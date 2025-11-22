@@ -5,6 +5,20 @@
 **Status**: Draft
 **Input**: User description: "作為受災居民、志工團體、配送志工等多種用戶，我希望在網站地圖上看到災區修復進度、清理狀況、物資倉庫位置、各種站點資訊，並能新增和更正站點位置，以便了解災區狀況、分配人力、規劃路線、找尋資源"
 
+## Clarifications
+
+### Session 2025-11-23
+
+- Q: When multiple volunteers submit conflicting information for the same location (e.g., one says "cleaned", another says "still needs volunteers"), how should the system handle these data conflicts? → A: Last edit wins with conflict history viewable - Display the most recent edit but preserve conflict records so users can view historical reports and timestamps. Speed is prioritized during disasters; users can judge for themselves.
+
+- Q: What are the authentication security requirements for volunteer contributors (FR-040 requires authentication but doesn't specify password policies, session management, etc.)? → A: Volunteer contributors (map data providers) should authenticate via LINE 2FA with whitelist system. Password character requirements are flexible but LINE-based two-factor authentication provides additional security while leveraging Taiwan's ubiquitous messaging platform.
+
+- Q: For delivery volunteers planning routes (FR-017), what is the definition of "optimal route"? What factors should the system prioritize? → A: Deferred to planning phase - Uncertain whether automated route planning should be implemented for delivery volunteers. This feature may be optional or replaced with simpler alternatives (e.g., display locations only, volunteers plan manually).
+
+- Q: Given the actual data volume is relatively small (approximately 158 total markers, maximum 54 accommodation points), is marker clustering functionality needed, or can all markers be displayed directly? → A: Category filtering only, no spatial clustering - With current data volume, display all markers without spatial clustering. Instead, allow users to filter by marker type (hide/show categories) to reduce visual load. Simpler implementation, clearer display, faster development.
+
+- Q: Should photos uploaded by volunteers (FR-023) require moderation before being displayed, or should they display immediately after upload? → A: Display immediately - Photos display immediately after upload to prioritize speed during disasters. Trust volunteer contributors (already authenticated via LINE 2FA + whitelist). Allow users to report inappropriate photos for post-publication review.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - View Disaster Recovery Status (Priority: P1)
@@ -164,7 +178,7 @@
 - **Multiple users editing the same location simultaneously**: System should handle concurrent edits through last-write-wins, conflict detection, or edit queuing to prevent data corruption
 - **Map loads with no data/no markers**: Display clear message "目前沒有可用的資料 - No data available currently" rather than blank map, with instructions to check back or contact administrators
 - **Mobile device with slow network**: Map should load progressively (base map first, then markers in order of priority), not freeze or crash on slow connections
-- **User zoomed out too far**: Markers should cluster to prevent overwhelming the display; clicking clusters should zoom in to reveal individual markers
+- **User zoomed out too far**: With expected data volume (~158 markers max), display all markers without spatial clustering. Users can filter by category (toggle marker types on/off) to reduce visual clutter if needed
 - **Accessibility for users with disabilities**: Map should support keyboard navigation, screen reader compatibility, and high-contrast modes for visually impaired users
 - **Offline usage**: Critical information (last known recovery status, facility locations, disaster boundary) should be cacheable for offline viewing when network is unavailable
 
@@ -201,8 +215,8 @@
 
 - **FR-015**: System MUST display distinct markers for supply warehouses, stranded residents needing supplies, blocked roads, and roads under repair
 - **FR-016**: Road status markers MUST clearly indicate: "道路中斷 - road blocked", "道路搶修中 - under repair", "道路可通行 - passable", with optional notes on vehicle requirements (4WD only, motorcycles only, etc.)
-- **FR-017**: System MUST allow delivery volunteers to select multiple destinations and suggest an optimal route considering road accessibility and distance
-- **FR-018**: Route suggestions MUST account for vehicle type (motorcycle, car, truck, 4WD) and adjust for vehicle limitations
+- **FR-017**: System SHOULD allow delivery volunteers to select multiple destinations and suggest an optimal route considering road accessibility and distance (NOTE: Implementation deferred to planning phase - feasibility and complexity to be evaluated. Minimum viable alternative: display all locations on map for manual route planning)
+- **FR-018**: If route suggestions are implemented (FR-017), they SHOULD account for vehicle type (motorcycle, car, truck, 4WD) and adjust for vehicle limitations (conditional on FR-017 implementation decision)
 - **FR-019**: Delivery volunteers MUST be able to mark locations as "已送達 - delivered" to update supply status
 
 #### Community Data Contribution (User Story 4)
@@ -210,14 +224,14 @@
 - **FR-020**: System MUST allow authenticated volunteers to add new location markers with: location type, name, description, contact info, status, and optional photos
 - **FR-021**: System MUST allow authenticated volunteers to edit/correct existing marker information with a change note explaining the update
 - **FR-022**: Newly added or edited markers MUST display on the map within 5 minutes (real-time or near-real-time) for other users to see
-- **FR-023**: System MUST support photo uploads (max 5MB per photo) and display photos when users view marker details
-- **FR-024**: System MUST detect and flag conflicting information when multiple users report different data for the same location, showing timestamps and allowing review
+- **FR-023**: System MUST support photo uploads (max 5MB per photo) and display photos immediately after upload when users view marker details. Photos do not require pre-moderation. System MUST provide "回報不當照片 - report inappropriate photo" button to allow users to flag problematic content for post-publication review by moderators.
+- **FR-024**: System MUST detect conflicting information when multiple users report different data for the same location. The system MUST display the most recent edit by default while preserving all conflicting reports in a viewable history with timestamps, user IDs, and change notes. Users can click "查看衝突記錄 - view conflict history" to see all versions and make informed judgments.
 
 #### Facility Locator (User Story 5)
 
 - **FR-025**: System MUST display facility markers (restrooms, accommodations, showers, meals, water stations, charging stations, medical tents) with type-specific icons
 - **FR-026**: Facility markers MUST show details: address, operating hours, fees (if any), capacity, current occupancy status, contact info, special notes
-- **FR-027**: System MUST allow users to filter map to show only specific facility types (e.g., show only restrooms)
+- **FR-027**: System MUST allow users to filter map to show only specific facility types (e.g., show only restrooms). Filter controls MUST use toggle checkboxes to enable/disable marker categories, reducing visual clutter without spatial clustering
 - **FR-028**: Facility markers MUST indicate distance and estimated travel time from user's current location (if location services enabled)
 - **FR-029**: Facility information MUST include status: "空位 - available", "已滿 - full", "暫停服務 - temporarily closed"
 
@@ -239,8 +253,8 @@
 #### Authentication & Permissions
 
 - **FR-039**: System MUST support public read access (anyone can view map and markers) without requiring authentication
-- **FR-040**: System MUST require authentication for users who want to add or edit markers (volunteer data contributors)
-- **FR-041**: System MUST distinguish between regular authenticated users (can add/edit markers) and coordinators/admins (can update cleanup status, review flagged conflicts, manage users)
+- **FR-040**: System MUST require authentication for users who want to add or edit markers (volunteer data contributors). Authentication MUST use LINE-based two-factor authentication (2FA) for volunteer contributors. System MUST maintain a whitelist of approved contributor accounts to prevent unauthorized data manipulation.
+- **FR-041**: System MUST distinguish between regular authenticated users (can add/edit markers) and coordinators/admins (can update cleanup status, review flagged conflicts, manage users, manage contributor whitelist)
 
 #### Data Integrity & Quality
 
