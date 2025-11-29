@@ -19,6 +19,26 @@
 
 - Q: Should photos uploaded by volunteers (FR-023) require moderation before being displayed, or should they display immediately after upload? → A: Display immediately - Photos display immediately after upload to prioritize speed during disasters. Trust volunteer contributors (already authenticated via LINE 2FA + whitelist). Allow users to report inappropriate photos for post-publication review.
 
+- Q: What is the policy for handling conflict/edit locking on map markers? → A: Implement configurable edit locking - System should support lockable markers to prevent simultaneous conflicting edits. Lock behavior configurable per deployment. Only backend/admins can view full edit history. Soft-delete approach for marker removal with three visibility levels: (1) backend exists + frontend shows "closed", (2) backend exists + frontend hidden, (3) backend soft-deleted. Permission configuration for deletion/approval workflow.
+
+- Q: For locations with multiple functions (e.g., large hospital with restrooms, kitchen, medical services), how should the system handle marker representation? → A: Multi-function markers with proximity detection - When adding/editing markers, system performs real-time proximity search to detect similar nearby points and prompts user to update existing marker instead of creating duplicate. System uses geo-fencing or coordinate proximity (leveraging Uber H3 library or similar) to identify same location. Multi-function locations represented as single marker with multiple category tags.
+
+- Q: If volunteers upload markers that don't fit existing category tags (e.g., newly opened stores, temporary义廚 mobile kitchens), how should the system handle unknown categories? → A: Whitelist-controlled category creation - Only whitelist users can create new categories. System provides emoji/icon selection for new categories. Non-whitelist users can apply for whitelist access via contact form. System includes prominent "申請白名單 - apply for whitelist" button/page for recruitment and partner onboarding.
+
+- Q: Does the map require built-in navigation/routing functionality? → A: No built-in navigation - Map displays locations only for manual route planning. Users can switch to external apps (Google Maps, etc.) for turn-by-turn navigation. Simplifies implementation while meeting core information display needs.
+
+- Q: For prohibited/restricted areas (禁止進入區域), should they always remain visible regardless of zoom level? → A: Always visible - Prohibited areas must always display prominently at all zoom levels as critical safety information. Not subject to clustering or category filtering that could hide them.
+
+- Q: Should the system provide active push notifications for map updates? → A: No push notifications - System operates as pull-only information display. Users refresh map to get updates. No active notification system required for MVP.
+
+- Q: What UI/UX considerations exist for the numerous configuration toggles discussed? → A: Document all configuration options - System will include many administrative configuration toggles. All options must have default values with comments/suggestions. UI/UX team must design clear admin interface to accommodate multiple toggle switches without overwhelming users.
+
+- Q: The system targets 1,000 concurrent users (SC-008) but assumes 10,000-100,000 markers maximum (Assumption 8). What is the database scalability strategy if actual load exceeds these limits? → A: Manual scaling trigger with single EC2 instance deployment - System will deploy DB + web server on same EC2 instance. When approaching 80% capacity, send alerts to ops team requiring manual intervention to add resources. Optimized for cost control and simplicity during initial deployments.
+
+- Q: LINE 2FA is required for authentication (FR-040), but session management is not specified. How long should authenticated user sessions remain valid? → A: 24-hour sessions with automatic extension on activity - Balance convenience with security during disaster response. Sessions automatically extend on user activity, minimizing re-authentication friction for active volunteers while maintaining reasonable security.
+
+- Q: After a disaster event concludes, how long should the system retain disaster data (markers, edit history, photos) before archival or deletion? → A: 6 months active + move to read-only archive - Support post-disaster analysis and lessons learned while reducing operational cost. After 6 months, disaster data moves to read-only archive accessible for research and future disaster preparedness but no longer editable.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - View Disaster Recovery Status (Priority: P1)
@@ -171,6 +191,142 @@
 
 ---
 
+### User Story 8 - Resource Location Management (Priority: P2)
+
+**作為資源管理志工 (As a resource management volunteer)**, I want to add, edit, and manage resource location markers (新增、編輯、下架物資站點/設施) on the map including supply warehouses, distribution points, and community kitchens, so that residents and other volunteers can find available resources easily.
+
+**Why this priority**: Resource location management is essential for disaster response logistics, but it's P2 because it builds upon the data contribution framework (User Story 4). It enables systematic resource coordination but requires the base map viewing and contribution systems to be operational first.
+
+**Independent Test**: Can be fully tested by implementing interfaces for authenticated volunteers to create resource location markers with detailed attributes (type, inventory summary, operating hours, contact), edit existing resource locations, and temporarily disable/archive locations that are no longer active. Verification includes checking that changes appear correctly on the map for all users.
+
+**Acceptance Scenarios**:
+
+1. **Given** a volunteer with resource management permissions accesses the map, **When** they click "新增資源點位 - add resource location", **Then** they can place a marker and specify: resource type (warehouse, distribution point, community kitchen, water station), name, inventory summary, operating hours, contact information, vehicle access notes, current status
+
+2. **Given** a resource location needs updates, **When** a volunteer selects the marker and clicks "編輯 - edit", **Then** they can update all fields including inventory status, operating hours changes, or add special notes (e.g., "僅接受大型車輛 - large vehicles only")
+
+3. **Given** a resource location is temporarily closed or relocated, **When** a volunteer marks it as "暫時關閉 - temporarily closed" or "已下架 - archived", **Then** the marker status updates on the map (showing "closed" or becoming hidden based on configuration), and the location is preserved in backend for future reference
+
+4. **Given** a volunteer adds a new resource location, **When** the system detects similar nearby locations (within 50 meters), **Then** the system prompts "附近已有類似站點，是否要更新現有站點？ - Similar location nearby, update existing instead?", preventing duplicates while allowing legitimate nearby locations
+
+5. **Given** multiple resource locations exist in an area, **When** users view the map, **Then** they can filter by resource type (warehouses only, kitchens only, etc.) and see accurate inventory summaries and availability status for each location
+
+---
+
+### User Story 9 - Search Nearby Supply Stations (Priority: P2)
+
+**作為受災居民 (As a disaster-affected resident)**, I want to search for and locate nearby supply stations, distribution points, and resource facilities on the map based on my current location or address, so I can quickly find where to obtain needed supplies and assistance.
+
+**Why this priority**: Helping residents find resources is critical for disaster recovery, but it's P2 because it builds upon existing map search (FR-005) and facility display (User Story 5) capabilities. It becomes valuable once resource locations are populated on the map.
+
+**Independent Test**: Can be fully tested by implementing location-based search that shows nearby supply stations sorted by distance, with filters for resource types (food, water, medical supplies, clothing), and verification that search results are accurate and include relevant details (distance, availability, operating hours).
+
+**Acceptance Scenarios**:
+
+1. **Given** a resident accesses the map with location services enabled, **When** they click "搜尋附近物資站 - search nearby supplies", **Then** the map displays supply stations sorted by distance from their current location, showing distance, resource types available, and current status (open/closed/limited)
+
+2. **Given** a resident searches by address or landmark, **When** they enter "XX路XX號" or "XX學校", **Then** the map centers on that location and displays nearby supply stations within configurable radius (default 5km), with distance calculations from the search point
+
+3. **Given** a resident needs specific resources, **When** they filter by resource type (食物 - food, 飲用水 - drinking water, 醫療物資 - medical supplies, 衣物 - clothing), **Then** the map shows only supply stations that provide those resources, with inventory availability indicators (充足 - sufficient, 有限 - limited, 已缺 - out of stock)
+
+4. **Given** a resident selects a supply station from search results, **When** they view the station details, **Then** they see comprehensive information: exact address, distance and estimated travel time, operating hours, available resources with quantities, contact information, and any special requirements (需證件 - ID required, 限定對象 - restricted eligibility)
+
+5. **Given** supply station status changes (inventory updates, hours change, temporarily closed), **When** a resident performs a search, **Then** the results reflect real-time status updates, preventing wasted trips to unavailable locations
+
+---
+
+### User Story 10 - Map Information Layers (Priority: P2)
+
+**作為地圖使用者 (As a map user)**, I want to toggle between different information layers on the map (災區地圖資訊層) such as recovery status, cleanup progress, resource locations, road conditions, and restricted areas, so I can focus on relevant information for my specific needs without visual clutter.
+
+**Why this priority**: Information layer management is important for usability as the map becomes more complex with multiple data types, but it's P2 because it enhances the existing transparent display design (User Story 6) rather than adding core functionality. It becomes more valuable as the amount of data on the map increases.
+
+**Independent Test**: Can be fully tested by implementing visible layer toggle controls that allow users to enable/disable different information categories, verifying that layer changes update the map immediately without requiring page refresh, and confirming that layer preferences can optionally be saved per user session.
+
+**Acceptance Scenarios**:
+
+1. **Given** a user accesses the map with multiple data types displayed, **When** they view the layer control panel, **Then** they see clearly labeled toggle buttons for each layer: "修復進度 - recovery status", "清理狀況 - cleanup status", "物資站點 - supply locations", "路況資訊 - road conditions", "禁區警示 - restricted areas", "設施站點 - facility locations"
+
+2. **Given** a user wants to focus on specific information, **When** they toggle off certain layers (e.g., disable "facility locations"), **Then** those markers immediately disappear from the map while other layers remain visible, and the legend updates to show only active layers
+
+3. **Given** multiple layers are enabled simultaneously, **When** markers overlap at the same location, **Then** the map implements smart marker clustering or offset positioning to ensure all relevant markers remain clickable, with a marker count indicator for clustered points
+
+4. **Given** a user configures their preferred layer settings, **When** they revisit the map in the same session, **Then** their layer preferences are preserved (using session storage), allowing them to continue working without reconfiguring
+
+5. **Given** certain layers contain critical safety information (prohibited areas - 禁區), **When** a user views the map, **Then** those layers are always enabled by default and prominently displayed with warning colors (red/yellow), though users can still toggle them off with an additional confirmation prompt ("確定要隱藏禁區警示？ - Confirm hiding restricted area warnings?")
+
+---
+
+### User Story 11 - Restricted Area Warnings (Priority: P1)
+
+**作為任何用戶 (As any user - resident, volunteer, or official)**, I want to see clearly marked restricted/prohibited areas (禁區標記與警告) on the map with safety warnings and access restrictions, so I can avoid dangerous zones and understand which areas are off-limits due to structural damage, environmental hazards, or ongoing rescue operations.
+
+**Why this priority**: This is P1 because restricted area information directly impacts user safety. Entering prohibited zones can lead to injuries, fatalities, or interference with rescue operations. This information must be prominently displayed and always visible to prevent accidents.
+
+**Independent Test**: Can be fully tested by adding restricted area polygons to the map with distinct visual styling (red shading, hazard icons, warning borders), verifying that users can click on restricted areas to view detailed warning information, and confirming that these areas remain visible at all zoom levels regardless of layer toggle settings.
+
+**Acceptance Scenarios**:
+
+1. **Given** a user accesses the map, **When** restricted areas exist in the disaster zone, **Then** they are prominently displayed with high-visibility styling: red/orange shading, hazard warning icons (⚠️ 禁止進入), bold borders, and flashing/animated indicators for critical zones
+
+2. **Given** a user clicks on a restricted area, **When** the warning popup appears, **Then** they see detailed information: restriction type (結構不穩 - structural instability, 土石流危險 - landslide risk, 救援作業中 - active rescue operations), severity level (極度危險 - extreme danger, 危險 - dangerous, 謹慎進入 - proceed with caution), effective dates, alternative routes if available, and responsible authority contact information
+
+3. **Given** a user zooms out to view a larger area, **When** the zoom level decreases, **Then** restricted area markers scale appropriately and remain visible at all zoom levels (not subject to clustering), with aggregated restricted zones showing combined area size and total number of restrictions
+
+4. **Given** a user toggles map layers, **When** they attempt to disable the "restricted areas" layer, **Then** the system displays a confirmation dialog ("⚠️ 警告：關閉禁區顯示可能導致安全風險。確定要關閉嗎？ - Warning: Hiding restricted areas may create safety risks. Confirm?"), requiring explicit acknowledgment before hiding
+
+5. **Given** restricted area boundaries change over time, **When** areas become safe or new hazards emerge, **Then** the map updates restricted zones with change notifications ("新增禁區 - new restricted area added", "禁區已解除 - restriction lifted"), and displays the timestamp of the last update prominently
+
+6. **Given** a user navigates near a restricted area boundary, **When** their location marker approaches within 200 meters of a prohibited zone, **Then** the system displays a proximity warning ("⚠️ 您正在接近禁區 - You are approaching a restricted area") with directional indicators and distance information
+
+---
+
+### User Story 12 - Real-time Road Condition Reporting (Priority: P2)
+
+**作為志工或居民 (As a volunteer or resident)**, I want to report and view real-time road condition updates (路況即時回報) including blocked roads, roads under repair, passable routes, and vehicle accessibility requirements, so I can navigate safely and efficiently through the disaster area.
+
+**Why this priority**: Real-time road information is critical for efficient disaster response logistics, but it's P2 because it builds upon the data contribution system (User Story 4) and enhances delivery route planning (User Story 3). It's valuable for coordination but not immediately life-threatening like restricted area warnings (P1).
+
+**Independent Test**: Can be fully tested by implementing a road condition reporting interface where authenticated users can mark road segments with status updates, add photos and notes, and verify that road condition markers/overlays appear correctly on the map with appropriate visual styling and details.
+
+**Acceptance Scenarios**:
+
+1. **Given** a user encounters a road condition issue, **When** they click "回報路況 - report road condition" on the map, **Then** they can select a road segment and specify: condition status (暢通 - clear, 施工中 - under repair, 部分阻塞 - partially blocked, 完全中斷 - completely blocked), vehicle accessibility (所有車輛 - all vehicles, 機車only - motorcycles only, 四驅車only - 4WD only, 禁止通行 - no access), estimated repair time, and optional photo/notes
+
+2. **Given** a road condition report is submitted, **When** the system processes the update, **Then** the road segment's visual styling changes accordingly: green line for clear roads, yellow for partially blocked, orange for under repair, red for completely blocked, with icons indicating vehicle restrictions
+
+3. **Given** multiple users report conditions for the same road segment, **When** reports conflict (one says "clear", another says "blocked"), **Then** the system displays the most recent report prominently while showing a "衝突報告 - conflicting reports" indicator, allowing users to view report history with timestamps and decide which information to trust
+
+4. **Given** a user is planning a route, **When** they view the map with road condition layer enabled, **Then** they can see real-time road status across the entire disaster area, with color-coded road segments and filter options to show only specific conditions (show only blocked roads, show only accessible routes for my vehicle type)
+
+5. **Given** road conditions improve over time, **When** a road is reopened or repairs are completed, **Then** authenticated users can update the status to "已恢復暢通 - reopened", triggering automatic notifications or highlights for users who may have been affected by the previous blockage
+
+6. **Given** a user clicks on a road segment, **When** viewing road condition details, **Then** they see comprehensive information: current status with severity, vehicle restrictions, estimated duration, alternative routes suggested by other users, last update timestamp, and reporter credibility indicator (verified volunteer, government official, community member)
+
+---
+
+### User Story 13 - Delivery Route Display (Priority: P3)
+
+**作為配送志工或協調者 (As a delivery volunteer or coordinator)**, I want to see planned or ongoing delivery routes displayed on the map (物資配送路線規劃展示), so I can understand current delivery operations, avoid duplicate deliveries, and coordinate multiple delivery teams efficiently.
+
+**Why this priority**: Delivery route visualization is helpful for coordination but P3 because it's an enhancement to the manual route planning capabilities already described in User Story 3. The core delivery functionality (viewing locations and planning routes) works without visual route display. This becomes more valuable as delivery operations scale.
+
+**Independent Test**: Can be fully tested by implementing route polyline overlays on the map that show planned delivery paths from warehouses to destination points, with route metadata (assigned volunteer, delivery status, estimated completion time), and verification that multiple concurrent routes can be displayed without visual confusion.
+
+**Acceptance Scenarios**:
+
+1. **Given** a delivery volunteer plans a route, **When** they select a warehouse starting point and multiple delivery destinations, **Then** the system displays the planned route as a colored polyline on the map with waypoint markers showing delivery sequence (numbered 1, 2, 3...), and route summary (total distance, estimated time, number of stops)
+
+2. **Given** multiple delivery teams are active simultaneously, **When** the coordinator views the map, **Then** they can see all active delivery routes color-coded by team/volunteer (Team A = blue, Team B = green, etc.), with filters to show/hide specific teams or route statuses (規劃中 - planning, 進行中 - in progress, 已完成 - completed)
+
+3. **Given** a delivery route encounters a blocked road, **When** the road condition layer shows a blockage along the planned route, **Then** the affected route segment is highlighted with a warning indicator, and the system suggests alternative route segments if available (or indicates "需要重新規劃 - requires replanning")
+
+4. **Given** a delivery is in progress, **When** the volunteer reaches each waypoint, **Then** they can mark it as "已送達 - delivered", and the route display updates to show completed segments (grey), current position (animated marker), and remaining segments (active color), with real-time progress visible to coordinators
+
+5. **Given** a coordinator needs to assign new deliveries, **When** they view the map with route display enabled, **Then** they can identify areas not yet covered by current delivery routes, see which volunteers are near specific supply needs, and avoid assigning duplicate deliveries to the same destination
+
+---
+
 ### Edge Cases
 
 - **No GPS/location services available**: User should be able to manually search by address or landmark name to navigate the map
@@ -215,8 +371,8 @@
 
 - **FR-015**: System MUST display distinct markers for supply warehouses, stranded residents needing supplies, blocked roads, and roads under repair
 - **FR-016**: Road status markers MUST clearly indicate: "道路中斷 - road blocked", "道路搶修中 - under repair", "道路可通行 - passable", with optional notes on vehicle requirements (4WD only, motorcycles only, etc.)
-- **FR-017**: System SHOULD allow delivery volunteers to select multiple destinations and suggest an optimal route considering road accessibility and distance (NOTE: Implementation deferred to planning phase - feasibility and complexity to be evaluated. Minimum viable alternative: display all locations on map for manual route planning)
-- **FR-018**: If route suggestions are implemented (FR-017), they SHOULD account for vehicle type (motorcycle, car, truck, 4WD) and adjust for vehicle limitations (conditional on FR-017 implementation decision)
+- **FR-017**: Map MUST display all relevant locations (warehouses, stranded residents, blocked roads) for manual route planning by delivery volunteers. Built-in navigation/turn-by-turn routing is explicitly out of scope. Users can switch to external navigation apps (Google Maps, etc.) for detailed route guidance. This simplified approach meets core information display needs while reducing implementation complexity.
+- **FR-018**: ~~If route suggestions are implemented (FR-017), they SHOULD account for vehicle type (motorcycle, car, truck, 4WD) and adjust for vehicle limitations (conditional on FR-017 implementation decision)~~ REMOVED - No automated routing functionality per FR-017 clarification.
 - **FR-019**: Delivery volunteers MUST be able to mark locations as "已送達 - delivered" to update supply status
 
 #### Community Data Contribution (User Story 4)
@@ -225,7 +381,10 @@
 - **FR-021**: System MUST allow authenticated volunteers to edit/correct existing marker information with a change note explaining the update
 - **FR-022**: Newly added or edited markers MUST display on the map within 5 minutes (real-time or near-real-time) for other users to see
 - **FR-023**: System MUST support photo uploads (max 5MB per photo) and display photos immediately after upload when users view marker details. Photos do not require pre-moderation. System MUST provide "回報不當照片 - report inappropriate photo" button to allow users to flag problematic content for post-publication review by moderators.
-- **FR-024**: System MUST detect conflicting information when multiple users report different data for the same location. The system MUST display the most recent edit by default while preserving all conflicting reports in a viewable history with timestamps, user IDs, and change notes. Users can click "查看衝突記錄 - view conflict history" to see all versions and make informed judgments.
+- **FR-024**: System MUST detect conflicting information when multiple users report different data for the same location. The system MUST display the most recent edit by default while preserving all conflicting reports in a viewable history with timestamps, user IDs, and change notes. Users can click "查看衝突記錄 - view conflict history" to see all versions and make informed judgments. System MUST support configurable edit locking to prevent simultaneous conflicting edits. Full edit history viewable by backend/admins only.
+- **FR-024a**: System MUST implement soft-delete for marker removal with three configurable visibility levels: (1) backend exists + frontend displays "暫時關閉 - temporarily closed" status, (2) backend exists + frontend completely hidden, (3) backend soft-deleted (logically removed but recoverable). Deletion permissions and approval workflow MUST be configurable per deployment.
+- **FR-024b**: When adding or editing markers, system MUST perform real-time proximity search (within 50 meters using geo-fencing or coordinate proximity library such as Uber H3) to detect similar nearby points. If nearby markers found, system MUST prompt user with "是否要修改此站點？ - Do you want to update this existing marker?" to prevent duplicates.
+- **FR-024c**: System MUST support multi-function markers where a single location provides multiple services (e.g., hospital with restroom, kitchen, medical services). Markers MUST allow multiple category tags instead of forcing separate markers per function.
 
 #### Facility Locator (User Story 5)
 
@@ -249,12 +408,66 @@
 - **FR-036**: Disaster boundary MUST include major roads/highways, nearby cities, and landmarks to help volunteers plan travel
 - **FR-037**: Disaster boundary MUST show timestamp of last update to indicate information currency
 - **FR-038**: System MUST support multiple concurrent disaster boundaries (if multiple disasters are active) with distinct labels and colors
+- **FR-038a**: Prohibited/restricted areas (禁止進入區域) MUST always display prominently at all zoom levels as critical safety information. They MUST NOT be subject to marker clustering or category filtering that could hide them from users.
+
+#### Resource Location Management (User Story 8)
+
+- **FR-047**: System MUST allow authenticated volunteers with resource management permissions to add new resource location markers specifying: resource type (warehouse, distribution point, community kitchen, water station), name, inventory summary, operating hours, contact information, vehicle access notes, current status
+- **FR-048**: System MUST allow resource managers to edit existing resource locations including updating inventory status, operating hours, contact information, and vehicle access requirements
+- **FR-049**: System MUST support resource location lifecycle management with status options: "運作中 - operational", "暫時關閉 - temporarily closed", "已下架 - archived". Archived locations remain in backend but are hidden from public view unless admin/resource manager explicitly requests to view them.
+- **FR-050**: When a resource manager adds a new resource location, system MUST perform proximity detection (within 50 meters) to identify similar nearby resource locations and prompt with "附近已有類似站點 - Similar location nearby" to prevent duplicates while allowing legitimate nearby locations
+- **FR-051**: System MUST allow users to filter resource locations by type (warehouses, distribution points, kitchens, water stations) and status (operational, temporarily closed) with filter controls matching the transparent UI design (FR-030 to FR-034)
+
+#### Search Nearby Supply Stations (User Story 9)
+
+- **FR-052**: System MUST provide location-based search functionality with "搜尋附近物資站 - search nearby supplies" button that displays supply stations sorted by distance from user's current location (if location services enabled) or from a search address/landmark
+- **FR-053**: Supply station search results MUST display: station name, distance from search origin, resource types available, current status (open/closed/limited inventory), operating hours, and estimated travel time
+- **FR-054**: System MUST support resource type filtering in search allowing users to filter by specific resources needed: "食物 - food", "飲用水 - drinking water", "醫療物資 - medical supplies", "衣物 - clothing", with results showing only stations providing selected resources
+- **FR-055**: System MUST display inventory availability indicators for each resource: "充足 - sufficient", "有限 - limited", "已缺 - out of stock", updated based on resource manager inputs or automated inventory tracking if available
+- **FR-056**: Search results MUST include comprehensive supply station details: exact address, distance and estimated travel time, operating hours, available resources with quantities, contact information, special requirements (需證件 - ID required, 限定對象 - restricted eligibility, 需預約 - reservation required)
+- **FR-057**: System MUST support configurable search radius (default 5km) that can be adjusted by users or automatically expanded if no results found within initial radius
+
+#### Map Information Layers (User Story 10)
+
+- **FR-058**: System MUST implement layer control panel with clearly labeled toggle buttons for each information layer: "修復進度 - recovery status", "清理狀況 - cleanup status", "物資站點 - supply locations", "路況資訊 - road conditions", "禁區警示 - restricted areas", "設施站點 - facility locations"
+- **FR-059**: Layer toggles MUST immediately update map display without page refresh. When a layer is disabled, all markers of that type disappear from map and legend updates to show only active layers.
+- **FR-060**: When multiple layers are enabled and markers overlap at the same location, system MUST implement smart marker handling: either marker clustering with count indicator for overlapping points, or marker offset positioning ensuring all markers remain clickable
+- **FR-061**: System MUST preserve user's layer preferences for session duration using session storage, automatically restoring selected layers when user navigates away and returns within same session
+- **FR-062**: Critical safety layers (禁區警示 - restricted areas) MUST be enabled by default. If user attempts to disable them, system MUST display confirmation dialog: "⚠️ 警告：關閉禁區顯示可能導致安全風險。確定要關閉嗎？ - Warning: Hiding restricted areas may create safety risks. Confirm?" requiring explicit acknowledgment
+
+#### Restricted Area Warnings (User Story 11)
+
+- **FR-063**: System MUST display restricted/prohibited area polygons with high-visibility styling: red/orange shading, hazard warning icons (⚠️ 禁止進入), bold borders, and flashing/animated indicators for critical zones
+- **FR-064**: Restricted area markers MUST display detailed information when clicked: restriction type (結構不穩 - structural instability, 土石流危險 - landslide risk, 救援作業中 - active rescue operations), severity level (極度危險 - extreme danger, 危險 - dangerous, 謹慎進入 - proceed with caution), effective dates, alternative routes if available, responsible authority contact information
+- **FR-065**: Restricted areas MUST remain visible at all zoom levels without being subject to clustering or category filtering. When zoomed out, aggregated restricted zones MUST show combined area size and total number of restrictions.
+- **FR-066**: System MUST display proximity warnings when user's location marker approaches within 200 meters of a restricted area boundary, showing message: "⚠️ 您正在接近禁區 - You are approaching a restricted area" with directional indicators and distance information
+- **FR-067**: When restricted area boundaries change (areas become safe or new hazards emerge), system MUST update restricted zones with change notifications: "新增禁區 - new restricted area added" or "禁區已解除 - restriction lifted", displaying timestamp of last update prominently
+- **FR-068**: System MUST support multiple concurrent restricted areas with distinct severity levels and visual styling. Critical/extreme danger zones MUST use more prominent visual indicators than lower-severity restricted areas.
+
+#### Real-time Road Condition Reporting (User Story 12)
+
+- **FR-069**: System MUST allow authenticated users to report road conditions by selecting road segments and specifying: condition status (暢通 - clear, 施工中 - under repair, 部分阻塞 - partially blocked, 完全中斷 - completely blocked), vehicle accessibility (所有車輛 - all vehicles, 機車only - motorcycles only, 四驅車only - 4WD only, 禁止通行 - no access), estimated repair time, optional photo and notes
+- **FR-070**: Road condition reports MUST update road segment visual styling: green lines for clear roads, yellow for partially blocked, orange for under repair, red for completely blocked, with icons indicating vehicle restrictions
+- **FR-071**: When multiple users report conflicting conditions for the same road segment, system MUST display most recent report prominently while showing "衝突報告 - conflicting reports" indicator, allowing users to view report history with timestamps and reporter IDs to make informed judgments
+- **FR-072**: System MUST provide road condition layer displaying real-time road status across entire disaster area with color-coded road segments and filter options to show specific conditions (show only blocked roads, show only routes accessible by selected vehicle type)
+- **FR-073**: Road condition details MUST include: current status with severity, vehicle restrictions, estimated repair duration, alternative routes suggested by other users, last update timestamp, and reporter credibility indicator (verified volunteer, government official, community member)
+- **FR-074**: When roads are reopened or repairs completed, authenticated users MUST be able to update status to "已恢復暢通 - reopened", with system optionally highlighting these updates for users who previously viewed or were affected by the blockage
+
+#### Delivery Route Display (User Story 13)
+
+- **FR-075**: System MUST display planned delivery routes as colored polylines on map showing path from warehouse starting point to multiple delivery destinations, with waypoint markers indicating delivery sequence (numbered 1, 2, 3...) and route summary (total distance, estimated time, number of stops)
+- **FR-076**: System MUST support multiple concurrent delivery routes color-coded by team/volunteer (Team A = blue, Team B = green, etc.) with filters to show/hide specific teams or route statuses (規劃中 - planning, 進行中 - in progress, 已完成 - completed)
+- **FR-077**: When a delivery route encounters blocked roads (based on road condition layer), system MUST highlight affected route segments with warning indicators and suggest alternative route segments if available, or indicate "需要重新規劃 - requires replanning"
+- **FR-078**: During active deliveries, system MUST allow volunteers to mark waypoints as "已送達 - delivered", updating route display to show: completed segments (grey), current volunteer position (animated marker), remaining segments (active color), with real-time progress visible to coordinators
+- **FR-079**: Route display MUST help coordinators identify: areas not yet covered by current delivery routes, which volunteers are near specific supply needs, and prevent duplicate delivery assignments to same destination
 
 #### Authentication & Permissions
 
 - **FR-039**: System MUST support public read access (anyone can view map and markers) without requiring authentication
 - **FR-040**: System MUST require authentication for users who want to add or edit markers (volunteer data contributors). Authentication MUST use LINE-based two-factor authentication (2FA) for volunteer contributors. System MUST maintain a whitelist of approved contributor accounts to prevent unauthorized data manipulation.
-- **FR-041**: System MUST distinguish between regular authenticated users (can add/edit markers) and coordinators/admins (can update cleanup status, review flagged conflicts, manage users, manage contributor whitelist)
+- **FR-040a**: System MUST provide prominent "申請白名單 - apply for whitelist" button/page with contact form where users can apply to become approved contributors. Form MUST collect contact information and purpose for contributing. This serves as recruitment and partner onboarding mechanism.
+- **FR-040b**: Authenticated user sessions MUST remain valid for 24 hours with automatic extension on activity. Sessions automatically extend when users perform actions (view markers, add data, navigate map) to minimize re-authentication friction for active volunteers while maintaining reasonable security during disaster response.
+- **FR-041**: System MUST distinguish between regular authenticated users (can add/edit markers), whitelist users (can create new marker categories with emoji/icon selection), and coordinators/admins (can update cleanup status, review flagged conflicts, manage users, manage contributor whitelist, configure system-wide permissions)
 
 #### Data Integrity & Quality
 
@@ -262,12 +475,25 @@
 - **FR-043**: System MUST validate location data (coordinates within Taiwan bounds, required fields completed) before saving markers
 - **FR-044**: System MUST prevent duplicate markers for the same location by detecting nearby coordinates (within 50 meters) and prompting user to update existing marker instead
 - **FR-045**: System MUST allow users to report suspected outdated or incorrect information with a "回報錯誤 - report error" button on each marker
+- **FR-046**: System MUST implement comprehensive administrative configuration interface with default values and documentation for all configurable options including: edit locking behavior, marker deletion visibility levels, approval workflows, whitelist management, category creation permissions, and photo moderation policies. All configuration options MUST include inline help text with recommended settings and trade-off explanations.
+- **FR-080**: System MUST retain disaster data (markers, edit history, photos, user contributions) in active database for 6 months after disaster event conclusion. After 6 months, data MUST be moved to read-only archive accessible for research and future disaster preparedness analysis. Archived data remains searchable but not editable. Disaster event conclusion date set by system administrators.
+
+---
+
+### Non-Functional Requirements
+
+#### Performance & Scalability
+
+- **NFR-001**: System MUST be deployed with database and web server on same EC2 instance for initial deployment, optimizing for cost control and operational simplicity
+- **NFR-002**: System MUST implement capacity monitoring with alerts triggered at 80% resource utilization (CPU, memory, database connections, storage). Alerts sent to operations team for manual scaling intervention.
+- **NFR-003**: System MUST support manual vertical scaling (instance size increase) and horizontal scaling (adding instances with load balancer) as contingency plans when capacity limits approached
+- **NFR-004**: System architecture MUST document scaling runbook with step-by-step procedures for capacity expansion during disaster response surge periods
 
 ---
 
 ### Key Entities
 
-- **Map Marker**: Represents any point of interest on the map. Attributes include: ID, location (latitude/longitude), type (recovery status, cleanup area, warehouse, facility, stranded resident, road condition), name, description, status, photos, created_by, created_at, updated_at, verification_status
+- **Map Marker**: Represents any point of interest on the map. Attributes include: ID, location (latitude/longitude), categories (array supporting multiple tags for multi-function locations), name, description, status, photos, created_by, created_at, updated_at, verification_status, edit_lock (boolean), visibility_level (shown/hidden/soft_deleted), conflict_history (references to conflicting edits)
 
 - **Recovery Status**: Represents progress on infrastructure repair. Attributes include: marker_id (references Map Marker), recovery_type (home, road, water, electricity), status (not started, in progress, completed, paused), estimated_completion_date, responsible_agency, access_restrictions, notes
 
@@ -283,9 +509,19 @@
 
 - **Disaster Boundary**: Represents the geographic extent of the disaster area. Attributes include: ID, disaster_name, boundary_geometry (polygon), severity_zones (if applicable, with nested geometries and severity levels), last_updated, notes
 
-- **User**: Represents authenticated users who can contribute data. Attributes include: user_id, name, role (volunteer, coordinator, admin), contact_info, authentication_credentials, registered_at, last_login
+- **User**: Represents authenticated users who can contribute data. Attributes include: user_id, name, role (volunteer, whitelist_user, coordinator, admin), contact_info, authentication_credentials (LINE 2FA tokens), registered_at, last_login, whitelist_status (pending/approved/rejected), whitelist_application_info
+
+- **Marker Category**: Represents system-wide or custom marker categories. Attributes include: category_id, category_name, icon/emoji, color_code, created_by (whitelist user or admin), created_at, system_default (boolean), description
 
 - **Edit History**: Represents change log for audit trail. Attributes include: edit_id, marker_id, user_id, action_type (create, update, delete), previous_value (JSON), new_value (JSON), timestamp, change_reason (optional note)
+
+- **Resource Location**: Represents supply warehouses, distribution points, and community resource facilities. Attributes include: marker_id (references Map Marker), resource_type (warehouse, distribution_point, community_kitchen, water_station), inventory_summary (list of available supplies with quantities), inventory_status (充足-sufficient, 有限-limited, 已缺-out_of_stock), operating_hours, contact_info, vehicle_access_notes (大型車輛-large_vehicles, 機車-motorcycles, 四驅車-4WD), resource_status (運作中-operational, 暫時關閉-temporarily_closed, 已下架-archived), last_inventory_update, special_requirements (需證件-ID_required, 限定對象-restricted_eligibility, 需預約-reservation_required)
+
+- **Restricted Area**: Represents prohibited or dangerous zones on the map. Attributes include: ID, area_geometry (polygon defining boundary), restriction_type (結構不穩-structural_instability, 土石流危險-landslide_risk, 救援作業中-active_rescue, 環境危害-environmental_hazard), severity_level (極度危險-extreme_danger, 危險-dangerous, 謹慎進入-caution), effective_date_start, effective_date_end (if temporary), responsible_authority, contact_info, alternative_routes, last_updated, warning_message, visibility_level (always_visible, warning_before_hiding)
+
+- **Road Condition Report**: Represents real-time user-submitted road status updates. Attributes include: report_id, road_segment_id (or geometry), road_name, condition_status (暢通-clear, 施工中-under_repair, 部分阻塞-partially_blocked, 完全中斷-completely_blocked), vehicle_accessibility (所有車輛-all_vehicles, 機車only-motorcycles_only, 四驅車only-4WD_only, 禁止通行-no_access), estimated_repair_completion, photo, notes, reported_by (user_id), reporter_credibility (verified_volunteer, government_official, community_member), reported_at, last_updated, alternative_routes_suggested, conflict_reports (references to conflicting reports for same segment)
+
+- **Delivery Route**: Represents planned or active delivery paths for supply distribution. Attributes include: route_id, assigned_volunteer (user_id), team_identifier, route_geometry (polyline from warehouse to destinations), warehouse_start (marker_id), delivery_destinations (array of marker_ids with sequence numbers), route_status (規劃中-planning, 進行中-in_progress, 已完成-completed, 需重新規劃-requires_replanning), total_distance, estimated_time, number_of_stops, waypoints (array with sequence, location, status: pending/delivered, delivery_time), current_position (real-time volunteer location if active), route_color_code (for multi-team coordination), blocked_segments (references to blocked road conditions), created_at, updated_at, completion_time
 
 ---
 
@@ -335,7 +571,7 @@
 
 7. **Data Moderation**: Assumes volunteer-contributed data is generally trustworthy but may contain errors. Lightweight moderation (flagging conflicts, audit logs) is sufficient; pre-approval moderation is not required due to time-sensitive nature of disaster response.
 
-8. **Disaster Scope**: Assumes platform will be used for localized disasters (city/county level) rather than nationwide disasters. Database and performance are designed for 10,000-100,000 markers maximum.
+8. **Disaster Scope & Deployment**: Assumes platform will be used for localized disasters (city/county level) rather than nationwide disasters. Database and performance are designed for 10,000-100,000 markers maximum with 1,000 concurrent users target. Initial deployment uses single EC2 instance hosting both database and web server for cost optimization and operational simplicity. Manual scaling intervention required when capacity limits approached (80% resource utilization triggers alerts).
 
 9. **Language**: Assumes Traditional Chinese (繁體中文) is the primary language for all users. English UI can be added later if international volunteers require it, but initial version is Chinese-only.
 
@@ -349,7 +585,8 @@ The following items are explicitly out of scope for this feature but may be cons
 
 - **Real-time Automated Data Feeds**: Integration with government APIs, IoT sensors, or weather services for automatic status updates (Version 2.0)
 - **Mobile Native Apps**: iOS/Android native applications (current version is mobile web only)
-- **Navigation Turn-by-Turn Directions**: Detailed step-by-step navigation like Google Maps (current version provides route overview only)
+- **Built-in Navigation/Routing**: Any form of automated route planning, turn-by-turn directions, or navigation functionality (current version displays location information only for manual planning; users switch to external apps like Google Maps for actual navigation)
+- **Push Notifications**: Active notifications for map updates or alerts (system operates as pull-only; users manually refresh to get updates)
 - **User-to-User Messaging**: Direct communication between volunteers or residents through the platform (use external communication tools for now)
 - **Inventory Management**: Detailed tracking of supply inventory quantities at warehouses (only summary inventory is shown)
 - **Volunteer Scheduling/Shift Management**: Coordinating volunteer work schedules and shifts (coordinators manage this externally)
