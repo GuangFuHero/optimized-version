@@ -12,27 +12,27 @@ The Interactive Disaster Relief Map provides a centralized, real-time platform f
 ## Technical Context
 
 **Language/Version**:
-- Backend: Node.js 20 LTS (TypeScript 5.3+)
+- Backend: Python 3.11+ (leveraging existing team expertise)
 - Frontend: HTML/CSS/JavaScript (ES2022) with optional React 18+
 
 **Primary Dependencies**:
-- Backend: Apollo Server 4.x (GraphQL), Prisma 5.x (ORM with PostgreSQL)
-- Frontend: Leaflet.js 1.9+ (mapping), Apollo Client 3.x (GraphQL)
-- Authentication: LINE Login API, jsonwebtoken (JWT)
-- Geospatial: Uber H3 (proximity detection), Turf.js (geometric calculations)
+- Backend: Strawberry GraphQL 0.216+ (GraphQL), SQLAlchemy 2.x (ORM with PostgreSQL), FastAPI 0.104+ (ASGI server)
+- Frontend: Leaflet.js 1.9+ (mapping), Apollo Client 3.x or urql 4.x (GraphQL)
+- Authentication: LINE Login SDK, PyJWT (JWT)
+- Geospatial: h3-py (Uber H3 Python bindings), Shapely (geometric operations)
 
 **Storage**:
 - Database: PostgreSQL 15+ with PostGIS 3.x extension (geospatial support)
-- File Storage: Local filesystem or S3-compatible (MinIO for self-hosted)
+- Photo Storage: Free online image hosting (imgur, cloudinary, etc.) - users provide URLs
 - Cache: Redis 7.x (optional, for session management)
 
 **Testing**:
-- Backend: Jest + Supertest (integration tests for critical paths)
+- Backend: pytest + pytest-asyncio (async tests), httpx (GraphQL client testing)
 - Frontend: Jest + Testing Library (core map rendering, marker display)
 - E2E: Playwright (user journey validation)
 
 **Target Platform**:
-- Server: Docker containers on Ubuntu 22.04 LTS (single EC2 t3.medium or equivalent)
+- Server: Docker containers on Ubuntu 22.04 LTS (single EC2 t3.medium or equivalent, Python 3.11+ runtime)
 - Client: Modern mobile browsers (Chrome/Safari on iOS 15+, Android 10+)
 
 **Project Type**: Web application (backend + frontend)
@@ -52,10 +52,10 @@ The Interactive Disaster Relief Map provides a centralized, real-time platform f
 
 **Scale/Scope**:
 - Expected markers: 10,000-100,000 maximum
-- Photo storage: 1,000-5,000 photos per disaster event
+- Photo storage: 1,000-5,000 photo URLs per disaster event (hosted externally)
 - Active users: 100-1,000 concurrent during disaster response
 - Data retention: 6 months active + read-only archive
-- Deployment model: Single-instance initially, manual scaling at 80% capacity
+- Deployment model: **Single-instance required** (optimizes for rapid recreation <4 hours + cost control)
 
 ## Constitution Check
 
@@ -63,10 +63,10 @@ The Interactive Disaster Relief Map provides a centralized, real-time platform f
 
 ### ✅ I. Rapid Deployment Readiness
 
-- ✅ **Dependencies containerized**: Docker Compose for PostgreSQL, Node.js backend, Nginx frontend
+- ✅ **Dependencies containerized**: Docker Compose for PostgreSQL, Python backend (FastAPI), Nginx frontend
 - ✅ **Single-command deployment**: `docker-compose up -d` (with `.env.example` provided)
 - ✅ **Environment variables**: All config via `.env` (database URL, LINE API keys, storage paths)
-- ✅ **Automatic migrations**: Prisma migrations run on startup (idempotent)
+- ✅ **Automatic migrations**: Alembic migrations run on startup (idempotent, same as legacy system)
 - ✅ **No manual steps**: Database schema, initial admin user, base map config all automated
 
 **Status**: PASS - Target <4 hours deployment for experienced engineers
@@ -111,7 +111,7 @@ The Interactive Disaster Relief Map provides a centralized, real-time platform f
 **No vendor lock-in**:
 - ✅ OpenStreetMap (self-hosted tile server option via `openstreetmap-tile-server` Docker image)
 - ✅ Nominatim geocoding (self-hosted option documented)
-- ✅ MinIO for photo storage (S3-compatible, self-hostable)
+- ✅ Free online photo hosting (imgur, cloudinary, etc.) - no proprietary storage systems
 
 **Status**: PASS - Configuration-driven disaster adaptability
 
@@ -158,36 +158,44 @@ specs/002-interactive-disaster-map/
 ```text
 # Web application structure (backend + frontend)
 backend/
-├── src/
-│   ├── schema/           # GraphQL schema definitions (generated from Prisma)
-│   │   ├── types/        # GraphQL object types (Marker, User, Facility, etc.)
-│   │   ├── queries/      # Query resolvers (getMarkers, searchPlaces, etc.)
-│   │   ├── mutations/    # Mutation resolvers (createMarker, updateMarker, etc.)
-│   │   └── index.ts      # Schema assembly
-│   ├── resolvers/        # GraphQL resolver implementations
-│   │   ├── marker.resolver.ts
-│   │   ├── facility.resolver.ts
-│   │   ├── user.resolver.ts
-│   │   └── roadCondition.resolver.ts
-│   ├── services/         # Business logic (geospatial, proximity detection, auth)
-│   │   ├── geospatial.service.ts  # H3 proximity, distance calculations
-│   │   ├── auth.service.ts        # LINE 2FA, JWT validation
-│   │   ├── conflict.service.ts    # Edit conflict detection/resolution
-│   │   └── storage.service.ts     # Photo uploads (S3/MinIO)
-│   ├── prisma/           # Database ORM
-│   │   ├── schema.prisma # Database schema with dynamic fields (JSON)
-│   │   └── migrations/   # Auto-generated migrations
+├── app/
+│   ├── graphql/          # GraphQL schema and resolvers (Strawberry)
+│   │   ├── types/        # GraphQL types (Marker, User, Facility dataclasses)
+│   │   ├── queries/      # Query resolvers (get_markers, search_places, etc.)
+│   │   ├── mutations/    # Mutation resolvers (create_marker, update_marker, etc.)
+│   │   └── schema.py     # Schema assembly and Strawberry config
+│   ├── models/           # SQLAlchemy ORM models
+│   │   ├── marker.py     # Place/Marker model (legacy 'places' table)
+│   │   ├── user.py       # User model with LINE integration
+│   │   ├── facility.py   # Facility subtypes
+│   │   ├── edit_history.py  # Audit trail
+│   │   └── __init__.py   # Base, session factory
+│   ├── services/         # Business logic
+│   │   ├── geospatial.py     # H3 proximity (h3-py), Shapely operations
+│   │   ├── auth.py           # LINE 2FA integration, JWT
+│   │   ├── conflict.py       # Edit conflict detection/resolution
+│   │   └── photo_validator.py  # Photo URL validation for external hosting
+│   ├── db/               # Database management
+│   │   ├── migrations/   # Alembic migrations (preserves legacy structure)
+│   │   ├── base.py       # SQLAlchemy declarative base
+│   │   └── session.py    # Session factory, connection pool
 │   ├── config/           # Configuration files
 │   │   ├── features.json        # Feature flags
-│   │   ├── disaster-types.json  # Disaster-specific schemas
-│   │   └── field-definitions.json # Dynamic field configurations
-│   ├── middleware/       # Express/Apollo middleware (auth, logging)
-│   └── server.ts         # Apollo Server setup
+│   │   ├── disaster_types.json  # Disaster-specific schemas
+│   │   ├── field_definitions.json # Dynamic field configurations
+│   │   └── settings.py   # Pydantic settings (env vars)
+│   ├── middleware/       # FastAPI/Strawberry middleware
+│   │   ├── auth.py       # JWT validation, user context injection
+│   │   └── logging.py    # Request logging, error tracking
+│   └── main.py           # FastAPI app with Strawberry GraphQL mount
 ├── tests/
-│   ├── integration/      # API integration tests (marker CRUD, proximity)
-│   └── unit/             # Service unit tests (geospatial calculations)
+│   ├── integration/      # GraphQL integration tests (pytest + httpx)
+│   ├── unit/             # Service unit tests (geospatial, auth)
+│   └── conftest.py       # Pytest fixtures (test DB, client)
+├── alembic.ini           # Alembic configuration
 ├── Dockerfile
-└── package.json
+├── requirements.txt      # Core dependencies
+└── requirements-dev.txt  # Development dependencies (pytest, black, mypy)
 
 frontend/
 ├── public/
@@ -215,7 +223,7 @@ frontend/
 ├── Dockerfile
 └── package.json
 
-docker-compose.yml        # Orchestration (Postgres, backend, frontend, Redis)
+docker-compose.yml        # Orchestration (Postgres, backend, frontend, Redis) - No MinIO needed
 .env.example              # Environment variable template
 docs/
 ├── architecture.md       # System architecture diagram, data flow
@@ -235,10 +243,14 @@ No constitution violations requiring justification. All complexity is necessary:
 
 | Technical Decision | Justification | Simpler Alternative Rejected |
 |--------------------|---------------|------------------------------|
+| Python backend | Team expertise, refactor from existing Python system (FastAPI legacy), minimal retraining | Node.js would require learning new ecosystem, slower migration |
 | GraphQL over REST | User requirement for flexible schema; GraphQL introspection supports dynamic field discovery | REST requires versioning for schema changes, less flexible |
-| Prisma ORM | Type-safe database access, automatic migrations (Constitution I rapid deployment) | Raw SQL queries too error-prone, manual migrations slow deployment |
-| H3 library | Efficient geospatial proximity detection (FR-024b requires 50m radius checks) | Naive lat/lon distance calc insufficient for clustering/proximity at scale |
+| SQLAlchemy ORM | Team familiarity (already used in legacy system), battle-tested with PostgreSQL | Raw SQL queries too error-prone, Prisma requires Node.js |
+| Strawberry GraphQL | Modern Python GraphQL with type hints, async support, integrates with FastAPI | Graphene-Python outdated, Ariadne less type-safe |
+| H3 library (h3-py) | Efficient geospatial proximity detection (FR-024b requires 50m radius checks) | Naive lat/lon distance calc insufficient for clustering/proximity at scale |
 | Service Worker | Offline capability required by Constitution II (disaster-resilient design) | Simple browser cache insufficient for offline marker data persistence |
+| **Single-instance deployment** | **Intentional design optimizing for rapid recreation (<4 hours) and cost control. Disaster recovery through fast rebuild speed rather than expensive redundancy (Constitution I priority)** | **Multi-instance adds complexity and cost, slower to recreate in disaster scenarios** |
+| **External photo hosting** | **Free online services (imgur/cloudinary) eliminate storage infrastructure, reduce deployment complexity, instant <4 hour deployment** | **Self-hosted MinIO adds Docker service, storage management, backup complexity** |
 
 ---
 
@@ -278,10 +290,10 @@ No constitution violations requiring justification. All complexity is necessary:
    - Research: Service Worker strategies, IndexedDB for structured data, cache invalidation
    - Output: Caching strategy with cache size limits, update frequency
 
-7. **Photo Storage and Optimization**
-   - Question: Local filesystem vs MinIO vs S3 for photo storage (5MB max, 1000-5000 photos)?
-   - Research: Cost comparison, self-hosting requirements, image optimization pipelines
-   - Output: Storage decision, image processing strategy (WebP conversion, thumbnail generation)
+7. **Photo URL Storage and Validation**
+   - Question: How to validate and store photo URLs from free online hosting services?
+   - Research: URL validation patterns, external image service reliability, CORS handling
+   - Output: URL validation strategy, supported hosting providers (imgur, cloudinary, etc.)
 
 8. **GraphQL Performance Optimization**
    - Question: How to handle N+1 query problem for nested marker data (user, edit history, photos)?
@@ -297,7 +309,8 @@ No constitution violations requiring justification. All complexity is necessary:
 
 ### Output
 
-`research.md` in this directory (specs/002-interactive-disaster-map/)
+- `research.md` - Original Node.js research (reference)
+- `research-python.md` - **Python-focused decisions** (active, reflects team expertise)
 
 ---
 
@@ -345,20 +358,21 @@ No constitution violations requiring justification. All complexity is necessary:
      ```
 
 3. **Generate quickstart.md**
-   - Prerequisites: Node.js 20, Docker, PostgreSQL tools
+   - Prerequisites: Python 3.11+, Docker, PostgreSQL tools
    - Setup steps:
      1. Clone repository
      2. Copy `.env.example` → `.env`, configure LINE API keys
      3. `docker-compose up -d` (starts Postgres, Redis)
-     4. `cd backend && npm install && npx prisma migrate dev`
-     5. `cd frontend && npm install && npm run dev`
-     6. Access http://localhost:3000
-   - Development workflow: Hot reload, GraphQL Playground, database migrations
-   - Troubleshooting: Common errors (Postgres connection, LINE auth, map tiles)
+     4. `cd backend && python -m venv venv && source venv/bin/activate`
+     5. `pip install -r requirements.txt && alembic upgrade head`
+     6. `uvicorn app.main:app --reload`  (GraphQL at http://localhost:8000/graphql)
+     7. `cd frontend && npm install && npm run dev`  (http://localhost:3000)
+   - Development workflow: Hot reload (uvicorn), GraphQL IDE, Alembic migrations
+   - Troubleshooting: Common errors (Postgres connection, LINE auth, h3-py install, map tiles, photo URL validation)
 
 4. **Update Agent Context**
    - Run `.specify/scripts/bash/update-agent-context.sh claude`
-   - Add technology: Apollo Server, Prisma, Leaflet.js, H3, LINE Login API
+   - Add technology: FastAPI, Strawberry GraphQL, SQLAlchemy 2.x, h3-py, Leaflet.js, LINE Login SDK
    - Preserve manual additions (custom patterns, team conventions)
 
 ### Success Criteria
@@ -386,36 +400,36 @@ Run `/speckit.tasks 002-interactive-disaster-map` to generate `tasks.md` with ac
 
 ---
 
-## Migration from Legacy API
+## Fresh Database Design
 
-**Context**: Legacy system uses FastAPI (Python) with REST endpoints `/places`, `/human_resources`, `/supplies*` and PostgreSQL with specific table schema (see `table_spec.md`).
+**Context**: This is a **clean slate implementation** with a new PostgreSQL database. No data migration from legacy system. Legacy code serves as reference for patterns and team familiarity only.
 
-**Migration Strategy** (detailed in research.md Phase 0):
+**Design Strategy**:
 
-1. **Data Schema Compatibility**:
-   - Map legacy `places` table → new `Marker` entity with `type` field
-   - Preserve `additional_info` JSONB field for flexible attributes
-   - Add new fields: `edit_history`, `proximity_cluster_id`, `whitelist_approved`
+1. **Fresh Schema Design**:
+   - Clean GraphQL-first database design without legacy constraints
+   - `places` table renamed to `markers` for clarity (no legacy preservation needed)
+   - Optimized schema: `id`, `name`, `type`, `coordinates`, `status`, `additional_info` (JSONB), `photo_urls` (TEXT[]), `h3_index_13`, `version`, `created_at`, `updated_at`
+   - Supporting tables: `users`, `edit_history`, `restricted_areas`, `facilities`
 
-2. **API Transition**:
-   - **Dual-stack approach**: Run FastAPI + Apollo GraphQL in parallel during migration
-   - GraphQL resolvers query same PostgreSQL database
-   - Deprecate REST endpoints after 6 months (post-migration validation period)
+2. **API Implementation**:
+   - **GraphQL-only backend** (no dual-stack complexity needed)
+   - Strawberry GraphQL with FastAPI mount
+   - Clean resolver architecture without REST compatibility concerns
 
-3. **Field Configuration Migration**:
-   - Extract field definitions from FastAPI Pydantic schemas → `config/field-definitions.json`
-   - Create admin UI for backend field management (Phase 2 enhancement)
-   - Support both hardcoded (system fields: name, coordinates, status) and dynamic fields (disaster-specific attributes)
+3. **Field Configuration**:
+   - `config/field-definitions.json` defines dynamic fields for marker types
+   - JSON Schema validation at GraphQL resolver level
+   - System fields (name, coordinates, status) vs dynamic fields (disaster-specific attributes)
 
-4. **Backward Compatibility**:
-   - Preserve existing `places` table structure, add new tables for features (edit_history, restricted_areas)
-   - Create database views for legacy REST endpoints (if needed during transition)
-   - Document breaking changes in `docs/api-migration.md`
+4. **Rapid Deployment Focus**:
+   - Single Alembic migration creates all tables on first deploy
+   - Seed data script for initial admin user and base configuration
+   - <4 hour deployment from code to production (Constitution I requirement)
 
-**Reference Legacy Code**:
-- `/Users/richard_ys_lin/projects/guangfu/legacy-version/backend/api-server/guanfu_backend/src/routers/places.py`
-- `/Users/richard_ys_lin/projects/guangfu/legacy-version/backend/api-server/guanfu_backend/src/routers/human_resources.py`
-- `/Users/richard_ys_lin/projects/guangfu/legacy-version/backend/api-server/table_spec.md`
+**Reference Legacy Code** (patterns only, no data migration):
+- `/Users/richard_ys_lin/projects/guangfu/legacy-version/backend/api-server/guanfu_backend/src/routers/places.py` - FastAPI patterns
+- `/Users/richard_ys_lin/projects/guangfu/legacy-version/backend/api-server/table_spec.md` - Schema reference
 
 ---
 
