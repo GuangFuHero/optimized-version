@@ -16,13 +16,13 @@ The Interactive Disaster Relief Map provides a centralized, real-time platform f
 - Frontend: HTML/CSS/JavaScript (ES2022) with optional React 18+
 
 **Primary Dependencies**:
-- Backend: Strawberry GraphQL 0.216+ (GraphQL), SQLAlchemy 2.x (ORM with PostgreSQL), FastAPI 0.104+ (ASGI server)
+- Backend: Strawberry GraphQL 0.216+ (GraphQL), SQLAlchemy 2.x (ORM with PostgreSQL), GeoAlchemy-2>=0.18, FastAPI 0.104+ (ASGI server)
 - Frontend: Leaflet.js 1.9+ (mapping), Apollo Client 3.x or urql 4.x (GraphQL)
 - Authentication: LINE Login SDK, PyJWT (JWT)
 - Geospatial: h3-py (Uber H3 Python bindings), Shapely (geometric operations)
 
 **Storage**:
-- Database: PostgreSQL 15+ with PostGIS 3.x extension (geospatial support)
+- Database: PostgreSQL 15+ with PostGIS 3.x extension (geospatial support) with [h3](https://blog.rustprooflabs.com/2022/04/postgis-h3-intro)
 - Photo Storage: Free online image hosting (imgur, cloudinary, etc.) - users provide URLs
 - Cache: Redis 7.x (optional, for session management)
 
@@ -76,7 +76,7 @@ The Interactive Disaster Relief Map provides a centralized, real-time platform f
 ### ✅ II. Disaster-First Design
 
 - ✅ **Progressive enhancement**: HTML-first forms, map loads without JS (base image fallback)
-- ✅ **Offline capability**: Service Worker caches map tiles, marker data, facility info
+- ✅ **Offline capability**: Service Worker caches map tiles, marker data, facility info. Client-side map tile cache, edit update cache, etc. 
 - ✅ **Graceful degradation**: Geocoding failure → manual coordinate entry, photo upload failure → text-only submission
 - ✅ **Mobile-first**: Responsive design, touch gestures, <3MB initial bundle
 - ✅ **Low-bandwidth**: Images compressed (WebP/AVIF), lazy-load non-critical assets, <1MB page weight
