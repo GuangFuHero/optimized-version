@@ -1,0 +1,131 @@
+name: Repository Notifications
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  issues:
+    types: [opened, closed, reopened]
+  issue_comment:
+    types: [created]
+  create:
+  delete:
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    outputs:
+      event_type: ${{ steps.set_info.outputs.event_type }}
+      event_title: ${{ steps.set_info.outputs.event_title }}
+      event_description: ${{ steps.set_info.outputs.event_description }}
+      event_url: ${{ steps.set_info.outputs.event_url }}
+      event_author: ${{ steps.set_info.outputs.event_author }}
+      should_notify: ${{ steps.set_info.outputs.should_notify }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine event information
+        id: set_info
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "event_type=push" >> $GITHUB_OUTPUT
+            echo "event_title=New commits pushed to ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            DESC="**Branch:** ${{ github.ref_name }}
+**Commits:** ${{ github.event.commits.size() }}
+**Author:** ${{ github.event.head_commit.author.name }}
+**Message:** ${{ github.event.head_commit.message }}"
+            echo "event_description<<EOF" >> $GITHUB_OUTPUT
+            echo "$DESC" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "event_url=${{ github.event.head_commit.url }}" >> $GITHUB_OUTPUT
+            echo "event_author=${{ github.actor }}" >> $GITHUB_OUTPUT
+            echo "should_notify=true" >> $GITHUB_OUTPUT
+            echo "Push event detected on ${{ github.ref_name }}"
+          elif [[ "${{ github.event_name }}" == "issues" ]]; then
+            echo "event_type=issue" >> $GITHUB_OUTPUT
+            echo "event_title=Issue ${{ github.event.action }}: ${{ github.event.issue.title }}" >> $GITHUB_OUTPUT
+            DESC="**Issue #${{ github.event.issue.number }}** by @${{ github.event.issue.user.login }}
+**Action:** ${{ github.event.action }}
+**State:** ${{ github.event.issue.state }}"
+            echo "event_description<<EOF" >> $GITHUB_OUTPUT
+            echo "$DESC" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "event_url=${{ github.event.issue.html_url }}" >> $GITHUB_OUTPUT
+            echo "event_author=${{ github.event.issue.user.login }}" >> $GITHUB_OUTPUT
+            echo "should_notify=true" >> $GITHUB_OUTPUT
+            echo "Issue event detected: ${{ github.event.action }}"
+          elif [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            echo "event_type=issue_comment" >> $GITHUB_OUTPUT
+            echo "event_title=New comment on Issue #${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+            DESC="**Issue:** ${{ github.event.issue.title }}
+**Comment by:** @${{ github.event.comment.user.login }}"
+            echo "event_description<<EOF" >> $GITHUB_OUTPUT
+            echo "$DESC" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "event_url=${{ github.event.comment.html_url }}" >> $GITHUB_OUTPUT
+            echo "event_author=${{ github.event.comment.user.login }}" >> $GITHUB_OUTPUT
+            echo "should_notify=true" >> $GITHUB_OUTPUT
+            echo "Issue comment event detected"
+          elif [[ "${{ github.event_name }}" == "create" ]]; then
+            echo "event_type=create" >> $GITHUB_OUTPUT
+            echo "event_title=${{ github.event.ref_type }} created: ${{ github.event.ref }}" >> $GITHUB_OUTPUT
+            DESC="**Type:** ${{ github.event.ref_type }}
+**Name:** ${{ github.event.ref }}"
+            echo "event_description<<EOF" >> $GITHUB_OUTPUT
+            echo "$DESC" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "event_url=${{ github.repository_url }}/tree/${{ github.event.ref }}" >> $GITHUB_OUTPUT
+            echo "event_author=${{ github.actor }}" >> $GITHUB_OUTPUT
+            echo "should_notify=true" >> $GITHUB_OUTPUT
+            echo "Create event detected: ${{ github.event.ref_type }}"
+          elif [[ "${{ github.event_name }}" == "delete" ]]; then
+            echo "event_type=delete" >> $GITHUB_OUTPUT
+            echo "event_title=${{ github.event.ref_type }} deleted: ${{ github.event.ref }}" >> $GITHUB_OUTPUT
+            DESC="**Type:** ${{ github.event.ref_type }}
+**Name:** ${{ github.event.ref }}"
+            echo "event_description<<EOF" >> $GITHUB_OUTPUT
+            echo "$DESC" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "event_url=${{ github.repository_url }}" >> $GITHUB_OUTPUT
+            echo "event_author=${{ github.actor }}" >> $GITHUB_OUTPUT
+            echo "should_notify=true" >> $GITHUB_OUTPUT
+            echo "Delete event detected: ${{ github.event.ref_type }}"
+          else
+            echo "should_notify=false" >> $GITHUB_OUTPUT
+            echo "No notification needed for this event"
+          fi
+
+  notify:
+    needs: init
+    if: needs.init.outputs.should_notify == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Display Repository Notification
+        run: |
+          echo "📢 Repository Event Notification"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Type: ${{ needs.init.outputs.event_type }}"
+          echo "Title: ${{ needs.init.outputs.event_title }}"
+          echo "Author: ${{ needs.init.outputs.event_author }}"
+          echo "URL: ${{ needs.init.outputs.event_url }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Notify Discord
+        if: always()
+        uses: sarisia/actions-status-discord@v1
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          title: "${{ needs.init.outputs.event_title }}"
+          description: "${{ needs.init.outputs.event_description }}"
+          url: "${{ needs.init.outputs.event_url }}"
+          color: 0x5865F2
+

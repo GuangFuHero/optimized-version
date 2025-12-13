@@ -1,0 +1,154 @@
+name: Pull Request Notifications
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, closed, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.set_pr_info.outputs.pr_number }}
+      pr_title: ${{ steps.set_pr_info.outputs.pr_title }}
+      pr_author: ${{ steps.set_pr_info.outputs.pr_author }}
+      pr_state: ${{ steps.set_pr_info.outputs.pr_state }}
+      pr_url: ${{ steps.set_pr_info.outputs.pr_url }}
+      pr_branch: ${{ steps.set_pr_info.outputs.pr_branch }}
+      base_branch: ${{ steps.set_pr_info.outputs.base_branch }}
+      action: ${{ steps.set_pr_info.outputs.action }}
+      should_notify: ${{ steps.set_pr_info.outputs.should_notify }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine PR information
+        id: set_pr_info
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+            echo "pr_author=${{ github.event.pull_request.user.login }}" >> $GITHUB_OUTPUT
+            echo "pr_state=${{ github.event.pull_request.state }}" >> $GITHUB_OUTPUT
+            echo "pr_url=${{ github.event.pull_request.html_url }}" >> $GITHUB_OUTPUT
+            echo "pr_branch=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
+            echo "base_branch=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
+            echo "action=${{ github.event.action }}" >> $GITHUB_OUTPUT
+            echo "should_notify=true" >> $GITHUB_OUTPUT
+            echo "PR event detected: ${{ github.event.action }}"
+          elif [[ "${{ github.event_name }}" == "pull_request_review" ]]; then
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+            echo "pr_author=${{ github.event.pull_request.user.login }}" >> $GITHUB_OUTPUT
+            echo "pr_state=${{ github.event.pull_request.state }}" >> $GITHUB_OUTPUT
+            echo "pr_url=${{ github.event.pull_request.html_url }}" >> $GITHUB_OUTPUT
+            echo "pr_branch=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
+            echo "base_branch=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
+            echo "action=review_${{ github.event.review.state }}" >> $GITHUB_OUTPUT
+            echo "should_notify=true" >> $GITHUB_OUTPUT
+            echo "PR review event detected: ${{ github.event.review.state }}"
+          else
+            echo "should_notify=false" >> $GITHUB_OUTPUT
+            echo "No notification needed for this event"
+          fi
+
+  notify:
+    needs: init
+    if: needs.init.outputs.should_notify == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Display PR Notification
+        run: |
+          echo "🚀 Pull Request Notification"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "PR #${{ needs.init.outputs.pr_number }}: ${{ needs.init.outputs.pr_title }}"
+          echo "Author: ${{ needs.init.outputs.pr_author }}"
+          echo "Action: ${{ needs.init.outputs.action }}"
+          echo "State: ${{ needs.init.outputs.pr_state }}"
+          echo "Branch: ${{ needs.init.outputs.pr_branch }} → ${{ needs.init.outputs.base_branch }}"
+          echo "URL: ${{ needs.init.outputs.pr_url }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Notify Discord
+        if: always()
+        uses: sarisia/actions-status-discord@v1
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          title: "Pull Request: ${{ needs.init.outputs.pr_title }}"
+          description: |
+            **PR #${{ needs.init.outputs.pr_number }}** by @${{ needs.init.outputs.pr_author }}
+            Action: ${{ needs.init.outputs.action }}
+            State: ${{ needs.init.outputs.pr_state }}
+            Branch: ${{ needs.init.outputs.pr_branch }} → ${{ needs.init.outputs.base_branch }}
+            **URL:** ${{ needs.init.outputs.pr_url }}
+          color: 0x3498db
+
+      # Option 2: Slack Notification (requires SLACK_WEBHOOK_URL secret)
+      # - name: Notify Slack
+      #   if: always()
+      #   uses: 8398a7/action-slack@v3
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      #   with:
+      #     status: ${{ job.status }}
+      #     text: |
+      #       PR #${{ needs.init.outputs.pr_number }}: ${{ needs.init.outputs.pr_title }}
+      #       Author: ${{ needs.init.outputs.pr_author }}
+      #       Action: ${{ needs.init.outputs.action }}
+      #       State: ${{ needs.init.outputs.pr_state }}
+      #       Branch: ${{ needs.init.outputs.pr_branch }} → ${{ needs.init.outputs.base_branch }}
+      #       ${{ needs.init.outputs.pr_url }}
+      #     webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      # Option 3: Email Notification (requires SMTP configuration)
+      # - name: Send Email
+      #   if: always()
+      #   uses: dawidd6/action-send-mail@v3
+      #   env:
+      #     EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+      #     EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+      #     NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
+      #   with:
+      #     server_address: smtp.gmail.com
+      #     server_port: 465
+      #     username: ${{ secrets.EMAIL_USERNAME }}
+      #     password: ${{ secrets.EMAIL_PASSWORD }}
+      #     subject: "PR #${{ needs.init.outputs.pr_number }}: ${{ needs.init.outputs.pr_title }}"
+      #     to: ${{ secrets.NOTIFICATION_EMAIL }}
+      #     from: GitHub Actions
+      #     body: |
+      #       A new pull request event occurred:
+      #       
+      #       PR #${{ needs.init.outputs.pr_number }}: ${{ needs.init.outputs.pr_title }}
+      #       Author: ${{ needs.init.outputs.pr_author }}
+      #       Action: ${{ needs.init.outputs.action }}
+      #       State: ${{ needs.init.outputs.pr_state }}
+      #       Branch: ${{ needs.init.outputs.pr_branch }} → ${{ needs.init.outputs.base_branch }}
+      #       
+      #       View PR: ${{ needs.init.outputs.pr_url }}
+
+      # Option 4: Microsoft Teams Notification (requires TEAMS_WEBHOOK_URL secret)
+      # - name: Notify Microsoft Teams
+      #   if: always()
+      #   uses: aliencube/microsoft-teams-actions@v0.8.0
+      #   env:
+      #     TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+      #   with:
+      #     webhook_uri: ${{ secrets.TEAMS_WEBHOOK_URL }}
+      #     title: "PR #${{ needs.init.outputs.pr_number }}: ${{ needs.init.outputs.pr_title }}"
+      #     summary: "Pull Request Notification"
+      #     text: |
+      #       **Author:** ${{ needs.init.outputs.pr_author }}
+      #       **Action:** ${{ needs.init.outputs.action }}
+      #       **State:** ${{ needs.init.outputs.pr_state }}
+      #       **Branch:** ${{ needs.init.outputs.pr_branch }} → ${{ needs.init.outputs.base_branch }}
+      #       **URL:** ${{ needs.init.outputs.pr_url }}
+
