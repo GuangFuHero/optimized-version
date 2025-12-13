@@ -47,12 +47,11 @@ jobs:
             if [[ -z "$COMMIT_URL" ]]; then
               COMMIT_URL="${{ github.event.repository.html_url }}/commit/${{ github.sha }}"
             fi
-            DESC="**Branch:** ${{ github.ref_name }}
-**Commits:** ${COMMIT_COUNT}
-**Author:** ${COMMIT_AUTHOR}
-**Message:** ${COMMIT_MESSAGE}"
             echo "event_description<<EOF" >> $GITHUB_OUTPUT
-            echo "$DESC" >> $GITHUB_OUTPUT
+            echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "**Commits:** ${COMMIT_COUNT}" >> $GITHUB_OUTPUT
+            echo "**Author:** ${COMMIT_AUTHOR}" >> $GITHUB_OUTPUT
+            echo "**Message:** ${COMMIT_MESSAGE}" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
             echo "event_url=${COMMIT_URL}" >> $GITHUB_OUTPUT
             echo "event_author=${{ github.actor }}" >> $GITHUB_OUTPUT
@@ -61,11 +60,10 @@ jobs:
           elif [[ "${{ github.event_name }}" == "issues" ]]; then
             echo "event_type=issue" >> $GITHUB_OUTPUT
             echo "event_title=Issue ${{ github.event.action }}: ${{ github.event.issue.title }}" >> $GITHUB_OUTPUT
-            DESC="**Issue #${{ github.event.issue.number }}** by @${{ github.event.issue.user.login }}
-**Action:** ${{ github.event.action }}
-**State:** ${{ github.event.issue.state }}"
             echo "event_description<<EOF" >> $GITHUB_OUTPUT
-            echo "$DESC" >> $GITHUB_OUTPUT
+            echo "**Issue #${{ github.event.issue.number }}** by @${{ github.event.issue.user.login }}" >> $GITHUB_OUTPUT
+            echo "**Action:** ${{ github.event.action }}" >> $GITHUB_OUTPUT
+            echo "**State:** ${{ github.event.issue.state }}" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
             echo "event_url=${{ github.event.issue.html_url }}" >> $GITHUB_OUTPUT
             echo "event_author=${{ github.event.issue.user.login }}" >> $GITHUB_OUTPUT
@@ -74,10 +72,9 @@ jobs:
           elif [[ "${{ github.event_name }}" == "issue_comment" ]]; then
             echo "event_type=issue_comment" >> $GITHUB_OUTPUT
             echo "event_title=New comment on Issue #${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
-            DESC="**Issue:** ${{ github.event.issue.title }}
-**Comment by:** @${{ github.event.comment.user.login }}"
             echo "event_description<<EOF" >> $GITHUB_OUTPUT
-            echo "$DESC" >> $GITHUB_OUTPUT
+            echo "**Issue:** ${{ github.event.issue.title }}" >> $GITHUB_OUTPUT
+            echo "**Comment by:** @${{ github.event.comment.user.login }}" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
             echo "event_url=${{ github.event.comment.html_url }}" >> $GITHUB_OUTPUT
             echo "event_author=${{ github.event.comment.user.login }}" >> $GITHUB_OUTPUT
@@ -86,10 +83,9 @@ jobs:
           elif [[ "${{ github.event_name }}" == "create" ]]; then
             echo "event_type=create" >> $GITHUB_OUTPUT
             echo "event_title=${{ github.event.ref_type }} created: ${{ github.event.ref }}" >> $GITHUB_OUTPUT
-            DESC="**Type:** ${{ github.event.ref_type }}
-**Name:** ${{ github.event.ref }}"
             echo "event_description<<EOF" >> $GITHUB_OUTPUT
-            echo "$DESC" >> $GITHUB_OUTPUT
+            echo "**Type:** ${{ github.event.ref_type }}" >> $GITHUB_OUTPUT
+            echo "**Name:** ${{ github.event.ref }}" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
             echo "event_url=${{ github.repository_url }}/tree/${{ github.event.ref }}" >> $GITHUB_OUTPUT
             echo "event_author=${{ github.actor }}" >> $GITHUB_OUTPUT
@@ -98,10 +94,9 @@ jobs:
           elif [[ "${{ github.event_name }}" == "delete" ]]; then
             echo "event_type=delete" >> $GITHUB_OUTPUT
             echo "event_title=${{ github.event.ref_type }} deleted: ${{ github.event.ref }}" >> $GITHUB_OUTPUT
-            DESC="**Type:** ${{ github.event.ref_type }}
-**Name:** ${{ github.event.ref }}"
             echo "event_description<<EOF" >> $GITHUB_OUTPUT
-            echo "$DESC" >> $GITHUB_OUTPUT
+            echo "**Type:** ${{ github.event.ref_type }}" >> $GITHUB_OUTPUT
+            echo "**Name:** ${{ github.event.ref }}" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
             echo "event_url=${{ github.repository_url }}" >> $GITHUB_OUTPUT
             echo "event_author=${{ github.actor }}" >> $GITHUB_OUTPUT
