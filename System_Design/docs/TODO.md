@@ -66,6 +66,37 @@
 
 ---
 
+---
+
+## Code Review Findings (2025-12-13)
+
+Issues identified during code review before main branch push. Security issues were fixed; others documented here for future work.
+
+### Fixed ✅
+
+- [x] **Path traversal vulnerability** (server.py) - Fixed validation order in `read_file()`, `write_file()`, and `handle_node_update()`
+- [x] **Test import mismatch** (test_api.py) - Updated `DOCS_DIR` → `MINDMAP_DIR`
+- [x] **Test fixture structure** (test_api.py) - Updated to use new `content.md` structure
+
+### Should Fix (Medium Priority)
+
+- [ ] **No file size limit** (server.py `write_file()`) - Add max file size validation to prevent DoS
+- [ ] **Exception handling too broad** (server.py `broadcast_update()`) - Silent `except Exception: pass` swallows errors
+- [ ] **No logging** (server.py) - Add logging for file access, modifications, and security events
+- [ ] **WebSocket reconnect race condition** (editor.js L375-382) - Multiple reconnect timers can create multiple connections
+- [ ] **XSS vulnerability** (editor.js `loadAllMarkdown()`) - innerHTML with user content needs HTML escaping
+
+### Nice to Have (Low Priority)
+
+- [ ] **No authentication** - Anyone on localhost can read/write files (OK for local dev, but document the risk)
+- [ ] **Python version mismatch** - `.python-version` says 3.11, `pyproject.toml` requires >=3.12
+- [ ] **Magic numbers** (editor.js) - Hardcoded values (maxWidth: 300, reconnect delay: 3000ms)
+- [ ] **Memory leak potential** (server.py `agent_sessions` dict) - Declared but unused, or needs cleanup logic
+- [ ] **CORS not configured** (server.py) - May cause issues if frontend/backend split in future
+- [ ] **Inefficient text search** (editor.js `saveNodeEdit()`) - O(n*m) file search, should use node metadata
+
+---
+
 ## Future Ideas
 
 - [ ] Collaborative editing (multiple users)

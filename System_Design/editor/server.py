@@ -123,13 +123,14 @@ async def list_files():
 @app.get("/api/files/{file_path:path}")
 async def read_file(file_path: str):
     """Read a markdown file"""
-    full_path = MINDMAP_DIR / file_path
+    # SECURITY: Validate path FIRST before any file operations
+    full_path = (MINDMAP_DIR / file_path).resolve()
+    if not str(full_path).startswith(str(MINDMAP_DIR.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
     if not full_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
     if not full_path.is_file():
         raise HTTPException(status_code=400, detail=f"Not a file: {file_path}")
-    if not str(full_path.resolve()).startswith(str(MINDMAP_DIR.resolve())):
-        raise HTTPException(status_code=403, detail="Access denied")
 
     content = full_path.read_text(encoding="utf-8")
     return {"path": file_path, "content": content}
@@ -138,8 +139,9 @@ async def read_file(file_path: str):
 @app.put("/api/files/{file_path:path}")
 async def write_file(file_path: str, data: FileContent):
     """Write/update a markdown file"""
-    full_path = MINDMAP_DIR / file_path
-    if not str(full_path.resolve()).startswith(str(MINDMAP_DIR.resolve())):
+    # SECURITY: Validate path FIRST before any file operations
+    full_path = (MINDMAP_DIR / file_path).resolve()
+    if not str(full_path).startswith(str(MINDMAP_DIR.resolve())):
         raise HTTPException(status_code=403, detail="Access denied")
 
     # Create parent directories if needed
@@ -364,7 +366,11 @@ async def handle_node_update(message: dict, sender: WebSocket):
         await sender.send_json({"type": "error", "message": "Invalid update message"})
         return
 
-    full_path = MINDMAP_DIR / file_path
+    # SECURITY: Validate path FIRST before any file operations
+    full_path = (MINDMAP_DIR / file_path).resolve()
+    if not str(full_path).startswith(str(MINDMAP_DIR.resolve())):
+        await sender.send_json({"type": "error", "message": "Access denied"})
+        return
     if not full_path.exists():
         await sender.send_json({"type": "error", "message": f"File not found: {file_path}"})
         return

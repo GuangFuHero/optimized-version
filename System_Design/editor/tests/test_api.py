@@ -27,52 +27,54 @@ from fastapi import status
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from server import app, DOCS_DIR, STATIC_DIR, PROJECT_ROOT
+from server import app, MINDMAP_DIR, STATIC_DIR, PROJECT_ROOT
 
 
 # ==================== Fixtures ====================
 
 @pytest.fixture
 def temp_docs_dir(tmp_path):
-    """Create a temporary docs directory for testing"""
-    docs = tmp_path / "docs"
-    docs.mkdir()
+    """Create a temporary mindmap directory for testing (matches new content.md structure)"""
+    mindmap = tmp_path / "mindmap"
+    mindmap.mkdir()
 
-    # Create a sample module structure
-    module_01 = docs / "01-map"
+    # Create a sample module structure matching the new layout
+    module_01 = mindmap / "01_map"
     module_01.mkdir()
 
-    # Create requirements.md
-    requirements = module_01 / "requirements.md"
-    requirements.write_text("""# 地圖站點
+    # Create module-level content.md (user stories)
+    module_content = module_01 / "content.md"
+    module_content.write_text("✓ 一般民眾可以查看災區地圖\n✓ 志工可以看到任務地點")
 
-## FR-MAP-01: 基本地圖顯示
+    # Create requirements directory structure
+    requirements = module_01 / "requirements"
+    requirements.mkdir()
 
-### UI/UX
-使用者可以看到災區地圖
+    # Create requirements/content.md (FR list)
+    req_content = requirements / "content.md"
+    req_content.write_text("FR-MAP-01: 基本地圖顯示\nFR-MAP-02: 站點標記")
 
-### Frontend
-使用 Leaflet.js 顯示地圖
+    # Create dimension directories with content.md
+    for dim in ["ui_ux", "frontend", "backend", "ai_data"]:
+        dim_dir = requirements / dim
+        dim_dir.mkdir()
+        dim_content = dim_dir / "content.md"
+        dim_content.write_text(f"{dim} 相關需求說明")
 
-### Backend
-提供地圖資料 API
+    # Create backend/specs
+    specs_dir = requirements / "backend" / "specs"
+    specs_dir.mkdir()
+    specs_content = specs_dir / "content.md"
+    specs_content.write_text("S01-map-api: 地圖 API 規格")
 
-### AI & Data
-整合即時災情資料
-""")
-
-    # Create overview.md
-    overview = module_01 / "overview.md"
-    overview.write_text("# 地圖站點概述\n\n這是地圖模組的概述。")
-
-    return docs
+    return mindmap
 
 
 @pytest.fixture
 async def client(temp_docs_dir, monkeypatch):
-    """Create an async test client with patched DOCS_DIR"""
-    # Patch the DOCS_DIR to use temp directory
-    monkeypatch.setattr("server.DOCS_DIR", temp_docs_dir)
+    """Create an async test client with patched MINDMAP_DIR"""
+    # Patch the MINDMAP_DIR to use temp directory
+    monkeypatch.setattr("server.MINDMAP_DIR", temp_docs_dir)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -160,27 +162,29 @@ class TestFileAPI:
     """Test file listing and CRUD operations"""
 
     async def test_list_files_empty(self, client, temp_docs_dir, monkeypatch):
-        """GET /api/files should list markdown files"""
+        """GET /api/files should list content.md files in new structure"""
         response = await client.get("/api/files")
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
 
         assert "files" in data
         files = data["files"]
-        assert len(files) == 2  # requirements.md and overview.md
+        # New structure: 1 module + 1 requirements + 4 dimensions + 1 specs = 7 content.md files
+        assert len(files) == 7
 
-        # Check file structure
-        req_file = next(f for f in files if f["name"] == "requirements.md")
-        assert req_file["path"] == "01-map/requirements.md"
-        assert req_file["module"] == "01-map"
+        # Check file structure - all files should be content.md
+        assert all(f["name"] == "content.md" for f in files)
+        # All should be in 01_map module
+        assert all(f["module"] == "01_map" for f in files)
 
     async def test_read_file_success(self, client):
         """GET /api/files/{path} should return file content"""
-        response = await client.get("/api/files/01-map/requirements.md")
+        # Read from new content.md structure
+        response = await client.get("/api/files/01_map/requirements/content.md")
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
 
-        assert data["path"] == "01-map/requirements.md"
+        assert data["path"] == "01_map/requirements/content.md"
         assert "FR-MAP-01" in data["content"]
 
     async def test_read_file_not_found(self, client):
@@ -230,36 +234,37 @@ class TestTreeAPI:
     """Test document tree API for mindmap"""
 
     async def test_get_tree_structure(self, client):
-        """GET /api/tree should return hierarchical tree"""
+        """GET /api/tree should return hierarchical tree (new format)"""
         response = await client.get("/api/tree")
         assert response.status_code == status.HTTP_200_OK
         tree = response.json()
 
-        # Check root node
-        assert tree["name"] == "光復超人 2.0"
-        assert "children" in tree
+        # Check root structure
+        assert tree["title"] == "光復超人 2.0"
+        assert "modules" in tree
 
         # Check module nodes
-        assert len(tree["children"]) >= 1
-        module = tree["children"][0]
-        assert module["name"] == "01-map"
+        assert len(tree["modules"]) >= 1
+        module = tree["modules"][0]
+        assert module["id"] == "01_map"
+        assert module["name"] == "地圖站點"  # Mapped from MODULE_NAMES
         assert "requirements" in module
-        assert "FR-MAP-01" in module["requirements"]
-        assert "overview" in module
+        assert "FR-MAP-01" in module["requirements"]["content"]
+        assert "dimensions" in module["requirements"]
 
-    async def test_get_tree_excludes_specs_dir(self, client, temp_docs_dir):
-        """GET /api/tree should exclude specs/ directory"""
-        # Create specs dir
-        specs_dir = temp_docs_dir / "specs"
-        specs_dir.mkdir()
-        (specs_dir / "spec.md").write_text("# Spec")
+    async def test_get_tree_excludes_hidden_dirs(self, client, temp_docs_dir):
+        """GET /api/tree should exclude hidden directories (starting with .)"""
+        # Create a hidden dir
+        hidden_dir = temp_docs_dir / ".hidden"
+        hidden_dir.mkdir()
+        (hidden_dir / "content.md").write_text("# Hidden")
 
         response = await client.get("/api/tree")
         tree = response.json()
 
-        # Specs should not be in children
-        module_names = [child["name"] for child in tree["children"]]
-        assert "specs" not in module_names
+        # Hidden dir should not be in modules
+        module_ids = [m["id"] for m in tree["modules"]]
+        assert ".hidden" not in module_ids
 
 
 # ==================== Agent SDK Tests ====================
@@ -389,13 +394,13 @@ class TestIntegration:
         tree1 = await client.get("/api/tree")
         initial_tree = tree1.json()
 
-        # Add a new module
-        new_module_path = "99-test/requirements.md"
+        # Add a new module with proper content.md structure
+        new_module_path = "99_test/content.md"
         await client.put(
             f"/api/files/{new_module_path}",
             json={
                 "path": new_module_path,
-                "content": "# Test Module\n\n## FR-TEST-01: Test"
+                "content": "✓ Test user story"
             }
         )
 
@@ -403,9 +408,9 @@ class TestIntegration:
         tree2 = await client.get("/api/tree")
         updated_tree = tree2.json()
 
-        # New module should appear
-        module_names = [child["name"] for child in updated_tree["children"]]
-        assert "99-test" in module_names
+        # New module should appear (by id since no MODULE_NAMES mapping)
+        module_ids = [m["id"] for m in updated_tree["modules"]]
+        assert "99_test" in module_ids
 
 
 # ==================== Edge Cases & Security ====================
