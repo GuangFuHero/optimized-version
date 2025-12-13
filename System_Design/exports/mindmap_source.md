@@ -8,7 +8,7 @@
 
 #### Backend<br>設計 Station 資料表：id, disaster_id, type, name, status, lat, lng, description, photos<br>建立 /stations CRUD API（含權限：只有站點負責人或後台可以改）<br>加上 Geo Index（依經緯度查附近站點）<br>支援依 disaster_id 切換不同災難資料
 
-##### SPEC 連結<br>SPEC<br>002-interactive-disaster-map<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/specs/002-interactive-disaster-map
+##### SPEC 連結<br>SPEC<br>002-interactive-disaster-map<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/Backend/Spec/002-interactive-disaster-map
 
 #### Frontend<br>串接地圖套件（Leaflet/Mapbox/OSM），支援手機<br>呼叫 /stations API，依 disaster_id 顯示站點<br>支援篩選（站點類型、狀態）和地圖上點擊站點顯示資訊卡<br>低網速模式：預先載入/快取常用區塊
 
@@ -22,7 +22,7 @@
 
 #### Backend<br>Task 資料表：id, disaster_id, type, description, photos, location, status, verify_pin, created_at<br>API：建立任務、查詢列表、依驗證碼修改、志工更新狀態<br>狀態機制：未處理 → 進行中 → 完成（含權限檢查）<br>基本濫用防護（同 IP 過度送出時限流）
 
-##### SPEC 連結<br>SPEC<br>003 Request-Management<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/specs/003-request-management<br>SPEC<br>004-volunteer-dispatch<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/specs/004-volunteer-dispatch
+##### SPEC 連結<br>SPEC<br>003 Request-Management<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/Backend/Spec/003-request-management<br>SPEC<br>004-volunteer-dispatch<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/Backend/Spec/004-volunteer-dispatch
 
 #### Frontend<br>任務建立表單（不需登入），送出後顯示驗證碼<br>用 cookie 記住驗證碼，災民回來可以修改/取消需求<br>任務列表頁給志工：支援 filter, sort, 狀態更新按鈕<br>呼叫 /tasks API 以及 /tasks/{id}/status 更新
 
@@ -36,7 +36,7 @@
 
 #### Backend<br>DeliveryOrder 資料表：id, disaster_id, type(person/goods), pickup_location, dropoff_location, status, assigned_volunteer<br>API：建立配送單、列表查詢、接受訂單、更新狀態<br>基本鎖定機制：同一張單不能被兩位志工同時接（transaction/lock）<br>未來可與倉庫庫存表整合
 
-##### SPEC 連結<br>SPEC<br>003 Request-Management<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/specs/003-request-management<br>SPEC<br>005-supply-management<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/specs/005-supply-management
+##### SPEC 連結<br>SPEC<br>003 Request-Management<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/Backend/Spec/003-request-management<br>SPEC<br>005-supply-management<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/Backend/Spec/005-supply-management
 
 #### Frontend<br>配送需求表單 → 呼叫 /deliveries 新增訂單<br>小蜜蜂視圖：顯示可接訂單列表＋「接受」按鈕<br>訂單詳細頁可更新狀態（運送中/已完成）<br>若有地圖整合：在地圖上畫出起點、終點、目前狀態
 
@@ -50,7 +50,7 @@
 
 #### Backend<br>InfoItem 資料表：id, disaster_id, title, content, source, type, tags, updated_at, status<br>API：/info（可依 type, tags, disaster_id 篩選）<br>和 Moderator Admin 整合：「已審核」內容才會出現在 /info
 
-##### SPEC 連結<br>SPEC<br>007-information-publishing<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/specs/007-information-publishing
+##### SPEC 連結<br>SPEC<br>007-information-publishing<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/Backend/Spec/007-information-publishing
 
 #### Frontend<br>靜態/半動態資訊區塊組合（從 /info API 取得）<br>支援 tag 或分類 filter（只看政府公告、只看行前準備...）<br>顯示資料最近更新時間與來源（提高信任）
 
@@ -64,7 +64,7 @@
 
 #### Backend<br>ModerationQueue / InfoItem.status 欄位（pending/approved/rejected/outdated）<br>API：列出待審資料、更新審核結果、記錄審核人與時間<br>審核結果同步到 InfoItem / Station / Map overlay
 
-##### SPEC 連結<br>SPEC<br>007-information-publishing<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/specs/007-information-publishing<br>SPEC<br>006-backend-administration<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/specs/006-backend-administration
+##### SPEC 連結<br>SPEC<br>007-information-publishing<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/Backend/Spec/007-information-publishing<br>SPEC<br>006-backend-administration<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/Backend/Spec/006-backend-administration
 
 #### Frontend<br>後台 web：登入後才能使用（Moderator 角色）<br>列表視圖：顯示待審 InfoItems / 外部資料<br>詳情視圖：顯示原文＋AI 分析（可信度、抽取的地點/時間/類型）<br>操作按鈕：Approve / Reject / Mark Outdated / Merge
 
@@ -78,7 +78,7 @@
 
 #### Backend<br>DisasterInstance 表：id, name, region, active_modules, config_json<br>FieldConfig 表：針對不同功能的欄位設定<br>API：<br>/admin/disasters（CRUD）<br>/admin/config（讀寫欄位與模組設定）<br>/admin/stats（回傳 dashboard 數據）
 
-##### SPEC 連結<br>SPEC<br>006-backend-administration<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/specs/006-backend-administration
+##### SPEC 連結<br>SPEC<br>006-backend-administration<br>https://github.com/GuangFuHero/optimized-version/tree/specs-planning/Backend/Spec/006-backend-administration
 
 #### Frontend<br>災難列表頁：所有 Disaster Instances<br>災難詳細頁：可調整<br>啟用模組（Map/Tasks/Delivery/Info）<br>表單欄位設定（必填/選填/隱藏）<br>前端文案模板<br>Dashboard：顯示任務數、完成率、配送量、活躍志工數、照片數、資料錯誤率 etc
 

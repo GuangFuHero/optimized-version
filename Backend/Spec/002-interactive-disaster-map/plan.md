@@ -1,7 +1,7 @@
 # Implementation Plan: Interactive Disaster Relief Map (互動式救災地圖)
 
 **Branch**: `002-interactive-disaster-map` | **Date**: 2025-11-29 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/002-interactive-disaster-map/spec.md`
+**Input**: Feature specification from `/Spec/002-interactive-disaster-map/spec.md`
 
 ## Summary
 
@@ -141,7 +141,7 @@ The Interactive Disaster Relief Map provides a centralized, real-time platform f
 ### Documentation (this feature)
 
 ```text
-specs/002-interactive-disaster-map/
+Spec/002-interactive-disaster-map/
 ├── plan.md              # This file (/speckit.plan command output)
 ├── research.md          # Phase 0 output (GraphQL migration, flexible schema patterns)
 ├── data-model.md        # Phase 1 output (entity definitions, GraphQL types)

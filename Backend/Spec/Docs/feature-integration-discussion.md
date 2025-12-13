@@ -82,7 +82,7 @@ Level 4 (管理層):
 - **選項 C**: 兩者都有此權限 → 彈性最大
 - **選項 D**: 創建自訂角色「志工審核員」→ 專門角色
 
-**文件參考**: `docs/rbac-permissions-design.md`
+**文件參考**: `Backend/Spec/Docs/rbac-permissions-design.md`
 
 #### 不需再討論
 
@@ -142,7 +142,7 @@ Level 4 (管理層):
 
 1. 決定採用哪個選項
 2. 在 Feature 002 加入「Map Extensibility」章節
-3. 創建 `docs/api-contracts.md` 記錄 GeoJSON 格式
+3. 創建 `Backend/Spec/Docs/api-contracts.md` 記錄 GeoJSON 格式
 
 **討論問題**:
 
@@ -242,7 +242,7 @@ Sprint 8-9 (4週):  Feature 006 - 後台管理
 
 ### 立即行動 (會議決議後)
 
-- [x] **權限系統設計**: 定義所有權限和預設角色 → _完成_ (見 `docs/rbac-permissions-design.md`)
+- [x] **權限系統設計**: 定義所有權限和預設角色 → _完成_ (見 `Backend/Spec/Docs/rbac-permissions-design.md`)
 - [ ] **決策紀錄**: 記錄問題 B, C 的決定 → _指派給:_ \***\*\_\_\_\*\***
 - [ ] **更新 Feature 004 規格**: 加入權限系統參考 → _指派給:_ \***\*\_\_\_\*\***
 - [ ] **更新 Feature 006 規格**: 加入權限系統參考 → _指派給:_ \***\*\_\_\_\*\***
@@ -251,7 +251,7 @@ Sprint 8-9 (4週):  Feature 006 - 後台管理
 
 ### 短期行動 (1週內)
 
-- [ ] **創建 API contracts 文件**: `docs/api-contracts.md` → _指派給:_ \***\*\_\_\_\*\***
+- [ ] **創建 API contracts 文件**: `Backend/Spec/Docs/api-contracts.md` → _指派給:_ \***\*\_\_\_\*\***
 - [ ] **建立角色權限矩陣**: 誰可以做什麼 → _指派給:_ \***\*\_\_\_\*\***
 - [ ] **整合測試場景文件**: 跨 feature 測試 → _指派給:_ \***\*\_\_\_\*\***
 
@@ -284,8 +284,8 @@ Sprint 8-9 (4週):  Feature 006 - 後台管理
 
 ### 參考文件
 
-- 完整分析報告: `claudedocs/feature-dependency-analysis.md`
-- Feature 規格: `specs/00X-feature-name/spec.md`
+- 完整分析報告: `claudeBackend/Spec/Docs/feature-dependency-analysis.md`
+- Feature 規格: `Backend/Spec/00X-feature-name/spec.md`
 - 依賴關係圖: 見本文件 Section 1
 
 ---
@@ -305,7 +305,7 @@ Sprint 8-9 (4週):  Feature 006 - 後台管理
 
 **行動**:
 
-- ✅ 已完成權限系統設計文件 (`docs/rbac-permissions-design.md`)
+- ✅ 已完成權限系統設計文件 (`Backend/Spec/Docs/rbac-permissions-design.md`)
 - ⏳ 待更新 Feature 004 和 006 規格，加入文件參考
 - ⏳ 部署時由組織決定實際角色配置
 
@@ -394,4 +394,4 @@ Sprint 8-9 (4週):  Feature 006 - 後台管理
 - 這份文件包含所有必要的背景資訊和決策選項
 - 請在會議前閱讀 Section 1-2 (大約 10 分鐘)
 - 會議重點是 Section 2 的三個問題
-- 完整技術細節請參考 `claudedocs/feature-dependency-analysis.md`
+- 完整技術細節請參考 `claudeBackend/Spec/Docs/feature-dependency-analysis.md`

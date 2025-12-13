@@ -246,7 +246,7 @@ Feature 003 should clarify in its "Dependencies" or "Integration Points" section
 **Priority**: High
 **Rationale**: Prevent integration issues during implementation
 
-**Action**: Create `docs/api-contracts.md` documenting:
+**Action**: Create `Backend/Spec/Docs/api-contracts.md` documenting:
 
 - Feature 003 → Feature 002: Request GeoJSON API specification
 - Feature 004 → Feature 002: Volunteer location update API
@@ -319,7 +319,7 @@ Each feature is responsible for:
 **Priority**: Low
 **Rationale**: Ensure cross-feature workflows are tested
 
-**Action**: Create `docs/integration-test-scenarios.md` covering:
+**Action**: Create `Backend/Spec/Docs/integration-test-scenarios.md` covering:
 
 1. **Request → Volunteer → Map Flow**: Submit request → assign volunteer → see both on map
 2. **Supply Request → Fulfillment Flow**: Request supplies → allocate inventory → record delivery

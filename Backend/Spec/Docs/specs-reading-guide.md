@@ -33,7 +33,7 @@
 ### 核心規格文件 (最重要)
 
 ```
-specs/
+Backend/Spec/
 ├── 002-interactive-disaster-map/
 │   └── spec.md                    # 地圖和認證基礎
 ├── 003-request-management/
@@ -51,12 +51,12 @@ specs/
 ### 整合文件 (會議討論用)
 
 ```
-docs/
+Backend/Spec/Docs/
 ├── feature-integration-discussion.md    # 明天會議的主要文件 ⭐
 ├── rbac-permissions-design.md          # 權限系統完整設計
 └── api-contracts.md                    # (待建立) API 規格
 
-claudedocs/
+claudeBackend/Spec/Docs/
 └── feature-dependency-analysis.md      # 詳細的依賴分析報告
 ```
 
@@ -94,7 +94,7 @@ claudedocs/
 - GeoJSON 格式資料交換
 - 整合 Google Maps 路線規劃
 
-**完整規格**: `specs/002-interactive-disaster-map/spec.md`
+**完整規格**: `Backend/Spec/002-interactive-disaster-map/spec.md`
 
 ---
 
@@ -142,7 +142,7 @@ claudedocs/
 - 提供資料給 Feature 004（志工任務）
 - 提供資料給 Feature 005（物資需求連結）
 
-**完整規格**: `specs/003-request-management/spec.md`
+**完整規格**: `Backend/Spec/003-request-management/spec.md`
 
 ---
 
@@ -185,7 +185,7 @@ claudedocs/
 - 依賴 Feature 003（接收任務分配、更新需求狀態）
 - 提供資料給 Feature 006（志工統計）
 
-**完整規格**: `specs/004-volunteer-dispatch/spec.md`
+**完整規格**: `Backend/Spec/004-volunteer-dispatch/spec.md`
 
 ---
 
@@ -229,7 +229,7 @@ claudedocs/
 - 整合 Feature 003（連結物資需求）
 - 提供資料給 Feature 006（庫存統計）
 
-**完整規格**: `specs/005-supply-management/spec.md`
+**完整規格**: `Backend/Spec/005-supply-management/spec.md`
 
 ---
 
@@ -273,7 +273,7 @@ claudedocs/
 - 提供統一管理介面
 - 實作 RBAC 權限系統
 
-**完整規格**: `specs/006-backend-administration/spec.md`
+**完整規格**: `Backend/Spec/006-backend-administration/spec.md`
 
 ---
 
@@ -316,7 +316,7 @@ claudedocs/
 - 依賴 Feature 002（地理位置連結）
 - 提供資料給 Feature 006（內容統計）
 
-**完整規格**: `specs/007-information-publishing/spec.md`
+**完整規格**: `Backend/Spec/007-information-publishing/spec.md`
 
 ---
 
@@ -614,7 +614,7 @@ claudedocs/
 - 提供 8 個預設角色範本
 - 由部署組織自行決定角色配置
 
-**詳見**: `docs/rbac-permissions-design.md`
+**詳見**: `Backend/Spec/Docs/rbac-permissions-design.md`
 
 ---
 
@@ -624,30 +624,30 @@ claudedocs/
 
 ```bash
 # 查看某個 feature 的完整規格
-cat specs/002-interactive-disaster-map/spec.md
-cat specs/003-request-management/spec.md
-cat specs/004-volunteer-dispatch/spec.md
-cat specs/005-supply-management/spec.md
-cat specs/006-backend-administration/spec.md
-cat specs/007-information-publishing/spec.md
+cat Backend/Spec/002-interactive-disaster-map/spec.md
+cat Backend/Spec/003-request-management/spec.md
+cat Backend/Spec/004-volunteer-dispatch/spec.md
+cat Backend/Spec/005-supply-management/spec.md
+cat Backend/Spec/006-backend-administration/spec.md
+cat Backend/Spec/007-information-publishing/spec.md
 
 # 查看整合文件
-cat docs/feature-integration-discussion.md
-cat docs/rbac-permissions-design.md
-cat claudedocs/feature-dependency-analysis.md
+cat Backend/Spec/Docs/feature-integration-discussion.md
+cat Backend/Spec/Docs/rbac-permissions-design.md
+cat claudeBackend/Spec/Docs/feature-dependency-analysis.md
 ```
 
 ### 關鍵字搜尋
 
 ```bash
 # 搜尋特定功能需求
-grep "FR-" specs/*/spec.md
+grep "FR-" Backend/Spec/*/spec.md
 
 # 搜尋整合點
-grep -i "integration" specs/*/spec.md
+grep -i "integration" Backend/Spec/*/spec.md
 
 # 搜尋依賴關係
-grep -i "depend" specs/*/spec.md
+grep -i "depend" Backend/Spec/*/spec.md
 ```
 
 ---
