@@ -1,0 +1,45 @@
+# macOS
+.DS_Store
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Secrets
+*secret*
+*key*.json
+credentials*.json
+
+# Image tiles (OCR reference, can be regenerated)
+image_tiles_*/
+
+# uv generated files
+main.py
+
+# Exports can be regenerated
+exports/*.dot
+
+# Test screenshots
+editor/tests/screenshots/
+
+# Playwright MCP config
+.playwright-mcp/
+
+# AI chatroom - ephemeral files
+ai_chatroom/work_logs/
+ai_chatroom/**/tmp_*
+
+# Git worktrees
+worktree_*/
+
+# CC worktree clipboard (per-branch, never committed)
+CLAUDE_WORKTREE.md

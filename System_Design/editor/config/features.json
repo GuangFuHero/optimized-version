@@ -1,0 +1,15 @@
+{
+  "mindmap": {
+    "maxFrItems": 100,
+    "maxDimensionItems": 100,
+    "maxDescriptionLength": 200
+  },
+  "theme": {
+    "default": "dark"
+  },
+  "agent": {
+    "model": "claude-haiku-4-5-20251201",
+    "maxTokens": 4096,
+    "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep"]
+  }
+}

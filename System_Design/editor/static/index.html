@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>光復超人 2.0 - Mindmap Editor</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/style.css?v=6">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/markmap-toolbar@0.18.12/dist/style.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>🦸 光復超人 2.0 - Mindmap Editor</h1>
+            <div class="header-actions">
+                <span id="connection-status" class="status disconnected">● Disconnected</span>
+                <button id="btn-theme-toggle" class="icon-btn" title="切換深色/淺色主題">
+                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"/>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
+                <button id="btn-refresh" class="icon-btn" title="重新載入檔案">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main content -->
+        <div class="main">
+            <!-- File sidebar -->
+            <aside class="sidebar">
+                <h2>Files</h2>
+                <div id="file-list" class="file-list">
+                    <!-- Files will be loaded here -->
+                </div>
+            </aside>
+
+            <!-- Split pane: Editor + Mindmap -->
+            <div class="content">
+                <!-- Markdown editor pane -->
+                <div class="pane editor-pane">
+                    <div class="pane-toolbar">
+                        <span id="current-file" class="file-indicator">No file selected</span>
+                        <div class="toolbar-actions">
+                            <button id="btn-save" class="icon-btn" disabled title="儲存 (Ctrl+S)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                    <polyline points="17 21 17 13 7 13 7 21"/>
+                                    <polyline points="7 3 7 8 15 8"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="markdown-editor" placeholder="Select a file from the sidebar to edit..."></textarea>
+                </div>
+
+                <!-- Resize handle -->
+                <div class="resize-handle" id="resize-handle"></div>
+
+                <!-- Mindmap pane -->
+                <div class="pane mindmap-pane" id="mindmap-pane">
+                    <div class="pane-toolbar">
+                        <div class="toolbar-actions">
+                            <button id="btn-fit" class="icon-btn" title="適合視窗大小">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                                </svg>
+                            </button>
+                            <button id="btn-fullscreen" class="icon-btn" title="全螢幕">
+                                <svg class="icon-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>
+                                </svg>
+                                <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/>
+                                </svg>
+                            </button>
+                            <label class="edit-mode-toggle">
+                                <input type="checkbox" id="toggle-edit-mode">
+                                <span>Edit</span>
+                            </label>
+                        </div>
+                    </div>
+                    <svg id="mindmap"></svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit modal -->
+        <div id="edit-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>Edit Node</h3>
+                <textarea id="edit-input"></textarea>
+                <div class="modal-actions">
+                    <button id="edit-cancel">Cancel</button>
+                    <button id="edit-save" class="primary">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Chat Panel -->
+        <div id="agent-panel" class="agent-panel">
+            <div class="agent-panel-header">
+                <span>🤖 Agent Chat</span>
+                <span id="agent-status" class="agent-status">Checking...</span>
+                <button id="agent-toggle" class="agent-toggle" title="Toggle Agent Panel">▲</button>
+            </div>
+            <div class="agent-panel-body">
+                <div id="agent-messages" class="agent-messages">
+                    <div class="agent-welcome">
+                        <p>我可以幫你：</p>
+                        <ul>
+                            <li>瀏覽和理解 mindmap 結構</li>
+                            <li>搜尋特定的 FR 或關鍵字</li>
+                            <li>編輯 requirements.md 檔案</li>
+                            <li>回答系統架構相關問題</li>
+                        </ul>
+                        <p>試試看：「列出所有 map 模組的 FR」</p>
+                    </div>
+                </div>
+                <div class="agent-input-area">
+                    <textarea id="agent-input" placeholder="輸入訊息..." rows="1"></textarea>
+                    <button id="agent-send" class="primary" title="送出 (Enter)">送出</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+    <!-- markmap-lib must load FIRST to ensure Transformer is available -->
+    <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.18.12/dist/browser/index.iife.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-view@0.18.12/dist/browser/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-toolbar@0.18.12/dist/index.js"></script>
+    <script src="/static/editor.js"></script>
+</body>
+</html>
