@@ -139,8 +139,7 @@ jobs:
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
           title: "${{ needs.init.outputs.event_title }}"
-          description: |
-            ${{ needs.init.outputs.event_description }}
+          description: "${{ needs.init.outputs.event_description }}"
           url: "${{ needs.init.outputs.event_url }}"
           color: 0x5865F2
 
