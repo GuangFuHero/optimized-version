@@ -85,6 +85,16 @@ jobs:
           title: "Pull Request: ${{ needs.init.outputs.pr_title }}"
           description: |
 
+            • **Repo:** ${{ github.repository }}
+
+            • **Ref:** ${{ github.ref_name }}
+
+            • **Path:** ${{ github.workflow_ref }}
+
+            • **Triggered by:** ${{ github.actor }}
+
+            • **Workflow:** ${{ github.workflow }}
+
             • **PR #${{ needs.init.outputs.pr_number }}** by @${{ needs.init.outputs.pr_author }}
 
             • **Action:** ${{ needs.init.outputs.action }}
