@@ -84,11 +84,16 @@ jobs:
           webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
           title: "Pull Request: ${{ needs.init.outputs.pr_title }}"
           description: |
-            **PR #${{ needs.init.outputs.pr_number }}** by @${{ needs.init.outputs.pr_author }}
-            Action: ${{ needs.init.outputs.action }}
-            State: ${{ needs.init.outputs.pr_state }}
-            Branch: ${{ needs.init.outputs.pr_branch }} → ${{ needs.init.outputs.base_branch }}
-            **URL:** ${{ needs.init.outputs.pr_url }}
+
+            • **PR #${{ needs.init.outputs.pr_number }}** by @${{ needs.init.outputs.pr_author }}
+
+            • **Action:** ${{ needs.init.outputs.action }}
+
+            • **State:** ${{ needs.init.outputs.pr_state }}
+
+            • **Branch:** ${{ needs.init.outputs.pr_branch }} → ${{ needs.init.outputs.base_branch }}
+
+            • **URL:** ${{ needs.init.outputs.pr_url }}
           color: 0x3498db
 
       # Option 2: Slack Notification (requires SLACK_WEBHOOK_URL secret)
