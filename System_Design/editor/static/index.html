@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>光復超人 2.0 - Mindmap Editor</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-    <link rel="stylesheet" href="/static/style.css?v=6">
+    <link rel="stylesheet" href="/static/style.css?v=8">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/markmap-toolbar@0.18.12/dist/style.css">
 </head>
 <body>
@@ -37,7 +37,12 @@
         <div class="main">
             <!-- File sidebar -->
             <aside class="sidebar">
-                <h2>Files</h2>
+                <div class="sidebar-header">
+                    <h2>Files</h2>
+                    <button id="btn-expand-all" class="expand-btn" title="Toggle expand/collapse all">
+                        <span class="expand-icon">⊟</span> Collapse
+                    </button>
+                </div>
                 <div id="file-list" class="file-list">
                     <!-- Files will be loaded here -->
                 </div>

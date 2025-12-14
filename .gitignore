@@ -1,1 +1,4 @@
 .serena/
+
+# Playwright MCP screenshots (test artifacts)
+.playwright-mcp/

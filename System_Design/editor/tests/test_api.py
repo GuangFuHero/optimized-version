@@ -446,14 +446,25 @@ class TestEdgeCases:
         assert read_response.json()["content"] == unicode_content
 
     async def test_large_file_content(self, client, temp_docs_dir):
-        """Test handling of large file content"""
-        large_content = "# Large File\n\n" + ("A" * 100000)
+        """Test handling of large file content (under limit)"""
+        large_content = "# Large File\n\n" + ("A" * 100000)  # ~100KB, under 1MB limit
 
         response = await client.put(
             "/api/files/01-map/large.md",
             json={"path": "01-map/large.md", "content": large_content}
         )
         assert response.status_code == status.HTTP_200_OK
+
+    async def test_file_too_large_rejected(self, client, temp_docs_dir):
+        """Test that files exceeding MAX_FILE_SIZE (1MB) are rejected"""
+        oversized_content = "A" * (1024 * 1024 + 1)  # Just over 1MB
+
+        response = await client.put(
+            "/api/files/01-map/oversized.md",
+            json={"path": "01-map/oversized.md", "content": oversized_content}
+        )
+        assert response.status_code == status.HTTP_413_CONTENT_TOO_LARGE
+        assert "too large" in response.json()["detail"].lower()
 
     async def test_empty_file_content(self, client, temp_docs_dir):
         """Test handling of empty file content"""

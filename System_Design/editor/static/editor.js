@@ -12,9 +12,13 @@
 const state = {
     currentFile: null,
     files: [],
+    fileTree: null,  // Tree structure for sidebar
+    expandedFolders: new Set(),  // Set of expanded folder paths
+    allFolderPaths: [],  // All folder paths (for expand all)
     isDirty: false,
     editMode: false,
     ws: null,
+    wsReconnectTimeout: null,  // Prevent multiple reconnect timers
     markmap: null,
     transformer: null,
     allMarkdown: '',  // Combined markdown for mindmap
@@ -28,6 +32,118 @@ const state = {
 let appConfig = {
     mindmap: { maxFrItems: 100, maxDimensionItems: 100, maxDescriptionLength: 200 }
 };
+
+// HTML escape helper to prevent XSS
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Sanitize markdown to prevent XSS in markmap rendering
+// Removes dangerous HTML tags and event handlers before passing to markmap
+function sanitizeMarkdown(markdown) {
+    if (!markdown) return '';
+    return markdown
+        // Remove script tags entirely (including content)
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+        // Remove style tags (can be used for CSS injection)
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+        // Remove iframe, object, embed tags
+        .replace(/<(iframe|object|embed|form|input|button)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+        .replace(/<(iframe|object|embed|form|input|button)\b[^>]*\/?>/gi, '')
+        // Remove event handlers from any remaining tags (on*)
+        .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/\s+on\w+\s*=\s*[^\s>]+/gi, '')
+        // Remove javascript: URLs
+        .replace(/href\s*=\s*["']javascript:[^"']*["']/gi, 'href="#"')
+        .replace(/src\s*=\s*["']javascript:[^"']*["']/gi, 'src=""');
+}
+
+// Build file tree from flat file list
+// Input: [{path: "01_map/content.md"}, {path: "01_map/requirements/backend/content.md"}]
+// Output: nested tree structure
+function buildFileTree(files) {
+    const tree = {};
+    const allFolders = new Set();
+
+    for (const file of files) {
+        const parts = file.path.split('/');
+        let current = tree;
+        let pathSoFar = '';
+
+        // Process each part of the path
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            const isLast = i === parts.length - 1;
+            pathSoFar = pathSoFar ? `${pathSoFar}/${part}` : part;
+
+            if (isLast) {
+                // This is the file (content.md)
+                current[part] = {
+                    type: 'file',
+                    name: part,
+                    path: file.path
+                };
+            } else {
+                // This is a folder
+                if (!current[part]) {
+                    current[part] = {
+                        type: 'folder',
+                        name: part,
+                        path: pathSoFar,
+                        children: {}
+                    };
+                }
+                allFolders.add(pathSoFar);
+                current = current[part].children;
+            }
+        }
+    }
+
+    // Store all folder paths for expand all functionality
+    state.allFolderPaths = Array.from(allFolders);
+
+    return tree;
+}
+
+// Toggle folder expand/collapse
+function toggleFolder(folderPath) {
+    if (state.expandedFolders.has(folderPath)) {
+        state.expandedFolders.delete(folderPath);
+    } else {
+        state.expandedFolders.add(folderPath);
+    }
+    renderFileTree();
+}
+
+// Toggle all folders expand/collapse
+function toggleExpandAll() {
+    const allExpanded = state.allFolderPaths.every(p => state.expandedFolders.has(p));
+
+    if (allExpanded) {
+        // Collapse all
+        state.expandedFolders.clear();
+    } else {
+        // Expand all
+        state.expandedFolders = new Set(state.allFolderPaths);
+    }
+    renderFileTree();
+    updateExpandAllButton();
+}
+
+// Update expand/collapse all button text
+function updateExpandAllButton() {
+    const btn = document.getElementById('btn-expand-all');
+    if (!btn) return;
+
+    const allExpanded = state.allFolderPaths.every(p => state.expandedFolders.has(p));
+    btn.innerHTML = allExpanded
+        ? '<span class="expand-icon">⊟</span> Collapse'
+        : '<span class="expand-icon">⊞</span> Expand';
+    btn.title = allExpanded ? 'Collapse all folders' : 'Expand all folders';
+}
 
 // DOM elements
 const elements = {
@@ -173,47 +289,109 @@ async function loadFiles() {
         const response = await fetch('/api/files');
         const data = await response.json();
         state.files = data.files;
-        renderFileList();
+
+        // Build tree structure
+        state.fileTree = buildFileTree(state.files);
+
+        // Expand all folders by default (on first load)
+        if (state.expandedFolders.size === 0) {
+            state.expandedFolders = new Set(state.allFolderPaths);
+        }
+
+        renderFileTree();
     } catch (error) {
         console.error('Failed to load files:', error);
     }
 }
 
-// Render file list in sidebar
-function renderFileList() {
+// Render file tree in sidebar (VSCode-style collapsible tree)
+function renderFileTree() {
     elements.fileList.innerHTML = '';
 
-    // Group by module
-    const modules = {};
-    for (const file of state.files) {
-        const module = file.module || '_root';
-        if (!modules[module]) modules[module] = [];
-        modules[module].push(file);
-    }
+    if (!state.fileTree) return;
 
-    for (const [module, files] of Object.entries(modules)) {
-        if (module !== '_root') {
-            const header = document.createElement('div');
-            header.className = 'module-header';
-            header.textContent = module;
-            elements.fileList.appendChild(header);
-        }
+    // Recursively render tree nodes
+    function renderNode(node, container, depth = 0) {
+        if (node.type === 'folder') {
+            const isExpanded = state.expandedFolders.has(node.path);
 
-        for (const file of files) {
-            const item = document.createElement('div');
-            item.className = 'file-item';
-            item.dataset.path = file.path;
-            // Display parent directory name instead of "content.md"
-            const pathParts = file.path.split('/');
-            const displayName = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : file.name;
-            item.innerHTML = `
-                <span class="icon">📄</span>
-                <span>${displayName}</span>
+            // Folder row
+            const folderEl = document.createElement('div');
+            folderEl.className = 'tree-folder';
+            folderEl.style.paddingLeft = `${depth * 16 + 8}px`;
+            folderEl.dataset.path = node.path;
+
+            const chevron = isExpanded ? '▼' : '▶';
+            folderEl.innerHTML = `
+                <span class="tree-chevron${isExpanded ? '' : ' collapsed'}">${chevron}</span>
+                <span class="tree-icon">📁</span>
+                <span class="tree-name">${escapeHtml(node.name)}</span>
             `;
-            item.addEventListener('click', () => selectFile(file.path));
-            elements.fileList.appendChild(item);
+            folderEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleFolder(node.path);
+            });
+            container.appendChild(folderEl);
+
+            // Children container
+            if (isExpanded && node.children) {
+                const childrenEl = document.createElement('div');
+                childrenEl.className = 'tree-children';
+
+                // Sort: folders first, then files, alphabetically within each
+                const entries = Object.entries(node.children);
+                entries.sort((a, b) => {
+                    const aIsFolder = a[1].type === 'folder';
+                    const bIsFolder = b[1].type === 'folder';
+                    if (aIsFolder && !bIsFolder) return -1;
+                    if (!aIsFolder && bIsFolder) return 1;
+                    return a[0].localeCompare(b[0]);
+                });
+
+                for (const [, child] of entries) {
+                    renderNode(child, childrenEl, depth + 1);
+                }
+                container.appendChild(childrenEl);
+            }
+        } else if (node.type === 'file') {
+            // File row
+            const fileEl = document.createElement('div');
+            fileEl.className = 'tree-file';
+            if (state.currentFile === node.path) {
+                fileEl.classList.add('active');
+            }
+            fileEl.style.paddingLeft = `${depth * 16 + 8}px`;
+            fileEl.dataset.path = node.path;
+
+            // Display "content" instead of "content.md"
+            const displayName = node.name.replace('.md', '');
+            fileEl.innerHTML = `
+                <span class="tree-chevron-placeholder"></span>
+                <span class="tree-icon">📄</span>
+                <span class="tree-name">${escapeHtml(displayName)}</span>
+            `;
+            fileEl.addEventListener('click', () => selectFile(node.path));
+            container.appendChild(fileEl);
         }
     }
+
+    // Sort root level entries
+    const entries = Object.entries(state.fileTree);
+    entries.sort((a, b) => {
+        const aIsFolder = a[1].type === 'folder';
+        const bIsFolder = b[1].type === 'folder';
+        if (aIsFolder && !bIsFolder) return -1;
+        if (!aIsFolder && bIsFolder) return 1;
+        return a[0].localeCompare(b[0]);
+    });
+
+    // Render root level
+    for (const [, node] of entries) {
+        renderNode(node, elements.fileList, 0);
+    }
+
+    // Update expand/collapse button state
+    updateExpandAllButton();
 }
 
 // Select and load a file
@@ -240,7 +418,7 @@ async function selectFile(path) {
         elements.btnSave.disabled = true;
 
         // Update active state in sidebar
-        document.querySelectorAll('.file-item').forEach(el => {
+        document.querySelectorAll('.tree-file').forEach(el => {
             el.classList.toggle('active', el.dataset.path === path);
         });
 
@@ -291,18 +469,19 @@ async function loadAllMarkdown(shouldFitMindmap = false) {
         const response = await fetch('/api/tree');
         const treeData = await response.json();
 
-        let markdown = `# ${treeData.title}\n\n`;
+        let markdown = `# ${escapeHtml(treeData.title)}\n\n`;
 
         for (const module of treeData.modules) {
             // Module heading with content as <br> separated text
+            // escapeHtml() prevents XSS from malicious content in markdown files
             const moduleContent = module.content ?
-                module.content.trim().split('\n').filter(line => line.trim()).join('<br>') : '';
-            markdown += `## ${module.name}${moduleContent ? '<br>' + moduleContent : ''}\n\n`;
+                module.content.trim().split('\n').filter(line => line.trim()).map(escapeHtml).join('<br>') : '';
+            markdown += `## ${escapeHtml(module.name)}${moduleContent ? '<br>' + moduleContent : ''}\n\n`;
 
             // Requirements section
             if (module.requirements) {
                 const reqContent = module.requirements.content ?
-                    module.requirements.content.trim().split('\n').filter(line => line.trim()).join('<br>') : '';
+                    module.requirements.content.trim().split('\n').filter(line => line.trim()).map(escapeHtml).join('<br>') : '';
                 markdown += `### 功能需求${reqContent ? '<br>' + reqContent : ''}\n\n`;
 
                 // Dimensions in specific order
@@ -318,12 +497,12 @@ async function loadAllMarkdown(shouldFitMindmap = false) {
                 for (const dimKey of dimOrder) {
                     const dim = dimensions[dimKey];
                     if (dim && dim.content) {
-                        const dimContent = dim.content.trim().split('\n').filter(line => line.trim()).join('<br>');
+                        const dimContent = dim.content.trim().split('\n').filter(line => line.trim()).map(escapeHtml).join('<br>');
                         markdown += `#### ${dimNames[dimKey]}<br>${dimContent}\n\n`;
 
                         // SPEC links under backend
                         if (dimKey === 'backend' && dim.specs && dim.specs.content) {
-                            const specContent = dim.specs.content.trim().split('\n').filter(line => line.trim()).join('<br>');
+                            const specContent = dim.specs.content.trim().split('\n').filter(line => line.trim()).map(escapeHtml).join('<br>');
                             markdown += `##### SPEC 連結<br>${specContent}\n\n`;
                         }
                     }
@@ -345,7 +524,9 @@ function updateMindmap(shouldFit = false) {
     if (!state.transformer || !state.markmap) return;
 
     try {
-        const { root } = state.transformer.transform(state.allMarkdown);
+        // Sanitize markdown to prevent XSS before passing to markmap
+        const sanitizedMarkdown = sanitizeMarkdown(state.allMarkdown);
+        const { root } = state.transformer.transform(sanitizedMarkdown);
         state.markmap.setData(root);
 
         if (shouldFit && state.markmap._originalFit) {
@@ -361,6 +542,12 @@ function updateMindmap(shouldFit = false) {
 
 // Connect WebSocket for real-time updates
 function connectWebSocket() {
+    // Clear any pending reconnect to prevent race condition
+    if (state.wsReconnectTimeout) {
+        clearTimeout(state.wsReconnectTimeout);
+        state.wsReconnectTimeout = null;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
 
@@ -377,8 +564,10 @@ function connectWebSocket() {
         elements.connectionStatus.textContent = '● Disconnected';
         elements.connectionStatus.className = 'status disconnected';
 
-        // Reconnect after 3 seconds
-        setTimeout(connectWebSocket, 3000);
+        // Reconnect after 3 seconds (only if not already scheduled)
+        if (!state.wsReconnectTimeout) {
+            state.wsReconnectTimeout = setTimeout(connectWebSocket, 3000);
+        }
     };
 
     state.ws.onerror = (error) => {
@@ -468,6 +657,12 @@ function setupEventListeners() {
     elements.editModal.addEventListener('click', (e) => {
         if (e.target === elements.editModal) closeEditModal();
     });
+
+    // Expand/collapse all button
+    const btnExpandAll = document.getElementById('btn-expand-all');
+    if (btnExpandAll) {
+        btnExpandAll.addEventListener('click', toggleExpandAll);
+    }
 
     // Theme toggle
     setupThemeToggle();
@@ -875,13 +1070,18 @@ function setupThemeToggle() {
 // Toggle fullscreen mode for mindmap pane
 function toggleFullscreen() {
     const mindmapPane = elements.mindmapPane || document.getElementById('mindmap-pane');
+    const agentPanel = document.getElementById('agent-panel');
     state.isFullscreen = !state.isFullscreen;
 
     // CSS handles icon visibility via .fullscreen .icon-expand/collapse selectors
     if (state.isFullscreen) {
         mindmapPane.classList.add('fullscreen');
+        // Hide agent panel in fullscreen mode
+        if (agentPanel) agentPanel.style.display = 'none';
     } else {
         mindmapPane.classList.remove('fullscreen');
+        // Show agent panel when exiting fullscreen
+        if (agentPanel) agentPanel.style.display = '';
     }
 
     // Refit mindmap after layout change
@@ -927,6 +1127,9 @@ async function checkAgentStatus() {
     agentElements.messages = document.getElementById('agent-messages');
     agentElements.input = document.getElementById('agent-input');
     agentElements.sendBtn = document.getElementById('agent-send');
+
+    // Default to collapsed state
+    agentElements.panel.classList.add('collapsed');
 
     try {
         const response = await fetch('/api/agent/status');

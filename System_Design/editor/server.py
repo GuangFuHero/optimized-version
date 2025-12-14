@@ -18,11 +18,22 @@ Environment:
 
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("mindmap-editor")
+
+# Constants
+MAX_FILE_SIZE = 1024 * 1024  # 1MB max file size to prevent DoS
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -126,6 +137,7 @@ async def read_file(file_path: str):
     # SECURITY: Validate path FIRST before any file operations
     full_path = (MINDMAP_DIR / file_path).resolve()
     if not str(full_path).startswith(str(MINDMAP_DIR.resolve())):
+        logger.warning(f"Path traversal attempt blocked: {file_path}")
         raise HTTPException(status_code=403, detail="Access denied")
     if not full_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
@@ -142,13 +154,20 @@ async def write_file(file_path: str, data: FileContent):
     # SECURITY: Validate path FIRST before any file operations
     full_path = (MINDMAP_DIR / file_path).resolve()
     if not str(full_path).startswith(str(MINDMAP_DIR.resolve())):
+        logger.warning(f"Path traversal attempt blocked: {file_path}")
         raise HTTPException(status_code=403, detail="Access denied")
+
+    # Validate file size to prevent DoS
+    if len(data.content.encode("utf-8")) > MAX_FILE_SIZE:
+        logger.warning(f"File size limit exceeded: {file_path} ({len(data.content)} bytes)")
+        raise HTTPException(status_code=413, detail=f"File too large. Max size: {MAX_FILE_SIZE} bytes")
 
     # Create parent directories if needed
     full_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Write file
     full_path.write_text(data.content, encoding="utf-8")
+    logger.info(f"File written: {file_path}")
 
     # Notify all connected clients
     await broadcast_update({
@@ -369,6 +388,7 @@ async def handle_node_update(message: dict, sender: WebSocket):
     # SECURITY: Validate path FIRST before any file operations
     full_path = (MINDMAP_DIR / file_path).resolve()
     if not str(full_path).startswith(str(MINDMAP_DIR.resolve())):
+        logger.warning(f"WebSocket path traversal attempt blocked: {file_path}")
         await sender.send_json({"type": "error", "message": "Access denied"})
         return
     if not full_path.exists():
@@ -436,8 +456,8 @@ async def broadcast_update(message: dict):
     for client in connected_clients:
         try:
             await client.send_json(message)
-        except Exception:
-            pass  # Client disconnected
+        except Exception as e:
+            logger.debug(f"Failed to send to client (likely disconnected): {e}")
 
 
 # --- Static files (must be last) ---

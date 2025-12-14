@@ -80,16 +80,16 @@ Issues identified during code review before main branch push. Security issues we
 
 ### Should Fix (Medium Priority)
 
-- [ ] **No file size limit** (server.py `write_file()`) - Add max file size validation to prevent DoS
-- [ ] **Exception handling too broad** (server.py `broadcast_update()`) - Silent `except Exception: pass` swallows errors
-- [ ] **No logging** (server.py) - Add logging for file access, modifications, and security events
-- [ ] **WebSocket reconnect race condition** (editor.js L375-382) - Multiple reconnect timers can create multiple connections
-- [ ] **XSS vulnerability** (editor.js `loadAllMarkdown()`) - innerHTML with user content needs HTML escaping
+- [x] **No file size limit** (server.py `write_file()`) - Fixed: Added MAX_FILE_SIZE (1MB) validation
+- [x] **Exception handling too broad** (server.py `broadcast_update()`) - Fixed: Changed to `logger.debug()` instead of silent pass
+- [x] **No logging** (server.py) - Fixed: Added Python logging for file operations and security events
+- [x] **WebSocket reconnect race condition** (editor.js) - Fixed: Added `wsReconnectTimeout` state to prevent multiple timers
+- [x] **XSS vulnerability** (editor.js) - Fixed: Added `escapeHtml()` helper, applied to all user content in `loadAllMarkdown()` and `renderFileList()`
 
 ### Nice to Have (Low Priority)
 
 - [ ] **No authentication** - Anyone on localhost can read/write files (OK for local dev, but document the risk)
-- [ ] **Python version mismatch** - `.python-version` says 3.11, `pyproject.toml` requires >=3.12
+- [x] **Python version mismatch** - Already consistent: `.python-version` = 3.12, `pyproject.toml` >= 3.12
 - [ ] **Magic numbers** (editor.js) - Hardcoded values (maxWidth: 300, reconnect delay: 3000ms)
 - [ ] **Memory leak potential** (server.py `agent_sessions` dict) - Declared but unused, or needs cleanup logic
 - [ ] **CORS not configured** (server.py) - May cause issues if frontend/backend split in future

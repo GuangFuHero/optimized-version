@@ -93,7 +93,7 @@ Endpoint                          Method    Test Count    Coverage
 
 ### Anthropic Messages API Mock
 ```python
-mock_message.model = "claude-sonnet-4-20250514"
+mock_message.model = "claude-haiku-4-5-20251201"
 mock_message.usage.input_tokens = 100
 mock_message.usage.output_tokens = 200
 mock_message.content = [{"type": "text", "text": "回覆內容"}]

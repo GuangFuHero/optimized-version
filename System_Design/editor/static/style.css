@@ -128,7 +128,7 @@ body {
 /* ===== SIDEBAR ===== */
 
 .sidebar {
-    width: 200px;
+    width: 220px;
     background: var(--bg-secondary);
     border-right: 1px solid var(--border-color);
     display: flex;
@@ -136,50 +136,105 @@ body {
     transition: background 0.3s, border-color 0.3s;
 }
 
-.sidebar h2 {
-    font-size: 0.9rem;
-    padding: 0.75rem;
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-header h2 {
+    font-size: 0.9rem;
     color: var(--text-secondary);
+    margin: 0;
+}
+
+.expand-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.expand-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.expand-icon {
+    font-size: 0.9rem;
 }
 
 .file-list {
     flex: 1;
     overflow-y: auto;
-    padding: 0.5rem 0;
+    padding: 0.25rem 0;
 }
 
-.file-item {
-    padding: 0.5rem 0.75rem;
-    cursor: pointer;
-    font-size: 0.85rem;
-    border-left: 3px solid transparent;
+/* ===== FILE TREE ===== */
+
+.tree-folder,
+.tree-file {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    transition: background 0.2s;
+    gap: 0.25rem;
+    padding: 0.3rem 0.5rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background 0.15s;
+    white-space: nowrap;
+    border-left: 2px solid transparent;
 }
 
-.file-item:hover {
+.tree-folder:hover,
+.tree-file:hover {
     background: var(--bg-tertiary);
 }
 
-.file-item.active {
+.tree-file.active {
     background: var(--bg-tertiary);
     border-left-color: var(--accent);
 }
 
-.file-item .icon {
-    opacity: 0.7;
+.tree-chevron {
+    font-size: 0.65rem;
+    width: 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+    flex-shrink: 0;
 }
 
-.module-header {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-top: 0.5rem;
+.tree-chevron.collapsed {
+    color: var(--text-muted);
+}
+
+.tree-chevron-placeholder {
+    width: 1rem;
+    flex-shrink: 0;
+}
+
+.tree-icon {
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.tree-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tree-children {
+    /* Indentation is handled by inline padding-left */
 }
 
 /* ===== CONTENT AREA ===== */
@@ -555,7 +610,7 @@ body.light-theme #mindmap .markmap-foreign div {
 .ai-panel {
     position: fixed;
     bottom: 0;
-    left: 200px; /* sidebar width */
+    left: 220px; /* sidebar width */
     right: 0;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
@@ -756,9 +811,10 @@ body.light-theme #mindmap .markmap-foreign div {
 .agent-panel {
     position: fixed;
     bottom: 0;
-    right: 20px;
-    width: 400px;
-    max-height: 500px;
+    left: 220px;  /* sidebar width */
+    width: calc(40% - 88px);  /* 40% of content area (editor pane width) */
+    min-width: 280px;
+    max-height: 400px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-bottom: none;
