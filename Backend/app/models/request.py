@@ -5,8 +5,8 @@ from app.models.base import UUIDPKMixin, TimestampMixin, Base
 from typing import Optional
 
 
-class RequestBase(BaseGeometry):
-    __tablename__ = "request_bases"
+class Tickets(BaseGeometry):
+    __tablename__ = "tickets"
     uuid: Mapped[str] = mapped_column(ForeignKey("base_geometries.uuid"), primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[Optional[str]] = mapped_column(String)
@@ -21,18 +21,18 @@ class RequestBase(BaseGeometry):
     }
 
 
-class HRRequirement(RequestBase):
+class HRRequirement(Tickets):
     __tablename__ = "hr_requirements"
-    uuid: Mapped[str] = mapped_column(ForeignKey("request_bases.uuid"), primary_key=True)
+    uuid: Mapped[str] = mapped_column(ForeignKey("tickets.uuid"), primary_key=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "hr_request",
     }
 
 
-class SupplyRequirement(RequestBase):
+class SupplyRequirement(Tickets):
     __tablename__ = "supply_requirements"
-    uuid: Mapped[str] = mapped_column(ForeignKey("request_bases.uuid"), primary_key=True)
+    uuid: Mapped[str] = mapped_column(ForeignKey("tickets.uuid"), primary_key=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "supply_request",
@@ -59,6 +59,6 @@ class SupplyTaskItem(Base, UUIDPKMixin, TimestampMixin):
 
 class RequestPhoto(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "request_photos"
-    req_uuid: Mapped[str] = mapped_column(ForeignKey("request_bases.uuid"))
+    req_uuid: Mapped[str] = mapped_column(ForeignKey("tickets.uuid"))
     url: Mapped[str] = mapped_column(String(500))
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
