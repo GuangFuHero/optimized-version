@@ -15,8 +15,8 @@ class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
     # 地址資訊
     county: Mapped[Optional[str]] = mapped_column(String(50))
     city: Mapped[Optional[str]] = mapped_column(String(50))
-    巷: Mapped[Optional[str]] = mapped_column(String(20))
-    弄: Mapped[Optional[str]] = mapped_column(String(20))
+    lane: Mapped[Optional[str]] = mapped_column(String(20))
+    alley: Mapped[Optional[str]] = mapped_column(String(20))
     no: Mapped[Optional[str]] = mapped_column(String(20))
     floor: Mapped[Optional[str]] = mapped_column(String(20))
     room: Mapped[Optional[str]] = mapped_column(String(20))
