@@ -44,3 +44,6 @@ ENV/
 
 # GEMINI.md
 GEMINI.md
+
+# temp db files
+.db/

@@ -1,4 +1,4 @@
-import uuid
+import uuid as _uuid
 from datetime import datetime
 from sqlalchemy import UUID, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -23,9 +23,9 @@ class TimestampMixin:
     )
 
 class UUIDPKMixin:
-    uuid: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), 
-        primary_key=True, 
-        default=uuid.uuid4,
+    uuid: Mapped[_uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid.uuid4,
         comment="主鍵 UUID"
     )

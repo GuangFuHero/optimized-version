@@ -1,0 +1,12 @@
+services:
+  # Local db for local testing.
+  db:
+    image: postgis/postgis:16-3.4
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ./.db:/var/lib/postgresql/data

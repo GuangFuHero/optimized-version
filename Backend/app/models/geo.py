@@ -1,4 +1,5 @@
-from sqlalchemy import String, ForeignKey, UUID
+from geoalchemy2 import Geometry
+from sqlalchemy import String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import UUIDPKMixin, TimestampMixin, Base
 from typing import Optional
@@ -9,7 +10,7 @@ class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
     # 用於繼承鑑別
     property_name: Mapped[str] = mapped_column(String(50))
 
-    geometry: Mapped[Optional[str]] = mapped_column(String, comment="WKT/geo-binary placeholder")
+    geometry = mapped_column(Geometry("GEOMETRY", srid=4326))
     created_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.uuid"))
 
     # 地址資訊

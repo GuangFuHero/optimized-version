@@ -26,4 +26,4 @@ class CrowdSourcing(Base, UUIDPKMixin, TimestampMixin):
     user_credibility_score: Mapped[float] = mapped_column(Float)
     rating: Mapped[str] = mapped_column(String(20))  # up/neutral/down
     n_updates: Mapped[int] = mapped_column(Integer, default=0)
-    distance_from_geometry: Mapped[Optional[str]] = mapped_column(String)
+    distance_from_geometry: Mapped[Optional[float]] = mapped_column(Float)
