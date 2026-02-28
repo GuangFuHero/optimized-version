@@ -10,3 +10,23 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - ./.db:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - SQLALCHEMY_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/postgres
+      - SECRET_KEY=your-secret-key-for-local-dev
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
