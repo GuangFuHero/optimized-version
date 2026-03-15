@@ -469,6 +469,27 @@
 - **FR-040b**: Authenticated user sessions MUST remain valid for 24 hours with automatic extension on activity. Sessions automatically extend when users perform actions (view markers, add data, navigate map) to minimize re-authentication friction for active volunteers while maintaining reasonable security during disaster response.
 - **FR-041**: System MUST distinguish between regular authenticated users (can add/edit markers), whitelist users (can create new marker categories with emoji/icon selection), and coordinators/admins (can update cleanup status, review flagged conflicts, manage users, manage contributor whitelist, configure system-wide permissions)
 
+#### RBAC Permission Scopes
+
+- **FR-081**: System MUST implement a three-tier permission scope for every action (Read, Create, Edit, Delete):
+    - **all**: User can perform the action on resources created by any user across the entire system.
+    - **own**: User can only perform the action on resources they personally created.
+    - **none**: User has no permission to perform the action.
+
+#### Role-Permission Matrix
+
+- **FR-082**: Default system roles MUST be configured with the following permission baselines (configurable by Admin):
+    - **Admin**: All resources, all actions set to `all`.
+    - **Coordinator**: 
+        - `map_marker`: Read (`all`), Create (`all`), Edit (`all`), Delete (`all`)
+        - `cleanup_status`: Read (`all`), Edit (`all`)
+        - `user_management`: Read (`all`)
+    - **Volunteer (Whitelist)**:
+        - `map_marker`: Read (`all`), Create (`all`), Edit (`own`), Delete (`none`)
+        - `resource_location`: Read (`all`), Create (`all`), Edit (`own`)
+    - **Public/Guest**:
+        - All resources: Read (`all`), all other actions set to `none`.
+
 #### Data Integrity & Quality
 
 - **FR-042**: System MUST log all marker additions, edits, and status updates with timestamp and user ID for audit trail
@@ -509,7 +530,8 @@
 
 - **Disaster Boundary**: Represents the geographic extent of the disaster area. Attributes include: ID, disaster_name, boundary_geometry (polygon), severity_zones (if applicable, with nested geometries and severity levels), last_updated, notes
 
-- **User**: Represents authenticated users who can contribute data. Attributes include: user_id, name, role (volunteer, whitelist_user, coordinator, admin), contact_info, authentication_credentials (LINE 2FA tokens), registered_at, last_login, whitelist_status (pending/approved/rejected), whitelist_application_info
+- **User**: Represents authenticated users who can contribute data. Attributes include: `user_id` (UUID), `email` (unique identifier), `name`, `hashed_password`, `role` (volunteer, whitelist_user, coordinator, admin), `contact_info`, `authentication_credentials` (JWT tokens, LINE 2FA tokens), `registered_at`, `last_login`, `whitelist_status` (pending/approved/rejected), `whitelist_application_info`.
+    - **Authentication**: System MUST utilize **OAuth2 with Password Flow** for session management, issuing **JWT (JSON Web Token)** for authenticated requests. Each token MUST contain the user's UUID and expiration timestamp.
 
 - **Marker Category**: Represents system-wide or custom marker categories. Attributes include: category_id, category_name, icon/emoji, color_code, created_by (whitelist user or admin), created_at, system_default (boolean), description
 
