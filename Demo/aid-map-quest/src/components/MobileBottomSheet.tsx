@@ -1,22 +1,44 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { motion, useMotionValue, animate, PanInfo } from 'framer-motion';
-import { Task, TaskType, TaskStatus, Urgency, taskTypeConfig, urgencyConfig, statusConfig, taskTypeBadgeClass, urgencyOptions } from '@/data/tasks';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Input } from '@/components/ui/input';
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
 } from '@/components/ui/sheet';
 import {
-  Filter, Search, X, Clock, Building2, Trash2,
-  Link2, User, Lock, Pin, MapPin, Copy, UserCheck, AlertTriangle,
-} from 'lucide-react';
+  statusConfig,
+  Task,
+  TaskStatus,
+  TaskType,
+  taskTypeBadgeClass,
+  taskTypeConfig,
+  Urgency,
+  urgencyConfig,
+  urgencyOptions,
+} from '@/data/tasks';
 import { cn } from '@/lib/utils';
+import { animate, motion, PanInfo, useMotionValue } from 'framer-motion';
+import {
+  AlertTriangle,
+  Building2,
+  Clock,
+  Copy,
+  Filter,
+  Link2,
+  Lock,
+  MapPin,
+  Pin,
+  Search,
+  Trash2,
+  User,
+  UserCheck,
+  X,
+} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 interface MobileBottomSheetProps {
@@ -60,14 +82,31 @@ const HALF_RATIO = 0.5;
 const FULL_OFFSET = 44;
 
 const MobileBottomSheet = ({
-  tasks, allTaskCount, selectedTaskId, onSelectTask,
-  detailTask, onViewDetail, onCloseDetail,
-  activeFilters, floorOnly, searchQuery, timeFilter,
-  statusFilter, urgencyFilter, myTasksOnly,
-  customDateFrom, customDateTo,
-  onToggleTypeFilter, onSetFloorOnly, onSetSearchQuery,
-  onSetTimeFilter, onSetStatusFilter, onSetUrgencyFilter, onSetMyTasksOnly,
-  onSetCustomDateRange, onClearAllFilters,
+  tasks,
+  allTaskCount,
+  selectedTaskId,
+  onSelectTask,
+  detailTask,
+  onViewDetail,
+  onCloseDetail,
+  activeFilters,
+  floorOnly,
+  searchQuery,
+  timeFilter,
+  statusFilter,
+  urgencyFilter,
+  myTasksOnly,
+  customDateFrom,
+  customDateTo,
+  onToggleTypeFilter,
+  onSetFloorOnly,
+  onSetSearchQuery,
+  onSetTimeFilter,
+  onSetStatusFilter,
+  onSetUrgencyFilter,
+  onSetMyTasksOnly,
+  onSetCustomDateRange,
+  onClearAllFilters,
 }: MobileBottomSheetProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [snapIndex, setSnapIndex] = useState(0);
@@ -84,11 +123,10 @@ const MobileBottomSheet = ({
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const getSnapPoints = useCallback(() => [
-    windowH - COLLAPSED_HEIGHT,
-    windowH * (1 - HALF_RATIO),
-    FULL_OFFSET,
-  ], [windowH]);
+  const getSnapPoints = useCallback(
+    () => [windowH - COLLAPSED_HEIGHT, windowH * (1 - HALF_RATIO), FULL_OFFSET],
+    [windowH],
+  );
 
   useEffect(() => {
     const snaps = getSnapPoints();
@@ -107,12 +145,15 @@ const MobileBottomSheet = ({
     }
   }, [detailTask]); // eslint-disable-line
 
-  const snapTo = useCallback((index: number) => {
-    const snaps = getSnapPoints();
-    const target = snaps[Math.max(0, Math.min(2, index))];
-    animate(sheetY, target, { type: 'spring', damping: 30, stiffness: 300 });
-    setSnapIndex(index);
-  }, [getSnapPoints, sheetY]);
+  const snapTo = useCallback(
+    (index: number) => {
+      const snaps = getSnapPoints();
+      const target = snaps[Math.max(0, Math.min(2, index))];
+      animate(sheetY, target, { type: 'spring', damping: 30, stiffness: 300 });
+      setSnapIndex(index);
+    },
+    [getSnapPoints, sheetY],
+  );
 
   const handleDragEnd = (_: any, info: PanInfo) => {
     const currentY = sheetY.get();
@@ -120,23 +161,36 @@ const MobileBottomSheet = ({
     const snaps = getSnapPoints();
 
     let targetIndex: number;
-    if (velocity < -400) {
+    console.log(snaps, currentY, velocity);
+
+    // 快速滑動時才用速度判斷
+    if (velocity < -800) {
       targetIndex = Math.max(0, snapIndex - 1);
-    } else if (velocity > 400) {
+    } else if (velocity > 800) {
       targetIndex = Math.min(2, snapIndex + 1);
     } else {
+      // 找最近的 snap 點（包含當前點）
       let minDist = Infinity;
-      targetIndex = 0;
+      targetIndex = snapIndex; // 預設維持原位
+
       snaps.forEach((snap, i) => {
         const dist = Math.abs(currentY - snap);
-        if (dist < minDist) { minDist = dist; targetIndex = i; }
+        if (dist < minDist) {
+          minDist = dist;
+          targetIndex = i;
+        }
       });
     }
 
     snapTo(targetIndex);
   };
-
-  const hasActiveFilters = activeFilters.length > 0 || floorOnly || timeFilter !== 'all' || statusFilter !== 'all' || urgencyFilter !== 'all' || myTasksOnly;
+  const hasActiveFilters =
+    activeFilters.length > 0 ||
+    floorOnly ||
+    timeFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    urgencyFilter !== 'all' ||
+    myTasksOnly;
   const isOpen = snapIndex > 0;
 
   const handleSelectTask = (task: Task) => {
@@ -145,13 +199,8 @@ const MobileBottomSheet = ({
     snapTo(1);
   };
 
-  const handleTapHandle = () => {
-    if (snapIndex === 0) snapTo(1);
-    else snapTo(0);
-  };
-
-  const pinnedTasks = tasks.filter(t => t.pinned);
-  const unpinnedTasks = tasks.filter(t => !t.pinned);
+  const pinnedTasks = tasks.filter((t) => t.pinned);
+  const unpinnedTasks = tasks.filter((t) => !t.pinned);
 
   const renderTaskDetail = (task: Task) => (
     <div ref={detailScrollRef} className="px-4 pb-8 space-y-5">
@@ -169,13 +218,19 @@ const MobileBottomSheet = ({
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <Badge variant="outline" className={cn('border pointer-events-none', taskTypeBadgeClass[task.type])}>
+        <Badge
+          variant="outline"
+          className={cn('border pointer-events-none', taskTypeBadgeClass[task.type])}
+        >
           {taskTypeConfig[task.type].label}
         </Badge>
         <Badge className={cn('pointer-events-none', urgencyConfig[task.urgency].className)}>
           {urgencyConfig[task.urgency].label}
         </Badge>
-        <Badge variant="outline" className={cn('border pointer-events-none', statusConfig[task.status].className)}>
+        <Badge
+          variant="outline"
+          className={cn('border pointer-events-none', statusConfig[task.status].className)}
+        >
           {statusConfig[task.status].label}
         </Badge>
       </div>
@@ -211,10 +266,14 @@ const MobileBottomSheet = ({
           <h3 className="text-sm font-semibold text-foreground mb-2">現場照片</h3>
           <div className="flex gap-2 overflow-x-auto pb-2">
             {task.images.map((img, i) => (
-              <img key={i} src={img} alt={`照片 ${i + 1}`}
+              <img
+                key={i}
+                src={img}
+                alt={`照片 ${i + 1}`}
                 className="h-28 w-36 rounded-xl object-cover border border-border flex-shrink-0 cursor-pointer"
                 loading="lazy"
-                onClick={() => setLightboxImg(img)} />
+                onClick={() => setLightboxImg(img)}
+              />
             ))}
           </div>
         </div>
@@ -230,7 +289,10 @@ const MobileBottomSheet = ({
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground flex-1">{task.address}</span>
             <button
-              onClick={() => { navigator.clipboard.writeText(task.address!); toast.success('地址已複製'); }}
+              onClick={() => {
+                navigator.clipboard.writeText(task.address!);
+                toast.success('地址已複製');
+              }}
               className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
             >
               <Copy className="h-3.5 w-3.5" />
@@ -286,11 +348,18 @@ const MobileBottomSheet = ({
             <div className="space-y-3">
               {task.updateRecords.map((record, i) => (
                 <div key={i} className="relative">
-                  <div className={cn(
-                    'absolute -left-6 top-1 h-4 w-4 rounded-full border-2 flex items-center justify-center',
-                    i === 0 ? 'border-primary bg-primary/20' : 'border-border bg-card'
-                  )}>
-                    <div className={cn('h-1.5 w-1.5 rounded-full', i === 0 ? 'bg-primary' : 'bg-muted-foreground/40')} />
+                  <div
+                    className={cn(
+                      'absolute -left-6 top-1 h-4 w-4 rounded-full border-2 flex items-center justify-center',
+                      i === 0 ? 'border-primary bg-primary/20' : 'border-border bg-card',
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'h-1.5 w-1.5 rounded-full',
+                        i === 0 ? 'bg-primary' : 'bg-muted-foreground/40',
+                      )}
+                    />
                   </div>
                   <div>
                     <span className="text-[10px] text-muted-foreground">{record.time}</span>
@@ -311,7 +380,7 @@ const MobileBottomSheet = ({
       onClick={() => handleSelectTask(task)}
       className={cn(
         'w-full rounded-xl border border-border p-3.5 text-left transition-all min-h-[44px]',
-        selectedTaskId === task.id ? 'border-primary bg-accent' : 'bg-card'
+        selectedTaskId === task.id ? 'border-primary bg-accent' : 'bg-card',
       )}
     >
       <div className="flex items-center gap-2 mb-1">
@@ -320,13 +389,24 @@ const MobileBottomSheet = ({
         <span className="flex-1 text-sm font-medium text-foreground truncate">{task.name}</span>
       </div>
       <div className="flex gap-1.5 mb-1 flex-wrap">
-        <Badge variant="outline" className={cn('text-[9px] border pointer-events-none', taskTypeBadgeClass[task.type])}>
+        <Badge
+          variant="outline"
+          className={cn('text-[9px] border pointer-events-none', taskTypeBadgeClass[task.type])}
+        >
           {taskTypeConfig[task.type].label}
         </Badge>
-        <Badge className={cn('text-[9px] pointer-events-none', urgencyConfig[task.urgency].className)}>
+        <Badge
+          className={cn('text-[9px] pointer-events-none', urgencyConfig[task.urgency].className)}
+        >
           {urgencyConfig[task.urgency].label}
         </Badge>
-        <Badge variant="outline" className={cn('text-[9px] border pointer-events-none', statusConfig[task.status].className)}>
+        <Badge
+          variant="outline"
+          className={cn(
+            'text-[9px] border pointer-events-none',
+            statusConfig[task.status].className,
+          )}
+        >
           {statusConfig[task.status].label}
         </Badge>
       </div>
@@ -354,7 +434,6 @@ const MobileBottomSheet = ({
             sheetY.set(clamped);
           }}
           onDragEnd={handleDragEnd}
-          onTap={handleTapHandle}
         >
           <div className="h-1.5 w-10 rounded-full bg-border" />
           {!isOpen && !detailTask && (
@@ -372,14 +451,17 @@ const MobileBottomSheet = ({
                 <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <Input
                   value={searchQuery}
-                  onChange={e => onSetSearchQuery(e.target.value)}
+                  onChange={(e) => onSetSearchQuery(e.target.value)}
                   placeholder="搜尋任務..."
                   className="h-10 border-0 bg-transparent p-0 pl-2 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                   autoFocus
-                  onFocus={e => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
                 />
                 <button
-                  onClick={() => { onSetSearchQuery(''); setSearchOpen(false); }}
+                  onClick={() => {
+                    onSetSearchQuery('');
+                    setSearchOpen(false);
+                  }}
                   className="shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground"
                 >
                   <X className="h-4 w-4" />
@@ -387,15 +469,15 @@ const MobileBottomSheet = ({
               </div>
             ) : (
               <>
-                <h2 className="text-sm font-semibold text-foreground">
-                  任務列表 ({tasks.length})
-                </h2>
+                <h2 className="text-sm font-semibold text-foreground">任務列表 ({tasks.length})</h2>
                 <div className="flex gap-1">
                   <button
-                    onClick={() => { setSearchOpen(true); }}
+                    onClick={() => {
+                      setSearchOpen(true);
+                    }}
                     className={cn(
                       'min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl',
-                      searchQuery ? 'text-primary' : 'text-muted-foreground'
+                      searchQuery ? 'text-primary' : 'text-muted-foreground',
                     )}
                   >
                     <Search className="h-5 w-5" />
@@ -404,7 +486,7 @@ const MobileBottomSheet = ({
                     onClick={() => setFilterSheetOpen(true)}
                     className={cn(
                       'min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl',
-                      hasActiveFilters ? 'text-primary' : 'text-muted-foreground'
+                      hasActiveFilters ? 'text-primary' : 'text-muted-foreground',
                     )}
                   >
                     <Filter className="h-5 w-5" />
@@ -427,9 +509,7 @@ const MobileBottomSheet = ({
                     <Pin className="h-3 w-3" />
                     置頂任務
                   </div>
-                  <div className="space-y-2">
-                    {pinnedTasks.map(renderTaskCard)}
-                  </div>
+                  <div className="space-y-2">{pinnedTasks.map(renderTaskCard)}</div>
                 </div>
               )}
               {unpinnedTasks.map(renderTaskCard)}
@@ -447,7 +527,13 @@ const MobileBottomSheet = ({
           </SheetHeader>
           <div className="space-y-4 pb-6">
             {hasActiveFilters && (
-              <button onClick={() => { onClearAllFilters(); setFilterSheetOpen(false); }} className="flex items-center gap-1 text-xs text-destructive hover:underline min-h-[44px]">
+              <button
+                onClick={() => {
+                  onClearAllFilters();
+                  setFilterSheetOpen(false);
+                }}
+                className="flex items-center gap-1 text-xs text-destructive hover:underline min-h-[44px]"
+              >
                 <Trash2 className="h-3 w-3" />
                 清除全部
               </button>
@@ -459,7 +545,7 @@ const MobileBottomSheet = ({
                 'flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition-all border min-h-[36px]',
                 myTasksOnly
                   ? 'bg-primary/15 text-primary border-primary/30'
-                  : 'bg-muted text-muted-foreground border-transparent hover:bg-accent'
+                  : 'bg-muted text-muted-foreground border-transparent hover:bg-accent',
               )}
             >
               <UserCheck className="h-3 w-3" />
@@ -469,7 +555,7 @@ const MobileBottomSheet = ({
             <div>
               <span className="text-xs font-medium text-muted-foreground">任務狀態</span>
               <div className="flex flex-wrap gap-2 mt-1.5">
-                {(['all', 'active', 'completed'] as const).map(s => (
+                {(['all', 'active', 'completed'] as const).map((s) => (
                   <button
                     key={s}
                     onClick={() => onSetStatusFilter(s)}
@@ -477,7 +563,7 @@ const MobileBottomSheet = ({
                       'rounded-full px-3 py-2 text-xs font-medium transition-all border min-h-[36px]',
                       statusFilter === s
                         ? 'bg-primary/15 text-primary border-primary/30'
-                        : 'bg-muted text-muted-foreground border-transparent hover:bg-accent'
+                        : 'bg-muted text-muted-foreground border-transparent hover:bg-accent',
                     )}
                   >
                     {s === 'all' ? '全部' : s === 'active' ? '進行中' : '已結束'}
@@ -493,7 +579,7 @@ const MobileBottomSheet = ({
                 <span className="text-xs font-medium text-muted-foreground">緊急程度</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {urgencyOptions.map(opt => (
+                {urgencyOptions.map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => onSetUrgencyFilter(opt.value)}
@@ -501,7 +587,7 @@ const MobileBottomSheet = ({
                       'rounded-full px-3 py-2 text-xs font-medium transition-all border min-h-[36px]',
                       urgencyFilter === opt.value
                         ? 'bg-primary/15 text-primary border-primary/30'
-                        : 'bg-muted text-muted-foreground border-transparent hover:bg-accent'
+                        : 'bg-muted text-muted-foreground border-transparent hover:bg-accent',
                     )}
                   >
                     {opt.label}
@@ -513,7 +599,7 @@ const MobileBottomSheet = ({
             <div>
               <span className="text-xs font-medium text-muted-foreground">任務類型</span>
               <div className="flex flex-wrap gap-2 mt-1.5">
-                {(Object.keys(taskTypeConfig) as TaskType[]).map(type => (
+                {(Object.keys(taskTypeConfig) as TaskType[]).map((type) => (
                   <button
                     key={type}
                     onClick={() => onToggleTypeFilter(type)}
@@ -521,7 +607,7 @@ const MobileBottomSheet = ({
                       'rounded-full px-3 py-2 text-xs font-medium transition-all border min-h-[36px]',
                       activeFilters.includes(type)
                         ? taskTypeBadgeClass[type]
-                        : 'bg-muted text-muted-foreground border-transparent hover:bg-accent'
+                        : 'bg-muted text-muted-foreground border-transparent hover:bg-accent',
                     )}
                   >
                     {taskTypeConfig[type].emoji} {taskTypeConfig[type].label}
@@ -535,7 +621,7 @@ const MobileBottomSheet = ({
                 'flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition-all border min-h-[36px]',
                 floorOnly
                   ? 'bg-primary/15 text-primary border-primary/30'
-                  : 'bg-muted text-muted-foreground border-transparent hover:bg-accent'
+                  : 'bg-muted text-muted-foreground border-transparent hover:bg-accent',
               )}
             >
               <Building2 className="h-3 w-3" />
@@ -547,7 +633,7 @@ const MobileBottomSheet = ({
                 <span className="text-xs font-medium text-muted-foreground">時間範圍</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {TIME_RANGES.map(range => (
+                {TIME_RANGES.map((range) => (
                   <button
                     key={range.value}
                     onClick={() => onSetTimeFilter(range.value)}
@@ -555,7 +641,7 @@ const MobileBottomSheet = ({
                       'rounded-full px-3 py-2 text-xs font-medium transition-all border min-h-[36px]',
                       timeFilter === range.value
                         ? 'bg-primary/15 text-primary border-primary/30'
-                        : 'bg-muted text-muted-foreground border-transparent hover:bg-accent'
+                        : 'bg-muted text-muted-foreground border-transparent hover:bg-accent',
                     )}
                   >
                     {range.label}
@@ -566,7 +652,11 @@ const MobileBottomSheet = ({
                 <div className="mt-3">
                   <Calendar
                     mode="range"
-                    selected={customDateFrom && customDateTo ? { from: customDateFrom, to: customDateTo } : undefined}
+                    selected={
+                      customDateFrom && customDateTo
+                        ? { from: customDateFrom, to: customDateTo }
+                        : undefined
+                    }
                     onSelect={(range: any) => onSetCustomDateRange(range?.from, range?.to)}
                     className="p-3 pointer-events-auto"
                   />
@@ -593,7 +683,7 @@ const MobileBottomSheet = ({
             src={lightboxImg}
             alt="放大照片"
             className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain"
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           />
         </div>
       )}
