@@ -1,12 +1,12 @@
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { LayerConfig } from '@/components/LayerControlPanel';
+import { statusConfig, Task, taskTypeConfig, urgencyConfig } from '@/data/tasks';
 import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+import 'leaflet/dist/leaflet.css';
 import { useTheme } from 'next-themes';
-import { Task, taskTypeConfig, urgencyConfig, statusConfig } from '@/data/tasks';
-import { LayerConfig } from '@/components/LayerControlPanel';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 
 export interface RefugeZoneInfo {
   id: string;
@@ -61,10 +61,19 @@ const createPopupContent = (task: Task): string => {
   const urg = urgencyConfig[task.urgency];
   const stat = statusConfig[task.status];
   const color = typeColorMap[task.type] || '0, 0%, 50%';
-  const urgBg = task.urgency === 'critical' ? 'hsl(0 72% 51%)' : task.urgency === 'high' ? 'hsl(28 91% 50%)' : task.urgency === 'medium' ? 'hsl(196 80% 43%)' : 'var(--popup-muted-bg, hsl(0 0% 90%))';
+  const urgBg =
+    task.urgency === 'critical'
+      ? 'hsl(0 72% 51%)'
+      : task.urgency === 'high'
+        ? 'hsl(28 91% 50%)'
+        : task.urgency === 'medium'
+          ? 'hsl(196 80% 43%)'
+          : 'var(--popup-muted-bg, hsl(0 0% 90%))';
   const urgColor = task.urgency === 'low' ? 'var(--popup-muted-text, hsl(0 0% 45%))' : 'white';
-  const statusBg = task.status === 'active' ? 'hsl(145 63% 42% / 0.15)' : 'var(--popup-muted-bg, hsl(0 0% 90%))';
-  const statusColor = task.status === 'active' ? 'hsl(145 63% 42%)' : 'var(--popup-muted-text, hsl(0 0% 45%))';
+  const statusBg =
+    task.status === 'active' ? 'hsl(145 63% 42% / 0.15)' : 'var(--popup-muted-bg, hsl(0 0% 90%))';
+  const statusColor =
+    task.status === 'active' ? 'hsl(145 63% 42%)' : 'var(--popup-muted-text, hsl(0 0% 45%))';
   return `
     <div class="popup-inner">
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -85,7 +94,8 @@ const createPopupContent = (task: Task): string => {
 const LIGHT_TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 const DARK_TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const DEFAULT_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const SATELLITE_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const SATELLITE_TILE_URL =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const TERRAIN_TILE_URL = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
 
 // Irregular refuge zones
@@ -94,14 +104,30 @@ const REFUGE_ZONES = [
     id: 'zone-a',
     label: '避難區 A',
     sublabel: '仁德國小',
-    latlngs: [[22.94, 120.16], [22.945, 120.17], [22.96, 120.175], [22.965, 120.21], [22.955, 120.22], [22.94, 120.205], [22.935, 120.18]] as L.LatLngExpression[],
+    latlngs: [
+      [22.94, 120.16],
+      [22.945, 120.17],
+      [22.96, 120.175],
+      [22.965, 120.21],
+      [22.955, 120.22],
+      [22.94, 120.205],
+      [22.935, 120.18],
+    ] as L.LatLngExpression[],
     color: '145, 63%, 42%',
   },
   {
     id: 'zone-b',
     label: '避難區 B',
     sublabel: '永康運動公園',
-    latlngs: [[23.02, 120.24], [23.03, 120.245], [23.05, 120.25], [23.06, 120.28], [23.055, 120.30], [23.04, 120.295], [23.025, 120.27]] as L.LatLngExpression[],
+    latlngs: [
+      [23.02, 120.24],
+      [23.03, 120.245],
+      [23.05, 120.25],
+      [23.06, 120.28],
+      [23.055, 120.3],
+      [23.04, 120.295],
+      [23.025, 120.27],
+    ] as L.LatLngExpression[],
     color: '196, 80%, 43%',
   },
 ];
@@ -111,22 +137,68 @@ const NGO_ZONES = [
     id: 'ngo-a',
     label: 'NGO A 處理區',
     sublabel: '紅十字會',
-    latlngs: [[22.97, 120.20], [22.98, 120.21], [22.995, 120.215], [23.00, 120.25], [22.99, 120.26], [22.975, 120.245], [22.965, 120.225]] as L.LatLngExpression[],
+    latlngs: [
+      [22.97, 120.2],
+      [22.98, 120.21],
+      [22.995, 120.215],
+      [23.0, 120.25],
+      [22.99, 120.26],
+      [22.975, 120.245],
+      [22.965, 120.225],
+    ] as L.LatLngExpression[],
     color: '340, 65%, 50%',
   },
   {
     id: 'ngo-b',
     label: 'NGO B 處理區',
     sublabel: '慈濟基金會',
-    latlngs: [[23.05, 120.18], [23.06, 120.19], [23.075, 120.20], [23.08, 120.23], [23.07, 120.24], [23.055, 120.225], [23.045, 120.20]] as L.LatLngExpression[],
+    latlngs: [
+      [23.05, 120.18],
+      [23.06, 120.19],
+      [23.075, 120.2],
+      [23.08, 120.23],
+      [23.07, 120.24],
+      [23.055, 120.225],
+      [23.045, 120.2],
+    ] as L.LatLngExpression[],
     color: '260, 55%, 50%',
   },
 ];
 
 const WATER_ZONES = [
-  { latlngs: [[22.93, 120.18], [22.935, 120.20], [22.955, 120.22], [22.96, 120.24], [22.95, 120.24], [22.935, 120.22], [22.925, 120.19]] as L.LatLngExpression[] },
-  { latlngs: [[23.01, 120.19], [23.015, 120.20], [23.035, 120.215], [23.04, 120.23], [23.03, 120.23], [23.015, 120.215], [23.005, 120.20]] as L.LatLngExpression[] },
-  { latlngs: [[22.98, 120.26], [22.985, 120.27], [23.00, 120.28], [23.01, 120.30], [23.00, 120.30], [22.985, 120.285], [22.975, 120.27]] as L.LatLngExpression[] },
+  {
+    latlngs: [
+      [22.93, 120.18],
+      [22.935, 120.2],
+      [22.955, 120.22],
+      [22.96, 120.24],
+      [22.95, 120.24],
+      [22.935, 120.22],
+      [22.925, 120.19],
+    ] as L.LatLngExpression[],
+  },
+  {
+    latlngs: [
+      [23.01, 120.19],
+      [23.015, 120.2],
+      [23.035, 120.215],
+      [23.04, 120.23],
+      [23.03, 120.23],
+      [23.015, 120.215],
+      [23.005, 120.2],
+    ] as L.LatLngExpression[],
+  },
+  {
+    latlngs: [
+      [22.98, 120.26],
+      [22.985, 120.27],
+      [23.0, 120.28],
+      [23.01, 120.3],
+      [23.0, 120.3],
+      [22.985, 120.285],
+      [22.975, 120.27],
+    ] as L.LatLngExpression[],
+  },
 ];
 
 const BLOCKED_BRIDGES = [
@@ -142,7 +214,10 @@ const getTileUrl = (baseMap: string, resolvedTheme: string | undefined) => {
 };
 
 const MapView = forwardRef<MapViewHandle, MapViewProps>(
-  ({ tasks, allTasks, selectedTask, onSelectTask, onViewDetail, onViewRefugeZone, layers }, ref) => {
+  (
+    { tasks, allTasks, selectedTask, onSelectTask, onViewDetail, onViewRefugeZone, layers },
+    ref,
+  ) => {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<Map<string, L.Marker>>(new Map());
@@ -161,7 +236,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       zoomOut: () => mapRef.current?.zoomOut(),
       fitAll: () => {
         if (mapRef.current && allTasks.length > 0) {
-          const bounds = L.latLngBounds(allTasks.map(t => [t.lat, t.lng]));
+          const bounds = L.latLngBounds(allTasks.map((t) => [t.lat, t.lng]));
           mapRef.current.fitBounds(bounds, { padding: [40, 40] });
         }
       },
@@ -184,27 +259,34 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
             }
           },
           () => {},
-          { enableHighAccuracy: true }
+          { enableHighAccuracy: true },
         );
       },
     }));
 
-    const getClusterOptions = useCallback(() => ({
-      maxClusterRadius: 50,
-      spiderfyOnMaxZoom: true,
-      showCoverageOnHover: false,
-      zoomToBoundsOnClick: true,
-      iconCreateFunction: (cluster: L.MarkerCluster) => {
-        const count = cluster.getChildCount();
-        let size = 40, fontSize = 14;
-        if (count >= 50) { size = 56; fontSize = 16; }
-        else if (count >= 20) { size = 48; fontSize = 15; }
-        const isDark = resolvedTheme === 'dark';
-        const bgColor = isDark ? 'hsl(0 0% 8%)' : 'hsl(0 0% 100%)';
-        const textColor = isDark ? 'hsl(0 0% 95%)' : 'hsl(0 0% 10%)';
-        const borderColor = 'hsl(var(--secondary))';
-        return L.divIcon({
-          html: `<div style="
+    const getClusterOptions = useCallback(
+      () => ({
+        maxClusterRadius: 50,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        iconCreateFunction: (cluster: L.MarkerCluster) => {
+          const count = cluster.getChildCount();
+          let size = 40,
+            fontSize = 14;
+          if (count >= 50) {
+            size = 56;
+            fontSize = 16;
+          } else if (count >= 20) {
+            size = 48;
+            fontSize = 15;
+          }
+          const isDark = resolvedTheme === 'dark';
+          const bgColor = isDark ? 'hsl(0 0% 8%)' : 'hsl(0 0% 100%)';
+          const textColor = isDark ? 'hsl(0 0% 95%)' : 'hsl(0 0% 10%)';
+          const borderColor = 'hsl(var(--secondary))';
+          return L.divIcon({
+            html: `<div style="
             width: ${size}px; height: ${size}px;
             display: flex; align-items: center; justify-content: center;
             background: ${bgColor}; color: ${textColor}; border-radius: 50%;
@@ -213,12 +295,14 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
             box-shadow: 0 2px 12px rgba(0,0,0,${isDark ? '0.4' : '0.12'});
             border: 1px solid ${borderColor};
           ">${count}</div>`,
-          className: 'custom-cluster-icon',
-          iconSize: [size, size],
-          iconAnchor: [size / 2, size / 2],
-        });
-      },
-    }), [resolvedTheme]);
+            className: 'custom-cluster-icon',
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+          });
+        },
+      }),
+      [resolvedTheme],
+    );
 
     // Initialize map
     useEffect(() => {
@@ -239,7 +323,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
 
       // Refuge zones
       const refugeGroup = L.layerGroup();
-      REFUGE_ZONES.forEach(zone => {
+      REFUGE_ZONES.forEach((zone) => {
         const polygon = L.polygon(zone.latlngs, {
           color: `hsl(${zone.color})`,
           weight: 2,
@@ -249,7 +333,12 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
           interactive: true,
         });
         polygon.on('click', () => {
-          onViewRefugeZone?.({ id: zone.id, label: zone.label, sublabel: zone.sublabel, color: zone.color });
+          onViewRefugeZone?.({
+            id: zone.id,
+            label: zone.label,
+            sublabel: zone.sublabel,
+            color: zone.color,
+          });
         });
         refugeGroup.addLayer(polygon);
 
@@ -266,24 +355,36 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
           className: '',
           iconAnchor: [0, 12],
         });
-        const labelMarker = L.marker(center, { icon: labelIcon, interactive: true, zIndexOffset: -100 });
+        const labelMarker = L.marker(center, {
+          icon: labelIcon,
+          interactive: true,
+          zIndexOffset: -100,
+        });
         labelMarker.on('click', () => {
-          onViewRefugeZone?.({ id: zone.id, label: zone.label, sublabel: zone.sublabel, color: zone.color });
+          onViewRefugeZone?.({
+            id: zone.id,
+            label: zone.label,
+            sublabel: zone.sublabel,
+            color: zone.color,
+          });
         });
         refugeGroup.addLayer(labelMarker);
-        polygon.bindTooltip(`<b>${zone.label}</b><br/>${zone.sublabel}`, { sticky: true, className: 'refuge-tooltip' });
+        polygon.bindTooltip(`<b>${zone.label}</b><br/>${zone.sublabel}`, {
+          sticky: true,
+          className: 'refuge-tooltip',
+        });
       });
       refugeGroupRef.current = refugeGroup;
       if (layers.importantLocations) refugeGroup.addTo(map);
 
       // NGO zones
       const ngoGroup = L.layerGroup();
-      NGO_ZONES.forEach(zone => {
+      NGO_ZONES.forEach((zone) => {
         const polygon = L.polygon(zone.latlngs, {
           color: `hsl(${zone.color})`,
           weight: 2,
           fillColor: `hsl(${zone.color})`,
-          fillOpacity: 0.10,
+          fillOpacity: 0.1,
           dashArray: '8 4',
           interactive: true,
         });
@@ -301,16 +402,23 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
           className: '',
           iconAnchor: [0, 12],
         });
-        const labelMarker = L.marker(center, { icon: labelIcon, interactive: true, zIndexOffset: -100 });
+        const labelMarker = L.marker(center, {
+          icon: labelIcon,
+          interactive: true,
+          zIndexOffset: -100,
+        });
         ngoGroup.addLayer(labelMarker);
-        polygon.bindTooltip(`<b>${zone.label}</b><br/>${zone.sublabel}`, { sticky: true, className: 'refuge-tooltip' });
+        polygon.bindTooltip(`<b>${zone.label}</b><br/>${zone.sublabel}`, {
+          sticky: true,
+          className: 'refuge-tooltip',
+        });
       });
       ngoGroupRef.current = ngoGroup;
       if (layers.ngoZones) ngoGroup.addTo(map);
 
       // Bridge blocked markers
       const bridgeGroup = L.layerGroup();
-      BLOCKED_BRIDGES.forEach(bridge => {
+      BLOCKED_BRIDGES.forEach((bridge) => {
         const bridgeIcon = L.divIcon({
           html: `<div class="bridge-blocked-pin">🚫</div>`,
           className: 'custom-emoji-marker',
@@ -326,7 +434,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
 
       // Water zones
       const waterGroup = L.layerGroup();
-      WATER_ZONES.forEach(wz => {
+      WATER_ZONES.forEach((wz) => {
         const polygon = L.polygon(wz.latlngs, {
           color: 'hsl(210 80% 55%)',
           weight: 1,
@@ -341,7 +449,25 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
 
       mapRef.current = map;
 
+      const handleResize = () => {
+        setTimeout(() => {
+          map.invalidateSize();
+        }, 100);
+      };
+
+      window.addEventListener('resize', handleResize);
+      window.addEventListener('orientationchange', handleResize);
+
+      // 使用 ResizeObserver 監聽容器本身尺寸變化
+      const resizeObserver = new ResizeObserver(handleResize);
+      if (mapContainerRef.current) {
+        resizeObserver.observe(mapContainerRef.current);
+      }
+
       return () => {
+        window.removeEventListener('resize', handleResize);
+        window.removeEventListener('orientationchange', handleResize);
+        resizeObserver.disconnect();
         map.remove();
         mapRef.current = null;
         markersRef.current.clear();
@@ -366,7 +492,10 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
       const map = mapRef.current;
       if (!map) return;
       if (layers.terrain && !terrainLayerRef.current) {
-        terrainLayerRef.current = L.tileLayer(TERRAIN_TILE_URL, { opacity: 0.45, maxZoom: 17 }).addTo(map);
+        terrainLayerRef.current = L.tileLayer(TERRAIN_TILE_URL, {
+          opacity: 0.45,
+          maxZoom: 17,
+        }).addTo(map);
       } else if (!layers.terrain && terrainLayerRef.current) {
         map.removeLayer(terrainLayerRef.current);
         terrainLayerRef.current = null;
@@ -411,10 +540,12 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
     // Register detail callback
     useEffect(() => {
       (window as any).__viewTaskDetail__ = (taskId: string) => {
-        const task = allTasks.find(t => t.id === taskId);
+        const task = allTasks.find((t) => t.id === taskId);
         if (task) onViewDetail(task);
       };
-      return () => { delete (window as any).__viewTaskDetail__; };
+      return () => {
+        delete (window as any).__viewTaskDetail__;
+      };
     }, [allTasks, onViewDetail]);
 
     // Update markers
@@ -429,7 +560,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
 
       const clusterGroup = L.markerClusterGroup(getClusterOptions());
 
-      tasks.forEach(task => {
+      tasks.forEach((task) => {
         const marker = L.marker([task.lat, task.lng], { icon: createEmojiIcon(task) })
           .bindPopup(createPopupContent(task), {
             className: 'custom-popup',
@@ -561,7 +692,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(
         <div ref={mapContainerRef} className="h-full w-full" />
       </div>
     );
-  }
+  },
 );
 
 MapView.displayName = 'MapView';
