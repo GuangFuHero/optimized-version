@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy import String, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import UUIDPKMixin, TimestampMixin, Base
@@ -21,11 +22,13 @@ class Group(Base, UUIDPKMixin):
 
 class Policy(Base, UUIDPKMixin):
     __tablename__ = "policies"
-    name: Mapped[str] = mapped_column(String(100))
-    read: Mapped[str] = mapped_column(String(50))
-    create: Mapped[str] = mapped_column(String(50))
-    edit: Mapped[str] = mapped_column(String(50))
-    delete: Mapped[str] = mapped_column(String(50))
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    description: Mapped[Optional[str]] = mapped_column(String(255))
+    category: Mapped[Optional[str]] = mapped_column(String(50))
+    read: Mapped[str] = mapped_column(String(50), default="none")
+    create: Mapped[str] = mapped_column(String(50), default="none")
+    edit: Mapped[str] = mapped_column(String(50), default="none")
+    delete: Mapped[str] = mapped_column(String(50), default="none")
 
 
 class UserGroupAssign(Base, UUIDPKMixin):
