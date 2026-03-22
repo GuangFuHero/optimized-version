@@ -34,3 +34,23 @@ packages = ["app"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+extend-select = [
+    "E501",   # line too long
+    "C901",   # mccabe complexity
+    "I",      # isort (import sorting)
+    "UP",     # pyupgrade (modern syntax)
+    "B",      # bugbear (common bugs)
+    "SIM",    # simplify (redundant code)
+    "ASYNC",  # async anti-patterns
+    "D",      # pydocstyle (docstrings)
+    "FAST",   # FastAPI-specific rules
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
