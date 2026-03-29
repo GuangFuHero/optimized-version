@@ -3,10 +3,14 @@ import pytest_asyncio
 import asyncio
 import uuid
 import hashlib
+import os
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
+
+# 強制設定為測試環境
+os.environ["ENV"] = "testing"
 
 from app.main import app
 from app.core import security
@@ -84,7 +88,7 @@ async def test_full_rbac_flow(client: AsyncClient):
         "/api/v1/auth/register",
         json={
             "name": test_user_name, 
-            "hash_password": test_hash_password_v1,
+            "password": test_hash_password_v1,
             "salt_frontend": test_salt_frontend
         }
     )
