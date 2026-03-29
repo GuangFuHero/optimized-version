@@ -18,15 +18,20 @@ class TokenData(BaseModel):
 
 class UserCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
+    # 此欄位接收前端經過 PBKDF2 雜湊後的結果
     password: str = Field(..., min_length=6, max_length=255)
+    salt_frontend: str = Field(..., description="Frontend generated salt (hex)")
 
 
 class UserLogin(BaseModel):
     name: str
-    password: str
+    hash_password: str
 
 
 # --- 使用者回傳與更新 ---
+
+class UserSaltResponse(BaseModel):
+    salt_frontend: str
 
 class UserBase(BaseModel):
     name: str
