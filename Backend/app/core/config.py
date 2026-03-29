@@ -12,9 +12,22 @@ class Settings(BaseSettings):
     )
 
     # JWT 密鑰
+    # 注意：在生產環境中，建議每 90-180 天輪替此密鑰以提高安全性。
+    # 正式環境一律從外部 Secret Manager 注入。
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-for-local-dev")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+
+    @property
+    def JWT_SIGNING_KEY(self) -> str:
+        """
+        將原始 SECRET_KEY 進行 SHA-256 雜湊，產生更強大的簽名密鑰。
+        """
+        import hashlib
+        return hashlib.sha256(self.SECRET_KEY.encode()).hexdigest()
+
+    # 環境設定 (development, staging, production)
+    ENV: str = os.getenv("ENV", "development")
 
     model_config = SettingsConfigDict(
         env_file=".env",
