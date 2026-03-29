@@ -21,6 +21,8 @@ dependencies = [
     "sqlalchemy>=2.0.45",
     "strawberry-graphql[fastapi]>=0.288.2",
     "uvicorn>=0.40.0",
+    "pyrate-limiter>=4.1.0",
+    "fastapi-limiter>=0.2.0",
 ]
 
 [dependency-groups]

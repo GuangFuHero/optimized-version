@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pyrate_limiter import Duration, Limiter, Rate
+from strawberry.fastapi import GraphQLRouter
 from app.api.v1.api import api_router
+from app.graphql.context import get_context
 
 app = FastAPI(
     title="救災平台 API",
@@ -25,16 +27,20 @@ async def startup():
     初始化頻率限制引擎 (v3 模式)
     """
     import os
-    # 即時讀取環境變數，解決測試時 settings 實例已產生的問題
     env = os.getenv("ENV", "development")
-    
-    # 如果是測試環境，給予極高的配額以免干擾測試流程
     rate_val = 100 if env != "testing" else 999999
     app.state.limiter = Limiter(Rate(rate_val, Duration.MINUTE))
 
 
 # 註冊路由
 app.include_router(api_router, prefix="/api/v1")
+
+# GraphQL
+def _get_graphql_router():
+    from app.graphql.schema import schema
+    return GraphQLRouter(schema, context_getter=get_context)
+
+app.include_router(_get_graphql_router(), prefix="/graphql")
 
 
 @app.get("/")
@@ -45,4 +51,3 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
-
