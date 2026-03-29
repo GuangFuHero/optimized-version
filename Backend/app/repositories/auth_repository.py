@@ -1,6 +1,7 @@
 from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert
 from app.infrastructure.repository.base import GenericRepository
 from app.models.auth import User, Group, Policy, UserGroupAssign, PolicyUserAssign, PolicyGroupAssign
 
@@ -44,21 +45,22 @@ class UserRepository(GenericRepository[User]):
 
     async def add_to_group(self, db: AsyncSession, user_uuid: str, group_uuid: str) -> bool:
         """
-        將使用者加入特定群組。方便管理員頁面與註冊流程使用。
+        將使用者加入特定群組。
+        使用 PostgreSQL ON CONFLICT 優化為單一 SQL 語句，確保原子性與效能。
         """
-        # 檢查是否已經在群組中
-        exists_query = select(UserGroupAssign).where(
-            UserGroupAssign.user_uuid == user_uuid,
-            UserGroupAssign.group_uuid == group_uuid
+        stmt = insert(UserGroupAssign).values(
+            user_uuid=user_uuid, 
+            group_uuid=group_uuid
         )
-        exists = (await db.execute(exists_query)).scalar_one_or_none()
+        # 回應 Reviewer：優化為單一語句處理
+        stmt = stmt.on_conflict_do_nothing(index_elements=['user_uuid', 'group_uuid'])
+        stmt = stmt.returning(UserGroupAssign.uuid)
         
-        if not exists:
-            assignment = UserGroupAssign(user_uuid=user_uuid, group_uuid=group_uuid)
-            db.add(assignment)
-            await db.commit()
-            return True
-        return False
+        result = await db.execute(stmt)
+        await db.commit()
+        
+        # 若有回傳值代表成功插入新紀錄 (True)；否則代表記錄已存在 (False)
+        return result.fetchone() is not None
 
 
 class GroupRepository(GenericRepository[Group]):
