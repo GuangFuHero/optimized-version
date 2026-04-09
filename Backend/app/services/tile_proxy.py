@@ -2,6 +2,8 @@ import base64
 from dataclasses import dataclass, field
 from typing import Optional
 
+import httpx
+
 from app.schemas.map import AttributionResponse
 
 
@@ -171,3 +173,56 @@ def get_source_config(type_: str, source: str) -> Optional[SourceConfig]:
 
 def get_attribution(type_: str, source: str) -> Optional[AttributionResponse]:
     return ATTRIBUTION_REGISTRY.get((type_, source))
+
+
+async def fetch_tile(
+    redis,
+    source: str,
+    type_: str,
+    z: int,
+    x: int,
+    y: int,
+    query_params: dict[str, str],
+) -> tuple[bytes, str]:
+    """
+    Returns (tile_bytes, content_type).
+    Checks Redis cache first. On miss, fetches upstream and caches result.
+    On any upstream error, returns BLANK_TILE.
+    If Redis is unavailable, bypasses cache and fetches upstream directly.
+    """
+    config = get_source_config(type_, source)
+    cache_key = build_cache_key(source, type_, z, x, y, query_params)
+
+    # --- Cache check ---
+    try:
+        cached = await redis.hgetall(cache_key)
+        if cached and b"data" in cached:
+            return cached[b"data"], cached[b"ct"].decode()
+    except Exception:
+        cached = None  # Redis down — proceed to upstream
+
+    # --- Upstream fetch ---
+    layer = query_params.get("layer", "")
+    url = config.url_template.format(z=z, x=x, y=y, layer=layer)
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=config.headers)
+
+        if response.status_code != 200:
+            return BLANK_TILE, "image/png"
+
+        tile_bytes = response.content
+        content_type = response.headers.get("content-type", config.image_format)
+
+    except Exception:
+        return BLANK_TILE, "image/png"
+
+    # --- Store in cache (best-effort, skip if Redis down) ---
+    try:
+        await redis.hset(cache_key, mapping={"data": tile_bytes, "ct": content_type})
+        await redis.expire(cache_key, 604800)
+    except Exception:
+        pass
+
+    return tile_bytes, content_type
