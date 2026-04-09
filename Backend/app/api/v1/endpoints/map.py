@@ -65,7 +65,7 @@ async def get_tile(
         )
 
     query_params = {}
-    if layer:
+    if layer and source == "sinica":
         query_params["layer"] = layer
 
     redis_client = request.app.state.redis
