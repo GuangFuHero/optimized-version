@@ -1,5 +1,4 @@
 services:
-  # Local db for local testing.
   db:
     image: postgis/postgis:16-3.4
     ports:
@@ -13,6 +12,14 @@ services:
     networks:
       - app-network
 
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
   backend:
     build: .
     ports:
@@ -22,8 +29,10 @@ services:
     environment:
       - SQLALCHEMY_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/postgres
       - SECRET_KEY=your-secret-key-for-local-dev
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - db
+      - redis
     networks:
       - app-network
 
