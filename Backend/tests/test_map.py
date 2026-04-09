@@ -257,3 +257,95 @@ async def test_fetch_tile_sinica_layer_in_url(fake_redis):
 
     assert "EARTH" in captured_url[0]
     assert "layer=EARTH" not in captured_url[0]  # param consumed, not forwarded as query string
+
+
+# ===== Integration tests for endpoints =====
+
+from httpx import AsyncClient, ASGITransport
+from app.main import app
+
+
+@pytest_asyncio.fixture
+async def map_client():
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=False)
+    app.state.redis = fake_redis
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac, fake_redis
+
+
+@pytest.mark.asyncio
+async def test_tile_endpoint_invalid_source(map_client):
+    ac, _ = map_client
+    resp = await ac.get("/api/v1/map/tile/satellite/mapbox/10/1/2")
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_tile_endpoint_invalid_type_source_combo(map_client):
+    ac, _ = map_client
+    resp = await ac.get("/api/v1/map/tile/road/nasa_gibs/10/1/2")
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_tile_endpoint_invalid_zoom(map_client):
+    ac, _ = map_client
+    resp = await ac.get("/api/v1/map/tile/satellite/nasa_gibs/25/1/2")
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_tile_endpoint_sinica_missing_layer(map_client):
+    ac, _ = map_client
+    resp = await ac.get("/api/v1/map/tile/satellite/sinica/10/1/2")
+    assert resp.status_code == 400
+    assert "layer" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_tile_endpoint_cache_hit_returns_tile(map_client):
+    ac, fake_redis = map_client
+    key = "tile:nasa_gibs:satellite:_:10:1:2"
+    await fake_redis.hset(key, mapping={"data": b"CACHED_PNG", "ct": b"image/jpeg"})
+    await fake_redis.expire(key, 604800)
+
+    resp = await ac.get("/api/v1/map/tile/satellite/nasa_gibs/10/1/2")
+    assert resp.status_code == 200
+    assert resp.content == b"CACHED_PNG"
+    assert resp.headers["content-type"] == "image/jpeg"
+
+
+@pytest.mark.asyncio
+async def test_tile_endpoint_upstream_error_returns_blank(map_client):
+    ac, _ = map_client
+    with patch("app.services.tile_proxy.httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(side_effect=Exception("upstream down"))
+        mock_client_cls.return_value = mock_client
+
+        resp = await ac.get("/api/v1/map/tile/satellite/nasa_gibs/10/1/2")
+
+    assert resp.status_code == 200
+    assert resp.content == BLANK_TILE
+    assert resp.headers["content-type"] == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_attribution_endpoint_valid(map_client):
+    ac, _ = map_client
+    resp = await ac.get("/api/v1/map/attribution/satellite/nasa_gibs")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["source"] == "nasa_gibs"
+    assert body["requires_logo"] is False
+    assert body["logo_url"] is None
+    assert "NASA" in body["attribution_text"]
+
+
+@pytest.mark.asyncio
+async def test_attribution_endpoint_invalid(map_client):
+    ac, _ = map_client
+    resp = await ac.get("/api/v1/map/attribution/road/nasa_gibs")
+    assert resp.status_code == 400

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import rbac_test, auth, users
+from app.api.v1.endpoints import rbac_test, auth, users, map
 
 api_router = APIRouter()
 
@@ -11,6 +11,9 @@ api_router.include_router(users.router, prefix="/users", tags=["使用者管理"
 
 # 註冊 RBAC 測試路由
 api_router.include_router(rbac_test.router, prefix="/rbac-test", tags=["RBAC 測試"])
+
+# 註冊地圖圖磚路由
+api_router.include_router(map.router, prefix="/map", tags=["地圖圖磚"])
 
 # 未來其他功能路由註冊處
 # api_router.include_router(stations.router, prefix="/stations", tags=["stations"])
