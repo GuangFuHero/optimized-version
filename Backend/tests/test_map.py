@@ -39,3 +39,20 @@ def test_attribution_response_with_logo():
     )
     assert resp.requires_logo is True
     assert resp.logo_url == "https://www.mapbox.com/mapbox-logo/"
+
+
+def test_attribution_response_requires_logo_without_url_raises():
+    with pytest.raises(Exception):
+        AttributionResponse(
+            source="mapbox",
+            type="road",
+            name="Mapbox",
+            license="Mapbox ToS",
+            attribution_text="© Mapbox",
+            attribution_url="https://www.mapbox.com/about/maps/",
+            image_format="image/png",
+            commercial_use=True,
+            requires_logo=True,
+            logo_url=None,
+            notes=None,
+        )
