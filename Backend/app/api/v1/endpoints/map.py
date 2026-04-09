@@ -3,7 +3,6 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from app.schemas.map import AttributionResponse
 from app.services.tile_proxy import (
     fetch_tile,
-    get_source_config,
     get_attribution,
 )
 
