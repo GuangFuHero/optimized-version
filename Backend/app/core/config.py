@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
+    # Redis 連線字串
+    # Docker 內部連線預設: redis://redis:6379
+    # 本地開發連線預設: redis://localhost:6379
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
+
     @property
     def JWT_SIGNING_KEY(self) -> str:
         """

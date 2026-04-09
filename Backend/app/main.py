@@ -4,6 +4,7 @@ from pyrate_limiter import Duration, Limiter, Rate
 from strawberry.fastapi import GraphQLRouter
 from app.api.v1.api import api_router
 from app.graphql.context import get_context
+from app.core.config import settings
 
 app = FastAPI(
     title="救災平台 API",
@@ -24,12 +25,25 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     """
-    初始化頻率限制引擎 (v3 模式)
+    初始化頻率限制引擎與 Redis 連線
     """
     import os
+    import redis.asyncio as aioredis
+
     env = os.getenv("ENV", "development")
     rate_val = 100 if env != "testing" else 999999
     app.state.limiter = Limiter(Rate(rate_val, Duration.MINUTE))
+
+    app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=False)
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    """
+    清理 Redis 連線
+    """
+    if hasattr(app.state, "redis"):
+        await app.state.redis.aclose()
 
 
 # 註冊路由
