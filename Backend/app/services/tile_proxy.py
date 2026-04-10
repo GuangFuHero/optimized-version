@@ -19,6 +19,7 @@ class SourceConfig:
     url_template: str
     image_format: str
     headers: dict = field(default_factory=dict)
+    verify_ssl: bool = True
 
 
 SOURCE_REGISTRY: dict[tuple[str, str], SourceConfig] = {
@@ -40,7 +41,11 @@ SOURCE_REGISTRY: dict[tuple[str, str], SourceConfig] = {
     ("satellite", "nlsc"): SourceConfig(
         url_template="https://wmts.nlsc.gov.tw/wmts/PHOTO_MIX/default/EPSG:3857/{z}/{y}/{x}",
         image_format="image/png",
-        headers={"Referer": "https://maps.nlsc.gov.tw/"},
+        headers={
+            "Referer": "https://maps.nlsc.gov.tw/",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        },
+        verify_ssl=False,  # NLSC cert missing Subject Key Identifier — fails Python SSL validation
     ),
     ("satellite", "sinica"): SourceConfig(
         url_template=(
@@ -206,7 +211,7 @@ async def fetch_tile(
     url = config.url_template.format(z=z, x=x, y=y, layer=layer)
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, verify=config.verify_ssl) as client:
             response = await client.get(url, headers=config.headers)
 
         if response.status_code != 200:
