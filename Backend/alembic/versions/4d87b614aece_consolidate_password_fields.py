@@ -1,7 +1,7 @@
 """consolidate_password_fields
 
 Revision ID: 4d87b614aece
-Revises: 5c6103762349
+Revises: 60fa7227481a
 Create Date: 2026-03-26 10:05:13.739016
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '4d87b614aece'
-down_revision: Union[str, Sequence[str], None] = '5c6103762349'
+down_revision: Union[str, Sequence[str], None] = '60fa7227481a'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -25,8 +25,8 @@ def upgrade() -> None:
                existing_type=sa.VARCHAR(length=255),
                type_=sa.String(length=512),
                existing_nullable=False)
-    op.drop_column('users', 'salt_backend')
-    op.drop_column('users', 'salt_frontend')
+    op.drop_column('users', 'salt_backend', if_exists=True)
+    op.drop_column('users', 'salt_frontend', if_exists=True)
     # ### end Alembic commands ###
 
 
