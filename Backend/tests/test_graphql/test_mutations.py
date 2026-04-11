@@ -1,3 +1,5 @@
+"""GraphQL mutation integration tests for stations, tickets, tasks, and properties."""
+
 import uuid
 
 import pytest
@@ -462,7 +464,7 @@ async def test_crowdsourcing_mismatched_station(
 async def test_crowdsourcing_auto_credibility(
     client, coordinator_auth, sample_station, sample_station_property,
 ):
-    """userCredibilityScore is auto-set from the user's credibility_score."""
+    """UserCredibilityScore is auto-set from the user's credibility_score."""
     _, token = coordinator_auth
     resp = await client.post("/graphql", json={
         "query": CREATE_CROWDSOURCING,
@@ -484,8 +486,8 @@ async def test_crowdsourcing_auto_credibility(
 
 @pytest.mark.asyncio
 async def test_create_ticket(client, coordinator_auth):
-    """
-    Hypothesis: createTicket creates a flat ticket with status=pending.
+    """Hypothesis: createTicket creates a flat ticket with status=pending.
+
     Test case: coordinator creates hr ticket → uuid set, status=pending, priority=high.
     """
     _, token = coordinator_auth
@@ -510,8 +512,8 @@ async def test_create_ticket(client, coordinator_auth):
 
 @pytest.mark.asyncio
 async def test_update_ticket_valid_transition(client, coordinator_auth):
-    """
-    Hypothesis: valid status transitions are accepted by the API.
+    """Hypothesis: valid status transitions are accepted by the API.
+
     Test case: pending → in_progress → completed each return the new status.
     """
     _, token = coordinator_auth
@@ -528,7 +530,7 @@ async def test_update_ticket_valid_transition(client, coordinator_auth):
     }, headers=headers)
     ticket_uuid = resp.json()["data"]["createTicket"]["uuid"]
 
-    for from_status, to_status in [("pending", "in_progress"), ("in_progress", "completed")]:
+    for _, to_status in [("pending", "in_progress"), ("in_progress", "completed")]:
         resp = await client.post("/graphql", json={
             "query": UPDATE_TICKET,
             "variables": {"uuid": ticket_uuid, "input": {"status": to_status}},
@@ -561,8 +563,8 @@ async def test_update_ticket_no_permission_edit(
 
 @pytest.mark.asyncio
 async def test_create_ticket_task(client, coordinator_auth, sample_ticket):
-    """
-    Hypothesis: createTicketTask creates a task linked to its ticket with status=pending.
+    """Hypothesis: createTicketTask creates a task linked to its ticket with status=pending.
+
     Test case: coordinator creates hr task for sample_ticket → uuid set, taskType=hr, status=pending.
     """
     _, token = coordinator_auth
@@ -583,8 +585,8 @@ async def test_create_ticket_task(client, coordinator_auth, sample_ticket):
 
 @pytest.mark.asyncio
 async def test_create_ticket_task_unknown_ticket(client, coordinator_auth):
-    """
-    Hypothesis: createTicketTask with a non-existent ticketUuid returns an error.
+    """Hypothesis: createTicketTask with a non-existent ticketUuid returns an error.
+
     Test case: random UUID as ticketUuid → errors list contains "not found".
     """
     _, token = coordinator_auth
@@ -601,8 +603,8 @@ async def test_create_ticket_task_unknown_ticket(client, coordinator_auth):
 
 @pytest.mark.asyncio
 async def test_update_ticket_task_status(client, coordinator_auth, sample_ticket_task):
-    """
-    Hypothesis: updateTicketTask status update is persisted and returned.
+    """Hypothesis: updateTicketTask status update is persisted and returned.
+
     Test case: update sample_ticket_task to in_progress → response reflects new status.
     """
     _, token = coordinator_auth
@@ -615,8 +617,8 @@ async def test_update_ticket_task_status(client, coordinator_auth, sample_ticket
 
 @pytest.mark.asyncio
 async def test_create_task_property(client, coordinator_auth, sample_ticket_task):
-    """
-    Hypothesis: createTaskProperty stores an EAV entry on a task.
+    """Hypothesis: createTaskProperty stores an EAV entry on a task.
+
     Test case: add required_skill=medical to hr task → propertyName and propertyValue round-trip correctly.
     """
     _, token = coordinator_auth
@@ -640,8 +642,8 @@ async def test_create_task_property(client, coordinator_auth, sample_ticket_task
 @pytest.mark.asyncio
 @pytest.mark.parametrize("data_type", ["Boolean", "String"])
 async def test_upsert_station_property_config_idempotent(client, coordinator_auth, data_type):
-    """
-    Hypothesis: upsertStationPropertyConfig is idempotent — calling it twice updates, not duplicates.
+    """Hypothesis: upsertStationPropertyConfig is idempotent — calling it twice updates, not duplicates.
+
     Test case: upsert power_stable with Boolean then String → second call's dataType wins.
     """
     _, token = coordinator_auth

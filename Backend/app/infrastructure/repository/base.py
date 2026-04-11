@@ -1,16 +1,24 @@
-from typing import Generic, Type, TypeVar, List, Optional, Any, Dict
-from sqlalchemy import select, update, delete, func, asc, desc
+"""Generic async SQLAlchemy repository providing standard CRUD operations."""
+
+from typing import Any, Generic, TypeVar
+
+from sqlalchemy import asc, delete, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.session import Base
 
 ModelType = TypeVar("ModelType", bound=Base)
 
 
 class GenericRepository(Generic[ModelType]):
-    def __init__(self, model: Type[ModelType]):
+    """Base repository with get, list, count, create, update, and delete."""
+
+    def __init__(self, model: type[ModelType]):
+        """Initialize with the SQLAlchemy model class to manage."""
         self.model = model
 
-    async def get_by_uuid(self, db: AsyncSession, uuid: Any) -> Optional[ModelType]:
+    async def get_by_uuid(self, db: AsyncSession, uuid: Any) -> ModelType | None:
+        """Fetch a record by its primary UUID."""
         query = select(self.model).where(self.model.uuid == uuid)
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -21,13 +29,11 @@ class GenericRepository(Generic[ModelType]):
             *,
             skip: int = 0,
             limit: int = 100,
-            filters: Dict[str, Any] = None,
-            sort_by: Optional[str] = None,
+            filters: dict[str, Any] = None,
+            sort_by: str | None = None,
             sort_desc: bool = False
-    ) -> List[ModelType]:
-        """
-        DataTable 核心邏輯：支援動態過濾、分頁與排序
-        """
+    ) -> list[ModelType]:
+        """DataTable 核心邏輯：支援動態過濾、分頁與排序。"""
         query = select(self.model)
 
         # 1. 處理過濾 (簡單的等值過濾，可擴充為更複雜的運算)
@@ -51,7 +57,8 @@ class GenericRepository(Generic[ModelType]):
         result = await db.execute(query)
         return result.scalars().all()
 
-    async def count(self, db: AsyncSession, filters: Dict[str, Any] = None) -> int:
+    async def count(self, db: AsyncSession, filters: dict[str, Any] = None) -> int:
+        """Count records matching optional equality filters."""
         query = select(func.count()).select_from(self.model)
         if filters:
             for field, value in filters.items():
@@ -60,7 +67,8 @@ class GenericRepository(Generic[ModelType]):
         result = await db.execute(query)
         return result.scalar() or 0
 
-    async def create(self, db: AsyncSession, *, obj_in: Dict[str, Any]) -> ModelType:
+    async def create(self, db: AsyncSession, *, obj_in: dict[str, Any]) -> ModelType:
+        """Insert a new record and return the refreshed instance."""
         db_obj = self.model(**obj_in)
         db.add(db_obj)
         await db.commit()
@@ -68,8 +76,9 @@ class GenericRepository(Generic[ModelType]):
         return db_obj
 
     async def update(
-            self, db: AsyncSession, *, db_obj: ModelType, obj_in: Dict[str, Any]
+            self, db: AsyncSession, *, db_obj: ModelType, obj_in: dict[str, Any]
     ) -> ModelType:
+        """Apply field updates to an existing record and return the refreshed instance."""
         for field in obj_in:
             if hasattr(db_obj, field):
                 setattr(db_obj, field, obj_in[field])
@@ -79,6 +88,7 @@ class GenericRepository(Generic[ModelType]):
         return db_obj
 
     async def remove(self, db: AsyncSession, *, uuid: Any) -> ModelType:
+        """Hard-delete a record by UUID and return the deleted instance."""
         query = delete(self.model).where(self.model.uuid == uuid).returning(self.model)
         result = await db.execute(query)
         await db.commit()

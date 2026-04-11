@@ -1,3 +1,5 @@
+"""GraphQL edge-case integration tests covering geometry roundtrips and boundary conditions."""
+
 import pytest
 
 from tests.test_graphql.conftest import auth_header

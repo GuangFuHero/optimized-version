@@ -1,3 +1,5 @@
+"""Custom Strawberry scalars and GeoJSON geometry conversion utilities."""
+
 from typing import Any, NewType
 
 import strawberry

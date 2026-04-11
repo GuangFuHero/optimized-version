@@ -1,16 +1,18 @@
+"""GraphQL types for the map API — stations, tickets, tasks, and crowd-sourcing."""
+
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 import strawberry
 
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 
-
 # --- Pagination ---
 
 @strawberry.input
 class BoundsInput:
+    """Geographic bounding box for spatial filtering."""
+
     min_lat: float
     max_lat: float
     min_lng: float
@@ -19,6 +21,8 @@ class BoundsInput:
 
 @strawberry.type
 class PageInfo:
+    """Pagination metadata for list responses."""
+
     total_count: int
     has_next_page: bool
     has_previous_page: bool
@@ -28,22 +32,25 @@ class PageInfo:
 
 @strawberry.type
 class SecondaryLocationType:
+    """GraphQL type for secondary address or pole location details."""
+
     uuid: UUID
     geometry_uuid: str
     location_type: str
-    county: Optional[str] = None
-    city: Optional[str] = None
-    lane: Optional[str] = None
-    alley: Optional[str] = None
-    no: Optional[str] = None
-    floor: Optional[str] = None
-    room: Optional[str] = None
-    pole_id: Optional[str] = None
-    pole_type: Optional[str] = None
-    pole_note: Optional[str] = None
+    county: str | None = None
+    city: str | None = None
+    lane: str | None = None
+    alley: str | None = None
+    no: str | None = None
+    floor: str | None = None
+    room: str | None = None
+    pole_id: str | None = None
+    pole_type: str | None = None
+    pole_note: str | None = None
 
     @classmethod
     def from_model(cls, m) -> "SecondaryLocationType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, geometry_uuid=m.geometry_uuid,
             location_type=m.location_type,
@@ -55,47 +62,53 @@ class SecondaryLocationType:
 
 @strawberry.input
 class SecondaryLocationInput:
+    """Input for attaching a secondary address or pole location to a station."""
+
     location_type: str = "address"
-    county: Optional[str] = None
-    city: Optional[str] = None
-    lane: Optional[str] = None
-    alley: Optional[str] = None
-    no: Optional[str] = None
-    floor: Optional[str] = None
-    room: Optional[str] = None
-    pole_id: Optional[str] = None
-    pole_type: Optional[str] = None
-    pole_note: Optional[str] = None
+    county: str | None = None
+    city: str | None = None
+    lane: str | None = None
+    alley: str | None = None
+    no: str | None = None
+    floor: str | None = None
+    room: str | None = None
+    pole_id: str | None = None
+    pole_type: str | None = None
+    pole_note: str | None = None
 
 
 # --- Station ---
 
 @strawberry.type
 class StationType:
+    """GraphQL type representing a map station (shelter, supply point, etc.)."""
+
     uuid: UUID
     property_name: str
-    geometry: Optional[GeoJSON] = None
-    created_by: Optional[str] = None
-    type: Optional[str] = None
-    name: Optional[str] = None
-    description: Optional[str] = None
-    op_hour: Optional[str] = None
+    geometry: GeoJSON | None = None
+    created_by: str | None = None
+    type: str | None = None
+    name: str | None = None
+    description: str | None = None
+    op_hour: str | None = None
     level: int = 0
-    comment: Optional[str] = None
-    source: Optional[str] = None
-    visibility: Optional[str] = None
-    verification_status: Optional[str] = None
-    confidence_score: Optional[float] = None
+    comment: str | None = None
+    source: str | None = None
+    visibility: str | None = None
+    verification_status: str | None = None
+    confidence_score: float | None = None
     is_duplicate: bool = False
     is_temporary: bool = False
     is_official: bool = False
-    priority_score: Optional[float] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    priority_score: float | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     @strawberry.field
-    async def secondary_location(self, info: strawberry.types.Info) -> Optional[SecondaryLocationType]:
+    async def secondary_location(self, info: strawberry.types.Info) -> SecondaryLocationType | None:
+        """Resolve the secondary address or pole location for this station."""
         from sqlalchemy import select
+
         from app.models.secondary_location import SecondaryLocation
         db = info.context["db"]
         result = await db.execute(
@@ -106,7 +119,9 @@ class StationType:
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list["StationPropertyType"]:
+        """Resolve all properties (supply items, services) attached to this station."""
         from sqlalchemy import select
+
         from app.models.station_property import StationProperty
         db = info.context["db"]
         result = await db.execute(
@@ -116,6 +131,7 @@ class StationType:
 
     @classmethod
     def from_model(cls, m) -> "StationType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, property_name=m.property_name,
             geometry=geom_to_geojson(m.geometry), created_by=m.created_by,
@@ -132,52 +148,61 @@ class StationType:
 
 @strawberry.type
 class StationConnection:
+    """Paginated list of stations with page metadata."""
+
     items: list[StationType]
     page_info: PageInfo
 
 
 @strawberry.input
 class CreateStationInput:
+    """Input for creating a new map station."""
+
     geometry: GeoJSON
-    type: Optional[str] = None
-    name: Optional[str] = None
-    description: Optional[str] = None
-    op_hour: Optional[str] = None
+    type: str | None = None
+    name: str | None = None
+    description: str | None = None
+    op_hour: str | None = None
     level: int = 0
-    comment: Optional[str] = None
+    comment: str | None = None
     source: str = "user"
     visibility: str = "public"
-    secondary_location: Optional[SecondaryLocationInput] = None
+    secondary_location: SecondaryLocationInput | None = None
 
 
 @strawberry.input
 class UpdateStationInput:
-    geometry: Optional[GeoJSON] = None
-    type: Optional[str] = strawberry.UNSET
-    name: Optional[str] = strawberry.UNSET
-    description: Optional[str] = strawberry.UNSET
-    op_hour: Optional[str] = strawberry.UNSET
-    level: Optional[int] = None
-    comment: Optional[str] = strawberry.UNSET
-    visibility: Optional[str] = None
+    """Input for updating an existing station. UNSET fields are left unchanged."""
+
+    geometry: GeoJSON | None = None
+    type: str | None = strawberry.UNSET
+    name: str | None = strawberry.UNSET
+    description: str | None = strawberry.UNSET
+    op_hour: str | None = strawberry.UNSET
+    level: int | None = None
+    comment: str | None = strawberry.UNSET
+    visibility: str | None = None
 
 
 # --- Closure Area ---
 
 @strawberry.type
 class ClosureAreaType:
+    """GraphQL type representing a road or area closure."""
+
     uuid: UUID
     property_name: str
-    geometry: Optional[GeoJSON] = None
-    created_by: Optional[str] = None
+    geometry: GeoJSON | None = None
+    created_by: str | None = None
     status: str = ""
-    information_source: Optional[str] = None
-    comment: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    information_source: str | None = None
+    comment: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     @classmethod
     def from_model(cls, m) -> "ClosureAreaType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, property_name=m.property_name,
             geometry=geom_to_geojson(m.geometry), created_by=m.created_by,
@@ -188,44 +213,54 @@ class ClosureAreaType:
 
 @strawberry.type
 class ClosureAreaConnection:
+    """Paginated list of closure areas with page metadata."""
+
     items: list[ClosureAreaType]
     page_info: PageInfo
 
 
 @strawberry.input
 class CreateClosureAreaInput:
+    """Input for creating a new closure area."""
+
     geometry: GeoJSON
     status: str
-    information_source: Optional[str] = None
-    comment: Optional[str] = None
+    information_source: str | None = None
+    comment: str | None = None
 
 
 @strawberry.input
 class UpdateClosureAreaInput:
-    geometry: Optional[GeoJSON] = None
-    status: Optional[str] = None
-    information_source: Optional[str] = strawberry.UNSET
-    comment: Optional[str] = strawberry.UNSET
+    """Input for updating an existing closure area. UNSET fields are left unchanged."""
+
+    geometry: GeoJSON | None = None
+    status: str | None = None
+    information_source: str | None = strawberry.UNSET
+    comment: str | None = strawberry.UNSET
 
 
 # --- Station Property ---
 
 @strawberry.type
 class StationPropertyType:
+    """GraphQL type representing a property (supply item, service) on a station."""
+
     uuid: UUID
     station_uuid: str
     property_type: str
     property_name: str
-    quantity: Optional[int] = None
-    comment: Optional[str] = None
+    quantity: int | None = None
+    comment: str | None = None
     status: str = "pending"
     weightings: float = 1.0
-    created_by: Optional[str] = None
-    created_at: Optional[datetime] = None
+    created_by: str | None = None
+    created_at: datetime | None = None
 
     @strawberry.field
     async def crowd_sourcings(self, info: strawberry.types.Info) -> list["CrowdSourcingType"]:
+        """Resolve crowd-sourcing entries submitted for this property."""
         from sqlalchemy import select
+
         from app.models.station_property import CrowdSourcing
         db = info.context["db"]
         result = await db.execute(
@@ -235,6 +270,7 @@ class StationPropertyType:
 
     @classmethod
     def from_model(cls, m) -> "StationPropertyType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, station_uuid=m.station_uuid,
             property_type=m.property_type, property_name=m.property_name,
@@ -246,35 +282,42 @@ class StationPropertyType:
 
 @strawberry.input
 class CreateStationPropertyInput:
+    """Input for adding a new property to a station."""
+
     station_uuid: str
     property_type: str
     property_name: str
-    quantity: Optional[int] = None
+    quantity: int | None = None
     weightings: float = 1.0
 
 
 @strawberry.input
 class UpdateStationPropertyInput:
-    quantity: Optional[int] = strawberry.UNSET
-    status: Optional[str] = None
-    weightings: Optional[float] = None
+    """Input for updating a station property's status, quantity, or weightings."""
+
+    quantity: int | None = strawberry.UNSET
+    status: str | None = None
+    weightings: float | None = None
 
 
 # --- CrowdSourcing ---
 
 @strawberry.type
 class CrowdSourcingType:
+    """GraphQL type for a crowd-sourced rating submitted by a user for a station property."""
+
     uuid: UUID
     station_uuid: str
-    item_uuid: Optional[str] = None
+    item_uuid: str | None = None
     user_uuid: str = ""
     user_credibility_score: float = 0.0
     rating: str = ""
-    distance_from_geometry: Optional[float] = None
-    created_at: Optional[datetime] = None
+    distance_from_geometry: float | None = None
+    created_at: datetime | None = None
 
     @classmethod
     def from_model(cls, m) -> "CrowdSourcingType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, station_uuid=m.station_uuid,
             item_uuid=m.item_uuid, user_uuid=m.user_uuid,
@@ -286,25 +329,30 @@ class CrowdSourcingType:
 
 @strawberry.input
 class CreateCrowdSourcingInput:
+    """Input for submitting or updating a crowd-sourced rating for a station property."""
+
     station_uuid: str
     item_uuid: str
     rating: str
-    distance_from_geometry: Optional[float] = None
+    distance_from_geometry: float | None = None
 
 
 # --- Photos ---
 
 @strawberry.type
 class PhotoType:
+    """GraphQL type representing a photo attached to a station or ticket."""
+
     uuid: UUID
     ref_uuid: str
     ref_type: str
     url: str
     created_by: str
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
 
     @classmethod
     def from_model(cls, m) -> "PhotoType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, ref_uuid=m.ref_uuid, ref_type=m.ref_type,
             url=m.url, created_by=m.created_by, created_at=m.created_at,
@@ -315,18 +363,21 @@ class PhotoType:
 
 @strawberry.type
 class TaskPropertyType:
+    """GraphQL type for a structured property attached to a ticket task."""
+
     uuid: UUID
     task_uuid: str
     property_name: str
     property_value: str
-    quantity: Optional[int] = None
-    status: Optional[str] = None
-    comment: Optional[str] = None
-    created_by: Optional[str] = None
-    created_at: Optional[datetime] = None
+    quantity: int | None = None
+    status: str | None = None
+    comment: str | None = None
+    created_by: str | None = None
+    created_at: datetime | None = None
 
     @classmethod
     def from_model(cls, m) -> "TaskPropertyType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, task_uuid=m.task_uuid,
             property_name=m.property_name, property_value=m.property_value,
@@ -337,14 +388,17 @@ class TaskPropertyType:
 
 @strawberry.type
 class TaskAssignmentType:
+    """GraphQL type representing a user or group assigned to a ticket task."""
+
     uuid: UUID
     task_uuid: str
     actor_uuid: str
-    role: Optional[str] = None
-    assigned_at: Optional[datetime] = None
+    role: str | None = None
+    assigned_at: datetime | None = None
 
     @classmethod
     def from_model(cls, m) -> "TaskAssignmentType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, task_uuid=m.task_uuid, actor_uuid=m.actor_uuid,
             role=m.role, assigned_at=m.assigned_at,
@@ -353,24 +407,28 @@ class TaskAssignmentType:
 
 @strawberry.type
 class TicketTaskType:
+    """GraphQL type representing a task under a support ticket (rescue, HR, supply, etc.)."""
+
     uuid: UUID
     ticket_uuid: str
     task_type: str
     task_name: str
-    task_description: Optional[str] = None
-    quantity: Optional[int] = None
+    task_description: str | None = None
+    quantity: int | None = None
     status: str = "pending"
     source: str = "user"
-    progress_note: Optional[str] = None
+    progress_note: str | None = None
     visibility: str = "public"
     moderation_status: str = "pending_review"
-    review_note: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    review_note: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list[TaskPropertyType]:
+        """Resolve structured properties (skills, cargo type, etc.) for this task."""
         from sqlalchemy import select
+
         from app.models.ticket_task import TaskProperty
         db = info.context["db"]
         result = await db.execute(
@@ -383,7 +441,9 @@ class TicketTaskType:
 
     @strawberry.field
     async def assignments(self, info: strawberry.types.Info) -> list[TaskAssignmentType]:
+        """Resolve actors (volunteers, responders) assigned to this task."""
         from sqlalchemy import select
+
         from app.models.ticket_task import TaskAssignment
         db = info.context["db"]
         result = await db.execute(
@@ -393,6 +453,7 @@ class TicketTaskType:
 
     @classmethod
     def from_model(cls, m) -> "TicketTaskType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, ticket_uuid=m.ticket_uuid,
             task_type=m.task_type, task_name=m.task_name,
@@ -406,67 +467,79 @@ class TicketTaskType:
 
 @strawberry.input
 class CreateTicketTaskInput:
+    """Input for creating a new task under a support ticket."""
+
     ticket_uuid: str
     task_type: str
     task_name: str
-    task_description: Optional[str] = None
-    quantity: Optional[int] = None
+    task_description: str | None = None
+    quantity: int | None = None
     source: str = "user"
     visibility: str = "public"
-    route_uuid: Optional[str] = None
+    route_uuid: str | None = None
 
 
 @strawberry.input
 class UpdateTicketTaskInput:
-    status: Optional[str] = None
-    progress_note: Optional[str] = strawberry.UNSET
-    review_note: Optional[str] = strawberry.UNSET
-    moderation_status: Optional[str] = None
-    visibility: Optional[str] = None
+    """Input for updating a ticket task's status, visibility, or review notes."""
+
+    status: str | None = None
+    progress_note: str | None = strawberry.UNSET
+    review_note: str | None = strawberry.UNSET
+    moderation_status: str | None = None
+    visibility: str | None = None
 
 
 @strawberry.input
 class CreateTaskPropertyInput:
+    """Input for adding a structured property to a ticket task."""
+
     task_uuid: str
     property_name: str
     property_value: str
-    quantity: Optional[int] = None
-    comment: Optional[str] = None
+    quantity: int | None = None
+    comment: str | None = None
 
 
 @strawberry.input
 class UpdateTaskPropertyInput:
-    property_value: Optional[str] = None
-    quantity: Optional[int] = strawberry.UNSET
-    status: Optional[str] = None
-    comment: Optional[str] = strawberry.UNSET
+    """Input for updating a task property's value, quantity, status, or comment."""
+
+    property_value: str | None = None
+    quantity: int | None = strawberry.UNSET
+    status: str | None = None
+    comment: str | None = strawberry.UNSET
 
 
 # --- Tickets ---
 
 @strawberry.type
 class TicketType:
+    """GraphQL type representing a disaster relief support ticket."""
+
     uuid: UUID
     property_name: str
-    geometry: Optional[GeoJSON] = None
+    geometry: GeoJSON | None = None
     title: str = ""
-    description: Optional[str] = None
+    description: str | None = None
     contact_name: str = ""
-    contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
     status: str = ""
     priority: str = ""
-    task_type: Optional[str] = None
-    visibility: Optional[str] = None
-    verification_status: Optional[str] = None
-    review_note: Optional[str] = None
-    created_by: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    task_type: str | None = None
+    visibility: str | None = None
+    verification_status: str | None = None
+    review_note: str | None = None
+    created_by: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     @strawberry.field
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
+        """Resolve photos attached to this ticket."""
         from sqlalchemy import select
+
         from app.models.photo import Photo
         db = info.context["db"]
         result = await db.execute(
@@ -480,7 +553,9 @@ class TicketType:
 
     @strawberry.field
     async def tasks(self, info: strawberry.types.Info) -> list[TicketTaskType]:
+        """Resolve all active tasks under this ticket."""
         from sqlalchemy import select
+
         from app.models.ticket_task import TicketTask
         db = info.context["db"]
         result = await db.execute(
@@ -493,6 +568,7 @@ class TicketType:
 
     @classmethod
     def from_model(cls, m) -> "TicketType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, property_name=m.property_name,
             geometry=geom_to_geojson(m.geometry),
@@ -507,45 +583,54 @@ class TicketType:
 
 @strawberry.type
 class TicketConnection:
+    """Paginated list of tickets with page metadata."""
+
     items: list[TicketType]
     page_info: PageInfo
 
 
 @strawberry.input
 class CreateTicketInput:
+    """Input for creating a new support ticket."""
+
     title: str
-    description: Optional[str] = None
+    description: str | None = None
     geometry: GeoJSON
     contact_name: str
-    contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
     priority: str = "low"
-    task_type: Optional[str] = None
+    task_type: str | None = None
     visibility: str = "public"
 
 
 @strawberry.input
 class UpdateTicketInput:
-    status: Optional[str] = None
-    priority: Optional[str] = None
-    title: Optional[str] = None
-    description: Optional[str] = strawberry.UNSET
-    review_note: Optional[str] = strawberry.UNSET
-    verification_status: Optional[str] = None
+    """Input for updating a ticket's status, priority, or review notes."""
+
+    status: str | None = None
+    priority: str | None = None
+    title: str | None = None
+    description: str | None = strawberry.UNSET
+    review_note: str | None = strawberry.UNSET
+    verification_status: str | None = None
 
 
 # --- Property Config ---
 
 @strawberry.type
 class StationPropertyConfigType:
+    """GraphQL type for a station property config schema (name, data type, enum options)."""
+
     uuid: UUID
     station_type: str
     property_name: str
     data_type: str
-    enum_options: Optional[list[str]] = None
+    enum_options: list[str] | None = None
 
     @classmethod
     def from_model(cls, m) -> "StationPropertyConfigType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, station_type=m.station_type,
             property_name=m.property_name, data_type=m.data_type,
@@ -555,14 +640,17 @@ class StationPropertyConfigType:
 
 @strawberry.type
 class TaskPropertyConfigType:
+    """GraphQL type for a task property config schema (name, data type, enum options)."""
+
     uuid: UUID
     task_type: str
     property_name: str
     data_type: str
-    enum_options: Optional[list[str]] = None
+    enum_options: list[str] | None = None
 
     @classmethod
     def from_model(cls, m) -> "TaskPropertyConfigType":
+        """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, task_type=m.task_type,
             property_name=m.property_name, data_type=m.data_type,
@@ -572,6 +660,8 @@ class TaskPropertyConfigType:
 
 @strawberry.input
 class UpsertPropertyConfigInput:
+    """Input for creating or updating a property config entry."""
+
     property_name: str
     data_type: str
-    enum_options: Optional[list[str]] = None
+    enum_options: list[str] | None = None

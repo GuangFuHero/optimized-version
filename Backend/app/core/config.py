@@ -1,8 +1,13 @@
+"""Application configuration loaded from environment variables and .env file."""
+
 import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Application settings loaded from environment variables and the .env file."""
+
     # 資料庫連線字串
     # Docker 內部連線預設: postgresql+asyncpg://postgres:postgres@db:5432/postgres
     # 本地開發連線預設: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
@@ -25,9 +30,7 @@ class Settings(BaseSettings):
 
     @property
     def JWT_SIGNING_KEY(self) -> str:
-        """
-        將原始 SECRET_KEY 進行 SHA-256 雜湊，產生更強大的簽名密鑰。
-        """
+        """將原始 SECRET_KEY 進行 SHA-256 雜湊，產生更強大的簽名密鑰。"""
         import hashlib
         return hashlib.sha256(self.SECRET_KEY.encode()).hexdigest()
 

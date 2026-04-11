@@ -1,25 +1,25 @@
+"""Authentication endpoints: user registration, login, and salt retrieval."""
+
 import os
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_limiter.depends import RateLimiter
-from pyrate_limiter import Duration, Rate, Limiter
+from pyrate_limiter import Duration, Limiter, Rate
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.core import security
 from app.core.config import settings
-from app.api.v1.endpoints import rbac_test
-from app.repositories.auth_repository import user_repository, group_repository
-from app.schemas.auth import UserCreate, Token, UserResponse, UserLogin, UserSaltResponse
-from app.models.auth import User
+from app.repositories.auth_repository import group_repository, user_repository
+from app.schemas.auth import Token, UserCreate, UserResponse, UserSaltResponse
 
 router = APIRouter()
 
-from fastapi import Response # 補上 Response import
 
 # 頻率限制包裝器：支援測試環境繞過
 def get_rate_limiter(times: int, seconds: int):
+    """Build a rate-limiter FastAPI dependency that is bypassed in testing."""
     _limiter = Limiter(Rate(times, Duration.SECOND * seconds))
     
     async def dynamic_rate_limiter(request: Request, response: Response):
@@ -39,9 +39,7 @@ async def get_user_salt(
         username: str,
         db: AsyncSession = Depends(security.get_db)
 ):
-    """
-    獲取使用者的前端 salt。
-    """
+    """獲取使用者的前端 salt。"""
     user = await user_repository.get_by_name(db, name=username)
     
     if user:
@@ -64,9 +62,7 @@ async def register(
         user_in: UserCreate,
         db: AsyncSession = Depends(security.get_db)
 ):
-    """
-    使用者註冊。
-    """
+    """使用者註冊。"""
     # 1. 檢查名稱是否已被使用
     existing_user = await user_repository.get_by_name(db, name=user_in.name)
     if existing_user:
@@ -102,8 +98,8 @@ async def login(
         form_data: OAuth2PasswordRequestForm = Depends(),
         db: AsyncSession = Depends(security.get_db)
 ):
-    """
-    使用者登入，回傳 JWT Token。
+    """使用者登入，回傳 JWT Token。
+
     [Rate Limit: 5 次/每分鐘]
     """
     user = await user_repository.get_by_name(db, name=form_data.username)

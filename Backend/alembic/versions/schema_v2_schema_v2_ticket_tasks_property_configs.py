@@ -5,12 +5,14 @@ Revises: ecff746c61a6
 Create Date: 2026-04-09
 
 """
-from typing import Sequence, Union
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
 
+from alembic import op
+
 revision: str = 'schema_v2'
-down_revision: Union[str, Sequence[str], None] = 'ecff746c61a6'
+down_revision: str | Sequence[str] | None = 'ecff746c61a6'
 branch_labels = None
 depends_on = None
 

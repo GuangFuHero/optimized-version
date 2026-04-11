@@ -1,33 +1,53 @@
-from typing import Optional
+"""GraphQL queries for geo features, tickets, tasks, and property configs."""
+
 from uuid import UUID
 
 import strawberry
-from sqlalchemy import func, select, or_
+from sqlalchemy import func, or_, select
 
 from app.graphql.types import (
     BoundsInput,
-    ClosureAreaConnection, ClosureAreaType,
+    ClosureAreaConnection,
+    ClosureAreaType,
     PageInfo,
-    StationConnection, StationType,
-    TicketConnection, TicketType,
-    TicketTaskType, TaskPropertyType,
-    StationPropertyConfigType, TaskPropertyConfigType,
+    StationConnection,
+    StationPropertyConfigType,
+    StationType,
+    TaskPropertyConfigType,
+    TaskPropertyType,
+    TicketConnection,
+    TicketTaskType,
+    TicketType,
 )
 from app.models.geo import ClosureArea, Station
-from app.models.request import Tickets
-from app.models.ticket_task import TicketTask, TaskProperty
 from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
+from app.models.request import Tickets
+from app.models.ticket_task import TaskProperty, TicketTask
 
 
 @strawberry.type
 class GeoQuery:
+    """GraphQL queries for stations and closure areas."""
+
     @strawberry.field
     async def stations(
         self, info: strawberry.types.Info,
-        bounds: Optional[BoundsInput] = None,
-        station_type: Optional[str] = None,
+        bounds: BoundsInput | None = None,
+        station_type: str | None = None,
         skip: int = 0, limit: int = 50,
     ) -> StationConnection:
+        """List stations within an optional geographic bounding box.
+
+        Args:
+            info: Strawberry resolver context providing the database session.
+            bounds: Optional lat/lng bbox to spatially filter results via ST_Intersects.
+            station_type: Optional type filter (e.g. 'shelter', 'supply', 'medical').
+            skip: Pagination offset.
+            limit: Max results per page (default 50).
+
+        Returns:
+            StationConnection with items and total count / pagination metadata.
+        """
         db = info.context["db"]
         query = select(Station).where(Station.delete_at.is_(None))
 
@@ -52,7 +72,8 @@ class GeoQuery:
         )
 
     @strawberry.field
-    async def station(self, info: strawberry.types.Info, uuid: UUID) -> Optional[StationType]:
+    async def station(self, info: strawberry.types.Info, uuid: UUID) -> StationType | None:
+        """Fetch a single active station by UUID. Returns None if not found or soft-deleted."""
         db = info.context["db"]
         result = await db.execute(
             select(Station).where(Station.uuid == uuid, Station.delete_at.is_(None))
@@ -63,9 +84,10 @@ class GeoQuery:
     @strawberry.field
     async def closure_areas(
         self, info: strawberry.types.Info,
-        bounds: Optional[BoundsInput] = None,
+        bounds: BoundsInput | None = None,
         skip: int = 0, limit: int = 50,
     ) -> ClosureAreaConnection:
+        """List closure areas within an optional geographic bounding box, paginated."""
         db = info.context["db"]
         query = select(ClosureArea).where(ClosureArea.delete_at.is_(None))
 
@@ -88,7 +110,8 @@ class GeoQuery:
         )
 
     @strawberry.field
-    async def closure_area(self, info: strawberry.types.Info, uuid: UUID) -> Optional[ClosureAreaType]:
+    async def closure_area(self, info: strawberry.types.Info, uuid: UUID) -> ClosureAreaType | None:
+        """Fetch a single active closure area by UUID. Returns None if not found or soft-deleted."""
         db = info.context["db"]
         result = await db.execute(
             select(ClosureArea).where(ClosureArea.uuid == uuid, ClosureArea.delete_at.is_(None))
@@ -99,14 +122,17 @@ class GeoQuery:
 
 @strawberry.type
 class RequestQuery:
+    """GraphQL queries for support tickets."""
+
     @strawberry.field
     async def tickets(
         self, info: strawberry.types.Info,
-        bounds: Optional[BoundsInput] = None,
-        status: Optional[str] = None,
-        priority: Optional[str] = None,
+        bounds: BoundsInput | None = None,
+        status: str | None = None,
+        priority: str | None = None,
         skip: int = 0, limit: int = 50,
     ) -> TicketConnection:
+        """List tickets with optional bbox, status, and priority filters, paginated."""
         db = info.context["db"]
         query = select(Tickets).where(Tickets.delete_at.is_(None))
 
@@ -133,7 +159,8 @@ class RequestQuery:
         )
 
     @strawberry.field
-    async def ticket(self, info: strawberry.types.Info, uuid: UUID) -> Optional[TicketType]:
+    async def ticket(self, info: strawberry.types.Info, uuid: UUID) -> TicketType | None:
+        """Fetch a single active ticket by UUID. Returns None if not found or soft-deleted."""
         db = info.context["db"]
         result = await db.execute(
             select(Tickets).where(Tickets.uuid == uuid, Tickets.delete_at.is_(None))
@@ -144,14 +171,16 @@ class RequestQuery:
 
 @strawberry.type
 class TicketTaskQuery:
+    """GraphQL queries for ticket tasks and their properties."""
 
     @strawberry.field
     async def ticket_tasks(
         self, info: strawberry.types.Info,
         ticket_uuid: str,
-        status: Optional[str] = None,
+        status: str | None = None,
         skip: int = 0, limit: int = 50,
     ) -> list[TicketTaskType]:
+        """List tasks for a given ticket UUID, with optional status filter and pagination."""
         db = info.context["db"]
         query = select(TicketTask).where(
             TicketTask.ticket_uuid == ticket_uuid,
@@ -166,6 +195,7 @@ class TicketTaskQuery:
     async def task_properties(
         self, info: strawberry.types.Info, task_uuid: str
     ) -> list[TaskPropertyType]:
+        """List all active properties for a given task UUID."""
         db = info.context["db"]
         results = await db.execute(
             select(TaskProperty).where(
@@ -178,11 +208,13 @@ class TicketTaskQuery:
 
 @strawberry.type
 class PropertyConfigQuery:
+    """GraphQL queries for station and task property configuration schemas."""
 
     @strawberry.field
     async def station_property_configs(
         self, info: strawberry.types.Info, station_type: str
     ) -> list[StationPropertyConfigType]:
+        """List property config entries for a station type (includes universal 'all' configs)."""
         db = info.context["db"]
         results = await db.execute(
             select(StationPropertyConfig).where(
@@ -198,6 +230,7 @@ class PropertyConfigQuery:
     async def task_property_configs(
         self, info: strawberry.types.Info, task_type: str
     ) -> list[TaskPropertyConfigType]:
+        """List property config entries for a task type."""
         db = info.context["db"]
         results = await db.execute(
             select(TaskPropertyConfig).where(TaskPropertyConfig.task_type == task_type)

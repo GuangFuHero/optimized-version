@@ -1,7 +1,8 @@
+"""Shared fixtures and helpers for GraphQL integration tests."""
+
 import uuid as uuid_mod
 from contextlib import asynccontextmanager
 
-import pytest
 import pytest_asyncio
 from geoalchemy2.shape import from_shape
 from httpx import ASGITransport, AsyncClient
@@ -10,14 +11,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.main import app
+from app.core.security import create_access_token, generate_salt, get_password_hash
 from app.db.session import Base
+from app.main import app
 from app.models.auth import Group, Policy, PolicyGroupAssign, User, UserGroupAssign
-from app.models.geo import Station, ClosureArea
+from app.models.geo import ClosureArea, Station
 from app.models.request import Tickets
-from app.models.ticket_task import TicketTask
 from app.models.station_property import StationProperty
-from app.core.security import get_password_hash, create_access_token, generate_salt
+from app.models.ticket_task import TicketTask
 
 TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
@@ -63,7 +64,7 @@ async def _ensure_db():
         db.add(PolicyGroupAssign(group_uuid=login_group.uuid, policy_uuid=login_req.uuid))
 
         coord_map = Policy(name="FieldCoordinator_Map", read="all", create="all", edit="all", delete="all")
-        coord_req = Policy(name="FieldCoordinator_Request", read="all", create="all", edit="all", delete="all")
+        coord_req = Policy(name="FieldCoordinator_Request", read="all", create="all", edit="all", delete="all")  # noqa: E501
         db.add_all([coord_map, coord_req])
         await db.flush()
         db.add(PolicyGroupAssign(group_uuid=coordinator_group.uuid, policy_uuid=coord_map.uuid))
@@ -75,6 +76,7 @@ async def _ensure_db():
 
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
+    """Ensure the test database schema and seed data are initialized before each test."""
     await _ensure_db()
     # Dispose the app-level engine pool so each test gets fresh connections
     # on the current event loop (avoids "Future attached to a different loop").
@@ -84,6 +86,7 @@ async def setup_db():
 
 @pytest_asyncio.fixture
 async def client():
+    """Provide an async HTTP test client connected to the FastAPI app."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -108,20 +111,24 @@ async def _create_user_with_role(group_name: str) -> tuple[str, str]:
 
 @pytest_asyncio.fixture
 async def coordinator_auth():
+    """Return (user_uuid, token) for a user with Field Coordinator permissions."""
     return await _create_user_with_role("Field Coordinator")
 
 
 @pytest_asyncio.fixture
 async def login_user_auth():
+    """Return (user_uuid, token) for a user with Login User permissions."""
     return await _create_user_with_role("Login User")
 
 
 def auth_header(token: str) -> dict:
+    """Build a Bearer authorization header dict from a JWT token."""
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture
 async def sample_station(coordinator_auth):
+    """Seed a shelter-type station and return its UUID string."""
     user_uuid, _ = coordinator_auth
     async with test_db() as db:
         station = Station(
@@ -138,6 +145,7 @@ async def sample_station(coordinator_auth):
 
 @pytest_asyncio.fixture
 async def sample_closure_area(coordinator_auth):
+    """Seed a polygon closure area and return its UUID string."""
     user_uuid, _ = coordinator_auth
     async with test_db() as db:
         area = ClosureArea(
@@ -156,6 +164,7 @@ async def sample_closure_area(coordinator_auth):
 
 @pytest_asyncio.fixture
 async def sample_ticket(coordinator_auth):
+    """Seed a pending support ticket and return its UUID string."""
     user_uuid, _ = coordinator_auth
     async with test_db() as db:
         ticket = Tickets(
@@ -173,6 +182,7 @@ async def sample_ticket(coordinator_auth):
 
 @pytest_asyncio.fixture
 async def sample_ticket_task(coordinator_auth, sample_ticket):
+    """Seed a ticket task under the sample ticket and return its UUID string."""
     async with test_db() as db:
         task = TicketTask(
             ticket_uuid=sample_ticket,
@@ -186,6 +196,7 @@ async def sample_ticket_task(coordinator_auth, sample_ticket):
 
 @pytest_asyncio.fixture
 async def sample_station_property(coordinator_auth, sample_station):
+    """Seed a facility property for the sample station and return its UUID string."""
     user_uuid, _ = coordinator_auth
     async with test_db() as db:
         prop = StationProperty(

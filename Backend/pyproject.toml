@@ -55,6 +55,15 @@ extend-select = [
     "D",      # pydocstyle (docstrings)
     "FAST",   # FastAPI-specific rules
 ]
+ignore = [
+    "B008",    # FastAPI Depends() in defaults is intentional
+    "FAST002", # Old-style Depends is valid, Annotated migration is optional
+    "D415",    # Chinese 。 is valid terminal punctuation; ASCII-only rule is too restrictive
+    "UP046",   # PEP 695 generics are a style preference; Generic[T] syntax is still valid
+]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/**" = ["D", "E501"]  # auto-generated migration files
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

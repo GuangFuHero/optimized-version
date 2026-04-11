@@ -1,11 +1,11 @@
+"""GraphQL query integration tests for stations, tickets, tasks, and property configs."""
+
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-import pytest_asyncio
 
-from tests.test_graphql.conftest import test_db, auth_header
-
+from tests.test_graphql.conftest import auth_header, test_db
 
 # ──────────────────────────────────────────────
 # GraphQL query strings
@@ -39,6 +39,7 @@ query($ticketUuid: String!) {
 
 @pytest.mark.asyncio
 async def test_stations_returns_data(client, sample_station):
+    """Stations query returns at least one item and a non-zero totalCount."""
     response = await client.post("/graphql", json={
         "query": """
             query { stations { items { uuid propertyName } pageInfo { totalCount } } }
@@ -55,6 +56,7 @@ async def test_stations_returns_data(client, sample_station):
 
 @pytest.mark.asyncio
 async def test_stations_with_bounds(client, sample_station):
+    """Stations query with a bounding box returns only stations inside the bounds."""
     response = await client.post("/graphql", json={
         "query": """
             query {
@@ -76,6 +78,7 @@ async def test_stations_with_bounds(client, sample_station):
 
 @pytest.mark.asyncio
 async def test_stations_outside_bounds_excluded(client, sample_station):
+    """Stations query with a non-overlapping bounding box returns an empty list."""
     response = await client.post("/graphql", json={
         "query": """
             query {
@@ -95,8 +98,8 @@ async def test_stations_outside_bounds_excluded(client, sample_station):
 
 @pytest.mark.asyncio
 async def test_stations_filter_by_station_type(client, sample_station):
-    """
-    Hypothesis: stations(stationType=...) filters by Station.type field.
+    """Hypothesis: stations(stationType=...) filters by Station.type field.
+
     Test case: stationType=shelter returns sample_station; stationType=water returns empty list.
     """
     response = await client.post("/graphql", json={
@@ -123,6 +126,7 @@ async def test_stations_filter_by_station_type(client, sample_station):
 
 @pytest.mark.asyncio
 async def test_stations_pagination(client, sample_station):
+    """Stations query with limit=1 returns at most one item and correct page metadata."""
     response = await client.post("/graphql", json={
         "query": """
             query {
@@ -144,8 +148,10 @@ async def test_stations_pagination(client, sample_station):
 
 @pytest.mark.asyncio
 async def test_stations_excludes_soft_deleted(client, coordinator_auth):
+    """Soft-deleted stations are excluded from the stations query results."""
     from geoalchemy2.shape import from_shape
     from shapely.geometry import Point
+
     from app.models.geo import Station
 
     user_uuid, _ = coordinator_auth
@@ -158,7 +164,7 @@ async def test_stations_excludes_soft_deleted(client, coordinator_auth):
         await db.flush()
         deleted_uuid = str(station.uuid)
 
-        station.delete_at = datetime.now(timezone.utc)
+        station.delete_at = datetime.now(UTC)
 
     response = await client.post("/graphql", json={
         "query": """
@@ -174,6 +180,7 @@ async def test_stations_excludes_soft_deleted(client, coordinator_auth):
 
 @pytest.mark.asyncio
 async def test_station_detail(client, sample_station):
+    """station(uuid) returns the correct fields for a known station."""
     response = await client.post("/graphql", json={
         "query": f"""
             query {{
@@ -196,6 +203,7 @@ async def test_station_detail(client, sample_station):
 
 @pytest.mark.asyncio
 async def test_station_not_found(client):
+    """station(uuid) returns null for a non-existent UUID."""
     random_uuid = str(uuid.uuid4())
     response = await client.post("/graphql", json={
         "query": f"""
@@ -214,6 +222,7 @@ async def test_station_not_found(client):
 
 @pytest.mark.asyncio
 async def test_closure_areas_returns_data(client, sample_closure_area):
+    """ClosureAreas query returns at least one item when a closure area exists."""
     response = await client.post("/graphql", json={
         "query": """
             query { closureAreas { items { uuid propertyName } pageInfo { totalCount } } }
@@ -229,6 +238,7 @@ async def test_closure_areas_returns_data(client, sample_closure_area):
 
 @pytest.mark.asyncio
 async def test_closure_areas_with_bounds(client, sample_closure_area):
+    """ClosureAreas query with bounding box includes only overlapping areas."""
     response = await client.post("/graphql", json={
         "query": """
             query {
@@ -250,6 +260,7 @@ async def test_closure_areas_with_bounds(client, sample_closure_area):
 
 @pytest.mark.asyncio
 async def test_closure_area_detail(client, sample_closure_area):
+    """closureArea(uuid) returns status, source, and geometry for a known area."""
     response = await client.post("/graphql", json={
         "query": f"""
             query {{
@@ -271,6 +282,7 @@ async def test_closure_area_detail(client, sample_closure_area):
 
 @pytest.mark.asyncio
 async def test_closure_area_not_found(client):
+    """closureArea(uuid) returns null for a non-existent UUID."""
     random_uuid = str(uuid.uuid4())
     response = await client.post("/graphql", json={
         "query": f"""
@@ -289,6 +301,7 @@ async def test_closure_area_not_found(client):
 
 @pytest.mark.asyncio
 async def test_tickets_returns_data(client, sample_ticket):
+    """Tickets query returns at least one item when a ticket exists."""
     response = await client.post("/graphql", json={
         "query": """
             query { tickets { items { uuid title status } pageInfo { totalCount } } }
@@ -304,6 +317,7 @@ async def test_tickets_returns_data(client, sample_ticket):
 
 @pytest.mark.asyncio
 async def test_tickets_with_bounds(client, sample_ticket):
+    """Tickets query with a bounding box returns only tickets inside the bounds."""
     response = await client.post("/graphql", json={
         "query": """
             query {
@@ -325,6 +339,7 @@ async def test_tickets_with_bounds(client, sample_ticket):
 
 @pytest.mark.asyncio
 async def test_tickets_filter_by_status(client, sample_ticket):
+    """tickets(status=...) returns only tickets matching the given status."""
     # Match "pending"
     response = await client.post("/graphql", json={
         "query": """
@@ -358,6 +373,7 @@ async def test_tickets_filter_by_status(client, sample_ticket):
 
 @pytest.mark.asyncio
 async def test_ticket_detail(client, sample_ticket):
+    """ticket(uuid) returns correct title, status, and priority for a known ticket."""
     response = await client.post("/graphql", json={
         "query": f"""
             query {{
@@ -385,8 +401,8 @@ async def test_ticket_detail(client, sample_ticket):
 
 @pytest.mark.asyncio
 async def test_station_property_configs_returns_list(client, coordinator_auth):
-    """
-    Hypothesis: stationPropertyConfigs query returns a list of property configs.
+    """Hypothesis: stationPropertyConfigs query returns a list of property configs.
+
     Test case: query with any stationType returns a list (may be empty if not seeded).
     """
     _, token = coordinator_auth
@@ -404,8 +420,8 @@ async def test_station_property_configs_returns_list(client, coordinator_auth):
 
 @pytest.mark.asyncio
 async def test_task_property_configs_returns_list(client, coordinator_auth):
-    """
-    Hypothesis: taskPropertyConfigs query returns a list of property configs.
+    """Hypothesis: taskPropertyConfigs query returns a list of property configs.
+
     Test case: query with any taskType returns a list (may be empty if not seeded).
     """
     _, token = coordinator_auth
@@ -423,8 +439,8 @@ async def test_task_property_configs_returns_list(client, coordinator_auth):
 
 @pytest.mark.asyncio
 async def test_ticket_tasks_query(client, coordinator_auth, sample_ticket, sample_ticket_task):
-    """
-    Hypothesis: ticketTasks returns all tasks for a ticket, with an empty properties list initially.
+    """Hypothesis: ticketTasks returns all tasks for a ticket, with an empty properties list initially.
+
     Test case: sample_ticket has 1 task (sample_ticket_task), taskType=hr, no properties yet.
     """
     _, token = coordinator_auth

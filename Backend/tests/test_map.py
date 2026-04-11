@@ -1,22 +1,34 @@
-import pytest
+"""Unit tests for map tile proxy service: cache key generation and attribution lookup."""
+
 import os
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import fakeredis.aioredis
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+
 os.environ["ENV"] = "testing"
 
-import pytest_asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-import fakeredis.aioredis
-
-from app.schemas.map import AttributionResponse
-from app.services.tile_proxy import build_cache_key, get_source_config, get_attribution, BLANK_TILE, fetch_tile
+from app.main import app  # noqa: E402
+from app.schemas.map import AttributionResponse  # noqa: E402
+from app.services.tile_proxy import (  # noqa: E402
+    BLANK_TILE,
+    build_cache_key,
+    fetch_tile,
+    get_attribution,
+    get_source_config,
+)
 
 
 def test_attribution_response_valid():
+    """AttributionResponse is valid without a logo when requires_logo is False."""
     resp = AttributionResponse(
         source="nasa_gibs",
         type="satellite",
         name="NASA GIBS",
         license="US Gov Open Data",
-        attribution_text="Imagery provided by NASA's Global Imagery Browse Services (GIBS), part of NASA's ESDIS",
+        attribution_text="Imagery provided by NASA's Global Imagery Browse Services (GIBS), part of NASA's ESDIS",  # noqa: E501
         attribution_url="https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs",
         image_format="image/jpeg",
         commercial_use=True,
@@ -29,6 +41,7 @@ def test_attribution_response_valid():
 
 
 def test_attribution_response_with_logo():
+    """AttributionResponse with requires_logo=True and a valid logo_url is accepted."""
     resp = AttributionResponse(
         source="mapbox",
         type="road",
@@ -47,7 +60,8 @@ def test_attribution_response_with_logo():
 
 
 def test_attribution_response_requires_logo_without_url_raises():
-    with pytest.raises(Exception):
+    """AttributionResponse raises ValueError when requires_logo=True but logo_url is None."""
+    with pytest.raises(ValueError):
         AttributionResponse(
             source="mapbox",
             type="road",
@@ -64,21 +78,25 @@ def test_attribution_response_requires_logo_without_url_raises():
 
 
 def test_cache_key_no_params():
+    """Cache key with empty params uses underscore sentinel."""
     key = build_cache_key("nasa_gibs", "satellite", 10, 123, 456, {})
     assert key == "tile:nasa_gibs:satellite:_:10:123:456"
 
 
 def test_cache_key_with_one_param():
+    """Cache key with a single query param includes it in the key."""
     key = build_cache_key("sinica", "satellite", 10, 1, 2, {"layer": "EARTH"})
     assert key == "tile:sinica:satellite:layer=EARTH:10:1:2"
 
 
 def test_cache_key_params_sorted():
+    """Cache key sorts multiple query params alphabetically for cache consistency."""
     key = build_cache_key("sinica", "satellite", 5, 0, 0, {"style": "default", "layer": "EARTH"})
     assert key == "tile:sinica:satellite:layer=EARTH,style=default:5:0:0"
 
 
 def test_get_source_config_valid():
+    """Valid type/source combination returns a SourceConfig with url_template."""
     config = get_source_config("satellite", "nasa_gibs")
     assert config is not None
     assert "{z}" in config.url_template
@@ -86,11 +104,13 @@ def test_get_source_config_valid():
 
 
 def test_get_source_config_invalid_combo():
+    """Invalid type/source combination returns None."""
     config = get_source_config("road", "nasa_gibs")
     assert config is None
 
 
 def test_get_attribution_valid():
+    """Valid type/source returns an AttributionResponse with expected fields."""
     attr = get_attribution("satellite", "nasa_gibs")
     assert attr is not None
     assert attr.source == "nasa_gibs"
@@ -100,11 +120,13 @@ def test_get_attribution_valid():
 
 
 def test_get_attribution_invalid():
+    """Invalid type/source combination returns None."""
     attr = get_attribution("satellite", "carto")
     assert attr is None
 
 
 def test_blank_tile_is_bytes():
+    """BLANK_TILE is a valid PNG byte sequence."""
     assert isinstance(BLANK_TILE, bytes)
     assert len(BLANK_TILE) > 0
     # Valid PNG starts with PNG magic bytes
@@ -113,6 +135,7 @@ def test_blank_tile_is_bytes():
 
 @pytest_asyncio.fixture
 async def fake_redis():
+    """Provide an in-memory fake Redis instance for unit tests."""
     return fakeredis.aioredis.FakeRedis(decode_responses=False)
 
 
@@ -261,12 +284,10 @@ async def test_fetch_tile_sinica_layer_in_url(fake_redis):
 
 # ===== Integration tests for endpoints =====
 
-from httpx import AsyncClient, ASGITransport
-from app.main import app
-
 
 @pytest_asyncio.fixture
 async def map_client():
+    """Provide an HTTP test client with a fake Redis instance attached to app state."""
     fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=False)
     app.state.redis = fake_redis
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -275,6 +296,7 @@ async def map_client():
 
 @pytest.mark.asyncio
 async def test_tile_endpoint_invalid_source(map_client):
+    """Tile endpoint returns 400 for an unregistered source name."""
     ac, _ = map_client
     resp = await ac.get("/api/v1/map/tile/satellite/mapbox/10/1/2")
     assert resp.status_code == 400
@@ -282,6 +304,7 @@ async def test_tile_endpoint_invalid_source(map_client):
 
 @pytest.mark.asyncio
 async def test_tile_endpoint_invalid_type_source_combo(map_client):
+    """Tile endpoint returns 400 for a valid source used with the wrong tile type."""
     ac, _ = map_client
     resp = await ac.get("/api/v1/map/tile/road/nasa_gibs/10/1/2")
     assert resp.status_code == 400
@@ -289,6 +312,7 @@ async def test_tile_endpoint_invalid_type_source_combo(map_client):
 
 @pytest.mark.asyncio
 async def test_tile_endpoint_invalid_zoom(map_client):
+    """Tile endpoint returns 400 when zoom level exceeds the maximum (24)."""
     ac, _ = map_client
     resp = await ac.get("/api/v1/map/tile/satellite/nasa_gibs/25/1/2")
     assert resp.status_code == 400
@@ -296,6 +320,7 @@ async def test_tile_endpoint_invalid_zoom(map_client):
 
 @pytest.mark.asyncio
 async def test_tile_endpoint_sinica_missing_layer(map_client):
+    """Sinica tile requests without a layer query param return 400."""
     ac, _ = map_client
     resp = await ac.get("/api/v1/map/tile/satellite/sinica/10/1/2")
     assert resp.status_code == 400
@@ -304,6 +329,7 @@ async def test_tile_endpoint_sinica_missing_layer(map_client):
 
 @pytest.mark.asyncio
 async def test_tile_endpoint_cache_hit_returns_tile(map_client):
+    """Tile endpoint returns cached bytes and content-type on Redis cache hit."""
     ac, fake_redis = map_client
     key = "tile:nasa_gibs:satellite:_:10:1:2"
     await fake_redis.hset(key, mapping={"data": b"CACHED_PNG", "ct": b"image/jpeg"})
@@ -317,6 +343,7 @@ async def test_tile_endpoint_cache_hit_returns_tile(map_client):
 
 @pytest.mark.asyncio
 async def test_tile_endpoint_upstream_error_returns_blank(map_client):
+    """Tile endpoint returns BLANK_TILE with image/png when upstream raises."""
     ac, _ = map_client
     with patch("app.services.tile_proxy.httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
@@ -334,6 +361,7 @@ async def test_tile_endpoint_upstream_error_returns_blank(map_client):
 
 @pytest.mark.asyncio
 async def test_attribution_endpoint_valid(map_client):
+    """Attribution endpoint returns full metadata for a known source."""
     ac, _ = map_client
     resp = await ac.get("/api/v1/map/attribution/satellite/nasa_gibs")
     assert resp.status_code == 200
@@ -346,6 +374,7 @@ async def test_attribution_endpoint_valid(map_client):
 
 @pytest.mark.asyncio
 async def test_attribution_endpoint_invalid(map_client):
+    """Attribution endpoint returns 400 for an invalid type/source combination."""
     ac, _ = map_client
     resp = await ac.get("/api/v1/map/attribution/road/nasa_gibs")
     assert resp.status_code == 400

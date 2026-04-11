@@ -1,5 +1,7 @@
-from typing import Optional
+"""Map tile proxy and attribution endpoints."""
+
 from fastapi import APIRouter, HTTPException, Request, Response
+
 from app.schemas.map import AttributionResponse
 from app.services.tile_proxy import (
     fetch_tile,
@@ -36,10 +38,9 @@ async def get_tile(
     x: int,
     y: int,
     request: Request,
-    layer: Optional[str] = None,
+    layer: str | None = None,
 ):
-    """
-    Proxy a map tile from an upstream source with 7-day Redis caching.
+    """Proxy a map tile from an upstream source with 7-day Redis caching.
 
     **type** — `satellite` or `road`
 
@@ -84,8 +85,7 @@ async def get_tile(
 
 @router.get("/attribution/{type_}/{source}", response_model=AttributionResponse)
 async def get_attribution_info(type_: str, source: str):
-    """
-    Return attribution metadata for a given tile source.
+    """Return attribution metadata for a given tile source.
 
     The frontend should display `attribution_text` on the map.
     When `requires_logo` is true, also render the logo from `logo_url`.

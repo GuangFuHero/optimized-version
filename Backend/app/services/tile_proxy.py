@@ -1,11 +1,11 @@
+"""Map tile proxy service — fetches tiles from upstream sources with Redis caching."""
+
 import base64
 from dataclasses import dataclass, field
-from typing import Optional
 
 import httpx
 
 from app.schemas.map import AttributionResponse
-
 
 # 1×1 transparent PNG (67 bytes)
 BLANK_TILE = base64.b64decode(
@@ -16,6 +16,8 @@ BLANK_TILE = base64.b64decode(
 
 @dataclass
 class SourceConfig:
+    """Configuration for an upstream map tile source."""
+
     url_template: str
     image_format: str
     headers: dict = field(default_factory=dict)
@@ -43,7 +45,7 @@ SOURCE_REGISTRY: dict[tuple[str, str], SourceConfig] = {
         image_format="image/png",
         headers={
             "Referer": "https://maps.nlsc.gov.tw/",
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",  # noqa: E501
         },
         verify_ssl=False,  # NLSC cert missing Subject Key Identifier — fails Python SSL validation
     ),
@@ -163,20 +165,18 @@ def build_cache_key(
     y: int,
     query_params: dict[str, str],
 ) -> str:
-    if query_params:
-        sorted_params = ",".join(
-            f"{k}={v}" for k, v in sorted(query_params.items())
-        )
-    else:
-        sorted_params = "_"
+    """Build a Redis cache key for a tile request including sorted query params."""
+    sorted_params = ",".join(f"{k}={v}" for k, v in sorted(query_params.items())) if query_params else "_"
     return f"tile:{source}:{type_}:{sorted_params}:{z}:{x}:{y}"
 
 
-def get_source_config(type_: str, source: str) -> Optional[SourceConfig]:
+def get_source_config(type_: str, source: str) -> SourceConfig | None:
+    """Return the SourceConfig for the given tile type and source name, or None."""
     return SOURCE_REGISTRY.get((type_, source))
 
 
-def get_attribution(type_: str, source: str) -> Optional[AttributionResponse]:
+def get_attribution(type_: str, source: str) -> AttributionResponse | None:
+    """Return the AttributionResponse for the given tile type and source name, or None."""
     return ATTRIBUTION_REGISTRY.get((type_, source))
 
 
@@ -189,8 +189,8 @@ async def fetch_tile(
     y: int,
     query_params: dict[str, str],
 ) -> tuple[bytes, str]:
-    """
-    Returns (tile_bytes, content_type).
+    """Return (tile_bytes, content_type) for the requested tile.
+
     Checks Redis cache first. On miss, fetches upstream and caches result.
     On any upstream error, returns BLANK_TILE.
     If Redis is unavailable, bypasses cache and fetches upstream directly.

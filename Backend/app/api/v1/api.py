@@ -1,5 +1,8 @@
+"""API v1 router — aggregates all endpoint sub-routers under /api/v1."""
+
 from fastapi import APIRouter
-from app.api.v1.endpoints import rbac_test, auth, users, map
+
+from app.api.v1.endpoints import auth, map, rbac_test, users
 
 api_router = APIRouter()
 

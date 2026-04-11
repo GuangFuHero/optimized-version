@@ -1,10 +1,14 @@
+"""FastAPI application entry point — wires up middleware, routers, and startup lifecycle."""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pyrate_limiter import Duration, Limiter, Rate
 from strawberry.fastapi import GraphQLRouter
+
 from app.api.v1.api import api_router
-from app.graphql.context import get_context
 from app.core.config import settings
+from app.graphql.context import get_context
+from app.graphql.schema import schema
 
 app = FastAPI(
     title="救災平台 API",
@@ -24,10 +28,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    """
-    初始化頻率限制引擎與 Redis 連線
-    """
+    """初始化頻率限制引擎與 Redis 連線。"""
     import os
+
     import redis.asyncio as aioredis
 
     env = os.getenv("ENV", "development")
@@ -39,9 +42,7 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-    """
-    清理 Redis 連線
-    """
+    """清理 Redis 連線。"""
     if hasattr(app.state, "redis"):
         await app.state.redis.aclose()
 
@@ -51,17 +52,19 @@ app.include_router(api_router, prefix="/api/v1")
 
 # GraphQL
 def _get_graphql_router():
-    from app.graphql.schema import schema
+    """Build the Strawberry GraphQL router with deferred schema import."""
     return GraphQLRouter(schema, context_getter=get_context)
 
-app.include_router(_get_graphql_router(), prefix="/graphql")
+app.include_router(_get_graphql_router(), prefix="/graphql", tags=["圖資"])
 
 
 @app.get("/")
 async def root():
+    """Return a welcome message confirming the API is online."""
     return {"message": "Welcome to Disaster Relief Platform API", "status": "online"}
 
 
 @app.get("/health")
 async def health_check():
+    """Return a simple health check response."""
     return {"status": "ok"}

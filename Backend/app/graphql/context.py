@@ -1,6 +1,9 @@
+"""GraphQL request context factory and RBAC permission helper."""
+
 from fastapi import HTTPException, status
 from starlette.requests import Request
-from app.core.security import get_current_user, get_db, PermissionChecker
+
+from app.core.security import PermissionChecker, get_current_user, get_db
 
 
 async def get_context(request: Request):
