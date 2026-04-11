@@ -91,29 +91,26 @@ async def test_bounds_no_results(client):
 
 @pytest.mark.asyncio
 async def test_unicode_in_fields(client, coordinator_auth):
-    """Chinese characters in comment and county survive roundtrip."""
+    """Chinese characters in comment survive roundtrip."""
     _, token = coordinator_auth
     res = await client.post("/graphql", json={
         "query": """mutation($input: CreateStationInput!) {
-            createStation(input: $input) { uuid comment county }
+            createStation(input: $input) { uuid comment }
         }""",
         "variables": {"input": {
             "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
             "comment": "\u6e2c\u8a66\u7ad9\u9ede",
-            "county": "\u53f0\u5317\u5e02",
         }},
     }, headers=auth_header(token))
     data = res.json()["data"]["createStation"]
     created_uuid = data["uuid"]
     assert data["comment"] == "\u6e2c\u8a66\u7ad9\u9ede"
-    assert data["county"] == "\u53f0\u5317\u5e02"
 
     res = await client.post("/graphql", json={
-        "query": f'{{ station(uuid: "{created_uuid}") {{ comment county }} }}',
+        "query": f'{{ station(uuid: "{created_uuid}") {{ comment }} }}',
     })
     station = res.json()["data"]["station"]
     assert station["comment"] == "\u6e2c\u8a66\u7ad9\u9ede"
-    assert station["county"] == "\u53f0\u5317\u5e02"
 
 
 @pytest.mark.asyncio

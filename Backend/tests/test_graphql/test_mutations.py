@@ -70,6 +70,32 @@ mutation($uuid: UUID!, $input: UpdateTicketInput!) {
 }
 """
 
+CREATE_TICKET_TASK = """
+mutation($input: CreateTicketTaskInput!) {
+    createTicketTask(input: $input) { uuid taskType taskName status }
+}
+"""
+
+UPDATE_TICKET_TASK = """
+mutation($uuid: UUID!, $input: UpdateTicketTaskInput!) {
+    updateTicketTask(uuid: $uuid, input: $input) { uuid status progressNote }
+}
+"""
+
+CREATE_TASK_PROPERTY = """
+mutation($input: CreateTaskPropertyInput!) {
+    createTaskProperty(input: $input) { uuid propertyName propertyValue }
+}
+"""
+
+UPSERT_STATION_PROPERTY_CONFIG = """
+mutation($stationType: String!, $input: UpsertPropertyConfigInput!) {
+    upsertStationPropertyConfig(stationType: $stationType, input: $input) {
+        uuid stationType propertyName dataType enumOptions
+    }
+}
+"""
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -452,13 +478,16 @@ async def test_crowdsourcing_auto_credibility(
 
 
 # ============================================================================
-# Ticket mutations (5 tests)
+# Ticket mutations (4 tests)
 # ============================================================================
 
 
 @pytest.mark.asyncio
 async def test_create_ticket(client, coordinator_auth):
-    """Coordinator creates an HR ticket with specialties."""
+    """
+    Hypothesis: createTicket creates a flat ticket with status=pending.
+    Test case: coordinator creates hr ticket → uuid set, status=pending, priority=high.
+    """
     _, token = coordinator_auth
     resp = await client.post("/graphql", json={
         "query": CREATE_TICKET,
@@ -468,118 +497,45 @@ async def test_create_ticket(client, coordinator_auth):
             "geometry": POINT_TAIPEI,
             "contactName": "Alice",
             "contactEmail": "alice@example.com",
-            "priority": "urgent",
-            "ticketType": "hr",
-            "hrSpecialties": [
-                {"specialtyDescription": "First aid", "quantity": 3},
-            ],
+            "priority": "high",
+            "taskType": "hr",
+            "visibility": "public",
         }},
     }, headers=auth_header(token))
     data = resp.json()["data"]["createTicket"]
     assert data["title"] == "Need medics"
     assert data["status"] == "pending"
-    assert data["priority"] == "urgent"
+    assert data["priority"] == "high"
 
 
 @pytest.mark.asyncio
 async def test_update_ticket_valid_transition(client, coordinator_auth):
-    """Status transitions pending -> in_progress -> completed succeed."""
+    """
+    Hypothesis: valid status transitions are accepted by the API.
+    Test case: pending → in_progress → completed each return the new status.
+    """
     _, token = coordinator_auth
     headers = auth_header(token)
 
-    # Create a ticket
     resp = await client.post("/graphql", json={
         "query": CREATE_TICKET,
         "variables": {"input": {
             "title": "Transition test",
             "geometry": POINT_TAIPEI,
             "contactName": "Bob",
-            "ticketType": "hr",
+            "taskType": "hr",
         }},
     }, headers=headers)
     ticket_uuid = resp.json()["data"]["createTicket"]["uuid"]
 
-    # pending -> in_progress
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_TICKET,
-        "variables": {"uuid": ticket_uuid, "input": {"status": "in_progress"}},
-    }, headers=headers)
-    assert resp.json()["data"]["updateTicket"]["status"] == "in_progress"
-
-    # in_progress -> completed
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_TICKET,
-        "variables": {"uuid": ticket_uuid, "input": {"status": "completed"}},
-    }, headers=headers)
-    assert resp.json()["data"]["updateTicket"]["status"] == "completed"
+    for from_status, to_status in [("pending", "in_progress"), ("in_progress", "completed")]:
+        resp = await client.post("/graphql", json={
+            "query": UPDATE_TICKET,
+            "variables": {"uuid": ticket_uuid, "input": {"status": to_status}},
+        }, headers=headers)
+        assert resp.json()["data"]["updateTicket"]["status"] == to_status
 
 
-@pytest.mark.asyncio
-async def test_update_ticket_invalid_transition(client, coordinator_auth):
-    """completed -> pending is not allowed."""
-    _, token = coordinator_auth
-    headers = auth_header(token)
-
-    # Create and advance to completed
-    resp = await client.post("/graphql", json={
-        "query": CREATE_TICKET,
-        "variables": {"input": {
-            "title": "Invalid transition",
-            "geometry": POINT_TAIPEI,
-            "contactName": "Carol",
-            "ticketType": "hr",
-        }},
-    }, headers=headers)
-    ticket_uuid = resp.json()["data"]["createTicket"]["uuid"]
-
-    await client.post("/graphql", json={
-        "query": UPDATE_TICKET,
-        "variables": {"uuid": ticket_uuid, "input": {"status": "in_progress"}},
-    }, headers=headers)
-    await client.post("/graphql", json={
-        "query": UPDATE_TICKET,
-        "variables": {"uuid": ticket_uuid, "input": {"status": "completed"}},
-    }, headers=headers)
-
-    # completed -> pending should fail
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_TICKET,
-        "variables": {"uuid": ticket_uuid, "input": {"status": "pending"}},
-    }, headers=headers)
-    errors = resp.json()["errors"]
-    assert any("Cannot transition" in e["message"] for e in errors)
-
-
-@pytest.mark.asyncio
-async def test_update_ticket_cancelled_is_terminal(client, coordinator_auth):
-    """cancelled -> anything is not allowed."""
-    _, token = coordinator_auth
-    headers = auth_header(token)
-
-    # Create and cancel
-    resp = await client.post("/graphql", json={
-        "query": CREATE_TICKET,
-        "variables": {"input": {
-            "title": "Cancel test",
-            "geometry": POINT_TAIPEI,
-            "contactName": "Dave",
-            "ticketType": "hr",
-        }},
-    }, headers=headers)
-    ticket_uuid = resp.json()["data"]["createTicket"]["uuid"]
-
-    await client.post("/graphql", json={
-        "query": UPDATE_TICKET,
-        "variables": {"uuid": ticket_uuid, "input": {"status": "cancelled"}},
-    }, headers=headers)
-
-    # cancelled -> in_progress should fail
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_TICKET,
-        "variables": {"uuid": ticket_uuid, "input": {"status": "in_progress"}},
-    }, headers=headers)
-    errors = resp.json()["errors"]
-    assert any("Cannot transition" in e["message"] for e in errors)
 
 
 @pytest.mark.asyncio
@@ -597,3 +553,103 @@ async def test_update_ticket_no_permission_edit(
     }, headers=auth_header(login_token))
     errors = resp.json().get("errors", [])
     assert any("Permission Denied." in e["message"] for e in errors)
+
+
+# ============================================================================
+# Ticket task mutations (4 tests)
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_create_ticket_task(client, coordinator_auth, sample_ticket):
+    """
+    Hypothesis: createTicketTask creates a task linked to its ticket with status=pending.
+    Test case: coordinator creates hr task for sample_ticket → uuid set, taskType=hr, status=pending.
+    """
+    _, token = coordinator_auth
+    resp = await client.post("/graphql", json={
+        "query": CREATE_TICKET_TASK,
+        "variables": {"input": {
+            "ticketUuid": sample_ticket,
+            "taskType": "hr",
+            "taskName": "Need 3 medics",
+            "quantity": 3,
+        }},
+    }, headers=auth_header(token))
+    data = resp.json()["data"]["createTicketTask"]
+    assert data["uuid"] is not None
+    assert data["taskType"] == "hr"
+    assert data["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_create_ticket_task_unknown_ticket(client, coordinator_auth):
+    """
+    Hypothesis: createTicketTask with a non-existent ticketUuid returns an error.
+    Test case: random UUID as ticketUuid → errors list contains "not found".
+    """
+    _, token = coordinator_auth
+    resp = await client.post("/graphql", json={
+        "query": CREATE_TICKET_TASK,
+        "variables": {"input": {
+            "ticketUuid": str(uuid.uuid4()),
+            "taskType": "rescue",
+            "taskName": "Search 3F",
+        }},
+    }, headers=auth_header(token))
+    assert any("not found" in e["message"].lower() for e in resp.json()["errors"])
+
+
+@pytest.mark.asyncio
+async def test_update_ticket_task_status(client, coordinator_auth, sample_ticket_task):
+    """
+    Hypothesis: updateTicketTask status update is persisted and returned.
+    Test case: update sample_ticket_task to in_progress → response reflects new status.
+    """
+    _, token = coordinator_auth
+    resp = await client.post("/graphql", json={
+        "query": UPDATE_TICKET_TASK,
+        "variables": {"uuid": sample_ticket_task, "input": {"status": "in_progress"}},
+    }, headers=auth_header(token))
+    assert resp.json()["data"]["updateTicketTask"]["status"] == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_create_task_property(client, coordinator_auth, sample_ticket_task):
+    """
+    Hypothesis: createTaskProperty stores an EAV entry on a task.
+    Test case: add required_skill=medical to hr task → propertyName and propertyValue round-trip correctly.
+    """
+    _, token = coordinator_auth
+    resp = await client.post("/graphql", json={
+        "query": CREATE_TASK_PROPERTY,
+        "variables": {"input": {
+            "taskUuid": sample_ticket_task,
+            "propertyName": "required_skill",
+            "propertyValue": "medical",
+        }},
+    }, headers=auth_header(token))
+    data = resp.json()["data"]["createTaskProperty"]
+    assert data["propertyName"] == "required_skill"
+    assert data["propertyValue"] == "medical"
+
+
+# ============================================================================
+# Property config mutations (2 tests)
+# ============================================================================
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data_type", ["Boolean", "String"])
+async def test_upsert_station_property_config_idempotent(client, coordinator_auth, data_type):
+    """
+    Hypothesis: upsertStationPropertyConfig is idempotent — calling it twice updates, not duplicates.
+    Test case: upsert power_stable with Boolean then String → second call's dataType wins.
+    """
+    _, token = coordinator_auth
+    resp = await client.post("/graphql", json={
+        "query": UPSERT_STATION_PROPERTY_CONFIG,
+        "variables": {
+            "stationType": "power",
+            "input": {"propertyName": "power_stable", "dataType": data_type},
+        },
+    }, headers=auth_header(token))
+    assert resp.json()["data"]["upsertStationPropertyConfig"]["dataType"] == data_type

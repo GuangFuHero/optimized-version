@@ -4,7 +4,33 @@ from datetime import datetime, timezone
 import pytest
 import pytest_asyncio
 
-from tests.test_graphql.conftest import test_db
+from tests.test_graphql.conftest import test_db, auth_header
+
+
+# ──────────────────────────────────────────────
+# GraphQL query strings
+# ──────────────────────────────────────────────
+
+STATION_PROPERTY_CONFIGS = """
+query($stationType: String!) {
+    stationPropertyConfigs(stationType: $stationType) { propertyName dataType enumOptions }
+}
+"""
+
+TASK_PROPERTY_CONFIGS = """
+query($taskType: String!) {
+    taskPropertyConfigs(taskType: $taskType) { propertyName dataType enumOptions }
+}
+"""
+
+TICKET_TASKS_QUERY = """
+query($ticketUuid: String!) {
+    ticketTasks(ticketUuid: $ticketUuid) {
+        uuid taskType status
+        properties { propertyName propertyValue }
+    }
+}
+"""
 
 
 # ──────────────────────────────────────────────
@@ -68,37 +94,31 @@ async def test_stations_outside_bounds_excluded(client, sample_station):
 
 
 @pytest.mark.asyncio
-async def test_stations_with_property_filter(client, sample_station):
-    # Match existing property_name (polymorphic identity)
+async def test_stations_filter_by_station_type(client, sample_station):
+    """
+    Hypothesis: stations(stationType=...) filters by Station.type field.
+    Test case: stationType=shelter returns sample_station; stationType=water returns empty list.
+    """
     response = await client.post("/graphql", json={
         "query": """
-            query {
-                stations(propertyName: "station") {
-                    items { uuid propertyName }
-                }
-            }
+            query { stations(stationType: "shelter") { items { uuid } } }
         """
     })
     assert response.status_code == 200
     data = response.json()
     assert "errors" not in data
-    items = data["data"]["stations"]["items"]
-    assert len(items) >= 1
-    assert all(item["propertyName"] == "station" for item in items)
+    uuids = [item["uuid"] for item in data["data"]["stations"]["items"]]
+    assert sample_station in uuids
 
-    # Non-existent property_name
     response = await client.post("/graphql", json={
         "query": """
-            query {
-                stations(propertyName: "nonexistent") {
-                    items { uuid }
-                }
-            }
+            query { stations(stationType: "water") { items { uuid } } }
         """
     })
     data = response.json()
     assert "errors" not in data
-    assert data["data"]["stations"]["items"] == []
+    uuids = [item["uuid"] for item in data["data"]["stations"]["items"]]
+    assert sample_station not in uuids
 
 
 @pytest.mark.asyncio
@@ -158,7 +178,7 @@ async def test_station_detail(client, sample_station):
         "query": f"""
             query {{
                 station(uuid: "{sample_station}") {{
-                    uuid propertyName county city opHour level comment
+                    uuid propertyName opHour level comment
                     createdBy createdAt updatedAt geometry
                 }}
             }}
@@ -171,8 +191,6 @@ async def test_station_detail(client, sample_station):
     assert station is not None
     assert station["uuid"] == sample_station
     assert station["propertyName"] == "station"
-    assert station["county"] == "台北市"
-    assert station["city"] == "中正區"
     assert station["level"] == 3
 
 
@@ -236,7 +254,7 @@ async def test_closure_area_detail(client, sample_closure_area):
         "query": f"""
             query {{
                 closureArea(uuid: "{sample_closure_area}") {{
-                    uuid propertyName county city status
+                    uuid propertyName status
                     informationSource comment createdAt updatedAt geometry
                 }}
             }}
@@ -249,7 +267,6 @@ async def test_closure_area_detail(client, sample_closure_area):
     assert area is not None
     assert area["uuid"] == sample_closure_area
     assert area["status"] == "blocked"
-    assert area["county"] == "台北市"
 
 
 @pytest.mark.asyncio
@@ -359,82 +376,63 @@ async def test_ticket_detail(client, sample_ticket):
     assert ticket["uuid"] == sample_ticket
     assert ticket["title"] == "Need volunteers"
     assert ticket["status"] == "pending"
-    assert ticket["priority"] == "urgent"
+    assert ticket["priority"] == "high"
+
+
+# ──────────────────────────────────────────────
+# Property config queries (4 tests)
+# ──────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_station_property_configs_returns_list(client, coordinator_auth):
+    """
+    Hypothesis: stationPropertyConfigs query returns a list of property configs.
+    Test case: query with any stationType returns a list (may be empty if not seeded).
+    """
+    _, token = coordinator_auth
+    resp = await client.post("/graphql", json={
+        "query": STATION_PROPERTY_CONFIGS,
+        "variables": {"stationType": "shelter"},
+    }, headers=auth_header(token))
+    data = resp.json()["data"]["stationPropertyConfigs"]
+    assert isinstance(data, list)
+    # Each config should have propertyName and dataType
+    for cfg in data:
+        assert "propertyName" in cfg
+        assert "dataType" in cfg
 
 
 @pytest.mark.asyncio
-async def test_ticket_hr_nested_specialties(client, sample_ticket):
-    response = await client.post("/graphql", json={
-        "query": f"""
-            query {{
-                ticket(uuid: "{sample_ticket}") {{
-                    uuid
-                    taskSpecialties {{
-                        uuid specialtyDescription quantity status
-                    }}
-                }}
-            }}
-        """
-    })
-    assert response.status_code == 200
-    data = response.json()
-    assert "errors" not in data
-    ticket = data["data"]["ticket"]
-    assert ticket is not None
-    specialties = ticket["taskSpecialties"]
-    assert len(specialties) >= 1
-    assert specialties[0]["specialtyDescription"] == "Heavy lifting"
-    assert specialties[0]["quantity"] == 5
-    assert specialties[0]["status"] == "pending"
+async def test_task_property_configs_returns_list(client, coordinator_auth):
+    """
+    Hypothesis: taskPropertyConfigs query returns a list of property configs.
+    Test case: query with any taskType returns a list (may be empty if not seeded).
+    """
+    _, token = coordinator_auth
+    resp = await client.post("/graphql", json={
+        "query": TASK_PROPERTY_CONFIGS,
+        "variables": {"taskType": "rescue"},
+    }, headers=auth_header(token))
+    data = resp.json()["data"]["taskPropertyConfigs"]
+    assert isinstance(data, list)
+    # Each config should have propertyName and dataType
+    for cfg in data:
+        assert "propertyName" in cfg
+        assert "dataType" in cfg
 
 
 @pytest.mark.asyncio
-async def test_ticket_supply_nested_items(client, coordinator_auth):
-    from geoalchemy2.shape import from_shape
-    from shapely.geometry import Point
-    from app.models.request import SupplyRequirement, SupplyTaskItem
-
-    user_uuid, _ = coordinator_auth
-    async with test_db() as db:
-        ticket = SupplyRequirement(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid,
-            title="Need supplies", description="Water needed",
-            contact_name="Tester", contact_email="t@t.com",
-            status="pending", priority="nominal",
-        )
-        db.add(ticket)
-        await db.flush()
-        db.add(SupplyTaskItem(
-            req_uuid=ticket.uuid,
-            item_name="Water bottle",
-            item_description="500ml",
-            quantity=100,
-            status="pending",
-        ))
-        await db.flush()
-        ticket_uuid = str(ticket.uuid)
-
-    response = await client.post("/graphql", json={
-        "query": f"""
-            query {{
-                ticket(uuid: "{ticket_uuid}") {{
-                    uuid title
-                    taskItems {{
-                        uuid itemName itemDescription quantity status
-                    }}
-                }}
-            }}
-        """
-    })
-    assert response.status_code == 200
-    data = response.json()
-    assert "errors" not in data
-    ticket = data["data"]["ticket"]
-    assert ticket is not None
-    assert ticket["uuid"] == ticket_uuid
-    task_items = ticket["taskItems"]
-    assert len(task_items) >= 1
-    assert task_items[0]["itemName"] == "Water bottle"
-    assert task_items[0]["quantity"] == 100
-    assert task_items[0]["status"] == "pending"
+async def test_ticket_tasks_query(client, coordinator_auth, sample_ticket, sample_ticket_task):
+    """
+    Hypothesis: ticketTasks returns all tasks for a ticket, with an empty properties list initially.
+    Test case: sample_ticket has 1 task (sample_ticket_task), taskType=hr, no properties yet.
+    """
+    _, token = coordinator_auth
+    resp = await client.post("/graphql", json={
+        "query": TICKET_TASKS_QUERY,
+        "variables": {"ticketUuid": sample_ticket},
+    }, headers=auth_header(token))
+    tasks = resp.json()["data"]["ticketTasks"]
+    assert len(tasks) >= 1
+    assert tasks[0]["taskType"] == "hr"
+    assert tasks[0]["properties"] == []

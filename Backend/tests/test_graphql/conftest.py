@@ -14,7 +14,8 @@ from app.main import app
 from app.db.session import Base
 from app.models.auth import Group, Policy, PolicyGroupAssign, User, UserGroupAssign
 from app.models.geo import Station, ClosureArea
-from app.models.request import HRRequirement, HRTaskSpecialty
+from app.models.request import Tickets
+from app.models.ticket_task import TicketTask
 from app.models.station_property import StationProperty
 from app.core.security import get_password_hash, create_access_token, generate_salt
 
@@ -126,8 +127,9 @@ async def sample_station(coordinator_auth):
         station = Station(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
             created_by=user_uuid,
-            county="台北市", city="中正區",
+            type="shelter",
             op_hour="08:00-18:00", level=3, comment="Test station",
+            source="user", visibility="public",
         )
         db.add(station)
         await db.flush()
@@ -144,7 +146,6 @@ async def sample_closure_area(coordinator_auth):
                 (121.49, 25.01), (121.49, 24.99),
             ]), srid=4326),
             created_by=user_uuid,
-            county="台北市", city="中正區",
             status="blocked", information_source="test",
             comment="Test closure area",
         )
@@ -157,21 +158,30 @@ async def sample_closure_area(coordinator_auth):
 async def sample_ticket(coordinator_auth):
     user_uuid, _ = coordinator_auth
     async with test_db() as db:
-        ticket = HRRequirement(
+        ticket = Tickets(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
             created_by=user_uuid,
             title="Need volunteers", description="Cleanup needed",
             contact_name="Test", contact_email="test@test.com",
-            status="pending", priority="urgent",
+            status="pending", priority="high",
+            task_type="hr", visibility="public",
         )
         db.add(ticket)
         await db.flush()
-        db.add(HRTaskSpecialty(
-            req_uuid=ticket.uuid,
-            specialty_description="Heavy lifting",
-            quantity=5, status="pending",
-        ))
         return str(ticket.uuid)
+
+
+@pytest_asyncio.fixture
+async def sample_ticket_task(coordinator_auth, sample_ticket):
+    async with test_db() as db:
+        task = TicketTask(
+            ticket_uuid=sample_ticket,
+            task_type="hr", task_name="Need medics",
+            quantity=3, source="user", visibility="public",
+        )
+        db.add(task)
+        await db.flush()
+        return str(task.uuid)
 
 
 @pytest_asyncio.fixture
