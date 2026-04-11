@@ -1,16 +1,18 @@
 import strawberry
-
-from app.graphql.queries import GeoQuery, RequestQuery
-from app.graphql.mutations import GeoMutation, StationPropertyMutation, RequestMutation
+from app.graphql.queries import GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery
+from app.graphql.mutations import (
+    GeoMutation, StationPropertyMutation, RequestMutation,
+    TicketTaskMutation, PropertyConfigMutation,
+)
 
 
 @strawberry.type
-class Query(GeoQuery, RequestQuery):
+class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery):
     pass
 
 
 @strawberry.type
-class Mutation(GeoMutation, StationPropertyMutation, RequestMutation):
+class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation):
     pass
 
 

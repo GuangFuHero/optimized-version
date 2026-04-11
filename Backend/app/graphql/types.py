@@ -24,6 +24,50 @@ class PageInfo:
     has_previous_page: bool
 
 
+# --- Secondary Location ---
+
+@strawberry.type
+class SecondaryLocationType:
+    uuid: UUID
+    geometry_uuid: str
+    location_type: str
+    county: Optional[str] = None
+    city: Optional[str] = None
+    lane: Optional[str] = None
+    alley: Optional[str] = None
+    no: Optional[str] = None
+    floor: Optional[str] = None
+    room: Optional[str] = None
+    pole_id: Optional[str] = None
+    pole_type: Optional[str] = None
+    pole_note: Optional[str] = None
+
+    @classmethod
+    def from_model(cls, m) -> "SecondaryLocationType":
+        return cls(
+            uuid=m.uuid, geometry_uuid=m.geometry_uuid,
+            location_type=m.location_type,
+            county=m.county, city=m.city, lane=m.lane, alley=m.alley,
+            no=m.no, floor=m.floor, room=m.room,
+            pole_id=m.pole_id, pole_type=m.pole_type, pole_note=m.pole_note,
+        )
+
+
+@strawberry.input
+class SecondaryLocationInput:
+    location_type: str = "address"
+    county: Optional[str] = None
+    city: Optional[str] = None
+    lane: Optional[str] = None
+    alley: Optional[str] = None
+    no: Optional[str] = None
+    floor: Optional[str] = None
+    room: Optional[str] = None
+    pole_id: Optional[str] = None
+    pole_type: Optional[str] = None
+    pole_note: Optional[str] = None
+
+
 # --- Station ---
 
 @strawberry.type
@@ -32,18 +76,33 @@ class StationType:
     property_name: str
     geometry: Optional[GeoJSON] = None
     created_by: Optional[str] = None
-    county: Optional[str] = None
-    city: Optional[str] = None
-    lane: Optional[str] = None
-    alley: Optional[str] = None
-    no: Optional[str] = None
-    floor: Optional[str] = None
-    room: Optional[str] = None
+    type: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
     op_hour: Optional[str] = None
     level: int = 0
     comment: Optional[str] = None
+    source: Optional[str] = None
+    visibility: Optional[str] = None
+    verification_status: Optional[str] = None
+    confidence_score: Optional[float] = None
+    is_duplicate: bool = False
+    is_temporary: bool = False
+    is_official: bool = False
+    priority_score: Optional[float] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    @strawberry.field
+    async def secondary_location(self, info: strawberry.types.Info) -> Optional[SecondaryLocationType]:
+        from sqlalchemy import select
+        from app.models.secondary_location import SecondaryLocation
+        db = info.context["db"]
+        result = await db.execute(
+            select(SecondaryLocation).where(SecondaryLocation.geometry_uuid == str(self.uuid))
+        )
+        m = result.scalar_one_or_none()
+        return SecondaryLocationType.from_model(m) if m else None
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list["StationPropertyType"]:
@@ -60,9 +119,13 @@ class StationType:
         return cls(
             uuid=m.uuid, property_name=m.property_name,
             geometry=geom_to_geojson(m.geometry), created_by=m.created_by,
-            county=m.county, city=m.city, lane=m.lane, alley=m.alley,
-            no=m.no, floor=m.floor, room=m.room,
+            type=m.type, name=m.name, description=m.description,
             op_hour=m.op_hour, level=m.level, comment=m.comment,
+            source=m.source, visibility=m.visibility,
+            verification_status=m.verification_status,
+            confidence_score=m.confidence_score,
+            is_duplicate=m.is_duplicate, is_temporary=m.is_temporary,
+            is_official=m.is_official, priority_score=m.priority_score,
             created_at=m.created_at, updated_at=m.updated_at,
         )
 
@@ -76,31 +139,27 @@ class StationConnection:
 @strawberry.input
 class CreateStationInput:
     geometry: GeoJSON
-    county: Optional[str] = None
-    city: Optional[str] = None
-    lane: Optional[str] = None
-    alley: Optional[str] = None
-    no: Optional[str] = None
-    floor: Optional[str] = None
-    room: Optional[str] = None
+    type: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
     op_hour: Optional[str] = None
     level: int = 0
     comment: Optional[str] = None
+    source: str = "user"
+    visibility: str = "public"
+    secondary_location: Optional[SecondaryLocationInput] = None
 
 
 @strawberry.input
 class UpdateStationInput:
     geometry: Optional[GeoJSON] = None
-    county: Optional[str] = strawberry.UNSET
-    city: Optional[str] = strawberry.UNSET
-    lane: Optional[str] = strawberry.UNSET
-    alley: Optional[str] = strawberry.UNSET
-    no: Optional[str] = strawberry.UNSET
-    floor: Optional[str] = strawberry.UNSET
-    room: Optional[str] = strawberry.UNSET
+    type: Optional[str] = strawberry.UNSET
+    name: Optional[str] = strawberry.UNSET
+    description: Optional[str] = strawberry.UNSET
     op_hour: Optional[str] = strawberry.UNSET
     level: Optional[int] = None
     comment: Optional[str] = strawberry.UNSET
+    visibility: Optional[str] = None
 
 
 # --- Closure Area ---
@@ -111,8 +170,6 @@ class ClosureAreaType:
     property_name: str
     geometry: Optional[GeoJSON] = None
     created_by: Optional[str] = None
-    county: Optional[str] = None
-    city: Optional[str] = None
     status: str = ""
     information_source: Optional[str] = None
     comment: Optional[str] = None
@@ -124,7 +181,6 @@ class ClosureAreaType:
         return cls(
             uuid=m.uuid, property_name=m.property_name,
             geometry=geom_to_geojson(m.geometry), created_by=m.created_by,
-            county=m.county, city=m.city,
             status=m.status, information_source=m.information_source,
             comment=m.comment, created_at=m.created_at, updated_at=m.updated_at,
         )
@@ -142,8 +198,6 @@ class CreateClosureAreaInput:
     status: str
     information_source: Optional[str] = None
     comment: Optional[str] = None
-    county: Optional[str] = None
-    city: Optional[str] = None
 
 
 @strawberry.input
@@ -238,55 +292,157 @@ class CreateCrowdSourcingInput:
     distance_from_geometry: Optional[float] = None
 
 
-# --- Tickets ---
+# --- Photos ---
 
 @strawberry.type
-class HRTaskSpecialtyType:
+class PhotoType:
     uuid: UUID
-    req_uuid: str
-    specialty_description: str
-    quantity: int
-    status: str
-
-    @classmethod
-    def from_model(cls, m) -> "HRTaskSpecialtyType":
-        return cls(
-            uuid=m.uuid, req_uuid=m.req_uuid,
-            specialty_description=m.specialty_description,
-            quantity=m.quantity, status=m.status,
-        )
-
-
-@strawberry.type
-class SupplyTaskItemType:
-    uuid: UUID
-    req_uuid: str
-    item_name: str
-    item_description: Optional[str] = None
-    quantity: int = 0
-    status: str = ""
-    suggestion: Optional[str] = None
-
-    @classmethod
-    def from_model(cls, m) -> "SupplyTaskItemType":
-        return cls(
-            uuid=m.uuid, req_uuid=m.req_uuid,
-            item_name=m.item_name, item_description=m.item_description,
-            quantity=m.quantity, status=m.status, suggestion=m.suggestion,
-        )
-
-
-@strawberry.type
-class RequestPhotoType:
-    uuid: UUID
-    req_uuid: str
+    ref_uuid: str
+    ref_type: str
     url: str
     created_by: str
+    created_at: Optional[datetime] = None
 
     @classmethod
-    def from_model(cls, m) -> "RequestPhotoType":
-        return cls(uuid=m.uuid, req_uuid=m.req_uuid, url=m.url, created_by=m.created_by)
+    def from_model(cls, m) -> "PhotoType":
+        return cls(
+            uuid=m.uuid, ref_uuid=m.ref_uuid, ref_type=m.ref_type,
+            url=m.url, created_by=m.created_by, created_at=m.created_at,
+        )
 
+
+# --- Ticket Tasks ---
+
+@strawberry.type
+class TaskPropertyType:
+    uuid: UUID
+    task_uuid: str
+    property_name: str
+    property_value: str
+    quantity: Optional[int] = None
+    status: Optional[str] = None
+    comment: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    @classmethod
+    def from_model(cls, m) -> "TaskPropertyType":
+        return cls(
+            uuid=m.uuid, task_uuid=m.task_uuid,
+            property_name=m.property_name, property_value=m.property_value,
+            quantity=m.quantity, status=m.status, comment=m.comment,
+            created_by=m.created_by, created_at=m.created_at,
+        )
+
+
+@strawberry.type
+class TaskAssignmentType:
+    uuid: UUID
+    task_uuid: str
+    actor_uuid: str
+    role: Optional[str] = None
+    assigned_at: Optional[datetime] = None
+
+    @classmethod
+    def from_model(cls, m) -> "TaskAssignmentType":
+        return cls(
+            uuid=m.uuid, task_uuid=m.task_uuid, actor_uuid=m.actor_uuid,
+            role=m.role, assigned_at=m.assigned_at,
+        )
+
+
+@strawberry.type
+class TicketTaskType:
+    uuid: UUID
+    ticket_uuid: str
+    task_type: str
+    task_name: str
+    task_description: Optional[str] = None
+    quantity: Optional[int] = None
+    status: str = "pending"
+    source: str = "user"
+    progress_note: Optional[str] = None
+    visibility: str = "public"
+    moderation_status: str = "pending_review"
+    review_note: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    @strawberry.field
+    async def properties(self, info: strawberry.types.Info) -> list[TaskPropertyType]:
+        from sqlalchemy import select
+        from app.models.ticket_task import TaskProperty
+        db = info.context["db"]
+        result = await db.execute(
+            select(TaskProperty).where(
+                TaskProperty.task_uuid == str(self.uuid),
+                TaskProperty.delete_at.is_(None),
+            )
+        )
+        return [TaskPropertyType.from_model(p) for p in result.scalars()]
+
+    @strawberry.field
+    async def assignments(self, info: strawberry.types.Info) -> list[TaskAssignmentType]:
+        from sqlalchemy import select
+        from app.models.ticket_task import TaskAssignment
+        db = info.context["db"]
+        result = await db.execute(
+            select(TaskAssignment).where(TaskAssignment.task_uuid == str(self.uuid))
+        )
+        return [TaskAssignmentType.from_model(a) for a in result.scalars()]
+
+    @classmethod
+    def from_model(cls, m) -> "TicketTaskType":
+        return cls(
+            uuid=m.uuid, ticket_uuid=m.ticket_uuid,
+            task_type=m.task_type, task_name=m.task_name,
+            task_description=m.task_description, quantity=m.quantity,
+            status=m.status, source=m.source, progress_note=m.progress_note,
+            visibility=m.visibility, moderation_status=m.moderation_status,
+            review_note=m.review_note,
+            created_at=m.created_at, updated_at=m.updated_at,
+        )
+
+
+@strawberry.input
+class CreateTicketTaskInput:
+    ticket_uuid: str
+    task_type: str
+    task_name: str
+    task_description: Optional[str] = None
+    quantity: Optional[int] = None
+    source: str = "user"
+    visibility: str = "public"
+    route_uuid: Optional[str] = None
+
+
+@strawberry.input
+class UpdateTicketTaskInput:
+    status: Optional[str] = None
+    progress_note: Optional[str] = strawberry.UNSET
+    review_note: Optional[str] = strawberry.UNSET
+    moderation_status: Optional[str] = None
+    visibility: Optional[str] = None
+
+
+@strawberry.input
+class CreateTaskPropertyInput:
+    task_uuid: str
+    property_name: str
+    property_value: str
+    quantity: Optional[int] = None
+    comment: Optional[str] = None
+
+
+@strawberry.input
+class UpdateTaskPropertyInput:
+    property_value: Optional[str] = None
+    quantity: Optional[int] = strawberry.UNSET
+    status: Optional[str] = None
+    comment: Optional[str] = strawberry.UNSET
+
+
+# --- Tickets ---
 
 @strawberry.type
 class TicketType:
@@ -300,39 +456,40 @@ class TicketType:
     contact_phone: Optional[str] = None
     status: str = ""
     priority: str = ""
+    task_type: Optional[str] = None
+    visibility: Optional[str] = None
+    verification_status: Optional[str] = None
+    review_note: Optional[str] = None
     created_by: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     @strawberry.field
-    async def photos(self, info: strawberry.types.Info) -> list[RequestPhotoType]:
+    async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
         from sqlalchemy import select
-        from app.models.request import RequestPhoto
+        from app.models.photo import Photo
         db = info.context["db"]
         result = await db.execute(
-            select(RequestPhoto).where(RequestPhoto.req_uuid == str(self.uuid))
+            select(Photo).where(
+                Photo.ref_uuid == str(self.uuid),
+                Photo.ref_type == "ticket",
+                Photo.delete_at.is_(None),
+            )
         )
-        return [RequestPhotoType.from_model(p) for p in result.scalars()]
+        return [PhotoType.from_model(p) for p in result.scalars()]
 
     @strawberry.field
-    async def task_specialties(self, info: strawberry.types.Info) -> list[HRTaskSpecialtyType]:
+    async def tasks(self, info: strawberry.types.Info) -> list[TicketTaskType]:
         from sqlalchemy import select
-        from app.models.request import HRTaskSpecialty
+        from app.models.ticket_task import TicketTask
         db = info.context["db"]
         result = await db.execute(
-            select(HRTaskSpecialty).where(HRTaskSpecialty.req_uuid == str(self.uuid))
+            select(TicketTask).where(
+                TicketTask.ticket_uuid == str(self.uuid),
+                TicketTask.delete_at.is_(None),
+            )
         )
-        return [HRTaskSpecialtyType.from_model(s) for s in result.scalars()]
-
-    @strawberry.field
-    async def task_items(self, info: strawberry.types.Info) -> list[SupplyTaskItemType]:
-        from sqlalchemy import select
-        from app.models.request import SupplyTaskItem
-        db = info.context["db"]
-        result = await db.execute(
-            select(SupplyTaskItem).where(SupplyTaskItem.req_uuid == str(self.uuid))
-        )
-        return [SupplyTaskItemType.from_model(i) for i in result.scalars()]
+        return [TicketTaskType.from_model(t) for t in result.scalars()]
 
     @classmethod
     def from_model(cls, m) -> "TicketType":
@@ -342,6 +499,8 @@ class TicketType:
             title=m.title, description=m.description,
             contact_name=m.contact_name, contact_email=m.contact_email,
             contact_phone=m.contact_phone, status=m.status, priority=m.priority,
+            task_type=m.task_type, visibility=m.visibility,
+            verification_status=m.verification_status, review_note=m.review_note,
             created_by=m.created_by, created_at=m.created_at, updated_at=m.updated_at,
         )
 
@@ -360,24 +519,9 @@ class CreateTicketInput:
     contact_name: str
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
-    priority: str = "nominal"
-    ticket_type: str = "hr"  # "hr" or "supply"
-    hr_specialties: Optional[list["HRSpecialtyInput"]] = None
-    supply_items: Optional[list["SupplyItemInput"]] = None
-
-
-@strawberry.input
-class HRSpecialtyInput:
-    specialty_description: str
-    quantity: int
-
-
-@strawberry.input
-class SupplyItemInput:
-    item_name: str
-    item_description: Optional[str] = None
-    quantity: int
-    suggestion: Optional[str] = None
+    priority: str = "low"
+    task_type: Optional[str] = None
+    visibility: str = "public"
 
 
 @strawberry.input
@@ -386,3 +530,48 @@ class UpdateTicketInput:
     priority: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = strawberry.UNSET
+    review_note: Optional[str] = strawberry.UNSET
+    verification_status: Optional[str] = None
+
+
+# --- Property Config ---
+
+@strawberry.type
+class StationPropertyConfigType:
+    uuid: UUID
+    station_type: str
+    property_name: str
+    data_type: str
+    enum_options: Optional[list[str]] = None
+
+    @classmethod
+    def from_model(cls, m) -> "StationPropertyConfigType":
+        return cls(
+            uuid=m.uuid, station_type=m.station_type,
+            property_name=m.property_name, data_type=m.data_type,
+            enum_options=m.enum_options,
+        )
+
+
+@strawberry.type
+class TaskPropertyConfigType:
+    uuid: UUID
+    task_type: str
+    property_name: str
+    data_type: str
+    enum_options: Optional[list[str]] = None
+
+    @classmethod
+    def from_model(cls, m) -> "TaskPropertyConfigType":
+        return cls(
+            uuid=m.uuid, task_type=m.task_type,
+            property_name=m.property_name, data_type=m.data_type,
+            enum_options=m.enum_options,
+        )
+
+
+@strawberry.input
+class UpsertPropertyConfigInput:
+    property_name: str
+    data_type: str
+    enum_options: Optional[list[str]] = None
