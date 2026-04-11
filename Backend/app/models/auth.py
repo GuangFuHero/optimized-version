@@ -1,4 +1,5 @@
-from sqlalchemy import String, Float, ForeignKey
+from typing import Optional
+from sqlalchemy import String, Float, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import UUIDPKMixin, TimestampMixin, Base
 
@@ -6,7 +7,8 @@ from app.models.base import UUIDPKMixin, TimestampMixin, Base
 class User(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "users"
     name: Mapped[str] = mapped_column(String(100))
-    password: Mapped[str] = mapped_column(String(255))
+    # 儲存格式: <algorithm>$<iterations>$<salt-frontend>$<salt-backend>$<hash>
+    password: Mapped[str] = mapped_column(String(512))
     credibility_score: Mapped[float] = mapped_column(Float, default=50.0)
 
     # 關聯
@@ -21,15 +23,20 @@ class Group(Base, UUIDPKMixin):
 
 class Policy(Base, UUIDPKMixin):
     __tablename__ = "policies"
-    name: Mapped[str] = mapped_column(String(100))
-    read: Mapped[str] = mapped_column(String(50))
-    create: Mapped[str] = mapped_column(String(50))
-    edit: Mapped[str] = mapped_column(String(50))
-    delete: Mapped[str] = mapped_column(String(50))
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    description: Mapped[Optional[str]] = mapped_column(String(255))
+    category: Mapped[Optional[str]] = mapped_column(String(50))
+    read: Mapped[str] = mapped_column(String(50), default="none")
+    create: Mapped[str] = mapped_column(String(50), default="none")
+    edit: Mapped[str] = mapped_column(String(50), default="none")
+    delete: Mapped[str] = mapped_column(String(50), default="none")
 
 
 class UserGroupAssign(Base, UUIDPKMixin):
     __tablename__ = "user_group_assign"
+    __table_args__ = (
+        UniqueConstraint("user_uuid", "group_uuid", name="uq_user_group"),
+    )
     user_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
     group_uuid: Mapped[str] = mapped_column(ForeignKey("groups.uuid"))
     user = relationship("User", back_populates="groups")

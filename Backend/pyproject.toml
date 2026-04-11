@@ -3,7 +3,7 @@ name = "backend"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13, <4.0"
 dependencies = [
     "alembic>=1.18.0",
     "asyncpg>=0.31.0",
@@ -19,6 +19,8 @@ dependencies = [
     "sqlalchemy>=2.0.45",
     "strawberry-graphql[fastapi]>=0.288.2",
     "uvicorn>=0.40.0",
+    "fastapi-limiter>=0.2.0",
+    "pyrate-limiter>=3.0.0",
 ]
 
 [dependency-groups]
