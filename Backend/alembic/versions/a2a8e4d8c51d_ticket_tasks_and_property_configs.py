@@ -1,6 +1,6 @@
-"""schema_v2_ticket_tasks_property_configs
+"""ticket_tasks_and_property_configs
 
-Revision ID: schema_v2
+Revision ID: a2a8e4d8c51d
 Revises: ecff746c61a6
 Create Date: 2026-04-09
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = 'schema_v2'
+revision: str = 'a2a8e4d8c51d'
 down_revision: str | Sequence[str] | None = 'ecff746c61a6'
 branch_labels = None
 depends_on = None

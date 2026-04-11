@@ -1,7 +1,7 @@
 """consolidate_password_fields
 
 Revision ID: 4d87b614aece
-Revises: 60fa7227481a
+Revises: 5c6103762349
 Create Date: 2026-03-26 10:05:13.739016
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '4d87b614aece'
-down_revision: str | Sequence[str] | None = '60fa7227481a'
+down_revision: str | Sequence[str] | None = '5c6103762349'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
