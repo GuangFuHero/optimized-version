@@ -1,22 +1,39 @@
 """FastAPI application entry point — wires up middleware, routers, and startup lifecycle."""
 
+import os
+from contextlib import asynccontextmanager
+
+import redis.asyncio as aioredis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pyrate_limiter import Duration, Limiter, Rate
-from strawberry.fastapi import GraphQLRouter
 
 from app.api.v1.api import api_router
 from app.core.config import settings
-from app.graphql.context import get_context
-from app.graphql.schema import schema
+from app.graphql.router import graphql_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application startup and shutdown lifecycle."""
+    # --- startup (previously @app.on_event("startup")) ---
+    env = os.getenv("ENV", "development")
+    rate_val = 100 if env != "testing" else 999999
+    app.state.limiter = Limiter(Rate(rate_val, Duration.MINUTE))
+    app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=False)
+    yield
+    # --- shutdown (previously @app.on_event("shutdown")) ---
+    if hasattr(app.state, "redis"):
+        await app.state.redis.aclose()
+
 
 app = FastAPI(
     title="救災平台 API",
     description="災難救援與資源調度平台後端服務",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
-# 設定 CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,37 +42,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-@app.on_event("startup")
-async def startup():
-    """初始化頻率限制引擎與 Redis 連線。"""
-    import os
-
-    import redis.asyncio as aioredis
-
-    env = os.getenv("ENV", "development")
-    rate_val = 100 if env != "testing" else 999999
-    app.state.limiter = Limiter(Rate(rate_val, Duration.MINUTE))
-
-    app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=False)
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    """清理 Redis 連線。"""
-    if hasattr(app.state, "redis"):
-        await app.state.redis.aclose()
-
-
-# 註冊路由
 app.include_router(api_router, prefix="/api/v1")
-
-# GraphQL
-def _get_graphql_router():
-    """Build the Strawberry GraphQL router with deferred schema import."""
-    return GraphQLRouter(schema, context_getter=get_context)
-
-app.include_router(_get_graphql_router(), prefix="/graphql", tags=["圖資"])
+app.include_router(graphql_router, prefix="/graphql", tags=["圖資"])
 
 
 @app.get("/")

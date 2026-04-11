@@ -93,3 +93,17 @@ class GenericRepository(Generic[ModelType]):
         result = await db.execute(query)
         await db.commit()
         return result.scalar_one()
+
+    async def get_by_uuid_active(self, db: AsyncSession, uuid: Any) -> ModelType | None:
+        """Fetch a non-deleted record by UUID. Checks delete_at IS NULL if column exists."""
+        query = select(self.model).where(self.model.uuid == uuid)
+        if hasattr(self.model, "delete_at"):
+            query = query.where(self.model.delete_at.is_(None))
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def soft_delete(self, db: AsyncSession, *, db_obj: ModelType) -> None:
+        """Set delete_at to now, effectively soft-deleting the record."""
+        from datetime import UTC, datetime
+        db_obj.delete_at = datetime.now(UTC)
+        await db.commit()
