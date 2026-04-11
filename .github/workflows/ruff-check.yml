@@ -1,0 +1,45 @@
+name: Ruff Lint & Format Check
+
+on:
+  pull_request:
+    paths:
+      - "Backend/**/*.py"
+
+permissions:
+  contents: read
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get changed Python files
+        id: changed
+        uses: tj-actions/changed-files@22103cc46bda19c2b464ffe86db46df6922fd323 # v47.0.5
+        with:
+          files: "Backend/**/*.py"
+
+      - name: Set up Python
+        if: steps.changed.outputs.any_changed == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install ruff
+        if: steps.changed.outputs.any_changed == 'true'
+        run: pip install ruff==0.11.0
+
+      - name: Ruff check (lint)
+        if: steps.changed.outputs.any_changed == 'true'
+        continue-on-error: true
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.all_modified_files }}
+        run: ruff check --config Backend/pyproject.toml --output-format=github $CHANGED_FILES
+
+      - name: Ruff format check
+        if: steps.changed.outputs.any_changed == 'true'
+        continue-on-error: true
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.all_modified_files }}
+        run: ruff format --check --config Backend/pyproject.toml $CHANGED_FILES
