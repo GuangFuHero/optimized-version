@@ -318,6 +318,8 @@ No constitution violations requiring justification. All complexity is necessary:
 
 **Prerequisites**: research.md complete
 
+> **GraphQL API Design**: See [Spec/Docs/graphql-api-design.md](../Docs/graphql-api-design.md) for the complete GraphQL schema design including queries, mutations, RBAC mappings, business rules, and test plan.
+
 ### Tasks
 
 1. **Extract Entities from Spec → data-model.md**

@@ -1,30 +1,28 @@
-import pytest
-import pytest_asyncio
-import asyncio
-import uuid
+"""Integration tests for RBAC permission checking endpoints."""
+
 import hashlib
 import os
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+import uuid
+
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select
 
 # 強制設定為測試環境
 os.environ["ENV"] = "testing"
 
-from app.main import app
 from app.core import security
-from app.db.session import SessionLocal
-from app.models.auth import Base, Group, User, Policy, UserGroupAssign, PolicyGroupAssign
+from app.main import app
+from app.models.auth import Base, Group, Policy, PolicyGroupAssign
 
 # 測試用資料庫
 TEST_SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session():
-    """
-    建立測試專用的 Engine 與 Session，並覆寫 get_db。
-    """
+    """建立測試專用的 Engine 與 Session，並覆寫 get_db."""
     engine = create_async_engine(TEST_SQLALCHEMY_DATABASE_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -59,9 +57,7 @@ async def db_session():
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session):
-    """
-    配置測試客戶端並覆寫資料庫依賴。
-    """
+    """配置測試客戶端並覆寫資料庫依賴."""
     async def override_get_db():
         yield db_session
 
@@ -73,9 +69,7 @@ async def client(db_session):
 
 @pytest.mark.asyncio
 async def test_full_rbac_flow(client: AsyncClient):
-    """
-    驗證完整的 RBAC 流程：註冊 -> 獲取 Salt -> 登入 -> 權限檢查。
-    """
+    """驗證完整的 RBAC 流程：註冊 -> 獲取 Salt -> 登入 -> 權限檢查."""
     test_user_name = f"user_{uuid.uuid4().hex[:8]}"
     test_password = "password123"
     test_salt_frontend = "abcd1234efgh5678"

@@ -490,6 +490,10 @@
     - **Public/Guest**:
         - All resources: Read (`all`), all other actions set to `none`.
 
+#### GraphQL API Design
+
+- **FR-083**: The GraphQL API schema, operations, RBAC mappings, and business rules (ticket status state machine, geometry type validation, soft-delete visibility, crowdsourcing vote upsert) are defined in [Spec/Docs/graphql-api-design.md](../Docs/graphql-api-design.md).
+
 #### Data Integrity & Quality
 
 - **FR-042**: System MUST log all marker additions, edits, and status updates with timestamp and user ID for audit trail
