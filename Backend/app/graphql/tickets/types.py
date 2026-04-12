@@ -113,7 +113,7 @@ class TicketTaskType:
     )
     status: str = strawberry.field(
         default="pending",
-        description="Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled'",
+        description="Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'",
     )
     source: str = strawberry.field(
         default="user", description="Origin of this task: 'user' or 'official'"
@@ -122,7 +122,7 @@ class TicketTaskType:
         default=None, description="Current progress update written by the assignee"
     )
     visibility: str = strawberry.field(
-        default="public", description="Who can see this task: 'public' or 'private'"
+        default="public", description="Who can see this task: 'public', 'restricted', or 'internal'"
     )
     moderation_status: str = strawberry.field(
         default="pending_review",
@@ -192,7 +192,7 @@ class CreateTicketTaskInput:
         default="user", description="Origin: 'user' (default) or 'official'"
     )
     visibility: str = strawberry.field(
-        default="public", description="Visibility: 'public' (default) or 'private'"
+        default="public", description="Visibility: 'public' (default), 'restricted', or 'internal'"
     )
     route_uuid: str | None = strawberry.field(
         default=None, description="Optional UUID of an associated route"
@@ -205,7 +205,7 @@ class UpdateTicketTaskInput:
 
     status: str | None = strawberry.field(
         default=None,
-        description="New lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled'",
+        description="New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'",
     )
     progress_note: str | None = strawberry.field(
         default=strawberry.UNSET, description="Updated progress description — pass null to clear"
@@ -218,7 +218,7 @@ class UpdateTicketTaskInput:
         description="New review state: 'pending_review', 'approved', or 'rejected'",
     )
     visibility: str | None = strawberry.field(
-        default=None, description="Updated visibility: 'public' or 'private'"
+        default=None, description="Updated visibility: 'public', 'restricted', or 'internal'"
     )
 
 
@@ -291,10 +291,10 @@ class TicketType:
         description="Type of help needed: 'rescue', 'supply', 'medical', or 'hr'",
     )
     visibility: str | None = strawberry.field(
-        default=None, description="Who can see this ticket: 'public' or 'private'"
+        default=None, description="Who can see this ticket: 'public', 'restricted', or 'internal'"
     )
     verification_status: str | None = strawberry.field(
-        default=None, description="Review state: 'pending_review', 'verified', or 'rejected'"
+        default=None, description="Review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'"
     )
     review_note: str | None = strawberry.field(
         default=None, description="Moderator's notes about the verification decision"
@@ -383,7 +383,7 @@ class CreateTicketInput:
         default=None, description="Type of help: 'rescue', 'supply', 'medical', or 'hr'"
     )
     visibility: str = strawberry.field(
-        default="public", description="Visibility: 'public' (default) or 'private'"
+        default="public", description="Visibility: 'public' (default), 'restricted', or 'internal'"
     )
 
 
@@ -405,5 +405,5 @@ class UpdateTicketInput:
     )
     verification_status: str | None = strawberry.field(
         default=None,
-        description="Updated review state: 'pending_review', 'verified', or 'rejected'",
+        description="Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'",
     )

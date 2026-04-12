@@ -4,6 +4,7 @@ from uuid import UUID
 
 import strawberry
 from shapely.geometry import shape
+from sqlalchemy import select
 
 from app.graphql.context import check_permission
 from app.graphql.geo.types import (
@@ -20,6 +21,7 @@ from app.graphql.geo.types import (
     UpdateStationPropertyInput,
 )
 from app.graphql.scalars import geojson_to_geom
+from app.models.station_property import StationProperty
 from app.repositories.geo_repository import (
     closure_area_repository,
     crowd_sourcing_repository,
@@ -243,8 +245,13 @@ class StationPropertyMutation:
         db = info.context["db"]
         user = info.context["user"]
 
-        prop = await station_property_repository.get_by_uuid_active(db, input.item_uuid)
-        if not prop or prop.station_uuid != input.station_uuid:
+        result = await db.execute(
+            select(StationProperty).where(
+                StationProperty.uuid == input.item_uuid,
+                StationProperty.station_uuid == input.station_uuid,
+            )
+        )
+        if not result.scalar_one_or_none():
             raise ValueError("Item not found for this station")
 
         cs = await crowd_sourcing_repository.upsert(

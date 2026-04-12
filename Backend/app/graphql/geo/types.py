@@ -115,10 +115,10 @@ class StationType:
         default=None, description="Data source of this record: 'user' or 'official'"
     )
     visibility: str | None = strawberry.field(
-        default=None, description="Who can see this station: 'public' or 'private'"
+        default=None, description="Who can see this station: 'public' or 'restricted'"
     )
     verification_status: str | None = strawberry.field(
-        default=None, description="Review state: 'pending_review', 'verified', or 'rejected'"
+        default=None, description="Review state: 'unverified', 'ai_verified', or 'human_verified'"
     )
     confidence_score: float | None = strawberry.field(
         default=None,
@@ -216,7 +216,7 @@ class CreateStationInput:
         default="user", description="Data origin: 'user' (default) or 'official'"
     )
     visibility: str = strawberry.field(
-        default="public", description="Visibility: 'public' (default) or 'private'"
+        default="public", description="Visibility: 'public' (default) or 'restricted'"
     )
     secondary_location: SecondaryLocationInput | None = strawberry.field(
         default=None,
@@ -238,7 +238,7 @@ class UpdateStationInput:
     level: int | None = strawberry.field(default=None, description="Updated importance level")
     comment: str | None = strawberry.UNSET
     visibility: str | None = strawberry.field(
-        default=None, description="Updated visibility: 'public' or 'private'"
+        default=None, description="Updated visibility: 'public' or 'restricted'"
     )
 
 
@@ -259,7 +259,7 @@ class ClosureAreaType:
         default=None, description="UUID of the user who reported this closure"
     )
     status: str = strawberry.field(
-        default="", description="Current closure status: 'active', 'cleared', or 'unknown'"
+        default="", description="Current closure status: 'dangerous', 'block'"
     )
     information_source: str | None = strawberry.field(
         default=None,
@@ -422,7 +422,7 @@ class CrowdSourcingType:
         default=0.0, description="Credibility score of the submitter at the time of submission"
     )
     rating: str = strawberry.field(
-        default="", description="User-submitted rating, e.g. 'available', 'depleted', 'inaccurate'"
+        default="", description="User-submitted rating: 'up', 'neutral', or 'down'"
     )
     distance_from_geometry: float | None = strawberry.field(
         default=None,
@@ -447,9 +447,12 @@ class CreateCrowdSourcingInput:
     """Input for submitting or updating a crowd-sourced rating for a station property."""
 
     station_uuid: str = strawberry.field(description="UUID of the station being rated")
-    item_uuid: str = strawberry.field(description="UUID of the StationProperty being rated")
+    item_uuid: str | None = strawberry.field(
+        default=None,
+        description="UUID of the StationProperty being rated — null for a general station rating",
+    )
     rating: str = strawberry.field(
-        description="Rating value, e.g. 'available', 'depleted', 'inaccurate'"
+        description="Rating value: 'up', 'neutral', or 'down'"
     )
     distance_from_geometry: float | None = strawberry.field(
         default=None,

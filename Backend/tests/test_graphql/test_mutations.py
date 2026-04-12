@@ -405,12 +405,12 @@ async def test_create_crowdsourcing(
         "variables": {"input": {
             "stationUuid": sample_station,
             "itemUuid": sample_station_property,
-            "rating": "agree",
+            "rating": "up",
         }},
     }, headers=auth_header(token))
     data = resp.json()["data"]["createCrowdSourcing"]
     assert data["uuid"] is not None
-    assert data["rating"] == "agree"
+    assert data["rating"] == "up"
 
 
 @pytest.mark.asyncio
@@ -424,7 +424,7 @@ async def test_crowdsourcing_upsert(
         "variables": {"input": {
             "stationUuid": sample_station,
             "itemUuid": sample_station_property,
-            "rating": "agree",
+            "rating": "up",
         }},
     }
     headers = auth_header(token)
@@ -433,12 +433,12 @@ async def test_crowdsourcing_upsert(
     uuid1 = resp1.json()["data"]["createCrowdSourcing"]["uuid"]
 
     # Change rating and submit again
-    payload["variables"]["input"]["rating"] = "disagree"
+    payload["variables"]["input"]["rating"] = "down"
     resp2 = await client.post("/graphql", json=payload, headers=headers)
     data2 = resp2.json()["data"]["createCrowdSourcing"]
 
     assert data2["uuid"] == uuid1, "Should update existing record, not create new"
-    assert data2["rating"] == "disagree"
+    assert data2["rating"] == "down"
 
 
 @pytest.mark.asyncio
@@ -453,7 +453,7 @@ async def test_crowdsourcing_mismatched_station(
         "variables": {"input": {
             "stationUuid": fake_station,
             "itemUuid": sample_station_property,
-            "rating": "agree",
+            "rating": "up",
         }},
     }, headers=auth_header(token))
     errors = resp.json()["errors"]
@@ -471,7 +471,7 @@ async def test_crowdsourcing_auto_credibility(
         "variables": {"input": {
             "stationUuid": sample_station,
             "itemUuid": sample_station_property,
-            "rating": "agree",
+            "rating": "up",
         }},
     }, headers=auth_header(token))
     data = resp.json()["data"]["createCrowdSourcing"]
