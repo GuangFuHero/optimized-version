@@ -89,7 +89,7 @@ users {
       string room "nullable, address only"
       string pole_id "nullable, pole only"
       string pole_type "nullable, pole only"
-      uuid pole_photo_uuid FK "nullable, pole only, FK to photos"
+      uuid pole_photo_uuid FK "nullable, pole only, FK to photos, ON DELETE SET NULL"
       string pole_note "nullable, pole only"
   }
   base_geometries ||--|| secondary_locations : "has secondary location"
@@ -208,6 +208,7 @@ users {
       timestamp updated_at
       timestamp delete_at
   }
+  %% INDEX: ix_photos_ref ON photos (ref_type, ref_uuid) -- supports polymorphic photo lookup
   tickets ||--o{ photos : "has photos"
   secondary_locations ||--o{ photos : "has pole photos"
   users ||--o{ photos : "uploads"
