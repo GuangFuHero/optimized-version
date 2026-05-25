@@ -61,7 +61,7 @@ def upgrade() -> None:
 
     # Create photos (before secondary_locations due to pole_photo_uuid reference)
     op.create_table('photos',
-        sa.Column('ref_uuid', sa.String(), nullable=False),
+        sa.Column('ref_uuid', sa.UUID(), nullable=False),
         sa.Column('ref_type', sa.String(50), nullable=False),
         sa.Column('url', sa.String(500), nullable=False),
         sa.Column('created_by', sa.UUID(), nullable=False),
@@ -72,6 +72,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['created_by'], ['users.uuid']),
         sa.PrimaryKeyConstraint('uuid'),
     )
+    op.create_index('ix_photos_ref', 'photos', ['ref_type', 'ref_uuid'])
 
     # Create secondary_locations
     op.create_table('secondary_locations',
@@ -86,10 +87,11 @@ def upgrade() -> None:
         sa.Column('room', sa.String(20), nullable=True),
         sa.Column('pole_id', sa.String(50), nullable=True),
         sa.Column('pole_type', sa.String(50), nullable=True),
-        sa.Column('pole_photo_uuid', sa.String(), nullable=True),
+        sa.Column('pole_photo_uuid', sa.UUID(), nullable=True),
         sa.Column('pole_note', sa.String(), nullable=True),
         sa.Column('uuid', sa.UUID(), nullable=False),
         sa.ForeignKeyConstraint(['geometry_uuid'], ['base_geometries.uuid']),
+        sa.ForeignKeyConstraint(['pole_photo_uuid'], ['photos.uuid'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('uuid'),
     )
 
@@ -244,6 +246,7 @@ def downgrade() -> None:
     op.drop_table('ticket_tasks')
     op.drop_table('routes')
     op.drop_table('secondary_locations')
+    op.drop_index('ix_photos_ref', table_name='photos')
     op.drop_table('photos')
 
     # Restore address cols on base_geometries

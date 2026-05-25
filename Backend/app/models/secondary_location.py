@@ -21,5 +21,7 @@ class SecondaryLocation(Base, UUIDPKMixin):
     room: Mapped[str | None] = mapped_column(String(20))
     pole_id: Mapped[str | None] = mapped_column(String(50))
     pole_type: Mapped[str | None] = mapped_column(String(50))
-    pole_photo_uuid: Mapped[str | None] = mapped_column(String, nullable=True)
+    pole_photo_uuid: Mapped[str | None] = mapped_column(
+        ForeignKey("photos.uuid", ondelete="SET NULL"), nullable=True
+    )
     pole_note: Mapped[str | None] = mapped_column(String)
