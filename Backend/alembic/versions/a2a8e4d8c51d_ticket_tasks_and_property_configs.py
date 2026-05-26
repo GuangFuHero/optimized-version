@@ -122,12 +122,14 @@ def upgrade() -> None:
         sa.Column('moderation_status', sa.String(50), nullable=False, server_default='pending_review'),
         sa.Column('visibility', sa.String(50), nullable=False, server_default='public'),
         sa.Column('review_note', sa.String(), nullable=True),
+        sa.Column('created_by', sa.UUID(), nullable=False),
         sa.Column('uuid', sa.UUID(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('delete_at', sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(['ticket_uuid'], ['tickets.uuid']),
         sa.ForeignKeyConstraint(['route_uuid'], ['routes.uuid']),
+        sa.ForeignKeyConstraint(['created_by'], ['users.uuid']),
         sa.PrimaryKeyConstraint('uuid'),
     )
 
@@ -139,13 +141,11 @@ def upgrade() -> None:
         sa.Column('quantity', sa.Integer(), nullable=True),
         sa.Column('status', sa.String(50), nullable=True),
         sa.Column('comment', sa.String(), nullable=True),
-        sa.Column('created_by', sa.UUID(), nullable=False),
         sa.Column('uuid', sa.UUID(), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('delete_at', sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(['task_uuid'], ['ticket_tasks.uuid']),
-        sa.ForeignKeyConstraint(['created_by'], ['users.uuid']),
         sa.PrimaryKeyConstraint('uuid'),
     )
 

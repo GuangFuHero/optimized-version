@@ -54,9 +54,6 @@ class TaskPropertyType:
     comment: str | None = strawberry.field(
         default=None, description="Optional notes about this property"
     )
-    created_by: str | None = strawberry.field(
-        default=None, description="UUID of the user who added this property"
-    )
     created_at: datetime | None = None
 
     @classmethod
@@ -66,7 +63,7 @@ class TaskPropertyType:
             uuid=m.uuid, task_uuid=m.task_uuid,
             property_name=m.property_name, property_value=m.property_value,
             quantity=m.quantity, status=m.status, comment=m.comment,
-            created_by=m.created_by, created_at=m.created_at,
+            created_at=m.created_at,
         )
 
 
@@ -131,6 +128,9 @@ class TicketTaskType:
     review_note: str | None = strawberry.field(
         default=None, description="Moderator's notes explaining the review decision"
     )
+    created_by: str | None = strawberry.field(
+        default=None, description="UUID of the user who created this task"
+    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -153,7 +153,7 @@ class TicketTaskType:
             task_description=m.task_description, quantity=m.quantity,
             status=m.status, source=m.source, progress_note=m.progress_note,
             visibility=m.visibility, moderation_status=m.moderation_status,
-            review_note=m.review_note,
+            review_note=m.review_note, created_by=m.created_by,
             created_at=m.created_at, updated_at=m.updated_at,
         )
 

@@ -244,12 +244,14 @@ users {
       string moderation_status "pending_review/approved/rejected/merged"
       string visibility "public/restricted/internal"
       string review_note "nullable"
+      uuid created_by FK
       timestamp created_at
       timestamp updated_at
       timestamp delete_at
   }
   tickets ||--o{ ticket_tasks : "contains sub-tasks"
   routes |o--o{ ticket_tasks : "follows route (optional)"
+  users ||--o{ ticket_tasks : "creates"
 
   %% Task Properties (EAV for type-specific details)
   task_properties {
@@ -260,13 +262,11 @@ users {
       int quantity "nullable, for supply items"
       string status "nullable, for supply item tracking"
       string comment "nullable"
-      uuid created_by FK
       timestamp created_at
       timestamp updated_at
       timestamp delete_at
   }
   ticket_tasks ||--o{ task_properties : "has properties"
-  users ||--o{ task_properties : "defines"
 
   %% Task Assignments (who is working on each sub-task)
   task_assignments {

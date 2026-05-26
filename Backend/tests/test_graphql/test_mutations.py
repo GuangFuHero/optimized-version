@@ -90,6 +90,12 @@ mutation($input: CreateTaskPropertyInput!) {
 }
 """
 
+UPDATE_TASK_PROPERTY = """
+mutation($uuid: UUID!, $input: UpdateTaskPropertyInput!) {
+    updateTaskProperty(uuid: $uuid, input: $input) { uuid propertyValue }
+}
+"""
+
 UPSERT_STATION_PROPERTY_CONFIG = """
 mutation($stationType: String!, $input: UpsertPropertyConfigInput!) {
     upsertStationPropertyConfig(stationType: $stationType, input: $input) {
@@ -633,6 +639,55 @@ async def test_create_task_property(client, coordinator_auth, sample_ticket_task
     data = resp.json()["data"]["createTaskProperty"]
     assert data["propertyName"] == "required_skill"
     assert data["propertyValue"] == "medical"
+
+
+@pytest.mark.asyncio
+async def test_update_ticket_task_blocks_non_owner(
+    client, login_user_auth, sample_ticket_task
+):
+    """A user with request:edit:own cannot edit a task they do not own.
+
+    sample_ticket_task is created by the Field Coordinator fixture; a Login User
+    (edit scope = "own") calling updateTicketTask on it must be denied.
+    """
+    _, token = login_user_auth
+    resp = await client.post("/graphql", json={
+        "query": UPDATE_TICKET_TASK,
+        "variables": {"uuid": sample_ticket_task, "input": {"status": "in_progress"}},
+    }, headers=auth_header(token))
+    body = resp.json()
+    assert "errors" in body
+    assert any("permission" in e["message"].lower() for e in body["errors"]), body
+
+
+@pytest.mark.asyncio
+async def test_update_task_property_blocks_non_owner(
+    client, coordinator_auth, login_user_auth, sample_ticket_task
+):
+    """A non-owner of the parent task cannot edit its properties.
+
+    Coordinator creates a property on their task; Login User tries to update it
+    and must be denied because ownership is inherited from the task.
+    """
+    _, coord_token = coordinator_auth
+    create_resp = await client.post("/graphql", json={
+        "query": CREATE_TASK_PROPERTY,
+        "variables": {"input": {
+            "taskUuid": sample_ticket_task,
+            "propertyName": "required_skill",
+            "propertyValue": "medical",
+        }},
+    }, headers=auth_header(coord_token))
+    prop_uuid = create_resp.json()["data"]["createTaskProperty"]["uuid"]
+
+    _, user_token = login_user_auth
+    resp = await client.post("/graphql", json={
+        "query": UPDATE_TASK_PROPERTY,
+        "variables": {"uuid": prop_uuid, "input": {"propertyValue": "logistics"}},
+    }, headers=auth_header(user_token))
+    body = resp.json()
+    assert "errors" in body
+    assert any("permission" in e["message"].lower() for e in body["errors"]), body
 
 
 # ============================================================================

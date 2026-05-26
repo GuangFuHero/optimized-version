@@ -183,11 +183,13 @@ async def sample_ticket(coordinator_auth):
 @pytest_asyncio.fixture
 async def sample_ticket_task(coordinator_auth, sample_ticket):
     """Seed a ticket task under the sample ticket and return its UUID string."""
+    user_uuid, _ = coordinator_auth
     async with test_db() as db:
         task = TicketTask(
             ticket_uuid=sample_ticket,
             task_type="hr", task_name="Need medics",
             quantity=3, source="user", visibility="public",
+            created_by=user_uuid,
         )
         db.add(task)
         await db.flush()

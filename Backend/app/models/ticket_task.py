@@ -27,6 +27,7 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     moderation_status: Mapped[str] = mapped_column(String(50), default="pending_review")
     visibility: Mapped[str] = mapped_column(String(50), default="public")
     review_note: Mapped[str | None] = mapped_column(String)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
 
 
 class TaskProperty(Base, UUIDPKMixin, TimestampMixin):
@@ -39,7 +40,6 @@ class TaskProperty(Base, UUIDPKMixin, TimestampMixin):
     quantity: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str | None] = mapped_column(String(50))
     comment: Mapped[str | None] = mapped_column(String)
-    created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
 
 
 class TaskAssignment(Base, UUIDPKMixin):

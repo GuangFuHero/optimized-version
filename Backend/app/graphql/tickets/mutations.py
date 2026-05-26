@@ -118,6 +118,7 @@ class TicketTaskMutation:
             "source": input.source,
             "visibility": input.visibility,
             "route_uuid": input.route_uuid,
+            "created_by": str(info.context["user"].uuid),
         })
         return TicketTaskType.from_model(task)
 
@@ -133,7 +134,7 @@ class TicketTaskMutation:
         task = await ticket_task_repository.get_by_uuid_active(db, str(uuid))
         if not task:
             raise ValueError("Ticket task not found")
-        await check_permission(info, "request", "edit")
+        await check_permission(info, "request", "edit", owner_uuid=task.created_by)
 
         obj_in = {}
         if input.status is not None:
@@ -169,7 +170,6 @@ class TicketTaskMutation:
             "property_value": input.property_value,
             "quantity": input.quantity,
             "comment": input.comment,
-            "created_by": str(info.context["user"].uuid),
         })
         return TaskPropertyType.from_model(prop)
 
@@ -186,7 +186,8 @@ class TicketTaskMutation:
         prop = await task_property_repository.get_by_uuid_active(db, str(uuid))
         if not prop:
             raise ValueError("Task property not found")
-        await check_permission(info, "request", "edit", owner_uuid=prop.created_by)
+        task = await ticket_task_repository.get_by_uuid_active(db, prop.task_uuid)
+        await check_permission(info, "request", "edit", owner_uuid=task.created_by)
 
         obj_in = {}
         if input.property_value is not None:
