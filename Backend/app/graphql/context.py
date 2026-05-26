@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from starlette.requests import Request
 
 from app.core.security import PermissionChecker, get_current_user, get_db
+from app.graphql.loaders import build_loaders
 
 
 async def get_context(request: Request):
@@ -25,7 +26,7 @@ async def get_context(request: Request):
         user = None
         if token:
             user = await get_current_user(db=db, token=token)
-        yield {"db": db, "user": user}
+        yield {"db": db, "user": user, "loaders": build_loaders(db)}
     finally:
         await db_gen.aclose()
 

@@ -137,29 +137,12 @@ class TicketTaskType:
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list[TaskPropertyType]:
         """Resolve structured properties (skills, cargo type, etc.) for this task."""
-        from sqlalchemy import select
-
-        from app.models.ticket_task import TaskProperty
-        db = info.context["db"]
-        result = await db.execute(
-            select(TaskProperty).where(
-                TaskProperty.task_uuid == str(self.uuid),
-                TaskProperty.delete_at.is_(None),
-            )
-        )
-        return [TaskPropertyType.from_model(p) for p in result.scalars()]
+        return await info.context["loaders"]["task_properties_by_task"].load(str(self.uuid))
 
     @strawberry.field
     async def assignments(self, info: strawberry.types.Info) -> list[TaskAssignmentType]:
         """Resolve actors (volunteers, responders) assigned to this task."""
-        from sqlalchemy import select
-
-        from app.models.ticket_task import TaskAssignment
-        db = info.context["db"]
-        result = await db.execute(
-            select(TaskAssignment).where(TaskAssignment.task_uuid == str(self.uuid))
-        )
-        return [TaskAssignmentType.from_model(a) for a in result.scalars()]
+        return await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "TicketTaskType":
@@ -308,33 +291,12 @@ class TicketType:
     @strawberry.field
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
         """Resolve photos attached to this ticket."""
-        from sqlalchemy import select
-
-        from app.models.photo import Photo
-        db = info.context["db"]
-        result = await db.execute(
-            select(Photo).where(
-                Photo.ref_uuid == str(self.uuid),
-                Photo.ref_type == "ticket",
-                Photo.delete_at.is_(None),
-            )
-        )
-        return [PhotoType.from_model(p) for p in result.scalars()]
+        return await info.context["loaders"]["photos_by_ticket"].load(str(self.uuid))
 
     @strawberry.field
     async def tasks(self, info: strawberry.types.Info) -> list[TicketTaskType]:
         """Resolve all active tasks under this ticket."""
-        from sqlalchemy import select
-
-        from app.models.ticket_task import TicketTask
-        db = info.context["db"]
-        result = await db.execute(
-            select(TicketTask).where(
-                TicketTask.ticket_uuid == str(self.uuid),
-                TicketTask.delete_at.is_(None),
-            )
-        )
-        return [TicketTaskType.from_model(t) for t in result.scalars()]
+        return await info.context["loaders"]["tasks_by_ticket"].load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "TicketType":

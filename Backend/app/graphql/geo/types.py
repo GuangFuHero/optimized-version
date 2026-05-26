@@ -146,27 +146,12 @@ class StationType:
     @strawberry.field
     async def secondary_location(self, info: strawberry.types.Info) -> SecondaryLocationType | None:
         """Resolve the secondary address or pole location for this station."""
-        from sqlalchemy import select
-
-        from app.models.secondary_location import SecondaryLocation
-        db = info.context["db"]
-        result = await db.execute(
-            select(SecondaryLocation).where(SecondaryLocation.geometry_uuid == str(self.uuid))
-        )
-        m = result.scalar_one_or_none()
-        return SecondaryLocationType.from_model(m) if m else None
+        return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list["StationPropertyType"]:
         """Resolve all properties (supply items, services) attached to this station."""
-        from sqlalchemy import select
-
-        from app.models.station_property import StationProperty
-        db = info.context["db"]
-        result = await db.execute(
-            select(StationProperty).where(StationProperty.station_uuid == str(self.uuid))
-        )
-        return [StationPropertyType.from_model(p) for p in result.scalars()]
+        return await info.context["loaders"]["station_properties_by_station"].load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "StationType":
@@ -351,14 +336,7 @@ class StationPropertyType:
     @strawberry.field
     async def crowd_sourcings(self, info: strawberry.types.Info) -> list["CrowdSourcingType"]:
         """Resolve crowd-sourcing entries submitted for this property."""
-        from sqlalchemy import select
-
-        from app.models.station_property import CrowdSourcing
-        db = info.context["db"]
-        result = await db.execute(
-            select(CrowdSourcing).where(CrowdSourcing.item_uuid == str(self.uuid))
-        )
-        return [CrowdSourcingType.from_model(c) for c in result.scalars()]
+        return await info.context["loaders"]["crowd_sourcings_by_property"].load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "StationPropertyType":

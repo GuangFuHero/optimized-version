@@ -46,7 +46,7 @@ GraphQL endpoint at `/graphql` serves map domain data (stations, closure areas, 
 | `HRRequirementType` | `taskSpecialties` | `[HRTaskSpecialtyType]` |
 | `SupplyRequirementType` | `taskItems` | `[SupplyTaskItemType]` |
 
-No DataLoaders — ~158 markers, N+1 is negligible at this scale.
+Nested collections (`StationType.properties`/`secondaryLocation`, `StationPropertyType.crowdSourcings`, `TicketType.photos`/`tasks`, `TicketTaskType.properties`/`assignments`) are resolved through per-request Strawberry DataLoaders (`app/graphql/loaders.py`) — each nesting level collapses to a single `WHERE parent_uuid IN (...)` query.
 
 ## Business Rules
 
