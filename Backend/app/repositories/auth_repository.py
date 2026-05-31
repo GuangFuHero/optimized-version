@@ -1,27 +1,28 @@
-from typing import List, Optional
+"""Repositories for User, Group, and Policy models with RBAC query helpers."""
+
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.infrastructure.repository.base import GenericRepository
-from app.models.auth import User, Group, Policy, UserGroupAssign, PolicyUserAssign, PolicyGroupAssign
+from app.models.auth import Group, Policy, PolicyGroupAssign, PolicyUserAssign, User, UserGroupAssign
 
 
 class UserRepository(GenericRepository[User]):
+    """Repository for User model CRUD and permission queries."""
+
     def __init__(self):
+        """Initialize with User as the managed model."""
         super().__init__(User)
 
-    async def get_by_name(self, db: AsyncSession, name: str) -> Optional[User]:
-        """
-        透過使用者名稱搜尋。
-        """
+    async def get_by_name(self, db: AsyncSession, name: str) -> User | None:
+        """透過使用者名稱搜尋。"""
         query = select(User).where(User.name == name)
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_user_permissions(self, db: AsyncSession, user_uuid: str) -> List[Policy]:
-        """
-        獲取用戶的所有權限（包含從群組繼承的）。
-        """
+    async def get_user_permissions(self, db: AsyncSession, user_uuid: str) -> list[Policy]:
+        """獲取用戶的所有權限（包含從群組繼承的）。"""
         # 1. 獲取直接分配給用戶的權限
         direct_policies_query = (
             select(Policy)
@@ -44,8 +45,8 @@ class UserRepository(GenericRepository[User]):
         return all_policies
 
     async def add_to_group(self, db: AsyncSession, user_uuid: str, group_uuid: str) -> bool:
-        """
-        將使用者加入特定群組。
+        """將使用者加入特定群組。
+
         使用 PostgreSQL ON CONFLICT 優化為單一 SQL 語句，確保原子性與效能。
         """
         stmt = insert(UserGroupAssign).values(
@@ -64,20 +65,24 @@ class UserRepository(GenericRepository[User]):
 
 
 class GroupRepository(GenericRepository[Group]):
+    """Repository for Group model CRUD."""
+
     def __init__(self):
+        """Initialize with Group as the managed model."""
         super().__init__(Group)
 
-    async def get_by_name(self, db: AsyncSession, name: str) -> Optional[Group]:
-        """
-        透過名稱搜尋角色。
-        """
+    async def get_by_name(self, db: AsyncSession, name: str) -> Group | None:
+        """透過名稱搜尋角色。"""
         query = select(Group).where(Group.name == name)
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
 
 class PolicyRepository(GenericRepository[Policy]):
+    """Repository for Policy model CRUD."""
+
     def __init__(self):
+        """Initialize with Policy as the managed model."""
         super().__init__(Policy)
 
 

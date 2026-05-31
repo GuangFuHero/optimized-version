@@ -1,10 +1,17 @@
+"""Shared SQLAlchemy mixins: UUID primary key and soft-delete timestamps."""
+
 import uuid as _uuid
 from datetime import datetime
+
 from sqlalchemy import UUID, DateTime, func
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Mapped, mapped_column
-from app.db.session import Base
+
+Base = declarative_base()
 
 class TimestampMixin:
+    """Mixin adding created_at, updated_at, and soft-delete delete_at columns."""
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), 
         server_default=func.now(),
@@ -23,6 +30,8 @@ class TimestampMixin:
     )
 
 class UUIDPKMixin:
+    """Mixin adding a UUID primary key column."""
+
     uuid: Mapped[_uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,

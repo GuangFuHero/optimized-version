@@ -1,7 +1,10 @@
+"""Script to seed initial RBAC roles, policies, and group assignments."""
+
 import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 from app.models.auth import Group, Policy, PolicyGroupAssign
@@ -71,6 +74,7 @@ ROLES_DATA = [
 ]
 
 async def seed():
+    """Create or update all RBAC groups, policies, and assignments in the database."""
     async with AsyncSessionLocal() as db:
         print("開始資料初始化 (Seeding RBAC)...")
 
@@ -110,7 +114,7 @@ async def seed():
                         policy_uuid=policy.uuid
                     )
                     db.add(assign)
-                    print(f"為角色 {group.name} 建立策略: {perm['name']} ({perm['read']}/{perm['create']}/{perm['edit']}/{perm['delete']})")
+                    print(f"為角色 {group.name} 建立策略: {perm['name']} ({perm['read']}/{perm['create']}/{perm['edit']}/{perm['delete']})")  # noqa: E501
                 else:
                     print(f"策略 {policy_name} 已存在，跳過。")
         

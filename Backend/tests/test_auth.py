@@ -1,17 +1,20 @@
+"""Integration tests for authentication endpoints: register, login, and salt retrieval."""
+
+import hashlib
+import os
+import uuid
+
 import pytest
 import pytest_asyncio
-import hashlib
-import uuid
-import os
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 # 強制設定為測試環境，避開全域 Rate Limit
 os.environ["ENV"] = "testing"
 
-from app.main import app
 from app.core import security
+from app.main import app
 from app.models.auth import Base
 
 # 測試用資料庫
@@ -19,6 +22,7 @@ TEST_SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session():
+    """Create an isolated test database session with a freshly created schema."""
     engine = create_async_engine(TEST_SQLALCHEMY_DATABASE_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -30,6 +34,7 @@ async def db_session():
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session):
+    """Configure the test HTTP client with a database dependency override."""
     async def override_get_db():
         yield db_session
     app.dependency_overrides[security.get_db] = override_get_db
@@ -39,9 +44,7 @@ async def client(db_session):
 
 @pytest.mark.asyncio
 async def test_auth_full_flow(client: AsyncClient):
-    """
-    測試完整的註冊與登入流程 (Happy Path)
-    """
+    """測試完整的註冊與登入流程 (Happy Path)."""
     username = f"user_{uuid.uuid4().hex[:6]}"
     password = "password123"
 
@@ -74,9 +77,7 @@ async def test_auth_full_flow(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_registration_conflict_409(client: AsyncClient):
-    """
-    測試重複註冊應回傳 409
-    """
+    """測試重複註冊應回傳 409."""
     username = f"conflict_{uuid.uuid4().hex[:6]}"
     payload = {"name": username, "password": "secure_password", "salt_frontend": "salt"}
     
@@ -86,9 +87,7 @@ async def test_registration_conflict_409(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_login_failures(client: AsyncClient):
-    """
-    測試各種登入失敗情況
-    """
+    """測試各種登入失敗情況."""
     # 案例 1: 密碼錯誤
     response = await client.post(
         "/api/v1/auth/login",
@@ -99,9 +98,7 @@ async def test_login_failures(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_malformed_password_logic():
-    """
-    測試 security 核心對損毀密碼字串的處理
-    """
+    """測試 security 核心對損毀密碼字串的處理."""
     # 缺少分割符號
     assert security.verify_password("p", "invalid_string") is False
     # 分割部分不足

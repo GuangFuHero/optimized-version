@@ -1,0 +1,66 @@
+Category,Label,Backend_Key,Data_Type,Required,Options/Enum,Notes,Display,ER_Mapping
+通用,資源 ID,resource_id,String (UUID),Yes,-,系統自動生成唯一碼,No,base_geometries.uuid
+通用,站點類型,type,Enum,Yes,"water, shelter, power, shower, toilet, transport, medical, cellular point, power station, charge spot, gas station",定義站點大類,Yes,stations.type
+通用,名稱,name,String,No,-,站點自訂名稱,Yes,stations.name
+通用,經度,longitude,Float,Yes,-180 to 180,地理座標,Yes,base_geometries.geometry (embedded in PostGIS)
+通用,緯度,latitude,Float,Yes,-90 to 90,地理座標,Yes,base_geometries.geometry (embedded in PostGIS)
+通用,信用分數,confidence_score,Float,Yes,0.0 - 1.0,AI 或人工驗證給分,No,stations.confidence_score
+通用,來源,source,Enum,Yes,"user, gov, crawler",資料來源識別,Yes,stations.source
+通用,最後更新時間,updated_at,Timestamp,Yes,ISO8601,判斷資訊是否過期,Yes,base_geometries.updated_at
+通用,建立時間,created_at,Timestamp,Yes,ISO8601,用於排序與timeline,Yes,base_geometries.created_at
+通用,描述,description,Text,No,-,補充現場情況,Yes,stations.description
+通用,地址,address,String,No,-,人類可讀位置,Yes,secondary_locations (location_type=address: county/city/lane/alley/no/floor/room)
+通用,現場照片,photo_urls,Array,No,URL list,支援多張照片,Yes,photos (ref_type=station: ref_uuid→stations.uuid)
+通用,是否為臨時站點,is_temporary,Boolean,Yes,"true, false",災害常為臨時設置,Yes,stations.is_temporary
+通用,開放期限,expires_at,Timestamp,No,ISO8601,過期自動降權或隱藏,Yes,stations.expires_at
+通用,最後更新者,updated_by,String,No,user_id,信用追蹤,Yes,stations.updated_by (base_geometries has created_by only)
+通用,是否官方認證,is_official,Boolean,Yes,"true, false",政府或官方來源,Yes,stations.is_official
+通用,去重群組ID,dedup_group_id,String,No,-,AI合併重複資料,No,stations.dedup_group_id
+通用,可見性,visibility,Enum,Yes,"public, restricted",權限控制,No,stations.visibility
+通用,驗證狀態,verification_status,Enum,Yes,"unverified, ai_verified, human_verified",AI是否已驗證地點真實性,Yes,stations.verification_status
+通用,是否疑似重複,is_duplicate,Boolean,Yes,"true, false",前端提示,Yes,stations.is_duplicate
+通用,使用者投票數,vote_count,Integer,No,-,群眾訊號,Yes,derived:crowd_sourcing (aggregate COUNT)
+通用,正確回報數,upvote_count,Integer,No,-,正向評價,Yes,"derived:crowd_sourcing (COUNT WHERE rating='up')"
+通用,錯誤回報數,downvote_count,Integer,No,-,負向評價,Yes,"derived:crowd_sourcing (COUNT WHERE rating='down')"
+通用,顯示優先級,priority_score,Float,No,0.0 - 1.0,排序與推薦,No,stations.priority_score
+通用,人流狀態,crowd_level,Enum,No,"low, medium, high",UI顯示擁擠程度（動態資料）,Yes,station_properties (EAV: property_name=crowd_level)
+通用,電線桿編號,pole_id,String,No,-,台灣定位輔助（無地址時關鍵識別）,Yes,secondary_locations (location_type=pole: pole_id)
+通用,電線桿類型,pole_type,Enum,No,"electric, telecom, other",電力或通訊電桿,Yes,secondary_locations (location_type=pole: pole_type)
+通用,電線桿照片,pole_photo_url,String,No,URL,方便人工辨識與比對,Yes,secondary_locations.pole_photo_uuid → photos.uuid
+通用,電線桿描述,pole_note,Text,No,-,例如：路口旁、橋邊、斜坡上,Yes,secondary_locations (location_type=pole: pole_note)
+通用,開放時段,available_time,Text,Yes,時間,資源站點開放時間,Yes,stations.op_hour
+加水點,是否可飲用,is_potable,Boolean,Yes,"true, false",是否達飲用標準,Yes,station_properties (EAV: property_name=is_potable)
+加水點,水量狀態,water_level,Enum,No,"full, partial, empty",供水充足程度,Yes,station_properties (EAV: property_name=water_level)
+避難所,總容納人數,capacity_total,Integer,No,-,站點最大負荷,Yes,station_properties (EAV: property_name=capacity_total)
+避難所、住宿點,剩餘床位,beds_available,Integer,Yes,-,即時收容剩餘空間,Yes,station_properties (EAV: property_name=beds_available)
+避難所、住宿點,寵物友善,pet_friendly,Boolean,No,"true, false",是否有接收寵物,Yes,station_properties (EAV: property_name=pet_friendly)
+避難所、住宿點,弱勢優先,vulnerable_priority,Boolean,No,"true, false",是否有無障礙或優先設施,Yes,station_properties (EAV: property_name=vulnerable_priority)
+避難所,是否有醫療支援,has_medical_support,Boolean,No,"true, false",重要決策因素,Yes,station_properties (EAV: property_name=has_medical_support)
+避難所、住宿點,是否可長期居住,long_term_stay,Boolean,No,"true, false",短期 vs 長期,Yes,station_properties (EAV: property_name=long_term_stay)
+住宿點,收費與否,is_charge,Boolean,Yes,"true, false",此志工住宿是否收費,Yes,station_properties (EAV: property_name=is_charge)
+住宿點,價格,price,Integer,Yes,any integer,此志工住宿價格,Yes,station_properties (EAV: property_name=price)
+洗澡,性別限制,gender_limit,Enum,No,"mixed, male_only, female_only",設施使用限制,Yes,station_properties (EAV: property_name=gender_limit)
+洗澡,有無熱水,has_hot_water,Boolean,No,"true, false",僅限洗澡點,Yes,station_properties (EAV: property_name=has_hot_water)
+廁所,是否可沖水,has_flush,Boolean,No,"true, false",災害時可能無水,Yes,station_properties (EAV: property_name=has_flush)
+物資站,物資類型,supply_types,Array,No,"food, water, medicine, daily_items, repair_tool",提供哪些物資,Yes,station_properties (EAV: multiple rows per item)
+物資站,是否限量,supply_rationed,Boolean,No,"true, false",是否限制領取,Yes,station_properties (EAV: property_name=supply_rationed)
+物資站,限制條件,supply_condition,Text,No,text,是否限制領取人群、身份,Yes,station_properties (EAV: property_name=supply_condition)
+加油站,油品種類,fuel_types,Array,No,"92, 95, 98, diesel",僅限加油站類型,Yes,station_properties (EAV: multiple rows per fuel)
+加油站,是否營業,is_open,Boolean,Yes,"true, false",是否仍在運作,Yes,station_properties (EAV: property_name=is_open)
+加油站,是否有優惠,is_onsale,Boolean,Yes,"true, false",是否提供優惠,Yes,station_properties (EAV: property_name=is_onsale)
+醫療站,醫護等級,medical_level,Enum,Yes,"first_aid, clinic, hospital",醫療支援能力等級,Yes,station_properties (EAV: property_name=medical_level)
+醫療站,專科能力,specialties,Array,No,"trauma, pediatric, pharmacy, surgical, Tuina/Massage",現場專科支援,Yes,station_properties (EAV: multiple rows per specialty)
+醫療站,是否有人員值守,has_staff,Boolean,Yes,"true, false",是否有急救人員,Yes,station_properties (EAV: property_name=has_staff)
+醫療站,可處理人數,capacity_available,Integer,No,-,處理能力,Yes,station_properties (EAV: property_name=capacity_available)
+醫療站,是否有獸醫,vet_available,Boolean,Yes,"true, false",是否有獸醫,Yes,station_properties (EAV: property_name=vet_available)
+交通點,是否運行中,is_operational,Boolean,Yes,"true, false",是否正常運作,Yes,station_properties (EAV: property_name=is_operational)
+交通點,接駁目的地,destination,String,No,-,接駁車開往何處,Yes,station_properties (EAV: property_name=destination)
+交通點,接駁頻率,frequency,String,No,-,接駁車接駁頻率、班次,Yes,station_properties (EAV: property_name=frequency)
+發電站,供電範圍,power_coverage,Text,No,-,影響區域描述,Yes,station_properties (EAV: property_name=power_coverage)
+發電站,是否穩定供電,power_stable,Boolean,No,"true, false",電力品質,Yes,station_properties (EAV: property_name=power_stable)
+通訊站,是否協助申辦、恢復網路,recover_internet,Boolean,Yes,"true, false",是否協助申辦、恢復網路,Yes,station_properties (EAV: property_name=recover_internet)
+通訊站,是否協助申辦、恢復電話,recover_phone,Boolean,Yes,"true, false",是否協助申辦、恢復電話,Yes,station_properties (EAV: property_name=recover_phone)
+通訊點,WiFi名稱,wifi_ssid,String,No,-,現場熱點名稱,Yes,station_properties (EAV: property_name=wifi_ssid)
+通訊點,網路品質,signal_strength,Enum,No,"strong, weak, unstable",網路連線穩定度,Yes,station_properties (EAV: property_name=signal_strength)
+充電站,充電接口,connector_types,Array,No,"usb_c, lightning, ac_110v",支援的設備接口,Yes,station_properties (EAV: multiple rows per connector)
+充電站,可用插座數,available_ports,Integer,No,-,設備數量,Yes,station_properties (EAV: property_name=available_ports)

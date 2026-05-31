@@ -11,21 +11,23 @@ dependencies = [
     "geoalchemy2>=0.18.1",
     "greenlet>=3.3.1",
     "h3>=4.4.1",
+    "httpx>=0.28.1",
     "line-bot-sdk>=3.21.0",
     "pydantic-settings>=2.12.0",
     "python-jose[cryptography]>=3.5.0",
     "python-multipart>=0.0.21",
+    "redis[asyncio]>=5.0.0",
     "shapely>=2.1.2",
     "sqlalchemy>=2.0.45",
     "strawberry-graphql[fastapi]>=0.288.2",
     "uvicorn>=0.40.0",
     "fastapi-limiter>=0.2.0",
-    "pyrate-limiter>=3.0.0",
+    "pyrate-limiter>=4.1.0",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
+    "fakeredis>=2.26.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "ruff>=0.11.0",
@@ -53,6 +55,15 @@ extend-select = [
     "D",      # pydocstyle (docstrings)
     "FAST",   # FastAPI-specific rules
 ]
+ignore = [
+    "B008",    # FastAPI Depends() in defaults is intentional
+    "FAST002", # Old-style Depends is valid, Annotated migration is optional
+    "D415",    # Chinese 。 is valid terminal punctuation; ASCII-only rule is too restrictive
+    "UP046",   # PEP 695 generics are a style preference; Generic[T] syntax is still valid
+]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/**" = ["D", "E501"]  # auto-generated migration files
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
