@@ -69,7 +69,7 @@ async def test_jwt_integrity(client: AsyncClient):
     headers = {"Authorization": "Bearer invalid.token.payload"}
     response = await client.get("/api/v1/users/me", headers=headers)
     assert response.status_code == 401
-    assert "無法驗證憑證" in response.json()["detail"]
+    assert "Could not validate credentials" in response.json()["detail"]
 
     # 案例 2: 缺少 Token
     response = await client.get("/api/v1/users/me")

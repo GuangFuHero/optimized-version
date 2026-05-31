@@ -4,6 +4,7 @@ import hashlib
 import os
 import uuid
 
+import fakeredis.aioredis
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -14,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 os.environ["ENV"] = "testing"
 
 from app.core import security
+from app.core.redis import get_redis
 from app.main import app
 from app.models.auth import Base, Group, Policy, PolicyGroupAssign
 
@@ -61,11 +63,14 @@ async def client(db_session):
     async def override_get_db():
         yield db_session
 
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=False)
     app.dependency_overrides[security.get_db] = override_get_db
+    app.dependency_overrides[get_redis] = lambda: fake_redis
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+    await fake_redis.aclose()
 
 @pytest.mark.asyncio
 async def test_full_rbac_flow(client: AsyncClient):
@@ -107,7 +112,7 @@ async def test_full_rbac_flow(client: AsyncClient):
     # (a) 應具有讀取權限
     map_response = await client.get("/api/v1/rbac-test/map-view", headers=headers)
     assert map_response.status_code == 200
-    assert "具有檢視地圖的權限" in map_response.json()["message"]
+    assert "has map view permission" in map_response.json()["message"]
 
     # (b) 不應具有建立權限
     create_response = await client.get("/api/v1/rbac-test/map-create", headers=headers)

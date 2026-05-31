@@ -4,6 +4,7 @@ import hashlib
 import os
 import uuid
 
+import fakeredis.aioredis
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -14,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 os.environ["ENV"] = "testing"
 
 from app.core import security
+from app.core.redis import get_redis
 from app.main import app
 from app.models.auth import Base
 
@@ -34,13 +36,16 @@ async def db_session():
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session):
-    """Configure the test HTTP client with a database dependency override."""
+    """Configure the test HTTP client with database and Redis dependency overrides."""
     async def override_get_db():
         yield db_session
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=False)
     app.dependency_overrides[security.get_db] = override_get_db
+    app.dependency_overrides[get_redis] = lambda: fake_redis
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+    await fake_redis.aclose()
 
 @pytest.mark.asyncio
 async def test_auth_full_flow(client: AsyncClient):
@@ -94,7 +99,7 @@ async def test_login_failures(client: AsyncClient):
         data={"username": "any_user", "password": "wrong_password"}
     )
     assert response.status_code == 401
-    assert "帳號或密碼錯誤" in response.json()["detail"]
+    assert "Incorrect username or password" in response.json()["detail"]
 
 @pytest.mark.asyncio
 async def test_malformed_password_logic():

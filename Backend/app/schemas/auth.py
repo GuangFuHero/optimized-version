@@ -7,13 +7,6 @@ from pydantic import BaseModel, Field
 
 # --- Token 相關 ---
 
-class Token(BaseModel):
-    """JWT access token response."""
-
-    access_token: str
-    token_type: str
-
-
 class TokenData(BaseModel):
     """Decoded JWT payload data."""
 
@@ -68,4 +61,26 @@ class UserUpdate(BaseModel):
     """Request body for partial user profile updates."""
 
     name: str | None = Field(None, min_length=1, max_length=100)
-    password: str | None = Field(None, min_length=6, max_length=255)
+
+
+class TokenPair(BaseModel):
+    """Access + refresh token pair returned by login/refresh."""
+
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class RefreshRequest(BaseModel):
+    """Request body carrying a refresh token to exchange."""
+
+    refresh_token: str
+
+
+class ChangePasswordRequest(BaseModel):
+    """Request body for changing password (all values already frontend-hashed)."""
+
+    old_password: str = Field(..., min_length=6, max_length=255)
+    new_password: str = Field(..., min_length=6, max_length=255)
+    salt_frontend: str = Field(..., description="Frontend salt for the new password")

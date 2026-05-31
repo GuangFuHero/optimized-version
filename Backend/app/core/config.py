@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     # 正式環境一律從外部 Secret Manager 注入。
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-for-local-dev")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15            # short-lived access token
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 14              # refresh token lifetime (Redis TTL)
 
     # Redis 連線字串
     # Docker 內部連線預設: redis://redis:6379

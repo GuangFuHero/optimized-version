@@ -26,11 +26,5 @@ async def update_user_me(
 ):
     """更新當前登入使用者的個人資料。"""
     update_data = user_in.model_dump(exclude_unset=True)
-    
-    # 如果有修改密碼，需要加密
-    if "password" in update_data:
-        update_data["password"] = security.get_password_hash(update_data["password"])
-    
-    # 使用 Repository 更新
     updated_user = await user_repository.update(db, db_obj=current_user, obj_in=update_data)
     return updated_user

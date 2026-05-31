@@ -1,7 +1,6 @@
 """Authentication endpoints: user registration, login, and salt retrieval."""
 
 import os
-from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -11,8 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
 from app.core.config import settings
+from app.core.redis import get_redis
+from app.models.auth import User
 from app.repositories.auth_repository import group_repository, user_repository
-from app.schemas.auth import Token, UserCreate, UserResponse, UserSaltResponse
+from app.repositories.session_repository import (
+    InvalidRefreshToken,
+    RefreshTokenReuse,
+    SessionRepository,
+)
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    RefreshRequest,
+    TokenPair,
+    UserCreate,
+    UserResponse,
+    UserSaltResponse,
+)
 
 router = APIRouter()
 
@@ -69,7 +82,7 @@ async def register(
         # 回應 Reviewer：資源衝突使用 409 Conflict 較為精確
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="該用戶名稱已被註冊"
+            detail="Username already registered"
         )
 
     # 2. 建立新使用者
@@ -91,30 +104,75 @@ async def register(
     return new_user
 
 
-@router.post("/login", 
-             response_model=Token,
+@router.post("/login",
+             response_model=TokenPair,
              dependencies=[Depends(get_rate_limiter(5, 60))])
 async def login(
+        request: Request,
         form_data: OAuth2PasswordRequestForm = Depends(),
-        db: AsyncSession = Depends(security.get_db)
+        db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
 ):
-    """使用者登入，回傳 JWT Token。
-
-    [Rate Limit: 5 次/每分鐘]
-    """
+    """使用者登入，建立 session 並回傳 access + refresh token。"""
     user = await user_repository.get_by_name(db, name=form_data.username)
-
     if not user or not security.verify_password(form_data.password, user.password):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="帳號或密碼錯誤",
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    # 簽發 Token (使用 UUID 字串)
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = security.create_access_token(
-        data={"sub": str(user.uuid)}, expires_delta=access_token_expires
+    device = request.headers.get("user-agent", "unknown")
+    sid, refresh_token = await SessionRepository(redis).create_session(str(user.uuid), device)
+    access_token = security.create_access_token(data={"sub": str(user.uuid)}, sid=sid)
+    return TokenPair(
+        access_token=access_token, refresh_token=refresh_token,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+
+@router.post("/refresh",
+             response_model=TokenPair,
+             dependencies=[Depends(get_rate_limiter(10, 60))])
+async def refresh(
+        body: RefreshRequest,
+        redis=Depends(get_redis),
+):
+    """以 refresh token 換發新的 access token，並 rotate refresh token。"""
+    repo = SessionRepository(redis)
+    try:
+        sid, user_uuid, new_refresh = await repo.rotate(body.refresh_token)
+    except (InvalidRefreshToken, RefreshTokenReuse) as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from err
+    access_token = security.create_access_token(data={"sub": user_uuid}, sid=sid)
+    return TokenPair(
+        access_token=access_token, refresh_token=new_refresh,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+        session=Depends(security.get_current_session),
+        redis=Depends(get_redis),
+):
+    """登出：撤銷該使用者的所有 session（全域登出）。"""
+    user_uuid, _sid = session
+    await SessionRepository(redis).revoke_all_for_user(user_uuid)
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT,
+             dependencies=[Depends(get_rate_limiter(5, 60))])
+async def change_password(
+        body: ChangePasswordRequest,
+        current_user: User = Depends(security.get_current_user),
+        db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+):
+    """更改密碼：驗證舊密碼，寫入新密碼，並撤銷所有 session（強制重新登入）。"""
+    if not security.verify_password(body.old_password, current_user.password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect current password")
+    new_hash = security.get_password_hash(body.new_password, body.salt_frontend)
+    await user_repository.update(db, db_obj=current_user, obj_in={"password": new_hash})
+    await SessionRepository(redis).revoke_all_for_user(str(current_user.uuid))
