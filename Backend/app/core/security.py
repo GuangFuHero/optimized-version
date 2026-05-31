@@ -236,3 +236,22 @@ class PermissionChecker:
 def has_permission(resource: str, action: str):
     """FastAPI dependency factory for resource and action permission checks."""
     return Depends(PermissionChecker(resource, action))
+
+
+async def require_onboarded(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Gate: require the user to own >=1 verified contact. Raises 403 until onboarding completes."""
+    from sqlalchemy import select  # local import to avoid reshuffling module header
+
+    from app.models.auth import UserContact
+    q = select(UserContact.uuid).where(
+        UserContact.user_uuid == current_user.uuid, UserContact.verified.is_(True)
+    ).limit(1)
+    if (await db.execute(q)).first() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Onboarding incomplete: verify a contact method first",
+        )
+    return current_user

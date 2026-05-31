@@ -1,6 +1,7 @@
 """Pydantic schemas for authentication requests and responses."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -11,24 +12,6 @@ class TokenData(BaseModel):
     """Decoded JWT payload data."""
 
     user_uuid: str | None = None
-
-
-# --- 使用者註冊與登入 ---
-
-class UserCreate(BaseModel):
-    """Request body for user registration."""
-
-    name: str = Field(..., min_length=1, max_length=100)
-    # 此欄位接收前端經過 PBKDF2 雜湊後的結果
-    password: str = Field(..., min_length=6, max_length=255)
-    salt_frontend: str = Field(..., description="Frontend generated salt (hex)")
-
-
-class UserLogin(BaseModel):
-    """Request body for user login (legacy, not used by OAuth2 form flow)."""
-
-    name: str
-    hash_password: str
 
 
 # --- 使用者回傳與更新 ---
@@ -84,3 +67,26 @@ class ChangePasswordRequest(BaseModel):
     old_password: str = Field(..., min_length=6, max_length=255)
     new_password: str = Field(..., min_length=6, max_length=255)
     salt_frontend: str = Field(..., description="Frontend salt for the new password")
+
+
+class RegisterRequest(BaseModel):
+    """Verify-then-create registration. Phase 1 accepts type == 'email' only."""
+
+    type: Literal["email", "phone"] = "email"
+    value: str = Field(..., min_length=1, max_length=320)
+    password: str = Field(..., min_length=6, max_length=255)  # already frontend-hashed
+    salt_frontend: str = Field(..., description="Frontend salt (hex)")
+    name: str | None = Field(None, min_length=1, max_length=100)
+
+
+class VerifyEmailRequest(BaseModel):
+    """Body carrying the single-use email-verification token."""
+
+    token: str = Field(..., min_length=1)
+
+
+class ResendVerificationRequest(BaseModel):
+    """Request to resend a verification message for a pending registration."""
+
+    type: Literal["email", "phone"] = "email"
+    value: str = Field(..., min_length=1, max_length=320)

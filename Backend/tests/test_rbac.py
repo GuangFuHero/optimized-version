@@ -73,35 +73,33 @@ async def client(db_session):
     await fake_redis.aclose()
 
 @pytest.mark.asyncio
-async def test_full_rbac_flow(client: AsyncClient):
-    """驗證完整的 RBAC 流程：註冊 -> 獲取 Salt -> 登入 -> 權限檢查."""
-    test_user_name = f"user_{uuid.uuid4().hex[:8]}"
+async def test_full_rbac_flow(client: AsyncClient, db_session: AsyncSession):
+    """驗證完整的 RBAC 流程：建立帳號 -> 獲取 Salt -> 登入 -> 權限檢查."""
+    from app.services.auth_account import create_password_account
+
+    test_email = f"user_{uuid.uuid4().hex[:8]}@t.local"
     test_password = "password123"
     test_salt_frontend = "abcd1234efgh5678"
-    
+
     # 模擬前端傳送雜湊後的密碼
     test_hash_password_v1 = hashlib.sha256((test_password + test_salt_frontend).encode()).hexdigest()
 
-    # 1. 註冊使用者
-    reg_response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "name": test_user_name, 
-            "password": test_hash_password_v1,
-            "salt_frontend": test_salt_frontend
-        }
+    # 1. 直接建立帳號 (verify-then-create 流程於 test_register_flow 另行驗證)
+    await create_password_account(
+        db_session,
+        email=test_email,
+        password_hash=security.get_password_hash(test_hash_password_v1, test_salt_frontend),
     )
-    assert reg_response.status_code == 200
 
-    # 2. 登入前獲取 Salt (驗證是否能正確從 DB 結構中解析出前端 Salt)
-    salt_response = await client.get(f"/api/v1/auth/salt/{test_user_name}")
+    # 2. 登入前獲取 Salt (驗證是否能正確從 identity 結構中解析出前端 Salt)
+    salt_response = await client.get(f"/api/v1/auth/salt/{test_email}")
     assert salt_response.status_code == 200
     assert salt_response.json()["salt_frontend"] == test_salt_frontend
 
-    # 3. 執行登入
+    # 3. 執行登入 (以 email 為帳號)
     login_response = await client.post(
         "/api/v1/auth/login",
-        data={"username": test_user_name, "password": test_hash_password_v1}
+        data={"username": test_email, "password": test_hash_password_v1}
     )
     assert login_response.status_code == 200
     token_data = login_response.json()

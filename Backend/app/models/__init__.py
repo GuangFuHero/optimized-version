@@ -6,7 +6,9 @@ from app.models.auth import (  # noqa: F401
     PolicyGroupAssign,
     PolicyUserAssign,
     User,
+    UserContact,
     UserGroupAssign,
+    UserIdentity,
 )
 from app.models.geo import BaseGeometry, ClosureArea, Station  # noqa: F401
 from app.models.photo import Photo  # noqa: F401

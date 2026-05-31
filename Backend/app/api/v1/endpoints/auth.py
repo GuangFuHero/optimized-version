@@ -1,6 +1,7 @@
 """Authentication endpoints: user registration, login, and salt retrieval."""
 
 import os
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -10,22 +11,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
 from app.core.config import settings
+from app.core.email import build_verification_email, get_email_sender
+from app.core.normalize import normalize_email
 from app.core.redis import get_redis
 from app.models.auth import User
-from app.repositories.auth_repository import group_repository, user_repository
+from app.repositories.auth_repository import (
+    contact_repository,
+    identity_repository,
+    user_repository,
+)
 from app.repositories.session_repository import (
     InvalidRefreshToken,
     RefreshTokenReuse,
     SessionRepository,
 )
+from app.repositories.verification_repository import VerificationRepository
 from app.schemas.auth import (
     ChangePasswordRequest,
     RefreshRequest,
+    RegisterRequest,
+    ResendVerificationRequest,
     TokenPair,
-    UserCreate,
-    UserResponse,
     UserSaltResponse,
+    VerifyEmailRequest,
 )
+from app.services.auth_account import create_password_account
 
 router = APIRouter()
 
@@ -45,63 +55,113 @@ def get_rate_limiter(times: int, seconds: int):
     return dynamic_rate_limiter
 
 
-@router.get("/salt/{username}", 
-            response_model=UserSaltResponse,
+@router.get("/salt/{value}", response_model=UserSaltResponse,
             dependencies=[Depends(get_rate_limiter(10, 60))])
-async def get_user_salt(
-        username: str,
-        db: AsyncSession = Depends(security.get_db)
-):
-    """獲取使用者的前端 salt。"""
-    user = await user_repository.get_by_name(db, name=username)
-    
-    if user:
-        salt_frontend = security.parse_salt_frontend(user.password)
-        if salt_frontend:
-            return {"salt_frontend": salt_frontend}
-
-    # 產生假 Salt
-    fake_salt = security.hashlib.sha256(
-        (username + settings.SECRET_KEY).encode()
-    ).hexdigest()[:32]
-
+async def get_user_salt(value: str, db: AsyncSession = Depends(security.get_db)):
+    """Return the frontend salt for an email's password identity, or a deterministic fake salt."""
+    seed = value
+    try:
+        email = normalize_email(value)
+        seed = email  # hash the normalized form so case/space variants collapse to one fake salt
+        user = await contact_repository.get_user_by_contact(db, type_="email", value=email)
+        if user is not None:
+            identity = await identity_repository.get_password_identity(db, str(user.uuid))
+            if identity and identity.password_hash:
+                salt = security.parse_salt_frontend(identity.password_hash)
+                if salt:
+                    return {"salt_frontend": salt}
+    except ValueError:
+        pass  # malformed email → fall through to fake salt
+    fake_salt = security.hashlib.sha256((seed + settings.SECRET_KEY).encode()).hexdigest()[:32]
     return {"salt_frontend": fake_salt}
 
 
-@router.post("/register", 
-             response_model=UserResponse,
+@router.post("/register", status_code=status.HTTP_202_ACCEPTED,
              dependencies=[Depends(get_rate_limiter(3, 60))])
 async def register(
-        user_in: UserCreate,
-        db: AsyncSession = Depends(security.get_db)
+        body: RegisterRequest,
+        db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+        email_sender=Depends(get_email_sender),
 ):
-    """使用者註冊。"""
-    # 1. 檢查名稱是否已被使用
-    existing_user = await user_repository.get_by_name(db, name=user_in.name)
-    if existing_user:
-        # 回應 Reviewer：資源衝突使用 409 Conflict 較為精確
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Username already registered"
-        )
+    """Verify-then-create: store a pending registration in Redis and email a verification link.
 
-    # 2. 建立新使用者
-    user_data = {
-        "name": user_in.name,
-        # 同步命名變更：使用 user_in.password (原本為 hash_password)
-        "password": security.get_password_hash(user_in.password, user_in.salt_frontend),
-        "credibility_score": 50.0
-    }
-    new_user = await user_repository.create(db, obj_in=user_data)
+    Never writes an unverified DB row. Phase 1 supports email only.
+    """
+    if body.type != "email":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="Only email registration is supported")
+    try:
+        email = normalize_email(body.value)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid email") from err
 
-    # 3. 自動指派 'Login User' 角色
-    login_group = await group_repository.get_by_name(db, name="Login User")
-    if login_group:
-        await user_repository.add_to_group(db, user_uuid=new_user.uuid, group_uuid=login_group.uuid)
+    if await contact_repository.is_value_taken(db, type_="email", value=email):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already in use")
 
-    await db.refresh(new_user)
+    password_hash = security.get_password_hash(body.password, body.salt_frontend)
+    token = await VerificationRepository(redis).issue_email_registration(
+        email=email, password_hash=password_hash, name=body.name
+    )
+    verify_url = f"{settings.APP_BASE_URL}/verify-email?token={token}"
+    subject, content = build_verification_email(verify_url)
+    await email_sender.send(email, subject, content)
+    return {"detail": "Verification email sent"}
 
-    return new_user
+
+@router.post("/verify-email", response_model=TokenPair,
+             dependencies=[Depends(get_rate_limiter(10, 60))])
+async def verify_email(
+        body: VerifyEmailRequest,
+        request: Request,
+        db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+):
+    """Consume a pending registration, create the account, and issue a session (verify == login)."""
+    payload = await VerificationRepository(redis).consume_email_registration(body.token)
+    if payload is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            detail="Invalid or expired verification token")
+    email = payload["value"]
+    # re-check the race: someone may have verified the same email between register and now
+    if await contact_repository.is_value_taken(db, type_="email", value=email):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already in use")
+    user = await create_password_account(
+        db, email=email, password_hash=payload["password_hash"], name=payload.get("name")
+    )
+    device = request.headers.get("user-agent", "unknown")
+    sid, refresh_token = await SessionRepository(redis).create_session(str(user.uuid), device)
+    access_token = security.create_access_token(data={"sub": str(user.uuid)}, sid=sid)
+    return TokenPair(access_token=access_token, refresh_token=refresh_token,
+                     expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+
+
+@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED,
+             dependencies=[Depends(get_rate_limiter(2, 60))])
+async def resend_verification(
+        body: ResendVerificationRequest,
+        db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+        email_sender=Depends(get_email_sender),
+):
+    """Resend the verification link for a still-pending email registration (rate limited)."""
+    if body.type != "email":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Only email is supported")
+    try:
+        email = normalize_email(body.value)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid email") from err
+    if await contact_repository.is_value_taken(db, type_="email", value=email):
+        # already a real account → nothing to resend; do not leak beyond the register 409 policy
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already in use")
+    token = await VerificationRepository(redis).reissue_email_registration(email)
+    if token is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            detail="No pending registration for this email")
+    verify_url = f"{settings.APP_BASE_URL}/verify-email?token={token}"
+    subject, content = build_verification_email(verify_url)
+    await email_sender.send(email, subject, content)
+    return {"detail": "Verification email re-sent"}
 
 
 @router.post("/login",
@@ -113,20 +173,27 @@ async def login(
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
 ):
-    """使用者登入，建立 session 並回傳 access + refresh token。"""
-    user = await user_repository.get_by_name(db, name=form_data.username)
-    if not user or not security.verify_password(form_data.password, user.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    """Email + password login: contact → user → password identity → verify."""
+    cred_exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        email = normalize_email(form_data.username)
+    except ValueError:
+        raise cred_exc from None
+    user = await contact_repository.get_user_by_contact(db, type_="email", value=email)
+    if user is None:
+        raise cred_exc
+    identity = await identity_repository.get_password_identity(db, str(user.uuid))
+    if identity is None or not security.verify_password(form_data.password, identity.password_hash):
+        raise cred_exc
+    await user_repository.update(db, db_obj=user, obj_in={"last_login_at": datetime.now(UTC)})
     device = request.headers.get("user-agent", "unknown")
     sid, refresh_token = await SessionRepository(redis).create_session(str(user.uuid), device)
     access_token = security.create_access_token(data={"sub": str(user.uuid)}, sid=sid)
-    return TokenPair(
-        access_token=access_token, refresh_token=refresh_token,
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
+    return TokenPair(access_token=access_token, refresh_token=refresh_token,
+                     expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
 
 
 @router.post("/refresh",
@@ -170,9 +237,14 @@ async def change_password(
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
 ):
-    """更改密碼：驗證舊密碼，寫入新密碼，並撤銷所有 session（強制重新登入）。"""
-    if not security.verify_password(body.old_password, current_user.password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect current password")
+    """Verify old password against the password identity, write the new hash, revoke all sessions."""
+    user_uuid = str(current_user.uuid)
+    identity = await identity_repository.get_password_identity(db, user_uuid)
+    if identity is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="No password set; use /auth/set-password (available in a later phase)")
+    if not security.verify_password(body.old_password, identity.password_hash):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Incorrect current password")
     new_hash = security.get_password_hash(body.new_password, body.salt_frontend)
-    await user_repository.update(db, db_obj=current_user, obj_in={"password": new_hash})
-    await SessionRepository(redis).revoke_all_for_user(str(current_user.uuid))
+    await identity_repository.update(db, db_obj=identity, obj_in={"password_hash": new_hash})
+    await SessionRepository(redis).revoke_all_for_user(user_uuid)

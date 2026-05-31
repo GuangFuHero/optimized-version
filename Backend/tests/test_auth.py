@@ -1,105 +1,73 @@
-"""Integration tests for authentication endpoints: register, login, and salt retrieval."""
+"""Integration tests for authentication endpoints: register, verify, login, and salt retrieval."""
 
-import hashlib
 import os
 import uuid
 
-import fakeredis.aioredis
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
 
 # 強制設定為測試環境，避開全域 Rate Limit
 os.environ["ENV"] = "testing"
 
 from app.core import security
-from app.core.redis import get_redis
-from app.main import app
-from app.models.auth import Base
 
-# 測試用資料庫
-TEST_SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
-
-@pytest_asyncio.fixture(scope="function")
-async def db_session():
-    """Create an isolated test database session with a freshly created schema."""
-    engine = create_async_engine(TEST_SQLALCHEMY_DATABASE_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    TestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with TestingSessionLocal() as session:
-        yield session
-    await engine.dispose()
-
-@pytest_asyncio.fixture(scope="function")
-async def client(db_session):
-    """Configure the test HTTP client with database and Redis dependency overrides."""
-    async def override_get_db():
-        yield db_session
-    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=False)
-    app.dependency_overrides[security.get_db] = override_get_db
-    app.dependency_overrides[get_redis] = lambda: fake_redis
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
-    app.dependency_overrides.clear()
-    await fake_redis.aclose()
 
 @pytest.mark.asyncio
-async def test_auth_full_flow(client: AsyncClient):
-    """測試完整的註冊與登入流程 (Happy Path)."""
-    username = f"user_{uuid.uuid4().hex[:6]}"
-    password = "password123"
+async def test_auth_full_flow(client, capture_email):
+    """測試完整的註冊 -> 驗證信箱 -> 登入流程 (Happy Path)."""
+    email = f"user_{uuid.uuid4().hex[:6]}@t.local"
+    password = "pw123456"
 
-    # 1. 獲取 Salt
-    salt_res = await client.get(f"/api/v1/auth/salt/{username}")
-    assert salt_res.status_code == 200
-    salt_frontend = salt_res.json()["salt_frontend"]
-
-    # 2. 模擬前端 PBKDF2 雜湊 (10萬次) 並註冊
-    # 這裡為了簡單測試使用一次雜湊模擬，邏輯與 security.py 一致即可
-    hash_p1 = hashlib.pbkdf2_hmac('sha256', password.encode(), salt_frontend.encode(), 100000).hex()
-    
+    # 1. 註冊 (verify-then-create) -> 202
     reg_res = await client.post(
         "/api/v1/auth/register",
-        json={"name": username, "password": hash_p1, "salt_frontend": salt_frontend}
+        json={"type": "email", "value": email, "password": password, "salt_frontend": "abc"},
     )
-    assert reg_res.status_code == 200
+    assert reg_res.status_code == 202
 
-    # 3. 再次獲取 Salt (應拿到資料庫中存儲的同一個 Salt)
-    salt_res_2 = await client.get(f"/api/v1/auth/salt/{username}")
-    assert salt_res_2.json()["salt_frontend"] == salt_frontend
+    # 2. 從擷取的驗證信中讀出 token 並驗證信箱
+    token = capture_email.last_token
+    assert token
+    verify_res = await client.post("/api/v1/auth/verify-email", json={"token": token})
+    assert verify_res.status_code == 200
+    assert "access_token" in verify_res.json()
+    assert "refresh_token" in verify_res.json()
 
-    # 4. 登入
+    # 3. 以 email 登入
     login_res = await client.post(
         "/api/v1/auth/login",
-        data={"username": username, "password": hash_p1}
+        data={"username": email, "password": password},
     )
     assert login_res.status_code == 200
     assert "access_token" in login_res.json()
 
+
 @pytest.mark.asyncio
-async def test_registration_conflict_409(client: AsyncClient):
-    """測試重複註冊應回傳 409."""
-    username = f"conflict_{uuid.uuid4().hex[:6]}"
-    payload = {"name": username, "password": "secure_password", "salt_frontend": "salt"}
-    
+async def test_registration_conflict_409(client, capture_email):
+    """測試重複註冊已驗證的信箱應回傳 409."""
+    email = f"conflict_{uuid.uuid4().hex[:6]}@t.local"
+    payload = {"type": "email", "value": email, "password": "pw123456", "salt_frontend": "abc"}
+
+    # 第一次註冊 + 驗證，帳號就會存在
     await client.post("/api/v1/auth/register", json=payload)
+    token = capture_email.last_token
+    await client.post("/api/v1/auth/verify-email", json={"token": token})
+
+    # 再次以相同信箱註冊 -> 409
     res = await client.post("/api/v1/auth/register", json=payload)
     assert res.status_code == 409
 
+
 @pytest.mark.asyncio
-async def test_login_failures(client: AsyncClient):
+async def test_login_failures(client):
     """測試各種登入失敗情況."""
-    # 案例 1: 密碼錯誤
+    # 案例 1: 帳號不存在 / 密碼錯誤
     response = await client.post(
         "/api/v1/auth/login",
-        data={"username": "any_user", "password": "wrong_password"}
+        data={"username": "any_user", "password": "wrong_password"},
     )
     assert response.status_code == 401
-    assert "Incorrect username or password" in response.json()["detail"]
+    assert "Incorrect email or password" in response.json()["detail"]
+
 
 @pytest.mark.asyncio
 async def test_malformed_password_logic():

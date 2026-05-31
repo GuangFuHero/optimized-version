@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.core.security import create_access_token, generate_salt, get_password_hash
+from app.core.security import create_access_token
 from app.db.session import Base
 from app.main import app
 from app.models.auth import Group, Policy, PolicyGroupAssign, User, UserGroupAssign
@@ -96,8 +96,7 @@ async def _create_user_with_role(group_name: str) -> tuple[str, str]:
     """Create a user, assign to group, return (user_uuid, token)."""
     async with test_db() as db:
         name = f"test_{uuid_mod.uuid4().hex[:8]}"
-        salt = generate_salt()
-        user = User(name=name, password=get_password_hash("pass123", salt))
+        user = User(name=name)
         db.add(user)
         await db.flush()
 

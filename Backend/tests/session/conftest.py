@@ -6,7 +6,6 @@ import uuid as uuid_mod
 import fakeredis.aioredis
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -16,7 +15,8 @@ from app.core.redis import get_redis
 from app.core.security import generate_salt, get_password_hash
 from app.db.session import Base
 from app.main import app
-from app.models.auth import Group, User, UserGroupAssign
+from app.models.auth import Group
+from app.services.auth_account import create_password_account
 
 TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 _db_ready = False
@@ -69,13 +69,10 @@ def make_user():
         eng = create_async_engine(TEST_DB_URL, echo=False)
         factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=False)
         async with factory() as db:
-            user = User(name=name, password=get_password_hash(password, salt))
-            db.add(user)
-            await db.flush()
-            group = (await db.execute(select(Group).where(Group.name == "Login User"))).scalar_one()
-            db.add(UserGroupAssign(user_uuid=user.uuid, group_uuid=group.uuid))
-            await db.commit()
+            user = await create_password_account(
+                db, email=f"{name}@t.local", password_hash=get_password_hash(password, salt), name=name
+            )
             uid = str(user.uuid)
         await eng.dispose()
-        return uid, password, name
+        return uid, password, f"{name}@t.local"
     return _make
