@@ -1,5 +1,7 @@
 """Repositories for User, Group, and Policy models with RBAC query helpers."""
 
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,6 +111,16 @@ class ContactRepository(GenericRepository[UserContact]):
         """True if any contact row (verified or not) already holds this (type, value)."""
         q = select(UserContact.uuid).where(UserContact.type == type_, UserContact.value == value)
         return (await db.execute(q)).first() is not None
+
+    async def create_verified(self, db: AsyncSession, *, user_uuid, type_: str, value: str) -> UserContact:
+        """Attach a VERIFIED contact (value pre-normalized) to an existing user."""
+        contact = UserContact(
+            user_uuid=user_uuid, type=type_, value=value, verified=True, verified_at=datetime.now(UTC)
+        )
+        db.add(contact)
+        await db.commit()
+        await db.refresh(contact)
+        return contact
 
 
 class IdentityRepository(GenericRepository[UserIdentity]):

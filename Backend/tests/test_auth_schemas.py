@@ -27,3 +27,10 @@ def test_verify_request():
 def test_resend_request():
     """The resend body carries the contact value to resend to."""
     assert ResendVerificationRequest(type="email", value="a@x.com").value == "a@x.com"
+
+
+def test_add_and_verify_contact_requests():
+    """AddContactRequest + VerifyContactRequest carry the expected fields."""
+    from app.schemas.auth import AddContactRequest, VerifyContactRequest
+    assert AddContactRequest(type="phone", value="0912345678").type == "phone"
+    assert VerifyContactRequest(type="phone", value="0912345678", code="123456").code == "123456"

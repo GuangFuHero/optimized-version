@@ -64,6 +64,19 @@ async def test_contact_taken_checks_any_verification_state(db):
 
 
 @pytest.mark.asyncio
+async def test_create_verified_contact(db):
+    """create_verified attaches a verified contact to an existing user."""
+    from app.models.auth import User
+    from app.repositories.auth_repository import contact_repository
+    u = User(name="A")
+    db.add(u)
+    await db.flush()
+    c = await contact_repository.create_verified(db, user_uuid=u.uuid, type_="phone", value="+886912345678")
+    assert c.verified is True and c.type == "phone" and c.value == "+886912345678"
+    assert await contact_repository.get_user_by_contact(db, type_="phone", value="+886912345678") is not None
+
+
+@pytest.mark.asyncio
 async def test_get_password_identity(db):
     """The password identity for a user is returned when present."""
     u = User(name="A")

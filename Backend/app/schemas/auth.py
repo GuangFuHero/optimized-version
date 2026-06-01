@@ -92,3 +92,18 @@ class ResendVerificationRequest(BaseModel):
 
     type: Literal["email", "phone"] = "email"
     value: str = Field(..., min_length=1, max_length=320)
+
+
+class AddContactRequest(BaseModel):
+    """Body to start adding a contact (email/phone) to the current account."""
+
+    type: Literal["email", "phone"] = "email"
+    value: str = Field(..., min_length=1, max_length=320)
+
+
+class VerifyContactRequest(BaseModel):
+    """Body to verify a contact-add with the 6-digit code."""
+
+    type: Literal["email", "phone"] = "email"
+    value: str = Field(..., min_length=1, max_length=320)
+    code: str = Field(..., min_length=4, max_length=8)

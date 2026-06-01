@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_limiter.depends import RateLimiter
 from pyrate_limiter import Duration, Limiter, Rate
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
@@ -28,12 +29,14 @@ from app.repositories.session_repository import (
 )
 from app.repositories.verification_repository import VerificationRepository
 from app.schemas.auth import (
+    AddContactRequest,
     ChangePasswordRequest,
     RefreshRequest,
     RegisterRequest,
     ResendVerificationRequest,
     TokenPair,
     UserSaltResponse,
+    VerifyContactRequest,
     VerifyRequest,
 )
 from app.services.auth_account import create_account
@@ -266,3 +269,86 @@ async def change_password(
     new_hash = security.get_password_hash(body.new_password, body.salt_frontend)
     await identity_repository.update(db, db_obj=identity, obj_in={"password_hash": new_hash})
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
+
+
+@router.post("/contacts", status_code=status.HTTP_202_ACCEPTED,
+             dependencies=[Depends(get_rate_limiter(3, 60))])
+async def add_contact(
+        body: AddContactRequest,
+        current_user: User = Depends(security.get_current_user),
+        db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+        email_sender=Depends(get_email_sender),
+        sms_sender=Depends(get_sms_sender),
+):
+    """Start adding a contact to the current account: send a 6-digit code (verify-then-attach)."""
+    try:
+        ident = _normalize_identifier(body.type, body.value)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid identifier") from err
+    if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"{body.type.capitalize()} already in use")
+    code = await VerificationRepository(redis).issue_contact_verification(
+        user_uuid=str(current_user.uuid), type_=body.type, value=ident)
+    if body.type == "email":
+        subject, content = build_verification_email(code)
+        await email_sender.send(ident, subject, content)
+    else:
+        await sms_sender.send(ident, build_verification_sms(code))
+    return {"detail": "Verification code sent"}
+
+
+@router.post("/contacts/verify", dependencies=[Depends(get_rate_limiter(10, 60))])
+async def verify_contact(
+        body: VerifyContactRequest,
+        current_user: User = Depends(security.get_current_user),
+        db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+):
+    """Verify a 6-digit code and attach the verified contact to the current account."""
+    try:
+        ident = _normalize_identifier(body.type, body.value)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code") from err
+    payload = await VerificationRepository(redis).consume_contact_verification(
+        user_uuid=str(current_user.uuid), type_=body.type, value=ident, code=body.code)
+    if payload is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
+    if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
+    try:
+        await contact_repository.create_verified(
+            db, user_uuid=current_user.uuid, type_=body.type, value=ident)
+    except IntegrityError as err:  # F-C: rare race — value claimed between the check above and the insert
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use") from err
+    return {"detail": "Contact added"}
+
+
+@router.post("/contacts/resend", status_code=status.HTTP_202_ACCEPTED,
+             dependencies=[Depends(get_rate_limiter(2, 60))])
+async def resend_contact(
+        body: AddContactRequest,
+        current_user: User = Depends(security.get_current_user),
+        db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+        email_sender=Depends(get_email_sender),
+        sms_sender=Depends(get_sms_sender),
+):
+    """Resend the contact-verification code for a still-pending add (rate limited)."""
+    try:
+        ident = _normalize_identifier(body.type, body.value)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid identifier") from err
+    if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
+    code = await VerificationRepository(redis).reissue_contact_verification(
+        user_uuid=str(current_user.uuid), type_=body.type, value=ident)
+    if code is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No pending contact verification")
+    if body.type == "email":
+        subject, content = build_verification_email(code)
+        await email_sender.send(ident, subject, content)
+    else:
+        await sms_sender.send(ident, build_verification_sms(code))
+    return {"detail": "Verification code re-sent"}
