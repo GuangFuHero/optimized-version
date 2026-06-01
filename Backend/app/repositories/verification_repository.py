@@ -1,65 +1,74 @@
-"""Redis-backed verification store. Holds pending email registrations (verify-then-create, design §3.1).
+"""Redis-backed unified verification store: pending registrations verified by a 6-digit code.
 
-Two keys per pending registration so we can look up by token (verify) AND by email (resend):
-  pending_reg:email:{email}  -> payload incl. current token_hash
-  pending_reg:token:{hash}   -> email pointer
-Generalizes to an MFA-ready OtpService later (design §6); Phase 1 only needs the email path.
+One key per pending registration, keyed by the normalized identifier (email or phone):
+  pending_reg:{type}:{value} -> {type, value, password_hash, name, code_hash, attempts}
+Used by email and phone identically; only the delivery channel differs.
 """
 
 import json
 import secrets
 
 from app.core.config import settings
-from app.core.security import hash_refresh_token  # SHA-256 hex; reused as a generic token hash
+from app.core.security import hash_refresh_token  # sha256 hex, reused as a generic code hash
 
-PENDING_BY_EMAIL = "pending_reg:email:"
-PENDING_BY_TOKEN = "pending_reg:token:"
+PENDING = "pending_reg:"
+MAX_OTP_ATTEMPTS = 5
 
 
-def _as_str(raw: bytes | str | None) -> str | None:
-    """Decode a bytes-mode Redis value to str (client uses decode_responses=False)."""
-    if raw is None:
-        return None
-    return raw.decode() if isinstance(raw, bytes) else raw
+def _key(type_: str, value: str) -> str:
+    """Redis key for a pending registration."""
+    return f"{PENDING}{type_}:{value}"
+
+
+def _gen_code() -> str:
+    """Generate a zero-padded 6-digit numeric code."""
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 class VerificationRepository:
-    """Stores pending registrations under an email key + a token pointer (bytes-mode client)."""
+    """Stores pending registrations keyed by identifier; verified by 6-digit code (bytes-mode client)."""
 
     def __init__(self, redis):
         """Initialize with a `redis.asyncio` client (decode_responses=False)."""
         self.redis = redis
-        self.ttl = settings.EMAIL_VERIFY_TTL_SECONDS
+        self.ttl = settings.OTP_TTL_SECONDS
 
-    async def _write(self, *, email: str, payload: dict) -> str:
-        """Mint a token, store the email payload + token pointer, return the raw token."""
-        token = secrets.token_urlsafe(32)
-        token_hash = hash_refresh_token(token)
-        payload["token_hash"] = token_hash
-        await self.redis.set(PENDING_BY_EMAIL + email, json.dumps(payload), ex=self.ttl)
-        await self.redis.set(PENDING_BY_TOKEN + token_hash, email, ex=self.ttl)
-        return token
+    async def issue_registration(
+        self, *, type_: str, value: str, password_hash: str, name: str | None
+    ) -> str:
+        """Store a fresh pending registration and return the plaintext 6-digit code for delivery."""
+        code = _gen_code()
+        payload = {
+            "type": type_, "value": value, "password_hash": password_hash, "name": name,
+            "code_hash": hash_refresh_token(code), "attempts": 0,
+        }
+        await self.redis.set(_key(type_, value), json.dumps(payload), ex=self.ttl)
+        return code
 
-    async def issue_email_registration(self, *, email: str, password_hash: str, name: str | None) -> str:
-        """Store a fresh pending registration and return the raw token for the verification link."""
-        payload = {"type": "email", "value": email, "password_hash": password_hash, "name": name}
-        return await self._write(email=email, payload=payload)
-
-    async def consume_email_registration(self, token: str) -> dict | None:
-        """Single-use: token → email → payload, deleting both keys. None if unknown/expired."""
-        email = _as_str(await self.redis.getdel(PENDING_BY_TOKEN + hash_refresh_token(token)))
-        if email is None:
-            return None
-        raw = await self.redis.getdel(PENDING_BY_EMAIL + email)
-        return json.loads(raw) if raw else None
-
-    async def reissue_email_registration(self, email: str) -> str | None:
-        """Mint a new token for a still-pending email, invalidating the old token. None if none pending."""
-        raw = await self.redis.get(PENDING_BY_EMAIL + email)
+    async def consume_registration(self, *, type_: str, value: str, code: str) -> dict | None:
+        """Verify a code. Correct → delete + return payload. Wrong → count attempt, burn at cap. None else."""
+        raw = await self.redis.get(_key(type_, value))
         if raw is None:
             return None
         payload = json.loads(raw)
-        old_hash = payload.get("token_hash")
-        if old_hash:
-            await self.redis.delete(PENDING_BY_TOKEN + old_hash)
-        return await self._write(email=email, payload=payload)
+        if hash_refresh_token(code) == payload["code_hash"]:
+            await self.redis.delete(_key(type_, value))
+            return payload
+        payload["attempts"] += 1
+        if payload["attempts"] >= MAX_OTP_ATTEMPTS:
+            await self.redis.delete(_key(type_, value))
+        else:
+            await self.redis.set(_key(type_, value), json.dumps(payload), keepttl=True)
+        return None
+
+    async def reissue_registration(self, *, type_: str, value: str) -> str | None:
+        """Mint a new code for a still-pending registration (resets attempts). None if none pending."""
+        raw = await self.redis.get(_key(type_, value))
+        if raw is None:
+            return None
+        payload = json.loads(raw)
+        code = _gen_code()
+        payload["code_hash"] = hash_refresh_token(code)
+        payload["attempts"] = 0
+        await self.redis.set(_key(type_, value), json.dumps(payload), ex=self.ttl)
+        return code

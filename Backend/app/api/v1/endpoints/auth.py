@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.config import settings
 from app.core.email import build_verification_email, get_email_sender
-from app.core.normalize import normalize_email
+from app.core.normalize import normalize_email, normalize_phone
 from app.core.redis import get_redis
+from app.core.sms import build_verification_sms, get_sms_sender
 from app.models.auth import User
 from app.repositories.auth_repository import (
     contact_repository,
@@ -33,11 +34,16 @@ from app.schemas.auth import (
     ResendVerificationRequest,
     TokenPair,
     UserSaltResponse,
-    VerifyEmailRequest,
+    VerifyRequest,
 )
-from app.services.auth_account import create_password_account
+from app.services.auth_account import create_account
 
 router = APIRouter()
+
+
+def _normalize_identifier(type_: str, value: str) -> str:
+    """Normalize an email or phone identifier; raise ValueError if invalid for the type."""
+    return normalize_email(value) if type_ == "email" else normalize_phone(value)
 
 
 # 頻率限制包裝器：支援測試環境繞過
@@ -58,20 +64,22 @@ def get_rate_limiter(times: int, seconds: int):
 @router.get("/salt/{value}", response_model=UserSaltResponse,
             dependencies=[Depends(get_rate_limiter(10, 60))])
 async def get_user_salt(value: str, db: AsyncSession = Depends(security.get_db)):
-    """Return the frontend salt for an email's password identity, or a deterministic fake salt."""
+    """Return the frontend salt for an identifier's password identity, or a deterministic fake salt."""
     seed = value
-    try:
-        email = normalize_email(value)
-        seed = email  # hash the normalized form so case/space variants collapse to one fake salt
-        user = await contact_repository.get_user_by_contact(db, type_="email", value=email)
+    for type_, normalizer in (("email", normalize_email), ("phone", normalize_phone)):
+        try:
+            ident = normalizer(value)
+        except ValueError:
+            continue
+        seed = ident  # hash the normalized form so case/format variants collapse to one fake salt
+        user = await contact_repository.get_user_by_contact(db, type_=type_, value=ident)
         if user is not None:
             identity = await identity_repository.get_password_identity(db, str(user.uuid))
             if identity and identity.password_hash:
                 salt = security.parse_salt_frontend(identity.password_hash)
                 if salt:
                     return {"salt_frontend": salt}
-    except ValueError:
-        pass  # malformed email → fall through to fake salt
+        break  # matched a type (email or phone) but no account -> fake salt on normalized seed
     fake_salt = security.hashlib.sha256((seed + settings.SECRET_KEY).encode()).hexdigest()[:32]
     return {"salt_frontend": fake_salt}
 
@@ -83,51 +91,56 @@ async def register(
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
         email_sender=Depends(get_email_sender),
+        sms_sender=Depends(get_sms_sender),
 ):
-    """Verify-then-create: store a pending registration in Redis and email a verification link.
+    """Verify-then-create: store a pending registration and send a 6-digit code by email or SMS.
 
-    Never writes an unverified DB row. Phase 1 supports email only.
+    Never writes an unverified DB row.
     """
-    if body.type != "email":
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail="Only email registration is supported")
     try:
-        email = normalize_email(body.value)
+        ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid email") from err
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid identifier") from err
 
-    if await contact_repository.is_value_taken(db, type_="email", value=email):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already in use")
+    if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"{body.type.capitalize()} already in use")
 
     password_hash = security.get_password_hash(body.password, body.salt_frontend)
-    token = await VerificationRepository(redis).issue_email_registration(
-        email=email, password_hash=password_hash, name=body.name
+    code = await VerificationRepository(redis).issue_registration(
+        type_=body.type, value=ident, password_hash=password_hash, name=body.name
     )
-    verify_url = f"{settings.APP_BASE_URL}/verify-email?token={token}"
-    subject, content = build_verification_email(verify_url)
-    await email_sender.send(email, subject, content)
-    return {"detail": "Verification email sent"}
+    if body.type == "email":
+        subject, content = build_verification_email(code)
+        await email_sender.send(ident, subject, content)
+    else:
+        await sms_sender.send(ident, build_verification_sms(code))
+    return {"detail": "Verification code sent"}
 
 
-@router.post("/verify-email", response_model=TokenPair,
+@router.post("/verify", response_model=TokenPair,
              dependencies=[Depends(get_rate_limiter(10, 60))])
-async def verify_email(
-        body: VerifyEmailRequest,
+async def verify(
+        body: VerifyRequest,
         request: Request,
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
 ):
-    """Consume a pending registration, create the account, and issue a session (verify == login)."""
-    payload = await VerificationRepository(redis).consume_email_registration(body.token)
+    """Consume a 6-digit code, create the account, and issue a session (verify == login)."""
+    try:
+        ident = _normalize_identifier(body.type, body.value)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code") from err
+    payload = await VerificationRepository(redis).consume_registration(
+        type_=body.type, value=ident, code=body.code
+    )
     if payload is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            detail="Invalid or expired verification token")
-    email = payload["value"]
-    # re-check the race: someone may have verified the same email between register and now
-    if await contact_repository.is_value_taken(db, type_="email", value=email):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already in use")
-    user = await create_password_account(
-        db, email=email, password_hash=payload["password_hash"], name=payload.get("name")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
+    # re-check the race: someone may have verified the same identifier between register and now
+    if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
+    user = await create_account(
+        db, contact_type=body.type, value=ident, password_hash=payload["password_hash"],
+        name=payload.get("name")
     )
     device = request.headers.get("user-agent", "unknown")
     sid, refresh_token = await SessionRepository(redis).create_session(str(user.uuid), device)
@@ -143,25 +156,25 @@ async def resend_verification(
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
         email_sender=Depends(get_email_sender),
+        sms_sender=Depends(get_sms_sender),
 ):
-    """Resend the verification link for a still-pending email registration (rate limited)."""
-    if body.type != "email":
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Only email is supported")
+    """Resend the 6-digit code for a still-pending email or phone registration (rate limited)."""
     try:
-        email = normalize_email(body.value)
+        ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid email") from err
-    if await contact_repository.is_value_taken(db, type_="email", value=email):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid identifier") from err
+    if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
         # already a real account → nothing to resend; do not leak beyond the register 409 policy
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already in use")
-    token = await VerificationRepository(redis).reissue_email_registration(email)
-    if token is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND,
-                            detail="No pending registration for this email")
-    verify_url = f"{settings.APP_BASE_URL}/verify-email?token={token}"
-    subject, content = build_verification_email(verify_url)
-    await email_sender.send(email, subject, content)
-    return {"detail": "Verification email re-sent"}
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
+    code = await VerificationRepository(redis).reissue_registration(type_=body.type, value=ident)
+    if code is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No pending registration")
+    if body.type == "email":
+        subject, content = build_verification_email(code)
+        await email_sender.send(ident, subject, content)
+    else:
+        await sms_sender.send(ident, build_verification_sms(code))
+    return {"detail": "Verification code re-sent"}
 
 
 @router.post("/login",
@@ -173,16 +186,21 @@ async def login(
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
 ):
-    """Email + password login: contact → user → password identity → verify."""
+    """Email/phone + password login: contact → user → password identity → verify."""
     cred_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    try:
-        email = normalize_email(form_data.username)
-    except ValueError:
-        raise cred_exc from None
-    user = await contact_repository.get_user_by_contact(db, type_="email", value=email)
+    raw = form_data.username
+    user = None
+    for type_, normalizer in (("email", normalize_email), ("phone", normalize_phone)):
+        try:
+            ident = normalizer(raw)
+        except ValueError:
+            continue
+        user = await contact_repository.get_user_by_contact(db, type_=type_, value=ident)
+        if user:
+            break
     if user is None:
         raise cred_exc
     identity = await identity_repository.get_password_identity(db, str(user.uuid))

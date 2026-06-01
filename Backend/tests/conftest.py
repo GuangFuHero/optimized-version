@@ -16,10 +16,13 @@ from sqlalchemy.orm import sessionmaker
 from app.core import security
 from app.core.email import get_email_sender
 from app.core.redis import get_redis
+from app.core.sms import get_sms_sender
 from app.main import app
 from app.models.auth import Base, Group
 
 TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+
+_CODE_RE = re.compile(r"\b(\d{6})\b")
 
 
 @pytest_asyncio.fixture
@@ -50,24 +53,36 @@ async def db_session():
     await engine.dispose()
 
 
-class CaptureEmailSender:
-    """Test EmailSender that records messages so tests can extract the verify token."""
+class _Capturer:
+    """Base capturer exposing the 6-digit code from the most recent message body."""
 
     def __init__(self):
         """Start with an empty message log."""
         self.messages = []
 
+    @property
+    def last_code(self):
+        """Return the 6-digit code parsed from the most recent message body, or None."""
+        if not self.messages:
+            return None
+        m = _CODE_RE.search(self.messages[-1][-1])  # body is the last tuple element
+        return m.group(1) if m else None
+
+
+class CaptureEmailSender(_Capturer):
+    """Test EmailSender that records messages so tests can extract the verification code."""
+
     async def send(self, to, subject, body):
         """Record one outbound email instead of delivering it."""
         self.messages.append((to, subject, body))
 
-    @property
-    def last_token(self):
-        """Return the verify token parsed from the most recent email body, or None."""
-        if not self.messages:
-            return None
-        m = re.search(r"token=([\w-]+)", self.messages[-1][2])
-        return m.group(1) if m else None
+
+class CaptureSmsSender(_Capturer):
+    """Test SmsSender that records messages so tests can extract the verification code."""
+
+    async def send(self, to, body):
+        """Record one outbound SMS instead of delivering it."""
+        self.messages.append((to, body))
 
 
 @pytest_asyncio.fixture
@@ -87,8 +102,17 @@ async def client(db_session):
 
 @pytest.fixture
 def capture_email():
-    """Override get_email_sender with a capturing double; exposes `.last_token`."""
+    """Override get_email_sender with a capturing double; exposes `.last_code`."""
     sender = CaptureEmailSender()
     app.dependency_overrides[get_email_sender] = lambda: sender
     yield sender
     app.dependency_overrides.pop(get_email_sender, None)
+
+
+@pytest.fixture
+def capture_sms():
+    """Override get_sms_sender with a capturing double; exposes `.last_code`."""
+    sender = CaptureSmsSender()
+    app.dependency_overrides[get_sms_sender] = lambda: sender
+    yield sender
+    app.dependency_overrides.pop(get_sms_sender, None)

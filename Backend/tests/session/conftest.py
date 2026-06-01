@@ -16,7 +16,7 @@ from app.core.security import generate_salt, get_password_hash
 from app.db.session import Base
 from app.main import app
 from app.models.auth import Group
-from app.services.auth_account import create_password_account
+from app.services.auth_account import create_account
 
 TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 _db_ready = False
@@ -69,8 +69,9 @@ def make_user():
         eng = create_async_engine(TEST_DB_URL, echo=False)
         factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=False)
         async with factory() as db:
-            user = await create_password_account(
-                db, email=f"{name}@t.local", password_hash=get_password_hash(password, salt), name=name
+            user = await create_account(
+                db, contact_type="email", value=f"{name}@t.local",
+                password_hash=get_password_hash(password, salt), name=name,
             )
             uid = str(user.uuid)
         await eng.dispose()

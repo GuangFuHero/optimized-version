@@ -3,7 +3,7 @@
 import pytest
 
 from app.core.security import create_access_token, generate_salt, get_password_hash
-from app.services.auth_account import create_password_account
+from app.services.auth_account import create_account
 
 
 @pytest.mark.asyncio
@@ -12,8 +12,9 @@ async def test_change_password_updates_identity(client, db_session):
     # 'Login User' group is already seeded by the db_session fixture (Task 9b) — do NOT re-add it
     # (a duplicate group makes group_repository.get_by_name raise MultipleResultsFound).
     salt = generate_salt()
-    user = await create_password_account(
-        db_session, email="a@x.com", password_hash=get_password_hash("oldpw1", salt)
+    user = await create_account(
+        db_session, contact_type="email", value="a@x.com",
+        password_hash=get_password_hash("oldpw1", salt),
     )
     token = create_access_token(data={"sub": str(user.uuid)})
     res = await client.post("/api/v1/auth/change-password",
@@ -31,8 +32,9 @@ async def test_change_password_updates_identity(client, db_session):
 async def test_change_password_wrong_old_password_401(client, db_session):
     """Change-password with a wrong old password returns 401."""
     salt = generate_salt()
-    user = await create_password_account(
-        db_session, email="a@x.com", password_hash=get_password_hash("oldpw1", salt)
+    user = await create_account(
+        db_session, contact_type="email", value="a@x.com",
+        password_hash=get_password_hash("oldpw1", salt),
     )
     token = create_access_token(data={"sub": str(user.uuid)})
     res = await client.post("/api/v1/auth/change-password",

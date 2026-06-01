@@ -29,12 +29,15 @@ class Settings(BaseSettings):
     # 本地開發連線預設: redis://localhost:6379
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
 
-    EMAIL_PROVIDER: str = os.getenv("EMAIL_PROVIDER", "console")  # console | brevo
+    EMAIL_PROVIDER: str = os.getenv("EMAIL_PROVIDER", "console")  # console | smtp2go
     EMAIL_FROM: str = os.getenv("EMAIL_FROM", "no-reply@disaster-rescue.local")
     EMAIL_FROM_NAME: str = os.getenv("EMAIL_FROM_NAME", "Disaster Rescue")
-    BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", "")
     APP_BASE_URL: str = os.getenv("APP_BASE_URL", "http://localhost:3000")
-    EMAIL_VERIFY_TTL_SECONDS: int = 1800  # 30 min
+
+    PHONE_DEFAULT_REGION: str = os.getenv("PHONE_DEFAULT_REGION", "TW")
+    OTP_TTL_SECONDS: int = 600  # 10 min, unified email+phone code TTL
+    SMS_PROVIDER: str = os.getenv("SMS_PROVIDER", "console")  # console (real adapter deferred)
+    SMTP2GO_API_KEY: str = os.getenv("SMTP2GO_API_KEY", "")
 
     @property
     def JWT_SIGNING_KEY(self) -> str:

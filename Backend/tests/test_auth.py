@@ -13,7 +13,7 @@ from app.core import security
 
 @pytest.mark.asyncio
 async def test_auth_full_flow(client, capture_email):
-    """測試完整的註冊 -> 驗證信箱 -> 登入流程 (Happy Path)."""
+    """測試完整的註冊 -> 驗證碼驗證 -> 登入流程 (Happy Path)."""
     email = f"user_{uuid.uuid4().hex[:6]}@t.local"
     password = "pw123456"
 
@@ -24,10 +24,12 @@ async def test_auth_full_flow(client, capture_email):
     )
     assert reg_res.status_code == 202
 
-    # 2. 從擷取的驗證信中讀出 token 並驗證信箱
-    token = capture_email.last_token
-    assert token
-    verify_res = await client.post("/api/v1/auth/verify-email", json={"token": token})
+    # 2. 從擷取的驗證信中讀出 6 位數驗證碼並驗證
+    code = capture_email.last_code
+    assert code
+    verify_res = await client.post(
+        "/api/v1/auth/verify", json={"type": "email", "value": email, "code": code}
+    )
     assert verify_res.status_code == 200
     assert "access_token" in verify_res.json()
     assert "refresh_token" in verify_res.json()
@@ -49,8 +51,8 @@ async def test_registration_conflict_409(client, capture_email):
 
     # 第一次註冊 + 驗證，帳號就會存在
     await client.post("/api/v1/auth/register", json=payload)
-    token = capture_email.last_token
-    await client.post("/api/v1/auth/verify-email", json={"token": token})
+    code = capture_email.last_code
+    await client.post("/api/v1/auth/verify", json={"type": "email", "value": email, "code": code})
 
     # 再次以相同信箱註冊 -> 409
     res = await client.post("/api/v1/auth/register", json=payload)

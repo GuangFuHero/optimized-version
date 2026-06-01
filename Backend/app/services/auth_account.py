@@ -10,20 +10,20 @@ from app.repositories.auth_repository import group_repository
 LOGIN_GROUP = "Login User"
 
 
-async def create_password_account(
-    db: AsyncSession, *, email: str, password_hash: str, name: str | None = None
+async def create_account(
+    db: AsyncSession, *, contact_type: str, value: str, password_hash: str, name: str | None = None
 ) -> User:
-    """Create user + password identity + VERIFIED email contact + Login User group in ONE transaction.
+    """Create user + password identity + VERIFIED contact(type) + Login User group in ONE transaction.
 
-    `email` must already be normalized. Caller guarantees the email is not already taken. Returns a
+    `value` must already be normalized. Caller guarantees the value is not already taken. Returns a
     refreshed `User` (safe to read attributes — see the async gotcha note at the top of this plan).
     """
-    user = User(name=name or email)
+    user = User(name=name or value)
     db.add(user)
     await db.flush()  # populate user.uuid for the FK rows below
     db.add(UserIdentity(user_uuid=user.uuid, provider="password", password_hash=password_hash))
     db.add(UserContact(
-        user_uuid=user.uuid, type="email", value=email,
+        user_uuid=user.uuid, type=contact_type, value=value,
         verified=True, verified_at=datetime.now(UTC),
     ))
     group = await group_repository.get_by_name(db, name=LOGIN_GROUP)

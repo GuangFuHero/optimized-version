@@ -1,29 +1,29 @@
-"""Tests for the Brevo HTTPS-API email adapter."""
+"""Tests for the SMTP2Go HTTP-API email adapter."""
 
 import httpx
 import pytest
 
-from app.core.email_brevo import BrevoEmailSender
+from app.core.email_smtp2go import Smtp2goEmailSender
 
 
 @pytest.mark.asyncio
-async def test_brevo_posts_to_api(monkeypatch):
-    """BrevoEmailSender POSTs the right URL, payload, and api-key header."""
+async def test_smtp2go_posts_to_api(monkeypatch):
+    """send() POSTs to the SMTP2Go v3 endpoint with the api-key header and recipient."""
     captured = {}
 
     class FakeResp:
         """Stand-in httpx response with a no-op status check."""
 
-        status_code = 201
+        status_code = 200
 
         def raise_for_status(self):
-            """Pretend the request succeeded."""
+            """No-op for a 2xx response."""
 
     class FakeClient:
         """Async context-manager double recording the POST arguments."""
 
         def __init__(self, *a, **k):
-            """Accept and ignore any client construction arguments."""
+            """Accept and ignore client args."""
 
         async def __aenter__(self):
             """Enter the async context and return self."""
@@ -39,9 +39,9 @@ async def test_brevo_posts_to_api(monkeypatch):
             return FakeResp()
 
     monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
-    monkeypatch.setattr("app.core.email_brevo.settings.BREVO_API_KEY", "test-key", raising=False)
+    monkeypatch.setattr("app.core.email_smtp2go.settings.SMTP2GO_API_KEY", "api-test", raising=False)
 
-    await BrevoEmailSender().send("alice@x.com", "Verify", "link")
-    assert captured["url"] == "https://api.brevo.com/v3/smtp/email"
-    assert captured["json"]["to"][0]["email"] == "alice@x.com"
-    assert captured["headers"]["api-key"] == "test-key"
+    await Smtp2goEmailSender().send("alice@x.com", "Verify", "code 123456")
+    assert captured["url"] == "https://api.smtp2go.com/v3/email/send"
+    assert captured["headers"]["X-Smtp2go-Api-Key"] == "api-test"
+    assert "alice@x.com" in captured["json"]["to"][0]

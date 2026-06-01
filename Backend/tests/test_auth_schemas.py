@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.auth import RegisterRequest, ResendVerificationRequest, VerifyEmailRequest
+from app.schemas.auth import RegisterRequest, ResendVerificationRequest, VerifyRequest
 
 
 def test_register_request_email_type():
@@ -18,9 +18,10 @@ def test_register_request_rejects_blank_value():
         RegisterRequest(type="email", value="", password="hashed", salt_frontend="abc")
 
 
-def test_verify_email_request():
-    """The verify-email body carries the single-use token."""
-    assert VerifyEmailRequest(token="abc").token == "abc"
+def test_verify_request():
+    """VerifyRequest carries type, value, code."""
+    r = VerifyRequest(type="phone", value="+886912345678", code="123456")
+    assert r.code == "123456"
 
 
 def test_resend_request():

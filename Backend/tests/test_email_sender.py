@@ -17,10 +17,10 @@ async def test_console_sender_logs_link(caplog):
     assert "token=abc" in caplog.text
 
 
-def test_build_verification_email_has_link():
-    """The built verification email contains the verify URL and a subject."""
-    subject, body = build_verification_email("https://app/verify?token=abc")
-    assert "https://app/verify?token=abc" in body
+def test_build_verification_email_has_code():
+    """The built verification email contains the 6-digit code and a subject."""
+    subject, body = build_verification_email("123456")
+    assert "123456" in body
     assert subject
 
 
@@ -32,10 +32,10 @@ def test_get_email_sender_defaults_to_console(monkeypatch):
     assert isinstance(get_email_sender(), ConsoleEmailSender)
 
 
-def test_get_email_sender_returns_brevo_when_configured(monkeypatch):
-    """get_email_sender returns the Brevo adapter when EMAIL_PROVIDER is 'brevo'."""
+def test_get_email_sender_returns_smtp2go_when_configured(monkeypatch):
+    """get_email_sender returns the SMTP2Go adapter when EMAIL_PROVIDER is 'smtp2go'."""
     from app.core.config import settings
-    from app.core.email_brevo import BrevoEmailSender
+    from app.core.email_smtp2go import Smtp2goEmailSender
 
-    monkeypatch.setattr(settings, "EMAIL_PROVIDER", "brevo")
-    assert isinstance(get_email_sender(), BrevoEmailSender)
+    monkeypatch.setattr(settings, "EMAIL_PROVIDER", "smtp2go")
+    assert isinstance(get_email_sender(), Smtp2goEmailSender)

@@ -1,4 +1,4 @@
-"""Tests for the create_password_account service (atomic user + identity + contact + group)."""
+"""Tests for the create_account service (atomic user + identity + contact + group)."""
 
 import os
 
@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.models.auth import Base, Group, UserContact, UserGroupAssign, UserIdentity
-from app.services.auth_account import create_password_account
+from app.services.auth_account import create_account
 
 TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
@@ -30,12 +30,13 @@ async def db():
 
 
 @pytest.mark.asyncio
-async def test_create_password_account_wires_everything(db):
-    """Account creation persists the identity, verified contact, and Login User group link."""
+@pytest.mark.parametrize("ctype,value", [("email", "a@x.com"), ("phone", "+886912345678")])
+async def test_create_account_wires_everything(db, ctype, value):
+    """Account creation persists the identity, verified contact(type), and Login User group link."""
     db.add(Group(name="Login User"))
     await db.commit()
-    user = await create_password_account(
-        db, email="alice@x.com", password_hash="pbkdf2_sha256$x", name="Alice"
+    user = await create_account(
+        db, contact_type=ctype, value=value, password_hash="pbkdf2$x", name="A"
     )
     idents = (
         await db.execute(select(UserIdentity).where(UserIdentity.user_uuid == user.uuid))
@@ -47,5 +48,6 @@ async def test_create_password_account_wires_everything(db):
         await db.execute(select(UserGroupAssign).where(UserGroupAssign.user_uuid == user.uuid))
     ).scalars().all()
     assert idents[0].provider == "password"
-    assert contacts[0].value == "alice@x.com" and contacts[0].verified is True
+    assert contacts[0].type == ctype
+    assert contacts[0].value == value and contacts[0].verified is True
     assert len(groups) == 1

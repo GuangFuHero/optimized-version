@@ -75,7 +75,7 @@ async def client(db_session):
 @pytest.mark.asyncio
 async def test_full_rbac_flow(client: AsyncClient, db_session: AsyncSession):
     """驗證完整的 RBAC 流程：建立帳號 -> 獲取 Salt -> 登入 -> 權限檢查."""
-    from app.services.auth_account import create_password_account
+    from app.services.auth_account import create_account
 
     test_email = f"user_{uuid.uuid4().hex[:8]}@t.local"
     test_password = "password123"
@@ -85,9 +85,10 @@ async def test_full_rbac_flow(client: AsyncClient, db_session: AsyncSession):
     test_hash_password_v1 = hashlib.sha256((test_password + test_salt_frontend).encode()).hexdigest()
 
     # 1. 直接建立帳號 (verify-then-create 流程於 test_register_flow 另行驗證)
-    await create_password_account(
+    await create_account(
         db_session,
-        email=test_email,
+        contact_type="email",
+        value=test_email,
         password_hash=security.get_password_hash(test_hash_password_v1, test_salt_frontend),
     )
 

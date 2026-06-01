@@ -70,7 +70,7 @@ class ChangePasswordRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    """Verify-then-create registration. Phase 1 accepts type == 'email' only."""
+    """Verify-then-create registration for email or phone."""
 
     type: Literal["email", "phone"] = "email"
     value: str = Field(..., min_length=1, max_length=320)
@@ -79,10 +79,12 @@ class RegisterRequest(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=100)
 
 
-class VerifyEmailRequest(BaseModel):
-    """Body carrying the single-use email-verification token."""
+class VerifyRequest(BaseModel):
+    """Body for unified verification: identifier + 6-digit code."""
 
-    token: str = Field(..., min_length=1)
+    type: Literal["email", "phone"] = "email"
+    value: str = Field(..., min_length=1, max_length=320)
+    code: str = Field(..., min_length=4, max_length=8)
 
 
 class ResendVerificationRequest(BaseModel):
