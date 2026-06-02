@@ -11,14 +11,14 @@ LOGIN_GROUP = "Login User"
 
 
 async def create_account(
-    db: AsyncSession, *, contact_type: str, value: str, password_hash: str, name: str | None = None
+    db: AsyncSession, *, contact_type: str, value: str, password_hash: str, name: str
 ) -> User:
     """Create user + password identity + VERIFIED contact(type) + Login User group in ONE transaction.
 
     `value` must already be normalized. Caller guarantees the value is not already taken. Returns a
     refreshed `User` (safe to read attributes — see the async gotcha note at the top of this plan).
     """
-    user = User(name=name or value)
+    user = User(name=name)
     db.add(user)
     await db.flush()  # populate user.uuid for the FK rows below
     db.add(UserIdentity(user_uuid=user.uuid, provider="password", password_hash=password_hash))

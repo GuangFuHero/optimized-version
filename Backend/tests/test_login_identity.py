@@ -18,7 +18,7 @@ async def test_login_by_email(client, db_session):
     salt = generate_salt()
     await create_account(
         db_session, contact_type="email", value="a@x.com",
-        password_hash=get_password_hash("secret", salt),
+        password_hash=get_password_hash("secret", salt), name="Tester",
     )
     res = await client.post("/api/v1/auth/login", data={"username": "A@X.com", "password": "secret"})
     assert res.status_code == 200
@@ -34,7 +34,7 @@ async def test_login_by_phone(client, db_session):
     salt = generate_salt()
     await create_account(
         db_session, contact_type="phone", value=PHONE,
-        password_hash=get_password_hash("secret", salt),
+        password_hash=get_password_hash("secret", salt), name="Tester",
     )
     res = await client.post("/api/v1/auth/login", data={"username": "0912345678", "password": "secret"})
     assert res.status_code == 200
@@ -46,7 +46,7 @@ async def test_login_wrong_password_401(client, db_session):
     """Login with a wrong password returns 401."""
     await create_account(
         db_session, contact_type="email", value="a@x.com",
-        password_hash=get_password_hash("secret", generate_salt()),
+        password_hash=get_password_hash("secret", generate_salt()), name="Tester",
     )
     res = await client.post("/api/v1/auth/login", data={"username": "a@x.com", "password": "nope"})
     assert res.status_code == 401

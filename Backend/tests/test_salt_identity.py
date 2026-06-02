@@ -15,7 +15,8 @@ async def test_salt_returns_real_salt_for_known_email(client, db_session):
     # (a duplicate group makes group_repository.get_by_name raise MultipleResultsFound).
     salt = generate_salt()
     await create_account(
-        db_session, contact_type="email", value="a@x.com", password_hash=get_password_hash("pw", salt)
+        db_session, contact_type="email", value="a@x.com", password_hash=get_password_hash("pw", salt),
+        name="Tester",
     )
     res = await client.get("/api/v1/auth/salt/A@X.com")
     assert res.status_code == 200
@@ -27,7 +28,8 @@ async def test_salt_returns_real_salt_for_known_phone(client, db_session):
     """Salt lookup returns the stored frontend salt for a known phone (format variants collapse)."""
     salt = generate_salt()
     await create_account(
-        db_session, contact_type="phone", value=PHONE, password_hash=get_password_hash("pw", salt)
+        db_session, contact_type="phone", value=PHONE, password_hash=get_password_hash("pw", salt),
+        name="Tester",
     )
     res = await client.get("/api/v1/auth/salt/0912345678")
     assert res.status_code == 200

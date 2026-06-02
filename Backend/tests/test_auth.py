@@ -20,7 +20,8 @@ async def test_auth_full_flow(client, capture_email):
     # 1. 註冊 (verify-then-create) -> 202
     reg_res = await client.post(
         "/api/v1/auth/register",
-        json={"type": "email", "value": email, "password": password, "salt_frontend": "abc"},
+        json={"type": "email", "value": email, "password": password, "salt_frontend": "abc",
+              "name": "Test User"},
     )
     assert reg_res.status_code == 202
 
@@ -47,7 +48,8 @@ async def test_auth_full_flow(client, capture_email):
 async def test_registration_conflict_409(client, capture_email):
     """測試重複註冊已驗證的信箱應回傳 409."""
     email = f"conflict_{uuid.uuid4().hex[:6]}@t.local"
-    payload = {"type": "email", "value": email, "password": "pw123456", "salt_frontend": "abc"}
+    payload = {"type": "email", "value": email, "password": "pw123456", "salt_frontend": "abc",
+               "name": "Test User"}
 
     # 第一次註冊 + 驗證，帳號就會存在
     await client.post("/api/v1/auth/register", json=payload)

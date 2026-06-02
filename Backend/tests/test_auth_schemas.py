@@ -8,14 +8,29 @@ from app.schemas.auth import RegisterRequest, ResendVerificationRequest, VerifyR
 
 def test_register_request_email_type():
     """A valid email registration request parses and keeps type == 'email'."""
-    r = RegisterRequest(type="email", value="A@X.com", password="hashed", salt_frontend="abc")
+    r = RegisterRequest(type="email", value="A@X.com", password="hashed", salt_frontend="abc",
+                        name="Tester")
     assert r.type == "email"
 
 
 def test_register_request_rejects_blank_value():
     """A blank value fails the min_length=1 constraint."""
     with pytest.raises(ValidationError):
-        RegisterRequest(type="email", value="", password="hashed", salt_frontend="abc")
+        RegisterRequest(type="email", value="", password="hashed", salt_frontend="abc", name="Tester")
+
+
+def test_register_request_name_required_and_stripped():
+    """`name` is required, rejects whitespace-only, and is stripped of surrounding spaces."""
+    # (a) missing name -> ValidationError
+    with pytest.raises(ValidationError):
+        RegisterRequest(type="email", value="a@x.com", password="hashed", salt_frontend="abc")
+    # (b) whitespace-only name -> ValidationError
+    with pytest.raises(ValidationError):
+        RegisterRequest(type="email", value="a@x.com", password="hashed", salt_frontend="abc", name="   ")
+    # (c) surrounding whitespace is stripped
+    r = RegisterRequest(type="email", value="a@x.com", password="hashed", salt_frontend="abc",
+                        name=" Bob ")
+    assert r.name == "Bob"
 
 
 def test_verify_request():

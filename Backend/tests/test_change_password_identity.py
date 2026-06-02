@@ -14,7 +14,7 @@ async def test_change_password_updates_identity(client, db_session):
     salt = generate_salt()
     user = await create_account(
         db_session, contact_type="email", value="a@x.com",
-        password_hash=get_password_hash("oldpw1", salt),
+        password_hash=get_password_hash("oldpw1", salt), name="Tester",
     )
     token = create_access_token(data={"sub": str(user.uuid)})
     res = await client.post("/api/v1/auth/change-password",
@@ -34,7 +34,7 @@ async def test_change_password_wrong_old_password_401(client, db_session):
     salt = generate_salt()
     user = await create_account(
         db_session, contact_type="email", value="a@x.com",
-        password_hash=get_password_hash("oldpw1", salt),
+        password_hash=get_password_hash("oldpw1", salt), name="Tester",
     )
     token = create_access_token(data={"sub": str(user.uuid)})
     res = await client.post("/api/v1/auth/change-password",

@@ -13,7 +13,8 @@ async def test_require_onboarded_passes_with_verified_contact(db):
     """A user with a verified contact passes the gate without raising."""
     db.add(Group(name="Login User"))
     await db.commit()
-    user = await create_account(db, contact_type="email", value="a@x.com", password_hash="h")
+    user = await create_account(db, contact_type="email", value="a@x.com", password_hash="h",
+                                name="Tester")
     # should not raise
     await require_onboarded(current_user=user, db=db)
 

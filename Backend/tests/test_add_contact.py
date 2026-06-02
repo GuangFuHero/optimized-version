@@ -9,7 +9,7 @@ async def _logged_in_email_user(db_session):
     """Create an email account and return (user, bearer_headers)."""
     user = await create_account(
         db_session, contact_type="email", value="owner@x.com",
-        password_hash=get_password_hash("secret", generate_salt()),
+        password_hash=get_password_hash("secret", generate_salt()), name="Tester",
     )
     headers = {"Authorization": f"Bearer {create_access_token(data={'sub': str(user.uuid)})}"}
     return user, headers
@@ -43,7 +43,8 @@ async def test_add_contact_requires_auth(client):
 async def test_add_contact_collision_409(client, db_session):
     """Adding a value already verified by another account → 409."""
     # someone else already owns this phone
-    await create_account(db_session, contact_type="phone", value="+886912345678", password_hash="h")
+    await create_account(db_session, contact_type="phone", value="+886912345678", password_hash="h",
+                         name="Tester")
     _, headers = await _logged_in_email_user(db_session)
     res = await client.post("/api/v1/auth/contacts", headers=headers,
                             json={"type": "phone", "value": "0912345678"})  # normalizes to +886912345678

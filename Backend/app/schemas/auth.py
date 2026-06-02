@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # --- Token 相關 ---
 
@@ -76,7 +76,16 @@ class RegisterRequest(BaseModel):
     value: str = Field(..., min_length=1, max_length=320)
     password: str = Field(..., min_length=6, max_length=255)  # already frontend-hashed
     salt_frontend: str = Field(..., description="Frontend salt (hex)")
-    name: str | None = Field(None, min_length=1, max_length=100)
+    name: str = Field(..., min_length=1, max_length=100)
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, v: str) -> str:
+        """Strip surrounding whitespace and reject blank (whitespace-only) names."""
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
 
 
 class VerifyRequest(BaseModel):

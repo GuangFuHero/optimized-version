@@ -90,6 +90,7 @@ async def test_full_rbac_flow(client: AsyncClient, db_session: AsyncSession):
         contact_type="email",
         value=test_email,
         password_hash=security.get_password_hash(test_hash_password_v1, test_salt_frontend),
+        name="Tester",
     )
 
     # 2. 登入前獲取 Salt (驗證是否能正確從 identity 結構中解析出前端 Salt)

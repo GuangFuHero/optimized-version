@@ -138,12 +138,19 @@ async def verify(
     )
     if payload is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
+    # guard a stale pending (pre-required-name deploy) that has no usable name: the pending is already
+    # consumed (burned) above, so the user simply re-registers instead of hitting a 500 on the NOT NULL
+    name = payload.get("name")
+    if not name or not str(name).strip():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Registration expired, please register again"
+        )
     # re-check the race: someone may have verified the same identifier between register and now
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
     user = await create_account(
         db, contact_type=body.type, value=ident, password_hash=payload["password_hash"],
-        name=payload.get("name")
+        name=name,
     )
     device = request.headers.get("user-agent", "unknown")
     sid, refresh_token = await SessionRepository(redis).create_session(str(user.uuid), device)

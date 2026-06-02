@@ -86,18 +86,24 @@ class CaptureSmsSender(_Capturer):
 
 
 @pytest_asyncio.fixture
-async def client(db_session):
+async def redis():
+    """One fake redis shared by the client fixture and by tests that need to seed pendings directly."""
+    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=False)
+    yield fake_redis
+    await fake_redis.aclose()
+
+
+@pytest_asyncio.fixture
+async def client(db_session, redis):
     """HTTP client with db + redis + email-sender overrides bound to ONE fake redis."""
     async def override_get_db():
         yield db_session
 
-    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=False)
     app.dependency_overrides[security.get_db] = override_get_db
-    app.dependency_overrides[get_redis] = lambda: fake_redis
+    app.dependency_overrides[get_redis] = lambda: redis
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
-    await fake_redis.aclose()
 
 
 @pytest.fixture
