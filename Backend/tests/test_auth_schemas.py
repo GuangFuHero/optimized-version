@@ -56,3 +56,10 @@ def test_google_sso_request_requires_id_token():
     from app.schemas.auth import GoogleSsoRequest
     with pytest.raises(ValidationError):
         GoogleSsoRequest(id_token="")
+
+
+def test_id_token_request_requires_token():
+    """IdTokenRequest rejects an empty id_token (min_length=1)."""
+    from app.schemas.auth import IdTokenRequest
+    with pytest.raises(ValidationError):
+        IdTokenRequest(id_token="")

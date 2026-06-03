@@ -100,6 +100,12 @@ class LinkGoogleRequest(BaseModel):
     id_token: str = Field(..., min_length=1)
 
 
+class IdTokenRequest(BaseModel):
+    """Body carrying a provider id_token (LINE SSO / link)."""
+
+    id_token: str = Field(..., min_length=1)
+
+
 class SetPasswordRequest(BaseModel):
     """Body for SSO-only users to set a first password (no old password)."""
 

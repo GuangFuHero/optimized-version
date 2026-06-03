@@ -41,6 +41,8 @@ class Settings(BaseSettings):
 
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
 
+    LINE_CHANNEL_ID: str = os.getenv("LINE_CHANNEL_ID", "")
+
     @property
     def JWT_SIGNING_KEY(self) -> str:
         """將原始 SECRET_KEY 進行 SHA-256 雜湊，產生更強大的簽名密鑰。"""
