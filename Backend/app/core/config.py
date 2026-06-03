@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     SMS_PROVIDER: str = os.getenv("SMS_PROVIDER", "console")  # console (real adapter deferred)
     SMTP2GO_API_KEY: str = os.getenv("SMTP2GO_API_KEY", "")
 
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+
     @property
     def JWT_SIGNING_KEY(self) -> str:
         """將原始 SECRET_KEY 進行 SHA-256 雜湊，產生更強大的簽名密鑰。"""

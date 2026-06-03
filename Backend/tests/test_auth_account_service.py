@@ -51,3 +51,19 @@ async def test_create_account_wires_everything(db, ctype, value):
     assert contacts[0].type == ctype
     assert contacts[0].value == value and contacts[0].verified is True
     assert len(groups) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_account_google_identity_no_password(db):
+    """A google account: google identity (no password_hash) + verified email contact."""
+    db.add(Group(name="Login User"))
+    await db.commit()
+    user = await create_account(
+        db, name="GUser", provider="google", provider_subject="g-sub-1",
+        contact_type="email", value="g@x.com",
+    )
+    idents = (await db.execute(
+        select(UserIdentity).where(UserIdentity.user_uuid == user.uuid))).scalars().all()
+    assert idents[0].provider == "google"
+    assert idents[0].provider_subject == "g-sub-1"
+    assert idents[0].password_hash is None

@@ -11,24 +11,37 @@ LOGIN_GROUP = "Login User"
 
 
 async def create_account(
-    db: AsyncSession, *, contact_type: str, value: str, password_hash: str, name: str
+    db: AsyncSession,
+    *,
+    name: str,
+    provider: str = "password",
+    provider_subject: str | None = None,
+    password_hash: str | None = None,
+    contact_type: str | None = None,
+    value: str | None = None,
 ) -> User:
-    """Create user + password identity + VERIFIED contact(type) + Login User group in ONE transaction.
+    """Create user + ONE identity (+ optional VERIFIED contact) + Login User group, atomically.
 
-    `value` must already be normalized. Caller guarantees the value is not already taken. Returns a
-    refreshed `User` (safe to read attributes — see the async gotcha note at the top of this plan).
+    Defaults preserve the original password-register behavior (provider="password"), so existing
+    callers need no change. SSO callers pass provider="google", provider_subject=<sub>, and (for Google)
+    a verified email contact. `value` must already be normalized; caller guarantees it is not taken.
+    Returns a refreshed `User`.
     """
     user = User(name=name)
     db.add(user)
     await db.flush()  # populate user.uuid for the FK rows below
-    db.add(UserIdentity(user_uuid=user.uuid, provider="password", password_hash=password_hash))
-    db.add(UserContact(
-        user_uuid=user.uuid, type=contact_type, value=value,
-        verified=True, verified_at=datetime.now(UTC),
+    db.add(UserIdentity(
+        user_uuid=user.uuid, provider=provider,
+        provider_subject=provider_subject, password_hash=password_hash,
     ))
+    if contact_type and value:
+        db.add(UserContact(
+            user_uuid=user.uuid, type=contact_type, value=value,
+            verified=True, verified_at=datetime.now(UTC),
+        ))
     group = await group_repository.get_by_name(db, name=LOGIN_GROUP)
     if group:
         db.add(UserGroupAssign(user_uuid=user.uuid, group_uuid=group.uuid))
-    await db.commit()      # single atomic commit for all four rows
-    await db.refresh(user)  # un-expire after commit (expire_on_commit=True default)
+    await db.commit()
+    await db.refresh(user)
     return user

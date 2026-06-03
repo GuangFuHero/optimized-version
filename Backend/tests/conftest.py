@@ -15,10 +15,12 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core import security
 from app.core.email import get_email_sender
+from app.core.google_verifier import get_google_verifier
 from app.core.redis import get_redis
 from app.core.sms import get_sms_sender
 from app.main import app
 from app.models.auth import Base, Group
+from tests.fakes import FakeGoogleVerifier
 
 TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
@@ -101,6 +103,7 @@ async def client(db_session, redis):
 
     app.dependency_overrides[security.get_db] = override_get_db
     app.dependency_overrides[get_redis] = lambda: redis
+    app.dependency_overrides[get_google_verifier] = lambda: FakeGoogleVerifier()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()

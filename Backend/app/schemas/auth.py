@@ -88,6 +88,25 @@ class RegisterRequest(BaseModel):
         return stripped
 
 
+class GoogleSsoRequest(BaseModel):
+    """Body carrying a Google id_token for SSO login / first-login create."""
+
+    id_token: str = Field(..., min_length=1)
+
+
+class LinkGoogleRequest(BaseModel):
+    """Body carrying a Google id_token to link to the current account."""
+
+    id_token: str = Field(..., min_length=1)
+
+
+class SetPasswordRequest(BaseModel):
+    """Body for SSO-only users to set a first password (no old password)."""
+
+    password: str = Field(..., min_length=6, max_length=255)  # already frontend-hashed
+    salt_frontend: str = Field(..., description="Frontend salt (hex)")
+
+
 class VerifyRequest(BaseModel):
     """Body for unified verification: identifier + 6-digit code."""
 

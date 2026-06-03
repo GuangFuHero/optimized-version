@@ -13,6 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.config import settings
 from app.core.email import build_verification_email, get_email_sender
+from app.core.google_verifier import (
+    GoogleTokenVerificationError,
+    GoogleTokenVerifier,
+    get_google_verifier,
+)
 from app.core.normalize import normalize_email, normalize_phone
 from app.core.redis import get_redis
 from app.core.sms import build_verification_sms, get_sms_sender
@@ -31,9 +36,12 @@ from app.repositories.verification_repository import VerificationRepository
 from app.schemas.auth import (
     AddContactRequest,
     ChangePasswordRequest,
+    GoogleSsoRequest,
+    LinkGoogleRequest,
     RefreshRequest,
     RegisterRequest,
     ResendVerificationRequest,
+    SetPasswordRequest,
     TokenPair,
     UserSaltResponse,
     VerifyContactRequest,
@@ -224,6 +232,95 @@ async def login(
                      expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
 
 
+@router.post("/sso/google", response_model=TokenPair,
+             dependencies=[Depends(get_rate_limiter(10, 60))])
+async def sso_google(
+        body: GoogleSsoRequest,
+        request: Request,
+        db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+        verifier: GoogleTokenVerifier = Depends(get_google_verifier),
+):
+    """Verify a Google id_token; log in an existing google identity or create the account on first login."""
+    try:
+        gid = await verifier.verify(body.id_token)
+    except GoogleTokenVerificationError as err:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid Google token") from err
+
+    identity = await identity_repository.get_by_provider_subject(db, provider="google", subject=gid.sub)
+    if identity is None:
+        if not gid.email_verified:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Google email not verified")
+        try:
+            email = normalize_email(gid.email)
+        except ValueError as err:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Google email not verified") from err
+        if await contact_repository.is_value_taken(db, type_="email", value=email):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="Email already in use; log in and link Google in settings",
+            )
+        name = gid.name or email.split("@")[0]
+        try:
+            user = await create_account(
+                db, name=name, provider="google", provider_subject=gid.sub,
+                contact_type="email", value=email,
+            )
+        except IntegrityError as err:  # concurrent first-login race
+            await db.rollback()
+            identity = await identity_repository.get_by_provider_subject(
+                db, provider="google", subject=gid.sub)
+            if identity is None:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    detail="Email already in use; log in and link Google in settings",
+                ) from err
+            user = await user_repository.get_by_uuid(db, identity.user_uuid)
+    else:
+        user = await user_repository.get_by_uuid(db, identity.user_uuid)
+
+    await user_repository.update(db, db_obj=user, obj_in={"last_login_at": datetime.now(UTC)})
+    device = request.headers.get("user-agent", "unknown")
+    sid, refresh_token = await SessionRepository(redis).create_session(str(user.uuid), device)
+    access_token = security.create_access_token(data={"sub": str(user.uuid)}, sid=sid)
+    return TokenPair(access_token=access_token, refresh_token=refresh_token,
+                     expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+
+
+@router.post("/link/google", status_code=status.HTTP_200_OK,
+             dependencies=[Depends(get_rate_limiter(5, 60))])
+async def link_google(
+        body: LinkGoogleRequest,
+        current_user: User = Depends(security.get_current_user),
+        db: AsyncSession = Depends(security.get_db),
+        verifier: GoogleTokenVerifier = Depends(get_google_verifier),
+):
+    """Attach a verified Google identity to the current account (login method only; no contact change)."""
+    try:
+        gid = await verifier.verify(body.id_token)
+    except GoogleTokenVerificationError as err:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid Google token") from err
+
+    # this Google sub already bound somewhere?
+    existing = await identity_repository.get_by_provider_subject(db, provider="google", subject=gid.sub)
+    if existing is not None:
+        if str(existing.user_uuid) == str(current_user.uuid):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail="Google account already linked")
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            detail="This Google account is already linked to another account")
+    # current user already has a (different) google identity?
+    if await identity_repository.get_user_identity(db, str(current_user.uuid), "google") is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Google account already linked")
+    try:
+        await identity_repository.create(db, obj_in={
+            "user_uuid": current_user.uuid, "provider": "google", "provider_subject": gid.sub,
+        })
+    except IntegrityError as err:  # concurrent link race
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already linked") from err
+    return {"detail": "Google account linked"}
+
+
 @router.post("/refresh",
              response_model=TokenPair,
              dependencies=[Depends(get_rate_limiter(10, 60))])
@@ -270,12 +367,34 @@ async def change_password(
     identity = await identity_repository.get_password_identity(db, user_uuid)
     if identity is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail="No password set; use /auth/set-password (available in a later phase)")
+                            detail="No password set; use /auth/set-password")
     if not security.verify_password(body.old_password, identity.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Incorrect current password")
     new_hash = security.get_password_hash(body.new_password, body.salt_frontend)
     await identity_repository.update(db, db_obj=identity, obj_in={"password_hash": new_hash})
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
+
+
+@router.post("/set-password", status_code=status.HTTP_204_NO_CONTENT,
+             dependencies=[Depends(get_rate_limiter(5, 60))])
+async def set_password(
+        body: SetPasswordRequest,
+        current_user: User = Depends(security.get_current_user),
+        db: AsyncSession = Depends(security.get_db),
+):
+    """Create a first password identity for an SSO-only account (no old-password check)."""
+    user_uuid = str(current_user.uuid)
+    if await identity_repository.get_password_identity(db, user_uuid) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            detail="Password already set; use /auth/change-password")
+    password_hash = security.get_password_hash(body.password, body.salt_frontend)
+    try:
+        await identity_repository.create(db, obj_in={
+            "user_uuid": current_user.uuid, "provider": "password", "password_hash": password_hash,
+        })
+    except IntegrityError as err:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Password already set") from err
 
 
 @router.post("/contacts", status_code=status.HTTP_202_ACCEPTED,

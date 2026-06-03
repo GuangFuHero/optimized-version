@@ -137,6 +137,24 @@ class IdentityRepository(GenericRepository[UserIdentity]):
         )
         return (await db.execute(q)).scalar_one_or_none()
 
+    async def get_by_provider_subject(
+        self, db: AsyncSession, *, provider: str, subject: str
+    ) -> UserIdentity | None:
+        """Return the identity for a given (provider, provider_subject), or None."""
+        q = select(UserIdentity).where(
+            UserIdentity.provider == provider, UserIdentity.provider_subject == subject
+        )
+        return (await db.execute(q)).scalar_one_or_none()
+
+    async def get_user_identity(
+        self, db: AsyncSession, user_uuid: str, provider: str
+    ) -> UserIdentity | None:
+        """Return the user's identity for a specific provider, or None."""
+        q = select(UserIdentity).where(
+            UserIdentity.user_uuid == user_uuid, UserIdentity.provider == provider
+        )
+        return (await db.execute(q)).scalar_one_or_none()
+
 
 user_repository = UserRepository()
 group_repository = GroupRepository()

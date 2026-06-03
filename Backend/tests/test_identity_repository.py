@@ -9,8 +9,9 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models.auth import Base, User, UserContact, UserIdentity
+from app.models.auth import Base, Group, User, UserContact, UserIdentity
 from app.repositories.auth_repository import contact_repository, identity_repository
+from app.services.auth_account import create_account
 
 TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
@@ -86,3 +87,16 @@ async def test_get_password_identity(db):
     await db.commit()
     ident = await identity_repository.get_password_identity(db, str(u.uuid))
     assert ident.password_hash == "h"
+
+
+@pytest.mark.asyncio
+async def test_get_by_provider_subject(db):
+    """The identity for a (provider, provider_subject) pair resolves; an unknown subject is None."""
+    db.add(Group(name="Login User"))
+    await db.commit()
+    user = await create_account(
+        db, name="G", provider="google", provider_subject="sub-xyz",
+        contact_type="email", value="g@x.com")
+    found = await identity_repository.get_by_provider_subject(db, provider="google", subject="sub-xyz")
+    assert found is not None and found.user_uuid == user.uuid
+    assert await identity_repository.get_by_provider_subject(db, provider="google", subject="nope") is None

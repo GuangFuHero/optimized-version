@@ -49,3 +49,10 @@ def test_add_and_verify_contact_requests():
     from app.schemas.auth import AddContactRequest, VerifyContactRequest
     assert AddContactRequest(type="phone", value="0912345678").type == "phone"
     assert VerifyContactRequest(type="phone", value="0912345678", code="123456").code == "123456"
+
+
+def test_google_sso_request_requires_id_token():
+    """GoogleSsoRequest rejects an empty id_token (min_length=1)."""
+    from app.schemas.auth import GoogleSsoRequest
+    with pytest.raises(ValidationError):
+        GoogleSsoRequest(id_token="")
