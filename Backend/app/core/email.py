@@ -38,6 +38,28 @@ def build_verification_email(code: str) -> tuple[str, str]:
     return subject, body
 
 
+def build_password_reset_email(code: str) -> tuple[str, str]:
+    """Return (subject, body) for an email carrying a 6-digit password-reset code."""
+    subject = "Reset your password"
+    body = (
+        f"Your password reset code is {code}\n\n"
+        "Enter it to set a new password. It expires in 10 minutes.\n"
+        "If you did not request this, ignore this email."
+    )
+    return subject, body
+
+
+def build_sso_notice_email() -> tuple[str, str]:
+    """Return (subject, body) telling an SSO-only user there is no password to reset (no code)."""
+    subject = "Password reset"
+    body = (
+        "This account signs in with a third-party login and has no password set.\n"
+        "Please sign in with the provider you used; you can set a password afterwards.\n"
+        "If you did not request this, ignore this email."
+    )
+    return subject, body
+
+
 def get_email_sender() -> EmailSender:
     """FastAPI dependency selecting the configured email sender."""
     if settings.EMAIL_PROVIDER == "smtp2go":

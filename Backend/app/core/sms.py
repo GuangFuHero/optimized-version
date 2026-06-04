@@ -27,6 +27,17 @@ def build_verification_sms(code: str) -> str:
     return f"Your verification code is {code}. It expires in 10 minutes."
 
 
+def build_password_reset_sms(code: str) -> str:
+    """Return the SMS body carrying a password-reset code."""
+    return f"Your password reset code is {code}. It expires in 10 minutes."
+
+
+def build_sso_notice_sms() -> str:
+    """Return the SMS body telling an SSO-only user there is no password to reset (no code)."""
+    return ("This account uses a third-party login and has no password set. "
+            "Please sign in with that provider.")
+
+
 def get_sms_sender() -> SmsSender:
     """FastAPI dependency selecting the configured SMS sender (console for now)."""
     return ConsoleSmsSender()

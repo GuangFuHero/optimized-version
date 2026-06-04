@@ -141,3 +141,20 @@ class VerifyContactRequest(BaseModel):
     type: Literal["email", "phone"] = "email"
     value: str = Field(..., min_length=1, max_length=320)
     code: str = Field(..., min_length=4, max_length=8)
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Body to request a logged-out password reset code."""
+
+    type: Literal["email", "phone"] = "email"
+    value: str = Field(..., min_length=1, max_length=320)
+
+
+class ResetPasswordRequest(BaseModel):
+    """Body to complete a logged-out password reset (new_password already frontend-hashed)."""
+
+    type: Literal["email", "phone"] = "email"
+    value: str = Field(..., min_length=1, max_length=320)
+    code: str = Field(..., min_length=4, max_length=8)
+    new_password: str = Field(..., min_length=6, max_length=255)  # already frontend-hashed
+    salt_frontend: str = Field(..., description="Frontend salt (hex)")

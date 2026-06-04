@@ -14,6 +14,7 @@ from app.core.security import hash_refresh_token
 
 PENDING_REG = "pending_reg:"
 PENDING_CONTACT = "pending_contact:"
+PENDING_PWRESET = "pending_pwreset:"
 MAX_OTP_ATTEMPTS = 5
 
 
@@ -101,3 +102,15 @@ class VerificationRepository:
     async def reissue_contact_verification(self, *, user_uuid: str, type_: str, value: str) -> str | None:
         """Reissue a contact code for `user_uuid`."""
         return await self._reissue(f"{PENDING_CONTACT}{user_uuid}:{type_}:{value}")
+
+    # --- password reset (verify-then-reset), logged-out, keyed by identifier ---
+    async def issue_password_reset(self, *, user_uuid: str, type_: str, value: str) -> str:
+        """Store a pending password reset for `user_uuid`; return the code to deliver."""
+        return await self._issue(
+            f"{PENDING_PWRESET}{type_}:{value}",
+            {"user_uuid": user_uuid, "type": type_, "value": value},
+        )
+
+    async def consume_password_reset(self, *, type_: str, value: str, code: str) -> dict | None:
+        """Verify a password-reset code; on success returns the pending payload."""
+        return await self._consume(f"{PENDING_PWRESET}{type_}:{value}", code)
