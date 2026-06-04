@@ -112,6 +112,22 @@ class ContactRepository(GenericRepository[UserContact]):
         q = select(UserContact.uuid).where(UserContact.type == type_, UserContact.value == value)
         return (await db.execute(q)).first() is not None
 
+    async def user_has_contact_type(self, db: AsyncSession, *, user_uuid: str, type_: str) -> bool:
+        """Return True if the user already owns any contact row of the given type.
+
+        Args:
+            db: Active async session.
+            user_uuid: Owner of the contacts to check.
+            type_: Contact type to look for ("email" or "phone").
+
+        Returns:
+            True if a contact row of that type exists for the user, else False.
+        """
+        q = select(UserContact.uuid).where(
+            UserContact.user_uuid == user_uuid, UserContact.type == type_
+        )
+        return (await db.execute(q)).first() is not None
+
     async def create_verified(self, db: AsyncSession, *, user_uuid, type_: str, value: str) -> UserContact:
         """Attach a VERIFIED contact (value pre-normalized) to an existing user."""
         contact = UserContact(

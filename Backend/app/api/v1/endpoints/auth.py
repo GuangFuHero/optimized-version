@@ -502,6 +502,10 @@ async def add_contact(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid identifier") from err
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f"{body.type.capitalize()} already in use")
+    if await contact_repository.user_has_contact_type(
+            db, user_uuid=str(current_user.uuid), type_=body.type):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            detail=f"This account already has a verified {body.type}")
     code = await VerificationRepository(redis).issue_contact_verification(
         user_uuid=str(current_user.uuid), type_=body.type, value=ident)
     if body.type == "email":
@@ -530,6 +534,10 @@ async def verify_contact(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
+    if await contact_repository.user_has_contact_type(
+            db, user_uuid=str(current_user.uuid), type_=body.type):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            detail=f"This account already has a verified {body.type}")
     try:
         await contact_repository.create_verified(
             db, user_uuid=current_user.uuid, type_=body.type, value=ident)
@@ -556,6 +564,10 @@ async def resend_contact(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid identifier") from err
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
+    if await contact_repository.user_has_contact_type(
+            db, user_uuid=str(current_user.uuid), type_=body.type):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            detail=f"This account already has a verified {body.type}")
     code = await VerificationRepository(redis).reissue_contact_verification(
         user_uuid=str(current_user.uuid), type_=body.type, value=ident)
     if code is None:

@@ -94,7 +94,13 @@ class UserContact(Base, UUIDPKMixin):
     """A verified contact method; email/phone double as the global login identifier."""
 
     __tablename__ = "user_contacts"
-    __table_args__ = (UniqueConstraint("type", "value", name="uq_contact_type_value"),)
+    # uq_contact_user_type: at most one contact per (user, type). A plain (non-partial) unique is safe
+    # because every persisted contact row is verified=True. If unverified rows ever land in the DB,
+    # switch this to a partial unique on verified=True.
+    __table_args__ = (
+        UniqueConstraint("type", "value", name="uq_contact_type_value"),
+        UniqueConstraint("user_uuid", "type", name="uq_contact_user_type"),
+    )
     user_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"), index=True)
     type: Mapped[str] = mapped_column(String(10))  # email | phone
     value: Mapped[str] = mapped_column(String(320))  # normalized (lowercase email / E.164 phone)
