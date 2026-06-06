@@ -453,7 +453,21 @@ async def logout(
         session=Depends(security.get_current_session),
         redis=Depends(get_redis),
 ):
-    """登出：撤銷該使用者的所有 session（全域登出）。"""
+    """Log out the CURRENT device only: revoke this session (its refresh token).
+
+    Use /auth/logout-all to sign out every device. (A token minted without a sid is a no-op.)
+    """
+    _user_uuid, sid = session
+    if sid:
+        await SessionRepository(redis).revoke_session(sid)
+
+
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_all(
+        session=Depends(security.get_current_session),
+        redis=Depends(get_redis),
+):
+    """Log out EVERY device: revoke all of the user's sessions."""
     user_uuid, _sid = session
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
 

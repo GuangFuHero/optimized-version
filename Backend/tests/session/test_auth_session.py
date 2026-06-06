@@ -46,18 +46,39 @@ async def test_refresh_unknown_token_401(fake_redis, make_user):
 
 
 @pytest.mark.asyncio
-async def test_logout_revokes_all_sessions(fake_redis, make_user):
-    """登出後該使用者所有 session 失效，後續 refresh 應回傳 401。"""
+async def test_logout_revokes_only_current_device(fake_redis, make_user):
+    """`/logout` 只撤當前裝置的 session；其他裝置仍可 refresh。"""
     _, password, name = await make_user()
     async with _client() as c:
-        login = (await c.post("/api/v1/auth/login",
-                              data={"username": name, "password": password})).json()
-        access, rt = login["access_token"], login["refresh_token"]
+        s1 = (await c.post("/api/v1/auth/login",
+                           data={"username": name, "password": password})).json()
+        s2 = (await c.post("/api/v1/auth/login",
+                           data={"username": name, "password": password})).json()
         res = await c.post("/api/v1/auth/logout",
-                           headers={"Authorization": f"Bearer {access}"})
+                           headers={"Authorization": f"Bearer {s1['access_token']}"})
         assert res.status_code == 204
-        r = await c.post("/api/v1/auth/refresh", json={"refresh_token": rt})
-        assert r.status_code == 401
+        # device 1 的 refresh 失效,device 2 仍可用
+        r1 = await c.post("/api/v1/auth/refresh", json={"refresh_token": s1["refresh_token"]})
+        assert r1.status_code == 401
+        r2 = await c.post("/api/v1/auth/refresh", json={"refresh_token": s2["refresh_token"]})
+        assert r2.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_logout_all_revokes_every_session(fake_redis, make_user):
+    """`/logout-all` 撤銷該使用者所有 session,所有裝置的 refresh 皆 401。"""
+    _, password, name = await make_user()
+    async with _client() as c:
+        s1 = (await c.post("/api/v1/auth/login",
+                           data={"username": name, "password": password})).json()
+        s2 = (await c.post("/api/v1/auth/login",
+                           data={"username": name, "password": password})).json()
+        res = await c.post("/api/v1/auth/logout-all",
+                           headers={"Authorization": f"Bearer {s1['access_token']}"})
+        assert res.status_code == 204
+        for s in (s1, s2):
+            r = await c.post("/api/v1/auth/refresh", json={"refresh_token": s["refresh_token"]})
+            assert r.status_code == 401
 
 
 @pytest.mark.asyncio
