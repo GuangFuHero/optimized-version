@@ -3,7 +3,7 @@
 import os
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_limiter.depends import RateLimiter
 from pyrate_limiter import Duration, Limiter, Rate
@@ -505,6 +505,7 @@ async def set_password(
              dependencies=[Depends(get_rate_limiter(3, 60))])
 async def forgot_password(
         body: ForgotPasswordRequest,
+        background_tasks: BackgroundTasks,
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
         email_sender=Depends(get_email_sender),
@@ -515,6 +516,10 @@ async def forgot_password(
     Real accounts with a password get a 6-digit reset code; SSO-only accounts get a generic
     "use third-party sign-in" notice. Unknown/unreachable identifiers get nothing. The HTTP response is
     identical in every branch; only the owner's inbox/phone sees what differs.
+
+    Delivery is dispatched via BackgroundTasks so every branch returns in ~constant time — otherwise the
+    awaited send on the account-exists branch leaks account existence via response latency once a real
+    email/SMS provider is wired (the response body is already identical across branches).
     """
     generic = {"detail": "If an account exists, we've sent it instructions to reset the password"}
     try:
@@ -530,14 +535,14 @@ async def forgot_password(
             user_uuid=str(user.uuid), type_=body.type, value=ident)
         if body.type == "email":
             subject, content = build_password_reset_email(code)
-            await email_sender.send(ident, subject, content)
+            background_tasks.add_task(email_sender.send, ident, subject, content)
         else:
-            await sms_sender.send(ident, build_password_reset_sms(code))
+            background_tasks.add_task(sms_sender.send, ident, build_password_reset_sms(code))
     elif body.type == "email":
         subject, content = build_sso_notice_email()
-        await email_sender.send(ident, subject, content)
+        background_tasks.add_task(email_sender.send, ident, subject, content)
     else:
-        await sms_sender.send(ident, build_sso_notice_sms())
+        background_tasks.add_task(sms_sender.send, ident, build_sso_notice_sms())
     return generic
 
 
