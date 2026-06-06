@@ -140,11 +140,27 @@ def generate_salt(length: int = 16) -> str:
     """Generate a random hex salt of the given byte length."""
     return secrets.token_hex(length)
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    """Create a signed JWT access token with an optional custom expiry."""
+def generate_refresh_token() -> str:
+    """Generate an opaque, URL-safe refresh token (raw value, returned to client only)."""
+    return secrets.token_urlsafe(32)
+
+def hash_refresh_token(token: str) -> str:
+    """Return the SHA-256 hex digest used to store/look up a refresh token in Redis."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+def create_access_token(
+    data: dict, expires_delta: timedelta | None = None, sid: str | None = None
+) -> str:
+    """Create a signed JWT access token, tagging it with type/jti and optional session id."""
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
+    to_encode.update({
+        "exp": expire,
+        "iat": datetime.now(UTC),
+        "type": "access",
+        "jti": secrets.token_hex(16),
+        "sid": sid,
+    })
     return jwt.encode(to_encode, settings.JWT_SIGNING_KEY, algorithm=settings.ALGORITHM)
 
 async def get_db():
@@ -152,24 +168,36 @@ async def get_db():
     async with SessionLocal() as session:
         yield session
 
-async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
-    """FastAPI dependency resolving the current authenticated user from JWT."""
-    credentials_exception = HTTPException(
+def _credentials_exception() -> HTTPException:
+    """Build the standard 401 used when an access token cannot be validated."""
+    return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="無法驗證憑證",
+        detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+def _decode_access_payload(token: str) -> dict:
+    """Decode and validate an access JWT, returning its payload. Raises 401 on any failure."""
     try:
         payload = jwt.decode(token, settings.JWT_SIGNING_KEY, algorithms=[settings.ALGORITHM])
-        user_uuid: str = payload.get("sub")
-        if user_uuid is None:
-            raise credentials_exception
     except JWTError as err:
-        raise credentials_exception from err
-    user = await user_repository.get_by_uuid(db, user_uuid)
+        raise _credentials_exception() from err
+    if payload.get("sub") is None or payload.get("type") != "access":
+        raise _credentials_exception()
+    return payload
+
+async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
+    """FastAPI dependency resolving the current authenticated user from JWT."""
+    payload = _decode_access_payload(token)
+    user = await user_repository.get_by_uuid(db, payload["sub"])
     if user is None:
-        raise credentials_exception
+        raise _credentials_exception()
     return user
+
+async def get_current_session(token: str = Depends(oauth2_scheme)) -> tuple[str, str | None]:
+    """Resolve (user_uuid, sid) from the access token without a DB hit."""
+    payload = _decode_access_payload(token)
+    return payload["sub"], payload.get("sid")
 
 class PermissionChecker:
     """FastAPI dependency that enforces RBAC permissions on a resource and action."""

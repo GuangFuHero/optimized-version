@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.core.security import create_access_token, generate_salt, get_password_hash
+from app.core.security import create_access_token
 from app.db.session import Base
 from app.main import app
 from app.models.auth import Group, Policy, PolicyGroupAssign, User, UserGroupAssign
@@ -19,8 +19,7 @@ from app.models.geo import ClosureArea, Station
 from app.models.request import Tickets
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TicketTask
-
-TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
 
 _db_initialized = False
 
@@ -29,7 +28,7 @@ _db_initialized = False
 async def test_db():
     """Async context manager: yields a session, auto-commits and disposes."""
     eng = create_async_engine(TEST_DB_URL, echo=False)
-    factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=False)
+    factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
         yield db
         await db.commit()
@@ -48,7 +47,7 @@ async def _ensure_db():
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=False)
+    factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
         # Groups
         login_group = Group(name="Login User")
@@ -96,8 +95,7 @@ async def _create_user_with_role(group_name: str) -> tuple[str, str]:
     """Create a user, assign to group, return (user_uuid, token)."""
     async with test_db() as db:
         name = f"test_{uuid_mod.uuid4().hex[:8]}"
-        salt = generate_salt()
-        user = User(name=name, password=get_password_hash("pass123", salt))
+        user = User(name=name)
         db.add(user)
         await db.flush()
 

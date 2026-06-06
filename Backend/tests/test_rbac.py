@@ -6,6 +6,7 @@ import uuid
 
 import pytest
 import pytest_asyncio
+import redis.asyncio as aioredis
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -14,11 +15,12 @@ from sqlalchemy.orm import sessionmaker
 os.environ["ENV"] = "testing"
 
 from app.core import security
+from app.core.redis import get_redis
 from app.main import app
 from app.models.auth import Base, Group, Policy, PolicyGroupAssign
+from tests.conftest import TEST_DB_URL as TEST_SQLALCHEMY_DATABASE_URL
+from tests.conftest import TEST_REDIS_URL
 
-# 測試用資料庫
-TEST_SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session():
@@ -28,7 +30,7 @@ async def db_session():
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    TestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    TestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     
     # 預填基礎角色與權限
     async with TestingSessionLocal() as db:
@@ -61,42 +63,47 @@ async def client(db_session):
     async def override_get_db():
         yield db_session
 
+    fake_redis = aioredis.from_url(TEST_REDIS_URL, decode_responses=False)
+    await fake_redis.flushdb()
     app.dependency_overrides[security.get_db] = override_get_db
+    app.dependency_overrides[get_redis] = lambda: fake_redis
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+    await fake_redis.flushdb()
+    await fake_redis.aclose()
 
 @pytest.mark.asyncio
-async def test_full_rbac_flow(client: AsyncClient):
-    """驗證完整的 RBAC 流程：註冊 -> 獲取 Salt -> 登入 -> 權限檢查."""
-    test_user_name = f"user_{uuid.uuid4().hex[:8]}"
+async def test_full_rbac_flow(client: AsyncClient, db_session: AsyncSession):
+    """驗證完整的 RBAC 流程：建立帳號 -> 獲取 Salt -> 登入 -> 權限檢查."""
+    from app.services.auth_account import create_account
+
+    test_email = f"user_{uuid.uuid4().hex[:8]}@t.local"
     test_password = "password123"
     test_salt_frontend = "abcd1234efgh5678"
-    
+
     # 模擬前端傳送雜湊後的密碼
     test_hash_password_v1 = hashlib.sha256((test_password + test_salt_frontend).encode()).hexdigest()
 
-    # 1. 註冊使用者
-    reg_response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "name": test_user_name, 
-            "password": test_hash_password_v1,
-            "salt_frontend": test_salt_frontend
-        }
+    # 1. 直接建立帳號 (verify-then-create 流程於 test_register_flow 另行驗證)
+    await create_account(
+        db_session,
+        contact_type="email",
+        value=test_email,
+        password_hash=security.get_password_hash(test_hash_password_v1, test_salt_frontend),
+        name="Tester",
     )
-    assert reg_response.status_code == 200
 
-    # 2. 登入前獲取 Salt (驗證是否能正確從 DB 結構中解析出前端 Salt)
-    salt_response = await client.get(f"/api/v1/auth/salt/{test_user_name}")
+    # 2. 登入前獲取 Salt (驗證是否能正確從 identity 結構中解析出前端 Salt)
+    salt_response = await client.get(f"/api/v1/auth/salt/{test_email}")
     assert salt_response.status_code == 200
     assert salt_response.json()["salt_frontend"] == test_salt_frontend
 
-    # 3. 執行登入
+    # 3. 執行登入 (以 email 為帳號)
     login_response = await client.post(
         "/api/v1/auth/login",
-        data={"username": test_user_name, "password": test_hash_password_v1}
+        data={"username": test_email, "password": test_hash_password_v1}
     )
     assert login_response.status_code == 200
     token_data = login_response.json()
@@ -107,7 +114,7 @@ async def test_full_rbac_flow(client: AsyncClient):
     # (a) 應具有讀取權限
     map_response = await client.get("/api/v1/rbac-test/map-view", headers=headers)
     assert map_response.status_code == 200
-    assert "具有檢視地圖的權限" in map_response.json()["message"]
+    assert "has map view permission" in map_response.json()["message"]
 
     # (b) 不應具有建立權限
     create_response = await client.get("/api/v1/rbac-test/map-create", headers=headers)

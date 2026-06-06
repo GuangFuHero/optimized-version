@@ -1,23 +1,26 @@
 """SQLAlchemy models for users, groups, policies, and RBAC assignment tables."""
 
-from sqlalchemy import Float, ForeignKey, String, UniqueConstraint
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
 
 
 class User(Base, UUIDPKMixin, TimestampMixin):
-    """ORM model for a registered user."""
+    """ORM model for a registered person (no auth material here)."""
 
     __tablename__ = "users"
-    name: Mapped[str] = mapped_column(String(100))
-    # 儲存格式: <algorithm>$<iterations>$<salt-frontend>$<salt-backend>$<hash>
-    password: Mapped[str] = mapped_column(String(512))
+    name: Mapped[str] = mapped_column(String(100))  # display nickname; no longer the login id, not unique
     credibility_score: Mapped[float] = mapped_column(Float, default=50.0)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # 關聯
     groups: Mapped[list["UserGroupAssign"]] = relationship(back_populates="user")
     policies: Mapped[list["PolicyUserAssign"]] = relationship(back_populates="user")
+    identities: Mapped[list["UserIdentity"]] = relationship(back_populates="user")
+    contacts: Mapped[list["UserContact"]] = relationship(back_populates="user")
 
 
 class Group(Base, UUIDPKMixin):
@@ -67,3 +70,42 @@ class PolicyGroupAssign(Base, UUIDPKMixin):
     __tablename__ = "policy_group_assign"
     group_uuid: Mapped[str] = mapped_column(ForeignKey("groups.uuid"))
     policy_uuid: Mapped[str] = mapped_column(ForeignKey("policies.uuid"))
+
+
+class UserIdentity(Base, UUIDPKMixin):
+    """How a user logs in: one row per auth method (password / google / line)."""
+
+    __tablename__ = "user_identities"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_subject", name="uq_identity_provider_subject"),
+        UniqueConstraint("user_uuid", "provider", name="uq_identity_user_provider"),
+    )
+    user_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"), index=True)
+    provider: Mapped[str] = mapped_column(String(20))  # password | google | line
+    provider_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # pbkdf2_sha256$iters$salt_frontend$salt_backend$hash ; only when provider == password
+    password_hash: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="identities")
+
+
+class UserContact(Base, UUIDPKMixin):
+    """A verified contact method; email/phone double as the global login identifier."""
+
+    __tablename__ = "user_contacts"
+    # uq_contact_user_type: at most one contact per (user, type). A plain (non-partial) unique is safe
+    # because every persisted contact row is verified=True. If unverified rows ever land in the DB,
+    # switch this to a partial unique on verified=True.
+    __table_args__ = (
+        UniqueConstraint("type", "value", name="uq_contact_type_value"),
+        UniqueConstraint("user_uuid", "type", name="uq_contact_user_type"),
+    )
+    user_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"), index=True)
+    type: Mapped[str] = mapped_column(String(10))  # email | phone
+    value: Mapped[str] = mapped_column(String(320))  # normalized (lowercase email / E.164 phone)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="contacts")

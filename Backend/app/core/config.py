@@ -21,12 +21,27 @@ class Settings(BaseSettings):
     # 正式環境一律從外部 Secret Manager 注入。
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-for-local-dev")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15            # short-lived access token
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 14              # refresh token lifetime (Redis TTL)
 
     # Redis 連線字串
     # Docker 內部連線預設: redis://redis:6379
     # 本地開發連線預設: redis://localhost:6379
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+    EMAIL_PROVIDER: str = os.getenv("EMAIL_PROVIDER", "console")  # console | smtp2go
+    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "no-reply@disaster-rescue.local")
+    EMAIL_FROM_NAME: str = os.getenv("EMAIL_FROM_NAME", "Disaster Rescue")
+    APP_BASE_URL: str = os.getenv("APP_BASE_URL", "http://localhost:3000")
+
+    PHONE_DEFAULT_REGION: str = os.getenv("PHONE_DEFAULT_REGION", "TW")
+    OTP_TTL_SECONDS: int = 600  # 10 min, unified email+phone code TTL
+    SMS_PROVIDER: str = os.getenv("SMS_PROVIDER", "console")  # console (real adapter deferred)
+    SMTP2GO_API_KEY: str = os.getenv("SMTP2GO_API_KEY", "")
+
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+
+    LINE_CHANNEL_ID: str = os.getenv("LINE_CHANNEL_ID", "")
 
     @property
     def JWT_SIGNING_KEY(self) -> str:

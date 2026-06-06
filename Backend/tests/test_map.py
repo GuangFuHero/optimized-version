@@ -3,9 +3,9 @@
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import fakeredis.aioredis
 import pytest
 import pytest_asyncio
+import redis.asyncio as aioredis
 from httpx import ASGITransport, AsyncClient
 
 os.environ["ENV"] = "testing"
@@ -19,6 +19,7 @@ from app.services.tile_proxy import (  # noqa: E402
     get_attribution,
     get_source_config,
 )
+from tests.conftest import TEST_REDIS_URL  # noqa: E402
 
 
 def test_attribution_response_valid():
@@ -135,8 +136,12 @@ def test_blank_tile_is_bytes():
 
 @pytest_asyncio.fixture
 async def fake_redis():
-    """Provide an in-memory fake Redis instance for unit tests."""
-    return fakeredis.aioredis.FakeRedis(decode_responses=False)
+    """Provide a real Redis instance (db 15, flushed per test) for unit tests."""
+    r = aioredis.from_url(TEST_REDIS_URL, decode_responses=False)
+    await r.flushdb()
+    yield r
+    await r.flushdb()
+    await r.aclose()
 
 
 @pytest.mark.asyncio
@@ -288,10 +293,13 @@ async def test_fetch_tile_sinica_layer_in_url(fake_redis):
 @pytest_asyncio.fixture
 async def map_client():
     """Provide an HTTP test client with a fake Redis instance attached to app state."""
-    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=False)
+    fake_redis = aioredis.from_url(TEST_REDIS_URL, decode_responses=False)
+    await fake_redis.flushdb()
     app.state.redis = fake_redis
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac, fake_redis
+    await fake_redis.flushdb()
+    await fake_redis.aclose()
 
 
 @pytest.mark.asyncio

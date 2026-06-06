@@ -1,0 +1,41 @@
+"""Tests for the EmailSender protocol, console impl, and sender selection."""
+
+import logging
+
+import pytest
+
+from app.messaging.email import ConsoleEmailSender, build_verification_email, get_email_sender
+
+
+@pytest.mark.asyncio
+async def test_console_sender_logs_link(caplog):
+    """ConsoleEmailSender logs the recipient and the verification link."""
+    sender = ConsoleEmailSender()
+    with caplog.at_level(logging.INFO):
+        await sender.send("alice@x.com", "Verify", "https://app/verify?token=abc")
+    assert "alice@x.com" in caplog.text
+    assert "token=abc" in caplog.text
+
+
+def test_build_verification_email_has_code():
+    """The built verification email contains the 6-digit code and a subject."""
+    subject, body = build_verification_email("123456")
+    assert "123456" in body
+    assert subject
+
+
+def test_get_email_sender_defaults_to_console(monkeypatch):
+    """get_email_sender returns a ConsoleEmailSender for the console provider."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "EMAIL_PROVIDER", "console")
+    assert isinstance(get_email_sender(), ConsoleEmailSender)
+
+
+def test_get_email_sender_returns_smtp2go_when_configured(monkeypatch):
+    """get_email_sender returns the SMTP2Go adapter when EMAIL_PROVIDER is 'smtp2go'."""
+    from app.core.config import settings
+    from app.messaging.smtp2go import Smtp2goEmailSender
+
+    monkeypatch.setattr(settings, "EMAIL_PROVIDER", "smtp2go")
+    assert isinstance(get_email_sender(), Smtp2goEmailSender)

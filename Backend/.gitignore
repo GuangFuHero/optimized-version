@@ -47,3 +47,6 @@ GEMINI.md
 
 # temp db files
 .db/
+
+# local-only compose overrides (e.g. real GOOGLE_CLIENT_ID + oidc verifier for e2e)
+docker-compose.override.yml

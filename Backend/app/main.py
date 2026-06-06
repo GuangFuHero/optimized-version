@@ -1,6 +1,8 @@
 """FastAPI application entry point — wires up middleware, routers, and startup lifecycle."""
 
+import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
@@ -11,6 +13,18 @@ from pyrate_limiter import Duration, Limiter, Rate
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.graphql.router import graphql_router
+
+# Route the app's loggers (e.g. the app.email / app.sms console senders) to stdout at INFO so dev
+# verification codes are visible in `docker compose logs backend`. uvicorn configures only its own
+# loggers, leaving app.* at the root WARNING default — which silently drops the console-sender output.
+_app_logger = logging.getLogger("app")
+if not _app_logger.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
+    _app_logger.addHandler(_handler)
+    _app_logger.setLevel(logging.INFO)
+    # Keep propagate=True so pytest's caplog (root-level capture) still sees app.* records;
+    # uvicorn adds no root handler, so this does not double-log in production.
 
 
 @asynccontextmanager
