@@ -3,7 +3,7 @@ import logging
 
 import pytest
 
-from app.core.sms import ConsoleSmsSender, build_verification_sms, get_sms_sender
+from app.messaging.sms import ConsoleSmsSender, build_verification_sms, get_sms_sender
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@
 import httpx
 import pytest
 
-from app.core.email_smtp2go import Smtp2goEmailSender
+from app.messaging.smtp2go import Smtp2goEmailSender
 
 
 @pytest.mark.asyncio
@@ -39,7 +39,7 @@ async def test_smtp2go_posts_to_api(monkeypatch):
             return FakeResp()
 
     monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
-    monkeypatch.setattr("app.core.email_smtp2go.settings.SMTP2GO_API_KEY", "api-test", raising=False)
+    monkeypatch.setattr("app.messaging.smtp2go.settings.SMTP2GO_API_KEY", "api-test", raising=False)
 
     await Smtp2goEmailSender().send("alice@x.com", "Verify", "code 123456")
     assert captured["url"] == "https://api.smtp2go.com/v3/email/send"

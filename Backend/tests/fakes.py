@@ -1,8 +1,8 @@
 """TEST-ONLY doubles. None of these are ever wired into the running application."""
 import json
 
-from app.core.google_verifier import GoogleIdentity, GoogleTokenVerificationError
-from app.core.line_verifier import LineIdentity, LineTokenVerificationError
+from app.sso.google import GoogleIdentity, GoogleTokenVerificationError
+from app.sso.line import LineIdentity, LineTokenVerificationError
 
 
 class FakeGoogleVerifier:

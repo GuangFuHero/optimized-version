@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from app.core.email import ConsoleEmailSender, build_verification_email, get_email_sender
+from app.messaging.email import ConsoleEmailSender, build_verification_email, get_email_sender
 
 
 @pytest.mark.asyncio
@@ -35,7 +35,7 @@ def test_get_email_sender_defaults_to_console(monkeypatch):
 def test_get_email_sender_returns_smtp2go_when_configured(monkeypatch):
     """get_email_sender returns the SMTP2Go adapter when EMAIL_PROVIDER is 'smtp2go'."""
     from app.core.config import settings
-    from app.core.email_smtp2go import Smtp2goEmailSender
+    from app.messaging.smtp2go import Smtp2goEmailSender
 
     monkeypatch.setattr(settings, "EMAIL_PROVIDER", "smtp2go")
     assert isinstance(get_email_sender(), Smtp2goEmailSender)

@@ -3,9 +3,9 @@ import re
 
 import pytest
 
-from app.core.email import build_password_reset_email, build_sso_notice_email
 from app.core.security import generate_salt, get_password_hash
-from app.core.sms import build_password_reset_sms, build_sso_notice_sms
+from app.messaging.email import build_password_reset_email, build_sso_notice_email
+from app.messaging.sms import build_password_reset_sms, build_sso_notice_sms
 from app.repositories.verification_repository import VerificationRepository
 from app.services.auth_account import create_account
 

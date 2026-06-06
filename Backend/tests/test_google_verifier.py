@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from app.core.google_verifier import (
+from app.sso.google import (
     GoogleIdentity,
     GoogleOidcVerifier,
     GoogleTokenVerificationError,

@@ -34,13 +34,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E4
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 from app.core import security  # noqa: E402
-from app.core.email import get_email_sender  # noqa: E402
-from app.core.google_verifier import get_google_verifier  # noqa: E402
-from app.core.line_verifier import get_line_verifier  # noqa: E402
 from app.core.redis import get_redis  # noqa: E402
-from app.core.sms import get_sms_sender  # noqa: E402
 from app.main import app  # noqa: E402
+from app.messaging.email import get_email_sender  # noqa: E402
+from app.messaging.sms import get_sms_sender  # noqa: E402
 from app.models.auth import Base, Group  # noqa: E402
+from app.sso.google import get_google_verifier  # noqa: E402
+from app.sso.line import get_line_verifier  # noqa: E402
 from tests.fakes import FakeGoogleVerifier, FakeLineVerifier  # noqa: E402
 
 TEST_REDIS_URL = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/15")  # dedicated logical DB

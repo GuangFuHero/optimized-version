@@ -63,6 +63,6 @@ def build_sso_notice_email() -> tuple[str, str]:
 def get_email_sender() -> EmailSender:
     """FastAPI dependency selecting the configured email sender."""
     if settings.EMAIL_PROVIDER == "smtp2go":
-        from app.core.email_smtp2go import Smtp2goEmailSender  # noqa: PLC0415 — optional adapter
+        from app.messaging.smtp2go import Smtp2goEmailSender  # noqa: PLC0415 — optional adapter
         return Smtp2goEmailSender()
     return ConsoleEmailSender()

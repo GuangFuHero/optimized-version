@@ -211,7 +211,7 @@ async def test_verify_create_account_integrity_error_returns_409(client, capture
     """A concurrent-verify IntegrityError on create_account surfaces as 409, not a 500."""
     from sqlalchemy.exc import IntegrityError
 
-    import app.api.v1.endpoints.auth as auth_endpoint
+    import app.api.v1.endpoints.auth.register as auth_endpoint
 
     await client.post(
         "/api/v1/auth/register",

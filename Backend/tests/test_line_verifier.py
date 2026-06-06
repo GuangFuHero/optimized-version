@@ -4,8 +4,8 @@ import json
 import httpx
 import pytest
 
-from app.core import line_verifier
-from app.core.line_verifier import (
+from app.sso import line as line_verifier
+from app.sso.line import (
     LineIdentity,
     LineTokenVerificationError,
     LineVerifyApiVerifier,
