@@ -2,6 +2,8 @@
 from dataclasses import dataclass
 from typing import Protocol
 
+import anyio
+
 from app.core.config import settings
 
 
@@ -39,8 +41,10 @@ class GoogleOidcVerifier:
         from google.auth.transport import requests as ga_requests
         from google.oauth2 import id_token as ga_id_token
         try:
-            claims = ga_id_token.verify_oauth2_token(
-                id_token, ga_requests.Request(), self._client_id
+            # verify_oauth2_token is sync and fetches Google's certs over the network — run it off the
+            # event loop so a slow round-trip doesn't block every other request.
+            claims = await anyio.to_thread.run_sync(
+                ga_id_token.verify_oauth2_token, id_token, ga_requests.Request(), self._client_id
             )
         except Exception as err:  # google-auth raises ValueError subclasses
             raise GoogleTokenVerificationError(str(err)) from err
