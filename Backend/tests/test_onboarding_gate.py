@@ -27,6 +27,7 @@ async def test_require_onboarded_blocks_without_verified_contact(db):
     await db.flush()
     db.add(UserContact(user_uuid=u.uuid, type="email", value="x@x.com", verified=False))
     await db.commit()
+    await db.refresh(u)  # commit expired `u`; reload it like get_current_user would (prod-faithful)
     with pytest.raises(HTTPException) as exc:
         await require_onboarded(current_user=u, db=db)
     assert exc.value.status_code == 403

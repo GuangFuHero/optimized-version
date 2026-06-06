@@ -41,16 +41,17 @@ async def test_link_adds_identity_but_no_contact(client, db_session):
 
     from app.models.auth import UserContact, UserIdentity
     user, headers = await _password_user(db_session)
+    user_uuid = user.uuid  # capture before the request commits db_session and expires `user`
     res = await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok()})
     assert res.status_code == 200
     google = (await db_session.execute(
-        select(UserIdentity).where(UserIdentity.user_uuid == user.uuid,
+        select(UserIdentity).where(UserIdentity.user_uuid == user_uuid,
                                    UserIdentity.provider == "google"))).scalar_one_or_none()
     assert google is not None and google.provider_subject is not None
     # the password user started with exactly one contact (the email); linking adds none
     contact_count = (await db_session.execute(
         select(func.count()).select_from(UserContact).where(
-            UserContact.user_uuid == user.uuid))).scalar_one()
+            UserContact.user_uuid == user_uuid))).scalar_one()
     assert contact_count == 1
 
 

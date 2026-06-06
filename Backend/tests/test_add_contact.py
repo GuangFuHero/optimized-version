@@ -141,6 +141,28 @@ async def test_verify_second_email_blocked_even_if_add_bypassed(client, db_sessi
 
 
 @pytest.mark.asyncio
+async def test_verify_second_email_409_does_not_consume_code(client, db_session, redis):
+    """A 409 on verify_contact (already-owned type) must NOT burn the pending code.
+
+    The conflict checks run BEFORE consume_contact_verification, so the redis pending key survives the
+    409 and the user can retry once the conflict clears.
+    """
+    user, headers = await _logged_in_email_user(db_session)  # already owns owner@x.com
+    repo = VerificationRepository(redis)
+    code = await repo.issue_contact_verification(
+        user_uuid=str(user.uuid), type_="email", value="second@x.com")
+    key = f"pending_contact:{user.uuid}:email:second@x.com"
+    assert await redis.exists(key)
+
+    v = await client.post("/api/v1/auth/contacts/verify", headers=headers,
+                          json={"type": "email", "value": "second@x.com", "code": code})
+    assert v.status_code == 409
+    assert "already has" in v.json()["detail"]
+    # the pending code was NOT consumed by the 409 path
+    assert await redis.exists(key)
+
+
+@pytest.mark.asyncio
 async def test_resend_second_type_blocked_409(client, db_session):
     """Resend for an already-owned type is also blocked → 409 (symmetric with add/verify)."""
     _, headers = await _logged_in_email_user(db_session)  # already owns owner@x.com

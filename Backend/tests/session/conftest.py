@@ -3,9 +3,9 @@
 import os
 import uuid as uuid_mod
 
-import fakeredis.aioredis
 import pytest
 import pytest_asyncio
+import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -17,8 +17,13 @@ from app.db.session import Base
 from app.main import app
 from app.models.auth import Group
 from app.services.auth_account import create_account
+from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
 
-TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+TEST_REDIS_URL = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/15")  # dedicated logical DB
+assert TEST_REDIS_URL.rsplit("/", 1)[-1] not in (
+    "",
+    "0",
+), "TEST_REDIS_URL must use a non-0 db index (flushdb wipes it)"
 _db_ready = False
 
 
@@ -31,7 +36,7 @@ async def _ensure_db():
     async with eng.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=False)
+    factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
         db.add(Group(name="Login User"))
         await db.commit()
@@ -48,11 +53,13 @@ async def setup_db():
 
 @pytest_asyncio.fixture
 async def fake_redis():
-    """In-memory Redis matching the app's bytes-mode client; overrides get_redis."""
-    r = fakeredis.aioredis.FakeRedis(decode_responses=False)
+    """Real bytes-mode Redis (db 15, flushed per test) matching the app's client; overrides get_redis."""
+    r = aioredis.from_url(TEST_REDIS_URL, decode_responses=False)
+    await r.flushdb()
     app.dependency_overrides[get_redis] = lambda: r
     yield r
     app.dependency_overrides.pop(get_redis, None)
+    await r.flushdb()
     await r.aclose()
 
 
@@ -67,7 +74,7 @@ def make_user():
         name = name or f"u_{uuid_mod.uuid4().hex[:8]}"
         salt = generate_salt()
         eng = create_async_engine(TEST_DB_URL, echo=False)
-        factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=False)
+        factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
         async with factory() as db:
             user = await create_account(
                 db, contact_type="email", value=f"{name}@t.local",

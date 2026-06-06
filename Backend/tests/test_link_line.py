@@ -30,16 +30,17 @@ async def test_link_requires_auth(client):
 async def test_link_attaches_line_identity_no_contact(client, db_session):
     """Linking attaches a LINE identity and adds no new contact."""
     user, headers = await _password_user(db_session)
+    user_uuid = user.uuid  # capture before the request commits db_session and expires `user`
     res = await client.post("/api/v1/auth/link/line", headers=headers, json={"id_token": _tok()})
     assert res.status_code == 200
     from sqlalchemy import func, select
 
     from app.models.auth import UserContact, UserIdentity
     line = (await db_session.execute(select(UserIdentity).where(
-        UserIdentity.user_uuid == user.uuid, UserIdentity.provider == "line"))).scalar_one_or_none()
+        UserIdentity.user_uuid == user_uuid, UserIdentity.provider == "line"))).scalar_one_or_none()
     assert line is not None and line.provider_subject is not None
     n = (await db_session.execute(select(func.count()).select_from(UserContact)
-         .where(UserContact.user_uuid == user.uuid))).scalar_one()
+         .where(UserContact.user_uuid == user_uuid))).scalar_one()
     assert n == 1  # only the original email contact; link adds none
 
 

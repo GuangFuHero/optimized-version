@@ -12,18 +12,17 @@ from sqlalchemy.orm import sessionmaker
 from app.models.auth import Base, Group, User, UserContact, UserIdentity
 from app.repositories.auth_repository import contact_repository, identity_repository
 from app.services.auth_account import create_account
-
-TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
 
 
 @pytest_asyncio.fixture
 async def db():
-    """Provide a session against a freshly (re)created schema; drops the dev DB tables."""
+    """Provide a session against a freshly (re)created schema in the dedicated test DB."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
         yield session
     await engine.dispose()
@@ -83,9 +82,10 @@ async def test_get_password_identity(db):
     u = User(name="A")
     db.add(u)
     await db.flush()
-    db.add(UserIdentity(user_uuid=u.uuid, provider="password", password_hash="h"))
+    u_uuid = u.uuid  # capture before commit (commit expires the instance)
+    db.add(UserIdentity(user_uuid=u_uuid, provider="password", password_hash="h"))
     await db.commit()
-    ident = await identity_repository.get_password_identity(db, str(u.uuid))
+    ident = await identity_repository.get_password_identity(db, str(u_uuid))
     assert ident.password_hash == "h"
 
 

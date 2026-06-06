@@ -35,36 +35,40 @@ class VerificationRepository:
     async def _issue(self, key: str, payload: dict) -> str:
         """Store a pending record under `key` with a fresh code; return the plaintext code."""
         code = _gen_code()
-        record = {**payload, "code_hash": hash_refresh_token(code), "attempts": 0}
+        record = {**payload, "code_hash": hash_refresh_token(code)}
         await self.redis.set(key, json.dumps(record), ex=self.ttl)
         return code
 
     async def _consume(self, key: str, code: str) -> dict | None:
-        """Verify a code. Correct → delete + return payload. Wrong → count, burn at cap. None on fail."""
+        """Verify a code. Correct → delete + return payload. Wrong → count, burn at cap. None on fail.
+
+        Wrong-guess counting uses an atomic `INCR` on a separate `:attempts` key so concurrent wrong
+        guesses cannot lose increments and slip past the cap (a non-atomic read-modify-write would).
+        """
         raw = await self.redis.get(key)
         if raw is None:
             return None
         record = json.loads(raw)
         if hash_refresh_token(code) == record["code_hash"]:
-            await self.redis.delete(key)
+            await self.redis.delete(key, key + ":attempts")
             return record
-        record["attempts"] += 1
-        if record["attempts"] >= MAX_OTP_ATTEMPTS:
-            await self.redis.delete(key)
-        else:
-            await self.redis.set(key, json.dumps(record), keepttl=True)
+        n = await self.redis.incr(key + ":attempts")
+        if n == 1:
+            await self.redis.expire(key + ":attempts", self.ttl)
+        if n >= MAX_OTP_ATTEMPTS:
+            await self.redis.delete(key, key + ":attempts")
         return None
 
     async def _reissue(self, key: str) -> str | None:
-        """Mint a new code for a still-pending record (resets attempts). None if none pending."""
+        """Mint a new code for a still-pending record (resets the attempt counter). None if none pending."""
         raw = await self.redis.get(key)
         if raw is None:
             return None
         record = json.loads(raw)
         code = _gen_code()
         record["code_hash"] = hash_refresh_token(code)
-        record["attempts"] = 0
         await self.redis.set(key, json.dumps(record), ex=self.ttl)
+        await self.redis.delete(key + ":attempts")
         return code
 
     # --- registration (verify-then-create) ---

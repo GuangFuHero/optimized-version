@@ -242,7 +242,10 @@ async def require_onboarded(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Gate: require the user to own >=1 verified contact. Raises 403 until onboarding completes."""
+    """Gate: require the user to own >=1 verified contact. Raises 403 until onboarding completes.
+
+    Intentionally NOT wired into any route yet (kept for future per-action enforcement); not dead code.
+    """
     from sqlalchemy import select  # local import to avoid reshuffling module header
 
     from app.models.auth import UserContact

@@ -22,6 +22,7 @@ class SessionRepository:
     SESSION = "session:"
     REFRESH = "refresh:"
     USER_SESSIONS = "user_sessions:"
+    USED = "refresh_used:"
 
     def __init__(self, redis):
         """Initialize with a `redis.asyncio` client (decode_responses=False)."""
@@ -51,7 +52,7 @@ class SessionRepository:
         await self.redis.set(self.SESSION + sid, json.dumps(session), ex=self.ttl)
         await self.redis.set(
             self.REFRESH + rt_hash,
-            json.dumps({"sid": sid, "user_uuid": user_uuid, "used": False}),
+            json.dumps({"sid": sid, "user_uuid": user_uuid}),
             ex=self.ttl,
         )
         await self.redis.sadd(self.USER_SESSIONS + user_uuid, sid)
@@ -72,24 +73,27 @@ class SessionRepository:
         rec = await self.get_refresh(rt_hash)
         if rec is None:
             raise InvalidRefreshToken
-        if rec["used"]:
-            await self.revoke_session(rec["sid"])
-            raise RefreshTokenReuse
         sid = rec["sid"]
         user_uuid = rec["user_uuid"]
-        # load session first so a missing session fails before we mint a new token (no orphan keys)
+        # atomically claim this token: only the first rotation sets the NX flag and proceeds.
+        # any later (or concurrent-losing) rotation finds it already set -> replay -> revoke session.
+        claimed = await self.redis.set(self.USED + rt_hash, b"1", nx=True, ex=self.ttl)
+        if not claimed:
+            await self.revoke_session(sid)
+            raise RefreshTokenReuse
+        # NOTE: the claim is atomic, but mint-new-token + update-pointer below are not transactional with it.
+        # A crash between the claim and the new-token write is a SAFE failure: the old token is trapped, no
+        # new token is issued -> the user re-logs in. There is no window where two valid chains coexist.
+        # load session after the claim; a missing session fails before we mint a new token
         session = self._load(await self.redis.get(self.SESSION + sid))
         if session is None:
             raise InvalidRefreshToken
-        # mark old token used (kept until natural TTL as a trap)
-        rec["used"] = True
-        await self.redis.set(self.REFRESH + rt_hash, json.dumps(rec), ex=self.ttl)
         # issue new token
         new_raw = generate_refresh_token()
         new_hash = self._hash(new_raw)
         await self.redis.set(
             self.REFRESH + new_hash,
-            json.dumps({"sid": sid, "user_uuid": user_uuid, "used": False}),
+            json.dumps({"sid": sid, "user_uuid": user_uuid}),
             ex=self.ttl,
         )
         # update session pointer + sliding TTL

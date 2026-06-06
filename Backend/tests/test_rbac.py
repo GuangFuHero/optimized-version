@@ -4,9 +4,9 @@ import hashlib
 import os
 import uuid
 
-import fakeredis.aioredis
 import pytest
 import pytest_asyncio
+import redis.asyncio as aioredis
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -18,9 +18,9 @@ from app.core import security
 from app.core.redis import get_redis
 from app.main import app
 from app.models.auth import Base, Group, Policy, PolicyGroupAssign
+from tests.conftest import TEST_DB_URL as TEST_SQLALCHEMY_DATABASE_URL
+from tests.conftest import TEST_REDIS_URL
 
-# 測試用資料庫
-TEST_SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session():
@@ -30,7 +30,7 @@ async def db_session():
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    TestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    TestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     
     # 預填基礎角色與權限
     async with TestingSessionLocal() as db:
@@ -63,13 +63,15 @@ async def client(db_session):
     async def override_get_db():
         yield db_session
 
-    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=False)
+    fake_redis = aioredis.from_url(TEST_REDIS_URL, decode_responses=False)
+    await fake_redis.flushdb()
     app.dependency_overrides[security.get_db] = override_get_db
     app.dependency_overrides[get_redis] = lambda: fake_redis
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+    await fake_redis.flushdb()
     await fake_redis.aclose()
 
 @pytest.mark.asyncio

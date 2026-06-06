@@ -1,14 +1,22 @@
 """Tests for the unified (email + phone) 6-digit verification store."""
-import fakeredis.aioredis
+import asyncio
+
 import pytest
+import pytest_asyncio
+import redis.asyncio as aioredis
 
 from app.repositories.verification_repository import MAX_OTP_ATTEMPTS, VerificationRepository
+from tests.conftest import TEST_REDIS_URL
 
 
-@pytest.fixture
-def redis():
-    """In-memory bytes-mode redis."""
-    return fakeredis.aioredis.FakeRedis(decode_responses=False)
+@pytest_asyncio.fixture
+async def redis():
+    """Real bytes-mode redis (db 15, flushed per test)."""
+    r = aioredis.from_url(TEST_REDIS_URL, decode_responses=False)
+    await r.flushdb()
+    yield r
+    await r.flushdb()
+    await r.aclose()
 
 
 @pytest.mark.asyncio
@@ -41,6 +49,55 @@ async def test_attempt_cap_burns_pending(redis):
     for _ in range(MAX_OTP_ATTEMPTS):
         assert await repo.consume_registration(type_="phone", value="+886912345678", code="000000") is None
     assert await repo.consume_registration(type_="phone", value="+886912345678", code=code) is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_wrong_guesses_enforce_cap(redis):
+    """Concurrent wrong guesses that all read the same stale state must not exceed the attempt cap.
+
+    A Barrier gate after the (single) record read forces every coroutine to read the same pre-mutation
+    state before any of them writes back -- the exact interleaving a non-atomic read-modify-write loses
+    increments under. With an atomic counter the cap is still enforced and the pending is burned.
+    """
+    repo = VerificationRepository(redis)
+    code = await repo.issue_registration(type_="email", value="a@x.com", password_hash="h", name="n")
+
+    pending_key = b"pending_reg:email:a@x.com"
+    gate = asyncio.Barrier(MAX_OTP_ATTEMPTS)
+    orig_get = repo.redis.get
+
+    async def gated_get(k):
+        v = await orig_get(k)
+        key_str = k.decode() if isinstance(k, (bytes, bytearray)) else k
+        if key_str == pending_key.decode():
+            await gate.wait()
+        return v
+
+    repo.redis.get = gated_get
+    results = await asyncio.gather(
+        *[repo.consume_registration(type_="email", value="a@x.com", code="000000")
+          for _ in range(MAX_OTP_ATTEMPTS)]
+    )
+    repo.redis.get = orig_get
+
+    assert all(r is None for r in results)
+    # cap enforced despite the concurrent stale reads: the pending is burned, correct code now fails.
+    assert await repo.consume_registration(type_="email", value="a@x.com", code=code) is None
+
+
+@pytest.mark.asyncio
+async def test_reissue_resets_attempt_counter(redis):
+    """Reissue resets the wrong-guess counter: 4 wrong, reissue, 4 more wrong must not yet burn."""
+    repo = VerificationRepository(redis)
+    await repo.issue_registration(type_="email", value="a@x.com", password_hash="h", name=None)
+    for _ in range(MAX_OTP_ATTEMPTS - 1):
+        assert await repo.consume_registration(type_="email", value="a@x.com", code="000000") is None
+    new = await repo.reissue_registration(type_="email", value="a@x.com")
+    assert new
+    for _ in range(MAX_OTP_ATTEMPTS - 1):
+        assert await repo.consume_registration(type_="email", value="a@x.com", code="000000") is None
+    # counter was reset by reissue, so after only 4 fresh wrong guesses the correct code still works.
+    assert (await repo.consume_registration(type_="email", value="a@x.com", code=new)) is not None
 
 
 @pytest.mark.asyncio

@@ -19,8 +19,7 @@ from app.models.geo import ClosureArea, Station
 from app.models.request import Tickets
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TicketTask
-
-TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
 
 _db_initialized = False
 
@@ -29,7 +28,7 @@ _db_initialized = False
 async def test_db():
     """Async context manager: yields a session, auto-commits and disposes."""
     eng = create_async_engine(TEST_DB_URL, echo=False)
-    factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=False)
+    factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
         yield db
         await db.commit()
@@ -48,7 +47,7 @@ async def _ensure_db():
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=False)
+    factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
         # Groups
         login_group = Group(name="Login User")

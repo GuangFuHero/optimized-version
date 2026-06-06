@@ -204,3 +204,29 @@ async def test_resend_taken_email_returns_409(client, capture_email):
         "/api/v1/auth/resend-verification", json={"type": "email", "value": "done@x.com"}
     )
     assert res.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_verify_create_account_integrity_error_returns_409(client, capture_email, monkeypatch):
+    """A concurrent-verify IntegrityError on create_account surfaces as 409, not a 500."""
+    from sqlalchemy.exc import IntegrityError
+
+    import app.api.v1.endpoints.auth as auth_endpoint
+
+    await client.post(
+        "/api/v1/auth/register",
+        json={"type": "email", "value": "race@x.com", "password": "hpw123", "salt_frontend": "abc",
+              "name": "Test User"},
+    )
+    code = capture_email.last_code
+    assert code
+
+    async def _boom(*args, **kwargs):
+        raise IntegrityError("x", "y", Exception("dup"))
+
+    # patch the symbol the endpoint actually references
+    monkeypatch.setattr(auth_endpoint, "create_account", _boom)
+    res = await client.post(
+        "/api/v1/auth/verify", json={"type": "email", "value": "race@x.com", "code": code}
+    )
+    assert res.status_code == 409

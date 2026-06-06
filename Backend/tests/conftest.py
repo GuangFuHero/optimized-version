@@ -4,38 +4,87 @@ import os
 
 os.environ["ENV"] = "testing"
 
-import re
+# Dedicated Postgres test DB (env-driven). Resolved BEFORE any `app.*` import so the application
+# engine (app.db.session) binds to the test DB, not the dev `postgres` maintenance DB. Session
+# tests use the real app engine (no get_db override), so this is what keeps them off dev `postgres`.
+TEST_DB_URL = os.getenv(
+    "TEST_DB_URL",
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/disaster_rescue_test",
+)
+# Maintenance DB used to bootstrap the dedicated test DB (CREATE DATABASE can't run in a txn).
+_ADMIN_DB_URL = os.getenv(
+    "TEST_ADMIN_DB_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+)
+_TEST_DB_NAME = TEST_DB_URL.rsplit("/", 1)[-1]
+assert _TEST_DB_NAME not in (
+    "",
+    "postgres",
+), "TEST_DB_URL must point at a dedicated test DB, never the 'postgres' maintenance DB (it gets wiped)"
+# Point the application engine at the test DB before app.core.config / app.db.session import.
+os.environ["SQLALCHEMY_DATABASE_URL"] = TEST_DB_URL
 
-import fakeredis.aioredis
-import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+import re  # noqa: E402
 
-from app.core import security
-from app.core.email import get_email_sender
-from app.core.google_verifier import get_google_verifier
-from app.core.line_verifier import get_line_verifier
-from app.core.redis import get_redis
-from app.core.sms import get_sms_sender
-from app.main import app
-from app.models.auth import Base, Group
-from tests.fakes import FakeGoogleVerifier, FakeLineVerifier
+import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
+import redis.asyncio as aioredis  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
 
-TEST_DB_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+from app.core import security  # noqa: E402
+from app.core.email import get_email_sender  # noqa: E402
+from app.core.google_verifier import get_google_verifier  # noqa: E402
+from app.core.line_verifier import get_line_verifier  # noqa: E402
+from app.core.redis import get_redis  # noqa: E402
+from app.core.sms import get_sms_sender  # noqa: E402
+from app.main import app  # noqa: E402
+from app.models.auth import Base, Group  # noqa: E402
+from tests.fakes import FakeGoogleVerifier, FakeLineVerifier  # noqa: E402
+
+TEST_REDIS_URL = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/15")  # dedicated logical DB
+assert TEST_REDIS_URL.rsplit("/", 1)[-1] not in (
+    "",
+    "0",
+), "TEST_REDIS_URL must use a non-0 db index (flushdb wipes it)"
 
 _CODE_RE = re.compile(r"\b(\d{6})\b")
 
 
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
+async def _ensure_test_database():
+    """Create the dedicated test DB (+ PostGIS) before any test, so tests never touch dev `postgres`.
+
+    Two gotchas handled here:
+    - asyncpg can't run ``CREATE DATABASE`` inside a transaction / prepared statement, so we use an
+      AUTOCOMMIT engine and ``exec_driver_sql`` (which sends the statement unprepared).
+    - the fixture is session-scoped with a session-scoped loop so pytest-asyncio doesn't raise a
+      "fixture scoped to a different loop" error against the function-scoped test loops.
+    """
+    admin = create_async_engine(_ADMIN_DB_URL, isolation_level="AUTOCOMMIT")
+    async with admin.connect() as conn:
+        exists = await conn.scalar(
+            text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": _TEST_DB_NAME}
+        )
+        if not exists:
+            await conn.exec_driver_sql(f'CREATE DATABASE "{_TEST_DB_NAME}"')
+    await admin.dispose()
+
+    eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
+    async with eng.connect() as conn:
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
+    await eng.dispose()
+
+
 @pytest_asyncio.fixture
 async def db():
-    """Fresh schema per test, UNSEEDED (for model/repo/service/gate unit tests). Wipes the dev DB."""
+    """Fresh schema per test, UNSEEDED (for model/repo/service/gate unit tests). Wipes the test DB."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
         yield session
     await engine.dispose()
@@ -43,12 +92,12 @@ async def db():
 
 @pytest_asyncio.fixture
 async def db_session():
-    """Fresh schema + seeded 'Login User' group per test (self-contained; wipes the dev DB)."""
+    """Fresh schema + seeded 'Login User' group per test (self-contained; wipes the test DB)."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
         session.add(Group(name="Login User"))
         await session.commit()
@@ -90,10 +139,12 @@ class CaptureSmsSender(_Capturer):
 
 @pytest_asyncio.fixture
 async def redis():
-    """One fake redis shared by the client fixture and by tests that need to seed pendings directly."""
-    fake_redis = fakeredis.aioredis.FakeRedis(decode_responses=False)
-    yield fake_redis
-    await fake_redis.aclose()
+    """One real redis (db 15, flushed per test) shared by the client fixture and by tests directly."""
+    r = aioredis.from_url(TEST_REDIS_URL, decode_responses=False)
+    await r.flushdb()
+    yield r
+    await r.flushdb()
+    await r.aclose()
 
 
 @pytest_asyncio.fixture

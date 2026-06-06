@@ -1,19 +1,27 @@
 """Tests for the Redis-backed SessionRepository."""
 
-import fakeredis.aioredis
+import asyncio
+
 import pytest
+import pytest_asyncio
+import redis.asyncio as aioredis
 
 from app.repositories.session_repository import (
     InvalidRefreshToken,
     RefreshTokenReuse,
     SessionRepository,
 )
+from tests.conftest import TEST_REDIS_URL
 
 
-@pytest.fixture
-def repo():
-    """Return a SessionRepository backed by an in-memory fakeredis client."""
-    return SessionRepository(fakeredis.aioredis.FakeRedis(decode_responses=False))
+@pytest_asyncio.fixture
+async def repo():
+    """Return a SessionRepository backed by a real flushed redis client (db 15)."""
+    r = aioredis.from_url(TEST_REDIS_URL, decode_responses=False)
+    await r.flushdb()
+    yield SessionRepository(r)
+    await r.flushdb()
+    await r.aclose()
 
 
 @pytest.mark.asyncio
@@ -22,7 +30,7 @@ async def test_create_session_returns_sid_and_raw_token(repo):
     sid, raw = await repo.create_session("user-1", device="pytest-UA")
     assert sid and raw
     rec = await repo.get_refresh(repo._hash(raw))
-    assert rec["sid"] == sid and rec["user_uuid"] == "user-1" and rec["used"] is False
+    assert rec["sid"] == sid and rec["user_uuid"] == "user-1"
 
 
 @pytest.mark.asyncio
@@ -51,6 +59,29 @@ async def test_unknown_token_is_invalid(repo):
     """Rotating an unknown token raises InvalidRefreshToken."""
     with pytest.raises(InvalidRefreshToken):
         await repo.rotate("nope")
+
+
+@pytest.mark.asyncio
+async def test_concurrent_rotate_same_token_one_wins(repo):
+    """Two concurrent rotations of the same token: exactly one wins, one is reuse-detected.
+
+    Uses an asyncio.Barrier to deterministically force the race window: both coroutines read the
+    refresh record before either mutates, which is exactly the interleave the fix must survive.
+    """
+    sid, raw = await repo.create_session("u-1", "dev")
+    gate = asyncio.Barrier(2)
+    orig_get = repo.get_refresh
+
+    async def gated_get_refresh(h):
+        rec = await orig_get(h)
+        await gate.wait()  # both coroutines have read before either mutates
+        return rec
+
+    repo.get_refresh = gated_get_refresh
+    results = await asyncio.gather(repo.rotate(raw), repo.rotate(raw), return_exceptions=True)
+    oks = [r for r in results if not isinstance(r, Exception)]
+    reuse = [r for r in results if isinstance(r, RefreshTokenReuse)]
+    assert len(oks) == 1 and len(reuse) == 1
 
 
 @pytest.mark.asyncio

@@ -14,9 +14,8 @@ os.environ["ENV"] = "testing"
 
 from app.core import security  # noqa: E402
 from app.models.auth import Base  # noqa: E402
+from tests.conftest import TEST_DB_URL as TEST_SQLALCHEMY_DATABASE_URL  # noqa: E402 — dedicated test DB
 
-# 測試用資料庫
-TEST_SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session():
@@ -25,7 +24,7 @@ async def db_session():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    TestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    TestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with TestingSessionLocal() as session:
         yield session
     await engine.dispose()

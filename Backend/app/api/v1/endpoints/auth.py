@@ -174,10 +174,14 @@ async def verify(
     # re-check the race: someone may have verified the same identifier between register and now
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
-    user = await create_account(
-        db, contact_type=body.type, value=ident, password_hash=payload["password_hash"],
-        name=name,
-    )
+    try:
+        user = await create_account(
+            db, contact_type=body.type, value=ident, password_hash=payload["password_hash"],
+            name=name,
+        )
+    except IntegrityError as err:  # concurrent verify race for the same identifier
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use") from err
     device = request.headers.get("user-agent", "unknown")
     sid, refresh_token = await SessionRepository(redis).create_session(str(user.uuid), device)
     access_token = security.create_access_token(data={"sub": str(user.uuid)}, sid=sid)
@@ -609,16 +613,18 @@ async def verify_contact(
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code") from err
-    payload = await VerificationRepository(redis).consume_contact_verification(
-        user_uuid=str(current_user.uuid), type_=body.type, value=ident, code=body.code)
-    if payload is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
+    # Conflict checks BEFORE consuming the code: a 409 must not burn the user's pending code (they keep
+    # the code and can retry once the conflict clears). Order: normalize (422/400) → 409 → consume (400).
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
     if await contact_repository.user_has_contact_type(
             db, user_uuid=str(current_user.uuid), type_=body.type):
         raise HTTPException(status.HTTP_409_CONFLICT,
                             detail=f"This account already has a verified {body.type}")
+    payload = await VerificationRepository(redis).consume_contact_verification(
+        user_uuid=str(current_user.uuid), type_=body.type, value=ident, code=body.code)
+    if payload is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
     try:
         await contact_repository.create_verified(
             db, user_uuid=current_user.uuid, type_=body.type, value=ident)
