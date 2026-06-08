@@ -88,6 +88,23 @@ async def setup_audit_triggers(db):
         FOR EACH ROW
         EXECUTE FUNCTION audit_trigger_func();
     """))
+
+    # 3. Attach protective trigger on audit_logs table to make it append-only
+    await db.execute(text("""
+        CREATE OR REPLACE FUNCTION protect_audit_logs_func()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            RAISE EXCEPTION 'Audit logs table is append-only. Updates and Deletes are forbidden.';
+        END;
+        $$ LANGUAGE plpgsql;
+    """))
+
+    await db.execute(text("""
+        CREATE TRIGGER protect_audit_logs_trigger
+        BEFORE UPDATE OR DELETE ON audit_logs
+        FOR EACH ROW
+        EXECUTE FUNCTION protect_audit_logs_func();
+    """))
     await db.commit()
 
 
@@ -192,3 +209,40 @@ async def test_audit_trigger_on_delete(db):
     assert delete_log.action == "DELETE"
     assert delete_log.old_values["name"] == "User to Delete"
     assert delete_log.new_values is None
+
+
+@pytest.mark.asyncio
+async def test_audit_logs_table_is_append_only(db):
+    """Verify that any direct UPDATE or DELETE on the audit_logs table raises a database exception."""
+    from sqlalchemy.exc import DBAPIError
+
+    # 1. Create a user to generate an audit log entry
+    new_user = User(name="Audit Append Only Test")
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    user_uuid = new_user.uuid
+
+    # 2. Fetch the audit log entry
+    logs_q = await db.execute(select(AuditLog).where(AuditLog.row_id == user_uuid))
+    audit = logs_q.scalar_one()
+
+    # 3. Attempt to update the audit log row (should raise exception)
+    audit.action = "UPDATE"
+    with pytest.raises(DBAPIError) as exc_info:
+        await db.commit()
+    assert "Updates and Deletes are forbidden" in str(exc_info.value)
+
+    # Rollback to reset transaction state after exception
+    await db.rollback()
+
+    # 4. Attempt to delete the audit log row (should raise exception)
+    # Refetch since transaction was rolled back
+    logs_q = await db.execute(select(AuditLog).where(AuditLog.row_id == user_uuid))
+    audit = logs_q.scalar_one()
+
+    await db.delete(audit)
+    with pytest.raises(DBAPIError) as exc_info:
+        await db.commit()
+    assert "Updates and Deletes are forbidden" in str(exc_info.value)
+

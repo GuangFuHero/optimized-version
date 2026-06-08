@@ -124,9 +124,27 @@ def upgrade() -> None:
             EXECUTE FUNCTION audit_trigger_func();
         """)
 
+    # 4. Prevent updates/deletes on audit_logs table to enforce append-only behavior
+    op.execute("""
+        CREATE OR REPLACE FUNCTION protect_audit_logs_func()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            RAISE EXCEPTION 'Audit logs table is append-only. Updates and Deletes are forbidden.';
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER protect_audit_logs_trigger
+        BEFORE UPDATE OR DELETE ON audit_logs
+        FOR EACH ROW
+        EXECUTE FUNCTION protect_audit_logs_func();
+    """)
+
 
 def downgrade() -> None:
     """Downgrade schema: Drop triggers, functions, and audit_logs table."""
+    op.execute("DROP TRIGGER IF EXISTS protect_audit_logs_trigger ON audit_logs;")
+    op.execute("DROP FUNCTION IF EXISTS protect_audit_logs_func();")
+
     tables = [
         'users',
         'user_identities',
@@ -144,3 +162,4 @@ def downgrade() -> None:
 
     op.execute("DROP FUNCTION IF EXISTS audit_trigger_func();")
     op.drop_table('audit_logs')
+
