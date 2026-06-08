@@ -3,7 +3,8 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, UUID, DateTime, String, func
+from sqlalchemy import UUID, DateTime, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, UUIDPKMixin
@@ -17,8 +18,8 @@ class AuditLog(Base, UUIDPKMixin):
     table_name: Mapped[str] = mapped_column(String(100), comment="異動資料表名稱")
     action: Mapped[str] = mapped_column(String(20), comment="異動類型 (INSERT, UPDATE, DELETE)")
     row_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), comment="受異動資料的主鍵 UUID")
-    old_values: Mapped[dict | None] = mapped_column(JSON, nullable=True, comment="異動前資料內容")
-    new_values: Mapped[dict | None] = mapped_column(JSON, nullable=True, comment="異動後資料內容")
+    old_values: Mapped[dict | None] = mapped_column(JSONB, nullable=True, comment="異動前資料內容")
+    new_values: Mapped[dict | None] = mapped_column(JSONB, nullable=True, comment="異動後資料內容")
     user_uuid: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, comment="操作者使用者 UUID"
     )

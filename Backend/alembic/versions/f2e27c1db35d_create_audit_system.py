@@ -8,6 +8,7 @@ Create Date: 2026-06-08 06:10:00.000000
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -26,8 +27,8 @@ def upgrade() -> None:
         sa.Column('table_name', sa.String(length=100), nullable=False, comment='異動資料表名稱'),
         sa.Column('action', sa.String(length=20), nullable=False, comment='異動類型 (INSERT, UPDATE, DELETE)'),
         sa.Column('row_id', sa.UUID(), nullable=False, comment='受異動資料的主鍵 UUID'),
-        sa.Column('old_values', sa.JSON(), nullable=True, comment='異動前資料內容'),
-        sa.Column('new_values', sa.JSON(), nullable=True, comment='異動後資料內容'),
+        sa.Column('old_values', postgresql.JSONB(astext_type=sa.Text()), nullable=True, comment='異動前資料內容'),
+        sa.Column('new_values', postgresql.JSONB(astext_type=sa.Text()), nullable=True, comment='異動後資料內容'),
         sa.Column('user_uuid', sa.UUID(), nullable=True, comment='操作者使用者 UUID'),
         sa.Column('client_ip', sa.String(length=50), nullable=True, comment='操作者 IP 位址'),
         sa.Column('uuid', sa.UUID(), nullable=False, comment='主鍵 UUID'),
