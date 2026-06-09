@@ -222,6 +222,7 @@ users {
       string visibility "public/restricted/internal"
       string verification_status "unverified/ai_verified/human_verified/disputed"
       string review_note "nullable"
+      string disaster_type "nullable, free-form e.g. earthquake/flood"
   }
   base_geometries ||--|| tickets : "inherits as general ticket"
   %% NOTE: polymorphic_identity = "request" (base_geometries.property_name stores "request" for ticket rows)

@@ -329,6 +329,9 @@ class TicketType:
     review_note: str | None = strawberry.field(
         default=None, description="Moderator's notes about the verification decision"
     )
+    disaster_type: str | None = strawberry.field(
+        default=None, description="Type of disaster, e.g. 'earthquake', 'flood'"
+    )
     created_by: str | None = strawberry.field(
         default=None, description="UUID of the user who submitted this ticket"
     )
@@ -356,6 +359,7 @@ class TicketType:
             contact_phone=m.contact_phone, status=m.status, priority=m.priority,
             task_type=m.task_type, visibility=m.visibility,
             verification_status=m.verification_status, review_note=m.review_note,
+            disaster_type=m.disaster_type,
             created_by=m.created_by, created_at=m.created_at, updated_at=m.updated_at,
         )
 
@@ -394,6 +398,9 @@ class CreateTicketInput:
     visibility: str = strawberry.field(
         default="public", description="Visibility: 'public' (default), 'restricted', or 'internal'"
     )
+    disaster_type: str | None = strawberry.field(
+        default=None, description="Type of disaster, e.g. 'earthquake', 'flood'"
+    )
 
 
 @strawberry.input
@@ -415,4 +422,7 @@ class UpdateTicketInput:
     verification_status: str | None = strawberry.field(
         default=None,
         description="Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'",
+    )
+    disaster_type: str | None = strawberry.field(
+        default=strawberry.UNSET, description="Type of disaster — pass null to clear"
     )

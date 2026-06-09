@@ -56,6 +56,7 @@ class RequestMutation:
             "status": "pending", "priority": input.priority,
             "task_type": input.task_type,
             "visibility": input.visibility,
+            "disaster_type": input.disaster_type,
         })
         return TicketType.from_model(ticket)
 
@@ -86,7 +87,7 @@ class RequestMutation:
             obj_in["title"] = input.title
         if input.verification_status is not None:
             obj_in["verification_status"] = input.verification_status
-        for field in ("description", "review_note"):
+        for field in ("description", "review_note", "disaster_type"):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
                 obj_in[field] = val
