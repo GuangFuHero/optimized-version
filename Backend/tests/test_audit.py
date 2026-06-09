@@ -7,104 +7,30 @@ import pytest_asyncio
 from sqlalchemy import select, text
 
 from app.core.context import request_client_ip, request_user_uuid
+from app.db.triggers import (
+    AUDIT_TRIGGER_FUNC_SQL,
+    AUDITED_TABLES,
+    PROTECT_AUDIT_LOGS_FUNC_SQL,
+    PROTECT_AUDIT_LOGS_TRIGGER_SQL,
+    get_audit_trigger_sql,
+)
 from app.models.audit import AuditLog
-from app.models.auth import User
+from app.models.auth import User, UserIdentity
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def setup_audit_triggers(db):
     """Deploy the trigger function and user audit triggers on the clean test database connection."""
     # 1. Create trigger function
-    await db.execute(text("""
-        CREATE OR REPLACE FUNCTION audit_trigger_func()
-        RETURNS TRIGGER AS $$
-        DECLARE
-            old_val JSONB := NULL;
-            new_val JSONB := NULL;
-            user_id UUID := NULL;
-            ip_addr VARCHAR := NULL;
-            r_id UUID := NULL;
-        BEGIN
-            -- Resolve context variables
-            BEGIN
-                user_id := NULLIF(current_setting('app.current_user_id', true), '')::UUID;
-            EXCEPTION WHEN OTHERS THEN
-                user_id := NULL;
-            END;
+    await db.execute(text(AUDIT_TRIGGER_FUNC_SQL))
 
-            BEGIN
-                ip_addr := NULLIF(current_setting('app.client_ip', true), '');
-            EXCEPTION WHEN OTHERS THEN
-                ip_addr := NULL;
-            END;
-
-            -- Extract row identifier and states
-            IF TG_OP = 'DELETE' THEN
-                r_id := OLD.uuid;
-                old_val := to_jsonb(OLD);
-            ELSIF TG_OP = 'UPDATE' THEN
-                r_id := NEW.uuid;
-                old_val := to_jsonb(OLD);
-                new_val := to_jsonb(NEW);
-            ELSE
-                r_id := NEW.uuid;
-                new_val := to_jsonb(NEW);
-            END IF;
-
-            -- Log to audit table
-            INSERT INTO audit_logs (
-                uuid,
-                table_name,
-                action,
-                row_id,
-                old_values,
-                new_values,
-                user_uuid,
-                client_ip
-            ) VALUES (
-                gen_random_uuid(),
-                TG_TABLE_NAME,
-                TG_OP,
-                r_id,
-                old_val,
-                new_val,
-                user_id,
-                ip_addr
-            );
-
-            IF TG_OP = 'DELETE' THEN
-                RETURN OLD;
-            ELSE
-                RETURN NEW;
-            END IF;
-        END;
-        $$ LANGUAGE plpgsql;
-    """))
-
-    # 2. Attach trigger on users table
-    await db.execute(text("""
-        CREATE TRIGGER audit_trigger_users
-        AFTER INSERT OR UPDATE OR DELETE ON users
-        FOR EACH ROW
-        EXECUTE FUNCTION audit_trigger_func();
-    """))
+    # 2. Attach triggers on all audited tables
+    for table in AUDITED_TABLES:
+        await db.execute(text(get_audit_trigger_sql(table)))
 
     # 3. Attach protective trigger on audit_logs table to make it append-only
-    await db.execute(text("""
-        CREATE OR REPLACE FUNCTION protect_audit_logs_func()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            RAISE EXCEPTION 'Audit logs table is append-only. Updates and Deletes are forbidden.';
-        END;
-        $$ LANGUAGE plpgsql;
-    """))
-
-    await db.execute(text("""
-        CREATE TRIGGER protect_audit_logs_trigger
-        BEFORE UPDATE OR DELETE ON audit_logs
-        FOR EACH ROW
-        EXECUTE FUNCTION protect_audit_logs_func();
-    """))
+    await db.execute(text(PROTECT_AUDIT_LOGS_FUNC_SQL))
+    await db.execute(text(PROTECT_AUDIT_LOGS_TRIGGER_SQL))
     await db.commit()
 
 
@@ -213,7 +139,7 @@ async def test_audit_trigger_on_delete(db):
 
 @pytest.mark.asyncio
 async def test_audit_logs_table_is_append_only(db):
-    """Verify that any direct UPDATE or DELETE on the audit_logs table raises a database exception."""
+    """Verify that any direct UPDATE, DELETE, or TRUNCATE on audit_logs raises a database exception."""
     from sqlalchemy.exc import DBAPIError
 
     # 1. Create a user to generate an audit log entry
@@ -245,4 +171,56 @@ async def test_audit_logs_table_is_append_only(db):
     with pytest.raises(DBAPIError) as exc_info:
         await db.commit()
     assert "Updates and Deletes are forbidden" in str(exc_info.value)
+
+    # Rollback to reset transaction state after exception
+    await db.rollback()
+
+    # 5. Attempt to TRUNCATE the audit log table (should raise exception)
+    with pytest.raises(DBAPIError) as exc_info:
+        await db.execute(text("TRUNCATE audit_logs;"))
+        await db.commit()
+    assert "Updates and Deletes are forbidden" in str(exc_info.value)
+
+    await db.rollback()
+
+
+@pytest.mark.asyncio
+async def test_audit_log_redacts_password_hash(db):
+    """Verify that user password hash is redacted from audit logs on identity creation."""
+    from sqlalchemy.exc import DBAPIError  # noqa: F401
+
+    # 1. Create a base user
+    user = User(name="Password Redact Test User")
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    # 2. Add a password identity
+    identity = UserIdentity(
+        user_uuid=user.uuid,
+        provider="password",
+        provider_subject="test_user_subject",
+        password_hash="pbkdf2_sha256$iters$salt$hash_secret_values",
+    )
+    db.add(identity)
+    await db.commit()
+    await db.refresh(identity)
+
+    # 3. Retrieve audit log for user_identities table
+    logs_q = await db.execute(
+        select(AuditLog)
+        .where(AuditLog.table_name == "user_identities")
+        .where(AuditLog.row_id == identity.uuid)
+    )
+    logs = logs_q.scalars().all()
+    assert len(logs) == 1
+
+    audit_entry = logs[0]
+    assert audit_entry.action == "INSERT"
+
+    # 4. Check that new_values does NOT contain password_hash, but does contain provider
+    assert "password_hash" not in audit_entry.new_values
+    assert audit_entry.new_values["provider"] == "password"
+    assert audit_entry.new_values["provider_subject"] == "test_user_subject"
+
 

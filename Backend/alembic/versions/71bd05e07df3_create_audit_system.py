@@ -11,6 +11,13 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 from alembic import op
+from app.db.triggers import (
+    AUDIT_TRIGGER_FUNC_SQL,
+    AUDITED_TABLES,
+    PROTECT_AUDIT_LOGS_FUNC_SQL,
+    PROTECT_AUDIT_LOGS_TRIGGER_SQL,
+    get_audit_trigger_sql,
+)
 
 # revision identifiers, used by Alembic.
 revision: str = '71bd05e07df3'
@@ -37,107 +44,15 @@ def upgrade() -> None:
     )
 
     # 2. Create trigger function to log operations
-    op.execute("""
-        CREATE OR REPLACE FUNCTION audit_trigger_func()
-        RETURNS TRIGGER AS $$
-        DECLARE
-            old_val JSONB := NULL;
-            new_val JSONB := NULL;
-            user_id UUID := NULL;
-            ip_addr VARCHAR := NULL;
-            r_id UUID := NULL;
-        BEGIN
-            -- Resolve context variables
-            BEGIN
-                user_id := NULLIF(current_setting('app.current_user_id', true), '')::UUID;
-            EXCEPTION WHEN OTHERS THEN
-                user_id := NULL;
-            END;
-
-            BEGIN
-                ip_addr := NULLIF(current_setting('app.client_ip', true), '');
-            EXCEPTION WHEN OTHERS THEN
-                ip_addr := NULL;
-            END;
-
-            -- Extract row identifier and states
-            IF TG_OP = 'DELETE' THEN
-                r_id := OLD.uuid;
-                old_val := to_jsonb(OLD);
-            ELSIF TG_OP = 'UPDATE' THEN
-                r_id := NEW.uuid;
-                old_val := to_jsonb(OLD);
-                new_val := to_jsonb(NEW);
-            ELSE
-                r_id := NEW.uuid;
-                new_val := to_jsonb(NEW);
-            END IF;
-
-            -- Log to audit table
-            INSERT INTO audit_logs (
-                uuid,
-                table_name,
-                action,
-                row_id,
-                old_values,
-                new_values,
-                user_uuid,
-                client_ip
-            ) VALUES (
-                gen_random_uuid(),
-                TG_TABLE_NAME,
-                TG_OP,
-                r_id,
-                old_val,
-                new_val,
-                user_id,
-                ip_addr
-            );
-
-            IF TG_OP = 'DELETE' THEN
-                RETURN OLD;
-            ELSE
-                RETURN NEW;
-            END IF;
-        END;
-        $$ LANGUAGE plpgsql;
-    """)
+    op.execute(AUDIT_TRIGGER_FUNC_SQL)
 
     # 3. Create triggers on audited tables
-    tables = [
-        'users',
-        'user_identities',
-        'user_contacts',
-        'base_geometries',
-        'station_properties',
-        'ticket_tasks',
-        'task_assignments',
-        'routes',
-        'secondary_locations'
-    ]
-
-    for table in tables:
-        op.execute(f"""
-            CREATE TRIGGER audit_trigger_{table}
-            AFTER INSERT OR UPDATE OR DELETE ON {table}
-            FOR EACH ROW
-            EXECUTE FUNCTION audit_trigger_func();
-        """)
+    for table in AUDITED_TABLES:
+        op.execute(get_audit_trigger_sql(table))
 
     # 4. Prevent updates/deletes on audit_logs table to enforce append-only behavior
-    op.execute("""
-        CREATE OR REPLACE FUNCTION protect_audit_logs_func()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            RAISE EXCEPTION 'Audit logs table is append-only. Updates and Deletes are forbidden.';
-        END;
-        $$ LANGUAGE plpgsql;
-
-        CREATE TRIGGER protect_audit_logs_trigger
-        BEFORE UPDATE OR DELETE ON audit_logs
-        FOR EACH ROW
-        EXECUTE FUNCTION protect_audit_logs_func();
-    """)
+    op.execute(PROTECT_AUDIT_LOGS_FUNC_SQL)
+    op.execute(PROTECT_AUDIT_LOGS_TRIGGER_SQL)
 
 
 def downgrade() -> None:
@@ -145,21 +60,10 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER IF EXISTS protect_audit_logs_trigger ON audit_logs;")
     op.execute("DROP FUNCTION IF EXISTS protect_audit_logs_func();")
 
-    tables = [
-        'users',
-        'user_identities',
-        'user_contacts',
-        'base_geometries',
-        'station_properties',
-        'ticket_tasks',
-        'task_assignments',
-        'routes',
-        'secondary_locations'
-    ]
-
-    for table in tables:
+    for table in AUDITED_TABLES:
         op.execute(f"DROP TRIGGER IF EXISTS audit_trigger_{table} ON {table};")
 
     op.execute("DROP FUNCTION IF EXISTS audit_trigger_func();")
     op.drop_table('audit_logs')
+
 
