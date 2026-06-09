@@ -9,10 +9,7 @@ column's Python type on approval, so validation and application can never drift 
 # enum_options is None unless data_type == "enum".
 SUGGESTABLE_FIELDS: dict[str, list[tuple[str, str, list[str] | None]]] = {
     "station": [
-        ("type", "enum", [
-            "water", "shelter", "power", "shower", "toilet",
-            "transport", "medical", "cellular", "charge", "gas_station",
-        ]),
+        ("type", "string", None),
         ("name", "string", None),
         ("description", "string", None),
         ("op_hour", "string", None),
