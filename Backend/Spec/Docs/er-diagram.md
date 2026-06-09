@@ -311,6 +311,30 @@ users {
   users ||--o{ task_assignments : "works on"
 
   %% ==========================
+  %% 8a. Station Update Suggestions (user-proposed edits, admin review)
+  %% ==========================
+  station_update_suggestions {
+      uuid uuid PK
+      string target_type "station/station_property"
+      string target_uuid "uuid of the targeted station or station_property (polymorphic, no FK)"
+      string field_name "which field to change (must be in code-derived suggestable schema)"
+      string new_value "proposed value stored as text; coerced to the field's type on approval"
+      string comment "nullable, why the change is suggested"
+      string status "pending/approved/rejected, default pending"
+      string review_note "nullable, admin note on the decision"
+      uuid reviewed_by FK "nullable, FK to users (admin who decided)"
+      uuid created_by FK "FK to users (the suggester)"
+      timestamp created_at
+      timestamp updated_at
+      timestamp delete_at
+  }
+  users ||--o{ station_update_suggestions : "suggests"
+  users ||--o{ station_update_suggestions : "reviews"
+  %% POLYMORPHIC: target_type + target_uuid reference stations OR station_properties
+  %% (no FK, same pattern as photos.ref_type/ref_uuid). On approve, new_value is applied
+  %% to the target field; on reject, status=rejected and the target is unchanged.
+
+  %% ==========================
   %% 9. Property Config (EAV schema definitions, no FK relationships)
   %% ==========================
   station_property_config {
