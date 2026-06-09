@@ -3,7 +3,6 @@
 import uuid
 
 import pytest
-
 from tests.test_graphql.conftest import auth_header
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,6 @@
 from uuid import UUID
 
 import strawberry
-
 from app.graphql.context import check_permission
 from app.graphql.scalars import geojson_to_geom
 from app.graphql.tickets.types import (

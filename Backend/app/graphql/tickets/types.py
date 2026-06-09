@@ -4,7 +4,6 @@ from datetime import datetime
 from uuid import UUID
 
 import strawberry
-
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import PageInfo
 

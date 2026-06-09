@@ -1,11 +1,10 @@
 """Repositories for tickets, ticket tasks, and task properties."""
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class TicketRepository(GenericRepository[Tickets]):

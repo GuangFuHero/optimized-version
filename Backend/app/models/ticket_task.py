@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from app.models.base import Base, TimestampMixin, UUIDPKMixin
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -13,8 +14,6 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
-
-from app.models.base import Base, TimestampMixin, UUIDPKMixin
 
 
 class TicketTask(Base, UUIDPKMixin, TimestampMixin):
