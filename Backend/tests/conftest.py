@@ -124,9 +124,9 @@ class _Capturer:
 class CaptureEmailSender(_Capturer):
     """Test EmailSender that records messages so tests can extract the verification code."""
 
-    async def send(self, to, subject, body):
-        """Record one outbound email instead of delivering it."""
-        self.messages.append((to, subject, body))
+    async def send(self, to, subject, html, text):
+        """Record one outbound email instead of delivering it (text body parsed for the code)."""
+        self.messages.append((to, subject, html, text))
 
 
 class CaptureSmsSender(_Capturer):

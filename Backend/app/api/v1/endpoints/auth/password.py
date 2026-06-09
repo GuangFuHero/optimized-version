@@ -112,13 +112,13 @@ async def forgot_password(
         code = await VerificationRepository(redis).issue_password_reset(
             user_uuid=str(user.uuid), type_=body.type, value=ident)
         if body.type == "email":
-            subject, content = build_password_reset_email(code)
-            background_tasks.add_task(email_sender.send, ident, subject, content)
+            subject, html, text = build_password_reset_email(code)
+            background_tasks.add_task(email_sender.send, ident, subject, html, text)
         else:
             background_tasks.add_task(sms_sender.send, ident, build_password_reset_sms(code))
     elif body.type == "email":
-        subject, content = build_sso_notice_email()
-        background_tasks.add_task(email_sender.send, ident, subject, content)
+        subject, html, text = build_sso_notice_email()
+        background_tasks.add_task(email_sender.send, ident, subject, html, text)
     else:
         background_tasks.add_task(sms_sender.send, ident, build_sso_notice_sms())
     return generic
