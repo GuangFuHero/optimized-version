@@ -104,6 +104,33 @@ mutation($stationType: String!, $input: UpsertPropertyConfigInput!) {
 }
 """
 
+ASSIGN_TASK_ACTOR = """
+mutation($taskUuid: UUID!, $actorUuid: UUID, $role: String) {
+    assignTaskActor(taskUuid: $taskUuid, actorUuid: $actorUuid, role: $role) {
+        uuid taskUuid actorUuid status role
+    }
+}
+"""
+
+UPDATE_TASK_ASSIGNMENT = """
+mutation($uuid: UUID!, $input: UpdateTaskAssignmentInput!) {
+    updateTaskAssignment(uuid: $uuid, input: $input) { uuid status role }
+}
+"""
+
+UNASSIGN_TASK_ACTOR = """
+mutation($uuid: UUID!) { unassignTaskActor(uuid: $uuid) }
+"""
+
+TASK_PROGRESS = """
+query($ticketUuid: String!) {
+    ticketTasks(ticketUuid: $ticketUuid) {
+        uuid quantity assignedCount completedCount progress
+        assignments { actorUuid status }
+    }
+}
+"""
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -710,3 +737,169 @@ async def test_upsert_station_property_config_idempotent(client, coordinator_aut
         },
     }, headers=auth_header(token))
     assert resp.json()["data"]["upsertStationPropertyConfig"]["dataType"] == data_type
+
+
+# ============================================================================
+# Task assignment mutations (HR staffing + work-completion progress bar)
+# ============================================================================
+
+
+async def _assign(client, token, task_uuid, actor_uuid=None, role=None):
+    """Helper: POST assignTaskActor and return the parsed JSON body."""
+    return (await client.post("/graphql", json={
+        "query": ASSIGN_TASK_ACTOR,
+        "variables": {"taskUuid": task_uuid, "actorUuid": actor_uuid, "role": role},
+    }, headers=auth_header(token))).json()
+
+
+@pytest.mark.asyncio
+async def test_self_signup_creates_assignment(
+    client, login_user_auth, sample_ticket_task,
+):
+    """A login user can self-sign-up (no actorUuid) → assignment starts as 'accepted'."""
+    user_uuid, token = login_user_auth
+    body = await _assign(client, token, sample_ticket_task)
+    data = body["data"]["assignTaskActor"]
+    assert data["actorUuid"] == user_uuid
+    assert data["status"] == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_coordinator_assigns_other_user(
+    client, coordinator_auth, sample_ticket_task,
+):
+    """A coordinator (request:edit=all) can assign another user to a task."""
+    from tests.test_graphql.conftest import _create_user_with_role
+    other_uuid, _ = await _create_user_with_role("Login User")
+
+    _, token = coordinator_auth
+    body = await _assign(client, token, sample_ticket_task, actor_uuid=other_uuid, role="lead")
+    data = body["data"]["assignTaskActor"]
+    assert data["actorUuid"] == other_uuid
+    assert data["role"] == "lead"
+
+
+@pytest.mark.asyncio
+async def test_login_user_cannot_assign_other(
+    client, login_user_auth, sample_ticket_task,
+):
+    """A login user (request:edit=own) cannot assign someone else to a task they don't own."""
+    from tests.test_graphql.conftest import _create_user_with_role
+    other_uuid, _ = await _create_user_with_role("Login User")
+
+    _, token = login_user_auth
+    body = await _assign(client, token, sample_ticket_task, actor_uuid=other_uuid)
+    assert any("Permission Denied." in e["message"] for e in body["errors"])
+
+
+@pytest.mark.asyncio
+async def test_duplicate_assignment_rejected(
+    client, login_user_auth, sample_ticket_task,
+):
+    """Linking the same actor to the same task twice is rejected by the duplicate guard."""
+    _, token = login_user_auth
+    await _assign(client, token, sample_ticket_task)
+    body = await _assign(client, token, sample_ticket_task)
+    assert any("already assigned" in e["message"] for e in body["errors"])
+
+
+@pytest.mark.asyncio
+async def test_over_subscription_allowed(
+    client, coordinator_auth, sample_ticket_task,
+):
+    """quantity=3 task accepts more than 3 people — no capacity cap."""
+    from tests.test_graphql.conftest import _create_user_with_role
+    _, token = coordinator_auth
+    for _ in range(4):
+        actor_uuid, _ignore = await _create_user_with_role("Login User")
+        body = await _assign(client, token, sample_ticket_task, actor_uuid=actor_uuid)
+        assert "errors" not in body, body
+
+
+@pytest.mark.asyncio
+async def test_progress_reflects_completed(
+    client, coordinator_auth, sample_ticket, sample_ticket_task,
+):
+    """Progress = completed assignments / quantity; updating status moves the bar."""
+    from tests.test_graphql.conftest import _create_user_with_role
+    _, token = coordinator_auth
+
+    assignment_uuids = []
+    for _ in range(3):  # task quantity is 3
+        actor_uuid, _ignore = await _create_user_with_role("Login User")
+        body = await _assign(client, token, sample_ticket_task, actor_uuid=actor_uuid)
+        assignment_uuids.append(body["data"]["assignTaskActor"]["uuid"])
+
+    # Mark 2 of the 3 as completed
+    for a_uuid in assignment_uuids[:2]:
+        await client.post("/graphql", json={
+            "query": UPDATE_TASK_ASSIGNMENT,
+            "variables": {"uuid": a_uuid, "input": {"status": "completed"}},
+        }, headers=auth_header(token))
+
+    resp = await client.post("/graphql", json={
+        "query": TASK_PROGRESS, "variables": {"ticketUuid": sample_ticket},
+    }, headers=auth_header(token))
+    task = next(
+        t for t in resp.json()["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task
+    )
+    assert task["assignedCount"] == 3
+    assert task["completedCount"] == 2
+    assert task["progress"] == pytest.approx(2 / 3)
+
+
+@pytest.mark.asyncio
+async def test_assignee_updates_own_status(
+    client, login_user_auth, sample_ticket_task,
+):
+    """The assignee can advance their own assignment status (edit=own)."""
+    _, token = login_user_auth
+    body = await _assign(client, token, sample_ticket_task)
+    a_uuid = body["data"]["assignTaskActor"]["uuid"]
+
+    resp = await client.post("/graphql", json={
+        "query": UPDATE_TASK_ASSIGNMENT,
+        "variables": {"uuid": a_uuid, "input": {"status": "completed"}},
+    }, headers=auth_header(token))
+    assert resp.json()["data"]["updateTaskAssignment"]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_non_owner_cannot_update_assignment(
+    client, login_user_auth, sample_ticket_task,
+):
+    """A login user cannot update another person's assignment."""
+    from tests.test_graphql.conftest import _create_user_with_role
+    owner_uuid, owner_token = await _create_user_with_role("Login User")
+    body = await _assign(client, owner_token, sample_ticket_task)
+    a_uuid = body["data"]["assignTaskActor"]["uuid"]
+
+    _, other_token = login_user_auth
+    resp = await client.post("/graphql", json={
+        "query": UPDATE_TASK_ASSIGNMENT,
+        "variables": {"uuid": a_uuid, "input": {"status": "completed"}},
+    }, headers=auth_header(other_token))
+    assert any("Permission Denied." in e["message"] for e in resp.json()["errors"])
+
+
+@pytest.mark.asyncio
+async def test_unassign_removes_assignment(
+    client, login_user_auth, sample_ticket, sample_ticket_task,
+):
+    """Unassigning hard-deletes the row and drops assignedCount back to 0."""
+    _, token = login_user_auth
+    body = await _assign(client, token, sample_ticket_task)
+    a_uuid = body["data"]["assignTaskActor"]["uuid"]
+
+    resp = await client.post("/graphql", json={
+        "query": UNASSIGN_TASK_ACTOR, "variables": {"uuid": a_uuid},
+    }, headers=auth_header(token))
+    assert resp.json()["data"]["unassignTaskActor"] is True
+
+    resp = await client.post("/graphql", json={
+        "query": TASK_PROGRESS, "variables": {"ticketUuid": sample_ticket},
+    }, headers=auth_header(token))
+    task = next(
+        t for t in resp.json()["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task
+    )
+    assert task["assignedCount"] == 0

@@ -77,8 +77,15 @@ class TaskAssignmentType:
     role: str | None = strawberry.field(
         default=None, description="Role in the task, e.g. 'lead', 'support'"
     )
+    status: str = strawberry.field(
+        default="accepted",
+        description="Work-completion state: 'accepted', 'en_route', or 'completed'",
+    )
     assigned_at: datetime | None = strawberry.field(
         default=None, description="Timestamp when the assignment was created"
+    )
+    updated_at: datetime | None = strawberry.field(
+        default=None, description="Timestamp when the status was last changed"
     )
 
     @classmethod
@@ -86,7 +93,8 @@ class TaskAssignmentType:
         """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, task_uuid=m.task_uuid, actor_uuid=m.actor_uuid,
-            role=m.role, assigned_at=m.assigned_at,
+            role=m.role, status=m.status,
+            assigned_at=m.assigned_at, updated_at=m.updated_at,
         )
 
 
@@ -143,6 +151,31 @@ class TicketTaskType:
     async def assignments(self, info: strawberry.types.Info) -> list[TaskAssignmentType]:
         """Resolve actors (volunteers, responders) assigned to this task."""
         return await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
+
+    @strawberry.field
+    async def assigned_count(self, info: strawberry.types.Info) -> int:
+        """Number of people currently linked to this task."""
+        rows = await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
+        return len(rows)
+
+    @strawberry.field
+    async def completed_count(self, info: strawberry.types.Info) -> int:
+        """Number of assignments that have reached 'completed' status."""
+        rows = await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
+        return sum(1 for a in rows if a.status == "completed")
+
+    @strawberry.field
+    async def progress(self, info: strawberry.types.Info) -> float | None:
+        """Work-completion ratio (0.0-1.0): completed assignments / quantity needed.
+
+        Returns null when quantity is unset or zero. Clamped at 1.0 even if the
+        task is over-subscribed (more completions than people requested).
+        """
+        if not self.quantity:
+            return None
+        rows = await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
+        completed = sum(1 for a in rows if a.status == "completed")
+        return min(1.0, completed / self.quantity)
 
     @classmethod
     def from_model(cls, m) -> "TicketTaskType":
@@ -235,6 +268,20 @@ class UpdateTaskPropertyInput:
     )
     comment: str | None = strawberry.field(
         default=strawberry.UNSET, description="Updated notes — pass null to clear"
+    )
+
+
+@strawberry.input
+class UpdateTaskAssignmentInput:
+    """Input for updating a task assignment's work-completion status or role."""
+
+    status: str | None = strawberry.field(
+        default=None,
+        description="New work state: 'accepted', 'en_route', or 'completed'",
+    )
+    role: str | None = strawberry.field(
+        default=strawberry.UNSET,
+        description="Updated role, e.g. 'lead' or 'support' — pass null to clear",
     )
 
 

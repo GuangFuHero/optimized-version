@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
-from app.models.ticket_task import TaskProperty, TicketTask
+from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 
 
 class TicketRepository(GenericRepository[Tickets]):
@@ -96,6 +96,34 @@ class TaskPropertyRepository(GenericRepository[TaskProperty]):
         return result.scalars().all()
 
 
+class TaskAssignmentRepository(GenericRepository[TaskAssignment]):
+    """Repository for task assignment queries (people linked to a task)."""
+
+    def __init__(self):
+        """Initialize with TaskAssignment as the managed model."""
+        super().__init__(TaskAssignment)
+
+    async def list_by_task(self, db: AsyncSession, task_uuid: str) -> list[TaskAssignment]:
+        """List all assignments for a given task."""
+        result = await db.execute(
+            select(self.model).where(self.model.task_uuid == task_uuid)
+        )
+        return result.scalars().all()
+
+    async def get_by_task_and_actor(
+        self, db: AsyncSession, task_uuid: str, actor_uuid: str
+    ) -> TaskAssignment | None:
+        """Fetch the assignment linking an actor to a task, if it exists (duplicate guard)."""
+        result = await db.execute(
+            select(self.model).where(
+                self.model.task_uuid == task_uuid,
+                self.model.actor_uuid == actor_uuid,
+            )
+        )
+        return result.scalar_one_or_none()
+
+
 ticket_repository = TicketRepository()
 ticket_task_repository = TicketTaskRepository()
 task_property_repository = TaskPropertyRepository()
+task_assignment_repository = TaskAssignmentRepository()

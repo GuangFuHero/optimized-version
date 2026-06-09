@@ -10,14 +10,17 @@ from app.graphql.tickets.types import (
     CreateTaskPropertyInput,
     CreateTicketInput,
     CreateTicketTaskInput,
+    TaskAssignmentType,
     TaskPropertyType,
     TicketTaskType,
     TicketType,
+    UpdateTaskAssignmentInput,
     UpdateTaskPropertyInput,
     UpdateTicketInput,
     UpdateTicketTaskInput,
 )
 from app.repositories.tickets_repository import (
+    task_assignment_repository,
     task_property_repository,
     ticket_repository,
     ticket_task_repository,
@@ -201,3 +204,77 @@ class TicketTaskMutation:
 
         prop = await task_property_repository.update(db, db_obj=prop, obj_in=obj_in)
         return TaskPropertyType.from_model(prop)
+
+    @strawberry.mutation
+    async def assign_task_actor(
+        self, info: strawberry.types.Info,
+        task_uuid: UUID, actor_uuid: UUID | None = None, role: str | None = None,
+    ) -> TaskAssignmentType:
+        """Link a person to a ticket task (volunteer self-sign-up or coordinator assignment).
+
+        When actor_uuid is omitted (or equals the caller), this is a self-sign-up and
+        only request:create is required. Assigning someone else requires request:edit on
+        the task. Over-subscription is allowed (no capacity check); the only guard is that
+        the same actor cannot be linked to the same task twice. Returns the new assignment.
+        """
+        db = info.context["db"]
+        task = await ticket_task_repository.get_by_uuid_active(db, str(task_uuid))
+        if not task:
+            raise ValueError("Ticket task not found")
+
+        current_uuid = str(info.context["user"].uuid) if info.context["user"] else None
+        actor = str(actor_uuid) if actor_uuid else current_uuid
+        if actor == current_uuid:
+            await check_permission(info, "request", "create")
+        else:
+            await check_permission(info, "request", "edit", owner_uuid=task.created_by)
+
+        if await task_assignment_repository.get_by_task_and_actor(db, str(task_uuid), actor):
+            raise ValueError("Actor already assigned to this task")
+
+        assignment = await task_assignment_repository.create(db, obj_in={
+            "task_uuid": str(task_uuid),
+            "actor_uuid": actor,
+            "role": role,
+            "status": "accepted",
+        })
+        return TaskAssignmentType.from_model(assignment)
+
+    @strawberry.mutation
+    async def update_task_assignment(
+        self, info: strawberry.types.Info, uuid: UUID, input: UpdateTaskAssignmentInput
+    ) -> TaskAssignmentType:
+        """Update an assignment's work-completion status or role — moves the progress bar.
+
+        Owner-scoped: the assignee can update their own assignment (request:edit=own),
+        coordinators can update anyone's (request:edit=all). Returns the updated assignment.
+        """
+        db = info.context["db"]
+        assignment = await task_assignment_repository.get_by_uuid(db, str(uuid))
+        if not assignment:
+            raise ValueError("Task assignment not found")
+        await check_permission(info, "request", "edit", owner_uuid=str(assignment.actor_uuid))
+
+        obj_in = {}
+        if input.status is not None:
+            obj_in["status"] = input.status
+        if input.role is not strawberry.UNSET:
+            obj_in["role"] = input.role
+
+        assignment = await task_assignment_repository.update(db, db_obj=assignment, obj_in=obj_in)
+        return TaskAssignmentType.from_model(assignment)
+
+    @strawberry.mutation
+    async def unassign_task_actor(self, info: strawberry.types.Info, uuid: UUID) -> bool:
+        """Remove a person from a ticket task (withdraw or un-assign).
+
+        Owner-scoped request:edit — the assignee can remove their own link, coordinators
+        can remove any. Hard-deletes the assignment row. Returns True on success.
+        """
+        db = info.context["db"]
+        assignment = await task_assignment_repository.get_by_uuid(db, str(uuid))
+        if not assignment:
+            raise ValueError("Task assignment not found")
+        await check_permission(info, "request", "edit", owner_uuid=str(assignment.actor_uuid))
+        await task_assignment_repository.remove(db, uuid=str(uuid))
+        return True
