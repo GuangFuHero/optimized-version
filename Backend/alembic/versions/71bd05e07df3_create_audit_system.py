@@ -1,8 +1,8 @@
 """create_audit_system
 
-Revision ID: f2e27c1db35d
+Revision ID: 71bd05e07df3
 Revises: b5d1c8e9f3a2
-Create Date: 2026-06-08 06:10:00.000000
+Create Date: 2026-06-09 17:45:12.932030
 
 """
 from collections.abc import Sequence
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'f2e27c1db35d'
+revision: str = '71bd05e07df3'
 down_revision: str | Sequence[str] | None = 'b5d1c8e9f3a2'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
