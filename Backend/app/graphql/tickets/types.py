@@ -14,12 +14,8 @@ class PhotoType:
     """GraphQL type representing a photo attached to a station or ticket."""
 
     uuid: UUID
-    ref_uuid: str = strawberry.field(
-        description="UUID of the parent entity this photo is attached to"
-    )
-    ref_type: str = strawberry.field(
-        description="Type of the parent entity: 'station' or 'ticket'"
-    )
+    ref_uuid: str = strawberry.field(description="UUID of the parent entity this photo is attached to")
+    ref_type: str = strawberry.field(description="Type of the parent entity: 'station' or 'ticket'")
     url: str = strawberry.field(description="Public URL of the uploaded photo")
     created_by: str = strawberry.field(description="UUID of the user who uploaded this photo")
     created_at: datetime | None = None
@@ -28,8 +24,12 @@ class PhotoType:
     def from_model(cls, m) -> "PhotoType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, ref_uuid=m.ref_uuid, ref_type=m.ref_type,
-            url=m.url, created_by=m.created_by, created_at=m.created_at,
+            uuid=m.uuid,
+            ref_uuid=m.ref_uuid,
+            ref_type=m.ref_type,
+            url=m.url,
+            created_by=m.created_by,
+            created_at=m.created_at,
         )
 
 
@@ -51,18 +51,20 @@ class TaskPropertyType:
     status: str | None = strawberry.field(
         default=None, description="Fulfillment state: 'pending' or 'fulfilled'"
     )
-    comment: str | None = strawberry.field(
-        default=None, description="Optional notes about this property"
-    )
+    comment: str | None = strawberry.field(default=None, description="Optional notes about this property")
     created_at: datetime | None = None
 
     @classmethod
     def from_model(cls, m) -> "TaskPropertyType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, task_uuid=m.task_uuid,
-            property_name=m.property_name, property_value=m.property_value,
-            quantity=m.quantity, status=m.status, comment=m.comment,
+            uuid=m.uuid,
+            task_uuid=m.task_uuid,
+            property_name=m.property_name,
+            property_value=m.property_value,
+            quantity=m.quantity,
+            status=m.status,
+            comment=m.comment,
             created_at=m.created_at,
         )
 
@@ -74,9 +76,7 @@ class TaskAssignmentType:
     uuid: UUID
     task_uuid: str = strawberry.field(description="UUID of the task this assignment belongs to")
     actor_uuid: str = strawberry.field(description="UUID of the assigned user or group")
-    role: str | None = strawberry.field(
-        default=None, description="Role in the task, e.g. 'lead', 'support'"
-    )
+    role: str | None = strawberry.field(default=None, description="Role in the task, e.g. 'lead', 'support'")
     status: str = strawberry.field(
         default="accepted",
         description="Work-completion state: 'accepted', 'en_route', or 'completed'",
@@ -92,9 +92,13 @@ class TaskAssignmentType:
     def from_model(cls, m) -> "TaskAssignmentType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, task_uuid=m.task_uuid, actor_uuid=m.actor_uuid,
-            role=m.role, status=m.status,
-            assigned_at=m.assigned_at, updated_at=m.updated_at,
+            uuid=m.uuid,
+            task_uuid=m.task_uuid,
+            actor_uuid=m.actor_uuid,
+            role=m.role,
+            status=m.status,
+            assigned_at=m.assigned_at,
+            updated_at=m.updated_at,
         )
 
 
@@ -103,12 +107,8 @@ class TicketTaskType:
     """GraphQL type representing a task under a support ticket (rescue, HR, supply, etc.)."""
 
     uuid: UUID
-    ticket_uuid: str = strawberry.field(
-        description="UUID of the parent ticket this task belongs to"
-    )
-    task_type: str = strawberry.field(
-        description="Category of task: 'rescue', 'supply', 'medical', or 'hr'"
-    )
+    ticket_uuid: str = strawberry.field(description="UUID of the parent ticket this task belongs to")
+    task_type: str = strawberry.field(description="Category of task: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str = strawberry.field(description="Short name summarising the task")
     task_description: str | None = strawberry.field(
         default=None, description="Detailed task instructions or context"
@@ -120,9 +120,7 @@ class TicketTaskType:
         default="pending",
         description="Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'",
     )
-    source: str = strawberry.field(
-        default="user", description="Origin of this task: 'user' or 'official'"
-    )
+    source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
     progress_note: str | None = strawberry.field(
         default=None, description="Current progress update written by the assignee"
     )
@@ -181,13 +179,21 @@ class TicketTaskType:
     def from_model(cls, m) -> "TicketTaskType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, ticket_uuid=m.ticket_uuid,
-            task_type=m.task_type, task_name=m.task_name,
-            task_description=m.task_description, quantity=m.quantity,
-            status=m.status, source=m.source, progress_note=m.progress_note,
-            visibility=m.visibility, moderation_status=m.moderation_status,
-            review_note=m.review_note, created_by=m.created_by,
-            created_at=m.created_at, updated_at=m.updated_at,
+            uuid=m.uuid,
+            ticket_uuid=m.ticket_uuid,
+            task_type=m.task_type,
+            task_name=m.task_name,
+            task_description=m.task_description,
+            quantity=m.quantity,
+            status=m.status,
+            source=m.source,
+            progress_note=m.progress_note,
+            visibility=m.visibility,
+            moderation_status=m.moderation_status,
+            review_note=m.review_note,
+            created_by=m.created_by,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
         )
 
 
@@ -196,17 +202,11 @@ class CreateTicketTaskInput:
     """Input for creating a new task under a support ticket."""
 
     ticket_uuid: str = strawberry.field(description="UUID of the ticket this task belongs to")
-    task_type: str = strawberry.field(
-        description="Category: 'rescue', 'supply', 'medical', or 'hr'"
-    )
+    task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str
     task_description: str | None = None
-    quantity: int | None = strawberry.field(
-        default=None, description="Number of people or units needed"
-    )
-    source: str = strawberry.field(
-        default="user", description="Origin: 'user' (default) or 'official'"
-    )
+    quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
+    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
     visibility: str = strawberry.field(
         default="public", description="Visibility: 'public' (default), 'restricted', or 'internal'"
     )
@@ -257,9 +257,7 @@ class CreateTaskPropertyInput:
 class UpdateTaskPropertyInput:
     """Input for updating a task property's value, quantity, status, or comment."""
 
-    property_value: str | None = strawberry.field(
-        default=None, description="Updated attribute value"
-    )
+    property_value: str | None = strawberry.field(default=None, description="Updated attribute value")
     quantity: int | None = strawberry.field(
         default=strawberry.UNSET, description="Updated number of units — pass null to clear"
     )
@@ -290,15 +288,11 @@ class TicketType:
     """GraphQL type representing a disaster relief support ticket."""
 
     uuid: UUID
-    property_name: str = strawberry.field(
-        description="Internal polymorphic discriminator — always 'request'"
-    )
+    property_name: str = strawberry.field(description="Internal polymorphic discriminator — always 'request'")
     geometry: GeoJSON | None = strawberry.field(
         default=None, description="GeoJSON Point indicating where help is needed"
     )
-    title: str = strawberry.field(
-        default="", description="Short subject line describing the request"
-    )
+    title: str = strawberry.field(default="", description="Short subject line describing the request")
     description: str | None = None
     contact_name: str = strawberry.field(
         default="", description="Full name of the person who submitted this request"
@@ -349,14 +343,23 @@ class TicketType:
     def from_model(cls, m) -> "TicketType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, property_name=m.property_name,
+            uuid=m.uuid,
+            property_name=m.property_name,
             geometry=geom_to_geojson(m.geometry),
-            title=m.title, description=m.description,
-            contact_name=m.contact_name, contact_email=m.contact_email,
-            contact_phone=m.contact_phone, status=m.status, priority=m.priority,
-            task_type=m.task_type, visibility=m.visibility,
-            verification_status=m.verification_status, review_note=m.review_note,
-            created_by=m.created_by, created_at=m.created_at, updated_at=m.updated_at,
+            title=m.title,
+            description=m.description,
+            contact_name=m.contact_name,
+            contact_email=m.contact_email,
+            contact_phone=m.contact_phone,
+            status=m.status,
+            priority=m.priority,
+            task_type=m.task_type,
+            visibility=m.visibility,
+            verification_status=m.verification_status,
+            review_note=m.review_note,
+            created_by=m.created_by,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
         )
 
 
@@ -378,9 +381,7 @@ class CreateTicketInput:
         description="GeoJSON Point for the location where help is needed — [longitude, latitude]"
     )
     contact_name: str = strawberry.field(description="Full name of the requester")
-    contact_email: str | None = strawberry.field(
-        default=None, description="Optional email for follow-up"
-    )
+    contact_email: str | None = strawberry.field(default=None, description="Optional email for follow-up")
     contact_phone: str | None = strawberry.field(
         default=None, description="Optional phone number for follow-up"
     )

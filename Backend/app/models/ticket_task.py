@@ -55,9 +55,7 @@ class TaskAssignment(Base, UUIDPKMixin):
     """ORM model for assigning a user to a ticket task with a specific role."""
 
     __tablename__ = "task_assignments"
-    __table_args__ = (
-        UniqueConstraint("task_uuid", "actor_uuid", name="uq_assignment_task_actor"),
-    )
+    __table_args__ = (UniqueConstraint("task_uuid", "actor_uuid", name="uq_assignment_task_actor"),)
     task_uuid: Mapped[str] = mapped_column(ForeignKey("ticket_tasks.uuid"))
     actor_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
     role: Mapped[str | None] = mapped_column(String(100))

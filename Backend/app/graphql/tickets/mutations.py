@@ -45,18 +45,23 @@ class RequestMutation:
         Requires request:create permission. Returns the created TicketType.
         """
         await check_permission(info, "request", "create")
-        ticket = await ticket_repository.create(info.context["db"], obj_in={
-            "property_name": "request",
-            "geometry": geojson_to_geom(input.geometry),
-            "created_by": str(info.context["user"].uuid),
-            "title": input.title, "description": input.description,
-            "contact_name": input.contact_name,
-            "contact_email": input.contact_email,
-            "contact_phone": input.contact_phone,
-            "status": "pending", "priority": input.priority,
-            "task_type": input.task_type,
-            "visibility": input.visibility,
-        })
+        ticket = await ticket_repository.create(
+            info.context["db"],
+            obj_in={
+                "property_name": "request",
+                "geometry": geojson_to_geom(input.geometry),
+                "created_by": str(info.context["user"].uuid),
+                "title": input.title,
+                "description": input.description,
+                "contact_name": input.contact_name,
+                "contact_email": input.contact_email,
+                "contact_phone": input.contact_phone,
+                "status": "pending",
+                "priority": input.priority,
+                "task_type": input.task_type,
+                "visibility": input.visibility,
+            },
+        )
         return TicketType.from_model(ticket)
 
     @strawberry.mutation
@@ -112,17 +117,20 @@ class TicketTaskMutation:
         db = info.context["db"]
         if not await ticket_repository.get_by_uuid_active(db, input.ticket_uuid):
             raise ValueError("Ticket not found")
-        task = await ticket_task_repository.create(db, obj_in={
-            "ticket_uuid": input.ticket_uuid,
-            "task_type": input.task_type,
-            "task_name": input.task_name,
-            "task_description": input.task_description,
-            "quantity": input.quantity,
-            "source": input.source,
-            "visibility": input.visibility,
-            "route_uuid": input.route_uuid,
-            "created_by": str(info.context["user"].uuid),
-        })
+        task = await ticket_task_repository.create(
+            db,
+            obj_in={
+                "ticket_uuid": input.ticket_uuid,
+                "task_type": input.task_type,
+                "task_name": input.task_name,
+                "task_description": input.task_description,
+                "quantity": input.quantity,
+                "source": input.source,
+                "visibility": input.visibility,
+                "route_uuid": input.route_uuid,
+                "created_by": str(info.context["user"].uuid),
+            },
+        )
         return TicketTaskType.from_model(task)
 
     @strawberry.mutation
@@ -167,13 +175,16 @@ class TicketTaskMutation:
         db = info.context["db"]
         if not await ticket_task_repository.get_by_uuid_active(db, input.task_uuid):
             raise ValueError("Ticket task not found")
-        prop = await task_property_repository.create(db, obj_in={
-            "task_uuid": input.task_uuid,
-            "property_name": input.property_name,
-            "property_value": input.property_value,
-            "quantity": input.quantity,
-            "comment": input.comment,
-        })
+        prop = await task_property_repository.create(
+            db,
+            obj_in={
+                "task_uuid": input.task_uuid,
+                "property_name": input.property_name,
+                "property_value": input.property_value,
+                "quantity": input.quantity,
+                "comment": input.comment,
+            },
+        )
         return TaskPropertyType.from_model(prop)
 
     @strawberry.mutation
@@ -207,8 +218,11 @@ class TicketTaskMutation:
 
     @strawberry.mutation
     async def assign_task_actor(
-        self, info: strawberry.types.Info,
-        task_uuid: UUID, actor_uuid: UUID | None = None, role: str | None = None,
+        self,
+        info: strawberry.types.Info,
+        task_uuid: UUID,
+        actor_uuid: UUID | None = None,
+        role: str | None = None,
     ) -> TaskAssignmentType:
         """Link a person to a ticket task (volunteer self-sign-up or coordinator assignment).
 
@@ -232,12 +246,15 @@ class TicketTaskMutation:
         if await task_assignment_repository.get_by_task_and_actor(db, str(task_uuid), actor):
             raise ValueError("Actor already assigned to this task")
 
-        assignment = await task_assignment_repository.create(db, obj_in={
-            "task_uuid": str(task_uuid),
-            "actor_uuid": actor,
-            "role": role,
-            "status": "accepted",
-        })
+        assignment = await task_assignment_repository.create(
+            db,
+            obj_in={
+                "task_uuid": str(task_uuid),
+                "actor_uuid": actor,
+                "role": role,
+                "status": "accepted",
+            },
+        )
         return TaskAssignmentType.from_model(assignment)
 
     @strawberry.mutation

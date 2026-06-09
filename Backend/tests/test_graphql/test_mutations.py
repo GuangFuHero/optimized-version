@@ -139,19 +139,22 @@ POINT_TAIPEI = {"type": "Point", "coordinates": [121.5, 25.0]}
 
 POLYGON_TAIPEI = {
     "type": "Polygon",
-    "coordinates": [[
-        [121.49, 24.99], [121.51, 24.99], [121.51, 25.01],
-        [121.49, 25.01], [121.49, 24.99],
-    ]],
+    "coordinates": [
+        [
+            [121.49, 24.99],
+            [121.51, 24.99],
+            [121.51, 25.01],
+            [121.49, 25.01],
+            [121.49, 24.99],
+        ]
+    ],
 }
 
 MULTIPOLYGON = {
     "type": "MultiPolygon",
     "coordinates": [
-        [[[121.49, 24.99], [121.51, 24.99], [121.51, 25.01],
-          [121.49, 25.01], [121.49, 24.99]]],
-        [[[121.52, 25.02], [121.54, 25.02], [121.54, 25.04],
-          [121.52, 25.04], [121.52, 25.02]]],
+        [[[121.49, 24.99], [121.51, 24.99], [121.51, 25.01], [121.49, 25.01], [121.49, 24.99]]],
+        [[[121.52, 25.02], [121.54, 25.02], [121.54, 25.04], [121.52, 25.04], [121.52, 25.02]]],
     ],
 }
 
@@ -171,10 +174,14 @@ def _station_input(**overrides) -> dict:
 async def test_create_station(client, coordinator_auth):
     """Coordinator creates a station successfully."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_STATION,
-        "variables": {"input": _station_input()},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {"input": _station_input()},
+        },
+        headers=auth_header(token),
+    )
 
     data = resp.json()["data"]["createStation"]
     assert data["uuid"] is not None
@@ -186,10 +193,14 @@ async def test_create_station(client, coordinator_auth):
 async def test_create_station_rejects_polygon(client, coordinator_auth):
     """Polygon geometry is rejected for a station."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_STATION,
-        "variables": {"input": _station_input(geometry=POLYGON_TAIPEI)},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {"input": _station_input(geometry=POLYGON_TAIPEI)},
+        },
+        headers=auth_header(token),
+    )
     errors = resp.json()["errors"]
     assert any("must be a Point" in e["message"] for e in errors)
 
@@ -198,12 +209,18 @@ async def test_create_station_rejects_polygon(client, coordinator_auth):
 async def test_create_station_invalid_coordinates(client, coordinator_auth):
     """Out-of-range coordinates are rejected."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_STATION,
-        "variables": {"input": _station_input(
-            geometry={"type": "Point", "coordinates": [200, 100]},
-        )},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {
+                "input": _station_input(
+                    geometry={"type": "Point", "coordinates": [200, 100]},
+                )
+            },
+        },
+        headers=auth_header(token),
+    )
     errors = resp.json()["errors"]
     assert any("Invalid coordinates" in e["message"] for e in errors)
 
@@ -212,17 +229,21 @@ async def test_create_station_invalid_coordinates(client, coordinator_auth):
 async def test_update_station(client, coordinator_auth, sample_station):
     """Coordinator updates a station's comment."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": """
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": """
         mutation($uuid: UUID!, $input: UpdateStationInput!) {
             updateStation(uuid: $uuid, input: $input) { uuid comment }
         }
         """,
-        "variables": {
-            "uuid": sample_station,
-            "input": {"comment": "updated comment"},
+            "variables": {
+                "uuid": sample_station,
+                "input": {"comment": "updated comment"},
+            },
         },
-    }, headers=auth_header(token))
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["updateStation"]
     assert data["comment"] == "updated comment"
 
@@ -232,28 +253,37 @@ async def test_update_station_all_scope(client, coordinator_auth):
     """Coordinator with edit=all can edit another coordinator's station."""
     # Create a station as a second coordinator
     from tests.test_graphql.conftest import _create_user_with_role
+
     other_uuid, other_token = await _create_user_with_role("Field Coordinator")
 
     # Create station as the other coordinator
-    resp = await client.post("/graphql", json={
-        "query": CREATE_STATION,
-        "variables": {"input": _station_input()},
-    }, headers=auth_header(other_token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {"input": _station_input()},
+        },
+        headers=auth_header(other_token),
+    )
     station_uuid = resp.json()["data"]["createStation"]["uuid"]
 
     # Original coordinator edits it
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": """
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": """
         mutation($uuid: UUID!, $input: UpdateStationInput!) {
             updateStation(uuid: $uuid, input: $input) { uuid comment }
         }
         """,
-        "variables": {
-            "uuid": station_uuid,
-            "input": {"comment": "edited_by_other"},
+            "variables": {
+                "uuid": station_uuid,
+                "input": {"comment": "edited_by_other"},
+            },
         },
-    }, headers=auth_header(token))
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["updateStation"]
     assert data["comment"] == "edited_by_other"
 
@@ -263,16 +293,24 @@ async def test_delete_station(client, coordinator_auth):
     """Coordinator deletes a station (soft delete)."""
     _, token = coordinator_auth
     # Create a station to delete
-    resp = await client.post("/graphql", json={
-        "query": CREATE_STATION,
-        "variables": {"input": _station_input()},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {"input": _station_input()},
+        },
+        headers=auth_header(token),
+    )
     station_uuid = resp.json()["data"]["createStation"]["uuid"]
 
-    resp = await client.post("/graphql", json={
-        "query": DELETE_STATION,
-        "variables": {"uuid": station_uuid},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": DELETE_STATION,
+            "variables": {"uuid": station_uuid},
+        },
+        headers=auth_header(token),
+    )
     assert resp.json()["data"]["deleteStation"] is True
 
 
@@ -281,21 +319,33 @@ async def test_delete_station_excluded_from_queries(client, coordinator_auth):
     """After deletion, station query returns null."""
     _, token = coordinator_auth
     # Create and delete
-    resp = await client.post("/graphql", json={
-        "query": CREATE_STATION,
-        "variables": {"input": _station_input()},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {"input": _station_input()},
+        },
+        headers=auth_header(token),
+    )
     station_uuid = resp.json()["data"]["createStation"]["uuid"]
 
-    await client.post("/graphql", json={
-        "query": DELETE_STATION,
-        "variables": {"uuid": station_uuid},
-    }, headers=auth_header(token))
+    await client.post(
+        "/graphql",
+        json={
+            "query": DELETE_STATION,
+            "variables": {"uuid": station_uuid},
+        },
+        headers=auth_header(token),
+    )
 
-    resp = await client.post("/graphql", json={
-        "query": QUERY_STATION,
-        "variables": {"uuid": station_uuid},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": QUERY_STATION,
+            "variables": {"uuid": station_uuid},
+        },
+        headers=auth_header(token),
+    )
     assert resp.json()["data"]["station"] is None
 
 
@@ -308,13 +358,19 @@ async def test_delete_station_excluded_from_queries(client, coordinator_auth):
 async def test_create_closure_area(client, coordinator_auth):
     """Coordinator creates a closure area with a polygon."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_CLOSURE_AREA,
-        "variables": {"input": {
-            "geometry": POLYGON_TAIPEI,
-            "status": "blocked",
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_CLOSURE_AREA,
+            "variables": {
+                "input": {
+                    "geometry": POLYGON_TAIPEI,
+                    "status": "blocked",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["createClosureArea"]
     assert data["uuid"] is not None
     assert data["status"] == "blocked"
@@ -324,13 +380,19 @@ async def test_create_closure_area(client, coordinator_auth):
 async def test_create_closure_area_multipolygon(client, coordinator_auth):
     """MultiPolygon geometry is accepted for closure areas."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_CLOSURE_AREA,
-        "variables": {"input": {
-            "geometry": MULTIPOLYGON,
-            "status": "blocked",
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_CLOSURE_AREA,
+            "variables": {
+                "input": {
+                    "geometry": MULTIPOLYGON,
+                    "status": "blocked",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["createClosureArea"]
     assert data["uuid"] is not None
 
@@ -339,13 +401,19 @@ async def test_create_closure_area_multipolygon(client, coordinator_auth):
 async def test_create_closure_area_rejects_point(client, coordinator_auth):
     """Point geometry is rejected for closure areas."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_CLOSURE_AREA,
-        "variables": {"input": {
-            "geometry": POINT_TAIPEI,
-            "status": "blocked",
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_CLOSURE_AREA,
+            "variables": {
+                "input": {
+                    "geometry": POINT_TAIPEI,
+                    "status": "blocked",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     errors = resp.json()["errors"]
     assert any("Polygon or MultiPolygon" in e["message"] for e in errors)
 
@@ -354,13 +422,17 @@ async def test_create_closure_area_rejects_point(client, coordinator_auth):
 async def test_update_closure_area(client, coordinator_auth, sample_closure_area):
     """Coordinator updates a closure area's status."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_CLOSURE_AREA,
-        "variables": {
-            "uuid": sample_closure_area,
-            "input": {"status": "cleared"},
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_CLOSURE_AREA,
+            "variables": {
+                "uuid": sample_closure_area,
+                "input": {"status": "cleared"},
+            },
         },
-    }, headers=auth_header(token))
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["updateClosureArea"]
     assert data["status"] == "cleared"
 
@@ -374,15 +446,21 @@ async def test_update_closure_area(client, coordinator_auth, sample_closure_area
 async def test_create_station_property(client, coordinator_auth, sample_station):
     """Coordinator adds a property to an existing station."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_STATION_PROPERTY,
-        "variables": {"input": {
-            "stationUuid": sample_station,
-            "propertyType": "facility",
-            "propertyName": "wifi",
-            "quantity": 1,
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION_PROPERTY,
+            "variables": {
+                "input": {
+                    "stationUuid": sample_station,
+                    "propertyType": "facility",
+                    "propertyName": "wifi",
+                    "quantity": 1,
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["createStationProperty"]
     assert data["propertyName"] == "wifi"
     assert data["propertyType"] == "facility"
@@ -393,31 +471,43 @@ async def test_create_property_invalid_station(client, coordinator_auth):
     """Nonexistent station UUID is rejected."""
     _, token = coordinator_auth
     fake_uuid = str(uuid.uuid4())
-    resp = await client.post("/graphql", json={
-        "query": CREATE_STATION_PROPERTY,
-        "variables": {"input": {
-            "stationUuid": fake_uuid,
-            "propertyType": "facility",
-            "propertyName": "wifi",
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION_PROPERTY,
+            "variables": {
+                "input": {
+                    "stationUuid": fake_uuid,
+                    "propertyType": "facility",
+                    "propertyName": "wifi",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     errors = resp.json()["errors"]
     assert any("Station not found" in e["message"] for e in errors)
 
 
 @pytest.mark.asyncio
 async def test_update_station_property(
-    client, coordinator_auth, sample_station_property,
+    client,
+    coordinator_auth,
+    sample_station_property,
 ):
     """Coordinator updates a station property's status."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_STATION_PROPERTY,
-        "variables": {
-            "uuid": sample_station_property,
-            "input": {"status": "verified"},
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION_PROPERTY,
+            "variables": {
+                "uuid": sample_station_property,
+                "input": {"status": "verified"},
+            },
         },
-    }, headers=auth_header(token))
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["updateStationProperty"]
     assert data["status"] == "verified"
 
@@ -429,18 +519,27 @@ async def test_update_station_property(
 
 @pytest.mark.asyncio
 async def test_create_crowdsourcing(
-    client, coordinator_auth, sample_station, sample_station_property,
+    client,
+    coordinator_auth,
+    sample_station,
+    sample_station_property,
 ):
     """Coordinator votes on a station property."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_CROWDSOURCING,
-        "variables": {"input": {
-            "stationUuid": sample_station,
-            "itemUuid": sample_station_property,
-            "rating": "up",
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_CROWDSOURCING,
+            "variables": {
+                "input": {
+                    "stationUuid": sample_station,
+                    "itemUuid": sample_station_property,
+                    "rating": "up",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["createCrowdSourcing"]
     assert data["uuid"] is not None
     assert data["rating"] == "up"
@@ -448,17 +547,22 @@ async def test_create_crowdsourcing(
 
 @pytest.mark.asyncio
 async def test_crowdsourcing_upsert(
-    client, coordinator_auth, sample_station, sample_station_property,
+    client,
+    coordinator_auth,
+    sample_station,
+    sample_station_property,
 ):
     """Voting again on the same item updates instead of creating a duplicate."""
     _, token = coordinator_auth
     payload = {
         "query": CREATE_CROWDSOURCING,
-        "variables": {"input": {
-            "stationUuid": sample_station,
-            "itemUuid": sample_station_property,
-            "rating": "up",
-        }},
+        "variables": {
+            "input": {
+                "stationUuid": sample_station,
+                "itemUuid": sample_station_property,
+                "rating": "up",
+            }
+        },
     }
     headers = auth_header(token)
 
@@ -476,37 +580,54 @@ async def test_crowdsourcing_upsert(
 
 @pytest.mark.asyncio
 async def test_crowdsourcing_mismatched_station(
-    client, coordinator_auth, sample_station_property,
+    client,
+    coordinator_auth,
+    sample_station_property,
 ):
     """Wrong stationUuid for the property item returns an error."""
     _, token = coordinator_auth
     fake_station = str(uuid.uuid4())
-    resp = await client.post("/graphql", json={
-        "query": CREATE_CROWDSOURCING,
-        "variables": {"input": {
-            "stationUuid": fake_station,
-            "itemUuid": sample_station_property,
-            "rating": "up",
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_CROWDSOURCING,
+            "variables": {
+                "input": {
+                    "stationUuid": fake_station,
+                    "itemUuid": sample_station_property,
+                    "rating": "up",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     errors = resp.json()["errors"]
     assert any("Item not found for this station" in e["message"] for e in errors)
 
 
 @pytest.mark.asyncio
 async def test_crowdsourcing_auto_credibility(
-    client, coordinator_auth, sample_station, sample_station_property,
+    client,
+    coordinator_auth,
+    sample_station,
+    sample_station_property,
 ):
     """UserCredibilityScore is auto-set from the user's credibility_score."""
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_CROWDSOURCING,
-        "variables": {"input": {
-            "stationUuid": sample_station,
-            "itemUuid": sample_station_property,
-            "rating": "up",
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_CROWDSOURCING,
+            "variables": {
+                "input": {
+                    "stationUuid": sample_station,
+                    "itemUuid": sample_station_property,
+                    "rating": "up",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["createCrowdSourcing"]
     # Default credibility_score for new users is 50.0
     assert data["userCredibilityScore"] == 50.0
@@ -524,19 +645,25 @@ async def test_create_ticket(client, coordinator_auth):
     Test case: coordinator creates hr ticket → uuid set, status=pending, priority=high.
     """
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_TICKET,
-        "variables": {"input": {
-            "title": "Need medics",
-            "description": "Flood relief",
-            "geometry": POINT_TAIPEI,
-            "contactName": "Alice",
-            "contactEmail": "alice@example.com",
-            "priority": "high",
-            "taskType": "hr",
-            "visibility": "public",
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET,
+            "variables": {
+                "input": {
+                    "title": "Need medics",
+                    "description": "Flood relief",
+                    "geometry": POINT_TAIPEI,
+                    "contactName": "Alice",
+                    "contactEmail": "alice@example.com",
+                    "priority": "high",
+                    "taskType": "hr",
+                    "visibility": "public",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["createTicket"]
     assert data["title"] == "Need medics"
     assert data["status"] == "pending"
@@ -552,40 +679,55 @@ async def test_update_ticket_valid_transition(client, coordinator_auth):
     _, token = coordinator_auth
     headers = auth_header(token)
 
-    resp = await client.post("/graphql", json={
-        "query": CREATE_TICKET,
-        "variables": {"input": {
-            "title": "Transition test",
-            "geometry": POINT_TAIPEI,
-            "contactName": "Bob",
-            "taskType": "hr",
-        }},
-    }, headers=headers)
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET,
+            "variables": {
+                "input": {
+                    "title": "Transition test",
+                    "geometry": POINT_TAIPEI,
+                    "contactName": "Bob",
+                    "taskType": "hr",
+                }
+            },
+        },
+        headers=headers,
+    )
     ticket_uuid = resp.json()["data"]["createTicket"]["uuid"]
 
     for _, to_status in [("pending", "in_progress"), ("in_progress", "completed")]:
-        resp = await client.post("/graphql", json={
-            "query": UPDATE_TICKET,
-            "variables": {"uuid": ticket_uuid, "input": {"status": to_status}},
-        }, headers=headers)
+        resp = await client.post(
+            "/graphql",
+            json={
+                "query": UPDATE_TICKET,
+                "variables": {"uuid": ticket_uuid, "input": {"status": to_status}},
+            },
+            headers=headers,
+        )
         assert resp.json()["data"]["updateTicket"]["status"] == to_status
-
-
 
 
 @pytest.mark.asyncio
 async def test_update_ticket_no_permission_edit(
-    client, coordinator_auth, login_user_auth, sample_ticket,
+    client,
+    coordinator_auth,
+    login_user_auth,
+    sample_ticket,
 ):
     """Login user (request:edit=own) cannot edit coordinator's ticket."""
     _, login_token = login_user_auth
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_TICKET,
-        "variables": {
-            "uuid": sample_ticket,
-            "input": {"status": "in_progress"},
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TICKET,
+            "variables": {
+                "uuid": sample_ticket,
+                "input": {"status": "in_progress"},
+            },
         },
-    }, headers=auth_header(login_token))
+        headers=auth_header(login_token),
+    )
     errors = resp.json().get("errors", [])
     assert any("Permission Denied." in e["message"] for e in errors)
 
@@ -594,6 +736,7 @@ async def test_update_ticket_no_permission_edit(
 # Ticket task mutations (4 tests)
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_create_ticket_task(client, coordinator_auth, sample_ticket):
     """Hypothesis: createTicketTask creates a task linked to its ticket with status=pending.
@@ -601,15 +744,21 @@ async def test_create_ticket_task(client, coordinator_auth, sample_ticket):
     Test case: coordinator creates hr task for sample_ticket → uuid set, taskType=hr, status=pending.
     """
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_TICKET_TASK,
-        "variables": {"input": {
-            "ticketUuid": sample_ticket,
-            "taskType": "hr",
-            "taskName": "Need 3 medics",
-            "quantity": 3,
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET_TASK,
+            "variables": {
+                "input": {
+                    "ticketUuid": sample_ticket,
+                    "taskType": "hr",
+                    "taskName": "Need 3 medics",
+                    "quantity": 3,
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["createTicketTask"]
     assert data["uuid"] is not None
     assert data["taskType"] == "hr"
@@ -623,14 +772,20 @@ async def test_create_ticket_task_unknown_ticket(client, coordinator_auth):
     Test case: random UUID as ticketUuid → errors list contains "not found".
     """
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_TICKET_TASK,
-        "variables": {"input": {
-            "ticketUuid": str(uuid.uuid4()),
-            "taskType": "rescue",
-            "taskName": "Search 3F",
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET_TASK,
+            "variables": {
+                "input": {
+                    "ticketUuid": str(uuid.uuid4()),
+                    "taskType": "rescue",
+                    "taskName": "Search 3F",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     assert any("not found" in e["message"].lower() for e in resp.json()["errors"])
 
 
@@ -641,10 +796,14 @@ async def test_update_ticket_task_status(client, coordinator_auth, sample_ticket
     Test case: update sample_ticket_task to in_progress → response reflects new status.
     """
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_TICKET_TASK,
-        "variables": {"uuid": sample_ticket_task, "input": {"status": "in_progress"}},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TICKET_TASK,
+            "variables": {"uuid": sample_ticket_task, "input": {"status": "in_progress"}},
+        },
+        headers=auth_header(token),
+    )
     assert resp.json()["data"]["updateTicketTask"]["status"] == "in_progress"
 
 
@@ -655,33 +814,41 @@ async def test_create_task_property(client, coordinator_auth, sample_ticket_task
     Test case: add required_skill=medical to hr task → propertyName and propertyValue round-trip correctly.
     """
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": CREATE_TASK_PROPERTY,
-        "variables": {"input": {
-            "taskUuid": sample_ticket_task,
-            "propertyName": "required_skill",
-            "propertyValue": "medical",
-        }},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TASK_PROPERTY,
+            "variables": {
+                "input": {
+                    "taskUuid": sample_ticket_task,
+                    "propertyName": "required_skill",
+                    "propertyValue": "medical",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
     data = resp.json()["data"]["createTaskProperty"]
     assert data["propertyName"] == "required_skill"
     assert data["propertyValue"] == "medical"
 
 
 @pytest.mark.asyncio
-async def test_update_ticket_task_blocks_non_owner(
-    client, login_user_auth, sample_ticket_task
-):
+async def test_update_ticket_task_blocks_non_owner(client, login_user_auth, sample_ticket_task):
     """A user with request:edit:own cannot edit a task they do not own.
 
     sample_ticket_task is created by the Field Coordinator fixture; a Login User
     (edit scope = "own") calling updateTicketTask on it must be denied.
     """
     _, token = login_user_auth
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_TICKET_TASK,
-        "variables": {"uuid": sample_ticket_task, "input": {"status": "in_progress"}},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TICKET_TASK,
+            "variables": {"uuid": sample_ticket_task, "input": {"status": "in_progress"}},
+        },
+        headers=auth_header(token),
+    )
     body = resp.json()
     assert "errors" in body
     assert any("permission" in e["message"].lower() for e in body["errors"]), body
@@ -697,21 +864,31 @@ async def test_update_task_property_blocks_non_owner(
     and must be denied because ownership is inherited from the task.
     """
     _, coord_token = coordinator_auth
-    create_resp = await client.post("/graphql", json={
-        "query": CREATE_TASK_PROPERTY,
-        "variables": {"input": {
-            "taskUuid": sample_ticket_task,
-            "propertyName": "required_skill",
-            "propertyValue": "medical",
-        }},
-    }, headers=auth_header(coord_token))
+    create_resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TASK_PROPERTY,
+            "variables": {
+                "input": {
+                    "taskUuid": sample_ticket_task,
+                    "propertyName": "required_skill",
+                    "propertyValue": "medical",
+                }
+            },
+        },
+        headers=auth_header(coord_token),
+    )
     prop_uuid = create_resp.json()["data"]["createTaskProperty"]["uuid"]
 
     _, user_token = login_user_auth
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_TASK_PROPERTY,
-        "variables": {"uuid": prop_uuid, "input": {"propertyValue": "logistics"}},
-    }, headers=auth_header(user_token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TASK_PROPERTY,
+            "variables": {"uuid": prop_uuid, "input": {"propertyValue": "logistics"}},
+        },
+        headers=auth_header(user_token),
+    )
     body = resp.json()
     assert "errors" in body
     assert any("permission" in e["message"].lower() for e in body["errors"]), body
@@ -721,6 +898,7 @@ async def test_update_task_property_blocks_non_owner(
 # Property config mutations (2 tests)
 # ============================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("data_type", ["Boolean", "String"])
 async def test_upsert_station_property_config_idempotent(client, coordinator_auth, data_type):
@@ -729,13 +907,17 @@ async def test_upsert_station_property_config_idempotent(client, coordinator_aut
     Test case: upsert power_stable with Boolean then String → second call's dataType wins.
     """
     _, token = coordinator_auth
-    resp = await client.post("/graphql", json={
-        "query": UPSERT_STATION_PROPERTY_CONFIG,
-        "variables": {
-            "stationType": "power",
-            "input": {"propertyName": "power_stable", "dataType": data_type},
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPSERT_STATION_PROPERTY_CONFIG,
+            "variables": {
+                "stationType": "power",
+                "input": {"propertyName": "power_stable", "dataType": data_type},
+            },
         },
-    }, headers=auth_header(token))
+        headers=auth_header(token),
+    )
     assert resp.json()["data"]["upsertStationPropertyConfig"]["dataType"] == data_type
 
 
@@ -746,15 +928,23 @@ async def test_upsert_station_property_config_idempotent(client, coordinator_aut
 
 async def _assign(client, token, task_uuid, actor_uuid=None, role=None):
     """Helper: POST assignTaskActor and return the parsed JSON body."""
-    return (await client.post("/graphql", json={
-        "query": ASSIGN_TASK_ACTOR,
-        "variables": {"taskUuid": task_uuid, "actorUuid": actor_uuid, "role": role},
-    }, headers=auth_header(token))).json()
+    return (
+        await client.post(
+            "/graphql",
+            json={
+                "query": ASSIGN_TASK_ACTOR,
+                "variables": {"taskUuid": task_uuid, "actorUuid": actor_uuid, "role": role},
+            },
+            headers=auth_header(token),
+        )
+    ).json()
 
 
 @pytest.mark.asyncio
 async def test_self_signup_creates_assignment(
-    client, login_user_auth, sample_ticket_task,
+    client,
+    login_user_auth,
+    sample_ticket_task,
 ):
     """A login user can self-sign-up (no actorUuid) → assignment starts as 'accepted'."""
     user_uuid, token = login_user_auth
@@ -766,10 +956,13 @@ async def test_self_signup_creates_assignment(
 
 @pytest.mark.asyncio
 async def test_coordinator_assigns_other_user(
-    client, coordinator_auth, sample_ticket_task,
+    client,
+    coordinator_auth,
+    sample_ticket_task,
 ):
     """A coordinator (request:edit=all) can assign another user to a task."""
     from tests.test_graphql.conftest import _create_user_with_role
+
     other_uuid, _ = await _create_user_with_role("Login User")
 
     _, token = coordinator_auth
@@ -781,10 +974,13 @@ async def test_coordinator_assigns_other_user(
 
 @pytest.mark.asyncio
 async def test_login_user_cannot_assign_other(
-    client, login_user_auth, sample_ticket_task,
+    client,
+    login_user_auth,
+    sample_ticket_task,
 ):
     """A login user (request:edit=own) cannot assign someone else to a task they don't own."""
     from tests.test_graphql.conftest import _create_user_with_role
+
     other_uuid, _ = await _create_user_with_role("Login User")
 
     _, token = login_user_auth
@@ -794,7 +990,9 @@ async def test_login_user_cannot_assign_other(
 
 @pytest.mark.asyncio
 async def test_duplicate_assignment_rejected(
-    client, login_user_auth, sample_ticket_task,
+    client,
+    login_user_auth,
+    sample_ticket_task,
 ):
     """Linking the same actor to the same task twice is rejected by the duplicate guard."""
     _, token = login_user_auth
@@ -805,10 +1003,13 @@ async def test_duplicate_assignment_rejected(
 
 @pytest.mark.asyncio
 async def test_over_subscription_allowed(
-    client, coordinator_auth, sample_ticket_task,
+    client,
+    coordinator_auth,
+    sample_ticket_task,
 ):
     """quantity=3 task accepts more than 3 people — no capacity cap."""
     from tests.test_graphql.conftest import _create_user_with_role
+
     _, token = coordinator_auth
     for _ in range(4):
         actor_uuid, _ignore = await _create_user_with_role("Login User")
@@ -818,10 +1019,14 @@ async def test_over_subscription_allowed(
 
 @pytest.mark.asyncio
 async def test_progress_reflects_completed(
-    client, coordinator_auth, sample_ticket, sample_ticket_task,
+    client,
+    coordinator_auth,
+    sample_ticket,
+    sample_ticket_task,
 ):
     """Progress = completed assignments / quantity; updating status moves the bar."""
     from tests.test_graphql.conftest import _create_user_with_role
+
     _, token = coordinator_auth
 
     assignment_uuids = []
@@ -832,17 +1037,24 @@ async def test_progress_reflects_completed(
 
     # Mark 2 of the 3 as completed
     for a_uuid in assignment_uuids[:2]:
-        await client.post("/graphql", json={
-            "query": UPDATE_TASK_ASSIGNMENT,
-            "variables": {"uuid": a_uuid, "input": {"status": "completed"}},
-        }, headers=auth_header(token))
+        await client.post(
+            "/graphql",
+            json={
+                "query": UPDATE_TASK_ASSIGNMENT,
+                "variables": {"uuid": a_uuid, "input": {"status": "completed"}},
+            },
+            headers=auth_header(token),
+        )
 
-    resp = await client.post("/graphql", json={
-        "query": TASK_PROGRESS, "variables": {"ticketUuid": sample_ticket},
-    }, headers=auth_header(token))
-    task = next(
-        t for t in resp.json()["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": TASK_PROGRESS,
+            "variables": {"ticketUuid": sample_ticket},
+        },
+        headers=auth_header(token),
     )
+    task = next(t for t in resp.json()["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task)
     assert task["assignedCount"] == 3
     assert task["completedCount"] == 2
     assert task["progress"] == pytest.approx(2 / 3)
@@ -850,56 +1062,80 @@ async def test_progress_reflects_completed(
 
 @pytest.mark.asyncio
 async def test_assignee_updates_own_status(
-    client, login_user_auth, sample_ticket_task,
+    client,
+    login_user_auth,
+    sample_ticket_task,
 ):
     """The assignee can advance their own assignment status (edit=own)."""
     _, token = login_user_auth
     body = await _assign(client, token, sample_ticket_task)
     a_uuid = body["data"]["assignTaskActor"]["uuid"]
 
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_TASK_ASSIGNMENT,
-        "variables": {"uuid": a_uuid, "input": {"status": "completed"}},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TASK_ASSIGNMENT,
+            "variables": {"uuid": a_uuid, "input": {"status": "completed"}},
+        },
+        headers=auth_header(token),
+    )
     assert resp.json()["data"]["updateTaskAssignment"]["status"] == "completed"
 
 
 @pytest.mark.asyncio
 async def test_non_owner_cannot_update_assignment(
-    client, login_user_auth, sample_ticket_task,
+    client,
+    login_user_auth,
+    sample_ticket_task,
 ):
     """A login user cannot update another person's assignment."""
     from tests.test_graphql.conftest import _create_user_with_role
+
     owner_uuid, owner_token = await _create_user_with_role("Login User")
     body = await _assign(client, owner_token, sample_ticket_task)
     a_uuid = body["data"]["assignTaskActor"]["uuid"]
 
     _, other_token = login_user_auth
-    resp = await client.post("/graphql", json={
-        "query": UPDATE_TASK_ASSIGNMENT,
-        "variables": {"uuid": a_uuid, "input": {"status": "completed"}},
-    }, headers=auth_header(other_token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TASK_ASSIGNMENT,
+            "variables": {"uuid": a_uuid, "input": {"status": "completed"}},
+        },
+        headers=auth_header(other_token),
+    )
     assert any("Permission Denied." in e["message"] for e in resp.json()["errors"])
 
 
 @pytest.mark.asyncio
 async def test_unassign_removes_assignment(
-    client, login_user_auth, sample_ticket, sample_ticket_task,
+    client,
+    login_user_auth,
+    sample_ticket,
+    sample_ticket_task,
 ):
     """Unassigning hard-deletes the row and drops assignedCount back to 0."""
     _, token = login_user_auth
     body = await _assign(client, token, sample_ticket_task)
     a_uuid = body["data"]["assignTaskActor"]["uuid"]
 
-    resp = await client.post("/graphql", json={
-        "query": UNASSIGN_TASK_ACTOR, "variables": {"uuid": a_uuid},
-    }, headers=auth_header(token))
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UNASSIGN_TASK_ACTOR,
+            "variables": {"uuid": a_uuid},
+        },
+        headers=auth_header(token),
+    )
     assert resp.json()["data"]["unassignTaskActor"] is True
 
-    resp = await client.post("/graphql", json={
-        "query": TASK_PROGRESS, "variables": {"ticketUuid": sample_ticket},
-    }, headers=auth_header(token))
-    task = next(
-        t for t in resp.json()["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": TASK_PROGRESS,
+            "variables": {"ticketUuid": sample_ticket},
+        },
+        headers=auth_header(token),
     )
+    task = next(t for t in resp.json()["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task)
     assert task["assignedCount"] == 0
