@@ -1,7 +1,7 @@
 """add status, updated_at, and uniqueness to task_assignments
 
 Revision ID: c3f2a1b4d5e6
-Revises: b5d1c8e9f3a2
+Revises: 71bd05e07df3
 Create Date: 2026-06-08 00:00:00.000000
 
 """
@@ -12,7 +12,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "c3f2a1b4d5e6"
-down_revision: str | Sequence[str] | None = "b5d1c8e9f3a2"
+down_revision: str | Sequence[str] | None = "71bd05e07df3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
