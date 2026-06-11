@@ -78,8 +78,8 @@ async def register(
         type_=body.type, value=ident, password_hash=password_hash, name=body.name
     )
     if body.type == "email":
-        subject, content = build_verification_email(code)
-        await email_sender.send(ident, subject, content)
+        subject, html, text = build_verification_email(code)
+        await email_sender.send(ident, subject, html, text)
     else:
         await sms_sender.send(ident, build_verification_sms(code))
     return {"detail": "Verification code sent"}
@@ -145,8 +145,8 @@ async def resend_verification(
     if code is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No pending registration")
     if body.type == "email":
-        subject, content = build_verification_email(code)
-        await email_sender.send(ident, subject, content)
+        subject, html, text = build_verification_email(code)
+        await email_sender.send(ident, subject, html, text)
     else:
         await sms_sender.send(ident, build_verification_sms(code))
     return {"detail": "Verification code re-sent"}

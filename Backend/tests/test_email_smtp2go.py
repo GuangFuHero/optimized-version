@@ -41,7 +41,21 @@ async def test_smtp2go_posts_to_api(monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
     monkeypatch.setattr("app.messaging.smtp2go.settings.SMTP2GO_API_KEY", "api-test", raising=False)
 
-    await Smtp2goEmailSender().send("alice@x.com", "Verify", "code 123456")
+    await Smtp2goEmailSender().send("alice@x.com", "Verify", "<p>html 123456</p>", "code 123456")
+    body = captured["json"]
     assert captured["url"] == "https://api.smtp2go.com/v3/email/send"
     assert captured["headers"]["X-Smtp2go-Api-Key"] == "api-test"
-    assert "alice@x.com" in captured["json"]["to"][0]
+    assert "alice@x.com" in body["to"][0]
+    assert body["html_body"] == "<p>html 123456</p>"
+    assert body["text_body"] == "code 123456"
+    # brand logo rides along as an inline cid attachment so it renders without external hosting
+    assert body["inlines"][0]["filename"] == "logo"
+    assert body["inlines"][0]["mimetype"] == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_smtp2go_fails_fast_on_missing_api_key(monkeypatch):
+    """An empty SMTP2GO_API_KEY raises a clear config error instead of a generic HTTP failure."""
+    monkeypatch.setattr("app.messaging.smtp2go.settings.SMTP2GO_API_KEY", "", raising=False)
+    with pytest.raises(RuntimeError, match="SMTP2GO_API_KEY"):
+        await Smtp2goEmailSender().send("alice@x.com", "Verify", "<p>html</p>", "text")
