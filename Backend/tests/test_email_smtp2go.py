@@ -51,3 +51,11 @@ async def test_smtp2go_posts_to_api(monkeypatch):
     # brand logo rides along as an inline cid attachment so it renders without external hosting
     assert body["inlines"][0]["filename"] == "logo"
     assert body["inlines"][0]["mimetype"] == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_smtp2go_fails_fast_on_missing_api_key(monkeypatch):
+    """An empty SMTP2GO_API_KEY raises a clear config error instead of a generic HTTP failure."""
+    monkeypatch.setattr("app.messaging.smtp2go.settings.SMTP2GO_API_KEY", "", raising=False)
+    with pytest.raises(RuntimeError, match="SMTP2GO_API_KEY"):
+        await Smtp2goEmailSender().send("alice@x.com", "Verify", "<p>html</p>", "text")

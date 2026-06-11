@@ -27,6 +27,8 @@ class Smtp2goEmailSender:
 
     async def send(self, to: str, subject: str, html: str, text: str) -> None:
         """POST one multipart email (HTML + text) to SMTP2Go; raise on non-2xx. Logo rides along as cid."""
+        if not settings.SMTP2GO_API_KEY:
+            raise RuntimeError("SMTP2GO_API_KEY is required when EMAIL_PROVIDER=smtp2go")
         payload = {
             "sender": f"{settings.EMAIL_FROM_NAME} <{settings.EMAIL_FROM}>",
             "to": [to],
