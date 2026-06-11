@@ -18,6 +18,7 @@ from app.graphql.tickets.types import (
     UpdateTicketInput,
     UpdateTicketTaskInput,
 )
+from app.repositories.auth_repository import user_repository
 from app.repositories.tickets_repository import (
     task_assignment_repository,
     task_property_repository,
@@ -206,7 +207,7 @@ class TicketTaskMutation:
         if input.property_value is not None:
             obj_in["property_value"] = input.property_value
         if input.status is not None:
-            obj_in["status"] = input.status
+            obj_in["status"] = input.status.value
         for field in ("quantity", "comment"):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
@@ -241,6 +242,10 @@ class TicketTaskMutation:
             await check_permission(info, "request", "create")
         else:
             await check_permission(info, "request", "edit", owner_uuid=task.created_by)
+            # Self-signup's actor is the authenticated user; only a coordinator-supplied
+            # actor_uuid can be bad/stale, so validate it to avoid a raw FK 500.
+            if not await user_repository.get_by_uuid_active(db, actor):
+                raise ValueError("User not found")
 
         if await task_assignment_repository.get_by_task_and_actor(db, str(task_uuid), actor):
             raise ValueError("Actor already assigned to this task")
@@ -273,7 +278,7 @@ class TicketTaskMutation:
 
         obj_in = {}
         if input.status is not None:
-            obj_in["status"] = input.status
+            obj_in["status"] = input.status.value
         if input.role is not strawberry.UNSET:
             obj_in["role"] = input.role
 

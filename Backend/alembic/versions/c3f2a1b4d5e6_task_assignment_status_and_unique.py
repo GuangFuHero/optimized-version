@@ -23,8 +23,8 @@ def upgrade() -> None:
     Adds `status` (accepted/en_route/completed) which drives the work-completion
     progress bar, `updated_at` to stamp status changes (the row is now mutable),
     and a uniqueness guard so the same actor can't be linked to the same task
-    twice. IF NOT EXISTS / if_not_exists keep this idempotent for DBs already
-    patched manually.
+    twice. The raw `IF NOT EXISTS` / `pg_constraint` guards keep this idempotent
+    for DBs already patched manually.
     """
     op.execute(
         "ALTER TABLE task_assignments ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'accepted'"
@@ -32,16 +32,21 @@ def upgrade() -> None:
     op.execute(
         "ALTER TABLE task_assignments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
     )
-    op.create_unique_constraint(
-        "uq_assignment_task_actor",
-        "task_assignments",
-        ["task_uuid", "actor_uuid"],
-        if_not_exists=True,
+    # `op.create_unique_constraint(if_not_exists=...)` silently drops the kwarg, so guard explicitly.
+    op.execute(
+        """
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_assignment_task_actor') THEN
+            ALTER TABLE task_assignments
+              ADD CONSTRAINT uq_assignment_task_actor UNIQUE (task_uuid, actor_uuid);
+          END IF;
+        END $$;
+        """
     )
 
 
 def downgrade() -> None:
     """Reverse the task_assignments additions."""
-    op.drop_constraint("uq_assignment_task_actor", "task_assignments", type_="unique")
+    op.execute("ALTER TABLE task_assignments DROP CONSTRAINT IF EXISTS uq_assignment_task_actor")
     op.execute("ALTER TABLE task_assignments DROP COLUMN IF EXISTS updated_at")
     op.execute("ALTER TABLE task_assignments DROP COLUMN IF EXISTS status")

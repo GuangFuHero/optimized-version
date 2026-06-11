@@ -1138,3 +1138,38 @@ async def test_unassign_removes_assignment(
     )
     task = next(t for t in resp.json()["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task)
     assert task["assignedCount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_coordinator_assign_nonexistent_user_rejected(
+    client,
+    coordinator_auth,
+    sample_ticket_task,
+):
+    """A coordinator assigning a bad/stale actorUuid gets a clean 'User not found', not a 500."""
+    _, token = coordinator_auth
+    body = await _assign(client, token, sample_ticket_task, actor_uuid=str(uuid.uuid4()))
+    assert any("User not found" in e["message"] for e in body["errors"])
+
+
+@pytest.mark.asyncio
+async def test_update_assignment_invalid_status_rejected(
+    client,
+    login_user_auth,
+    sample_ticket_task,
+):
+    """An out-of-enum status is rejected by GraphQL schema validation before the resolver runs."""
+    _, token = login_user_auth
+    body = await _assign(client, token, sample_ticket_task)
+    a_uuid = body["data"]["assignTaskActor"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TASK_ASSIGNMENT,
+            "variables": {"uuid": a_uuid, "input": {"status": "bogus"}},
+        },
+        headers=auth_header(token),
+    )
+    assert resp.json().get("errors")
+    assert resp.json().get("data") is None

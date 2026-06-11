@@ -1,11 +1,29 @@
 """GraphQL types for tickets, ticket tasks, and photos."""
 
+import enum
 from datetime import datetime
 from uuid import UUID
 
 import strawberry
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import PageInfo
+
+
+@strawberry.enum
+class TaskAssignmentStatus(enum.Enum):
+    """Work-completion state of a task assignment; drives the HR progress bar."""
+
+    accepted = "accepted"
+    en_route = "en_route"
+    completed = "completed"
+
+
+@strawberry.enum
+class TaskPropertyStatus(enum.Enum):
+    """Fulfillment state of a structured task property."""
+
+    pending = "pending"
+    fulfilled = "fulfilled"
 
 
 @strawberry.type
@@ -260,8 +278,8 @@ class UpdateTaskPropertyInput:
     quantity: int | None = strawberry.field(
         default=strawberry.UNSET, description="Updated number of units — pass null to clear"
     )
-    status: str | None = strawberry.field(
-        default=None, description="Updated fulfillment state: 'pending' or 'fulfilled'"
+    status: TaskPropertyStatus | None = strawberry.field(
+        default=None, description="Updated fulfillment state"
     )
     comment: str | None = strawberry.field(
         default=strawberry.UNSET, description="Updated notes — pass null to clear"
@@ -272,9 +290,9 @@ class UpdateTaskPropertyInput:
 class UpdateTaskAssignmentInput:
     """Input for updating a task assignment's work-completion status or role."""
 
-    status: str | None = strawberry.field(
+    status: TaskAssignmentStatus | None = strawberry.field(
         default=None,
-        description="New work state: 'accepted', 'en_route', or 'completed'",
+        description="New work-completion state",
     )
     role: str | None = strawberry.field(
         default=strawberry.UNSET,

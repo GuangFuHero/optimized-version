@@ -7,7 +7,7 @@ memory/
 .handoff/
 .idea/
 .vscode/
-./pytest_cache/
+.pytest_cache/
 .claude/
 .db/
 .venv/
