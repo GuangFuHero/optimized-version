@@ -150,7 +150,24 @@ main() {
     compose exec -T db pg_dump -U postgres postgres | gzip | gsutil -q cp - "$LAST_BACKUP"
     log "backup done: $LAST_BACKUP"
 
-    # ---- steps 8..9 appended in Task 7 ----
+    log "[8/9] migrate + seeds (in one-off backend containers — old container lacks new files)"  # C3
+    compose run --rm backend alembic upgrade head
+    compose run --rm backend python scripts/seed_rbac.py
+    if [ "${SEED_MOCK:-false}" = "true" ]; then
+        log "applying mock-scenario seed (SEED_MOCK=true)"
+        compose exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < scripts/seed_mock_scenarios.sql
+    fi
+
+    log "[9/9] starting new backend and waiting for readiness"
+    STAGE=service                       # from here, failure = full image rollback
+    compose up -d backend
+    wait_ready || false                 # trigger the ERR trap explicitly on timeout
+
+    trap - ERR
+    docker image prune -f >/dev/null    # dangling only; :latest/:prev tags survive (S6)
+    log "DEPLOY OK — $(git rev-parse --short HEAD) in $(( $(date +%s) - start_ts ))s"
+    log "rollback hint: ./scripts/deploy.sh $OLD_SHA"
 }
 
 main "$@"
