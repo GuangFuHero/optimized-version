@@ -6,13 +6,17 @@ import sys
 from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pyrate_limiter import Duration, Limiter, Rate
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.api import api_router
+from app.core import security
 from app.core.config import settings
 from app.core.context import AuditContextMiddleware
+from app.core.redis import get_redis
 from app.graphql.router import graphql_router
 
 # Route the app's loggers (e.g. the app.email / app.sms console senders) to stdout at INFO so dev
@@ -72,3 +76,17 @@ async def root():
 async def health_check():
     """Return a simple health check response."""
     return {"status": "ok"}
+
+
+@app.get("/readyz")
+async def readiness_check(
+        db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+):
+    """Readiness probe: 200 only when DB and Redis are reachable. Used as the deploy gate."""
+    try:
+        await db.execute(text("SELECT 1"))
+        await redis.ping()
+    except Exception as err:
+        raise HTTPException(status_code=503, detail="not ready") from err
+    return {"status": "ready"}
