@@ -38,11 +38,12 @@ URL at it. `-N` keeps a forward-only session; drop it if you also want a shell.
 
 ### Inspecting the DB from your machine (DBeaver / psql)
 
-Postgres is published on the VM's **loopback only** at `127.0.0.1:5433` (never on the public
-interface). Tunnel it:
+Postgres is published on the VM's **loopback only** at `127.0.0.1:5432` (never on the public
+interface). Tunnel it — pick any free LOCAL port; 5433 is handy if your local dev DB already
+occupies 5432 on your machine:
 
 ```bash
-gcloud compute ssh wanguard-test-01 --zone=asia-east1-a -- -N -L 5433:localhost:5433
+gcloud compute ssh wanguard-test-01 --zone=asia-east1-a -- -N -L 5433:localhost:5432
 ```
 
 Then connect your DB client to `localhost:5433`, user `postgres`, database `postgres`. The password
@@ -62,7 +63,7 @@ gcloud secrets versions access latest --secret=app-postgres-password
 | Repo path on VM | `/opt/wanguard` |
 | Compose file | `docker-compose.staging.yml`, compose project name pinned to `backend` |
 | Data | Named volumes `backend_pgdata` / `backend_redisdata` — **survive all deploys** |
-| Published ports | Backend `:8000`; Postgres on **loopback only** (`127.0.0.1:5433`, for SSH-tunnel inspection); Redis internal-only |
+| Published ports | Backend `:8000`; Postgres on **loopback only** (`127.0.0.1:5432`, for SSH-tunnel inspection); Redis internal-only |
 | GCP firewall | Only 22/SSH open. **8000 is NOT open** — access via SSH tunnel until a firewall rule (or Caddy/HTTPS) is added for the frontend |
 | External IP | Ephemeral (not reserved). It can change when the VM is stopped/started — always connect via `gcloud compute ssh`, don't hardcode the IP |
 | Secrets | GCP Secret Manager: `app-postgres-password`, `app-secret-key`, `app-smtp2go-api-key` |

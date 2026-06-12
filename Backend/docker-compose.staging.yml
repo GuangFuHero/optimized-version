@@ -10,7 +10,7 @@ services:
     # Loopback-ONLY publish: reachable from the VM itself (and SSH tunnels) for DB inspection,
     # never from the internet (binds 127.0.0.1, not 0.0.0.0).
     ports:
-      - "127.0.0.1:5433:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
