@@ -98,7 +98,7 @@ Design rules baked into the script:
   not in the old running container (which doesn't contain the new files).
 - In-container Python scripts need `-e PYTHONPATH=/app` (the local `PYTHONPATH=.` convention doesn't
   exist inside the image; without it `import app.*` fails).
-- Concurrency: an flock on `/var/lock/disaster-deploy.lock` makes a second concurrent deploy fail
+- Concurrency: a flock on `/var/lock/disaster-deploy.lock` makes a second concurrent deploy fail
   immediately with "another deploy is already in progress". The lock is released when the process
   exits (including crashes) — there are no stale-lock cleanup steps to run.
 

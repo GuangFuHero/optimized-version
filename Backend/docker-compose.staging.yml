@@ -1,5 +1,5 @@
 # Staging deploy — plain HTTP on :8000 (Stage 1: frontend still runs locally).
-# Deploy: docker compose -f docker-compose.staging.yml up -d --build
+# Deploy: ./scripts/deploy.sh — NEVER `docker compose up` directly (skips backup/migrate/readiness; see DEPLOY.md)
 # db/redis publish NO host ports — reachable only on the internal docker network.
 # Only backend :8000 is exposed. Add Caddy/HTTPS (docker-compose.prod.yml) when the
 # frontend moves to the cloud and the backend must serve https.
