@@ -16,7 +16,7 @@ export COMPOSE_PROJECT_NAME=backend
 
 IMAGE=disaster-backend
 LOCK_FILE=/var/lock/disaster-deploy.lock
-GCS_BUCKET="gs://CHANGE_ME-db-backups"          # set once: the bucket from the bootstrap step
+GCS_BUCKET="gs://wanguard-250923-db-backups"    # created by the one-time bootstrap (30-day lifecycle)
 READYZ_URL=http://localhost:8000/readyz
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
