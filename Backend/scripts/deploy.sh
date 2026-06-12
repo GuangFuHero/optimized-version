@@ -160,7 +160,9 @@ main() {
 
     log "[8/9] migrate + seeds (in one-off backend containers — old container lacks new files)"  # C3
     compose run --rm backend alembic upgrade head
-    compose run --rm backend python scripts/seed_rbac.py
+    # PYTHONPATH: the script imports `app.*`; WORKDIR is /app but `python scripts/x.py` puts only
+    # scripts/ on sys.path (alembic is unaffected — its env.py resolves paths itself).
+    compose run --rm -e PYTHONPATH=/app backend python scripts/seed_rbac.py
     if [ "${SEED_MOCK:-false}" = "true" ]; then
         log "applying mock-scenario seed (SEED_MOCK=true)"
         compose exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
