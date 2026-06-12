@@ -272,11 +272,25 @@ a minute but won't be OOM-killed). Cached rebuilds are fast.
 
 ---
 
+## Security checklist BEFORE exposing :8000 to the internet
+
+Today the backend is reachable only via SSH tunnel (firewall opens 22 only), which neutralizes the
+items below. The day :8000 (or Caddy/443) is opened for the frontend, work through this list:
+
+- [ ] **TLS**: serve HTTPS (Caddy per the original infra plan); don't expose plain HTTP.
+- [ ] **CORS**: replace the pre-existing `allow_origins=["*"]` with the frontend's origin allowlist.
+- [ ] **Mock accounts**: the committed seed gives 37 staging accounts a publicly-known password
+      (`Mock1234!`, demo-only by design). Decide: accept for a demo env, or rotate the seed password.
+- [ ] **Probe rate-limiting**: `/readyz` does `SELECT 1` + Redis `PING` per hit and has no rate limit
+      (auth endpoints do). Cheap, but add a limiter or let Caddy throttle it once public.
+- [ ] Re-check the firewall rule scope (source ranges) and that db/redis are still loopback/internal.
+
 ## Future work (not covered by this doc)
 
 - CI/CD (push-to-deploy): GitHub Actions builds the image → Artifact Registry → VM pulls
   (no more building on the VM)
-- Frontend access: open firewall :8000, or add Caddy for HTTPS/443
+- Frontend access: open firewall :8000, or add Caddy for HTTPS/443 — **run the security checklist
+  above first**
 - Zero-downtime production: Caddy blue-green on the VM, or Cloud Run + managed DB/Redis
   (prerequisite either way: expand-contract migrations)
 - Terraform once the infra surface grows
