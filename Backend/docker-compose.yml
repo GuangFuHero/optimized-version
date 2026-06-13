@@ -1,3 +1,5 @@
+# Development-only local stack.
+# For combined frontend/backend deployment, use ../docker-compose.deploy.yml from the repo root.
 services:
   db:
     image: postgis/postgis:16-3.4
@@ -38,6 +40,27 @@ services:
       - redis
     networks:
       - app-network
+
+  frontend:
+    build:
+      context: ./Frontend
+    environment:
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      AUTH_SECRET: ${AUTH_SECRET}
+
+      API_BASE_URL: http://backend:8000/api
+      GRAPHQL_URL: http://backend:8000/graphql
+
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      LINE_CLIENT_ID: ${LINE_CLIENT_ID}
+      LINE_CLIENT_SECRET: ${LINE_CLIENT_SECRET}
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
 
 networks:
   app-network:
