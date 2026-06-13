@@ -1,0 +1,12 @@
+.venv/
+.db/
+.pytest_cache/
+.ruff_cache/
+.git/
+__pycache__/
+*.pyc
+.env
+docker-compose.override.yml
+scripts/smoke_email.py
+note/
+docs/

@@ -12,6 +12,7 @@ from pyrate_limiter import Duration, Limiter, Rate
 
 from app.api.v1.api import api_router
 from app.core.config import settings
+from app.core.context import AuditContextMiddleware
 from app.graphql.router import graphql_router
 
 # Route the app's loggers (e.g. the app.email / app.sms console senders) to stdout at INFO so dev
@@ -55,6 +56,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(AuditContextMiddleware)
 
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(graphql_router, prefix="/graphql", tags=["圖資"])
