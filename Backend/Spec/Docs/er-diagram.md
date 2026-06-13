@@ -141,7 +141,7 @@ users {
       int level
       string comment
       string source "user/gov/crawler"
-      string visibility "public/restricted"
+      string visibility "public/restricted/internal"
       string verification_status "unverified/ai_verified/human_verified"
       float confidence_score "0.0-1.0"
       boolean is_duplicate
@@ -222,6 +222,7 @@ users {
       string visibility "public/restricted/internal"
       string verification_status "unverified/ai_verified/human_verified/disputed"
       string review_note "nullable"
+      string disaster_type "nullable, free-form e.g. earthquake/flood"
   }
   base_geometries ||--|| tickets : "inherits as general ticket"
   %% NOTE: polymorphic_identity = "request" (base_geometries.property_name stores "request" for ticket rows)
@@ -309,6 +310,30 @@ users {
   %% UNIQUE(task_uuid, actor_uuid) -- uq_assignment_task_actor (a person can't be linked to the same task twice; over-subscription = different people exceeding quantity)
   ticket_tasks ||--o{ task_assignments : "assigned to"
   users ||--o{ task_assignments : "works on"
+
+  %% ==========================
+  %% 8a. Station Update Suggestions (user-proposed edits, admin review)
+  %% ==========================
+  station_update_suggestions {
+      uuid uuid PK
+      string target_type "station/station_property"
+      string target_uuid "uuid of the targeted station or station_property (polymorphic, no FK)"
+      string field_name "which field to change (must be in code-derived suggestable schema)"
+      string new_value "proposed value stored as text; coerced to the field's type on approval"
+      string comment "nullable, why the change is suggested"
+      string status "pending/approved/rejected, default pending"
+      string review_note "nullable, admin note on the decision"
+      uuid reviewed_by FK "nullable, FK to users (admin who decided)"
+      uuid created_by FK "FK to users (the suggester)"
+      timestamp created_at
+      timestamp updated_at
+      timestamp delete_at
+  }
+  users ||--o{ station_update_suggestions : "suggests"
+  users ||--o{ station_update_suggestions : "reviews"
+  %% POLYMORPHIC: target_type + target_uuid reference stations OR station_properties
+  %% (no FK, same pattern as photos.ref_type/ref_uuid). On approve, new_value is applied
+  %% to the target field; on reject, status=rejected and the target is unchanged.
 
   %% ==========================
   %% 9. Property Config (EAV schema definitions, no FK relationships)

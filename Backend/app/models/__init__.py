@@ -17,6 +17,10 @@ from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
 from app.models.request import Tickets  # noqa: F401
 from app.models.route import Route  # noqa: F401
 from app.models.secondary_location import SecondaryLocation  # noqa: F401
-from app.models.station_property import CrowdSourcing, StationProperty  # noqa: F401
+from app.models.station_property import (  # noqa: F401
+    CrowdSourcing,
+    StationProperty,
+    StationUpdateSuggestion,
+)
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask  # noqa: F401
 

@@ -22,6 +22,7 @@ class Tickets(BaseGeometry):
     visibility: Mapped[str | None] = mapped_column(String(50))
     verification_status: Mapped[str | None] = mapped_column(String(50))
     review_note: Mapped[str | None] = mapped_column(String)
+    disaster_type: Mapped[str | None] = mapped_column(String(50))
 
     __mapper_args__ = {
         "polymorphic_identity": "request",
