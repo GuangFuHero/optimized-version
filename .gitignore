@@ -2,3 +2,27 @@
 
 # Playwright MCP screenshots (test artifacts)
 .playwright-mcp/
+
+/disaster-map
+
+openspec
+
+# Local editor settings
+.vscode/
+Frontend/.vscode/
+
+# Local workflow tooling
+.github/prompts/
+.github/skills/
+
+# Frontend local dependencies and build outputs
+Frontend/node_modules/
+Frontend/.nx/
+Frontend/.vercel/
+Frontend/.next/
+Frontend/dist/
+Frontend/.env.local
+Frontend/.env.*.local
+
+# Backend local runtime data
+Backend/.db/
