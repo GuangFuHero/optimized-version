@@ -2,3 +2,12 @@
 
 # Playwright MCP screenshots (test artifacts)
 .playwright-mcp/
+
+memory/
+.handoff/
+.idea/
+.vscode/
+.pytest_cache/
+.claude/
+.db/
+.venv/

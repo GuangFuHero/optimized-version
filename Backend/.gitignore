@@ -51,5 +51,8 @@ GEMINI.md
 # local-only compose overrides (e.g. real GOOGLE_CLIENT_ID + oidc verifier for e2e)
 docker-compose.override.yml
 
+.handoff/
+memory/
+
 # local-only smoke test holding a real SMTP2Go API key
 scripts/smoke_email.py
