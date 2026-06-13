@@ -6,7 +6,7 @@ from uuid import UUID
 
 import strawberry
 from app.graphql.scalars import GeoJSON, geom_to_geojson
-from app.graphql.shared import PageInfo
+from app.graphql.shared import PageInfo, Visibility
 
 
 @strawberry.enum
@@ -224,8 +224,9 @@ class CreateTicketTaskInput:
     task_description: str | None = None
     quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
     source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
-    visibility: str = strawberry.field(
-        default="public", description="Visibility: 'public' (default), 'restricted', or 'internal'"
+    visibility: Visibility = strawberry.field(
+        default=Visibility.public,
+        description="Visibility: 'public' (default), 'restricted', or 'internal'",
     )
     route_uuid: str | None = strawberry.field(
         default=None, description="Optional UUID of an associated route"
@@ -250,7 +251,7 @@ class UpdateTicketTaskInput:
         default=None,
         description="New review state: 'pending_review', 'approved', or 'rejected'",
     )
-    visibility: str | None = strawberry.field(
+    visibility: Visibility | None = strawberry.field(
         default=None, description="Updated visibility: 'public', 'restricted', or 'internal'"
     )
 
@@ -413,8 +414,9 @@ class CreateTicketInput:
     task_type: str | None = strawberry.field(
         default=None, description="Type of help: 'rescue', 'supply', 'medical', or 'hr'"
     )
-    visibility: str = strawberry.field(
-        default="public", description="Visibility: 'public' (default), 'restricted', or 'internal'"
+    visibility: Visibility = strawberry.field(
+        default=Visibility.public,
+        description="Visibility: 'public' (default), 'restricted', or 'internal'",
     )
     disaster_type: str | None = strawberry.field(
         default=None, description="Type of disaster, e.g. 'earthquake', 'flood'"

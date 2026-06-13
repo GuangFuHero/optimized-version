@@ -15,7 +15,7 @@ SUGGESTABLE_FIELDS: dict[str, list[tuple[str, str, list[str] | None]]] = {
         ("op_hour", "string", None),
         ("level", "integer", None),
         ("comment", "string", None),
-        ("visibility", "enum", ["public", "restricted"]),
+        ("visibility", "enum", ["public", "restricted", "internal"]),
     ],
     "station_property": [
         ("property_name", "string", None),

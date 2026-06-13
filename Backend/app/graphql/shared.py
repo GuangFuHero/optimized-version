@@ -1,6 +1,17 @@
 """Shared GraphQL types reused across domains."""
 
+import enum
+
 import strawberry
+
+
+@strawberry.enum
+class Visibility(enum.Enum):
+    """How widely a record is shown. Shared by stations, tickets, and ticket tasks."""
+
+    public = "public"
+    restricted = "restricted"
+    internal = "internal"
 
 
 @strawberry.type

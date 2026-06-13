@@ -42,7 +42,9 @@ class SuggestionMutation:
 
         if input.target_type not in VALID_TARGET_TYPES:
             raise ValueError(f"Unknown target_type '{input.target_type}'")
-        target = await _TARGET_REPOS[input.target_type].get_by_uuid_active(db, input.target_uuid)
+        target = await _TARGET_REPOS[input.target_type].get_by_uuid_active(
+            db, str(input.target_uuid)
+        )
         if not target:
             raise ValueError(f"{input.target_type} not found")
 
@@ -51,7 +53,7 @@ class SuggestionMutation:
 
         suggestion = await station_suggestion_repository.create(db, obj_in={
             "target_type": input.target_type,
-            "target_uuid": input.target_uuid,
+            "target_uuid": str(input.target_uuid),
             "field_name": input.field_name,
             "new_value": str(value),
             "comment": input.comment,

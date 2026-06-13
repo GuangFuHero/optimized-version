@@ -141,7 +141,7 @@ users {
       int level
       string comment
       string source "user/gov/crawler"
-      string visibility "public/restricted"
+      string visibility "public/restricted/internal"
       string verification_status "unverified/ai_verified/human_verified"
       float confidence_score "0.0-1.0"
       boolean is_duplicate

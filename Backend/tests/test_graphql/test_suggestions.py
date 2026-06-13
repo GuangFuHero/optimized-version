@@ -71,7 +71,7 @@ async def test_suggestable_fields_exposes_enum_options(client):
     fields = {f["fieldName"]: f for f in resp.json()["data"]["suggestableFields"]}
     assert fields["type"]["dataType"] == "string"
     assert fields["type"]["enumOptions"] is None
-    assert fields["visibility"]["enumOptions"] == ["public", "restricted"]
+    assert fields["visibility"]["enumOptions"] == ["public", "restricted", "internal"]
     assert fields["op_hour"]["dataType"] == "string"
     assert fields["level"]["dataType"] == "integer"
     assert fields["level"]["enumOptions"] is None
@@ -153,6 +153,17 @@ async def test_create_requires_auth(client, sample_station):
     """An unauthenticated request cannot create a suggestion."""
     body = await _create(client, "", "station", sample_station, "name", "X")
     assert "errors" in body
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_malformed_target_uuid(client, login_user_auth):
+    """A non-UUID target is rejected at the GraphQL boundary, not as a leaky DB DataError."""
+    _, token = login_user_auth
+    body = await _create(client, token, "station", "abc", "name", "X")
+    messages = " ".join(e["message"] for e in body["errors"])
+    # The UUID scalar rejects "abc" before any query runs — no asyncpg DataError, no SQL leak.
+    assert "DataError" not in messages
+    assert "SQL" not in messages
 
 
 # ---------------------------------------------------------------------------

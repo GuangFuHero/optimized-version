@@ -59,7 +59,7 @@ class RequestMutation:
                 "status": "pending",
                 "priority": input.priority,
                 "task_type": input.task_type,
-                "visibility": input.visibility,
+                "visibility": input.visibility.value,
                 "disaster_type": input.disaster_type,
             },
         )
@@ -127,7 +127,7 @@ class TicketTaskMutation:
                 "task_description": input.task_description,
                 "quantity": input.quantity,
                 "source": input.source,
-                "visibility": input.visibility,
+                "visibility": input.visibility.value,
                 "route_uuid": input.route_uuid,
                 "created_by": str(info.context["user"].uuid),
             },
@@ -154,7 +154,7 @@ class TicketTaskMutation:
         if input.moderation_status is not None:
             obj_in["moderation_status"] = input.moderation_status
         if input.visibility is not None:
-            obj_in["visibility"] = input.visibility
+            obj_in["visibility"] = input.visibility.value
         for field in ("progress_note", "review_note"):
             val = getattr(input, field)
             if val is not strawberry.UNSET:

@@ -66,7 +66,7 @@ class CreateStationSuggestionInput:
     """Input for proposing a change to a station or station-property field."""
 
     target_type: str = strawberry.field(description="'station' or 'station_property'")
-    target_uuid: str = strawberry.field(description="UUID of the station/property to change")
+    target_uuid: UUID = strawberry.field(description="UUID of the station/property to change")
     field_name: str = strawberry.field(description="Which field to change (see suggestableFields)")
     new_value: str = strawberry.field(description="Proposed new value as text")
     comment: str | None = strawberry.field(default=None, description="Why the change is suggested")
