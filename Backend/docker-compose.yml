@@ -1,5 +1,6 @@
 # Development-only local stack.
-# For combined frontend/backend deployment, use ../docker-compose.deploy.yml from the repo root.
+# For staging deployment (backend + frontend + Cloudflare tunnel), use
+# ./scripts/deploy.sh with docker-compose.staging.yml — never `docker compose up` directly.
 services:
   db:
     image: postgis/postgis:16-3.4
