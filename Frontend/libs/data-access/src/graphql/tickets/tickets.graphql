@@ -1,0 +1,150 @@
+fragment TicketFields on TicketType {
+  uuid
+  propertyName
+  geometry
+  title
+  description
+  contactName
+  contactEmail
+  contactPhone
+  status
+  priority
+  taskType
+  visibility
+  verificationStatus
+  reviewNote
+  createdBy
+  createdAt
+  updatedAt
+}
+
+fragment TicketTaskFields on TicketTaskType {
+  uuid
+  ticketUuid
+  taskType
+  taskName
+  taskDescription
+  quantity
+  status
+  source
+  progressNote
+  visibility
+  moderationStatus
+  reviewNote
+  createdAt
+  updatedAt
+}
+
+# ─── Queries ────────────────────────────────────────────────
+
+query GetTickets(
+  $bounds: BoundsInput
+  $status: String
+  $priority: String
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  tickets(
+    bounds: $bounds
+    status: $status
+    priority: $priority
+    skip: $skip
+    limit: $limit
+  ) {
+    items {
+      ...TicketFields
+    }
+    pageInfo {
+      totalCount
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}
+
+query GetTicket($uuid: UUID!) {
+  ticket(uuid: $uuid) {
+    ...TicketFields
+    photos {
+      uuid
+      url
+      createdBy
+      createdAt
+    }
+    tasks {
+      ...TicketTaskFields
+    }
+  }
+}
+
+query GetTicketTasks(
+  $ticketUuid: String!
+  $status: String
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  ticketTasks(
+    ticketUuid: $ticketUuid
+    status: $status
+    skip: $skip
+    limit: $limit
+  ) {
+    ...TicketTaskFields
+    properties {
+      uuid
+      taskUuid
+      propertyName
+      propertyValue
+      quantity
+      status
+      comment
+      createdAt
+    }
+    assignments {
+      uuid
+      taskUuid
+      actorUuid
+      role
+      assignedAt
+    }
+  }
+}
+
+# ─── Mutations ──────────────────────────────────────────────
+
+mutation CreateTicket($input: CreateTicketInput!) {
+  createTicket(input: $input) {
+    ...TicketFields
+  }
+}
+
+mutation UpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
+  updateTicket(uuid: $uuid, input: $input) {
+    ...TicketFields
+  }
+}
+
+mutation CreateTicketTask($input: CreateTicketTaskInput!) {
+  createTicketTask(input: $input) {
+    ...TicketTaskFields
+  }
+}
+
+mutation UpdateTicketTask($uuid: UUID!, $input: UpdateTicketTaskInput!) {
+  updateTicketTask(uuid: $uuid, input: $input) {
+    ...TicketTaskFields
+  }
+}
+
+mutation CreateTaskProperty($input: CreateTaskPropertyInput!) {
+  createTaskProperty(input: $input) {
+    uuid
+    taskUuid
+    propertyName
+    propertyValue
+    quantity
+    status
+    comment
+    createdAt
+  }
+}
