@@ -113,7 +113,7 @@ INSERT INTO user_contacts (uuid, user_uuid, type, value, verified, verified_at, 
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000036', 'email', 'bngo05@mock.test', true, now(), now()),
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000037', 'email', 'bgov01@mock.test', true, now(), now());
 INSERT INTO user_identities (uuid, user_uuid, provider, provider_subject, password_hash, created_at)
-SELECT gen_random_uuid(), u.uuid, 'password', NULL, 'pbkdf2_sha256$600000$mockdata12345678$22c5f18b05a3da2d9b73ce908b1b0209$2e9aa846631acac187bcd7c2373fe94702ff7d57fdd1af73a7f258dea4c11a4d', now()
+SELECT gen_random_uuid(), u.uuid, 'password', NULL, 'pbkdf2_sha256$600000$mockdata12345678$22c5f18b05a3da2d9b73ce908b1b0209$99a483d62cf51799d5cb4ce03dd460c8b3414b9fd1d12f816d8b35fe724d6479', now()
 FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
 INSERT INTO user_group_assign (uuid, user_uuid, group_uuid)
 SELECT gen_random_uuid(), u.uuid, (SELECT uuid FROM groups WHERE name='Login User')
