@@ -1,0 +1,7 @@
+.env.local
+.next
+.nx
+.vercel
+apps/demo/.next
+dist
+node_modules

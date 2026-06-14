@@ -181,6 +181,22 @@ importers:
         specifier: ^8.40.0
         version: 8.58.1(eslint@9.39.4(jiti@2.4.2))(typescript@5.9.3)
 
+  libs/data-access: {}
+
+  libs/modules:
+    dependencies:
+      next:
+        specifier: '>=15'
+        version: 16.1.7(@babel/core@7.29.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(sass@1.99.0)
+      react:
+        specifier: '>=19'
+        version: 19.2.5
+      react-dom:
+        specifier: '>=19'
+        version: 19.2.5(react@19.2.5)
+
+  libs/ui: {}
+
 packages:
 
   '@0no-co/graphql.web@1.2.0':
@@ -3337,6 +3353,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@unrs/resolver-binding-android-arm-eabi@1.11.1':
     resolution: {integrity: sha512-ppLRUgHVaGRWUx0R0Ut06Mjo9gBaBkg3v/8AxusGLhsIotbBLuRk51rAzqLC8gq6NyyAojEXglNjzf6R948DNw==}
