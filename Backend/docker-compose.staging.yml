@@ -1,0 +1,67 @@
+# Staging deploy — plain HTTP on :8000 (Stage 1: frontend still runs locally).
+# Deploy: ./scripts/deploy.sh — NEVER `docker compose up` directly (skips backup/migrate/readiness; see DEPLOY.md)
+# db/redis publish NO host ports — reachable only on the internal docker network.
+# Only backend :8000 is exposed. Add Caddy/HTTPS (docker-compose.prod.yml) when the
+# frontend moves to the cloud and the backend must serve https.
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    # Loopback-ONLY publish: reachable from the VM itself (and SSH tunnels) for DB inspection,
+    # never from the internet (binds 127.0.0.1, not 0.0.0.0).
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # appendonly: sessions/refresh/OTP survive restart & redeploy.
+    # noeviction: under memory pressure, error rather than silently drop auth keys.
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - app-network
+
+  backend:
+    build: .
+    image: disaster-backend:latest
+    restart: unless-stopped
+    # No --reload, no source bind-mount: uses the Dockerfile CMD (uvicorn app.main:app :8000).
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  app-network:
+    driver: bridge
