@@ -66,6 +66,12 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "alembic/**" = ["D", "E501"]  # auto-generated migration files
 
+[tool.ruff.lint.isort]
+# Pin first-party packages so import grouping (I001) is identical whether ruff runs
+# from the repo root (CI) or from Backend/ — otherwise `app`/`tests` get auto-detected
+# differently by cwd and the same file fails one but passes the other.
+known-first-party = ["app", "tests"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
