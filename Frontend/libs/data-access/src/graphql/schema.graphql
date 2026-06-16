@@ -1,0 +1,679 @@
+input BoundsInput {
+  """South boundary latitude"""
+  minLat: Float!
+
+  """North boundary latitude"""
+  maxLat: Float!
+
+  """West boundary longitude"""
+  minLng: Float!
+
+  """East boundary longitude"""
+  maxLng: Float!
+}
+
+type ClosureAreaConnection {
+  items: [ClosureAreaType!]!
+  pageInfo: PageInfo!
+}
+
+type ClosureAreaType {
+  uuid: UUID!
+
+  """Internal polymorphic discriminator — always 'closure_area'"""
+  propertyName: String!
+
+  """GeoJSON Polygon or MultiPolygon marking the closed area"""
+  geometry: GeoJSON
+
+  """UUID of the user who reported this closure"""
+  createdBy: String
+
+  """Current closure status: 'dangerous', 'block'"""
+  status: String!
+
+  """Source of the closure report, e.g. agency name or URL"""
+  informationSource: String
+
+  """Additional notes about this closure"""
+  comment: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CreateClosureAreaInput {
+  """GeoJSON Polygon or MultiPolygon — must not be a Point"""
+  geometry: GeoJSON!
+
+  """Initial closure status: 'active', 'cleared', or 'unknown'"""
+  status: String!
+
+  """Source of the closure report, e.g. agency name or URL"""
+  informationSource: String = null
+  comment: String = null
+}
+
+input CreateCrowdSourcingInput {
+  """UUID of the station being rated"""
+  stationUuid: String!
+
+  """
+  UUID of the StationProperty being rated — null for a general station rating
+  """
+  itemUuid: String = null
+
+  """Rating value: 'up', 'neutral', or 'down'"""
+  rating: String!
+
+  """Distance in meters from the user to the station at time of submission"""
+  distanceFromGeometry: Float = null
+}
+
+input CreateStationInput {
+  """GeoJSON Point — must be a valid Point within lon/lat bounds"""
+  geometry: GeoJSON!
+
+  """Station category, e.g. 'shelter', 'supply', 'medical'"""
+  type: String = null
+  name: String = null
+  description: String = null
+
+  """Operating hours in free-text format"""
+  opHour: String = null
+
+  """Importance level for map rendering (0 = default)"""
+  level: Int! = 0
+  comment: String = null
+
+  """Data origin: 'user' (default) or 'official'"""
+  source: String! = "user"
+
+  """Visibility: 'public' (default) or 'restricted'"""
+  visibility: String! = "public"
+
+  """Optional secondary address or pole location to attach to this station"""
+  secondaryLocation: SecondaryLocationInput = null
+}
+
+input CreateStationPropertyInput {
+  """UUID of the station to attach this property to"""
+  stationUuid: String!
+
+  """Category: 'supply', 'service', or 'equipment'"""
+  propertyType: String!
+
+  """Specific item name matching the property config schema"""
+  propertyName: String!
+  quantity: Int = null
+
+  """Initial credibility weight [0.0–2.0], default 1.0"""
+  weightings: Float! = 1
+}
+
+input CreateTaskPropertyInput {
+  """UUID of the task to attach this property to"""
+  taskUuid: String!
+
+  """Attribute key matching the task property config schema"""
+  propertyName: String!
+
+  """Value for the attribute"""
+  propertyValue: String!
+
+  """Number of units — null if not applicable"""
+  quantity: Int = null
+  comment: String = null
+}
+
+input CreateTicketInput {
+  title: String!
+  description: String = null
+
+  """
+  GeoJSON Point for the location where help is needed — [longitude, latitude]
+  """
+  geometry: GeoJSON!
+
+  """Full name of the requester"""
+  contactName: String!
+
+  """Optional email for follow-up"""
+  contactEmail: String = null
+
+  """Optional phone number for follow-up"""
+  contactPhone: String = null
+
+  """Urgency: 'low' (default), 'medium', 'high', or 'critical'"""
+  priority: String! = "low"
+
+  """Type of help: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String = null
+
+  """Visibility: 'public' (default), 'restricted', or 'internal'"""
+  visibility: String! = "public"
+}
+
+input CreateTicketTaskInput {
+  """UUID of the ticket this task belongs to"""
+  ticketUuid: String!
+
+  """Category: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String!
+  taskName: String!
+  taskDescription: String = null
+
+  """Number of people or units needed"""
+  quantity: Int = null
+
+  """Origin: 'user' (default) or 'official'"""
+  source: String! = "user"
+
+  """Visibility: 'public' (default), 'restricted', or 'internal'"""
+  visibility: String! = "public"
+
+  """Optional UUID of an associated route"""
+  routeUuid: String = null
+}
+
+type CrowdSourcingType {
+  uuid: UUID!
+
+  """UUID of the station being rated"""
+  stationUuid: String!
+
+  """UUID of the specific StationProperty being rated"""
+  itemUuid: String
+
+  """UUID of the user who submitted this rating"""
+  userUuid: String!
+
+  """Credibility score of the submitter at the time of submission"""
+  userCredibilityScore: Float!
+
+  """User-submitted rating: 'up', 'neutral', or 'down'"""
+  rating: String!
+
+  """
+  Distance in meters between the user's location and the station at submission time
+  """
+  distanceFromGeometry: Float
+  createdAt: DateTime
+}
+
+"""Date with time (isoformat)"""
+scalar DateTime
+
+"""GeoJSON geometry object (RFC 7946)"""
+scalar GeoJSON
+
+type Mutation {
+  createStation(input: CreateStationInput!): StationType!
+  updateStation(uuid: UUID!, input: UpdateStationInput!): StationType!
+  deleteStation(uuid: UUID!): Boolean!
+  createClosureArea(input: CreateClosureAreaInput!): ClosureAreaType!
+  updateClosureArea(uuid: UUID!, input: UpdateClosureAreaInput!): ClosureAreaType!
+  createStationProperty(input: CreateStationPropertyInput!): StationPropertyType!
+  updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
+  createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
+  createTicket(input: CreateTicketInput!): TicketType!
+  updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
+  createTicketTask(input: CreateTicketTaskInput!): TicketTaskType!
+  updateTicketTask(uuid: UUID!, input: UpdateTicketTaskInput!): TicketTaskType!
+  createTaskProperty(input: CreateTaskPropertyInput!): TaskPropertyType!
+  updateTaskProperty(uuid: UUID!, input: UpdateTaskPropertyInput!): TaskPropertyType!
+  upsertStationPropertyConfig(stationType: String!, input: UpsertPropertyConfigInput!): StationPropertyConfigType!
+  upsertTaskPropertyConfig(taskType: String!, input: UpsertPropertyConfigInput!): TaskPropertyConfigType!
+}
+
+type PageInfo {
+  """Total number of matching records across all pages"""
+  totalCount: Int!
+
+  """True if there are more records after the current page"""
+  hasNextPage: Boolean!
+
+  """True if there are records before the current page"""
+  hasPreviousPage: Boolean!
+}
+
+type PhotoType {
+  uuid: UUID!
+
+  """UUID of the parent entity this photo is attached to"""
+  refUuid: String!
+
+  """Type of the parent entity: 'station' or 'ticket'"""
+  refType: String!
+
+  """Public URL of the uploaded photo"""
+  url: String!
+
+  """UUID of the user who uploaded this photo"""
+  createdBy: String!
+  createdAt: DateTime
+}
+
+type Query {
+  stations(bounds: BoundsInput = null, stationType: String = null, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  station(uuid: UUID!): StationType
+  closureAreas(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): ClosureAreaConnection!
+  closureArea(uuid: UUID!): ClosureAreaType
+  tickets(bounds: BoundsInput = null, status: String = null, priority: String = null, skip: Int! = 0, limit: Int! = 50): TicketConnection!
+  ticket(uuid: UUID!): TicketType
+  ticketTasks(ticketUuid: String!, status: String = null, skip: Int! = 0, limit: Int! = 50): [TicketTaskType!]!
+  taskProperties(taskUuid: String!): [TaskPropertyType!]!
+  stationPropertyConfigs(stationType: String!): [StationPropertyConfigType!]!
+  taskPropertyConfigs(taskType: String!): [TaskPropertyConfigType!]!
+}
+
+input SecondaryLocationInput {
+  """Type of secondary location: 'address' (default) or 'pole'"""
+  locationType: String! = "address"
+  county: String = null
+  city: String = null
+  lane: String = null
+  alley: String = null
+  no: String = null
+  floor: String = null
+  room: String = null
+  poleId: String = null
+  poleType: String = null
+  poleNote: String = null
+}
+
+type SecondaryLocationType {
+  uuid: UUID!
+
+  """UUID of the parent station this location belongs to"""
+  geometryUuid: String!
+
+  """Type of secondary location: 'address' or 'pole'"""
+  locationType: String!
+  county: String
+  city: String
+  lane: String
+  alley: String
+  no: String
+  floor: String
+  room: String
+
+  """Utility pole identifier (only set when location_type is 'pole')"""
+  poleId: String
+
+  """
+  Type of utility pole, e.g. '電線桿' (electricity pole), '電話線桿' (telephone pole)
+  """
+  poleType: String
+
+  """Additional notes about the pole location"""
+  poleNote: String
+}
+
+type StationConnection {
+  items: [StationType!]!
+  pageInfo: PageInfo!
+}
+
+type StationPropertyConfigType {
+  uuid: UUID!
+
+  """
+  The station type this config applies to, or 'all' for universal properties
+  """
+  stationType: String!
+
+  """The property key this config defines, e.g. 'water', 'food_ration'"""
+  propertyName: String!
+
+  """Expected data type: 'string', 'integer', 'float', or 'enum'"""
+  dataType: String!
+
+  """
+  Allowed values when data_type is 'enum', e.g. ['available', 'depleted']
+  """
+  enumOptions: [String!]
+}
+
+type StationPropertyType {
+  uuid: UUID!
+
+  """UUID of the parent station this property belongs to"""
+  stationUuid: String!
+
+  """Category of this property, e.g. 'supply', 'service', 'equipment'"""
+  propertyType: String!
+
+  """Specific item name, e.g. 'water', 'food_ration', 'medical_kit'"""
+  propertyName: String!
+
+  """Available quantity — null means unknown"""
+  quantity: Int
+  comment: String
+
+  """Review state: 'pending', 'verified', or 'rejected'"""
+  status: String!
+
+  """
+  Credibility weight applied during score aggregation [0.0–2.0], default 1.0
+  """
+  weightings: Float!
+
+  """UUID of the user who added this property"""
+  createdBy: String
+  createdAt: DateTime
+  crowdSourcings: [CrowdSourcingType!]!
+}
+
+type StationType {
+  uuid: UUID!
+
+  """Internal polymorphic discriminator — always 'station'"""
+  propertyName: String!
+
+  """
+  GeoJSON geometry — Point for a station location, Polygon/MultiPolygon for an area
+  """
+  geometry: GeoJSON
+
+  """UUID of the user who created this station"""
+  createdBy: String
+
+  """Station category, e.g. 'shelter', 'supply', 'medical'"""
+  type: String
+  name: String
+  description: String
+
+  """Operating hours in free-text format, e.g. '09:00–18:00' or '24h'"""
+  opHour: String
+
+  """Importance level used for map rendering priority (0 = default)"""
+  level: Int!
+
+  """Internal admin comment, not shown to the public"""
+  comment: String
+
+  """Data source of this record: 'user' or 'official'"""
+  source: String
+
+  """Who can see this station: 'public' or 'restricted'"""
+  visibility: String
+
+  """Review state: 'unverified', 'ai_verified', or 'human_verified'"""
+  verificationStatus: String
+
+  """Aggregate credibility score based on crowd-sourced ratings [0.0–1.0]"""
+  confidenceScore: Float
+
+  """True if this station has been flagged as a duplicate entry"""
+  isDuplicate: Boolean!
+
+  """True if this is a temporary station (e.g. emergency shelter)"""
+  isTemporary: Boolean!
+
+  """True if this station is operated by a government or official body"""
+  isOfficial: Boolean!
+
+  """
+  Computed urgency score used for display ordering — higher is more urgent
+  """
+  priorityScore: Float
+  createdAt: DateTime
+  updatedAt: DateTime
+  secondaryLocation: SecondaryLocationType
+  properties: [StationPropertyType!]!
+}
+
+type TaskAssignmentType {
+  uuid: UUID!
+
+  """UUID of the task this assignment belongs to"""
+  taskUuid: String!
+
+  """UUID of the assigned user or group"""
+  actorUuid: String!
+
+  """Role in the task, e.g. 'lead', 'support'"""
+  role: String
+
+  """Timestamp when the assignment was created"""
+  assignedAt: DateTime
+}
+
+type TaskPropertyConfigType {
+  uuid: UUID!
+
+  """The task type this config applies to"""
+  taskType: String!
+
+  """The property key this config defines"""
+  propertyName: String!
+
+  """Expected data type: 'string', 'integer', 'float', or 'enum'"""
+  dataType: String!
+
+  """Allowed values when data_type is 'enum'"""
+  enumOptions: [String!]
+}
+
+type TaskPropertyType {
+  uuid: UUID!
+
+  """UUID of the parent ticket task"""
+  taskUuid: String!
+
+  """Structured attribute key, e.g. 'skill_required', 'cargo_type'"""
+  propertyName: String!
+
+  """Value for the attribute, e.g. 'medical_first_aid', 'food'"""
+  propertyValue: String!
+
+  """Number of units required — null means not applicable"""
+  quantity: Int
+
+  """Fulfillment state: 'pending' or 'fulfilled'"""
+  status: String
+
+  """Optional notes about this property"""
+  comment: String
+
+  """UUID of the user who added this property"""
+  createdBy: String
+  createdAt: DateTime
+}
+
+type TicketConnection {
+  items: [TicketType!]!
+  pageInfo: PageInfo!
+}
+
+type TicketTaskType {
+  uuid: UUID!
+
+  """UUID of the parent ticket this task belongs to"""
+  ticketUuid: String!
+
+  """Category of task: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String!
+
+  """Short name summarising the task"""
+  taskName: String!
+
+  """Detailed task instructions or context"""
+  taskDescription: String
+
+  """Number of people or units needed — null means unspecified"""
+  quantity: Int
+
+  """Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'"""
+  status: String!
+
+  """Origin of this task: 'user' or 'official'"""
+  source: String!
+
+  """Current progress update written by the assignee"""
+  progressNote: String
+
+  """Who can see this task: 'public', 'restricted', or 'internal'"""
+  visibility: String!
+
+  """Review state: 'pending_review', 'approved', or 'rejected'"""
+  moderationStatus: String!
+
+  """Moderator's notes explaining the review decision"""
+  reviewNote: String
+  createdAt: DateTime
+  updatedAt: DateTime
+  properties: [TaskPropertyType!]!
+  assignments: [TaskAssignmentType!]!
+}
+
+type TicketType {
+  uuid: UUID!
+
+  """Internal polymorphic discriminator — always 'request'"""
+  propertyName: String!
+
+  """GeoJSON Point indicating where help is needed"""
+  geometry: GeoJSON
+
+  """Short subject line describing the request"""
+  title: String!
+  description: String
+
+  """Full name of the person who submitted this request"""
+  contactName: String!
+
+  """Email address for follow-up communication"""
+  contactEmail: String
+
+  """Phone number for follow-up communication"""
+  contactPhone: String
+
+  """Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled'"""
+  status: String!
+
+  """Urgency level: 'low', 'medium', 'high', or 'critical'"""
+  priority: String!
+
+  """Type of help needed: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String
+
+  """Who can see this ticket: 'public', 'restricted', or 'internal'"""
+  visibility: String
+
+  """
+  Review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'
+  """
+  verificationStatus: String
+
+  """Moderator's notes about the verification decision"""
+  reviewNote: String
+
+  """UUID of the user who submitted this ticket"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+  photos: [PhotoType!]!
+  tasks: [TicketTaskType!]!
+}
+
+scalar UUID
+
+input UpdateClosureAreaInput {
+  geometry: GeoJSON = null
+  status: String = null
+  informationSource: String
+  comment: String
+}
+
+input UpdateStationInput {
+  """New GeoJSON Point — replaces existing geometry if provided"""
+  geometry: GeoJSON = null
+  type: String
+  name: String
+  description: String
+  opHour: String
+
+  """Updated importance level"""
+  level: Int = null
+  comment: String
+
+  """Updated visibility: 'public' or 'restricted'"""
+  visibility: String = null
+}
+
+input UpdateStationPropertyInput {
+  quantity: Int
+
+  """New review state: 'pending', 'verified', or 'rejected'"""
+  status: String = null
+
+  """Updated credibility weight [0.0–2.0]"""
+  weightings: Float = null
+}
+
+input UpdateTaskPropertyInput {
+  """Updated attribute value"""
+  propertyValue: String = null
+
+  """Updated number of units — pass null to clear"""
+  quantity: Int
+
+  """Updated fulfillment state: 'pending' or 'fulfilled'"""
+  status: String = null
+
+  """Updated notes — pass null to clear"""
+  comment: String
+}
+
+input UpdateTicketInput {
+  """
+  New lifecycle state — must follow valid transitions (e.g. pending → in_progress)
+  """
+  status: String = null
+
+  """Updated urgency: 'low', 'medium', 'high', or 'critical'"""
+  priority: String = null
+  title: String = null
+  description: String
+
+  """Moderator's review notes — pass null to clear"""
+  reviewNote: String
+
+  """
+  Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'
+  """
+  verificationStatus: String = null
+}
+
+input UpdateTicketTaskInput {
+  """
+  New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'
+  """
+  status: String = null
+
+  """Updated progress description — pass null to clear"""
+  progressNote: String
+
+  """Moderator's review notes — pass null to clear"""
+  reviewNote: String
+
+  """New review state: 'pending_review', 'approved', or 'rejected'"""
+  moderationStatus: String = null
+
+  """Updated visibility: 'public', 'restricted', or 'internal'"""
+  visibility: String = null
+}
+
+input UpsertPropertyConfigInput {
+  """The property key to create or update"""
+  propertyName: String!
+
+  """Expected data type: 'string', 'integer', 'float', or 'enum'"""
+  dataType: String!
+
+  """
+  Allowed enum values — required when data_type is 'enum', null otherwise
+  """
+  enumOptions: [String!] = null
+}

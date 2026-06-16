@@ -1,0 +1,1261 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "救災平台 API",
+    "description": "災難救援與資源調度平台後端服務",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/auth/salt/{value}": {
+      "get": {
+        "tags": ["認證系統"],
+        "summary": "Get User Salt",
+        "description": "Return the frontend salt for an identifier's password identity, or a deterministic fake salt.",
+        "operationId": "get_user_salt_api_v1_auth_salt__value__get",
+        "parameters": [
+          {
+            "name": "value",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Value" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserSaltResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Register",
+        "description": "Verify-then-create: store a pending registration and send a 6-digit code by email or SMS.\n\nNever writes an unverified DB row.",
+        "operationId": "register_api_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RegisterRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/verify": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Verify",
+        "description": "Consume a 6-digit code, create the account, and issue a session (verify == login).",
+        "operationId": "verify_api_v1_auth_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VerifyRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TokenPair" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/resend-verification": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Resend Verification",
+        "description": "Resend the 6-digit code for a still-pending email or phone registration (rate limited).",
+        "operationId": "resend_verification_api_v1_auth_resend_verification_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Login",
+        "description": "Email/phone + password login: contact → user → password identity → verify.",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_login_api_v1_auth_login_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TokenPair" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Refresh",
+        "description": "以 refresh token 換發新的 access token，並 rotate refresh token。",
+        "operationId": "refresh_api_v1_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TokenPair" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Logout",
+        "description": "Log out the CURRENT device only: revoke this session (its refresh token).\n\nUse /auth/logout-all to sign out every device. (A token minted without a sid is a no-op.)",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": { "204": { "description": "Successful Response" } },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/auth/logout-all": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Logout All",
+        "description": "Log out EVERY device: revoke all of the user's sessions.",
+        "operationId": "logout_all_api_v1_auth_logout_all_post",
+        "responses": { "204": { "description": "Successful Response" } },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/auth/sso/google": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Sso Google",
+        "description": "Verify a Google id_token; log in an existing google identity or create the account on first login.",
+        "operationId": "sso_google_api_v1_auth_sso_google_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/GoogleSsoRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TokenPair" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/link/google": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Link Google",
+        "description": "Attach a verified Google identity to the current account (login method only; no contact change).",
+        "operationId": "link_google_api_v1_auth_link_google_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LinkGoogleRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/auth/sso/line": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Sso Line",
+        "description": "Verify a LINE id_token; log in an existing line identity or create the account on first login.",
+        "operationId": "sso_line_api_v1_auth_sso_line_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/IdTokenRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TokenPair" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/link/line": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Link Line",
+        "description": "Attach a verified LINE identity to the current account (login method only; no contact change).",
+        "operationId": "link_line_api_v1_auth_link_line_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/IdTokenRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Change Password",
+        "description": "Verify old password against the password identity, write the new hash, revoke all sessions.",
+        "operationId": "change_password_api_v1_auth_change_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChangePasswordRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": { "description": "Successful Response" },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/auth/set-password": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Set Password",
+        "description": "Create a first password identity for an SSO-only account (no old-password check).",
+        "operationId": "set_password_api_v1_auth_set_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SetPasswordRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": { "description": "Successful Response" },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/auth/forgot-password": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Forgot Password",
+        "description": "Start a logged-out password reset. Always 202 (anti-enumeration).\n\nReal accounts with a password get a 6-digit reset code; SSO-only accounts get a generic\n\"use third-party sign-in\" notice. Unknown/unreachable identifiers get nothing. The HTTP response is\nidentical in every branch; only the owner's inbox/phone sees what differs.\n\nDelivery is dispatched via BackgroundTasks so every branch returns in ~constant time — otherwise the\nawaited send on the account-exists branch leaks account existence via response latency once a real\nemail/SMS provider is wired (the response body is already identical across branches).",
+        "operationId": "forgot_password_api_v1_auth_forgot_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ForgotPasswordRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/reset-password": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Reset Password",
+        "description": "Complete a logged-out reset: consume the code, write the new password, revoke all sessions.",
+        "operationId": "reset_password_api_v1_auth_reset_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ResetPasswordRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": { "description": "Successful Response" },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/contacts": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Add Contact",
+        "description": "Start adding a contact to the current account: send a 6-digit code (verify-then-attach).",
+        "operationId": "add_contact_api_v1_auth_contacts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AddContactRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/auth/contacts/verify": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Verify Contact",
+        "description": "Verify a 6-digit code and attach the verified contact to the current account.",
+        "operationId": "verify_contact_api_v1_auth_contacts_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VerifyContactRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/auth/contacts/resend": {
+      "post": {
+        "tags": ["認證系統"],
+        "summary": "Resend Contact",
+        "description": "Resend the contact-verification code for a still-pending add (rate limited).",
+        "operationId": "resend_contact_api_v1_auth_contacts_resend_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AddContactRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "tags": ["使用者管理"],
+        "summary": "Read User Me",
+        "description": "獲取當前登入使用者的個人資料。",
+        "operationId": "read_user_me_api_v1_users_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      },
+      "patch": {
+        "tags": ["使用者管理"],
+        "summary": "Update User Me",
+        "description": "更新當前登入使用者的個人資料。",
+        "operationId": "update_user_me_api_v1_users_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserUpdate" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UserResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/rbac-test/public": {
+      "get": {
+        "tags": ["RBAC 測試"],
+        "summary": "Public Api",
+        "description": "公開 API：不需要任何權限。",
+        "operationId": "public_api_api_v1_rbac_test_public_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
+    "/api/v1/rbac-test/map-view": {
+      "get": {
+        "tags": ["RBAC 測試"],
+        "summary": "Map View Api",
+        "description": "地圖檢視 API：需要 'map' 資源的 'read' 權限。",
+        "operationId": "map_view_api_api_v1_rbac_test_map_view_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/rbac-test/map-create": {
+      "get": {
+        "tags": ["RBAC 測試"],
+        "summary": "Map Create Api",
+        "description": "建立標記 API：需要 'map' 資源的 'create' 權限。",
+        "operationId": "map_create_api_api_v1_rbac_test_map_create_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/rbac-test/admin-only": {
+      "get": {
+        "tags": ["RBAC 測試"],
+        "summary": "Admin Only Api",
+        "description": "管理員專用 API：需要 'admin' 資源的 'read' 權限。",
+        "operationId": "admin_only_api_api_v1_rbac_test_admin_only_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/v1/map/tile/{type_}/{source}/{z}/{x}/{y}": {
+      "get": {
+        "tags": ["地圖圖磚"],
+        "summary": "Get Tile",
+        "description": "Proxy a map tile from an upstream source with 7-day Redis caching.\n\n**type** — `satellite` or `road`\n\n**source** — one of:\n- satellite: `nasa_gibs` (image/jpeg), `eox` (image/jpeg), `nlsc` (image/png), `sinica` (image/png)\n- road: `osm` (image/png), `carto` (image/png)\n\n**z/x/y** — Standard XYZ slippy map tile coordinates (z: 0–19)\n\n**layer** — Required only for `source=sinica`. Pass the Sinica layer name\n(e.g. `EARTH`, `TAIWAN_MOSAIC`). See https://gis.sinica.edu.tw/worldmap/\nfor available layers. Ignored for all other sources.\n\nReturns the raw tile image bytes with the upstream Content-Type header.\nOn upstream error, returns a 1×1 transparent PNG.",
+        "operationId": "get_tile_api_v1_map_tile__type____source___z___x___y__get",
+        "parameters": [
+          {
+            "name": "type_",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Type " }
+          },
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Source" }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "title": "Z" }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "title": "X" }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "title": "Y" }
+          },
+          {
+            "name": "layer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [{ "type": "string" }, { "type": "null" }],
+              "title": "Layer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/map/attribution/{type_}/{source}": {
+      "get": {
+        "tags": ["地圖圖磚"],
+        "summary": "Get Attribution Info",
+        "description": "Return attribution metadata for a given tile source.\n\nThe frontend should display `attribution_text` on the map.\nWhen `requires_logo` is true, also render the logo from `logo_url`.",
+        "operationId": "get_attribution_info_api_v1_map_attribution__type____source__get",
+        "parameters": [
+          {
+            "name": "type_",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Type " }
+          },
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Source" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AttributionResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/graphql": {
+      "get": {
+        "tags": ["圖資"],
+        "summary": "Handle Http Get",
+        "operationId": "handle_http_get_graphql_get",
+        "responses": {
+          "200": {
+            "description": "The GraphiQL integrated development environment.",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "404": {
+            "description": "Not found if GraphiQL or query via GET are not enabled."
+          }
+        }
+      },
+      "post": {
+        "tags": ["圖資"],
+        "summary": "Handle Http Post",
+        "operationId": "handle_http_post_graphql_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Root",
+        "description": "Return a welcome message confirming the API is online.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Return a simple health check response.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddContactRequest": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["email", "phone"],
+            "title": "Type",
+            "default": "email"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": ["value"],
+        "title": "AddContactRequest",
+        "description": "Body to start adding a contact (email/phone) to the current account."
+      },
+      "AttributionResponse": {
+        "properties": {
+          "source": { "type": "string", "title": "Source" },
+          "type": { "type": "string", "title": "Type" },
+          "name": { "type": "string", "title": "Name" },
+          "license": { "type": "string", "title": "License" },
+          "attribution_text": { "type": "string", "title": "Attribution Text" },
+          "attribution_url": { "type": "string", "title": "Attribution Url" },
+          "image_format": { "type": "string", "title": "Image Format" },
+          "commercial_use": { "type": "boolean", "title": "Commercial Use" },
+          "requires_logo": { "type": "boolean", "title": "Requires Logo" },
+          "logo_url": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Logo Url"
+          },
+          "notes": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "type",
+          "name",
+          "license",
+          "attribution_text",
+          "attribution_url",
+          "image_format",
+          "commercial_use",
+          "requires_logo"
+        ],
+        "title": "AttributionResponse",
+        "description": "Schema for map tile source attribution metadata."
+      },
+      "Body_login_api_v1_auth_login_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              { "type": "string", "pattern": "^password$" },
+              { "type": "null" }
+            ],
+            "title": "Grant Type"
+          },
+          "username": { "type": "string", "title": "Username" },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "title": "Password"
+          },
+          "scope": { "type": "string", "title": "Scope", "default": "" },
+          "client_id": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "format": "password",
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": ["username", "password"],
+        "title": "Body_login_api_v1_auth_login_post"
+      },
+      "ChangePasswordRequest": {
+        "properties": {
+          "old_password": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 6,
+            "title": "Old Password"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 6,
+            "title": "New Password"
+          },
+          "salt_frontend": {
+            "type": "string",
+            "title": "Salt Frontend",
+            "description": "Frontend salt for the new password"
+          }
+        },
+        "type": "object",
+        "required": ["old_password", "new_password", "salt_frontend"],
+        "title": "ChangePasswordRequest",
+        "description": "Request body for changing password (all values already frontend-hashed)."
+      },
+      "ForgotPasswordRequest": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["email", "phone"],
+            "title": "Type",
+            "default": "email"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": ["value"],
+        "title": "ForgotPasswordRequest",
+        "description": "Body to request a logged-out password reset code."
+      },
+      "GoogleSsoRequest": {
+        "properties": {
+          "id_token": { "type": "string", "minLength": 1, "title": "Id Token" }
+        },
+        "type": "object",
+        "required": ["id_token"],
+        "title": "GoogleSsoRequest",
+        "description": "Body carrying a Google id_token for SSO login / first-login create."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": { "$ref": "#/components/schemas/ValidationError" },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IdTokenRequest": {
+        "properties": {
+          "id_token": { "type": "string", "minLength": 1, "title": "Id Token" }
+        },
+        "type": "object",
+        "required": ["id_token"],
+        "title": "IdTokenRequest",
+        "description": "Body carrying a provider id_token (LINE SSO / link)."
+      },
+      "LinkGoogleRequest": {
+        "properties": {
+          "id_token": { "type": "string", "minLength": 1, "title": "Id Token" }
+        },
+        "type": "object",
+        "required": ["id_token"],
+        "title": "LinkGoogleRequest",
+        "description": "Body carrying a Google id_token to link to the current account."
+      },
+      "RefreshRequest": {
+        "properties": {
+          "refresh_token": { "type": "string", "title": "Refresh Token" }
+        },
+        "type": "object",
+        "required": ["refresh_token"],
+        "title": "RefreshRequest",
+        "description": "Request body carrying a refresh token to exchange."
+      },
+      "RegisterRequest": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["email", "phone"],
+            "title": "Type",
+            "default": "email"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Value"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 6,
+            "title": "Password"
+          },
+          "salt_frontend": {
+            "type": "string",
+            "title": "Salt Frontend",
+            "description": "Frontend salt (hex)"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": ["value", "password", "salt_frontend", "name"],
+        "title": "RegisterRequest",
+        "description": "Verify-then-create registration for email or phone."
+      },
+      "ResendVerificationRequest": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["email", "phone"],
+            "title": "Type",
+            "default": "email"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": ["value"],
+        "title": "ResendVerificationRequest",
+        "description": "Request to resend a verification message for a pending registration."
+      },
+      "ResetPasswordRequest": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["email", "phone"],
+            "title": "Type",
+            "default": "email"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Value"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 8,
+            "minLength": 4,
+            "title": "Code"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 6,
+            "title": "New Password"
+          },
+          "salt_frontend": {
+            "type": "string",
+            "title": "Salt Frontend",
+            "description": "Frontend salt (hex)"
+          }
+        },
+        "type": "object",
+        "required": ["value", "code", "new_password", "salt_frontend"],
+        "title": "ResetPasswordRequest",
+        "description": "Body to complete a logged-out password reset (new_password already frontend-hashed)."
+      },
+      "SetPasswordRequest": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 6,
+            "title": "Password"
+          },
+          "salt_frontend": {
+            "type": "string",
+            "title": "Salt Frontend",
+            "description": "Frontend salt (hex)"
+          }
+        },
+        "type": "object",
+        "required": ["password", "salt_frontend"],
+        "title": "SetPasswordRequest",
+        "description": "Body for SSO-only users to set a first password (no old password)."
+      },
+      "TokenPair": {
+        "properties": {
+          "access_token": { "type": "string", "title": "Access Token" },
+          "refresh_token": { "type": "string", "title": "Refresh Token" },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": { "type": "integer", "title": "Expires In" }
+        },
+        "type": "object",
+        "required": ["access_token", "refresh_token", "expires_in"],
+        "title": "TokenPair",
+        "description": "Access + refresh token pair returned by login/refresh."
+      },
+      "UserResponse": {
+        "properties": {
+          "name": { "type": "string", "title": "Name" },
+          "credibility_score": {
+            "type": "number",
+            "title": "Credibility Score"
+          },
+          "uuid": { "type": "string", "format": "uuid", "title": "Uuid" },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": ["name", "credibility_score", "uuid", "created_at"],
+        "title": "UserResponse",
+        "description": "Full user profile response."
+      },
+      "UserSaltResponse": {
+        "properties": {
+          "salt_frontend": { "type": "string", "title": "Salt Frontend" }
+        },
+        "type": "object",
+        "required": ["salt_frontend"],
+        "title": "UserSaltResponse",
+        "description": "Response containing the frontend salt for client-side password hashing."
+      },
+      "UserUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              { "type": "string", "maxLength": 100, "minLength": 1 },
+              { "type": "null" }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "title": "UserUpdate",
+        "description": "Request body for partial user profile updates."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": { "anyOf": [{ "type": "string" }, { "type": "integer" }] },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": { "type": "string", "title": "Message" },
+          "type": { "type": "string", "title": "Error Type" },
+          "input": { "title": "Input" },
+          "ctx": { "type": "object", "title": "Context" }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      },
+      "VerifyContactRequest": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["email", "phone"],
+            "title": "Type",
+            "default": "email"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Value"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 8,
+            "minLength": 4,
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": ["value", "code"],
+        "title": "VerifyContactRequest",
+        "description": "Body to verify a contact-add with the 6-digit code."
+      },
+      "VerifyRequest": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["email", "phone"],
+            "title": "Type",
+            "default": "email"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Value"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 8,
+            "minLength": 4,
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": ["value", "code"],
+        "title": "VerifyRequest",
+        "description": "Body for unified verification: identifier + 6-digit code."
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": { "scopes": {}, "tokenUrl": "/api/v1/auth/login" }
+        }
+      }
+    }
+  }
+}

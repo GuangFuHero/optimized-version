@@ -1,0 +1,153 @@
+fragment PageInfoFields on PageInfo {
+  totalCount
+  hasNextPage
+  hasPreviousPage
+}
+
+fragment StationFields on StationType {
+  uuid
+  propertyName
+  geometry
+  type
+  name
+  description
+  opHour
+  level
+  comment
+  source
+  visibility
+  verificationStatus
+  confidenceScore
+  isDuplicate
+  isTemporary
+  isOfficial
+  priorityScore
+  createdBy
+  createdAt
+  updatedAt
+}
+
+fragment ClosureAreaFields on ClosureAreaType {
+  uuid
+  propertyName
+  geometry
+  status
+  informationSource
+  comment
+  createdBy
+  createdAt
+  updatedAt
+}
+
+# ─── Queries ────────────────────────────────────────────────
+
+query GetStations(
+  $bounds: BoundsInput
+  $stationType: String
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  stations(bounds: $bounds, stationType: $stationType, skip: $skip, limit: $limit) {
+    items {
+      ...StationFields
+    }
+    pageInfo {
+      ...PageInfoFields
+    }
+  }
+}
+
+query GetStation($uuid: UUID!) {
+  station(uuid: $uuid) {
+    ...StationFields
+    secondaryLocation {
+      uuid
+      locationType
+      county
+      city
+      lane
+      alley
+      no
+      floor
+      room
+      poleId
+      poleType
+      poleNote
+    }
+    properties {
+      uuid
+      stationUuid
+      propertyType
+      propertyName
+      quantity
+      comment
+      status
+      weightings
+      createdBy
+      createdAt
+    }
+  }
+}
+
+query GetClosureAreas(
+  $bounds: BoundsInput
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  closureAreas(bounds: $bounds, skip: $skip, limit: $limit) {
+    items {
+      ...ClosureAreaFields
+    }
+    pageInfo {
+      ...PageInfoFields
+    }
+  }
+}
+
+query GetClosureArea($uuid: UUID!) {
+  closureArea(uuid: $uuid) {
+    ...ClosureAreaFields
+  }
+}
+
+# ─── Mutations ──────────────────────────────────────────────
+
+mutation CreateStation($input: CreateStationInput!) {
+  createStation(input: $input) {
+    ...StationFields
+  }
+}
+
+mutation UpdateStation($uuid: UUID!, $input: UpdateStationInput!) {
+  updateStation(uuid: $uuid, input: $input) {
+    ...StationFields
+  }
+}
+
+mutation DeleteStation($uuid: UUID!) {
+  deleteStation(uuid: $uuid)
+}
+
+mutation CreateStationProperty($input: CreateStationPropertyInput!) {
+  createStationProperty(input: $input) {
+    uuid
+    stationUuid
+    propertyType
+    propertyName
+    quantity
+    status
+    weightings
+    createdBy
+    createdAt
+  }
+}
+
+mutation CreateCrowdSourcing($input: CreateCrowdSourcingInput!) {
+  createCrowdSourcing(input: $input) {
+    uuid
+    stationUuid
+    itemUuid
+    rating
+    createdAt
+  }
+}
