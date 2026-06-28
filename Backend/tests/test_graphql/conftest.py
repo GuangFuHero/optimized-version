@@ -69,6 +69,17 @@ async def _ensure_db():
         db.add(PolicyGroupAssign(group_uuid=coordinator_group.uuid, policy_uuid=coord_map.uuid))
         db.add(PolicyGroupAssign(group_uuid=coordinator_group.uuid, policy_uuid=coord_req.uuid))
 
+        # Content Admin: full access to the "content" resource (announcements et al.)
+        content_group = Group(name="Content Admin")
+        db.add(content_group)
+        await db.flush()
+        content_pol = Policy(
+            name="ContentAdmin_content", read="all", create="all", edit="all", delete="all"
+        )
+        db.add(content_pol)
+        await db.flush()
+        db.add(PolicyGroupAssign(group_uuid=content_group.uuid, policy_uuid=content_pol.uuid))
+
         await db.commit()
     await eng.dispose()
 
@@ -117,6 +128,12 @@ async def coordinator_auth():
 async def login_user_auth():
     """Return (user_uuid, token) for a user with Login User permissions."""
     return await _create_user_with_role("Login User")
+
+
+@pytest_asyncio.fixture
+async def content_admin_auth():
+    """Return (user_uuid, token) for a user with content management permissions."""
+    return await _create_user_with_role("Content Admin")
 
 
 def auth_header(token: str) -> dict:
