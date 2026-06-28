@@ -80,6 +80,17 @@ async def _ensure_db():
         await db.flush()
         db.add(PolicyGroupAssign(group_uuid=content_group.uuid, policy_uuid=content_pol.uuid))
 
+        # Briefing Admin: full access to the dedicated "briefing" resource
+        briefing_group = Group(name="Briefing Admin")
+        db.add(briefing_group)
+        await db.flush()
+        briefing_pol = Policy(
+            name="BriefingAdmin_briefing", read="all", create="all", edit="all", delete="all"
+        )
+        db.add(briefing_pol)
+        await db.flush()
+        db.add(PolicyGroupAssign(group_uuid=briefing_group.uuid, policy_uuid=briefing_pol.uuid))
+
         await db.commit()
     await eng.dispose()
 
@@ -134,6 +145,12 @@ async def login_user_auth():
 async def content_admin_auth():
     """Return (user_uuid, token) for a user with content management permissions."""
     return await _create_user_with_role("Content Admin")
+
+
+@pytest_asyncio.fixture
+async def briefing_admin_auth():
+    """Return (user_uuid, token) for a user with briefing management permissions."""
+    return await _create_user_with_role("Briefing Admin")
 
 
 def auth_header(token: str) -> dict:
