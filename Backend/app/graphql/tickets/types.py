@@ -5,6 +5,7 @@ from uuid import UUID
 
 import strawberry
 
+from app.graphql.masking import MaskForGuests, mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import PageInfo
 
@@ -254,13 +255,19 @@ class TicketType:
     )
     description: str | None = None
     contact_name: str = strawberry.field(
-        default="", description="Full name of the person who submitted this request"
+        default="",
+        description="Full name of the person who submitted this request",
+        extensions=[MaskForGuests(mask_name)],
     )
     contact_email: str | None = strawberry.field(
-        default=None, description="Email address for follow-up communication"
+        default=None,
+        description="Email address for follow-up communication",
+        extensions=[MaskForGuests(mask_email)],
     )
     contact_phone: str | None = strawberry.field(
-        default=None, description="Phone number for follow-up communication"
+        default=None,
+        description="Phone number for follow-up communication",
+        extensions=[MaskForGuests(mask_phone)],
     )
     status: str = strawberry.field(
         default="",
