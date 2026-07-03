@@ -5,6 +5,7 @@ from uuid import UUID
 import strawberry
 
 from app.graphql.context import check_permission
+from app.graphql.geo.types import secondary_location_input_to_dict
 from app.graphql.scalars import geojson_to_geom
 from app.graphql.tickets.types import (
     CreateTaskPropertyInput,
@@ -42,18 +43,26 @@ class RequestMutation:
         Requires request:create permission. Returns the created TicketType.
         """
         await check_permission(info, "request", "create")
-        ticket = await ticket_repository.create(info.context["db"], obj_in={
-            "property_name": "request",
-            "geometry": geojson_to_geom(input.geometry),
-            "created_by": str(info.context["user"].uuid),
-            "title": input.title, "description": input.description,
-            "contact_name": input.contact_name,
-            "contact_email": input.contact_email,
-            "contact_phone": input.contact_phone,
-            "status": "pending", "priority": input.priority,
-            "task_type": input.task_type,
-            "visibility": input.visibility,
-        })
+        sl_dict = (
+            secondary_location_input_to_dict(input.secondary_location)
+            if input.secondary_location is not None else None
+        )
+        ticket = await ticket_repository.create_with_secondary_location(
+            info.context["db"],
+            obj_in={
+                "property_name": "request",
+                "geometry": geojson_to_geom(input.geometry),
+                "created_by": str(info.context["user"].uuid),
+                "title": input.title, "description": input.description,
+                "contact_name": input.contact_name,
+                "contact_email": input.contact_email,
+                "contact_phone": input.contact_phone,
+                "status": "pending", "priority": input.priority,
+                "task_type": input.task_type,
+                "visibility": input.visibility,
+            },
+            secondary_location=sl_dict,
+        )
         return TicketType.from_model(ticket)
 
     @strawberry.mutation
@@ -89,6 +98,14 @@ class RequestMutation:
                 obj_in[field] = val
 
         ticket = await ticket_repository.update(db, db_obj=ticket, obj_in=obj_in)
+        if input.secondary_location is not strawberry.UNSET:
+            sl_dict = (
+                secondary_location_input_to_dict(input.secondary_location)
+                if input.secondary_location is not None else None
+            )
+            await ticket_repository.set_secondary_location(
+                db, geometry_uuid=str(ticket.uuid), secondary_location=sl_dict
+            )
         return TicketType.from_model(ticket)
 
 

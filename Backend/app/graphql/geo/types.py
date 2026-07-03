@@ -81,6 +81,16 @@ class SecondaryLocationInput:
     pole_note: str | None = None
 
 
+def secondary_location_input_to_dict(sl: SecondaryLocationInput) -> dict:
+    """Flatten a SecondaryLocationInput into the kwargs SecondaryLocation(...) expects."""
+    return {
+        "location_type": sl.location_type,
+        "county": sl.county, "city": sl.city, "lane": sl.lane, "alley": sl.alley,
+        "no": sl.no, "floor": sl.floor, "room": sl.room,
+        "pole_id": sl.pole_id, "pole_type": sl.pole_type, "pole_note": sl.pole_note,
+    }
+
+
 @strawberry.type
 class StationType:
     """GraphQL type representing a map station (shelter, supply point, etc.)."""

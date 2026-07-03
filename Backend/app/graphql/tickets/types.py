@@ -5,7 +5,8 @@ from uuid import UUID
 
 import strawberry
 
-from app.graphql.masking import MaskForGuests, mask_email, mask_name, mask_phone
+from app.graphql.geo.types import SecondaryLocationInput, SecondaryLocationType
+from app.graphql.masking import MaskForGuests, mask_address, mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import PageInfo
 
@@ -296,6 +297,16 @@ class TicketType:
     updated_at: datetime | None = None
 
     @strawberry.field
+    async def secondary_location(
+        self, info: strawberry.types.Info
+    ) -> SecondaryLocationType | None:
+        """Resolve this ticket's address, masked to county/city for guests."""
+        loc = await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
+        if loc is not None and info.context.get("user") is None:
+            return mask_address(loc)
+        return loc
+
+    @strawberry.field
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
         """Resolve photos attached to this ticket."""
         return await info.context["loaders"]["photos_by_ticket"].load(str(self.uuid))
@@ -307,10 +318,14 @@ class TicketType:
 
     @classmethod
     def from_model(cls, m) -> "TicketType":
-        """Build from a SQLAlchemy model instance."""
+        """Build from a SQLAlchemy model instance.
+
+        `masked_geometry` is a transient, request-scoped attribute set by the repository
+        for guest queries (the H3 cell centroid); when absent, the exact geometry is used.
+        """
         return cls(
             uuid=m.uuid, property_name=m.property_name,
-            geometry=geom_to_geojson(m.geometry),
+            geometry=geom_to_geojson(getattr(m, "masked_geometry", None) or m.geometry),
             title=m.title, description=m.description,
             contact_name=m.contact_name, contact_email=m.contact_email,
             contact_phone=m.contact_phone, status=m.status, priority=m.priority,
@@ -354,6 +369,9 @@ class CreateTicketInput:
     visibility: str = strawberry.field(
         default="public", description="Visibility: 'public' (default), 'restricted', or 'internal'"
     )
+    secondary_location: SecondaryLocationInput | None = strawberry.field(
+        default=None, description="Optional structured address to attach to this ticket"
+    )
 
 
 @strawberry.input
@@ -375,4 +393,8 @@ class UpdateTicketInput:
     verification_status: str | None = strawberry.field(
         default=None,
         description="Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'",
+    )
+    secondary_location: SecondaryLocationInput | None = strawberry.field(
+        default=strawberry.UNSET,
+        description="Updated structured address — pass null to clear it",
     )

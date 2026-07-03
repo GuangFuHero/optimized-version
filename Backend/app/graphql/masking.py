@@ -5,9 +5,12 @@ them only when the request is anonymous. Logged-in users always receive raw valu
 """
 
 import re
+from dataclasses import replace
 
 import strawberry
 from strawberry.extensions import FieldExtension
+
+from app.graphql.geo.types import SecondaryLocationType
 
 # A name is treated as Latin only when it has Latin letters and no CJK ideograph;
 # anything else (CJK present, or no letters at all) uses the CJK marker style.
@@ -89,6 +92,17 @@ def mask_phone(value: str | None) -> str | None:
         if i not in keep:
             chars[i] = "*"
     return "".join(chars)
+
+
+def mask_address(value: SecondaryLocationType | None) -> SecondaryLocationType | None:
+    """Keep county/city; unconditionally hide the street-level fields behind '***'.
+
+    Always masks lane/alley/no/floor/room regardless of whether they were populated —
+    a `None` left un-masked next to `"***"` values would itself leak which fields exist.
+    """
+    if value is None:
+        return value
+    return replace(value, lane="***", alley="***", no="***", floor="***", room="***")
 
 
 class MaskForGuests(FieldExtension):

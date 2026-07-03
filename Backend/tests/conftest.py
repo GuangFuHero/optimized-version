@@ -74,6 +74,8 @@ async def _ensure_test_database():
     eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
     async with eng.connect() as conn:
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS h3")
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE")
     await eng.dispose()
 
 

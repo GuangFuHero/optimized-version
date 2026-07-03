@@ -30,14 +30,21 @@ class RequestQuery:
         status: str | None = None,
         priority: str | None = None,
         skip: int = 0, limit: int = 50,
+        zoom: float | None = None,
     ) -> TicketConnection:
-        """List tickets with optional bbox, status, and priority filters, paginated."""
+        """List tickets with optional bbox, status, and priority filters, paginated.
+
+        `zoom` is only used for guests, to pick how coarse the masked geometry is
+        (server-capped — see `app.db.h3`).
+        """
         db = info.context["db"]
+        is_guest = info.context.get("user") is None
         total = await ticket_repository.count_active(
             db, bounds=bounds, status=status, priority=priority
         )
         items = await ticket_repository.list_active(
-            db, bounds=bounds, status=status, priority=priority, skip=skip, limit=limit
+            db, bounds=bounds, status=status, priority=priority, skip=skip, limit=limit,
+            is_guest=is_guest, zoom=zoom,
         )
         return TicketConnection(
             items=[TicketType.from_model(m) for m in items],
@@ -49,9 +56,14 @@ class RequestQuery:
         )
 
     @strawberry.field
-    async def ticket(self, info: strawberry.types.Info, uuid: UUID) -> TicketType | None:
+    async def ticket(
+        self, info: strawberry.types.Info, uuid: UUID, zoom: float | None = None,
+    ) -> TicketType | None:
         """Fetch a single active ticket by UUID. Returns None if not found or soft-deleted."""
-        m = await ticket_repository.get_by_uuid_active(info.context["db"], uuid)
+        is_guest = info.context.get("user") is None
+        m = await ticket_repository.get_by_uuid_active_display(
+            info.context["db"], uuid, is_guest=is_guest, zoom=zoom
+        )
         return TicketType.from_model(m) if m else None
 
 
