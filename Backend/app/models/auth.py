@@ -1,4 +1,8 @@
-"""SQLAlchemy models for users, groups, policies, and RBAC assignment tables."""
+"""SQLAlchemy models for users, login identities, and contacts.
+
+RBAC models (Role/Permission/*) moved to app/models/rbac.py; team models to app/models/team.py
+(ADR-026 drop-and-replace of the old Group/Policy engine).
+"""
 
 from datetime import datetime
 
@@ -15,61 +19,14 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(100))  # display nickname; no longer the login id, not unique
     credibility_score: Mapped[float] = mapped_column(Float, default=50.0)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # A user has at most one team (ADR-019). Sole source of truth for "which team" — a
+    # team-kind Role grant (app/models/rbac.py:Role) always resolves against this column,
+    # never a copy stored elsewhere.
+    team_uuid: Mapped[str | None] = mapped_column(ForeignKey("teams.uuid"), nullable=True, index=True)
 
     # 關聯
-    groups: Mapped[list["UserGroupAssign"]] = relationship(back_populates="user")
-    policies: Mapped[list["PolicyUserAssign"]] = relationship(back_populates="user")
     identities: Mapped[list["UserIdentity"]] = relationship(back_populates="user")
     contacts: Mapped[list["UserContact"]] = relationship(back_populates="user")
-
-
-class Group(Base, UUIDPKMixin):
-    """ORM model for a user group (role)."""
-
-    __tablename__ = "groups"
-    name: Mapped[str] = mapped_column(String(100))
-
-
-class Policy(Base, UUIDPKMixin):
-    """ORM model for an RBAC policy defining resource-level permissions."""
-
-    __tablename__ = "policies"
-    name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
-    description: Mapped[str | None] = mapped_column(String(255))
-    category: Mapped[str | None] = mapped_column(String(50))
-    read: Mapped[str] = mapped_column(String(50), default="none")
-    create: Mapped[str] = mapped_column(String(50), default="none")
-    edit: Mapped[str] = mapped_column(String(50), default="none")
-    delete: Mapped[str] = mapped_column(String(50), default="none")
-
-
-class UserGroupAssign(Base, UUIDPKMixin):
-    """Junction table assigning users to groups."""
-
-    __tablename__ = "user_group_assign"
-    __table_args__ = (
-        UniqueConstraint("user_uuid", "group_uuid", name="uq_user_group"),
-    )
-    user_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
-    group_uuid: Mapped[str] = mapped_column(ForeignKey("groups.uuid"))
-    user = relationship("User", back_populates="groups")
-
-
-class PolicyUserAssign(Base, UUIDPKMixin):
-    """Junction table assigning policies directly to users."""
-
-    __tablename__ = "policy_user_assign"
-    user_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
-    policy_uuid: Mapped[str] = mapped_column(ForeignKey("policies.uuid"))
-    user = relationship("User", back_populates="policies")
-
-
-class PolicyGroupAssign(Base, UUIDPKMixin):
-    """Junction table assigning policies to groups."""
-
-    __tablename__ = "policy_group_assign"
-    group_uuid: Mapped[str] = mapped_column(ForeignKey("groups.uuid"))
-    policy_uuid: Mapped[str] = mapped_column(ForeignKey("policies.uuid"))
 
 
 class UserIdentity(Base, UUIDPKMixin):

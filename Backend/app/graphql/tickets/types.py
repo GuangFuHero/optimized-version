@@ -2,9 +2,15 @@
 
 import enum
 from datetime import datetime
+from types import SimpleNamespace
 from uuid import UUID
 
 import strawberry
+
+from app.core.permissions import Perm
+from app.core.rbac_scopes import Scope, in_scope
+from app.core.security import resolve_scope
+from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import PageInfo, Visibility
 
@@ -312,15 +318,6 @@ class TicketType:
     )
     title: str = strawberry.field(default="", description="Short subject line describing the request")
     description: str | None = None
-    contact_name: str = strawberry.field(
-        default="", description="Full name of the person who submitted this request"
-    )
-    contact_email: str | None = strawberry.field(
-        default=None, description="Email address for follow-up communication"
-    )
-    contact_phone: str | None = strawberry.field(
-        default=None, description="Phone number for follow-up communication"
-    )
     status: str = strawberry.field(
         default="",
         description="Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled'",
@@ -350,6 +347,55 @@ class TicketType:
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
+    # Private storage backing the contact_* PII resolvers below (ADR-049) — never exposed
+    # directly in the schema, only readable (raw or masked) through the gated resolvers.
+    # `_geometry_raw` is the WKBElement (not the GeoJSON) needed for the `zone` ST_Contains check.
+    _contact_name_raw: strawberry.Private[str] = ""
+    _contact_email_raw: strawberry.Private[str | None] = None
+    _contact_phone_raw: strawberry.Private[str | None] = None
+    _geometry_raw: strawberry.Private[object | None] = None
+
+    async def _pii_visible(self, info: strawberry.types.Info) -> bool:
+        """Compute PII visibility directly via resolve_scope + in_scope (ADR-049).
+
+        Neither raises — a denial renders as a *masked* contact field, not a GraphQL
+        field-level error. Per-role scope: guest → not visible (no capability); own → own
+        ticket; zone → ticket's location inside my team's WorkZone; all → everything.
+        """
+        user = info.context["user"]
+        if user is None:
+            return False
+        scope = await resolve_scope(
+            user, Perm.TICKET_VIEW_PII, info.context["db"], cache=info.context["_rbac_cache"]
+        )
+        if scope == Scope.NONE:
+            return False
+        if scope == Scope.ALL:
+            return True
+        resource = SimpleNamespace(created_by=self.created_by, geometry=self._geometry_raw)
+        return await in_scope(scope, actor=user, resource=resource, db=info.context["db"])
+
+    @strawberry.field(description="Requester full name — masked unless the caller holds ticket.view_pii here")
+    async def contact_name(self, info: strawberry.types.Info) -> str | None:
+        """Return the contact name raw if in scope, otherwise masked (王◯◯ / John S.)."""
+        if await self._pii_visible(info):
+            return self._contact_name_raw
+        return mask_name(self._contact_name_raw)
+
+    @strawberry.field(description="Follow-up email — masked unless the caller holds ticket.view_pii here")
+    async def contact_email(self, info: strawberry.types.Info) -> str | None:
+        """Return the contact email raw if in scope, otherwise masked (j***@***.com)."""
+        if await self._pii_visible(info):
+            return self._contact_email_raw
+        return mask_email(self._contact_email_raw)
+
+    @strawberry.field(description="Follow-up phone — masked unless the caller holds ticket.view_pii here")
+    async def contact_phone(self, info: strawberry.types.Info) -> str | None:
+        """Return the contact phone raw if in scope, otherwise masked (09*****678)."""
+        if await self._pii_visible(info):
+            return self._contact_phone_raw
+        return mask_phone(self._contact_phone_raw)
+
     @strawberry.field
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
         """Resolve photos attached to this ticket."""
@@ -369,9 +415,6 @@ class TicketType:
             geometry=geom_to_geojson(m.geometry),
             title=m.title,
             description=m.description,
-            contact_name=m.contact_name,
-            contact_email=m.contact_email,
-            contact_phone=m.contact_phone,
             status=m.status,
             priority=m.priority,
             task_type=m.task_type,
@@ -382,6 +425,10 @@ class TicketType:
             created_by=m.created_by,
             created_at=m.created_at,
             updated_at=m.updated_at,
+            _contact_name_raw=m.contact_name,
+            _contact_email_raw=m.contact_email,
+            _contact_phone_raw=m.contact_phone,
+            _geometry_raw=m.geometry,
         )
 
 

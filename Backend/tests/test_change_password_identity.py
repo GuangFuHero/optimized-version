@@ -9,8 +9,8 @@ from app.services.auth_account import create_account
 @pytest.mark.asyncio
 async def test_change_password_updates_identity(client, db_session):
     """Change-password updates the password identity; old fails and new logs in."""
-    # 'Login User' group is already seeded by the db_session fixture (Task 9b) — do NOT re-add it
-    # (a duplicate group makes group_repository.get_by_name raise MultipleResultsFound).
+    # 'user' platform role is already seeded by the db_session fixture (Task 9b) — do NOT re-add it
+    # (a duplicate role makes role_repository.get_by_name raise MultipleResultsFound).
     salt = generate_salt()
     user = await create_account(
         db_session, contact_type="email", value="a@x.com",

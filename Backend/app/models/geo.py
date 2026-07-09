@@ -16,6 +16,9 @@ class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
     property_name: Mapped[str] = mapped_column(String(50))
     geometry = mapped_column(Geometry("GEOMETRY", srid=4326))
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"))
+    # No `team_uuid` here (ADR-049, 乙): a geo resource's jurisdiction is decided by geography
+    # — whether its point falls inside a WorkZone polygon assigned to a team (`zone` scope) —
+    # not by a stored owning-org. Removed to keep authorization purely capability + own + zone.
 
     __mapper_args__ = {
         "polymorphic_on": property_name,

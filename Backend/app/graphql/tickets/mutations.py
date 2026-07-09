@@ -1,10 +1,15 @@
-"""GraphQL mutations for tickets and ticket tasks."""
+"""GraphQL mutations for tickets and ticket tasks.
+
+Thin per ADR-014: parse input, call the ticket service function (which owns authz,
+validation, and persistence), map the result back to a GraphQL type. See
+app/services/ticket.py.
+"""
 
 from uuid import UUID
 
 import strawberry
-from app.graphql.context import check_permission
-from app.graphql.scalars import geojson_to_geom
+
+from app.graphql.context import require_authenticated
 from app.graphql.tickets.types import (
     CreateTaskPropertyInput,
     CreateTicketInput,
@@ -18,20 +23,7 @@ from app.graphql.tickets.types import (
     UpdateTicketInput,
     UpdateTicketTaskInput,
 )
-from app.repositories.auth_repository import user_repository
-from app.repositories.tickets_repository import (
-    task_assignment_repository,
-    task_property_repository,
-    ticket_repository,
-    ticket_task_repository,
-)
-
-VALID_TRANSITIONS = {
-    "pending": ["in_progress", "cancelled"],
-    "in_progress": ["completed", "cancelled"],
-    "completed": [],
-    "cancelled": [],
-}
+from app.services import ticket as ticket_service
 
 
 @strawberry.type
@@ -42,26 +34,15 @@ class RequestMutation:
     async def create_ticket(self, info: strawberry.types.Info, input: CreateTicketInput) -> TicketType:
         """Create a new support ticket with location, contact info, and priority.
 
-        Requires request:create permission. Returns the created TicketType.
+        Requires ticket.make permission. Returns the created TicketType.
         """
-        await check_permission(info, "request", "create")
-        ticket = await ticket_repository.create(
-            info.context["db"],
-            obj_in={
-                "property_name": "request",
-                "geometry": geojson_to_geom(input.geometry),
-                "created_by": str(info.context["user"].uuid),
-                "title": input.title,
-                "description": input.description,
-                "contact_name": input.contact_name,
-                "contact_email": input.contact_email,
-                "contact_phone": input.contact_phone,
-                "status": "pending",
-                "priority": input.priority,
-                "task_type": input.task_type,
-                "visibility": input.visibility.value,
-                "disaster_type": input.disaster_type,
-            },
+        ticket = await ticket_service.create_ticket(
+            info.context["db"], actor=require_authenticated(info),
+            geometry=input.geometry, title=input.title, description=input.description,
+            contact_name=input.contact_name, contact_email=input.contact_email,
+            contact_phone=input.contact_phone, priority=input.priority,
+            task_type=input.task_type, visibility=input.visibility.value,
+            disaster_type=input.disaster_type,
         )
         return TicketType.from_model(ticket)
 
@@ -72,33 +53,56 @@ class RequestMutation:
         """Update a ticket's status, priority, title, or review notes.
 
         Status changes are validated against VALID_TRANSITIONS (e.g. pending→in_progress).
-        Requires request:edit with ownership check. Returns the updated TicketType.
-        """
-        db = info.context["db"]
-        ticket = await ticket_repository.get_by_uuid_active(db, str(uuid))
-        if not ticket:
-            raise ValueError("Ticket not found")
-        await check_permission(info, "request", "edit", owner_uuid=ticket.created_by)
+        Requires ticket.edit permission with scope check. Returns the updated TicketType.
 
-        obj_in = {}
-        if input.status is not None:
-            allowed = VALID_TRANSITIONS.get(ticket.status, [])
-            if input.status not in allowed:
-                raise ValueError(f"Cannot transition from '{ticket.status}' to '{input.status}'")
-            obj_in["status"] = input.status
+        Note: verification_status is NOT set here — that is a review decision, handled by
+        review_ticket under ticket.review (ADR-049).
+        """
+        changes = {}
         if input.priority is not None:
-            obj_in["priority"] = input.priority
+            changes["priority"] = input.priority
         if input.title is not None:
-            obj_in["title"] = input.title
-        if input.verification_status is not None:
-            obj_in["verification_status"] = input.verification_status
+            changes["title"] = input.title
         for field in ("description", "review_note", "disaster_type"):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
-                obj_in[field] = val
+                changes[field] = val
 
-        ticket = await ticket_repository.update(db, db_obj=ticket, obj_in=obj_in)
+        ticket = await ticket_service.update_ticket(
+            info.context["db"], actor=require_authenticated(info),
+            uuid=str(uuid), status=input.status, changes=changes,
+        )
         return TicketType.from_model(ticket)
+
+    @strawberry.mutation
+    async def review_ticket(
+        self,
+        info: strawberry.types.Info,
+        uuid: UUID,
+        verification_status: str,
+        review_note: str | None = None,
+    ) -> TicketType:
+        """Verify/approve a ticket by setting its verification_status.
+
+        A review decision, gated by ticket.review (not ticket.edit) with scope check.
+        Returns the updated TicketType.
+        """
+        ticket = await ticket_service.review_ticket(
+            info.context["db"], actor=require_authenticated(info),
+            uuid=str(uuid), verification_status=verification_status, review_note=review_note,
+        )
+        return TicketType.from_model(ticket)
+
+    @strawberry.mutation
+    async def delete_ticket(self, info: strawberry.types.Info, uuid: UUID) -> bool:
+        """Soft-delete a ticket (sets delete_at).
+
+        Requires ticket.delete permission with scope check. Returns True on success.
+        """
+        await ticket_service.delete_ticket(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
+        )
+        return True
 
 
 @strawberry.type
@@ -111,26 +115,15 @@ class TicketTaskMutation:
     ) -> TicketTaskType:
         """Create a new task (rescue, HR, supply, etc.) under an existing ticket.
 
-        Verifies the parent ticket exists. Requires request:create permission.
+        Verifies the parent ticket exists. Requires ticket.make permission (checkpoint 1
+        only — matches prior behavior, which did not scope-check against the parent ticket).
         Returns the created TicketTaskType.
         """
-        await check_permission(info, "request", "create")
-        db = info.context["db"]
-        if not await ticket_repository.get_by_uuid_active(db, input.ticket_uuid):
-            raise ValueError("Ticket not found")
-        task = await ticket_task_repository.create(
-            db,
-            obj_in={
-                "ticket_uuid": input.ticket_uuid,
-                "task_type": input.task_type,
-                "task_name": input.task_name,
-                "task_description": input.task_description,
-                "quantity": input.quantity,
-                "source": input.source,
-                "visibility": input.visibility.value,
-                "route_uuid": input.route_uuid,
-                "created_by": str(info.context["user"].uuid),
-            },
+        task = await ticket_service.create_ticket_task(
+            info.context["db"], actor=require_authenticated(info),
+            ticket_uuid=input.ticket_uuid, task_type=input.task_type, task_name=input.task_name,
+            task_description=input.task_description, quantity=input.quantity,
+            source=input.source, visibility=input.visibility.value, route_uuid=input.route_uuid,
         )
         return TicketTaskType.from_model(task)
 
@@ -140,27 +133,23 @@ class TicketTaskMutation:
     ) -> TicketTaskType:
         """Update a ticket task's status, moderation status, visibility, or progress notes.
 
-        UNSET fields are skipped. Requires request:edit permission. Returns the updated task.
+        UNSET fields are skipped. Requires ticket.edit permission. Returns the updated task.
         """
-        db = info.context["db"]
-        task = await ticket_task_repository.get_by_uuid_active(db, str(uuid))
-        if not task:
-            raise ValueError("Ticket task not found")
-        await check_permission(info, "request", "edit", owner_uuid=task.created_by)
-
-        obj_in = {}
+        changes = {}
         if input.status is not None:
-            obj_in["status"] = input.status
+            changes["status"] = input.status
         if input.moderation_status is not None:
-            obj_in["moderation_status"] = input.moderation_status
+            changes["moderation_status"] = input.moderation_status
         if input.visibility is not None:
-            obj_in["visibility"] = input.visibility.value
+            changes["visibility"] = input.visibility.value
         for field in ("progress_note", "review_note"):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
-                obj_in[field] = val
+                changes[field] = val
 
-        task = await ticket_task_repository.update(db, db_obj=task, obj_in=obj_in)
+        task = await ticket_service.update_ticket_task(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid), changes=changes
+        )
         return TicketTaskType.from_model(task)
 
     @strawberry.mutation
@@ -169,22 +158,13 @@ class TicketTaskMutation:
     ) -> TaskPropertyType:
         """Add a structured property to a ticket task.
 
-        Verifies the parent task exists. Requires request:create permission.
-        Returns the created TaskPropertyType.
+        Verifies the parent task exists. Requires ticket.make permission (checkpoint 1
+        only — matches prior behavior). Returns the created TaskPropertyType.
         """
-        await check_permission(info, "request", "create")
-        db = info.context["db"]
-        if not await ticket_task_repository.get_by_uuid_active(db, input.task_uuid):
-            raise ValueError("Ticket task not found")
-        prop = await task_property_repository.create(
-            db,
-            obj_in={
-                "task_uuid": input.task_uuid,
-                "property_name": input.property_name,
-                "property_value": input.property_value,
-                "quantity": input.quantity,
-                "comment": input.comment,
-            },
+        prop = await ticket_service.create_task_property(
+            info.context["db"], actor=require_authenticated(info),
+            task_uuid=input.task_uuid, property_name=input.property_name,
+            property_value=input.property_value, quantity=input.quantity, comment=input.comment,
         )
         return TaskPropertyType.from_model(prop)
 
@@ -194,27 +174,23 @@ class TicketTaskMutation:
     ) -> TaskPropertyType:
         """Update a task property's value, quantity, status, or comment.
 
-        UNSET fields are skipped. Requires request:edit with ownership check.
+        UNSET fields are skipped. Requires ticket.edit permission, scope-checked against the
+        parent task (TaskProperty itself carries no ownership of its own).
         Returns the updated TaskPropertyType.
         """
-        db = info.context["db"]
-        prop = await task_property_repository.get_by_uuid_active(db, str(uuid))
-        if not prop:
-            raise ValueError("Task property not found")
-        task = await ticket_task_repository.get_by_uuid_active(db, prop.task_uuid)
-        await check_permission(info, "request", "edit", owner_uuid=task.created_by)
-
-        obj_in = {}
+        changes = {}
         if input.property_value is not None:
-            obj_in["property_value"] = input.property_value
+            changes["property_value"] = input.property_value
         if input.status is not None:
-            obj_in["status"] = input.status.value
+            changes["status"] = input.status.value
         for field in ("quantity", "comment"):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
-                obj_in[field] = val
+                changes[field] = val
 
-        prop = await task_property_repository.update(db, db_obj=prop, obj_in=obj_in)
+        prop = await ticket_service.update_task_property(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid), changes=changes
+        )
         return TaskPropertyType.from_model(prop)
 
     @strawberry.mutation
@@ -228,37 +204,16 @@ class TicketTaskMutation:
         """Link a person to a ticket task (volunteer self-sign-up or coordinator assignment).
 
         When actor_uuid is omitted (or equals the caller), this is a self-sign-up and
-        only request:create is required. Assigning someone else requires request:edit on
-        the task. Over-subscription is allowed (no capacity check); the only guard is that
+        only ticket.assign (checkpoint 1) is required. Assigning someone else additionally
+        requires the task to fall within the caller's ticket.assign scope (checkpoint 2).
+        Over-subscription is allowed (no capacity check); the only guard is that
         the same actor cannot be linked to the same task twice. Returns the new assignment.
         """
-        db = info.context["db"]
-        task = await ticket_task_repository.get_by_uuid_active(db, str(task_uuid))
-        if not task:
-            raise ValueError("Ticket task not found")
-
-        current_uuid = str(info.context["user"].uuid) if info.context["user"] else None
-        actor = str(actor_uuid) if actor_uuid else current_uuid
-        if actor == current_uuid:
-            await check_permission(info, "request", "create")
-        else:
-            await check_permission(info, "request", "edit", owner_uuid=task.created_by)
-            # Self-signup's actor is the authenticated user; only a coordinator-supplied
-            # actor_uuid can be bad/stale, so validate it to avoid a raw FK 500.
-            if not await user_repository.get_by_uuid_active(db, actor):
-                raise ValueError("User not found")
-
-        if await task_assignment_repository.get_by_task_and_actor(db, str(task_uuid), actor):
-            raise ValueError("Actor already assigned to this task")
-
-        assignment = await task_assignment_repository.create(
-            db,
-            obj_in={
-                "task_uuid": str(task_uuid),
-                "actor_uuid": actor,
-                "role": role,
-                "status": "accepted",
-            },
+        assignment = await ticket_service.assign_task_actor(
+            info.context["db"], actor=require_authenticated(info),
+            task_uuid=str(task_uuid),
+            actor_uuid=str(actor_uuid) if actor_uuid else None,
+            role=role,
         )
         return TaskAssignmentType.from_model(assignment)
 
@@ -268,35 +223,29 @@ class TicketTaskMutation:
     ) -> TaskAssignmentType:
         """Update an assignment's work-completion status or role — moves the progress bar.
 
-        Owner-scoped: the assignee can update their own assignment (request:edit=own),
-        coordinators can update anyone's (request:edit=all). Returns the updated assignment.
+        Owner-scoped: the assignee can update their own assignment (ticket.assign=own,
+        matched against actor_uuid), coordinators can update anyone's (=all). Returns the
+        updated assignment.
         """
-        db = info.context["db"]
-        assignment = await task_assignment_repository.get_by_uuid(db, str(uuid))
-        if not assignment:
-            raise ValueError("Task assignment not found")
-        await check_permission(info, "request", "edit", owner_uuid=str(assignment.actor_uuid))
-
-        obj_in = {}
+        changes = {}
         if input.status is not None:
-            obj_in["status"] = input.status.value
+            changes["status"] = input.status.value
         if input.role is not strawberry.UNSET:
-            obj_in["role"] = input.role
+            changes["role"] = input.role
 
-        assignment = await task_assignment_repository.update(db, db_obj=assignment, obj_in=obj_in)
+        assignment = await ticket_service.update_task_assignment(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid), changes=changes
+        )
         return TaskAssignmentType.from_model(assignment)
 
     @strawberry.mutation
     async def unassign_task_actor(self, info: strawberry.types.Info, uuid: UUID) -> bool:
         """Remove a person from a ticket task (withdraw or un-assign).
 
-        Owner-scoped request:edit — the assignee can remove their own link, coordinators
+        Owner-scoped ticket.assign — the assignee can remove their own link, coordinators
         can remove any. Hard-deletes the assignment row. Returns True on success.
         """
-        db = info.context["db"]
-        assignment = await task_assignment_repository.get_by_uuid(db, str(uuid))
-        if not assignment:
-            raise ValueError("Task assignment not found")
-        await check_permission(info, "request", "edit", owner_uuid=str(assignment.actor_uuid))
-        await task_assignment_repository.remove(db, uuid=str(uuid))
+        await ticket_service.unassign_task_actor(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
+        )
         return True

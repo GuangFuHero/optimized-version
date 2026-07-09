@@ -11,8 +11,8 @@ PHONE = "+886912345678"
 @pytest.mark.asyncio
 async def test_salt_returns_real_salt_for_known_email(client, db_session):
     """Salt lookup returns the stored frontend salt for a known email."""
-    # 'Login User' group is already seeded by the db_session fixture (Task 9b) — do NOT re-add it
-    # (a duplicate group makes group_repository.get_by_name raise MultipleResultsFound).
+    # 'user' platform role is already seeded by the db_session fixture (Task 9b) — do NOT re-add it
+    # (a duplicate role makes role_repository.get_by_name raise MultipleResultsFound).
     salt = generate_salt()
     await create_account(
         db_session, contact_type="email", value="a@x.com", password_hash=get_password_hash("pw", salt),

@@ -19,12 +19,18 @@ AUDITED_TABLES = [
     "routes",
     "secondary_locations",
 
-    # RBAC & Authorization tables
-    "groups",
-    "policies",
-    "policy_user_assign",
-    "policy_group_assign",
-    "user_group_assign",
+    # RBAC v1: teams & work zones (RBAC_V1_DECISIONS.md ADR-024 falls out of ADR-026's
+    # drop-and-replace of the old groups/policies/policy_*/user_group_assign tables)
+    "teams",
+    "work_zones",
+    "team_zone_assign",
+
+    # RBAC v1: capability-based role/permission engine
+    "roles",
+    "permissions",
+    "role_permission_assign",
+    "user_role_assign",
+    "user_permission_assign",
 ]
 
 # PL/pgSQL function that serializes row mutations into JSONB, redacting password_hash

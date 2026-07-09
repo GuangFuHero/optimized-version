@@ -67,6 +67,18 @@ class GenericRepository(Generic[ModelType]):
         result = await db.execute(query)
         return result.scalar() or 0
 
+    async def add(self, db: AsyncSession, *, obj_in: dict[str, Any]) -> ModelType:
+        """Insert a new record via flush only — no commit.
+
+        For multi-step atomic orchestration where the caller (a use-case, ADR-022) owns
+        the transaction boundary and commits once after all steps succeed. Most callers
+        want the single-step, auto-committing `create()` below instead.
+        """
+        db_obj = self.model(**obj_in)
+        db.add(db_obj)
+        await db.flush()
+        return db_obj
+
     async def create(self, db: AsyncSession, *, obj_in: dict[str, Any]) -> ModelType:
         """Insert a new record and return the refreshed instance."""
         db_obj = self.model(**obj_in)
