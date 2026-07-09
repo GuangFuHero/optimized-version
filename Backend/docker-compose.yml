@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgis/postgis:16-3.4
+    build: ./docker/postgres-h3
     ports:
       - "5432:5432"
     environment:
