@@ -22,6 +22,7 @@ ROLES_DATA = [
             {"name": "map", "read": "all", "create": "none", "edit": "none", "delete": "none"},
             {"name": "content", "read": "all", "create": "none", "edit": "none", "delete": "none"},
             {"name": "request", "read": "all", "create": "none", "edit": "none", "delete": "none"},
+            {"name": "briefing", "read": "all", "create": "none", "edit": "none", "delete": "none"},
         ],
     },
     {
@@ -31,6 +32,7 @@ ROLES_DATA = [
             {"name": "map", "read": "all", "create": "none", "edit": "none", "delete": "none"},
             {"name": "request", "read": "own", "create": "all", "edit": "own", "delete": "own"},
             {"name": "content", "read": "all", "create": "none", "edit": "none", "delete": "none"},
+            {"name": "briefing", "read": "all", "create": "none", "edit": "none", "delete": "none"},
         ],
     },
     {
@@ -58,6 +60,7 @@ ROLES_DATA = [
             {"name": "supply", "read": "all", "create": "all", "edit": "all", "delete": "all"},
             {"name": "map", "read": "all", "create": "all", "edit": "all", "delete": "all"},
             {"name": "content", "read": "all", "create": "all", "edit": "all", "delete": "all"},
+            {"name": "briefing", "read": "all", "create": "all", "edit": "all", "delete": "all"},
         ],
     },
     {
@@ -69,6 +72,7 @@ ROLES_DATA = [
             {"name": "supply", "read": "all", "create": "all", "edit": "all", "delete": "all"},
             {"name": "map", "read": "all", "create": "all", "edit": "all", "delete": "all"},
             {"name": "content", "read": "all", "create": "all", "edit": "all", "delete": "all"},
+            {"name": "briefing", "read": "all", "create": "all", "edit": "all", "delete": "all"},
             {"name": "system", "read": "all", "create": "all", "edit": "all", "delete": "all"},
         ],
     },

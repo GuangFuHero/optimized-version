@@ -351,4 +351,32 @@ users {
       timestamp delete_at
   }
   users ||--o{ announcements : "authors"
+
+  %% ==========================
+  %% 11. Briefings (templates + generated deployment briefings)
+  %% ==========================
+  briefing_templates {
+      uuid uuid PK
+      text content
+      jsonb tags "string array, categorization; default []"
+      string state "briefing/in_field/debrief (pre-trip/on-site/post-trip)"
+      uuid created_by FK "FK to users"
+      timestamp created_at
+      timestamp updated_at
+      timestamp delete_at "nullable, soft delete"
+  }
+  briefings {
+      uuid uuid PK
+      uuid template_uuid FK "nullable, FK to briefing_templates (source template)"
+      text content
+      jsonb tags "string array, categorization; default []"
+      string state "briefing/in_field/debrief"
+      uuid created_by FK "FK to users"
+      timestamp created_at
+      timestamp updated_at
+      timestamp delete_at "nullable, soft delete"
+  }
+  briefing_templates ||--o{ briefings : "generated from"
+  users ||--o{ briefing_templates : "authors"
+  users ||--o{ briefings : "authors"
 ```
