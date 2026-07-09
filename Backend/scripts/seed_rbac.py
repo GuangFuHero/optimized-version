@@ -57,6 +57,7 @@ ROLES_DATA = [
             {"name": "volunteer", "read": "all", "create": "all", "edit": "all", "delete": "all"},
             {"name": "supply", "read": "all", "create": "all", "edit": "all", "delete": "all"},
             {"name": "map", "read": "all", "create": "all", "edit": "all", "delete": "all"},
+            {"name": "content", "read": "all", "create": "all", "edit": "all", "delete": "all"},
         ],
     },
     {

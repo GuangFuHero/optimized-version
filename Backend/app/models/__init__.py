@@ -1,5 +1,6 @@
 """SQLAlchemy model registry — imports all models so Alembic and the mapper can discover them."""
 
+from app.models.announcement import Announcement  # noqa: F401
 from app.models.audit import AuditLog  # noqa: F401
 from app.models.auth import (  # noqa: F401
     Group,
