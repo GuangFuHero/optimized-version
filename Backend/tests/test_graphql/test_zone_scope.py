@@ -20,11 +20,18 @@ from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.ticket_task import TicketTask
 from tests.test_graphql.conftest import auth_header, test_db
 
 UPDATE_TICKET = """
 mutation($uuid: UUID!, $input: UpdateTicketInput!) {
     updateTicket(uuid: $uuid, input: $input) { uuid status }
+}
+"""
+
+UPDATE_TICKET_TASK = """
+mutation($uuid: UUID!, $input: UpdateTicketTaskInput!) {
+    updateTicketTask(uuid: $uuid, input: $input) { uuid status }
 }
 """
 
@@ -132,6 +139,68 @@ async def test_zone_scope_404s_for_a_ticket_outside_the_assigned_zone(client, te
         json={
             "query": UPDATE_TICKET,
             "variables": {"uuid": ticket_uuid, "input": {"status": "in_progress"}},
+        },
+        headers=auth_header(editor_token),
+    )
+    body = resp.json()
+    errors = body.get("errors", [])
+    assert any("Not Found." in e["message"] for e in errors), body
+
+
+async def _make_task_under(ticket_uuid: str) -> str:
+    """Seed a ticket task under `ticket_uuid` (created by someone else) and return its UUID."""
+    async with test_db() as db:
+        creator = User(name=f"taskcreator_{uuid_mod.uuid4().hex[:8]}")
+        db.add(creator)
+        await db.flush()
+        task = TicketTask(
+            ticket_uuid=ticket_uuid,
+            task_type="hr", task_name="Need medics",
+            quantity=2, source="user", visibility="public",
+            created_by=str(creator.uuid),
+        )
+        db.add(task)
+        await db.flush()
+        return str(task.uuid)
+
+
+@pytest.mark.asyncio
+async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, team_assigned_to_zone):
+    """ADR-052 (direction B): a task inherits its parent ticket's location for the zone check.
+
+    A TicketTask has no geometry of its own, so a `ticket.edit=zone` grant would never match
+    it directly; borrowing the parent ticket's point lets a zone editor moderate tasks under
+    tickets inside the team's assigned zone (which they own neither).
+    """
+    _, editor_token = await _make_zone_scoped_editor(team_assigned_to_zone)
+    ticket_uuid = await _make_ticket_at(INSIDE_ZONE_POINT)
+    task_uuid = await _make_task_under(ticket_uuid)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TICKET_TASK,
+            "variables": {"uuid": task_uuid, "input": {"status": "in_progress"}},
+        },
+        headers=auth_header(editor_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    assert body["data"]["updateTicketTask"]["status"] == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_zone_scope_404s_task_under_ticket_outside_zone(client, team_assigned_to_zone):
+    """Symmetric to the ticket-level case: a task under a ticket OUTSIDE the zone is 404."""
+    _, editor_token = await _make_zone_scoped_editor(team_assigned_to_zone)
+    ticket_uuid = await _make_ticket_at(OUTSIDE_ZONE_POINT)
+    task_uuid = await _make_task_under(ticket_uuid)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TICKET_TASK,
+            "variables": {"uuid": task_uuid, "input": {"status": "in_progress"}},
         },
         headers=auth_header(editor_token),
     )

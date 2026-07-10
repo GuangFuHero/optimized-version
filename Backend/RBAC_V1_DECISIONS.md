@@ -672,6 +672,19 @@ async def create_station(self, info, input) -> StationType:
 
 **Blast Radius**:`services/ticket.py:update_task_property` +1 行 guard;`tests/test_graphql/test_mutations.py` +1 回歸測試。其餘 use-case 已檢查過(`update_ticket`/`update_ticket_task`/`review_ticket`/`update_station*` 等都已有 None guard)。
 
+#### ADR-052 task 類資源的 `zone` 判定 = 借用 parent ticket 的 geometry（direction B）
+> **狀態:ACCEPTED（2026-07-10,code review 發現）。**
+
+**Context**：`zone` scope 的判定 100% 靠 `resource.geometry` + `ST_Contains`(`app/core/rbac_scopes.py:in_scope` 的 ZONE 分支,沒 geometry 直接回 False)。但 `TicketTask`/`TaskProperty`/`TaskAssignment` **都沒有 geometry 欄位**,只有頂層地理物件(Tickets/Station/WorkZone)有。而 seed 把 team `admin` 的 `ticket.edit`/`ticket.assign`/`ticket.review` 設成 `zone`——同一把 key 同時管 ticket(有 geometry,zone 正常)與 task(無 geometry,zone 永遠不匹配)。淨後果:**team 協調員無法編輯/審核/指派責任區內的 task,只有 super_admin(`all`)能碰 task 層級操作。**
+
+**Options**:A=承認 task 只吃 own/all(0 code,但協調員管不到 task);B=task 借用 parent ticket 的 geometry 判 zone;C=seed 把 task 相關 grant 改 own/all(等於跨區,過寬)。
+
+**Decision（走 B）**:task 類資源對 `zone` 的判定,**借用其 parent ticket 的 geometry**。實作放在 **service 層(不動 `in_scope`)**:由 `services/ticket.py` 建構一個帶 parent-ticket geometry 的 scope target(`_task_scope_target` / `_assignment_scope_target`),再交給 `require_scope`。`in_scope` 契約不變(沒 geometry 仍回 False),所以 `test_rbac_scopes.py` 的 `in_scope` 單元測試不受影響。`own` 語意維持:task = task.created_by、assignment = 「我是被指派者」(ADR-045)。
+
+**Blast Radius**:
+- `services/ticket.py`:新增 `_task_scope_target(db, task)`(取代直接傳 raw task)、`_assignment_scope_target(db, assignment)`(取代 `_as_scope_target`);`update_ticket_task`/`update_task_property`/`assign_task_actor`(指派他人)/`unassign_task_actor`/`update_task_assignment` 五處改用。每次 task 授權多一次 parent-ticket 查詢(assignment 多兩次)——可接受。
+- 測試:`tests/test_graphql/test_zone_scope.py` 新增「zone 編輯者能改責任區內 ticket 底下的 task、區外 404」。既有 ticket 級 zone 測試與 `in_scope` 單元測試不變。
+
 ---
 
 ## 附錄 A. Scope 語意表

@@ -31,13 +31,38 @@ VALID_TRANSITIONS = {
 }
 
 
-def _as_scope_target(actor_uuid: str) -> SimpleNamespace:
-    """Wrap an assignee's actor_uuid as the shape checkpoint 2 expects.
+async def _task_scope_target(db: AsyncSession, task: TicketTask) -> SimpleNamespace:
+    """Scope target for a ticket task (ADR-052, direction B).
 
-    TaskAssignment's `own` scope means "I am the assignee" (actor_uuid), not "I created
-    this row" — so it can't be scope-checked as a raw model (ADR-045).
+    A TicketTask has no geometry of its own, so `zone` scope could never match it
+    directly (in_scope's ZONE branch needs resource.geometry). Direction B: the task
+    borrows its parent ticket's location for the zone check, so a team's `zone`-scoped
+    ticket.edit / ticket.assign reaches the tasks under tickets sitting inside its
+    WorkZone. `own` is unchanged — it still means the task's own creator.
     """
-    return SimpleNamespace(created_by=actor_uuid, team_uuid=None, geometry=None)
+    parent = await ticket_repository.get_by_uuid_active(db, task.ticket_uuid)
+    return SimpleNamespace(
+        created_by=task.created_by,
+        team_uuid=None,
+        geometry=parent.geometry if parent else None,
+    )
+
+
+async def _assignment_scope_target(db: AsyncSession, assignment: TaskAssignment) -> SimpleNamespace:
+    """Scope target for a task assignment (ADR-045 + ADR-052).
+
+    `own` means "I am the assignee" (actor_uuid), not "I created this row" (ADR-045).
+    `zone` borrows the assignment's task's parent-ticket location (ADR-052, direction B),
+    so a coordinator with ticket.assign=zone can manage assignments on tasks inside their
+    WorkZone.
+    """
+    task = await ticket_task_repository.get_by_uuid_active(db, assignment.task_uuid)
+    parent = await ticket_repository.get_by_uuid_active(db, task.ticket_uuid) if task else None
+    return SimpleNamespace(
+        created_by=str(assignment.actor_uuid),
+        team_uuid=None,
+        geometry=parent.geometry if parent else None,
+    )
 
 
 async def create_ticket(
@@ -172,7 +197,7 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     task = await ticket_task_repository.get_by_uuid_active(db, uuid)
     if not task:
         raise ValueError("Ticket task not found")
-    await require_scope(actor, Perm.TICKET_EDIT, db, resource=task)
+    await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     return await ticket_task_repository.update(db, db_obj=task, obj_in=changes)
 
 
@@ -210,7 +235,7 @@ async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, chan
     task = await ticket_task_repository.get_by_uuid_active(db, prop.task_uuid)
     if not task:
         raise ValueError("Ticket task not found")
-    await require_scope(actor, Perm.TICKET_EDIT, db, resource=task)
+    await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     return await task_property_repository.update(db, db_obj=prop, obj_in=changes)
 
 
@@ -231,7 +256,7 @@ async def assign_task_actor(
     if target_actor == current_uuid:
         await require_scope(actor, Perm.TICKET_ASSIGN, db)
     else:
-        await require_scope(actor, Perm.TICKET_ASSIGN, db, resource=task)
+        await require_scope(actor, Perm.TICKET_ASSIGN, db, resource=await _task_scope_target(db, task))
         if not await user_repository.get_by_uuid_active(db, target_actor):
             raise ValueError("User not found")
 
@@ -250,7 +275,7 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
     if not assignment:
         raise ValueError("Task assignment not found")
     await require_scope(
-        actor, Perm.TICKET_ASSIGN, db, resource=_as_scope_target(str(assignment.actor_uuid))
+        actor, Perm.TICKET_ASSIGN, db, resource=await _assignment_scope_target(db, assignment)
     )
     await task_assignment_repository.remove(db, uuid=uuid)
 
@@ -263,6 +288,6 @@ async def update_task_assignment(
     if not assignment:
         raise ValueError("Task assignment not found")
     await require_scope(
-        actor, Perm.TICKET_ASSIGN, db, resource=_as_scope_target(str(assignment.actor_uuid))
+        actor, Perm.TICKET_ASSIGN, db, resource=await _assignment_scope_target(db, assignment)
     )
     return await task_assignment_repository.update(db, db_obj=assignment, obj_in=changes)
