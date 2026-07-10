@@ -1,5 +1,6 @@
 """GraphQL types for tickets, ticket tasks, and photos."""
 
+import asyncio
 import enum
 from datetime import datetime
 from types import SimpleNamespace
@@ -354,8 +355,24 @@ class TicketType:
     _contact_email_raw: strawberry.Private[str | None] = None
     _contact_phone_raw: strawberry.Private[str | None] = None
     _geometry_raw: strawberry.Private[object | None] = None
+    _pii_visible_task: strawberry.Private[object | None] = None
 
-    async def _pii_visible(self, info: strawberry.types.Info) -> bool:
+    def _pii_visible(self, info: strawberry.types.Info):
+        """Memoized PII-visibility check shared by the three contact_* resolvers.
+
+        Cached as a single asyncio Task on this instance so that when GraphQL resolves
+        contact_name/email/phone concurrently on the SAME TicketType, the underlying zone
+        check (in_scope → ST_Contains, see app/core/rbac_scopes.py) runs at most once per
+        ticket instead of three times. The check-then-create below is synchronous, so it is
+        atomic under the event loop — no double-scheduling. Lifetime = this instance = one
+        request; there is no cross-request cache, so the staleness window is identical to
+        the per-request _rbac_cache it sits alongside.
+        """
+        if self._pii_visible_task is None:
+            self._pii_visible_task = asyncio.ensure_future(self._compute_pii_visible(info))
+        return self._pii_visible_task
+
+    async def _compute_pii_visible(self, info: strawberry.types.Info) -> bool:
         """Compute PII visibility directly via resolve_scope + in_scope (ADR-049).
 
         Neither raises — a denial renders as a *masked* contact field, not a GraphQL
