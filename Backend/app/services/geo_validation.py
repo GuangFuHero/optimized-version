@@ -8,11 +8,15 @@ resolver did.
 from shapely.geometry import shape
 
 
-def validate_point(geojson: dict) -> None:
-    """Raise ValueError if geojson is not a valid Point within lon/lat bounds."""
+def validate_point(geojson: dict, *, entity: str = "Station") -> None:
+    """Raise ValueError if geojson is not a valid Point within lon/lat bounds.
+
+    `entity` names the caller's domain in the error message (default kept for the existing
+    station callers; ticket passes "Ticket").
+    """
     geom = shape(geojson)
     if geom.geom_type != "Point":
-        raise ValueError("Station geometry must be a Point")
+        raise ValueError(f"{entity} geometry must be a Point")
     x, y = geom.coords[0][:2]
     if not (-180 <= x <= 180 and -90 <= y <= 90):
         raise ValueError("Invalid coordinates")

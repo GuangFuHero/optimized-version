@@ -705,6 +705,30 @@ async def test_create_ticket(client, coordinator_auth):
 
 
 @pytest.mark.asyncio
+async def test_create_ticket_rejects_non_point_geometry(client, coordinator_auth):
+    """A ticket location must be a Point — a Polygon is rejected (validate_point, ADR-052 review)."""
+    _, token = coordinator_auth
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET,
+            "variables": {
+                "input": {
+                    "title": "Need medics",
+                    "geometry": POLYGON_TAIPEI,
+                    "contactName": "Alice",
+                    "priority": "high",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    errors = body.get("errors", [])
+    assert any("must be a Point" in e["message"] for e in errors), body
+
+
+@pytest.mark.asyncio
 async def test_update_ticket_valid_transition(client, coordinator_auth):
     """Hypothesis: valid status transitions are accepted by the API.
 
