@@ -657,6 +657,23 @@ async def create_station(self, info, input) -> StationType:
 
 ---
 
+## RBAC v1 — Code Review 修正（2026-07-10）
+
+#### ADR-051 `require_scope(resource=None)` = 刻意跳過 checkpoint 2；「先撈物件再當 resource」的 use-case 必須自己擋 None
+> **狀態:ACCEPTED（2026-07-10,code review 發現）。**
+
+**Context**：`app/services/authz.py:require_scope` 的 checkpoint 2 是條件式的——`needs_checkpoint_2 = resource is not None and scope != Scope.ALL`。也就是說 **`resource=None` 會讓它退化成「只驗 capability(checkpoint 1)」**。這是刻意設計:`create_*` 這種「新物件、無前主」的情境本來就只需要 checkpoint 1,所以傳 `resource=None`。
+
+**問題**:如果一個「先把物件撈出來、再把它當 `resource` 傳進去」的 use-case 沒有先擋掉「撈不到(None)」的情況,就會**意外**走進「resource=None → 跳過 checkpoint 2」這條路,把物件級授權整個略過。`services/ticket.py:update_task_property` 就中了——parent task 撈不到(`get_by_uuid_active` 因 `delete_at` 過濾回 None)時,照樣 `resource=task(=None)`,任何持 `ticket.edit` 的人(連 own)都能改那個孤兒 property。已用 `test_update_task_property_blocked_when_parent_task_soft_deleted` 實測重現(非 owner 成功改值、無 error)。
+
+**Decision**:
+1. 確立通則:**凡是「load 物件 → 當 resource 傳給 `require_scope`」的 use-case,都必須在 load 之後、require_scope 之前擋掉 None**(`if not obj: raise ...`)。`resource=None` 只保留給「create、本來就沒有前置物件」的呼叫。
+2. 即刻修 `update_task_property`,補 `if not task: raise ValueError("Ticket task not found")`,與 `update_ticket_task` 對齊。
+
+**Blast Radius**:`services/ticket.py:update_task_property` +1 行 guard;`tests/test_graphql/test_mutations.py` +1 回歸測試。其餘 use-case 已檢查過(`update_ticket`/`update_ticket_task`/`review_ticket`/`update_station*` 等都已有 None guard)。
+
+---
+
 ## 附錄 A. Scope 語意表
 | scope | 判定式 | 依賴 |
 |---|---|---|

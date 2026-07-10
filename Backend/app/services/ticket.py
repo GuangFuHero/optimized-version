@@ -208,6 +208,8 @@ async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, chan
     if not prop:
         raise ValueError("Task property not found")
     task = await ticket_task_repository.get_by_uuid_active(db, prop.task_uuid)
+    if not task:
+        raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=task)
     return await task_property_repository.update(db, db_obj=prop, obj_in=changes)
 
