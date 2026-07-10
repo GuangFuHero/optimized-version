@@ -3,9 +3,10 @@
 work_zone.view is not in PUBLIC_PERMS (ADR-036) — zone boundaries are internal
 administrative data, not disaster-relief-facing content like stations/tickets/map
 overlays, so an anonymous caller gets a plain 403 (ADR-025 default-deny) rather than a
-public read. Checkpoint 1 only: every role granted work_zone.view holds it at Scope.ALL
-(gov_manager/ngo_manager/super_admin, scripts/seed_rbac.py), so there is no per-row
-filtering to apply.
+public read. Checkpoint 1 only: in the current seed the holders of work_zone.view are the
+`super_admin` platform role and the `admin` team role (scripts/seed_rbac.py), both at
+Scope.ALL, so there is no per-row filtering to apply. (The old gov_manager/ngo_manager
+role names are gone — ADR-049 folded org type into the team's team.type, not a role name.)
 """
 
 from uuid import UUID

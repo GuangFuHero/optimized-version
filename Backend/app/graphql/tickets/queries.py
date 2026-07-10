@@ -44,9 +44,13 @@ class RequestQuery:
     ) -> TicketConnection:
         """List tickets with optional bbox, status, and priority filters, paginated.
 
-        Requires ticket.view permission (public — Guest may call this). Rows are
-        filtered to the caller's resolved scope (own/team/gov/ngo/zone/all) — e.g. a
-        `user`-role caller only sees their own tickets, a gov_manager sees their team type's.
+        Requires ticket.view permission (public — Guest may call this). Note: the
+        help-request board is public (ADR-027), so the seed grants ticket.view at `all`
+        to *every* role including plain citizens — `scope_filter` therefore does not
+        narrow anyone's list today; it's the pre-wired hook for a future role granted
+        less than `all`. The genuinely per-scope thing is PII (own/zone/all), gated
+        separately in tickets/types.py (contact_* resolvers). (gov/ngo scope was removed
+        in ADR-049.)
         """
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
