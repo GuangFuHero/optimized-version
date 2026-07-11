@@ -14,6 +14,15 @@ class TeamRepository(GenericRepository[Team]):
         """Initialize with Team as the managed model."""
         super().__init__(Team)
 
+    async def list_active(self, db: AsyncSession, *, extra_filters=()) -> list[Team]:
+        """List non-deleted teams, newest first, honoring RBAC scope_filter conditions."""
+        query = (
+            select(Team)
+            .where(Team.delete_at.is_(None), *extra_filters)
+            .order_by(Team.created_at.desc())
+        )
+        return (await db.execute(query)).scalars().all()
+
 
 class WorkZoneRepository(GenericRepository[WorkZone]):
     """Repository for WorkZone CRUD (pure, ADR-015 — orchestration lives in the use-case)."""

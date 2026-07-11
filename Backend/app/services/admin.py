@@ -11,6 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
+from app.core.rbac_scopes import Scope, scope_filter
 from app.models.auth import User
 from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
@@ -171,3 +172,9 @@ async def create_team(db: AsyncSession, *, actor: User, name: str, type_: str) -
     """Create a gov/ngo team (checkpoint 1 only — team.edit, super_admin in seed, ADR-054)."""
     await require_scope(actor, Perm.TEAM_EDIT, db)
     return await team_repository.create(db, obj_in={"name": name, "type": type_})
+
+
+async def list_teams(db: AsyncSession, *, actor: User, scope: Scope) -> list[Team]:
+    """List teams within the caller's team.view scope (all / own team / none, ADR-053)."""
+    filters = scope_filter(scope, actor=actor, model=Team)
+    return await team_repository.list_active(db, extra_filters=filters)

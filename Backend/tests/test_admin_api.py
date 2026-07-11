@@ -11,6 +11,8 @@ implicit lazy reload that isn't valid under AsyncSession outside a real await, a
 with `MissingGreenlet`.
 """
 
+from uuid import uuid4
+
 import pytest
 from sqlalchemy import select
 
@@ -47,6 +49,7 @@ async def _make_super_admin(db) -> str:
     await _grant(db, role, perm_cache, Perm.USER_VIEW, "all")
     await _grant(db, role, perm_cache, Perm.TEAM_MEMBER_MANAGE, "all")
     await _grant(db, role, perm_cache, Perm.TEAM_EDIT, "all")
+    await _grant(db, role, perm_cache, Perm.TEAM_VIEW, "all")
 
     user = User(name="Super Admin")
     db.add(user)
@@ -63,6 +66,25 @@ async def _make_plain_user(db, *, name: str = "Plain User", team_uuid: str | Non
     db.add(user)
     await db.flush()
     user_uuid = str(user.uuid)
+    await db.commit()
+    return user_uuid
+
+
+async def _make_team_admin(db, team_uuid: str) -> str:
+    """Create a user in team_uuid holding team.view=team; return their uuid as a str."""
+    from app.core.permissions import Perm
+
+    role = Role(name=f"team-viewer-{uuid4().hex[:8]}", kind="team")
+    db.add(role)
+    await db.flush()
+    perm_cache: dict = {}
+    await _grant(db, role, perm_cache, Perm.TEAM_VIEW, "team")
+
+    user = User(name="Team Admin", team_uuid=team_uuid)
+    db.add(user)
+    await db.flush()
+    user_uuid = str(user.uuid)
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     await db.commit()
     return user_uuid
 
@@ -311,3 +333,35 @@ async def test_create_team_rejects_bad_type(client, db_session):
         headers=_auth_header(admin_uuid),
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_list_teams_super_admin_sees_all(client, db_session):
+    """team.view=all returns every team."""
+    admin_uuid = await _make_super_admin(db_session)
+    await _make_team(db_session, name="Gov A", type_="gov")
+    await _make_team(db_session, name="NGO B", type_="ngo")
+    resp = await client.get("/api/v1/admin/teams", headers=_auth_header(admin_uuid))
+    assert resp.status_code == 200, resp.json()
+    names = {t["name"] for t in resp.json()}
+    assert {"Gov A", "NGO B"} <= names
+
+
+@pytest.mark.asyncio
+async def test_list_teams_team_admin_sees_only_own(client, db_session):
+    """team.view=team returns only the caller's own team (ADR-053 boundary)."""
+    my_team = await _make_team(db_session, name="My Team", type_="ngo")
+    await _make_team(db_session, name="Other Team", type_="gov")
+    viewer_uuid = await _make_team_admin(db_session, my_team)
+    resp = await client.get("/api/v1/admin/teams", headers=_auth_header(viewer_uuid))
+    assert resp.status_code == 200, resp.json()
+    names = {t["name"] for t in resp.json()}
+    assert names == {"My Team"}
+
+
+@pytest.mark.asyncio
+async def test_list_teams_denied_without_team_view(client, db_session):
+    """A caller without team.view is denied (403)."""
+    plain_uuid = await _make_plain_user(db_session)
+    resp = await client.get("/api/v1/admin/teams", headers=_auth_header(plain_uuid))
+    assert resp.status_code == 403

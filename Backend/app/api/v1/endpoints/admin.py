@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
 from app.core.permissions import Perm
+from app.core.rbac_scopes import Scope
 from app.models.auth import User
 from app.models.rbac import Role, UserRoleAssign
 from app.repositories.auth_repository import user_repository
@@ -111,6 +112,24 @@ async def create_team(
         db, actor=current_user, name=body.name, type_=body.type
     )
     return TeamResponse(uuid=team.uuid, name=team.name, type=team.type, status=team.status)
+
+
+@router.get(
+    "/teams",
+    response_model=list[TeamResponse],
+    summary="列出 team",
+    responses={403: {"description": "Permission Denied"}},
+)
+async def list_teams(
+    scope: Scope = security.has_permission(Perm.TEAM_VIEW),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+):
+    """List teams filtered by the caller's team.view scope (all / own team / none)."""
+    teams = await admin_service.list_teams(db, actor=current_user, scope=scope)
+    return [
+        TeamResponse(uuid=t.uuid, name=t.name, type=t.type, status=t.status) for t in teams
+    ]
 
 
 @router.post("/teams/{team_uuid}/members", response_model=TeamMemberResponse)
