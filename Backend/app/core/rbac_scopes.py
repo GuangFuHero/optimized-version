@@ -116,11 +116,14 @@ def scope_filter(scope: Scope, *, actor: User, model) -> list:
         return [model.created_by == str(actor.uuid)]
 
     if scope == Scope.TEAM:
-        # Only meaningful for models that carry team_uuid; geo models no longer do, so this
-        # yields false() there. Kept for symmetry with in_scope's TEAM branch.
-        if not actor.team_uuid or not hasattr(model, "team_uuid"):
+        # A model may declare its own team-scope boundary column (ADR-053); default is
+        # team_uuid. Team declares "uuid" because a team IS its own boundary.
+        if not actor.team_uuid:
             return [false()]
-        return [model.team_uuid == actor.team_uuid]
+        attr = getattr(model, "__team_scope_attr__", "team_uuid")
+        if not hasattr(model, attr):
+            return [false()]
+        return [getattr(model, attr) == actor.team_uuid]
 
     if scope == Scope.ZONE:
         if not actor.team_uuid:

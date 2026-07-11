@@ -9,6 +9,7 @@ in_scope()'s single-object checks don't exercise, so they get their own DB-execu
 
 import os
 from types import SimpleNamespace
+from uuid import uuid4
 
 os.environ["ENV"] = "testing"
 
@@ -316,3 +317,19 @@ def test_scope_filter_none_excludes_everything():
     actor = User(name="A")
     conditions = scope_filter(Scope.NONE, actor=actor, model=Station)
     assert len(conditions) == 1  # a false() sentinel — excludes every row
+
+
+def test_scope_filter_team_uses_declared_boundary_for_team_model():
+    """Team declares its own uuid as the team boundary, so team-scope filters on teams.uuid."""
+    actor = SimpleNamespace(uuid=uuid4(), team_uuid=uuid4())
+    conds = scope_filter(Scope.TEAM, actor=actor, model=Team)
+    assert len(conds) == 1
+    assert "teams.uuid" in str(conds[0])
+
+
+def test_scope_filter_team_defaults_to_team_uuid_column():
+    """A model without a declared boundary keeps using its team_uuid column (regression)."""
+    actor = SimpleNamespace(uuid=uuid4(), team_uuid=uuid4())
+    conds = scope_filter(Scope.TEAM, actor=actor, model=User)
+    assert len(conds) == 1
+    assert "users.team_uuid" in str(conds[0])

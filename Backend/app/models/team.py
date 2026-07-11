@@ -8,9 +8,15 @@ from app.models.base import Base, TimestampMixin, UUIDPKMixin
 
 
 class Team(Base, UUIDPKMixin, TimestampMixin):
-    """A gov or NGO organization. The scope boundary for `team`/`gov`/`ngo` scopes."""
+    """A gov or NGO organization.
+
+    A team IS its own scope boundary (ADR-053): team-scope filters key on its own uuid,
+    not a team_uuid column.
+    """
 
     __tablename__ = "teams"
+    # ADR-053: team-scope resources filter on this column; Team's boundary is its own uuid.
+    __team_scope_attr__ = "uuid"
     name: Mapped[str] = mapped_column(String(100))
     type: Mapped[str] = mapped_column(String(10))  # "gov" | "ngo" — drives gov/ngo scope
     status: Mapped[str] = mapped_column(String(20), default="active")

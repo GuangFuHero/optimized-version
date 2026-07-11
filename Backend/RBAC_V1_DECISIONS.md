@@ -685,6 +685,13 @@ async def create_station(self, info, input) -> StationType:
 - `services/ticket.py`:新增 `_task_scope_target(db, task)`(取代直接傳 raw task)、`_assignment_scope_target(db, assignment)`(取代 `_as_scope_target`);`update_ticket_task`/`update_task_property`/`assign_task_actor`(指派他人)/`unassign_task_actor`/`update_task_assignment` 五處改用。每次 task 授權多一次 parent-ticket 查詢(assignment 多兩次)——可接受。
 - 測試:`tests/test_graphql/test_zone_scope.py` 新增「zone 編輯者能改責任區內 ticket 底下的 task、區外 404」。既有 ticket 級 zone 測試與 `in_scope` 單元測試不變。
 
+#### ADR-053 team-scope 資源可宣告自己的邊界欄位（`__team_scope_attr__`）
+> **狀態:ACCEPTED（2026-07-10,Team Management）。**
+
+**Context**:`Team` 沒有 `team_uuid` 欄位（它自己的 uuid 就是邊界）,通用 `scope_filter(TEAM, Team)` 因 `hasattr(Team,"team_uuid") is False` 回 `false()`,導致 team admin 列不到自己 team。
+
+**Decision**:model 可宣告 `__team_scope_attr__`(預設 `team_uuid`);`scope_filter` 的 TEAM 分支讀它,`Team` 宣告 `"uuid"`。範圍限 list/filter 路徑;`in_scope` 維持既有 SimpleNamespace adaptor(裸 Team 不走 in_scope)。其他 model 未宣告 → 行為不變。
+
 ---
 
 ## 附錄 A. Scope 語意表
