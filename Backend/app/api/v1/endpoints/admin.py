@@ -22,8 +22,10 @@ from app.schemas.admin import (
     AdminUserListItem,
     AssignRoleRequest,
     AssignRoleResponse,
+    CreateTeamRequest,
     TeamMemberRequest,
     TeamMemberResponse,
+    TeamResponse,
 )
 from app.services import admin as admin_service
 from app.services.admin import AdminConflictError, AdminNotFoundError
@@ -90,6 +92,25 @@ async def assign_role(
     except AdminConflictError as err:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
     return AssignRoleResponse(user_uuid=assignment.user_uuid, role_uuid=assignment.role_uuid)
+
+
+@router.post(
+    "/teams",
+    response_model=TeamResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立 team",
+    responses={403: {"description": "Permission Denied"}},
+)
+async def create_team(
+    body: CreateTeamRequest,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Create a gov/ngo team (super_admin only, via team.edit)."""
+    team = await admin_service.create_team(
+        db, actor=current_user, name=body.name, type_=body.type
+    )
+    return TeamResponse(uuid=team.uuid, name=team.name, type=team.type, status=team.status)
 
 
 @router.post("/teams/{team_uuid}/members", response_model=TeamMemberResponse)

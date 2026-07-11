@@ -46,6 +46,7 @@ async def _make_super_admin(db) -> str:
     await _grant(db, role, perm_cache, Perm.RBAC_ASSIGN, "all")
     await _grant(db, role, perm_cache, Perm.USER_VIEW, "all")
     await _grant(db, role, perm_cache, Perm.TEAM_MEMBER_MANAGE, "all")
+    await _grant(db, role, perm_cache, Perm.TEAM_EDIT, "all")
 
     user = User(name="Super Admin")
     db.add(user)
@@ -269,3 +270,44 @@ async def test_remove_team_member_clears_team_uuid_and_role(client, db_session):
         await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid))
     ).scalars().all()
     assert remaining == []
+
+
+@pytest.mark.asyncio
+async def test_create_team_as_super_admin(client, db_session):
+    """super_admin creates a gov team and gets 201 with the persisted row."""
+    admin_uuid = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/teams",
+        json={"name": "Taipei Gov", "type": "gov"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 201, resp.json()
+    body = resp.json()
+    assert body["name"] == "Taipei Gov"
+    assert body["type"] == "gov"
+    assert body["status"] == "active"
+    assert body["uuid"]
+
+
+@pytest.mark.asyncio
+async def test_create_team_denied_without_team_edit(client, db_session):
+    """A caller without team.edit is denied (403)."""
+    plain_uuid = await _make_plain_user(db_session)
+    resp = await client.post(
+        "/api/v1/admin/teams",
+        json={"name": "Rogue", "type": "ngo"},
+        headers=_auth_header(plain_uuid),
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_team_rejects_bad_type(client, db_session):
+    """A type outside {gov, ngo} is rejected by the request schema (422)."""
+    admin_uuid = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/teams",
+        json={"name": "X", "type": "military"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 422

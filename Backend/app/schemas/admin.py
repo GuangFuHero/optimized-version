@@ -1,8 +1,9 @@
 """Pydantic schemas for the minimal admin API (list users, assign role, manage team members)."""
 
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AdminUserListItem(BaseModel):
@@ -40,3 +41,19 @@ class TeamMemberResponse(BaseModel):
 
     uuid: UUID
     team_uuid: UUID | None
+
+
+class CreateTeamRequest(BaseModel):
+    """Body for creating a gov/ngo team."""
+
+    name: str = Field(min_length=1, max_length=100)
+    type: Literal["gov", "ngo"]
+
+
+class TeamResponse(BaseModel):
+    """A team's identity and status."""
+
+    uuid: UUID
+    name: str
+    type: str
+    status: str

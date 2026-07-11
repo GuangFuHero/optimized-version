@@ -15,6 +15,7 @@ from app.models.auth import User
 from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
 from app.repositories.auth_repository import role_repository, user_repository
+from app.repositories.team_repository import team_repository
 from app.services.authz import require_scope
 
 SUPER_ADMIN_ROLE_NAME = "super_admin"
@@ -164,3 +165,9 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
     await db.commit()
     await db.refresh(target)
     return target
+
+
+async def create_team(db: AsyncSession, *, actor: User, name: str, type_: str) -> Team:
+    """Create a gov/ngo team (checkpoint 1 only — team.edit, super_admin in seed, ADR-054)."""
+    await require_scope(actor, Perm.TEAM_EDIT, db)
+    return await team_repository.create(db, obj_in={"name": name, "type": type_})

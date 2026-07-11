@@ -79,7 +79,7 @@ ROLES_DATA = [
                 Perm.FIELD_VIEW, Perm.FIELD_MAKE, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
                 Perm.USER_VIEW, Perm.USER_MAKE, Perm.USER_EDIT, Perm.USER_DELETE,
                 Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
-                Perm.TEAM_VIEW, Perm.TEAM_MEMBER_MANAGE,
+                Perm.TEAM_VIEW, Perm.TEAM_EDIT, Perm.TEAM_MEMBER_MANAGE,
                 Perm.ZONE_VIEW, Perm.ZONE_MAKE, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN,
             ],
             "all",

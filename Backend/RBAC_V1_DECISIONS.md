@@ -694,6 +694,15 @@ async def create_station(self, info, input) -> StationType:
 
 ---
 
+#### ADR-054 team 建立/編輯 = super_admin 專屬（`TEAM_EDIT=all`）
+> **狀態:ACCEPTED（2026-07-10,Team Management）。**
+
+**Context**:`TEAM_EDIT` 原本 seed 沒授予任何角色,導致沒人能建 team(而指派成員/zone 的前提是 team 存在)。
+
+**Decision**:`super_admin` 加 `TEAM_EDIT: all`;其餘角色不給。team admin 只管成員(`TEAM_MEMBER_MANAGE`),不管 team 本身。維持 seed-driven,不做後台權限矩陣編輯(ADR-049 前提)。`POST /admin/teams` 用 `TEAM_EDIT`(checkpoint 1)把關。
+
+---
+
 ## 附錄 A. Scope 語意表
 | scope | 判定式 | 依賴 |
 |---|---|---|
