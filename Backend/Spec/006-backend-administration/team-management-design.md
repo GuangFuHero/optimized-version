@@ -130,8 +130,8 @@ async def list_active(self, db, *, extra_filters=()) -> list[Team]:
 
 ## 7. ADR（兩條，各自一個決策，寫入 `RBAC_V1_DECISIONS.md`）
 
-- **ADR-053**：team 建立/編輯 = super_admin 專屬（`TEAM_EDIT=all`）；team admin 只管成員（`TEAM_MEMBER_MANAGE`），不管 team 本身。維持 seed-driven，未做後台權限編輯（ADR-049 前提）。
-- **ADR-054**：team-scope 資源可宣告自己的邊界欄位（`__team_scope_attr__`）；`Team` 用 `uuid`，`scope_filter` 讀它、預設 `team_uuid`。範圍限 list/filter 路徑；`in_scope` 維持既有 adaptor。
+- **ADR-053**：team-scope 資源可宣告自己的邊界欄位（`__team_scope_attr__`）；`Team` 用 `uuid`，`scope_filter` 讀它、預設 `team_uuid`。範圍限 list/filter 路徑；`in_scope` 維持既有 adaptor。（在 Task 1 落地）
+- **ADR-054**：team 建立/編輯 = super_admin 專屬（`TEAM_EDIT=all`）；team admin 只管成員（`TEAM_MEMBER_MANAGE`），不管 team 本身。維持 seed-driven，未做後台權限編輯（ADR-049 前提）。（在 Task 2 落地）
 
 ---
 
