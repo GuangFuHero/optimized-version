@@ -692,6 +692,8 @@ async def create_station(self, info, input) -> StationType:
 
 **Decision**:model 可宣告 `__team_scope_attr__`(預設 `team_uuid`);`scope_filter` 的 TEAM 分支讀它,`Team` 宣告 `"uuid"`。範圍限 list/filter 路徑;`in_scope` 維持既有 SimpleNamespace adaptor(裸 Team 不走 in_scope)。其他 model 未宣告 → 行為不變。
 
+**補充（2026-07-11,final review）**:同一個 `scope_filter` 裡的 OWN 與 ZONE 分支也比照 TEAM 分支加上欄位守衛——OWN 檢查 `created_by`、ZONE 檢查 `geometry`,缺欄位就回 `false()`。否則像 `Team` 這種沒有 `created_by`/`geometry` 的表,一旦 seed 把它的 `*.view` 設成 `own`/`zone`,`scope_filter` 會丟 `AttributeError`(→ HTTP 500)而非乾淨的「什麼都看不到」。對既有有欄位的 model(tickets/stations/closure_area)零行為改變。
+
 ---
 
 #### ADR-054 team 建立/編輯 = super_admin 專屬（`TEAM_EDIT=all`）

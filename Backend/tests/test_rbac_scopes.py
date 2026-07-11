@@ -16,7 +16,7 @@ os.environ["ENV"] = "testing"
 import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point, Polygon
-from sqlalchemy import select
+from sqlalchemy import false, select
 
 from app.core.rbac_scopes import Scope, in_scope, scope_filter, widest
 from app.models.auth import User
@@ -333,3 +333,12 @@ def test_scope_filter_team_defaults_to_team_uuid_column():
     conds = scope_filter(Scope.TEAM, actor=actor, model=User)
     assert len(conds) == 1
     assert "users.team_uuid" in str(conds[0])
+
+
+def test_scope_filter_own_and_zone_degrade_to_false_for_columnless_model():
+    """OWN/ZONE degrade to false() (not AttributeError) when the model lacks the column."""
+    actor = SimpleNamespace(uuid=uuid4(), team_uuid=uuid4())
+    own = scope_filter(Scope.OWN, actor=actor, model=Team)
+    zone = scope_filter(Scope.ZONE, actor=actor, model=Team)
+    assert str(own[0]) == str(false())
+    assert str(zone[0]) == str(false())

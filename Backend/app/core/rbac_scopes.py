@@ -111,7 +111,9 @@ def scope_filter(scope: Scope, *, actor: User, model) -> list:
         return []
 
     if scope == Scope.OWN:
-        if not actor.uuid:
+        # Fall back to false() when the model has no created_by column (ADR-053), rather
+        # than raising AttributeError — e.g. Team, which carries no ownership column.
+        if not actor.uuid or not hasattr(model, "created_by"):
             return [false()]
         return [model.created_by == str(actor.uuid)]
 
@@ -126,7 +128,9 @@ def scope_filter(scope: Scope, *, actor: User, model) -> list:
         return [getattr(model, attr) == actor.team_uuid]
 
     if scope == Scope.ZONE:
-        if not actor.team_uuid:
+        # Fall back to false() when the model has no geometry column (ADR-053), rather than
+        # raising AttributeError — e.g. Team, which is non-geographic.
+        if not actor.team_uuid or not hasattr(model, "geometry"):
             return [false()]
         my_zones = (
             select(WorkZone.uuid)
