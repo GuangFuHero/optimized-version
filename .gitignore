@@ -29,3 +29,20 @@ memory/
 .claude/
 .db/
 .venv/
+
+# Frontend app + JS deps (separate workspace, not part of Backend history)
+Frontend/
+node_modules/
+.nx/
+
+# Agent / tooling scratch
+.multi-agent/
+.superpowers/
+
+# Sibling deployment repo (tracked separately)
+optimized-version-dockerized-deployment-setup/
+
+# One-off review / handoff artifacts (not for the repo)
+CODE_REVIEW_rbac_v1.md
+DIFF_INTENT_REVIEW.md
+Universal_Disaster_Platform_Manager_End_RBAC_v1.0_Dashboard.md
