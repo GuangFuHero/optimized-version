@@ -6,7 +6,7 @@ from uuid import UUID
 import strawberry
 
 from app.graphql.scalars import GeoJSON, geom_to_geojson
-from app.graphql.shared import PageInfo
+from app.graphql.shared import PageInfo, Visibility
 
 
 @strawberry.input
@@ -200,8 +200,9 @@ class CreateStationInput:
     source: str = strawberry.field(
         default="user", description="Data origin: 'user' (default) or 'official'"
     )
-    visibility: str = strawberry.field(
-        default="public", description="Visibility: 'public' (default) or 'restricted'"
+    visibility: Visibility = strawberry.field(
+        default=Visibility.public,
+        description="Visibility: 'public' (default), 'restricted', or 'internal'",
     )
     secondary_location: SecondaryLocationInput | None = strawberry.field(
         default=None,
@@ -222,8 +223,8 @@ class UpdateStationInput:
     op_hour: str | None = strawberry.UNSET
     level: int | None = strawberry.field(default=None, description="Updated importance level")
     comment: str | None = strawberry.UNSET
-    visibility: str | None = strawberry.field(
-        default=None, description="Updated visibility: 'public' or 'restricted'"
+    visibility: Visibility | None = strawberry.field(
+        default=None, description="Updated visibility: 'public', 'restricted', or 'internal'"
     )
 
 

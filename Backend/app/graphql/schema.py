@@ -8,6 +8,8 @@ from app.graphql.config.mutations import PropertyConfigMutation
 from app.graphql.config.queries import PropertyConfigQuery
 from app.graphql.geo.mutations import GeoMutation, StationPropertyMutation
 from app.graphql.geo.queries import GeoQuery
+from app.graphql.suggestions.mutations import SuggestionMutation
+from app.graphql.suggestions.queries import SuggestionQuery
 from app.graphql.tickets.mutations import RequestMutation, TicketTaskMutation
 from app.graphql.tickets.queries import RequestQuery, TicketTaskQuery
 

@@ -16,6 +16,31 @@ users {
         timestamp delete_at
     }
 
+  user_identities {
+      uuid uuid PK
+      uuid user_uuid FK "indexed"
+      string provider "password/google/line, String(20)"
+      string provider_subject "nullable, String(255)"
+      string password_hash "nullable, String(512), only when provider=password"
+      timestamp created_at
+  }
+  %% UNIQUE(provider, provider_subject) -- uq_identity_provider_subject
+  %% UNIQUE(user_uuid, provider)        -- uq_identity_user_provider
+  users ||--o{ user_identities : "logs in via"
+
+  user_contacts {
+      uuid uuid PK
+      uuid user_uuid FK "indexed"
+      string type "email/phone, String(10)"
+      string value "normalized (lowercase email / E.164 phone), String(320)"
+      boolean verified "default false"
+      timestamp verified_at "nullable"
+      timestamp created_at
+  }
+  %% UNIQUE(type, value)      -- uq_contact_type_value (email/phone double as global login identifier)
+  %% UNIQUE(user_uuid, type)  -- uq_contact_user_type
+  users ||--o{ user_contacts : "reachable at"
+
   groups {
       uuid uuid PK
       string name
@@ -23,11 +48,13 @@ users {
 
   policies {
       uuid uuid PK
-      string name
-      string read "permissions"
-      string create "permissions"
-      string edit "permissions"
-      string delete "permissions"
+      string name "unique, indexed"
+      string description "nullable, String(255)"
+      string category "nullable, String(50)"
+      string read "permissions, default none"
+      string create "permissions, default none"
+      string edit "permissions, default none"
+      string delete "permissions, default none"
   }
 
   user_group_assign {
@@ -137,7 +164,7 @@ users {
       int level
       string comment
       string source "user/gov/crawler"
-      string visibility "public/restricted"
+      string visibility "public/restricted/internal"
       string verification_status "unverified/ai_verified/human_verified"
       float confidence_score "0.0-1.0"
       boolean is_duplicate
@@ -227,8 +254,10 @@ users {
       string visibility "public/restricted/internal"
       string verification_status "unverified/ai_verified/human_verified/disputed"
       string review_note "nullable"
+      string disaster_type "nullable, free-form e.g. earthquake/flood"
   }
   base_geometries ||--|| tickets : "inherits as general ticket"
+  %% NOTE: polymorphic_identity = "request" (base_geometries.property_name stores "request" for ticket rows)
 
   photos {
       uuid uuid PK
@@ -314,9 +343,12 @@ users {
       uuid uuid PK
       uuid task_uuid FK "FK to ticket_tasks"
       uuid actor_uuid FK "FK to users"
-      string role "nullable"
+      string role "nullable, String(100)"
+      string status "accepted/en_route/completed, String(20), default accepted; drives task progress = completed/quantity"
       timestamp assigned_at
+      timestamp updated_at "stamp of last status change"
   }
+  %% UNIQUE(task_uuid, actor_uuid) -- uq_assignment_task_actor (a person can't be linked to the same task twice; over-subscription = different people exceeding quantity)
   ticket_tasks ||--o{ task_assignments : "assigned to"
   users ||--o{ task_assignments : "works on"
 

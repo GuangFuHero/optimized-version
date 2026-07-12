@@ -77,7 +77,7 @@ class GeoMutation:
                 "created_by": str(info.context["user"].uuid),
                 "type": input.type, "name": input.name, "description": input.description,
                 "op_hour": input.op_hour, "level": input.level, "comment": input.comment,
-                "source": input.source, "visibility": input.visibility,
+                "source": input.source, "visibility": input.visibility.value,
             },
             secondary_location=sl_dict,
         )
@@ -105,7 +105,7 @@ class GeoMutation:
         if input.level is not None:
             obj_in["level"] = input.level
         if input.visibility is not None:
-            obj_in["visibility"] = input.visibility
+            obj_in["visibility"] = input.visibility.value
         for field in ("type", "name", "description", "op_hour", "comment"):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
