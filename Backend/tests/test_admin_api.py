@@ -296,11 +296,11 @@ async def test_remove_team_member_clears_team_uuid_and_role(client, db_session):
 
 @pytest.mark.asyncio
 async def test_create_team_as_super_admin(client, db_session):
-    """super_admin creates a gov team and gets 201 with the persisted row."""
+    """super_admin creates a gov team (with a valid 統一編號) and gets 201 with the row."""
     admin_uuid = await _make_super_admin(db_session)
     resp = await client.post(
         "/api/v1/admin/teams",
-        json={"name": "Taipei Gov", "type": "gov"},
+        json={"name": "Taipei Gov", "type": "gov", "tax_id": "04595257"},  # Z=40, /5 ok
         headers=_auth_header(admin_uuid),
     )
     assert resp.status_code == 201, resp.json()
@@ -308,7 +308,45 @@ async def test_create_team_as_super_admin(client, db_session):
     assert body["name"] == "Taipei Gov"
     assert body["type"] == "gov"
     assert body["status"] == "active"
+    assert body["tax_id"] == "04595257"
     assert body["uuid"]
+
+
+@pytest.mark.asyncio
+async def test_create_team_without_tax_id_is_null(client, db_session):
+    """tax_id is optional (可空): omitting it persists and returns null."""
+    admin_uuid = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/teams",
+        json={"name": "No UBN Org", "type": "ngo"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 201, resp.json()
+    assert resp.json()["tax_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_team_rejects_overlong_tax_id(client, db_session):
+    """tax_id that is not exactly 8 digits is rejected by the schema (422)."""
+    admin_uuid = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/teams",
+        json={"name": "X", "type": "gov", "tax_id": "123456789"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_team_rejects_bad_ubn_checksum(client, db_session):
+    """8 digits but the /5 checksum fails → rejected (422). 12345678 gives Z=42."""
+    admin_uuid = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/teams",
+        json={"name": "X", "type": "gov", "tax_id": "12345678"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

@@ -109,9 +109,11 @@ async def create_team(
 ):
     """Create a gov/ngo team (super_admin only, via team.edit)."""
     team = await admin_service.create_team(
-        db, actor=current_user, name=body.name, type_=body.type
+        db, actor=current_user, name=body.name, type_=body.type, tax_id=body.tax_id
     )
-    return TeamResponse(uuid=team.uuid, name=team.name, type=team.type, status=team.status)
+    return TeamResponse(
+        uuid=team.uuid, name=team.name, type=team.type, status=team.status, tax_id=team.tax_id
+    )
 
 
 @router.get(
@@ -128,7 +130,8 @@ async def list_teams(
     """List teams filtered by the caller's team.view scope (all / own team / none)."""
     teams = await admin_service.list_teams(db, actor=current_user, scope=scope)
     return [
-        TeamResponse(uuid=t.uuid, name=t.name, type=t.type, status=t.status) for t in teams
+        TeamResponse(uuid=t.uuid, name=t.name, type=t.type, status=t.status, tax_id=t.tax_id)
+        for t in teams
     ]
 
 

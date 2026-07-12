@@ -168,10 +168,14 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
     return target
 
 
-async def create_team(db: AsyncSession, *, actor: User, name: str, type_: str) -> Team:
+async def create_team(
+    db: AsyncSession, *, actor: User, name: str, type_: str, tax_id: str | None = None
+) -> Team:
     """Create a gov/ngo team (checkpoint 1 only — team.edit, super_admin in seed, ADR-054)."""
     await require_scope(actor, Perm.TEAM_EDIT, db)
-    return await team_repository.create(db, obj_in={"name": name, "type": type_})
+    return await team_repository.create(
+        db, obj_in={"name": name, "type": type_, "tax_id": tax_id}
+    )
 
 
 async def list_teams(db: AsyncSession, *, actor: User, scope: Scope) -> list[Team]:

@@ -19,6 +19,7 @@ class Team(Base, UUIDPKMixin, TimestampMixin):
     __team_scope_attr__ = "uuid"
     name: Mapped[str] = mapped_column(String(100))
     type: Mapped[str] = mapped_column(String(10))  # "gov" | "ngo" — drives gov/ngo scope
+    tax_id: Mapped[str | None] = mapped_column(String(8), nullable=True)  # 統一編號 (UBN), 8 碼
     status: Mapped[str] = mapped_column(String(20), default="active")
 
 
