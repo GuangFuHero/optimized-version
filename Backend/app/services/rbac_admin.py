@@ -8,12 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
-from app.repositories.auth_repository import role_repository
+from app.repositories.auth_repository import role_repository, user_repository
 from app.schemas.rbac_admin import (
     CapabilityCatalogResponse,
     CapabilityInfo,
     MatrixResponse,
     RoleGrants,
+    RoleRef,
+    UserPermissionsResponse,
 )
 
 
@@ -60,3 +62,19 @@ async def get_role(db: AsyncSession, role_uuid: str) -> RoleGrants:
         raise RbacNotFoundError("Role not found")
     grants = {key: scope for _, key, scope in await role_repository.get_grants(db, role_uuid=role_uuid)}
     return RoleGrants(uuid=role.uuid, name=role.name, kind=role.kind, grants=grants)
+
+
+async def get_user_permissions_detail(db: AsyncSession, user_uuid: str) -> UserPermissionsResponse:
+    """A user's roles, direct grants, and resolved effective permissions."""
+    user = await user_repository.get_by_uuid(db, user_uuid)
+    if user is None:
+        raise RbacNotFoundError("User not found")
+    roles = await user_repository.get_role_refs(db, user_uuid)
+    direct = await user_repository.get_direct_grants(db, user_uuid)
+    effective = await user_repository.get_user_permissions(db, user_uuid)
+    return UserPermissionsResponse(
+        user_uuid=user.uuid,
+        roles=[RoleRef(name=role.name, kind=role.kind) for role in roles],
+        direct_grants=dict(direct),
+        effective={key: scope.value for key, scope in effective.items()},
+    )

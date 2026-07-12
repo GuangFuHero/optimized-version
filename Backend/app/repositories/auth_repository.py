@@ -61,6 +61,24 @@ class UserRepository(GenericRepository[User]):
             scopes_by_key.setdefault(key, []).append(parsed)
         return {key: widest(scopes) for key, scopes in scopes_by_key.items()}
 
+    async def get_role_refs(self, db: AsyncSession, user_uuid: str) -> list[Role]:
+        """The roles a user currently holds."""
+        result = await db.execute(
+            select(Role)
+            .join(UserRoleAssign, UserRoleAssign.role_uuid == Role.uuid)
+            .where(UserRoleAssign.user_uuid == user_uuid)
+        )
+        return list(result.scalars().all())
+
+    async def get_direct_grants(self, db: AsyncSession, user_uuid: str) -> list[tuple[str, str]]:
+        """A user's direct (per-user) capability->scope grants."""
+        result = await db.execute(
+            select(Permission.key, UserPermissionAssign.scope)
+            .join(UserPermissionAssign, UserPermissionAssign.permission_uuid == Permission.uuid)
+            .where(UserPermissionAssign.user_uuid == user_uuid)
+        )
+        return [(key, scope) for key, scope in result.all()]
+
     async def assign_role(self, db: AsyncSession, user_uuid: str, role_uuid: str) -> bool:
         """將使用者指派特定角色 (role)。
 

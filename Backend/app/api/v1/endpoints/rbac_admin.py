@@ -11,7 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
 from app.core.permissions import Perm
-from app.schemas.rbac_admin import CapabilityCatalogResponse, MatrixResponse, RoleGrants
+from app.schemas.rbac_admin import (
+    CapabilityCatalogResponse,
+    MatrixResponse,
+    RoleGrants,
+    UserPermissionsResponse,
+)
 from app.services import rbac_admin as rbac_admin_service
 from app.services.rbac_admin import RbacNotFoundError
 
@@ -35,5 +40,14 @@ async def get_role(role_uuid: UUID, db: AsyncSession = Depends(security.get_db))
     """One role and its grants."""
     try:
         return await rbac_admin_service.get_role(db, str(role_uuid))
+    except RbacNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/users/{user_uuid}/permissions", response_model=UserPermissionsResponse)
+async def get_user_permissions(user_uuid: UUID, db: AsyncSession = Depends(security.get_db)):
+    """A user's roles, direct grants, and resolved effective permissions."""
+    try:
+        return await rbac_admin_service.get_user_permissions_detail(db, str(user_uuid))
     except RbacNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

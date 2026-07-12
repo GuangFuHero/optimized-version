@@ -111,3 +111,27 @@ async def test_role_detail_404_when_missing(client, db_session):
         f"/api/v1/admin/rbac/roles/{uuid4()}", headers=_auth_header(admin_uuid)
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_user_permissions_returns_roles_and_effective(client, db_session):
+    """User permissions endpoint returns roles, direct grants, and effective permissions."""
+    admin_uuid = await _make_rbac_admin(db_session)
+    resp = await client.get(
+        f"/api/v1/admin/users/{admin_uuid}/permissions", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 200, resp.json()
+    body = resp.json()
+    assert any(r["name"] == "super_admin" for r in body["roles"])
+    assert body["effective"]["rbac.view"] == "all"
+    assert body["direct_grants"] == {}
+
+
+@pytest.mark.asyncio
+async def test_user_permissions_404_when_user_missing(client, db_session):
+    """User permissions endpoint returns 404 for missing user."""
+    admin_uuid = await _make_rbac_admin(db_session)
+    resp = await client.get(
+        f"/api/v1/admin/users/{uuid4()}/permissions", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 404
