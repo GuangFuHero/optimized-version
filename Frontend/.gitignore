@@ -54,3 +54,11 @@ out
 vercel.json
 
 *.csv 
+
+node_modules/
+.nx/
+.vercel/
+.next/
+dist/
+.env.local
+.env.*.local

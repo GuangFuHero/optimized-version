@@ -15,14 +15,13 @@ Frontend/.vscode/
 .github/prompts/
 .github/skills/
 
-# Frontend local dependencies and build outputs
-Frontend/node_modules/
-Frontend/.nx/
-Frontend/.vercel/
-Frontend/.next/
-Frontend/dist/
-Frontend/.env.local
-Frontend/.env.*.local
-
 # Backend local runtime data
 Backend/.db/
+memory/
+.handoff/
+.idea/
+.vscode/
+.pytest_cache/
+.claude/
+.db/
+.venv/
