@@ -225,3 +225,26 @@ POST   /admin/users/{uuid}/role       （已存在，ADR-032）
 
 1. ~~`data_auditor` 是否給 `rbac.view`？~~ → **已定案：super_admin only**，後續需要再加。
 2. 三個新 ADR（055/056/057）隨各 phase PR 轉錄進 `RBAC_V1_DECISIONS.md`（建議）。
+
+---
+
+## 13. 設計備註：per-member 授權 vs 沒有 per-team 權限
+
+**常見誤解：「設定某個 team 的權限」。** 實際上 RBAC **沒有 per-team 權限表**——角色（`admin`/`member`）是**全域共用**的（`app/models/rbac.py:Role` docstring：「Definition is global, not per-team」）。team 之間的差異，靠 `team`/`zone` scope **相對於當事人自己的 `users.team_uuid` 自動隔離**：
+
+- team admin 的 `team.member.manage=team` 只能管**自己 team** 的成員；跨 team 操作 → 404（ADR-023，`app/services/admin.py:remove_team_member`）。
+- member/admin 的 `*.edit=zone` 只作用在**自己 team 被指派的 WorkZone** 內。
+
+要調整權限有三個不同層級的槓桿，別混淆：
+
+| 動的東西 | 影響範圍 | 機制 | 端點 |
+|---|---|---|---|
+| 改角色的 grant | **所有**持該角色的人（跨所有 team） | `role_permission_assign` | Phase 2 `PUT /admin/rbac/roles/{uuid}/permissions/{cap}` |
+| 給某人個人額外授權（additive，疊加在角色之上） | **只有那一個人** | `user_permission_assign`（ADR-018） | Phase 3 `PUT /admin/users/{uuid}/permissions/{cap}` |
+| 改某人的角色 | 那個人整包換角色 | `user_role_assign` | 已有 `POST /admin/users/{uuid}/role` |
+
+**結論：**
+- ✅ **可以** per-member 擴充：給某個 team member 一筆 direct grant，疊加在其角色之上，不動角色、不影響同 team 其他人。（注意：這是「個人 direct grant」，不是「改他的 role」——改 role 會影響所有持該角色的人。）
+- ❌ **不能** 對「整個 team」一鍵設定權限：要嘛改共用角色（影響所有 team）、要嘛逐一給每個成員 direct grant、要嘛建自訂角色再逐一指派（Phase 3）。無「Team X 的權限」這種單一物件。
+
+**Phase 3 硬性前提（承 Phase 1 final review）：** `UserPermissionAssign` 目前**沒有** `(user_uuid, permission_uuid)` 唯一約束（對比 `RolePermissionAssign`/`UserRoleAssign` 都有）。個人 grant 的寫入端點（Phase 3）**必須**補上這個唯一約束，**或**讓讀取面對 direct grant 套 `widest()`——否則同一個 (user, capability) 可能存在多列，`direct_grants`（目前 `dict()` last-wins）會與 `effective`（widest-wins）不一致。
