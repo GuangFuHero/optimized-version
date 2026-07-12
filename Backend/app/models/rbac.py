@@ -44,7 +44,7 @@ class RolePermissionAssign(Base, UUIDPKMixin):
     __table_args__ = (UniqueConstraint("role_uuid", "permission_uuid", name="uq_role_perm"),)
     role_uuid: Mapped[str] = mapped_column(ForeignKey("roles.uuid"), index=True)
     permission_uuid: Mapped[str] = mapped_column(ForeignKey("permissions.uuid"), index=True)
-    scope: Mapped[str] = mapped_column(String(10), default="none")  # none/own/team/gov/ngo/zone/all
+    scope: Mapped[str] = mapped_column(String(10), default="none")  # none/own/team/zone/all (ADR-049; gov/ngo 已退場)
 
 
 class UserRoleAssign(Base, UUIDPKMixin):

@@ -705,17 +705,16 @@ async def create_station(self, info, input) -> StationType:
 
 ---
 
-## 附錄 A. Scope 語意表
+## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|
-| none | 無 | — |
+| none | `false()`（防禦性；CP1 應已先擋掉） | — |
 | own | `resource.created_by == actor.uuid` | — |
-| team | `resource.team_uuid == actor.team_uuid` | 一人一 team |
-| gov/ngo | `resource.team.type == actor.team.type` | `teams.type` |
-| zone | `ST_Contains(team_zones, resource.geometry)` | `work_zones`+`team_zone_assign` |
+| team | `resource.<team 邊界欄位> == actor.team_uuid`（預設欄位 `team_uuid`；`Team` 宣告 `uuid`）。**只用於團隊成員管理**，不套用在 geo 資源 | 一人一 team（`users.team_uuid`）、`__team_scope_attr__`（ADR-053） |
+| zone | `ST_Contains(actor 所屬 team 被指派的 WorkZone, resource.geometry)` | `work_zones`+`team_zone_assign`（ADR-049/052） |
 | all | 全域 | — |
 
-最寬勝：`all > gov/ngo > zone > team > own > none`。
+最寬勝：`all > zone > team > own > none`（見 `app/core/rbac_scopes.py:WIDTH`）。gov/ngo scope 已於 ADR-049 退場——組織身分改由 `users.team_uuid → team.type` 表達，不進 scope。
 
 ## 附錄 B. D 版 schema 修正（已納入 §2）
 1. scope 綁 `role_permission_assign`（非 permission）→ 同 perm 不同 role 可不同 scope。**最關鍵。**
