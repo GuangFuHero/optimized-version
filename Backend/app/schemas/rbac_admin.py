@@ -1,0 +1,52 @@
+"""Pydantic schemas for the RBAC admin read surface (feature 009, Phase 1)."""
+
+from uuid import UUID
+
+from pydantic import BaseModel
+
+
+class CapabilityInfo(BaseModel):
+    """One capability key, split for display; `public` = in PUBLIC_PERMS."""
+
+    key: str
+    resource: str
+    action: str
+    public: bool
+
+
+class CapabilityCatalogResponse(BaseModel):
+    """The full capability catalog + allowed scope values (read-only, ADR-057)."""
+
+    scopes: list[str]
+    capabilities: list[CapabilityInfo]
+
+
+class RoleGrants(BaseModel):
+    """A role and its capability->scope grants."""
+
+    uuid: UUID
+    name: str
+    kind: str
+    grants: dict[str, str]
+
+
+class MatrixResponse(BaseModel):
+    """The whole role × capability × scope grid."""
+
+    roles: list[RoleGrants]
+
+
+class RoleRef(BaseModel):
+    """A role a user holds."""
+
+    name: str
+    kind: str
+
+
+class UserPermissionsResponse(BaseModel):
+    """A user's roles, direct grants, and resolved effective permissions."""
+
+    user_uuid: UUID
+    roles: list[RoleRef]
+    direct_grants: dict[str, str]
+    effective: dict[str, str]

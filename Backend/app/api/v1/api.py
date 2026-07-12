@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import admin, auth, map, rbac_test, users
+from app.api.v1.endpoints import admin, auth, map, rbac_admin, rbac_test, users
 from app.core.config import settings
 
 api_router = APIRouter()
@@ -15,6 +15,9 @@ api_router.include_router(users.router, prefix="/users", tags=["使用者管理"
 
 # 註冊管理員 API（user 列表 / 指派 role / team member 管理）
 api_router.include_router(admin.router, prefix="/admin", tags=["管理員 API"])
+
+# 註冊 RBAC 管理 API（capability catalog / matrix / user permissions，唯讀，feature 009 P1）
+api_router.include_router(rbac_admin.router, prefix="/admin", tags=["RBAC 管理 API"])
 
 
 def rbac_test_enabled(env: str) -> bool:
