@@ -37,8 +37,8 @@
 4. **端點形狀**：granular REST（每次改一格/一筆，掛 `/admin/rbac`）＋一個彙總 `GET /admin/rbac/matrix` 供顯示。
 5. **一份 spec、分三階段實作**（Phase 1 讀 → Phase 2 矩陣寫 → Phase 3 角色 CRUD + 個人 grant），各自一個 PR。
 
-### 未決（實作時確認）
-- **`data_auditor` 要不要有 `rbac.view`？** 本 spec 預設 **super_admin only**；data_auditor 定位是「全平台唯讀」，若要讓它也看得到矩陣，Phase 1 seed 多授一條即可（低風險，可後補）。
+### 已定案的邊界
+- **`rbac.view` = super_admin only**（2026-07-12 定案）。data_auditor 不給——它定位是「資料唯讀」，而權限矩陣屬治理設定，暫不開放。日後若要開放，Phase 1 seed 多授一條 grant 即可（低風險，可後補）。
 
 ---
 
@@ -47,6 +47,7 @@
 > 這三條在對應 phase 落地時轉錄進 `RBAC_V1_DECISIONS.md`（沿用該檔「每個決策一條編號 ADR」慣例）。此處為 approved-pending-implementation。
 
 ### ADR-055 RBAC 轉 runtime-managed；runtime DB = 事實來源；seed 降為 idempotent bootstrap
+**白話**：`seed_rbac.py` 是「系統剛啟動時鋪的**預設權限**」；啟動後，一樣能在 runtime 針對個別權限客製，而且**客製的以 runtime 為準**——下次重啟／重跑 seed **不會蓋掉**你改過的，seed 只會補「還沒有的」。
 **Context**：ADR-049 前提「一場災難 = 短命獨立部署，seed-time 設定就夠、不過度建治理機制」，ADR-054 據此明言「不做後台權限矩陣編輯」。現在產品需要前端能顯示/修改權限，這個前提要調整。
 **Decision**：RBAC 設定的事實來源改為 **runtime DB**。`seed_rbac.py` 降為純 bootstrap：permission/role/grant 三者一律「缺才補、既有不動」（移除目前 `:181-183` 更新既有 grant scope 的邏輯）。部署重跑 seed 不再覆蓋後台改動。baseline 若要升級（例如新模組要給某角色預設權限），走新增 grant（seed 會補缺）或一次性 migration，不靠改既有 grant。
 **Consequences**：➕ 後台改的權限永久保留、可 runtime 管理。➖ 事實來源不再是單一檔案；重現某環境權限狀態要看 DB，不能只讀 seed。
@@ -62,9 +63,16 @@
 **取代關係**：兌現 ADR-050；延續 ADR-032/035/040。
 
 ### ADR-057 capability 目錄 code-owned & 唯讀；runtime CRUD 只作用在 grant/role/assignment
-**Context**：「權限 CRUD」易被誤解為能新增 capability。但 `Perm` key 綁在程式 enforcement 點，runtime 新增沒有意義。
-**Decision**：capability 目錄（`Perm`）與 scope 值（`Scope`）維持 code-defined、API 唯讀（`GET /admin/rbac/capabilities`）。寫入 API 一律驗證 `capability ∈ Perm`、`scope ∈ Scope`，否則 422。runtime 可 CRUD 的只有：role-permission grant、role、user-role assignment、user direct grant。
-**Consequences**：➕ 不會出現「有 grant 卻無 enforcement」的無效權限；輸入邊界清楚。➖ 新 capability 仍要改 code（低頻，可接受）。
+**白話**：先分兩個詞——
+- **capability（權限項目）**＝「系統裡有哪些動作」的清單，例如 `ticket.add`（建立求助單）、`station.edit`（編輯站點）。**寫死在程式碼**，因為每一項都對應到程式裡「檢查這個權限」的那一行。
+- **grant（授權）**＝「某角色／某人，對某個權限項目，能在多大範圍（scope）內做」，例如「member → `ticket.edit` → 只能改自己責任區」。
+
+後台能 CRUD 的是**授權（grant）**，不是**權限項目清單（capability）**。因為若讓後台新增一個 capability（例如 `ticket.approve`），程式裡根本沒有任何一行在檢查它——它只會是資料庫裡一筆**沒有任何效果的死資料**。權限項目一定要先在程式碼接上檢查點才有意義。
+> 比喻：capability＝菜單上有哪些菜（由廚房後場決定）；grant＝哪桌點了哪道菜、幾份（隨時能改）。前台不能憑空加一道廚房不會做的菜。
+
+**Context**：「權限 CRUD」易被誤解成「能新增權限項目」。但 `Perm` key 綁在程式 enforcement 點，runtime 新增沒有意義（如上）。
+**Decision**：capability 目錄（`Perm`）與 scope 值（`Scope`）維持 code-defined、API 唯讀（`GET /admin/rbac/capabilities` 只給前端當下拉選單）。寫入 API 一律驗證 `capability ∈ Perm`、`scope ∈ Scope`，否則 422。runtime 可 CRUD 的只有四種：role↔permission 授權（grant）、role 本身、user↔role 指派、user 個人 grant。
+**Consequences**：➕ 不會出現「有授權卻沒人檢查」的無效權限；輸入邊界清楚。➖ 要新增權限項目仍得改 code（低頻，可接受）。
 **取代關係**：呼應 ADR-020（固定 scope、不做通用 ABAC）。
 
 ---
@@ -213,7 +221,7 @@ POST   /admin/users/{uuid}/role       （已存在，ADR-032）
 
 ---
 
-## 12. 開放問題清單
+## 12. 待辦
 
-1. `data_auditor` 是否給 `rbac.view`？（預設否）
-2. 三個新 ADR 落地時轉錄進 `RBAC_V1_DECISIONS.md` 的時機：隨各 phase PR 一起（建議），或一次補齊。
+1. ~~`data_auditor` 是否給 `rbac.view`？~~ → **已定案：super_admin only**，後續需要再加。
+2. 三個新 ADR（055/056/057）隨各 phase PR 轉錄進 `RBAC_V1_DECISIONS.md`（建議）。
