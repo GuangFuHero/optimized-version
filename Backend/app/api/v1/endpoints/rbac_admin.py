@@ -4,11 +4,12 @@ Every route is gated by `rbac.view` (super_admin only) via the router-level depe
 checkpoint 1 only; reads carry no per-row scope.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
 from app.core.permissions import Perm
-from app.schemas.rbac_admin import CapabilityCatalogResponse
+from app.schemas.rbac_admin import CapabilityCatalogResponse, MatrixResponse
 from app.services import rbac_admin as rbac_admin_service
 
 router = APIRouter(dependencies=[security.has_permission(Perm.RBAC_VIEW)])
@@ -18,3 +19,9 @@ router = APIRouter(dependencies=[security.has_permission(Perm.RBAC_VIEW)])
 async def get_capabilities():
     """Capability catalog + scope values for the frontend's dropdowns (read-only)."""
     return rbac_admin_service.list_capabilities()
+
+
+@router.get("/rbac/matrix", response_model=MatrixResponse)
+async def get_matrix(db: AsyncSession = Depends(security.get_db)):
+    """The full role × capability × scope grid."""
+    return await rbac_admin_service.get_matrix(db)

@@ -72,3 +72,15 @@ async def test_capabilities_denied_without_rbac_view(client, db_session):
         "/api/v1/admin/rbac/capabilities", headers=_auth_header(plain_uuid)
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_matrix_returns_roles_with_grants(client, db_session):
+    """Matrix endpoint lists all roles with their capability->scope grants."""
+    admin_uuid = await _make_rbac_admin(db_session)
+    resp = await client.get("/api/v1/admin/rbac/matrix", headers=_auth_header(admin_uuid))
+    assert resp.status_code == 200, resp.json()
+    roles = resp.json()["roles"]
+    super_admin = next(r for r in roles if r["name"] == "super_admin")
+    assert super_admin["kind"] == "platform"
+    assert super_admin["grants"]["rbac.view"] == "all"

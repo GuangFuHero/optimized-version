@@ -93,6 +93,23 @@ class RoleRepository(GenericRepository[Role]):
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
+    async def list_all(self, db: AsyncSession) -> list[Role]:
+        """Every role, ordered by kind then name (for the matrix display)."""
+        result = await db.execute(select(Role).order_by(Role.kind, Role.name))
+        return list(result.scalars().all())
+
+    async def get_grants(
+        self, db: AsyncSession, *, role_uuid: str | None = None
+    ) -> list[tuple[str, str, str]]:
+        """Return (role_uuid, capability_key, scope) rows; all roles when role_uuid is None."""
+        stmt = select(
+            RolePermissionAssign.role_uuid, Permission.key, RolePermissionAssign.scope
+        ).join(Permission, Permission.uuid == RolePermissionAssign.permission_uuid)
+        if role_uuid is not None:
+            stmt = stmt.where(RolePermissionAssign.role_uuid == role_uuid)
+        rows = (await db.execute(stmt)).all()
+        return [(str(role), key, scope) for role, key, scope in rows]
+
 
 class PermissionRepository(GenericRepository[Permission]):
     """Repository for Permission model CRUD."""
