@@ -64,8 +64,8 @@ async def test_require_scope_checkpoint_1_only_without_a_resource(db):
     actor = User(name="A")
     db.add(actor)
     await db.flush()
-    await _grant(db, actor, Perm.STATION_MAKE, "own", "role-make")
-    scope = await require_scope(actor, Perm.STATION_MAKE, db)
+    await _grant(db, actor, Perm.STATION_ADD, "own", "role-make")
+    scope = await require_scope(actor, Perm.STATION_ADD, db)
     assert scope == Scope.OWN
 
 

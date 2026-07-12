@@ -75,7 +75,7 @@ async def _make_gov_user() -> str:
         await db.flush()
         perm_cache: dict = {}
         await _grant(db, role, perm_cache, Perm.ZONE_VIEW, "all")
-        await _grant(db, role, perm_cache, Perm.ZONE_MAKE, "all")
+        await _grant(db, role, perm_cache, Perm.ZONE_ADD, "all")
         await _grant(db, role, perm_cache, Perm.ZONE_EDIT, "all")
         await _grant(db, role, perm_cache, Perm.ZONE_ASSIGN, "all")
 
@@ -157,7 +157,7 @@ async def test_anonymous_cannot_view_work_zones(client):
 
 @pytest.mark.asyncio
 async def test_plain_login_user_cannot_create_a_work_zone(client):
-    """A logged-in user with no work_zone.make grant is denied (default-deny, ADR-025)."""
+    """A logged-in user with no work_zone.add grant is denied (default-deny, ADR-025)."""
     plain_token = await _make_plain_user()
 
     resp = await client.post(

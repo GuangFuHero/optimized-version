@@ -34,7 +34,7 @@ class RequestMutation:
     async def create_ticket(self, info: strawberry.types.Info, input: CreateTicketInput) -> TicketType:
         """Create a new support ticket with location, contact info, and priority.
 
-        Requires ticket.make permission. Returns the created TicketType.
+        Requires ticket.add permission. Returns the created TicketType.
         """
         ticket = await ticket_service.create_ticket(
             info.context["db"], actor=require_authenticated(info),
@@ -115,7 +115,7 @@ class TicketTaskMutation:
     ) -> TicketTaskType:
         """Create a new task (rescue, HR, supply, etc.) under an existing ticket.
 
-        Verifies the parent ticket exists. Requires ticket.make permission (checkpoint 1
+        Verifies the parent ticket exists. Requires ticket.add permission (checkpoint 1
         only — matches prior behavior, which did not scope-check against the parent ticket).
         Returns the created TicketTaskType.
         """
@@ -158,7 +158,7 @@ class TicketTaskMutation:
     ) -> TaskPropertyType:
         """Add a structured property to a ticket task.
 
-        Verifies the parent task exists. Requires ticket.make permission (checkpoint 1
+        Verifies the parent task exists. Requires ticket.add permission (checkpoint 1
         only — matches prior behavior). Returns the created TaskPropertyType.
         """
         prop = await ticket_service.create_task_property(

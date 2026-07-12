@@ -268,7 +268,7 @@
 **Blast Radius（本決定的落地範圍）**：
 - `app/core/rbac_scopes.py`:移除 `in_scope`/`scope_filter` 的 team/gov/ngo 分支;`Scope` enum 拔掉 `TEAM`/`GOV`/`NGO`(留 `none`/`own`/`zone`/`all`)。
 - `app/models/geo.py`:移除 `BaseGeometry.team_uuid` + 新 migration `drop column`。
-- `scripts/seed_rbac.py` + `tests/test_graphql/conftest.py`:`user` 加 `station.make`;`gov_manager`/`ngo_manager` 的 `ticket.view` 改 `all`;edit/delete 由 gov/team 改成 `own`+`zone`(NGO)或 `all`;PII 維持 own/zone/all。
+- `scripts/seed_rbac.py` + `tests/test_graphql/conftest.py`:`user` 加 `station.add`;`gov_manager`/`ngo_manager` 的 `ticket.view` 改 `all`;edit/delete 由 gov/team 改成 `own`+`zone`(NGO)或 `all`;PII 維持 own/zone/all。
 - `app/graphql/tickets/types.py`:PII resolver 從「回 null」改成「回遮罩」,拔掉 `_team_uuid_raw`,改吃 geometry(for zone);新增/移植 `app/graphql/masking.py`。
 - `app/services/station.py`/`ticket.py`/`closure_area.py`:建立時不再寫 `team_uuid`。
 - 測試:`tests/test_graphql/test_team_scope.py`(team scope 案例)移除或改寫成 zone;`tests/test_rbac_scopes.py` 拔 team/gov/ngo、保留 zone;PII 測試從 null 斷言改成遮罩斷言。
@@ -284,22 +284,22 @@
 **Context(關鍵認知修正)**
 1. **角色是「功能 × 組織」兩軸,我當初把它們揉成一個。** `gov_manager`/`ngo_manager` 是錯的——那是「功能(Admin/Member)× 組織(gov/ngo)」。`Dashboard.md` §3 的 6 個「platform role」拆開就是:`Super Admin`/`Data Auditor`(平台級、org-agnostic 功能)+ `Admin`/`Member`(§4 團隊階層功能)× `team.type`(gov/ngo/無)。
 2. **schema/引擎本來就支援兩軸**,所以角色拆解**幾乎純 seed**:`user_role_assign→role`(功能)、`users.team_uuid→team.type`(組織)早就分開,`in_scope` 的 gov/ngo 分支本來就是 `actor.type == resource.type`(相對於當事人、gov/ngo 邏輯相同)。當初填 `gov_manager` 角色是**seed 訂錯,不是結構錯**。
-3. **gov ≠ ngo 有一項功能差異**:只有 gov 能 `work_zone.make`/`work_zone.assign`(政府劃定責任區、指派給 NGO 的職權)。→ 這條能力綁 `team.type==gov`(seed 只發給 gov 側)。
+3. **gov ≠ ngo 有一項功能差異**:只有 gov 能 `work_zone.add`/`work_zone.assign`(政府劃定責任區、指派給 NGO 的職權)。→ 這條能力綁 `team.type==gov`(seed 只發給 gov 側)。
 4. **Dashboard 沒有自己的權限**:它是把 ticket/station/物資/志工等模組「彙總」出來的視圖,可見範圍**繼承自來源模組的 scope**,不該有獨立 `dashboard.view`/`export`。→ 從目錄移除 `DASHBOARD_*`。同理 `map.view`(看圖是彙總)可能該拆成「看圖=衍生 / 封路=真實資源」。
 5. **無 `ANY_TEAM`**(Dashboard §6 有,但不採用)。
 
 **Decision — 角色模型(ACCEPTED,純 seed,不動結構)**
 - 功能角色 = `super_admin`、`data_auditor`(平台級)+ `admin`、`member`(團隊階層);**廢除 `gov_manager`/`ngo_manager`**。
 - 組織 = `users.team_uuid → team.type ∈ {gov, ngo}`;「政府協調員」= role `admin` + gov team。
-- gov 專屬:`work_zone.make`/`assign` 只發給 gov 側(seed)。
-- 其餘 seed 訂正:`ticket.view` 一律 `all`(修 gov/ngo 看得比 guest 少);`user` 加 `station.make`(任何人可建站);`data_auditor` **拿掉 `station.review`**(稽核員只讀,ADR 與 `Docs` §2.4 一致);`data_auditor` 加 `audit.view`(但看 log 端點尚未實作)。
+- gov 專屬:`work_zone.add`/`assign` 只發給 gov 側(seed)。
+- 其餘 seed 訂正:`ticket.view` 一律 `all`(修 gov/ngo 看得比 guest 少);`user` 加 `station.add`(任何人可建站);`data_auditor` **拿掉 `station.review`**(稽核員只讀,ADR 與 `Docs` §2.4 一致);`data_auditor` 加 `audit.view`(但看 log 端點尚未實作)。
 - `DASHBOARD_*` 從 `permissions.py` 目錄移除(衍生視圖無獨立權限)。
 
 **Decision — scope 資料範圍模型 = 乙(純地理,ACCEPTED)**
 - **scope 全集收斂成 `none` / `own` / `zone` / `all`**;`team` 僅保留給「團隊管理員管自己 team 成員」(`team.member.manage=team`,對 Team 實體、不碰 geo 資源)。**移除 `Scope.GOV` / `Scope.NGO`。**
 - **管轄權由地理決定,不由歸屬**:一筆 geo 資源能不能被某 team 的人 edit / 看 PII,看它的座標是否落在該 team 被指派的 WorkZone polygon 內(`ST_Contains`)。**`resource.team_uuid` 整欄移除(migration drop column)**;`users.team_uuid` 保留(成員身份、zone 指派要用)。
 - **gov→ngo 委派 = 巢狀 polygon**:ngo 的 polygon 嵌在 gov 的 polygon 內,同一點同時命中兩者 → 兩邊都能改,不轉移任何歸屬(附錄:走一遍實例見對話紀錄)。
-- **建立權與 team_uuid 完全脫鉤**:`station.make`/`ticket.make` 是純 capability(checkpoint 1),任何人有能力就能建;建立時**不再寫 team_uuid**。
+- **建立權與 team_uuid 完全脫鉤**:`station.add`/`ticket.add` 是純 capability(checkpoint 1),任何人有能力就能建;建立時**不再寫 team_uuid**。
 - **zone 指派階層採「先信任」不硬擋**:`work_zone.assign` 目前 scope=all,持有者(super_admin + gov admin,ngo admin 因共用 `admin` 角色也技術上拿得到)能指派任何 polygon 給任何 team;**不加 team.type=gov 硬牆**。萬一濫用,最壞是「某 team 被錯誤授予/移除某區 zone 存取」或「gov 自我擴大地理範圍」——但**碰不到大眾(view 已公開、PII 逐角色遮罩)、不刪資料、不提權到 super_admin、`team_zone_assign` 全程進 audit log、完全可逆**。硬牆(檢查目標 team.type + 子 polygon 是否在自己轄區內)列為之後可加的一層,不擋本輪。
 
 **取代關係**：ADR-048 的「view 一律公開」「PII 依角色遮罩」**維持**;其「丟掉 team/gov/ngo + 移除 team_uuid」**由本條正式定案採用**(乙)。ADR-030(view own→all)被「view 一律 all」涵蓋。
@@ -309,7 +309,7 @@
 **seed 角色矩陣（本輪落地採用；member/admin 的 own vs zone 切分為落地時的判斷,可調）**:
 - `super_admin`(平台):全部 `all`。
 - `data_auditor`(平台):唯讀——map/station/ticket `view`、`ticket.view_pii`、`user.view`、`audit.view` 皆 `all`;**無** edit/make/review。
-- `user`(平台,預設民眾):view 全 `all`;`station.make`/`ticket.make`=all;`station.edit/delete`、`ticket.edit/delete`、`ticket.view_pii`、`ticket.assign` 皆 `own`。
+- `user`(平台,預設民眾):view 全 `all`;`station.add`/`ticket.add`=all;`station.edit/delete`、`ticket.edit/delete`、`ticket.view_pii`、`ticket.assign` 皆 `own`。
 - `admin`(團隊,協調者):view 全 `all`;make=all;`station/ticket .edit/delete`、`ticket.assign/review`、`station.review`、`ticket.view_pii` 皆 `zone`;`team.view`/`team.member.manage`=team;`work_zone.view/make/assign`=all。
 - `member`(團隊,現場):view 全 `all`;make=all;`edit`、`ticket.view_pii`=zone;`delete`、`ticket.assign`=own;**無** team 管理、**無** work_zone。
 
@@ -425,22 +425,22 @@ class Perm(StrEnum):
     # Dashboard
     DASHBOARD_VIEW="dashboard.view"; DASHBOARD_EXPORT="dashboard.export"
     # Ticket（PII 拆開：view != view_pii）
-    TICKET_VIEW="ticket.view"; TICKET_VIEW_PII="ticket.view_pii"; TICKET_MAKE="ticket.make"
+    TICKET_VIEW="ticket.view"; TICKET_VIEW_PII="ticket.view_pii"; TICKET_MAKE="ticket.add"
     TICKET_EDIT="ticket.edit"; TICKET_DELETE="ticket.delete"; TICKET_ASSIGN="ticket.assign"
     TICKET_REVIEW="ticket.review"; TICKET_EXPORT="ticket.export"
     # Resource Station
-    STATION_VIEW="station.view"; STATION_MAKE="station.make"; STATION_EDIT="station.edit"
+    STATION_VIEW="station.view"; STATION_MAKE="station.add"; STATION_EDIT="station.edit"
     STATION_DELETE="station.delete"; STATION_REVIEW="station.review"
     # Interactive Map（圖磚/封閉區/公開讀）
-    MAP_VIEW="map.view"; MAP_MAKE="map.make"; MAP_EDIT="map.edit"; MAP_DELETE="map.delete"
+    MAP_VIEW="map.view"; MAP_MAKE="map.add"; MAP_EDIT="map.edit"; MAP_DELETE="map.delete"
     # AI Duplicate Review
     AI_DUP_VIEW="ai_duplicate.view"; AI_DUP_REVIEW="ai_duplicate.review"
     # User Management
-    USER_VIEW="user.view"; USER_MAKE="user.make"; USER_EDIT="user.edit"; USER_DELETE="user.delete"
+    USER_VIEW="user.view"; USER_MAKE="user.add"; USER_EDIT="user.edit"; USER_DELETE="user.delete"
     # Team Management（MEMBER op）
     TEAM_VIEW="team.view"; TEAM_EDIT="team.edit"; TEAM_MEMBER_MANAGE="team.member.manage"
     # Dynamic Fields
-    FIELD_VIEW="dynamic_field.view"; FIELD_MAKE="dynamic_field.make"
+    FIELD_VIEW="dynamic_field.view"; FIELD_MAKE="dynamic_field.add"
     FIELD_EDIT="dynamic_field.edit"; FIELD_DELETE="dynamic_field.delete"
     # Emergency Announcement（PUBLISH op）
     ANN_VIEW="announcement.view"; ANN_PUBLISH="announcement.publish"

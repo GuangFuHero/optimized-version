@@ -20,9 +20,9 @@ async def map_view_api(current_user: User = Depends(security.get_current_user)):
     return {"status": "success", "message": f"Authorized. User {current_user.name} ({current_user.uuid}) has map view permission."}  # noqa: E501
 
 
-@router.get("/map-create", dependencies=[security.has_permission(Perm.MAP_MAKE)])
+@router.get("/map-create", dependencies=[security.has_permission(Perm.MAP_ADD)])
 async def map_create_api(current_user: User = Depends(security.get_current_user)):
-    """建立標記 API：需要 'map.make' 權限。"""
+    """建立標記 API：需要 'map.add' 權限。"""
     return {"status": "success", "message": f"Authorized. User {current_user.name} ({current_user.uuid}) has map create permission."}  # noqa: E501
 
 

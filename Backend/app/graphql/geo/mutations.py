@@ -36,7 +36,7 @@ class GeoMutation:
         """Create a new map station.
 
         Validates the geometry as a Point within valid lon/lat bounds. Optionally
-        attaches a secondary address or pole location. Requires station.make permission.
+        attaches a secondary address or pole location. Requires station.add permission.
         Returns the created station.
         """
         sl_dict = None
@@ -102,7 +102,7 @@ class GeoMutation:
     ) -> ClosureAreaType:
         """Create a new road or area closure with a Polygon/MultiPolygon geometry.
 
-        Validates geometry type. Requires map.make permission. Returns the created closure area.
+        Validates geometry type. Requires map.add permission. Returns the created closure area.
         """
         area = await closure_area_service.create_closure_area(
             info.context["db"], actor=require_authenticated(info),

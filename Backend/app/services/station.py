@@ -44,7 +44,7 @@ async def create_station(
     Owns the two-table station + secondary_location orchestration and the single commit
     that makes it atomic.
     """
-    await require_scope(actor, Perm.STATION_MAKE, db)
+    await require_scope(actor, Perm.STATION_ADD, db)
     validate_point(geometry)
 
     station = await station_repository.add(

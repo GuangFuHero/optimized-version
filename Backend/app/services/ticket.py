@@ -82,7 +82,7 @@ async def create_ticket(
     disaster_type: str | None,
 ) -> Tickets:
     """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner)."""
-    await require_scope(actor, Perm.TICKET_MAKE, db)
+    await require_scope(actor, Perm.TICKET_ADD, db)
     validate_point(geometry, entity="Ticket")
     return await ticket_repository.create(
         db,
@@ -172,7 +172,7 @@ async def create_ticket_task(
     route_uuid: str | None,
 ) -> TicketTask:
     """Create a task under a ticket (checkpoint 1 only — no scope check against the parent)."""
-    await require_scope(actor, Perm.TICKET_MAKE, db)
+    await require_scope(actor, Perm.TICKET_ADD, db)
     if not await ticket_repository.get_by_uuid_active(db, ticket_uuid):
         raise ValueError("Ticket not found")
     return await ticket_task_repository.create(
@@ -214,7 +214,7 @@ async def create_task_property(
     comment: str | None,
 ) -> TaskProperty:
     """Add a structured property to a ticket task (checkpoint 1 only)."""
-    await require_scope(actor, Perm.TICKET_MAKE, db)
+    await require_scope(actor, Perm.TICKET_ADD, db)
     if not await ticket_task_repository.get_by_uuid_active(db, task_uuid):
         raise ValueError("Ticket task not found")
     return await task_property_repository.create(

@@ -25,7 +25,7 @@ async def create_closure_area(
     comment: str | None,
 ) -> ClosureArea:
     """Create a closure area (checkpoint 1 only — a new area has no prior owner to scope-check)."""
-    await require_scope(actor, Perm.MAP_MAKE, db)
+    await require_scope(actor, Perm.MAP_ADD, db)
     validate_polygon(geometry)
     return await closure_area_repository.create(
         db,

@@ -41,12 +41,12 @@ ROLES_DATA = [
         "permissions": {
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
-            Perm.STATION_MAKE: "all",     # ADR-049: anyone (incl. citizens) can register a station
+            Perm.STATION_ADD: "all",     # ADR-049: anyone (incl. citizens) can register a station
             Perm.STATION_EDIT: "own",
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",      # help-request board is public (ADR-027)
             Perm.TICKET_VIEW_PII: "own",  # only your own request's contact info; others masked
-            Perm.TICKET_MAKE: "all",
+            Perm.TICKET_ADD: "all",
             Perm.TICKET_EDIT: "own",
             Perm.TICKET_DELETE: "own",
             Perm.TICKET_ASSIGN: "own",    # volunteer self-signup (see app/services/ticket.py)
@@ -71,16 +71,16 @@ ROLES_DATA = [
         "kind": "platform",
         "permissions": dict.fromkeys(
             [
-                Perm.MAP_VIEW, Perm.MAP_MAKE, Perm.MAP_EDIT, Perm.MAP_DELETE,
-                Perm.STATION_VIEW, Perm.STATION_MAKE, Perm.STATION_EDIT,
+                Perm.MAP_VIEW, Perm.MAP_ADD, Perm.MAP_EDIT, Perm.MAP_DELETE,
+                Perm.STATION_VIEW, Perm.STATION_ADD, Perm.STATION_EDIT,
                 Perm.STATION_DELETE, Perm.STATION_REVIEW,
-                Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_MAKE, Perm.TICKET_EDIT,
+                Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
-                Perm.FIELD_VIEW, Perm.FIELD_MAKE, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
-                Perm.USER_VIEW, Perm.USER_MAKE, Perm.USER_EDIT, Perm.USER_DELETE,
+                Perm.FIELD_VIEW, Perm.FIELD_ADD, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
+                Perm.USER_VIEW, Perm.USER_ADD, Perm.USER_EDIT, Perm.USER_DELETE,
                 Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
                 Perm.TEAM_VIEW, Perm.TEAM_EDIT, Perm.TEAM_MEMBER_MANAGE,
-                Perm.ZONE_VIEW, Perm.ZONE_MAKE, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN,
+                Perm.ZONE_VIEW, Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN,
             ],
             "all",
         ),
@@ -99,13 +99,13 @@ ROLES_DATA = [
         "permissions": {
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
-            Perm.STATION_MAKE: "all",
+            Perm.STATION_ADD: "all",
             Perm.STATION_EDIT: "zone",
             Perm.STATION_DELETE: "zone",
             Perm.STATION_REVIEW: "zone",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
-            Perm.TICKET_MAKE: "all",
+            Perm.TICKET_ADD: "all",
             Perm.TICKET_EDIT: "zone",
             Perm.TICKET_DELETE: "zone",
             Perm.TICKET_ASSIGN: "zone",
@@ -113,7 +113,7 @@ ROLES_DATA = [
             Perm.TEAM_VIEW: "team",
             Perm.TEAM_MEMBER_MANAGE: "team",
             Perm.ZONE_VIEW: "all",
-            Perm.ZONE_MAKE: "all",
+            Perm.ZONE_ADD: "all",
             Perm.ZONE_EDIT: "all",
             Perm.ZONE_ASSIGN: "all",
         },
@@ -126,12 +126,12 @@ ROLES_DATA = [
         "permissions": {
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
-            Perm.STATION_MAKE: "all",
+            Perm.STATION_ADD: "all",
             Perm.STATION_EDIT: "zone",
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
-            Perm.TICKET_MAKE: "all",
+            Perm.TICKET_ADD: "all",
             Perm.TICKET_EDIT: "zone",
             Perm.TICKET_DELETE: "own",
             Perm.TICKET_ASSIGN: "own",

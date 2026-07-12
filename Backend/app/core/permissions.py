@@ -21,7 +21,7 @@ class Perm(StrEnum):
     # Ticket (PII split from the ticket itself: view != view_pii)
     TICKET_VIEW = "ticket.view"
     TICKET_VIEW_PII = "ticket.view_pii"
-    TICKET_MAKE = "ticket.make"
+    TICKET_ADD = "ticket.add"
     TICKET_EDIT = "ticket.edit"
     TICKET_DELETE = "ticket.delete"
     TICKET_ASSIGN = "ticket.assign"
@@ -30,14 +30,14 @@ class Perm(StrEnum):
 
     # Resource Station
     STATION_VIEW = "station.view"
-    STATION_MAKE = "station.make"
+    STATION_ADD = "station.add"
     STATION_EDIT = "station.edit"
     STATION_DELETE = "station.delete"
     STATION_REVIEW = "station.review"
 
     # Interactive Map (tiles, closure areas — the map *overlay*, distinct from the Station entity)
     MAP_VIEW = "map.view"
-    MAP_MAKE = "map.make"
+    MAP_ADD = "map.add"
     MAP_EDIT = "map.edit"
     MAP_DELETE = "map.delete"
 
@@ -47,7 +47,7 @@ class Perm(StrEnum):
 
     # User Management
     USER_VIEW = "user.view"
-    USER_MAKE = "user.make"
+    USER_ADD = "user.add"
     USER_EDIT = "user.edit"
     USER_DELETE = "user.delete"
 
@@ -58,13 +58,13 @@ class Perm(StrEnum):
 
     # Work Zone (gov-drawn disaster response boundaries — ADR-021, Phase 4/T119)
     ZONE_VIEW = "work_zone.view"
-    ZONE_MAKE = "work_zone.make"
+    ZONE_ADD = "work_zone.add"
     ZONE_EDIT = "work_zone.edit"
     ZONE_ASSIGN = "work_zone.assign"
 
     # Dynamic Fields (station/task property config)
     FIELD_VIEW = "dynamic_field.view"
-    FIELD_MAKE = "dynamic_field.make"
+    FIELD_ADD = "dynamic_field.add"
     FIELD_EDIT = "dynamic_field.edit"
     FIELD_DELETE = "dynamic_field.delete"
 

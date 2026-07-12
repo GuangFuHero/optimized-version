@@ -19,7 +19,7 @@ from app.services.geo_validation import validate_polygon
 
 async def create_work_zone(db: AsyncSession, *, actor: User, name: str, geometry: dict) -> WorkZone:
     """Draw a new work zone (checkpoint 1 only — a new zone has no prior owner)."""
-    await require_scope(actor, Perm.ZONE_MAKE, db)
+    await require_scope(actor, Perm.ZONE_ADD, db)
     validate_polygon(geometry, entity="Work zone")
     return await work_zone_repository.create(
         db,

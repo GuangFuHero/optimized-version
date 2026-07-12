@@ -28,7 +28,7 @@ class WorkZoneMutation:
     ) -> WorkZoneType:
         """Draw a new work zone. Validates the geometry as a Polygon/MultiPolygon.
 
-        Requires work_zone.make permission. Returns the created zone.
+        Requires work_zone.add permission. Returns the created zone.
         """
         zone = await work_zone_service.create_work_zone(
             info.context["db"], actor=require_authenticated(info),
