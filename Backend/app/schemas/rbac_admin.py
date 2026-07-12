@@ -39,6 +39,7 @@ class MatrixResponse(BaseModel):
 class RoleRef(BaseModel):
     """A role a user holds."""
 
+    uuid: UUID
     name: str
     kind: str
 

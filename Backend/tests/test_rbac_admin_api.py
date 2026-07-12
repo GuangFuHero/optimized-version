@@ -7,7 +7,7 @@ import pytest
 from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.models.auth import User
-from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+from app.models.rbac import Permission, Role, RolePermissionAssign, UserPermissionAssign, UserRoleAssign
 
 
 def _auth_header(user_uuid: str) -> dict:
@@ -135,3 +135,33 @@ async def test_user_permissions_404_when_user_missing(client, db_session):
         f"/api/v1/admin/users/{uuid4()}/permissions", headers=_auth_header(admin_uuid)
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_user_permissions_merges_role_and_direct_widest_wins(client, db_session):
+    """Direct and role grants merge, widest scope wins."""
+    admin_uuid = await _make_rbac_admin(db_session)
+    role = Role(name="viewer", kind="platform")
+    db_session.add(role)
+    await db_session.flush()
+    perm_cache: dict = {}
+    await _grant(db_session, role, perm_cache, Perm.TICKET_VIEW, "team")
+    target = User(name="Target")
+    db_session.add(target)
+    await db_session.flush()
+    target_uuid = str(target.uuid)
+    db_session.add(UserRoleAssign(user_uuid=target.uuid, role_uuid=role.uuid))
+    perm = perm_cache[Perm.TICKET_VIEW.value]
+    db_session.add(
+        UserPermissionAssign(user_uuid=target.uuid, permission_uuid=perm.uuid, scope="all")
+    )
+    await db_session.commit()
+
+    resp = await client.get(
+        f"/api/v1/admin/users/{target_uuid}/permissions", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 200, resp.json()
+    body = resp.json()
+    assert body["direct_grants"]["ticket.view"] == "all"
+    assert body["effective"]["ticket.view"] == "all"  # widest(team, all) == all
+    assert any(r["name"] == "viewer" for r in body["roles"])

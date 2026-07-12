@@ -74,7 +74,7 @@ async def get_user_permissions_detail(db: AsyncSession, user_uuid: str) -> UserP
     effective = await user_repository.get_user_permissions(db, user_uuid)
     return UserPermissionsResponse(
         user_uuid=user.uuid,
-        roles=[RoleRef(name=role.name, kind=role.kind) for role in roles],
+        roles=[RoleRef(uuid=role.uuid, name=role.name, kind=role.kind) for role in roles],
         direct_grants=dict(direct),
         effective={key: scope.value for key, scope in effective.items()},
     )
