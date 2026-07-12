@@ -51,3 +51,12 @@ async def get_matrix(db: AsyncSession) -> MatrixResponse:
             for role in roles
         ]
     )
+
+
+async def get_role(db: AsyncSession, role_uuid: str) -> RoleGrants:
+    """One role and its grants; raises RbacNotFoundError if the role does not exist."""
+    role = await role_repository.get_by_uuid(db, role_uuid)
+    if role is None:
+        raise RbacNotFoundError("Role not found")
+    grants = {key: scope for _, key, scope in await role_repository.get_grants(db, role_uuid=role_uuid)}
+    return RoleGrants(uuid=role.uuid, name=role.name, kind=role.kind, grants=grants)

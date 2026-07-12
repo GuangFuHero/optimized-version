@@ -1,5 +1,7 @@
 """Integration tests for the read-only RBAC admin surface (feature 009, Phase 1)."""
 
+from uuid import uuid4
+
 import pytest
 
 from app.core.permissions import Perm
@@ -84,3 +86,28 @@ async def test_matrix_returns_roles_with_grants(client, db_session):
     super_admin = next(r for r in roles if r["name"] == "super_admin")
     assert super_admin["kind"] == "platform"
     assert super_admin["grants"]["rbac.view"] == "all"
+
+
+@pytest.mark.asyncio
+async def test_role_detail_returns_grants(client, db_session):
+    """Role detail endpoint returns one role's capability->scope grants."""
+    admin_uuid = await _make_rbac_admin(db_session)
+    matrix = (
+        await client.get("/api/v1/admin/rbac/matrix", headers=_auth_header(admin_uuid))
+    ).json()
+    role_uuid = next(r["uuid"] for r in matrix["roles"] if r["name"] == "super_admin")
+    resp = await client.get(
+        f"/api/v1/admin/rbac/roles/{role_uuid}", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["grants"]["rbac.view"] == "all"
+
+
+@pytest.mark.asyncio
+async def test_role_detail_404_when_missing(client, db_session):
+    """Role detail endpoint returns 404 for missing role."""
+    admin_uuid = await _make_rbac_admin(db_session)
+    resp = await client.get(
+        f"/api/v1/admin/rbac/roles/{uuid4()}", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 404
