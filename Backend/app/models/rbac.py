@@ -66,9 +66,11 @@ class UserPermissionAssign(Base, UUIDPKMixin):
     """Exception direct grant straight to a user, additive.
 
     ADR-018 — no `effect` column, since union-only means there is nothing to "deny".
+    ADR-058 — one row per (user, permission); scope edits upsert this row, never duplicate.
     """
 
     __tablename__ = "user_permission_assign"
+    __table_args__ = (UniqueConstraint("user_uuid", "permission_uuid", name="uq_user_perm"),)
     user_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"), index=True)
     permission_uuid: Mapped[str] = mapped_column(ForeignKey("permissions.uuid"), index=True)
     scope: Mapped[str] = mapped_column(String(10), default="none")
