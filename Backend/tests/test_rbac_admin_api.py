@@ -461,3 +461,95 @@ async def test_delete_user_grant_is_idempotent(client, db_session):
 
     detail = await client.get(f"/api/v1/admin/users/{target}/permissions", headers=hdr)
     assert "ticket.export" not in detail.json()["direct_grants"]
+
+
+# --- Phase 3: role create + rename (POST / PATCH) -------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_role(client, db_session):
+    """super_admin creates a new empty role (201, no grants yet)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/rbac/roles",
+        json={"name": "dispatcher", "kind": "team"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 201, resp.json()
+    assert resp.json()["name"] == "dispatcher" and resp.json()["grants"] == {}
+
+
+@pytest.mark.asyncio
+async def test_create_role_duplicate_name_409(client, db_session):
+    """Creating a role whose name already exists is a 409."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    await _make_editable_role(db_session, name="dispatcher")
+    resp = await client.post(
+        "/api/v1/admin/rbac/roles",
+        json={"name": "dispatcher", "kind": "team"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_create_role_reserved_name_409(client, db_session):
+    """Creating a role named 'user' (a code-referenced name) is refused (ADR-059)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/rbac/roles",
+        json={"name": "user", "kind": "platform"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_create_role_bad_kind_422(client, db_session):
+    """Kind must be platform or team."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/rbac/roles",
+        json={"name": "x", "kind": "wizard"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_rename_role(client, db_session):
+    """Renaming a plain role updates its name."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="oldname")
+    resp = await client.patch(
+        f"/api/v1/admin/rbac/roles/{role_uuid}",
+        json={"name": "newname"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["name"] == "newname"
+
+
+@pytest.mark.asyncio
+async def test_rename_protected_role_409(client, db_session):
+    """The super_admin role cannot be renamed (ADR-059)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.patch(
+        f"/api/v1/admin/rbac/roles/{super_role_uuid}",
+        json={"name": "root"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_rename_role_denied_for_non_super_admin(client, db_session):
+    """A caller without rbac.edit is denied with 403."""
+    plain_uuid = await _make_plain_user(db_session)
+    role_uuid = await _make_editable_role(db_session, name="oldname")
+    resp = await client.patch(
+        f"/api/v1/admin/rbac/roles/{role_uuid}",
+        json={"name": "newname"},
+        headers=_auth_header(plain_uuid),
+    )
+    assert resp.status_code == 403

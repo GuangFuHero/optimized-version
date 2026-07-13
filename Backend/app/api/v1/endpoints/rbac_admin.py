@@ -14,7 +14,9 @@ from app.core.permissions import Perm
 from app.models.auth import User
 from app.schemas.rbac_admin import (
     CapabilityCatalogResponse,
+    CreateRoleRequest,
     MatrixResponse,
+    RenameRoleRequest,
     RoleGrants,
     SetGrantRequest,
     UserPermissionsResponse,
@@ -136,3 +138,36 @@ async def revoke_user_permission(
         )
     except RbacNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/rbac/roles", response_model=RoleGrants, status_code=status.HTTP_201_CREATED)
+async def create_role(
+    body: CreateRoleRequest,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Create a new empty role (super_admin only, via rbac.edit)."""
+    try:
+        return await rbac_admin_service.create_role(
+            db, actor=current_user, name=body.name, kind=body.kind
+        )
+    except RbacConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.patch("/rbac/roles/{role_uuid}", response_model=RoleGrants)
+async def rename_role(
+    role_uuid: UUID,
+    body: RenameRoleRequest,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Rename a role (super_admin only, via rbac.edit)."""
+    try:
+        return await rbac_admin_service.rename_role(
+            db, actor=current_user, role_uuid=str(role_uuid), name=body.name
+        )
+    except RbacNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except RbacConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

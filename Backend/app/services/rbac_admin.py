@@ -23,10 +23,15 @@ from app.schemas.rbac_admin import (
     UserPermissionsResponse,
 )
 from app.services.admin import SUPER_ADMIN_ROLE_NAME
+from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 
 # Capabilities super_admin must never lose, or it could lock itself out of RBAC management.
 _SUPER_ADMIN_LOCKED_CAPS = {Perm.RBAC_EDIT, Perm.RBAC_ASSIGN}
+
+# Role names the code references directly; renaming/deleting them breaks flows (ADR-059):
+# super_admin gates every RBAC guard; `user` is the default role new registrations get.
+PROTECTED_ROLE_NAMES = {SUPER_ADMIN_ROLE_NAME, DEFAULT_PLATFORM_ROLE}
 
 
 class RbacNotFoundError(ValueError):
@@ -178,3 +183,32 @@ async def revoke_user_permission(
     await user_repository.delete_grant(
         db, user_uuid=user_uuid, permission_uuid=str(permission.uuid)
     )
+
+
+async def create_role(db: AsyncSession, *, actor: User, name: str, kind: str) -> RoleGrants:
+    """Create a new empty role. Checkpoint 1: rbac.edit. Reserved/duplicate name → 409."""
+    await require_scope(actor, Perm.RBAC_EDIT, db)
+    if name in PROTECTED_ROLE_NAMES:
+        raise RbacConflictError(f"'{name}' is a reserved role name")
+    if await role_repository.get_by_name(db, name) is not None:
+        raise RbacConflictError(f"Role '{name}' already exists")
+    role = await role_repository.create(db, obj_in={"name": name, "kind": kind})
+    return RoleGrants(uuid=role.uuid, name=role.name, kind=role.kind, grants={})
+
+
+async def rename_role(db: AsyncSession, *, actor: User, role_uuid: str, name: str) -> RoleGrants:
+    """Rename a role. Checkpoint 1: rbac.edit. Protected role / protected or taken name → 409."""
+    await require_scope(actor, Perm.RBAC_EDIT, db)
+    role = await role_repository.get_by_uuid(db, role_uuid)
+    if role is None:
+        raise RbacNotFoundError("Role not found")
+    if role.name == name:
+        return await get_role(db, role_uuid)  # no-op
+    if role.name in PROTECTED_ROLE_NAMES:
+        raise RbacConflictError(f"Cannot rename the '{role.name}' role")
+    if name in PROTECTED_ROLE_NAMES:
+        raise RbacConflictError(f"'{name}' is a reserved role name")
+    if await role_repository.get_by_name(db, name) is not None:
+        raise RbacConflictError(f"Role '{name}' already exists")
+    await role_repository.update(db, db_obj=role, obj_in={"name": name})
+    return await get_role(db, role_uuid)
