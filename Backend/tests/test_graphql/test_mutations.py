@@ -189,6 +189,38 @@ async def test_create_station(client, coordinator_auth):
 
 
 @pytest.mark.asyncio
+async def test_create_station_rejects_bad_visibility(client, coordinator_auth):
+    """An out-of-set visibility value is rejected by the enum at the GraphQL layer."""
+    _, token = coordinator_auth
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {"input": _station_input(visibility="secret")},
+        },
+        headers=auth_header(token),
+    )
+    assert "errors" in resp.json()
+
+
+@pytest.mark.asyncio
+async def test_create_station_accepts_internal_visibility(client, coordinator_auth):
+    """The third visibility tier 'internal' is accepted for stations."""
+    _, token = coordinator_auth
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {"input": _station_input(visibility="internal")},
+        },
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    assert "errors" not in body
+    assert body["data"]["createStation"]["uuid"] is not None
+
+
+@pytest.mark.asyncio
 async def test_create_station_rejects_polygon(client, coordinator_auth):
     """Polygon geometry is rejected for a station."""
     _, token = coordinator_auth

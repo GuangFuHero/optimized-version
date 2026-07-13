@@ -5,7 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
 from app.models.geo import ClosureArea, Station
-from app.models.station_property import CrowdSourcing, StationProperty
+from app.models.station_property import (
+    CrowdSourcing,
+    StationProperty,
+    StationUpdateSuggestion,
+)
 
 
 class StationRepository(GenericRepository[Station]):
@@ -149,7 +153,32 @@ class CrowdSourcingRepository(GenericRepository[CrowdSourcing]):
         })
 
 
+class StationSuggestionRepository(GenericRepository[StationUpdateSuggestion]):
+    """Repository for user suggestions to update station / station-property fields."""
+
+    def __init__(self):
+        """Initialize with StationUpdateSuggestion as the managed model."""
+        super().__init__(StationUpdateSuggestion)
+
+    async def list_active(
+        self, db: AsyncSession, *,
+        status: str | None = None, target_uuid: str | None = None,
+        skip: int = 0, limit: int = 50,
+    ) -> list[StationUpdateSuggestion]:
+        """List non-deleted suggestions, newest first, with optional status/target filters."""
+        query = select(self.model).where(self.model.delete_at.is_(None))
+        if status:
+            query = query.where(self.model.status == status)
+        if target_uuid:
+            query = query.where(self.model.target_uuid == target_uuid)
+        result = await db.execute(
+            query.order_by(self.model.created_at.desc()).offset(skip).limit(limit)
+        )
+        return result.scalars().all()
+
+
 station_repository = StationRepository()
 closure_area_repository = ClosureAreaRepository()
 station_property_repository = StationPropertyRepository()
 crowd_sourcing_repository = CrowdSourcingRepository()
+station_suggestion_repository = StationSuggestionRepository()

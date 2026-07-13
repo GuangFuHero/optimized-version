@@ -20,6 +20,10 @@ Backend/.db/
 memory/
 .handoff/
 .idea/
+memory/
+.handoff/
+.idea/
+.local/
 .vscode/
 .pytest_cache/
 .claude/
