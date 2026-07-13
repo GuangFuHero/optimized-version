@@ -186,3 +186,23 @@ async def delete_role(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except RbacConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/users/{user_uuid}/role/{role_uuid}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def unassign_user_role(
+    user_uuid: UUID,
+    role_uuid: UUID,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Remove a role from a user (super_admin only, via rbac.assign)."""
+    try:
+        await rbac_admin_service.unassign_user_role(
+            db, actor=current_user, user_uuid=str(user_uuid), role_uuid=str(role_uuid)
+        )
+    except RbacNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except RbacConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

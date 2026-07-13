@@ -4,11 +4,13 @@ Reads only — no RBAC checkpoints here; the router gates every route on `rbac.v
 (checkpoint 1, super_admin only). Missing role/user raises RbacNotFoundError → 404.
 """
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import GOV_TEAM_ONLY_PERMS, PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
 from app.models.auth import User
+from app.models.rbac import UserRoleAssign
 from app.repositories.auth_repository import (
     permission_repository,
     role_repository,
@@ -22,7 +24,7 @@ from app.schemas.rbac_admin import (
     RoleRef,
     UserPermissionsResponse,
 )
-from app.services.admin import SUPER_ADMIN_ROLE_NAME
+from app.services.admin import SUPER_ADMIN_ROLE_NAME, _remaining_super_admins
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 
@@ -228,3 +230,35 @@ async def delete_role(db: AsyncSession, *, actor: User, role_uuid: str) -> None:
     if await role_repository.count_assignments(db, role_uuid) > 0:
         raise RbacConflictError("Role still has members; reassign them before deleting")
     await role_repository.delete_with_grants(db, role_uuid)
+
+
+async def unassign_user_role(
+    db: AsyncSession, *, actor: User, user_uuid: str, role_uuid: str
+) -> None:
+    """Remove a role from a user. Checkpoint 1: rbac.assign.
+
+    Guard: refuses to drop the last super_admin (ADR-032/056). 404 if the user, the role,
+    or the assignment itself does not exist.
+    """
+    await require_scope(actor, Perm.RBAC_ASSIGN, db)
+    role = await role_repository.get_by_uuid(db, role_uuid)
+    if role is None:
+        raise RbacNotFoundError("Role not found")
+
+    assignment = (
+        await db.execute(
+            select(UserRoleAssign).where(
+                UserRoleAssign.user_uuid == user_uuid,
+                UserRoleAssign.role_uuid == role_uuid,
+            )
+        )
+    ).scalars().first()
+    if assignment is None:
+        raise RbacNotFoundError("User is not assigned this role")
+
+    if role.name == SUPER_ADMIN_ROLE_NAME:
+        remaining = await _remaining_super_admins(db, role_uuid, excluding=user_uuid)
+        if remaining == 0:
+            raise RbacConflictError("Cannot remove the last super_admin")
+
+    await user_repository.unassign_role(db, user_uuid=user_uuid, role_uuid=role_uuid)

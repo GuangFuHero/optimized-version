@@ -608,3 +608,63 @@ async def test_delete_role_unknown_404(client, db_session):
         f"/api/v1/admin/rbac/roles/{uuid4()}", headers=_auth_header(admin_uuid)
     )
     assert resp.status_code == 404
+
+
+# --- Phase 3: unassign role (DELETE user/role) ----------------------------------------
+
+
+async def _assign(db, user_uuid: str, role_uuid: str) -> None:
+    """Directly attach a role to a user (test setup)."""
+    db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=role_uuid))
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_unassign_role(client, db_session):
+    """Removing a role the user holds succeeds (204) and drops it from their roles."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    role_uuid = await _make_editable_role(db_session, name="helper")
+    await _assign(db_session, target, role_uuid)
+    hdr = _auth_header(admin_uuid)
+
+    resp = await client.delete(f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=hdr)
+    assert resp.status_code == 204, resp.text
+    detail = await client.get(f"/api/v1/admin/users/{target}/permissions", headers=hdr)
+    assert all(r["name"] != "helper" for r in detail.json()["roles"])
+
+
+@pytest.mark.asyncio
+async def test_unassign_role_user_lacks_it_404(client, db_session):
+    """Unassigning a role the user does not hold returns 404."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    role_uuid = await _make_editable_role(db_session, name="helper")
+    resp = await client.delete(
+        f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_unassign_last_super_admin_409(client, db_session):
+    """Removing the only super_admin's super_admin role is refused (409)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/users/{admin_uuid}/role/{super_role_uuid}",
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_unassign_role_denied_for_non_super_admin(client, db_session):
+    """A caller without rbac.assign is denied with 403."""
+    plain_uuid = await _make_plain_user(db_session)
+    target = await _make_target_user(db_session)
+    role_uuid = await _make_editable_role(db_session, name="helper")
+    await _assign(db_session, target, role_uuid)
+    resp = await client.delete(
+        f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=_auth_header(plain_uuid)
+    )
+    assert resp.status_code == 403
