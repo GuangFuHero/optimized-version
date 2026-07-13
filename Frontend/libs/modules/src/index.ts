@@ -70,6 +70,7 @@ export type {
   PointShareTarget,
 } from './point-share';
 
+export { AdminLayout } from './shell';
 export { SiteShell } from './shell/site';
 
 export {

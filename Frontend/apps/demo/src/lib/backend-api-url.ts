@@ -6,8 +6,8 @@ function normalizeApiBaseUrl(url: string) {
 
 export function getBackendApiBaseUrl() {
   return normalizeApiBaseUrl(
-    process.env.NEXT_PUBLIC_API_BASE_URL ??
-      process.env.API_BASE_URL ??
+    process.env.API_BASE_URL ??
+      process.env.NEXT_PUBLIC_API_BASE_URL ??
       DEFAULT_API_BASE_URL,
   );
 }
