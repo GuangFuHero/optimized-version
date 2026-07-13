@@ -80,3 +80,24 @@ async def set_role_permission(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except RbacConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/rbac/roles/{role_uuid}/permissions/{cap}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def revoke_role_permission(
+    role_uuid: UUID,
+    cap: Perm,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Revoke one role×capability matrix cell (super_admin only, via rbac.edit)."""
+    try:
+        await rbac_admin_service.revoke_role_permission(
+            db, actor=current_user, role_uuid=str(role_uuid), cap=cap
+        )
+    except RbacNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except RbacConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

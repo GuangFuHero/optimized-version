@@ -119,3 +119,27 @@ async def set_role_permission(
         db, role_uuid=role_uuid, permission_uuid=str(permission.uuid), scope=scope.value
     )
     return await get_role(db, role_uuid)
+
+
+async def revoke_role_permission(
+    db: AsyncSession, *, actor: User, role_uuid: str, cap: Perm
+) -> None:
+    """Revoke one matrix cell. Checkpoint 1: rbac.edit, super_admin only. Idempotent.
+
+    Guard (ADR-056): super_admin must not lose rbac.edit/rbac.assign.
+    """
+    await require_scope(actor, Perm.RBAC_EDIT, db)
+
+    role = await role_repository.get_by_uuid(db, role_uuid)
+    if role is None:
+        raise RbacNotFoundError("Role not found")
+
+    if role.name == SUPER_ADMIN_ROLE_NAME and cap in _SUPER_ADMIN_LOCKED_CAPS:
+        raise RbacConflictError(f"Cannot remove {cap.value} from {SUPER_ADMIN_ROLE_NAME}")
+
+    permission = await permission_repository.get_by_key(db, cap.value)
+    if permission is None:
+        return  # nothing registered → nothing to revoke (idempotent)
+    await role_repository.delete_grant(
+        db, role_uuid=role_uuid, permission_uuid=str(permission.uuid)
+    )

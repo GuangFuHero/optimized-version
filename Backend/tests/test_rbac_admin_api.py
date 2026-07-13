@@ -298,3 +298,54 @@ async def test_put_cannot_none_out_super_admin_rbac_edit(client, db_session):
         headers=_auth_header(admin_uuid),
     )
     assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_grant_revokes_cell(client, db_session):
+    """DELETE removes a role's grant; a follow-up read no longer lists that capability."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session)
+    hdr = _auth_header(admin_uuid)
+    url = f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit"
+
+    await client.put(url, json={"scope": "own"}, headers=hdr)
+    resp = await client.delete(url, headers=hdr)
+    assert resp.status_code == 204, resp.text
+
+    detail = await client.get(f"/api/v1/admin/rbac/roles/{role_uuid}", headers=hdr)
+    assert "ticket.edit" not in detail.json()["grants"]
+
+
+@pytest.mark.asyncio
+async def test_delete_absent_grant_is_idempotent(client, db_session):
+    """Deleting a grant that was never set is a no-op 204, not a 404."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 204, resp.text
+
+
+@pytest.mark.asyncio
+async def test_delete_cannot_revoke_super_admin_rbac_edit(client, db_session):
+    """Revoking super_admin's rbac.edit is refused with 409 (self-lock guard, ADR-056)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{super_role_uuid}/permissions/rbac.edit",
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_grant_denied_for_non_super_admin(client, db_session):
+    """A caller without rbac.edit is denied with 403 (checkpoint 1, super_admin only)."""
+    plain_uuid = await _make_plain_user(db_session)
+    role_uuid = await _make_editable_role(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
+        headers=_auth_header(plain_uuid),
+    )
+    assert resp.status_code == 403

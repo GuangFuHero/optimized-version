@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -140,6 +140,19 @@ class RoleRepository(GenericRepository[Role]):
         )
         await db.execute(stmt)
         await db.commit()
+
+    async def delete_grant(
+        self, db: AsyncSession, *, role_uuid: str, permission_uuid: str
+    ) -> int:
+        """Delete one role→permission grant; returns rows removed (0 when absent)."""
+        result = await db.execute(
+            delete(RolePermissionAssign).where(
+                RolePermissionAssign.role_uuid == role_uuid,
+                RolePermissionAssign.permission_uuid == permission_uuid,
+            )
+        )
+        await db.commit()
+        return result.rowcount
 
 
 class PermissionRepository(GenericRepository[Permission]):
