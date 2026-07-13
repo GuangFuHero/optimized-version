@@ -703,6 +703,30 @@ async def create_station(self, info, input) -> StationType:
 
 **Decision**:`super_admin` 加 `TEAM_EDIT: all`;其餘角色不給。team admin 只管成員(`TEAM_MEMBER_MANAGE`),不管 team 本身。維持 seed-driven,不做後台權限矩陣編輯(ADR-049 前提)。`POST /admin/teams` 用 `TEAM_EDIT`(checkpoint 1)把關。
 
+#### ADR-055 RBAC 轉 runtime-managed；runtime DB = 事實來源；seed 降為 idempotent bootstrap
+> **狀態:ACCEPTED（2026-07-13,feature 009 Phase 2 落地）。**
+
+**白話**:`seed_rbac.py` 是「系統剛啟動時鋪的**預設權限**」;啟動後,一樣能在 runtime 針對個別權限客製,而且**客製的以 runtime 為準**——下次重啟／重跑 seed **不會蓋掉**你改過的,seed 只會補「還沒有的」。
+
+**Context**:ADR-049 前提「一場災難 = 短命獨立部署,seed-time 設定就夠、不過度建治理機制」,ADR-054 據此明言「不做後台權限矩陣編輯」。產品現在需要前端顯示/修改權限,這個前提要調整。
+
+**Decision**:RBAC 設定的事實來源改為 **runtime DB**。`seed_rbac.py` 降為純 bootstrap:permission/role/grant 一律「缺才補、既有不動」。實作抽出 `scripts/seed_rbac.py:ensure_role_grant()`——grant 不存在才 insert,存在則原封不動(移除舊 `:181-183` 更新既有 grant scope 的分支)。部署重跑 seed 不再覆蓋後台改動。baseline 要升級走「新增 grant(seed 補缺)」或一次性 migration,不靠改既有 grant。
+
+**Consequences**:➕ 後台改的權限永久保留、可 runtime 管理;`tests/test_seed_rbac.py` 回歸鎖住「重跑不覆蓋既有 grant」。➖ 事實來源不再是單一檔案;重現某環境權限狀態要看 DB,不能只讀 seed。
+
+**取代關係**:取代 ADR-049「seed 即配置面、不建治理機制」前提與 ADR-054「不做後台權限矩陣編輯」該條;ADR-049 的 scope/geo 模型不受影響。
+
+#### ADR-056 RBAC 自管 API — super_admin only，接上 rbac.view/edit enforcement
+> **狀態:ACCEPTED（2026-07-13）;Phase 2 落地 rbac.view(讀)＋ rbac.edit(矩陣寫入);rbac.assign 與角色 CRUD 護欄留待 Phase 3。**
+
+**Context**:ADR-050 把 `rbac.edit`/`rbac.assign` 標為「純超前定義,等對應功能才接 enforcement」。feature 009 即該功能。
+
+**Decision（Phase 2 範圍）**:新增 `/admin/rbac` REST 端點(沿 ADR-035)。讀取面(Phase 1)掛 `rbac.view`(super_admin only);view gate 從 router 層移到各 GET route,好讓寫入端點不繼承 view 要求。矩陣寫入(Phase 2)`PUT`/`DELETE /admin/rbac/roles/{uuid}/permissions/{cap}` 全走 service 層 `require_scope(actor, Perm.RBAC_EDIT, db)`(checkpoint 1,super_admin only)。輸入驗證:`cap ∈ Perm`、`scope ∈ Scope`,由 path enum / body enum 型別自動 422(capability 目錄 code-owned 唯讀,ADR-057)。護欄(use-case 層,非 DB 約束):`super_admin` 角色不可把 `rbac.edit`/`rbac.assign` 撤銷或 scope 降為 `none` → 409(避免自我鎖死)。
+
+**Consequences**:➕ 兌現 ADR-050 對 rbac.edit 的超前定義;提權面受限(唯一能改的 super_admin 本就全權,無「授出自己沒有的權限」問題)。➖ super_admin 成為單點;靠護欄防鎖死。
+
+**取代關係**:兌現 ADR-050(rbac.edit 部分);延續 ADR-032/035/040。`rbac.assign`(人↔角色/個人 grant)與「≥1 super_admin」「刪角色前無指派」等護欄於 Phase 3 補齊。
+
 ---
 
 #### ADR-062 ER 圖除舊：`er-diagram.md` 同步到 capability RBAC v1（補文件，非新設計）
