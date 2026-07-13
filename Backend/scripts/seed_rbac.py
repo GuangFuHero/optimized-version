@@ -142,8 +142,35 @@ ROLES_DATA = [
 ]
 
 
+async def ensure_role_grant(
+    db: AsyncSession, *, role: Role, permission: Permission, scope: str
+) -> bool:
+    """Insert a role→permission grant only when it is missing (ADR-055 idempotent bootstrap).
+
+    Never touches an existing grant: runtime edits made via /admin/rbac survive re-seeding.
+    Returns True when a new grant was inserted, False when one already existed.
+    """
+    existing = (
+        await db.execute(
+            select(RolePermissionAssign).where(
+                RolePermissionAssign.role_uuid == role.uuid,
+                RolePermissionAssign.permission_uuid == permission.uuid,
+            )
+        )
+    ).scalars().first()
+    if existing is not None:
+        return False
+    db.add(
+        RolePermissionAssign(
+            role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
+        )
+    )
+    print(f"為角色 {role.name} 授予 {permission.key} ({scope})")
+    return True
+
+
 async def seed():
-    """Create or update all RBAC v1 permissions, roles, and role-permission grants."""
+    """Create or bootstrap all RBAC v1 permissions, roles, and role-permission grants."""
     async with AsyncSessionLocal() as db:
         print("開始資料初始化 (Seeding RBAC v1)...")
 
@@ -171,22 +198,7 @@ async def seed():
 
             for perm, scope in role_info["permissions"].items():
                 permission = perm_by_key[perm.value]
-                result = await db.execute(
-                    select(RolePermissionAssign).where(
-                        RolePermissionAssign.role_uuid == role.uuid,
-                        RolePermissionAssign.permission_uuid == permission.uuid,
-                    )
-                )
-                grant = result.scalars().first()
-                if grant:
-                    if grant.scope != scope:
-                        print(f"更新 {role.name} 的 {permission.key}: {grant.scope} -> {scope}")
-                        grant.scope = scope
-                else:
-                    db.add(RolePermissionAssign(
-                        role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope,
-                    ))
-                    print(f"為角色 {role.name} 授予 {permission.key} ({scope})")
+                await ensure_role_grant(db, role=role, permission=permission, scope=scope)
 
             # Sync-delete (PR #24 [7]): drop grants no longer declared in ROLES_DATA so a
             # narrowing (removing a perm from the set) actually takes effect — upsert alone
