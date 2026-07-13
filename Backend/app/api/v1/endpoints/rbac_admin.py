@@ -171,3 +171,18 @@ async def rename_role(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except RbacConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.delete("/rbac/roles/{role_uuid}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_role(
+    role_uuid: UUID,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Delete a role and its grants (super_admin only, via rbac.edit)."""
+    try:
+        await rbac_admin_service.delete_role(db, actor=current_user, role_uuid=str(role_uuid))
+    except RbacNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except RbacConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

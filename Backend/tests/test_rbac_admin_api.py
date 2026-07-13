@@ -553,3 +553,58 @@ async def test_rename_role_denied_for_non_super_admin(client, db_session):
         headers=_auth_header(plain_uuid),
     )
     assert resp.status_code == 403
+
+
+# --- Phase 3: role delete (DELETE) ----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_role_with_grants_succeeds(client, db_session):
+    """Deleting an unassigned role removes it and its permission grants (204)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="temp")
+    hdr = _auth_header(admin_uuid)
+    await client.put(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
+        json={"scope": "own"}, headers=hdr,
+    )
+    resp = await client.delete(f"/api/v1/admin/rbac/roles/{role_uuid}", headers=hdr)
+    assert resp.status_code == 204, resp.text
+    assert (await client.get(f"/api/v1/admin/rbac/roles/{role_uuid}", headers=hdr)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_role_with_assignment_409(client, db_session):
+    """A role still assigned to a user cannot be deleted (must reassign first)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="temp")
+    user = User(name="Holder")
+    db_session.add(user)
+    await db_session.flush()
+    db_session.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role_uuid))
+    await db_session.commit()
+
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{role_uuid}", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_protected_role_409(client, db_session):
+    """The super_admin role cannot be deleted (ADR-059)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{super_role_uuid}", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_role_unknown_404(client, db_session):
+    """Deleting a non-existent role returns 404."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{uuid4()}", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 404

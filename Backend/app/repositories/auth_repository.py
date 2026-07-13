@@ -191,6 +191,23 @@ class RoleRepository(GenericRepository[Role]):
         await db.commit()
         return result.rowcount
 
+    async def count_assignments(self, db: AsyncSession, role_uuid: str) -> int:
+        """Number of users currently assigned this role."""
+        rows = (
+            await db.execute(
+                select(UserRoleAssign.uuid).where(UserRoleAssign.role_uuid == role_uuid)
+            )
+        ).all()
+        return len(rows)
+
+    async def delete_with_grants(self, db: AsyncSession, role_uuid: str) -> None:
+        """Delete a role's permission grants then the role itself, in one transaction."""
+        await db.execute(
+            delete(RolePermissionAssign).where(RolePermissionAssign.role_uuid == role_uuid)
+        )
+        await db.execute(delete(Role).where(Role.uuid == role_uuid))
+        await db.commit()
+
 
 class PermissionRepository(GenericRepository[Permission]):
     """Repository for Permission model CRUD."""

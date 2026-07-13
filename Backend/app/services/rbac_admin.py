@@ -212,3 +212,19 @@ async def rename_role(db: AsyncSession, *, actor: User, role_uuid: str, name: st
         raise RbacConflictError(f"Role '{name}' already exists")
     await role_repository.update(db, db_obj=role, obj_in={"name": name})
     return await get_role(db, role_uuid)
+
+
+async def delete_role(db: AsyncSession, *, actor: User, role_uuid: str) -> None:
+    """Delete a role and its grants. Checkpoint 1: rbac.edit.
+
+    Guards: protected role → 409; any remaining UserRoleAssign → 409 (reassign first, ADR-056).
+    """
+    await require_scope(actor, Perm.RBAC_EDIT, db)
+    role = await role_repository.get_by_uuid(db, role_uuid)
+    if role is None:
+        raise RbacNotFoundError("Role not found")
+    if role.name in PROTECTED_ROLE_NAMES:
+        raise RbacConflictError(f"Cannot delete the '{role.name}' role")
+    if await role_repository.count_assignments(db, role_uuid) > 0:
+        raise RbacConflictError("Role still has members; reassign them before deleting")
+    await role_repository.delete_with_grants(db, role_uuid)
