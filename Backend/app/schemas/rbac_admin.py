@@ -4,6 +4,14 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.core.rbac_scopes import Scope
+
+
+class SetGrantRequest(BaseModel):
+    """Upsert body for a single matrix cell; `scope` is validated against the Scope enum."""
+
+    scope: Scope
+
 
 class CapabilityInfo(BaseModel):
     """One capability key, split for display; `public` = in PUBLIC_PERMS."""

@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
-from app.repositories.auth_repository import role_repository, user_repository
+from app.models.auth import User
+from app.repositories.auth_repository import (
+    permission_repository,
+    role_repository,
+    user_repository,
+)
 from app.schemas.rbac_admin import (
     CapabilityCatalogResponse,
     CapabilityInfo,
@@ -17,10 +22,19 @@ from app.schemas.rbac_admin import (
     RoleRef,
     UserPermissionsResponse,
 )
+from app.services.admin import SUPER_ADMIN_ROLE_NAME
+from app.services.authz import require_scope
+
+# Capabilities super_admin must never lose, or it could lock itself out of RBAC management.
+_SUPER_ADMIN_LOCKED_CAPS = {Perm.RBAC_EDIT, Perm.RBAC_ASSIGN}
 
 
 class RbacNotFoundError(ValueError):
     """Raised when a role/user referenced by a read endpoint does not exist."""
+
+
+class RbacConflictError(ValueError):
+    """A write would violate an RBAC invariant (e.g. stripping super_admin's rbac.edit)."""
 
 
 def list_capabilities() -> CapabilityCatalogResponse:
@@ -78,3 +92,30 @@ async def get_user_permissions_detail(db: AsyncSession, user_uuid: str) -> UserP
         direct_grants=dict(direct),
         effective={key: scope.value for key, scope in effective.items()},
     )
+
+
+async def set_role_permission(
+    db: AsyncSession, *, actor: User, role_uuid: str, cap: Perm, scope: Scope
+) -> RoleGrants:
+    """Upsert one matrix cell (role→capability→scope). Checkpoint 1: rbac.edit, super_admin only.
+
+    Guard (ADR-056): super_admin must not have rbac.edit/rbac.assign scoped down to `none`.
+    """
+    await require_scope(actor, Perm.RBAC_EDIT, db)
+
+    role = await role_repository.get_by_uuid(db, role_uuid)
+    if role is None:
+        raise RbacNotFoundError("Role not found")
+
+    if (
+        role.name == SUPER_ADMIN_ROLE_NAME
+        and cap in _SUPER_ADMIN_LOCKED_CAPS
+        and scope == Scope.NONE
+    ):
+        raise RbacConflictError(f"Cannot remove {cap.value} from {SUPER_ADMIN_ROLE_NAME}")
+
+    permission = await permission_repository.ensure_by_key(db, cap.value)
+    await role_repository.upsert_grant(
+        db, role_uuid=role_uuid, permission_uuid=str(permission.uuid), scope=scope.value
+    )
+    return await get_role(db, role_uuid)
