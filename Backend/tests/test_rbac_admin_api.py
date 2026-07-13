@@ -370,3 +370,94 @@ async def test_delete_grant_denied_for_non_super_admin(client, db_session):
         headers=_auth_header(plain_uuid),
     )
     assert resp.status_code == 403
+
+
+# --- Phase 3: per-user grants (PUT / DELETE) ------------------------------------------
+
+
+async def _make_target_user(db, name: str = "Target") -> str:
+    """A plain user to receive per-user grants. Returns uuid."""
+    user = User(name=name)
+    db.add(user)
+    await db.flush()
+    user_uuid = str(user.uuid)
+    await db.commit()
+    return user_uuid
+
+
+@pytest.mark.asyncio
+async def test_put_user_grant_adds_direct_grant(client, db_session):
+    """A per-user grant shows up in direct_grants and effective."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/users/{target}/permissions/ticket.export",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["direct_grants"]["ticket.export"] == "all"
+    assert resp.json()["effective"]["ticket.export"] == "all"
+
+
+@pytest.mark.asyncio
+async def test_put_user_grant_upserts_not_duplicates(client, db_session):
+    """A second PUT for the same (user, cap) updates the one row (uq_user_perm)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    hdr = _auth_header(admin_uuid)
+    url = f"/api/v1/admin/users/{target}/permissions/ticket.export"
+    await client.put(url, json={"scope": "own"}, headers=hdr)
+    resp = await client.put(url, json={"scope": "all"}, headers=hdr)
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["direct_grants"]["ticket.export"] == "all"
+
+    rows = (
+        await db_session.execute(
+            select(UserPermissionAssign)
+            .join(Permission, Permission.uuid == UserPermissionAssign.permission_uuid)
+            .where(UserPermissionAssign.user_uuid == target, Permission.key == "ticket.export")
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_put_user_grant_unknown_user_404(client, db_session):
+    """Granting to a non-existent user returns 404."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/users/{uuid4()}/permissions/ticket.export",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_put_user_grant_denied_for_non_super_admin(client, db_session):
+    """A caller without rbac.assign is denied with 403."""
+    plain_uuid = await _make_plain_user(db_session)
+    target = await _make_target_user(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/users/{target}/permissions/ticket.export",
+        json={"scope": "all"},
+        headers=_auth_header(plain_uuid),
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_delete_user_grant_is_idempotent(client, db_session):
+    """DELETE removes the direct grant and is a 204 even when it was never set."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    hdr = _auth_header(admin_uuid)
+    url = f"/api/v1/admin/users/{target}/permissions/ticket.export"
+    await client.put(url, json={"scope": "all"}, headers=hdr)
+
+    assert (await client.delete(url, headers=hdr)).status_code == 204
+    assert (await client.delete(url, headers=hdr)).status_code == 204  # idempotent
+
+    detail = await client.get(f"/api/v1/admin/users/{target}/permissions", headers=hdr)
+    assert "ticket.export" not in detail.json()["direct_grants"]

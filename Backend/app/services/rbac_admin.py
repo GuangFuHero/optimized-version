@@ -147,3 +147,34 @@ async def revoke_role_permission(
     await role_repository.delete_grant(
         db, role_uuid=role_uuid, permission_uuid=str(permission.uuid)
     )
+
+
+async def set_user_permission(
+    db: AsyncSession, *, actor: User, user_uuid: str, cap: Perm, scope: Scope
+) -> UserPermissionsResponse:
+    """Add/update one per-user additive grant. Checkpoint 1: rbac.assign, super_admin only."""
+    await require_scope(actor, Perm.RBAC_ASSIGN, db)
+    user = await user_repository.get_by_uuid(db, user_uuid)
+    if user is None:
+        raise RbacNotFoundError("User not found")
+    permission = await permission_repository.ensure_by_key(db, cap.value)
+    await user_repository.upsert_grant(
+        db, user_uuid=user_uuid, permission_uuid=str(permission.uuid), scope=scope.value
+    )
+    return await get_user_permissions_detail(db, user_uuid)
+
+
+async def revoke_user_permission(
+    db: AsyncSession, *, actor: User, user_uuid: str, cap: Perm
+) -> None:
+    """Remove one per-user grant. Checkpoint 1: rbac.assign. Idempotent."""
+    await require_scope(actor, Perm.RBAC_ASSIGN, db)
+    user = await user_repository.get_by_uuid(db, user_uuid)
+    if user is None:
+        raise RbacNotFoundError("User not found")
+    permission = await permission_repository.get_by_key(db, cap.value)
+    if permission is None:
+        return
+    await user_repository.delete_grant(
+        db, user_uuid=user_uuid, permission_uuid=str(permission.uuid)
+    )

@@ -101,3 +101,38 @@ async def revoke_role_permission(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except RbacConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.put("/users/{user_uuid}/permissions/{cap}", response_model=UserPermissionsResponse)
+async def set_user_permission(
+    user_uuid: UUID,
+    cap: Perm,
+    body: SetGrantRequest,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Add/update one per-user additive grant (super_admin only, via rbac.assign)."""
+    try:
+        return await rbac_admin_service.set_user_permission(
+            db, actor=current_user, user_uuid=str(user_uuid), cap=cap, scope=body.scope
+        )
+    except RbacNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/users/{user_uuid}/permissions/{cap}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def revoke_user_permission(
+    user_uuid: UUID,
+    cap: Perm,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Remove one per-user grant (super_admin only, via rbac.assign)."""
+    try:
+        await rbac_admin_service.revoke_user_permission(
+            db, actor=current_user, user_uuid=str(user_uuid), cap=cap
+        )
+    except RbacNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
