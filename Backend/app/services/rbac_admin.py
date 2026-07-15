@@ -5,6 +5,7 @@ Reads only — no RBAC checkpoints here; the router gates every route on `rbac.v
 """
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import GOV_TEAM_ONLY_PERMS, PUBLIC_PERMS, Perm
@@ -30,6 +31,11 @@ from app.services.authz import require_scope
 
 # Capabilities super_admin must never lose, or it could lock itself out of RBAC management.
 _SUPER_ADMIN_LOCKED_CAPS = {Perm.RBAC_EDIT, Perm.RBAC_ASSIGN}
+
+# ADR-061: rbac.* is super_admin-only governance and cannot be delegated at runtime — no
+# other role may hold it, and it can never become a per-user grant. Derived by prefix so a
+# newly added rbac.* capability is covered without touching this guard.
+_RBAC_GOVERNANCE_CAPS = frozenset(p for p in Perm if p.value.startswith("rbac."))
 
 # Role names the code references directly; renaming/deleting them breaks flows (ADR-059):
 # super_admin gates every RBAC guard; `user` is the default role new registrations get.
@@ -118,6 +124,12 @@ async def set_role_permission(
     if role is None:
         raise RbacNotFoundError("Role not found")
 
+    # ADR-061: rbac.* stays super_admin-only — it cannot be delegated to any other role.
+    if cap in _RBAC_GOVERNANCE_CAPS and role.name != SUPER_ADMIN_ROLE_NAME:
+        raise RbacConflictError(
+            f"{cap.value} is super_admin-only and cannot be granted to '{role.name}'"
+        )
+
     if (
         role.name == SUPER_ADMIN_ROLE_NAME
         and cap in _SUPER_ADMIN_LOCKED_CAPS
@@ -161,6 +173,9 @@ async def set_user_permission(
 ) -> UserPermissionsResponse:
     """Add/update one per-user additive grant. Checkpoint 1: rbac.assign, super_admin only."""
     await require_scope(actor, Perm.RBAC_ASSIGN, db)
+    # ADR-061: rbac.* is role-bound governance; it is never handed out as a per-user grant.
+    if cap in _RBAC_GOVERNANCE_CAPS:
+        raise RbacConflictError(f"{cap.value} cannot be a per-user grant")
     user = await user_repository.get_by_uuid(db, user_uuid)
     if user is None:
         raise RbacNotFoundError("User not found")
@@ -194,7 +209,12 @@ async def create_role(db: AsyncSession, *, actor: User, name: str, kind: str) ->
         raise RbacConflictError(f"'{name}' is a reserved role name")
     if await role_repository.get_by_name(db, name) is not None:
         raise RbacConflictError(f"Role '{name}' already exists")
-    role = await role_repository.create(db, obj_in={"name": name, "kind": kind})
+    try:
+        role = await role_repository.create(db, obj_in={"name": name, "kind": kind})
+    except IntegrityError as err:
+        # ADR-060: name claimed in the window between the pre-check and our commit → 409, not 500.
+        await db.rollback()
+        raise RbacConflictError(f"Role '{name}' already exists") from err
     return RoleGrants(uuid=role.uuid, name=role.name, kind=role.kind, grants={})
 
 
@@ -212,7 +232,12 @@ async def rename_role(db: AsyncSession, *, actor: User, role_uuid: str, name: st
         raise RbacConflictError(f"'{name}' is a reserved role name")
     if await role_repository.get_by_name(db, name) is not None:
         raise RbacConflictError(f"Role '{name}' already exists")
-    await role_repository.update(db, db_obj=role, obj_in={"name": name})
+    try:
+        await role_repository.update(db, db_obj=role, obj_in={"name": name})
+    except IntegrityError as err:
+        # ADR-060: target name claimed in the TOCTOU window → 409, not 500.
+        await db.rollback()
+        raise RbacConflictError(f"Role '{name}' already exists") from err
     return await get_role(db, role_uuid)
 
 

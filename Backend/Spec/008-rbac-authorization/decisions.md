@@ -766,6 +766,36 @@ async def create_station(self, info, input) -> StationType:
 
 **替代方案(未採用)**:(a) 只保護 `super_admin`(spec 原文)——不採,因 `user` 斷掉是靜默且影響註冊;(b) 改用 `roles.is_system` 旗標欄位取代按名耦合——較乾淨但要動 schema/seed,YAGNI。
 
+#### ADR-060 角色建立/改名撞名的 TOCTOU race → 409（catch IntegrityError）
+> **狀態:ACCEPTED（2026-07-15,feature 009 Phase 3）。**
+
+**白話**:建立/改名角色是「先查名字有沒有被用(`get_by_name`)→ 再寫入」的 check-then-act。並發下兩個請求可能都通過前檢查、都去寫入,第二個撞 `roles.name` 的 unique 約束(`roles_name_key`)丟 `IntegrityError`,現在會冒成 **500**(還會漏 SQL/stack)。這應對齊前檢查的語意 → **409**。
+
+**Context**:Phase 3 才開放 runtime 建立/改名角色(`POST /admin/rbac/roles`、`PATCH /admin/rbac/roles/{uuid}`)。只有這兩條有「DB unique 約束 + 非 upsert 寫入」的缺口:assign role 用 `on_conflict_do_nothing`、grant 寫入用 `on_conflict_do_update`(ADR-058),都已吞掉 race;`_remaining_super_admins` 是純程式檢查、無 DB 約束,依 plan/ADR-032「不加鎖」不在此列。
+
+**Decision**:`create_role`/`rename_role` 在 `role_repository.create`/`.update` 外層 `except IntegrityError`:`await db.rollback()` 後改丟 `RbacConflictError("Role '<name>' already exists")`,重用既有端點層 `RbacConflictError → 409` 映射(與前檢查同一路徑、同一訊息)。沿用 `contacts.py:79`/`sso.py`/`register.py` 既有的「rollback + 409」防禦模式。護欄放 service 層(非端點),讓 409 語意與 domain invariant 同處。
+
+**Consequences**:➕ race 下回 409 而非 500,不漏 SQL;與 deterministic 前檢查語意一致、冪等。➖ 前檢查與 IntegrityError fallback 兩段(訊息重複一次)——可接受,fallback 只在罕見 race 觸發。測試以 monkeypatch `get_by_name→None` 確定性地打到 race 路徑。
+
+**取代關係**:呼應 ADR-023 錯誤語意(違反不變量 → 409)、ADR-032(TOCTOU 不加鎖的既有取捨);與 ADR-058 的 upsert 決策互補(那些寫入本就無此缺口)。
+
+#### ADR-061 rbac.* 是 super_admin-only 治理權限,runtime 不可委派
+> **狀態:ACCEPTED（2026-07-15,feature 009 Phase 3）。**
+
+**白話**:`rbac.view`/`rbac.assign`/`rbac.edit` 這三個治理權限只屬於 `super_admin`——別的角色不能被授予、任何人也拿不到個人版。ADR-056 只擋了「把 rbac.edit/assign 從 super_admin **撤掉**」,卻沒擋「把 rbac.edit **授給**一般角色」或「把 rbac.assign 塞成某人的**個人 grant**」,等於留了一條 runtime 橫向提權後門:一個握有 rbac.edit 的 super_admin 可以把 rbac.* 發給別的角色/使用者,繞過「唯一治理者」前提。
+
+**Context**:Phase 3 開放矩陣寫入(`PUT /admin/rbac/roles/{uuid}/permissions/{cap}`)與個人 grant 寫入(`PUT /admin/users/{uuid}/permissions/{cap}`)後,第一次可能從 runtime 把 rbac.* 授給非 super_admin 對象。ADR-056 的護欄只涵蓋「不可自我鎖死」單向。
+
+**Decision**:在 use-case 層加雙向護欄(非 DB 約束):
+- `_RBAC_GOVERNANCE_CAPS = frozenset(p for p in Perm if p.value.startswith("rbac."))`(prefix 動態算出,未來新增 rbac.* 自動涵蓋)。
+- `set_role_permission`:`cap ∈ rbac.*` 且目標角色非 `super_admin` → **409**;`super_admin` 角色自身仍可設定(冪等,維持 ADR-056)。
+- `set_user_permission`:`cap ∈ rbac.*` → 一律 **409**(rbac.* 是角色綁定治理權,永不作為個人 grant);此檢查在 user 查找前,與使用者是否存在無關。
+- 端點層 `set_user_permission` 補上 `except RbacConflictError → 409`(原本只 catch `RbacNotFoundError`,否則 conflict 會回 500)。
+
+**Consequences**:➕ 封住 runtime 橫向提權面:rbac.* 恆為 super_admin 角色專屬,提權只能靠改 seed/程式碼(code-owned)。➖ super_admin 仍是單點,靠 ADR-056+061 兩道護欄一起防(前者防「撤掉自己」,後者防「發給別人」)。
+
+**取代關係**:補齊 ADR-056(super_admin only enforcement)的另一半;呼應 ADR-050 對 rbac.edit/assign 的定位、ADR-057 capability 目錄 code-owned。
+
 ---
 
 #### ADR-062 ER 圖除舊：`er-diagram.md` 同步到 capability RBAC v1（補文件，非新設計）

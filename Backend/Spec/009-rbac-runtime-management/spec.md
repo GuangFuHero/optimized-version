@@ -23,8 +23,9 @@
 ### 非目標（YAGNI，明確排除）
 - **自訂 capability**：`Perm` 目錄是 code-owned、綁 enforcement 點，唯讀（ADR-057）。
 - **自訂 scope 值**：固定 `none/own/team/zone/all`（ADR-020）。
-- **可委派編輯**：不做「非 super_admin 也能改 + no-escalation 檢查」。只有 super_admin（ADR-056）。
+- **可委派編輯**：不做「非 super_admin 也能改 + no-escalation 檢查」。只有 super_admin（ADR-056）。`rbac.*` 這組治理權限本身**不可委派**——不能授給其他角色、也不能當個人 grant（ADR-061）。
 - **後台改 baseline 檔**：baseline 仍在 `seed_rbac.py`／未來 migration，不做「編輯 seed」的 UI。
+- **並發鎖**：不做樂觀／悲觀鎖。有 DB unique 約束的寫入（角色建立／改名）靠 `IntegrityError → 409` 收 TOCTOU（ADR-060）；`_remaining_super_admins` 無 DB 約束，沿用「不加鎖」的既有取捨（ADR-032）。
 - 權限版本歷史 UI（歷史查詢靠既有 `audit_logs`）。
 
 ---

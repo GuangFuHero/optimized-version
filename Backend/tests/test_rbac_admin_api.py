@@ -668,3 +668,99 @@ async def test_unassign_role_denied_for_non_super_admin(client, db_session):
         f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=_auth_header(plain_uuid)
     )
     assert resp.status_code == 403
+
+
+# --- ADR-061: rbac.* is super_admin-only; runtime cannot delegate it -------------------
+
+
+@pytest.mark.asyncio
+async def test_cannot_grant_rbac_edit_to_non_super_admin_role(client, db_session):
+    """Granting rbac.edit to a non-super_admin role is refused (409) — no delegated editing."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="member")
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/rbac.edit",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_cannot_grant_rbac_view_to_non_super_admin_role(client, db_session):
+    """rbac.view is also blocked from runtime delegation; widening it stays a seed decision."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="member")
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/rbac.view",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_can_still_set_rbac_edit_on_super_admin_role(client, db_session):
+    """Setting rbac.edit on the super_admin role itself stays allowed (idempotent)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{super_role_uuid}/permissions/rbac.edit",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["grants"]["rbac.edit"] == "all"
+
+
+@pytest.mark.asyncio
+async def test_cannot_grant_rbac_as_per_user_grant(client, db_session):
+    """rbac.* is a role-bound governance capability; it cannot be a per-user grant (409)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/users/{target}/permissions/rbac.assign",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+# --- ADR-060: a name-uniqueness race that slips past the pre-check maps to 409, not 500 -----
+
+
+async def _pretend_name_absent(*args, **kwargs):
+    """Force get_by_name to report 'free', simulating the TOCTOU window before our commit."""
+    return None
+
+
+@pytest.mark.asyncio
+async def test_create_role_name_race_maps_to_409(client, db_session, monkeypatch):
+    """Create that races past the name pre-check hits uq roles.name → 409, not 500 (ADR-060)."""
+    from app.repositories.auth_repository import role_repository
+
+    admin_uuid, _ = await _make_super_admin(db_session)
+    await _make_editable_role(db_session, name="dispatcher")  # the name is already taken
+    monkeypatch.setattr(role_repository, "get_by_name", _pretend_name_absent)
+    resp = await client.post(
+        "/api/v1/admin/rbac/roles",
+        json={"name": "dispatcher", "kind": "team"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409, resp.text
+
+
+@pytest.mark.asyncio
+async def test_rename_role_name_race_maps_to_409(client, db_session, monkeypatch):
+    """Rename whose target name is taken under a race hits uq roles.name → 409, not 500 (ADR-060)."""
+    from app.repositories.auth_repository import role_repository
+
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="oldname")
+    await _make_editable_role(db_session, name="taken")  # the target name is already in use
+    monkeypatch.setattr(role_repository, "get_by_name", _pretend_name_absent)
+    resp = await client.patch(
+        f"/api/v1/admin/rbac/roles/{role_uuid}",
+        json={"name": "taken"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409, resp.text
