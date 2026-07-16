@@ -1,4 +1,8 @@
-"""GraphQL mutations for announcements."""
+"""GraphQL mutations for announcements.
+
+Thin per ADR-AB-02: parse input, call the announcement service, map the result back to a
+GraphQL type. Authz + validation live in app/services/announcement.py.
+"""
 
 from uuid import UUID
 
@@ -10,8 +14,8 @@ from app.graphql.announcements.types import (
     CreateAnnouncementInput,
     UpdateAnnouncementInput,
 )
-from app.graphql.context import check_permission
-from app.repositories.announcements_repository import announcement_repository
+from app.graphql.context import require_authenticated
+from app.services import announcement as announcement_service
 
 
 @strawberry.type
@@ -22,15 +26,9 @@ class AnnouncementMutation:
     async def create_announcement(
         self, info: strawberry.types.Info, input: CreateAnnouncementInput
     ) -> AnnouncementType:
-        """Create an active announcement appended at the bottom of the list.
-
-        Requires content:create. Returns the created AnnouncementType.
-        """
-        await check_permission(info, "content", "create")
-        a = await announcement_repository.create_at_end(
-            info.context["db"],
-            content=input.content,
-            created_by=str(info.context["user"].uuid),
+        """Create an active announcement appended at the bottom. Requires announcement.publish."""
+        a = await announcement_service.create(
+            info.context["db"], actor=require_authenticated(info), content=input.content
         )
         return AnnouncementType.from_model(a)
 
@@ -38,47 +36,37 @@ class AnnouncementMutation:
     async def update_announcement(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateAnnouncementInput
     ) -> AnnouncementType:
-        """Edit an announcement's content. Requires content:edit."""
-        await check_permission(info, "content", "edit")
-        db = info.context["db"]
-        a = await announcement_repository.get_by_uuid_active(db, uuid)
-        if not a:
-            raise ValueError("Announcement not found")
-        a = await announcement_repository.update(db, db_obj=a, obj_in={"content": input.content})
+        """Edit an announcement's content. Requires announcement.edit."""
+        a = await announcement_service.update(
+            info.context["db"], actor=require_authenticated(info), uuid=uuid, content=input.content
+        )
         return AnnouncementType.from_model(a)
 
     @strawberry.mutation
     async def move_announcement(
         self, info: strawberry.types.Info, uuid: UUID, direction: AnnouncementMoveDirection
     ) -> AnnouncementType:
-        """Move an active announcement up or down one position. Requires content:edit."""
-        await check_permission(info, "content", "edit")
-        a = await announcement_repository.move(
-            info.context["db"], uuid=uuid, up=(direction is AnnouncementMoveDirection.UP)
+        """Move an active announcement up or down one position. Requires announcement.edit."""
+        a = await announcement_service.move(
+            info.context["db"], actor=require_authenticated(info),
+            uuid=uuid, up=(direction is AnnouncementMoveDirection.UP),
         )
-        if a is None:
-            raise ValueError("Announcement not found or not active")
         return AnnouncementType.from_model(a)
 
     @strawberry.mutation
     async def set_announcement_active(
         self, info: strawberry.types.Info, uuid: UUID, active: bool
     ) -> AnnouncementType:
-        """Activate (append at end) or deactivate (remove from order) an announcement.
-
-        Requires content:edit. Returns the updated AnnouncementType.
-        """
-        await check_permission(info, "content", "edit")
-        a = await announcement_repository.set_active(info.context["db"], uuid=uuid, active=active)
-        if a is None:
-            raise ValueError("Announcement not found")
+        """Activate or deactivate an announcement. Requires announcement.edit."""
+        a = await announcement_service.set_active(
+            info.context["db"], actor=require_authenticated(info), uuid=uuid, active=active
+        )
         return AnnouncementType.from_model(a)
 
     @strawberry.mutation
     async def delete_announcement(self, info: strawberry.types.Info, uuid: UUID) -> bool:
-        """Soft-delete an announcement and close the order gap. Requires content:delete."""
-        await check_permission(info, "content", "delete")
-        ok = await announcement_repository.soft_delete_announcement(info.context["db"], uuid=uuid)
-        if not ok:
-            raise ValueError("Announcement not found")
+        """Soft-delete an announcement and close the order gap. Requires announcement.delete."""
+        await announcement_service.delete(
+            info.context["db"], actor=require_authenticated(info), uuid=uuid
+        )
         return True

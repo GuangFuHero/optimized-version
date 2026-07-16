@@ -127,3 +127,94 @@ async def test_delete_requires_permission_and_removes(client, content_admin_auth
 
     admin_all = await _post(client, LIST, {"filter": "ALL"}, admin_token)
     assert all(x["uuid"] != a["uuid"] for x in admin_all["data"]["announcements"])
+
+
+UPDATE = """
+mutation($uuid: UUID!, $content: String!) {
+  updateAnnouncement(uuid: $uuid, input: {content: $content}) { uuid content }
+}
+"""
+
+GET = "query($uuid: UUID!) { announcement(uuid: $uuid) { uuid content active } }"
+
+NONEXISTENT = "00000000-0000-0000-0000-000000000000"
+
+
+@pytest.mark.asyncio
+async def test_update_edits_content(client, content_admin_auth):
+    """Common: a content admin edits an announcement's content."""
+    _, token = content_admin_auth
+    a = await _create(client, token, "before")
+    body = await _post(client, UPDATE, {"uuid": a["uuid"], "content": "after"}, token)
+    assert "errors" not in body, body
+    assert body["data"]["updateAnnouncement"]["content"] == "after"
+
+
+@pytest.mark.asyncio
+async def test_update_requires_permission(client, content_admin_auth, login_user_auth):
+    """Abnormal: a user without announcement.edit cannot update."""
+    _, admin_token = content_admin_auth
+    _, weak_token = login_user_auth
+    a = await _create(client, admin_token, "locked")
+    body = await _post(client, UPDATE, {"uuid": a["uuid"], "content": "hax"}, weak_token)
+    assert body.get("errors")
+
+
+@pytest.mark.asyncio
+async def test_unauthenticated_create_denied(client):
+    """Abnormal: an anonymous caller (no token) cannot create — require_authenticated fails."""
+    body = await _post(client, CREATE, {"content": "anon"})
+    assert body.get("errors")
+
+
+@pytest.mark.asyncio
+async def test_update_nonexistent_errors(client, content_admin_auth):
+    """Edge: updating a missing announcement errors (not found)."""
+    _, token = content_admin_auth
+    body = await _post(client, UPDATE, {"uuid": NONEXISTENT, "content": "x"}, token)
+    assert body.get("errors")
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_errors(client, content_admin_auth):
+    """Edge: deleting a missing announcement errors (not found)."""
+    _, token = content_admin_auth
+    body = await _post(client, DELETE, {"uuid": NONEXISTENT}, token)
+    assert body.get("errors")
+
+
+@pytest.mark.asyncio
+async def test_set_active_nonexistent_errors(client, content_admin_auth):
+    """Edge: toggling active on a missing announcement errors (not found)."""
+    _, token = content_admin_auth
+    body = await _post(client, SET_ACTIVE, {"uuid": NONEXISTENT, "active": False}, token)
+    assert body.get("errors")
+
+
+@pytest.mark.asyncio
+async def test_move_at_bottom_edge_is_noop(client, content_admin_auth):
+    """Edge: moving the bottom-most announcement DOWN is a no-op (no error, order unchanged)."""
+    _, token = content_admin_auth
+    a = await _create(client, token, "bot_a")
+    b = await _create(client, token, "bot_b")  # appended last → absolute bottom of the list
+    body = await _post(client, MOVE, {"uuid": b["uuid"], "dir": "DOWN"}, token)
+    assert "errors" not in body, body
+    listed = await _post(client, LIST, {"filter": "ACTIVE"})
+    mine = [x for x in listed["data"]["announcements"] if x["uuid"] in {a["uuid"], b["uuid"]}]
+    assert [x["content"] for x in mine] == ["bot_a", "bot_b"]  # b still last
+
+
+@pytest.mark.asyncio
+async def test_read_single_inactive_requires_permission(client, content_admin_auth):
+    """Edge: a deactivated announcement is readable by an admin but not by the public."""
+    _, token = content_admin_auth
+    a = await _create(client, token, "secret")
+    await _post(client, SET_ACTIVE, {"uuid": a["uuid"], "active": False}, token)
+
+    public = await _post(client, GET, {"uuid": a["uuid"]})  # no auth → denied
+    assert public.get("errors")
+
+    admin = await _post(client, GET, {"uuid": a["uuid"]}, token)
+    assert "errors" not in admin, admin
+    assert admin["data"]["announcement"]["uuid"] == a["uuid"]
+    assert admin["data"]["announcement"]["active"] is False
