@@ -1,7 +1,7 @@
 """Unit tests for the scope engine (app/core/rbac_scopes.py).
 
 Covers widest() merge and every in_scope() branch, including the team/gov/ngo/zone
-scopes that had zero coverage before (RBAC_V1_DECISIONS.md Phase 1 gap — no existing
+scopes that had zero coverage before (Spec/008-rbac-authorization/decisions.md Phase 1 gap — no existing
 fixture ever set team_uuid or built a Team). Also covers scope_filter() (ADR-028, added
 in Phase 2) — its list-level own/team/gov/ngo/zone conditions involve subqueries that
 in_scope()'s single-object checks don't exercise, so they get their own DB-executing tests.

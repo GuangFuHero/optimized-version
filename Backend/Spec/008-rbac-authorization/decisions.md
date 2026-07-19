@@ -705,6 +705,28 @@ async def create_station(self, info, input) -> StationType:
 
 ---
 
+#### ADR-062 ER 圖除舊：`er-diagram.md` 同步到 capability RBAC v1（補文件，非新設計）
+> **狀態：ACCEPTED（2026-07-19，doc-sync）。** 本條不引入任何新設計決策，只把落後的 ER 文件補到跟已實作、已 ADR 化的 schema 一致。ADR 編號取 062（跳過 055–061——那幾號已被 stack 上層 #25/#26/#27 用掉，見各分支）。
+
+**Context**：`Spec/Docs/er-diagram.md`（標記 2026-06-27）在 RBAC v1（ADR-026 drop-and-replace）落地後從未更新，仍畫著舊的 `groups`/`policies`/`user_group_assign`/`policy_user_assign`/`policy_group_assign`（字串式 read/create/edit/delete）——那套引擎在 migration `1d52ab265e50` 已整批 `DROP`，實際 DB 早就沒有這些表。反過來，capability RBAC v1 真正建立的 8 張表（`roles`/`permissions`/`role_permission_assign`/`user_role_assign`/`user_permission_assign`/`teams`/`work_zones`/`team_zone_assign`）與 `users.team_uuid` 從沒進過 ER 圖。文件與現實對不上，照 ER 圖理解資料模型的人會被誤導。**歸因**：這些 schema 全來自 #24（`popo/rbac-v1`）；#25/#26 純 API、無 schema 變更；#27 唯一的 schema 變更是 `user_permission_assign` 的 `uq_user_perm` UNIQUE 約束，已在 #27 自帶 ADR-058，**不併入本條**。
+
+**Decision**：把 `er-diagram.md` 的舊 Group/Policy 整段（表定義 + 關係）換成 capability RBAC v1 的實際 schema，以 migration `1d52ab265e50`（＋ `2f9a1c7b6e04` 刪 `base_geometries.team_uuid`、`a3f8d1c9e2b5` 加 `teams.tax_id`）為準：
+- 新增 8 張表 ＋ `users.team_uuid`（一人一 team，ADR-019）。
+- `role_permission_assign`/`user_permission_assign` 各帶 `scope`（`none/own/team/gov/ngo/zone/all`）；`role_permission_assign`/`user_role_assign`/`team_zone_assign` 標各自的 UNIQUE。
+- **明確不畫** `base_geometries.team_uuid`——它在 #24 內先加後刪（ADR-049 純地理模型），淨值不存在；改用 `team_zone_assign` 上的註解點明「geo 資源非組織所有、管轄靠地理」。
+- **本條不含** `user_permission_assign` 的 `uq_user_perm`——那是 #27 的變更（ADR-058），待 #27 rebase 到本分支後在 #27 自己的 ER 補註記。
+本條**不改任何 code、不改任何 migration**，純文件同步；背後設計決策早已定案於 ADR-012/018/019/020/021/026/049。
+
+**Consequences**：➕ ER 圖第一次跟實際 DB schema 一致，讀圖不再被舊 Group/Policy 誤導。➖ 無行為變更；唯一成本是這動了 stack 最底層 #24 的文件，#25/#26/#27 需再 rebase 一輪才會繼承（本檔與 `er-diagram.md` 可能各有一處 append 衝突，keep-both 即可）。
+
+**Blast Radius（本決定的落地範圍）**：
+- `Spec/Docs/er-diagram.md`：刪 5 張舊表（`groups`/`policies`/3×`*_assign`）＋其關係；加 8 張新表 ＋ `users.team_uuid` ＋關係；表頭註記更新。**唯一實質改動的資料模型檔。**
+- 本檔（`Spec/008-rbac-authorization/decisions.md`）：本 ADR-062 條目；另本次一併把整份 decision 從 `Backend/RBAC_V1_DECISIONS.md` `git mv` 到此並更新 15 個引用檔的路徑（純檔案搬遷 + 路徑字串，無邏輯改動）。
+- `Spec/Docs/rbac-permissions-design.md`：由 2025-12 舊版（權限優先 / 組織自訂角色）改寫到 capability RBAC v1 現況（另記，非本 ADR 的 schema 範圍）。
+- **零影響**：無 code / migration / 測試邏輯改動（只有 docstring 內的路徑字串更新）。
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|

@@ -4,7 +4,7 @@ Read-checked per ADR-027/028: ticket.view is public (Guest gets Scope.ALL), auth
 callers get whatever scope their role grants, applied as a list-level filter (scope_filter)
 for the tickets list and an object-level check (in_scope) for ticket detail. ticket_tasks/
 task_properties are sub-resources of an already-gated ticket and only need checkpoint 1
-(RBAC_V1_DECISIONS.md §7) — see app/graphql/tickets/types.py for PII field redaction.
+(Spec/008-rbac-authorization/decisions.md §7) — see app/graphql/tickets/types.py for PII field redaction.
 """
 
 from uuid import UUID

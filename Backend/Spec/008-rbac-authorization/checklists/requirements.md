@@ -10,7 +10,7 @@
 
 - [x] No implementation details (languages, frameworks, APIs)
   - **Result**: PASS — capabilities/scopes are described behaviourally; concrete engine wiring
-    lives in `Backend/RBAC_V1_DECISIONS.md` (ADR-012~050), referenced but not embedded here.
+    lives in `Backend/Spec/008-rbac-authorization/decisions.md` (ADR-012~050), referenced but not embedded here.
 - [x] Focused on user value and business needs
   - **Result**: PASS — each user story states the disaster-response value (transparency, citizen
     reporting, geographic delegation, accountability).
@@ -49,4 +49,4 @@
 - This spec documents authorization only; authentication (login, SSO, password handling) is
   covered elsewhere.
 - The decision history (why capability-based, why geographic scope, why PII masking not null) is
-  in `Backend/RBAC_V1_DECISIONS.md`; this spec is the stakeholder-facing behavioural contract.
+  in `Backend/Spec/008-rbac-authorization/decisions.md`; this spec is the stakeholder-facing behavioural contract.

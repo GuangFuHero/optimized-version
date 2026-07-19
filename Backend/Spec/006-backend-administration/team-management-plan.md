@@ -24,7 +24,7 @@
 **Files:**
 - Modify: `app/models/team.py` (add `__team_scope_attr__` to `Team`)
 - Modify: `app/core/rbac_scopes.py` (`scope_filter` TEAM branch)
-- Modify: `RBAC_V1_DECISIONS.md` (append ADR-053)
+- Modify: `Spec/008-rbac-authorization/decisions.md` (append ADR-053)
 - Test: `tests/test_rbac_scopes.py`
 
 **Interfaces:**
@@ -105,7 +105,7 @@ In `app/core/rbac_scopes.py`, replace the existing TEAM branch inside `scope_fil
 Run: `.venv/bin/python -m pytest tests/test_rbac_scopes.py -k "scope_filter_team" -v`
 Expected: 2 passed.
 
-- [ ] **Step 6: Append ADR-053 to `RBAC_V1_DECISIONS.md`**
+- [ ] **Step 6: Append ADR-053 to `Spec/008-rbac-authorization/decisions.md`**
 
 Insert this block immediately after the ADR-052 section (before `## 附錄 A. Scope 語意表`):
 
@@ -126,7 +126,7 @@ Run: `.venv/bin/ruff check app/models/team.py app/core/rbac_scopes.py tests/test
 Expected: All checks passed.
 
 ```bash
-git add app/models/team.py app/core/rbac_scopes.py tests/test_rbac_scopes.py RBAC_V1_DECISIONS.md
+git add app/models/team.py app/core/rbac_scopes.py tests/test_rbac_scopes.py Spec/008-rbac-authorization/decisions.md
 git commit -m "feat(rbac): let models declare their team-scope boundary column (ADR-053)"
 ```
 
@@ -139,7 +139,7 @@ git commit -m "feat(rbac): let models declare their team-scope boundary column (
 - Modify: `app/services/admin.py` (add `create_team`)
 - Modify: `app/api/v1/endpoints/admin.py` (add `POST /teams`)
 - Modify: `scripts/seed_rbac.py` (grant `TEAM_EDIT: all` to `super_admin`)
-- Modify: `RBAC_V1_DECISIONS.md` (append ADR-054)
+- Modify: `Spec/008-rbac-authorization/decisions.md` (append ADR-054)
 - Test: `tests/test_admin_api.py`
 
 **Interfaces:**
@@ -303,7 +303,7 @@ In `scripts/seed_rbac.py`, inside the `super_admin` role's permission list, add 
 Run: `.venv/bin/python -m pytest tests/test_admin_api.py -k create_team -v`
 Expected: 3 passed.
 
-- [ ] **Step 8: Append ADR-054 to `RBAC_V1_DECISIONS.md`**
+- [ ] **Step 8: Append ADR-054 to `Spec/008-rbac-authorization/decisions.md`**
 
 Insert immediately after the ADR-053 block (before `## 附錄 A. Scope 語意表`):
 
@@ -324,7 +324,7 @@ Run: `.venv/bin/ruff check app/schemas/admin.py app/services/admin.py app/api/v1
 Expected: All checks passed.
 
 ```bash
-git add app/schemas/admin.py app/services/admin.py app/api/v1/endpoints/admin.py scripts/seed_rbac.py RBAC_V1_DECISIONS.md tests/test_admin_api.py
+git add app/schemas/admin.py app/services/admin.py app/api/v1/endpoints/admin.py scripts/seed_rbac.py Spec/008-rbac-authorization/decisions.md tests/test_admin_api.py
 git commit -m "feat(admin): POST /admin/teams to create a team, super_admin only (ADR-054)"
 ```
 

@@ -1,4 +1,4 @@
-"""Coverage for the GraphQL query read-checks (RBAC_V1_DECISIONS.md ADR-027/028/049).
+"""Coverage for the GraphQL query read-checks (Spec/008-rbac-authorization/decisions.md ADR-027/028/049).
 
 Covers PII masking on Ticket contact fields (out-of-scope → masked value, not null —
 ADR-049), list-level scope filtering, and default-deny for non-public capabilities.

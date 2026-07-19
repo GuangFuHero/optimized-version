@@ -135,7 +135,7 @@ async def update_station_property(
     """Update a station property (checkpoint 1 station.edit, then checkpoint 2 against it).
 
     StationProperty carries no team_uuid, so `team`/`gov`/`ngo`/`zone` scope can never match
-    it — only `own`/`all` apply (RBAC_V1_DECISIONS.md §2C).
+    it — only `own`/`all` apply (Spec/008-rbac-authorization/decisions.md §2C).
     """
     prop = await station_property_repository.get_by_uuid_active(db, uuid)
     if not prop:

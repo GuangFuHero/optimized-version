@@ -1,7 +1,7 @@
 """Tests for app/services/authz.py:require_scope.
 
 This is the checkpoint-1/checkpoint-2 gate every use-case calls directly
-(RBAC_V1_DECISIONS.md ADR-022/023). Exercises the real DB-backed grant resolution
+(Spec/008-rbac-authorization/decisions.md ADR-022/023). Exercises the real DB-backed grant resolution
 (Role/Permission/RolePermissionAssign/UserRoleAssign), not mocks, since the 403-vs-404
 branching and the union/widest merge across multiple roles both depend on it.
 """

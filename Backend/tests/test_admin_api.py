@@ -1,4 +1,4 @@
-"""Integration tests for the minimal admin REST API (T117, RBAC_V1_DECISIONS.md ADR-031/032).
+"""Integration tests for the minimal admin REST API (T117, Spec/008-rbac-authorization/decisions.md ADR-031/032).
 
 Covers: role assignment (platform + team kind), the last-super_admin lockout guard, and
 team membership add/remove including the checkpoint-2 cross-team 404 (ADR-023).

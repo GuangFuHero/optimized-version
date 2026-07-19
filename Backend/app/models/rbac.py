@@ -1,4 +1,4 @@
-"""SQLAlchemy models for the capability-based RBAC engine (RBAC_V1_DECISIONS.md §2B).
+"""SQLAlchemy models for the capability-based RBAC engine (Spec/008-rbac-authorization/decisions.md §2B).
 
 Replaces the old Group/Policy/PolicyGroupAssign/PolicyUserAssign/UserGroupAssign engine
 (ADR-026 drop-and-replace). See app/core/permissions.py for the Perm key catalog and
@@ -37,7 +37,7 @@ class RolePermissionAssign(Base, UUIDPKMixin):
 
     Scope lives HERE (not on Permission) so the same permission can carry a different
     scope per role — e.g. `ticket.view` is `team` for a team member but `all` for
-    super_admin (RBAC_V1_DECISIONS.md Appendix B, point 1).
+    super_admin (Spec/008-rbac-authorization/decisions.md Appendix B, point 1).
     """
 
     __tablename__ = "role_permission_assign"
@@ -53,7 +53,7 @@ class UserRoleAssign(Base, UUIDPKMixin):
     A user holds at most one "platform" role and one "team" role at a time (ADR-019);
     that invariant is enforced by the role-assignment use case, not by a DB constraint
     (two roles of the same kind is a data-quality bug, not a security boundary — see
-    RBAC_V1_DECISIONS.md T117).
+    Spec/008-rbac-authorization/decisions.md T117).
     """
 
     __tablename__ = "user_role_assign"

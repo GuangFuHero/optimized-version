@@ -2,7 +2,7 @@
 
 **Feature Branch**: `008-rbac-authorization`
 **Created**: 2026-07-09
-**Status**: Implemented (see `Backend/RBAC_V1_DECISIONS.md` ADR-012~050 for decision records)
+**Status**: Implemented (see `Backend/Spec/008-rbac-authorization/decisions.md` ADR-012~050 for decision records)
 **Input**: User description: "Capability-based RBAC replacing the legacy Group/Policy engine — who can view, create, edit, delete and review disaster-relief data, plus PII protection"
 **Dependencies**: Feature 002 (Interactive Disaster Relief Map), Feature 003 (Request/Task Management), Feature 006 (Backend Administration)
 

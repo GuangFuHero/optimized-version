@@ -1,4 +1,4 @@
-"""SQLAlchemy models for teams and work zones (RBAC v1, RBAC_V1_DECISIONS.md §2B)."""
+"""SQLAlchemy models for teams and work zones (RBAC v1, Spec/008-rbac-authorization/decisions.md §2B)."""
 
 from geoalchemy2 import Geometry
 from sqlalchemy import ForeignKey, String, UniqueConstraint

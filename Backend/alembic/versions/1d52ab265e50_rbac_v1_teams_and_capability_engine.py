@@ -1,7 +1,7 @@
 """rbac_v1: teams, work zones, and capability-based role/permission engine
 
 Drop-and-replace of the old Group/Policy/PolicyGroupAssign/PolicyUserAssign/UserGroupAssign
-engine (ADR-026, RBAC_V1_DECISIONS.md). Zero users in production at time of writing, so no
+engine (ADR-026, Spec/008-rbac-authorization/decisions.md). Zero users in production at time of writing, so no
 backfill is needed for the new team_uuid columns.
 
 Revision ID: 1d52ab265e50

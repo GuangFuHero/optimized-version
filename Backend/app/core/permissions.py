@@ -1,7 +1,7 @@
 """Capability-key catalog (ADR-012).
 
 Single source of truth for permission keys — seed data and every RBAC check must use
-these constants, never a raw string (RBAC_V1_DECISIONS.md §3).
+these constants, never a raw string (Spec/008-rbac-authorization/decisions.md §3).
 
 Naming: `<capability>.<action>`, derived from the Dashboard v1.0 spec's 11-module ×
 Operation-Code matrix. Only modules that exist (or are the next thing being built) get a
