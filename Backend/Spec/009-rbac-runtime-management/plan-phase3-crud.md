@@ -32,7 +32,7 @@
 - Modify `app/api/v1/endpoints/rbac_admin.py` — `POST/PATCH/DELETE /rbac/roles`, `PUT/DELETE /users/{uuid}/permissions/{cap}`, `DELETE /users/{uuid}/role/{role_uuid}`.
 - Modify `tests/test_rbac_admin_api.py` — Phase 3 tests.
 - Create `tests/test_rbac_uniqueness.py` — model-level `uq_user_perm` test.
-- Modify `RBAC_V1_DECISIONS.md` — transcribe ADR-058, ADR-059, and the `rbac.assign` + role-CRUD half of ADR-056.
+- Modify `Spec/008-rbac-authorization/decisions.md` — transcribe ADR-058, ADR-059, and the `rbac.assign` + role-CRUD half of ADR-056.
 
 ---
 
@@ -922,7 +922,7 @@ async def unassign_user_role(
 ## Task 6: transcribe ADR-058 / ADR-059 / rest of ADR-056
 
 **Files:**
-- Modify: `RBAC_V1_DECISIONS.md`
+- Modify: `Spec/008-rbac-authorization/decisions.md`
 
 - [ ] **Step 1: Append ADR-058 (uniqueness) and ADR-059 (protected role names)** after ADR-056/057, matching the existing `#### ADR-0XX` + Context/Decision/Consequences/取代關係 format. ADR-058 body: constraint + dedup-keep-widest migration + upsert (see this plan's Task 1). ADR-059 body: `PROTECTED_ROLE_NAMES = {"super_admin","user"}`, code-coupling rationale (`auth_account.py:11,45`, `admin.py:22`), create/rename/delete → 409.
 
