@@ -44,7 +44,7 @@
 
 ## 3. 新增 ADR（055 / 056 / 057）
 
-> 這三條在對應 phase 落地時轉錄進 `RBAC_V1_DECISIONS.md`（沿用該檔「每個決策一條編號 ADR」慣例）。此處為 approved-pending-implementation。
+> 這三條在對應 phase 落地時轉錄進 `Spec/008-rbac-authorization/decisions.md`（沿用該檔「每個決策一條編號 ADR」慣例）。此處為 approved-pending-implementation。
 
 ### ADR-055 RBAC 轉 runtime-managed；runtime DB = 事實來源；seed 降為 idempotent bootstrap
 **白話**：`seed_rbac.py` 是「系統剛啟動時鋪的**預設權限**」；啟動後，一樣能在 runtime 針對個別權限客製，而且**客製的以 runtime 為準**——下次重啟／重跑 seed **不會蓋掉**你改過的，seed 只會補「還沒有的」。
@@ -224,7 +224,7 @@ POST   /admin/users/{uuid}/role       （已存在，ADR-032）
 ## 12. 待辦
 
 1. ~~`data_auditor` 是否給 `rbac.view`？~~ → **已定案：super_admin only**，後續需要再加。
-2. 三個新 ADR（055/056/057）隨各 phase PR 轉錄進 `RBAC_V1_DECISIONS.md`（建議）。
+2. 三個新 ADR（055/056/057）隨各 phase PR 轉錄進 `Spec/008-rbac-authorization/decisions.md`（建議）。
 
 ---
 
