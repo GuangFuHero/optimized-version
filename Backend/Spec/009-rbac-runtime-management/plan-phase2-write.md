@@ -30,7 +30,7 @@
 - Modify `app/api/v1/endpoints/rbac_admin.py` — move the `rbac.view` gate from router-level to each GET route; add `PUT` (→ `RoleGrants`) and `DELETE` (→ 204) routes.
 - Modify `tests/test_rbac_admin_api.py` — Phase 2 write tests.
 - Create `tests/test_seed_rbac.py` — ADR-055 idempotency unit tests.
-- Modify `RBAC_V1_DECISIONS.md` — transcribe ADR-055 and the rbac.edit half of ADR-056.
+- Modify `Spec/008-rbac-authorization/decisions.md` — transcribe ADR-055 and the rbac.edit half of ADR-056.
 
 ---
 
@@ -659,12 +659,12 @@ git commit -m "feat(rbac): DELETE /admin/rbac/roles/{uuid}/permissions/{cap} —
 ## Task 4: Transcribe ADRs + close Phase 2 docs
 
 **Files:**
-- Modify: `RBAC_V1_DECISIONS.md` (append ADR-055 + rbac.edit half of ADR-056)
+- Modify: `Spec/008-rbac-authorization/decisions.md` (append ADR-055 + rbac.edit half of ADR-056)
 - Modify: `Spec/009-rbac-runtime-management/spec.md` (mark Phase 2 status if a status line exists)
 
 - [ ] **Step 1: Locate the ADR log format**
 
-Run: `grep -nE '^### ADR-05[0-9]|^## ADR|^ADR-' RBAC_V1_DECISIONS.md | tail -20`
+Run: `grep -nE '^### ADR-05[0-9]|^## ADR|^ADR-' Spec/008-rbac-authorization/decisions.md | tail -20`
 Match the existing heading + field style (Context / Decision / Consequences / 取代關係).
 
 - [ ] **Step 2: Append ADR-055 and the Phase 2 slice of ADR-056**
@@ -674,7 +674,7 @@ Transcribe verbatim from `spec.md` §3 (ADR-055) and the `rbac.edit` enforcement
 - [ ] **Step 3: Commit**
 
 ```bash
-git add RBAC_V1_DECISIONS.md Spec/009-rbac-runtime-management/spec.md
+git add Spec/008-rbac-authorization/decisions.md Spec/009-rbac-runtime-management/spec.md
 git commit -m "docs(rbac): transcribe ADR-055 + rbac.edit half of ADR-056 (feature 009 P2)"
 ```
 
