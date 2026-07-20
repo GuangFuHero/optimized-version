@@ -30,8 +30,8 @@ memory/
 .db/
 .venv/
 
-# Frontend app + JS deps (separate workspace, not part of Backend history)
-Frontend/
+# JS deps / build only — the Frontend workspace itself is tracked (PRs 15-18), so do NOT
+# ignore Frontend/ or new frontend files silently vanish from `git status` (PR #25 review).
 node_modules/
 .nx/
 
