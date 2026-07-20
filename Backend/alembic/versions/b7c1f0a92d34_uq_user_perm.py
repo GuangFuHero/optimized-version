@@ -1,8 +1,13 @@
 """add uq_user_perm to user_permission_assign (ADR-058)
 
 Revision ID: b7c1f0a92d34
-Revises: a3f8d1c9e2b5
+Revises: f1a2b3c4d5e6
 Create Date: 2026-07-13 00:00:00.000000
+
+Re-pointed from a3f8d1c9e2b5 to f1a2b3c4d5e6 (PR #24's work_zones GIST migration) so the two
+sibling migrations that both branched off a3f8d1c9e2b5 form one linear RBAC chain instead of a
+fork. The announcement migration (a7c9e1f4b2d8) is still a separate head — reconciled with the
+announcement work (see decisions.md ADR-063 [0]).
 
 Enforces one grant row per (user_uuid, permission_uuid). Before adding the constraint we
 dedup any pre-existing rows, keeping the widest scope (all>zone>team>own>none, matching
@@ -14,7 +19,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = 'b7c1f0a92d34'
-down_revision: str | Sequence[str] | None = 'a3f8d1c9e2b5'
+down_revision: str | Sequence[str] | None = 'f1a2b3c4d5e6'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
