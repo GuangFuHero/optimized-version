@@ -49,18 +49,21 @@ _UBN_WEIGHTS = (1, 2, 1, 2, 1, 2, 4, 1)
 def is_valid_ubn(value: str) -> bool:
     """Validate a Taiwan Uniform Business Number (統一編號).
 
-    8 digits; multiply each by its logic weight, sum the tens + units digit of every
-    product, and require the total to be divisible by 5 (the post-2023 rule that replaced
-    the older divisible-by-10 check). The 7th-digit-"7" +1 exception is intentionally not
-    applied — a plain /5 check is the agreed rule.
+    8 ASCII digits; multiply each by its logic weight, sum the tens + units digit of every
+    product; valid when the total is divisible by 5 (the post-2023 rule that replaced the
+    older divisible-by-10 check). Official exception: when the 7th digit is "7", a total
+    whose value + 1 is divisible by 5 is also accepted (e.g. 10000073). `isascii()` guards
+    against full-width digits that `isdigit()` alone would accept.
     """
-    if len(value) != 8 or not value.isdigit():
+    if len(value) != 8 or not (value.isascii() and value.isdigit()):
         return False
     total = 0
     for weight, digit in zip(_UBN_WEIGHTS, (int(c) for c in value), strict=True):
         product = weight * digit
         total += product // 10 + product % 10
-    return total % 5 == 0
+    if total % 5 == 0:
+        return True
+    return value[6] == "7" and (total + 1) % 5 == 0
 
 
 class CreateTeamRequest(BaseModel):

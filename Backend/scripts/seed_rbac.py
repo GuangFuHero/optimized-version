@@ -42,6 +42,7 @@ ROLES_DATA = [
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
             Perm.STATION_ADD: "all",     # ADR-049: anyone (incl. citizens) can register a station
+            Perm.STATION_CONTRIBUTE: "all",  # open crowd-sourcing: property/rating on any station
             Perm.STATION_EDIT: "own",
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",      # help-request board is public (ADR-027)
@@ -72,7 +73,7 @@ ROLES_DATA = [
         "permissions": dict.fromkeys(
             [
                 Perm.MAP_VIEW, Perm.MAP_ADD, Perm.MAP_EDIT, Perm.MAP_DELETE,
-                Perm.STATION_VIEW, Perm.STATION_ADD, Perm.STATION_EDIT,
+                Perm.STATION_VIEW, Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
                 Perm.STATION_DELETE, Perm.STATION_REVIEW,
                 Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
@@ -186,6 +187,27 @@ async def seed():
                         role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope,
                     ))
                     print(f"為角色 {role.name} 授予 {permission.key} ({scope})")
+
+            # Sync-delete (PR #24 [7]): drop grants no longer declared in ROLES_DATA so a
+            # narrowing (removing a perm from the set) actually takes effect — upsert alone
+            # leaves the stale wide grant silently winning under union/widest-wins. The audit
+            # trigger preserves the removed rows' history.
+            declared = {perm_by_key[p.value].uuid for p in role_info["permissions"]}
+            stale = (
+                (
+                    await db.execute(
+                        select(RolePermissionAssign).where(
+                            RolePermissionAssign.role_uuid == role.uuid,
+                            RolePermissionAssign.permission_uuid.notin_(declared),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for grant in stale:
+                print(f"移除 {role.name} 不再宣告的 grant (permission_uuid={grant.permission_uuid})")
+                await db.delete(grant)
 
         await db.commit()
         print("RBAC v1 資料初始化完成！")

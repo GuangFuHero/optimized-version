@@ -6,6 +6,8 @@ each owns its own authz (require_scope) + validation + persistence so resolvers 
 secondary_location) lives here.
 """
 
+from types import SimpleNamespace
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,8 +113,12 @@ async def create_station_property(
     quantity: int | None,
     weightings: float,
 ) -> StationProperty:
-    """Add a property to a station (checkpoint 1 only — no scope check against the parent)."""
-    await require_scope(actor, Perm.STATION_EDIT, db)
+    """Add a property to a station — open crowd-sourcing (station.contribute, PR #24 review [5]).
+
+    Capability-only (checkpoint 1): anyone holding station.contribute may attach a property to
+    any station; there is deliberately no ownership/zone check (crowd-sourced facility data).
+    """
+    await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
     if not await station_repository.get_by_uuid_active(db, station_uuid):
         raise ValueError("Station not found")
     return await station_property_repository.create(
@@ -129,18 +135,38 @@ async def create_station_property(
     )
 
 
+async def _property_scope_target(db: AsyncSession, prop: StationProperty) -> SimpleNamespace:
+    """Scope target for a station property (ADR-052, direction B).
+
+    A StationProperty has no geometry of its own, so `zone` scope could never match it
+    directly (in_scope's ZONE branch needs resource.geometry). It borrows its parent
+    station's location for the zone check, so a team's `zone`-scoped station.edit reaches
+    properties on stations sitting inside its WorkZone. `own` still means the property's
+    own creator.
+    """
+    station = await station_repository.get_by_uuid_active(db, prop.station_uuid)
+    return SimpleNamespace(
+        created_by=prop.created_by,
+        team_uuid=None,
+        geometry=station.geometry if station else None,
+    )
+
+
 async def update_station_property(
     db: AsyncSession, *, actor: User, uuid: str, changes: dict
 ) -> StationProperty:
     """Update a station property (checkpoint 1 station.edit, then checkpoint 2 against it).
 
-    StationProperty carries no team_uuid, so `team`/`gov`/`ngo`/`zone` scope can never match
-    it — only `own`/`all` apply (Spec/008-rbac-authorization/decisions.md §2C).
+    The property has no geometry, so checkpoint 2 borrows the parent station's location for
+    `zone` scope (ADR-052); `own` resolves against the property's creator. Without this a
+    team role (`station.edit=zone`) could never edit any property, even inside its own zone.
     """
     prop = await station_property_repository.get_by_uuid_active(db, uuid)
     if not prop:
         raise ValueError("Station property not found")
-    await require_scope(actor, Perm.STATION_EDIT, db, resource=prop)
+    await require_scope(
+        actor, Perm.STATION_EDIT, db, resource=await _property_scope_target(db, prop)
+    )
     return await station_property_repository.update(db, db_obj=prop, obj_in=changes)
 
 
@@ -153,8 +179,12 @@ async def rate_station_property(
     rating: str,
     distance_from_geometry: float | None,
 ) -> CrowdSourcing:
-    """Submit or update a crowd-sourced rating for a station property (checkpoint 1 only)."""
-    await require_scope(actor, Perm.STATION_EDIT, db)
+    """Submit or update a crowd-sourced rating for a station property — open (station.contribute).
+
+    Ratings are inherently submitted by non-owners, so this is capability-only (checkpoint 1);
+    there is deliberately no ownership check.
+    """
+    await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
 
     result = await db.execute(
         select(StationProperty).where(

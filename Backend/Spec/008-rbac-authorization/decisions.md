@@ -727,6 +727,31 @@ async def create_station(self, info, input) -> StationType:
 
 ---
 
+#### ADR-063 PR #24 review 處理：授權 correctness + 設計收斂（jujuyuzu review，2026-07-20）
+> **狀態：ACCEPTED（2026-07-20）。** reviewer `jujuyuzu` 對 #24 提出的 review comment 經逐條驗證（見 `Backend/PR24_25_review_comments_verification.md`）+ 使用者問答定案後的處理。announcement 相關兩條（舊 `check_permission`、conftest Group/Policy）歸 `feature/backend-annoucement-rbac`，不在此。
+
+**設計決策（要記錄的）**
+- **[5] 新增 `station.contribute` capability**：`create_station_property` / `rate_station_property` 原本 gate 在 own-scoped 的 `station.edit` 卻只做 checkpoint 1，宣告 scope 被默默忽略。定案：**群眾貢獻是刻意開放的**（評分本就由非擁有者提交）——改用語意正確的純 capability `station.contribute`（checkpoint-1-only），seed 授予 `user`（每帳號預設角色→人人可貢獻）+ `super_admin`。
+- **[6] work_zone 畫/指派限 gov team + super_admin（硬化 ADR-049）**：ADR-049 原記「gov/ngo 靠 team.type、trust no hard guard」。reviewer 指出 NGO team admin 持 `work_zone.add/edit/assign=all` → 兩個 API call（畫涵蓋任意區的 zone + 自我指派）即可把 `zone`-scoped PII 升成任意地區 PII。定案：**在 use-case 層加 guard（ADR-020 動態規則）**：team-bound actor 需其（未刪）team `type=="gov"`，無 team 的 platform 持有者（super_admin）放行；NGO team admin 於此被擋。實作 `app/services/work_zone.py:_require_gov_zone_authority`，套用於 create/update/assign/remove 四個寫入動作。**本條硬化 ADR-049 §乙 的「trust」為 enforced。**
+- **[7] seed 改 declarative（sync-delete）**：`scripts/seed_rbac.py` 原為 upsert-only → 從 `ROLES_DATA` 移除 grant 不會刪 DB 列，union/widest-wins 下舊寬 grant 默默續存，收權「看似套用實際沒變」。定案：每個 role upsert 後**刪掉宣告集以外的 `role_permission_assign`**（audit trigger 留歷史），讓 seed 真正宣告式、未來收權會生效。
+- **[8] 統一編號檢查碼**：(a) 補**第7碼=7 例外**（`(total+1)%5==0` 也算有效，官方規則；原本被誤拒的 `10000073` 等有效號現在通過）；(b) `isdigit()` → `isascii() and isdigit()`（拒全形數字）；(c) **刻意不加 `tax_id` 唯一約束**——會議決策：可能有相同統編的組織各自申請 team，需允許重複。
+
+**授權 correctness / robustness 修正（隨附）**
+- **[4]** `update_station_property` 的 checkpoint 2 借 parent station geometry（`_property_scope_target`，延伸 ADR-052）——修掉 team（`station.edit=zone`）一律 404 改不了 property。
+- **[3]** `station_suggestions` 補 `require_authenticated`——審核佇列不再匿名可讀（`STATION_VIEW` 在 PUBLIC_PERMS 的副作用）。
+- **[11]** `mask_email` 對無 `@` 值回 `◯◯◯`——email 欄誤填電話不再原值外洩。
+- **[12]** `get_user_permissions` 的 `Scope(scope)` 容錯（skip+log）——單列壞 scope 不再讓該 user 每請求 500。
+- **[9]** `_remaining_super_admins` 改鎖全部 super_admin 持有列 `FOR UPDATE`——併發降級不再可能同時通過造成 0 個 super_admin。
+- **[10]** `assign_task_actor` / `assign_zone_to_team` 併發撞 unique constraint 改捕 `IntegrityError`（前者回乾淨 domain error、後者維持 idempotent），不再 500。
+- **[13]** rbac_scopes 的 zone 查詢（`in_scope` / `scope_filter`）與 work_zone 的 Team 查詢補 `delete_at IS NULL`——關掉「已刪 zone/team 仍授權」的 latent 洞。
+- **[15]** 新 migration `f1a2b3c4d5e6` 補 `work_zones.geometry` 的 GIST index——zone `ST_Contains` 不再全表掃。
+
+**延後（非本輪）**
+- **[0]** rebase 後兩個 alembic head（RBAC chain + announcement migration）→ merge revision 跟 announcements 一起在 `feature/backend-annoucement-rbac` 收（呼應 announcement 歸該分支）。
+- **[14]** PII 檢查 per-request 跨 ticket 未共用（N+1）——perf、不 crash，列待辦。
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|

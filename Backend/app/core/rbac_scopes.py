@@ -92,6 +92,7 @@ async def in_scope(scope: Scope, *, actor: User, resource, db: AsyncSession) -> 
             .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == WorkZone.uuid)
             .where(
                 TeamZoneAssign.team_uuid == actor.team_uuid,
+                WorkZone.delete_at.is_(None),
                 func.ST_Contains(WorkZone.geometry, geometry),
             )
         )
@@ -135,7 +136,7 @@ def scope_filter(scope: Scope, *, actor: User, model) -> list:
         my_zones = (
             select(WorkZone.uuid)
             .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == WorkZone.uuid)
-            .where(TeamZoneAssign.team_uuid == actor.team_uuid)
+            .where(TeamZoneAssign.team_uuid == actor.team_uuid, WorkZone.delete_at.is_(None))
         )
         return [
             exists(

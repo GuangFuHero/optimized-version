@@ -1,5 +1,6 @@
 """Repositories for User, Role, and Permission models with RBAC query helpers."""
 
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -16,6 +17,8 @@ from app.models.rbac import (
     UserPermissionAssign,
     UserRoleAssign,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class UserRepository(GenericRepository[User]):
@@ -48,7 +51,14 @@ class UserRepository(GenericRepository[User]):
 
         scopes_by_key: dict[str, list[Scope]] = {}
         for key, scope in [*role_rows, *direct_rows]:
-            scopes_by_key.setdefault(key, []).append(Scope(scope))
+            try:
+                parsed = Scope(scope)
+            except ValueError:
+                logger.warning(
+                    "skipping malformed scope %r for permission %s (user %s)", scope, key, user_uuid
+                )
+                continue
+            scopes_by_key.setdefault(key, []).append(parsed)
         return {key: widest(scopes) for key, scopes in scopes_by_key.items()}
 
     async def assign_role(self, db: AsyncSession, user_uuid: str, role_uuid: str) -> bool:

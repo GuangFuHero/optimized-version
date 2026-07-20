@@ -31,15 +31,21 @@ class AdminConflictError(ValueError):
 
 
 async def _remaining_super_admins(db: AsyncSession, role_uuid: str, *, excluding: str) -> int:
-    """Count other users still holding `role_uuid`, excluding `excluding` itself."""
+    """Count other users still holding `role_uuid`, excluding `excluding` itself.
+
+    Locks ALL current holders of the role FOR UPDATE (PR #24 [9]) so two concurrent demotions
+    of the last two super_admins serialize on the same rows and can't both observe
+    remaining == 1. Locking only the counted subset would let them lock disjoint rows and both
+    pass, leaving zero super_admins (administrative lockout).
+    """
     rows = (
         await db.execute(
-            select(UserRoleAssign.user_uuid).where(
-                UserRoleAssign.role_uuid == role_uuid, UserRoleAssign.user_uuid != excluding
-            )
+            select(UserRoleAssign.user_uuid)
+            .where(UserRoleAssign.role_uuid == role_uuid)
+            .with_for_update()
         )
     ).all()
-    return len(rows)
+    return sum(1 for (user_uuid,) in rows if user_uuid != excluding)
 
 
 async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_name: str) -> UserRoleAssign:

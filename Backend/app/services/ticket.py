@@ -6,6 +6,7 @@ its own authz + validation + persistence (ADR-013/014/015/022).
 
 from types import SimpleNamespace
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -265,10 +266,21 @@ async def assign_task_actor(
     if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
         raise ValueError("Actor already assigned to this task")
 
-    return await task_assignment_repository.create(
-        db,
-        obj_in={"task_uuid": task_uuid, "actor_uuid": target_actor, "role": role, "status": "accepted"},
-    )
+    try:
+        return await task_assignment_repository.create(
+            db,
+            obj_in={
+                "task_uuid": task_uuid,
+                "actor_uuid": target_actor,
+                "role": role,
+                "status": "accepted",
+            },
+        )
+    except IntegrityError as exc:
+        # Concurrent duplicate lost the race to uq_assignment_task_actor (PR #24 [10]) —
+        # surface the same clean domain error instead of a raw 500.
+        await db.rollback()
+        raise ValueError("Actor already assigned to this task") from exc
 
 
 async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> None:

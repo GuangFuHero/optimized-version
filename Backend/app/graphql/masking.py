@@ -35,9 +35,15 @@ def mask_name(name: str | None) -> str | None:
 
 
 def mask_email(email: str | None) -> str | None:
-    """Mask a contact email, keeping only the first local char and the TLD (j***@***.com)."""
-    if not email or "@" not in email:
+    """Mask a contact email, keeping only the first local char and the TLD (j***@***.com).
+
+    A non-empty value with no ``@`` (e.g. a phone number mis-typed into the email field) is
+    masked entirely rather than passed through, so mis-entered PII is never shown raw.
+    """
+    if not email:
         return email
+    if "@" not in email:
+        return _MASK_GLYPH * 3
     local, _, domain = email.partition("@")
     tld = domain.rsplit(".", 1)[-1] if "." in domain else domain
     first = local[0] if local else ""

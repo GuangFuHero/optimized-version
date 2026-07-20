@@ -34,6 +34,9 @@ class Perm(StrEnum):
     STATION_EDIT = "station.edit"
     STATION_DELETE = "station.delete"
     STATION_REVIEW = "station.review"
+    # Open crowd-sourcing: attach a property or submit a rating to ANY station (no ownership
+    # check — deliberately capability-only, not scoped like station.edit=own). See station.py.
+    STATION_CONTRIBUTE = "station.contribute"
 
     # Interactive Map (tiles, closure areas — the map *overlay*, distinct from the Station entity)
     MAP_VIEW = "map.view"

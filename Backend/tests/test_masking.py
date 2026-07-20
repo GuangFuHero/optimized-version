@@ -30,10 +30,11 @@ def test_mask_email_keeps_only_first_char_and_tld():
     assert mask_email("a@b.org") == "a***@***.org"
 
 
-def test_mask_email_non_email_passthrough():
-    """A value without '@' is returned unchanged (nothing to mask)."""
-    assert mask_email("not-an-email") == "not-an-email"
+def test_mask_email_non_email_is_masked():
+    """A non-empty value without '@' (e.g. a mis-entered phone) is masked, not passed through."""
+    assert mask_email("not-an-email") == "◯◯◯"
     assert mask_email(None) is None
+    assert mask_email("") == ""
 
 
 def test_mask_phone_keeps_first_two_last_three():
