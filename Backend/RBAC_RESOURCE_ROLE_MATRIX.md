@@ -3,6 +3,8 @@
 > 產生日期：2026-07-12 · 對應 branch `popo/rbac-v1`
 > 事實來源：`scripts/seed_rbac.py`（授權）+ `app/core/permissions.py`（capability 目錄）+ `app/core/rbac_scopes.py`（scope 引擎）。
 > 此檔為快照，seed 一改就會過時——以程式碼為準。
+>
+> **⚠️ Live 事實來源（feature 009）**：runtime 的權威視圖是 `GET /admin/rbac/matrix`（角色×capability×scope 即時網格）+ `GET /admin/rbac/capabilities`（capability 目錄，含 `public` / `team_gov_only` 旗標）。此 `.md` 只是 2026-07-12 的靜態快照、且早於 PR #24 review 的收斂，個別 cell（例如下方 Work Zone 的 gov/ngo 註記）可能已落後——需要當下真值時查 API，不要以本檔為準。
 
 ## 模型速記（ADR-019 / ADR-049）
 
@@ -112,8 +114,11 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | audit.view | — | — | all | all | — | — |
+| rbac.view | — | — | — | all | — | — |
 | rbac.assign | — | — | — | all | — | — |
 | rbac.edit | — | — | — | all | — | — |
+
+> `rbac.view`（feature 009 #25：`/admin/rbac` 唯讀面的 checkpoint-1 gate）只有 super_admin；`rbac.*` 全是 super_admin 專屬治理，不委派給其他角色。
 
 ## 補充說明
 
