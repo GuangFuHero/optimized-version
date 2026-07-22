@@ -840,7 +840,7 @@ async def create_station(self, info, input) -> StationType:
 - **[15]** 新 migration `f1a2b3c4d5e6` 補 `work_zones.geometry` 的 GIST index——zone `ST_Contains` 不再全表掃。
 
 **延後（非本輪）**
-- **[0]** rebase 後兩個 alembic head（RBAC chain + announcement migration）→ merge revision 跟 announcements 一起在 `feature/backend-annoucement-rbac` 收（呼應 announcement 歸該分支）。
+- **[0]** rebase 後兩個 alembic head（RBAC chain + announcement migration）→ ~~merge revision 跟 announcements 一起在 `feature/backend-annoucement-rbac` 收~~。**已提前於本 stack 收：見 ADR-065**（announcement 的 *code* port 仍歸該分支，只有 migration-DAG 的 merge 提前到 #27）。
 - **[14]** PII 檢查 per-request 跨 ticket 未共用（N+1）——perf、不 crash，列待辦。
 
 ---
@@ -861,6 +861,22 @@ async def create_station(self, info, input) -> StationType:
 - `app/services/rbac_admin.py`：`list_capabilities()` 設 `team_gov_only=perm in GOV_TEAM_ONLY_PERMS`。
 - `tests/test_rbac_admin_api.py`：catalog 測試斷言 `work_zone.*`→True、非 zone→False。
 - **零影響**：`work_zone.py` 的 `_require_gov_zone_authority` enforcement 不變（只是顯示層對齊它）；不動 migration。
+
+---
+
+#### ADR-065 alembic 雙 head 提前於本 stack 收（merge revision，推翻 ADR-063 [0] 的延後）
+> **狀態：ACCEPTED（2026-07-22）。** 落在 **#27（`popo/rbac-role-crud`）tip**——它是 stack 最上層、同時看得到兩個 head。ADR-063 [0] 原把此 merge 延到 `feature/backend-annoucement-rbac`，本條把「migration-DAG 的 merge」提前，announcement 的 **code** port（`Perm.ANN_*` / `require_authenticated`）仍留該分支。
+
+**Context**：rebase 到最新 main 後，本分支的 alembic 從 branchpoint `71bd05e07df3`（create_audit_system）分岔出兩個 head：announcement（`a7c9e1f4b2d8`，main 帶進來）與 RBAC 長鏈（…→`b7c1f0a92d34` uq_user_perm，ADR-058）。兩個 head → `alembic upgrade head` 直接 `FAILED: Multiple head revisions`，全新 DB 無法從零 migrate。reviewer 於 PR #24 `1d52ab265e50…:18` 提出（ADR-063 [0] 記為延後）。
+
+**Decision**：以標準 `alembic merge` 產生一支 **no-op** merge revision `c7d8e9f0a1b2`（`down_revision = ('b7c1f0a92d34', 'a7c9e1f4b2d8')`，`upgrade`/`downgrade` 皆 `pass`），把兩 head 併成單一 head。**不改寫任何既有 migration**（尤其不動 main 的 `a7c9e1f4b2d8`，避免與 main 分歧）；不動 schema——兩邊 DDL 早已各自套用。提前到本 stack 的理由：讓 popo stack 合進 main 前就是單 head、可從零 migrate，不必等 announcement code port。
+
+**Consequences**：➕ `alembic upgrade head` 從零可跑（單 head `c7d8e9f0a1b2`）；➕ popo stack 可獨立成單 head 合進 main。➖ 偏離 ADR-063 [0] 原計畫——**約定 `feature/backend-annoucement-rbac` 不再自行加 merge，改 rebase 到已含本 merge 的 popo stack 之上**（否則會出現重複 merge / 再度雙 head）。conftest 用 metadata `create_all`（非 alembic）建測試 DB，故測試不受此 merge 影響。
+
+**Blast Radius**：
+- `alembic/versions/c7d8e9f0a1b2_merge_rbac_and_announcement_heads.py`：新 no-op merge revision（唯一新增檔）。
+- 本檔：本 ADR-065 條目 + 更新 ADR-063 [0] 註記指向本條。
+- **零影響**：無 code / schema / 測試邏輯改動。
 
 ---
 
