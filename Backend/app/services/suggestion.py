@@ -18,6 +18,7 @@ from app.repositories.geo_repository import (
     station_suggestion_repository,
 )
 from app.services.authz import require_scope
+from app.services.station import _property_scope_target
 
 # Maps a suggestion's target_type to the repository that owns that table.
 _TARGET_REPOS = {
@@ -70,10 +71,11 @@ async def review_station_suggestion(
 ) -> StationUpdateSuggestion:
     """Approve (apply the change) or reject a pending suggestion (requires station.review).
 
-    Scope-checked against the target station (for a station_property target, against the
-    property itself — StationProperty carries no team_uuid, so team/gov/ngo/zone can never
-    match there; only own/all apply). Applying the value and marking the suggestion
-    reviewed happen in ONE commit (ADR-043).
+    Scope-checked against the target. A station_property has no geometry of its own, so it
+    borrows its parent station's location via `_property_scope_target` (ADR-052) — the same
+    adaptor `update_station_property` uses — so a `zone`-scoped reviewer reaches property
+    suggestions inside its WorkZone instead of always 404ing. Applying the value and marking
+    the suggestion reviewed happen in ONE commit (ADR-043).
     """
     suggestion = await station_suggestion_repository.get_by_uuid_active(db, uuid)
     if not suggestion:
@@ -85,7 +87,12 @@ async def review_station_suggestion(
     target = await repo.get_by_uuid_active(db, suggestion.target_uuid) if repo else None
     if not target:
         raise ValueError("Target no longer exists")
-    await require_scope(actor, Perm.STATION_REVIEW, db, resource=target)
+    scope_target = (
+        await _property_scope_target(db, target)
+        if suggestion.target_type == "station_property"
+        else target
+    )
+    await require_scope(actor, Perm.STATION_REVIEW, db, resource=scope_target)
 
     if approve:
         value = coerce_and_validate(suggestion.target_type, suggestion.field_name, suggestion.new_value)

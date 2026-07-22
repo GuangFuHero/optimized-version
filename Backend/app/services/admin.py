@@ -45,7 +45,11 @@ async def _remaining_super_admins(db: AsyncSession, role_uuid: str, *, excluding
             .with_for_update()
         )
     ).all()
-    return sum(1 for (user_uuid,) in rows if user_uuid != excluding)
+    # `user_uuid` deserializes to a uuid.UUID (the FK targets users.uuid, a UUID(as_uuid=True)
+    # column — the Mapped[str] annotation notwithstanding), while `excluding` is a str, so the
+    # comparison must normalize both sides. Comparing UUID != str is always True, which would
+    # silently never exclude the actor and disable the last-super_admin guard (PR #24 [8]).
+    return sum(1 for (user_uuid,) in rows if str(user_uuid) != excluding)
 
 
 async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_name: str) -> UserRoleAssign:
