@@ -6,7 +6,7 @@ Reads only — no RBAC checkpoints here; the router gates every route on `rbac.v
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.permissions import PUBLIC_PERMS, Perm
+from app.core.permissions import GOV_TEAM_ONLY_PERMS, PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
 from app.models.auth import User
 from app.repositories.auth_repository import (
@@ -44,7 +44,11 @@ def list_capabilities() -> CapabilityCatalogResponse:
         resource, _, action = perm.value.partition(".")
         capabilities.append(
             CapabilityInfo(
-                key=perm.value, resource=resource, action=action, public=perm in PUBLIC_PERMS
+                key=perm.value,
+                resource=resource,
+                action=action,
+                public=perm in PUBLIC_PERMS,
+                team_gov_only=perm in GOV_TEAM_ONLY_PERMS,
             )
         )
     return CapabilityCatalogResponse(

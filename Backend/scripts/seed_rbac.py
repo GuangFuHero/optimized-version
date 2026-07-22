@@ -200,26 +200,12 @@ async def seed():
                 permission = perm_by_key[perm.value]
                 await ensure_role_grant(db, role=role, permission=permission, scope=scope)
 
-            # Sync-delete (PR #24 [7]): drop grants no longer declared in ROLES_DATA so a
-            # narrowing (removing a perm from the set) actually takes effect — upsert alone
-            # leaves the stale wide grant silently winning under union/widest-wins. The audit
-            # trigger preserves the removed rows' history.
-            declared = {perm_by_key[p.value].uuid for p in role_info["permissions"]}
-            stale = (
-                (
-                    await db.execute(
-                        select(RolePermissionAssign).where(
-                            RolePermissionAssign.role_uuid == role.uuid,
-                            RolePermissionAssign.permission_uuid.notin_(declared),
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            for grant in stale:
-                print(f"移除 {role.name} 不再宣告的 grant (permission_uuid={grant.permission_uuid})")
-                await db.delete(grant)
+            # No sync-delete of undeclared grants (ADR-064, reverting PR #24 [7]): with runtime
+            # matrix editing (ADR-055/ADR-056), the seed is a pure additive bootstrap that never
+            # disturbs a grant added or narrowed via /admin/rbac — a sync-delete here would wipe
+            # those on the next re-seed, exactly what ADR-055 promises it won't. Narrowing a
+            # role's grant is a runtime action now (DELETE /admin/rbac/roles/{uuid}/permissions/{cap}),
+            # not a re-seed. The original reviewer retracted the [7] request on this same ground.
 
         await db.commit()
         print("RBAC v1 資料初始化完成！")

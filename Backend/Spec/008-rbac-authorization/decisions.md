@@ -776,6 +776,25 @@ async def create_station(self, info, input) -> StationType:
 
 ---
 
+#### ADR-064 PR #24 review round-2 收斂：撤回 seed sync-delete + gov-team 限制上 capability catalog
+> **狀態：ACCEPTED（2026-07-22）。** reviewer `jujuyuzu` 對 #24 的第二輪 review（2026-07-21）+ 使用者問答定案。本條落在 **#26（`popo/rbac-matrix-write`）**——兩點都在 #26 才成立：[1] 的矛盾隨 #26 的 `ensure_role_grant`（ADR-055）+ runtime matrix 編輯誕生；[2] 的 catalog 顯示到 #26 才因矩陣可編輯而「可行動」。#24 的 authz 修正（R8 last-super_admin 型別 bug、R3 property 建議 zone review）已在 #24 自帶 commit 處理，不在此。
+
+**設計決策（要記錄的）**
+- **[1] 撤回 seed sync-delete（推翻 ADR-063 [7]，遵 ADR-055）**：ADR-063 [7]（reviewer 首輪要求）讓 seed 每輪刪掉 `ROLES_DATA` 未宣告的 role grant，達成「宣告式收緊」。但 ADR-055 定案 seed 是**純 additive bootstrap，永不擾動 runtime 經 `/admin/rbac` 加的 grant**——一旦 #26 的 runtime 矩陣編輯存在，這個 sync-delete 會在下次 re-seed 把 `PUT /admin/rbac/roles/{uuid}/permissions/{cap}` 加的 grant 清掉，正是 ADR-055 承諾不會發生的事。兩者互斥。**同一 reviewer 於第二輪自行撤回 [7] 請求**（原因相同）。定案：**移除 sync-delete**；收緊某角色的權限改為 runtime 動作（`DELETE /admin/rbac/roles/{uuid}/permissions/{cap}`），不再靠 re-seed。`scripts/seed_rbac.py` 的 `ensure_role_grant`（never overwrite）自此與 seed 整體行為一致。
+- **[2] `work_zone.*` 在 capability catalog 標 `team_gov_only`（誠實化，非改角色模型）**：team-kind 的 `admin` 角色由 gov / ngo team 共用（`users.team_uuid → team.type`），seed 給它 `work_zone.add/edit/assign=all`；但實際擋 ngo 的是 ADR-063 [6] 的 `_require_gov_zone_authority`（硬編 `team.type=="gov"`）。於是 #25/#26 的 read/matrix 會顯示 ngo admin 持 `work_zone.assign`，實際 403，且用 #26 的矩陣 API 改那格也無效（真正的 gate 是 service 的 team.type 檢查，不是 grant）。**根因**：gov/ngo 共用一個角色但需不同 zone 權限，role×capability 矩陣天生表達不了 team.type 條件。定案（取輕量、不動角色模型）：新增 `GOV_TEAM_ONLY_PERMS = {ZONE_ADD, ZONE_EDIT, ZONE_ASSIGN}`（`app/core/permissions.py`，與 `_require_gov_zone_authority` 呼叫點對齊），`GET /admin/rbac/capabilities` 的 `CapabilityInfo` 加布林 `team_gov_only`，前端據此對這些 cap 顯示「僅 gov team」註記，讓顯示與實際 enforcement 一致。**未拆 gov_admin/ngo_admin 角色**（會動 seed + 既有指派 + 移除 service gate，blast radius 較大，v1 暫不做；列為日後若矩陣要成唯一真實來源時的選項）。
+
+**Consequences**：➕ seed 不再與 ADR-055 自打臉，runtime grant 不會被 re-seed 清掉；➕ capability catalog 誠實反映 gov gate，前端不再誤示 ngo admin 的 zone 權限。➖ 收緊 role grant 只能走 runtime API（seed 不再做宣告式收緊）——符合 ADR-055 的方向；➖ `team_gov_only` 是顯示層對齊，未消除「service gate 與 grant 兩處真實來源」的本質（拆角色才根治，暫緩）。需 rebase #27 一輪繼承（`decisions.md` 可能一處 append 衝突，keep-both 即可）。
+
+**Blast Radius（本決定的落地範圍）**：
+- `scripts/seed_rbac.py`：刪 sync-delete 區塊（`declared`/`stale`/迴圈 `db.delete`），換說明註解。行為：undeclared grant 於 re-seed 保留。
+- `app/core/permissions.py`：加 `GOV_TEAM_ONLY_PERMS` frozenset。
+- `app/schemas/rbac_admin.py`：`CapabilityInfo` 加 `team_gov_only: bool = False`。
+- `app/services/rbac_admin.py`：`list_capabilities()` 設 `team_gov_only=perm in GOV_TEAM_ONLY_PERMS`。
+- `tests/test_rbac_admin_api.py`：catalog 測試斷言 `work_zone.*`→True、非 zone→False。
+- **零影響**：`work_zone.py` 的 `_require_gov_zone_authority` enforcement 不變（只是顯示層對齊它）；不動 migration。
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|

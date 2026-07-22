@@ -65,6 +65,27 @@ async def test_capabilities_lists_catalog_for_super_admin(client, db_session):
     ticket_view = next(c for c in body["capabilities"] if c["key"] == "ticket.view")
     assert ticket_view["public"] is True
     assert ticket_view["resource"] == "ticket" and ticket_view["action"] == "view"
+    assert ticket_view["team_gov_only"] is False
+
+
+@pytest.mark.asyncio
+async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_session):
+    """ZONE_* caps are marked team_gov_only so the catalog matches the gov gate.
+
+    ADR-064: work_zone.py's `_require_gov_zone_authority` gates these; non-zone caps stay False.
+    """
+    admin_uuid = await _make_rbac_admin(db_session)
+    resp = await client.get(
+        "/api/v1/admin/rbac/capabilities", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 200, resp.json()
+    by_key = {c["key"]: c for c in resp.json()["capabilities"]}
+
+    for cap in ("work_zone.add", "work_zone.edit", "work_zone.assign"):
+        assert by_key[cap]["team_gov_only"] is True, cap
+    # work_zone.view is not gated by _require_gov_zone_authority, so it stays False.
+    assert by_key["work_zone.view"]["team_gov_only"] is False
+    assert by_key["ticket.assign"]["team_gov_only"] is False
 
 
 @pytest.mark.asyncio
