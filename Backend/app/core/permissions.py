@@ -86,6 +86,7 @@ class Perm(StrEnum):
     AUDIT_VIEW = "audit.view"
 
     # RBAC self-management (Super Admin only)
+    RBAC_VIEW = "rbac.view"
     RBAC_ASSIGN = "rbac.assign"
     RBAC_EDIT = "rbac.edit"
 

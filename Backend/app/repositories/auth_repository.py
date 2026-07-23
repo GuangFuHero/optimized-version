@@ -61,6 +61,24 @@ class UserRepository(GenericRepository[User]):
             scopes_by_key.setdefault(key, []).append(parsed)
         return {key: widest(scopes) for key, scopes in scopes_by_key.items()}
 
+    async def get_role_refs(self, db: AsyncSession, user_uuid: str) -> list[Role]:
+        """The roles a user currently holds."""
+        result = await db.execute(
+            select(Role)
+            .join(UserRoleAssign, UserRoleAssign.role_uuid == Role.uuid)
+            .where(UserRoleAssign.user_uuid == user_uuid)
+        )
+        return list(result.scalars().all())
+
+    async def get_direct_grants(self, db: AsyncSession, user_uuid: str) -> list[tuple[str, str]]:
+        """A user's direct (per-user) capability->scope grants."""
+        result = await db.execute(
+            select(Permission.key, UserPermissionAssign.scope)
+            .join(UserPermissionAssign, UserPermissionAssign.permission_uuid == Permission.uuid)
+            .where(UserPermissionAssign.user_uuid == user_uuid)
+        )
+        return [(key, scope) for key, scope in result.all()]
+
     async def assign_role(self, db: AsyncSession, user_uuid: str, role_uuid: str) -> bool:
         """將使用者指派特定角色 (role)。
 
@@ -92,6 +110,23 @@ class RoleRepository(GenericRepository[Role]):
         query = select(Role).where(Role.name == name)
         result = await db.execute(query)
         return result.scalar_one_or_none()
+
+    async def list_all(self, db: AsyncSession) -> list[Role]:
+        """Every role, ordered by kind then name (for the matrix display)."""
+        result = await db.execute(select(Role).order_by(Role.kind, Role.name))
+        return list(result.scalars().all())
+
+    async def get_grants(
+        self, db: AsyncSession, *, role_uuid: str | None = None
+    ) -> list[tuple[str, str, str]]:
+        """Return (role_uuid, capability_key, scope) rows; all roles when role_uuid is None."""
+        stmt = select(
+            RolePermissionAssign.role_uuid, Permission.key, RolePermissionAssign.scope
+        ).join(Permission, Permission.uuid == RolePermissionAssign.permission_uuid)
+        if role_uuid is not None:
+            stmt = stmt.where(RolePermissionAssign.role_uuid == role_uuid)
+        rows = (await db.execute(stmt)).all()
+        return [(str(role), key, scope) for role, key, scope in rows]
 
 
 class PermissionRepository(GenericRepository[Permission]):
