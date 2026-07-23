@@ -3,6 +3,7 @@
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 
 from app.core.permissions import Perm
 from app.core.security import create_access_token
@@ -64,6 +65,27 @@ async def test_capabilities_lists_catalog_for_super_admin(client, db_session):
     ticket_view = next(c for c in body["capabilities"] if c["key"] == "ticket.view")
     assert ticket_view["public"] is True
     assert ticket_view["resource"] == "ticket" and ticket_view["action"] == "view"
+    assert ticket_view["team_gov_only"] is False
+
+
+@pytest.mark.asyncio
+async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_session):
+    """ZONE_* caps are marked team_gov_only so the catalog matches the gov gate.
+
+    ADR-064: work_zone.py's `_require_gov_zone_authority` gates these; non-zone caps stay False.
+    """
+    admin_uuid = await _make_rbac_admin(db_session)
+    resp = await client.get(
+        "/api/v1/admin/rbac/capabilities", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 200, resp.json()
+    by_key = {c["key"]: c for c in resp.json()["capabilities"]}
+
+    for cap in ("work_zone.add", "work_zone.edit", "work_zone.assign"):
+        assert by_key[cap]["team_gov_only"] is True, cap
+    # work_zone.view is not gated by _require_gov_zone_authority, so it stays False.
+    assert by_key["work_zone.view"]["team_gov_only"] is False
+    assert by_key["ticket.assign"]["team_gov_only"] is False
 
 
 @pytest.mark.asyncio
@@ -165,3 +187,186 @@ async def test_user_permissions_merges_role_and_direct_widest_wins(client, db_se
     assert body["direct_grants"]["ticket.view"] == "all"
     assert body["effective"]["ticket.view"] == "all"  # widest(team, all) == all
     assert any(r["name"] == "viewer" for r in body["roles"])
+
+
+# --- Phase 2: matrix write (PUT / DELETE a cell) ---------------------------------------
+
+
+async def _make_super_admin(db) -> tuple[str, str]:
+    """super_admin holding rbac.view+edit+assign at scope all. Returns (user_uuid, role_uuid)."""
+    role = Role(name="super_admin", kind="platform")
+    db.add(role)
+    await db.flush()
+    role_uuid = str(role.uuid)
+    cache: dict = {}
+    for cap in (Perm.RBAC_VIEW, Perm.RBAC_EDIT, Perm.RBAC_ASSIGN):
+        await _grant(db, role, cache, cap, "all")
+    user = User(name="Root")
+    db.add(user)
+    await db.flush()
+    user_uuid = str(user.uuid)
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    await db.commit()
+    return user_uuid, role_uuid
+
+
+async def _make_editable_role(db, name: str = "member") -> str:
+    """A plain team role with no grants yet, for matrix-edit tests. Returns its uuid."""
+    role = Role(name=name, kind="team")
+    db.add(role)
+    await db.flush()
+    role_uuid = str(role.uuid)
+    await db.commit()
+    return role_uuid
+
+
+@pytest.mark.asyncio
+async def test_put_grant_sets_new_cell(client, db_session):
+    """super_admin can add a role×capability grant; the response reflects the new scope."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session)
+
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
+        json={"scope": "own"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["grants"]["ticket.edit"] == "own"
+
+
+@pytest.mark.asyncio
+async def test_put_grant_updates_existing_cell_without_duplicating(client, db_session):
+    """A second PUT to the same cell updates the scope in place (uq_role_perm upsert), not a 2nd row."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session)
+    hdr = _auth_header(admin_uuid)
+    url = f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit"
+
+    await client.put(url, json={"scope": "own"}, headers=hdr)
+    resp = await client.put(url, json={"scope": "zone"}, headers=hdr)
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["grants"]["ticket.edit"] == "zone"
+
+    rows = (
+        await db_session.execute(
+            select(RolePermissionAssign)
+            .join(Permission, Permission.uuid == RolePermissionAssign.permission_uuid)
+            .where(RolePermissionAssign.role_uuid == role_uuid, Permission.key == "ticket.edit")
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_put_grant_rejects_bad_scope(client, db_session):
+    """An out-of-enum scope is rejected by the schema with 422 (ADR-057 fixed scope set)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
+        json={"scope": "galaxy"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_put_grant_rejects_unknown_capability(client, db_session):
+    """An unknown capability key in the path is rejected with 422 (cap ∈ Perm, ADR-057)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.telepathy",
+        json={"scope": "own"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_put_grant_denied_for_non_super_admin(client, db_session):
+    """A caller without rbac.edit is denied with 403 (checkpoint 1, super_admin only)."""
+    plain_uuid = await _make_plain_user(db_session)
+    role_uuid = await _make_editable_role(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
+        json={"scope": "own"},
+        headers=_auth_header(plain_uuid),
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_put_grant_unknown_role_404(client, db_session):
+    """Setting a grant on a non-existent role returns 404."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{uuid4()}/permissions/ticket.edit",
+        json={"scope": "own"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_put_cannot_none_out_super_admin_rbac_edit(client, db_session):
+    """Scoping super_admin's rbac.edit down to none is refused with 409 (self-lock guard, ADR-056)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{super_role_uuid}/permissions/rbac.edit",
+        json={"scope": "none"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_grant_revokes_cell(client, db_session):
+    """DELETE removes a role's grant; a follow-up read no longer lists that capability."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session)
+    hdr = _auth_header(admin_uuid)
+    url = f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit"
+
+    await client.put(url, json={"scope": "own"}, headers=hdr)
+    resp = await client.delete(url, headers=hdr)
+    assert resp.status_code == 204, resp.text
+
+    detail = await client.get(f"/api/v1/admin/rbac/roles/{role_uuid}", headers=hdr)
+    assert "ticket.edit" not in detail.json()["grants"]
+
+
+@pytest.mark.asyncio
+async def test_delete_absent_grant_is_idempotent(client, db_session):
+    """Deleting a grant that was never set is a no-op 204, not a 404."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 204, resp.text
+
+
+@pytest.mark.asyncio
+async def test_delete_cannot_revoke_super_admin_rbac_edit(client, db_session):
+    """Revoking super_admin's rbac.edit is refused with 409 (self-lock guard, ADR-056)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{super_role_uuid}/permissions/rbac.edit",
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_grant_denied_for_non_super_admin(client, db_session):
+    """A caller without rbac.edit is denied with 403 (checkpoint 1, super_admin only)."""
+    plain_uuid = await _make_plain_user(db_session)
+    role_uuid = await _make_editable_role(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
+        headers=_auth_header(plain_uuid),
+    )
+    assert resp.status_code == 403

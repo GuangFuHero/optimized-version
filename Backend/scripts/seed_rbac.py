@@ -142,8 +142,35 @@ ROLES_DATA = [
 ]
 
 
+async def ensure_role_grant(
+    db: AsyncSession, *, role: Role, permission: Permission, scope: str
+) -> bool:
+    """Insert a role→permission grant only when it is missing (ADR-055 idempotent bootstrap).
+
+    Never touches an existing grant: runtime edits made via /admin/rbac survive re-seeding.
+    Returns True when a new grant was inserted, False when one already existed.
+    """
+    existing = (
+        await db.execute(
+            select(RolePermissionAssign).where(
+                RolePermissionAssign.role_uuid == role.uuid,
+                RolePermissionAssign.permission_uuid == permission.uuid,
+            )
+        )
+    ).scalars().first()
+    if existing is not None:
+        return False
+    db.add(
+        RolePermissionAssign(
+            role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
+        )
+    )
+    print(f"為角色 {role.name} 授予 {permission.key} ({scope})")
+    return True
+
+
 async def seed():
-    """Create or update all RBAC v1 permissions, roles, and role-permission grants."""
+    """Create or bootstrap all RBAC v1 permissions, roles, and role-permission grants."""
     async with AsyncSessionLocal() as db:
         print("開始資料初始化 (Seeding RBAC v1)...")
 
@@ -171,43 +198,14 @@ async def seed():
 
             for perm, scope in role_info["permissions"].items():
                 permission = perm_by_key[perm.value]
-                result = await db.execute(
-                    select(RolePermissionAssign).where(
-                        RolePermissionAssign.role_uuid == role.uuid,
-                        RolePermissionAssign.permission_uuid == permission.uuid,
-                    )
-                )
-                grant = result.scalars().first()
-                if grant:
-                    if grant.scope != scope:
-                        print(f"更新 {role.name} 的 {permission.key}: {grant.scope} -> {scope}")
-                        grant.scope = scope
-                else:
-                    db.add(RolePermissionAssign(
-                        role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope,
-                    ))
-                    print(f"為角色 {role.name} 授予 {permission.key} ({scope})")
+                await ensure_role_grant(db, role=role, permission=permission, scope=scope)
 
-            # Sync-delete (PR #24 [7]): drop grants no longer declared in ROLES_DATA so a
-            # narrowing (removing a perm from the set) actually takes effect — upsert alone
-            # leaves the stale wide grant silently winning under union/widest-wins. The audit
-            # trigger preserves the removed rows' history.
-            declared = {perm_by_key[p.value].uuid for p in role_info["permissions"]}
-            stale = (
-                (
-                    await db.execute(
-                        select(RolePermissionAssign).where(
-                            RolePermissionAssign.role_uuid == role.uuid,
-                            RolePermissionAssign.permission_uuid.notin_(declared),
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            for grant in stale:
-                print(f"移除 {role.name} 不再宣告的 grant (permission_uuid={grant.permission_uuid})")
-                await db.delete(grant)
+            # No sync-delete of undeclared grants (ADR-064, reverting PR #24 [7]): with runtime
+            # matrix editing (ADR-055/ADR-056), the seed is a pure additive bootstrap that never
+            # disturbs a grant added or narrowed via /admin/rbac — a sync-delete here would wipe
+            # those on the next re-seed, exactly what ADR-055 promises it won't. Narrowing a
+            # role's grant is a runtime action now (DELETE /admin/rbac/roles/{uuid}/permissions/{cap}),
+            # not a re-seed. The original reviewer retracted the [7] request on this same ground.
 
         await db.commit()
         print("RBAC v1 資料初始化完成！")

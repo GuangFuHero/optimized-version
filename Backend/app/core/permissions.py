@@ -97,3 +97,12 @@ class Perm(StrEnum):
 # require login); ticket.view_pii is deliberately never in this set — PII always requires
 # a real actor, checked separately per-field (ADR-029).
 PUBLIC_PERMS = frozenset({Perm.MAP_VIEW, Perm.ANN_VIEW, Perm.STATION_VIEW, Perm.TICKET_VIEW})
+
+# ADR-064: capabilities that, for a team-kind holder, only take effect when the actor's team
+# is gov-type. Checkpoint 1 (holding the grant) is not enough — work_zone.py's
+# `_require_gov_zone_authority` (ADR-063 [6]) additionally requires a gov team, so an ngo
+# admin holds these in the seed matrix but is blocked in practice. A platform holder
+# (super_admin, no team) is unaffected. Surfaced in the capability catalog so the read/matrix
+# display matches what is actually enforced (the role×capability matrix alone can't express a
+# team.type condition). Keep this in lockstep with the `_require_gov_zone_authority` call sites.
+GOV_TEAM_ONLY_PERMS = frozenset({Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN})

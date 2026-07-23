@@ -4,14 +4,28 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.core.rbac_scopes import Scope
+
+
+class SetGrantRequest(BaseModel):
+    """Upsert body for a single matrix cell; `scope` is validated against the Scope enum."""
+
+    scope: Scope
+
 
 class CapabilityInfo(BaseModel):
-    """One capability key, split for display; `public` = in PUBLIC_PERMS."""
+    """One capability key, split for display.
+
+    `public` = in PUBLIC_PERMS. `team_gov_only` (ADR-064) = held by a team-kind role it only
+    takes effect on gov-type teams (work_zone.py `_require_gov_zone_authority`), so the matrix
+    grant alone overstates what an ngo admin can do; the frontend shows a "gov teams only" note.
+    """
 
     key: str
     resource: str
     action: str
     public: bool
+    team_gov_only: bool = False
 
 
 class CapabilityCatalogResponse(BaseModel):

@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -128,6 +128,32 @@ class RoleRepository(GenericRepository[Role]):
         rows = (await db.execute(stmt)).all()
         return [(str(role), key, scope) for role, key, scope in rows]
 
+    async def upsert_grant(
+        self, db: AsyncSession, *, role_uuid: str, permission_uuid: str, scope: str
+    ) -> None:
+        """Insert or update one role→permission grant's scope (PG ON CONFLICT on uq_role_perm)."""
+        stmt = insert(RolePermissionAssign).values(
+            role_uuid=role_uuid, permission_uuid=permission_uuid, scope=scope
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["role_uuid", "permission_uuid"], set_={"scope": scope}
+        )
+        await db.execute(stmt)
+        await db.commit()
+
+    async def delete_grant(
+        self, db: AsyncSession, *, role_uuid: str, permission_uuid: str
+    ) -> int:
+        """Delete one role→permission grant; returns rows removed (0 when absent)."""
+        result = await db.execute(
+            delete(RolePermissionAssign).where(
+                RolePermissionAssign.role_uuid == role_uuid,
+                RolePermissionAssign.permission_uuid == permission_uuid,
+            )
+        )
+        await db.commit()
+        return result.rowcount
+
 
 class PermissionRepository(GenericRepository[Permission]):
     """Repository for Permission model CRUD."""
@@ -141,6 +167,19 @@ class PermissionRepository(GenericRepository[Permission]):
         query = select(Permission).where(Permission.key == key)
         result = await db.execute(query)
         return result.scalar_one_or_none()
+
+    async def ensure_by_key(self, db: AsyncSession, key: str) -> Permission:
+        """Return the Permission row for a code-owned capability key, creating it if absent.
+
+        Capability rows mirror `Perm` (ADR-057); auto-creating on first grant keeps the
+        write path working on a DB seeded before the key existed.
+        """
+        permission = await self.get_by_key(db, key)
+        if permission is None:
+            permission = Permission(key=key)
+            db.add(permission)
+            await db.flush()
+        return permission
 
 
 class ContactRepository(GenericRepository[UserContact]):

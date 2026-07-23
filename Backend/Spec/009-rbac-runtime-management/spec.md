@@ -146,6 +146,12 @@ POST   /admin/users/{uuid}/role       （已存在，ADR-032）
   - 刪角色前不得有 `UserRoleAssign` 指向它 → 409（訊息提示先 reassign）。
 - 錯誤語意沿 ADR-023：缺 capability → 403；資源不存在 → 404；違反不變量 → 409（`AdminConflictError`）。
 
+### 6.1 IDOR / 物件參照（設計註記）
+
+`/admin/rbac` 全面 **checkpoint-1-only、super_admin only**，且 role/grant/指派都是**全域物件**（無 per-team/per-user owner），super_admin 的 scope 是 `all`。因此路徑上的 `{role_uuid}`/`{user_uuid}` 只是「選要治理哪個全域物件」，換成別的並非越權——**IDOR 兩個前提（授權檢查缺席 + 物件有 owner 邊界）都不成立**。物件級 scoping（checkpoint 2 + `scope_filter` + 跨界 404）是 team-scoped 端點（`admin.py:add/remove_team_member`）的防線，此處刻意不需要。路徑 ID 由 `UUID` 型別驗格式（亂丟 → 422），不存在 → 404。
+
+- **⚠️ 待放寬時再評估**：目前 `rbac.view` = super_admin only，`GET /admin/users/{uuid}/permissions` 不外洩。若日後依 §12 放寬 `rbac.view` 給 `data_auditor`，該讀取端點會變成**可枚舉 `{user_uuid}`** 讀到任何人的 roles/direct/effective 權限。對「唯讀稽核」角色屬預期，但屆時應評估是否對此端點加限制（例如僅回自己、或加速率限制/稽核）。放寬前此非曝險。
+
 ---
 
 ## 7. seed 改造（ADR-055）
