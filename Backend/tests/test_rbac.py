@@ -15,9 +15,11 @@ from sqlalchemy.orm import sessionmaker
 os.environ["ENV"] = "testing"
 
 from app.core import security
+from app.core.permissions import Perm
 from app.core.redis import get_redis
 from app.main import app
-from app.models.auth import Base, Group, Policy, PolicyGroupAssign
+from app.models.auth import Base
+from app.models.rbac import Permission, Role, RolePermissionAssign
 from tests.conftest import TEST_DB_URL as TEST_SQLALCHEMY_DATABASE_URL
 from tests.conftest import TEST_REDIS_URL
 
@@ -31,25 +33,19 @@ async def db_session():
         await conn.run_sync(Base.metadata.create_all)
 
     TestingSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
-    
-    # 預填基礎角色與權限
+
+    # 預填基礎角色與權限 (name="user" matches app.services.auth_account.DEFAULT_PLATFORM_ROLE,
+    # so every account create_account() makes is auto-assigned this role.)
     async with TestingSessionLocal() as db:
-        login_group = Group(name="Login User")
-        db.add(login_group)
+        user_role = Role(name="user", kind="platform")
+        db.add(user_role)
         await db.flush()
-        
-        map_policy = Policy(
-            name="LoginUser_Map",
-            read="all",
-            create="none",
-            edit="none",
-            delete="none"
-        )
-        db.add(map_policy)
+
+        map_view = Permission(key=Perm.MAP_VIEW.value)
+        db.add(map_view)
         await db.flush()
-        
-        assign = PolicyGroupAssign(group_uuid=login_group.uuid, policy_uuid=map_policy.uuid)
-        db.add(assign)
+
+        db.add(RolePermissionAssign(role_uuid=user_role.uuid, permission_uuid=map_view.uuid, scope="all"))
         await db.commit()
 
     async with TestingSessionLocal() as session:

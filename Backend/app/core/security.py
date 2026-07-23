@@ -6,12 +6,14 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.permissions import Perm
+from app.core.rbac_scopes import Scope
 from app.db.session import SessionLocal
 from app.models.auth import User
 from app.repositories.auth_repository import user_repository
@@ -22,12 +24,15 @@ class PasswordHandler(Protocol):
     """Protocol defining the password handler interface."""
 
     name: str
+
     def hash(self, password: str, salt_frontend: str) -> str:
         """Hash a plaintext password with the given frontend salt."""
         ...
+
     def verify(self, password: str, hashed_password_db: str) -> bool:
         """Verify a plaintext password against a stored hash string."""
         ...
+
     def parse_salt_frontend(self, hashed_password_db: str) -> str | None:
         """Extract the frontend salt component from a stored hash string."""
         ...
@@ -114,18 +119,22 @@ class PasswordManager:
         algorithm = hashed_password_db.split('$', 1)[0]
         return self._get_handler(algorithm).parse_salt_frontend(hashed_password_db)
 
+
 # 初始化管理員
 pwd_manager = PasswordManager()
 pwd_manager.register(PBKDF2SHA256Handler(), default=True)
+
 
 # 導出便捷方法
 def get_password_hash(hash_password_frontend: str, salt_frontend: str) -> str:
     """Hash a frontend-hashed password with the configured password manager."""
     return pwd_manager.hash(hash_password_frontend, salt_frontend)
 
+
 def verify_password(hash_password_frontend: str, hashed_password_db: str) -> bool:
     """Verify a frontend-hashed password against the stored hash."""
     return pwd_manager.verify(hash_password_frontend, hashed_password_db)
+
 
 def parse_salt_frontend(hashed_password_db: str) -> str | None:
     """Extract the frontend salt from a stored hash."""
@@ -136,20 +145,24 @@ def parse_salt_frontend(hashed_password_db: str) -> str | None:
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
+
 def generate_salt(length: int = 16) -> str:
     """Generate a random hex salt of the given byte length."""
     return secrets.token_hex(length)
+
 
 def generate_refresh_token() -> str:
     """Generate an opaque, URL-safe refresh token (raw value, returned to client only)."""
     return secrets.token_urlsafe(32)
 
+
 def hash_refresh_token(token: str) -> str:
     """Return the SHA-256 hex digest used to store/look up a refresh token in Redis."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+
 def create_access_token(
-    data: dict, expires_delta: timedelta | None = None, sid: str | None = None
+        data: dict, expires_delta: timedelta | None = None, sid: str | None = None
 ) -> str:
     """Create a signed JWT access token, tagging it with type/jti and optional session id."""
     to_encode = data.copy()
@@ -163,10 +176,12 @@ def create_access_token(
     })
     return jwt.encode(to_encode, settings.JWT_SIGNING_KEY, algorithm=settings.ALGORITHM)
 
+
 async def get_db():
     """Async generator yielding a database session per request."""
     async with SessionLocal() as session:
         yield session
+
 
 def _credentials_exception() -> HTTPException:
     """Build the standard 401 used when an access token cannot be validated."""
@@ -175,6 +190,7 @@ def _credentials_exception() -> HTTPException:
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
 
 def _decode_access_payload(token: str) -> dict:
     """Decode and validate an access JWT, returning its payload. Raises 401 on any failure."""
@@ -186,6 +202,7 @@ def _decode_access_payload(token: str) -> dict:
         raise _credentials_exception()
     return payload
 
+
 async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
     """FastAPI dependency resolving the current authenticated user from JWT."""
     payload = _decode_access_payload(token)
@@ -194,45 +211,69 @@ async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depe
         raise _credentials_exception()
     return user
 
+
 async def get_current_session(token: str = Depends(oauth2_scheme)) -> tuple[str, str | None]:
     """Resolve (user_uuid, sid) from the access token without a DB hit."""
     payload = _decode_access_payload(token)
     return payload["sub"], payload.get("sid")
 
+
+def _request_rbac_cache(request: Request) -> dict:
+    """Return (creating if absent) the request-scoped permission cache (ADR-046).
+
+    Keyed by user uuid so one request's cache never leaks across users — relevant mainly
+    for tests that swap `current_user` between calls within a single request lifecycle.
+    """
+    if not hasattr(request.state, "rbac_cache"):
+        request.state.rbac_cache = {}
+    return request.state.rbac_cache
+
+
+async def resolve_scope(
+        actor: User, perm: Perm, db: AsyncSession, cache: dict | None = None
+) -> Scope:
+    """Checkpoint 1 (ADR-022): resolve `actor`'s widest granted scope for `perm`.
+
+    `cache`, when given, is a plain dict scoped to one request/GraphQL-context; the full
+    per-user grant map is fetched at most once per request regardless of how many
+    capabilities are checked in it.
+    """
+    if cache is not None and actor.uuid in cache:
+        grants = cache[actor.uuid]
+    else:
+        grants = await user_repository.get_user_permissions(db, actor.uuid)
+        if cache is not None:
+            cache[actor.uuid] = grants
+    return grants.get(perm.value, Scope.NONE)
+
+
 class PermissionChecker:
-    """FastAPI dependency that enforces RBAC permissions on a resource and action."""
+    """FastAPI dependency enforcing RBAC — checkpoint 1 only (ADR-022).
 
-    def __init__(self, resource: str, action: str):
-        """Store resource and action for later permission check."""
-        self.resource, self.action = resource.lower(), action.lower()
+    Resolves the caller's scope for `perm` and raises 403 if it is Scope.NONE (ADR-023).
+    Returns the resolved Scope so REST handlers needing row-level filtering (own/team/...)
+    can inject it and filter themselves; handlers needing the full two-checkpoint model
+    (object-level 404) should use app.graphql.context.check_permission's REST-equivalent
+    pattern directly instead of relying on this dependency alone.
+    """
+
+    def __init__(self, perm: Perm):
+        """Store the capability key this dependency checks."""
+        self.perm = perm
+
     async def __call__(
-        self,
-        current_user: User = Depends(get_current_user),
-        db: AsyncSession = Depends(get_db),
-    ) -> str:
-        """檢查權限範圍 (Scope)。定義遵循產品規格 FR-081。
-
-        - all: 具備該資源全域存取權。
-        - own: 僅限於存取自己建立的資源。
-        - none: 無任何存取權。
-        """
-        user_policies = await user_repository.get_user_permissions(db, current_user.uuid)
-        target_policy = next(
-            (
-                p for p in user_policies
-                if p.name.lower() == self.resource
-                or p.name.lower().endswith(f":{self.resource}")
-                or p.name.lower().endswith(f"_{self.resource}")
-            ),
-            None,
-        )
-        if not target_policy:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Resource access restricted.")
-        scope = getattr(target_policy, self.action, "none")
-        if scope == "none":
+            self,
+            request: Request,
+            current_user: User = Depends(get_current_user),
+            db: AsyncSession = Depends(get_db),
+    ) -> Scope:
+        """Resolve and return the caller's scope for `self.perm`; 403 if none."""
+        scope = await resolve_scope(current_user, self.perm, db, cache=_request_rbac_cache(request))
+        if scope == Scope.NONE:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
         return scope
 
-def has_permission(resource: str, action: str):
-    """FastAPI dependency factory for resource and action permission checks."""
-    return Depends(PermissionChecker(resource, action))
+
+def has_permission(perm: Perm):
+    """FastAPI dependency factory: checkpoint-1-only permission check for `perm`."""
+    return Depends(PermissionChecker(perm))

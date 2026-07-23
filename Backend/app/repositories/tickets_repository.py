@@ -1,10 +1,11 @@
 """Repositories for tickets, ticket tasks, and task properties."""
 
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class TicketRepository(GenericRepository[Tickets]):
@@ -23,9 +24,10 @@ class TicketRepository(GenericRepository[Tickets]):
         priority: str | None = None,
         skip: int = 0,
         limit: int = 50,
+        extra_filters=(),
     ) -> list[Tickets]:
-        """List active tickets with optional bbox, status, and priority filters."""
-        query = select(self.model).where(self.model.delete_at.is_(None))
+        """List active tickets with optional bbox/status/priority filter and RBAC scope_filter conditions."""
+        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
             bbox = func.ST_MakeEnvelope(bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326)
             query = query.where(func.ST_Intersects(self.model.geometry, bbox))
@@ -43,9 +45,10 @@ class TicketRepository(GenericRepository[Tickets]):
         bounds=None,
         status: str | None = None,
         priority: str | None = None,
+        extra_filters=(),
     ) -> int:
-        """Count active tickets with optional bbox, status, and priority filters."""
-        query = select(self.model).where(self.model.delete_at.is_(None))
+        """Count active tickets with optional bbox/status/priority filter and RBAC scope_filter conditions."""
+        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
             bbox = func.ST_MakeEnvelope(bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326)
             query = query.where(func.ST_Intersects(self.model.geometry, bbox))

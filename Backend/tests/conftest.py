@@ -38,7 +38,8 @@ from app.core.redis import get_redis  # noqa: E402
 from app.main import app  # noqa: E402
 from app.messaging.email import get_email_sender  # noqa: E402
 from app.messaging.sms import get_sms_sender  # noqa: E402
-from app.models.auth import Base, Group  # noqa: E402
+from app.models.auth import Base  # noqa: E402
+from app.models.rbac import Role  # noqa: E402
 from app.sso.google import get_google_verifier  # noqa: E402
 from app.sso.line import get_line_verifier  # noqa: E402
 from tests.fakes import FakeGoogleVerifier, FakeLineVerifier  # noqa: E402
@@ -92,14 +93,14 @@ async def db():
 
 @pytest_asyncio.fixture
 async def db_session():
-    """Fresh schema + seeded 'Login User' group per test (self-contained; wipes the test DB)."""
+    """Fresh schema + seeded default 'user' platform role per test (self-contained; wipes the test DB)."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
-        session.add(Group(name="Login User"))
+        session.add(Role(name="user", kind="platform"))
         await session.commit()
         yield session
     await engine.dispose()

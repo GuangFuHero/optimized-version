@@ -1,8 +1,11 @@
 """GraphQL mutation integration tests for stations, tickets, tasks, and properties."""
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
+
+from app.models.ticket_task import TicketTask
 from tests.test_graphql.conftest import auth_header
 
 # ---------------------------------------------------------------------------
@@ -702,6 +705,30 @@ async def test_create_ticket(client, coordinator_auth):
 
 
 @pytest.mark.asyncio
+async def test_create_ticket_rejects_non_point_geometry(client, coordinator_auth):
+    """A ticket location must be a Point — a Polygon is rejected (validate_point, ADR-052 review)."""
+    _, token = coordinator_auth
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET,
+            "variables": {
+                "input": {
+                    "title": "Need medics",
+                    "geometry": POLYGON_TAIPEI,
+                    "contactName": "Alice",
+                    "priority": "high",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    errors = body.get("errors", [])
+    assert any("must be a Point" in e["message"] for e in errors), body
+
+
+@pytest.mark.asyncio
 async def test_update_ticket_valid_transition(client, coordinator_auth):
     """Hypothesis: valid status transitions are accepted by the API.
 
@@ -923,6 +950,58 @@ async def test_update_task_property_blocks_non_owner(
     body = resp.json()
     assert "errors" in body
     assert any("permission" in e["message"].lower() for e in body["errors"]), body
+
+
+@pytest.mark.asyncio
+async def test_update_task_property_blocked_when_parent_task_soft_deleted(
+    client, coordinator_auth, login_user_auth, sample_ticket_task
+):
+    """A soft-deleted parent task must NOT downgrade the property edit to checkpoint-1-only.
+
+    Regression guard for the missing None-check in services/ticket.py:update_task_property:
+    when the parent task can't be loaded (delete_at set), `require_scope(resource=None)`
+    silently skips checkpoint 2 (see services/authz.py — needs_checkpoint_2 requires
+    resource is not None), so any holder of ticket.edit (even own-scoped) could edit the
+    orphaned property. The property owner here is the Coordinator; a non-owner Login User
+    (ticket.edit=own) must still be denied.
+    """
+    _, coord_token = coordinator_auth
+    create_resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TASK_PROPERTY,
+            "variables": {
+                "input": {
+                    "taskUuid": sample_ticket_task,
+                    "propertyName": "required_skill",
+                    "propertyValue": "medical",
+                }
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    prop_uuid = create_resp.json()["data"]["createTaskProperty"]["uuid"]
+
+    # Soft-delete the parent task directly — no app path sets TicketTask.delete_at today,
+    # so we reproduce the future-reachable state by hand. (local import keeps the
+    # test_db helper out of the module namespace so pytest doesn't collect it as a test.)
+    from tests.test_graphql.conftest import test_db
+
+    async with test_db() as db:
+        task = await db.get(TicketTask, uuid.UUID(sample_ticket_task))
+        task.delete_at = datetime.now(UTC)
+
+    _, user_token = login_user_auth
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TASK_PROPERTY,
+            "variables": {"uuid": prop_uuid, "input": {"propertyValue": "logistics"}},
+        },
+        headers=auth_header(user_token),
+    )
+    body = resp.json()
+    assert "errors" in body, body
 
 
 # ============================================================================
