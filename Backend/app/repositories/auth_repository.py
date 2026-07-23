@@ -97,6 +97,43 @@ class UserRepository(GenericRepository[User]):
         # 若有回傳值代表成功插入新紀錄 (True)；否則代表記錄已存在 (False)
         return result.fetchone() is not None
 
+    async def upsert_grant(
+        self, db: AsyncSession, *, user_uuid: str, permission_uuid: str, scope: str
+    ) -> None:
+        """Insert or update one per-user grant's scope (PG ON CONFLICT on uq_user_perm)."""
+        stmt = insert(UserPermissionAssign).values(
+            user_uuid=user_uuid, permission_uuid=permission_uuid, scope=scope
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_uuid", "permission_uuid"], set_={"scope": scope}
+        )
+        await db.execute(stmt)
+        await db.commit()
+
+    async def delete_grant(
+        self, db: AsyncSession, *, user_uuid: str, permission_uuid: str
+    ) -> int:
+        """Delete one per-user grant; returns rows removed (0 when absent)."""
+        result = await db.execute(
+            delete(UserPermissionAssign).where(
+                UserPermissionAssign.user_uuid == user_uuid,
+                UserPermissionAssign.permission_uuid == permission_uuid,
+            )
+        )
+        await db.commit()
+        return result.rowcount
+
+    async def unassign_role(self, db: AsyncSession, *, user_uuid: str, role_uuid: str) -> int:
+        """Delete a user↔role assignment; returns rows removed (0 when absent)."""
+        result = await db.execute(
+            delete(UserRoleAssign).where(
+                UserRoleAssign.user_uuid == user_uuid,
+                UserRoleAssign.role_uuid == role_uuid,
+            )
+        )
+        await db.commit()
+        return result.rowcount
+
 
 class RoleRepository(GenericRepository[Role]):
     """Repository for Role model CRUD."""
@@ -153,6 +190,23 @@ class RoleRepository(GenericRepository[Role]):
         )
         await db.commit()
         return result.rowcount
+
+    async def count_assignments(self, db: AsyncSession, role_uuid: str) -> int:
+        """Number of users currently assigned this role."""
+        rows = (
+            await db.execute(
+                select(UserRoleAssign.uuid).where(UserRoleAssign.role_uuid == role_uuid)
+            )
+        ).all()
+        return len(rows)
+
+    async def delete_with_grants(self, db: AsyncSession, role_uuid: str) -> None:
+        """Delete a role's permission grants then the role itself, in one transaction."""
+        await db.execute(
+            delete(RolePermissionAssign).where(RolePermissionAssign.role_uuid == role_uuid)
+        )
+        await db.execute(delete(Role).where(Role.uuid == role_uuid))
+        await db.commit()
 
 
 class PermissionRepository(GenericRepository[Permission]):

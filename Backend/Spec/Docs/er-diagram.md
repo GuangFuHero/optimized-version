@@ -92,6 +92,8 @@ users {
       uuid permission_uuid FK "FK to permissions, indexed"
       string scope "none/own/team/gov/ngo/zone/all, String(10), default none"
   }
+  %% UNIQUE(user_uuid, permission_uuid) -- uq_user_perm (ADR-058, feature 009 P3 / #27):
+  %% one direct grant per (user, permission); dedup keeps the widest scope.
   users ||--o{ user_permission_assign : "directly granted"
   permissions ||--o{ user_permission_assign : "granted to user"
 

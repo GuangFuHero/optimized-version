@@ -717,7 +717,7 @@ async def create_station(self, info, input) -> StationType:
 **取代關係**:取代 ADR-049「seed 即配置面、不建治理機制」前提與 ADR-054「不做後台權限矩陣編輯」該條;ADR-049 的 scope/geo 模型不受影響。
 
 #### ADR-056 RBAC 自管 API — super_admin only，接上 rbac.view/edit enforcement
-> **狀態:ACCEPTED（2026-07-13）;Phase 2 落地 rbac.view(讀)＋ rbac.edit(矩陣寫入);rbac.assign 與角色 CRUD 護欄留待 Phase 3。**
+> **狀態:ACCEPTED（2026-07-13）;Phase 2 落地 rbac.view(讀)＋ rbac.edit(矩陣寫入);Phase 3 補齊 rbac.assign(個人 grant + 取消指派)與角色 CRUD 護欄(≥1 super_admin、刪角色前無指派、保留字保護)。**
 
 **Context**:ADR-050 把 `rbac.edit`/`rbac.assign` 標為「純超前定義,等對應功能才接 enforcement」。feature 009 即該功能。
 
@@ -725,7 +725,76 @@ async def create_station(self, info, input) -> StationType:
 
 **Consequences**:➕ 兌現 ADR-050 對 rbac.edit 的超前定義;提權面受限(唯一能改的 super_admin 本就全權,無「授出自己沒有的權限」問題)。➖ super_admin 成為單點;靠護欄防鎖死。
 
-**取代關係**:兌現 ADR-050(rbac.edit 部分);延續 ADR-032/035/040。`rbac.assign`(人↔角色/個人 grant)與「≥1 super_admin」「刪角色前無指派」等護欄於 Phase 3 補齊。
+**取代關係**:兌現 ADR-050(rbac.edit + rbac.assign 全部);延續 ADR-032/035/040。Phase 3 端點:`POST/PATCH/DELETE /admin/rbac/roles`(rbac.edit)、`PUT/DELETE /admin/users/{uuid}/permissions/{cap}` 與 `DELETE /admin/users/{uuid}/role/{role_uuid}`(rbac.assign)。
+
+#### ADR-057 capability 目錄 code-owned & 唯讀；runtime CRUD 只作用在 grant/role/assignment
+> **狀態:ACCEPTED（2026-07-13,feature 009 Phase 1~3）。**
+
+**白話**:**capability(權限項目)**＝「系統裡有哪些動作」的清單(如 `ticket.add`),**寫死在程式碼**,因為每一項都對應到程式裡「檢查這個權限」的那一行。**grant(授權)**＝「某角色／某人對某權限項目能在多大 scope 內做」。後台能 CRUD 的是**授權**,不是**權限項目清單**——若後台能新增一個沒人檢查的 capability,它只會是 DB 裡一筆無效死資料。
+
+**Context**:「權限 CRUD」易被誤解成「能新增權限項目」。但 `Perm` key 綁在程式 enforcement 點,runtime 新增沒有意義。
+
+**Decision**:capability 目錄(`Perm`)與 scope 值(`Scope`)維持 code-defined、API 唯讀(`GET /admin/rbac/capabilities` 只給前端當下拉選單)。所有寫入端點驗證 `cap ∈ Perm`、`scope ∈ Scope`,否則 422(用 FastAPI path enum / Pydantic body enum 型別達成)。runtime 可 CRUD 的只有四種:role↔permission 授權(grant)、role 本身、user↔role 指派、user 個人 grant。
+
+**Consequences**:➕ 不會出現「有授權卻沒人檢查」的無效權限;輸入邊界清楚。➖ 要新增權限項目仍得改 code(低頻,可接受)。
+
+**取代關係**:呼應 ADR-020(固定 scope、不做通用 ABAC)。
+
+#### ADR-058 個人 grant 唯一化:補 `uq_user_perm` + migration(內含去重)+ upsert 寫入
+> **狀態:ACCEPTED（2026-07-13,feature 009 Phase 3）。**
+
+**白話**:`user_permission_assign`(某人的個人額外授權)以前**沒有**「同一人同一權限只能一列」的限制,別的兩張授權表(`uq_role_perm`/`uq_user_role`)都有。沒限制的話,寫入可能替同一 (人,權限) 長出兩列不同 scope,讀取面 `direct_grants`(last-wins)就會跟 `effective`(widest-wins)對不上。
+
+**Context**:承 Phase 1 final review 與 spec §250。`app/models/rbac.py:UserPermissionAssign` 原本無 `__table_args__`。
+
+**Decision**:(1) model 加 `UniqueConstraint("user_uuid","permission_uuid", name="uq_user_perm")`;(2) Alembic migration `b7c1f0a92d34` **先去重**——同鍵保留 scope 最寬的列(`all>zone>team>own>none`,重用 `app/core/rbac_scopes.py:WIDTH`/`widest()`,平手取最小 uuid,結果確定)、刪其餘,再建約束(DO block、冪等);(3) 個人 grant 寫入走 `insert(...).on_conflict_do_update(index_elements=["user_uuid","permission_uuid"], set_={"scope":...})`,與 `RoleRepository.upsert_grant`(Phase 2)同模式。
+
+**Consequences**:➕ 每個 (人,權限) 恆一列,`direct_grants` 與 `effective` 永遠一致,寫入冪等。➖ 首度為 feature 009 引入一支 migration;去重步驟在無使用者環境為 no-op。
+
+**取代關係**:呼應 ADR-018(個人 grant 加法、無 effect);補齊 spec §250 的 Phase 3 硬性前提。
+
+#### ADR-059 保護「程式碼按名字引用」的種子角色不被改名/刪除
+> **狀態:ACCEPTED（2026-07-13,feature 009 Phase 3）。**
+
+**白話**:有些角色名字被程式碼寫死引用,改名或刪掉會**默默弄壞流程**:`super_admin` → 所有 RBAC 護欄靠它(`app/services/admin.py:22`);`user` → 新使用者註冊時按名字撈這個當預設平台角色(`app/services/auth_account.py:11,45`),改名/刪除會讓**註冊直接壞掉**。團隊角色 `admin`/`member` 不受影響(名字是參數傳入,非硬編碼)。
+
+**Context**:Phase 3 開放 role CRUD 後,才第一次可能從 runtime 改到這些角色的名字/存在性。
+
+**Decision**:定義 `PROTECTED_ROLE_NAMES = {SUPER_ADMIN_ROLE_NAME, DEFAULT_PLATFORM_ROLE}`(＝ `{"super_admin","user"}`,直接取自兩個既有常數,耦合跟著源頭走)。建立(名字命中)、改名(改的是保留角色、或改成保留名)、刪除(刪的是保留角色)→ 一律 **409**。`super_admin` 另有 ADR-056 的「不可撤 rbac.edit/assign」。
+
+**Consequences**:➕ 擋掉「改個名就讓註冊/授權崩掉」的地雷。➖ 這兩個角色只能改 grant(Phase 2 的 PUT/DELETE),不能改名/刪——正是所需。
+
+**替代方案(未採用)**:(a) 只保護 `super_admin`(spec 原文)——不採,因 `user` 斷掉是靜默且影響註冊;(b) 改用 `roles.is_system` 旗標欄位取代按名耦合——較乾淨但要動 schema/seed,YAGNI。
+
+#### ADR-060 角色建立/改名撞名的 TOCTOU race → 409（catch IntegrityError）
+> **狀態:ACCEPTED（2026-07-15,feature 009 Phase 3）。**
+
+**白話**:建立/改名角色是「先查名字有沒有被用(`get_by_name`)→ 再寫入」的 check-then-act。並發下兩個請求可能都通過前檢查、都去寫入,第二個撞 `roles.name` 的 unique 約束(`roles_name_key`)丟 `IntegrityError`,現在會冒成 **500**(還會漏 SQL/stack)。這應對齊前檢查的語意 → **409**。
+
+**Context**:Phase 3 才開放 runtime 建立/改名角色(`POST /admin/rbac/roles`、`PATCH /admin/rbac/roles/{uuid}`)。只有這兩條有「DB unique 約束 + 非 upsert 寫入」的缺口:assign role 用 `on_conflict_do_nothing`、grant 寫入用 `on_conflict_do_update`(ADR-058),都已吞掉 race;`_remaining_super_admins` 是純程式檢查、無 DB 約束,依 plan/ADR-032「不加鎖」不在此列。
+
+**Decision**:`create_role`/`rename_role` 在 `role_repository.create`/`.update` 外層 `except IntegrityError`:`await db.rollback()` 後改丟 `RbacConflictError("Role '<name>' already exists")`,重用既有端點層 `RbacConflictError → 409` 映射(與前檢查同一路徑、同一訊息)。沿用 `contacts.py:79`/`sso.py`/`register.py` 既有的「rollback + 409」防禦模式。護欄放 service 層(非端點),讓 409 語意與 domain invariant 同處。
+
+**Consequences**:➕ race 下回 409 而非 500,不漏 SQL;與 deterministic 前檢查語意一致、冪等。➖ 前檢查與 IntegrityError fallback 兩段(訊息重複一次)——可接受,fallback 只在罕見 race 觸發。測試以 monkeypatch `get_by_name→None` 確定性地打到 race 路徑。
+
+**取代關係**:呼應 ADR-023 錯誤語意(違反不變量 → 409)、ADR-032(TOCTOU 不加鎖的既有取捨);與 ADR-058 的 upsert 決策互補(那些寫入本就無此缺口)。
+
+#### ADR-061 rbac.* 是 super_admin-only 治理權限,runtime 不可委派
+> **狀態:ACCEPTED（2026-07-15,feature 009 Phase 3）。**
+
+**白話**:`rbac.view`/`rbac.assign`/`rbac.edit` 這三個治理權限只屬於 `super_admin`——別的角色不能被授予、任何人也拿不到個人版。ADR-056 只擋了「把 rbac.edit/assign 從 super_admin **撤掉**」,卻沒擋「把 rbac.edit **授給**一般角色」或「把 rbac.assign 塞成某人的**個人 grant**」,等於留了一條 runtime 橫向提權後門:一個握有 rbac.edit 的 super_admin 可以把 rbac.* 發給別的角色/使用者,繞過「唯一治理者」前提。
+
+**Context**:Phase 3 開放矩陣寫入(`PUT /admin/rbac/roles/{uuid}/permissions/{cap}`)與個人 grant 寫入(`PUT /admin/users/{uuid}/permissions/{cap}`)後,第一次可能從 runtime 把 rbac.* 授給非 super_admin 對象。ADR-056 的護欄只涵蓋「不可自我鎖死」單向。
+
+**Decision**:在 use-case 層加雙向護欄(非 DB 約束):
+- `_RBAC_GOVERNANCE_CAPS = frozenset(p for p in Perm if p.value.startswith("rbac."))`(prefix 動態算出,未來新增 rbac.* 自動涵蓋)。
+- `set_role_permission`:`cap ∈ rbac.*` 且目標角色非 `super_admin` → **409**;`super_admin` 角色自身仍可設定(冪等,維持 ADR-056)。
+- `set_user_permission`:`cap ∈ rbac.*` → 一律 **409**(rbac.* 是角色綁定治理權,永不作為個人 grant);此檢查在 user 查找前,與使用者是否存在無關。
+- 端點層 `set_user_permission` 補上 `except RbacConflictError → 409`(原本只 catch `RbacNotFoundError`,否則 conflict 會回 500)。
+
+**Consequences**:➕ 封住 runtime 橫向提權面:rbac.* 恆為 super_admin 角色專屬,提權只能靠改 seed/程式碼(code-owned)。➖ super_admin 仍是單點,靠 ADR-056+061 兩道護欄一起防(前者防「撤掉自己」,後者防「發給別人」)。
+
+**取代關係**:補齊 ADR-056(super_admin only enforcement)的另一半;呼應 ADR-050 對 rbac.edit/assign 的定位、ADR-057 capability 目錄 code-owned。
 
 ---
 
@@ -771,7 +840,7 @@ async def create_station(self, info, input) -> StationType:
 - **[15]** 新 migration `f1a2b3c4d5e6` 補 `work_zones.geometry` 的 GIST index——zone `ST_Contains` 不再全表掃。
 
 **延後（非本輪）**
-- **[0]** rebase 後兩個 alembic head（RBAC chain + announcement migration）→ merge revision 跟 announcements 一起在 `feature/backend-annoucement-rbac` 收（呼應 announcement 歸該分支）。
+- **[0]** rebase 後兩個 alembic head（RBAC chain + announcement migration）→ ~~merge revision 跟 announcements 一起在 `feature/backend-annoucement-rbac` 收~~。**已提前於本 stack 收：見 ADR-065**（announcement 的 *code* port 仍歸該分支，只有 migration-DAG 的 merge 提前到 #27）。
 - **[14]** PII 檢查 per-request 跨 ticket 未共用（N+1）——perf、不 crash，列待辦。
 
 ---
@@ -792,6 +861,22 @@ async def create_station(self, info, input) -> StationType:
 - `app/services/rbac_admin.py`：`list_capabilities()` 設 `team_gov_only=perm in GOV_TEAM_ONLY_PERMS`。
 - `tests/test_rbac_admin_api.py`：catalog 測試斷言 `work_zone.*`→True、非 zone→False。
 - **零影響**：`work_zone.py` 的 `_require_gov_zone_authority` enforcement 不變（只是顯示層對齊它）；不動 migration。
+
+---
+
+#### ADR-065 alembic 雙 head 提前於本 stack 收（merge revision，推翻 ADR-063 [0] 的延後）
+> **狀態：ACCEPTED（2026-07-22）。** 落在 **#27（`popo/rbac-role-crud`）tip**——它是 stack 最上層、同時看得到兩個 head。ADR-063 [0] 原把此 merge 延到 `feature/backend-annoucement-rbac`，本條把「migration-DAG 的 merge」提前，announcement 的 **code** port（`Perm.ANN_*` / `require_authenticated`）仍留該分支。
+
+**Context**：rebase 到最新 main 後，本分支的 alembic 從 branchpoint `71bd05e07df3`（create_audit_system）分岔出兩個 head：announcement（`a7c9e1f4b2d8`，main 帶進來）與 RBAC 長鏈（…→`b7c1f0a92d34` uq_user_perm，ADR-058）。兩個 head → `alembic upgrade head` 直接 `FAILED: Multiple head revisions`，全新 DB 無法從零 migrate。reviewer 於 PR #24 `1d52ab265e50…:18` 提出（ADR-063 [0] 記為延後）。
+
+**Decision**：以標準 `alembic merge` 產生一支 **no-op** merge revision `c7d8e9f0a1b2`（`down_revision = ('b7c1f0a92d34', 'a7c9e1f4b2d8')`，`upgrade`/`downgrade` 皆 `pass`），把兩 head 併成單一 head。**不改寫任何既有 migration**（尤其不動 main 的 `a7c9e1f4b2d8`，避免與 main 分歧）；不動 schema——兩邊 DDL 早已各自套用。提前到本 stack 的理由：讓 popo stack 合進 main 前就是單 head、可從零 migrate，不必等 announcement code port。
+
+**Consequences**：➕ `alembic upgrade head` 從零可跑（單 head `c7d8e9f0a1b2`）；➕ popo stack 可獨立成單 head 合進 main。➖ 偏離 ADR-063 [0] 原計畫——**約定 `feature/backend-annoucement-rbac` 不再自行加 merge，改 rebase 到已含本 merge 的 popo stack 之上**（否則會出現重複 merge / 再度雙 head）。conftest 用 metadata `create_all`（非 alembic）建測試 DB，故測試不受此 merge 影響。
+
+**Blast Radius**：
+- `alembic/versions/c7d8e9f0a1b2_merge_rbac_and_announcement_heads.py`：新 no-op merge revision（唯一新增檔）。
+- 本檔：本 ADR-065 條目 + 更新 ADR-063 [0] 註記指向本條。
+- **零影響**：無 code / schema / 測試邏輯改動。
 
 ---
 

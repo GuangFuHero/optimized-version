@@ -1,16 +1,32 @@
 """Pydantic schemas for the RBAC admin read surface (feature 009, Phase 1)."""
 
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 from app.core.rbac_scopes import Scope
+
+_RoleName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
 
 
 class SetGrantRequest(BaseModel):
     """Upsert body for a single matrix cell; `scope` is validated against the Scope enum."""
 
     scope: Scope
+
+
+class CreateRoleRequest(BaseModel):
+    """Create-role body; kind is fixed to platform|team, name is trimmed and 1..50 chars."""
+
+    name: _RoleName
+    kind: Literal["platform", "team"]
+
+
+class RenameRoleRequest(BaseModel):
+    """Rename-role body (name only; kind is immutable)."""
+
+    name: _RoleName
 
 
 class CapabilityInfo(BaseModel):

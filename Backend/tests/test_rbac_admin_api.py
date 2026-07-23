@@ -370,3 +370,397 @@ async def test_delete_grant_denied_for_non_super_admin(client, db_session):
         headers=_auth_header(plain_uuid),
     )
     assert resp.status_code == 403
+
+
+# --- Phase 3: per-user grants (PUT / DELETE) ------------------------------------------
+
+
+async def _make_target_user(db, name: str = "Target") -> str:
+    """A plain user to receive per-user grants. Returns uuid."""
+    user = User(name=name)
+    db.add(user)
+    await db.flush()
+    user_uuid = str(user.uuid)
+    await db.commit()
+    return user_uuid
+
+
+@pytest.mark.asyncio
+async def test_put_user_grant_adds_direct_grant(client, db_session):
+    """A per-user grant shows up in direct_grants and effective."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/users/{target}/permissions/ticket.export",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["direct_grants"]["ticket.export"] == "all"
+    assert resp.json()["effective"]["ticket.export"] == "all"
+
+
+@pytest.mark.asyncio
+async def test_put_user_grant_upserts_not_duplicates(client, db_session):
+    """A second PUT for the same (user, cap) updates the one row (uq_user_perm)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    hdr = _auth_header(admin_uuid)
+    url = f"/api/v1/admin/users/{target}/permissions/ticket.export"
+    await client.put(url, json={"scope": "own"}, headers=hdr)
+    resp = await client.put(url, json={"scope": "all"}, headers=hdr)
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["direct_grants"]["ticket.export"] == "all"
+
+    rows = (
+        await db_session.execute(
+            select(UserPermissionAssign)
+            .join(Permission, Permission.uuid == UserPermissionAssign.permission_uuid)
+            .where(UserPermissionAssign.user_uuid == target, Permission.key == "ticket.export")
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_put_user_grant_unknown_user_404(client, db_session):
+    """Granting to a non-existent user returns 404."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/users/{uuid4()}/permissions/ticket.export",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_put_user_grant_denied_for_non_super_admin(client, db_session):
+    """A caller without rbac.assign is denied with 403."""
+    plain_uuid = await _make_plain_user(db_session)
+    target = await _make_target_user(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/users/{target}/permissions/ticket.export",
+        json={"scope": "all"},
+        headers=_auth_header(plain_uuid),
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_delete_user_grant_is_idempotent(client, db_session):
+    """DELETE removes the direct grant and is a 204 even when it was never set."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    hdr = _auth_header(admin_uuid)
+    url = f"/api/v1/admin/users/{target}/permissions/ticket.export"
+    await client.put(url, json={"scope": "all"}, headers=hdr)
+
+    assert (await client.delete(url, headers=hdr)).status_code == 204
+    assert (await client.delete(url, headers=hdr)).status_code == 204  # idempotent
+
+    detail = await client.get(f"/api/v1/admin/users/{target}/permissions", headers=hdr)
+    assert "ticket.export" not in detail.json()["direct_grants"]
+
+
+# --- Phase 3: role create + rename (POST / PATCH) -------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_role(client, db_session):
+    """super_admin creates a new empty role (201, no grants yet)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/rbac/roles",
+        json={"name": "dispatcher", "kind": "team"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 201, resp.json()
+    assert resp.json()["name"] == "dispatcher" and resp.json()["grants"] == {}
+
+
+@pytest.mark.asyncio
+async def test_create_role_duplicate_name_409(client, db_session):
+    """Creating a role whose name already exists is a 409."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    await _make_editable_role(db_session, name="dispatcher")
+    resp = await client.post(
+        "/api/v1/admin/rbac/roles",
+        json={"name": "dispatcher", "kind": "team"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_create_role_reserved_name_409(client, db_session):
+    """Creating a role named 'user' (a code-referenced name) is refused (ADR-059)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/rbac/roles",
+        json={"name": "user", "kind": "platform"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_create_role_bad_kind_422(client, db_session):
+    """Kind must be platform or team."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.post(
+        "/api/v1/admin/rbac/roles",
+        json={"name": "x", "kind": "wizard"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_rename_role(client, db_session):
+    """Renaming a plain role updates its name."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="oldname")
+    resp = await client.patch(
+        f"/api/v1/admin/rbac/roles/{role_uuid}",
+        json={"name": "newname"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["name"] == "newname"
+
+
+@pytest.mark.asyncio
+async def test_rename_protected_role_409(client, db_session):
+    """The super_admin role cannot be renamed (ADR-059)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.patch(
+        f"/api/v1/admin/rbac/roles/{super_role_uuid}",
+        json={"name": "root"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_rename_role_denied_for_non_super_admin(client, db_session):
+    """A caller without rbac.edit is denied with 403."""
+    plain_uuid = await _make_plain_user(db_session)
+    role_uuid = await _make_editable_role(db_session, name="oldname")
+    resp = await client.patch(
+        f"/api/v1/admin/rbac/roles/{role_uuid}",
+        json={"name": "newname"},
+        headers=_auth_header(plain_uuid),
+    )
+    assert resp.status_code == 403
+
+
+# --- Phase 3: role delete (DELETE) ----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_role_with_grants_succeeds(client, db_session):
+    """Deleting an unassigned role removes it and its permission grants (204)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="temp")
+    hdr = _auth_header(admin_uuid)
+    await client.put(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
+        json={"scope": "own"}, headers=hdr,
+    )
+    resp = await client.delete(f"/api/v1/admin/rbac/roles/{role_uuid}", headers=hdr)
+    assert resp.status_code == 204, resp.text
+    assert (await client.get(f"/api/v1/admin/rbac/roles/{role_uuid}", headers=hdr)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_role_with_assignment_409(client, db_session):
+    """A role still assigned to a user cannot be deleted (must reassign first)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="temp")
+    user = User(name="Holder")
+    db_session.add(user)
+    await db_session.flush()
+    db_session.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role_uuid))
+    await db_session.commit()
+
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{role_uuid}", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_protected_role_409(client, db_session):
+    """The super_admin role cannot be deleted (ADR-059)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{super_role_uuid}", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_role_unknown_404(client, db_session):
+    """Deleting a non-existent role returns 404."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/rbac/roles/{uuid4()}", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 404
+
+
+# --- Phase 3: unassign role (DELETE user/role) ----------------------------------------
+
+
+async def _assign(db, user_uuid: str, role_uuid: str) -> None:
+    """Directly attach a role to a user (test setup)."""
+    db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=role_uuid))
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_unassign_role(client, db_session):
+    """Removing a role the user holds succeeds (204) and drops it from their roles."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    role_uuid = await _make_editable_role(db_session, name="helper")
+    await _assign(db_session, target, role_uuid)
+    hdr = _auth_header(admin_uuid)
+
+    resp = await client.delete(f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=hdr)
+    assert resp.status_code == 204, resp.text
+    detail = await client.get(f"/api/v1/admin/users/{target}/permissions", headers=hdr)
+    assert all(r["name"] != "helper" for r in detail.json()["roles"])
+
+
+@pytest.mark.asyncio
+async def test_unassign_role_user_lacks_it_404(client, db_session):
+    """Unassigning a role the user does not hold returns 404."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    role_uuid = await _make_editable_role(db_session, name="helper")
+    resp = await client.delete(
+        f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=_auth_header(admin_uuid)
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_unassign_last_super_admin_409(client, db_session):
+    """Removing the only super_admin's super_admin role is refused (409)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.delete(
+        f"/api/v1/admin/users/{admin_uuid}/role/{super_role_uuid}",
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_unassign_role_denied_for_non_super_admin(client, db_session):
+    """A caller without rbac.assign is denied with 403."""
+    plain_uuid = await _make_plain_user(db_session)
+    target = await _make_target_user(db_session)
+    role_uuid = await _make_editable_role(db_session, name="helper")
+    await _assign(db_session, target, role_uuid)
+    resp = await client.delete(
+        f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=_auth_header(plain_uuid)
+    )
+    assert resp.status_code == 403
+
+
+# --- ADR-061: rbac.* is super_admin-only; runtime cannot delegate it -------------------
+
+
+@pytest.mark.asyncio
+async def test_cannot_grant_rbac_edit_to_non_super_admin_role(client, db_session):
+    """Granting rbac.edit to a non-super_admin role is refused (409) — no delegated editing."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="member")
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/rbac.edit",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_cannot_grant_rbac_view_to_non_super_admin_role(client, db_session):
+    """rbac.view is also blocked from runtime delegation; widening it stays a seed decision."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="member")
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/rbac.view",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_can_still_set_rbac_edit_on_super_admin_role(client, db_session):
+    """Setting rbac.edit on the super_admin role itself stays allowed (idempotent)."""
+    admin_uuid, super_role_uuid = await _make_super_admin(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/rbac/roles/{super_role_uuid}/permissions/rbac.edit",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["grants"]["rbac.edit"] == "all"
+
+
+@pytest.mark.asyncio
+async def test_cannot_grant_rbac_as_per_user_grant(client, db_session):
+    """rbac.* is a role-bound governance capability; it cannot be a per-user grant (409)."""
+    admin_uuid, _ = await _make_super_admin(db_session)
+    target = await _make_target_user(db_session)
+    resp = await client.put(
+        f"/api/v1/admin/users/{target}/permissions/rbac.assign",
+        json={"scope": "all"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409
+
+
+# --- ADR-060: a name-uniqueness race that slips past the pre-check maps to 409, not 500 -----
+
+
+async def _pretend_name_absent(*args, **kwargs):
+    """Force get_by_name to report 'free', simulating the TOCTOU window before our commit."""
+    return None
+
+
+@pytest.mark.asyncio
+async def test_create_role_name_race_maps_to_409(client, db_session, monkeypatch):
+    """Create that races past the name pre-check hits uq roles.name → 409, not 500 (ADR-060)."""
+    from app.repositories.auth_repository import role_repository
+
+    admin_uuid, _ = await _make_super_admin(db_session)
+    await _make_editable_role(db_session, name="dispatcher")  # the name is already taken
+    monkeypatch.setattr(role_repository, "get_by_name", _pretend_name_absent)
+    resp = await client.post(
+        "/api/v1/admin/rbac/roles",
+        json={"name": "dispatcher", "kind": "team"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409, resp.text
+
+
+@pytest.mark.asyncio
+async def test_rename_role_name_race_maps_to_409(client, db_session, monkeypatch):
+    """Rename whose target name is taken under a race hits uq roles.name → 409, not 500 (ADR-060)."""
+    from app.repositories.auth_repository import role_repository
+
+    admin_uuid, _ = await _make_super_admin(db_session)
+    role_uuid = await _make_editable_role(db_session, name="oldname")
+    await _make_editable_role(db_session, name="taken")  # the target name is already in use
+    monkeypatch.setattr(role_repository, "get_by_name", _pretend_name_absent)
+    resp = await client.patch(
+        f"/api/v1/admin/rbac/roles/{role_uuid}",
+        json={"name": "taken"},
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 409, resp.text

@@ -4,11 +4,14 @@ Reads only — no RBAC checkpoints here; the router gates every route on `rbac.v
 (checkpoint 1, super_admin only). Missing role/user raises RbacNotFoundError → 404.
 """
 
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import GOV_TEAM_ONLY_PERMS, PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
 from app.models.auth import User
+from app.models.rbac import UserRoleAssign
 from app.repositories.auth_repository import (
     permission_repository,
     role_repository,
@@ -22,11 +25,21 @@ from app.schemas.rbac_admin import (
     RoleRef,
     UserPermissionsResponse,
 )
-from app.services.admin import SUPER_ADMIN_ROLE_NAME
+from app.services.admin import SUPER_ADMIN_ROLE_NAME, _remaining_super_admins
+from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 
 # Capabilities super_admin must never lose, or it could lock itself out of RBAC management.
 _SUPER_ADMIN_LOCKED_CAPS = {Perm.RBAC_EDIT, Perm.RBAC_ASSIGN}
+
+# ADR-061: rbac.* is super_admin-only governance and cannot be delegated at runtime — no
+# other role may hold it, and it can never become a per-user grant. Derived by prefix so a
+# newly added rbac.* capability is covered without touching this guard.
+_RBAC_GOVERNANCE_CAPS = frozenset(p for p in Perm if p.value.startswith("rbac."))
+
+# Role names the code references directly; renaming/deleting them breaks flows (ADR-059):
+# super_admin gates every RBAC guard; `user` is the default role new registrations get.
+PROTECTED_ROLE_NAMES = {SUPER_ADMIN_ROLE_NAME, DEFAULT_PLATFORM_ROLE}
 
 
 class RbacNotFoundError(ValueError):
@@ -111,6 +124,12 @@ async def set_role_permission(
     if role is None:
         raise RbacNotFoundError("Role not found")
 
+    # ADR-061: rbac.* stays super_admin-only — it cannot be delegated to any other role.
+    if cap in _RBAC_GOVERNANCE_CAPS and role.name != SUPER_ADMIN_ROLE_NAME:
+        raise RbacConflictError(
+            f"{cap.value} is super_admin-only and cannot be granted to '{role.name}'"
+        )
+
     if (
         role.name == SUPER_ADMIN_ROLE_NAME
         and cap in _SUPER_ADMIN_LOCKED_CAPS
@@ -147,3 +166,124 @@ async def revoke_role_permission(
     await role_repository.delete_grant(
         db, role_uuid=role_uuid, permission_uuid=str(permission.uuid)
     )
+
+
+async def set_user_permission(
+    db: AsyncSession, *, actor: User, user_uuid: str, cap: Perm, scope: Scope
+) -> UserPermissionsResponse:
+    """Add/update one per-user additive grant. Checkpoint 1: rbac.assign, super_admin only."""
+    await require_scope(actor, Perm.RBAC_ASSIGN, db)
+    # ADR-061: rbac.* is role-bound governance; it is never handed out as a per-user grant.
+    if cap in _RBAC_GOVERNANCE_CAPS:
+        raise RbacConflictError(f"{cap.value} cannot be a per-user grant")
+    user = await user_repository.get_by_uuid(db, user_uuid)
+    if user is None:
+        raise RbacNotFoundError("User not found")
+    permission = await permission_repository.ensure_by_key(db, cap.value)
+    await user_repository.upsert_grant(
+        db, user_uuid=user_uuid, permission_uuid=str(permission.uuid), scope=scope.value
+    )
+    return await get_user_permissions_detail(db, user_uuid)
+
+
+async def revoke_user_permission(
+    db: AsyncSession, *, actor: User, user_uuid: str, cap: Perm
+) -> None:
+    """Remove one per-user grant. Checkpoint 1: rbac.assign. Idempotent."""
+    await require_scope(actor, Perm.RBAC_ASSIGN, db)
+    user = await user_repository.get_by_uuid(db, user_uuid)
+    if user is None:
+        raise RbacNotFoundError("User not found")
+    permission = await permission_repository.get_by_key(db, cap.value)
+    if permission is None:
+        return
+    await user_repository.delete_grant(
+        db, user_uuid=user_uuid, permission_uuid=str(permission.uuid)
+    )
+
+
+async def create_role(db: AsyncSession, *, actor: User, name: str, kind: str) -> RoleGrants:
+    """Create a new empty role. Checkpoint 1: rbac.edit. Reserved/duplicate name → 409."""
+    await require_scope(actor, Perm.RBAC_EDIT, db)
+    if name in PROTECTED_ROLE_NAMES:
+        raise RbacConflictError(f"'{name}' is a reserved role name")
+    if await role_repository.get_by_name(db, name) is not None:
+        raise RbacConflictError(f"Role '{name}' already exists")
+    try:
+        role = await role_repository.create(db, obj_in={"name": name, "kind": kind})
+    except IntegrityError as err:
+        # ADR-060: name claimed in the window between the pre-check and our commit → 409, not 500.
+        await db.rollback()
+        raise RbacConflictError(f"Role '{name}' already exists") from err
+    return RoleGrants(uuid=role.uuid, name=role.name, kind=role.kind, grants={})
+
+
+async def rename_role(db: AsyncSession, *, actor: User, role_uuid: str, name: str) -> RoleGrants:
+    """Rename a role. Checkpoint 1: rbac.edit. Protected role / protected or taken name → 409."""
+    await require_scope(actor, Perm.RBAC_EDIT, db)
+    role = await role_repository.get_by_uuid(db, role_uuid)
+    if role is None:
+        raise RbacNotFoundError("Role not found")
+    if role.name == name:
+        return await get_role(db, role_uuid)  # no-op
+    if role.name in PROTECTED_ROLE_NAMES:
+        raise RbacConflictError(f"Cannot rename the '{role.name}' role")
+    if name in PROTECTED_ROLE_NAMES:
+        raise RbacConflictError(f"'{name}' is a reserved role name")
+    if await role_repository.get_by_name(db, name) is not None:
+        raise RbacConflictError(f"Role '{name}' already exists")
+    try:
+        await role_repository.update(db, db_obj=role, obj_in={"name": name})
+    except IntegrityError as err:
+        # ADR-060: target name claimed in the TOCTOU window → 409, not 500.
+        await db.rollback()
+        raise RbacConflictError(f"Role '{name}' already exists") from err
+    return await get_role(db, role_uuid)
+
+
+async def delete_role(db: AsyncSession, *, actor: User, role_uuid: str) -> None:
+    """Delete a role and its grants. Checkpoint 1: rbac.edit.
+
+    Guards: protected role → 409; any remaining UserRoleAssign → 409 (reassign first, ADR-056).
+    """
+    await require_scope(actor, Perm.RBAC_EDIT, db)
+    role = await role_repository.get_by_uuid(db, role_uuid)
+    if role is None:
+        raise RbacNotFoundError("Role not found")
+    if role.name in PROTECTED_ROLE_NAMES:
+        raise RbacConflictError(f"Cannot delete the '{role.name}' role")
+    if await role_repository.count_assignments(db, role_uuid) > 0:
+        raise RbacConflictError("Role still has members; reassign them before deleting")
+    await role_repository.delete_with_grants(db, role_uuid)
+
+
+async def unassign_user_role(
+    db: AsyncSession, *, actor: User, user_uuid: str, role_uuid: str
+) -> None:
+    """Remove a role from a user. Checkpoint 1: rbac.assign.
+
+    Guard: refuses to drop the last super_admin (ADR-032/056). 404 if the user, the role,
+    or the assignment itself does not exist.
+    """
+    await require_scope(actor, Perm.RBAC_ASSIGN, db)
+    role = await role_repository.get_by_uuid(db, role_uuid)
+    if role is None:
+        raise RbacNotFoundError("Role not found")
+
+    assignment = (
+        await db.execute(
+            select(UserRoleAssign).where(
+                UserRoleAssign.user_uuid == user_uuid,
+                UserRoleAssign.role_uuid == role_uuid,
+            )
+        )
+    ).scalars().first()
+    if assignment is None:
+        raise RbacNotFoundError("User is not assigned this role")
+
+    if role.name == SUPER_ADMIN_ROLE_NAME:
+        remaining = await _remaining_super_admins(db, role_uuid, excluding=user_uuid)
+        if remaining == 0:
+            raise RbacConflictError("Cannot remove the last super_admin")
+
+    await user_repository.unassign_role(db, user_uuid=user_uuid, role_uuid=role_uuid)
