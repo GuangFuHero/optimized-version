@@ -82,6 +82,12 @@ class Perm(StrEnum):
     PREDEP_PUBLISH = "pre_departure.publish"
     PREDEP_EDIT = "pre_departure.edit"
 
+    # Deployment Briefings (templates + generated briefings; internal, not public — ADR-AB-01)
+    BRIEFING_VIEW = "briefing.view"
+    BRIEFING_CREATE = "briefing.create"
+    BRIEFING_EDIT = "briefing.edit"
+    BRIEFING_DELETE = "briefing.delete"
+
     # Audit Log
     AUDIT_VIEW = "audit.view"
 

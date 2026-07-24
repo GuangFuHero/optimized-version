@@ -2,6 +2,7 @@
 
 from app.models.announcement import Announcement  # noqa: F401
 from app.models.audit import AuditLog  # noqa: F401
+from app.models.briefing import Briefing, BriefingTemplate  # noqa: F401
 from app.models.auth import (  # noqa: F401
     User,
     UserContact,
