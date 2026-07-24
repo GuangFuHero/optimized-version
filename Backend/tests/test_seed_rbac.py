@@ -3,8 +3,16 @@
 import pytest
 from sqlalchemy import select
 
+from app.core.permissions import Perm
 from app.models.rbac import Permission, Role, RolePermissionAssign
-from scripts.seed_rbac import ensure_role_grant
+from scripts.seed_rbac import ROLES_DATA, ensure_role_grant
+
+
+def test_seed_grants_announcement_caps_to_super_admin():
+    """super_admin can manage announcements once the module enforces announcement.* (ADR-AB-02)."""
+    super_admin = next(r for r in ROLES_DATA if r["name"] == "super_admin")
+    for cap in (Perm.ANN_VIEW, Perm.ANN_PUBLISH, Perm.ANN_EDIT, Perm.ANN_DELETE):
+        assert super_admin["permissions"].get(cap) == "all", cap
 
 
 async def _role_and_perm(db) -> tuple[Role, Permission]:

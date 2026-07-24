@@ -82,6 +82,9 @@ ROLES_DATA = [
                 Perm.RBAC_VIEW, Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
                 Perm.TEAM_VIEW, Perm.TEAM_EDIT, Perm.TEAM_MEMBER_MANAGE,
                 Perm.ZONE_VIEW, Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN,
+                # Announcements now enforce announcement.* (ADR-AB-02/03); super_admin manages
+                # them. A dedicated content-admin role can be created at runtime via /admin/rbac.
+                Perm.ANN_VIEW, Perm.ANN_PUBLISH, Perm.ANN_EDIT, Perm.ANN_DELETE,
             ],
             "all",
         ),
