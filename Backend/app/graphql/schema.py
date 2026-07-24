@@ -4,6 +4,8 @@ import strawberry
 
 from app.graphql.announcements.mutations import AnnouncementMutation
 from app.graphql.announcements.queries import AnnouncementQuery
+from app.graphql.briefings.mutations import BriefingMutation
+from app.graphql.briefings.queries import BriefingQuery
 from app.graphql.config.mutations import PropertyConfigMutation
 from app.graphql.config.queries import PropertyConfigQuery
 from app.graphql.geo.mutations import GeoMutation, StationPropertyMutation
@@ -17,12 +19,12 @@ from app.graphql.work_zone.queries import WorkZoneQuery
 
 
 @strawberry.type
-class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, SuggestionQuery, WorkZoneQuery):  # noqa: E501
+class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, BriefingQuery, SuggestionQuery, WorkZoneQuery):  # noqa: E501
     """Root query type composing all domain query mixins."""
 
 
 @strawberry.type
-class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, SuggestionMutation, WorkZoneMutation):  # noqa: E501
+class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, BriefingMutation, SuggestionMutation, WorkZoneMutation):  # noqa: E501
     """Root mutation type composing all domain mutation mixins."""
 
 
