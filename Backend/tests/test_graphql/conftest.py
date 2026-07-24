@@ -85,6 +85,7 @@ async def _ensure_db():
         # (all-scoped everywhere) using the new capability keys.
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_VIEW, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_ADD, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.STATION_CONTRIBUTE, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_DELETE, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_REVIEW, "all")
@@ -101,16 +102,14 @@ async def _ensure_db():
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_ASSIGN, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_REVIEW, "all")
 
-        # Content Admin: full access to the "content" resource (announcements et al.)
-        content_group = Group(name="Content Admin")
-        db.add(content_group)
+        # Content Admin: can manage site announcements (announcement.*, all scope).
+        content_role = Role(name="Content Admin", kind="platform")
+        db.add(content_role)
         await db.flush()
-        content_pol = Policy(
-            name="ContentAdmin_content", read="all", create="all", edit="all", delete="all"
-        )
-        db.add(content_pol)
-        await db.flush()
-        db.add(PolicyGroupAssign(group_uuid=content_group.uuid, policy_uuid=content_pol.uuid))
+        await _grant(db, content_role, perm_cache, Perm.ANN_VIEW, "all")
+        await _grant(db, content_role, perm_cache, Perm.ANN_PUBLISH, "all")
+        await _grant(db, content_role, perm_cache, Perm.ANN_EDIT, "all")
+        await _grant(db, content_role, perm_cache, Perm.ANN_DELETE, "all")
 
         await db.commit()
     await eng.dispose()
