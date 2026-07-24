@@ -111,6 +111,15 @@ async def _ensure_db():
         await _grant(db, content_role, perm_cache, Perm.ANN_EDIT, "all")
         await _grant(db, content_role, perm_cache, Perm.ANN_DELETE, "all")
 
+        # Briefing Admin: can manage deployment briefings (briefing.*, all scope).
+        briefing_role = Role(name="Briefing Admin", kind="platform")
+        db.add(briefing_role)
+        await db.flush()
+        await _grant(db, briefing_role, perm_cache, Perm.BRIEFING_VIEW, "all")
+        await _grant(db, briefing_role, perm_cache, Perm.BRIEFING_CREATE, "all")
+        await _grant(db, briefing_role, perm_cache, Perm.BRIEFING_EDIT, "all")
+        await _grant(db, briefing_role, perm_cache, Perm.BRIEFING_DELETE, "all")
+
         await db.commit()
     await eng.dispose()
 
@@ -165,6 +174,12 @@ async def login_user_auth():
 async def content_admin_auth():
     """Return (user_uuid, token) for a user with content management permissions."""
     return await _create_user_with_role("Content Admin")
+
+
+@pytest_asyncio.fixture
+async def briefing_admin_auth():
+    """Return (user_uuid, token) for a user with briefing management permissions."""
+    return await _create_user_with_role("Briefing Admin")
 
 
 def auth_header(token: str) -> dict:

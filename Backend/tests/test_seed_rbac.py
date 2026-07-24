@@ -15,6 +15,13 @@ def test_seed_grants_announcement_caps_to_super_admin():
         assert super_admin["permissions"].get(cap) == "all", cap
 
 
+def test_seed_grants_briefing_caps_to_super_admin():
+    """super_admin can manage briefings once the module enforces briefing.* (ADR-AB-01/04)."""
+    super_admin = next(r for r in ROLES_DATA if r["name"] == "super_admin")
+    for cap in (Perm.BRIEFING_VIEW, Perm.BRIEFING_CREATE, Perm.BRIEFING_EDIT, Perm.BRIEFING_DELETE):
+        assert super_admin["permissions"].get(cap) == "all", cap
+
+
 async def _role_and_perm(db) -> tuple[Role, Permission]:
     role = Role(name="seed_role", kind="platform")
     perm = Permission(key="ticket.edit")

@@ -85,6 +85,8 @@ ROLES_DATA = [
                 # Announcements now enforce announcement.* (ADR-AB-02/03); super_admin manages
                 # them. A dedicated content-admin role can be created at runtime via /admin/rbac.
                 Perm.ANN_VIEW, Perm.ANN_PUBLISH, Perm.ANN_EDIT, Perm.ANN_DELETE,
+                # Briefings enforce briefing.* (ADR-AB-01/04); super_admin manages them too.
+                Perm.BRIEFING_VIEW, Perm.BRIEFING_CREATE, Perm.BRIEFING_EDIT, Perm.BRIEFING_DELETE,
             ],
             "all",
         ),
