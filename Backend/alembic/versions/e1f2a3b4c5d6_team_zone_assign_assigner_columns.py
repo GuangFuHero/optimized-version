@@ -46,9 +46,6 @@ def upgrade() -> None:
         ),
     )
     op.add_column("team_zone_assign", sa.Column("assigned_by", sa.UUID(as_uuid=True), nullable=True))
-    op.create_foreign_key(
-        "fk_team_zone_assign_assigned_by", "team_zone_assign", "users", ["assigned_by"], ["uuid"]
-    )
 
     op.execute(
         """
@@ -69,6 +66,15 @@ def upgrade() -> None:
 
     op.execute("DELETE FROM team_zone_assign WHERE assigned_by IS NULL;")
     op.alter_column("team_zone_assign", "assigned_by", nullable=False)
+
+    # The FK is created only now, after the backfill/purge above have run: audit_logs.user_uuid
+    # has no FK to users (app/models/audit.py), so a hard-deleted user still referenced by an
+    # old audit INSERT event would make the backfill write a dangling assigned_by. Creating the
+    # constraint before the backfill would make that backfill UPDATE fail and abort the whole
+    # upgrade; creating it here means it only ever validates already-verified-good values.
+    op.create_foreign_key(
+        "fk_team_zone_assign_assigned_by", "team_zone_assign", "users", ["assigned_by"], ["uuid"]
+    )
 
     op.execute("ALTER TABLE team_zone_assign ENABLE TRIGGER USER;")
 
