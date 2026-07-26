@@ -23,8 +23,12 @@ BEGIN;
 -- 0. 清除既有 seed(依前綴,可重跑)
 -- team_zone_assign 先清(引用 teams/work_zones/users),再清 work_zones(引用 users),
 -- 最後(users 清完後)才能清 teams,否則 users.team_uuid FK 會擋刪除。
-DELETE FROM team_zone_assign WHERE uuid::text LIKE '30000000-%';
-DELETE FROM work_zones WHERE uuid::text LIKE '20000000-%';
+DELETE FROM team_zone_assign
+ WHERE uuid::text LIKE '30000000-%'
+    OR zone_uuid::text LIKE '20000000-%'
+    OR team_uuid::text LIKE '10000000-%'
+    OR assigned_by::text LIKE 'c0000000-%';
+DELETE FROM work_zones WHERE uuid::text LIKE '20000000-%' OR created_by::text LIKE 'c0000000-%';
 DELETE FROM task_assignments WHERE uuid::text LIKE 'f0000000-%' OR task_uuid::text LIKE 'e0000000-%';
 DELETE FROM task_properties WHERE task_uuid::text LIKE 'e0000000-%';
 DELETE FROM ticket_tasks WHERE uuid::text LIKE 'e0000000-%';
