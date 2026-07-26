@@ -117,6 +117,36 @@ async def _make_plain_user() -> str:
         return create_access_token(data={"sub": str(user.uuid)})
 
 
+async def _make_team_user(team_type: str) -> str:
+    """Create a user holding the full work_zone.* set, bound to a fresh team of `team_type`.
+
+    Mirrors `_make_gov_user()`, but the resulting user has a real `team_uuid` (instead of
+    `None`), so it exercises the team-type check in `_require_gov_zone_authority` rather than
+    short-circuiting on its early "platform-level holder" return.
+    """
+    async with test_db() as db:
+        team = Team(name=f"Team {uuid_mod.uuid4().hex[:8]}", type=team_type)
+        db.add(team)
+        await db.flush()
+
+        role = Role(name=f"{team_type}-{uuid_mod.uuid4().hex[:8]}", kind="platform")
+        db.add(role)
+        await db.flush()
+        perm_cache: dict = {}
+        await _grant(db, role, perm_cache, Perm.ZONE_VIEW, "all")
+        await _grant(db, role, perm_cache, Perm.ZONE_ADD, "all")
+        await _grant(db, role, perm_cache, Perm.ZONE_EDIT, "all")
+        await _grant(db, role, perm_cache, Perm.ZONE_ASSIGN, "all")
+        await _grant(db, role, perm_cache, Perm.ZONE_DELETE, "all")
+
+        user = User(name=f"{team_type}_{uuid_mod.uuid4().hex[:8]}", team_uuid=team.uuid)
+        db.add(user)
+        await db.flush()
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+
+        return create_access_token(data={"sub": str(user.uuid)})
+
+
 @pytest_asyncio.fixture
 async def team_uuid() -> str:
     """A bare Team row with no zone assignment, for the assign/remove tests."""
@@ -389,6 +419,88 @@ async def test_plain_login_user_cannot_delete_a_work_zone(client):
         headers=auth_header(plain_token),
     )
     assert any("Permission Denied." in e["message"] for e in resp.json().get("errors", []))
+
+
+@pytest.mark.asyncio
+async def test_ngo_team_admin_cannot_create_a_work_zone(client):
+    """An NGO team's admin holds the full work_zone.* grant but is fenced out by team type.
+
+    Closes the escalation `_require_gov_zone_authority`'s docstring describes: an NGO admin
+    drawing a zone anywhere and self-assigning it to reach raw victim PII.
+    """
+    ngo_token = await _make_team_user("ngo")
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone M", "geometry": ZONE_POLYGON}}},
+        headers=auth_header(ngo_token),
+    )
+    body = resp.json()
+    errors = body.get("errors", [])
+    assert any("Only gov teams may draw or assign work zones." in e["message"] for e in errors), body
+
+
+@pytest.mark.asyncio
+async def test_gov_team_admin_can_create_a_work_zone(client):
+    """The positive counterpart: a gov-type team's admin is allowed through the same gate.
+
+    Proves the guard discriminates on team type, not on some unrelated failure.
+    """
+    gov_token = await _make_team_user("gov")
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone N", "geometry": ZONE_POLYGON}}},
+        headers=auth_header(gov_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    assert body["data"]["createWorkZone"]["name"] == "Zone N"
+
+
+@pytest.mark.asyncio
+async def test_ngo_team_admin_cannot_delete_a_work_zone(client):
+    """An NGO team's admin holding work_zone.delete is still fenced out by team type."""
+    gov_token = await _make_gov_user()
+    ngo_token = await _make_team_user("ngo")
+
+    create_resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone O", "geometry": ZONE_POLYGON}}},
+        headers=auth_header(gov_token),
+    )
+    zone_uuid = create_resp.json()["data"]["createWorkZone"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": DELETE_ZONE, "variables": {"uuid": zone_uuid}},
+        headers=auth_header(ngo_token),
+    )
+    body = resp.json()
+    errors = body.get("errors", [])
+    assert any("Only gov teams may draw or assign work zones." in e["message"] for e in errors), body
+
+
+@pytest.mark.asyncio
+async def test_gov_team_admin_can_delete_a_work_zone(client):
+    """The positive counterpart: a gov-type team's admin can delete through the same gate."""
+    gov_token = await _make_team_user("gov")
+
+    create_resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone P", "geometry": ZONE_POLYGON}}},
+        headers=auth_header(gov_token),
+    )
+    zone_uuid = create_resp.json()["data"]["createWorkZone"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": DELETE_ZONE, "variables": {"uuid": zone_uuid}},
+        headers=auth_header(gov_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    assert body["data"]["deleteWorkZone"] is True
 
 
 @pytest.mark.asyncio
