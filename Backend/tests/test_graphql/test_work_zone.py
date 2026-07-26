@@ -248,3 +248,62 @@ async def test_remove_zone_from_team_clears_the_assignment(client, team_uuid):
     )
     body = second_remove_resp.json()
     assert any("not assigned" in e["message"] for e in body.get("errors", [])), body
+
+
+@pytest.mark.asyncio
+async def test_assign_rejects_an_inactive_team(client):
+    """A zone cannot be delegated to a team whose status is not active."""
+    gov_token = await _make_gov_user()
+    async with test_db() as db:
+        team = Team(name=f"Inactive {uuid_mod.uuid4().hex[:8]}", type="ngo", status="suspended")
+        db.add(team)
+        await db.flush()
+        inactive_team_uuid = str(team.uuid)
+
+    create_resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone E", "geometry": ZONE_POLYGON}}},
+        headers=auth_header(gov_token),
+    )
+    zone_uuid = create_resp.json()["data"]["createWorkZone"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": ASSIGN_ZONE,
+            "variables": {"input": {"zoneUuid": zone_uuid, "teamUuid": inactive_team_uuid}},
+        },
+        headers=auth_header(gov_token),
+    )
+    body = resp.json()
+    assert any("Team is not active" in e["message"] for e in body.get("errors", [])), body
+
+
+@pytest.mark.asyncio
+async def test_assign_records_the_assigning_user(client, team_uuid):
+    """The assignment row records which user performed the delegation."""
+    gov_token = await _make_gov_user()
+    create_resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone F", "geometry": ZONE_POLYGON}}},
+        headers=auth_header(gov_token),
+    )
+    zone_uuid = create_resp.json()["data"]["createWorkZone"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": ASSIGN_ZONE, "variables": {"input": {"zoneUuid": zone_uuid, "teamUuid": team_uuid}}},
+        headers=auth_header(gov_token),
+    )
+    assert "errors" not in resp.json(), resp.json()
+
+    async with test_db() as db:
+        row = (
+            await db.execute(
+                select(TeamZoneAssign).where(
+                    TeamZoneAssign.team_uuid == team_uuid, TeamZoneAssign.zone_uuid == zone_uuid
+                )
+            )
+        ).scalar_one()
+        assert row.assigned_by is not None
+        assert row.created_at is not None

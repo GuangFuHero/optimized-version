@@ -78,15 +78,25 @@ async def assign_zone_to_team(
 ) -> TeamZoneAssign:
     """Assign a work zone to a team, establishing `zone` scope for it (checkpoint 1 only).
 
-    Idempotent — returns the existing assignment if the pair is already linked.
+    Idempotent — returns the existing assignment if the pair is already linked. Note that the
+    returned row's `assigned_by` is then the *original* assigner, not the caller: re-assigning
+    an existing link creates nothing and therefore records nobody new.
+
+    The target team must be active. This is a create-time check only: a team that goes
+    inactive later keeps the zone scope its existing assignments grant, because
+    `rbac_scopes.py` filters on WorkZone.delete_at alone (design §3.6).
     """
     await require_scope(actor, Perm.ZONE_ASSIGN, db)
     await _require_gov_zone_authority(db, actor)
 
-    if not await work_zone_repository.get_by_uuid(db, zone_uuid):
+    if not await work_zone_repository.get_by_uuid_active(db, zone_uuid):
         raise ValueError("Work zone not found")
-    if not await db.scalar(select(Team).where(Team.uuid == team_uuid, Team.delete_at.is_(None))):
+
+    team = await db.scalar(select(Team).where(Team.uuid == team_uuid, Team.delete_at.is_(None)))
+    if team is None:
         raise ValueError("Team not found")
+    if team.status != "active":
+        raise ValueError("Team is not active")
 
     existing = await team_zone_assign_repository.get_assignment(
         db, team_uuid=team_uuid, zone_uuid=zone_uuid
