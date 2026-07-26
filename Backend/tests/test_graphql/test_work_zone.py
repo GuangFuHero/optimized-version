@@ -450,7 +450,7 @@ async def test_zones_by_team_lists_only_that_teams_live_zones(client, team_uuid)
     body = resp.json()
     assert "errors" not in body, body
     listed = {item["uuid"] for item in body["data"]["zonesByTeam"]["items"]}
-    assert set(zone_uuids) <= listed
+    assert listed == set(zone_uuids)
 
     await client.post(
         "/graphql",
