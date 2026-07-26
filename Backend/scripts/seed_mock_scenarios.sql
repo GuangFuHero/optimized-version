@@ -7,7 +7,8 @@
 --
 -- PR12-ready:tickets.disaster_type / task_assignments.status 用條件式 DO 區塊,
 --   欄位存在才寫入 → 部署 PR#11/#12 前後跑同一檔案皆可。
--- UUID 前綴:users=c…、A站=a…、B站=b…、tickets=d…、tasks=e…、assignments=f… (可重跑自清)
+-- UUID 前綴:users=c…、A站=a…、B站=b…、tickets=d…、tasks=e…、assignments=f…、
+--   teams=1…、work_zones=2…、team_zone_assign=3… (可重跑自清)
 -- 登入:全部 37 人,密碼 Mock1234!(salt_frontend=mockdata12345678;
 --   API password=sha256('Mock1234!'+salt)=3a88d3527a01c374689c19033f45ecfad25a749ade957b3044591ad30551e79a)
 -- Run (local dev):  psql "host=127.0.0.1 port=5432 user=postgres dbname=postgres" \
@@ -20,6 +21,10 @@
 BEGIN;
 
 -- 0. 清除既有 seed(依前綴,可重跑)
+-- team_zone_assign 先清(引用 teams/work_zones/users),再清 work_zones(引用 users),
+-- 最後(users 清完後)才能清 teams,否則 users.team_uuid FK 會擋刪除。
+DELETE FROM team_zone_assign WHERE uuid::text LIKE '30000000-%';
+DELETE FROM work_zones WHERE uuid::text LIKE '20000000-%';
 DELETE FROM task_assignments WHERE uuid::text LIKE 'f0000000-%' OR task_uuid::text LIKE 'e0000000-%';
 DELETE FROM task_properties WHERE task_uuid::text LIKE 'e0000000-%';
 DELETE FROM ticket_tasks WHERE uuid::text LIKE 'e0000000-%';
@@ -32,6 +37,7 @@ DELETE FROM user_role_assign WHERE user_uuid::text LIKE 'c0000000-%';
 DELETE FROM user_identities WHERE user_uuid::text LIKE 'c0000000-%';
 DELETE FROM user_contacts WHERE user_uuid::text LIKE 'c0000000-%';
 DELETE FROM users WHERE uuid::text LIKE 'c0000000-%';
+DELETE FROM teams WHERE uuid::text LIKE '10000000-%';
 
 -- 1. USERS — 37 人(A:志工20+NGO4+官方3;B:志工4+NGO5+官方1)
 INSERT INTO users (uuid, name, credibility_score, created_at, updated_at) VALUES
@@ -126,6 +132,46 @@ FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
 INSERT INTO user_role_assign (uuid, user_uuid, role_uuid)
 SELECT gen_random_uuid(), u.uuid, (SELECT uuid FROM roles WHERE name='user' AND kind='platform')
 FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
+
+-- 1c. TEAMS — RBAC v1 組織身分(13 個:官方 4 + NGO 9,對照 note/mock-data-users.csv 的「角色」欄)
+INSERT INTO teams (uuid, name, type, tax_id, status) VALUES
+ ('10000000-0000-4000-8000-000000000001','慈濟基金會-花蓮聯絡處','ngo',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000002','紅十字會-花蓮支會','ngo',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000003','世界展望會-東區辦事處','ngo',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000004','法鼓山慈善基金會','ngo',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000005','光復鄉公所-災防課','gov',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000006','花蓮縣消防局-鳳林大隊','gov',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000007','光復鄉大同村村長','gov',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000008','慈濟基金會-羅東聯絡處','ngo',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000009','紅十字會-宜蘭支會','ngo',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000010','宜蘭縣社福聯盟','ngo',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000011','佛光山蘭陽別院','ngo',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000012','善牧基金會-宜蘭','ngo',NULL,'active'),
+ ('10000000-0000-4000-8000-000000000013','冬山鄉公所-民政課','gov',NULL,'active');
+
+-- 1d. 13 個官方/NGO 帳號指向所屬 team,並賦予 team admin 角色(團隊協調者,帶 zone-scoped 授權)。
+-- 24 個志工帳號維持 team_uuid=NULL、只有 1b 給的 user 平台角色,才會與官方/NGO 形成對比。
+UPDATE users SET team_uuid = m.team_uuid::uuid
+FROM (VALUES
+ ('c0000000-0000-4000-8000-000000000021','10000000-0000-4000-8000-000000000001'),
+ ('c0000000-0000-4000-8000-000000000022','10000000-0000-4000-8000-000000000002'),
+ ('c0000000-0000-4000-8000-000000000023','10000000-0000-4000-8000-000000000003'),
+ ('c0000000-0000-4000-8000-000000000024','10000000-0000-4000-8000-000000000004'),
+ ('c0000000-0000-4000-8000-000000000025','10000000-0000-4000-8000-000000000005'),
+ ('c0000000-0000-4000-8000-000000000026','10000000-0000-4000-8000-000000000006'),
+ ('c0000000-0000-4000-8000-000000000027','10000000-0000-4000-8000-000000000007'),
+ ('c0000000-0000-4000-8000-000000000032','10000000-0000-4000-8000-000000000008'),
+ ('c0000000-0000-4000-8000-000000000033','10000000-0000-4000-8000-000000000009'),
+ ('c0000000-0000-4000-8000-000000000034','10000000-0000-4000-8000-000000000010'),
+ ('c0000000-0000-4000-8000-000000000035','10000000-0000-4000-8000-000000000011'),
+ ('c0000000-0000-4000-8000-000000000036','10000000-0000-4000-8000-000000000012'),
+ ('c0000000-0000-4000-8000-000000000037','10000000-0000-4000-8000-000000000013')
+) AS m(user_uuid, team_uuid)
+WHERE users.uuid::text = m.user_uuid;
+
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid)
+SELECT gen_random_uuid(), u.uuid, (SELECT uuid FROM roles WHERE name='admin' AND kind='team')
+FROM users u WHERE u.team_uuid::text LIKE '10000000-%';
 
 -- 2. STATIONS — base_geometries + stations + EAV + 投票
 INSERT INTO base_geometries (uuid, property_name, geometry, created_by, created_at, updated_at) VALUES
@@ -563,7 +609,24 @@ INSERT INTO task_assignments (uuid, task_uuid, actor_uuid, role, assigned_at) VA
  ('f0000000-0000-4000-8000-000000000046','e0000000-0000-4000-8000-000000000051','c0000000-0000-4000-8000-000000000031','volunteer','2025-10-03 16:39+08'),
  ('f0000000-0000-4000-8000-000000000047','e0000000-0000-4000-8000-000000000051','c0000000-0000-4000-8000-000000000029','volunteer','2025-10-03 16:39+08');
 
--- 5. PR12-ready 條件區塊 — 欄位存在才寫(部署 PR#11/#12 後重跑即生效)
+-- 6. WORK ZONES — 每個情境一個,官方帳號劃設(work_zones.created_by),涵蓋該情境站點/tickets 座標範圍。
+-- geometry 欄位是 Geometry("MULTIPOLYGON", srid=4326)(見 app/models/team.py),故用 ST_Multi 包住
+-- ST_MakeEnvelope 產生的 polygon,型別才吃得下。
+INSERT INTO work_zones (uuid, name, geometry, created_by) VALUES
+ ('20000000-0000-4000-8000-000000000001','花蓮光復救災範圍',
+  ST_Multi(ST_MakeEnvelope(121.35,23.48,121.47,23.76,4326)),'c0000000-0000-4000-8000-000000000025'),
+ ('20000000-0000-4000-8000-000000000002','宜蘭冬山救災範圍',
+  ST_Multi(ST_MakeEnvelope(121.70,24.60,121.82,24.76,4326)),'c0000000-0000-4000-8000-000000000037');
+
+-- 7. TEAM ZONE ASSIGN — 每個情境的 zone 委派給一個同情境 NGO team;assigned_by 是劃設該 zone 的官方帳號
+-- (與 app/services/work_zone.py 的真實服務層行為一致)。
+INSERT INTO team_zone_assign (uuid, team_uuid, zone_uuid, assigned_by) VALUES
+ ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
+  '20000000-0000-4000-8000-000000000001','c0000000-0000-4000-8000-000000000025'),
+ ('30000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000008',
+  '20000000-0000-4000-8000-000000000002','c0000000-0000-4000-8000-000000000037');
+
+-- 8. PR12-ready 條件區塊 — 欄位存在才寫(部署 PR#11/#12 後重跑即生效)
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.columns
