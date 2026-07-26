@@ -99,7 +99,7 @@
 | :--- | :--- | :--- |
 | **`user`** | 一般民眾（每個註冊帳號的預設） | `map.view`/`station.view`/`ticket.view`=all；`station.add`/`ticket.add`=all；`station.edit`/`station.delete`/`ticket.edit`/`ticket.delete`/`ticket.assign`=own；`ticket.view_pii`=own |
 | **`data_auditor`** | 監督查核（唯讀，看全部含 PII） | `map.view`/`station.view`/`ticket.view`=all；`ticket.view_pii`=all；`user.view`=all；`audit.view`=all |
-| **`super_admin`** | 平台最高權限（1–2 人） | 上述所有模組 + user/team/work_zone/rbac/audit 全部 = all（**唯一持有 `rbac.assign`/`rbac.edit`、`team.edit`**） |
+| **`super_admin`** | 平台最高權限（1–2 人） | 上述所有模組 + user/team/work_zone/rbac/audit/announcement 全部 = all（**唯一持有 `rbac.assign`/`rbac.edit`、`team.edit`**） |
 
 ### 4.2 Team 角色（綁在 `user_role_assign`；組織 = 該 team 的 `type`）
 

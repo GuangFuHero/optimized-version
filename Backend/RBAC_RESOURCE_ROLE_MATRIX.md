@@ -114,6 +114,15 @@
 | dynamic_field.edit | — | — | — | all | — | — |
 | dynamic_field.delete | — | — | — | all | — | — |
 
+### 緊急公告 Announcement
+
+| capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
+|---|---|---|---|---|---|---|
+| announcement.view | all（公開） | all | all | all | all | all |
+| announcement.publish | — | — | — | all | — | — |
+| announcement.edit | — | — | — | all | — | — |
+| announcement.delete | — | — | — | all | — | — |
+
 ### 稽核 / RBAC 自管
 
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
@@ -135,8 +144,7 @@
 
 ### 「已定義、但目前無角色授予」的 capability（ahead-of-feature，ADR-050）
 下列 key 存在於目錄、但 seed 沒發給任何角色，等對應功能實作時才會接上 enforcement：
-`ticket.export`、`ai_duplicate.view`、`ai_duplicate.review`、`announcement.publish/edit/delete`、`pre_departure.view/publish/edit`。
-（`announcement.view` 屬公開白名單，故匿名可見，即使無角色 grant。）
+`ticket.export`、`ai_duplicate.view`、`ai_duplicate.review`、`pre_departure.view/publish/edit`。
 
 ### 相關 ADR
 ADR-018（union）、ADR-019（兩軸/一人一 team）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）。
