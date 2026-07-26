@@ -421,7 +421,7 @@ async def test_assign_returns_the_assignment_record(client, team_uuid):
 
 @pytest.mark.asyncio
 async def test_zones_by_team_lists_only_that_teams_live_zones(client, team_uuid):
-    """zonesByTeam returns the team's assignments and drops soft-deleted zones."""  # noqa: D403
+    """Verify that zonesByTeam returns the team's assignments and drops soft-deleted zones."""
     gov_token = await _make_gov_user()
     zone_uuids = []
     for name in ("Zone J", "Zone K"):
