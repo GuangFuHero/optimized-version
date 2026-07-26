@@ -51,3 +51,23 @@ def test_mask_phone_short_and_none():
     """Short numbers fully masked; None passes through."""
     assert mask_phone("123") == "***"
     assert mask_phone(None) is None
+    assert mask_phone("") == ""
+
+
+def test_mask_phone_legitimate_formats_still_mask_as_phone():
+    """Legitimate Taiwanese phone punctuation is stripped, not rejected as non-phone."""
+    assert mask_phone("0912345678") == "09*****678"
+    assert mask_phone("0912-345-678") == "09*****678"
+    assert mask_phone("(03) 8221234") == "03****234"
+    assert mask_phone("+886912345678") == "09*****678"
+    assert mask_phone("02-1234-5678") == "02*****678"
+
+
+def test_mask_phone_non_phone_is_masked_entirely():
+    """A value that is not phone-shaped is masked entirely, not passed through empty.
+
+    E.g. a LINE ID mis-stored in the phone field must not turn into a fake phone number.
+    """
+    assert mask_phone("LINE: yilan_vol") == "◯◯◯"
+    assert mask_phone("LINE: abc123456") == "◯◯◯"
+    assert mask_phone("LINE: hualien_relief_2024") == "◯◯◯"

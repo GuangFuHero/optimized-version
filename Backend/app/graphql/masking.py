@@ -50,16 +50,28 @@ def mask_email(email: str | None) -> str | None:
     return f"{first}***@***.{tld}"
 
 
+_PHONE_PUNCTUATION_RE = re.compile(r"[\s\-().+]")
+
+
 def mask_phone(phone: str | None) -> str | None:
     """Mask a contact phone: keep first 2 + last 3 digits, mask the middle.
 
     Normalizes a leading ``+886`` to ``0`` first (Taiwan), preserving any separators around
     the kept digits (0912345678 → 09*****678).
+
+    A non-empty value that is not phone-shaped (e.g. a LINE ID mis-stored in the phone
+    field) is masked entirely rather than passed through, so mis-entered PII is never
+    shown raw and masking never fabricates phone-looking digits out of unrelated text.
+    A value is phone-shaped if, after stripping legitimate phone punctuation (spaces,
+    ``-``, ``(``, ``)``, ``+``, ``.``), everything remaining is digits.
     """
     if not phone:
         return phone
     normalized = re.sub(r"^\+886", "0", phone.strip())
-    digits = re.sub(r"\D", "", normalized)
+    stripped = _PHONE_PUNCTUATION_RE.sub("", normalized)
+    if not re.fullmatch(r"\d+", stripped):
+        return _MASK_GLYPH * 3
+    digits = stripped
     if len(digits) <= 5:
         return "*" * len(digits)
     masked = digits[:2] + "*" * (len(digits) - 5) + digits[-3:]
