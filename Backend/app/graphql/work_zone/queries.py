@@ -59,8 +59,12 @@ class WorkZoneQuery:
         Requires work_zone.view. In the current seed team admins hold that at Scope.ALL, so
         any team admin can inspect any team's delegations. Judged acceptable: knowing which
         team covers which area is a precondition for inter-agency coordination, and no PII is
-        involved. To narrow it, drop the admin role's work_zone.view to `team` — a seed/matrix
-        change, no code change (design §4.3).
+        involved. Narrowing this is NOT a seed/matrix-only change: this resolver performs
+        checkpoint 1 only — it discards the Scope check_permission returns and never passes
+        `resource=`, so checkpoint 2 can't run regardless of the grant — and `team` scope has
+        no meaning for WorkZone today, since it carries no team-ownership column to filter on
+        (design §4.3). A real mitigation needs a new predicate meaning "zones delegated to my
+        team" plus this resolver consuming the scope it is handed.
         """
         db = info.context["db"]
         await check_permission(info, Perm.ZONE_VIEW)
