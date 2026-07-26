@@ -132,10 +132,15 @@ users {
       uuid uuid PK
       uuid team_uuid FK "FK to teams, indexed"
       uuid zone_uuid FK "FK to work_zones, indexed"
+      timestamp created_at "when the delegation was made"
+      uuid assigned_by FK "FK to users, who delegated it"
   }
   %% UNIQUE(team_uuid, zone_uuid) -- uq_team_zone
+  %% created_at/assigned_by are denormalised from audit_logs for cheap display; audit_logs
+  %% remains the source of truth for delegation history, including removals.
   teams ||--o{ team_zone_assign : "assigned zones"
   work_zones ||--o{ team_zone_assign : "assigned to teams"
+  users ||--o{ team_zone_assign : "assigned by"
 
   %% Authentication identities (one row per login method)
   user_identities {

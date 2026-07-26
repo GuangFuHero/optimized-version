@@ -53,7 +53,7 @@
 | **AI Duplicate（重複審核）** | `ai_duplicate.view`、`ai_duplicate.review` |
 | **User（使用者管理）** | `user.view`、`user.add`、`user.edit`、`user.delete` |
 | **Team（團隊管理）** | `team.view`、`team.edit`、`team.member.manage` |
-| **Work Zone（責任區）** | `work_zone.view`、`work_zone.add`、`work_zone.edit`、`work_zone.assign` |
+| **Work Zone（責任區）** | `work_zone.view`、`work_zone.add`、`work_zone.edit`、`work_zone.assign`、`work_zone.delete` |
 | **Dynamic Field（動態欄位設定）** | `dynamic_field.view`、`dynamic_field.add`、`dynamic_field.edit`、`dynamic_field.delete` |
 | **Pre-Departure（出勤前須知）** | `pre_departure.view`、`pre_departure.publish`、`pre_departure.edit` |
 | **Audit（稽核日誌）** | `audit.view` |
@@ -105,7 +105,7 @@
 
 | 角色 | 定位 | scope grant 重點 |
 | :--- | :--- | :--- |
-| **`admin`** | 團隊協調員 | 操作類（station/ticket 的 edit/delete/review/assign）=**zone**；`team.view`/`team.member.manage`=team；`work_zone.view/add/edit/assign`=all；view/add=all |
+| **`admin`** | 團隊協調員 | 操作類（station/ticket 的 edit/delete/review/assign）=**zone**；`team.view`/`team.member.manage`=team；`work_zone.view/add/edit/assign/delete`=all；view/add=all |
 | **`member`** | 團隊現場人員 | station/ticket 的 edit=**zone**；delete/assign 維持 own；`ticket.view_pii`=zone；`team.view`=team；**無**團隊管理、**無**畫 zone |
 
 > 「政府協調員」= `admin` 角色 + `gov` 型 team；「NGO 協調員」= `admin` 角色 + `ngo` 型 team。組織差異只在 team.type，不在角色。

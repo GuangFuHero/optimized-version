@@ -880,6 +880,30 @@ async def create_station(self, info, input) -> StationType:
 
 ---
 
+### ADR-066：zone 刪除、委派來源欄位與 target team 檢查
+
+- **`work_zone.delete` 為獨立 capability**，不複用 `work_zone.edit`。刪 zone 會連帶讓所有靠它
+  取得 zone scope 的 team 失去可見性，破壞力遠大於改名或改邊界；獨立 capability 才能單獨收回
+  「可改但不可刪」。同步納入 `GOV_TEAM_ONLY_PERMS`，並在 `delete_work_zone` 呼叫
+  `_require_gov_zone_authority` —— 這兩處是手動 lockstep，改一處必改另一處。
+- **soft delete 不清 `team_zone_assign`**。`rbac_scopes.py` 的 in_scope 與 scope_filter 都已過濾
+  `WorkZone.delete_at IS NULL`，zone 一軟刪，其授予的 zone scope 立即失效；清 assign 列沒有收益。
+- **`team_zone_assign` 加 `created_at` / `assigned_by` 是 denormalization，不是 audit**。
+  該表早有 DB audit trigger（ADR 對應 migration `c219aac56556`），`audit_logs` 完整記錄 assign
+  與 unassign、操作者、IP，且 append-only。加欄位純粹是為了 API 顯示不必掃全站共用的
+  `audit_logs`。unassign 時欄位隨列硬刪消失是預期行為，歷史查 `audit_logs`。
+- **assign 要求 target team `status == "active"`，但這是 create-time 檢查**。zone scope 查詢
+  只看 `WorkZone.delete_at`，不看 `Team.status`/`Team.delete_at`，所以 team 事後轉為 inactive
+  不會使既有委派失效。改變這點會影響既有授權行為，屬 breaking change，需獨立評估。
+- **zone attribute 不走 `*_property_config` 動態機制**。該機制沒有驗證能力（`enum_options` /
+  `data_type` 從未被任何寫入路徑讀取），只是前端表單提示。zone 是授權邊界，未來若有 attribute
+  參與授權判斷，必須是有型別、有約束、可索引的真欄位。需要什麼就加欄位 + migration。
+- **陷阱記錄**：`in_scope` 的 ZONE 分支執行 `ST_Contains(assigned_zone.geometry, resource.geometry)`。
+  當 resource 本身是 WorkZone 時，任何多邊形都包含自己 —— 若把 zone capability 調成 `Scope.ZONE`，
+  被指派 zone X 的 team 就能對 zone X 動作。目前 seed 給 `Scope.ALL` 且有 gov guard，觸發不到。
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|

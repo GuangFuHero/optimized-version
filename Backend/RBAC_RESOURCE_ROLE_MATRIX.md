@@ -97,8 +97,13 @@
 | work_zone.add | — | — | — | all | all | — |
 | work_zone.edit | — | — | — | all | all | — |
 | work_zone.assign | — | — | — | all | all | — |
+| work_zone.delete | — | — | — | all | all | — |
 
-> ⚠️ ADR-049 的意圖是「畫/指派 zone 只有 gov 側能做」，但 gov/ngo admin 共用同一個 `admin` 角色，能力層分不出來，故 **ngo admin 技術上也拿得到**。目前採「先信任、不硬擋」（ADR-049 §303），未加 `team.type==gov` 硬牆。
+> ⚠️ ADR-049 的意圖是「畫/指派/刪除 zone 只有 gov 側能做」，但 gov/ngo admin 共用同一個 `admin`
+> 角色，能力層分不出來。ADR-063 之後改為**硬擋**：`app/services/work_zone.py` 的
+> `_require_gov_zone_authority` 要求 team-kind 持有者的 team 必須是 gov 型，否則 403。
+> ngo admin 在矩陣上仍持有這些 capability，但實際呼叫會被擋下 —— 這就是
+> `GOV_TEAM_ONLY_PERMS`（`app/core/permissions.py`）在 capability catalog 標記的意義。
 
 ### 動態欄位 Dynamic Field
 
