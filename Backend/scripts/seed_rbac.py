@@ -81,7 +81,7 @@ ROLES_DATA = [
                 Perm.USER_VIEW, Perm.USER_ADD, Perm.USER_EDIT, Perm.USER_DELETE,
                 Perm.RBAC_VIEW, Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
                 Perm.TEAM_VIEW, Perm.TEAM_EDIT, Perm.TEAM_MEMBER_MANAGE,
-                Perm.ZONE_VIEW, Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN,
+                Perm.ZONE_VIEW, Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN, Perm.ZONE_DELETE,
             ],
             "all",
         ),
@@ -117,6 +117,7 @@ ROLES_DATA = [
             Perm.ZONE_ADD: "all",
             Perm.ZONE_EDIT: "all",
             Perm.ZONE_ASSIGN: "all",
+            Perm.ZONE_DELETE: "all",
         },
     },
     {

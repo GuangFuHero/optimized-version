@@ -81,7 +81,7 @@ async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_sess
     assert resp.status_code == 200, resp.json()
     by_key = {c["key"]: c for c in resp.json()["capabilities"]}
 
-    for cap in ("work_zone.add", "work_zone.edit", "work_zone.assign"):
+    for cap in ("work_zone.add", "work_zone.edit", "work_zone.assign", "work_zone.delete"):
         assert by_key[cap]["team_gov_only"] is True, cap
     # work_zone.view is not gated by _require_gov_zone_authority, so it stays False.
     assert by_key["work_zone.view"]["team_gov_only"] is False
