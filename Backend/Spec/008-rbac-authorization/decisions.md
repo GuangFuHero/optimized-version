@@ -880,7 +880,8 @@ async def create_station(self, info, input) -> StationType:
 
 ---
 
-### ADR-066：zone 刪除、委派來源欄位與 target team 檢查
+#### ADR-066 zone 刪除、委派來源欄位與 target team 檢查
+> **狀態：ACCEPTED（2026-07-26）。** 本輪「補完 gov zone assign 後端」的設計決定；落在 `feat/gov-zone-assign-backend`。
 
 - **`work_zone.delete` 為獨立 capability**，不複用 `work_zone.edit`。刪 zone 會連帶讓所有靠它
   取得 zone scope 的 team 失去可見性，破壞力遠大於改名或改邊界；獨立 capability 才能單獨收回
