@@ -54,6 +54,18 @@ ZONE_POLYGON = {
     "coordinates": [[[121.0, 24.0], [121.0, 25.0], [122.0, 25.0], [122.0, 24.0], [121.0, 24.0]]],
 }
 
+ZONES_BY_TEAM = """
+query($teamUuid: UUID!) {
+    zonesByTeam(teamUuid: $teamUuid) { items { uuid name } pageInfo { totalCount } }
+}
+"""
+
+ZONE_WITH_TEAMS = """
+query($uuid: UUID!) {
+    workZone(uuid: $uuid) { uuid assignedTeams { uuid name type } }
+}
+"""
+
 
 async def _grant(db, role: Role, perm_cache: dict, perm: Perm, scope: str) -> None:
     """Create (or reuse) a Permission row and grant `role` `perm` at `scope`.
@@ -405,3 +417,81 @@ async def test_assign_returns_the_assignment_record(client, team_uuid):
     assert record["teamUuid"] == team_uuid
     assert record["assignedBy"] is not None
     assert record["assignedAt"] is not None
+
+
+@pytest.mark.asyncio
+async def test_zones_by_team_lists_only_that_teams_live_zones(client, team_uuid):
+    """zonesByTeam returns the team's assignments and drops soft-deleted zones."""  # noqa: D403
+    gov_token = await _make_gov_user()
+    zone_uuids = []
+    for name in ("Zone J", "Zone K"):
+        create_resp = await client.post(
+            "/graphql",
+            json={"query": CREATE_ZONE, "variables": {"input": {"name": name, "geometry": ZONE_POLYGON}}},
+            headers=auth_header(gov_token),
+        )
+        zone_uuids.append(create_resp.json()["data"]["createWorkZone"]["uuid"])
+
+    for zone_uuid in zone_uuids:
+        await client.post(
+            "/graphql",
+            json={
+                "query": ASSIGN_ZONE,
+                "variables": {"input": {"zoneUuid": zone_uuid, "teamUuid": team_uuid}},
+            },
+            headers=auth_header(gov_token),
+        )
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": ZONES_BY_TEAM, "variables": {"teamUuid": team_uuid}},
+        headers=auth_header(gov_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    listed = {item["uuid"] for item in body["data"]["zonesByTeam"]["items"]}
+    assert set(zone_uuids) <= listed
+
+    await client.post(
+        "/graphql",
+        json={"query": DELETE_ZONE, "variables": {"uuid": zone_uuids[0]}},
+        headers=auth_header(gov_token),
+    )
+
+    after = await client.post(
+        "/graphql",
+        json={"query": ZONES_BY_TEAM, "variables": {"teamUuid": team_uuid}},
+        headers=auth_header(gov_token),
+    )
+    remaining = {item["uuid"] for item in after.json()["data"]["zonesByTeam"]["items"]}
+    assert zone_uuids[0] not in remaining
+    assert zone_uuids[1] in remaining
+
+
+@pytest.mark.asyncio
+async def test_work_zone_exposes_its_assigned_teams(client, team_uuid):
+    """A zone reports the teams it has been delegated to."""
+    gov_token = await _make_gov_user()
+    create_resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone L", "geometry": ZONE_POLYGON}}},
+        headers=auth_header(gov_token),
+    )
+    zone_uuid = create_resp.json()["data"]["createWorkZone"]["uuid"]
+
+    await client.post(
+        "/graphql",
+        json={"query": ASSIGN_ZONE, "variables": {"input": {"zoneUuid": zone_uuid, "teamUuid": team_uuid}}},
+        headers=auth_header(gov_token),
+    )
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": ZONE_WITH_TEAMS, "variables": {"uuid": zone_uuid}},
+        headers=auth_header(gov_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    teams = body["data"]["workZone"]["assignedTeams"]
+    assert [t["uuid"] for t in teams] == [team_uuid]
+    assert teams[0]["type"] == "ngo"
