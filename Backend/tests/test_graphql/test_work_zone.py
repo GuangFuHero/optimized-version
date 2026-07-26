@@ -34,11 +34,19 @@ query { workZones { items { uuid } pageInfo { totalCount } } }
 """
 
 ASSIGN_ZONE = """
-mutation($input: ZoneTeamAssignmentInput!) { assignZoneToTeam(input: $input) }
+mutation($input: ZoneTeamAssignmentInput!) { assignZoneToTeam(input: $input) { zoneUuid } }
 """
 
 REMOVE_ZONE = """
 mutation($input: ZoneTeamAssignmentInput!) { removeZoneFromTeam(input: $input) }
+"""
+
+DELETE_ZONE = "mutation($uuid: UUID!) { deleteWorkZone(uuid: $uuid) }"
+
+ASSIGN_ZONE_FULL = """
+mutation($input: ZoneTeamAssignmentInput!) {
+    assignZoneToTeam(input: $input) { zoneUuid teamUuid assignedAt assignedBy }
+}
 """
 
 ZONE_POLYGON = {
@@ -78,6 +86,7 @@ async def _make_gov_user() -> str:
         await _grant(db, role, perm_cache, Perm.ZONE_ADD, "all")
         await _grant(db, role, perm_cache, Perm.ZONE_EDIT, "all")
         await _grant(db, role, perm_cache, Perm.ZONE_ASSIGN, "all")
+        await _grant(db, role, perm_cache, Perm.ZONE_DELETE, "all")
 
         user = User(name=f"gov_{uuid_mod.uuid4().hex[:8]}")
         db.add(user)
@@ -191,7 +200,7 @@ async def test_assign_zone_to_team_is_idempotent(client, team_uuid):
         )
         body = resp.json()
         assert "errors" not in body, body
-        assert body["data"]["assignZoneToTeam"] is True
+        assert body["data"]["assignZoneToTeam"]["zoneUuid"] == zone_uuid
 
     async with test_db() as db:
         rows = (
@@ -307,3 +316,92 @@ async def test_assign_records_the_assigning_user(client, team_uuid):
         ).scalar_one()
         assert row.assigned_by is not None
         assert row.created_at is not None
+
+
+@pytest.mark.asyncio
+async def test_gov_can_soft_delete_a_zone_and_it_leaves_the_listing(client):
+    """A deleted zone disappears from workZones and can no longer be updated or re-deleted."""
+    gov_token = await _make_gov_user()
+    create_resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone G", "geometry": ZONE_POLYGON}}},
+        headers=auth_header(gov_token),
+    )
+    zone_uuid = create_resp.json()["data"]["createWorkZone"]["uuid"]
+
+    del_resp = await client.post(
+        "/graphql",
+        json={"query": DELETE_ZONE, "variables": {"uuid": zone_uuid}},
+        headers=auth_header(gov_token),
+    )
+    body = del_resp.json()
+    assert "errors" not in body, body
+    assert body["data"]["deleteWorkZone"] is True
+
+    list_resp = await client.post(
+        "/graphql", json={"query": WORK_ZONES}, headers=auth_header(gov_token)
+    )
+    items = list_resp.json()["data"]["workZones"]["items"]
+    assert all(item["uuid"] != zone_uuid for item in items)
+
+    update_resp = await client.post(
+        "/graphql",
+        json={"query": UPDATE_ZONE, "variables": {"uuid": zone_uuid, "input": {"name": "Nope"}}},
+        headers=auth_header(gov_token),
+    )
+    assert any("not found" in e["message"] for e in update_resp.json().get("errors", []))
+
+    second_del_resp = await client.post(
+        "/graphql",
+        json={"query": DELETE_ZONE, "variables": {"uuid": zone_uuid}},
+        headers=auth_header(gov_token),
+    )
+    assert any("not found" in e["message"] for e in second_del_resp.json().get("errors", []))
+
+
+@pytest.mark.asyncio
+async def test_plain_login_user_cannot_delete_a_work_zone(client):
+    """Deleting requires work_zone.delete — a user without it is denied (default-deny)."""
+    gov_token = await _make_gov_user()
+    plain_token = await _make_plain_user()
+    create_resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone H", "geometry": ZONE_POLYGON}}},
+        headers=auth_header(gov_token),
+    )
+    zone_uuid = create_resp.json()["data"]["createWorkZone"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": DELETE_ZONE, "variables": {"uuid": zone_uuid}},
+        headers=auth_header(plain_token),
+    )
+    assert any("Permission Denied." in e["message"] for e in resp.json().get("errors", []))
+
+
+@pytest.mark.asyncio
+async def test_assign_returns_the_assignment_record(client, team_uuid):
+    """AssignZoneToTeam returns the assignment, including who assigned it and when."""
+    gov_token = await _make_gov_user()
+    create_resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone I", "geometry": ZONE_POLYGON}}},
+        headers=auth_header(gov_token),
+    )
+    zone_uuid = create_resp.json()["data"]["createWorkZone"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": ASSIGN_ZONE_FULL,
+            "variables": {"input": {"zoneUuid": zone_uuid, "teamUuid": team_uuid}},
+        },
+        headers=auth_header(gov_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    record = body["data"]["assignZoneToTeam"]
+    assert record["zoneUuid"] == zone_uuid
+    assert record["teamUuid"] == team_uuid
+    assert record["assignedBy"] is not None
+    assert record["assignedAt"] is not None

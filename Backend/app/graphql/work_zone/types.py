@@ -41,6 +41,31 @@ class WorkZoneConnection:
     page_info: PageInfo
 
 
+@strawberry.type
+class ZoneAssignmentType:
+    """A team <-> work zone delegation, with who created it and when.
+
+    `assigned_by` is the user uuid as a scalar rather than a nested user object: GraphQL has
+    no User type in this schema, and adding one would widen this change considerably. Mirrors
+    WorkZoneType.created_by.
+    """
+
+    zone_uuid: UUID
+    team_uuid: UUID
+    assigned_at: datetime | None = None
+    assigned_by: str | None = None
+
+    @classmethod
+    def from_model(cls, m) -> "ZoneAssignmentType":
+        """Build from a TeamZoneAssign model instance."""
+        return cls(
+            zone_uuid=m.zone_uuid,
+            team_uuid=m.team_uuid,
+            assigned_at=m.created_at,
+            assigned_by=str(m.assigned_by) if m.assigned_by else None,
+        )
+
+
 @strawberry.input
 class CreateWorkZoneInput:
     """Input for creating a new work zone."""
