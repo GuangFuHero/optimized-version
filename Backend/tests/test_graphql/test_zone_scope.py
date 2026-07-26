@@ -72,10 +72,16 @@ async def team_assigned_to_zone() -> str:
     async with test_db() as db:
         team = Team(name=f"Zone Team {uuid_mod.uuid4().hex[:8]}", type="ngo")
         db.add(team)
+        assigner = User(name=f"assigner_{uuid_mod.uuid4().hex[:8]}")
+        db.add(assigner)
         zone = WorkZone(name="Test Zone", geometry=from_shape(ZONE_POLYGON, srid=4326))
         db.add(zone)
         await db.flush()
-        db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid))
+        db.add(
+            TeamZoneAssign(
+                team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)
+            )
+        )
         await db.flush()
         return str(team.uuid)
 

@@ -96,7 +96,12 @@ async def assign_zone_to_team(
 
     try:
         return await team_zone_assign_repository.create(
-            db, obj_in={"team_uuid": team_uuid, "zone_uuid": zone_uuid}
+            db,
+            obj_in={
+                "team_uuid": team_uuid,
+                "zone_uuid": zone_uuid,
+                "assigned_by": str(actor.uuid),
+            },
         )
     except IntegrityError as exc:
         # Concurrent assign lost the race to uq_team_zone (PR #24 [10]) — stay idempotent by

@@ -97,10 +97,16 @@ async def test_require_scope_own_mismatch_is_403_not_404(db):
 
 async def _assign_zone(db, team, polygon: Polygon) -> None:
     """Give `team` a WorkZone covering `polygon` (ADR-049 zone scope backing)."""
+    assigner = User(name="zone-assigner")
+    db.add(assigner)
     zone = WorkZone(name="Z", geometry=from_shape(polygon, srid=4326))
     db.add(zone)
     await db.flush()
-    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid))
+    db.add(
+        TeamZoneAssign(
+            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)
+        )
+    )
     await db.flush()
 
 
