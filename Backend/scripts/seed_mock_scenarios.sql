@@ -28,7 +28,7 @@ DELETE FROM crowd_sourcing WHERE station_uuid::text LIKE 'a0000000-%' OR station
 DELETE FROM station_properties WHERE station_uuid::text LIKE 'a0000000-%' OR station_uuid::text LIKE 'b0000000-%';
 DELETE FROM stations WHERE uuid::text LIKE 'a0000000-%' OR uuid::text LIKE 'b0000000-%';
 DELETE FROM base_geometries WHERE uuid::text LIKE 'a0000000-%' OR uuid::text LIKE 'b0000000-%' OR uuid::text LIKE 'd0000000-%';
-DELETE FROM user_group_assign WHERE user_uuid::text LIKE 'c0000000-%';
+DELETE FROM user_role_assign WHERE user_uuid::text LIKE 'c0000000-%';
 DELETE FROM user_identities WHERE user_uuid::text LIKE 'c0000000-%';
 DELETE FROM user_contacts WHERE user_uuid::text LIKE 'c0000000-%';
 DELETE FROM users WHERE uuid::text LIKE 'c0000000-%';
@@ -115,8 +115,11 @@ INSERT INTO user_contacts (uuid, user_uuid, type, value, verified, verified_at, 
 INSERT INTO user_identities (uuid, user_uuid, provider, provider_subject, password_hash, created_at)
 SELECT gen_random_uuid(), u.uuid, 'password', NULL, 'pbkdf2_sha256$600000$mockdata12345678$22c5f18b05a3da2d9b73ce908b1b0209$99a483d62cf51799d5cb4ce03dd460c8b3414b9fd1d12f816d8b35fe724d6479', now()
 FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
-INSERT INTO user_group_assign (uuid, user_uuid, group_uuid)
-SELECT gen_random_uuid(), u.uuid, (SELECT uuid FROM groups WHERE name='Login User')
+-- ADR-026 dropped the Group/Policy model: the old 'Login User' group is now the `user` platform
+-- role that every registered account gets (see scripts/seed_rbac.py). role_uuid is NOT NULL, so
+-- this fails loudly rather than silently if seed_rbac.py has not been run on this database first.
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid)
+SELECT gen_random_uuid(), u.uuid, (SELECT uuid FROM roles WHERE name='user' AND kind='platform')
 FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
 
 -- 2. STATIONS — base_geometries + stations + EAV + 投票
