@@ -5,6 +5,7 @@ callers (ADR-036), and idempotent assign/remove of a zone<->team link.
 """
 
 import uuid as uuid_mod
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -621,3 +622,55 @@ async def test_work_zone_exposes_its_assigned_teams(client, team_uuid):
     teams = body["data"]["workZone"]["assignedTeams"]
     assert [t["uuid"] for t in teams] == [team_uuid]
     assert teams[0]["type"] == "ngo"
+
+
+@pytest.mark.asyncio
+async def test_soft_deleted_team_drops_out_of_assigned_teams(client, team_uuid):
+    """A soft-deleted team disappears from a zone's assignedTeams; a live one still appears.
+
+    Design §4.1 requires `teams_by_zones` to filter `Team.delete_at.is_(None)` so delegation
+    listings don't surface teams that no longer exist as an org.
+    """
+    gov_token = await _make_gov_user()
+
+    async with test_db() as db:
+        doomed_team = Team(name=f"Team {uuid_mod.uuid4().hex[:8]}", type="ngo")
+        db.add(doomed_team)
+        await db.flush()
+        doomed_team_uuid = str(doomed_team.uuid)
+
+    create_resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_ZONE,
+            "variables": {"input": {"name": f"Zone {uuid_mod.uuid4().hex[:8]}", "geometry": ZONE_POLYGON}},
+        },
+        headers=auth_header(gov_token),
+    )
+    zone_uuid = create_resp.json()["data"]["createWorkZone"]["uuid"]
+
+    for tid in (team_uuid, doomed_team_uuid):
+        assign_resp = await client.post(
+            "/graphql",
+            json={"query": ASSIGN_ZONE, "variables": {"input": {"zoneUuid": zone_uuid, "teamUuid": tid}}},
+            headers=auth_header(gov_token),
+        )
+        assert "errors" not in assign_resp.json(), assign_resp.json()
+
+    async with test_db() as db:
+        doomed = (
+            await db.execute(select(Team).where(Team.uuid == doomed_team_uuid))
+        ).scalars().first()
+        assert doomed is not None
+        doomed.delete_at = datetime.now(UTC)
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": ZONE_WITH_TEAMS, "variables": {"uuid": zone_uuid}},
+        headers=auth_header(gov_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    listed = {t["uuid"] for t in body["data"]["workZone"]["assignedTeams"]}
+    assert team_uuid in listed
+    assert doomed_team_uuid not in listed
