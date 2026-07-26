@@ -371,6 +371,11 @@ async def test_gov_can_soft_delete_a_zone_and_it_leaves_the_listing(client):
     )
     zone_uuid = create_resp.json()["data"]["createWorkZone"]["uuid"]
 
+    before_resp = await client.post(
+        "/graphql", json={"query": WORK_ZONES}, headers=auth_header(gov_token)
+    )
+    total_before = before_resp.json()["data"]["workZones"]["pageInfo"]["totalCount"]
+
     del_resp = await client.post(
         "/graphql",
         json={"query": DELETE_ZONE, "variables": {"uuid": zone_uuid}},
@@ -383,8 +388,12 @@ async def test_gov_can_soft_delete_a_zone_and_it_leaves_the_listing(client):
     list_resp = await client.post(
         "/graphql", json={"query": WORK_ZONES}, headers=auth_header(gov_token)
     )
-    items = list_resp.json()["data"]["workZones"]["items"]
+    list_body = list_resp.json()["data"]["workZones"]
+    items = list_body["items"]
     assert all(item["uuid"] != zone_uuid for item in items)
+    # count_all must drop by exactly one: a relative comparison, since the test DB is shared
+    # and other tests' zones are present in the totals.
+    assert list_body["pageInfo"]["totalCount"] == total_before - 1
 
     update_resp = await client.post(
         "/graphql",
@@ -563,6 +572,7 @@ async def test_zones_by_team_lists_only_that_teams_live_zones(client, team_uuid)
     assert "errors" not in body, body
     listed = {item["uuid"] for item in body["data"]["zonesByTeam"]["items"]}
     assert listed == set(zone_uuids)
+    total_before = body["data"]["zonesByTeam"]["pageInfo"]["totalCount"]
 
     await client.post(
         "/graphql",
@@ -575,9 +585,13 @@ async def test_zones_by_team_lists_only_that_teams_live_zones(client, team_uuid)
         json={"query": ZONES_BY_TEAM, "variables": {"teamUuid": team_uuid}},
         headers=auth_header(gov_token),
     )
-    remaining = {item["uuid"] for item in after.json()["data"]["zonesByTeam"]["items"]}
+    after_body = after.json()["data"]["zonesByTeam"]
+    remaining = {item["uuid"] for item in after_body["items"]}
     assert zone_uuids[0] not in remaining
     assert zone_uuids[1] in remaining
+    # count_by_team must drop by exactly one: a relative comparison, since the test DB is
+    # shared and other tests' zones for other teams are present in the totals.
+    assert after_body["pageInfo"]["totalCount"] == total_before - 1
 
 
 @pytest.mark.asyncio
