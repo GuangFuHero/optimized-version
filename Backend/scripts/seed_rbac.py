@@ -89,9 +89,10 @@ ROLES_DATA = [
     # --- Team-kind functional roles (attached to a team via user_role_assign; org = the
     # team's team.type). "gov admin" = admin + gov team; "ngo admin" = admin + ngo team.
     # Operational data access is `zone` — the team edits resources geographically inside a
-    # WorkZone assigned to it. Only gov teams *should* draw/assign zones; under ADR-049's
-    # "trust, no hard guard" that is policy, not enforced (ngo admins technically hold
-    # work_zone.assign too).
+    # WorkZone assigned to it. Zone operations are gov-only: `_require_gov_zone_authority` in
+    # app/services/work_zone.py enforces this. NGO admins hold these capabilities in the seed
+    # but are rejected with 403 at the service layer. GOV_TEAM_ONLY_PERMS in
+    # app/core/permissions.py mirrors this for display—keep in lockstep.
     {
         # Team coordinator: full operations within the team's zone + team-member management
         # + zone drawing/assignment.
