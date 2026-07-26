@@ -101,16 +101,17 @@ async def _ensure_db():
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_ASSIGN, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_REVIEW, "all")
 
-        # Content Admin: full access to the "content" resource (announcements et al.)
-        content_group = Group(name="Content Admin")
-        db.add(content_group)
+        # Content Admin: announcement management. ADR-026 dropped the Group/Policy tables in
+        # favour of capability grants, so this role is the capability-era equivalent of the old
+        # "ContentAdmin_content" policy. announcement.view is public (PUBLIC_PERMS) and needs no
+        # grant, but is included so the role reads as a complete description of the fixture.
+        content_role = Role(name="Content Admin", kind="platform")
+        db.add(content_role)
         await db.flush()
-        content_pol = Policy(
-            name="ContentAdmin_content", read="all", create="all", edit="all", delete="all"
-        )
-        db.add(content_pol)
-        await db.flush()
-        db.add(PolicyGroupAssign(group_uuid=content_group.uuid, policy_uuid=content_pol.uuid))
+        await _grant(db, content_role, perm_cache, Perm.ANN_VIEW, "all")
+        await _grant(db, content_role, perm_cache, Perm.ANN_PUBLISH, "all")
+        await _grant(db, content_role, perm_cache, Perm.ANN_EDIT, "all")
+        await _grant(db, content_role, perm_cache, Perm.ANN_DELETE, "all")
 
         await db.commit()
     await eng.dispose()
