@@ -88,6 +88,7 @@ async def _ensure_db():
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_DELETE, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_REVIEW, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.STATION_CONTRIBUTE, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.MAP_ADD, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.MAP_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.MAP_DELETE, "all")
