@@ -6,7 +6,7 @@ team roles (kind="team", assigned per-team; resolved against the actor's own
 app/core/rbac_scopes.py:Scope (none/own/team/gov/ngo/zone/all).
 
 Only capabilities with a real enforcement point today (station/map/ticket/dynamic_field/
-user/team/audit/rbac/announcement) are actually granted below; the rest of the Perm
+user/team/work_zone/audit/rbac/announcement) are actually granted below; the rest of the Perm
 catalog (ticket.export/ai_duplicate/pre_departure) is registered as a Permission row so
 it exists ahead of the feature that will enforce it, but isn't wired into any role yet.
 """
