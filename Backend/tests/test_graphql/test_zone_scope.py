@@ -253,11 +253,11 @@ async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, team_
         "/graphql",
         json={
             "query": UPDATE_TICKET,
-            "variables": {"uuid": ticket_uuid, "input": {"status": "pending"}},
+            "variables": {"uuid": ticket_uuid, "input": {"status": "completed"}},
         },
         headers=auth_header(editor_token),
     )
-    assert after.json().get("errors"), after.json()
+    assert any("Not Found." in e["message"] for e in after.json().get("errors", [])), after.json()
 
 
 @pytest.mark.asyncio
