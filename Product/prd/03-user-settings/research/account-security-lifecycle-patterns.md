@@ -6,7 +6,7 @@
 > 3. 帳號「停用」到底是什麼？停用 / 刪除 / 凍結的差別？可不可恢復？資料怎麼辦？
 > 4. 角色升等申請的狀態機與重複申請、撤回、被拒後重送的規則。
 > **日期**：2026-06-10
-> **關聯**：[[../prd]]（03-user-settings）、[[../../01-auth/prd]]、[[../../05-member-management/prd]]、[[../../02-user-profile/prd]]
+> **關聯**：[`prd.md`](../prd.md)（03-user-settings）、[[01-auth]]、[[05-member-management]]、[[02-user-profile]]
 > **狀態**：研究參考，供決策用（PRD 內以「🟡 建議」回填）
 
 ---
@@ -28,7 +28,7 @@
 | 項目 | 業界作法 | 🟡 對 Wanguard 建議 |
 |---|---|---|
 | 入口輸入 | Email 或手機 | 兩者皆可（對應 01-auth 多管道） |
-| **防枚舉** | 無論帳號是否存在都回「若帳號存在已寄出重設連結」 | 採之（與 [[../../01-auth/prd]] 防枚舉一致） |
+| **防枚舉** | 無論帳號是否存在都回「若帳號存在已寄出重設連結」 | 採之（與 [[01-auth]] 防枚舉一致） |
 | 重設連結 / 碼有效期 | 連結 15–60 分鐘、OTP 5–10 分鐘 | 連結 30 分鐘、簡訊碼 5 分鐘 |
 | 一次性 | 用過即失效，且只允許最新一封有效 | 採之 |
 | 重設成功後 | **登出其他所有 session** + 寄「密碼已變更」通知 | 採之（防接管後的駐留） |
@@ -66,18 +66,18 @@
 | **Suspend（停權 / 凍結）** | 管理者（非自願） | ✅ 由管理者恢復 | 全保留 | 多數平台違規處置 |
 | **Delete（刪除）** | 使用者請求 | ❌（過寬限期後不可逆） | 寬限期後清除/匿名化 | GDPR「被遺忘權」 |
 
-> **重要區分**：03 寫的是使用者**自行**「停用」→ 對應 **Deactivate（可逆休眠）**，不是 Delete。管理者端的 **Suspend** 已在 [[../../05-member-management/prd]]（Team 內暫停 / 整帳號暫停）定義，兩者應對齊用語避免混淆。
+> **重要區分**：03 寫的是使用者**自行**「停用」→ 對應 **Deactivate（可逆休眠）**，不是 Delete。管理者端的 **Suspend** 已在 [[05-member-management]]（Team 內暫停 / 整帳號暫停）定義，兩者應對齊用語避免混淆。
 >
 > 🟡 **建議**：
 > - 自助「停用」＝可逆休眠：登出全部 session、不再收通知，重新登入即自動恢復（或顯示「重新啟用」按鈕）。
-> - 若要提供**刪除**（個資法/GDPR 刪除權），建議 **30 天寬限期 + 軟刪除**，期間可撤回，期滿才匿名化；但**最後一位 Super Admin 不可刪除**（與 [[../../05-member-management/prd]] E8 一致）。
-> - 災害應變期間的後台人員自助停用，建議若其為 Team 唯一 Admin 須先指派接班（與 [[../../05-member-management/prd]] E1 一致）。
+> - 若要提供**刪除**（個資法/GDPR 刪除權），建議 **30 天寬限期 + 軟刪除**，期間可撤回，期滿才匿名化；但**最後一位 Super Admin 不可刪除**（與 [[05-member-management]] E8 一致）。
+> - 災害應變期間的後台人員自助停用，建議若其為 Team 唯一 Admin 須先指派接班（與 [[05-member-management]] E1 一致）。
 
 ---
 
 ## 5. 角色升等申請（狀態機）
 
-03 寫「申請送出進入審核佇列」，但缺申請的完整生命週期。對齊 [[../../05-member-management/prd]] F5（加入 Team → Team Admin 審；平台角色 → Super Admin 審）後，建議狀態機：
+03 寫「申請送出進入審核佇列」，但缺申請的完整生命週期。對齊 [[05-member-management]] F5（加入 Team → Team Admin 審；平台角色 → Super Admin 審）後，建議狀態機：
 
 ```
 draft → submitted → under_review → approved
@@ -90,8 +90,8 @@ submitted/under_review → withdrawn(使用者主動撤回)
 | **重複申請** | 同類型已有 pending 申請時，不可重複送出（顯示「已有待審申請」） |
 | **撤回** | 審核前使用者可主動撤回 |
 | **被拒後重送** | 允許，但建議冷卻期（如 24h）或要求補充理由，避免騷擾審核者 |
-| **同時兩種申請** | 加入 Team 與升平台角色互不相依、可並行（已由 [[../../05-member-management/prd]] F7 / E4 定案） |
-| **通知** | 每次狀態轉移皆透過 [[../../02-user-profile/prd]] 站內通知告知申請人 |
+| **同時兩種申請** | 加入 Team 與升平台角色互不相依、可並行（已由 [[05-member-management]] F7 / E4 定案） |
+| **通知** | 每次狀態轉移皆透過 [[02-user-profile]] 站內通知告知申請人 |
 | **進度可視** | 設定頁顯示目前狀態與時間軸 |
 
 ---
@@ -115,4 +115,4 @@ submitted/under_review → withdrawn(使用者主動撤回)
 - Google Account Help — Change/recover email, security notifications
 - GitHub Docs — Changing your primary email / verifying email
 - GDPR Art.17 — Right to erasure（被遺忘權）、軟刪除與寬限期實務
-- 與本 repo 既有：[[../../05-member-management/prd]]（suspend / 最後一位 Admin/Super Admin 約束）
+- 與本 repo 既有：[[05-member-management]]（suspend / 最後一位 Admin/Super Admin 約束）

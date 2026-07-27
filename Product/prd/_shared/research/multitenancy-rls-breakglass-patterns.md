@@ -7,7 +7,7 @@
 > 4. 平台級操作（關閉災害事件、解除直立救援）是否需兩位 Super Admin 雙簽？
 > 並補一個 v2.0 點到但沒展開的主題：**PostgreSQL RLS 的實作模式與陷阱**，以及災時 **break-glass（緊急破窗）** 存取。
 > **日期**：2026-06-10
-> **關聯**：[[../prd]]（04-rbac）、[[../../05-member-management/prd]]、[[../../01-auth/prd]]、[[../../08-ticket-management/prd]]
+> **關聯**：[[04-rbac]]（04-rbac）、[[05-member-management]]、[[01-auth]]、[[08-ticket-management]]
 > **狀態**：研究參考，供決策用（回填至 04-rbac 開放問題）
 
 ---
@@ -66,7 +66,7 @@ v2.0 建議「在 DB 層再加一層 RLS」，這裡補實作要點與陷阱：
 | 強制登出 | 安全、但擾民 | 高敏感金融系統 |
 | 下次 token 刷新生效（不強制登出） | 體驗好、靠短 token 收斂時間窗 | 多數 SaaS、雲端 IAM |
 
-> 04-rbac v2.0 已決「不強制登出、下次刷新生效」。本研究**支持此決策**，補充條件：**降權（如撤銷 Super Admin、停權）應更即時**——建議降權類變更縮短生效窗（如強制該使用者的 access token 立即失效一次），升權則可等自然刷新。這與 [[../../01-auth/prd]] 的短 token 設計一致。
+> 04-rbac v2.0 已決「不強制登出、下次刷新生效」。本研究**支持此決策**，補充條件：**降權（如撤銷 Super Admin、停權）應更即時**——建議降權類變更縮短生效窗（如強制該使用者的 access token 立即失效一次），升權則可等自然刷新。這與 [[01-auth]] 的短 token 設計一致。
 
 ---
 
@@ -80,7 +80,7 @@ v2.0 建議「在 DB 層再加一層 RLS」，這裡補實作要點與陷阱：
 > - 「解除直立救援」維持 v2.0 的「限 Super Admin + 附理由」即可，不必雙簽（現場時效優先）。
 
 ### 5.2 Break-glass（緊急破窗存取）
-呼應 [[../../01-auth/prd]] A6：若究平安 SSO 中斷、或唯一 Super Admin 失聯，平台需要緊急取得最高權限的途徑。
+呼應 [[01-auth]] A6：若究平安 SSO 中斷、或唯一 Super Admin 失聯，平台需要緊急取得最高權限的途徑。
 
 > 業界（PagerDuty、AWS break-glass IAM、醫療系統）作法：保留**極少數封存的緊急帳號**，使用需強稽核（每次使用即告警 + 事後審查），平時鎖定。
 >
@@ -106,4 +106,4 @@ v2.0 建議「在 DB 層再加一層 RLS」，這裡補實作要點與陷阱：
 - AWS — Multi-tenant data isolation patterns / IAM evaluation logic（deny 優先）：https://docs.aws.amazon.com/
 - Microsoft Entra — Multiple role assignment & PIM（Privileged Identity Management）
 - NIST / 一般安全工程 — Four-eyes principle、Break-glass access
-- 與本 repo 既有：[[../../05-member-management/prd]]（E7 / E8 / E14）、[[../../01-auth/prd]]（短 token、break-glass A6）
+- 與本 repo 既有：[[05-member-management]]（E7 / E8 / E14）、[[01-auth]]（短 token、break-glass A6）

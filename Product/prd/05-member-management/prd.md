@@ -1,16 +1,22 @@
+---
+feature: 05-member-management
+title: 成員管理
+status: definition
+owner:
+depends_on: [02-user-profile, 03-user-settings, 04-rbac, 06-map-decision-support, 08-ticket-management]
+design:
+---
+
 # Feature PRD — 成員管理 (Member Management)
 
-> **版本：** v5.0
-> **日期：** 2026-06-15
-> **狀態：** Definition Phase
 > **根基文件：** [`user-stories.md`](user-stories.md)（角色、情境、使用者目標——請先讀這份）
 > **關聯文件：** [[04-rbac]]（平台 RBAC 角色與權限矩陣）、[[03-user-settings]]（申請入口）、`research/qr-invitation-security-patterns.md`、`research/guest-restricted-access-patterns.md`
 
-> 本文件是由 [`user-stories.md`](user-stories.md) **推導出的功能規格**（如何實作）。正文只寫目前定案的規格;角色與情境見根基文件,版本演進見文末變更紀錄,平台 RBAC 的權限模型見 [[04-rbac]] 不重述。
+> 本文件是由 [`user-stories.md`](user-stories.md) **推導出的功能規格**（如何實作）。正文只寫目前定案的規格;角色與情境見根基文件,平台 RBAC 的權限模型見 [[04-rbac]] 不重述。
 
 ---
 
-## 1. 範圍與邊界
+## 範圍與邊界
 
 本文件負責**「人與團隊的管理操作流程」**:建立團隊、管理成員、邀請、切換、審核、稽核。
 
@@ -33,7 +39,7 @@
 
 ---
 
-## 2. 介面與導覽(IA)
+## 介面與導覽(IA)
 
 > 決策日 2026-06-15。對齊「RBAC 與 Team 正交」原則:**兩個維度在介面上各有自己的家**,不再把 Team 埋在單一「成員管理」模組的分頁底下(原型 HTML 的舊作法)。
 
@@ -52,12 +58,12 @@
 > **待對齊設計(現有 Figma / 原型的漂移):**
 > 1. Figma `User Management` 為舊單軸模型(Role 下拉含 `Volunteer`、缺 `Data Auditor`、無 Team)——需依本節 IA 與兩軸模型重畫。
 > 2. 取消 Figma 式「每列 inline Role 下拉」:改 RBAC 須為刻意動作(僅 Super Admin、重新驗證、寫 Audit、通知當事人,見 [[04-rbac]]),不是隨手下拉。
-> 3. 原型 HTML 的約束代碼需同步命名:`E1`(Team 至少 1 位 Admin)對應本 PRD §4 的 `EA1`;`E8`(平台至少 1 位 Super Admin)屬平台 RBAC 不變量,**v5.0 起已移交 [[04-rbac]] 維護**,本 PRD 不再保留 `EB` 編號,引用時直接指向 [[04-rbac]] 對應約束。
+> 3. 原型 HTML 的約束代碼需同步命名:`E1`(Team 至少 1 位 Admin)對應本 PRD「異常場景」的 `EA1`;`E8`(平台至少 1 位 Super Admin)屬平台 RBAC 不變量,**v5.0 起已移交 [[04-rbac]] 維護**,本 PRD 不再保留 `EB` 編號,引用時直接指向 [[04-rbac]] 對應約束。
 > 4. 原型把「訪客」以「RBAC=一般使用者被邀入」表現,需與 Team 內角色 `Guest`(A2)的視覺一致化。
 
 ---
 
-## 3. 功能需求
+## 功能需求
 
 ### A. Team 管理
 
@@ -95,7 +101,7 @@
 * 切換後資料邊界(Ticket/Zone/成員清單/Audit Log)以當前 Team 為準;該人在各 Team 的 Team 內角色各自獨立,控制項即時對應。**平台 RBAC 不隨切換改變。**
 
 #### A5. Team 訪客(Guest)存取
-* 被 Team Admin 邀進某 Team 的一般使用者,**RBAC 維持「一般使用者」不變**,僅靠 Team 成員身份解鎖「該 Team 這一個空間」(採推導式存取,見 §1 推導原則與 [`research/guest-restricted-access-patterns.md`](research/guest-restricted-access-patterns.md))。
+* 被 Team Admin 邀進某 Team 的一般使用者,**RBAC 維持「一般使用者」不變**,僅靠 Team 成員身份解鎖「該 Team 這一個空間」(採推導式存取,見「範圍與邊界」推導原則與 [`research/guest-restricted-access-patterns.md`](research/guest-restricted-access-patterns.md))。
 * **收斂掉的內容**(前端不渲染、後端 403 把關):成員管理整個功能、其他 Team 任何資料、地圖繪製/災害啟動/Audit Log。
 * Guest 定位為唯讀/受限,需 Team Admin 手動升為 Member 才可回報;後台 UI 需顯眼標「訪客」徽章避免誤判。
 * **未加入任何 Team 的一般使用者** → 進不了後台(純前台),僅能於 [[03-user-settings]] 送申請。
@@ -128,7 +134,7 @@
 
 ---
 
-## 4. 異常場景
+## 異常場景
 
 > 「⛔」為前後端應強制的硬約束。平台 RBAC 的不變量(如「至少 1 位 Super Admin」)已移至 [[04-rbac]],此處僅列成員管理相關場景。
 
@@ -148,7 +154,7 @@
 
 ---
 
-## 5. User Flow
+## User Flow
 
 ### Flow 1 — Super Admin 建立 Team 並邀請 Admin
 ```mermaid
@@ -181,7 +187,7 @@ flowchart TD
 
 ---
 
-## 6. 成功驗收標準
+## 驗收標準
 
 **Team 維度**
 - [ ] Team Admin 不需 Super Admin 介入即可邀請、暫停、升降自家成員的 Team 內角色。
@@ -201,31 +207,16 @@ flowchart TD
 
 ---
 
-## 7. 待確認
+## 開放問題
 
 目前無未決項——原 v3.2 開放問題已於 2026-06-14 全數定案並併入上述正文。平台 RBAC 相關的不變量與生命週期(至少 1 位 Super Admin、Super Admin 互撤、存取推導原則)已於本次拆分移交 [[04-rbac]] 維護;原 v4.0 的 `EB` 系列場景(EB1/EB2/EB3)隨之退役,本 PRD 異常場景僅保留 Team 維度(`EA`)與跨維度(`EC`)兩類。
 
 ---
 
-## 8. 相關 Feature
+## 相關 Feature
 
 * [[04-rbac]] — 平台 RBAC 角色、權限矩陣、不變量(本文件只做成員管理操作)
 * [[03-user-settings]] — 一般使用者發起角色/Team 申請的入口
 * [[02-user-profile]] — Team 標籤與 RBAC 顯示於資料卡
 * [[06-map-decision-support]] — Zone 指派目標來自 Team 列表
 * [[08-ticket-management]] — Ticket 歸屬 Team
-
----
-
-## 9. 變更紀錄
-
-| 版本 | 日期 | 更新重點 |
-|------|------|----------|
-| v1.0 | 2026-05-28 | 初版,從 prd-manager-end.md §2.2 拆分 |
-| v2.0 | 2026-05-28 | 加入 Team 概念:CRUD、Team 內角色、QR 邀請、可見性、Audit Log |
-| v3.0–3.2 | 2026-06-08~10 | RBAC 與 Team 徹底解耦;一人多 Team 與切換;Team 訪客(推導式存取);邀請/QR 安全 |
-| v4.0 | 2026-06-15 | 結構性改版:功能需求按維度分 Part A/B/C;新增概念定義;異常場景分 EA/EB/EC(零刪減)。完整內容存 `archive/05-member-management-prd-v4.0.md` |
-| v5.0 | 2026-06-15 | 精簡:正文去版本化、合併重複(刪除與正文重複的決策回填章);User Stories 抽出為根基檔 `user-stories.md`;RBAC 規則拆出移交 [[04-rbac]](5 角色定義、≥1 Super Admin 不變量、互撤機制、存取推導原則),Part B 僅留操作入口 |
-| v5.1 | 2026-06-15 | 新增「介面與導覽(IA)」一節:依正交原則將 **Teams** 與 **成員與權限** 拆為兩個獨立導覽項、審核佇列改頂欄全域 inbox;標注 Figma/原型的待對齊漂移(單軸 Role 下拉、E1/E8→EA1/EB2、Guest 軸) |
-| v5.2 | 2026-06-15 | 收口:修正 §2 對 `EB2` 的斷裂引用(EB 系列已於 v5.0 移交 [[04-rbac]],本 PRD 不再保留 EB 編號),`E8`→[[04-rbac]] 約束;§7 補記 EB 場景退役。全文已無懸空編號引用 |
-</content>

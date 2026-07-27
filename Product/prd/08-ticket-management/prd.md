@@ -1,6 +1,14 @@
+---
+feature: 08-ticket-management
+title: 任務管理
+status: definition
+owner:
+depends_on: [04-rbac, 05-member-management, 06-map-decision-support, 07-resource-station, 10-guest-ticket-privacy]
+design:
+---
+
 # Feature PRD — 任務管理 (Ticket Management)
 
-> **狀態：** Definition Phase
 > **北極星（問題空間）：** [`user-stories.md`](user-stories.md)
 > **相關 Feature：** [[04-rbac]]（權限）、[[05-member-management]]（Team／志工身份）、[[06-map-decision-support]]（地圖、劃區指派）、[[07-resource-station]]（資源站協作）、[[10-guest-ticket-privacy]]（訪客端可見性）
 
@@ -8,7 +16,7 @@
 
 ---
 
-## 核心模型：四層結構
+## 核心概念：四層結構
 
 任務資料由四個層次組成，由地理底層逐層向下展開。理解這四層是讀懂本文件的前提。
 
@@ -249,7 +257,7 @@ flowchart TD
 
 ---
 
-## 成功驗收標準
+## 驗收標準
 
 * [ ] 一筆 Ticket 可掛多筆 Task；承接與指派以 Task 為單位（寫入 `task_assignments`）。
 * [ ] 前台自助報案走精簡表單，無專業必填欄位即可送出，並取得可追蹤識別。
@@ -265,7 +273,7 @@ flowchart TD
 
 ---
 
-## 待拍板（設計決策）
+## 開放問題
 
 模型方向已定：**四層 Ticket→Task 結構、災害在平台層、災害專屬情報走 EAV**；設計原型將據此重做。以下為此方向下仍待收斂者，定案前不應視為規格。
 

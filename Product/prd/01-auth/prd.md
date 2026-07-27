@@ -1,10 +1,16 @@
+---
+feature: 01-auth
+title: 身份認證
+status: definition
+owner:
+depends_on: [02-user-profile, 03-user-settings, 04-rbac]
+design:
+---
+
 # Feature PRD — 身份認證 (Auth)
 
-> **版本：** v1.2 — 整併重寫，將歷版內容融為單一當前規格
-> **日期：** 2026-06-15
-> **狀態：** Definition Phase
-> **所屬功能：** 身份認證 Auth（ManagerEnd 核心模組）
-> **關聯文件：** `research/auth-sso-otp-session-patterns.md`、`ai-context/decisions-log.md`、`product/user-journey.md`、`design/foundation/design-principles.md`、`UI-UX-Analysis.md`
+> **根基文件：** [`user-stories.md`](user-stories.md)（角色、情境、使用者目標——請先讀這份）
+> **關聯文件：** `research/auth-sso-otp-session-patterns.md`、[user-journey.md](../../user-journey.md)
 
 ---
 
@@ -101,7 +107,7 @@ SMS / Email OTP 是最常被攻擊的環節（簡訊轟炸、暴力猜碼、SMS 
 
 ---
 
-## 成功驗收標準
+## 驗收標準
 
 - [ ] 前台使用者可透過 Email、SMS、Google、Line 四種方式完成登入。
 - [ ] 後台人員透過 SSO 登入後，系統自動對應 RBAC 角色，無須手動選擇。
@@ -115,7 +121,7 @@ SMS / Email OTP 是最常被攻擊的環節（簡訊轟炸、暴力猜碼、SMS 
 
 ---
 
-## 開放問題（待確認）
+## 開放問題
 
 > 已拍板的設計決策（OTP 預設值、verified-linking、JIT 佈建、Session 策略）已寫入上方規格；以下為仍需政策決定者。
 
@@ -130,13 +136,3 @@ SMS / Email OTP 是最常被攻擊的環節（簡訊轟炸、暴力猜碼、SMS 
 * [[04-rbac]] — 登入後的角色與權限控制、break-glass
 * [[02-user-profile]] — 登入後的使用者個人資訊
 * [[03-user-settings]] — 帳號變更密碼等設定、升等流程
-
----
-
-## 變更紀錄
-
-| 版本 | 日期 | 更新重點 | 負責人 |
-|------|------|----------|--------|
-| v1.0 | 2026-05-28 | 初版建立，從 prd-manager-end.md §1.1 拆分 | — |
-| v1.1 | 2026-06-10 | 拆細帳號識別與連結、OTP 防濫用、Session 與權限生效、8 條異常場景（當時以建議形式標註）；新增研究檔 `research/auth-sso-otp-session-patterns.md` | — |
-| **v1.2** | **2026-06-15** | **整併重寫**：移除版本標籤與 🟡 標記；將 v1.1 拆細的帳號識別／OTP／Session 三段融入單一 F1–F6 功能需求；研究後已可拍板者（OTP 預設值、verified-linking、JIT、降權即時生效）定調為規格；新增「核心概念」導讀；開放問題僅留 break-glass / Line 識別 / 境外號碼三項政策決定。**無功能刪減。** | — |

@@ -7,7 +7,7 @@
 > 4. 同一事件短時間多次觸發要不要合併（防洗版）？
 > 5. 三種通知是否該各有「跳轉目的地（deep link）」？
 > **日期**：2026-06-10
-> **關聯**：[[../prd]]（02-user-profile）、[[../../08-ticket-management/prd]]、[[../../07-resource-station/prd]]、[[../../05-member-management/prd]]、[[../../09-emergency-announcement/prd]]
+> **關聯**：[`prd.md`](../prd.md)（02-user-profile）、[[08-ticket-management]]、[[07-resource-station]]、[[05-member-management]]、[[09-emergency-announcement]]
 > **狀態**：研究參考，供決策用（PRD 內以「🟡 建議」回填）
 
 ---
@@ -28,7 +28,7 @@
 
 > 02-user-profile 既然定為「非主動推播」，**最貼合的是 A + 輕量 B 的組合**：頁面載入先拉一次（A），停留期間以**較長間隔輪詢未讀數**（B，例如 30–60 秒，只拉「數字」不拉「內容」，內容點開鈴鐺才拉）。GitHub 的鈴鐺正是這種「先拉計數、點開才拉清單」的兩段式設計，能把負載壓到最低。
 >
-> 🟡 **建議**：輪詢間隔做成可調參數，**平時 60 秒、災害啟動期間自動縮短到 15–30 秒**（與 [[../../09-emergency-announcement/prd]] 的緊急公告即時性需求對齊）。
+> 🟡 **建議**：輪詢間隔做成可調參數，**平時 60 秒、災害啟動期間自動縮短到 15–30 秒**（與 [[09-emergency-announcement]] 的緊急公告即時性需求對齊）。
 
 ### 防驚群（thundering herd）
 大量使用者同時在線時，若大家用「固定整點輪詢」會在同一瞬間打爆後端。業界作法：**加入隨機抖動（jitter）**，每個 client 的輪詢間隔 ±10–20% 隨機，把請求攤平。
@@ -57,7 +57,7 @@
 | 議題 | 業界常見作法 | 🟡 對 Wanguard 建議 |
 |---|---|---|
 | **分組** | 依類型 Tab 或依事件對象聚合（如「同一 Ticket 的 3 則更新」收合成 1 條） | 至少依 02 的三種類型可篩選；同一 Ticket/同一申請的多則建議聚合 |
-| **保留期限** | GitHub 5 個月、Slack 依方案、Linear 不限但可歸檔 | 建議站內通知保留 **90 天**，逾期歸檔或清除（災害稽核需求另由 Audit Log 承擔，見 [[../../05-member-management/prd]]） |
+| **保留期限** | GitHub 5 個月、Slack 依方案、Linear 不限但可歸檔 | 建議站內通知保留 **90 天**，逾期歸檔或清除（災害稽核需求另由 Audit Log 承擔，見 [[05-member-management]]） |
 | **歷史檢視** | 提供「全部通知」頁，可翻舊的 | 提供完整通知頁，與鈴鐺快覽（最近 N 則）分離 |
 | **跨裝置同步** | 已讀狀態雲端同步 | 已讀狀態存後端，不存 localStorage |
 
@@ -80,11 +80,11 @@
 
 | 通知類型 | 觸發來源 | 🟡 建議跳轉目的地 |
 |---|---|---|
-| 任務配對提醒 | [[../../08-ticket-management/prd]] 有志工承接 | 該 Ticket 詳情抽屜 |
-| 審查結果通知 | [[../../07-resource-station/prd]] 修改建議審查完成 | 該資源站 / 該建議的結果頁 |
-| 角色升等提醒 | [[../../05-member-management/prd]] 審核通過 | 個人檔案的角色區 / 重新整理套用新權限 |
+| 任務配對提醒 | [[08-ticket-management]] 有志工承接 | 該 Ticket 詳情抽屜 |
+| 審查結果通知 | [[07-resource-station]] 修改建議審查完成 | 該資源站 / 該建議的結果頁 |
+| 角色升等提醒 | [[05-member-management]] 審核通過 | 個人檔案的角色區 / 重新整理套用新權限 |
 
-> 🟡 **建議補強**：02 目前只列 3 類通知，但 [[../../09-emergency-announcement/prd]] 的後台公告、[[../../06-map-decision-support/prd]] 的 Zone 指派/Hazard 警示、[[../../05-member-management/prd]] 的待審佇列徽章，本質都需要觸達後台人員。**是否納入站內通知中心，還是各自獨立呈現，需要在 02 與這些 feature 間對齊**（列入開放問題）。
+> 🟡 **建議補強**：02 目前只列 3 類通知，但 [[09-emergency-announcement]] 的後台公告、[[06-map-decision-support]] 的 Zone 指派/Hazard 警示、[[05-member-management]] 的待審佇列徽章，本質都需要觸達後台人員。**是否納入站內通知中心，還是各自獨立呈現，需要在 02 與這些 feature 間對齊**（列入開放問題）。
 
 ---
 

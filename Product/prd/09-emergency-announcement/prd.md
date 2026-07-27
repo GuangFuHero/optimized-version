@@ -1,10 +1,16 @@
+---
+feature: 09-emergency-announcement
+title: 緊急公告系統
+status: definition
+owner:
+depends_on: [02-user-profile, 04-rbac, 06-map-decision-support, 08-ticket-management]
+design:
+---
+
 # Feature PRD — 緊急公告系統 (Emergency Announcement)
 
-> **版本：** v2.0 — 整併重寫，對齊 CAP 與 04-rbac，融為單一當前規格
-> **日期：** 2026-06-15
-> **狀態：** Definition Phase
-> **所屬功能：** 緊急公告系統 Emergency Announcement（ManagerEnd 核心模組）
-> **關聯文件：** `research/emergency-alert-cap-patterns.md`、`ai-context/decisions-log.md`、`product/user-journey.md`、`design/foundation/design-principles.md`、`UI-UX-Analysis.md`
+> **根基文件：** [`user-stories.md`](user-stories.md)（角色、情境、使用者目標——請先讀這份）
+> **關聯文件：** `research/emergency-alert-cap-patterns.md`、[user-journey.md](../../user-journey.md)
 
 ---
 
@@ -125,7 +131,7 @@ active → updated(發更新版取代前一則，舊版標 superseded)
 
 ---
 
-## 成功驗收標準
+## 驗收標準
 
 - [ ] 前台公告發佈後，所有造訪前台的使用者在頁面頂部可見置頂橫幅。
 - [ ] 後台公告發佈後，所有已登入後台的人員在下次開啟頁面或重新整理時看到公告提示。
@@ -141,7 +147,7 @@ active → updated(發更新版取代前一則，舊版標 superseded)
 
 ---
 
-## 開放問題（待確認）
+## 開放問題
 
 > 資料模型、嚴重度視覺、排程到期、分眾、回執、版位、發佈權限均已定調寫入規格；以下為仍待決者。
 
@@ -157,13 +163,3 @@ active → updated(發更新版取代前一則，舊版標 superseded)
 * [[02-user-profile]] — 後台成員接收公告通知（後台公告發佈即生成站內通知，待對齊）
 * [[06-map-decision-support]] — 公告地理範圍與 Hazard Zone 嚴重度對齊
 * [[08-ticket-management]] — 公告關聯 Disaster Activation 事件
-
----
-
-## 變更紀錄
-
-| 版本 | 日期 | 更新重點 | 負責人 |
-|------|------|----------|--------|
-| v1.0 | 2026-05-28 | 初版建立，從 prd-manager-end.md §4 拆分 | — |
-| v1.1 | 2026-06-10 | 對齊 CAP：拆細公告資料模型、嚴重度視覺、排程/到期狀態機、分眾投放、已讀回執、多則並存版位、6 條異常場景（當時以建議形式標註，並質疑 v1.0「唯一操作者」與 04-rbac 矛盾）；新增研究檔 `research/emergency-alert-cap-patterns.md` | — |
-| **v2.0** | **2026-06-15** | **整併重寫**：移除版本標籤與 🟡 標記；原「拆細規格」段融入單一 F1–F8；採 [[04-rbac]] 權限表定調發佈權限（前台限 Super Admin/Government、後台含 Team Admin 自家），取代 v1.0「唯一操作者 Super Admin」；CAP 結構、severity、排程到期等寫入規格；開放問題僅留多語 / 通知整合 / Extreme 攔截頻率。**無功能刪減。** | — |

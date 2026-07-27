@@ -2,7 +2,7 @@
 
 > **目的**：回答一個 member-management 的開放問題——當 **Team Admin 透過 QRCode 邀請一位「一般使用者」（前台市民/志工，無任何後台 RBAC）進入自己的 Team** 時，是否該讓這個人「進得了後台」？如果讓他進來，他理應只看得到「他被邀進的那一個 Team」，看不到後台其他內容。這種「只看得到一個空間」的人，業界成熟產品怎麼處理？
 > **日期**：2026-06-08
-> **關聯**：[[../prd]]（05-member-management v3.0）、[[../../04-rbac/prd]]、`research/competitive/patterns/team-organization-patterns.md`
+> **關聯**：[`prd.md`](../prd.md)（05-member-management v3.0）、[[04-rbac]]
 > **狀態**：研究參考，供決策用（尚未拍板）
 
 ---
@@ -159,6 +159,3 @@ Team Admin 邀請時，被邀者直接升為 RBAC = NGO，於是用既有 NGO �
 - GitHub — Roles in an organization：https://docs.github.com/en/organizations/managing-peoples-access-to-your-organization-with-roles/roles-in-an-organization
 - Microsoft Teams — Guest access：https://learn.microsoft.com/en-us/microsoftteams/guest-access
 - Microsoft Entra — B2B guest user properties：https://learn.microsoft.com/en-us/entra/external-id/user-properties
-- repo 內既有研究：`research/competitive/competitor-details/crisis-cleanup.md`、`research/competitive/competitor-details/sahana-eden.md`、`research/competitive/patterns/team-organization-patterns.md`
-</content>
-</invoke>

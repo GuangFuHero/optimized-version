@@ -1,10 +1,16 @@
+---
+feature: 06-map-decision-support
+title: 即時決策輔助與地圖繪製
+status: definition
+owner:
+depends_on: [04-rbac, 05-member-management, 07-resource-station, 08-ticket-management, 09-emergency-announcement]
+design:
+---
+
 # Feature PRD — 即時決策輔助與地圖繪製 (Map Decision Support & Drawing)
 
-> **版本：** v3.0 — 整併重寫，將歷版內容融為單一當前規格
-> **日期：** 2026-06-15
-> **狀態：** Definition Phase
-> **所屬功能：** 即時決策輔助 + 地圖繪製（ManagerEnd 核心模組）
-> **關聯文件：** `research/map-performance-offline-geometry-patterns.md`、`research/competitive/patterns/map-drawing-ux-patterns.md`、`research/competitive/competitor-details/crisis-cleanup.md`、`research/competitive/competitor-details/arcgis-workforce.md`、`ai-context/decisions-log.md`、`product/user-journey.md`、`design/foundation/design-principles.md`、`UI-UX-Analysis.md`
+> **根基文件：** [`user-stories.md`](user-stories.md)（角色、情境、使用者目標——請先讀這份）
+> **關聯文件：** `research/map-performance-offline-geometry-patterns.md`、[user-journey.md](../../user-journey.md)
 
 ---
 
@@ -265,7 +271,7 @@ flowchart TD
 
 ---
 
-## 成功驗收標準
+## 驗收標準
 
 - [ ] Government 可用矩形 / 多邊形 / 圓 / 手繪 / Pin 五種工具在地圖上繪製形狀。
 - [ ] 繪製進行中右下角即時顯示範圍內 Ticket 與 Resource Station 數量，更新延遲 < 100ms。
@@ -283,7 +289,7 @@ flowchart TD
 
 ---
 
-## 開放問題（待確認）
+## 開放問題
 
 > 效能/聚合、幾何正確性、離線策略、Hazard 效期、Zone 編輯後 Ticket 重算等已定調寫入規格；以下為仍待決或排程 v2 者。
 
@@ -303,14 +309,3 @@ flowchart TD
 * [[05-member-management]] — Zone 指派目標來自 Team 列表
 * [[04-rbac]] — Zone 編輯權限
 * [[09-emergency-announcement]] — Hazard 嚴重度與公告分級對齊
-
----
-
-## 變更紀錄
-
-| 版本 | 日期 | 更新重點 | 負責人 |
-|------|------|----------|--------|
-| v1.0 | 2026-05-28 | 初版建立，從 prd-manager-end.md §3.1 拆分 | — |
-| v2.0 | 2026-05-28 | 加入地圖繪製（5 種工具）、Zone 資料模型（Assignment / Hazard）、繪製狀態機、即時預覽、Undo、圖層管理、衝突規則 | — |
-| v2.1 | 2026-06-10 | 補效能/聚合、繪製幾何正確性、離線/弱網策略（當時以開放問題形式提出）；新增研究檔 `research/map-performance-offline-geometry-patterns.md` | — |
-| **v3.0** | **2026-06-15** | **整併重寫**：移除版本標籤與 🟡 標記；將 v2.1 研究後已可拍板的效能/幾何/離線提升為正式 F11，Hazard 效期可自訂+到期提醒併入 F2.2；新增「核心概念」導讀；開放問題僅留 SHP/Buffer/跨Team/子區等 v2 或待決項。**無功能刪減。** | — |

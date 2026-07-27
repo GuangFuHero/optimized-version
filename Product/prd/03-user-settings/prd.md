@@ -1,10 +1,16 @@
+---
+feature: 03-user-settings
+title: 個人設定
+status: definition
+owner:
+depends_on: [01-auth, 02-user-profile, 05-member-management]
+design:
+---
+
 # Feature PRD — 個人設定 (User Settings)
 
-> **版本：** v1.2 — 整併重寫，將歷版內容融為單一當前規格
-> **日期：** 2026-06-15
-> **狀態：** Definition Phase
-> **所屬功能：** 個人設定 User Settings（ManagerEnd 核心模組）
-> **關聯文件：** `research/account-security-lifecycle-patterns.md`、`ai-context/decisions-log.md`、`product/user-journey.md`、`design/foundation/design-principles.md`、`UI-UX-Analysis.md`
+> **根基文件：** [`user-stories.md`](user-stories.md)（角色、情境、使用者目標——請先讀這份）
+> **關聯文件：** `research/account-security-lifecycle-patterns.md`、[user-journey.md](../../user-journey.md)
 
 ---
 
@@ -103,7 +109,7 @@ submitted/under_review → withdrawn(使用者主動撤回)
 
 ---
 
-## 成功驗收標準
+## 驗收標準
 
 - [ ] 忘記密碼流程完成後，使用者可在 5 分鐘內透過 Email 或 SMS 完成密碼重設。
 - [ ] 角色升等申請送出後，系統顯示待審狀態，使用者可在個人頁看到申請進度。
@@ -118,7 +124,7 @@ submitted/under_review → withdrawn(使用者主動撤回)
 
 ---
 
-## 開放問題（待確認）
+## 開放問題
 
 > 密碼／敏感變更安全、升等狀態機、停用語義均已定調寫入規格；以下為仍待決者。
 
@@ -133,13 +139,3 @@ submitted/under_review → withdrawn(使用者主動撤回)
 * [[01-auth]] — 密碼與帳號驗證流程
 * [[02-user-profile]] — 顯示個人資訊、申請狀態通知
 * [[05-member-management]] — 角色申請審核分流、唯一 Admin / 最後 Super Admin 約束
-
----
-
-## 變更紀錄
-
-| 版本 | 日期 | 更新重點 | 負責人 |
-|------|------|----------|--------|
-| v1.0 | 2026-05-28 | 初版建立，從 prd-manager-end.md §1.3 拆分 | — |
-| v1.1 | 2026-06-10 | 拆細密碼/敏感變更安全、升等申請狀態機與審核者分流、帳號停用語義、6 條異常場景（當時以建議形式標註，並質疑 v1.0「由 Super Admin 審核」）；新增研究檔 `research/account-security-lifecycle-patterns.md` | — |
-| **v1.2** | **2026-06-15** | **整併重寫**：移除版本標籤與 🟡 標記；原「安全與生命週期拆細」段融入單一 F1–F5；採 [[05-member-management]] 的審核分流定義定調（取代 v1.0「一律 Super Admin 審」）；研究後已可拍板者（連結效期、驗新+通知舊+step-up、可逆休眠、軟刪除）寫入規格；開放問題僅留撤回冷靜期 / 刪除時程 / 重送規則。**無功能刪減。** | — |

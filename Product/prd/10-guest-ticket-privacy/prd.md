@@ -1,10 +1,16 @@
+---
+feature: 10-guest-ticket-privacy
+title: 訪客端工單隱私
+status: draft
+owner:
+depends_on: [04-rbac, 06-map-decision-support, 08-ticket-management]
+design:
+---
+
 # Feature PRD — 訪客端工單隱私 (Guest Ticket Privacy)
 
-> **版本：** v0.1 — 草稿（Definition Phase）
-> **日期：** 2026-06-29
-> **狀態：** 草稿，待產品決策（位置精度、內文揭露、存取門檻三項待拍板）
-> **所屬功能：** 公開前台 ／ 跨 08-ticket-management × 04-rbac
-> **關聯文件：** `ai-context/decisions-log.md`、`product/prd/04-rbac/prd.md`、`product/prd/08-ticket-management/prd.md`
+> **定位：** 公開前台橫切議題（跨 [[08-ticket-management]] × [[04-rbac]]）
+> **關聯文件：** [[04-rbac]]、[[08-ticket-management]]
 > **觸發背景：** 後端 `feature/pii-protection` PR（僅遮罩工單 3 個聯絡欄位）的審查發現——訪客端真正的隱私面遠大於聯絡欄位，需獨立定義。
 
 ---
@@ -96,7 +102,7 @@
 
 ---
 
-## 成功驗收標準
+## 驗收標準
 
 - [ ] 訪客查詢 `restricted` / `internal` 工單時，列表不含、單筆回「查無」，且回應不洩漏其存在。
 - [ ] 訪客取得的任一工單，`description`、`title` 原始自由文字、`photos`、`review_note`、`created_by` 皆不可得（為 `null` 或安全摘要）。
@@ -120,11 +126,3 @@
 * [[04-rbac]] — 資料可見性矩陣的權威來源；本 PRD 的訪客欄位分級須回填為矩陣新增的「訪客」列。
 * [[08-ticket-management]] — 工單欄位與生命週期的定義來源；本 PRD 規範其「對訪客」的揭露切面。
 * [[06-map-decision-support]] — 公開地圖的聚合/降精度呈現與位置精度權衡。
-
----
-
-## 變更紀錄
-
-| 版本 | 日期 | 更新重點 | 負責人 |
-|------|------|----------|--------|
-| v0.1 | 2026-06-29 | 草稿初版：因 `feature/pii-protection` PR 審查發現訪客端隱私面遠大於聯絡欄位而建立。定義存取控制 + 欄位揭露分級 + 位置降精度三大機制，留 3 項開放問題待產品拍板 | — |

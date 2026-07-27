@@ -1,10 +1,16 @@
+---
+feature: 07-resource-station
+title: 資源站管理
+status: definition
+owner:
+depends_on: [04-rbac, 06-map-decision-support]
+design:
+---
+
 # Feature PRD — 資源站管理 (Resource Station)
 
-> **版本：** v1.2 — 整併重寫，將歷版內容融為單一當前規格
-> **日期：** 2026-06-15
-> **狀態：** Definition Phase
-> **所屬功能：** 資源站管理 Resource Station（ManagerEnd 核心模組）
-> **關聯文件：** `research/crowdsourced-poi-moderation-patterns.md`、`ai-context/decisions-log.md`、`product/user-journey.md`、`design/foundation/design-principles.md`、`UI-UX-Analysis.md`
+> **根基文件：** [`user-stories.md`](user-stories.md)（角色、情境、使用者目標——請先讀這份）
+> **關聯文件：** `research/crowdsourced-poi-moderation-patterns.md`、[user-journey.md](../../user-journey.md)
 
 ---
 
@@ -140,7 +146,7 @@ StationEditSuggestion:
 
 ---
 
-## 成功驗收標準
+## 驗收標準
 
 - [ ] Table 視圖可依地區、類型、成立時間、營運狀態組合篩選，結果即時更新。
 - [ ] 前台修改建議可在後台審查頁並排對比原始值與建議值，並提供核准 / 拒絕 / 調整操作。
@@ -157,7 +163,7 @@ StationEditSuggestion:
 
 ---
 
-## 開放問題（待確認）
+## 開放問題
 
 > 資料模型、proposal/diff、衝突處理、軟刪除/rollback、快速通道、離線匯出均已定調寫入規格；以下為仍待決者。
 
@@ -170,13 +176,3 @@ StationEditSuggestion:
 
 * [[04-rbac]] — 各角色對此功能的存取權限（資源站為公共資訊、全可見）
 * [[06-map-decision-support]] — 地圖底圖與圖層整合、共用單一真實來源
-
----
-
-## 變更紀錄
-
-| 版本 | 日期 | 更新重點 | 負責人 |
-|------|------|----------|--------|
-| v1.0 | 2026-05-28 | 初版建立，從 prd-manager-end.md §3.2 拆分 | — |
-| v1.1 | 2026-06-10 | 拆細站點資料模型、修改建議 proposal/diff、樂觀並發衝突、版本/軟刪除/rollback、營運狀態快速通道、離線匯出、6 條異常場景（當時以建議形式標註，並質疑 v1.0 NGO 可見性）；新增研究檔 `research/crowdsourced-poi-moderation-patterns.md` | — |
-| **v1.2** | **2026-06-15** | **整併重寫**：移除版本標籤與 🟡 標記；原「拆細規格」段融入單一 F1–F9；採 [[04-rbac]] 定義定調「資源站全可見、匯出可限自家區」（取代 v1.0「NGO 僅限指派區域檢視」）；研究後已可拍板者（proposal/diff、衝突處理、軟刪除、快速通道）寫入規格；開放問題僅留信任分級 / 自動更新門檻。**無功能刪減。** | — |

@@ -6,7 +6,7 @@
 > 3. 離線 / 弱網（災區網路常斷）的底圖與資料策略。
 > 4. 回應開放問題：行政區 SHP 匯入、Buffer 工具、Hazard 24h 自動失效、Zone 編輯後 Ticket 重算、子區。
 > **日期**：2026-06-10
-> **關聯**：[[../prd]]（06-map-decision-support）、[[../../07-resource-station/prd]]、[[../../08-ticket-management/prd]]
+> **關聯**：[`prd.md`](../prd.md)（06-map-decision-support）、[[07-resource-station]]、[[08-ticket-management]]
 > **狀態**：研究參考，供決策用（回填至 06 開放問題）
 
 ---
@@ -53,7 +53,7 @@ v2.0 驗收訂「≤500 markers 60fps」。但花蓮 7.0 地震級事件，單�
 | **離線編輯 + 同步** | 樂觀寫入本地佇列，連線恢復後同步（衝突解決） | 🟡 進階，v2 再做；v1 先確保「離線可讀 + 連線後重試送出」 |
 | **降級提示** | 明確顯示「離線模式 / 資料截至 HH:MM」 | 必要，避免誤判即時性 |
 
-> 與 [[../../07-resource-station/prd]] 的「離線匯出 + 時間戳」呼應——兩者都在解同一個「現場無網」痛點，建議一致設計。
+> 與 [[07-resource-station]] 的「離線匯出 + 時間戳」呼應——兩者都在解同一個「現場無網」痛點，建議一致設計。
 
 ---
 
@@ -61,7 +61,7 @@ v2.0 驗收訂「≤500 markers 60fps」。但花蓮 7.0 地震級事件，單�
 
 - **行政區 SHP 匯入**（v2.0 建議 v2 再做）→ 🟡 **支持 v2**。補充：台灣行政區界圖資（國土測繪中心 / 政府開放資料）可轉 GeoJSON 預載，讓劃區能「吸附」到行政區界，減少手繪誤差。
 - **沿線 Buffer 工具**（如河川/道路兩側 N 公尺）→ 🟡 用 Turf.js `buffer` 可低成本實作，但 v1 非必要，列 v2。
-- **Hazard 24h 自動失效**（開放問題質疑是否合理）→ 🟡 **建議：預設 24h 但允許建立者自訂 effective_until，且到期前提醒延長**（避免危險區默默消失害到人）。與 [[../../09-emergency-announcement/prd]] 公告自動到期同一設計語彙。
+- **Hazard 24h 自動失效**（開放問題質疑是否合理）→ 🟡 **建議：預設 24h 但允許建立者自訂 effective_until，且到期前提醒延長**（避免危險區默默消失害到人）。與 [[09-emergency-announcement]] 公告自動到期同一設計語彙。
 - **跨 Team 協作 Zone（一 Zone 多 Team）**→ v2.0 建議否；🟡 **支持否**（責任不清）。
 - **Zone 編輯後 Ticket 重算**（移動邊界後原範圍 Ticket 去留）→ v2.0 建議保留+提示；🟡 **支持**，並建議：移出範圍的 Ticket 維持原 assigned_team 但標「已不在 Zone 內」，由 Government 決定是否解除。
 - **Team Admin 自家責任區內畫子區**→ v2.0 建議 v2；🟡 **支持 v2**。
@@ -89,4 +89,4 @@ v2.0 驗收訂「≤500 markers 60fps」。但花蓮 7.0 地震級事件，單�
 - Supercluster / rbush — 聚合與空間索引：https://github.com/mapbox/supercluster
 - PMTiles / MBTiles — 離線/單檔向量磚：https://protomaps.com/
 - 台灣國土測繪中心 / 政府資料開放平台 — 行政區界圖資
-- 與本 repo 既有：[[../../07-resource-station/prd]]（離線匯出）、[[../../08-ticket-management/prd]]（Building Anchor 群組化）
+- 與本 repo 既有：[[07-resource-station]]（離線匯出）、[[08-ticket-management]]（Building Anchor 群組化）

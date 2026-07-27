@@ -1,10 +1,16 @@
+---
+feature: 02-user-profile
+title: 個人檔案
+status: definition
+owner:
+depends_on: [01-auth, 03-user-settings, 04-rbac, 05-member-management, 06-map-decision-support, 07-resource-station, 08-ticket-management, 09-emergency-announcement]
+design:
+---
+
 # Feature PRD — 個人檔案 (User Profile)
 
-> **版本：** v1.2 — 整併重寫，將歷版內容融為單一當前規格
-> **日期：** 2026-06-15
-> **狀態：** Definition Phase
-> **所屬功能：** 個人檔案 User Profile（ManagerEnd 核心模組）
-> **關聯文件：** `research/in-app-notification-patterns.md`、`ai-context/decisions-log.md`、`product/user-journey.md`、`design/foundation/design-principles.md`、`UI-UX-Analysis.md`
+> **根基文件：** [`user-stories.md`](user-stories.md)（角色、情境、使用者目標——請先讀這份）
+> **關聯文件：** `research/in-app-notification-patterns.md`、[user-journey.md](../../user-journey.md)
 
 ---
 
@@ -104,7 +110,7 @@
 
 ---
 
-## 成功驗收標準
+## 驗收標準
 
 - [ ] 使用者開啟任意頁面時，通知徽章自動更新，無須手動刷新。
 - [ ] 通知列表清楚區分三種通知類型，每條顯示事件摘要與時間戳記。
@@ -119,7 +125,7 @@
 
 ---
 
-## 開放問題（待確認）
+## 開放問題
 
 > 通知中心的傳輸、已讀、保留、防洗版、deep link 均已定調寫入 F1；以下為仍需跨 feature 對齊者。
 
@@ -133,13 +139,3 @@
 * [[03-user-settings]] — 帳號設定與變更
 * [[04-rbac]] — 後台角色身份管理
 * [[09-emergency-announcement]] — 通知範圍與公告的關係
-
----
-
-## 變更紀錄
-
-| 版本 | 日期 | 更新重點 | 負責人 |
-|------|------|----------|--------|
-| v1.0 | 2026-05-28 | 初版建立，從 prd-manager-end.md §1.2 拆分 | — |
-| v1.1 | 2026-06-10 | 拆細通知中心機制（兩段式輪詢、三態已讀、分組保留、防洗版、deep link）與偏好持久化（當時以建議形式標註）；新增研究檔 `research/in-app-notification-patterns.md` | — |
-| **v1.2** | **2026-06-15** | **整併重寫**：移除版本標籤與 🟡 標記；將原「通知中心機制拆細」段融入單一 F1（含子節 F1.1–F1.6）；研究後已可拍板者（輪詢間隔、三態已讀、90 天保留、合併規則、deep link、偏好後端持久化）定調為規格；開放問題僅留「通知範圍擴充」待跨 feature 對齊。**無功能刪減。** | — |

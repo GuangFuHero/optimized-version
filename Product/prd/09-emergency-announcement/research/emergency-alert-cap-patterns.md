@@ -8,7 +8,7 @@
 > 5. 多則公告同時存在的優先序與版位？
 > 6. 與國家級警報（CAP / NCDR / 細胞廣播）的關係與用語對齊。
 > **日期**：2026-06-10
-> **關聯**：[[../prd]]（09-emergency-announcement）、[[../../02-user-profile/prd]]、[[../../06-map-decision-support/prd]]、[[../../08-ticket-management/prd]]、[[../../04-rbac/prd]]
+> **關聯**：[`prd.md`](../prd.md)（09-emergency-announcement）、[[02-user-profile]]、[[06-map-decision-support]]、[[08-ticket-management]]、[[04-rbac]]
 > **狀態**：研究參考，供決策用（PRD 內以「🟡 建議」回填）
 
 ---
@@ -130,4 +130,4 @@ v1.0 只分「前台 / 後台」兩個對象。實務常需更細：
 - 台灣 NCDR 災害示警公開資料平台（CAP 格式）：https://alerts.ncdr.nat.gov.tw/
 - 台灣 災防告警細胞廣播訊息（PWS / Cell Broadcast）
 - Everbridge / PagerDuty — mass notification & acknowledgement 實務
-- 與本 repo 既有：[[../../06-map-decision-support/prd]]（Hazard Zone 分級）、[[../../08-ticket-management/prd]]（災害類型）
+- 與本 repo 既有：[[06-map-decision-support]]（Hazard Zone 分級）、[[08-ticket-management]]（災害類型）

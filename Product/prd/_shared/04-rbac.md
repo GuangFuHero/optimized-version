@@ -1,12 +1,18 @@
-# Feature PRD — 角色權限管理 (RBAC)
+---
+feature: 04-rbac
+title: 角色權限管理
+status: definition
+owner:
+depends_on: [01-auth, 05-member-management, 06-map-decision-support, 08-ticket-management, 10-guest-ticket-privacy]
+design:
+---
 
-> **版本：** v3.1 — 承接 05 移交的 RBAC 不變量與生命週期
-> **日期：** 2026-06-15
-> **狀態：** Definition Phase
-> **所屬功能：** 角色權限管理 RBAC（ManagerEnd 核心模組）
-> **關聯文件：** `research/multitenancy-rls-breakglass-patterns.md`、`research/competitive/patterns/team-organization-patterns.md`、`ai-context/decisions-log.md`、`product/user-journey.md`、`design/foundation/design-principles.md`、`UI-UX-Analysis.md`
+# 橫切定義 — 角色權限管理 (RBAC)
 
-> 🔵 **v3.0 改版說明（2026-06-15）**：本次改版與 [[05-member-management]] v4.0 同步，將 Team Admin / Team Member 從「RBAC 角色」中移出，還原其本質——Team 內角色是與 RBAC 正交的另一個維度。原 v2.0/v2.1 的所有功能需求與開放問題建議**全部保留**。
+> **性質：** 橫切定義，非 feature PRD。全站以 `[[04-rbac]]` 引用本文件；權限規則一律定義在此，各 feature PRD 引用而不重述。
+> **適用範圍：** 全平台（ManagerEnd 所有模組）
+> **關聯文件：** `research/multitenancy-rls-breakglass-patterns.md`、[user-journey.md](../../user-journey.md)
+
 
 ---
 
@@ -21,7 +27,7 @@ Team 內角色（Admin / Member / Guest）是另一個正交維度，定義在 [
 | **平台 RBAC** | 本文件 (04-rbac) | Super Admin / Government / NGO / Data Auditor / 一般使用者 | 能做什麼動作、能看到哪些全域資料 |
 | **Team 內角色** | 05-member-management | Admin / Member / Guest（每 Team 獨立） | 在某個 Team 內能否管理成員清單 |
 
-> ⛔ **NGO 是 RBAC 角色，不是 Team Admin。** Team Admin 是 Team 內角色，與 RBAC 完全獨立。詳見 [[05-member-management]] §1.5 鐵則。
+> ⛔ **NGO 是 RBAC 角色，不是 Team Admin。** Team Admin 是 Team 內角色，與 RBAC 完全獨立。詳見 [[05-member-management]]「範圍與邊界」的三條鐵則。
 
 ---
 
@@ -110,7 +116,7 @@ Team 內角色（Admin / Member / Guest）是另一個正交維度，定義在 [
 
 ## Team 內角色附錄（正交維度）
 
-> 以下內容為簡要摘錄，完整定義見 [[05-member-management]] §1.3。此處列出是為了讓本文件的權限矩陣可以完整呈現。
+> 以下內容為簡要摘錄，完整定義見 [[05-member-management]]「範圍與邊界」。此處列出是為了讓本文件的權限矩陣可以完整呈現。
 
 Team 內角色是**與 RBAC 正交的另一個維度**，每 Team 獨立計算。同一人在不同 Team 可有不同 Team 內角色。
 
@@ -219,7 +225,7 @@ Team 內角色是**與 RBAC 正交的另一個維度**，每 Team 獨立計算�
 
 ---
 
-## 成功驗收標準
+## 驗收標準
 
 - [ ] 每個角色登入後頁面只顯示有權操作的控制項。
 - [ ] RBAC 角色變更（NGO / Government / Data Auditor / Super Admin）只有 Super Admin 能執行。
@@ -257,16 +263,3 @@ Team 內角色是**與 RBAC 正交的另一個維度**，每 Team 獨立計算�
 * [[05-member-management]] — Team 管理、Team 內角色指派與審核（正交維度）
 * [[06-map-decision-support]] — Zone 編輯權限
 * [[08-ticket-management]] — 任務操作權限與資料邊界
-
----
-
-## 變更紀錄
-
-| 版本 | 日期 | 更新重點 | 負責人 |
-|------|------|----------|--------|
-| v1.0 | 2026-05-28 | 初版建立，從 prd-manager-end.md §2.1 拆分 | — |
-| v2.0 | 2026-05-28 | 加入 Team Admin / Team Member 兩個新角色；資料可見性矩陣；跨 Team 資料隔離原則；建議 PostgreSQL RLS | — |
-| v2.1 | 2026-06-10 | 為全部開放問題補上業界作法與建議；質疑並建議後續與 05 v3.x 對齊 | — |
-| **v3.0** | **2026-06-15** | **對齊 05-member-management v4.0 正交模型**：將 Team Admin / Team Member 從 RBAC 角色中移出，還原為 Team 內角色（正交維度）；RBAC 角色回歸純粹 5 種；資料可見性矩陣改以 RBAC 為主軸、Team 內角色以「依 Team 內角色」標示；權限總表同步調整；明確標註 NGO ≠ Team Admin。**所有 v2.1 功能需求與開放問題建議全部保留。** |
-| **v3.1** | **2026-06-15** | 承接 05 v5.0 移交的內容,新增「平台 RBAC 不變量與生命週期」一節:存取推導原則(RBAC ∪ Team)、≥1 Super Admin 不變量、僅 Super Admin 可指派 RBAC、Super Admin 互撤機制;同步補驗收標準。 | — |
-| v3.2 | 2026-06-29 | 資料可見性矩陣新增「訪客（未登入）」欄，補齊 README 既有待辦；訪客 Ticket/Building Anchor 揭露對齊 [[10-guest-ticket-privacy]]（僅 public + 降級揭露），Hazard Zone/Resource Station 對訪客開放並加註理由。 | — |

@@ -6,7 +6,7 @@
 > 3. **USAR 直立救援 15 欄位是否過多**（v2.0 自己提的開放問題）——拆「必填核心 vs 可選」。
 > 並回填 20m 半徑、立刻救援 vs 直立救援組合、跨建築錨點等開放問題。
 > **日期**：2026-06-10
-> **關聯**：[[../prd]]（08-ticket-management）、[[../../06-map-decision-support/prd]]、[[../../05-member-management/prd]]、`research/competitive/patterns/vertical-rescue-usar.md`
+> **關聯**：[`prd.md`](../prd.md)（08-ticket-management）、[[06-map-decision-support]]、[[05-member-management]]
 > **狀態**：研究參考，供決策用（回填至 08 開放問題）
 
 ---
@@ -41,7 +41,7 @@ v2.0 F5.2 統計「真實人數 / 需求量」缺口，但沒回答「**怎麼�
 > - **承接上限 / 重複承接防呆**：同一志工同時段承接數上限；已滿額任務標「已足」。
 > - 模型 C（技能媒合）需志工技能檔案，列 v2。
 >
-> 🟡 **待確認**：志工是「前台一般使用者」還是需登錄的 Team Member？這牽涉 [[../../05-member-management/prd]] 的身份模型——「承接任務」的人到底是誰、要不要先入 Team，需釐清（列開放問題）。
+> 🟡 **待確認**：志工是「前台一般使用者」還是需登錄的 Team Member？這牽涉 [[05-member-management]] 的身份模型——「承接任務」的人到底是誰、要不要先入 Team，需釐清（列開放問題）。
 
 ---
 
@@ -94,6 +94,6 @@ v2.0 vertical_rescue 群組有 ~15 欄。現場（尤其初報）一次填 15 �
 - ICS（Incident Command System）/ FEMA — 資源派遣與優先排序
 - INSARAG Guidelines — USAR worksite triage & ASR（Assessment）分階段蒐集：https://www.insarag.org/
 - START / SALT triage — 大量傷患檢傷分類
-- Crisis Cleanup — work order claim / 志工承接模型（見 `research/competitive/competitor-details/crisis-cleanup.md`）
-- ArcGIS Workforce — dispatch/assignment 模型（見 `research/competitive/competitor-details/arcgis-workforce.md`）
-- 與本 repo 既有：`research/competitive/patterns/vertical-rescue-usar.md`、[[../../05-member-management/prd]]、[[../../06-map-decision-support/prd]]
+- Crisis Cleanup — work order claim / 志工承接模型
+- ArcGIS Workforce — dispatch/assignment 模型
+- 與本 repo 既有：[[05-member-management]]、[[06-map-decision-support]]

@@ -64,4 +64,3 @@
 ## 對應規格
 
 各 User Story 的實作規格、約束與異常場景,見同資料夾 [`prd.md`](prd.md) 的功能需求(A. Team 管理 / B. RBAC 操作入口 / C. 跨維度共用)。
-</content>
