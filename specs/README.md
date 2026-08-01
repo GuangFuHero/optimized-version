@@ -11,6 +11,7 @@ specs/
 │       ├── user-stories.md #   問題空間
 │       ├── prd.md          #   產品規格
 │       ├── research/       #   決策依據
+│       ├── wireframe/      #   線框圖（選用，供討論用，非規格）
 │       └── engineering/    #   工程規格：spec.md / plan.md / tasks.md / checklists/
 ├── v2.0.0/                 # 下一版（目前只有 backlog）
 ├── _shared/                # 橫切定義，不屬於任何單一 feature 或版本
@@ -28,6 +29,7 @@ specs/
 | `prd.md` | 產品規格 | 系統該有什麼行為、什麼算完成 | ✅ 權威 |
 | `engineering/spec.md` | 工程規格 | 如何實作、資料模型、API、任務拆解 | ✅ 權威（實作面） |
 | `research/` | 決策依據 | 成熟產品怎麼做、為什麼這樣選 | 參考 |
+| `wireframe/` | 討論媒介 | 畫面與資訊層級長什麼樣（選用） | 參考，拍板後寫回 `prd.md` |
 
 **閱讀順序：先 `user-stories.md`，再 `prd.md`，最後 `engineering/`。** 避免從功能反推需求。
 

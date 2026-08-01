@@ -114,3 +114,44 @@
 ## 逐 Field 討論（暫停，待北極星建立後恢復）
 
 > 原 PRD common 欄位群定義已被上方實際 schema 取代，逐 Field 將以實際 schema + 雙層 Ticket/Task 模型為準。
+
+---
+
+## ⚠️ 重大發現：自訂欄位功能已在後端實作（2026-08-01 查證程式碼）
+
+D3「欄位不足時的逃生閥」擱置期間，後端已經把自訂欄位做出來了。查證結果：
+
+| 項目 | 位置 | 狀態 |
+|---|---|---|
+| 欄位定義表 `task_property_config` | `Backend/app/models/property_config.py` | 已建表、已有種子資料 |
+| 查詢 `taskPropertyConfigs(taskType)` | `Backend/app/graphql/config/queries.py` | 已實作 |
+| 新增／修改 `upsertTaskPropertyConfig` | `Backend/app/graphql/config/mutations.py` | 已實作，權限 `map:edit` |
+
+**這代表 D3 的前提已經被程式碼跳過**：不是「要不要給自訂」，而是「已經給了，且接近 B3（完全開放）」——`property_name` 與 `data_type` 都是自由輸入，權限只擋在 `map:edit`（非 Super Admin 專屬）。D3 要重新問的是「**接受現況，還是收回權限**」。
+
+種子資料的實際欄位：`rescue` → `people_count`／`floor_level`／`unit_number`／`hazard_note`；`hr` → `required_skill`／`vehicle_type`／`cargo_type`／`cleanup_type`／`required_tool`；`supply` → `item_name`。
+
+> 附帶：待拍板 B「直立救援」需要的 `floor_level` 已存在於 `rescue` 底下，並非從零開始。
+
+### 同時推翻的 PRD 敘述
+
+PRD 稱 Ticket 層 `task_type` 是情境分類（`search_rescue`/`medical_support`/`fire_response`/`supply_delivery`）。**這組值在整個後端一次都沒出現過。** 程式碼中兩層用的是同一套值（`rescue`/`supply`/`medical`/`hr`），種子資料 `tickets.task_type` 存的就是 `'rescue'`。
+
+所以不是「同名不同義」，是**同名同義、重複一份**——Ticket 層那個是底下 Task 的摘要。
+
+---
+
+## D9 — Ticket 層重複的 `task_type`
+- **問題：** `tickets.task_type` 與 `ticket_tasks.task_type` 同名同義，前者可空、無任何機制使用；後者必填、是自訂欄位的分類依據。
+- **決策：** ✅ **廢除 `tickets.task_type`。**
+- **理由（使用者）：** 「先把多餘的東西拿掉，否則做不完」——控制範圍優先。
+- **影響評估：** 資料庫 1 個可空欄位；後端 GraphQL 型別 3–4 處、種子 SQL 1 個檔；前端 0 處（未使用）；自訂欄位機制不受影響（綁 Task 層）。
+- **衍生開放問題：** 地圖圖示與統計原本讀這個欄位，廢除後需即時由 Task 集合推導；災時上千至上萬點的效能影響需工程評估。
+
+---
+
+## D10 — 自訂欄位的層級（進行中）
+- **問題：** 新災害需要新欄位（如水災的「積水深度」）時，管理員能動的層級到哪？
+- **選項：** (A) 需求種類鎖死、只開放欄位　(B) 需求種類也可新增　(C) 多加一個「災害」維度
+- **建議：** A。平台一次只處理一場應變，欄位清單本就等於「這場應變的表單設定」，不需再切災害維度；且現況 schema 即支援、分類不會長歪。
+- **狀態：** 🟡 待決。三個做法的後台畫面與表單效果見 [`wireframe/02-field-admin-options.md`](wireframe/02-field-admin-options.md)、[`wireframe/03-form-effect.md`](wireframe/03-form-effect.md)。
