@@ -4,42 +4,50 @@
 
 ---
 
-## 三層結構
+## 規格都在 `specs/`
 
-| 層 | 位置 | 回答什麼 | 權威性 |
-|---|------|----------|--------|
-| **問題空間** | `Product/prd/XX-feature/user-stories.md` | 為誰、在什麼情境、想達成什麼價值 | ✅ 權威 |
-| **產品規格** | `Product/prd/XX-feature/prd.md` | 系統該有什麼行為、什麼算完成 | ✅ 權威 |
-| **工程規格** | `Backend/Spec/NNN-*/spec.md` | 如何實作、資料模型、API、任務拆解 | ✅ 權威（實作面） |
+產品需求與工程規格已合併為單一規格樹，依「發布版本 → feature → 文件層」組織：
+
+```
+specs/<version>/<NN-feature>/
+├── user-stories.md   問題空間 — 為誰、在什麼情境、想達成什麼價值
+├── prd.md            產品規格 — 系統該有什麼行為、什麼算完成
+├── research/         決策依據 — 成熟產品怎麼做、為什麼這樣選
+└── engineering/      工程規格 — 如何實作、資料模型、API、任務拆解
+```
 
 上層是下層的來源。工程規格若與 PRD 衝突，以 PRD 為準並回報差異；PRD 若與 user-stories 衝突，以 user-stories 為準。
 
-**入口：**
-- 產品需求 → [`Product/prd/README.md`](Product/prd/README.md)
-- 跨 feature 旅程 → [`Product/user-journey.md`](Product/user-journey.md)
-- 橫切權限定義 → [`Product/prd/_shared/04-rbac.md`](Product/prd/_shared/04-rbac.md)
-- 工程規格閱讀指引 → [`Backend/Spec/Docs/specs-reading-guide.md`](Backend/Spec/Docs/specs-reading-guide.md)
+**入口：** [`specs/README.md`](specs/README.md) — 結構、版本規則與撰寫規範
+**目前版本：** [`specs/v1/`](specs/v1/README.md)（9 個 feature，全數規格定義中） · [`specs/v2/backlog.md`](specs/v2/backlog.md)（延後項目索引）
+**橫切定義：** [`specs/_shared/04-rbac.md`](specs/_shared/04-rbac.md) · [`specs/_shared/user-journey.md`](specs/_shared/user-journey.md) · [`specs/_shared/engineering/`](specs/_shared/engineering/)
+
+資料模型的實際狀態以 [`specs/_shared/engineering/er-diagram.md`](specs/_shared/engineering/er-diagram.md) 為準。
 
 ---
 
-## 追溯表：PRD ↔ 工程規格 ↔ 舊 mindmap
+## 舊路徑對照
 
-兩套編號體系互不相同，且是不同世代的產物（`Backend/Spec` 建於 2025-11，`Product/prd` 建於 2026-05 之後）。對應關係如下，**內容不保證同步**——有出入時以 PRD 為準。
+`Product/`、`Backend/Spec/`、根目錄 `Spec/` 三棵樹已全部併入 `specs/`。舊連結對照如下：
 
-| Product PRD | Backend/Spec | System_Design/mindmap（已過時） |
-|---|---|---|
-| [01-auth](Product/prd/01-auth/prd.md) | （散於 006） | — |
-| [02-user-profile](Product/prd/02-user-profile/prd.md) | （散於 006） | — |
-| [03-user-settings](Product/prd/03-user-settings/prd.md) | （散於 006） | — |
-| [04-rbac](Product/prd/_shared/04-rbac.md)（橫切） | [Docs/rbac-permissions-design.md](Backend/Spec/Docs/rbac-permissions-design.md) | `06_system_admin` |
-| [05-member-management](Product/prd/05-member-management/prd.md) | [006-backend-administration](Backend/Spec/006-backend-administration/spec.md) | `05_moderator_admin` |
-| [06-map-decision-support](Product/prd/06-map-decision-support/prd.md) | [002-interactive-disaster-map](Backend/Spec/002-interactive-disaster-map/spec.md) | `01_map` |
-| [07-resource-station](Product/prd/07-resource-station/prd.md) | [005-supply-management](Backend/Spec/005-supply-management/spec.md) | `03_delivery` |
-| [08-ticket-management](Product/prd/08-ticket-management/prd.md) | [003-request-management](Backend/Spec/003-request-management/spec.md) · [004-volunteer-dispatch](Backend/Spec/004-volunteer-dispatch/spec.md) | `02_volunteer_tasks` |
-| [09-emergency-announcement](Product/prd/09-emergency-announcement/prd.md) | [007-information-publishing](Backend/Spec/007-information-publishing/spec.md) | `04_info_page` |
-| [10-guest-ticket-privacy](Product/prd/10-guest-ticket-privacy/prd.md) | （尚無；後端 `feature/pii-protection` 為部分實作） | — |
+| 舊位置 | 新位置 |
+|---|---|
+| `Product/prd/XX-feature/` | `specs/v1/XX-feature/` |
+| `Product/prd/_shared/` · `Product/user-journey.md` | `specs/_shared/` |
+| `Product/prd/_template/` | `specs/_template/` |
+| `Product/_archive/` · `Product/prd/prd-manager-end-sucre.md` | `specs/_archive/` |
+| `Backend/Spec/002-interactive-disaster-map` | `specs/v1/06-map-decision-support/engineering/` |
+| `Backend/Spec/003-request-management` | `specs/v1/08-ticket-management/engineering/request-management/` |
+| `Backend/Spec/004-volunteer-dispatch` | `specs/v1/08-ticket-management/engineering/volunteer-dispatch/` |
+| `Backend/Spec/005-supply-management` | `specs/v1/07-resource-station/engineering/` |
+| `Backend/Spec/006-backend-administration` | `specs/v1/05-member-management/engineering/` |
+| `Backend/Spec/007-information-publishing` | `specs/v1/09-emergency-announcement/engineering/` |
+| `Backend/Spec/Docs/` | `specs/_shared/engineering/` |
+| `Backend/Spec/TODO.md` | `specs/_archive/backend-spec-todo.md` |
+| `Spec/Docs/map-tile-service-*.md` | `specs/v1/06-map-decision-support/engineering/` |
+| `Backend/.specify/` | `.specify/`（repo root） |
 
-資料模型的實際狀態以 [`Backend/Spec/Docs/er-diagram.md`](Backend/Spec/Docs/er-diagram.md) 為準。
+**兩套編號體系已統一為 Product 的 01–10。** 舊的 `Backend/Spec/NNN-*` 三位數編號不再使用；01/02/03 沒有各自的工程規格，原 006 同時涵蓋這三者與 05，整份現位於 `specs/v1/05-member-management/engineering/`。
 
 ---
 
@@ -47,11 +55,12 @@
 
 | 位置 | 狀態 | 說明 |
 |------|------|------|
-| `Product/_archive/` | 凍結 | 舊 user-stories 索引與過時內容 |
-| `Product/prd/prd-manager-end-sucre.md` | 僅供追溯 | 舊版單檔總表，內容已拆分至 01–10 |
-| `System_Design/mindmap/` | 過時 | 6 模組 × 4 面向的早期需求樹，已被 `Product/prd/` 取代 |
-| `Spec/Docs/` （根目錄） | 孤兒 | 只有 map-tile-service 兩份，未被任何文件引用 |
-| `Product/prd/08-ticket-management/grill-decisions.md` | 過程紀錄 | 設計討論產物，非規格 |
+| `specs/_archive/` | 凍結 | 舊 user-stories 索引、舊版單檔 PRD 總表、舊工程待辦清單 |
+| `System_Design/mindmap/` | 過時 | 6 模組 × 4 面向的早期需求樹，已被 `specs/` 取代。內含的 GitHub 連結指向舊 `Backend/Spec/` 路徑，未更新 |
+| `specs/v1/08-ticket-management/decisions.md` | 過程紀錄 | 設計討論產物，非規格 |
+
+舊 mindmap 模組與現行 feature 的粗略對應（**內容不保證同步，有出入以 PRD 為準**）：
+`01_map`→06、`02_volunteer_tasks`→08、`03_delivery`→07、`04_info_page`→09、`05_moderator_admin`→05、`06_system_admin`→04-rbac。
 
 ---
 
