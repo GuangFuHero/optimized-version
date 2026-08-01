@@ -72,7 +72,8 @@
 * As a Government 成員, I want **在地圖拉框把範圍內任務批次指派給某 Team**, so that 不必逐筆操作、快速劃定責任。
 
 ### Super Admin（全域治理）
-* As a Super Admin, I want **設定/啟動災害種類並決定其預設專業欄位組合**, so that 新災害出現時能即時讓系統承載（積木組裝，見 decisions.md D2）。
+* As a Super Admin, I want **加開災害種類時自動帶入該災害的專業欄位**, so that 應變中途出現新災害（如地震後續淹水）能即時讓系統承載，不必逐個欄位手建。
+* As a Super Admin, I want **在災害欄位組不敷使用時自行加上單一欄位**, so that 未達「加開災害」程度的臨時情報也記得下來。
 * As a Super Admin, I want **對生命危急任務一鍵啟動最高優先級覆寫（立刻救援）**, so that 立即讓全員看見、不被默默漏接。
 
 ### Data Auditor（審查與整理）
