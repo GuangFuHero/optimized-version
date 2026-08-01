@@ -1,0 +1,891 @@
+<title>自訂欄位 — 任務管理 Wireframe</title>
+
+<style>
+/* ==========================================================================
+   Wan Guard Design System — tokens (ui_kits/console, tokens/semantic.css)
+   ========================================================================== */
+:root {
+  --orange-400:#E3791E; --orange-500:#C46416; --orange-200:#F5C08B; --orange-50:#FDF3E9;
+  --blue-400:#2592B9;   --blue-500:#1E7A9D;   --blue-50:#EEF7FB;
+  --red-500:#D32F2F;    --red-700:#B71C1C;    --red-50:#FFEBEE;
+  --green-500:#2E7D32;  --green-700:#1B5E20;  --green-50:#E8F5E9;
+  --amber-500:#F57C00;  --amber-700:#E65100;  --amber-50:#FFF3E0;
+
+  --bg-default:#FFFFFF; --bg-subtle:#F6FAFF; --bg-sunken:#EDF2F7; --bg-disable:#E2E8F0;
+  --fg-default:#0F172A; --fg-subtle:#334155; --fg-muted:#94A3B8;
+  --border:#CBD5E1; --border-accent:var(--orange-200);
+
+  --brand:var(--orange-400); --brand-hover:var(--orange-500); --brand-subtle:var(--orange-50);
+  --accent:var(--blue-400);  --accent-subtle:var(--blue-50);
+  --danger:var(--red-500); --danger-subtle:var(--red-50);
+  --success:var(--green-500); --success-subtle:var(--green-50);
+  --warning:var(--amber-500); --warning-subtle:var(--amber-50);
+  --on-brand:#111111;
+
+  --shadow-sm:0 1px 4px rgba(227,121,30,.10);
+  --shadow-md:0 4px 16px rgba(227,121,30,.15);
+  --shadow-lg:0 8px 32px rgba(227,121,30,.20);
+
+  --r-sm:6px; --r-md:12px; --r-lg:20px; --r-full:9999px;
+
+  --font-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,-apple-system,sans-serif;
+  --font-data:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+
+/* Dark theme derived from the brand — grounds shifted to the neutrals' blue bias,
+   accent kept warm so it still reads as Wan Guard. Not an inversion. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-default:#131A26; --bg-subtle:#0D131C; --bg-sunken:#1C2634; --bg-disable:#2A3646;
+    --fg-default:#E8EEF6; --fg-subtle:#B4C2D4; --fg-muted:#7387A0;
+    --border:#2E3B4D; --border-accent:#7A4A1B;
+    --brand:#F08A2E; --brand-hover:#FF9C45; --brand-subtle:#2A1C0C;
+    --accent:#41ABD2; --accent-subtle:#0F2630;
+    --danger:#E5534B; --danger-subtle:#2C1416;
+    --success:#4CAF50; --success-subtle:#122514;
+    --warning:#FF9800; --warning-subtle:#2B1C06;
+    --on-brand:#1A1206;
+    --shadow-sm:0 1px 4px rgba(0,0,0,.4); --shadow-md:0 4px 16px rgba(0,0,0,.5); --shadow-lg:0 8px 32px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --bg-default:#131A26; --bg-subtle:#0D131C; --bg-sunken:#1C2634; --bg-disable:#2A3646;
+  --fg-default:#E8EEF6; --fg-subtle:#B4C2D4; --fg-muted:#7387A0;
+  --border:#2E3B4D; --border-accent:#7A4A1B;
+  --brand:#F08A2E; --brand-hover:#FF9C45; --brand-subtle:#2A1C0C;
+  --accent:#41ABD2; --accent-subtle:#0F2630;
+  --danger:#E5534B; --danger-subtle:#2C1416;
+  --success:#4CAF50; --success-subtle:#122514;
+  --warning:#FF9800; --warning-subtle:#2B1C06;
+  --on-brand:#1A1206;
+  --shadow-sm:0 1px 4px rgba(0,0,0,.4); --shadow-md:0 4px 16px rgba(0,0,0,.5); --shadow-lg:0 8px 32px rgba(0,0,0,.6);
+}
+:root[data-theme="light"] {
+  --bg-default:#FFFFFF; --bg-subtle:#F6FAFF; --bg-sunken:#EDF2F7; --bg-disable:#E2E8F0;
+  --fg-default:#0F172A; --fg-subtle:#334155; --fg-muted:#94A3B8;
+  --border:#CBD5E1; --border-accent:var(--orange-200);
+  --brand:var(--orange-400); --brand-hover:var(--orange-500); --brand-subtle:var(--orange-50);
+  --accent:var(--blue-400); --accent-subtle:var(--blue-50);
+  --danger:var(--red-500); --danger-subtle:var(--red-50);
+  --success:var(--green-500); --success-subtle:var(--green-50);
+  --warning:var(--amber-500); --warning-subtle:var(--amber-50);
+  --on-brand:#111111;
+  --shadow-sm:0 1px 4px rgba(227,121,30,.10); --shadow-md:0 4px 16px rgba(227,121,30,.15); --shadow-lg:0 8px 32px rgba(227,121,30,.20);
+}
+
+*,*::before,*::after { box-sizing:border-box; }
+body {
+  margin:0; font-family:var(--font-body); font-size:16px; line-height:1.5;
+  color:var(--fg-default); background:var(--bg-subtle);
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select { font:inherit; color:inherit; }
+:focus-visible { outline:2px solid var(--brand); outline-offset:2px; border-radius:var(--r-sm); }
+@media (prefers-reduced-motion:reduce){ *{ transition:none !important; animation:none !important; } }
+
+/* ---------- shell ---------- */
+.shell { display:flex; min-height:100vh; }
+
+.side {
+  width:236px; flex-shrink:0; background:var(--bg-subtle);
+  border-right:1px solid var(--border); display:flex; flex-direction:column;
+  position:sticky; top:0; height:100vh;
+}
+.side-hd {
+  padding:18px 20px; border-bottom:1px solid var(--border);
+  font-weight:700; font-size:15px; letter-spacing:.06em;
+}
+.side-nav { display:flex; flex-direction:column; gap:4px; padding:16px; flex:1; }
+.cta {
+  display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+  height:42px; margin-bottom:14px; border:none; border-radius:var(--r-md);
+  background:var(--brand); color:var(--on-brand); font-weight:700; cursor:pointer;
+  transition:background .15s;
+}
+.cta:hover { background:var(--brand-hover); }
+.nav-item {
+  display:flex; align-items:center; gap:10px; padding:10px 12px; border:none;
+  border-radius:var(--r-md); background:transparent; color:var(--fg-subtle);
+  cursor:pointer; text-align:left; width:100%; font-size:15px; transition:background .15s,color .15s;
+}
+.nav-item:hover { background:var(--bg-sunken); color:var(--fg-default); }
+.nav-item[aria-current="page"] { background:var(--brand-subtle); color:var(--brand); font-weight:700; }
+.nav-item .ic { width:20px; text-align:center; flex-shrink:0; }
+.side-ft { padding:14px 16px; border-top:1px solid var(--border); }
+
+.main { flex:1; min-width:0; display:flex; flex-direction:column; }
+.topbar {
+  height:64px; flex-shrink:0; background:var(--bg-default); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:14px; padding:0 24px; position:sticky; top:0; z-index:50;
+}
+.crumb { font-size:13px; color:var(--fg-muted); }
+.topbar h1 { margin:0; font-size:20px; font-weight:700; letter-spacing:-.01em; }
+.who { margin-left:auto; display:flex; align-items:center; gap:10px; }
+.avatar {
+  width:34px; height:34px; border-radius:var(--r-full); background:var(--brand);
+  color:var(--on-brand); display:grid; place-items:center; font-weight:700; font-size:14px;
+}
+.who-name { font-size:14px; font-weight:700; line-height:1.2; }
+.who-role { font-family:var(--font-data); font-size:12px; color:var(--fg-muted); line-height:1.3; }
+
+.content { flex:1; padding:24px; display:grid; grid-template-columns:minmax(0,1fr) 400px; gap:24px; align-items:start; }
+@media (max-width:1140px){ .content { grid-template-columns:minmax(0,1fr); } .preview { position:static !important; } }
+
+/* ---------- cards ---------- */
+.card {
+  background:var(--bg-default); border:1px solid var(--border);
+  border-radius:var(--r-lg); box-shadow:var(--shadow-sm);
+}
+.card + .card { margin-top:20px; }
+.card-hd { padding:18px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.card-hd h2 { margin:0; font-size:17px; font-weight:700; }
+.card-bd { padding:20px; }
+.hint { font-size:13px; color:var(--fg-muted); margin:0; }
+
+/* ---------- deployment bar ---------- */
+.deploy { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.deploy-label { font-size:13px; color:var(--fg-muted); }
+.deploy-name { font-weight:700; }
+.chip {
+  display:inline-flex; align-items:center; gap:7px; height:32px; padding:0 12px;
+  border-radius:var(--r-full); border:1px solid var(--border);
+  background:var(--bg-default); font-size:14px; cursor:default;
+}
+.chip.on { background:var(--accent-subtle); border-color:var(--accent); color:var(--accent); font-weight:700; }
+.chip .x {
+  border:none; background:transparent; cursor:pointer; color:inherit; padding:0 0 0 2px;
+  font-size:15px; line-height:1; opacity:.65;
+}
+.chip .x:hover { opacity:1; }
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px; height:34px; padding:0 14px;
+  border-radius:var(--r-md); border:1px solid var(--border); background:var(--bg-default);
+  color:var(--fg-default); font-size:14px; font-weight:700; cursor:pointer; transition:background .15s,border-color .15s;
+}
+.btn:hover { background:var(--bg-sunken); }
+.btn-primary { background:var(--brand); border-color:var(--brand); color:var(--on-brand); }
+.btn-primary:hover { background:var(--brand-hover); border-color:var(--brand-hover); }
+.btn-ghost { border-color:transparent; background:transparent; font-weight:400; color:var(--fg-subtle); }
+.btn-ghost:hover { background:var(--bg-sunken); }
+.btn-danger { color:var(--danger); border-color:var(--danger); background:transparent; }
+.btn-danger:hover { background:var(--danger-subtle); }
+
+/* ---------- tabs ---------- */
+.tabs { display:flex; gap:4px; }
+.tab {
+  border:none; background:transparent; padding:9px 15px; border-radius:var(--r-md);
+  cursor:pointer; color:var(--fg-subtle); font-size:15px; display:inline-flex; align-items:center; gap:8px;
+  transition:background .15s,color .15s;
+}
+.tab:hover { background:var(--bg-sunken); }
+.tab[aria-selected="true"] { background:var(--brand-subtle); color:var(--brand); font-weight:700; }
+.tab .n {
+  font-family:var(--font-data); font-size:12px; font-variant-numeric:tabular-nums;
+  background:var(--bg-sunken); color:var(--fg-subtle); border-radius:var(--r-full); padding:1px 7px;
+}
+.tab[aria-selected="true"] .n { background:var(--brand); color:var(--on-brand); }
+
+/* ---------- field rows ---------- */
+.rows { display:flex; flex-direction:column; gap:8px; }
+.row {
+  display:grid; grid-template-columns:18px minmax(0,1fr) auto auto; align-items:center; gap:12px;
+  padding:12px 14px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg-default);
+  transition:border-color .15s,box-shadow .15s;
+}
+.row:hover { border-color:var(--border-accent); box-shadow:var(--shadow-sm); }
+.row.off { opacity:.55; background:var(--bg-sunken); }
+.grip { color:var(--fg-muted); cursor:grab; line-height:1; user-select:none; font-size:15px; }
+.row.off .grip { visibility:hidden; }
+.f-name { font-weight:700; font-size:15px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.f-meta { font-family:var(--font-data); font-size:12px; color:var(--fg-muted); margin-top:3px; }
+.tag {
+  display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:var(--r-full);
+  background:var(--accent-subtle); color:var(--accent); white-space:nowrap;
+}
+.tag.custom { background:var(--warning-subtle); color:var(--amber-700); }
+.tag.lib { background:var(--success-subtle); color:var(--green-700); }
+.tag.off { background:var(--bg-disable); color:var(--fg-muted); }
+:root[data-theme="dark"] .tag.custom, :root[data-theme="dark"] .tag.lib { color:var(--fg-default); }
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .tag.custom, :root:not([data-theme="light"]) .tag.lib { color:var(--fg-default); } }
+
+.req { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--fg-subtle); white-space:nowrap; }
+.sw { position:relative; width:38px; height:22px; flex-shrink:0; }
+.sw input { position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
+.sw span {
+  position:absolute; inset:0; border-radius:var(--r-full); background:var(--bg-disable);
+  transition:background .15s; pointer-events:none;
+}
+.sw span::after {
+  content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%;
+  background:#fff; transition:transform .15s; box-shadow:0 1px 2px rgba(0,0,0,.3);
+}
+.sw input:checked + span { background:var(--brand); }
+.sw input:checked + span::after { transform:translateX(16px); }
+.sw input:focus-visible + span { outline:2px solid var(--brand); outline-offset:2px; }
+
+.sect-label {
+  font-size:12px; font-weight:700; letter-spacing:.08em; color:var(--fg-muted);
+  margin:22px 0 10px; display:flex; align-items:center; gap:10px;
+}
+.sect-label::after { content:""; flex:1; height:1px; background:var(--border); }
+
+/* ---------- preview ---------- */
+.preview { position:sticky; top:88px; }
+.seg { display:flex; gap:3px; padding:3px; background:var(--bg-sunken); border-radius:var(--r-md); }
+.seg button {
+  flex:1; border:none; background:transparent; padding:7px 10px; border-radius:9px;
+  font-size:13px; cursor:pointer; color:var(--fg-subtle); transition:background .15s,color .15s;
+}
+.seg button[aria-pressed="true"] { background:var(--bg-default); color:var(--fg-default); font-weight:700; box-shadow:var(--shadow-sm); }
+
+.form-field { margin-bottom:15px; }
+.form-field label { display:block; font-size:13px; font-weight:700; margin-bottom:5px; }
+.form-field .star { color:var(--danger); }
+.ctrl {
+  width:100%; height:38px; padding:0 11px; border:1px solid var(--border);
+  border-radius:var(--r-sm); background:var(--bg-subtle); font-size:14px;
+}
+.ctrl:disabled { color:var(--fg-muted); }
+textarea.ctrl { height:60px; padding:9px 11px; resize:vertical; font-family:inherit; }
+.unit { font-family:var(--font-data); font-size:12px; color:var(--fg-muted); margin-left:6px; }
+.readonly-note {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:9px 11px; border:1px dashed var(--border); border-radius:var(--r-sm);
+  background:var(--bg-sunken); font-size:14px; color:var(--fg-subtle);
+}
+.callout {
+  display:flex; gap:9px; padding:11px 13px; border-radius:var(--r-md); font-size:13px; line-height:1.5;
+  background:var(--accent-subtle); color:var(--fg-subtle); border:1px solid transparent;
+}
+.callout.warn { background:var(--warning-subtle); }
+.callout b { color:var(--fg-default); }
+
+/* ---------- modal ---------- */
+.scrim {
+  position:fixed; inset:0; background:rgba(15,23,42,.55); display:grid; place-items:center;
+  padding:20px; z-index:200;
+}
+.scrim[hidden] { display:none; }
+.modal {
+  width:min(520px,100%); max-height:86vh; overflow:auto; background:var(--bg-default);
+  border-radius:var(--r-lg); box-shadow:var(--shadow-lg); border:1px solid var(--border);
+}
+.modal-hd { padding:18px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; }
+.modal-hd h3 { margin:0; font-size:17px; font-weight:700; }
+.modal-hd .x { margin-left:auto; border:none; background:transparent; cursor:pointer; font-size:20px; color:var(--fg-muted); line-height:1; }
+.modal-bd { padding:20px; }
+.modal-ft { padding:16px 20px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; }
+
+.pick {
+  display:flex; align-items:center; gap:11px; width:100%; padding:11px 13px; margin-bottom:8px;
+  border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg-default);
+  cursor:pointer; text-align:left; transition:border-color .15s,background .15s;
+}
+.pick:hover { border-color:var(--brand); background:var(--brand-subtle); }
+.pick[disabled] { opacity:.5; cursor:not-allowed; }
+.pick:hover[disabled] { border-color:var(--border); background:var(--bg-default); }
+.pick .nm { font-weight:700; font-size:14px; }
+.pick .mt { font-family:var(--font-data); font-size:12px; color:var(--fg-muted); }
+.pick .rt { margin-left:auto; }
+
+.grp-list { list-style:none; margin:0; padding:0; border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; }
+.grp-list li { display:flex; gap:10px; align-items:baseline; padding:9px 13px; font-size:14px; }
+.grp-list li + li { border-top:1px solid var(--border); }
+.grp-list .tt { font-family:var(--font-data); font-size:12px; color:var(--fg-muted); min-width:38px; }
+.grp-list .dup { margin-left:auto; font-size:12px; color:var(--success); font-weight:700; }
+
+.checkrow { display:flex; gap:10px; align-items:flex-start; padding:12px 13px; border:1px solid var(--border); border-radius:var(--r-md); }
+.checkrow input { margin:3px 0 0; width:16px; height:16px; accent-color:var(--brand); }
+.checkrow label { font-size:14px; font-weight:700; }
+.checkrow p { margin:3px 0 0; font-size:13px; color:var(--fg-muted); }
+
+.field-lbl { display:block; font-size:13px; font-weight:700; margin-bottom:6px; }
+.radio-set { display:flex; gap:16px; flex-wrap:wrap; }
+.radio-set label { display:inline-flex; align-items:center; gap:6px; font-size:14px; font-weight:400; }
+.radio-set input { accent-color:var(--brand); }
+
+/* ---------- toast ---------- */
+.toast {
+  position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+  background:var(--fg-default); color:var(--bg-default); padding:12px 18px;
+  border-radius:var(--r-full); box-shadow:var(--shadow-lg); font-size:14px; z-index:300;
+  max-width:min(560px,92vw); text-align:center;
+}
+.toast[hidden] { display:none; }
+
+.legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--fg-muted); margin-top:16px; }
+.legend span { display:inline-flex; align-items:center; gap:5px; }
+</style>
+
+<div class="shell">
+  <aside class="side">
+    <div class="side-hd">OPERATIONS</div>
+    <nav class="side-nav">
+      <button class="cta" type="button">＋ 新增任務</button>
+      <button class="nav-item" type="button"><span class="ic">◎</span>地圖</button>
+      <button class="nav-item" type="button" aria-current="page"><span class="ic">☰</span>任務管理</button>
+      <button class="nav-item" type="button"><span class="ic">▤</span>資源站點管理</button>
+      <button class="nav-item" type="button"><span class="ic">◫</span>事件紀錄</button>
+      <button class="nav-item" type="button"><span class="ic">◍</span>用戶管理</button>
+    </nav>
+    <div class="side-ft">
+      <button class="nav-item" type="button"><span class="ic">⚙</span>設定</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <div class="crumb">任務管理</div>
+        <h1>欄位設定</h1>
+      </div>
+      <div class="who">
+        <div class="avatar">陳</div>
+        <div>
+          <div class="who-name">陳怡君</div>
+          <div class="who-role">Super Admin</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- ============ left: settings ============ -->
+      <div>
+        <section class="card">
+          <div class="card-bd">
+            <div class="deploy">
+              <span class="deploy-label">當前應變</span>
+              <span class="deploy-name">2026 花蓮地震</span>
+              <span style="color:var(--border)">|</span>
+              <span class="deploy-label">災害種類</span>
+              <span id="disasterChips" style="display:flex;gap:8px;flex-wrap:wrap"></span>
+              <button class="btn" type="button" id="addDisasterBtn" style="margin-left:auto">＋ 加開災害</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-hd">
+            <div class="tabs" role="tablist" id="tabs"></div>
+            <button class="btn btn-primary" type="button" id="addFieldBtn" style="margin-left:auto">＋ 新增欄位</button>
+          </div>
+          <div class="card-bd">
+            <div class="rows" id="rows"></div>
+            <div id="offWrap" hidden>
+              <div class="sect-label">已停用</div>
+              <div class="rows" id="offRows"></div>
+            </div>
+            <div class="legend">
+              <span><b class="tag">水災組</b> 套用災害欄位組帶入</span>
+              <span><b class="tag lib">欄位庫</b> 從系統欄位庫挑選</span>
+              <span><b class="tag custom">自訂</b> 找不到而自建</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ============ right: live preview ============ -->
+      <div class="preview">
+        <section class="card">
+          <div class="card-hd" style="display:block">
+            <h2 style="margin-bottom:12px">即時預覽</h2>
+            <div class="seg" role="group" aria-label="預覽對象">
+              <button type="button" data-prev="staff" aria-pressed="true">後台代報</button>
+              <button type="button" data-prev="citizen" aria-pressed="false">前台民眾報案</button>
+            </div>
+          </div>
+          <div class="card-bd" id="previewBody"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ modals ============ -->
+<div class="scrim" id="scrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="modal-hd">
+      <h3 id="mTitle"></h3>
+      <button class="x" type="button" data-close aria-label="關閉">✕</button>
+    </div>
+    <div class="modal-bd" id="mBody"></div>
+    <div class="modal-ft" id="mFoot"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+"use strict";
+
+/* ==========================================================================
+   Model — mirrors the decided design (decisions.md D10–D16)
+
+   需求種類固定；欄位掛在需求種類底下；災害種類是欄位組的預設集，
+   套用時併入、關閉時不自動移除；欄位可停用不可刪除。
+   ========================================================================== */
+
+const TASK_TYPES = [
+  { id:"rescue", label:"救援" },
+  { id:"hr",     label:"人力" },
+  { id:"supply", label:"物資" },
+];
+
+/* 基礎欄位 — 取自後端 alembic 種子資料 */
+const BASE_FIELDS = [
+  { key:"people_count",   label:"受困人數", type:"整數", tt:"rescue" },
+  { key:"floor_level",    label:"樓層",     type:"整數", tt:"rescue" },
+  { key:"unit_number",    label:"門牌號",   type:"文字", tt:"rescue" },
+  { key:"hazard_note",    label:"危害備註", type:"文字", tt:"rescue" },
+  { key:"required_skill", label:"需要技能", type:"單選", tt:"hr", opts:"醫療 / 救援 / 駕駛 / 清潔 / 翻譯 / 後勤 / 維修 / 消防 / 勘查" },
+  { key:"vehicle_type",   label:"車輛類型", type:"單選", tt:"hr", opts:"轎車 / 貨車 / 機車 / 船 / 救護車 / 直升機" },
+  { key:"cargo_type",     label:"載運類型", type:"單選", tt:"hr", opts:"人員 / 物資 / 設備" },
+  { key:"cleanup_type",   label:"清理類型", type:"單選", tt:"hr", opts:"淤泥 / 瓦礫 / 垃圾 / 污水" },
+  { key:"required_tool",  label:"需要工具", type:"單選", tt:"hr", opts:"圓鍬 / 怪手 / 抽水機 / 卡車 / 電鋸" },
+  { key:"item_name",      label:"品項",     type:"文字", tt:"supply" },
+];
+
+/* 災害欄位組 — 工程預先定義、隨系統出貨（D11）。
+   每組是 (需求種類, 欄位) 的配對集合，不是單純的欄位清單。 */
+const DISASTER_GROUPS = {
+  earthquake: { label:"地震", fields:[
+    { key:"structure_stability", label:"結構穩定度", type:"單選", tt:"rescue", opts:"穩定 / 局部受損 / 有倒塌風險" },
+    { key:"collapse_level",      label:"倒塌程度",   type:"單選", tt:"rescue", opts:"未倒塌 / 半倒 / 全倒" },
+    { key:"heavy_machine",       label:"需要重機具", type:"整數", tt:"hr" },
+  ]},
+  flood: { label:"水災", fields:[
+    { key:"water_depth", label:"積水深度",   type:"數字", unit:"公分", tt:"rescue" },
+    { key:"power_out",   label:"是否斷電",   type:"是否", tt:"rescue" },
+    { key:"pump_needed", label:"需要抽水機", type:"整數", tt:"hr" },
+    { key:"sandbag",     label:"需要沙包",   type:"整數", tt:"supply" },
+  ]},
+  fire: { label:"火災", fields:[
+    { key:"smoke_level", label:"濃煙程度",       type:"單選", tt:"rescue", opts:"輕微 / 中度 / 濃密" },
+    { key:"hazmat",      label:"危害物質",       type:"文字", tt:"rescue" },
+    { key:"scba",        label:"需要空氣呼吸器", type:"整數", tt:"hr" },
+  ]},
+  landslide: { label:"土石流", fields:[
+    { key:"mud_depth",  label:"淤泥深度", type:"數字", unit:"公分", tt:"rescue" },
+    { key:"excavator",  label:"需要怪手", type:"整數", tt:"hr" },
+  ]},
+  typhoon: { label:"颱風", fields:[
+    { key:"tree_fall",    label:"路樹倒塌",     type:"是否", tt:"rescue" },
+    { key:"power_repair", label:"需要電力搶修", type:"整數", tt:"hr" },
+  ]},
+};
+
+/* 系統欄位庫（D12）— 所有災害組欄位 + 基礎欄位 + 一些未歸組的備用欄位。
+   手動加欄位必須先搜尋這裡，找不到才自訂。 */
+const EXTRA_LIBRARY = [
+  { key:"flood_area",    label:"淹水面積",     type:"數字", unit:"平方公尺", tt:"rescue" },
+  { key:"pet_count",     label:"待救援動物數", type:"整數", tt:"rescue" },
+  { key:"elderly_count", label:"行動不便人數", type:"整數", tt:"rescue" },
+  { key:"water_truck",   label:"需要水車",     type:"整數", tt:"hr" },
+  { key:"blanket",       label:"需要毛毯",     type:"整數", tt:"supply" },
+];
+
+function buildLibrary() {
+  const out = [];
+  const seen = new Set();
+  const push = (f, groupId) => {
+    if (seen.has(f.key)) return;
+    seen.add(f.key);
+    out.push(Object.assign({}, f, { group: groupId }));
+  };
+  BASE_FIELDS.forEach(f => push(f, null));
+  Object.keys(DISASTER_GROUPS).forEach(g => DISASTER_GROUPS[g].fields.forEach(f => push(f, g)));
+  EXTRA_LIBRARY.forEach(f => push(f, null));
+  return out;
+}
+const LIBRARY = buildLibrary();
+
+/* ---------- state ---------- */
+const state = {
+  disasters: ["earthquake"],       // 當前應變已開啟的災害種類
+  tab: "rescue",
+  preview: "staff",
+  fields: [],                      // 本場欄位清單
+};
+
+/* 初始清單：基礎欄位 + 已開啟災害（地震）的欄位組 */
+BASE_FIELDS.forEach(f => state.fields.push(mkField(f, "base")));
+DISASTER_GROUPS.earthquake.fields.forEach(f => state.fields.push(mkField(f, "group:earthquake")));
+state.fields.find(f => f.key === "people_count").required = true;
+
+function mkField(def, source) {
+  return {
+    key: def.key, label: def.label, type: def.type, unit: def.unit || "",
+    opts: def.opts || "", tt: def.tt,
+    source: source, required: false, enabled: true,
+  };
+}
+
+/* ==========================================================================
+   Render
+   ========================================================================== */
+const $ = id => document.getElementById(id);
+
+function sourceTag(f) {
+  if (f.source === "custom") return '<span class="tag custom">自訂</span>';
+  if (f.source === "library") return '<span class="tag lib">欄位庫</span>';
+  if (f.source && f.source.indexOf("group:") === 0) {
+    const g = DISASTER_GROUPS[f.source.slice(6)];
+    return '<span class="tag">' + g.label + "組</span>";
+  }
+  return "";
+}
+
+function renderChips() {
+  $("disasterChips").innerHTML = state.disasters.map(id =>
+    '<span class="chip on">' + DISASTER_GROUPS[id].label +
+    '<button class="x" type="button" data-close-disaster="' + id + '" aria-label="關閉' + DISASTER_GROUPS[id].label + '">✕</button></span>'
+  ).join("");
+}
+
+function renderTabs() {
+  $("tabs").innerHTML = TASK_TYPES.map(t => {
+    const n = state.fields.filter(f => f.tt === t.id && f.enabled).length;
+    return '<button class="tab" type="button" role="tab" data-tab="' + t.id + '" aria-selected="' +
+      (state.tab === t.id) + '">' + t.label + '<span class="n">' + n + "</span></button>";
+  }).join("");
+}
+
+function rowHtml(f) {
+  const meta = f.key + " · " + f.type + (f.unit ? "（" + f.unit + "）" : "") + (f.opts ? " · " + f.opts : "");
+  if (!f.enabled) {
+    return '<div class="row off">' +
+      '<span class="grip">⠿</span>' +
+      '<div><div class="f-name">' + f.label + ' <span class="tag off">已停用</span></div><div class="f-meta">' + meta + "</div></div>" +
+      '<span></span>' +
+      '<button class="btn btn-ghost" type="button" data-enable="' + f.key + '">啟用</button>' +
+      "</div>";
+  }
+  return '<div class="row">' +
+    '<span class="grip" aria-hidden="true">⠿</span>' +
+    '<div><div class="f-name">' + f.label + " " + sourceTag(f) + '</div><div class="f-meta">' + meta + "</div></div>" +
+    '<label class="req"><span class="sw"><input type="checkbox" data-req="' + f.key + '"' + (f.required ? " checked" : "") + '><span></span></span>必填</label>' +
+    '<button class="btn btn-ghost" type="button" data-disable="' + f.key + '">停用</button>' +
+    "</div>";
+}
+
+function renderRows() {
+  const mine = state.fields.filter(f => f.tt === state.tab);
+  $("rows").innerHTML = mine.filter(f => f.enabled).map(rowHtml).join("") ||
+    '<p class="hint">這個需求種類目前沒有啟用中的欄位。</p>';
+  const off = mine.filter(f => !f.enabled);
+  $("offWrap").hidden = off.length === 0;
+  $("offRows").innerHTML = off.map(rowHtml).join("");
+}
+
+function renderPreview() {
+  const box = $("previewBody");
+
+  if (state.preview === "citizen") {
+    box.innerHTML =
+      '<div class="callout"><span aria-hidden="true">🛟</span><div>前台永遠只有這張極簡表單。<b>自訂欄位一個都不會出現</b>——專業欄位由後台補齊。</div></div>' +
+      '<div style="margin-top:16px">' +
+      '<div class="form-field"><label>在哪裡 <span class="star">*</span></label><input class="ctrl" placeholder="點地圖或輸入地址" disabled></div>' +
+      '<div class="form-field"><label>需要什麼 <span class="star">*</span></label>' +
+      '<div class="radio-set" style="margin-top:4px">' +
+      '<label><input type="checkbox" disabled checked>有人受困</label>' +
+      '<label><input type="checkbox" disabled>人力</label>' +
+      '<label><input type="checkbox" disabled>物資</label></div></div>' +
+      '<div class="form-field"><label>姓名 <span class="star">*</span></label><input class="ctrl" disabled></div>' +
+      '<div class="form-field"><label>電話 <span class="star">*</span></label><input class="ctrl" disabled></div>' +
+      '<button class="btn btn-primary" type="button" style="width:100%;height:42px" disabled>送出求救</button>' +
+      "</div>";
+    return;
+  }
+
+  const tt = TASK_TYPES.find(t => t.id === state.tab);
+  const live = state.fields.filter(f => f.tt === state.tab && f.enabled);
+  const dead = state.fields.filter(f => f.tt === state.tab && !f.enabled);
+
+  let html = '<p class="hint" style="margin-bottom:14px">工單 #d0000001 › 需求「' + tt.label + "」的細節欄位</p>";
+
+  html += live.map(f => {
+    const star = f.required ? ' <span class="star">*</span>' : "";
+    let ctrl;
+    if (f.type === "是否") {
+      ctrl = '<div class="radio-set"><label><input type="radio" name="p_' + f.key + '" disabled>是</label>' +
+             '<label><input type="radio" name="p_' + f.key + '" disabled checked>否</label></div>';
+    } else if (f.type === "單選") {
+      ctrl = '<select class="ctrl" disabled><option>' + (f.opts.split(" / ")[0] || "請選擇") + "</option></select>";
+    } else if (f.type === "文字" && f.key === "hazard_note") {
+      ctrl = '<textarea class="ctrl" disabled></textarea>';
+    } else {
+      ctrl = '<input class="ctrl" disabled>' + (f.unit ? '<span class="unit">' + f.unit + "</span>" : "");
+    }
+    return '<div class="form-field"><label>' + f.label + star + "</label>" + ctrl + "</div>";
+  }).join("");
+
+  if (!live.length) html += '<p class="hint">沒有啟用中的欄位，這張表單目前是空的。</p>';
+
+  if (f_hasFloorRequired()) {
+    html += '<div class="callout warn" style="margin:4px 0 16px"><span aria-hidden="true">▲</span><div>' +
+            '樓層非 1 樓，<b>建議補齊結構評估</b>。此為提示，不擋儲存。</div></div>';
+  }
+
+  if (dead.length) {
+    html += '<div class="sect-label" style="margin-top:20px">已停用欄位</div>' +
+      dead.map(f => '<div class="readonly-note" style="margin-bottom:8px"><span>' + f.label +
+        '</span><span class="unit">唯讀</span></div>').join("") +
+      '<p class="hint" style="margin-top:8px">停用不刪除，已填的資料照常看得到。</p>';
+  }
+
+  html += '<button class="btn btn-primary" type="button" style="width:100%;height:42px;margin-top:8px" disabled>儲存</button>';
+  box.innerHTML = html;
+}
+
+/* 只要 rescue 有啟用中的「樓層」欄位就展示提示（D16 的替代做法） */
+function f_hasFloorRequired() {
+  return state.tab === "rescue" && state.fields.some(f => f.key === "floor_level" && f.enabled);
+}
+
+function renderAll() { renderChips(); renderTabs(); renderRows(); renderPreview(); }
+
+/* ==========================================================================
+   Modal + toast
+   ========================================================================== */
+let onConfirm = null;
+
+function openModal(title, bodyHtml, footHtml, confirmFn) {
+  $("mTitle").textContent = title;
+  $("mBody").innerHTML = bodyHtml;
+  $("mFoot").innerHTML = footHtml;
+  onConfirm = confirmFn || null;
+  $("scrim").hidden = false;
+  const first = $("mBody").querySelector("input,button,select") || $("mFoot").querySelector("button");
+  if (first) first.focus();
+}
+function closeModal() { $("scrim").hidden = true; onConfirm = null; }
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 4200);
+}
+
+/* ==========================================================================
+   Actions
+   ========================================================================== */
+
+/* 加開災害 — 欄位組併入，重複的自動整併（D10 + D12） */
+function openAddDisaster() {
+  const avail = Object.keys(DISASTER_GROUPS).filter(id => state.disasters.indexOf(id) === -1);
+  if (!avail.length) { toast("所有災害種類都已開啟。"); return; }
+
+  const body =
+    '<p class="hint" style="margin-bottom:12px">選一個災害種類，它的欄位組會併入當前欄位清單。</p>' +
+    '<div class="radio-set" style="flex-direction:column;gap:8px" id="dPick">' +
+    avail.map((id, i) =>
+      '<label style="font-weight:700"><input type="radio" name="dz" value="' + id + '"' +
+      (i === 0 ? " checked" : "") + ">" + DISASTER_GROUPS[id].label + "</label>"
+    ).join("") + "</div>" +
+    '<div style="margin-top:16px"><div class="field-lbl">將加入的欄位</div><ul class="grp-list" id="dPrev"></ul></div>';
+
+  openModal("加開災害種類", body,
+    '<button class="btn" type="button" data-close>取消</button>' +
+    '<button class="btn btn-primary" type="button" data-confirm>加開</button>',
+    () => {
+      const id = $("mBody").querySelector('input[name="dz"]:checked').value;
+      applyDisaster(id);
+    });
+
+  const upd = () => {
+    const id = $("mBody").querySelector('input[name="dz"]:checked').value;
+    $("dPrev").innerHTML = DISASTER_GROUPS[id].fields.map(f => {
+      const dup = state.fields.some(x => x.key === f.key);
+      const ttl = TASK_TYPES.find(t => t.id === f.tt).label;
+      return "<li><span class='tt'>" + ttl + "</span><span>" + f.label + "</span>" +
+        (dup ? "<span class='dup'>已存在 · 自動整併</span>" : "") + "</li>";
+    }).join("");
+  };
+  $("dPick").addEventListener("change", upd);
+  upd();
+}
+
+function applyDisaster(id) {
+  const g = DISASTER_GROUPS[id];
+  let added = 0, merged = [];
+  g.fields.forEach(def => {
+    const exist = state.fields.find(x => x.key === def.key);
+    if (exist) {
+      merged.push(exist.label);
+      if (!exist.enabled) exist.enabled = true;   // 重新啟用而非重複建立
+      if (exist.source === "library" || exist.source === "custom") exist.source = "group:" + id;
+    } else {
+      state.fields.push(mkField(def, "group:" + id));
+      added++;
+    }
+  });
+  state.disasters.push(id);
+  closeModal();
+  renderAll();
+  toast(merged.length
+    ? "已加開「" + g.label + "」：新增 " + added + " 個欄位，" + merged.length + " 個已存在（" + merged.join("、") + "）自動整併，資料不需搬移。"
+    : "已加開「" + g.label + "」：新增 " + added + " 個欄位。");
+}
+
+/* 關閉災害 — 欄位預設不動（D10），提供一鍵停用（D15） */
+function openCloseDisaster(id) {
+  const g = DISASTER_GROUPS[id];
+  const owned = state.fields.filter(f => f.source === "group:" + id && f.enabled);
+  const body =
+    "<p style='margin:0 0 14px'>「" + g.label + "」不再列為當前應變的災害種類，影響統計維度與地圖圖層。</p>" +
+    (owned.length
+      ? '<div class="checkrow"><input type="checkbox" id="alsoDisable"><div>' +
+        '<label for="alsoDisable">一併停用這組帶進來的 ' + owned.length + " 個欄位</label>" +
+        "<p>預設不勾。停用後新表單不顯示，已填資料仍看得到。</p></div></div>"
+      : '<p class="hint">這組沒有仍啟用中的欄位。</p>');
+
+  openModal("關閉「" + g.label + "」", body,
+    '<button class="btn" type="button" data-close>取消</button>' +
+    '<button class="btn btn-danger" type="button" data-confirm>關閉' + g.label + "</button>",
+    () => {
+      const also = $("alsoDisable") && $("alsoDisable").checked;
+      if (also) owned.forEach(f => { f.enabled = false; f.required = false; });
+      state.disasters = state.disasters.filter(d => d !== id);
+      closeModal();
+      renderAll();
+      toast(also
+        ? "已關閉「" + g.label + "」，並停用該組 " + owned.length + " 個欄位。"
+        : "已關閉「" + g.label + "」。欄位保留在清單中，未受影響。");
+    });
+}
+
+/* 新增欄位 — 先搜尋欄位庫，找不到才自訂（D12） */
+function openAddField() {
+  const body =
+    '<input class="ctrl" id="q" placeholder="搜尋欄位名稱，例如「淹水」" autocomplete="off" style="margin-bottom:14px">' +
+    '<div id="results"></div>' +
+    '<div id="customBox" hidden style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">' +
+      '<div class="field-lbl">自訂新欄位</div>' +
+      '<input class="ctrl" id="cName" placeholder="欄位名稱" style="margin-bottom:10px">' +
+      '<div class="field-lbl">型別</div>' +
+      '<div class="radio-set">' +
+        '<label><input type="radio" name="ct" value="文字" checked>文字</label>' +
+        '<label><input type="radio" name="ct" value="數字">數字</label>' +
+        '<label><input type="radio" name="ct" value="整數">整數</label>' +
+        '<label><input type="radio" name="ct" value="是否">是／否</label>' +
+      "</div>" +
+      '<p class="hint" style="margin-top:10px">自訂欄位在本場應變內與欄位庫欄位完全平等，但不會自動進入欄位庫。</p>' +
+    "</div>";
+
+  openModal("新增欄位到「" + TASK_TYPES.find(t => t.id === state.tab).label + "」", body,
+    '<button class="btn" type="button" data-close>取消</button>', null);
+
+  const results = $("results"), q = $("q");
+  const draw = () => {
+    const term = q.value.trim();
+    const pool = LIBRARY.filter(f => f.tt === state.tab);
+    const hits = term ? pool.filter(f => f.label.indexOf(term) !== -1 || f.key.indexOf(term.toLowerCase()) !== -1) : pool;
+
+    if (!hits.length) {
+      results.innerHTML = '<p class="hint">系統欄位庫裡沒有「' + term + "」。</p>";
+      $("customBox").hidden = false;
+      return;
+    }
+    results.innerHTML = '<div class="field-lbl">系統欄位庫找到 ' + hits.length + " 個</div>" +
+      hits.map(f => {
+        const already = state.fields.some(x => x.key === f.key);
+        const g = f.group ? '<span class="tag">' + DISASTER_GROUPS[f.group].label + "組</span>" : "";
+        return '<button class="pick" type="button" data-pick="' + f.key + '"' + (already ? " disabled" : "") + ">" +
+          "<div><div class='nm'>" + f.label + " " + g + "</div><div class='mt'>" + f.key + " · " + f.type +
+          (f.unit ? "（" + f.unit + "）" : "") + "</div></div>" +
+          "<span class='rt " + (already ? "mt" : "") + "'>" + (already ? "已在清單中" : "加入 →") + "</span></button>";
+      }).join("");
+    $("customBox").hidden = !term;
+  };
+  q.addEventListener("input", draw);
+  draw();
+}
+
+function addFromLibrary(key) {
+  const def = LIBRARY.find(f => f.key === key);
+  state.fields.push(mkField(def, "library"));
+  closeModal();
+  renderAll();
+  toast("已加入「" + def.label + "」。之後若加開" +
+    (def.group ? "「" + DISASTER_GROUPS[def.group].label + "」" : "相關災害") +
+    "，這個欄位會自動整併、不會重複。");
+}
+
+function addCustom() {
+  const name = $("cName").value.trim();
+  if (!name) { $("cName").focus(); return; }
+  const type = $("mBody").querySelector('input[name="ct"]:checked').value;
+  const key = "custom_" + Date.now().toString(36);
+  state.fields.push(mkField({ key, label:name, type, tt:state.tab }, "custom"));
+  closeModal();
+  renderAll();
+  toast("已自訂欄位「" + name + "」。它在本場應變內與其他欄位完全平等。");
+}
+
+/* ==========================================================================
+   Events
+   ========================================================================== */
+document.addEventListener("click", e => {
+  const t = e.target.closest("button");
+  if (!t) return;
+
+  if (t.dataset.tab)  { state.tab = t.dataset.tab; renderAll(); return; }
+  if (t.dataset.prev) {
+    state.preview = t.dataset.prev;
+    document.querySelectorAll("[data-prev]").forEach(b =>
+      b.setAttribute("aria-pressed", String(b.dataset.prev === state.preview)));
+    renderPreview();
+    return;
+  }
+  if (t.id === "addDisasterBtn") { openAddDisaster(); return; }
+  if (t.id === "addFieldBtn")    { openAddField();    return; }
+  if (t.dataset.closeDisaster)   { openCloseDisaster(t.dataset.closeDisaster); return; }
+  if (t.dataset.pick)            { addFromLibrary(t.dataset.pick); return; }
+
+  if (t.dataset.disable) {
+    const f = state.fields.find(x => x.key === t.dataset.disable);
+    f.enabled = false; f.required = false;
+    renderAll(); toast("已停用「" + f.label + "」。欄位不會被刪除，已填資料仍可檢視。");
+    return;
+  }
+  if (t.dataset.enable) {
+    const f = state.fields.find(x => x.key === t.dataset.enable);
+    f.enabled = true; renderAll(); toast("已重新啟用「" + f.label + "」。");
+    return;
+  }
+  if (t.hasAttribute("data-close")) { closeModal(); return; }
+  if (t.hasAttribute("data-confirm")) {
+    if ($("customBox") && !$("customBox").hidden && $("cName") && $("cName").value.trim()) { addCustom(); return; }
+    if (onConfirm) onConfirm();
+    return;
+  }
+});
+
+/* 自訂欄位的 modal 沒有 confirm 鈕，改由 customBox 出現時補上 */
+const mo = new MutationObserver(() => {
+  const box = $("customBox");
+  if (box && !box.hidden && !$("mFoot").querySelector("[data-confirm]")) {
+    $("mFoot").insertAdjacentHTML("beforeend",
+      '<button class="btn btn-primary" type="button" data-confirm>建立自訂欄位</button>');
+  } else if ((!box || box.hidden) && $("mFoot").querySelector("[data-confirm]") && $("mTitle").textContent.indexOf("新增欄位") === 0) {
+    $("mFoot").querySelector("[data-confirm]").remove();
+  }
+});
+mo.observe(document.getElementById("mBody"), { attributes:true, childList:true, subtree:true });
+
+document.addEventListener("change", e => {
+  if (e.target.dataset && e.target.dataset.req) {
+    const f = state.fields.find(x => x.key === e.target.dataset.req);
+    f.required = e.target.checked;
+    renderPreview();
+  }
+});
+
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("scrim").hidden) closeModal(); });
+$("scrim").addEventListener("click", e => { if (e.target === $("scrim")) closeModal(); });
+
+renderAll();
+</script>
