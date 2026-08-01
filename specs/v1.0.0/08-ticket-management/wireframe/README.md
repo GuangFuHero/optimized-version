@@ -15,4 +15,6 @@
 
 ASCII 圖可直接在編輯器與 GitHub 上讀、可 diff、不需要工具；`custom-fields.html` 是單一自足檔案（無外部相依），雙擊即可在瀏覽器操作。
 
-視覺沿用 claude.ai Design 的 `Wan Guard Design System`（`ui_kits/console` 的 shell 結構與 `tokens/semantic.css` 的色票）。**只表達結構與資訊層級，不表達視覺樣式**——配色、間距、元件樣式屬 UI 設計，不在此處決定。
+ASCII 圖**只表達結構與資訊層級**，不表達視覺樣式。
+
+`custom-fields.html` 的視覺沿用 claude.ai Design 的 `Wan Guard Design System`（`ui_kits/console` 的 shell 結構與 `tokens/semantic.css` 的色票），但它仍是**線框圖不是設計稿**——用既有 token 是為了讓討論聚焦在流程而非配色，最終的元件樣式與細節仍以 Design System 專案為準。
