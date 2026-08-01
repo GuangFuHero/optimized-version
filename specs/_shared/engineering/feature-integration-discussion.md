@@ -284,8 +284,8 @@ Sprint 8-9 (4週):  Feature 006 - 後台管理
 
 ### 參考文件
 
-- 完整分析報告: `claudeBackend/Spec/Docs/feature-dependency-analysis.md`
-- Feature 規格: `Backend/Spec/00X-feature-name/spec.md`
+- 完整分析報告: `specs/_shared/engineering/feature-dependency-analysis.md`
+- Feature 規格: `specs/<version>/<NN-feature>/engineering/spec.md`
 - 依賴關係圖: 見本文件 Section 1
 
 ---
@@ -394,4 +394,4 @@ Sprint 8-9 (4週):  Feature 006 - 後台管理
 - 這份文件包含所有必要的背景資訊和決策選項
 - 請在會議前閱讀 Section 1-2 (大約 10 分鐘)
 - 會議重點是 Section 2 的三個問題
-- 完整技術細節請參考 `claudeBackend/Spec/Docs/feature-dependency-analysis.md`
+- 完整技術細節請參考 `specs/_shared/engineering/feature-dependency-analysis.md`

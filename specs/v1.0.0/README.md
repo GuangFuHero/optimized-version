@@ -1,9 +1,9 @@
 ---
-version: v1
+version: v1.0.0
 status: definition
 ---
 
-# v1 — 管理後台系統 (ManagerEnd)
+# v1.0.0 — 管理後台系統 (ManagerEnd)
 
 **系統**：島嶼守望 Wanguard 管理後台
 **範圍**：下列 9 個 feature + 橫切的 [`04-rbac`](../_shared/04-rbac.md)。目前尚無任何 feature 交付，全數處於規格定義階段。

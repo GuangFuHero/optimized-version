@@ -4,21 +4,21 @@
 
 ```
 specs/
-├── ACTIVE_VERSION          # 新規格要落在哪一版（目前 v1）
-├── v1/                     # 一個發布版本
+├── ACTIVE_VERSION          # 新規格要落在哪一版（目前 v1.0.0）
+├── v1.0.0/                 # 一個發布版本
 │   ├── README.md           #   本版範圍與 feature 列表
 │   └── 06-map-decision-support/
 │       ├── user-stories.md #   問題空間
 │       ├── prd.md          #   產品規格
 │       ├── research/       #   決策依據
 │       └── engineering/    #   工程規格：spec.md / plan.md / tasks.md / checklists/
-├── v2/                     # 下一版（目前只有 backlog）
+├── v2.0.0/                 # 下一版（目前只有 backlog）
 ├── _shared/                # 橫切定義，不屬於任何單一 feature 或版本
 ├── _template/              # 新 feature 的範本
 └── _archive/               # 已凍結，勿引用
 ```
 
-**入口：** [v1 範圍](v1/README.md) · [v2 backlog](v2/backlog.md) · [權限定義 04-rbac](_shared/04-rbac.md) · [跨 feature 旅程](_shared/user-journey.md) · [工程規格閱讀指引](_shared/engineering/specs-reading-guide.md)
+**入口：** [v1.0.0 範圍](v1.0.0/README.md) · [v2.0.0 backlog](v2.0.0/backlog.md) · [權限定義 04-rbac](_shared/04-rbac.md) · [跨 feature 旅程](_shared/user-journey.md) · [工程規格閱讀指引](_shared/engineering/specs-reading-guide.md)
 
 ## 三層文件，上層是下層的來源
 
@@ -39,9 +39,12 @@ specs/
 
 一個版本 = 一個發布里程碑。**一個 feature 同時只存在於一個版本資料夾**，不跨版本複製。
 
-- **編號跨版本唯一。** `06-map-decision-support` 從 v1 移到 v2 之後仍是 06。這讓 `[[06-map-decision-support]]` 這類引用不因換版失效，也讓工具鏈能用編號跨版本定位。
+- **版本資料夾以 semver 命名**：`v<major>.<minor>.<patch>`，例如 `v1.0.0`、`v1.1.0`、`v2.0.0`。三段都要寫滿，`v1` 或 `v1.0` 都不合法——工具鏈以 `sort -V` 排序，補滿三段才能正確比較（`v1.10.0` 才會排在 `v1.9.0` 之後）。
+- 語意沿用 semver：破壞性的模型或流程重做進 major，既有 feature 的增補進 minor，規格勘誤進 patch。
+
+- **編號跨版本唯一。** `06-map-decision-support` 從 v1.0.0 移到 v2.0.0 之後仍是 06。這讓 `[[06-map-decision-support]]` 這類引用不因換版失效，也讓工具鏈能用編號跨版本定位。
 - **推進到下一版就是 `git mv` 整個資料夾**，然後更新兩邊 `README.md` 的表格。
-- **`ACTIVE_VERSION` 決定新 feature 落在哪。** 這是宣告不是推測——`v2/` 可以先作為 backlog 存在很久，才輪到它成為正在寫規格的版本。要切版就改這個檔。
+- **`ACTIVE_VERSION` 決定新 feature 落在哪。** 這是宣告不是推測——`v2.0.0/` 可以先作為 backlog 存在很久，才輪到它成為正在寫規格的版本。要切版就改這個檔。
 - 版本內的延後項目記在下一版的 `backlog.md`，但**決策本身留在原 PRD 的「開放問題」**，backlog 只是索引。
 
 ## 橫切定義

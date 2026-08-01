@@ -203,9 +203,10 @@ if [ -n "${SPECIFY_VERSION:-}" ]; then
 elif [ -s "$SPECS_ROOT/ACTIVE_VERSION" ]; then
     VERSION=$(tr -d '[:space:]' < "$SPECS_ROOT/ACTIVE_VERSION")
 else
-    VERSION=$(ls -d "$SPECS_ROOT"/v[0-9]* 2>/dev/null | xargs -n1 basename 2>/dev/null \
-              | sed 's/^v//' | sort -n | tail -1)
-    VERSION="v${VERSION:-1}"
+    # Versions are semver-named (v1.0.0, v1.1.0, v2.0.0); sort -V orders them correctly.
+    VERSION=$(ls -d "$SPECS_ROOT"/v[0-9]*.[0-9]*.[0-9]* 2>/dev/null | xargs -n1 basename 2>/dev/null \
+              | sort -V | tail -1)
+    VERSION="${VERSION:-v1.0.0}"
 fi
 SPECS_DIR="$SPECS_ROOT/$VERSION"
 mkdir -p "$SPECS_DIR"

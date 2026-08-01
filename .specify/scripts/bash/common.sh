@@ -4,7 +4,8 @@
 # Layout (see specs/README.md):
 #   specs/<version>/<NN-feature>/          product layer: user-stories.md, prd.md, research/
 #   specs/<version>/<NN-feature>/engineering/   engineering layer: spec.md, plan.md, tasks.md, ...
-# Feature numbers are 2- or 3-digit. Versions are release milestones (v1, v2, ...).
+# Feature numbers are 2- or 3-digit. Versions are release milestones named with
+# semver: v1.0.0, v1.1.0, v2.0.0, ...
 
 # Root of the specs tree
 get_specs_root() { echo "$(get_repo_root)/specs"; }
@@ -12,9 +13,9 @@ get_specs_root() { echo "$(get_repo_root)/specs"; }
 # Version new work lands in. Resolution order:
 #   1. SPECIFY_VERSION environment variable
 #   2. specs/ACTIVE_VERSION file (the declared answer — edit that file to cut a release)
-#   3. highest vN directory present
-# The active version is declared rather than inferred: a v2 directory can exist as a
-# backlog long before v2 becomes the version being specced.
+#   3. highest semver directory present
+# The active version is declared rather than inferred: a v2.0.0 directory can exist as
+# a backlog long before v2.0.0 becomes the version being specced.
 get_active_version() {
     if [[ -n "${SPECIFY_VERSION:-}" ]]; then
         echo "$SPECIFY_VERSION"
@@ -32,20 +33,15 @@ get_active_version() {
         fi
     fi
 
-    local latest="" highest=-1
-    for dir in "$specs_root"/v*; do
-        [[ -d "$dir" ]] || continue
-        local name="$(basename "$dir")"
-        if [[ "$name" =~ ^v([0-9]+)$ ]]; then
-            local n=$((10#${BASH_REMATCH[1]}))
-            if [[ "$n" -gt "$highest" ]]; then
-                highest=$n
-                latest="$name"
-            fi
-        fi
-    done
+    # Highest semver directory, ordered by `sort -V` so v1.10.0 beats v1.9.0
+    local latest
+    latest=$(for dir in "$specs_root"/v*; do
+                 [[ -d "$dir" ]] || continue
+                 local name="$(basename "$dir")"
+                 [[ "$name" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo "$name"
+             done | sort -V | tail -1)
 
-    echo "${latest:-v1}"
+    echo "${latest:-v1.0.0}"
 }
 
 # Get project root by finding .specify/ directory

@@ -19,7 +19,7 @@ specs/<version>/<NN-feature>/
 上層是下層的來源。工程規格若與 PRD 衝突，以 PRD 為準並回報差異；PRD 若與 user-stories 衝突，以 user-stories 為準。
 
 **入口：** [`specs/README.md`](specs/README.md) — 結構、版本規則與撰寫規範
-**目前版本：** [`specs/v1/`](specs/v1/README.md)（9 個 feature，全數規格定義中） · [`specs/v2/backlog.md`](specs/v2/backlog.md)（延後項目索引）
+**目前版本：** [`specs/v1.0.0/`](specs/v1.0.0/README.md)（9 個 feature，全數規格定義中） · [`specs/v2.0.0/backlog.md`](specs/v2.0.0/backlog.md)（延後項目索引）
 **橫切定義：** [`specs/_shared/04-rbac.md`](specs/_shared/04-rbac.md) · [`specs/_shared/user-journey.md`](specs/_shared/user-journey.md) · [`specs/_shared/engineering/`](specs/_shared/engineering/)
 
 資料模型的實際狀態以 [`specs/_shared/engineering/er-diagram.md`](specs/_shared/engineering/er-diagram.md) 為準。
@@ -32,22 +32,22 @@ specs/<version>/<NN-feature>/
 
 | 舊位置 | 新位置 |
 |---|---|
-| `Product/prd/XX-feature/` | `specs/v1/XX-feature/` |
+| `Product/prd/XX-feature/` | `specs/v1.0.0/XX-feature/` |
 | `Product/prd/_shared/` · `Product/user-journey.md` | `specs/_shared/` |
 | `Product/prd/_template/` | `specs/_template/` |
 | `Product/_archive/` · `Product/prd/prd-manager-end-sucre.md` | `specs/_archive/` |
-| `Backend/Spec/002-interactive-disaster-map` | `specs/v1/06-map-decision-support/engineering/` |
-| `Backend/Spec/003-request-management` | `specs/v1/08-ticket-management/engineering/request-management/` |
-| `Backend/Spec/004-volunteer-dispatch` | `specs/v1/08-ticket-management/engineering/volunteer-dispatch/` |
-| `Backend/Spec/005-supply-management` | `specs/v1/07-resource-station/engineering/` |
-| `Backend/Spec/006-backend-administration` | `specs/v1/05-member-management/engineering/` |
-| `Backend/Spec/007-information-publishing` | `specs/v1/09-emergency-announcement/engineering/` |
+| `Backend/Spec/002-interactive-disaster-map` | `specs/v1.0.0/06-map-decision-support/engineering/` |
+| `Backend/Spec/003-request-management` | `specs/v1.0.0/08-ticket-management/engineering/request-management/` |
+| `Backend/Spec/004-volunteer-dispatch` | `specs/v1.0.0/08-ticket-management/engineering/volunteer-dispatch/` |
+| `Backend/Spec/005-supply-management` | `specs/v1.0.0/07-resource-station/engineering/` |
+| `Backend/Spec/006-backend-administration` | `specs/v1.0.0/05-member-management/engineering/` |
+| `Backend/Spec/007-information-publishing` | `specs/v1.0.0/09-emergency-announcement/engineering/` |
 | `Backend/Spec/Docs/` | `specs/_shared/engineering/` |
 | `Backend/Spec/TODO.md` | `specs/_archive/backend-spec-todo.md` |
-| `Spec/Docs/map-tile-service-*.md` | `specs/v1/06-map-decision-support/engineering/` |
+| `Spec/Docs/map-tile-service-*.md` | `specs/v1.0.0/06-map-decision-support/engineering/` |
 | `Backend/.specify/` | `.specify/`（repo root） |
 
-**兩套編號體系已統一為 Product 的 01–10。** 舊的 `Backend/Spec/NNN-*` 三位數編號不再使用；01/02/03 沒有各自的工程規格，原 006 同時涵蓋這三者與 05，整份現位於 `specs/v1/05-member-management/engineering/`。
+**兩套編號體系已統一為 Product 的 01–10。** 舊的 `Backend/Spec/NNN-*` 三位數編號不再使用；01/02/03 沒有各自的工程規格，原 006 同時涵蓋這三者與 05，整份現位於 `specs/v1.0.0/05-member-management/engineering/`。
 
 ---
 
@@ -57,7 +57,7 @@ specs/<version>/<NN-feature>/
 |------|------|------|
 | `specs/_archive/` | 凍結 | 舊 user-stories 索引、舊版單檔 PRD 總表、舊工程待辦清單 |
 | `System_Design/mindmap/` | 過時 | 6 模組 × 4 面向的早期需求樹，已被 `specs/` 取代。內含的 GitHub 連結指向舊 `Backend/Spec/` 路徑，未更新 |
-| `specs/v1/08-ticket-management/decisions.md` | 過程紀錄 | 設計討論產物，非規格 |
+| `specs/v1.0.0/08-ticket-management/decisions.md` | 過程紀錄 | 設計討論產物，非規格 |
 
 舊 mindmap 模組與現行 feature 的粗略對應（**內容不保證同步，有出入以 PRD 為準**）：
 `01_map`→06、`02_volunteer_tasks`→08、`03_delivery`→07、`04_info_page`→09、`05_moderator_admin`→05、`06_system_admin`→04-rbac。

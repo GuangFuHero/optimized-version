@@ -12,7 +12,7 @@ design:
 > **北極星（問題空間）：** [`user-stories.md`](user-stories.md)
 > **相關 Feature：** [[04-rbac]]（權限）、[[05-member-management]]（Team／志工身份）、[[06-map-decision-support]]（地圖、劃區指派）、[[07-resource-station]]（資源站協作）、[[10-guest-ticket-privacy]]（訪客端可見性）
 
-本文件描述「任務管理」的資料模型與功能規格。已與後端實際 schema（`Backend/Spec/Docs/er-diagram.md`）對齊：凡標為「規格」者已有 schema 支撐或已拍板；凡列於文末「待拍板」者為尚未定案、將於設計討論中收斂的項目，**不應視為已定規格實作**。
+本文件描述「任務管理」的資料模型與功能規格。已與後端實際 schema（`specs/_shared/engineering/er-diagram.md`）對齊：凡標為「規格」者已有 schema 支撐或已拍板；凡列於文末「待拍板」者為尚未定案、將於設計討論中收斂的項目，**不應視為已定規格實作**。
 
 ---
 

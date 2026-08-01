@@ -164,12 +164,12 @@
 ## 🔗 Related Documents
 
 - [Project Constitution](../../.specify/memory/constitution.md) - 项目宪章和核心原则
-- [Feature 002 Spec](../v1/) - 交互式救灾地图规格（已更新）
-- [Feature 003 Outline](../v1/) - 需求单管理系统大纲
-- [Feature 004 Outline](../v1/) - 志工调度系统大纲
-- [Feature 005 Outline](../v1/) - 资源管理系统大纲
-- [Feature 006 Outline](../v1/) - 后台管理系统大纲
-- [Feature 007 Outline](../v1/) - 资讯发布系统大纲
+- [Feature 002 Spec](../v1.0.0/) - 交互式救灾地图规格（已更新）
+- [Feature 003 Outline](../v1.0.0/) - 需求单管理系统大纲
+- [Feature 004 Outline](../v1.0.0/) - 志工调度系统大纲
+- [Feature 005 Outline](../v1.0.0/) - 资源管理系统大纲
+- [Feature 006 Outline](../v1.0.0/) - 后台管理系统大纲
+- [Feature 007 Outline](../v1.0.0/) - 资讯发布系统大纲
 
 ---
 
