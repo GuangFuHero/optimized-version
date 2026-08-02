@@ -115,6 +115,20 @@ function Test-CleanFixture {
     }
 }
 
+function Test-DraftWithoutValidation {
+    $fixture = New-ValidFixture
+    try {
+        Remove-Item -LiteralPath (Join-Path $fixture 'product-areas\task-management\features\TM-FEAT-001-custom-fields\validation.md')
+        $result = Invoke-Verifier -Fixture $fixture
+        if ($result.ExitCode -ne 0) {
+            throw "A Draft without validation.md must remain valid:`n$($result.Output)"
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $fixture -Recurse -Force
+    }
+}
+
 function Test-DefaultRootInvocation {
     $output = & $powerShellHost -NoProfile -ExecutionPolicy Bypass -File $verifier 2>&1 | Out-String
     if ($output -match 'Cannot bind argument|Join-Path') {
@@ -149,6 +163,7 @@ function Test-ErrorCode {
 
 $tests = [ordered]@{
     'accepts a valid spec tree' = { Test-CleanFixture }
+    'allows a Draft without validation' = { Test-DraftWithoutValidation }
     'uses the repository specs directory by default' = { Test-DefaultRootInvocation }
     'rejects directories in versions' = {
         Test-ErrorCode 'VERSION_CONTENT' { param($root) New-Item -ItemType Directory -Path (Join-Path $root 'versions\nested') | Out-Null }

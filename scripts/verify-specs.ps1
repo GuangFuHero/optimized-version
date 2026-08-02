@@ -191,7 +191,7 @@ foreach ($featureFile in $featureFiles) {
     foreach ($criterion in $acceptanceCriteria) {
         $missingFrom = [System.Collections.Generic.List[string]]::new()
         if ($specContent -and $specContent -notmatch ('\b' + [regex]::Escape($criterion) + '\b')) { $missingFrom.Add('spec.md') }
-        if (-not $validationContentForCoverage -or $validationContentForCoverage -notmatch ('\b' + [regex]::Escape($criterion) + '\b')) { $missingFrom.Add('validation.md') }
+        if ($validationContentForCoverage -and $validationContentForCoverage -notmatch ('\b' + [regex]::Escape($criterion) + '\b')) { $missingFrom.Add('validation.md') }
         if ($missingFrom.Count -gt 0) {
             Add-Issue -Code 'AC_UNCOVERED' -Path $featureFile.FullName -Message "$criterion is not covered by $($missingFrom -join ' and ')."
         }
