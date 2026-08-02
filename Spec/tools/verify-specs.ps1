@@ -187,6 +187,62 @@ foreach ($featureFile in $featureFiles) {
         }
     }
 
+    # Scenarios are supporting material, but their shape and their citations are checked.
+    $scenariosPath = Join-Path $featureDir 'scenarios.md'
+    if (Test-Path -LiteralPath $scenariosPath -PathType Leaf) {
+        $scenarioContent = Get-Content -Raw -Encoding UTF8 -LiteralPath $scenariosPath
+        # Escaped so this script stays ASCII: five scenario types, two frequencies, separated by U+00B7.
+        $tagPattern = '^`(?<type>\u967D\u5149|\u7570\u5E38|\u908A\u754C|\u885D\u7A81|\u8B8A\u9077)`\s*\u00B7\s*`(?<freq>\u9AD8\u983B|\u4F4E\u983B)`\s*\u00B7\s*`(?<id>S-\d{2})`$'
+        $scenarioIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $baselineCount = 0
+        $blocks = @([regex]::Split($scenarioContent, '(?m)^###\s+') | Select-Object -Skip 1)
+        if ($blocks.Count -eq 0) {
+            Add-Issue -Code 'SCENARIO_FORMAT' -Path $scenariosPath -Message 'No scenario heading found.'
+        }
+        foreach ($block in $blocks) {
+            $blockLines = @($block -split '\r?\n')
+            $title = $blockLines[0].Trim()
+            $tagLine = ''
+            foreach ($blockLine in ($blockLines | Select-Object -Skip 1)) {
+                if ($blockLine.Trim()) { $tagLine = $blockLine.Trim(); break }
+            }
+
+            $tagMatch = [regex]::Match($tagLine, $tagPattern)
+            if (-not $tagMatch.Success) {
+                Add-Issue -Code 'SCENARIO_FORMAT' -Path $scenariosPath -Message "Scenario '$title' must be followed by a tag line carrying one type, one frequency, and one S-NN handle."
+                continue
+            }
+
+            $scenarioId = $tagMatch.Groups['id'].Value
+            if (-not $scenarioIds.Add($scenarioId)) {
+                Add-Issue -Code 'SCENARIO_FORMAT' -Path $scenariosPath -Message "Scenario handle $scenarioId is used more than once."
+            }
+            if ($title -match '\bS-\d{2}\b') {
+                Add-Issue -Code 'SCENARIO_FORMAT' -Path $scenariosPath -Message "Scenario heading '$title' must not carry its S-NN handle."
+            }
+            if ($tagMatch.Groups['type'].Value -match '^\u967D\u5149$') { $baselineCount++ }
+            if ($block -notmatch '\*\*\u7D50\u8AD6\*\*') {
+                Add-Issue -Code 'SCENARIO_FORMAT' -Path $scenariosPath -Message "Scenario $scenarioId is missing its conclusion line."
+            }
+        }
+        if ($blocks.Count -gt 0 -and $baselineCount -eq 0) {
+            Add-Issue -Code 'SCENARIO_FORMAT' -Path $scenariosPath -Message 'At least one scenario must carry the baseline type.'
+        }
+
+        $decisionsPath = Join-Path (Split-Path -Parent (Split-Path -Parent $featureDir)) 'decisions.md'
+        $decisionsContent = if (Test-Path -LiteralPath $decisionsPath -PathType Leaf) { Get-Content -Raw -Encoding UTF8 -LiteralPath $decisionsPath } else { '' }
+        foreach ($decision in @([regex]::Matches($scenarioContent, '\bD\d+\b') | ForEach-Object { $_.Value } | Select-Object -Unique)) {
+            if ($decisionsContent -notmatch ('\b' + [regex]::Escape($decision) + '\b')) {
+                Add-Issue -Code 'SCENARIO_REFERENCE' -Path $scenariosPath -Message "Cited decision is not recorded in the product-area decisions: $decision."
+            }
+        }
+        foreach ($criterion in @([regex]::Matches($scenarioContent, '\bAC-\d+\b') | ForEach-Object { $_.Value } | Select-Object -Unique)) {
+            if ($content -notmatch ('\b' + [regex]::Escape($criterion) + '\b')) {
+                Add-Issue -Code 'SCENARIO_REFERENCE' -Path $scenariosPath -Message "Cited acceptance criterion is not in feature.md: $criterion."
+            }
+        }
+    }
+
     $acceptanceCriteria = @([regex]::Matches($content, '\bAC-\d+\b') | ForEach-Object { $_.Value } | Select-Object -Unique)
     foreach ($criterion in $acceptanceCriteria) {
         $missingFrom = [System.Collections.Generic.List[string]]::new()
