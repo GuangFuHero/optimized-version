@@ -8,7 +8,7 @@
 > 5. 信任分級——前台使用者的建議是否一律要審？高信任貢獻者可否自動通過？
 > 6. 離線匯出（NGO 現場無網）的格式與時效。
 > **日期**：2026-06-10
-> **關聯**：[`prd.md`](../prd.md)（07-resource-station）、[[06-map-decision-support]]、[[04-rbac]]、[[02-user-profile]]
+> **關聯**：[`feature.md`](../feature.md)（07-resource-station）、`MAP-FEAT-001`、`AC-FEAT-001`、`IAM-FEAT-002`
 > **狀態**：研究參考，供決策用（PRD 內以「🟡 建議」回填）
 
 ---
@@ -110,7 +110,7 @@ ResourceStation:
   updated_at
 ```
 
-> 🟡 **待確認**：是否需要與 [[06-map-decision-support]] 的圖層（Resource Station Markers）共用同一份資料模型與座標？建議**是**，單一真實來源（single source of truth），避免兩處資料不同步。
+> 🟡 **待確認**：是否需要與 `MAP-FEAT-001` 的圖層（Resource Station Markers）共用同一份資料模型與座標？建議**是**，單一真實來源（single source of truth），避免兩處資料不同步。
 
 ---
 
@@ -143,4 +143,4 @@ ResourceStation:
 - Waze Map Editor — edit & community review workflow
 - Google Local Guides — reputation / trust levels
 - 樂觀並發控制（optimistic concurrency control）— 一般分散式編輯實務
-- 與本 repo 既有：[[06-map-decision-support]]（Resource Station 圖層）
+- 與本 repo 既有：`MAP-FEAT-001`（Resource Station 圖層）

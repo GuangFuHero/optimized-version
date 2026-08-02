@@ -8,7 +8,7 @@
 > 5. 多則公告同時存在的優先序與版位？
 > 6. 與國家級警報（CAP / NCDR / 細胞廣播）的關係與用語對齊。
 > **日期**：2026-06-10
-> **關聯**：[`prd.md`](../prd.md)（09-emergency-announcement）、[[02-user-profile]]、[[06-map-decision-support]]、[[08-ticket-management]]、[[04-rbac]]
+> **關聯**：[`feature.md`](../feature.md)（09-emergency-announcement）、`IAM-FEAT-002`、`MAP-FEAT-001`、`Task Management`、`AC-FEAT-001`
 > **狀態**：研究參考，供決策用（PRD 內以「🟡 建議」回填）
 
 ---
@@ -25,7 +25,7 @@ CAP 每則警報（alert/info）的關鍵欄位：
 
 | CAP 欄位 | 含義 | 對 09 的對應 / 🟡 建議 |
 |---|---|---|
-| **category** | 災害類別（Geo/Met/Safety/Health/Fire/Security…） | 對應 [[08-ticket-management]] 的災害類型，可重用 |
+| **category** | 災害類別（Geo/Met/Safety/Health/Fire/Security…） | 對應 `Task Management` 的災害類型，可重用 |
 | **event** | 事件名稱 | 公告標題 / 關聯的 Disaster Activation |
 | **urgency** | Immediate / Expected / Future / Past | 控制是否需立即彈出 |
 | **severity** | **Extreme / Severe / Moderate / Minor** | **公告嚴重程度 → 決定視覺分級**（見 §3） |
@@ -50,7 +50,7 @@ CAP 每則警報（alert/info）的關鍵欄位：
 | **Moderate（中等）** | 黃底橫幅 | 置頂、可關閉 |
 | **Minor（輕微）/ 一般協調** | 藍/灰資訊條 | 低調呈現 |
 
-> 對應 [[06-map-decision-support]] 的 Hazard Zone 已有 `low/medium/high/critical` 分級——**建議公告 severity 與 Hazard Zone 分級用語對齊或可互轉**，避免同一平台兩套嚴重度語彙。
+> 對應 `MAP-FEAT-001` 的 Hazard Zone 已有 `low/medium/high/critical` 分級——**建議公告 severity 與 Hazard Zone 分級用語對齊或可互轉**，避免同一平台兩套嚴重度語彙。
 
 ---
 
@@ -79,8 +79,8 @@ v1.0 只分「前台 / 後台」兩個對象。實務常需更細：
 | 維度 | 範例 | 🟡 建議 |
 |---|---|---|
 | **管道** | 前台橫幅 / 後台公告 | 沿用 v1.0 |
-| **地理** | 只給花蓮縣民眾 | 借 CAP `area`，可結合 [[06-map-decision-support]] 行政區 |
-| **RBAC / Team** | 只給 NGO、或只給某 Team | 後台協調公告可指定收件對象（對齊 [[04-rbac]]） |
+| **地理** | 只給花蓮縣民眾 | 借 CAP `area`，可結合 `MAP-FEAT-001` 行政區 |
+| **RBAC / Team** | 只給 NGO、或只給某 Team | 後台協調公告可指定收件對象（對齊 `AC-FEAT-001`） |
 | **語言** | 中 / 英 / 原民語 / 越南語等 | 🟡 待確認：災害資訊多語是否納入？建議至少中英，v2 擴充 |
 
 ---
@@ -105,7 +105,7 @@ v1.0 只分「前台 / 後台」兩個對象。實務常需更細：
 
 ## 8. 與通知中心、Audit 的關係
 
-* 後台公告發佈 → 應同時觸發 [[02-user-profile]] 站內通知（v1.0 §相關 Feature 已連結，建議明確「發佈即生成通知」）。
+* 後台公告發佈 → 應同時觸發 `IAM-FEAT-002` 站內通知（v1.0 §相關 Feature 已連結，建議明確「發佈即生成通知」）。
 * 09 v1.0 已要求「編輯/發佈/下架記入 Audit Log」——保留，並建議記錄 severity、對象、排程、到期、撤銷/更新等完整生命週期。
 
 ---
@@ -118,7 +118,7 @@ v1.0 只分「前台 / 後台」兩個對象。實務常需更細：
 - [ ] 是否支援分眾投放（地理 / RBAC / Team / 語言）？多語是否納入 v1？
 - [ ] 後台協調公告是否支援「需確認」回執與已讀比例？
 - [ ] 多則公告並存的排序與前台版位上限（1–2 則）？
-- [ ] 發佈者是否僅限 Super Admin？（v1.0 限 Super Admin，但 [[04-rbac]] 權限表把「編輯前台/後台公告」也給了 Government / Team Admin —— 需釐清，見 PRD 質疑）
+- [ ] 發佈者是否僅限 Super Admin？（v1.0 限 Super Admin，但 `AC-FEAT-001` 權限表把「編輯前台/後台公告」也給了 Government / Team Admin —— 需釐清，見 PRD 質疑）
 
 ---
 
@@ -130,4 +130,4 @@ v1.0 只分「前台 / 後台」兩個對象。實務常需更細：
 - 台灣 NCDR 災害示警公開資料平台（CAP 格式）：https://alerts.ncdr.nat.gov.tw/
 - 台灣 災防告警細胞廣播訊息（PWS / Cell Broadcast）
 - Everbridge / PagerDuty — mass notification & acknowledgement 實務
-- 與本 repo 既有：[[06-map-decision-support]]（Hazard Zone 分級）、[[08-ticket-management]]（災害類型）
+- 與本 repo 既有：`MAP-FEAT-001`（Hazard Zone 分級）、`Task Management`（災害類型）
