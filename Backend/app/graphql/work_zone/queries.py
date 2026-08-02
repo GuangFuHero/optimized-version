@@ -44,8 +44,39 @@ class WorkZoneQuery:
 
     @strawberry.field
     async def work_zone(self, info: strawberry.types.Info, uuid: UUID) -> WorkZoneType | None:
-        """Fetch a single work zone by UUID. Requires work_zone.view permission."""
+        """Fetch a single non-deleted work zone by UUID. Requires work_zone.view permission."""
         db = info.context["db"]
         await check_permission(info, Perm.ZONE_VIEW)
-        m = await work_zone_repository.get_by_uuid(db, uuid)
+        m = await work_zone_repository.get_by_uuid_active(db, uuid)
         return WorkZoneType.from_model(m) if m else None
+
+    @strawberry.field
+    async def zones_by_team(
+        self, info: strawberry.types.Info, team_uuid: UUID, skip: int = 0, limit: int = 50,
+    ) -> WorkZoneConnection:
+        """List the work zones delegated to a team, newest first.
+
+        Requires work_zone.view. In the current seed team admins hold that at Scope.ALL, so
+        any team admin can inspect any team's delegations. Judged acceptable: knowing which
+        team covers which area is a precondition for inter-agency coordination, and no PII is
+        involved. Narrowing this is NOT a seed/matrix-only change: this resolver performs
+        checkpoint 1 only — it discards the Scope check_permission returns and never passes
+        `resource=`, so checkpoint 2 can't run regardless of the grant — and `team` scope has
+        no meaning for WorkZone today, since it carries no team-ownership column to filter on
+        (design §4.3). A real mitigation needs a new predicate meaning "zones delegated to my
+        team" plus this resolver consuming the scope it is handed.
+        """
+        db = info.context["db"]
+        await check_permission(info, Perm.ZONE_VIEW)
+        total = await work_zone_repository.count_by_team(db, team_uuid=str(team_uuid))
+        items = await work_zone_repository.list_by_team(
+            db, team_uuid=str(team_uuid), skip=skip, limit=limit
+        )
+        return WorkZoneConnection(
+            items=[WorkZoneType.from_model(m) for m in items],
+            page_info=PageInfo(
+                total_count=total,
+                has_next_page=(skip + limit) < total,
+                has_previous_page=skip > 0,
+            ),
+        )

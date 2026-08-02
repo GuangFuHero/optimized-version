@@ -24,10 +24,12 @@ from app.graphql.tickets.types import (
     TaskPropertyType,
     TicketTaskType,
 )
+from app.graphql.work_zone.types import AssignedTeamType
 from app.models.photo import Photo
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import CrowdSourcing, StationProperty
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
+from app.repositories.team_repository import team_zone_assign_repository
 
 
 def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
@@ -68,6 +70,7 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
                 db, TaskAssignment, "task_uuid", TaskAssignmentType
             )
         ),
+        "teams_by_zone": DataLoader(load_fn=_make_teams_by_zone_loader(db)),
     }
 
 
@@ -128,5 +131,18 @@ def _make_photos_by_ticket_loader(db: AsyncSession):
         for row in rows:
             grouped[str(row.ref_uuid)].append(PhotoType.from_model(row))
         return [grouped[str(uuid)] for uuid in ticket_uuids]
+
+    return load_fn
+
+
+def _make_teams_by_zone_loader(db: AsyncSession):
+    """Batch-load the teams each work zone is delegated to (soft-deleted teams excluded)."""
+
+    async def load_fn(zone_uuids: list[str]) -> list[list[AssignedTeamType]]:
+        pairs = await team_zone_assign_repository.teams_by_zones(db, list(zone_uuids))
+        grouped: dict[str, list[AssignedTeamType]] = defaultdict(list)
+        for zone_uuid, team in pairs:
+            grouped[zone_uuid].append(AssignedTeamType.from_model(team))
+        return [grouped[str(uuid)] for uuid in zone_uuids]
 
     return load_fn

@@ -97,8 +97,13 @@
 | work_zone.add | — | — | — | all | all | — |
 | work_zone.edit | — | — | — | all | all | — |
 | work_zone.assign | — | — | — | all | all | — |
+| work_zone.delete | — | — | — | all | all | — |
 
-> ⚠️ ADR-049 的意圖是「畫/指派 zone 只有 gov 側能做」，但 gov/ngo admin 共用同一個 `admin` 角色，能力層分不出來，故 **ngo admin 技術上也拿得到**。目前採「先信任、不硬擋」（ADR-049 §303），未加 `team.type==gov` 硬牆。
+> ⚠️ ADR-049 的意圖是「畫/指派/刪除 zone 只有 gov 側能做」，但 gov/ngo admin 共用同一個 `admin`
+> 角色，能力層分不出來。ADR-063 之後改為**硬擋**：`app/services/work_zone.py` 的
+> `_require_gov_zone_authority` 要求 team-kind 持有者的 team 必須是 gov 型，否則 403。
+> ngo admin 在矩陣上仍持有這些 capability，但實際呼叫會被擋下 —— 這就是
+> `GOV_TEAM_ONLY_PERMS`（`app/core/permissions.py`）在 capability catalog 標記的意義。
 
 ### 動態欄位 Dynamic Field
 
@@ -108,6 +113,15 @@
 | dynamic_field.add | — | — | — | all | — | — |
 | dynamic_field.edit | — | — | — | all | — | — |
 | dynamic_field.delete | — | — | — | all | — | — |
+
+### 緊急公告 Announcement
+
+| capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
+|---|---|---|---|---|---|---|
+| announcement.view | all（公開） | — | — | all | — | — |
+| announcement.publish | — | — | — | all | — | — |
+| announcement.edit | — | — | — | all | — | — |
+| announcement.delete | — | — | — | all | — | — |
 
 ### 稽核 / RBAC 自管
 
@@ -130,8 +144,7 @@
 
 ### 「已定義、但目前無角色授予」的 capability（ahead-of-feature，ADR-050）
 下列 key 存在於目錄、但 seed 沒發給任何角色，等對應功能實作時才會接上 enforcement：
-`ticket.export`、`ai_duplicate.view`、`ai_duplicate.review`、`announcement.publish/edit/delete`、`pre_departure.view/publish/edit`。
-（`announcement.view` 屬公開白名單，故匿名可見，即使無角色 grant。）
+`ticket.export`、`ai_duplicate.view`、`ai_duplicate.review`、`pre_departure.view/publish/edit`。
 
 ### 相關 ADR
 ADR-018（union）、ADR-019（兩軸/一人一 team）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）。

@@ -880,6 +880,77 @@ async def create_station(self, info, input) -> StationType:
 
 ---
 
+#### ADR-066 zone 刪除、委派來源欄位與 target team 檢查
+> **狀態：ACCEPTED（2026-07-26）。** 本輪「補完 gov zone assign 後端」的設計決定；落在 `feat/gov-zone-assign-backend`。
+
+- **`work_zone.delete` 為獨立 capability**，不複用 `work_zone.edit`。刪 zone 會連帶讓所有靠它
+  取得 zone scope 的 team 失去可見性，破壞力遠大於改名或改邊界；獨立 capability 才能單獨收回
+  「可改但不可刪」。同步納入 `GOV_TEAM_ONLY_PERMS`，並在 `delete_work_zone` 呼叫
+  `_require_gov_zone_authority` —— 這兩處是手動 lockstep，改一處必改另一處。
+- **soft delete 不清 `team_zone_assign`**。`rbac_scopes.py` 的 in_scope 與 scope_filter 都已過濾
+  `WorkZone.delete_at IS NULL`，zone 一軟刪，其授予的 zone scope 立即失效；清 assign 列沒有收益。
+- **`team_zone_assign` 加 `created_at` / `assigned_by` 是 denormalization，不是 audit**。
+  該表早有 DB audit trigger（ADR 對應 migration `c219aac56556`），`audit_logs` 完整記錄 assign
+  與 unassign、操作者、IP，且 append-only。加欄位純粹是為了 API 顯示不必掃全站共用的
+  `audit_logs`。unassign 時欄位隨列硬刪消失是預期行為，歷史查 `audit_logs`。
+- **assign 要求 target team `status == "active"`，但這是 create-time 檢查**。zone scope 查詢
+  只看 `WorkZone.delete_at`，不看 `Team.status`/`Team.delete_at`，所以 team 事後轉為 inactive
+  不會使既有委派失效。改變這點會影響既有授權行為，屬 breaking change，需獨立評估。
+- **zone attribute 不走 `*_property_config` 動態機制**。該機制沒有驗證能力（`enum_options` /
+  `data_type` 從未被任何寫入路徑讀取），只是前端表單提示。zone 是授權邊界，未來若有 attribute
+  參與授權判斷，必須是有型別、有約束、可索引的真欄位。需要什麼就加欄位 + migration。
+- **陷阱記錄**：`in_scope` 的 ZONE 分支執行 `ST_Contains(assigned_zone.geometry, resource.geometry)`。
+  當 resource 本身是 WorkZone 時，任何多邊形都包含自己 —— 若把 zone capability 調成 `Scope.ZONE`，
+  被指派 zone X 的 team 就能對 zone X 動作。目前 seed 給 `Scope.ALL` 且有 gov guard，觸發不到。
+
+---
+
+#### ADR-067 `announcement.publish/edit/delete` 補接 super_admin；ahead-of-feature 分類過期
+> **狀態：ACCEPTED（2026-07-26）。** 落在 `feat/gov-zone-assign-backend`。
+
+**Context**：`announcement.*` 一開始就是 ADR-050 認定的「純超前定義」capability——目錄有 key，
+但沒有 enforcement 呼叫它，seed 也就沒發給任何角色（見 ADR-050 末段、`RBAC_RESOURCE_ROLE_MATRIX.md`
+「已定義、但目前無角色授予」清單）。之後 ADR-026 把舊的 Group/Policy 模型連同 3-arg
+`check_permission(info, "content", "create")` 一起拆掉，但 announcement 模組的 resolver 沒有跟著遷移，
+留著舊簽章的呼叫——等於從「尚未接上」變成「接了一個已經不存在的介面」，實際上仍是零 enforcement，只是
+故障模式從「沒檢查」換成「呼叫時炸掉」。本分支的 `0b46e03` 把這些呼叫改成
+`check_permission(info, Perm.ANN_PUBLISH)` 等現行 RBAC v1 簽章，enforcement 因而首次真正生效——連帶
+效果是 `createAnnouncement` 對包含 `super_admin` 在內的所有人回 `403`，因為沒有任何角色持有這些
+capability。
+
+**Decision**：announcement 現在符合本專案「capability 只有接上真的 enforcement 才會發角色」的既定
+規則（seed_rbac.py 檔頭），因此把 `announcement.publish/edit/delete` 連同 `announcement.view`
+（已在 `PUBLIC_PERMS`，但比照 `map.view`/`station.view`/`ticket.view` 的既有慣例仍顯式發給角色）
+一併加入 `super_admin` 的 `dict.fromkeys([...], "all")` 清單，`scope="all"`。刻意**只**發給
+`super_admin`，不比照其他內容型 capability 下放給 team admin：
+- **炸裂半徑**：站點/求助單的錯誤影響範圍是單筆資料；一則錯誤或惡意的全站公告會送達*所有*使用者，
+  是系統中影響面最大的內容類型，值得比照 `rbac.*`/`team.edit` 的收斂原則單獨收緊。
+- **矩陣可表達，不需要新守門邏輯**：`GOV_TEAM_ONLY_PERMS` 那類 team.type 條件式限制需要額外的服務層
+  guard（見 ADR-064）；`super_admin`-only 只是角色×capability 矩陣的一格，不必新開一種限制機制。
+- **runtime 可調寬，不是釘死**：矩陣現在是 runtime-managed（ADR-055/056），要放寬給其他角色是
+  `PUT /admin/rbac/roles/{uuid}/permissions/{cap}` 的一次呼叫，不必改 code 或重新 seed。從窄的起點
+  開始沒有沉沒成本。
+
+`pre_departure.*` 與 `ai_duplicate.*` **刻意不動**：兩者在 `app/core/permissions.py` 之外沒有任何
+enforcement 呼叫（僅目錄 key），不符合「先有 enforcement 才發 capability」的規則，維持 ahead-of-feature、
+留給對應功能實作時再接。
+
+**Consequences**：➕ `createAnnouncement`/`updateAnnouncement`/`deleteAnnouncement` 對 `super_admin`
+恢復可用；`announcements(filter: ALL)`（走 `ANN_EDIT`）比照開放。➕ `RBAC_RESOURCE_ROLE_MATRIX.md`「已定義、
+但目前無角色授予」清單收斂為僅剩 `ticket.export`/`ai_duplicate.*`/`pre_departure.*`，反映實情。
+➖ 一般使用者、team admin 目前完全不能發公告——若未來要下放（例如 gov team admin 可發區域性公告），
+是獨立的產品決策，不在本 ADR 範圍。
+
+**Blast Radius**：
+- `scripts/seed_rbac.py`：`super_admin` 的 permissions 清單加 `Perm.ANN_VIEW/ANN_PUBLISH/ANN_EDIT/
+  ANN_DELETE`；檔頭 docstring 的「尚未接上」清單同步更新。
+- `RBAC_RESOURCE_ROLE_MATRIX.md`：新增「緊急公告 Announcement」矩陣區塊；「已定義、但目前無角色授予」
+  清單移除 `announcement.publish/edit/delete`。
+- `Spec/Docs/rbac-permissions-design.md` §4.1：`super_admin` 列的模組枚舉加 `announcement`。
+- **零 schema / migration 影響**：純 `role_permission_assign` 資料列新增，沿用既有 `Permission` row。
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|

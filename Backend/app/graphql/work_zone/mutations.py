@@ -13,6 +13,7 @@ from app.graphql.work_zone.types import (
     CreateWorkZoneInput,
     UpdateWorkZoneInput,
     WorkZoneType,
+    ZoneAssignmentType,
     ZoneTeamAssignmentInput,
 )
 from app.services import work_zone as work_zone_service
@@ -57,16 +58,17 @@ class WorkZoneMutation:
     @strawberry.mutation
     async def assign_zone_to_team(
         self, info: strawberry.types.Info, input: ZoneTeamAssignmentInput
-    ) -> bool:
+    ) -> ZoneAssignmentType:
         """Assign a work zone to a team, establishing `zone` scope for it (ADR-021).
 
-        Requires work_zone.assign permission. Idempotent if already assigned. Returns True.
+        Requires work_zone.assign permission. Idempotent — re-assigning an existing link
+        returns that link unchanged, so `assignedBy` is the original assigner, not the caller.
         """
-        await work_zone_service.assign_zone_to_team(
+        assignment = await work_zone_service.assign_zone_to_team(
             info.context["db"], actor=require_authenticated(info),
             zone_uuid=str(input.zone_uuid), team_uuid=str(input.team_uuid),
         )
-        return True
+        return ZoneAssignmentType.from_model(assignment)
 
     @strawberry.mutation
     async def remove_zone_from_team(
@@ -79,5 +81,17 @@ class WorkZoneMutation:
         await work_zone_service.remove_zone_from_team(
             info.context["db"], actor=require_authenticated(info),
             zone_uuid=str(input.zone_uuid), team_uuid=str(input.team_uuid),
+        )
+        return True
+
+    @strawberry.mutation
+    async def delete_work_zone(self, info: strawberry.types.Info, uuid: UUID) -> bool:
+        """Soft-delete a work zone. Requires work_zone.delete permission.
+
+        Returns True. Matches deleteStation/deleteClosureArea, which also return a bare
+        boolean — there is no post-delete resource left to select fields from.
+        """
+        await work_zone_service.delete_work_zone(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid),
         )
         return True

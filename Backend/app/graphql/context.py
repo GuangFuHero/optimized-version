@@ -27,6 +27,16 @@ async def get_context(request: Request):
     db_gen = get_db()
     db = await anext(db_gen)
     try:
+        # graphql-core resolves sibling root fields concurrently, and they all share this
+        # one AsyncSession. The session must have already acquired its connection before
+        # any resolver runs, or two sibling resolvers race to provision it and SQLAlchemy
+        # raises "This session is provisioning a new connection; concurrent operations are
+        # not permitted" on the second one. Below, the auth lookup incidentally warms the
+        # connection for authenticated callers (it issues a query), but anonymous callers
+        # skip that path entirely — so without this explicit warm-up, any anonymous query
+        # selecting 2+ root fields fails. Do this unconditionally so both paths are
+        # equally warmed and this doesn't silently regress if the auth lookup ever changes.
+        await db.connection()
         auth = request.headers.get("Authorization", "")
         token = auth[7:] if auth.startswith("Bearer ") else ""
         user = None

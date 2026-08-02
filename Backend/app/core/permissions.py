@@ -64,6 +64,7 @@ class Perm(StrEnum):
     ZONE_ADD = "work_zone.add"
     ZONE_EDIT = "work_zone.edit"
     ZONE_ASSIGN = "work_zone.assign"
+    ZONE_DELETE = "work_zone.delete"
 
     # Dynamic Fields (station/task property config)
     FIELD_VIEW = "dynamic_field.view"
@@ -105,4 +106,6 @@ PUBLIC_PERMS = frozenset({Perm.MAP_VIEW, Perm.ANN_VIEW, Perm.STATION_VIEW, Perm.
 # (super_admin, no team) is unaffected. Surfaced in the capability catalog so the read/matrix
 # display matches what is actually enforced (the role×capability matrix alone can't express a
 # team.type condition). Keep this in lockstep with the `_require_gov_zone_authority` call sites.
-GOV_TEAM_ONLY_PERMS = frozenset({Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN})
+GOV_TEAM_ONLY_PERMS = frozenset(
+    {Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN, Perm.ZONE_DELETE}
+)

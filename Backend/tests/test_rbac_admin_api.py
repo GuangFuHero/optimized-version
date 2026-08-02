@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from app.core.permissions import Perm
+from app.core.permissions import GOV_TEAM_ONLY_PERMS, Perm
 from app.core.security import create_access_token
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserPermissionAssign, UserRoleAssign
@@ -70,9 +70,13 @@ async def test_capabilities_lists_catalog_for_super_admin(client, db_session):
 
 @pytest.mark.asyncio
 async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_session):
-    """ZONE_* caps are marked team_gov_only so the catalog matches the gov gate.
+    """ZONE_* caps are marked team_gov_only so the catalog matches the gov gate, both ways.
 
     ADR-064: work_zone.py's `_require_gov_zone_authority` gates these; non-zone caps stay False.
+    The per-key assertions below document intent readably. The exhaustiveness assertion at the
+    end is the drift net: it fails if a future capability is added to `_require_gov_zone_authority`
+    without being added to `GOV_TEAM_ONLY_PERMS` (or vice versa), since those two are manually
+    synchronised sources of truth.
     """
     admin_uuid = await _make_rbac_admin(db_session)
     resp = await client.get(
@@ -81,11 +85,14 @@ async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_sess
     assert resp.status_code == 200, resp.json()
     by_key = {c["key"]: c for c in resp.json()["capabilities"]}
 
-    for cap in ("work_zone.add", "work_zone.edit", "work_zone.assign"):
+    for cap in ("work_zone.add", "work_zone.edit", "work_zone.assign", "work_zone.delete"):
         assert by_key[cap]["team_gov_only"] is True, cap
     # work_zone.view is not gated by _require_gov_zone_authority, so it stays False.
     assert by_key["work_zone.view"]["team_gov_only"] is False
     assert by_key["ticket.assign"]["team_gov_only"] is False
+
+    flagged = {key for key, cap in by_key.items() if cap["team_gov_only"] is True}
+    assert flagged == {p.value for p in GOV_TEAM_ONLY_PERMS}
 
 
 @pytest.mark.asyncio

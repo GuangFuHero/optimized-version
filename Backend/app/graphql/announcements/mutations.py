@@ -4,6 +4,7 @@ from uuid import UUID
 
 import strawberry
 
+from app.core.permissions import Perm
 from app.graphql.announcements.types import (
     AnnouncementMoveDirection,
     AnnouncementType,
@@ -24,9 +25,9 @@ class AnnouncementMutation:
     ) -> AnnouncementType:
         """Create an active announcement appended at the bottom of the list.
 
-        Requires content:create. Returns the created AnnouncementType.
+        Requires announcement.publish. Returns the created AnnouncementType.
         """
-        await check_permission(info, "content", "create")
+        await check_permission(info, Perm.ANN_PUBLISH)
         a = await announcement_repository.create_at_end(
             info.context["db"],
             content=input.content,
@@ -38,8 +39,8 @@ class AnnouncementMutation:
     async def update_announcement(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateAnnouncementInput
     ) -> AnnouncementType:
-        """Edit an announcement's content. Requires content:edit."""
-        await check_permission(info, "content", "edit")
+        """Edit an announcement's content. Requires announcement.edit."""
+        await check_permission(info, Perm.ANN_EDIT)
         db = info.context["db"]
         a = await announcement_repository.get_by_uuid_active(db, uuid)
         if not a:
@@ -51,8 +52,8 @@ class AnnouncementMutation:
     async def move_announcement(
         self, info: strawberry.types.Info, uuid: UUID, direction: AnnouncementMoveDirection
     ) -> AnnouncementType:
-        """Move an active announcement up or down one position. Requires content:edit."""
-        await check_permission(info, "content", "edit")
+        """Move an active announcement up or down one position. Requires announcement.edit."""
+        await check_permission(info, Perm.ANN_EDIT)
         a = await announcement_repository.move(
             info.context["db"], uuid=uuid, up=(direction is AnnouncementMoveDirection.UP)
         )
@@ -66,9 +67,9 @@ class AnnouncementMutation:
     ) -> AnnouncementType:
         """Activate (append at end) or deactivate (remove from order) an announcement.
 
-        Requires content:edit. Returns the updated AnnouncementType.
+        Requires announcement.edit. Returns the updated AnnouncementType.
         """
-        await check_permission(info, "content", "edit")
+        await check_permission(info, Perm.ANN_EDIT)
         a = await announcement_repository.set_active(info.context["db"], uuid=uuid, active=active)
         if a is None:
             raise ValueError("Announcement not found")
@@ -76,8 +77,8 @@ class AnnouncementMutation:
 
     @strawberry.mutation
     async def delete_announcement(self, info: strawberry.types.Info, uuid: UUID) -> bool:
-        """Soft-delete an announcement and close the order gap. Requires content:delete."""
-        await check_permission(info, "content", "delete")
+        """Soft-delete an announcement and close the order gap. Requires announcement.delete."""
+        await check_permission(info, Perm.ANN_DELETE)
         ok = await announcement_repository.soft_delete_announcement(info.context["db"], uuid=uuid)
         if not ok:
             raise ValueError("Announcement not found")

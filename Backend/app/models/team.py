@@ -1,7 +1,9 @@
 """SQLAlchemy models for teams and work zones (RBAC v1, Spec/008-rbac-authorization/decisions.md §2B)."""
 
+from datetime import datetime
+
 from geoalchemy2 import Geometry
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -33,9 +35,20 @@ class WorkZone(Base, UUIDPKMixin, TimestampMixin):
 
 
 class TeamZoneAssign(Base, UUIDPKMixin):
-    """Junction table: a gov assigns a WorkZone to a Team for `zone` scope."""
+    """Junction table: a gov assigns a WorkZone to a Team for `zone` scope.
+
+    `created_at` / `assigned_by` are denormalised from audit_logs so the API can show who
+    assigned a zone without scanning the shared audit table. audit_logs stays the source of
+    truth for history — these columns vanish with the row on unassign, by design.
+    """
 
     __tablename__ = "team_zone_assign"
     __table_args__ = (UniqueConstraint("team_uuid", "zone_uuid", name="uq_team_zone"),)
     team_uuid: Mapped[str] = mapped_column(ForeignKey("teams.uuid"), index=True)
     zone_uuid: Mapped[str] = mapped_column(ForeignKey("work_zones.uuid"), index=True)
+    # server_default is required, not optional: tests build the schema with
+    # Base.metadata.create_all (tests/test_graphql/conftest.py), never through alembic.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    assigned_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))

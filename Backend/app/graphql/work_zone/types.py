@@ -10,6 +10,25 @@ from app.graphql.shared import PageInfo
 
 
 @strawberry.type
+class AssignedTeamType:
+    """A team a work zone has been delegated to.
+
+    Deliberately minimal: teams are managed over REST (/admin/teams) and this schema has no
+    Team type. Building a full one here would split team reads and writes across two API
+    styles; these three fields are all the delegation view needs.
+    """
+
+    uuid: UUID
+    name: str
+    type: str
+
+    @classmethod
+    def from_model(cls, m) -> "AssignedTeamType":
+        """Build from a Team model instance."""
+        return cls(uuid=m.uuid, name=m.name, type=m.type)
+
+
+@strawberry.type
 class WorkZoneType:
     """GraphQL type representing a Work Zone."""
 
@@ -23,6 +42,15 @@ class WorkZoneType:
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    @strawberry.field(description="Teams this zone has been delegated to")
+    async def assigned_teams(self, info: strawberry.types.Info) -> list[AssignedTeamType]:
+        """Resolve the zone's delegated teams via the per-request DataLoader.
+
+        Visible to any holder of work_zone.view. No extra team.view gate: work_zone.view is
+        already non-public (ADR-036) and a team's name and type are not PII (design §4.3).
+        """
+        return await info.context["loaders"]["teams_by_zone"].load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "WorkZoneType":
@@ -39,6 +67,31 @@ class WorkZoneConnection:
 
     items: list[WorkZoneType]
     page_info: PageInfo
+
+
+@strawberry.type
+class ZoneAssignmentType:
+    """A team <-> work zone delegation, with who created it and when.
+
+    `assigned_by` is the user uuid as a scalar rather than a nested user object: GraphQL has
+    no User type in this schema, and adding one would widen this change considerably. Mirrors
+    WorkZoneType.created_by.
+    """
+
+    zone_uuid: UUID
+    team_uuid: UUID
+    assigned_at: datetime | None = None
+    assigned_by: str | None = None
+
+    @classmethod
+    def from_model(cls, m) -> "ZoneAssignmentType":
+        """Build from a TeamZoneAssign model instance."""
+        return cls(
+            zone_uuid=m.zone_uuid,
+            team_uuid=m.team_uuid,
+            assigned_at=m.created_at,
+            assigned_by=str(m.assigned_by) if m.assigned_by else None,
+        )
 
 
 @strawberry.input

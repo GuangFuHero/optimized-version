@@ -164,7 +164,11 @@ async def test_in_scope_zone_matches_point_inside_assigned_zone(db):
     zone = WorkZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
     db.add(zone)
     await db.flush()
-    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid))
+    db.add(
+        TeamZoneAssign(
+            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(actor.uuid)
+        )
+    )
     await db.flush()
 
     resource = Station(geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(actor.uuid))
@@ -185,7 +189,11 @@ async def test_in_scope_zone_rejects_point_outside_assigned_zone(db):
     zone = WorkZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
     db.add(zone)
     await db.flush()
-    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid))
+    db.add(
+        TeamZoneAssign(
+            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(actor.uuid)
+        )
+    )
     await db.flush()
 
     resource = Station(geometry=from_shape(Point(130.0, 30.0), srid=4326), created_by=str(actor.uuid))
@@ -300,7 +308,11 @@ async def test_scope_filter_zone_matches_rows_inside_assigned_zone_only(db):
     zone = WorkZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
     db.add(zone)
     await db.flush()
-    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid))
+    db.add(
+        TeamZoneAssign(
+            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(actor.uuid)
+        )
+    )
     await db.flush()
 
     inside = Station(geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(actor.uuid))

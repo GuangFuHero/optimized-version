@@ -452,3 +452,54 @@ async def test_ticket_tasks_query(client, coordinator_auth, sample_ticket, sampl
     assert len(tasks) >= 1
     assert tasks[0]["taskType"] == "hr"
     assert tasks[0]["properties"] == []
+
+
+# ──────────────────────────────────────────────
+# Anonymous multi-root-field regression test (get_context concurrency, see
+# app/graphql/context.py)
+# ──────────────────────────────────────────────
+
+ANON_MULTI_ROOT_QUERY = """
+    query {
+        stations { items { uuid } pageInfo { totalCount } }
+        closureAreas { items { uuid } pageInfo { totalCount } }
+        tickets { items { uuid } pageInfo { totalCount } }
+        announcements { uuid }
+    }
+"""
+
+
+@pytest.mark.asyncio
+async def test_anonymous_multi_root_field_query_succeeds(
+    client, sample_station, sample_closure_area, sample_ticket
+):
+    """An anonymous request selecting several root fields must not race on the DB session.
+
+    graphql-core resolves sibling root query fields concurrently, and every resolver in a
+    single request shares one AsyncSession (app/graphql/context.py:get_context). An
+    authenticated request incidentally warms that session's connection via the auth lookup
+    before any resolver runs; an anonymous request skips that lookup entirely. Without
+    `await db.connection()` in get_context, two sibling resolvers below would race to
+    provision the connection and SQLAlchemy would raise "This session is provisioning a
+    new connection; concurrent operations are not permitted" on whichever loses the race.
+
+    No Authorization header is sent — anonymity is the point of the test. Every field here
+    (station.view, map.view, ticket.view, announcement.view) is in PUBLIC_PERMS, so it's
+    genuinely reachable without auth. Row counts aren't asserted — the shared GraphQL test
+    DB accumulates rows across tests, so a non-zero count would be incidental, not a real
+    check. The load-bearing assertion is "errors" not in data: every one of the four
+    resolvers ran to completion without the concurrency error.
+    """
+    response = await client.post("/graphql", json={"query": ANON_MULTI_ROOT_QUERY})
+    assert response.status_code == 200
+    data = response.json()
+    assert "errors" not in data
+
+    body = data["data"]
+    assert isinstance(body["stations"]["items"], list)
+    assert isinstance(body["stations"]["pageInfo"]["totalCount"], int)
+    assert isinstance(body["closureAreas"]["items"], list)
+    assert isinstance(body["closureAreas"]["pageInfo"]["totalCount"], int)
+    assert isinstance(body["tickets"]["items"], list)
+    assert isinstance(body["tickets"]["pageInfo"]["totalCount"], int)
+    assert isinstance(body["announcements"], list)

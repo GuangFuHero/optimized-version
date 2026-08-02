@@ -60,7 +60,7 @@ async def update_work_zone(
     db: AsyncSession, *, actor: User, uuid: str, geometry: dict | None = None, changes: dict
 ) -> WorkZone:
     """Update a work zone's name or boundary (checkpoint 1 work_zone.edit, then checkpoint 2)."""
-    zone = await work_zone_repository.get_by_uuid(db, uuid)
+    zone = await work_zone_repository.get_by_uuid_active(db, uuid)
     if not zone:
         raise ValueError("Work zone not found")
     await require_scope(actor, Perm.ZONE_EDIT, db, resource=zone)
@@ -73,20 +73,53 @@ async def update_work_zone(
     return await work_zone_repository.update(db, db_obj=zone, obj_in=obj_in)
 
 
+async def delete_work_zone(db: AsyncSession, *, actor: User, uuid: str) -> None:
+    """Soft-delete a work zone (checkpoint 1 work_zone.delete, then checkpoint 2).
+
+    Assignment rows in team_zone_assign are deliberately left in place: rbac_scopes.py
+    already filters `WorkZone.delete_at IS NULL` on both the in_scope and scope_filter
+    paths, so the zone scope those rows grant lapses the moment the zone is soft-deleted.
+    Clearing them would buy nothing and add a failure point.
+
+    Beware when handing this capability out at Scope.ZONE: in_scope's ZONE branch tests
+    `ST_Contains(assigned_zone.geometry, resource.geometry)`, and every polygon contains
+    itself — so a team assigned zone X would be able to delete zone X. The seed grants
+    Scope.ALL and `_require_gov_zone_authority` fences non-gov teams out, so this is not
+    reachable today (design §3.7).
+    """
+    zone = await work_zone_repository.get_by_uuid_active(db, uuid)
+    if not zone:
+        raise ValueError("Work zone not found")
+    await require_scope(actor, Perm.ZONE_DELETE, db, resource=zone)
+    await _require_gov_zone_authority(db, actor)
+
+    await work_zone_repository.soft_delete(db, db_obj=zone)
+
+
 async def assign_zone_to_team(
     db: AsyncSession, *, actor: User, zone_uuid: str, team_uuid: str
 ) -> TeamZoneAssign:
     """Assign a work zone to a team, establishing `zone` scope for it (checkpoint 1 only).
 
-    Idempotent — returns the existing assignment if the pair is already linked.
+    Idempotent — returns the existing assignment if the pair is already linked. Note that the
+    returned row's `assigned_by` is then the *original* assigner, not the caller: re-assigning
+    an existing link creates nothing and therefore records nobody new.
+
+    The target team must be active. This is a create-time check only: a team that goes
+    inactive later keeps the zone scope its existing assignments grant, because
+    `rbac_scopes.py` filters on WorkZone.delete_at alone (design §3.6).
     """
     await require_scope(actor, Perm.ZONE_ASSIGN, db)
     await _require_gov_zone_authority(db, actor)
 
-    if not await work_zone_repository.get_by_uuid(db, zone_uuid):
+    if not await work_zone_repository.get_by_uuid_active(db, zone_uuid):
         raise ValueError("Work zone not found")
-    if not await db.scalar(select(Team).where(Team.uuid == team_uuid, Team.delete_at.is_(None))):
+
+    team = await db.scalar(select(Team).where(Team.uuid == team_uuid, Team.delete_at.is_(None)))
+    if team is None:
         raise ValueError("Team not found")
+    if team.status != "active":
+        raise ValueError("Team is not active")
 
     existing = await team_zone_assign_repository.get_assignment(
         db, team_uuid=team_uuid, zone_uuid=zone_uuid
@@ -96,7 +129,12 @@ async def assign_zone_to_team(
 
     try:
         return await team_zone_assign_repository.create(
-            db, obj_in={"team_uuid": team_uuid, "zone_uuid": zone_uuid}
+            db,
+            obj_in={
+                "team_uuid": team_uuid,
+                "zone_uuid": zone_uuid,
+                "assigned_by": str(actor.uuid),
+            },
         )
     except IntegrityError as exc:
         # Concurrent assign lost the race to uq_team_zone (PR #24 [10]) — stay idempotent by

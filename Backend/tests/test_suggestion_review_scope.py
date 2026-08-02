@@ -62,7 +62,11 @@ async def _zone_reviewer_with_property_suggestion(db, station_point: Point):
     zone = WorkZone(name="Z", geometry=from_shape(_ZONE_POLY, srid=4326))
     db.add(zone)
     await db.flush()
-    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid))
+    db.add(
+        TeamZoneAssign(
+            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(reviewer.uuid)
+        )
+    )
     await _grant(db, reviewer, Perm.STATION_REVIEW, "zone", "role-review")
 
     station = Station(geometry=from_shape(station_point, srid=4326), created_by=str(author.uuid))

@@ -7,6 +7,7 @@ TeamZoneAssign instead of a hand-rolled resource in a unit test.
 """
 
 import uuid as uuid_mod
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -72,10 +73,16 @@ async def team_assigned_to_zone() -> str:
     async with test_db() as db:
         team = Team(name=f"Zone Team {uuid_mod.uuid4().hex[:8]}", type="ngo")
         db.add(team)
+        assigner = User(name=f"assigner_{uuid_mod.uuid4().hex[:8]}")
+        db.add(assigner)
         zone = WorkZone(name="Test Zone", geometry=from_shape(ZONE_POLYGON, srid=4326))
         db.add(zone)
         await db.flush()
-        db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid))
+        db.add(
+            TeamZoneAssign(
+                team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)
+            )
+        )
         await db.flush()
         return str(team.uuid)
 
@@ -207,6 +214,50 @@ async def test_zone_scope_404s_task_under_ticket_outside_zone(client, team_assig
     body = resp.json()
     errors = body.get("errors", [])
     assert any("Not Found." in e["message"] for e in errors), body
+
+
+@pytest.mark.asyncio
+async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, team_assigned_to_zone):
+    """Soft-deleting a work zone immediately lapses the zone scope it granted.
+
+    rbac_scopes.py filters `WorkZone.delete_at IS NULL` on both the in_scope and scope_filter
+    paths, so no cache invalidation or assignment cleanup is needed — but that has to stay
+    true, hence this test. A lapsed zone scope surfaces as 404, not 403 (ADR-023).
+    """
+    _, editor_token = await _make_zone_scoped_editor(team_assigned_to_zone)
+    ticket_uuid = await _make_ticket_at(INSIDE_ZONE_POINT)
+
+    # Baseline: while the zone is live, the zone-scoped grant reaches the ticket.
+    before = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TICKET,
+            "variables": {"uuid": ticket_uuid, "input": {"status": "in_progress"}},
+        },
+        headers=auth_header(editor_token),
+    )
+    assert "errors" not in before.json(), before.json()
+
+    async with test_db() as db:
+        zone = (
+            await db.execute(
+                select(WorkZone)
+                .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == WorkZone.uuid)
+                .where(TeamZoneAssign.team_uuid == team_assigned_to_zone)
+            )
+        ).scalars().first()
+        assert zone is not None
+        zone.delete_at = datetime.now(UTC)
+
+    after = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_TICKET,
+            "variables": {"uuid": ticket_uuid, "input": {"status": "completed"}},
+        },
+        headers=auth_header(editor_token),
+    )
+    assert any("Not Found." in e["message"] for e in after.json().get("errors", [])), after.json()
 
 
 @pytest.mark.asyncio
