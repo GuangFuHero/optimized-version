@@ -11,10 +11,10 @@ Product areas are stable, long-lived capabilities. Their semantic paths do not c
 | Member Management | [`member-management/`](./member-management/README.md) | `v0.1.0` |
 | Map Decision Support | [`map-decision-support/`](./map-decision-support/README.md) | `v0.2.0` |
 | Resource Stations | [`resource-stations/`](./resource-stations/README.md) | `v0.1.0` |
-| Task Management | `task-management/` | `v0.1.0`; guest privacy targets `v0.2.0` |
+| Task Management | [`task-management/`](./task-management/README.md) | `v0.1.0`; guest privacy targets `v0.2.0` |
 | Emergency Announcements | [`emergency-announcements/`](./emergency-announcements/README.md) | `v0.2.0` |
 
-Links are added when each area has a real `README.md`; do not create empty area placeholders.
+Every link above points to a real product-area entry; do not create empty area placeholders.
 
 ## Historical name mapping
 

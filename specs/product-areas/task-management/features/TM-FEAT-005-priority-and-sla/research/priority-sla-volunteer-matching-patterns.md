@@ -6,7 +6,7 @@
 > 3. **USAR 直立救援 15 欄位是否過多**（v2.0 自己提的開放問題）——拆「必填核心 vs 可選」。
 > 並回填 20m 半徑、立刻救援 vs 直立救援組合、跨建築錨點等開放問題。
 > **日期**：2026-06-10
-> **關聯**：[`prd.md`](../prd.md)（08-ticket-management）、[[06-map-decision-support]]、[[05-member-management]]
+> **關聯**：[Task Management PRD](../../../prd.md)、[Map Decision Support](../../../../map-decision-support/README.md)、[Member Management](../../../../member-management/README.md)
 > **狀態**：研究參考，供決策用（回填至 08 開放問題）
 
 ---
@@ -41,7 +41,7 @@ v2.0 F5.2 統計「真實人數 / 需求量」缺口，但沒回答「**怎麼�
 > - **承接上限 / 重複承接防呆**：同一志工同時段承接數上限；已滿額任務標「已足」。
 > - 模型 C（技能媒合）需志工技能檔案，列 v2。
 >
-> 🟡 **待確認**：志工是「前台一般使用者」還是需登錄的 Team Member？這牽涉 [[05-member-management]] 的身份模型——「承接任務」的人到底是誰、要不要先入 Team，需釐清（列開放問題）。
+> 🟡 **歷史提案**：志工身份曾被提出需與 [Member Management](../../../../member-management/README.md) 對齊；現行未決事項只以 [`TM-FEAT-002`](../../TM-FEAT-002-task-assignment/feature.md) 為準。
 
 ---
 
@@ -61,7 +61,7 @@ v2.0 vertical_rescue 群組有 ~15 欄。現場（尤其初報）一次填 15 �
 > **可選 / 救援展開後補**
 > - `victims_confirmed_alive`、`victims_by_floor`、`communication_status`、`estimated_trapped_hours`、`required_equipment`、`usar_level`、`estimated_operation_hours`、`requires_field_commander`、`collapse_level`
 >
-> 這樣初報快、不漏關鍵；細節欄位在 Building Anchor 抽屜由現場指揮逐步補齊。對齊 [[06-map-decision-support]] 的漸進式資訊蒐集精神。
+> 這樣初報快、不漏關鍵；細節欄位在 Building Anchor 抽屜由現場指揮逐步補齊。對齊 [Map Decision Support](../../../../map-decision-support/README.md) 的漸進式資訊蒐集精神。
 
 ---
 
@@ -76,7 +76,9 @@ v2.0 vertical_rescue 群組有 ~15 欄。現場（尤其初報）一次填 15 �
 
 ---
 
-## 5. 待決問題（回填至 08 開放問題）
+## 5. 歷史提案路由（非現行規格）
+
+以下核取方塊是原研究留下的提案，未經驗證且不代表批准。現行問題已分流至各 Feature 的 `feature.md`。
 
 - [ ] 優先級是否從二元擴為 4 級 + 各級 SLA + 生命危急逾時升級警示？
 - [ ] 志工媒合 v1 採自我承接 + 缺口導向排序 + 承接上限防扎堆？技能媒合列 v2？
@@ -96,4 +98,4 @@ v2.0 vertical_rescue 群組有 ~15 欄。現場（尤其初報）一次填 15 �
 - START / SALT triage — 大量傷患檢傷分類
 - Crisis Cleanup — work order claim / 志工承接模型
 - ArcGIS Workforce — dispatch/assignment 模型
-- 與本 repo 既有：[[05-member-management]]、[[06-map-decision-support]]
+- 與本 repo 既有：[Member Management](../../../../member-management/README.md)、[Map Decision Support](../../../../map-decision-support/README.md)

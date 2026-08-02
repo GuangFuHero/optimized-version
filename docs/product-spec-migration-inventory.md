@@ -6,16 +6,16 @@
 
 This inventory is the migration ledger for the product-spec governance restructure. It records where every legacy product area and engineering artifact will go. A move is not complete until the target exists, links are repaired, and `scripts/verify-specs.ps1` passes or reports only an explicitly registered migration blocker.
 
-## Protected working-tree change
+## Protected working-tree change — consumed and verified
 
 The following pre-existing change belongs to the user and must be preserved as one logical move:
 
 | Git state | Path | Protection |
 |---|---|---|
-| deleted | `specs/v1.0.0/08-ticket-management/wireframe/flow.md` | Do not restore independently. |
-| untracked | `specs/v1.0.0/08-ticket-management/flow.md` | Canonical source for the future `TM-FEAT-001-custom-fields/flow.md`. SHA-256: `F38DD0DFD1CD2ECA0EB596575ADEB986D6FA99A8E46B1C75A3EF59C50C05B895`. |
+| deleted | `specs/v1.0.0/08-ticket-management/wireframe/flow.md` | Consumed as the source-side deletion; it was not restored independently. |
+| moved and rewritten | `specs/product-areas/task-management/features/TM-FEAT-001-custom-fields/flow.md` | Hash before rewrite matched the protected source: `F38DD0DFD1CD2ECA0EB596575ADEB986D6FA99A8E46B1C75A3EF59C50C05B895`. Pure-sequence result hash: `5C615FAC8BAEF54AAED75CE0637741511D70A56BEF400A778338BCA0FB70A542`. |
 
-Before moving this file, re-check its hash. After moving it, verify the target has the same hash before editing its contents.
+The source hash was re-checked before moving, and the target matched before the approved pure-sequence rewrite.
 
 ## Product-area and Feature mapping
 
@@ -32,7 +32,7 @@ Numeric prefixes are migration-only identifiers. Stable product-area paths use s
 | `v1.0.0/07-resource-station/` | `resource-stations/` | `RS-FEAT-001-resource-stations` | `v0.1.0` | Normalize the plural product-area name; preserve product evidence and applicable implementation contracts. |
 | `v1.0.0/08-ticket-management/` | `task-management/` | `TM-FEAT-001` through `TM-FEAT-006` | `v0.1.0` except guest privacy | Split the monolith by independently definable and releasable product changes; see the detailed routing below. |
 | `v1.0.0/09-emergency-announcement/` | `emergency-announcements/` | `EA-FEAT-001-emergency-announcements` | `v0.2.0` | Normalize the plural product-area name and move product evidence into its Feature. |
-| `v1.0.0/10-guest-ticket-privacy/` | `task-management/` | `TM-FEAT-003-guest-task-privacy` | `v0.2.0` | Merge into Task Management because it changes task visibility, not an independent product capability. |
+| `v1.0.0/10-guest-ticket-privacy/` | `task-management/` | `TM-FEAT-003-guest-ticket-privacy` | `v0.2.0` | Merge into Task Management because it changes task visibility, not an independent product capability. |
 
 ### Task Management detailed routing
 
@@ -40,10 +40,10 @@ Numeric prefixes are migration-only identifiers. Stable product-area paths use s
 |---|---|---|
 | `TM-FEAT-001-custom-fields` | `v0.1.0` | Custom-field behavior, approved decisions D10-D16, wireframes, and the protected Flow. Open decisions remain only in `feature.md`; Flow contains sequence and Spec-rule references only. |
 | `TM-FEAT-002-task-assignment` | `v0.1.0` | Self-claim versus coordinator assignment and acceptance. Remains Draft until the Owner resolves the assignment model. |
-| `TM-FEAT-003-guest-task-privacy` | `v0.2.0` | Entire legacy `10-guest-ticket-privacy` scope plus any matching visibility requirement formerly embedded in 08. |
-| `TM-FEAT-004-task-intake` | `v0.1.0` | Task/request creation and intake behavior from the 08 PRD and user stories. |
+| `TM-FEAT-003-guest-ticket-privacy` | `v0.2.0` | Entire legacy `10-guest-ticket-privacy` scope plus any matching visibility requirement formerly embedded in 08. |
+| `TM-FEAT-004-intake-and-tracking` | `v0.1.0` | Task/request creation, intake source, and tracking behavior from the 08 PRD and user stories. |
 | `TM-FEAT-005-priority-and-sla` | `v0.1.0` | Priority and SLA behavior. Unresolved policy remains a blocking Open decision, not a Flow annotation. |
-| `TM-FEAT-006-deduplication-and-building-groups` | `v0.1.0` | Duplicate handling and building/group semantics. Unresolved product rules remain blocking Open decisions. |
+| `TM-FEAT-006-dedup-and-building-groups` | `v0.1.0` | Duplicate handling and building/group semantics. Unresolved product rules remain blocking Open decisions. |
 
 ## Engineering artifact disposition
 
