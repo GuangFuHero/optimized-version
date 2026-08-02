@@ -18,4 +18,8 @@ ASCII 圖可直接在編輯器與 GitHub 上讀、可 diff、不需要工具；`
 
 ASCII 圖**只表達結構與資訊層級**，不表達視覺樣式。
 
+## 已知落差
+
+畫面上只畫了救援／人力／物資三種需求種類，實際有**四種**——還有一個**醫療**。醫療目前沒有任何設定欄位，依 `TM-CF-119` 這是合法狀態，表單照常運作，只是不顯示自訂欄位區塊。要重畫這些圖時請補上第四個頁籤。
+
 `custom-fields.html` 的視覺沿用 claude.ai Design 的 `Wan Guard Design System`（`ui_kits/console` 的 shell 結構與 `tokens/semantic.css` 的色票），但它仍是**線框圖不是設計稿**——用既有 token 是為了讓討論聚焦在流程而非配色，最終的元件樣式與細節仍以 Design System 專案為準。

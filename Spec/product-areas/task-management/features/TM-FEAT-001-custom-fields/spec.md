@@ -15,7 +15,7 @@
 - **Precondition:** Task fields are being configured.
 - **Trigger:** A field is added or a predefined group is applied.
 - **Observable result:** Every field is associated with at least one system-defined Task category.
-- **Constraint/fallback:** A Super Admin cannot create a new Task category through field configuration.
+- **Constraint/fallback:** A Super Admin cannot create a new Task category through field configuration. The reverse does not hold: a category need not have any field, per TM-CF-119.
 
 ### TM-CF-102: Additive disaster groups
 
@@ -153,6 +153,14 @@
 - **Observable result:** Required fields appear above optional fields under a visible separator, the optional section is not collapsed, and a field added since the member last filled this form is marked as new until they first fill it.
 - **Constraint/fallback:** Ordering within each section follows the configured order.
 
+### TM-CF-119: Category without configured fields
+
+- **Actor/system:** Task form and configuration.
+- **Precondition:** A system-defined Task category has no configured fields, either because none was ever added or because all were deactivated.
+- **Trigger:** An operational member opens a Task of that category, or a Super Admin opens its configuration.
+- **Observable result:** The form presents the built-in Task information with no configurable-field section, and the category stays selectable at intake and open for configuration.
+- **Constraint/fallback:** A category is never hidden, disabled, or refused for holding no configured fields. Whether a category ships with a starting set of fields is product content, not a behavior rule.
+
 ## Traceability
 
 | Acceptance criterion | Spec rules |
@@ -173,3 +181,4 @@
 | AC-14 | TM-CF-107 |
 | AC-15 | TM-CF-108, TM-CF-117 |
 | AC-16 | TM-CF-118 |
+| AC-17 | TM-CF-119 |

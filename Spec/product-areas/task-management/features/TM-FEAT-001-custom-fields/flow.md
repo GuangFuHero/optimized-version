@@ -29,6 +29,12 @@ This file describes sequence only. Product behavior is defined by [`spec.md`](./
 2. The Super Admin sets required state for that category. (`TM-CF-110`)
 3. Both categories' forms show the field as one identity, each under its own required state. (`TM-CF-110`)
 
+## Open a category that has no fields
+
+1. An operational member selects a Task category that has no configured fields. (`TM-CF-119`)
+2. The form presents the built-in Task information with no configurable-field section. (`TM-CF-119`)
+3. A Super Admin later adds a field to that category, and it appears on the next form. (`TM-CF-103`)
+
 ## Use configured fields
 
 1. An operational member opens a Task form. (`TM-CF-105`)

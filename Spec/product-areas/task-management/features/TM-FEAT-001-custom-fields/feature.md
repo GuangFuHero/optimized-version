@@ -31,12 +31,14 @@ Approved behavior is limited to the rules in [`spec.md`](./spec.md). Two princip
 
 - Applying predefined disaster field groups, selecting library fields, creating incident-local fields, attaching one field to several task categories, required/optional state, list-choice changes, type correction, deactivation and reactivation, and historical-value visibility.
 - Reading the field configuration, and how a Task form presents required and optional fields.
+- Behavior of a Task category that has no configured fields. The system-defined categories are rescue, supply, medical, and hr; medical currently has none.
 
 ### Out of scope
 
 - Creating task categories, conditional-required rules, cross-incident library promotion workflow, and public guest disclosure.
 - Which role may close a Task. This Feature defines that closure is the enforcement point; TM-FEAT-002 defines who performs it.
 - Merging two fields that turn out to mean the same thing.
+- Which fields a category should start with. That is product content chosen per incident, not behavior. Deciding whether medical ships with a starting set is an Owner content task, not a blocker for this Feature.
 
 ### Affects
 
@@ -64,6 +66,7 @@ None.
 - **AC-14:** Deactivation removes a field from new forms without deleting its historical values, and reactivation restores the required state it had before deactivation.
 - **AC-15:** Failed, stale, concurrent, or offline configuration changes never erase an already accepted configuration or collected values, and each change affects only the fields it names.
 - **AC-16:** A Task form presents required fields above optional fields under a visible separator without collapsing the optional section, and marks a newly added field until it is first filled.
+- **AC-17:** A Task category with no configured fields stays selectable at intake, presents a usable form, and accepts fields like any other category.
 
 ## References
 

@@ -56,6 +56,9 @@ Runtime validation has not run. Every item remains unchecked until it is execute
 
 - [ ] **AC-16 / TM-CF-118:** A form with required and optional fields shows required fields above a visible separator, with the optional section expanded.
 - [ ] **AC-16 / TM-CF-118:** A field added since the member last filled this form is marked as new, and the mark disappears after they first fill it.
+- [ ] **AC-17 / TM-CF-119:** A Task of the medical category, which has no configured fields, can be created, saved, and closed, and its form shows no configurable-field section.
+- [ ] **AC-17 / TM-CF-119:** After a Super Admin adds a field to a category that had none, the field appears on that category's form like any other.
+- [ ] **AC-17 / TM-CF-119:** Deactivating the last remaining field of a category leaves the category selectable at intake.
 
 ## End-to-end
 
