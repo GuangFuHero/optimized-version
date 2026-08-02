@@ -1,22 +1,24 @@
-"""Repositories for User, Group, and Policy models with RBAC query helpers."""
+"""Repositories for User, Role, and Permission models with RBAC query helpers."""
 
+import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rbac_scopes import Scope, widest
 from app.infrastructure.repository.base import GenericRepository
-from app.models.auth import (
-    Group,
-    Policy,
-    PolicyGroupAssign,
-    PolicyUserAssign,
-    User,
-    UserContact,
-    UserGroupAssign,
-    UserIdentity,
+from app.models.auth import User, UserContact, UserIdentity
+from app.models.rbac import (
+    Permission,
+    Role,
+    RolePermissionAssign,
+    UserPermissionAssign,
+    UserRoleAssign,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class UserRepository(GenericRepository[User]):
@@ -26,69 +28,212 @@ class UserRepository(GenericRepository[User]):
         """Initialize with User as the managed model."""
         super().__init__(User)
 
-    async def get_user_permissions(self, db: AsyncSession, user_uuid: str) -> list[Policy]:
-        """獲取用戶的所有權限（包含從群組繼承的）。"""
-        # 1. 獲取直接分配給用戶的權限
-        direct_policies_query = (
-            select(Policy)
-            .join(PolicyUserAssign, Policy.uuid == PolicyUserAssign.policy_uuid)
-            .where(PolicyUserAssign.user_uuid == user_uuid)
+    async def get_user_permissions(self, db: AsyncSession, user_uuid: str) -> dict[str, Scope]:
+        """Resolve every capability the user holds to its widest scope (ADR-018/021).
+
+        Unions role-derived grants (via user_role_assign → role_permission_assign) with
+        direct grants (user_permission_assign), then collapses same-key scopes to the
+        widest one. Callers look up a specific key with ``.get(key, Scope.NONE)``.
+        """
+        role_grants_query = (
+            select(Permission.key, RolePermissionAssign.scope)
+            .join(RolePermissionAssign, RolePermissionAssign.permission_uuid == Permission.uuid)
+            .join(UserRoleAssign, UserRoleAssign.role_uuid == RolePermissionAssign.role_uuid)
+            .where(UserRoleAssign.user_uuid == user_uuid)
         )
-        direct_policies = (await db.execute(direct_policies_query)).scalars().all()
-
-        # 2. 獲取用戶所屬群組的權限
-        group_policies_query = (
-            select(Policy)
-            .join(PolicyGroupAssign, Policy.uuid == PolicyGroupAssign.policy_uuid)
-            .join(UserGroupAssign, PolicyGroupAssign.group_uuid == UserGroupAssign.group_uuid)
-            .where(UserGroupAssign.user_uuid == user_uuid)
+        direct_grants_query = (
+            select(Permission.key, UserPermissionAssign.scope)
+            .join(UserPermissionAssign, UserPermissionAssign.permission_uuid == Permission.uuid)
+            .where(UserPermissionAssign.user_uuid == user_uuid)
         )
-        group_policies = (await db.execute(group_policies_query)).scalars().all()
+        role_rows = (await db.execute(role_grants_query)).all()
+        direct_rows = (await db.execute(direct_grants_query)).all()
 
-        # 合併去重 (根據權限名稱 name 去重)
-        all_policies = list({p.name: p for p in (list(direct_policies) + list(group_policies))}.values())
-        return all_policies
+        scopes_by_key: dict[str, list[Scope]] = {}
+        for key, scope in [*role_rows, *direct_rows]:
+            try:
+                parsed = Scope(scope)
+            except ValueError:
+                logger.warning(
+                    "skipping malformed scope %r for permission %s (user %s)", scope, key, user_uuid
+                )
+                continue
+            scopes_by_key.setdefault(key, []).append(parsed)
+        return {key: widest(scopes) for key, scopes in scopes_by_key.items()}
 
-    async def add_to_group(self, db: AsyncSession, user_uuid: str, group_uuid: str) -> bool:
-        """將使用者加入特定群組。
+    async def get_role_refs(self, db: AsyncSession, user_uuid: str) -> list[Role]:
+        """The roles a user currently holds."""
+        result = await db.execute(
+            select(Role)
+            .join(UserRoleAssign, UserRoleAssign.role_uuid == Role.uuid)
+            .where(UserRoleAssign.user_uuid == user_uuid)
+        )
+        return list(result.scalars().all())
+
+    async def get_direct_grants(self, db: AsyncSession, user_uuid: str) -> list[tuple[str, str]]:
+        """A user's direct (per-user) capability->scope grants."""
+        result = await db.execute(
+            select(Permission.key, UserPermissionAssign.scope)
+            .join(UserPermissionAssign, UserPermissionAssign.permission_uuid == Permission.uuid)
+            .where(UserPermissionAssign.user_uuid == user_uuid)
+        )
+        return [(key, scope) for key, scope in result.all()]
+
+    async def assign_role(self, db: AsyncSession, user_uuid: str, role_uuid: str) -> bool:
+        """將使用者指派特定角色 (role)。
 
         使用 PostgreSQL ON CONFLICT 優化為單一 SQL 語句，確保原子性與效能。
         """
-        stmt = insert(UserGroupAssign).values(
-            user_uuid=user_uuid, 
-            group_uuid=group_uuid
+        stmt = insert(UserRoleAssign).values(
+            user_uuid=user_uuid,
+            role_uuid=role_uuid,
         )
-        # 回應 Reviewer：優化為單一語句處理
-        stmt = stmt.on_conflict_do_nothing(index_elements=['user_uuid', 'group_uuid'])
-        stmt = stmt.returning(UserGroupAssign.uuid)
-        
+        stmt = stmt.on_conflict_do_nothing(index_elements=["user_uuid", "role_uuid"])
+        stmt = stmt.returning(UserRoleAssign.uuid)
+
         result = await db.execute(stmt)
         await db.commit()
-        
+
         # 若有回傳值代表成功插入新紀錄 (True)；否則代表記錄已存在 (False)
         return result.fetchone() is not None
 
+    async def upsert_grant(
+        self, db: AsyncSession, *, user_uuid: str, permission_uuid: str, scope: str
+    ) -> None:
+        """Insert or update one per-user grant's scope (PG ON CONFLICT on uq_user_perm)."""
+        stmt = insert(UserPermissionAssign).values(
+            user_uuid=user_uuid, permission_uuid=permission_uuid, scope=scope
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_uuid", "permission_uuid"], set_={"scope": scope}
+        )
+        await db.execute(stmt)
+        await db.commit()
 
-class GroupRepository(GenericRepository[Group]):
-    """Repository for Group model CRUD."""
+    async def delete_grant(
+        self, db: AsyncSession, *, user_uuid: str, permission_uuid: str
+    ) -> int:
+        """Delete one per-user grant; returns rows removed (0 when absent)."""
+        result = await db.execute(
+            delete(UserPermissionAssign).where(
+                UserPermissionAssign.user_uuid == user_uuid,
+                UserPermissionAssign.permission_uuid == permission_uuid,
+            )
+        )
+        await db.commit()
+        return result.rowcount
+
+    async def unassign_role(self, db: AsyncSession, *, user_uuid: str, role_uuid: str) -> int:
+        """Delete a user↔role assignment; returns rows removed (0 when absent)."""
+        result = await db.execute(
+            delete(UserRoleAssign).where(
+                UserRoleAssign.user_uuid == user_uuid,
+                UserRoleAssign.role_uuid == role_uuid,
+            )
+        )
+        await db.commit()
+        return result.rowcount
+
+
+class RoleRepository(GenericRepository[Role]):
+    """Repository for Role model CRUD."""
 
     def __init__(self):
-        """Initialize with Group as the managed model."""
-        super().__init__(Group)
+        """Initialize with Role as the managed model."""
+        super().__init__(Role)
 
-    async def get_by_name(self, db: AsyncSession, name: str) -> Group | None:
+    async def get_by_name(self, db: AsyncSession, name: str) -> Role | None:
         """透過名稱搜尋角色。"""
-        query = select(Group).where(Group.name == name)
+        query = select(Role).where(Role.name == name)
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
+    async def list_all(self, db: AsyncSession) -> list[Role]:
+        """Every role, ordered by kind then name (for the matrix display)."""
+        result = await db.execute(select(Role).order_by(Role.kind, Role.name))
+        return list(result.scalars().all())
 
-class PolicyRepository(GenericRepository[Policy]):
-    """Repository for Policy model CRUD."""
+    async def get_grants(
+        self, db: AsyncSession, *, role_uuid: str | None = None
+    ) -> list[tuple[str, str, str]]:
+        """Return (role_uuid, capability_key, scope) rows; all roles when role_uuid is None."""
+        stmt = select(
+            RolePermissionAssign.role_uuid, Permission.key, RolePermissionAssign.scope
+        ).join(Permission, Permission.uuid == RolePermissionAssign.permission_uuid)
+        if role_uuid is not None:
+            stmt = stmt.where(RolePermissionAssign.role_uuid == role_uuid)
+        rows = (await db.execute(stmt)).all()
+        return [(str(role), key, scope) for role, key, scope in rows]
+
+    async def upsert_grant(
+        self, db: AsyncSession, *, role_uuid: str, permission_uuid: str, scope: str
+    ) -> None:
+        """Insert or update one role→permission grant's scope (PG ON CONFLICT on uq_role_perm)."""
+        stmt = insert(RolePermissionAssign).values(
+            role_uuid=role_uuid, permission_uuid=permission_uuid, scope=scope
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["role_uuid", "permission_uuid"], set_={"scope": scope}
+        )
+        await db.execute(stmt)
+        await db.commit()
+
+    async def delete_grant(
+        self, db: AsyncSession, *, role_uuid: str, permission_uuid: str
+    ) -> int:
+        """Delete one role→permission grant; returns rows removed (0 when absent)."""
+        result = await db.execute(
+            delete(RolePermissionAssign).where(
+                RolePermissionAssign.role_uuid == role_uuid,
+                RolePermissionAssign.permission_uuid == permission_uuid,
+            )
+        )
+        await db.commit()
+        return result.rowcount
+
+    async def count_assignments(self, db: AsyncSession, role_uuid: str) -> int:
+        """Number of users currently assigned this role."""
+        rows = (
+            await db.execute(
+                select(UserRoleAssign.uuid).where(UserRoleAssign.role_uuid == role_uuid)
+            )
+        ).all()
+        return len(rows)
+
+    async def delete_with_grants(self, db: AsyncSession, role_uuid: str) -> None:
+        """Delete a role's permission grants then the role itself, in one transaction."""
+        await db.execute(
+            delete(RolePermissionAssign).where(RolePermissionAssign.role_uuid == role_uuid)
+        )
+        await db.execute(delete(Role).where(Role.uuid == role_uuid))
+        await db.commit()
+
+
+class PermissionRepository(GenericRepository[Permission]):
+    """Repository for Permission model CRUD."""
 
     def __init__(self):
-        """Initialize with Policy as the managed model."""
-        super().__init__(Policy)
+        """Initialize with Permission as the managed model."""
+        super().__init__(Permission)
+
+    async def get_by_key(self, db: AsyncSession, key: str) -> Permission | None:
+        """透過 capability key 搜尋權限。"""
+        query = select(Permission).where(Permission.key == key)
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def ensure_by_key(self, db: AsyncSession, key: str) -> Permission:
+        """Return the Permission row for a code-owned capability key, creating it if absent.
+
+        Capability rows mirror `Perm` (ADR-057); auto-creating on first grant keeps the
+        write path working on a DB seeded before the key existed.
+        """
+        permission = await self.get_by_key(db, key)
+        if permission is None:
+            permission = Permission(key=key)
+            db.add(permission)
+            await db.flush()
+        return permission
 
 
 class ContactRepository(GenericRepository[UserContact]):
@@ -173,7 +318,7 @@ class IdentityRepository(GenericRepository[UserIdentity]):
 
 
 user_repository = UserRepository()
-group_repository = GroupRepository()
-policy_repository = PolicyRepository()
+role_repository = RoleRepository()
+permission_repository = PermissionRepository()
 contact_repository = ContactRepository()
 identity_repository = IdentityRepository()

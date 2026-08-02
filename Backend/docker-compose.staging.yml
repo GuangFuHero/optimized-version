@@ -58,6 +58,35 @@ services:
     networks:
       - app-network
 
+  frontend:
+    build: ../Frontend
+    image: disaster-frontend:latest
+    restart: unless-stopped
+    # .env.frontend only — backend DB/JWT secrets are NOT exposed to this public-facing container.
+    env_file:
+      - .env.frontend
+    # No host port: reached only via cloudflared on the internal docker network.
+    expose:
+      - "3000"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  # Cloudflare Tunnel: outbound-only connection to Cloudflare's edge — no inbound ports on
+  # the VM, free HTTPS. Public hostname demo.wan-guard.com -> http://frontend:3000 is set in
+  # the Zero Trust dashboard. TUNNEL_TOKEN comes from .env.frontend (gen_env → Secret Manager).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    env_file:
+      - .env.frontend
+    depends_on:
+      - frontend
+    networks:
+      - app-network
+
 volumes:
   pgdata:
   redisdata:

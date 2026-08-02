@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
 from app.models.geo import ClosureArea, Station
+from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import (
     CrowdSourcing,
     StationProperty,
@@ -13,33 +14,23 @@ from app.models.station_property import (
 
 
 class StationRepository(GenericRepository[Station]):
-    """Repository for Station queries with spatial filtering and secondary location support."""
+    """Repository for Station queries with spatial filtering (pure CRUD, ADR-015).
+
+    The secondary-location orchestration that used to live here moved to
+    app/services/station/create.py, which owns the transaction across both tables.
+    """
 
     def __init__(self):
         """Initialize with Station as the managed model."""
         super().__init__(Station)
 
-    async def create_with_secondary_location(
-        self, db: AsyncSession, *, obj_in: dict, secondary_location: dict | None = None
-    ) -> Station:
-        """Create a station, flushing first so UUID is available for secondary location."""
-        from app.models.secondary_location import SecondaryLocation
-        station = Station(**obj_in)
-        db.add(station)
-        await db.flush()
-        if secondary_location:
-            db.add(SecondaryLocation(geometry_uuid=str(station.uuid), **secondary_location))
-        await db.commit()
-        await db.refresh(station)
-        return station
-
     async def list_active(
         self, db: AsyncSession, *,
         bounds=None, station_type: str | None = None,
-        skip: int = 0, limit: int = 50,
+        skip: int = 0, limit: int = 50, extra_filters=(),
     ) -> list[Station]:
-        """List active stations with optional bbox and type filter."""
-        query = select(self.model).where(self.model.delete_at.is_(None))
+        """List active stations with optional bbox/type filter and RBAC scope_filter conditions."""
+        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
             bbox = func.ST_MakeEnvelope(
                 bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
@@ -55,10 +46,10 @@ class StationRepository(GenericRepository[Station]):
         return result.scalars().all()
 
     async def count_active(
-        self, db: AsyncSession, *, bounds=None, station_type: str | None = None
+        self, db: AsyncSession, *, bounds=None, station_type: str | None = None, extra_filters=()
     ) -> int:
-        """Count active stations with optional bbox and type filter."""
-        query = select(self.model).where(self.model.delete_at.is_(None))
+        """Count active stations with optional bbox/type filter and RBAC scope_filter conditions."""
+        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
             bbox = func.ST_MakeEnvelope(
                 bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
@@ -84,10 +75,10 @@ class ClosureAreaRepository(GenericRepository[ClosureArea]):
         super().__init__(ClosureArea)
 
     async def list_active(
-        self, db: AsyncSession, *, bounds=None, skip: int = 0, limit: int = 50
+        self, db: AsyncSession, *, bounds=None, skip: int = 0, limit: int = 50, extra_filters=()
     ) -> list[ClosureArea]:
-        """List active closure areas with optional bbox filter."""
-        query = select(self.model).where(self.model.delete_at.is_(None))
+        """List active closure areas with optional bbox filter and RBAC scope_filter conditions."""
+        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
             bbox = func.ST_MakeEnvelope(
                 bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
@@ -98,9 +89,9 @@ class ClosureAreaRepository(GenericRepository[ClosureArea]):
         )
         return result.scalars().all()
 
-    async def count_active(self, db: AsyncSession, *, bounds=None) -> int:
-        """Count active closure areas with optional bbox filter."""
-        query = select(self.model).where(self.model.delete_at.is_(None))
+    async def count_active(self, db: AsyncSession, *, bounds=None, extra_filters=()) -> int:
+        """Count active closure areas with optional bbox filter and RBAC scope_filter conditions."""
+        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
             bbox = func.ST_MakeEnvelope(
                 bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
@@ -177,8 +168,17 @@ class StationSuggestionRepository(GenericRepository[StationUpdateSuggestion]):
         return result.scalars().all()
 
 
+class SecondaryLocationRepository(GenericRepository[SecondaryLocation]):
+    """Repository for secondary address / pole location details (pure CRUD)."""
+
+    def __init__(self):
+        """Initialize with SecondaryLocation as the managed model."""
+        super().__init__(SecondaryLocation)
+
+
 station_repository = StationRepository()
 closure_area_repository = ClosureAreaRepository()
 station_property_repository = StationPropertyRepository()
 crowd_sourcing_repository = CrowdSourcingRepository()
 station_suggestion_repository = StationSuggestionRepository()
+secondary_location_repository = SecondaryLocationRepository()

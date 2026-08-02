@@ -15,7 +15,7 @@ from app.core.redis import get_redis
 from app.core.security import generate_salt, get_password_hash
 from app.db.session import Base
 from app.main import app
-from app.models.auth import Group
+from app.models.rbac import Role
 from app.services.auth_account import create_account
 from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
 
@@ -38,14 +38,14 @@ async def _ensure_db():
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
-        db.add(Group(name="Login User"))
+        db.add(Role(name="user", kind="platform"))
         await db.commit()
     await eng.dispose()
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
-    """Ensure schema + Login User group exist; reset app engine pool per test."""
+    """Ensure schema + default 'user' platform role exist; reset app engine pool per test."""
     await _ensure_db()
     from app.db.session import engine as app_engine
     await app_engine.dispose()

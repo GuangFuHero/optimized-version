@@ -3,6 +3,23 @@
 # Playwright MCP screenshots (test artifacts)
 .playwright-mcp/
 
+/disaster-map
+
+openspec
+
+# Local editor settings
+.vscode/
+Frontend/.vscode/
+
+# Local workflow tooling
+.github/prompts/
+.github/skills/
+
+# Backend local runtime data
+Backend/.db/
+memory/
+.handoff/
+.idea/
 memory/
 .handoff/
 .idea/
@@ -12,3 +29,20 @@ memory/
 .claude/
 .db/
 .venv/
+
+# JS deps / build only — the Frontend workspace itself is tracked (PRs 15-18), so do NOT
+# ignore Frontend/ or new frontend files silently vanish from `git status` (PR #25 review).
+node_modules/
+.nx/
+
+# Agent / tooling scratch
+.multi-agent/
+.superpowers/
+
+# Sibling deployment repo (tracked separately)
+optimized-version-dockerized-deployment-setup/
+
+# One-off review / handoff artifacts (not for the repo)
+CODE_REVIEW_rbac_v1.md
+DIFF_INTENT_REVIEW.md
+Universal_Disaster_Platform_Manager_End_RBAC_v1.0_Dashboard.md

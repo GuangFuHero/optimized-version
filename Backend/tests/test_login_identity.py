@@ -13,8 +13,8 @@ PHONE = "+886912345678"
 @pytest.mark.asyncio
 async def test_login_by_email(client, db_session):
     """Login by email succeeds and stamps last_login_at."""
-    # 'Login User' group is already seeded by the db_session fixture (Task 9b) — do NOT re-add it
-    # (a duplicate group makes group_repository.get_by_name raise MultipleResultsFound).
+    # 'user' platform role is already seeded by the db_session fixture (Task 9b) — do NOT re-add it
+    # (a duplicate role makes role_repository.get_by_name raise MultipleResultsFound).
     salt = generate_salt()
     await create_account(
         db_session, contact_type="email", value="a@x.com",

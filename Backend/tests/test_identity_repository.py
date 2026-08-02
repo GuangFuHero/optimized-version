@@ -9,7 +9,8 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models.auth import Base, Group, User, UserContact, UserIdentity
+from app.models.auth import Base, User, UserContact, UserIdentity
+from app.models.rbac import Role
 from app.repositories.auth_repository import contact_repository, identity_repository
 from app.services.auth_account import create_account
 from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
@@ -92,7 +93,7 @@ async def test_get_password_identity(db):
 @pytest.mark.asyncio
 async def test_get_by_provider_subject(db):
     """The identity for a (provider, provider_subject) pair resolves; an unknown subject is None."""
-    db.add(Group(name="Login User"))
+    db.add(Role(name="user", kind="platform"))
     await db.commit()
     user = await create_account(
         db, name="G", provider="google", provider_subject="sub-xyz",
