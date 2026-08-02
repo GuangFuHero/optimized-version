@@ -73,5 +73,6 @@ None.
 - [Product rules](./spec.md)
 - [Behavior sequence](./flow.md)
 - [Validation](./validation.md)
+- [Scenarios behind these decisions](./scenarios.md)
 - [Target Version](../../../../versions/v0.1.0.md)
 - [Binding decisions](../../decisions.md)

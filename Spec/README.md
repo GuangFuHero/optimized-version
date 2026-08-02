@@ -20,6 +20,7 @@ Spec/
           spec.md           # Only when behavioral ambiguity requires it
           flow.md           # Only when sequence requires it
           validation.md     # Required before Ready
+          scenarios.md      # Optional: the situations a decision came from
           engineering/      # Optional Feature-local implementation contract
   _shared/                  # Only genuinely cross-area material
   _template/                # Document templates
@@ -74,7 +75,9 @@ Start at the relevant product-area `README.md`, then read its target Version and
 product-area README -> target Version -> owned Feature
 ```
 
-Open decisions live only in the owning `feature.md`. Research, wireframes, archived files, and engineering plans cannot override canonical product behavior.
+Open decisions live only in the owning `feature.md`. Research, wireframes, scenarios, archived files, and engineering plans cannot override canonical product behavior.
+
+A Feature may keep a `scenarios.md` recording the real situations its decisions came from, so design, engineering, and field training can see why a rule takes the shape it does. It is supporting material, never a source of behavior: each scenario cites the decisions and acceptance criteria it produced, and a scenario that disagrees with `spec.md` is the one that is wrong.
 
 After a change, run this from the repository root:
 
