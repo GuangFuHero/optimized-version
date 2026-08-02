@@ -61,7 +61,7 @@ A Feature may keep a `scenarios.md` holding the real situations its decisions ca
 
 - Scenarios are written in Traditional Chinese and must be understandable to a reader who has opened no other file in the folder. Spell terms out — 超級管理員, not 超管 — and call product concepts by the names the documents use, never internal shorthand.
 - Every scenario carries one type of `陽光`, `異常`, `邊界`, `衝突`, or `變遷`, and one frequency of `高頻` or `低頻`. Field conditions such as rain, gloves, or lost signal are background written into the scenario, not a type.
-- Keep the four fixed lines: 誰, 情境, 不這樣做會怎樣, 結論. The 結論 states the resulting rule in one plain sentence, then cites the decisions, acceptance criteria, and Spec rules it produced.
+- Keep the four fixed bullets: 誰, 情境, 不這樣做會怎樣, 結論. The 結論 states the resulting rule in one plain sentence, then cites the decisions, acceptance criteria, and Spec rules it produced.
 - `S-NN` is a citation handle only. Keep it off the heading, on the tag line and in the index table.
 - Include at least one `陽光` scenario, so a reader meets the normal path before the exceptions.
 
