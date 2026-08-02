@@ -59,9 +59,11 @@ Runtime validation has not run. Every item remains unchecked until it is execute
 - [ ] **AC-17 / TM-CF-119:** A Task of the medical category, which has no configured fields, can be created, saved, and closed, and its form shows no configurable-field section.
 - [ ] **AC-17 / TM-CF-119:** After a Super Admin adds a field to a category that had none, the field appears on that category's form like any other.
 - [ ] **AC-17 / TM-CF-119:** Deactivating the last remaining field of a category leaves the category selectable at intake.
-- [ ] **AC-18 / TM-CF-120:** A newly deployed system presents the medical form with the four triage counts, all required, plus the three optional fields.
-- [ ] **AC-18 / TM-CF-120:** A medical Task with a triage count left empty cannot be closed; a count entered as zero satisfies it.
-- [ ] **AC-18 / TM-CF-120:** Every shipped field outside the four medical triage counts starts optional.
+- [ ] **AC-18 / TM-CF-120:** A newly deployed system presents the medical form with casualty count and condition of the worst affected as required, plus the two optional fields.
+- [ ] **AC-18 / TM-CF-120:** The condition field offers the five listed choices in order, and no choice states a triage level or any other clinical classification.
+- [ ] **AC-18 / TM-CF-120:** Selecting "not sure" satisfies the required state and allows closure; leaving the field empty does not.
+- [ ] **AC-18 / TM-CF-120:** A casualty count of zero satisfies the required state; an empty count does not.
+- [ ] **AC-18 / TM-CF-120:** Every shipped field outside the two required medical fields starts optional.
 - [ ] **AC-18 / TM-CF-120 / TM-CF-107:** A Super Admin can deactivate or change a shipped starting field exactly as with any added field.
 
 ## End-to-end

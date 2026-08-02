@@ -167,21 +167,28 @@
 - **Precondition:** A system is deployed for a new incident and no configuration change has been made yet.
 - **Trigger:** Anyone opens a Task form or the field configuration.
 - **Observable result:** Each system-defined category presents the starting field set recorded below. From that point it behaves like any other configuration and a Super Admin may change it.
-- **Constraint/fallback:** A starting set is a starting point, not a floor. Every shipped field is optional unless the table marks it required, and a category emptied of its starting fields falls under TM-CF-119.
+- **Constraint/fallback:** A starting set is a starting point, not a floor. Every shipped field is optional unless the table marks it required, and a category emptied of its starting fields falls under TM-CF-119. A medical starting field never asks for a clinical classification.
 
 **medical 醫療** — approved 2026-08-02.
 
 | Field | 欄位 | Type | Required |
 |---|---|---|---|
-| Immediate | 紅（立即） | number | Yes |
-| Delayed | 黃（延遲） | number | Yes |
-| Minor | 綠（輕傷） | number | Yes |
-| Expectant | 黑（無生命跡象） | number | Yes |
-| Awaiting evacuation | 需後送人數 | number | No |
+| Casualties | 傷患人數 | number | Yes |
+| Condition of the worst affected | 最嚴重的人現在 | choice | Yes |
 | Medical staff on scene | 現場有醫護 | yes/no | No |
 | Evacuation route condition | 後送路線狀況 | text | No |
 
-The four counts follow START triage, the field standard for mass-casualty incidents. A count of zero is an answer; an empty count is not. This set has not been reviewed by a qualified EMT and should be before first release.
+Choices for the condition field, in this order:
+
+| Choice | 選項 |
+|---|---|
+| Can walk unaided | 可以自己走動 |
+| Cannot walk but is conscious | 不能走，但清醒 |
+| Cannot be roused but is breathing | 叫不醒，但有呼吸 |
+| Not breathing | 沒有呼吸 |
+| Not sure | 不確定 |
+
+Each choice is something an untrained reporter can observe, and each maps to a START triage level for a trained reader. "Not sure" is always available and satisfies the required state, because an unknown recorded as unknown is safer than a guess recorded as fact. A casualty count of zero is an answer; an empty count is not. Recording a professional clinical assessment is `TM-FEAT-007`, not this Feature.
 
 **rescue 搜救, supply 物資, hr 人力** — carried over from the existing implementation, all optional.
 

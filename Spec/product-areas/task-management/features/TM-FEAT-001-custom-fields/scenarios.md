@@ -153,19 +153,34 @@ Rescue, human resources, and supply all ship with a starting set of fields. Medi
 
 ---
 
-### S-14 · 二樓兩位傷患，派幾台車
-**How many ambulances does "two casualties" mean**
+### S-14 · 第一個到現場的人不會檢傷
+**The first person on scene has no triage training**
 
-大進街 42 號的地點底下已經掛了搜救、人力、物資三張單，每張都是「這個地點的一種需求」，人數是欄位不是單數——搜救單的「受困人數 2」記的是一對老夫婦，一張單不是兩張。醫療單照理應該同一個形狀。
+醫療類別最初的設計是四個檢傷分級人數：紅、黃、綠、黑。這是大量傷患事故的國際標準，派遣看一眼就知道要派幾台車、哪種等級。
 
-但綠黃紅黑的整個用途就是決定先救誰、派什麼等級的資源。只寫「傷患 2 人」，派遣沒有依據；只寫「最高是紅」，知道要派高級救護但不知道要派幾台。而「黑」的人數是災後統計最關鍵的數字之一，一旦併進總人數就再也拆不出來。
+問題是**誰在填這張單**。第一個發現的通常是隔壁鄰居、路過的志工、來送物資的人，不是救護技術員。綠黃紅黑是跑完一套判斷流程之後的**結論**，把結論當成欄位，等於要求回報者先受過訓練。實際會發生兩件事，都很糟：他亂猜，你拿到看起來精確但不可信的分級，而且它會直接驅動派遣；或者他不敢填，任務單卡住，甚至乾脆不回報。
 
-搜救不會有這個問題，因為把人弄出來的工作不隨傷勢改變；醫療是唯一「傷勢決定資源」的類別。
+但那套流程的**輸入**不需要訓練——能不能自己走、有沒有呼吸、叫不叫得醒，任何人都看得出來，而受過訓練的人從這三個答案就推得出分級。所以問題從「他是紅還是黃」改成「最嚴重的那個人現在什麼狀況」，並且一定要有「不確定」這個選項：如果選項只有臨床狀態，答不出來的人就會猜，而「未知」跟「錯的分級」對派遣的意義完全不同。
 
-At 42 Dajin Street the Ticket already carries rescue, human-resources, and supply Tasks. Each is one need at one location, with headcount as a field rather than as separate Tasks — the rescue Task's "trapped people: 2" is one elderly couple on one form, not two forms. A medical Task should follow the same shape.
+The medical category was first designed around four triage counts — immediate, delayed, minor, expectant. That is the international standard for mass-casualty incidents, and dispatch can read it at a glance.
 
-Except that the whole purpose of the four triage colours is deciding who is treated first and what level of resource is sent. "Two casualties" gives dispatch nothing to act on; "highest is red" says send advanced care but not how much of it. And the expectant count is one of the numbers the after-action record turns on — folded into a total, it can never be recovered.
+The problem is who fills the form. The first person there is usually a neighbour, a passing volunteer, someone dropping off supplies — not a paramedic. The four colours are the *conclusion* of an assessment procedure, so making them fields requires the reporter to have been trained. Two things follow, both bad: they guess, and dispatch acts on a precise-looking classification that is not true; or they do not dare answer, and the report stalls or never happens.
 
-Rescue never hits this, because pulling someone out does not change with their injuries. Medical is the one category where severity determines the resource.
+The *inputs* to that procedure need no training at all — can they walk, are they breathing, can they be roused. Anyone can see those, and a trained reader recovers the classification from them. So the question changed from "is this one red or yellow" to "what is the worst affected person doing right now", with "not sure" always on the list: if every choice is a clinical state, someone who cannot answer will guess, and an unknown means something entirely different to dispatch than a wrong classification.
 
 **→ D30 · AC-18 · TM-CF-120**
+
+---
+
+### S-15 · 救護員沒有手可以填表單
+**A crew working a casualty has no hands for a form**
+
+把分級人數降為選填、留給到場的專業人員補，聽起來安全——不用的話零成本。但實際上救護人員到場後正在處理傷患，沒有人會停下來開網站填檢傷分類；他們用無線電。所以那四格會永遠是空的，只是讓表單變長。
+
+真正的問題不是「要不要留欄位」，而是「專業評估到底怎麼進到系統裡」——可能是後方接收無線電的人代輸，可能根本不該用同一張任務單，可能需要完全不同的權限與介面。這個場景還沒想清楚，所以不是把欄位設成選填就算解決，而是獨立成 `TM-FEAT-007` 重新想。
+
+Keeping the triage counts as optional fields for professionals to fill in later sounds safe — free if unused. In practice a crew that has reached a casualty is working on them; nobody stops to open a website and enter a triage breakdown. They use the radio. Those four boxes would stay empty forever and only make the form longer.
+
+The real question is not whether to keep the fields but how a professional assessment reaches the system at all — possibly typed by whoever is receiving the radio traffic, possibly not on this Task at all, possibly needing a different interface and a different permission. That is unresolved, so making the fields optional does not settle it. It moves to `TM-FEAT-007` to be thought through properly.
+
+**→ D30 · TM-FEAT-007**

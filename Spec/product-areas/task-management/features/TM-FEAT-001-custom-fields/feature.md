@@ -39,7 +39,7 @@ Approved behavior is limited to the rules in [`spec.md`](./spec.md). Two princip
 - Which role may close a Task. This Feature defines that closure is the enforcement point; TM-FEAT-002 defines who performs it.
 - Merging two fields that turn out to mean the same thing.
 - Which fields an individual incident settles on. The starting sets in `spec.md` are a starting point; every incident adapts them, and that adaptation is the Feature working, not a gap in it.
-- Clinical review of the medical starting set. The four triage counts follow START triage, but a qualified EMT should confirm them before first release.
+- Recording a professional clinical assessment once trained responders reach the scene. That is [`TM-FEAT-007`](../TM-FEAT-007-professional-assessment/feature.md), which must first establish how responders actually report, since a crew working a casualty has no hands free for a form.
 
 ### Affects
 
@@ -68,7 +68,7 @@ None.
 - **AC-15:** Failed, stale, concurrent, or offline configuration changes never erase an already accepted configuration or collected values, and each change affects only the fields it names.
 - **AC-16:** A Task form presents required fields above optional fields under a visible separator without collapsing the optional section, and marks a newly added field until it is first filled.
 - **AC-17:** A Task category with no configured fields stays selectable at intake, presents a usable form, and accepts fields like any other category.
-- **AC-18:** A newly deployed system presents each category's starting field set, with the four medical triage counts required and every other shipped field optional.
+- **AC-18:** A newly deployed system presents each category's starting field set. Medical asks only for observations an untrained reporter can make, always offers "not sure", and requires no clinical classification.
 
 ## References
 
