@@ -1,5 +1,15 @@
-# optimized-version
-An optimized version design for disaster rescue site, support engineer to publish rapidly in future, including frontend and backend code.
+# Wanguard
 
-📖 **文件地圖：[DOCS.md](DOCS.md)** — 哪份文件對哪件事有權威、哪些已凍結，從這裡開始。
-# Test notification trigger
+Wanguard is a disaster-response support product. This repository contains the application and its governed product documentation.
+
+## Product documentation
+
+Agents and contributors must read [AGENTS.md](./AGENTS.md) before changing product documentation. The canonical entry point is [specs/README.md](./specs/README.md).
+
+Minimum path for a scoped change:
+
+```text
+README -> AGENTS -> specs/README -> product-area README -> target Version -> owned Feature
+```
+
+Product areas are stable capabilities. Features are independently defined, validated, and released. Version manifests aggregate released Features without containing or moving their files.

@@ -1,7 +1,7 @@
 # Product Spec Migration Inventory
 
-**Recorded:** 2026-08-02  
-**Source commit:** `dffc362dbc33260dc754a964b5af0785e922b972`  
+**Recorded:** 2026-08-02
+**Source commit:** `dffc362dbc33260dc754a964b5af0785e922b972`
 **Working branch:** `docs/prd`
 
 This inventory is the migration ledger for the product-spec governance restructure. It records where every legacy product area and engineering artifact will go. A move is not complete until the target exists, links are repaired, and `scripts/verify-specs.ps1` passes or reports only an explicitly registered migration blocker.
