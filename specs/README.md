@@ -36,6 +36,8 @@ Use Semantic Versioning identifiers in the form `vMAJOR.MINOR.PATCH`.
 
 The current default target is declared by [`ACTIVE_VERSION`](./ACTIVE_VERSION). Version manifests live under `versions/`; they never contain product-area directories or duplicate Feature requirements.
 
+Current planned manifests: [`v0.1.0`](./versions/v0.1.0.md) and [`v0.2.0`](./versions/v0.2.0.md). Product-area navigation and historical-name diagnosis live in [`product-areas/README.md`](./product-areas/README.md).
+
 ## Naming
 
 - Product areas use durable semantic slugs such as `task-management`, never ordering prefixes such as `08-`.
@@ -45,6 +47,10 @@ The current default target is declared by [`ACTIVE_VERSION`](./ACTIVE_VERSION). 
 ## Reading and editing
 
 Start at the relevant product-area `README.md`, then read its target Version and the owned Feature. Follow root [`AGENTS.md`](../AGENTS.md) and the repo-local product-spec skills before editing.
+
+```text
+product-area README -> target Version -> owned Feature
+```
 
 Open decisions live only in the owning `feature.md`. Research, wireframes, archived files, and engineering plans cannot override canonical product behavior.
 
