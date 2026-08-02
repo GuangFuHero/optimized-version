@@ -9,7 +9,7 @@ Product areas are stable, long-lived capabilities. Their semantic paths do not c
 | Identity and Account | [`identity-and-account/`](./identity-and-account/README.md) | `v0.2.0` |
 | Access Control | [`access-control/`](./access-control/README.md) | `v0.1.0` |
 | Member Management | [`member-management/`](./member-management/README.md) | `v0.1.0` |
-| Map Decision Support | [`map-decision-support/`](./map-decision-support/README.md) | `v0.2.0` |
+| Map Decision Support | [`map-decision-support/`](./map-decision-support/README.md) | `v0.1.0` for Zone drawing; remaining map capabilities target `v0.2.0` |
 | Resource Stations | [`resource-stations/`](./resource-stations/README.md) | `v0.1.0` |
 | Task Management | [`task-management/`](./task-management/README.md) | `v0.1.0`; guest privacy targets `v0.2.0` |
 | Emergency Announcements | [`emergency-announcements/`](./emergency-announcements/README.md) | `v0.2.0` |
@@ -27,7 +27,7 @@ These names exist only to diagnose old references. They are not canonical paths.
 | `03-user-settings` | `identity-and-account` / `IAM-FEAT-003` |
 | `04-rbac` | `access-control` / `AC-FEAT-001` |
 | `05-member-management` | `member-management` / `MEM-FEAT-001` |
-| `06-map-decision-support` | `map-decision-support` / `MAP-FEAT-001` |
+| `06-map-decision-support` | `map-decision-support` / `MAP-FEAT-001` and `MAP-FEAT-002` |
 | `07-resource-station` | `resource-stations` / `RS-FEAT-001` |
 | `08-ticket-management` | `task-management` / `TM-FEAT-001` through `TM-FEAT-006` |
 | `09-emergency-announcement` | `emergency-announcements` / `EA-FEAT-001` |

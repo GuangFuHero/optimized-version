@@ -41,7 +41,7 @@ Use Semantic Versioning identifiers in the form `vMAJOR.MINOR.PATCH`.
 
 The current default target is declared by [`ACTIVE_VERSION`](./ACTIVE_VERSION). Version manifests live under `versions/`; they never contain product-area directories or duplicate Feature requirements.
 
-Current planned manifests: [`v0.1.0`](./versions/v0.1.0.md) covers Access Control, Member Management, Resource Stations, and Task Management; [`v0.2.0`](./versions/v0.2.0.md) plans Identity and Account, Map Decision Support, and Emergency Announcements. Product-area navigation and historical-name diagnosis live in [`product-areas/README.md`](./product-areas/README.md).
+Current planned manifests: [`v0.1.0`](./versions/v0.1.0.md) covers Access Control, Member Management, Resource Stations, Task Management, and map Zone drawing; [`v0.2.0`](./versions/v0.2.0.md) plans Identity and Account, the remaining Map Decision Support capabilities, and Emergency Announcements. Product-area navigation and historical-name diagnosis live in [`product-areas/README.md`](./product-areas/README.md).
 
 ## Release semantics
 
