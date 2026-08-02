@@ -3,7 +3,7 @@
 This directory is the canonical product-document system for Wanguard. Everything needed to read, change, and verify product documentation lives here; the repository root holds only the application and its license.
 
 ```text
-specs/
+Spec/
   AGENTS.md                 # Rules every agent and contributor follows first
   CLAUDE.md                 # Pointer to AGENTS.md
   ACTIVE_VERSION            # Default Target Version for new Features
@@ -58,9 +58,12 @@ Historical names are mapped in [`product-areas/README.md`](./product-areas/READM
 
 ## Engineering boundary
 
-- [`Backend/`](../Backend/) and [`Frontend/`](../Frontend/) are the current implementation, not product definition.
-- Feature-local `engineering/` holds only the implementation contract that is necessary and already aligned with the Feature.
-- `_shared/engineering/` holds only genuinely cross-area contracts.
+This directory is read-only with respect to engineering. Nothing here may be edited to describe how something is built.
+
+- [`Backend/`](../Backend/), [`Frontend/`](../Frontend/), and [`System_Design/`](../System_Design/) are owned by other teams and are never modified from product work.
+- Backend engineering specifications live in [`Backend/Spec/`](../Backend/Spec/) and stay there.
+- `_shared/engineering/` holds pointers to cross-area engineering documents, not copies of them. See [`_shared/engineering/er-diagram.md`](./_shared/engineering/er-diagram.md).
+- Feature-local `engineering/` records an already-agreed contract a Feature depends on. It never designs implementation.
 - When an engineering document and product behavior disagree, list the difference and its impact and wait for the Owner. Never let an engineering document overwrite an approved product specification.
 
 ## Reading and editing
@@ -76,7 +79,7 @@ Open decisions live only in the owning `feature.md`. Research, wireframes, archi
 After a change, run this from the repository root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File specs/tools/verify-specs.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File Spec/tools/verify-specs.ps1
 ```
 
 Passing the document checks does not mean runtime validation has been performed.

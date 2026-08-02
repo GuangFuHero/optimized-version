@@ -7,27 +7,35 @@ These rules apply to every agent editing this repository. Product documents use 
 Read only what the task needs, in this order:
 
 1. Root `README.md` and this file.
-2. `specs/README.md`.
+2. `Spec/README.md`.
 3. The owned product area's `README.md`.
-4. The Feature's `Target Version` manifest under `specs/versions/`.
+4. The Feature's `Target Version` manifest under `Spec/versions/`.
 5. The owned Feature's `feature.md`, then its `spec.md`, `flow.md`, or `validation.md` only as needed.
 
 All paths in this file are relative to the repository root.
 
 Do not scan or modify unrelated product areas. Archive and research files are evidence, not current product behavior.
 
-## Required local skills
+## Scope boundary
 
-- For any Feature, Version, decision, Spec, Flow, Validation, or product-area change, read `.agents/skills/manage-product-spec/SKILL.md` first.
-- When creating or changing observable behavior rules, also read `.agents/skills/derive-feature-spec/SKILL.md`.
+`Spec/` defines what the product must do for its users. It is not a place for implementation.
+
+- Never edit, move, rename, or delete anything under `Backend/`, `Frontend/`, or `System_Design/`. Those folders belong to other teams. If product work appears to require a change there, describe it and hand it to the Owner.
+- Backend engineering specifications stay in `Backend/Spec/`. Do not copy or relocate them here.
+- Keep schemas, API contracts, migrations, library choices, and code out of `Spec/`. Link to the engineering document by path instead of duplicating it; a duplicate will drift.
+- A Feature-local `engineering/` folder records only an already-agreed contract the Feature depends on. It is a reference, never a place to design implementation.
+
+## Local skills
+
+The skills under `.agents/skills/` are local tooling and are not committed. When present, read `manage-product-spec/SKILL.md` before any Feature, Version, decision, Spec, Flow, Validation, or product-area change, and `derive-feature-spec/SKILL.md` before writing observable behavior rules. When absent, this file is the complete rule set.
 
 ## Stable structure
 
-- Product areas live at `specs/product-areas/<semantic-slug>/` and never move for a Version.
+- Product areas live at `Spec/product-areas/<semantic-slug>/` and never move for a Version.
 - Features live at `features/<FEATURE-ID>-<semantic-slug>/` inside one product area.
-- Versions live at `specs/versions/<version-id>.md` and are manifests, not folders for product documents.
+- Versions live at `Spec/versions/<version-id>.md` and are manifests, not folders for product documents.
 - Do not add numeric ordering prefixes such as `01-` to product-area names.
-- `engineering/` is optional and Feature-local. Keep only genuinely cross-area contracts under `specs/_shared/engineering/`.
+- `engineering/` is optional and Feature-local. Keep only genuinely cross-area contracts under `Spec/_shared/engineering/`.
 - `ACTIVE_VERSION` supplies a default Target Version for new Features; it does not change physical paths or status.
 
 ## Canonical ownership
@@ -63,7 +71,7 @@ When product and engineering documents disagree, list the conflict, affected beh
 After any product-spec change, run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File specs/tools/verify-specs.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File Spec/tools/verify-specs.ps1
 ```
 
 PowerShell 7 users may substitute `pwsh` for `powershell`. During the migration, `-AllowMigrationBlockers` may be used only when every remaining exception is explicitly registered; new violations are never allowed.

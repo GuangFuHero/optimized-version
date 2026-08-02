@@ -38,6 +38,8 @@ node_modules/
 # Agent / tooling scratch
 .multi-agent/
 .superpowers/
+.agents/
+.specify/
 
 # Sibling deployment repo (tracked separately)
 optimized-version-dockerized-deployment-setup/

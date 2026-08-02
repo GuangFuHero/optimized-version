@@ -10,7 +10,7 @@ Keep Wanguard product areas stable while Features can be defined, validated, and
 
 ## Canonical reading path
 
-1. Read repository [`README.md`](../../../README.md), [`specs/AGENTS.md`](../../AGENTS.md), and [`specs/README.md`](../../README.md).
+1. Read repository [`README.md`](../../../README.md), [`Spec/AGENTS.md`](../../AGENTS.md), and [`Spec/README.md`](../../README.md).
 2. Open the responsible [product-area README](../../product-areas/README.md).
 3. Read its Target Version and only the responsible Feature.
 
@@ -19,10 +19,10 @@ Before changing product documents, follow the repo-local `manage-product-spec` a
 ## Migrated structure
 
 - Version manifests: [`v0.1.0`](../../versions/v0.1.0.md) and [`v0.2.0`](../../versions/v0.2.0.md).
-- Stable areas: Identity and Account, Access Control, Member Management, Map Decision Support, Resource Stations, Task Management, and Emergency Announcements under [`specs/product-areas/`](../../product-areas/README.md).
+- Stable areas: Identity and Account, Access Control, Member Management, Map Decision Support, Resource Stations, Task Management, and Emergency Announcements under [`Spec/product-areas/`](../../product-areas/README.md).
 - Task Management is split into `TM-FEAT-001` through `TM-FEAT-006`; Custom Fields owns its Spec, pure Flow, unchecked validation, and wireframes.
-- Original PRDs, User Stories, decision discussion, old Version entry pages, cross-area journey, and stale/unreconciled engineering files are retained under [`specs/_archive/`](../../_archive/README.md).
-- The former `specs/v1.0.0/` and `specs/v2.0.0/` trees no longer exist as active paths.
+- Original PRDs, User Stories, decision discussion, old Version entry pages, cross-area journey, and stale/unreconciled engineering files are retained under [`Spec/_archive/`](../../_archive/README.md).
+- The former `Spec/v1.0.0/` and `Spec/v2.0.0/` trees no longer exist as active paths.
 
 ## Approved decisions
 
@@ -64,13 +64,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-specs.ps1
 git diff --check
 # Exit 0; no output.
 
-rg -n --glob '!specs/_archive/**' --glob '!docs/superpowers/**' --glob '!docs/product-spec-migration-inventory.md' "specs/v1\.0\.0|specs/v2\.0\.0" .
+rg -n --glob '!Spec/_archive/**' --glob '!docs/superpowers/**' --glob '!docs/product-spec-migration-inventory.md' "Spec/v1\.0\.0|Spec/v2\.0\.0" .
 # ACTIVE_OLD_PATH_MATCHES=0
 ```
 
 The strict validator was run without `-AllowMigrationBlockers`; the temporary blocker registry has been removed.
 
-This block records the commands exactly as executed on 2026-08-02. The verifier and its tests have since moved to `specs/tools/`, and the process documents to `specs/_process/`.
+This block records the commands exactly as executed on 2026-08-02. The verifier and its tests have since moved to `Spec/tools/`, and the process documents to `Spec/_process/`.
 
 ## Runtime validation
 

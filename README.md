@@ -90,10 +90,10 @@
 
 ## 📁 產品文件
 
-產品定義（PRD、Feature、版本盤點、決策紀錄）集中在 [`specs/`](./specs/README.md)。要改動任何產品文件前，先讀 [`specs/AGENTS.md`](./specs/AGENTS.md)。
+產品定義（PRD、Feature、版本盤點、決策紀錄）集中在 [`Spec/`](./Spec/README.md)。要改動任何產品文件前，先讀 [`Spec/AGENTS.md`](./Spec/AGENTS.md)。
 
 ```text
-specs/README.md -> 產品區 README -> 目標版本 -> 負責的 Feature
+Spec/README.md -> 產品區 README -> 目標版本 -> 負責的 Feature
 ```
 
 後端與前端的工程規格不放在這裡：後端在 [`Backend/Spec/`](./Backend/Spec/)，系統設計在 [`System_Design/`](./System_Design/)。
