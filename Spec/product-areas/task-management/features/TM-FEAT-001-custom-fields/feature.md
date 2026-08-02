@@ -31,14 +31,15 @@ Approved behavior is limited to the rules in [`spec.md`](./spec.md). Two princip
 
 - Applying predefined disaster field groups, selecting library fields, creating incident-local fields, attaching one field to several task categories, required/optional state, list-choice changes, type correction, deactivation and reactivation, and historical-value visibility.
 - Reading the field configuration, and how a Task form presents required and optional fields.
-- Behavior of a Task category that has no configured fields. The system-defined categories are rescue, supply, medical, and hr; medical currently has none.
+- Behavior of a Task category that has no configured fields, and the starting field set each category ships with. The system-defined categories are rescue, supply, medical, and hr.
 
 ### Out of scope
 
 - Creating task categories, conditional-required rules, cross-incident library promotion workflow, and public guest disclosure.
 - Which role may close a Task. This Feature defines that closure is the enforcement point; TM-FEAT-002 defines who performs it.
 - Merging two fields that turn out to mean the same thing.
-- Which fields a category should start with. That is product content chosen per incident, not behavior. Deciding whether medical ships with a starting set is an Owner content task, not a blocker for this Feature.
+- Which fields an individual incident settles on. The starting sets in `spec.md` are a starting point; every incident adapts them, and that adaptation is the Feature working, not a gap in it.
+- Clinical review of the medical starting set. The four triage counts follow START triage, but a qualified EMT should confirm them before first release.
 
 ### Affects
 
@@ -67,6 +68,7 @@ None.
 - **AC-15:** Failed, stale, concurrent, or offline configuration changes never erase an already accepted configuration or collected values, and each change affects only the fields it names.
 - **AC-16:** A Task form presents required fields above optional fields under a visible separator without collapsing the optional section, and marks a newly added field until it is first filled.
 - **AC-17:** A Task category with no configured fields stays selectable at intake, presents a usable form, and accepts fields like any other category.
+- **AC-18:** A newly deployed system presents each category's starting field set, with the four medical triage counts required and every other shipped field optional.
 
 ## References
 

@@ -161,6 +161,36 @@
 - **Observable result:** The form presents the built-in Task information with no configurable-field section, and the category stays selectable at intake and open for configuration.
 - **Constraint/fallback:** A category is never hidden, disabled, or refused for holding no configured fields. Whether a category ships with a starting set of fields is product content, not a behavior rule.
 
+### TM-CF-120: Starting field set
+
+- **Actor/system:** Product configuration at deployment.
+- **Precondition:** A system is deployed for a new incident and no configuration change has been made yet.
+- **Trigger:** Anyone opens a Task form or the field configuration.
+- **Observable result:** Each system-defined category presents the starting field set recorded below. From that point it behaves like any other configuration and a Super Admin may change it.
+- **Constraint/fallback:** A starting set is a starting point, not a floor. Every shipped field is optional unless the table marks it required, and a category emptied of its starting fields falls under TM-CF-119.
+
+**medical 醫療** — approved 2026-08-02.
+
+| Field | 欄位 | Type | Required |
+|---|---|---|---|
+| Immediate | 紅（立即） | number | Yes |
+| Delayed | 黃（延遲） | number | Yes |
+| Minor | 綠（輕傷） | number | Yes |
+| Expectant | 黑（無生命跡象） | number | Yes |
+| Awaiting evacuation | 需後送人數 | number | No |
+| Medical staff on scene | 現場有醫護 | yes/no | No |
+| Evacuation route condition | 後送路線狀況 | text | No |
+
+The four counts follow START triage, the field standard for mass-casualty incidents. A count of zero is an answer; an empty count is not. This set has not been reviewed by a qualified EMT and should be before first release.
+
+**rescue 搜救, supply 物資, hr 人力** — carried over from the existing implementation, all optional.
+
+| Category | Fields |
+|---|---|
+| rescue 搜救 | 受困人數 number · 樓層 number · 門牌號 text · 危害備註 text |
+| supply 物資 | 物品名稱 text |
+| hr 人力 | 需要技能 choice · 車輛類型 choice · 載運類型 choice · 清理類型 choice · 需要工具 choice |
+
 ## Traceability
 
 | Acceptance criterion | Spec rules |
@@ -182,3 +212,4 @@
 | AC-15 | TM-CF-108, TM-CF-117 |
 | AC-16 | TM-CF-118 |
 | AC-17 | TM-CF-119 |
+| AC-18 | TM-CF-120 |

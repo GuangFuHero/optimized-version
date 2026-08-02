@@ -28,7 +28,7 @@
 - The archived request-management and volunteer-dispatch specifications disagree with current product decisions about assignment authority, task categories, priority, statuses, volunteer identity, and multiple assignees.
 - Those files are `legacy-unreconciled`; they are evidence of past intent, not current product or engineering contracts.
 - Runtime behavior has not been validated against an immutable build.
-- The medical Task category ships with no configured fields, while rescue, supply, and hr ship with a starting set. Under D29 this is valid behavior, so it is a content question for the Owner: decide whether medical should start with fields, and which. It does not block TM-FEAT-001.
+- The medical starting field set approved in D30 follows START triage but has not been reviewed by a qualified EMT. Confirm it with one before first release.
 - The current backend implementation does not yet support the approved TM-FEAT-001 behavior. The gaps were recorded on 2026-08-02 and are owned by the backend team: field configuration has no identity, activation, or required state; configuration reads are restricted to Super Admin, which no form can render under; collected values reference a field by name rather than identity; no required-field check exists; and a Task has no defined status transition to attach closure enforcement to. Do not treat this as a product conflict — it is unbuilt work, not disputed behavior.
 
 ## Supporting material

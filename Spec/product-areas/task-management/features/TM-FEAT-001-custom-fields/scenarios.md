@@ -150,3 +150,22 @@ Two disaster groups plus three manual additions bring the rescue form to 18 fiel
 Rescue, human resources, and supply all ship with a starting set of fields. Medical does not. (The seed data does contain medical fields, but those belong to medical *stations* — a different table from medical *Tasks*.) If the system hid or disabled a category for having no configured fields, medical Tasks could not be created at all; yet every field was added by someone at some point, so an empty category is where every category begins rather than a defect.
 
 **→ D29 · AC-17 · TM-CF-119**
+
+---
+
+### S-14 · 二樓兩位傷患，派幾台車
+**How many ambulances does "two casualties" mean**
+
+大進街 42 號的地點底下已經掛了搜救、人力、物資三張單，每張都是「這個地點的一種需求」，人數是欄位不是單數——搜救單的「受困人數 2」記的是一對老夫婦，一張單不是兩張。醫療單照理應該同一個形狀。
+
+但綠黃紅黑的整個用途就是決定先救誰、派什麼等級的資源。只寫「傷患 2 人」，派遣沒有依據；只寫「最高是紅」，知道要派高級救護但不知道要派幾台。而「黑」的人數是災後統計最關鍵的數字之一，一旦併進總人數就再也拆不出來。
+
+搜救不會有這個問題，因為把人弄出來的工作不隨傷勢改變；醫療是唯一「傷勢決定資源」的類別。
+
+At 42 Dajin Street the Ticket already carries rescue, human-resources, and supply Tasks. Each is one need at one location, with headcount as a field rather than as separate Tasks — the rescue Task's "trapped people: 2" is one elderly couple on one form, not two forms. A medical Task should follow the same shape.
+
+Except that the whole purpose of the four triage colours is deciding who is treated first and what level of resource is sent. "Two casualties" gives dispatch nothing to act on; "highest is red" says send advanced care but not how much of it. And the expectant count is one of the numbers the after-action record turns on — folded into a total, it can never be recovered.
+
+Rescue never hits this, because pulling someone out does not change with their injuries. Medical is the one category where severity determines the resource.
+
+**→ D30 · AC-18 · TM-CF-120**
