@@ -7,7 +7,7 @@
 > 4. 邀請的撤銷 / 輪替 / 稽核。
 > 5. 深連結（短連結）被轉傳、被預覽抓取（link preview bot）誤觸的問題。
 > **日期**：2026-06-10
-> **關聯**：[`prd.md`](../prd.md)（05-member-management）、[[01-auth]]、[[04-rbac]]、[[03-user-settings]]
+> **關聯**：[`feature.md`](../feature.md)（05-member-management）、`IAM-FEAT-001`、`AC-FEAT-001`、`IAM-FEAT-003`
 > **狀態**：研究參考，供決策用（回填至 05 開放問題）
 
 ---
@@ -33,7 +33,7 @@
 
 簡訊/Email OTP 把「持有連結」升級為「持有連結 **且** 控制某個手機/信箱」，大幅降低純外流風險。
 
-> 🟡 **建議：強制 OTP**（與 05 傾向一致）。流程：掃 QR → 填手機 → 收 OTP → 完成註冊。OTP 規格沿用 [[01-auth]] 研究（6 碼 / 5 分鐘 / 限流）。
+> 🟡 **建議：強制 OTP**（與 05 傾向一致）。流程：掃 QR → 填手機 → 收 OTP → 完成註冊。OTP 規格沿用 `IAM-FEAT-001` 研究（6 碼 / 5 分鐘 / 限流）。
 > 例外考量：災時偏鄉收不到簡訊 → 🟡 可備援 Email OTP 或「Team Admin 手動確認佇列」雙軌（05 已有確認佇列，正好當 OTP 收不到時的後備）。
 
 ---
@@ -90,4 +90,4 @@ LINE / Slack / WhatsApp 等通訊軟體會對貼上的連結發 **link-preview �
 - GitHub — Inviting users / SSO 一次性連結：https://docs.github.com/en/organizations
 - Microsoft Teams / Entra B2B — Guest invitation redemption & verification：https://learn.microsoft.com/en-us/entra/external-id/
 - OWASP — 防止 bearer token 外流、短時效與輪替；link unfurling/preview 副作用（避免 GET 變更狀態的 CSRF/側效）
-- 與本 repo 既有：[[01-auth]]（OTP 規格）、[`guest-restricted-access-patterns.md`](guest-restricted-access-patterns.md)（訪客模型）
+- 與本 repo 既有：`IAM-FEAT-001`（OTP 規格）、[`guest-restricted-access-patterns.md`](guest-restricted-access-patterns.md)（訪客模型）

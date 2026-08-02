@@ -6,9 +6,9 @@ Product areas are stable, long-lived capabilities. Their semantic paths do not c
 
 | Product area | Semantic path | Current target |
 |---|---|---|
-| Identity and Account | `identity-and-account/` | `v0.2.0` |
-| Access Control | `access-control/` | `v0.1.0` |
-| Member Management | `member-management/` | `v0.1.0` |
+| Identity and Account | [`identity-and-account/`](./identity-and-account/README.md) | `v0.2.0` |
+| Access Control | [`access-control/`](./access-control/README.md) | `v0.1.0` |
+| Member Management | [`member-management/`](./member-management/README.md) | `v0.1.0` |
 | Map Decision Support | `map-decision-support/` | `v0.2.0` |
 | Resource Stations | `resource-stations/` | `v0.1.0` |
 | Task Management | `task-management/` | `v0.1.0`; guest privacy targets `v0.2.0` |

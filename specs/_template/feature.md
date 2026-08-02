@@ -48,4 +48,4 @@ Write `None.` when all decisions are resolved.
 
 ## References
 
-- [Target Version](../../../versions/<version-id>.md)
+- [Target Version](../../../../versions/<version-id>.md)

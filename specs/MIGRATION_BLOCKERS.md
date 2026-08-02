@@ -6,6 +6,5 @@ This temporary registry lists only pre-existing legacy paths that are allowed to
 |---|---|---|---|
 | BROKEN_LINK | `v1.0.0/*` | Version-owned numbered documents still contain historical wiki references; each source exits this path during Tasks 5-7. | Tasks 5-7 |
 | BROKEN_LINK | `v2.0.0/*` | Legacy roadmap navigation still references the numbered structure. | Task 8 |
-| BROKEN_LINK | `_shared/04-rbac.md` | RBAC still uses historical product-area names before promotion to Access Control. | Task 5 |
 | BROKEN_LINK | `_shared/user-journey.md` | Cross-area journey still uses the historical Task Management name. | Task 8 |
 | BROKEN_LINK | `_shared/research/multitenancy-rls-breakglass-patterns.md` | Shared research still uses historical Identity naming. | Task 8 |

@@ -2,7 +2,7 @@
 
 > **目的**：回答一個 member-management 的開放問題——當 **Team Admin 透過 QRCode 邀請一位「一般使用者」（前台市民/志工，無任何後台 RBAC）進入自己的 Team** 時，是否該讓這個人「進得了後台」？如果讓他進來，他理應只看得到「他被邀進的那一個 Team」，看不到後台其他內容。這種「只看得到一個空間」的人，業界成熟產品怎麼處理？
 > **日期**：2026-06-08
-> **關聯**：[`prd.md`](../prd.md)（05-member-management v3.0）、[[04-rbac]]
+> **關聯**：[`feature.md`](../feature.md)（05-member-management v3.0）、`AC-FEAT-001`
 > **狀態**：研究參考，供決策用（尚未拍板）
 
 ---
