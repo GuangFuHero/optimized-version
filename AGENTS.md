@@ -61,9 +61,9 @@ When product and engineering documents disagree, list the conflict, affected beh
 After any product-spec change, run:
 
 ```powershell
-pwsh -File scripts/verify-specs.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-specs.ps1
 ```
 
-During the migration, `-AllowMigrationBlockers` may be used only when every remaining exception is explicitly registered; new violations are never allowed.
+PowerShell 7 users may substitute `pwsh` for `powershell`. During the migration, `-AllowMigrationBlockers` may be used only when every remaining exception is explicitly registered; new violations are never allowed.
 
 Handoffs must state the objective, changed files, decisions recorded, unresolved Open decisions, verification performed and result, and next owner.

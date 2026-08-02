@@ -51,5 +51,5 @@ Open decisions live only in the owning `feature.md`. Research, wireframes, archi
 After a change, run:
 
 ```powershell
-pwsh -File scripts/verify-specs.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-specs.ps1
 ```

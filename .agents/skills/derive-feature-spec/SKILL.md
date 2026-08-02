@@ -34,4 +34,4 @@ If any link is missing or a blocking Open decision remains, keep the Feature bel
 
 Before the first release, a product area may have no baseline `spec.md`; record that as readiness information rather than inventing one. On release, merge the effective Feature rules into the baseline, removing superseded behavior. Version manifests reference the released Feature and immutable evidence; they do not duplicate its rules.
 
-Run `pwsh -File scripts/verify-specs.ps1` before handoff.
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-specs.ps1` before handoff.
