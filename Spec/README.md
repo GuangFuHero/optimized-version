@@ -77,7 +77,7 @@ product-area README -> target Version -> owned Feature
 
 Open decisions live only in the owning `feature.md`. Research, wireframes, scenarios, archived files, and engineering plans cannot override canonical product behavior.
 
-A Feature may keep a `scenarios.md` recording the real situations its decisions came from, so design, engineering, and field training can see why a rule takes the shape it does. It is supporting material, never a source of behavior: each scenario cites the decisions and acceptance criteria it produced, and a scenario that disagrees with `spec.md` is the one that is wrong.
+A Feature may keep a `scenarios.md` recording the real situations its decisions came from, so design, engineering, and field training can see why a rule takes the shape it does. It is supporting material, never a source of behavior: a scenario that disagrees with `spec.md` is the one that is wrong. Scenarios are written in plain Traditional Chinese and classified by type and frequency; [`_template/scenarios.md`](./_template/scenarios.md) is the required shape and [`AGENTS.md`](./AGENTS.md) holds the rules.
 
 After a change, run this from the repository root:
 

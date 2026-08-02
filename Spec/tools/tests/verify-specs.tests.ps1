@@ -18,6 +18,37 @@ function Write-Utf8File {
     [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
+# Scenario vocabulary is built from code points so this test file stays ASCII.
+$script:scenarioBaseline = [string]([char]0x967D) + [char]0x5149
+$script:scenarioAnomaly = [string]([char]0x7570) + [char]0x5E38
+$script:scenarioFrequent = [string]([char]0x9AD8) + [char]0x983B
+$script:scenarioSeparator = [string][char]0x00B7
+$script:scenarioConclusion = [string]([char]0x7D50) + [char]0x8AD6
+
+$script:scenarioBlockTemplate = @'
+### {0}
+`{1}` {2} `{3}` {2} `{4}`
+
+**{5}**: A plain-language rule. ({6} {2} {7})
+'@
+
+function New-ScenarioBlock {
+    param(
+        [string] $Title = 'A baseline situation',
+        [string] $Type = $script:scenarioBaseline,
+        [string] $Handle = 'S-01',
+        [string] $Decision = 'D1',
+        [string] $Criterion = 'AC-01'
+    )
+
+    return $script:scenarioBlockTemplate -f $Title, $Type, $script:scenarioSeparator, $script:scenarioFrequent, $Handle, $script:scenarioConclusion, $Decision, $Criterion
+}
+
+function Get-ScenariosPath {
+    param([Parameter(Mandatory)] [string] $Root)
+    return Join-Path $Root 'product-areas\task-management\features\TM-FEAT-001-custom-fields\scenarios.md'
+}
+
 function New-ValidFixture {
     $fixture = Join-Path ([System.IO.Path]::GetTempPath()) ("wanguard-spec-test-" + [guid]::NewGuid().ToString('N'))
     $featureDir = Join-Path $fixture 'product-areas\task-management\features\TM-FEAT-001-custom-fields'
@@ -91,6 +122,14 @@ The task form displays an active configured field.
 
 - [ ] **AC-01 / TM-CF-101:** The configured field is observable.
 '@
+    Write-Utf8File -Path (Join-Path $fixture 'product-areas\task-management\decisions.md') -Content @'
+# Task Management decisions
+
+| ID | Decision |
+|---|---|
+| D1 | A field keeps its identity when renamed. |
+'@
+    Write-Utf8File -Path (Join-Path $featureDir 'scenarios.md') -Content ((New-ScenarioBlock) + "`n")
 
     return $fixture
 }
@@ -192,6 +231,40 @@ $tests = [ordered]@{
     }
     'rejects legacy material as a canonical entry' = {
         Test-ErrorCode 'LEGACY_ENTRY' { param($root) Write-Utf8File -Path (Join-Path $root '_archive\legacy.md') -Content "status: legacy-unreconciled`n"; Add-Content -Encoding utf8 -Path (Join-Path $root 'versions\v0.1.0.md') -Value "`n[Legacy](../_archive/legacy.md)" }
+    }
+    'rejects a scenario without a tag line' = {
+        Test-ErrorCode 'SCENARIO_FORMAT' { param($root)
+            $path = Get-ScenariosPath -Root $root
+            $stripped = (Get-Content -Raw -Encoding UTF8 -LiteralPath $path) -replace '(?m)^`.+`\r?\n', ''
+            Write-Utf8File -Path $path -Content $stripped
+        }
+    }
+    'rejects a duplicate scenario handle' = {
+        Test-ErrorCode 'SCENARIO_FORMAT' { param($root)
+            $path = Get-ScenariosPath -Root $root
+            $content = (Get-Content -Raw -Encoding UTF8 -LiteralPath $path) + "`n" + (New-ScenarioBlock -Title 'A second situation reusing the handle')
+            Write-Utf8File -Path $path -Content $content
+        }
+    }
+    'rejects a scenarios file with no baseline scenario' = {
+        Test-ErrorCode 'SCENARIO_FORMAT' { param($root)
+            $path = Get-ScenariosPath -Root $root
+            Write-Utf8File -Path $path -Content ((New-ScenarioBlock -Type $script:scenarioAnomaly) + "`n")
+        }
+    }
+    'rejects a scenario citing an unrecorded decision' = {
+        Test-ErrorCode 'SCENARIO_REFERENCE' { param($root)
+            $path = Get-ScenariosPath -Root $root
+            $content = (Get-Content -Raw -Encoding UTF8 -LiteralPath $path) + "`n" + (New-ScenarioBlock -Title 'A situation citing a missing decision' -Handle 'S-02' -Decision 'D99')
+            Write-Utf8File -Path $path -Content $content
+        }
+    }
+    'rejects a scenario citing an unknown acceptance criterion' = {
+        Test-ErrorCode 'SCENARIO_REFERENCE' { param($root)
+            $path = Get-ScenariosPath -Root $root
+            $content = (Get-Content -Raw -Encoding UTF8 -LiteralPath $path) + "`n" + (New-ScenarioBlock -Title 'A situation citing a missing criterion' -Handle 'S-03' -Criterion 'AC-99')
+            Write-Utf8File -Path $path -Content $content
+        }
     }
     'rejects numeric product-area prefixes' = {
         Test-ErrorCode 'NUMERIC_AREA' { param($root) New-Item -ItemType Directory -Force -Path (Join-Path $root 'product-areas\08-task-management') | Out-Null; Write-Utf8File -Path (Join-Path $root 'product-areas\08-task-management\README.md') -Content '# Invalid area' }
