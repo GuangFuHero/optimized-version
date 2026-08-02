@@ -80,14 +80,13 @@ find_repo_root() {
     return 1
 }
 
-# Function to get highest feature number across every version directory.
-# Numbers are globally unique so a feature keeps its number when promoted between releases.
+# Function to get highest number from specs directory
 get_highest_from_specs() {
-    local specs_root="$1"
+    local specs_dir="$1"
     local highest=0
-
-    if [ -d "$specs_root" ]; then
-        for dir in "$specs_root"/*/*; do
+    
+    if [ -d "$specs_dir" ]; then
+        for dir in "$specs_dir"/*; do
             [ -d "$dir" ] || continue
             dirname=$(basename "$dir")
             number=$(echo "$dirname" | grep -o '^[0-9]\+' || echo "0")
@@ -97,7 +96,7 @@ get_highest_from_specs() {
             fi
         done
     fi
-
+    
     echo "$highest"
 }
 
@@ -113,9 +112,9 @@ get_highest_from_branches() {
             # Clean branch name: remove leading markers and remote prefixes
             clean_branch=$(echo "$branch" | sed 's/^[* ]*//; s|^remotes/[^/]*/||')
             
-            # Extract feature number if branch matches pattern NN-* or NNN-*
-            if echo "$clean_branch" | grep -q '^[0-9]\{2,3\}-'; then
-                number=$(echo "$clean_branch" | grep -o '^[0-9]\{2,3\}' || echo "0")
+            # Extract feature number if branch matches pattern ###-*
+            if echo "$clean_branch" | grep -q '^[0-9]\{3\}-'; then
+                number=$(echo "$clean_branch" | grep -o '^[0-9]\{3\}' || echo "0")
                 number=$((10#$number))
                 if [ "$number" -gt "$highest" ]; then
                     highest=$number
@@ -144,27 +143,17 @@ check_existing_branches() {
     # Check specs directory as well
     local spec_dirs=""
     if [ -d "$specs_dir" ]; then
-        spec_dirs=$(find "$specs_dir" -mindepth 2 -maxdepth 2 -type d -name "[0-9]*-${short_name}" 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/-.*//' | sort -n)
+        spec_dirs=$(find "$specs_dir" -maxdepth 1 -type d -name "[0-9]*-${short_name}" 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/-.*//' | sort -n)
     fi
     
-    # Feature numbers form a single space shared by every version directory, so a new
-    # feature must clear the global maximum -- not just the highest number that happens
-    # to carry this short name (which is 0 for any name never used before).
-    local max_num
-    max_num=$(get_highest_from_specs "$specs_dir")
-
-    local highest_branch
-    highest_branch=$(get_highest_from_branches)
-    if [ "$highest_branch" -gt "$max_num" ]; then
-        max_num=$highest_branch
-    fi
-
+    # Combine all sources and get the highest number
+    local max_num=0
     for num in $remote_branches $local_branches $spec_dirs; do
         if [ "$num" -gt "$max_num" ]; then
             max_num=$num
         fi
     done
-
+    
     # Return next number
     echo $((max_num + 1))
 }
@@ -194,21 +183,7 @@ fi
 
 cd "$REPO_ROOT"
 
-# Specs are partitioned by release version: specs/<version>/<NN-feature>/
-# Override the target version with SPECIFY_VERSION; otherwise use the highest vN present.
-SPECS_ROOT="$REPO_ROOT/specs"
-# Resolution order: SPECIFY_VERSION -> specs/ACTIVE_VERSION -> highest vN present.
-if [ -n "${SPECIFY_VERSION:-}" ]; then
-    VERSION="$SPECIFY_VERSION"
-elif [ -s "$SPECS_ROOT/ACTIVE_VERSION" ]; then
-    VERSION=$(tr -d '[:space:]' < "$SPECS_ROOT/ACTIVE_VERSION")
-else
-    # Versions are semver-named (v1.0.0, v1.1.0, v2.0.0); sort -V orders them correctly.
-    VERSION=$(ls -d "$SPECS_ROOT"/v[0-9]*.[0-9]*.[0-9]* 2>/dev/null | xargs -n1 basename 2>/dev/null \
-              | sort -V | tail -1)
-    VERSION="${VERSION:-v1.0.0}"
-fi
-SPECS_DIR="$SPECS_ROOT/$VERSION"
+SPECS_DIR="$REPO_ROOT/specs"
 mkdir -p "$SPECS_DIR"
 
 # Function to generate branch name with stop word filtering and length filtering
@@ -272,16 +247,15 @@ fi
 if [ -z "$BRANCH_NUMBER" ]; then
     if [ "$HAS_GIT" = true ]; then
         # Check existing branches on remotes
-        BRANCH_NUMBER=$(check_existing_branches "$BRANCH_SUFFIX" "$SPECS_ROOT")
+        BRANCH_NUMBER=$(check_existing_branches "$BRANCH_SUFFIX" "$SPECS_DIR")
     else
         # Fall back to local directory check
-        HIGHEST=$(get_highest_from_specs "$SPECS_ROOT")
+        HIGHEST=$(get_highest_from_specs "$SPECS_DIR")
         BRANCH_NUMBER=$((HIGHEST + 1))
     fi
 fi
 
-# Feature numbers are 2-digit to match the specs/ tree (01-auth, 05-member-management, ...)
-FEATURE_NUM=$(printf "%02d" "$BRANCH_NUMBER")
+FEATURE_NUM=$(printf "%03d" "$BRANCH_NUMBER")
 BRANCH_NAME="${FEATURE_NUM}-${BRANCH_SUFFIX}"
 
 # GitHub enforces a 244-byte limit on branch names
@@ -311,33 +285,21 @@ else
     >&2 echo "[specify] Warning: Git repository not detected; skipped branch creation for $BRANCH_NAME"
 fi
 
-PRODUCT_DIR="$SPECS_DIR/$BRANCH_NAME"
-FEATURE_DIR="$PRODUCT_DIR/engineering"
-mkdir -p "$FEATURE_DIR" "$PRODUCT_DIR/research"
+FEATURE_DIR="$SPECS_DIR/$BRANCH_NAME"
+mkdir -p "$FEATURE_DIR"
 
 TEMPLATE="$REPO_ROOT/.specify/templates/spec-template.md"
 SPEC_FILE="$FEATURE_DIR/spec.md"
 if [ -f "$TEMPLATE" ]; then cp "$TEMPLATE" "$SPEC_FILE"; else touch "$SPEC_FILE"; fi
 
-# Seed the product layer too: user-stories.md is the root document, prd.md derives from it.
-for product_doc in user-stories prd; do
-    PRODUCT_TEMPLATE="$SPECS_ROOT/_template/${product_doc}.md"
-    PRODUCT_FILE="$PRODUCT_DIR/${product_doc}.md"
-    if [ ! -f "$PRODUCT_FILE" ]; then
-        if [ -f "$PRODUCT_TEMPLATE" ]; then cp "$PRODUCT_TEMPLATE" "$PRODUCT_FILE"; else touch "$PRODUCT_FILE"; fi
-    fi
-done
-
 # Set the SPECIFY_FEATURE environment variable for the current session
 export SPECIFY_FEATURE="$BRANCH_NAME"
 
 if $JSON_MODE; then
-    printf '{"BRANCH_NAME":"%s","SPEC_FILE":"%s","FEATURE_NUM":"%s","VERSION":"%s","PRODUCT_DIR":"%s"}\n' "$BRANCH_NAME" "$SPEC_FILE" "$FEATURE_NUM" "$VERSION" "$PRODUCT_DIR"
+    printf '{"BRANCH_NAME":"%s","SPEC_FILE":"%s","FEATURE_NUM":"%s"}\n' "$BRANCH_NAME" "$SPEC_FILE" "$FEATURE_NUM"
 else
     echo "BRANCH_NAME: $BRANCH_NAME"
     echo "SPEC_FILE: $SPEC_FILE"
     echo "FEATURE_NUM: $FEATURE_NUM"
-    echo "VERSION: $VERSION"
-    echo "PRODUCT_DIR: $PRODUCT_DIR"
     echo "SPECIFY_FEATURE environment variable set to: $BRANCH_NAME"
 fi

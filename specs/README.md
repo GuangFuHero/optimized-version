@@ -1,10 +1,12 @@
 # Product specifications
 
-This directory is the canonical product-document system for Wanguard.
+This directory is the canonical product-document system for Wanguard. Everything needed to read, change, and verify product documentation lives here; the repository root holds only the application and its license.
 
 ```text
 specs/
-  ACTIVE_VERSION
+  AGENTS.md                 # Rules every agent and contributor follows first
+  CLAUDE.md                 # Pointer to AGENTS.md
+  ACTIVE_VERSION            # Default Target Version for new Features
   versions/                 # Release manifests only
   product-areas/            # Stable semantic capability paths
     <area>/
@@ -20,8 +22,10 @@ specs/
           validation.md     # Required before Ready
           engineering/      # Optional Feature-local implementation contract
   _shared/                  # Only genuinely cross-area material
-  _template/
+  _template/                # Document templates
+  _process/                 # Handoffs, migration plans, design records
   _archive/                 # Historical and non-canonical material
+  tools/                    # Specification verification script and its tests
 ```
 
 ## Version numbering
@@ -36,7 +40,13 @@ Use Semantic Versioning identifiers in the form `vMAJOR.MINOR.PATCH`.
 
 The current default target is declared by [`ACTIVE_VERSION`](./ACTIVE_VERSION). Version manifests live under `versions/`; they never contain product-area directories or duplicate Feature requirements.
 
-Current planned manifests: [`v0.1.0`](./versions/v0.1.0.md) and [`v0.2.0`](./versions/v0.2.0.md). Product-area navigation and historical-name diagnosis live in [`product-areas/README.md`](./product-areas/README.md).
+Current planned manifests: [`v0.1.0`](./versions/v0.1.0.md) covers Access Control, Member Management, Resource Stations, and Task Management; [`v0.2.0`](./versions/v0.2.0.md) plans Identity and Account, Map Decision Support, and Emergency Announcements. Product-area navigation and historical-name diagnosis live in [`product-areas/README.md`](./product-areas/README.md).
+
+## Release semantics
+
+- A Feature is defined, validated, and released on its own. Once it is live for users it is `Released`, and the product-area baseline `spec.md` is updated immediately.
+- A Version later aggregates a batch of Released Features. It does not contain their folders and does not decide whether they are live.
+- `ACTIVE_VERSION` only supplies the default Target Version for new Features; it never changes physical paths or status.
 
 ## Naming
 
@@ -44,9 +54,18 @@ Current planned manifests: [`v0.1.0`](./versions/v0.1.0.md) and [`v0.2.0`](./ver
 - Feature folders use `<FEATURE-ID>-<semantic-slug>`, for example `TM-FEAT-001-custom-fields`.
 - IDs are permanent. Rename a human-readable slug only when necessary; never recycle an ID.
 
+Historical names are mapped in [`product-areas/README.md`](./product-areas/README.md). The former Version-owned layout and the unreconciled engineering documents were moved to `_archive/` and are no longer reading entry points.
+
+## Engineering boundary
+
+- [`Backend/`](../Backend/) and [`Frontend/`](../Frontend/) are the current implementation, not product definition.
+- Feature-local `engineering/` holds only the implementation contract that is necessary and already aligned with the Feature.
+- `_shared/engineering/` holds only genuinely cross-area contracts.
+- When an engineering document and product behavior disagree, list the difference and its impact and wait for the Owner. Never let an engineering document overwrite an approved product specification.
+
 ## Reading and editing
 
-Start at the relevant product-area `README.md`, then read its target Version and the owned Feature. Follow root [`AGENTS.md`](../AGENTS.md) and the repo-local product-spec skills before editing.
+Start at the relevant product-area `README.md`, then read its target Version and the owned Feature. Follow [`AGENTS.md`](./AGENTS.md) and the repo-local product-spec skills before editing.
 
 ```text
 product-area README -> target Version -> owned Feature
@@ -54,8 +73,10 @@ product-area README -> target Version -> owned Feature
 
 Open decisions live only in the owning `feature.md`. Research, wireframes, archived files, and engineering plans cannot override canonical product behavior.
 
-After a change, run:
+After a change, run this from the repository root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-specs.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File specs/tools/verify-specs.ps1
 ```
+
+Passing the document checks does not mean runtime validation has been performed.

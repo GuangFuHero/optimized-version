@@ -10,18 +10,18 @@ Keep Wanguard product areas stable while Features can be defined, validated, and
 
 ## Canonical reading path
 
-1. Read repository [`README.md`](../../README.md), [`AGENTS.md`](../../AGENTS.md), and [`specs/README.md`](../../specs/README.md).
-2. Open the responsible [product-area README](../../specs/product-areas/README.md).
+1. Read repository [`README.md`](../../../README.md), [`specs/AGENTS.md`](../../AGENTS.md), and [`specs/README.md`](../../README.md).
+2. Open the responsible [product-area README](../../product-areas/README.md).
 3. Read its Target Version and only the responsible Feature.
 
 Before changing product documents, follow the repo-local `manage-product-spec` and `derive-feature-spec` skills. `CLAUDE.md` intentionally points to `AGENTS.md` rather than duplicating governance.
 
 ## Migrated structure
 
-- Version manifests: [`v0.1.0`](../../specs/versions/v0.1.0.md) and [`v0.2.0`](../../specs/versions/v0.2.0.md).
-- Stable areas: Identity and Account, Access Control, Member Management, Map Decision Support, Resource Stations, Task Management, and Emergency Announcements under [`specs/product-areas/`](../../specs/product-areas/README.md).
+- Version manifests: [`v0.1.0`](../../versions/v0.1.0.md) and [`v0.2.0`](../../versions/v0.2.0.md).
+- Stable areas: Identity and Account, Access Control, Member Management, Map Decision Support, Resource Stations, Task Management, and Emergency Announcements under [`specs/product-areas/`](../../product-areas/README.md).
 - Task Management is split into `TM-FEAT-001` through `TM-FEAT-006`; Custom Fields owns its Spec, pure Flow, unchecked validation, and wireframes.
-- Original PRDs, User Stories, decision discussion, old Version entry pages, cross-area journey, and stale/unreconciled engineering files are retained under [`specs/_archive/`](../../specs/_archive/README.md).
+- Original PRDs, User Stories, decision discussion, old Version entry pages, cross-area journey, and stale/unreconciled engineering files are retained under [`specs/_archive/`](../../_archive/README.md).
 - The former `specs/v1.0.0/` and `specs/v2.0.0/` trees no longer exist as active paths.
 
 ## Approved decisions
@@ -32,7 +32,7 @@ Before changing product documents, follow the repo-local `manage-product-spec` a
 - A Feature may independently reach Released and immediately update its product-area baseline; a formal Version aggregates released Features later.
 - Feature status never advances to Ready, Validated, or Released without the documented Owner and evidence gates.
 - Open decisions live only in the owning `feature.md`; Flow describes sequence and cites existing Spec rules.
-- Task Management binding decisions D4, D7, and D9-D16 are canonical in [`decisions.md`](../../specs/product-areas/task-management/decisions.md); the complete D1-D16 discussion remains non-canonical history.
+- Task Management binding decisions D4, D7, and D9-D16 are canonical in [`decisions.md`](../../product-areas/task-management/decisions.md); the complete D1-D16 discussion remains non-canonical history.
 
 ## Blocking Open decisions
 
@@ -69,6 +69,8 @@ rg -n --glob '!specs/_archive/**' --glob '!docs/superpowers/**' --glob '!docs/pr
 ```
 
 The strict validator was run without `-AllowMigrationBlockers`; the temporary blocker registry has been removed.
+
+This block records the commands exactly as executed on 2026-08-02. The verifier and its tests have since moved to `specs/tools/`, and the process documents to `specs/_process/`.
 
 ## Runtime validation
 

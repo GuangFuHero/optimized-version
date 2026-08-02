@@ -1,0 +1,39 @@
+Disaster_Scope,Task_Scope,Label,Backend_Key,Data_Type,Required,Options/Enum,Notes,Importance,Usage_Frequency,ER_Mapping
+all,all,任務 ID,task_id,String (UUID),Yes,-,系統自動生成唯一碼,,,base_geometries.uuid (via tickets inheritance)
+all,all,任務類型,task_type,Enum,Yes,"search_rescue, medical_support, fire_response, supply_delivery, personnel_transport, equipment_transport, cleanup, repair, inspection, info_report, info_update, info_verification, other",任務主分類,,,tickets.task_type
+all,all,災害類型,disaster_type,Enum,Yes,"earthquake, landslide, typhoon, flood, tsunami, fire, radiation, epidemic, war, other",對應災害場景,,,task_properties (property_name=disaster_type) on ticket_tasks
+all,all,任務標題,title,String,Yes,-,任務簡短標題,,,tickets.title
+all,all,任務描述,description,Text,Yes,-,詳細說明現場需求與狀況,,,tickets.description
+all,all,任務狀態,status,Enum,Yes,"pending, in_progress, completed, canceled, archived",供前端顯示流程狀態,,,tickets.status
+all,all,優先級,priority,Enum,Yes,"low, medium, high, critical",人工或系統定義緊急程度,,,tickets.priority
+all,all,建立時間,created_at,Timestamp,Yes,ISO8601,任務建立時間,,,base_geometries.created_at
+all,all,最後更新時間,updated_at,Timestamp,Yes,ISO8601,判斷資訊時效性,,,base_geometries.updated_at
+all,all,經度,longitude,Float,Yes,-180 to 180,地理座標,,,base_geometries.geometry (PostGIS POINT)
+all,all,緯度,latitude,Float,Yes,-90 to 90,地理座標,,,base_geometries.geometry (PostGIS POINT)
+all,all,地址,address,String,No,-,人類可讀位置,,,secondary_locations (location_type=address: county/city/lane/alley/no/floor/room)
+all,all,電線桿編號,pole_id,String,No,-,台灣定位輔助（無地址時關鍵識別）,,,secondary_locations (location_type=pole: pole_id)
+all,all,來源,source,Enum,Yes,"user, gov, crawler, ngo, admin",資料來源識別,,,ticket_tasks.source
+all,all,可見性,visibility,Enum,Yes,"public, restricted, internal",控制前端顯示範圍,,,tickets.visibility + ticket_tasks.visibility (both levels)
+all,all,現場照片,photo_urls,Array,No,URL list,支援多張照片,,,photos.url (ref_type=ticket)
+all,all,進度說明,progress_note,Text,No,-,目前處理進展,,,ticket_tasks.progress_note
+all,all,需求人數,required_headcount,Integer,No,-,任務所需總人力,,,derived: SUM(ticket_tasks.quantity) WHERE task_type=hr
+all,all,已配對人數,assigned_headcount,Integer,No,-,目前已媒合人數,,,derived: COUNT(task_assignments) WHERE ticket_tasks.task_type=hr
+all,all,所需資源,required_resources,Array,No,free text / resource ids,需要的物資或設備,,,derived: task_properties WHERE quantity IS NOT NULL (supply items)
+all,all,技能需求,required_skills,Array,No,"medical, rescue, driving, cleaning, translation, logistics, repair, firefighting, inspection",任務所需能力,,,task_properties (property_name=required_skill) on ticket_tasks WHERE task_type=hr
+all,all,接案者 ID,assigned_actor_ids,Array,No,user_id / org_id list,已參與個人或單位,,,task_assignments (task_uuid FK / actor_uuid FK→users / role / assigned_at)
+all,all,信用分數,confidence_score,Float,Yes,0.0 - 1.0,AI 或人工驗證給分,,,ticket_tasks.confidence_score
+all,all,驗證狀態,verification_status,Enum,Yes,"unverified, ai_verified, human_verified, disputed",UI 狀態顯示,,,tickets.verification_status
+all,all,是否疑似重複,is_duplicate,Boolean,Yes,"true, false",前端與管理端提示,,,ticket_tasks.is_duplicate
+all,all,去重群組 ID,dedup_group_id,String,No,-,AI 合併重複任務用,,,ticket_tasks.dedup_group_id
+all,all,審核狀態,moderation_status,Enum,Yes,"pending_review, approved, rejected, merged",管理後台流程,,,ticket_tasks.moderation_status
+all,all,審核備註,review_note,Text,No,-,人工審核說明,,,tickets.review_note + ticket_tasks.review_note (both levels)
+"earthquake, fire, landslide, tsunami, war","search_rescue, medical_support, fire_response",受影響人數,people_count,Integer,No,-,現場受困、受影響或待救援人數,,,task_properties (property_name=people_count) on ticket_tasks WHERE task_type=rescue
+"earthquake, fire, war","search_rescue, medical_support, fire_response",樓層資訊,floor_level,String,No,"B1, 1F, 2F, rooftop, unknown",支援垂直救援,,,task_properties (property_name=floor_level) on ticket_tasks WHERE task_type=rescue
+"earthquake, fire, war","search_rescue, medical_support, fire_response",房號資訊,unit_number,String,No,unit number 房號,支援垂直救援,,,task_properties (property_name=unit_number) on ticket_tasks WHERE task_type=rescue
+"earthquake, fire, landslide, flood, radiation, war","search_rescue, medical_support, fire_response, cleanup, repair",危險說明,hazard_note,Text,No,-,如瓦斯外洩、土石滑動、污染風險,,,task_properties (property_name=hazard_note) on ticket_tasks WHERE task_type=rescue
+all,"supply_delivery, personnel_transport",目的地,destination,String,Yes,-,運送或接駁目的地,,,ticket_tasks.route_uuid → routes.destination_uuid → base_geometries
+all,"supply_delivery, personnel_transport",載具需求,vehicle_types,Array,No,"car, truck, motorcycle, boat, ambulance, helicopter",運送的載具種類,,,task_properties (property_name=vehicle_type) on ticket_tasks WHERE task_type=hr
+all,"supply_delivery, personnel_transport",運送內容類型,cargo_type,Enum,No,"people, supplies, equipment",運送標的,,,task_properties (property_name=cargo_type) on ticket_tasks WHERE task_type=hr
+all,"supply_delivery, personnel_transport",運送數量,cargo_quantity,Integer,No,-,運送單位數量,,,task_properties.quantity (on supply items within the task)
+"flood, landslide, typhoon","cleanup, repair",清理類型,cleanup_type,Enum,No,"mud, debris, garbage, sewage",清理 / 修復任務適用,,,task_properties (property_name=cleanup_type) on ticket_tasks WHERE task_type=hr
+"flood, landslide, typhoon, earthquake, fire","cleanup, repair",所需工具,required_tools,Array,No,"shovel, excavator, pump, truck, chainsaw",清理 / 修復任務適用,,,task_properties (property_name=required_tool) on ticket_tasks WHERE task_type=hr

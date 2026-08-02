@@ -12,6 +12,8 @@ Read only what the task needs, in this order:
 4. The Feature's `Target Version` manifest under `specs/versions/`.
 5. The owned Feature's `feature.md`, then its `spec.md`, `flow.md`, or `validation.md` only as needed.
 
+All paths in this file are relative to the repository root.
+
 Do not scan or modify unrelated product areas. Archive and research files are evidence, not current product behavior.
 
 ## Required local skills
@@ -61,7 +63,7 @@ When product and engineering documents disagree, list the conflict, affected beh
 After any product-spec change, run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-specs.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File specs/tools/verify-specs.ps1
 ```
 
 PowerShell 7 users may substitute `pwsh` for `powershell`. During the migration, `-AllowMigrationBlockers` may be used only when every remaining exception is explicitly registered; new violations are never allowed.

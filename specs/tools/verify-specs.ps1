@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($Root)) {
-    $Root = Join-Path $PSScriptRoot '..\specs'
+    $Root = Join-Path $PSScriptRoot '..'
 }
 $allowedStatuses = @('Draft', 'Ready', 'In delivery', 'Validated', 'Released', 'Superseded')
 $validationRequiredStatuses = @('Ready', 'In delivery', 'Validated', 'Released')
@@ -74,7 +74,7 @@ function Get-FrontMatter {
 function Test-IsExcludedPath {
     param([Parameter(Mandatory)] [string] $Path)
     $relative = Get-RelativePath -Path $Path
-    return $relative -match '(^|/)(_archive|_template)(/|$)'
+    return $relative -match '(^|/)(_archive|_template|_process)(/|$)'
 }
 
 function Get-MarkdownLinks {

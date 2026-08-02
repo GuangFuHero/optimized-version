@@ -48,4 +48,4 @@ After explicit release approval and successful validation, merge the Feature's b
 
 ## Finish
 
-Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-specs.ps1`. Report changed canonical files, decisions, remaining Open decisions, validation actually performed, and next owner. Never claim runtime validation from document checks alone.
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File specs/tools/verify-specs.ps1`. Report changed canonical files, decisions, remaining Open decisions, validation actually performed, and next owner. Never claim runtime validation from document checks alone.

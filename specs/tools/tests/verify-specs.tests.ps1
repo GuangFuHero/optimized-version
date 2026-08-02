@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$verifier = Join-Path $repoRoot 'scripts\verify-specs.ps1'
+$toolsRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$verifier = Join-Path $toolsRoot 'verify-specs.ps1'
 $powerShellHost = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
 $script:failures = [System.Collections.Generic.List[string]]::new()
 
