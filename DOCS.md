@@ -41,7 +41,7 @@ AI agent 必須先讀 [`AGENTS.md`](./AGENTS.md)，再依相同路徑縮小範�
 
 ## 命名與歷史路徑
 
-產品區使用 semantic slug，不使用 `01-10` 排序編號。舊名稱對照集中於 [`specs/product-areas/README.md`](./specs/product-areas/README.md)。舊的 `specs/v1.0.0/`、`specs/v2.0.0/` 與衝突工程文件會在內容遷移完成後移入 `specs/_archive/`。
+產品區使用 semantic slug，不使用 `01-10` 排序編號。舊名稱對照集中於 [`specs/product-areas/README.md`](./specs/product-areas/README.md)。舊的 Version-owned layout 與衝突工程文件已移入 [`specs/_archive/`](./specs/_archive/README.md)，不再是閱讀入口。
 
 ## 工程與產品邊界
 

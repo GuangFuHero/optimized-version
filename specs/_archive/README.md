@@ -1,10 +1,18 @@
-# 已凍結文件（Archive）
+# Archived product documents
 
-**本資料夾內容僅供追溯，勿引用、勿修改。** 現行權威文件在 [`../v1.0.0/`](../v1.0.0/)。
+**Everything under this directory is historical and non-canonical. Do not use it as product behavior, a minimum reading path, an engineering contract, or release evidence.**
 
-| 項目 | 凍結原因 | 取代者 |
-|------|----------|--------|
-| `user-stories-legacy/` | User Stories 已全數 co-located 至各 feature 資料夾（`v1.0.0/XX-feature/user-stories.md`），本集中式索引失去作用 | [`../README.md`](../README.md) |
-| `user-stories-legacy/08-ticket-management.md` | 內容描述舊的「災害類型欄位群組 / 直立救援三層觸發」模型；08 已改採四層 Ticket→Task + EAV 結構，該機制退回待拍板 | [`../v1.0.0/08-ticket-management/user-stories.md`](../v1.0.0/08-ticket-management/user-stories.md) |
-| `prd-manager-end-sucre.md` | 舊版單檔總表，內容已全數拆分至 01–10 各 feature 資料夾 | [`../v1.0.0/`](../v1.0.0/) |
-| `backend-spec-todo.md` | 2025-11 的工程規格待辦清單，用的是已停用的 `Backend/Spec/NNN-*` 編號；其追蹤的規格皆已併入 `v1.0.0/XX-feature/engineering/` | [`../v1.0.0/`](../v1.0.0/) |
+Canonical product documents start at [`../README.md`](../README.md).
+
+## Archive groups
+
+| Group | Purpose | Canonical replacement |
+|---|---|---|
+| `version-owned-layout/` | Original `v1.0.0/` and `v2.0.0/` entry pages and backlog that incorrectly placed product areas inside Versions. | [`../versions/`](../versions/) and [`../product-areas/`](../product-areas/README.md) |
+| `legacy-product-docs/` | Source PRDs, User Stories, cross-area flows, and numbered-area documents retained for provenance. | Responsible product-area README and Feature |
+| `legacy-engineering/` | Superseded, stale, or unreconciled implementation documents and self-checklists. | Feature-local `engineering/`, current code, and immutable validation evidence |
+| `user-stories-legacy/` | Earlier centralized User Story collection. | Responsible Feature |
+| `prd-manager-end-sucre.md` | Earlier single-file product catalog. | [`../product-areas/`](../product-areas/README.md) |
+| `backend-spec-todo.md` | Obsolete 2025 engineering-spec tracking list. | Current Feature and engineering ownership |
+
+Historical links inside archived files may intentionally point to paths that no longer exist. Repair canonical files instead of making archived material look current.
