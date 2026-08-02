@@ -16,7 +16,7 @@
 
 | Feature | Status | Target Version | Blocking issue |
 |---|---|---|---|
-| [TM-FEAT-001 Custom fields](./features/TM-FEAT-001-custom-fields/feature.md) | Draft | [v0.1.0](../../versions/v0.1.0.md) | Eleven interaction and failure-mode decisions remain open. |
+| [TM-FEAT-001 Custom fields](./features/TM-FEAT-001-custom-fields/feature.md) | Draft | [v0.1.0](../../versions/v0.1.0.md) | None open. Closure enforcement depends on TM-FEAT-002 defining who may close a Task. |
 | [TM-FEAT-002 Task assignment](./features/TM-FEAT-002-task-assignment/feature.md) | Draft | [v0.1.0](../../versions/v0.1.0.md) | Assignment authority, volunteer identity, and multi-assignee behavior are unresolved. |
 | [TM-FEAT-003 Guest task privacy](./features/TM-FEAT-003-guest-ticket-privacy/feature.md) | Draft | [v0.2.0](../../versions/v0.2.0.md) | Verification threshold, location precision, and photo disclosure are unresolved. |
 | [TM-FEAT-004 Intake and tracking](./features/TM-FEAT-004-intake-and-tracking/feature.md) | Draft | [v0.1.0](../../versions/v0.1.0.md) | Intake-source contract and tracking identity are unresolved. |
@@ -28,6 +28,7 @@
 - The archived request-management and volunteer-dispatch specifications disagree with current product decisions about assignment authority, task categories, priority, statuses, volunteer identity, and multiple assignees.
 - Those files are `legacy-unreconciled`; they are evidence of past intent, not current product or engineering contracts.
 - Runtime behavior has not been validated against an immutable build.
+- The current backend implementation does not yet support the approved TM-FEAT-001 behavior. The gaps were recorded on 2026-08-02 and are owned by the backend team: field configuration has no identity, activation, or required state; configuration reads are restricted to Super Admin, which no form can render under; collected values reference a field by name rather than identity; no required-field check exists; and a Task has no defined status transition to attach closure enforcement to. Do not treat this as a product conflict — it is unbuilt work, not disputed behavior.
 
 ## Supporting material
 
