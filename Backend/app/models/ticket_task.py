@@ -37,6 +37,7 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     visibility: Mapped[str] = mapped_column(String(50), default="public")
     review_note: Mapped[str | None] = mapped_column(String)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class TaskProperty(Base, UUIDPKMixin, TimestampMixin):

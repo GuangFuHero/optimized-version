@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import admin, auth, map, rbac_admin, rbac_test, users
+from app.api.v1.endpoints import admin, analytics, auth, map, rbac_admin, rbac_test, users
 from app.core.config import settings
 
 api_router = APIRouter()
@@ -37,6 +37,9 @@ if rbac_test_enabled(settings.ENV):
 
 # 註冊地圖圖磚路由
 api_router.include_router(map.router, prefix="/map", tags=["地圖圖磚"])
+
+# 註冊數據分析圖表路由 (Plotly 圖表 HTML)
+api_router.include_router(analytics.router, prefix="/analytics", tags=["數據分析 API"])
 
 # 未來其他功能路由註冊處
 # api_router.include_router(stations.router, prefix="/stations", tags=["stations"])

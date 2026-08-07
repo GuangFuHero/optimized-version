@@ -1,6 +1,7 @@
 """GraphQL types for stations, closure areas, and station properties."""
 
 import asyncio
+import enum
 from datetime import datetime
 from types import SimpleNamespace
 from uuid import UUID
@@ -14,6 +15,15 @@ from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import PageInfo, Visibility
 from app.graphql.tickets.types import PhotoType
+
+
+@strawberry.enum
+class StationOperationalStatus(enum.Enum):
+    """Whether a station is currently open, and if not, why."""
+
+    active = "active"
+    temporarily_closed = "temporarily_closed"
+    permanently_closed = "permanently_closed"
 
 
 @strawberry.input
@@ -147,6 +157,13 @@ class StationType:
         default=None,
         description="Computed urgency score used for display ordering — higher is more urgent",
     )
+    operational_status: str = strawberry.field(
+        default="active",
+        description="Whether the station is open: 'active', 'temporarily_closed', or 'permanently_closed'",
+    )
+    status_changed_at: datetime | None = strawberry.field(
+        default=None, description="When operational_status last changed"
+    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -238,6 +255,7 @@ class StationType:
             confidence_score=m.confidence_score,
             is_duplicate=m.is_duplicate, is_temporary=m.is_temporary,
             is_official=m.is_official, priority_score=m.priority_score,
+            operational_status=m.operational_status, status_changed_at=m.status_changed_at,
             created_at=m.created_at, updated_at=m.updated_at,
             _contact_name_raw=m.contact_name,
             _contact_email_raw=m.contact_email,
@@ -283,6 +301,11 @@ class CreateStationInput:
     contact_name: str | None = strawberry.field(default=None, description="Optional station contact name")
     contact_email: str | None = strawberry.field(default=None, description="Optional station contact email")
     contact_phone: str | None = strawberry.field(default=None, description="Optional station contact phone")
+    operational_status: StationOperationalStatus = strawberry.field(
+        default=StationOperationalStatus.active,
+        description="Whether the station is open: 'active' (default), 'temporarily_closed', "
+        "or 'permanently_closed'",
+    )
     secondary_location: SecondaryLocationInput | None = strawberry.field(
         default=None,
         description="Optional secondary address or pole location to attach to this station",
@@ -304,6 +327,10 @@ class UpdateStationInput:
     comment: str | None = strawberry.UNSET
     visibility: Visibility | None = strawberry.field(
         default=None, description="Updated visibility: 'public', 'restricted', or 'internal'"
+    )
+    operational_status: StationOperationalStatus | None = strawberry.field(
+        default=None,
+        description="Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed'",
     )
 
 

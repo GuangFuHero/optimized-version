@@ -34,6 +34,7 @@ class GeoQuery:
         self, info: strawberry.types.Info,
         bounds: BoundsInput | None = None,
         station_type: str | None = None,
+        operational_status: str | None = None,
         skip: int = 0, limit: int = 50,
     ) -> StationConnection:
         """List stations within an optional geographic bounding box.
@@ -45,6 +46,7 @@ class GeoQuery:
             info: Strawberry resolver context providing the database session.
             bounds: Optional lat/lng bbox to spatially filter results via ST_Intersects.
             station_type: Optional type filter (e.g. 'shelter', 'supply', 'medical').
+            operational_status: Optional filter — 'active', 'temporarily_closed', or 'permanently_closed'.
             skip: Pagination offset.
             limit: Max results per page (default 50).
 
@@ -55,11 +57,12 @@ class GeoQuery:
         scope = await check_permission(info, Perm.STATION_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Station)
         total = await station_repository.count_active(
-            db, bounds=bounds, station_type=station_type, extra_filters=extra_filters
+            db, bounds=bounds, station_type=station_type, operational_status=operational_status,
+            extra_filters=extra_filters,
         )
         items = await station_repository.list_active(
-            db, bounds=bounds, station_type=station_type, skip=skip, limit=limit,
-            extra_filters=extra_filters,
+            db, bounds=bounds, station_type=station_type, operational_status=operational_status,
+            skip=skip, limit=limit, extra_filters=extra_filters,
         )
         return StationConnection(
             items=[StationType.from_model(m) for m in items],
