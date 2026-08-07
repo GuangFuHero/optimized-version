@@ -30,6 +30,43 @@ STATION_PROPERTY_CONFIGS = """
 query($stationType: String!) { stationPropertyConfigs(stationType: $stationType) { propertyName } }
 """
 
+CREATE_STATION = """
+mutation($input: CreateStationInput!) {
+    createStation(input: $input) { uuid }
+}
+"""
+
+STATION_DETAIL_WITH_PII = """
+query($uuid: UUID!) {
+    station(uuid: $uuid) { uuid contactName contactEmail contactPhone }
+}
+"""
+
+ATTACH_STATION_PHOTO = """
+mutation($stationUuid: UUID!, $url: String!) {
+    attachStationPhoto(stationUuid: $stationUuid, url: $url) { uuid url refType }
+}
+"""
+
+
+async def _create_station(client, token: str) -> str:
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {
+                "input": {
+                    "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
+                    "contactName": "Station Contact",
+                    "contactEmail": "station@example.com",
+                    "contactPhone": "0912345678",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    return resp.json()["data"]["createStation"]["uuid"]
+
 
 async def _create_ticket(client, token: str, title: str) -> str:
     resp = await client.post(
@@ -155,3 +192,71 @@ async def test_anonymous_config_query_requires_login(client):
     )
     body = resp.json()
     assert any("Permission Denied." in e["message"] for e in body.get("errors", [])), body
+
+
+@pytest.mark.asyncio
+async def test_anonymous_station_query_hides_pii(client, coordinator_auth):
+    """An anonymous caller can see a station (station.view is public) but not its PII."""
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql", json={"query": STATION_DETAIL_WITH_PII, "variables": {"uuid": station_uuid}}
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station = body["data"]["station"]
+    assert station is not None
+    # Mirrors ADR-049 for tickets: out-of-scope PII is masked (not null).
+    assert station["contactName"] == "Station C."
+    assert station["contactEmail"] == "s***@***.com"
+    assert station["contactPhone"] == "09*****678"
+
+
+@pytest.mark.asyncio
+async def test_coordinator_sees_station_pii(client, coordinator_auth):
+    """A holder of station.view_pii=all sees a station's raw contact fields."""
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": STATION_DETAIL_WITH_PII, "variables": {"uuid": station_uuid}},
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station = body["data"]["station"]
+    assert station["contactName"] == "Station Contact"
+    assert station["contactEmail"] == "station@example.com"
+
+
+@pytest.mark.asyncio
+async def test_attach_station_photo(client, coordinator_auth):
+    """attachStationPhoto creates a photo row that shows up under station.photos."""
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": ATTACH_STATION_PHOTO,
+            "variables": {"stationUuid": station_uuid, "url": "https://example/photo.jpg"},
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    photo = body["data"]["attachStationPhoto"]
+    assert photo["url"] == "https://example/photo.jpg"
+    assert photo["refType"] == "geometry"
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": "query($uuid: UUID!) { station(uuid: $uuid) { photos { url } } }",
+              "variables": {"uuid": station_uuid}},
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    urls = [p["url"] for p in body["data"]["station"]["photos"]]
+    assert "https://example/photo.jpg" in urls

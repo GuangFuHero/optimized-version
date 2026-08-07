@@ -1,12 +1,19 @@
 """GraphQL types for stations, closure areas, and station properties."""
 
+import asyncio
 from datetime import datetime
+from types import SimpleNamespace
 from uuid import UUID
 
 import strawberry
 
+from app.core.permissions import Perm
+from app.core.rbac_scopes import Scope, in_scope
+from app.core.security import resolve_scope
+from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import PageInfo, Visibility
+from app.graphql.tickets.types import PhotoType
 
 
 @strawberry.input
@@ -143,6 +150,71 @@ class StationType:
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
+    # Private storage backing the contact_* PII resolvers below (mirrors TicketType,
+    # ADR-049) — never exposed directly in the schema, only readable (raw or masked)
+    # through the gated resolvers below.
+    _contact_name_raw: strawberry.Private[str | None] = None
+    _contact_email_raw: strawberry.Private[str | None] = None
+    _contact_phone_raw: strawberry.Private[str | None] = None
+    _geometry_raw: strawberry.Private[object | None] = None
+    _pii_visible_task: strawberry.Private[object | None] = None
+
+    def _pii_visible(self, info: strawberry.types.Info):
+        """Memoized PII-visibility check shared by the three contact_* resolvers.
+
+        See TicketType._pii_visible (app/graphql/tickets/types.py) for the full rationale —
+        same memoization-per-instance pattern, scoped to station.view_pii here instead.
+        """
+        if self._pii_visible_task is None:
+            self._pii_visible_task = asyncio.ensure_future(self._compute_pii_visible(info))
+        return self._pii_visible_task
+
+    async def _compute_pii_visible(self, info: strawberry.types.Info) -> bool:
+        """Compute PII visibility via resolve_scope + in_scope, mirroring TicketType.
+
+        Neither raises — a denial renders as a *masked* contact field, not a GraphQL
+        field-level error. Per-role scope: guest -> not visible; own -> own station;
+        zone -> station's location inside my team's WorkZone; all -> everything.
+        """
+        user = info.context["user"]
+        if user is None:
+            return False
+        scope = await resolve_scope(
+            user, Perm.STATION_VIEW_PII, info.context["db"], cache=info.context["_rbac_cache"]
+        )
+        if scope == Scope.NONE:
+            return False
+        if scope == Scope.ALL:
+            return True
+        resource = SimpleNamespace(created_by=self.created_by, geometry=self._geometry_raw)
+        return await in_scope(scope, actor=user, resource=resource, db=info.context["db"])
+
+    @strawberry.field(description="Station contact name — masked unless the caller holds station.view_pii here")
+    async def contact_name(self, info: strawberry.types.Info) -> str | None:
+        """Return the contact name raw if in scope, otherwise masked."""
+        if await self._pii_visible(info):
+            return self._contact_name_raw
+        return mask_name(self._contact_name_raw)
+
+    @strawberry.field(description="Station contact email — masked unless the caller holds station.view_pii here")
+    async def contact_email(self, info: strawberry.types.Info) -> str | None:
+        """Return the contact email raw if in scope, otherwise masked."""
+        if await self._pii_visible(info):
+            return self._contact_email_raw
+        return mask_email(self._contact_email_raw)
+
+    @strawberry.field(description="Station contact phone — masked unless the caller holds station.view_pii here")
+    async def contact_phone(self, info: strawberry.types.Info) -> str | None:
+        """Return the contact phone raw if in scope, otherwise masked."""
+        if await self._pii_visible(info):
+            return self._contact_phone_raw
+        return mask_phone(self._contact_phone_raw)
+
+    @strawberry.field
+    async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
+        """Resolve photos attached to this station."""
+        return await info.context["loaders"]["photos_by_station"].load(str(self.uuid))
+
     @strawberry.field
     async def secondary_location(self, info: strawberry.types.Info) -> SecondaryLocationType | None:
         """Resolve the secondary address or pole location for this station."""
@@ -167,6 +239,10 @@ class StationType:
             is_duplicate=m.is_duplicate, is_temporary=m.is_temporary,
             is_official=m.is_official, priority_score=m.priority_score,
             created_at=m.created_at, updated_at=m.updated_at,
+            _contact_name_raw=m.contact_name,
+            _contact_email_raw=m.contact_email,
+            _contact_phone_raw=m.contact_phone,
+            _geometry_raw=m.geometry,
         )
 
 
@@ -204,6 +280,9 @@ class CreateStationInput:
         default=Visibility.public,
         description="Visibility: 'public' (default), 'restricted', or 'internal'",
     )
+    contact_name: str | None = strawberry.field(default=None, description="Optional station contact name")
+    contact_email: str | None = strawberry.field(default=None, description="Optional station contact email")
+    contact_phone: str | None = strawberry.field(default=None, description="Optional station contact phone")
     secondary_location: SecondaryLocationInput | None = strawberry.field(
         default=None,
         description="Optional secondary address or pole location to attach to this station",

@@ -39,6 +39,9 @@ async def create_station(
     comment: str | None,
     source: str,
     visibility: str,
+    contact_name: str | None = None,
+    contact_email: str | None = None,
+    contact_phone: str | None = None,
     secondary_location: dict | None = None,
 ) -> Station:
     """Create a station (checkpoint 1 only — a new station has no prior owner to scope-check).
@@ -62,6 +65,9 @@ async def create_station(
             "comment": comment,
             "source": source,
             "visibility": visibility,
+            "contact_name": contact_name,
+            "contact_email": contact_email,
+            "contact_phone": contact_phone,
         },
     )
     if secondary_location:
