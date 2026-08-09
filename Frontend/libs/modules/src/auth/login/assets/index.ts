@@ -1,0 +1,1 @@
+export { authHeroTexture } from './auth-hero-texture';

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
 from app.core.redis import get_redis
-from app.messaging.email import build_verification_email, get_email_sender
+from app.messaging.email import build_contact_verification_email, get_email_sender
 from app.messaging.sms import build_verification_sms, get_sms_sender
 from app.models.auth import User
 from app.repositories.auth_repository import contact_repository
@@ -42,8 +42,8 @@ async def add_contact(
     code = await VerificationRepository(redis).issue_contact_verification(
         user_uuid=str(current_user.uuid), type_=body.type, value=ident)
     if body.type == "email":
-        subject, content = build_verification_email(code)
-        await email_sender.send(ident, subject, content)
+        subject, html, text = build_contact_verification_email(code)
+        await email_sender.send(ident, subject, html, text)
     else:
         await sms_sender.send(ident, build_verification_sms(code))
     return {"detail": "Verification code sent"}
@@ -108,8 +108,8 @@ async def resend_contact(
     if code is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No pending contact verification")
     if body.type == "email":
-        subject, content = build_verification_email(code)
-        await email_sender.send(ident, subject, content)
+        subject, html, text = build_contact_verification_email(code)
+        await email_sender.send(ident, subject, html, text)
     else:
         await sms_sender.send(ident, build_verification_sms(code))
     return {"detail": "Verification code re-sent"}

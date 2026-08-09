@@ -34,11 +34,13 @@ async def test_pwreset_issue_then_consume_roundtrip(redis):
 # --- Task 3: message builders ---
 def test_reset_builders_carry_code_and_notice_has_none():
     """Reset builders carry the code; SSO-notice builders carry NO 6-digit code."""
-    _, body = build_password_reset_email("123456")
-    assert "123456" in body
+    _, html, text = build_password_reset_email("123456")
+    assert "123456" in html
+    assert "123456" in text
     assert "123456" in build_password_reset_sms("123456")
-    _, notice = build_sso_notice_email()
-    assert not re.search(r"\d{6}", notice)
+    # Assert on the plain-text body (the HTML carries 6-hex-digit colour codes that would false-match).
+    _, _notice_html, notice_text = build_sso_notice_email()
+    assert not re.search(r"\d{6}", notice_text)
     assert not re.search(r"\d{6}", build_sso_notice_sms())
 
 

@@ -5,6 +5,8 @@ from typing import Protocol
 
 logger = logging.getLogger("app.sms")
 
+_BRAND_ZH = "島嶼守望"
+
 
 class SmsSender(Protocol):
     """Sends a single SMS message."""
@@ -23,19 +25,22 @@ class ConsoleSmsSender:
 
 
 def build_verification_sms(code: str) -> str:
-    """Return the SMS body carrying a verification code."""
-    return f"Your verification code is {code}. It expires in 10 minutes."
+    """Return the bilingual SMS body carrying a verification code (register + add-contact)."""
+    return (f"【{_BRAND_ZH}】您的驗證碼是 {code}，10 分鐘內有效。 "
+            f"Your verification code is {code}, expires in 10 minutes.")
 
 
 def build_password_reset_sms(code: str) -> str:
-    """Return the SMS body carrying a password-reset code."""
-    return f"Your password reset code is {code}. It expires in 10 minutes."
+    """Return the bilingual SMS body carrying a password-reset code."""
+    return (f"【{_BRAND_ZH}】您的密碼重設驗證碼是 {code}，10 分鐘內有效。 "
+            f"Your password reset code is {code}, expires in 10 minutes.")
 
 
 def build_sso_notice_sms() -> str:
-    """Return the SMS body telling an SSO-only user there is no password to reset (no code)."""
-    return ("This account uses a third-party login and has no password set. "
-            "Please sign in with that provider.")
+    """Return the bilingual SMS telling an SSO-only user there is no password to reset (no code)."""
+    return (f"【{_BRAND_ZH}】此帳號使用第三方登入，無密碼可重設，請改用該服務登入。 "
+            "This account uses a third-party login and has no password set; "
+            "please sign in with that provider.")
 
 
 def get_sms_sender() -> SmsSender:

@@ -11,11 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.db.session import Base
 from app.main import app
-from app.models.auth import Group, Policy, PolicyGroupAssign, User, UserGroupAssign
+from app.models.auth import User
 from app.models.geo import ClosureArea, Station
+from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TicketTask
@@ -35,6 +37,17 @@ async def test_db():
     await eng.dispose()
 
 
+async def _grant(db, role: Role, perm_cache: dict, perm: Perm, scope: str) -> None:
+    """Create (or reuse) a Permission row and grant `role` `perm` at `scope`."""
+    permission = perm_cache.get(perm.value)
+    if permission is None:
+        permission = Permission(key=perm.value)
+        db.add(permission)
+        await db.flush()
+        perm_cache[perm.value] = permission
+    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
+
+
 async def _ensure_db():
     """Create tables and seed RBAC roles (runs once)."""
     global _db_initialized
@@ -49,25 +62,57 @@ async def _ensure_db():
 
     factory = sessionmaker(eng, class_=AsyncSession, expire_on_commit=True)
     async with factory() as db:
-        # Groups
-        login_group = Group(name="Login User")
-        coordinator_group = Group(name="Field Coordinator")
-        db.add_all([login_group, coordinator_group])
+        login_role = Role(name="Login User", kind="platform")
+        coordinator_role = Role(name="Field Coordinator", kind="platform")
+        db.add_all([login_role, coordinator_role])
         await db.flush()
 
-        login_map = Policy(name="LoginUser_Map", read="all", create="none", edit="none", delete="none")
-        login_req = Policy(name="LoginUser_Request", read="own", create="all", edit="own", delete="own")
-        db.add_all([login_map, login_req])
-        await db.flush()
-        db.add(PolicyGroupAssign(group_uuid=login_group.uuid, policy_uuid=login_map.uuid))
-        db.add(PolicyGroupAssign(group_uuid=login_group.uuid, policy_uuid=login_req.uuid))
+        perm_cache: dict[str, Permission] = {}
 
-        coord_map = Policy(name="FieldCoordinator_Map", read="all", create="all", edit="all", delete="all")
-        coord_req = Policy(name="FieldCoordinator_Request", read="all", create="all", edit="all", delete="all")  # noqa: E501
-        db.add_all([coord_map, coord_req])
+        # Mirrors the old "LoginUser_Map"/"LoginUser_Request" policies (read=all/none,
+        # own-scoped edit/delete on tickets) using the new capability keys.
+        # ticket.view = all, not own (ADR-030): viewing is public (ADR-027), logging in
+        # must never narrow that. Only ticket.view_pii and edit/delete stay own-scoped.
+        await _grant(db, login_role, perm_cache, Perm.STATION_VIEW, "all")
+        await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW, "all")
+        await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW_PII, "own")
+        await _grant(db, login_role, perm_cache, Perm.TICKET_ADD, "all")
+        await _grant(db, login_role, perm_cache, Perm.TICKET_EDIT, "own")
+        await _grant(db, login_role, perm_cache, Perm.TICKET_DELETE, "own")
+        await _grant(db, login_role, perm_cache, Perm.TICKET_ASSIGN, "own")
+
+        # Mirrors the old "FieldCoordinator_Map"/"FieldCoordinator_Request" policies
+        # (all-scoped everywhere) using the new capability keys.
+        await _grant(db, coordinator_role, perm_cache, Perm.STATION_VIEW, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.STATION_ADD, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.STATION_EDIT, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.STATION_DELETE, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.STATION_REVIEW, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.STATION_CONTRIBUTE, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.MAP_ADD, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.MAP_EDIT, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.MAP_DELETE, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.FIELD_VIEW, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.FIELD_EDIT, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW_PII, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_ADD, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_EDIT, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_DELETE, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_ASSIGN, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_REVIEW, "all")
+
+        # Content Admin: announcement management. ADR-026 dropped the Group/Policy tables in
+        # favour of capability grants, so this role is the capability-era equivalent of the old
+        # "ContentAdmin_content" policy. announcement.view is public (PUBLIC_PERMS) and needs no
+        # grant, but is included so the role reads as a complete description of the fixture.
+        content_role = Role(name="Content Admin", kind="platform")
+        db.add(content_role)
         await db.flush()
-        db.add(PolicyGroupAssign(group_uuid=coordinator_group.uuid, policy_uuid=coord_map.uuid))
-        db.add(PolicyGroupAssign(group_uuid=coordinator_group.uuid, policy_uuid=coord_req.uuid))
+        await _grant(db, content_role, perm_cache, Perm.ANN_VIEW, "all")
+        await _grant(db, content_role, perm_cache, Perm.ANN_PUBLISH, "all")
+        await _grant(db, content_role, perm_cache, Perm.ANN_EDIT, "all")
+        await _grant(db, content_role, perm_cache, Perm.ANN_DELETE, "all")
 
         await db.commit()
     await eng.dispose()
@@ -91,17 +136,17 @@ async def client():
         yield ac
 
 
-async def _create_user_with_role(group_name: str) -> tuple[str, str]:
-    """Create a user, assign to group, return (user_uuid, token)."""
+async def _create_user_with_role(role_name: str) -> tuple[str, str]:
+    """Create a user, assign to role, return (user_uuid, token)."""
     async with test_db() as db:
         name = f"test_{uuid_mod.uuid4().hex[:8]}"
         user = User(name=name)
         db.add(user)
         await db.flush()
 
-        result = await db.execute(select(Group).where(Group.name == group_name))
-        group = result.scalar_one()
-        db.add(UserGroupAssign(user_uuid=user.uuid, group_uuid=group.uuid))
+        result = await db.execute(select(Role).where(Role.name == role_name))
+        role = result.scalar_one()
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
 
         token = create_access_token(data={"sub": str(user.uuid)})
         return str(user.uuid), token
@@ -117,6 +162,12 @@ async def coordinator_auth():
 async def login_user_auth():
     """Return (user_uuid, token) for a user with Login User permissions."""
     return await _create_user_with_role("Login User")
+
+
+@pytest_asyncio.fixture
+async def content_admin_auth():
+    """Return (user_uuid, token) for a user with content management permissions."""
+    return await _create_user_with_role("Content Admin")
 
 
 def auth_header(token: str) -> dict:
