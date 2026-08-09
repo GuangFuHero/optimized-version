@@ -526,7 +526,7 @@ async def cleanup_expired_notifications(db: AsyncSession) -> int:
 
 ## 9. 執行順序檢核表 (Step-by-Step Execution Plan)
 
-- [ ] **Step 1**: 建立 `Backend/app/models/notification.py` 並生成 Alembic Migration。
+- [x] **Step 1**: 建立 `Backend/app/models/notification.py` 並生成 Alembic Migration。
 - [ ] **Step 2**: 實作 `NotificationRecipientResolver` 與 `NotificationService`。
 - [ ] **Step 3**: 實作 `Backend/app/schemas/notification.py` 與 `Backend/app/api/v1/endpoints/notifications.py`。
 - [ ] **Step 4**: 在既有 Service 中埋入通知觸發點 (WorkZone, Ticket, Station, Announcement)。
