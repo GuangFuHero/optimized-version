@@ -5,105 +5,118 @@ docs: https://plotly.com/python/. This is the only module that
 imports `plotly` — everything upstream deals in plain dicts/lists (ADR: keep the
 charting library isolated to the render boundary).
 
-Fixed metric catalog (per the analytics plan, Part 5): each metric has a small,
-explicit figure-builder function rather than a generic x/y pivot engine, since not
-every (metric, group_by, chart_type) combination is meaningful. CHART_DEFAULTS records
-what *is* valid for each metric; validate_combo() is the single place that enforces it.
+X/Y model: `y` picks which metric to compute (see CATALOG below — the same set of
+values exposed publicly at `GET /api/v1/analytics/catalog`); `x` picks how to slice it
+(`"date"` or `"category"`, or omitted for a single aggregate). Not every (y, x,
+chart_type) combination is meaningful — CATALOG records each y-metric's `allowed_x`
+and `allowed_chart_types`; `resolve()` is the single place that reconciles a request
+against it. `chart_type` is validated strictly (an unsupported chart_type for a given
+y is a 400); `x` is *not* — an `x` that doesn't apply is silently dropped rather than
+rejected (e.g. requesting `x=date` on a pie-only metric, or `chart_type=pie` together
+with `x=date` on a metric that allows both individually but not combined).
 """
 
 import plotly.graph_objects as go
 
-# --- Fixed metric catalog: (default_chart_type, allowed_chart_types, allowed_group_by) ---
+# --- Y-metric catalog: allowed_x is a set that may contain None (aggregate/no grouping),
+# "date", and/or "category". See GET /api/v1/analytics/catalog for the JSON version. ---
 
-_TICKET_METRIC_SPECS = {
-    "status_breakdown": {
-        "default_chart_type": "bar", "allowed_chart_types": {"bar", "pie"},
-        "allowed_group_by": {None, "category"},
+_TICKET_CATALOG = {
+    "total_tickets": {
+        "allowed_x": {None, "date", "category"},
+        "default_chart_type": "bar", "allowed_chart_types": {"bar", "line", "pie"},
+    },
+    "ongoing_tickets": {
+        "allowed_x": {None, "date", "category"},
+        "default_chart_type": "bar", "allowed_chart_types": {"bar", "line", "pie"},
+    },
+    "unassigned_tickets": {
+        "allowed_x": {None, "date", "category"},
+        "default_chart_type": "bar", "allowed_chart_types": {"bar", "line", "pie"},
+    },
+    "completed_tickets": {
+        "allowed_x": {None, "date", "category"},
+        "default_chart_type": "bar", "allowed_chart_types": {"bar", "line", "pie"},
     },
     "completion_rate": {
-        "default_chart_type": "bar", "allowed_chart_types": {"bar"},
-        "allowed_group_by": {None, "category"},
+        "allowed_x": {None, "date", "category"},
+        "default_chart_type": "bar", "allowed_chart_types": {"bar", "line"},
     },
     "age_distribution": {
+        "allowed_x": {None},  # forced shape: always grouped by age bucket internally
         "default_chart_type": "bar", "allowed_chart_types": {"bar"},
-        "allowed_group_by": {None, "category"},
     },
     "time_to_completion": {
+        "allowed_x": {None, "category"},
         "default_chart_type": "bar", "allowed_chart_types": {"bar"},
-        "allowed_group_by": {None, "category"},
     },
-    "backlog_trend": {
+    "net_backlog_change": {
+        "allowed_x": {"date"},  # forced shape: always date-grouped
         "default_chart_type": "line", "allowed_chart_types": {"line", "bar"},
-        "allowed_group_by": {None, "day", "week"},
     },
     "task_completion_distribution": {
+        "allowed_x": {None},  # forced shape: fixed completed/remaining pie
         "default_chart_type": "pie", "allowed_chart_types": {"pie"},
-        "allowed_group_by": {None},
     },
     "duplicate_count": {
+        "allowed_x": {None, "date", "category"},
         "default_chart_type": "bar", "allowed_chart_types": {"bar", "pie"},
-        "allowed_group_by": {None, "category"},
     },
 }
 
-_STATION_METRIC_SPECS = {
-    "count_by_type": {
+_STATION_CATALOG = {
+    "station_count": {
+        "allowed_x": {None, "category"},
         "default_chart_type": "bar", "allowed_chart_types": {"bar", "pie"},
-        "allowed_group_by": {None},
     },
-    "status_breakdown": {
+    "station_status_count": {
+        "allowed_x": {None, "category"},
         "default_chart_type": "pie", "allowed_chart_types": {"pie", "bar"},
-        "allowed_group_by": {None},
     },
-    "freshness_trend": {
+    "station_freshness_trend": {
+        "allowed_x": {"date"},  # forced shape: always date-grouped
         "default_chart_type": "line", "allowed_chart_types": {"line", "bar"},
-        "allowed_group_by": {None, "day", "week"},
     },
 }
 
-CHART_DEFAULTS = {"tickets": _TICKET_METRIC_SPECS, "stations": _STATION_METRIC_SPECS}
+CATALOG = {"tickets": _TICKET_CATALOG, "stations": _STATION_CATALOG}
 
 
-def validate_combo(
-    domain: str, metric: str, group_by: str | None, chart_type: str | None
-) -> str:
-    """Validate (metric, group_by, chart_type) against CHART_DEFAULTS.
+def resolve(domain: str, y: str, x: str | None, chart_type: str | None) -> tuple[str | None, str]:
+    """Resolve the effective (x, chart_type) for a (domain, y) request.
 
-    Returns the resolved chart_type (falls back to the metric's default when None).
-    Raises ValueError on an unknown metric or an invalid combination — the endpoint
-    layer turns that into HTTP 400.
+    Raises ValueError for an unknown y or a chart_type outside that metric's
+    allowed_chart_types (endpoint layer turns that into HTTP 400). Never raises over
+    `x` — see module docstring's "ignore, don't reject" rule.
     """
-    specs = CHART_DEFAULTS.get(domain)
-    if specs is None or metric not in specs:
-        raise ValueError(f"Unknown metric {metric!r} for domain {domain!r}")
-    spec = specs[metric]
-    if group_by not in spec["allowed_group_by"]:
-        raise ValueError(f"group_by={group_by!r} is not valid for metric {metric!r}")
+    catalog = CATALOG.get(domain)
+    if catalog is None or y not in catalog:
+        raise ValueError(f"Unknown metric {y!r} for domain {domain!r}")
+    spec = catalog[y]
+
     resolved_chart_type = chart_type or spec["default_chart_type"]
     if resolved_chart_type not in spec["allowed_chart_types"]:
-        raise ValueError(f"chart_type={resolved_chart_type!r} is not valid for metric {metric!r}")
-    return resolved_chart_type
+        raise ValueError(f"chart_type={resolved_chart_type!r} is not valid for y={y!r}")
+
+    resolved_x = x
+    if resolved_chart_type == "pie" and resolved_x == "date":
+        resolved_x = None  # a date trend can't be rendered as pie slices
+    if resolved_x not in spec["allowed_x"]:
+        # Not applicable to this y — ignore rather than reject, falling back to
+        # aggregate (None) where that's allowed, or the metric's one *forced* grouping
+        # otherwise (e.g. net_backlog_change/station_freshness_trend always group by
+        # date — allowed_x={"date"} with no None — so an irrelevant x still lands on
+        # "date", not silently ungrouped).
+        resolved_x = None if None in spec["allowed_x"] else next(iter(spec["allowed_x"]))
+
+    return resolved_x, resolved_chart_type
 
 
-# --- Small pivot/plot helpers shared by the per-metric figure builders below ---
-
-
-def _pivot(
-    data: list[dict], *, x_key: str, y_key: str, series_key: str | None
-) -> tuple[list, dict[str, list]]:
-    """Reshape rows into (x_values, {series_name: [y values aligned to x_values]})."""
-    x_values = list(dict.fromkeys(row[x_key] for row in data))
-    if series_key is None:
-        lookup = {row[x_key]: row[y_key] for row in data}
-        return x_values, {"value": [lookup.get(x, 0) for x in x_values]}
-    series_names = list(dict.fromkeys(row[series_key] for row in data))
-    lookup = {(row[x_key], row[series_key]): row[y_key] for row in data}
-    series = {name: [lookup.get((x, name), 0) for x in x_values] for name in series_names}
-    return x_values, series
+# --- Small pivot/plot helpers ---
 
 
 def _render_pivoted(x_values: list, series: dict[str, list], chart_type: str) -> go.Figure:
-    """Build a bar, line, or pie figure from pivoted (x_values, series) data.
+    """Build a bar, line, or pie figure from (x_values, {series_name: [y values]}) data.
 
     Chart type docs: https://plotly.com/python/bar-charts/,
     https://plotly.com/python/line-charts/, https://plotly.com/python/pie-charts/.
@@ -112,132 +125,148 @@ def _render_pivoted(x_values: list, series: dict[str, list], chart_type: str) ->
         values = next(iter(series.values())) if series else []
         return go.Figure(go.Pie(labels=x_values, values=values))
     if chart_type == "line":
+        # A line connects points in array order, not by re-sorting them — since a SQL
+        # GROUP BY doesn't guarantee row order, an unsorted trace would zig-zag instead
+        # of showing a clean trend. Sort here so every line chart is correct regardless
+        # of which query produced its rows (some data-layer functions already return
+        # date-sorted rows; this makes it true unconditionally, not by convention).
+        order = sorted(range(len(x_values)), key=lambda i: x_values[i])
+        x_values = [x_values[i] for i in order]
+        series = {name: [values[i] for i in order] for name, values in series.items()}
         fig = go.Figure()
         for name, values in series.items():
             fig.add_trace(go.Scatter(x=x_values, y=values, mode="lines+markers", name=name))
         return fig
     fig = go.Figure()
     for name, values in series.items():
-        fig.add_trace(go.Bar(x=x_values, y=values, name=None if name == "value" else name))
+        fig.add_trace(go.Bar(x=x_values, y=values, name=name))
     if len(series) > 1:
         fig.update_layout(barmode="group")
     return fig
 
 
-# --- Ticket figure builders (one per metric id in _TICKET_METRIC_SPECS) ---
+def _fig_count_metric(
+    data: list[dict], chart_type: str, *, value_key: str = "count", series_label: str = "value"
+) -> go.Figure:
+    """Shared figure builder for a metric shaped as an aggregate row or grouped rows.
 
-
-def _fig_status_breakdown(data, group_by, chart_type):
-    if group_by == "category":
-        x, series = _pivot(data, x_key="category", series_key="bucket", y_key="count")
+    Accepts either a single aggregate row or a list of {"x": ..., value_key: ...}
+    rows. The DATA shape — not the resolved `x` — decides whether this renders grouped or
+    aggregate: a row either has an `"x"` key (grouped, however that grouping was
+    produced — day/week, task_type, or a forced shape like age_distribution's age
+    bucket) or it doesn't (a single overall aggregate). This one function covers every
+    y-metric except the multi-series ones (time_to_completion, net_backlog_change,
+    station_freshness_trend), which keep their own builders below.
+    """
+    if data and "x" in data[0]:
+        x_values = [row["x"] for row in data]
+        y_values = [row[value_key] for row in data]
     else:
-        x, series = _pivot(data, x_key="bucket", series_key=None, y_key="count")
-    return _render_pivoted(x, series, chart_type)
+        x_values = ["overall"]
+        y_values = [data[0][value_key]] if data else [0]
+    return _render_pivoted(x_values, {series_label: y_values}, chart_type)
 
 
-def _fig_completion_rate(data, group_by, chart_type):
-    if group_by == "category":
-        x = [row["category"] for row in data]
-        y = [row["rate"] for row in data]
-    else:
-        x = ["overall"]
-        y = [data[0]["rate"]] if data else [0.0]
-    return _render_pivoted(x, {"completion rate": y}, chart_type)
+# --- Ticket figure builders (one per key in _TICKET_CATALOG) ---
 
 
-_AGE_BUCKET_ORDER = ["<24h", "24-48h", "48-72h", ">72h"]
+def _fig_total_tickets(data, chart_type):
+    return _fig_count_metric(data, chart_type, series_label="tickets")
 
 
-def _fig_age_distribution(data, group_by, chart_type):
-    series_key = "category" if group_by == "category" else None
-    x, series = _pivot(data, x_key="age_bucket", series_key=series_key, y_key="count")
-    ordered = [b for b in _AGE_BUCKET_ORDER if b in x]
-    if ordered:
-        idx = {b: i for i, b in enumerate(x)}
-        series = {name: [values[idx[b]] for b in ordered] for name, values in series.items()}
-        x = ordered
-    return _render_pivoted(x, series, chart_type)
+def _fig_ongoing_tickets(data, chart_type):
+    return _fig_count_metric(data, chart_type, series_label="ongoing tickets")
 
 
-def _fig_time_to_completion(data, group_by, chart_type):
-    x = [row["category"] for row in data] if group_by == "category" else ["overall"]
+def _fig_unassigned_tickets(data, chart_type):
+    return _fig_count_metric(data, chart_type, series_label="unassigned tickets")
+
+
+def _fig_completed_tickets(data, chart_type):
+    return _fig_count_metric(data, chart_type, series_label="completed tickets")
+
+
+def _fig_completion_rate(data, chart_type):
+    return _fig_count_metric(data, chart_type, value_key="rate", series_label="completion rate")
+
+
+def _fig_age_distribution(data, chart_type):
+    return _fig_count_metric(data, chart_type, series_label="tickets")
+
+
+def _fig_time_to_completion(data, chart_type):
+    x_values = [row["x"] for row in data] if data and "x" in data[0] else ["overall"]
     avg_days = [(row["avg_seconds"] or 0) / 86400 for row in data] if data else [0]
     median_days = [(row["median_seconds"] or 0) / 86400 for row in data] if data else [0]
-    return _render_pivoted(x, {"avg (days)": avg_days, "median (days)": median_days}, chart_type)
+    return _render_pivoted(x_values, {"avg (days)": avg_days, "median (days)": median_days}, chart_type)
 
 
-def _fig_backlog_trend(data, group_by, chart_type):
-    x = [row["period"] for row in data]
+def _fig_net_backlog_change(data, chart_type):
+    x_values = [row["x"] for row in data]
     series = {
         "new": [row["new_count"] for row in data],
         "completed": [row["completed_count"] for row in data],
         "net change": [row["net_change"] for row in data],
     }
-    return _render_pivoted(x, series, chart_type)
+    return _render_pivoted(x_values, series, chart_type)
 
 
-def _fig_task_completion_distribution(data, group_by, chart_type):
-    x = [row["label"] for row in data]
-    return _render_pivoted(x, {"value": [row["count"] for row in data]}, chart_type)
+def _fig_task_completion_distribution(data, chart_type):
+    return _fig_count_metric(data, chart_type, series_label="tasks")
 
 
-def _fig_duplicate_count(data, group_by, chart_type):
-    if group_by == "category":
-        x = [row["category"] for row in data]
-        y = [row["count"] for row in data]
-    else:
-        x = ["overall"]
-        y = [data[0]["count"]] if data else [0]
-    return _render_pivoted(x, {"duplicate tickets": y}, chart_type)
+def _fig_duplicate_count(data, chart_type):
+    return _fig_count_metric(data, chart_type, series_label="duplicate tickets")
 
 
-# --- Station figure builders (one per metric id in _STATION_METRIC_SPECS) ---
+# --- Station figure builders (one per key in _STATION_CATALOG) ---
 
 
-def _fig_count_by_type(data, group_by, chart_type):
-    x = [row["type"] for row in data]
-    return _render_pivoted(x, {"stations": [row["count"] for row in data]}, chart_type)
+def _fig_station_count(data, chart_type):
+    return _fig_count_metric(data, chart_type, series_label="stations")
 
 
-def _fig_station_status_breakdown(data, group_by, chart_type):
-    x = [row["operational_status"] for row in data]
-    return _render_pivoted(x, {"stations": [row["count"] for row in data]}, chart_type)
+def _fig_station_status_count(data, chart_type):
+    return _fig_count_metric(data, chart_type, series_label="stations")
 
 
-def _fig_freshness_trend(data, group_by, chart_type):
-    x = [row["period"] for row in data]
+def _fig_station_freshness_trend(data, chart_type):
+    x_values = [row["x"] for row in data]
     series = {
         "added": [row["added_count"] for row in data],
         "closed": [row["closed_count"] for row in data],
     }
-    return _render_pivoted(x, series, chart_type)
+    return _render_pivoted(x_values, series, chart_type)
 
 
 _FIGURE_BUILDERS = {
     "tickets": {
-        "status_breakdown": _fig_status_breakdown,
+        "total_tickets": _fig_total_tickets,
+        "ongoing_tickets": _fig_ongoing_tickets,
+        "unassigned_tickets": _fig_unassigned_tickets,
+        "completed_tickets": _fig_completed_tickets,
         "completion_rate": _fig_completion_rate,
         "age_distribution": _fig_age_distribution,
         "time_to_completion": _fig_time_to_completion,
-        "backlog_trend": _fig_backlog_trend,
+        "net_backlog_change": _fig_net_backlog_change,
         "task_completion_distribution": _fig_task_completion_distribution,
         "duplicate_count": _fig_duplicate_count,
     },
     "stations": {
-        "count_by_type": _fig_count_by_type,
-        "status_breakdown": _fig_station_status_breakdown,
-        "freshness_trend": _fig_freshness_trend,
+        "station_count": _fig_station_count,
+        "station_status_count": _fig_station_status_count,
+        "station_freshness_trend": _fig_station_freshness_trend,
     },
 }
 
 
 def render_chart(
-    domain: str, metric: str, data: list[dict], *,
-    group_by: str | None, chart_type: str | None,
+    domain: str, y: str, data: list[dict], *,
+    x: str | None, chart_type: str | None,
     theme: str = "light", width: int | None = None, height: int | None = None,
     layout_overrides: dict | None = None,
 ) -> str:
-    """Build a styled Plotly figure for `metric` and return it as a partial HTML div.
+    """Build a styled Plotly figure for `y` and return it as a partial HTML div.
 
     No embedded plotly.js — the frontend loads it once. Styling is layered so each
     stage can override the previous one: `theme` picks a
@@ -249,10 +278,15 @@ def render_chart(
     Plotly's own schema validation rejects unknown keys (raises ValueError, which the
     endpoint layer turns into HTTP 400).
 
-    Raises ValueError on an invalid (metric, group_by, chart_type) combination.
+    `data` is expected to already reflect the *resolved* `x` (the caller — the
+    analytics endpoint — calls resolve() before querying, so the DB grouping and the
+    chart grouping always agree). This function re-resolves `chart_type` internally
+    anyway (idempotent, harmless) so it stays safe to call standalone.
+
+    Raises ValueError on an unknown y or an unsupported chart_type for it.
     """
-    resolved_chart_type = validate_combo(domain, metric, group_by, chart_type)
-    fig = _FIGURE_BUILDERS[domain][metric](data, group_by, resolved_chart_type)
+    _resolved_x, resolved_chart_type = resolve(domain, y, x, chart_type)
+    fig = _FIGURE_BUILDERS[domain][y](data, resolved_chart_type)
 
     fig.update_layout(template="plotly_white" if theme == "light" else "plotly_dark")
     if width is not None or height is not None:

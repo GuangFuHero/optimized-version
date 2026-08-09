@@ -1,8 +1,9 @@
-"""Unit tests for the ticket/task analytics aggregation queries.
+"""Unit tests for ticket/task analytics aggregation and the chart_render x resolution.
 
-Covers the three trickiest pieces flagged in the analytics plan's verification
-section: the unassigned/ongoing/completed bucket CTE, age-distribution bucketing,
-and duplicate-ticket detection.
+Covers the trickiest pieces: the unassigned/ongoing/completed bucket classification
+(now exposed as get_ticket_count(bucket=...)), date-grouping on top of a bucket
+filter, age-distribution bucketing, duplicate-ticket detection, and the "ignore x when
+it doesn't apply" behavior in app.services.chart_render.resolve().
 """
 
 from datetime import UTC, datetime, timedelta
@@ -16,6 +17,7 @@ from app.models.auth import User
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import ticket_analytics
+from app.services.chart_render import resolve
 
 UTC_TZ = ZoneInfo("UTC")
 
@@ -47,12 +49,22 @@ def _make_task(
     )
 
 
+async def _count(db, *, bucket, x=None, x_granularity="day") -> int:
+    """Run get_ticket_count(bucket=...) ungrouped and return its single count."""
+    rows = await ticket_analytics.get_ticket_count(
+        db, bucket=bucket, x=x, x_granularity=x_granularity,
+        start_date=None, end_date=None, tz=UTC_TZ,
+    )
+    return rows[0]["count"] if rows else 0
+
+
 @pytest.mark.asyncio
-async def test_status_breakdown_buckets(db):
+async def test_ticket_count_buckets(db):
     """Classify tickets as unassigned/ongoing/completed based on their tasks.
 
     unassigned (no tasks / no assignments), ongoing (assigned, not all fulfilled),
-    and completed (all non-canceled tasks fulfilled).
+    and completed (all non-canceled tasks fulfilled); bucket=None (total_tickets)
+    counts every ticket regardless of bucket.
     """
     user_uuid = await _make_user(db)
 
@@ -79,13 +91,43 @@ async def test_status_breakdown_buckets(db):
     ])
     await db.commit()
 
-    rows = await ticket_analytics.get_status_breakdown(
-        db, start_date=None, end_date=None, group_by=None, tz=UTC_TZ
+    assert await _count(db, bucket=None) == 4  # total_tickets
+    assert await _count(db, bucket="unassigned") == 2  # A, B
+    assert await _count(db, bucket="ongoing") == 1  # C
+    assert await _count(db, bucket="completed") == 1  # D
+
+
+@pytest.mark.asyncio
+async def test_ticket_count_bucket_with_date_grouping(db):
+    """get_ticket_count(bucket=..., x="date") groups the filtered bucket by creation day."""
+    user_uuid = await _make_user(db)
+    now = datetime.now(UTC)
+
+    # Two "ongoing" tickets created on different days; one "unassigned" ticket that
+    # must not be counted in the "ongoing" x=date breakdown.
+    ongoing_day1 = _make_ticket(user_uuid)
+    ongoing_day1.created_at = now - timedelta(days=3)
+    ongoing_day2 = _make_ticket(user_uuid)
+    ongoing_day2.created_at = now - timedelta(days=1)
+    unassigned = _make_ticket(user_uuid)
+    unassigned.created_at = now - timedelta(days=3)
+    db.add_all([ongoing_day1, ongoing_day2, unassigned])
+    await db.flush()
+
+    for ticket in (ongoing_day1, ongoing_day2):
+        task = _make_task(str(ticket.uuid), user_uuid, status="in_progress")
+        task.created_at = ticket.created_at
+        db.add(task)
+        await db.flush()
+        db.add(TaskAssignment(task_uuid=task.uuid, actor_uuid=user_uuid, status="accepted"))
+    await db.commit()
+
+    rows = await ticket_analytics.get_ticket_count(
+        db, bucket="ongoing", x="date", x_granularity="day",
+        start_date=None, end_date=None, tz=UTC_TZ,
     )
-    counts = {row["bucket"]: row["count"] for row in rows}
-    assert counts.get("unassigned") == 2  # A, B
-    assert counts.get("ongoing") == 1  # C
-    assert counts.get("completed") == 1  # D
+    assert len(rows) == 2
+    assert sum(row["count"] for row in rows) == 2
 
 
 @pytest.mark.asyncio
@@ -117,9 +159,9 @@ async def test_age_distribution_buckets_and_excludes_completed(db):
     await db.commit()
 
     rows = await ticket_analytics.get_age_distribution(
-        db, start_date=None, end_date=None, group_by=None, tz=UTC_TZ
+        db, x=None, x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ
     )
-    counts = {row["age_bucket"]: row["count"] for row in rows}
+    counts = {row["x"]: row["count"] for row in rows}
     assert counts == {"<24h": 1, "24-48h": 1, "48-72h": 1, ">72h": 1}
 
 
@@ -147,6 +189,24 @@ async def test_duplicate_count_flags_nearby_same_category_tickets(db):
     await db.commit()
 
     rows = await ticket_analytics.get_duplicate_count(
-        db, start_date=None, end_date=None, group_by=None, tz=UTC_TZ
+        db, x=None, x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ
     )
     assert rows == [{"count": 2}]
+
+
+def test_resolve_ignores_inapplicable_x_instead_of_rejecting():
+    """An x that doesn't apply to the chosen y/chart_type is silently dropped."""
+    # task_completion_distribution has no x form at all -> x=date is ignored.
+    assert resolve("tickets", "task_completion_distribution", "date", None) == (None, "pie")
+    # A date trend can't be pie slices -> x collapses to None even though total_tickets
+    # allows both x=date and chart_type=pie individually.
+    assert resolve("tickets", "total_tickets", "date", "pie") == (None, "pie")
+    # net_backlog_change is always date-grouped -> an inapplicable x still forces "date",
+    # it doesn't fall back to ungrouped.
+    assert resolve("tickets", "net_backlog_change", "category", None) == ("date", "line")
+
+
+def test_resolve_still_rejects_invalid_chart_type():
+    """Unlike x, chart_type stays strictly validated."""
+    with pytest.raises(ValueError, match="chart_type"):
+        resolve("tickets", "net_backlog_change", "date", "pie")

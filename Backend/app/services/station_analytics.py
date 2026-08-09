@@ -2,7 +2,10 @@
 
 Same rationale as ticket_analytics.py: read-only reporting queries, plain SQLAlchemy
 Core `select()` statements rather than repository methods, returning plain lists of
-dicts for chart_render.py to plot.
+dicts for chart_render.py to plot. Every function shares the uniform keyword-only
+`(db, *, x, x_granularity, start_date, end_date, tz)` signature described in
+ticket_analytics.py's module docstring, even where a metric ignores some of those
+(get_station_freshness_trend ignores `x`; the others ignore `x_granularity`).
 """
 
 from datetime import date, datetime, time, timedelta
@@ -25,60 +28,76 @@ def _local_bounds(
     return lower, upper
 
 
-async def get_count_by_type(
+def _granularity(x_granularity: str) -> str:
+    """Normalize the x_granularity param to a Postgres date_trunc field name."""
+    return "week" if x_granularity == "week" else "day"
+
+
+async def get_station_count(
     db: AsyncSession, *,
-    start_date: date | None, end_date: date | None, group_by: str | None, tz: ZoneInfo,
+    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
 ) -> list[dict]:
-    """Count of active stations grouped by `type`."""
+    """Count of active stations, overall or grouped by `type` (x="category")."""
     lower, upper = _local_bounds(start_date, end_date, tz)
-    query = select(Station.type.label("type"), func.count(Station.uuid).label("count")).where(
-        Station.delete_at.is_(None)
-    )
+    cols = [func.count(Station.uuid).label("count")]
+    group_cols = []
+    if x == "category":
+        cols.insert(0, Station.type.label("x"))
+        group_cols.append(Station.type)
+
+    query = select(*cols).where(Station.delete_at.is_(None))
     if lower is not None:
         query = query.where(Station.created_at >= lower)
     if upper is not None:
         query = query.where(Station.created_at < upper)
-    query = query.group_by(Station.type)
+    if group_cols:
+        query = query.group_by(*group_cols)
 
     result = await db.execute(query)
     return [dict(row._mapping) for row in result]
 
 
-async def get_status_breakdown(
+async def get_station_status_count(
     db: AsyncSession, *,
-    start_date: date | None, end_date: date | None, group_by: str | None, tz: ZoneInfo,
+    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
 ) -> list[dict]:
-    """Count of active stations grouped by `operational_status`."""
+    """Count of active stations, overall or grouped by `operational_status` (x="category")."""
     lower, upper = _local_bounds(start_date, end_date, tz)
-    query = select(
-        Station.operational_status.label("operational_status"), func.count(Station.uuid).label("count")
-    ).where(Station.delete_at.is_(None))
+    cols = [func.count(Station.uuid).label("count")]
+    group_cols = []
+    if x == "category":
+        cols.insert(0, Station.operational_status.label("x"))
+        group_cols.append(Station.operational_status)
+
+    query = select(*cols).where(Station.delete_at.is_(None))
     if lower is not None:
         query = query.where(Station.created_at >= lower)
     if upper is not None:
         query = query.where(Station.created_at < upper)
-    query = query.group_by(Station.operational_status)
+    if group_cols:
+        query = query.group_by(*group_cols)
 
     result = await db.execute(query)
     return [dict(row._mapping) for row in result]
 
 
-async def get_freshness_trend(
+async def get_station_freshness_trend(
     db: AsyncSession, *,
-    start_date: date | None, end_date: date | None, group_by: str | None, tz: ZoneInfo,
+    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
 ) -> list[dict]:
     """Per day/week: newly added stations vs newly closed stations.
 
+    Always date-grouped regardless of what's passed for `x` (catalog marks this
+    `allowed_x={"date"}`, same forced-shape pattern as get_net_backlog_change).
     "Added" uses `created_at`; "closed" uses `status_changed_at` where
-    operational_status is one of CLOSED_OPERATIONAL_STATUSES. Local-day bucketing
-    matters here (see Part 1.5), same as get_backlog_trend.
+    operational_status is one of CLOSED_OPERATIONAL_STATUSES.
     """
-    granularity = "week" if group_by == "week" else "day"
+    granularity = _granularity(x_granularity)
     lower, upper = _local_bounds(start_date, end_date, tz)
 
     added_period = func.date_trunc(granularity, func.timezone(tz.key, Station.created_at))
     added_query = select(
-        added_period.label("period"), func.count(Station.uuid).label("added_count")
+        added_period.label("x"), func.count(Station.uuid).label("added_count")
     ).where(Station.delete_at.is_(None))
     if lower is not None:
         added_query = added_query.where(Station.created_at >= lower)
@@ -89,7 +108,7 @@ async def get_freshness_trend(
 
     closed_period = func.date_trunc(granularity, func.timezone(tz.key, Station.status_changed_at))
     closed_query = select(
-        closed_period.label("period"), func.count(Station.uuid).label("closed_count")
+        closed_period.label("x"), func.count(Station.uuid).label("closed_count")
     ).where(Station.delete_at.is_(None), Station.operational_status.in_(CLOSED_OPERATIONAL_STATUSES))
     if lower is not None:
         closed_query = closed_query.where(Station.status_changed_at >= lower)
@@ -100,10 +119,10 @@ async def get_freshness_trend(
 
     by_period: dict = {}
     for row in added_rows:
-        by_period.setdefault(row.period, {"period": row.period, "added_count": 0, "closed_count": 0})
-        by_period[row.period]["added_count"] = row.added_count
+        by_period.setdefault(row.x, {"x": row.x, "added_count": 0, "closed_count": 0})
+        by_period[row.x]["added_count"] = row.added_count
     for row in closed_rows:
-        by_period.setdefault(row.period, {"period": row.period, "added_count": 0, "closed_count": 0})
-        by_period[row.period]["closed_count"] = row.closed_count
+        by_period.setdefault(row.x, {"x": row.x, "added_count": 0, "closed_count": 0})
+        by_period[row.x]["closed_count"] = row.closed_count
 
-    return sorted(by_period.values(), key=lambda r: r["period"])
+    return sorted(by_period.values(), key=lambda r: r["x"])

@@ -6,10 +6,23 @@ don't map to a single entity's CRUD, so they live here as plain SQLAlchemy Core
 per-entity CRUD). Each function returns plain lists of dicts; chart_render.py turns
 that into a Plotly figure.
 
+Every function shares the same keyword-only signature —
+`(db, *, x, x_granularity, start_date, end_date, tz)` — even where a given metric
+ignores some of those (e.g. `get_age_distribution` has no ungrouped/date form, so its
+`x`/`x_granularity` are accepted but unused). This keeps app/api/v1/endpoints/
+analytics.py's dispatch loop uniform: it always calls every metric function the same
+way, and app.services.chart_render.resolve() is what guarantees each function only
+ever receives an `x` value that's actually valid for it (see that module's CATALOG).
+
+Grouped rows use a uniform `"x"` output column regardless of what's being grouped by
+(day/week bucket, task_type, ...) so chart_render.py never needs per-metric field
+lookups.
+
 Per Spec/Docs/er-diagram.md, a ticket has no status of its own that reflects work
-progress at the granularity we need here, so every metric below classifies a ticket by
-rolling up its `ticket_tasks` (and their `task_assignments`) rather than reading
-`tickets.status` directly:
+progress at the granularity we need here, so every bucket-based metric below (backing
+`total_tickets`/`ongoing_tickets`/`unassigned_tickets`/`completed_tickets`) classifies
+a ticket by rolling up its `ticket_tasks` (and their `task_assignments`) rather than
+reading `tickets.status` directly:
 
     unassigned  -- zero task_assignments across all of the ticket's tasks (no match yet)
     completed   -- >=1 task, and every non-canceled task.status == 'fulfilled'
@@ -43,6 +56,11 @@ def _local_bounds(
     lower = datetime.combine(start_date, time.min, tzinfo=tz) if start_date else None
     upper = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=tz) if end_date else None
     return lower, upper
+
+
+def _granularity(x_granularity: str) -> str:
+    """Normalize the x_granularity param to a Postgres date_trunc field name."""
+    return "week" if x_granularity == "week" else "day"
 
 
 def _task_rollup_subquery():
@@ -81,19 +99,58 @@ def _bucket_expr(rollup):
     )
 
 
-async def get_status_breakdown(
+async def get_ticket_count(
     db: AsyncSession, *,
-    start_date: date | None, end_date: date | None, group_by: str | None, tz: ZoneInfo,
+    bucket: str | None, x: str | None, x_granularity: str,
+    start_date: date | None, end_date: date | None, tz: ZoneInfo,
 ) -> list[dict]:
-    """Ticket count per bucket (unassigned/ongoing/completed), optionally split by task_type."""
-    rollup = _task_rollup_subquery()
-    bucket = _bucket_expr(rollup)
-    lower, upper = _local_bounds(start_date, end_date, tz)
+    """Ticket count for one bucket, optionally grouped by creation date/week or category.
 
-    cols = [bucket.label("bucket"), func.count(Tickets.uuid).label("count")]
-    group_cols = [bucket]
-    if group_by == "category":
-        cols.insert(1, Tickets.task_type.label("category"))
+    Backs 4 y-metrics via a fixed `bucket`: `bucket=None` = all tickets
+    ("total_tickets"); `"unassigned"`/`"ongoing"`/`"completed"` filter to that bucket.
+    `x="date"` groups by `Tickets.created_at` EXCEPT when `bucket == "completed"`,
+    which groups by each ticket's own completion day (`max(completed_at)` across its
+    tasks) instead — "how many tickets finished on day X", matching
+    get_net_backlog_change's "completed" series. `x="category"` groups by `task_type`.
+    """
+    rollup = _task_rollup_subquery()
+    bucket_expr = _bucket_expr(rollup)
+    lower, upper = _local_bounds(start_date, end_date, tz)
+    granularity = _granularity(x_granularity)
+
+    if bucket == "completed" and x == "date":
+        completion = (
+            select(
+                Tickets.uuid.label("ticket_uuid"),
+                func.max(TicketTask.completed_at).label("completed_at"),
+            )
+            .select_from(Tickets)
+            .join(rollup, rollup.c.ticket_uuid == Tickets.uuid)
+            .join(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
+            .where(Tickets.delete_at.is_(None), TicketTask.delete_at.is_(None), bucket_expr == "completed")
+            .group_by(Tickets.uuid)
+            .subquery()
+        )
+        period = func.date_trunc(granularity, func.timezone(tz.key, completion.c.completed_at))
+        query = select(
+            period.label("x"), func.count(completion.c.ticket_uuid).label("count")
+        ).select_from(completion)
+        if lower is not None:
+            query = query.where(completion.c.completed_at >= lower)
+        if upper is not None:
+            query = query.where(completion.c.completed_at < upper)
+        query = query.group_by(period)
+        result = await db.execute(query)
+        return [dict(row._mapping) for row in result]
+
+    cols = [func.count(Tickets.uuid).label("count")]
+    group_cols = []
+    if x == "date":
+        period = func.date_trunc(granularity, func.timezone(tz.key, Tickets.created_at))
+        cols.insert(0, period.label("x"))
+        group_cols.append(period)
+    elif x == "category":
+        cols.insert(0, Tickets.task_type.label("x"))
         group_cols.append(Tickets.task_type)
 
     query = (
@@ -102,11 +159,14 @@ async def get_status_breakdown(
         .outerjoin(rollup, rollup.c.ticket_uuid == Tickets.uuid)
         .where(Tickets.delete_at.is_(None))
     )
+    if bucket is not None:
+        query = query.where(bucket_expr == bucket)
     if lower is not None:
         query = query.where(Tickets.created_at >= lower)
     if upper is not None:
         query = query.where(Tickets.created_at < upper)
-    query = query.group_by(*group_cols)
+    if group_cols:
+        query = query.group_by(*group_cols)
 
     result = await db.execute(query)
     return [dict(row._mapping) for row in result]
@@ -114,20 +174,30 @@ async def get_status_breakdown(
 
 async def get_completion_rate(
     db: AsyncSession, *,
-    start_date: date | None, end_date: date | None, group_by: str | None, tz: ZoneInfo,
+    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
 ) -> list[dict]:
-    """Completed / total ticket ratio, overall or per task_type."""
+    """Completed / total ticket ratio, overall, per task_type, or per creation day/week.
+
+    `x="date"` is a cohort rate: tickets are grouped by creation day, and the rate
+    reflects their *current* completion status, not the rate as of that day — same
+    caveat get_net_backlog_change already has for its "completed" series.
+    """
     rollup = _task_rollup_subquery()
-    bucket = _bucket_expr(rollup)
+    bucket_expr = _bucket_expr(rollup)
     lower, upper = _local_bounds(start_date, end_date, tz)
+    granularity = _granularity(x_granularity)
 
     cols = [
-        func.count(Tickets.uuid).filter(bucket == "completed").label("completed"),
+        func.count(Tickets.uuid).filter(bucket_expr == "completed").label("completed"),
         func.count(Tickets.uuid).label("total"),
     ]
     group_cols = []
-    if group_by == "category":
-        cols.insert(0, Tickets.task_type.label("category"))
+    if x == "date":
+        period = func.date_trunc(granularity, func.timezone(tz.key, Tickets.created_at))
+        cols.insert(0, period.label("x"))
+        group_cols.append(period)
+    elif x == "category":
+        cols.insert(0, Tickets.task_type.label("x"))
         group_cols.append(Tickets.task_type)
 
     query = (
@@ -150,18 +220,23 @@ async def get_completion_rate(
     return rows
 
 
+_AGE_BUCKET_ORDER = ["<24h", "24-48h", "48-72h", ">72h"]
+
+
 async def get_age_distribution(
     db: AsyncSession, *,
-    start_date: date | None, end_date: date | None, group_by: str | None, tz: ZoneInfo,
+    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
 ) -> list[dict]:
-    """Non-completed ticket count bucketed by (now() - created_at) age.
+    """Non-completed ticket count bucketed by (now - created_at) age.
 
-    Duration-based, so `tz` is accepted (for start_date/end_date filtering, per Part
-    1.5) but doesn't affect the age buckets themselves — a duration is the same in any
-    timezone.
+    Always grouped by age bucket (<24h/24-48h/48-72h/>72h) — this metric has no
+    ungrouped form, so `x`/`x_granularity` are accepted (for dispatch-signature
+    uniformity, see module docstring) but unused; chart_render.py's catalog marks it
+    `allowed_x={None}`, a fixed shape like get_task_completion_distribution. Duration-
+    based, so `tz` only affects start/end filtering, not the buckets themselves.
     """
     rollup = _task_rollup_subquery()
-    bucket = _bucket_expr(rollup)
+    bucket_expr = _bucket_expr(rollup)
     lower, upper = _local_bounds(start_date, end_date, tz)
 
     age_hours = func.extract("epoch", func.now() - Tickets.created_at) / 3600.0
@@ -172,36 +247,34 @@ async def get_age_distribution(
         else_=">72h",
     )
 
-    cols = [age_bucket.label("age_bucket"), func.count(Tickets.uuid).label("count")]
-    group_cols = [age_bucket]
-    if group_by == "category":
-        cols.insert(1, Tickets.task_type.label("category"))
-        group_cols.append(Tickets.task_type)
-
     query = (
-        select(*cols)
+        select(age_bucket.label("x"), func.count(Tickets.uuid).label("count"))
         .select_from(Tickets)
         .outerjoin(rollup, rollup.c.ticket_uuid == Tickets.uuid)
-        .where(Tickets.delete_at.is_(None), bucket != "completed")
+        .where(Tickets.delete_at.is_(None), bucket_expr != "completed")
     )
     if lower is not None:
         query = query.where(Tickets.created_at >= lower)
     if upper is not None:
         query = query.where(Tickets.created_at < upper)
-    query = query.group_by(*group_cols)
+    query = query.group_by(age_bucket)
 
     result = await db.execute(query)
-    return [dict(row._mapping) for row in result]
+    rows = [dict(row._mapping) for row in result]
+    order = {b: i for i, b in enumerate(_AGE_BUCKET_ORDER)}
+    rows.sort(key=lambda r: order.get(r["x"], len(order)))
+    return rows
 
 
 async def get_time_to_completion(
     db: AsyncSession, *,
-    start_date: date | None, end_date: date | None, group_by: str | None, tz: ZoneInfo,
+    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
 ) -> list[dict]:
     """Avg + median duration (completed_at - created_at) across fulfilled ticket_tasks.
 
     Task-level per the "these metrics should be based on the task" instruction.
-    Duration-based like age_distribution — `tz` only affects the start/end filter.
+    `x="category"` splits by task_type; no date form (task-level durations aren't
+    naturally date-groupable without further design), so `x_granularity` is unused.
     """
     lower, upper = _local_bounds(start_date, end_date, tz)
     duration = func.extract("epoch", TicketTask.completed_at - TicketTask.created_at)
@@ -212,8 +285,8 @@ async def get_time_to_completion(
         func.count(TicketTask.uuid).label("sample_size"),
     ]
     group_cols = []
-    if group_by == "category":
-        cols.insert(0, TicketTask.task_type.label("category"))
+    if x == "category":
+        cols.insert(0, TicketTask.task_type.label("x"))
         group_cols.append(TicketTask.task_type)
 
     query = select(*cols).where(TicketTask.delete_at.is_(None), TicketTask.completed_at.is_not(None))
@@ -228,26 +301,27 @@ async def get_time_to_completion(
     return [dict(row._mapping) for row in result]
 
 
-async def get_backlog_trend(
+async def get_net_backlog_change(
     db: AsyncSession, *,
-    start_date: date | None, end_date: date | None, group_by: str | None, tz: ZoneInfo,
+    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
 ) -> list[dict]:
     """Per day/week: new tickets, completed tickets, and net = new - completed.
 
-    The only ticket metric where local-day bucketing matters (see Part 1.5) — day/week
-    boundaries are computed in `tz`, not UTC, via `date_trunc(..., timezone(tz, col))`.
-    "New" is grouped by ticket creation day; "completed" is grouped by the day the
-    *last* of a ticket's tasks was fulfilled (when the whole ticket finished) — the two
-    series are independent, so a ticket created before the window can still show up in
-    "completed" if it finished inside it.
+    Always date-grouped regardless of what's passed for `x` — chart_render.py's
+    catalog marks this `allowed_x={"date"}`, so resolve() guarantees `x="date"`
+    reaches here; `x_granularity` (day/week) is the only thing that actually varies
+    this query's shape. "New" is grouped by ticket creation day; "completed" is
+    grouped by the day the *last* of a ticket's tasks was fulfilled (when the whole
+    ticket finished) — the two series are independent, so a ticket created before the
+    window can still show up in "completed" if it finished inside it.
     """
-    granularity = "week" if group_by == "week" else "day"
+    granularity = _granularity(x_granularity)
     lower, upper = _local_bounds(start_date, end_date, tz)
     rollup = _task_rollup_subquery()
-    bucket = _bucket_expr(rollup)
+    bucket_expr = _bucket_expr(rollup)
 
     new_period = func.date_trunc(granularity, func.timezone(tz.key, Tickets.created_at))
-    new_query = select(new_period.label("period"), func.count(Tickets.uuid).label("new_count")).where(
+    new_query = select(new_period.label("x"), func.count(Tickets.uuid).label("new_count")).where(
         Tickets.delete_at.is_(None)
     )
     if lower is not None:
@@ -262,7 +336,7 @@ async def get_backlog_trend(
         .select_from(Tickets)
         .join(rollup, rollup.c.ticket_uuid == Tickets.uuid)
         .join(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
-        .where(Tickets.delete_at.is_(None), TicketTask.delete_at.is_(None), bucket == "completed")
+        .where(Tickets.delete_at.is_(None), TicketTask.delete_at.is_(None), bucket_expr == "completed")
         .group_by(Tickets.uuid)
         .subquery()
     )
@@ -270,7 +344,7 @@ async def get_backlog_trend(
         granularity, func.timezone(tz.key, ticket_completion.c.completed_at)
     )
     completed_query = select(
-        completed_period.label("period"),
+        completed_period.label("x"),
         func.count(ticket_completion.c.ticket_uuid).label("completed_count"),
     ).select_from(ticket_completion)
     if lower is not None:
@@ -282,13 +356,13 @@ async def get_backlog_trend(
 
     by_period: dict = {}
     for row in new_rows:
-        by_period.setdefault(row.period, {"period": row.period, "new_count": 0, "completed_count": 0})
-        by_period[row.period]["new_count"] = row.new_count
+        by_period.setdefault(row.x, {"x": row.x, "new_count": 0, "completed_count": 0})
+        by_period[row.x]["new_count"] = row.new_count
     for row in completed_rows:
-        by_period.setdefault(row.period, {"period": row.period, "new_count": 0, "completed_count": 0})
-        by_period[row.period]["completed_count"] = row.completed_count
+        by_period.setdefault(row.x, {"x": row.x, "new_count": 0, "completed_count": 0})
+        by_period[row.x]["completed_count"] = row.completed_count
 
-    result = sorted(by_period.values(), key=lambda r: r["period"])
+    result = sorted(by_period.values(), key=lambda r: r["x"])
     for row in result:
         row["net_change"] = row["new_count"] - row["completed_count"]
     return result
@@ -296,9 +370,14 @@ async def get_backlog_trend(
 
 async def get_task_completion_distribution(
     db: AsyncSession, *,
-    start_date: date | None, end_date: date | None, group_by: str | None, tz: ZoneInfo,
+    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
 ) -> list[dict]:
-    """Completed vs remaining tasks across all tickets in range (task-level, not per-ticket)."""
+    """Completed vs remaining tasks across all tickets in range (task-level, not per-ticket).
+
+    Always a fixed 2-row shape (completed/remaining) — no x form, so `x`/
+    `x_granularity` are accepted (dispatch-signature uniformity) but unused; catalog
+    marks this `allowed_x={None}`.
+    """
     lower, upper = _local_bounds(start_date, end_date, tz)
     query = select(
         func.count(TicketTask.uuid).filter(TicketTask.status == "fulfilled").label("completed"),
@@ -312,8 +391,8 @@ async def get_task_completion_distribution(
     row = (await db.execute(query)).one()
     completed, total = row.completed, row.total
     return [
-        {"label": "completed", "count": completed},
-        {"label": "remaining", "count": max(total - completed, 0)},
+        {"x": "completed", "count": completed},
+        {"x": "remaining", "count": max(total - completed, 0)},
     ]
 
 
@@ -335,19 +414,22 @@ def _duplicate_pair_condition(a, b):
 
 async def get_duplicate_count(
     db: AsyncSession, *,
-    start_date: date | None, end_date: date | None, group_by: str | None, tz: ZoneInfo,
+    x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
 ) -> list[dict]:
     """Count tickets flagged as likely duplicates.
 
     A ticket is flagged if it has >=1 other ticket sharing task_type/disaster_type
     within the distance/time thresholds above — a context flag, not an urgency signal.
+    `x="date"` groups flagged tickets by their own creation day/week; `x="category"`
+    by task_type.
     """
     lower, upper = _local_bounds(start_date, end_date, tz)
+    granularity = _granularity(x_granularity)
     a = aliased(Tickets)
     b = aliased(Tickets)
 
     flagged = (
-        select(a.uuid.label("uuid"), a.task_type.label("category"))
+        select(a.uuid.label("uuid"), a.task_type.label("category"), a.created_at.label("created_at"))
         .select_from(a)
         .join(b, _duplicate_pair_condition(a, b))
         .where(a.delete_at.is_(None))
@@ -360,8 +442,12 @@ async def get_duplicate_count(
 
     cols = [func.count(func.distinct(flagged.c.uuid)).label("count")]
     group_cols = []
-    if group_by == "category":
-        cols.insert(0, flagged.c.category.label("category"))
+    if x == "date":
+        period = func.date_trunc(granularity, func.timezone(tz.key, flagged.c.created_at))
+        cols.insert(0, period.label("x"))
+        group_cols.append(period)
+    elif x == "category":
+        cols.insert(0, flagged.c.category.label("x"))
         group_cols.append(flagged.c.category)
 
     query = select(*cols).select_from(flagged)
