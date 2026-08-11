@@ -528,7 +528,7 @@ async def cleanup_expired_notifications(db: AsyncSession) -> int:
 
 - [x] **Step 1**: 建立 `Backend/app/models/notification.py` 並生成 Alembic Migration。
 - [x] **Step 2**: 實作 `NotificationRecipientResolver` 與 `NotificationService`。
-- [ ] **Step 3**: 實作 `Backend/app/schemas/notification.py` 與 `Backend/app/api/v1/endpoints/notifications.py`。
+- [x] **Step 3**: 實作 `Backend/app/schemas/notification.py` 與 `Backend/app/api/v1/endpoints/notifications.py`。
 - [ ] **Step 4**: 在既有 Service 中埋入通知觸發點 (WorkZone, Ticket, Station, Announcement)。
 - [ ] **Step 5**: 撰寫後端單元與整合測試並通過驗證。
 - [ ] **Step 6**: 實作前端小鈴鐺組件、下拉通知面板、Toast 快訊與 Deep Link 導頁。
