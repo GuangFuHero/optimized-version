@@ -18,6 +18,8 @@ from app.repositories.team_repository import (
 )
 from app.services.authz import require_scope
 from app.services.geo_validation import validate_polygon
+from app.services.notification_resolver import NotificationRecipientResolver
+from app.services.notification_service import NotificationService
 
 
 async def _require_gov_zone_authority(db: AsyncSession, actor: User) -> None:
@@ -128,7 +130,7 @@ async def assign_zone_to_team(
         return existing
 
     try:
-        return await team_zone_assign_repository.create(
+        assignment = await team_zone_assign_repository.create(
             db,
             obj_in={
                 "team_uuid": team_uuid,
@@ -136,6 +138,22 @@ async def assign_zone_to_team(
                 "assigned_by": str(actor.uuid),
             },
         )
+        # 觸發 zone_assigned 通知 (Urgent 等級，送給 NGO Admin)
+        zone_obj = await work_zone_repository.get_by_uuid_active(db, zone_uuid)
+        zone_name = zone_obj.name if zone_obj else "工作分區"
+        admins = await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=team_uuid, org_type="ngo")
+        await NotificationService.dispatch(
+            db,
+            event_type="zone_assigned",
+            title=f"⚠️ 新指派工作區域：{zone_name}",
+            body=f"您的團隊已獲指派負責工作分區「{zone_name}」，請進行評估與派工。",
+            priority="urgent",
+            actor_uuid=actor.uuid,
+            ref_type="work_zone",
+            ref_uuid=zone_uuid,
+            explicit_recipients=admins,
+        )
+        return assignment
     except IntegrityError as exc:
         # Concurrent assign lost the race to uq_team_zone (PR #24 [10]) — stay idempotent by
         # returning the row the winner created.
@@ -159,3 +177,19 @@ async def remove_zone_from_team(db: AsyncSession, *, actor: User, zone_uuid: str
     if existing is None:
         raise ValueError("This team is not assigned to this work zone")
     await team_zone_assign_repository.remove(db, uuid=existing.uuid)
+
+    # 觸發 zone_unassigned 通知 (High 等級，送給 NGO Admin)
+    zone_obj = await work_zone_repository.get_by_uuid_active(db, zone_uuid)
+    zone_name = zone_obj.name if zone_obj else "工作分區"
+    admins = await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=team_uuid, org_type="ngo")
+    await NotificationService.dispatch(
+        db,
+        event_type="zone_unassigned",
+        title=f"工作區域指派已解除：{zone_name}",
+        body=f"您的團隊對工作分區「{zone_name}」的指派已解除。",
+        priority="high",
+        actor_uuid=actor.uuid,
+        ref_type="work_zone",
+        ref_uuid=zone_uuid,
+        explicit_recipients=admins,
+    )

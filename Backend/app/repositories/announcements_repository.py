@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
 from app.models.announcement import Announcement
+from app.services.notification_resolver import NotificationRecipientResolver
+from app.services.notification_service import NotificationService
 
 
 class AnnouncementRepository(GenericRepository[Announcement]):
@@ -80,6 +82,23 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         db.add(obj)
         await db.commit()
         await db.refresh(obj)
+
+        # 觸發 announcement_published 通知 (全站廣播)
+        recipients = await NotificationRecipientResolver.resolve_all_active(db)
+        summary = content[:80] + ("..." if len(content) > 80 else "")
+        await NotificationService.dispatch(
+            db,
+            event_type="announcement_published",
+            title="📢 全站重要公告",
+            body=summary,
+            priority="medium",
+            actor_uuid=created_by,
+            ref_type="announcement",
+            ref_uuid=obj.uuid,
+            explicit_recipients=recipients,
+        )
+        await db.commit()
+
         return obj
 
     async def move(self, db: AsyncSession, *, uuid: Any, up: bool) -> Announcement | None:
@@ -118,6 +137,23 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             target.active = True
             await db.commit()
             await db.refresh(target)
+
+            # 觸發 announcement_published 通知
+            recipients = await NotificationRecipientResolver.resolve_all_active(db)
+            summary = target.content[:80] + ("..." if len(target.content) > 80 else "")
+            await NotificationService.dispatch(
+                db,
+                event_type="announcement_published",
+                title="📢 全站重要公告",
+                body=summary,
+                priority="medium",
+                actor_uuid=target.created_by,
+                ref_type="announcement",
+                ref_uuid=target.uuid,
+                explicit_recipients=recipients,
+            )
+            await db.commit()
+
         elif not active and target.active:
             live = await self._live_for_update(db)
             self._remove_from_order(live, target)

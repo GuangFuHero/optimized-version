@@ -24,6 +24,8 @@ from app.repositories.geo_repository import (
 )
 from app.services.authz import require_scope
 from app.services.geo_validation import validate_point
+from app.services.notification_resolver import NotificationRecipientResolver
+from app.services.notification_service import NotificationService
 
 
 async def create_station(
@@ -71,6 +73,21 @@ async def create_station(
 
     await db.commit()
     await db.refresh(station)
+
+    # 觸發 resource_station_updated 通知
+    recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, str(station.uuid))
+    await NotificationService.dispatch(
+        db,
+        event_type="resource_station_updated",
+        title=f"🏢 新建物資資源站：{station.name or '物資站'}",
+        body=f"新建物資資源站「{station.name or station.uuid}」，請留意物資與避難整備狀況。",
+        priority="medium",
+        actor_uuid=actor.uuid,
+        ref_type="station",
+        ref_uuid=station.uuid,
+        explicit_recipients=recipients,
+    )
+
     return station
 
 
@@ -87,11 +104,46 @@ async def update_station(
         raise ValueError("Station not found")
     await require_scope(actor, Perm.STATION_EDIT, db, resource=station)
 
+    old_dup = station.is_duplicate
     obj_in = dict(changes)
     if geometry is not None:
         validate_point(geometry)
         obj_in["geometry"] = geojson_to_geom(geometry)
-    return await station_repository.update(db, db_obj=station, obj_in=obj_in)
+    updated = await station_repository.update(db, db_obj=station, obj_in=obj_in)
+
+    # 觸發通知
+    if ("is_duplicate" in changes and changes["is_duplicate"] and not old_dup) or (
+        "dedup_group_id" in changes and changes["dedup_group_id"]
+    ):
+        dedup_recipients = await NotificationRecipientResolver.resolve_permission(
+            db, "dedup.station.manage"
+        )
+        await NotificationService.dispatch(
+            db,
+            event_type="dedup_flag_station",
+            title=f"重複物資站待審核：{updated.name or '物資站'}",
+            body=f"物資站「{updated.name or updated.uuid}」已被系統標記為疑似重複項目，請進行審核。",
+            priority="medium",
+            actor_uuid=actor.uuid,
+            ref_type="station",
+            ref_uuid=updated.uuid,
+            explicit_recipients=dedup_recipients,
+        )
+    else:
+        recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, str(updated.uuid))
+        await NotificationService.dispatch(
+            db,
+            event_type="resource_station_updated",
+            title=f"🏢 資源物資站狀態更新：{updated.name or '物資站'}",
+            body=f"物資站「{updated.name or updated.uuid}」營運資訊或物資儲備狀況已更新。",
+            priority="medium",
+            actor_uuid=actor.uuid,
+            ref_type="station",
+            ref_uuid=updated.uuid,
+            explicit_recipients=recipients,
+        )
+
+    return updated
 
 
 async def delete_station(db: AsyncSession, *, actor: User, uuid: str) -> None:

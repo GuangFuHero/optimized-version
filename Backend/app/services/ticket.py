@@ -23,6 +23,8 @@ from app.repositories.tickets_repository import (
 )
 from app.services.authz import require_scope
 from app.services.geo_validation import validate_point
+from app.services.notification_resolver import NotificationRecipientResolver
+from app.services.notification_service import NotificationService
 
 # Business rule (ADR-020): status transitions live here, not in the RBAC layer.
 VALID_TRANSITIONS = {
@@ -201,7 +203,65 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     if not task:
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
-    return await ticket_task_repository.update(db, db_obj=task, obj_in=changes)
+
+    old_mod = task.moderation_status
+    old_status = task.status
+    old_dup = task.is_duplicate
+
+    updated_task = await ticket_task_repository.update(db, db_obj=task, obj_in=changes)
+
+    # 1. 審核狀態變更通知 (High)
+    if "moderation_status" in changes and changes["moderation_status"] != old_mod:
+        assignments = await task_assignment_repository.list_by_task(db, str(task.uuid))
+        recipients = {str(task.created_by)} | {str(a.actor_uuid) for a in assignments}
+        await NotificationService.dispatch(
+            db,
+            event_type="ticket_task_moderation_update",
+            title=f"工單審核狀態更新：{updated_task.task_name}",
+            body=f"工單任務「{updated_task.task_name}」審核狀態已變更為【{updated_task.moderation_status}】。",
+            priority="high",
+            actor_uuid=actor.uuid,
+            ref_type="ticket_task",
+            ref_uuid=task.uuid,
+            explicit_recipients=list(recipients),
+        )
+
+    # 2. 任務執行狀態變更通知 (Medium)
+    if "status" in changes and changes["status"] != old_status:
+        assignments = await task_assignment_repository.list_by_task(db, str(task.uuid))
+        recipients = {str(a.actor_uuid) for a in assignments}
+        await NotificationService.dispatch(
+            db,
+            event_type="ticket_task_status_update",
+            title=f"工單進度更新：{updated_task.task_name}",
+            body=f"工單任務「{updated_task.task_name}」狀態已變更為【{updated_task.status}】。",
+            priority="medium",
+            actor_uuid=actor.uuid,
+            ref_type="ticket_task",
+            ref_uuid=task.uuid,
+            explicit_recipients=list(recipients),
+        )
+
+    # 3. 重複工單標記通知 (Medium)
+    if ("is_duplicate" in changes and changes["is_duplicate"] and not old_dup) or (
+        "dedup_group_id" in changes and changes["dedup_group_id"]
+    ):
+        dedup_managers = await NotificationRecipientResolver.resolve_permission(
+            db, "dedup.ticket.manage"
+        )
+        await NotificationService.dispatch(
+            db,
+            event_type="dedup_flag_ticket",
+            title=f"重複工單待審核：{updated_task.task_name}",
+            body=f"工單任務「{updated_task.task_name}」已被系統標記為疑似重複項目，請進行審核。",
+            priority="medium",
+            actor_uuid=actor.uuid,
+            ref_type="ticket_task",
+            ref_uuid=task.uuid,
+            explicit_recipients=dedup_managers,
+        )
+
+    return updated_task
 
 
 async def create_task_property(
@@ -267,7 +327,7 @@ async def assign_task_actor(
         raise ValueError("Actor already assigned to this task")
 
     try:
-        return await task_assignment_repository.create(
+        assignment = await task_assignment_repository.create(
             db,
             obj_in={
                 "task_uuid": task_uuid,
@@ -276,6 +336,19 @@ async def assign_task_actor(
                 "status": "accepted",
             },
         )
+        # 觸發 task_assignment_created 通知 (High)
+        await NotificationService.dispatch(
+            db,
+            event_type="task_assignment_created",
+            title=f"📋 您有新的任務指派：{task.task_name}",
+            body=f"您已獲指派負責工單任務「{task.task_name}」。",
+            priority="high",
+            actor_uuid=actor.uuid,
+            ref_type="ticket_task",
+            ref_uuid=task.uuid,
+            explicit_recipients=[target_actor],
+        )
+        return assignment
     except IntegrityError as exc:
         # Concurrent duplicate lost the race to uq_assignment_task_actor (PR #24 [10]) —
         # surface the same clean domain error instead of a raw 500.

@@ -18,6 +18,7 @@ from app.models.team import Team
 from app.repositories.auth_repository import role_repository, user_repository
 from app.repositories.team_repository import team_repository
 from app.services.authz import require_scope
+from app.services.notification_service import NotificationService
 
 SUPER_ADMIN_ROLE_NAME = "super_admin"
 
@@ -146,6 +147,20 @@ async def add_team_member(
 
     await db.commit()
     await db.refresh(target)
+
+    # 觸發 team_member_added 通知 (High)
+    await NotificationService.dispatch(
+        db,
+        event_type="team_member_added",
+        title=f"歡迎加入團隊：{team.name}",
+        body=f"您已成功加入團隊「{team.name}」{f'，擔任 {team_role_name}' if team_role_name else ''}。",
+        priority="high",
+        actor_uuid=actor.uuid,
+        ref_type="team",
+        ref_uuid=team.uuid,
+        explicit_recipients=[str(target.uuid)],
+    )
+    await db.commit()
     return target
 
 
