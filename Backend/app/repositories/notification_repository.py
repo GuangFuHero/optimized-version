@@ -98,7 +98,8 @@ class NotificationRepository(GenericRepository[Notification]):
         if not notification.read:
             notification.read = True
             notification.read_at = datetime.now(UTC)
-            await db.flush()
+            await db.commit()
+            await db.refresh(notification)
         return notification
 
     async def mark_all_as_read(
@@ -119,7 +120,7 @@ class NotificationRepository(GenericRepository[Notification]):
             .values(read=True, read_at=now)
         )
         result = await db.execute(stmt)
-        await db.flush()
+        await db.commit()
         return result.rowcount
 
 

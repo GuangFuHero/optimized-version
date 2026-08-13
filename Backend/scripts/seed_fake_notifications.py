@@ -1,10 +1,15 @@
-"""Seed realistic mock users, teams, and notifications for manual E2E / UI testing."""
-
 import asyncio
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+import sys
 import uuid
 
-from sqlalchemy import select
+# 將 Backend 根目錄加入 sys.path，確保無論在任何路徑執行腳本都能解析 app 模組
+backend_dir = Path(__file__).resolve().parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -79,8 +84,9 @@ async def seed():
         charlie = users["Charlie (王專員 - Gov Admin)"]
         david = users["David (張民眾 - Volunteer)"]
 
-        # 清除舊的假通知 (重跑自清)
-        await db.execute(select(Notification))
+        # 清除舊的假通知 (重跑自清，確保每次都是精確 3 則)
+        await db.execute(delete(Notification))
+        await db.commit()
 
         now = datetime.now(UTC)
         mock_notifications = [
@@ -175,11 +181,28 @@ async def seed():
         db.add_all(mock_notifications)
         await db.commit()
 
-        print("\n✅ 假資料生成完成！測試人員清單：")
-        print(f"1. Alice (NGO Admin)   - UUID: {alice.uuid} (未讀: 3 則, 含 Urgent ⚠️)")
-        print(f"2. Bob (NGO Member)    - UUID: {bob.uuid} (未讀: 2 則, 含 Task High 📌)")
-        print(f"3. Charlie (Gov Admin) - UUID: {charlie.uuid} (未讀: 1 則 🏢)")
-        print("💡 您現在可以使用這些使用者的 UUID 進行 API 或前端驗證！")
+        # 生成可直接用於 Swagger "Authorize" 授權的 JWT Token
+        from app.core.security import create_access_token
+        alice_token = create_access_token({"sub": str(alice.uuid)})
+        bob_token = create_access_token({"sub": str(bob.uuid)})
+        charlie_token = create_access_token({"sub": str(charlie.uuid)})
+
+        print("\n" + "=" * 80)
+        print("✅ 假資料生成完成！Swagger 登入測試 Token 清單：")
+        print("=" * 80)
+        print(f"\n👤 1. Alice (NGO Admin - 陳隊長) | 未讀: 3 則 (含 Urgent ⚠️)")
+        print(f"   Token: {alice_token}")
+        print(f"\n👤 2. Bob (NGO Member - 林志工)   | 未讀: 2 則 (含 Task 📌)")
+        print(f"   Token: {bob_token}")
+        print(f"\n👤 3. Charlie (Gov Admin - 王專員) | 未讀: 1 則 🏢")
+        print(f"   Token: {charlie_token}")
+        print("\n" + "=" * 80)
+        print("🔑 如何在 Swagger 登入測試：")
+        print("1. 打開 http://localhost:8000/docs")
+        print("2. 點擊右上角綠色的【Authorize 🔓】按鈕")
+        print("3. 複製上方任一使用者的 Token 貼入 Value 欄位，點擊【Authorize】")
+        print("4. 現在測試 /api/v1/notifications 就不會再出現 Not authenticated 了！")
+        print("=" * 80 + "\n")
 
 
 if __name__ == "__main__":

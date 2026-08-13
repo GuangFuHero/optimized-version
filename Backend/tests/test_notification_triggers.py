@@ -8,6 +8,7 @@ import pytest
 
 from app.models.auth import User
 from app.models.geo import Station
+from app.models.rbac import Role
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import admin as admin_service
@@ -116,9 +117,12 @@ async def test_add_team_member_triggers_notification(mock_actor):
     mock_target = User(name="新志工小明")
     mock_target.uuid = uuid.UUID(user_id)
     mock_target.team_uuid = None
+    mock_role = Role(name="ngo_member", kind="team")
+    mock_role.uuid = uuid.uuid4()
 
     with patch("app.services.admin.require_scope", new_callable=AsyncMock), \
          patch("app.services.admin.user_repository.get_by_uuid", new_callable=AsyncMock, return_value=mock_target), \
+         patch("app.services.admin.role_repository.get_by_name", new_callable=AsyncMock, return_value=mock_role), \
          patch("app.services.admin.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch:
 
         mock_db.get = AsyncMock(return_value=mock_team)
