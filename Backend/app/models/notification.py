@@ -3,7 +3,7 @@
 import uuid as _uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -79,6 +79,7 @@ class Notification(Base, UUIDPKMixin, TimestampMixin):
     )
 
     def __init__(self, **kwargs):
+        """Initialize notification model with default uuid, priority, read status and created_at."""
         kwargs.setdefault("uuid", _uuid.uuid4())
         kwargs.setdefault("priority", "medium")
         kwargs.setdefault("read", False)

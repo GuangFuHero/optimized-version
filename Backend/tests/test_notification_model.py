@@ -1,12 +1,7 @@
 """Unit tests for the Notification ORM model schema and metadata."""
 
 import uuid
-from datetime import datetime, timezone
 
-import pytest
-from sqlalchemy import inspect
-
-from app.models.auth import User
 from app.models.base import Base
 from app.models.notification import Notification
 

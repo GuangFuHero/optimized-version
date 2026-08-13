@@ -7,12 +7,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.models.auth import User
-from app.models.geo import Station
 from app.models.rbac import Role
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import admin as admin_service
-from app.services import station as station_service
 from app.services import ticket as ticket_service
 from app.services import work_zone as work_zone_service
 
@@ -41,14 +39,31 @@ async def test_assign_zone_triggers_notification(mock_actor):
 
     mock_assignment = TeamZoneAssign(team_uuid=team_id, zone_uuid=zone_id, assigned_by=str(mock_actor.uuid))
 
-    with patch("app.services.work_zone.require_scope", new_callable=AsyncMock), \
-         patch("app.services.work_zone._require_gov_zone_authority", new_callable=AsyncMock), \
-         patch("app.services.work_zone.work_zone_repository.get_by_uuid_active", new_callable=AsyncMock, return_value=mock_zone), \
-         patch("app.services.work_zone.team_zone_assign_repository.get_assignment", new_callable=AsyncMock, return_value=None), \
-         patch("app.services.work_zone.team_zone_assign_repository.create", new_callable=AsyncMock, return_value=mock_assignment), \
-         patch("app.services.work_zone.NotificationRecipientResolver.resolve_team_admin", new_callable=AsyncMock, return_value=[admin_id]), \
-         patch("app.services.work_zone.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch:
-
+    with (
+        patch("app.services.work_zone.require_scope", new_callable=AsyncMock),
+        patch("app.services.work_zone._require_gov_zone_authority", new_callable=AsyncMock),
+        patch(
+            "app.services.work_zone.work_zone_repository.get_by_uuid_active",
+            new_callable=AsyncMock,
+            return_value=mock_zone,
+        ),
+        patch(
+            "app.services.work_zone.team_zone_assign_repository.get_assignment",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.services.work_zone.team_zone_assign_repository.create",
+            new_callable=AsyncMock,
+            return_value=mock_assignment,
+        ),
+        patch(
+            "app.services.work_zone.NotificationRecipientResolver.resolve_team_admin",
+            new_callable=AsyncMock,
+            return_value=[admin_id],
+        ),
+        patch("app.services.work_zone.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch,
+    ):
         mock_db.scalar = AsyncMock(return_value=mock_team)
 
         await work_zone_service.assign_zone_to_team(
@@ -80,14 +95,35 @@ async def test_task_assignment_triggers_notification(mock_actor):
 
     mock_assignment = TaskAssignment(task_uuid=task_id, actor_uuid=target_assignee_id, status="accepted")
 
-    with patch("app.services.ticket.require_scope", new_callable=AsyncMock), \
-         patch("app.services.ticket.ticket_task_repository.get_by_uuid_active", new_callable=AsyncMock, return_value=mock_task), \
-         patch("app.services.ticket.user_repository.get_by_uuid_active", new_callable=AsyncMock, return_value=User(name="Assignee")), \
-         patch("app.services.ticket.task_assignment_repository.get_by_task_and_actor", new_callable=AsyncMock, return_value=None), \
-         patch("app.services.ticket.task_assignment_repository.create", new_callable=AsyncMock, return_value=mock_assignment), \
-         patch("app.services.ticket._task_scope_target", new_callable=AsyncMock, return_value=SimpleNamespace(created_by=None, team_uuid=None, geometry=None)), \
-         patch("app.services.ticket.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch:
-
+    with (
+        patch("app.services.ticket.require_scope", new_callable=AsyncMock),
+        patch(
+            "app.services.ticket.ticket_task_repository.get_by_uuid_active",
+            new_callable=AsyncMock,
+            return_value=mock_task,
+        ),
+        patch(
+            "app.services.ticket.user_repository.get_by_uuid_active",
+            new_callable=AsyncMock,
+            return_value=User(name="Assignee"),
+        ),
+        patch(
+            "app.services.ticket.task_assignment_repository.get_by_task_and_actor",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.services.ticket.task_assignment_repository.create",
+            new_callable=AsyncMock,
+            return_value=mock_assignment,
+        ),
+        patch(
+            "app.services.ticket._task_scope_target",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(created_by=None, team_uuid=None, geometry=None),
+        ),
+        patch("app.services.ticket.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch,
+    ):
         await ticket_service.assign_task_actor(
             mock_db,
             actor=mock_actor,
@@ -120,11 +156,20 @@ async def test_add_team_member_triggers_notification(mock_actor):
     mock_role = Role(name="ngo_member", kind="team")
     mock_role.uuid = uuid.uuid4()
 
-    with patch("app.services.admin.require_scope", new_callable=AsyncMock), \
-         patch("app.services.admin.user_repository.get_by_uuid", new_callable=AsyncMock, return_value=mock_target), \
-         patch("app.services.admin.role_repository.get_by_name", new_callable=AsyncMock, return_value=mock_role), \
-         patch("app.services.admin.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch:
-
+    with (
+        patch("app.services.admin.require_scope", new_callable=AsyncMock),
+        patch(
+            "app.services.admin.user_repository.get_by_uuid",
+            new_callable=AsyncMock,
+            return_value=mock_target,
+        ),
+        patch(
+            "app.services.admin.role_repository.get_by_name",
+            new_callable=AsyncMock,
+            return_value=mock_role,
+        ),
+        patch("app.services.admin.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch,
+    ):
         mock_db.get = AsyncMock(return_value=mock_team)
         mock_db.commit = AsyncMock()
         mock_db.refresh = AsyncMock()

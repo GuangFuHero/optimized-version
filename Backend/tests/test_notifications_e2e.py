@@ -11,7 +11,6 @@ from app.core import security
 from app.main import app
 from app.models.auth import User
 from app.models.notification import Notification
-from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
 from app.repositories.notification_repository import notification_repository
 from app.services.notification_service import NotificationService

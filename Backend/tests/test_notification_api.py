@@ -73,13 +73,16 @@ async def test_list_notifications(mock_user, mock_notification):
     mock_db = AsyncMock()
     app.dependency_overrides[security.get_db] = lambda: mock_db
 
-    with patch(
-        "app.api.v1.endpoints.notifications.notification_repository.list_for_recipient",
-        new_callable=AsyncMock,
-    ) as mock_list, patch(
-        "app.api.v1.endpoints.notifications.notification_repository.count_for_recipient",
-        new_callable=AsyncMock,
-    ) as mock_count:
+    with (
+        patch(
+            "app.api.v1.endpoints.notifications.notification_repository.list_for_recipient",
+            new_callable=AsyncMock,
+        ) as mock_list,
+        patch(
+            "app.api.v1.endpoints.notifications.notification_repository.count_for_recipient",
+            new_callable=AsyncMock,
+        ) as mock_count,
+    ):
         mock_list.return_value = [mock_notification]
         mock_count.return_value = 1
 

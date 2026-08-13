@@ -1,23 +1,25 @@
+"""Seed fake notifications, users, and teams for manual verification."""
+
 import asyncio
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
 import sys
 import uuid
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 # 將 Backend 根目錄加入 sys.path，確保無論在任何路徑執行腳本都能解析 app 模組
 backend_dir = Path(__file__).resolve().parent.parent
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import delete, select  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
 
-from app.core.config import settings
-from app.models.auth import User
-from app.models.notification import Notification
-from app.models.rbac import Role, UserRoleAssign
-from app.models.team import Team
+from app.core.config import settings  # noqa: E402
+from app.models.auth import User  # noqa: E402
+from app.models.notification import Notification  # noqa: E402
+from app.models.rbac import Role, UserRoleAssign  # noqa: E402
+from app.models.team import Team  # noqa: E402
 
 engine = create_async_engine(settings.SQLALCHEMY_DATABASE_URL, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -29,7 +31,12 @@ async def seed():
         print("🌱 開始產生假使用者、假團隊與假通知資料...")
 
         # 1. 建立或取得角色 (Roles)
-        role_names = [("ngo_admin", "team"), ("ngo_member", "team"), ("gov_admin", "team"), ("user", "platform")]
+        role_names = [
+            ("ngo_admin", "team"),
+            ("ngo_member", "team"),
+            ("gov_admin", "team"),
+            ("user", "platform"),
+        ]
         roles = {}
         for r_name, r_kind in role_names:
             res = await db.execute(select(Role).where(Role.name == r_name))
@@ -82,7 +89,6 @@ async def seed():
         alice = users["Alice (陳隊長 - NGO Admin)"]
         bob = users["Bob (林志工 - NGO Member)"]
         charlie = users["Charlie (王專員 - Gov Admin)"]
-        david = users["David (張民眾 - Volunteer)"]
 
         # 清除舊的假通知 (重跑自清，確保每次都是精確 3 則)
         await db.execute(delete(Notification))
@@ -138,7 +144,6 @@ async def seed():
                 read_at=now - timedelta(hours=1),
                 created_at=now - timedelta(days=1),
             ),
-
             # --- Bob (NGO Member): 2 則未讀 (任務派工 High + 公告) ---
             Notification(
                 recipient_uuid=bob.uuid,
@@ -163,7 +168,6 @@ async def seed():
                 read=False,
                 created_at=now - timedelta(hours=2),
             ),
-
             # --- Charlie (Gov Admin): 1 則未讀 ---
             Notification(
                 recipient_uuid=charlie.uuid,
@@ -183,6 +187,7 @@ async def seed():
 
         # 生成可直接用於 Swagger "Authorize" 授權的 JWT Token
         from app.core.security import create_access_token
+
         alice_token = create_access_token({"sub": str(alice.uuid)})
         bob_token = create_access_token({"sub": str(bob.uuid)})
         charlie_token = create_access_token({"sub": str(charlie.uuid)})
@@ -190,11 +195,11 @@ async def seed():
         print("\n" + "=" * 80)
         print("✅ 假資料生成完成！Swagger 登入測試 Token 清單：")
         print("=" * 80)
-        print(f"\n👤 1. Alice (NGO Admin - 陳隊長) | 未讀: 3 則 (含 Urgent ⚠️)")
+        print("\n👤 1. Alice (NGO Admin - 陳隊長) | 未讀: 3 則 (含 Urgent ⚠️)")
         print(f"   Token: {alice_token}")
-        print(f"\n👤 2. Bob (NGO Member - 林志工)   | 未讀: 2 則 (含 Task 📌)")
+        print("\n👤 2. Bob (NGO Member - 林志工)   | 未讀: 2 則 (含 Task 📌)")
         print(f"   Token: {bob_token}")
-        print(f"\n👤 3. Charlie (Gov Admin - 王專員) | 未讀: 1 則 🏢")
+        print("\n👤 3. Charlie (Gov Admin - 王專員) | 未讀: 1 則 🏢")
         print(f"   Token: {charlie_token}")
         print("\n" + "=" * 80)
         print("🔑 如何在 Swagger 登入測試：")

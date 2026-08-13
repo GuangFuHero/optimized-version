@@ -1,11 +1,10 @@
 """Unit tests for NotificationRecipientResolver and NotificationService dispatch logic."""
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
-from app.models.notification import Notification
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService, _to_uuid_obj
 

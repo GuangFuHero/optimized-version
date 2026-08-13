@@ -18,7 +18,7 @@ from app.schemas.notification import (
 router = APIRouter()
 
 
-@router.get("", response_model=NotificationListResponse)
+@router.get("")
 async def list_notifications(
     page: int = Query(1, ge=1, description="頁碼 (1-based)"),
     page_size: int = Query(20, ge=1, le=100, description="每頁筆數 (上限 100)"),
@@ -49,7 +49,7 @@ async def list_notifications(
     )
 
 
-@router.get("/unread-count", response_model=UnreadCountResponse)
+@router.get("/unread-count")
 async def get_unread_count(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
@@ -65,14 +65,14 @@ async def get_unread_count(
     )
 
 
-@router.patch("/{uuid}/read", response_model=NotificationItem)
+@router.patch("/{uuid}/read")
 async def mark_notification_read(
     uuid: UUID,
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ) -> NotificationItem:
     """標記單筆通知為已讀。
-    
+
     安全性保證：若該通知不存在或不屬於當前使用者，一律回傳 404 (防止跨使用者探測 ID)。
     """
     notification = await notification_repository.mark_as_read(
@@ -88,7 +88,7 @@ async def mark_notification_read(
     return notification
 
 
-@router.patch("/read-all", response_model=MarkAllReadResponse)
+@router.patch("/read-all")
 async def mark_all_notifications_read(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),

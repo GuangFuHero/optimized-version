@@ -70,15 +70,11 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             if a.display_order is not None and a.display_order > removed:
                 a.display_order -= 1
 
-    async def create_at_end(
-        self, db: AsyncSession, *, content: str, created_by: str
-    ) -> Announcement:
+    async def create_at_end(self, db: AsyncSession, *, content: str, created_by: str) -> Announcement:
         """Create an active announcement appended at the bottom (largest order)."""
         live = await self._live_for_update(db)
         next_order = (live[-1].display_order + 1) if live else 1
-        obj = self.model(
-            content=content, created_by=created_by, active=True, display_order=next_order
-        )
+        obj = self.model(content=content, created_by=created_by, active=True, display_order=next_order)
         db.add(obj)
         await db.commit()
         await db.refresh(obj)
@@ -121,9 +117,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         await db.refresh(a)
         return a
 
-    async def set_active(
-        self, db: AsyncSession, *, uuid: Any, active: bool
-    ) -> Announcement | None:
+    async def set_active(self, db: AsyncSession, *, uuid: Any, active: bool) -> Announcement | None:
         """Activate (append at end) or deactivate (null order + close gap) an announcement.
 
         Returns the updated announcement, or None if not found / already soft-deleted.
