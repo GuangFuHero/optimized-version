@@ -38,17 +38,15 @@ class NotificationRecipientResolver:
     async def resolve_team_admin(
         db: AsyncSession,
         team_uuid: str | _uuid.UUID,
-        org_type: str = "ngo",
     ) -> list[str]:
-        """Resolve admins of a specific team (e.g., only ngo_admin of the assigned team).
+        """Resolve admins of a specific team (Team admins have Role.name == 'admin').
 
-        Filters strictly by User.team_uuid == team_uuid and Role.name == f"{org_type}_admin".
+        Filters strictly by User.team_uuid == team_uuid and Role.name == 'admin'.
         """
         team_uid_str = _to_uuid_str(team_uuid)
         if not team_uid_str:
             return []
 
-        admin_role_name = f"{org_type}_admin"
         stmt = (
             select(User.uuid)
             .join(UserRoleAssign, UserRoleAssign.user_uuid == User.uuid)
@@ -56,7 +54,7 @@ class NotificationRecipientResolver:
             .where(
                 User.delete_at.is_(None),
                 User.team_uuid == team_uid_str,
-                Role.name == admin_role_name,
+                Role.name == "admin",
             )
         )
         result = await db.execute(stmt)
@@ -117,7 +115,7 @@ class NotificationRecipientResolver:
                     WorkZone.delete_at.is_(None),
                     Station.delete_at.is_(None),
                     Team.type == "ngo",
-                    Role.name == "ngo_admin",
+                    Role.name == "admin",
                     func.ST_Contains(WorkZone.geometry, Station.geometry),
                 )
             )
@@ -151,6 +149,10 @@ class NotificationRecipientResolver:
             .where(
                 User.delete_at.is_(None),
                 Permission.key == capability_key,
+                (
+                    (RolePermissionAssign.scope.is_not(None) & (RolePermissionAssign.scope != "none"))
+                    | (UserPermissionAssign.scope.is_not(None) & (UserPermissionAssign.scope != "none"))
+                ),
             )
             .distinct()
         )

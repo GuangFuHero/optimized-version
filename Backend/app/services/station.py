@@ -116,7 +116,7 @@ async def update_station(
         "dedup_group_id" in changes and changes["dedup_group_id"]
     ):
         dedup_recipients = await NotificationRecipientResolver.resolve_permission(
-            db, "dedup.station.manage"
+            db, Perm.AI_DUP_REVIEW.value
         )
         await NotificationService.dispatch(
             db,
@@ -216,9 +216,7 @@ async def update_station_property(
     prop = await station_property_repository.get_by_uuid_active(db, uuid)
     if not prop:
         raise ValueError("Station property not found")
-    await require_scope(
-        actor, Perm.STATION_EDIT, db, resource=await _property_scope_target(db, prop)
-    )
+    await require_scope(actor, Perm.STATION_EDIT, db, resource=await _property_scope_target(db, prop))
     return await station_property_repository.update(db, db_obj=prop, obj_in=changes)
 
 

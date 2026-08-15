@@ -246,9 +246,7 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     if ("is_duplicate" in changes and changes["is_duplicate"] and not old_dup) or (
         "dedup_group_id" in changes and changes["dedup_group_id"]
     ):
-        dedup_managers = await NotificationRecipientResolver.resolve_permission(
-            db, "dedup.ticket.manage"
-        )
+        dedup_managers = await NotificationRecipientResolver.resolve_permission(db, Perm.AI_DUP_REVIEW.value)
         await NotificationService.dispatch(
             db,
             event_type="dedup_flag_ticket",

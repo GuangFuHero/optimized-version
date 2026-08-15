@@ -33,9 +33,7 @@ async def _require_gov_zone_authority(db: AsyncSession, actor: User) -> None:
     """
     if actor.team_uuid is None:
         return
-    team = await db.scalar(
-        select(Team).where(Team.uuid == actor.team_uuid, Team.delete_at.is_(None))
-    )
+    team = await db.scalar(select(Team).where(Team.uuid == actor.team_uuid, Team.delete_at.is_(None)))
     if team is None or team.type != "gov":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -123,9 +121,7 @@ async def assign_zone_to_team(
     if team.status != "active":
         raise ValueError("Team is not active")
 
-    existing = await team_zone_assign_repository.get_assignment(
-        db, team_uuid=team_uuid, zone_uuid=zone_uuid
-    )
+    existing = await team_zone_assign_repository.get_assignment(db, team_uuid=team_uuid, zone_uuid=zone_uuid)
     if existing is not None:
         return existing
 
@@ -141,7 +137,7 @@ async def assign_zone_to_team(
         # 觸發 zone_assigned 通知 (Urgent 等級，送給 NGO Admin)
         zone_obj = await work_zone_repository.get_by_uuid_active(db, zone_uuid)
         zone_name = zone_obj.name if zone_obj else "工作分區"
-        admins = await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=team_uuid, org_type="ngo")
+        admins = await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=team_uuid)
         await NotificationService.dispatch(
             db,
             event_type="zone_assigned",
@@ -158,9 +154,7 @@ async def assign_zone_to_team(
         # Concurrent assign lost the race to uq_team_zone (PR #24 [10]) — stay idempotent by
         # returning the row the winner created.
         await db.rollback()
-        won = await team_zone_assign_repository.get_assignment(
-            db, team_uuid=team_uuid, zone_uuid=zone_uuid
-        )
+        won = await team_zone_assign_repository.get_assignment(db, team_uuid=team_uuid, zone_uuid=zone_uuid)
         if won is not None:
             return won
         raise ValueError("Failed to assign work zone to team") from exc
@@ -171,9 +165,7 @@ async def remove_zone_from_team(db: AsyncSession, *, actor: User, zone_uuid: str
     await require_scope(actor, Perm.ZONE_ASSIGN, db)
     await _require_gov_zone_authority(db, actor)
 
-    existing = await team_zone_assign_repository.get_assignment(
-        db, team_uuid=team_uuid, zone_uuid=zone_uuid
-    )
+    existing = await team_zone_assign_repository.get_assignment(db, team_uuid=team_uuid, zone_uuid=zone_uuid)
     if existing is None:
         raise ValueError("This team is not assigned to this work zone")
     await team_zone_assign_repository.remove(db, uuid=existing.uuid)
@@ -181,7 +173,7 @@ async def remove_zone_from_team(db: AsyncSession, *, actor: User, zone_uuid: str
     # 觸發 zone_unassigned 通知 (High 等級，送給 NGO Admin)
     zone_obj = await work_zone_repository.get_by_uuid_active(db, zone_uuid)
     zone_name = zone_obj.name if zone_obj else "工作分區"
-    admins = await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=team_uuid, org_type="ngo")
+    admins = await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=team_uuid)
     await NotificationService.dispatch(
         db,
         event_type="zone_unassigned",
