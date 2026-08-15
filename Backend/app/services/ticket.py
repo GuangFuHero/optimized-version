@@ -207,38 +207,44 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     old_mod = task.moderation_status
     old_status = task.status
     old_dup = task.is_duplicate
+    task_id = task.uuid
+    task_name = task.task_name
+    task_created_by = str(task.created_by)
 
+    actor_uid = actor.uuid
     updated_task = await ticket_task_repository.update(db, db_obj=task, obj_in=changes)
+    mod_status = updated_task.moderation_status
+    exec_status = updated_task.status
 
     # 1. 審核狀態變更通知 (High)
     if "moderation_status" in changes and changes["moderation_status"] != old_mod:
-        assignments = await task_assignment_repository.list_by_task(db, str(task.uuid))
-        recipients = {str(task.created_by)} | {str(a.actor_uuid) for a in assignments}
+        assignments = await task_assignment_repository.list_by_task(db, str(task_id))
+        recipients = {task_created_by} | {str(a.actor_uuid) for a in assignments}
         await NotificationService.dispatch(
             db,
             event_type="ticket_task_moderation_update",
-            title=f"工單審核狀態更新：{updated_task.task_name}",
-            body=f"工單任務「{updated_task.task_name}」審核狀態已變更為【{updated_task.moderation_status}】。",
+            title=f"工單審核狀態更新：{task_name}",
+            body=f"工單任務「{task_name}」審核狀態已變更為【{mod_status}】。",
             priority="high",
-            actor_uuid=actor.uuid,
+            actor_uuid=actor_uid,
             ref_type="ticket_task",
-            ref_uuid=task.uuid,
+            ref_uuid=task_id,
             explicit_recipients=list(recipients),
         )
 
     # 2. 任務執行狀態變更通知 (Medium)
     if "status" in changes and changes["status"] != old_status:
-        assignments = await task_assignment_repository.list_by_task(db, str(task.uuid))
+        assignments = await task_assignment_repository.list_by_task(db, str(task_id))
         recipients = {str(a.actor_uuid) for a in assignments}
         await NotificationService.dispatch(
             db,
             event_type="ticket_task_status_update",
-            title=f"工單進度更新：{updated_task.task_name}",
-            body=f"工單任務「{updated_task.task_name}」狀態已變更為【{updated_task.status}】。",
+            title=f"工單進度更新：{task_name}",
+            body=f"工單任務「{task_name}」狀態已變更為【{exec_status}】。",
             priority="medium",
-            actor_uuid=actor.uuid,
+            actor_uuid=actor_uid,
             ref_type="ticket_task",
-            ref_uuid=task.uuid,
+            ref_uuid=task_id,
             explicit_recipients=list(recipients),
         )
 
@@ -250,15 +256,16 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
         await NotificationService.dispatch(
             db,
             event_type="dedup_flag_ticket",
-            title=f"重複工單待審核：{updated_task.task_name}",
-            body=f"工單任務「{updated_task.task_name}」已被系統標記為疑似重複項目，請進行審核。",
+            title=f"重複工單待審核：{task_name}",
+            body=f"工單任務「{task_name}」已被系統標記為疑似重複項目，請進行審核。",
             priority="medium",
-            actor_uuid=actor.uuid,
+            actor_uuid=actor_uid,
             ref_type="ticket_task",
-            ref_uuid=task.uuid,
+            ref_uuid=task_id,
             explicit_recipients=dedup_managers,
         )
 
+    await db.refresh(updated_task)
     return updated_task
 
 
@@ -324,6 +331,9 @@ async def assign_task_actor(
     if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
         raise ValueError("Actor already assigned to this task")
 
+    task_name = task.task_name
+    task_id = task.uuid
+    actor_uid = actor.uuid
     try:
         assignment = await task_assignment_repository.create(
             db,
@@ -338,14 +348,15 @@ async def assign_task_actor(
         await NotificationService.dispatch(
             db,
             event_type="task_assignment_created",
-            title=f"📋 您有新的任務指派：{task.task_name}",
-            body=f"您已獲指派負責工單任務「{task.task_name}」。",
+            title=f"📋 您有新的任務指派：{task_name}",
+            body=f"您已獲指派負責工單任務「{task_name}」。",
             priority="high",
-            actor_uuid=actor.uuid,
+            actor_uuid=actor_uid,
             ref_type="ticket_task",
-            ref_uuid=task.uuid,
+            ref_uuid=task_id,
             explicit_recipients=[target_actor],
         )
+        await db.refresh(assignment)
         return assignment
     except IntegrityError as exc:
         # Concurrent duplicate lost the race to uq_assignment_task_actor (PR #24 [10]) —

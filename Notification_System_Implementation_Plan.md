@@ -187,13 +187,12 @@ class NotificationRecipientResolver:
 
     @staticmethod
     async def resolve_team_admin(
-        db: AsyncSession, team_uuid: str, org_type: str = "ngo"
+        db: AsyncSession, team_uuid: str
     ) -> list[str]:
-        """找出指定團隊的管理員 (例如 ngo_admin 或 gov_admin)。
+        """找出指定團隊的管理員 (Role.name == 'admin')。
         
-        嚴格過濾 User.team_uuid == team_uuid 與 Role.name == f"{org_type}_admin"。
+        嚴格過濾 User.team_uuid == team_uuid 與 Role.name == "admin"。
         """
-        admin_role_name = f"{org_type}_admin"
         stmt = (
             select(User.uuid)
             .join(UserRoleAssign, UserRoleAssign.user_uuid == User.uuid)
@@ -201,7 +200,7 @@ class NotificationRecipientResolver:
             .where(
                 User.delete_at.is_(None),
                 User.team_uuid == team_uuid,
-                Role.name == admin_role_name,
+                Role.name == "admin",
             )
         )
         result = await db.execute(stmt)
@@ -242,7 +241,7 @@ class NotificationRecipientResolver:
                 .where(
                     User.delete_at.is_(None),
                     Team.type == "ngo",
-                    Role.name == "ngo_admin",
+                    Role.name == "admin",
                     func.ST_Contains(WorkZone.geometry, Station.geometry),
                 )
             )
@@ -253,7 +252,7 @@ class NotificationRecipientResolver:
 
     @staticmethod
     async def resolve_permission(db: AsyncSession, capability_key: str) -> list[str]:
-        """Q2 決議：查詢持有指定 capability key 的所有使用者 (Role 或 User 直接指派)。"""
+        """Q2 決議：查詢持有指定 capability key 的所有使用者 (Role 或 User 直接指派)，過濾 scope != 'none'。"""
         stmt = (
             select(User.uuid)
             .outerjoin(UserRoleAssign, UserRoleAssign.user_uuid == User.uuid)
@@ -267,6 +266,10 @@ class NotificationRecipientResolver:
             .where(
                 User.delete_at.is_(None),
                 Permission.key == capability_key,
+                (
+                    (RolePermissionAssign.scope.is_not(None) & (RolePermissionAssign.scope != "none"))
+                    | (UserPermissionAssign.scope.is_not(None) & (UserPermissionAssign.scope != "none"))
+                ),
             )
             .distinct()
         )

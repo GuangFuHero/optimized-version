@@ -89,7 +89,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             ref_uuid=obj.uuid,
             explicit_recipients=recipients,
         )
-        await db.commit()
+        await db.refresh(obj)
 
         return obj
 
@@ -144,7 +144,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
                 ref_uuid=target.uuid,
                 explicit_recipients=recipients,
             )
-            await db.commit()
+            await db.refresh(target)
 
         elif not active and target.active:
             live = await self._live_for_update(db)

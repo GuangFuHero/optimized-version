@@ -32,9 +32,8 @@ async def seed():
 
         # 1. 建立或取得角色 (Roles)
         role_names = [
-            ("ngo_admin", "team"),
-            ("ngo_member", "team"),
-            ("gov_admin", "team"),
+            ("admin", "team"),
+            ("member", "team"),
             ("user", "platform"),
         ]
         roles = {}
@@ -64,9 +63,9 @@ async def seed():
 
         # 3. 建立或取得五大 Persona 使用者
         personas = [
-            ("Alice (陳隊長 - NGO Admin)", ngo_team.uuid, "ngo_admin"),
-            ("Bob (林志工 - NGO Member)", ngo_team.uuid, "ngo_member"),
-            ("Charlie (王專員 - Gov Admin)", gov_team.uuid, "gov_admin"),
+            ("Alice (陳隊長 - NGO Admin)", ngo_team.uuid, "admin"),
+            ("Bob (林志工 - NGO Member)", ngo_team.uuid, "member"),
+            ("Charlie (王專員 - Gov Admin)", gov_team.uuid, "admin"),
             ("David (張民眾 - Volunteer)", None, "user"),
             ("Eve (李審核員 - Auditor)", None, "user"),
         ]

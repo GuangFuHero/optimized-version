@@ -50,12 +50,13 @@ async def create_station(
     """
     await require_scope(actor, Perm.STATION_ADD, db)
     validate_point(geometry)
+    actor_uid = actor.uuid
 
     station = await station_repository.add(
         db,
         obj_in={
             "geometry": geojson_to_geom(geometry),
-            "created_by": str(actor.uuid),
+            "created_by": str(actor_uid),
             "type": type,
             "name": name,
             "description": description,
@@ -82,11 +83,12 @@ async def create_station(
         title=f"🏢 新建物資資源站：{station.name or '物資站'}",
         body=f"新建物資資源站「{station.name or station.uuid}」，請留意物資與避難整備狀況。",
         priority="medium",
-        actor_uuid=actor.uuid,
+        actor_uuid=actor_uid,
         ref_type="station",
         ref_uuid=station.uuid,
         explicit_recipients=recipients,
     )
+    await db.refresh(station)
 
     return station
 
@@ -103,6 +105,7 @@ async def update_station(
     if not station:
         raise ValueError("Station not found")
     await require_scope(actor, Perm.STATION_EDIT, db, resource=station)
+    actor_uid = actor.uuid
 
     old_dup = station.is_duplicate
     obj_in = dict(changes)
@@ -134,7 +137,7 @@ async def update_station(
             title=f"重複物資站待審核：{updated.name or '物資站'}",
             body=f"物資站「{updated.name or updated.uuid}」已被系統標記為疑似重複項目，請進行審核。",
             priority="medium",
-            actor_uuid=actor.uuid,
+            actor_uuid=actor_uid,
             ref_type="station",
             ref_uuid=updated.uuid,
             explicit_recipients=dedup_recipients,
@@ -147,12 +150,13 @@ async def update_station(
             title=f"🏢 資源物資站狀態更新：{updated.name or '物資站'}",
             body=f"物資站「{updated.name or updated.uuid}」營運資訊或物資儲備狀況已更新。",
             priority="medium",
-            actor_uuid=actor.uuid,
+            actor_uuid=actor_uid,
             ref_type="station",
             ref_uuid=updated.uuid,
             explicit_recipients=recipients,
         )
 
+    await db.refresh(updated)
     return updated
 
 

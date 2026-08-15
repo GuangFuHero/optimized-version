@@ -126,12 +126,13 @@ async def assign_zone_to_team(
         return existing
 
     try:
+        actor_uid = actor.uuid
         assignment = await team_zone_assign_repository.create(
             db,
             obj_in={
                 "team_uuid": team_uuid,
                 "zone_uuid": zone_uuid,
-                "assigned_by": str(actor.uuid),
+                "assigned_by": str(actor_uid),
             },
         )
         # 觸發 zone_assigned 通知 (Urgent 等級，送給 NGO Admin)
@@ -144,11 +145,12 @@ async def assign_zone_to_team(
             title=f"⚠️ 新指派工作區域：{zone_name}",
             body=f"您的團隊已獲指派負責工作分區「{zone_name}」，請進行評估與派工。",
             priority="urgent",
-            actor_uuid=actor.uuid,
+            actor_uuid=actor_uid,
             ref_type="work_zone",
             ref_uuid=zone_uuid,
             explicit_recipients=admins,
         )
+        await db.refresh(assignment)
         return assignment
     except IntegrityError as exc:
         # Concurrent assign lost the race to uq_team_zone (PR #24 [10]) — stay idempotent by
@@ -164,6 +166,7 @@ async def remove_zone_from_team(db: AsyncSession, *, actor: User, zone_uuid: str
     """Remove a work zone <-> team assignment (checkpoint 1 only, symmetric with assign)."""
     await require_scope(actor, Perm.ZONE_ASSIGN, db)
     await _require_gov_zone_authority(db, actor)
+    actor_uid = actor.uuid
 
     existing = await team_zone_assign_repository.get_assignment(db, team_uuid=team_uuid, zone_uuid=zone_uuid)
     if existing is None:
@@ -180,7 +183,7 @@ async def remove_zone_from_team(db: AsyncSession, *, actor: User, zone_uuid: str
         title=f"工作區域指派已解除：{zone_name}",
         body=f"您的團隊對工作分區「{zone_name}」的指派已解除。",
         priority="high",
-        actor_uuid=actor.uuid,
+        actor_uuid=actor_uid,
         ref_type="work_zone",
         ref_uuid=zone_uuid,
         explicit_recipients=admins,
