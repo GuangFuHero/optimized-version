@@ -72,7 +72,7 @@ class NotificationService:
         ]
 
         db.add_all(notifications)
-        await db.flush()
+        await db.commit()
         return notifications
 
 

@@ -22,7 +22,7 @@ class NotificationItem(BaseModel):
     body: str = Field(..., description="Notification body content")
     read: bool = Field(..., description="Read status")
     read_at: datetime | None = Field(None, description="Timestamp when read")
-    created_at: datetime = Field(..., description="Creation timestamp")
+    created_at: datetime | None = Field(None, description="Creation timestamp")
 
 
 class NotificationListResponse(BaseModel):

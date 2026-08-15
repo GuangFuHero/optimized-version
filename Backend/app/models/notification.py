@@ -1,7 +1,7 @@
 """SQLAlchemy ORM model for user notifications."""
 
 import uuid as _uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -18,7 +18,6 @@ class Notification(Base, UUIDPKMixin, TimestampMixin):
     recipient_uuid: Mapped[_uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.uuid", ondelete="CASCADE"),
-        index=True,
         nullable=False,
         comment="接收通知的使用者 UUID",
     )
@@ -79,11 +78,10 @@ class Notification(Base, UUIDPKMixin, TimestampMixin):
     )
 
     def __init__(self, **kwargs):
-        """Initialize notification model with default uuid, priority, read status and created_at."""
+        """Initialize notification model with default uuid, priority, and read status."""
         kwargs.setdefault("uuid", _uuid.uuid4())
         kwargs.setdefault("priority", "medium")
         kwargs.setdefault("read", False)
-        kwargs.setdefault("created_at", datetime.now(UTC))
         super().__init__(**kwargs)
 
     # 複合索引：優化高頻未讀數統計與分頁排序

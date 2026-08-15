@@ -62,6 +62,7 @@ async def test_full_notification_e2e_lifecycle(mock_users, mock_team):
 
     mock_db.add_all = mock_add_all
     mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
 
     # 1. 觸發事件：指派工作分區給 NGO (發給 Alice NGO Admin，不發給 Bob NGO Member)
     zone_id = uuid.uuid4()

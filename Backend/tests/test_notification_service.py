@@ -42,6 +42,7 @@ async def test_notification_dispatch_actor_exclusion():
 
     mock_db.add_all = mock_add_all
     mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
 
     # Actor is included in explicit_recipients
     recipients = [actor_id, recipient_a, recipient_b]
