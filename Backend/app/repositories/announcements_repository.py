@@ -25,9 +25,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         """Initialize with Announcement as the managed model."""
         super().__init__(Announcement)
 
-    async def list_announcements(
-        self, db: AsyncSession, *, only_active: bool
-    ) -> list[Announcement]:
+    async def list_announcements(self, db: AsyncSession, *, only_active: bool) -> list[Announcement]:
         """List non-deleted announcements.
 
         only_active=True  → active rows ordered by display_order ASC.
@@ -36,9 +34,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         """
         query = select(self.model).where(self.model.delete_at.is_(None))
         if only_active:
-            query = query.where(self.model.active.is_(True)).order_by(
-                self.model.display_order.asc()
-            )
+            query = query.where(self.model.active.is_(True)).order_by(self.model.display_order.asc())
         else:
             query = query.order_by(
                 self.model.display_order.asc().nulls_last(),
@@ -117,7 +113,9 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         await db.refresh(a)
         return a
 
-    async def set_active(self, db: AsyncSession, *, uuid: Any, active: bool) -> Announcement | None:
+    async def set_active(
+        self, db: AsyncSession, *, uuid: Any, active: bool, actor_uuid: Any = None
+    ) -> Announcement | None:
         """Activate (append at end) or deactivate (null order + close gap) an announcement.
 
         Returns the updated announcement, or None if not found / already soft-deleted.
@@ -141,7 +139,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
                 title="📢 全站重要公告",
                 body=summary,
                 priority="medium",
-                actor_uuid=target.created_by,
+                actor_uuid=actor_uuid or target.created_by,
                 ref_type="announcement",
                 ref_uuid=target.uuid,
                 explicit_recipients=recipients,

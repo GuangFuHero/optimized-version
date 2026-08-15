@@ -112,6 +112,16 @@ async def update_station(
     updated = await station_repository.update(db, db_obj=station, obj_in=obj_in)
 
     # 觸發通知
+    OPERATIONAL_STATUS_FIELDS = {
+        "status",
+        "is_open",
+        "water_level",
+        "beds_available",
+        "supply_rationed",
+        "power_available",
+        "capacity_status",
+    }
+
     if ("is_duplicate" in changes and changes["is_duplicate"] and not old_dup) or (
         "dedup_group_id" in changes and changes["dedup_group_id"]
     ):
@@ -129,7 +139,7 @@ async def update_station(
             ref_uuid=updated.uuid,
             explicit_recipients=dedup_recipients,
         )
-    else:
+    elif any(field in changes for field in OPERATIONAL_STATUS_FIELDS):
         recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, str(updated.uuid))
         await NotificationService.dispatch(
             db,
