@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    Computed,
     DateTime,
     Float,
     ForeignKey,
@@ -15,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
+from app.models.search import plain, search_text_expression, search_text_index, truncated
 
 
 class TicketTask(Base, UUIDPKMixin, TimestampMixin):
@@ -38,6 +40,18 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     review_note: Mapped[str | None] = mapped_column(String)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
 
+    # Keyword-search column (ADR-079/081). progress_note and review_note are excluded:
+    # operational notes accumulate contact details and ad-hoc coordination text.
+    search_text: Mapped[str] = mapped_column(
+        String,
+        Computed(
+            search_text_expression(plain("task_name"), truncated("task_description")),
+            persisted=True,
+        ),
+    )
+
+    __table_args__ = (search_text_index("ticket_tasks"),)
+
 
 class TaskProperty(Base, UUIDPKMixin, TimestampMixin):
     """ORM model for a key-value property attached to a ticket task."""
@@ -49,6 +63,17 @@ class TaskProperty(Base, UUIDPKMixin, TimestampMixin):
     quantity: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str | None] = mapped_column(String(50))
     comment: Mapped[str | None] = mapped_column(String)
+
+    # Keyword-search column (ADR-079/081). `comment` is excluded — free-text notes.
+    search_text: Mapped[str] = mapped_column(
+        String,
+        Computed(
+            search_text_expression(plain("property_name"), truncated("property_value")),
+            persisted=True,
+        ),
+    )
+
+    __table_args__ = (search_text_index("task_properties"),)
 
 
 class TaskAssignment(Base, UUIDPKMixin):

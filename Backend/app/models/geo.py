@@ -3,10 +3,11 @@
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String
+from sqlalchemy import Boolean, Computed, DateTime, Float, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
+from app.models.search import plain, search_text_expression, search_text_index, truncated
 
 
 class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
@@ -67,8 +68,17 @@ class Station(BaseGeometry):
     contact_email: Mapped[str | None] = mapped_column(String(100))
     contact_phone: Mapped[str | None] = mapped_column(String(50))
 
+    # Keyword-search column, maintained by PostgreSQL (ADR-079/081). The field list here
+    # IS the positive list — see app/models/search.py before changing it.
+    search_text: Mapped[str] = mapped_column(
+        String,
+        Computed(search_text_expression(plain("name"), truncated("description")), persisted=True),
+    )
+
     __mapper_args__ = {
         "polymorphic_identity": "station",
     }
+
+    __table_args__ = (search_text_index("stations"),)
 
     properties: Mapped[list["StationProperty"]] = relationship(back_populates="station")  # noqa: F821
