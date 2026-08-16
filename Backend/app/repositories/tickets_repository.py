@@ -3,6 +3,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.search import build_search_condition
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
@@ -15,6 +16,39 @@ class TicketRepository(GenericRepository[Tickets]):
         """Initialize with Tickets as the managed model."""
         super().__init__(Tickets)
 
+    def _active_conditions(
+        self,
+        *,
+        bounds=None,
+        status: str | None = None,
+        priority: str | None = None,
+        q: str | None = None,
+        extra_filters=(),
+    ) -> list:
+        """The single source of truth for "which tickets match this request".
+
+        Both list_active() and count_active() MUST build their WHERE clause from this and
+        nothing else. A condition present in one but not the other makes totalCount
+        disagree with the rows actually returned, which silently breaks pagination — and
+        no existing test would go red.
+        """
+        conditions = [self.model.delete_at.is_(None), *extra_filters]
+        if bounds:
+            conditions.append(
+                func.ST_Intersects(
+                    self.model.geometry,
+                    func.ST_MakeEnvelope(
+                        bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
+                    ),
+                )
+            )
+        if status:
+            conditions.append(self.model.status == status)
+        if priority:
+            conditions.append(self.model.priority == priority)
+        conditions.extend(build_search_condition(q, self.model.search_text))
+        return conditions
+
     async def list_active(
         self,
         db: AsyncSession,
@@ -22,20 +56,19 @@ class TicketRepository(GenericRepository[Tickets]):
         bounds=None,
         status: str | None = None,
         priority: str | None = None,
+        q: str | None = None,
         skip: int = 0,
         limit: int = 50,
         extra_filters=(),
     ) -> list[Tickets]:
-        """List active tickets with optional bbox/status/priority filter and RBAC scope_filter conditions."""
-        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
-        if bounds:
-            bbox = func.ST_MakeEnvelope(bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326)
-            query = query.where(func.ST_Intersects(self.model.geometry, bbox))
-        if status:
-            query = query.where(self.model.status == status)
-        if priority:
-            query = query.where(self.model.priority == priority)
-        result = await db.execute(query.order_by(self.model.created_at.desc()).offset(skip).limit(limit))
+        """List active tickets with optional bbox/status/priority/keyword filter and RBAC scope."""
+        conditions = self._active_conditions(
+            bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters
+        )
+        result = await db.execute(
+            select(self.model).where(*conditions)
+            .order_by(self.model.created_at.desc()).offset(skip).limit(limit)
+        )
         return result.scalars().all()
 
     async def count_active(
@@ -45,18 +78,16 @@ class TicketRepository(GenericRepository[Tickets]):
         bounds=None,
         status: str | None = None,
         priority: str | None = None,
+        q: str | None = None,
         extra_filters=(),
     ) -> int:
-        """Count active tickets with optional bbox/status/priority filter and RBAC scope_filter conditions."""
-        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
-        if bounds:
-            bbox = func.ST_MakeEnvelope(bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326)
-            query = query.where(func.ST_Intersects(self.model.geometry, bbox))
-        if status:
-            query = query.where(self.model.status == status)
-        if priority:
-            query = query.where(self.model.priority == priority)
-        return await db.scalar(select(func.count()).select_from(query.subquery()))
+        """Count active tickets — MUST use the same conditions as list_active()."""
+        conditions = self._active_conditions(
+            bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters
+        )
+        return await db.scalar(
+            select(func.count()).select_from(select(self.model).where(*conditions).subquery())
+        )
 
 
 class TicketTaskRepository(GenericRepository[TicketTask]):

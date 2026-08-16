@@ -40,9 +40,10 @@ class RequestQuery:
         bounds: BoundsInput | None = None,
         status: str | None = None,
         priority: str | None = None,
+        q: str | None = None,
         skip: int = 0, limit: int = 50,
     ) -> TicketConnection:
-        """List tickets with optional bbox, status, and priority filters, paginated.
+        """List tickets with optional bbox, status, priority and keyword filters, paginated.
 
         Requires ticket.view permission (public — Guest may call this). Note: the
         help-request board is public (ADR-027), so the seed grants ticket.view at `all`
@@ -51,15 +52,22 @@ class RequestQuery:
         less than `all`. The genuinely per-scope thing is PII (own/zone/all), gated
         separately in tickets/types.py (contact_* resolvers). (gov/ngo scope was removed
         in ADR-049.)
+
+        `q` is a keyword filter over the ticket's title and description (ADR-077/079).
+        contact_name / contact_email / contact_phone are deliberately NOT searchable:
+        those fields are masked per-field above, and letting them feed the search index
+        would make that masking meaningless — anyone could locate a ticket by typing its
+        reporter's phone number. 2–50 characters; outside that range raises.
         """
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Tickets)
         total = await ticket_repository.count_active(
-            db, bounds=bounds, status=status, priority=priority, extra_filters=extra_filters
+            db, bounds=bounds, status=status, priority=priority, q=q,
+            extra_filters=extra_filters,
         )
         items = await ticket_repository.list_active(
-            db, bounds=bounds, status=status, priority=priority, skip=skip, limit=limit,
+            db, bounds=bounds, status=status, priority=priority, q=q, skip=skip, limit=limit,
             extra_filters=extra_filters,
         )
         return TicketConnection(
