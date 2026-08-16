@@ -74,6 +74,8 @@
 **Consequences**：➕ 可預測、**H4 消失**。➖ 無法對單人精準扣某能力（靠 role 設計）。
 
 #### ADR-019 一人一 team + 兩軸 union 組合
+> ⚠️ **「最多一 team」已被 ADR-068 取代**（`Spec/010-multi-team-membership/decisions.md`，2026-08-16，狀態 Pending）：改為可隸屬多 team、一次一個 active team 生效。「平台 ∪ team ∪ 直接 grants、全 additive、無 override」的 union 語意不變，只是 team 那一份改為只取 active team 的授予。
+
 **Decision**：一帳號 = 一平台角色 + 一 team 角色（**最多一 team**）。effective = 平台 grants ∪ team grants ∪ 直接 grants，全 additive、無 override。
 **範例**：平台給 `map.view`，team 給 `map.edit` → `map.view + map.edit`。
 **對應**：OPEN_Q #10 的「正交 OR 組合」。
@@ -185,6 +187,8 @@
 **Consequences**：➕ 權限矩陣跟「誰該做什麼」的業務語意一致；`super_admin` 這次沒有遺漏。➖ 無。
 
 #### ADR-039 `UserRoleAssign` 不帶 `team_uuid` 欄位
+> ⚠️ **已被 ADR-073 取代**（`Spec/010-multi-team-membership/decisions.md`，2026-08-16，狀態 Pending）：本 ADR 的前提「一人一 team 使該欄位多餘」被 ADR-068 推翻後，`team_uuid` 成為必要——否則在 A 隊持有的 `admin` 角色會跟著人切到 B 隊生效。雙重事實來源的疑慮由 ADR-072 解決（`users.team_uuid` 移除，成員資格獨立為 `user_team_assign`）。
+
 **Context**：本文件原稿 §2B 曾把 `UserRoleAssign` 設計成連 `team_uuid` 都存一份（`team_uuid: Mapped[str | None]`），Phase 0 落地時發現這會造成雙重事實來源。
 **Decision**：`UserRoleAssign` 不帶 `team_uuid` 欄位；team 角色永遠透過 `users.team_uuid` 判定（ADR-019「一人一 team」的唯一事實來源）。實作見 `app/models/rbac.py:UserRoleAssign` docstring。
 **Consequences**：➕ 不會有「使用者的 `team_uuid` 跟他某筆角色指派上存的 `team_uuid` 兜不起來」的資料漂移問題。➖ 無——一人一 team 本來就代表這欄位是多餘的。
@@ -952,6 +956,13 @@ enforcement 呼叫（僅目錄 key），不符合「先有 enforcement 才發 ca
 ---
 
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
+
+> ⚠️ **本表的 team / zone 判定式已被 `Spec/010-multi-team-membership/decisions.md` 的 ADR-074 取代（2026-08-16）。**
+> 「一人一 team（`users.team_uuid`）」前提已由 ADR-068 取代為「可隸屬多 team，一次一個 active team 生效」；
+> `users.team_uuid` 欄位由 ADR-072 移除，成員資格改存 `user_team_assign`；
+> team / zone scope 改以 **active team** 判定，不做多隊聯集。
+> 010 目前狀態為 **Pending**（待團隊決策），未落地前下表仍反映 code 現況；實作 010 時須同步更新本表。
+
 | scope | 判定式 | 依賴 |
 |---|---|---|
 | none | `false()`（防禦性；CP1 應已先擋掉） | — |
