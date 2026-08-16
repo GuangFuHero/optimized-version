@@ -1,9 +1,10 @@
 """SQLAlchemy model for support tickets (disaster relief requests)."""
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import Computed, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.geo import BaseGeometry
+from app.models.search import plain, search_text_expression, search_text_index, truncated
 
 
 class Tickets(BaseGeometry):
@@ -24,6 +25,17 @@ class Tickets(BaseGeometry):
     review_note: Mapped[str | None] = mapped_column(String)
     disaster_type: Mapped[str | None] = mapped_column(String(50))
 
+    # Keyword-search column (ADR-079/081). contact_name / contact_email / contact_phone are
+    # deliberately absent: they are masked per-field in the API, and letting them feed the
+    # search index would make that masking meaningless — anyone could find a ticket by
+    # typing its reporter's phone number.
+    search_text: Mapped[str] = mapped_column(
+        String,
+        Computed(search_text_expression(plain("title"), truncated("description")), persisted=True),
+    )
+
     __mapper_args__ = {
         "polymorphic_identity": "request",
     }
+
+    __table_args__ = (search_text_index("tickets"),)

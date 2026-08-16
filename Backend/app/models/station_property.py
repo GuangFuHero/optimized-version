@@ -1,9 +1,10 @@
 """SQLAlchemy models for station properties and crowd-sourcing entries."""
 
-from sqlalchemy import Float, ForeignKey, Integer, String
+from sqlalchemy import Computed, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
+from app.models.search import plain, search_text_index
 
 
 class StationProperty(Base, UUIDPKMixin, TimestampMixin):
@@ -19,7 +20,16 @@ class StationProperty(Base, UUIDPKMixin, TimestampMixin):
     weightings: Mapped[float] = mapped_column(Float, default=1.0)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
 
+    # Keyword-search column (ADR-079/081). Searching "發電機" should find the stations that
+    # have one — this is the highest-value search target in the system. `comment` is
+    # excluded (free-text notes).
+    search_text: Mapped[str] = mapped_column(
+        String, Computed(plain("property_name"), persisted=True)
+    )
+
     station = relationship("Station", back_populates="properties")
+
+    __table_args__ = (search_text_index("station_properties"),)
 
 
 class StationUpdateSuggestion(Base, UUIDPKMixin, TimestampMixin):
