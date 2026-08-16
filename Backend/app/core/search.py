@@ -40,18 +40,13 @@ def _escape(value: str) -> str:
     return value
 
 
-def build_search_condition(q: str | None, first_column, *more_columns) -> list:
-    """Build the WHERE conditions implementing keyword search over the given columns.
+def normalize_query(q: str | None) -> str | None:
+    """Validate and trim a raw query, returning the search term or None for "no search".
 
-    Returns a list suitable for ``select().where(*conditions)``:
-
-    - ``[]`` when there is nothing to search for, so callers can splat it unconditionally.
-    - a single-element list holding one OR clause when there is.
-
-    At least one column is required *by the signature*. ``or_()`` accepts zero clauses and
-    silently produces an empty condition (deprecation warning only, SQLAlchemy 2.0.45),
-    which would quietly corrupt the caller's query instead of failing — so the invariant
-    is enforced structurally rather than by a runtime check.
+    Callers that build their own conditions (EXISTS subqueries, relevance ordering) need
+    the term itself as well as the LIKE pattern — `similarity()` ranks against the raw
+    term, not the escaped pattern — so validation is exposed separately from
+    build_search_condition().
 
     Raises SearchQueryError outside the accepted length range (ADR-082):
 
@@ -66,15 +61,38 @@ def build_search_condition(q: str | None, first_column, *more_columns) -> list:
       the API boundary.
     """
     if q is None:
-        return []
+        return None
     cleaned = q.strip()
     if not cleaned:
-        return []
+        return None
     if len(cleaned) < MIN_QUERY_LENGTH:
         raise SearchQueryError(f"搜尋關鍵字至少 {MIN_QUERY_LENGTH} 個字")
     if len(cleaned) > MAX_QUERY_LENGTH:
         raise SearchQueryError(f"搜尋關鍵字不得超過 {MAX_QUERY_LENGTH} 個字")
+    return cleaned
 
-    pattern = f"%{_escape(cleaned)}%"
+
+def like_pattern(term: str) -> str:
+    """Turn a validated term into an escaped `%term%` ILIKE pattern."""
+    return f"%{_escape(term)}%"
+
+
+def matches(column, pattern: str):
+    """One ILIKE predicate for an already-escaped pattern, with the escape char set.
+
+    Every ILIKE in the search path must go through this — passing `escape=` is what makes
+    the escaping in like_pattern() actually take effect.
+    """
+    return column.ilike(pattern, escape=_ESCAPE_CHAR)
+
+
+def any_matches(pattern: str, first_column, *more_columns):
+    """OR together an ILIKE predicate over each column.
+
+    At least one column is required *by the signature*. ``or_()`` accepts zero clauses and
+    silently produces an empty condition (deprecation warning only, SQLAlchemy 2.0.45),
+    which would quietly corrupt the caller's query instead of failing — so the invariant
+    is enforced structurally rather than by a runtime check.
+    """
     columns = (first_column, *more_columns)
-    return [or_(*(col.ilike(pattern, escape=_ESCAPE_CHAR) for col in columns))]
+    return or_(*(matches(col, pattern) for col in columns))

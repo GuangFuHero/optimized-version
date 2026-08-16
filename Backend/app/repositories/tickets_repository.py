@@ -1,11 +1,12 @@
 """Repositories for tickets, ticket tasks, and task properties."""
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.search import build_search_condition
+from app.core.search import like_pattern, matches, normalize_query
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 
 
@@ -15,6 +16,41 @@ class TicketRepository(GenericRepository[Tickets]):
     def __init__(self):
         """Initialize with Tickets as the managed model."""
         super().__init__(Tickets)
+
+    def _search_condition(self, term: str):
+        """Match the ticket itself, its tasks, those tasks' properties, or its address.
+
+        EXISTS rather than JOIN throughout (ADR-080) — a ticket with three matching task
+        properties would otherwise be returned three times, inflating totalCount and
+        skipping rows when paging. The task branch nests a second EXISTS so a ticket is
+        reachable through a property of one of its tasks.
+        """
+        pattern = like_pattern(term)
+        return or_(
+            matches(self.model.search_text, pattern),
+            exists(
+                select(1).where(
+                    TicketTask.ticket_uuid == self.model.uuid,
+                    TicketTask.delete_at.is_(None),
+                    or_(
+                        matches(TicketTask.search_text, pattern),
+                        exists(
+                            select(1).where(
+                                TaskProperty.task_uuid == TicketTask.uuid,
+                                TaskProperty.delete_at.is_(None),
+                                matches(TaskProperty.search_text, pattern),
+                            )
+                        ),
+                    ),
+                )
+            ),
+            exists(
+                select(1).where(
+                    SecondaryLocation.geometry_uuid == self.model.uuid,
+                    matches(SecondaryLocation.search_text, pattern),
+                )
+            ),
+        )
 
     def _active_conditions(
         self,
@@ -46,8 +82,23 @@ class TicketRepository(GenericRepository[Tickets]):
             conditions.append(self.model.status == status)
         if priority:
             conditions.append(self.model.priority == priority)
-        conditions.extend(build_search_condition(q, self.model.search_text))
+        term = normalize_query(q)
+        if term is not None:
+            conditions.append(self._search_condition(term))
         return conditions
+
+    def _order_by(self, term: str | None) -> list:
+        """Relevance first when searching, otherwise newest first (ADR-083).
+
+        similarity() scores the ticket's own search_text, so tickets reachable only
+        through a task or address score 0 and sort last among the matches.
+        """
+        if term is None:
+            return [self.model.created_at.desc()]
+        return [
+            func.similarity(self.model.search_text, term).desc(),
+            self.model.created_at.desc(),
+        ]
 
     async def list_active(
         self,
@@ -67,7 +118,8 @@ class TicketRepository(GenericRepository[Tickets]):
         )
         result = await db.execute(
             select(self.model).where(*conditions)
-            .order_by(self.model.created_at.desc()).offset(skip).limit(limit)
+            .order_by(*self._order_by(normalize_query(q)))
+            .offset(skip).limit(limit)
         )
         return result.scalars().all()
 
@@ -103,16 +155,34 @@ class TicketTaskRepository(GenericRepository[TicketTask]):
         ticket_uuid: str,
         *,
         status: str | None = None,
+        q: str | None = None,
         skip: int = 0,
         limit: int = 50,
     ) -> list[TicketTask]:
-        """List active tasks for a ticket with optional status filter."""
+        """List active tasks for a ticket with optional status and keyword filters."""
         query = select(self.model).where(
             self.model.ticket_uuid == ticket_uuid,
             self.model.delete_at.is_(None),
         )
         if status:
             query = query.where(self.model.status == status)
+        term = normalize_query(q)
+        if term is not None:
+            pattern = like_pattern(term)
+            # A task matches on its own name/description or on any of its properties,
+            # mirroring how a ticket reaches into its tasks (ADR-080).
+            query = query.where(
+                or_(
+                    matches(self.model.search_text, pattern),
+                    exists(
+                        select(1).where(
+                            TaskProperty.task_uuid == self.model.uuid,
+                            TaskProperty.delete_at.is_(None),
+                            matches(TaskProperty.search_text, pattern),
+                        )
+                    ),
+                )
+            )
         result = await db.execute(query.order_by(self.model.created_at.desc()).offset(skip).limit(limit))
         return result.scalars().all()
 

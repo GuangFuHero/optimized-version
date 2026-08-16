@@ -109,17 +109,21 @@ class TicketTaskQuery:
         self, info: strawberry.types.Info,
         ticket_uuid: str,
         status: str | None = None,
+        q: str | None = None,
         skip: int = 0, limit: int = 50,
     ) -> list[TicketTaskType]:
-        """List tasks for a given ticket UUID, with optional status filter and pagination.
+        """List tasks for a given ticket UUID, with optional status/keyword filters.
 
         Requires ticket.view permission (public — Guest may call this). Checkpoint 1
         only: TicketTask carries no team_uuid of its own to scope-filter a list by, and
         the caller already had to know the parent ticket_uuid to ask.
+
+        `q` narrows to tasks matching on their own name/description or on any of their
+        properties (ADR-079/080). 2–50 characters; outside that range raises.
         """
         await check_permission(info, Perm.TICKET_VIEW)
         items = await ticket_task_repository.list_by_ticket(
-            info.context["db"], ticket_uuid, status=status, skip=skip, limit=limit
+            info.context["db"], ticket_uuid, status=status, q=q, skip=skip, limit=limit
         )
         return [TicketTaskType.from_model(t) for t in items]
 

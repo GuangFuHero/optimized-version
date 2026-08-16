@@ -2,7 +2,7 @@
 
 **Date**: 2026-08-16
 **Feature**: 011-resource-search
-**Status**: Phase 1 implemented (PR #35); Phase 2 pending
+**Status**: 已實作（PR #35）
 **Notion**: 補齊功能 → 「系統性 - Ticket/Resource Station 搜尋系統」（backend-Popo，08-13~08-17）
 **Depends on**: 既有列表查詢（`app/graphql/geo/queries.py:32`、`app/graphql/tickets/queries.py:38`）、scope 引擎（`app/core/rbac_scopes.py`）
 **Blocked by**: 無
@@ -21,6 +21,10 @@
 - 搜得到**動態欄位**：搜「發電機」要找出擁有該項物資的站點。
 - 搜尋結果自動套用呼叫者的 RBAC scope，與現有列表行為一致。
 - 成本可預測：索引體積與查詢延遲有明確上界，不隨自由文字長度失控。
+
+> **實作註記**：ADR-083 的相關性排序僅對**主表**的 `search_text` 計分，因此僅透過關聯表
+> （動態欄位、地址）命中的列得分為 0，排在命中集最後。這是刻意的——名稱叫「發電機站」
+> 比「擁有一台發電機」更相關。
 
 ### 非目標（YAGNI，明確排除）
 - **跨型別的全站搜尋端點**：不做 `search(q, types: [...])` 回傳混合結果（ADR-077）。跨表分頁與排序做不對，且 UIUX 規劃的是 Tickets / Resource Stations 兩張獨立表格。

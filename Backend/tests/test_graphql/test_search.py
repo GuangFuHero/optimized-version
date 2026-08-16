@@ -12,6 +12,9 @@ from shapely.geometry import Point
 
 from app.models.geo import Station
 from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
+from app.models.station_property import StationProperty
+from app.models.ticket_task import TaskProperty, TicketTask
 from tests.test_graphql.conftest import test_db
 
 STATIONS_Q = """
@@ -262,3 +265,228 @@ async def test_ticket_total_count_reflects_the_filter(client, seeded_tickets):
     """count_active must apply the same predicate as list_active."""
     data = (await _tickets(client, q="需要"))["data"]["tickets"]
     assert data["pageInfo"]["totalCount"] == len(data["items"])
+
+
+# ──────────────────────────────────────────────
+# related-table search (ADR-080): dynamic fields and addresses
+# ──────────────────────────────────────────────
+
+STATIONS_Q_ORDERED = """
+query($q: String) {
+  stations(q: $q) { items { uuid name } }
+}
+"""
+
+
+@pytest_asyncio.fixture
+async def station_with_generator(coordinator_auth):
+    """A station whose NAME does not match, but which HAS a 發電機 property.
+
+    This is the highest-value search target in the system: "which stations have a
+    generator?" cannot be answered by searching station names alone.
+    """
+    user_uuid, _ = coordinator_auth
+    async with test_db() as db:
+        station = Station(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid, name="鳳林國中", description="避難收容",
+            type="shelter", level=1,
+        )
+        db.add(station)
+        await db.flush()
+        db.add(
+            StationProperty(
+                station_uuid=station.uuid, property_type="facility",
+                property_name="發電機", quantity=2, created_by=user_uuid,
+            )
+        )
+        await db.flush()
+        return str(station.uuid)
+
+
+@pytest_asyncio.fixture
+async def station_with_address(coordinator_auth):
+    """A station whose name does not match, but whose address contains 中正路."""
+    user_uuid, _ = coordinator_auth
+    async with test_db() as db:
+        station = Station(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid, name="大進活動中心", type="shelter", level=1,
+        )
+        db.add(station)
+        await db.flush()
+        db.add(
+            SecondaryLocation(
+                geometry_uuid=station.uuid, location_type="address",
+                county="花蓮縣", city="鳳林鎮", lane="中正路", alley="12巷", no="3號",
+            )
+        )
+        await db.flush()
+        return str(station.uuid)
+
+
+@pytest_asyncio.fixture
+async def ticket_with_task_property(coordinator_auth):
+    """A ticket whose title does not match, reachable only through its task's property."""
+    user_uuid, _ = coordinator_auth
+    async with test_db() as db:
+        ticket = Tickets(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid, title="現場支援需求", description="人力調度",
+            contact_name="陳先生", status="pending", priority="medium",
+        )
+        db.add(ticket)
+        await db.flush()
+        task = TicketTask(
+            ticket_uuid=ticket.uuid, task_type="supply", task_name="物資配送",
+            status="pending", created_by=user_uuid,
+        )
+        db.add(task)
+        await db.flush()
+        db.add(
+            TaskProperty(
+                task_uuid=task.uuid, property_name="需求品項", property_value="嬰兒奶粉",
+            )
+        )
+        await db.flush()
+        return str(ticket.uuid)
+
+
+@pytest.mark.asyncio
+async def test_station_search_reaches_into_its_properties(client, station_with_generator):
+    """Searching 發電機 finds stations that have one, not just ones named after it."""
+    found = _uuids(await _stations(client, q="發電機"), "stations")
+    assert station_with_generator in found
+
+
+@pytest.mark.asyncio
+async def test_station_search_reaches_into_its_address(client, station_with_address):
+    """Address parts are searchable through the related secondary_locations row."""
+    found = _uuids(await _stations(client, q="中正路"), "stations")
+    assert station_with_address in found
+
+
+@pytest.mark.asyncio
+async def test_station_matched_through_a_property_appears_once(client, coordinator_auth):
+    """A station with several matching properties must not be duplicated (ADR-080).
+
+    This is why the related tables are reached via EXISTS rather than JOIN: a JOIN would
+    return the station once per matching property, inflating totalCount and skipping rows
+    when paging.
+    """
+    user_uuid, _ = coordinator_auth
+    async with test_db() as db:
+        station = Station(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid, name="重複測試站", type="shelter", level=1,
+        )
+        db.add(station)
+        await db.flush()
+        for name in ("柴油發電機", "汽油發電機", "備用發電機"):
+            db.add(
+                StationProperty(
+                    station_uuid=station.uuid, property_type="facility",
+                    property_name=name, created_by=user_uuid,
+                )
+            )
+        await db.flush()
+        station_uuid = str(station.uuid)
+
+    body = await _stations(client, q="發電機")
+    items = body["data"]["stations"]["items"]
+    assert [i["uuid"] for i in items].count(station_uuid) == 1
+    assert body["data"]["stations"]["pageInfo"]["totalCount"] == len(items)
+
+
+@pytest.mark.asyncio
+async def test_ticket_search_reaches_into_task_properties(client, ticket_with_task_property):
+    """A ticket is findable through its task's properties (nested EXISTS)."""
+    found = _uuids(await _tickets(client, q="嬰兒奶粉"), "tickets")
+    assert ticket_with_task_property in found
+
+
+@pytest.mark.asyncio
+async def test_ticket_search_reaches_into_its_tasks(client, ticket_with_task_property):
+    """A ticket is findable through its task's own name."""
+    found = _uuids(await _tickets(client, q="物資配送"), "tickets")
+    assert ticket_with_task_property in found
+
+
+@pytest.mark.asyncio
+async def test_related_table_search_still_excludes_pii(client, seeded_tickets):
+    """Reaching into related tables must not open a back door to contact details."""
+    assert seeded_tickets["需要飲用水"] not in _uuids(
+        await _tickets(client, q="0912345678"), "tickets"
+    )
+
+
+@pytest.mark.asyncio
+async def test_name_match_outranks_property_only_match(client, coordinator_auth):
+    """Relevance ordering: a station named 發電機站 ranks above one that merely has one.
+
+    similarity() is computed against the station's own search_text, so rows matched only
+    through a related table score 0 and sort last among the matches (ADR-083).
+    """
+    user_uuid, _ = coordinator_auth
+    async with test_db() as db:
+        named = Station(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid, name="排序發電機站", type="shelter", level=1,
+        )
+        other = Station(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid, name="排序無關站", type="shelter", level=1,
+        )
+        db.add_all([named, other])
+        await db.flush()
+        db.add(
+            StationProperty(
+                station_uuid=other.uuid, property_type="facility",
+                property_name="排序發電機站", created_by=user_uuid,
+            )
+        )
+        await db.flush()
+        named_uuid, other_uuid = str(named.uuid), str(other.uuid)
+
+    body = await _stations(client, query=STATIONS_Q_ORDERED, q="排序發電機站")
+    order = [i["uuid"] for i in body["data"]["stations"]["items"]]
+    assert order.index(named_uuid) < order.index(other_uuid)
+
+
+TICKET_TASKS_Q = """
+query($ticketUuid: String!, $q: String) {
+  ticketTasks(ticketUuid: $ticketUuid, q: $q) { uuid taskName }
+}
+"""
+
+
+@pytest.mark.asyncio
+async def test_ticket_tasks_keyword_filter(client, ticket_with_task_property):
+    """The ticketTasks query narrows by keyword on the task's own name."""
+    resp = await client.post("/graphql", json={
+        "query": TICKET_TASKS_Q,
+        "variables": {"ticketUuid": ticket_with_task_property, "q": "物資"},
+    })
+    names = [t["taskName"] for t in resp.json()["data"]["ticketTasks"]]
+    assert names == ["物資配送"]
+
+
+@pytest.mark.asyncio
+async def test_ticket_tasks_keyword_reaches_into_properties(client, ticket_with_task_property):
+    """A task is findable through its own properties, mirroring the ticket behaviour."""
+    resp = await client.post("/graphql", json={
+        "query": TICKET_TASKS_Q,
+        "variables": {"ticketUuid": ticket_with_task_property, "q": "嬰兒奶粉"},
+    })
+    names = [t["taskName"] for t in resp.json()["data"]["ticketTasks"]]
+    assert names == ["物資配送"]
+
+
+@pytest.mark.asyncio
+async def test_ticket_tasks_non_matching_keyword_returns_nothing(client, ticket_with_task_property):
+    """The keyword filter actually narrows rather than being ignored."""
+    resp = await client.post("/graphql", json={
+        "query": TICKET_TASKS_Q,
+        "variables": {"ticketUuid": ticket_with_task_property, "q": "完全無關的字"},
+    })
+    assert resp.json()["data"]["ticketTasks"] == []
