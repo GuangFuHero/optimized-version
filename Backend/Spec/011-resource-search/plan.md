@@ -1,6 +1,6 @@
-# Resource Search — Phase 1 (Migration + 主表查詢) Implementation Plan
+# Resource Search — Implementation Plan
 
-**Goal:** 建立 `pg_trgm` 搜尋基礎設施（extension、6 個 `search_text` generated column、6 個 GIN 索引），並讓 `stations` / `tickets` 兩個既有 GraphQL 查詢支援 `q` 關鍵字參數。
+**Goal:** 建立 `pg_trgm` 搜尋基礎設施（extension、6 個 `search_text` generated column、6 個 GIN 索引），並讓 `stations` / `tickets` / `ticketTasks` 三個既有 GraphQL 查詢支援 `q` 關鍵字參數——涵蓋主表、動態欄位與地址，含相關性排序。
 
 **Architecture:** 不新增端點（ADR-077）。新增 `app/core/search.py` 提供 `build_search_condition()`——長度驗證、`%`/`_` escape、產生 `ILIKE` 條件；repository 的 `list_active` / `count_active` 多吃一個 `q` 參數，把條件併進既有的 `where` 子句；GraphQL resolver 只多傳一個參數。scope 過濾、bbox、分頁完全沿用既有路徑。
 
@@ -23,18 +23,22 @@
 
 ---
 
-## Phase 1 範圍
+## 範圍
 
-| 納入 | 排除（Phase 2） |
-|---|---|
-| `pg_trgm` extension（正式 + 測試環境） | 1:N 的 `EXISTS` 子查詢（動態欄位、地址） |
-| **全部 6 張表**的 `search_text` + GIN 索引 | `similarity()` 相關性排序 |
-| `build_search_condition()` 與其單元測試 | `ticketTasks(q:)` |
-| `stations(q:)`、`tickets(q:)` 主表搜尋 | |
+原本規劃切成兩個 phase（Phase 1 主表、Phase 2 關聯表），實作到一半後改為一次做完——切點落在「寫到哪」而非「功能是否完整」：Phase 1 的 migration 已為 6 張表全部建了索引，但只有 2 張被查詢用到，其餘 4 張在 Phase 2 前是純寫入成本；而**動態欄位搜尋（搜「發電機」找出有該項物資的站點）本來就是整套搜尋裡價值最高的部分**，卻不在 Phase 1。
 
-**為何 migration 一次做完 6 張表**：拆兩次 migration 只是 churn，Phase 2 變成純查詢工作，不再動 schema。
+因此本 plan 涵蓋完整功能：
 
-**為何 `ticketTasks(q:)` 移到 Phase 2**：`ticket_tasks` 查詢強制要 `ticket_uuid`（`app/graphql/tickets/queries.py:101`），是「某張工單底下的任務」而非全域清單，對它加 `q` 價值極低。真正有用的是讓 `tickets` 的搜尋透過 `EXISTS` 涵蓋其下的 task 與 task_property——那是 Phase 2 的工作。
+| 納入 |
+|---|
+| `pg_trgm` extension（正式 + 測試環境） |
+| 全部 6 張表的 `search_text` + GIN 索引 |
+| 搜尋條件建構器與其單元測試 |
+| `stations` / `tickets` / `ticketTasks` 的 `q` 參數 |
+| 1:N 關聯的 `EXISTS`（動態欄位、地址、工單→任務→任務欄位） |
+| `similarity()` 相關性排序 |
+
+**唯一延後的是 staging 效能實測**（見文末），那需要有代表性的資料量，不是實作階段能完成的事。
 
 ---
 
@@ -385,7 +389,13 @@ git commit -m "feat(search): add search_text generated columns and trigram GIN i
 
 ---
 
-## Task 3: `build_search_condition()` 搜尋條件建構器
+## Task 3: 搜尋條件建構器
+
+> **實作時 API 有演進**：本節原本規劃單一 `build_search_condition(q, *columns)`。
+> 補上關聯表搜尋（Task 8）後需要在 `EXISTS` 子查詢與 `similarity()` 排序中重複使用同一個
+> pattern 與原始詞，因此拆成 `normalize_query()`（驗證並回傳原始詞）、`like_pattern()`
+> （escape 並包上 `%`）、`matches()`（單一 ILIKE 述詞）、`any_matches()`（多欄位 OR）。
+> 下方的驗證邏輯與測試意圖不變，僅函式切分不同——以 `app/core/search.py` 為準。
 
 **Files:** Create `app/core/search.py`、`tests/test_search_helper.py`
 
@@ -565,7 +575,7 @@ git commit -m "feat(search): add ILIKE search condition builder with length and 
 
 ---
 
-## Task 4: `stations(q:)` 主表搜尋
+## Task 4: `stations(q:)`
 
 **Files:** Modify `app/repositories/geo_repository.py`、`app/graphql/geo/queries.py`；Create `tests/test_graphql/test_search.py`
 
@@ -719,7 +729,7 @@ git commit -m "feat(search): add q keyword filter to the stations query"
 
 ---
 
-## Task 5: `tickets(q:)` 主表搜尋
+## Task 5: `tickets(q:)`
 
 **Files:** Modify `app/repositories/tickets_repository.py`、`app/graphql/tickets/queries.py`；Extend `tests/test_graphql/test_search.py`
 
@@ -838,10 +848,20 @@ PR body 需包含：
 
 ---
 
-## Phase 2 預告（不在本 PR）
+## Task 8: 關聯表搜尋與相關性排序
 
-- `stations` 的 `EXISTS`：`station_properties`、`secondary_locations`
-- `tickets` 的 `EXISTS`：`ticket_tasks` → `task_properties`、`secondary_locations`
-- `similarity()` 相關性排序（ADR-083）
-- `ticketTasks(q:)`（若屆時仍判斷有價值）
-- **Staging 效能驗證**：以有代表性的資料量 `EXPLAIN ANALYZE` 實測——(1) `q` 單獨查詢的延遲；(2) `q` + `bounds` 組合時 planner 在 trigram GIN 與 PostGIS GiST 之間的選擇；(3) 2 字查詢在地理集中的資料集上的候選集大小。Phase 1 的 Task 6 只驗證索引接線正確，**不涵蓋這三項**（spec §6 已記錄為待實測）
+**Files:** Modify `app/core/search.py`、`app/repositories/geo_repository.py`、`app/repositories/tickets_repository.py`、`app/graphql/tickets/queries.py`；Extend `tests/test_graphql/test_search.py`
+
+- [x] **Step 1: 寫失敗測試** —— 動態欄位命中、地址命中、工單→任務→任務欄位（巢狀 `EXISTS`）、多筆 property 命中時不重複、相關性排序（站名命中優於僅 property 命中）
+- [x] **Step 2: `stations` 的 `EXISTS`** —— `station_properties`（含 `delete_at` 過濾）、`secondary_locations`
+- [x] **Step 3: `tickets` 的巢狀 `EXISTS`** —— `ticket_tasks` → `task_properties`、`secondary_locations`
+- [x] **Step 4: `similarity()` 排序**（ADR-083）—— 僅對主表 `search_text` 計分，因此僅透過關聯表命中的列得分為 0、排在命中集最後。這是刻意的：**名稱**叫「發電機站」比**擁有**發電機更相關
+- [x] **Step 5: `ticketTasks(q:)`** —— 任務以自身名稱/描述或其任一 property 命中，與工單的行為對稱
+
+> `SecondaryLocation` 沒有 `TimestampMixin`（無 `delete_at`），其 `EXISTS` 不加軟刪除條件；`StationProperty` / `TicketTask` / `TaskProperty` 有，必須加。
+
+---
+
+## 延後項目（需有代表性資料量，非實作階段可完成）
+
+**Staging 效能驗證**：(1) `q` 單獨查詢的延遲；(2) `q` + `bounds` 組合時 planner 在 trigram GIN 與 PostGIS GiST 之間的選擇；(3) 2 字查詢在地理集中的資料集上的候選集大小；(4) 巢狀 `EXISTS`（工單→任務→任務欄位）在大量任務下的成本。Task 6 只驗證索引接線正確，不涵蓋這四項（spec §6 已記錄為待實測）。

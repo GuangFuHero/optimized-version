@@ -1,9 +1,9 @@
 """Repositories for stations, closure areas, station properties, and crowd sourcing."""
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.search import build_search_condition
+from app.core.search import like_pattern, matches, normalize_query
 from app.infrastructure.repository.base import GenericRepository
 from app.models.geo import ClosureArea, Station
 from app.models.secondary_location import SecondaryLocation
@@ -24,6 +24,31 @@ class StationRepository(GenericRepository[Station]):
     def __init__(self):
         """Initialize with Station as the managed model."""
         super().__init__(Station)
+
+    def _search_condition(self, term: str):
+        """Match the station itself, its properties, or its address (ADR-079/080).
+
+        The related tables are reached with EXISTS rather than a JOIN: a station with
+        three matching properties would otherwise be returned three times, inflating
+        totalCount and skipping rows when paging.
+        """
+        pattern = like_pattern(term)
+        return or_(
+            matches(self.model.search_text, pattern),
+            exists(
+                select(1).where(
+                    StationProperty.station_uuid == self.model.uuid,
+                    StationProperty.delete_at.is_(None),
+                    matches(StationProperty.search_text, pattern),
+                )
+            ),
+            exists(
+                select(1).where(
+                    SecondaryLocation.geometry_uuid == self.model.uuid,
+                    matches(SecondaryLocation.search_text, pattern),
+                )
+            ),
+        )
 
     def _active_conditions(
         self, *, bounds=None, station_type: str | None = None,
@@ -48,8 +73,24 @@ class StationRepository(GenericRepository[Station]):
             )
         if station_type:
             conditions.append(self.model.type == station_type)
-        conditions.extend(build_search_condition(q, self.model.search_text))
+        term = normalize_query(q)
+        if term is not None:
+            conditions.append(self._search_condition(term))
         return conditions
+
+    def _order_by(self, term: str | None) -> list:
+        """Relevance first when searching, otherwise the standing order (ADR-083).
+
+        similarity() is scored against the station's own search_text, so rows matched only
+        through a property or address score 0 and sort last among the matches — a station
+        *named* after the keyword is more relevant than one that merely stocks it.
+        """
+        standing = [
+            self.model.priority_score.desc().nulls_last(), self.model.created_at.desc()
+        ]
+        if term is None:
+            return standing
+        return [func.similarity(self.model.search_text, term).desc(), *standing]
 
     async def list_active(
         self, db: AsyncSession, *,
@@ -62,9 +103,8 @@ class StationRepository(GenericRepository[Station]):
         )
         result = await db.execute(
             select(self.model).where(*conditions)
-            .order_by(
-                self.model.priority_score.desc().nulls_last(), self.model.created_at.desc()
-            ).offset(skip).limit(limit)
+            .order_by(*self._order_by(normalize_query(q)))
+            .offset(skip).limit(limit)
         )
         return result.scalars().all()
 
