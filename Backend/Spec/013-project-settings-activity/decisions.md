@@ -49,6 +49,13 @@
 
 進一步查證發現：兩張 config 表**目前是空的**（`scripts/seed_rbac.py` 與 `scripts/seed_mock_scenarios.sql` 各建 0 列），且沒有任何寫入路徑依賴它（見 ADR-092）。「保護管理員的現場客製不被範本覆蓋」是在保護不存在的東西。
 
+> **事實更正（2026-08-16，實作期 docker 驗收發現）**：上一段「兩張表是空的」**不正確**。當時只查了兩個 seed 腳本，漏了 migration 本身——`alembic/versions/a2a8e4d8c51d_ticket_tasks_and_property_configs.py:184` 起就 `INSERT` 了 **36 筆 station config 與 10 筆 task config**（`crowd_level`、`capacity_total`、`beds_available` 等）。
+>
+> 對本 ADR 的三點影響：
+> 1. **決策不變。** 拆「定義／啟用」的理由是混合災害會產生真實的定義衝突，與表是否為空無關。
+> 2. **UNIQUE 約束仍安全。** 乾淨 DB 跑完 migration 後實測無重複鍵，`create_unique_constraint` 通過。但「表是空的所以不可能失敗」這個推論站不住腳——**既有部署若曾透過 API 寫過 config，部署前務必先跑重複鍵檢查**（查詢見 `07ac630e0009` 的 docstring）。
+> 3. **不需要回填。** 這 51 筆種子列的 `disaster_types` 取欄位預設 `'{}'`，在任何災害設定下都保持啟用，行為與加欄位前完全一致。
+
 **Decision**：把「定義」與「啟用」拆開——
 
 | 概念 | 內容 | 唯一性 |
@@ -65,6 +72,14 @@ ALTER TABLE task_property_config    ADD CONSTRAINT uq_task_prop    UNIQUE (task_
 
 `disaster_types = '{}'` 代表不分災害型別一律啟用——沿用 `station_type = 'all'` 的既有慣例（`app/repositories/config_repository.py:17-26`）。
 
+**型別標籤格式：小寫英文，寫入時正規化，暫不設合法清單**（2026-08-16 補充）。比對是精確且區分大小寫的字串相等，所以 `["Flood"]` 對上 `["flood"]` 會**安靜地**讓整批水災欄位從表單消失（回 200、無錯誤、無警告）。因此在兩邊的寫入路徑統一 `.strip().lower()` 並去重（`app/core/disaster_types.py`）。
+
+但**不寫死合法清單**：型別詞彙的內容與「範本的實際欄位內容」同源，而後者被 `spec.md:28` 明確排除（來源是 PM-Scure 的「三種災難情境下的動態欄位」「泥石流範本先行」）。自行發明列舉等於替 PM 決定一份他們已經擁有的東西，且名稱極可能對不上（spec 寫「泥石流」，英文對應 landslide / debris flow / mudslide 並不唯一）。正規化不需要知道詞彙表就能消滅最常見的大小寫不匹配，且與日後補列舉完全相容——屆時列舉就放在同一個模組。
+
+因兩個 `disaster_types` 欄位都是由 migration `07ac630e0009` 新建，不存在既有的混合大小寫資料，故只在寫入端正規化即為完備，不需要 SQL 層的 `lower()`。
+
+➖ 真正的錯字（`floood`、`flooding`）仍會靜默通過，直到補上列舉驗證。
+
 查詢：`WHERE disaster_types = '{}' OR disaster_types && :current_types`（`&&` 為 PostgreSQL 陣列交集運算子）。
 
 **Consequences**：
@@ -74,6 +89,23 @@ ALTER TABLE task_property_config    ADD CONSTRAINT uq_task_prop    UNIQUE (task_
 ➕ 順帶補上 DB 唯一鍵——應用層 upsert 本來就以 `(type, property_name)` 為鍵（`config_repository.py:28-47`），但 DB 沒保證，並發下可能產生重複列。
 ➖ 無法表達「同一個欄位名在不同災害下有不同型別」。判斷這是**特性而非限制**——那種需求應該用兩個不同的欄位名表達。
 ➖ 改定義會立即影響所有啟用該欄位的災害型別。因 ADR-092 無強制力，影響僅限前端渲染。
+
+> **已知限制（2026-08-16，實作期審查發現）：`'all'` 桶子仍可產生同名衝突定義。**
+>
+> 上面「定義衝突在結構上不可能發生」的說法**只在災害型別這根軸上成立**。唯一鍵是 `(station_type, property_name)`，但 `list_by_type` 查詢時會把該站點型別與共用的 `station_type='all'` **合併**回傳（`app/repositories/config_repository.py:47`）——約束的範圍比查詢的範圍窄一格，於是 `('all', X)` 與 `('shelter', X)` 可以並存，同一張表單收到兩份定義：
+>
+> ```
+> ('all',     'crowd_level', 'Enum')      ← migration a2a8e4d8c51d:187 的種子資料
+> ('shelter', 'crowd_level', 'Integer')   ← 管理員後來建的
+> ```
+>
+> 已實跑驗證：shelter 的 `stationPropertyConfigs` 兩者都回傳。兩列的 `(sort_order, property_name)` 也相同，ADR-095 想修的排序不穩定在此案例上復發。
+>
+> **決策：本次不修，記為已知限制。** 理由是衝突面極小——`'all'` 桶子目前只有 `crowd_level` 一個欄位，且 task 那側的查詢不合併 `'all'`（`config_repository.py:100`），完全不受影響。等 PM 的範本內容落地、真正踩到再處理。
+>
+> 屆時的三個選項：①`property_name` 改為全表唯一（最貼近本 ADR 原意，且與 `station_properties` 只存 `property_name`、不存 `station_type` 的實際資料形狀一致；已查證 36+10 筆種子無跨型別同名，migration 可乾淨套用）②查詢層去重、具體型別蓋過 `'all'` ③寫入時擋下回 409。
+>
+> **與「多種災害疊加」無衝突**：疊加住在啟用軸（單一列的 `disaster_types` 陣列），本限制住在定義軸（`station_type` 是站點種類，與災害無關）。選項①不但不影響疊加，還是同一套「一份定義、多重啟用」邏輯的延伸。
 
 ---
 
