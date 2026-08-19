@@ -1,4 +1,8 @@
 import {
+  resolveClientIp,
+  runWithClientIp,
+} from '@rescue-frontend/data-access/server';
+import {
   ApiError,
   addContactAsync,
   changePasswordAsync,
@@ -86,9 +90,29 @@ function getPathKey(segments: string[] | undefined) {
   return segments?.join('/') ?? '';
 }
 
-export async function GET(
+type RouteContext = { params: Promise<{ segments?: string[] }> };
+
+/**
+ * Attach the browser's IP to every backend call this request makes.
+ *
+ * The backend rate-limits per caller IP. Every call it sees comes from this server, so without
+ * forwarding, all users share a single allowance.
+ */
+function withClientIp<T>(request: NextRequest, handler: () => Promise<T>) {
+  return runWithClientIp(resolveClientIp(request.headers), handler);
+}
+
+export async function GET(request: NextRequest, context: RouteContext) {
+  return withClientIp(request, () => handleGetAsync(request, context));
+}
+
+export async function POST(request: NextRequest, context: RouteContext) {
+  return withClientIp(request, () => handlePostAsync(request, context));
+}
+
+async function handleGetAsync(
   request: NextRequest,
-  { params }: { params: Promise<{ segments?: string[] }> },
+  { params }: RouteContext,
 ) {
   const { segments } = await params;
   const pathKey = getPathKey(segments);
@@ -106,9 +130,9 @@ export async function GET(
   }
 }
 
-export async function POST(
+async function handlePostAsync(
   request: NextRequest,
-  { params }: { params: Promise<{ segments?: string[] }> },
+  { params }: RouteContext,
 ) {
   const { segments } = await params;
   const pathKey = getPathKey(segments);

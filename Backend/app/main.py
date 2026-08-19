@@ -1,7 +1,6 @@
 """FastAPI application entry point — wires up middleware, routers, and startup lifecycle."""
 
 import logging
-import os
 import sys
 from contextlib import asynccontextmanager
 
@@ -9,7 +8,6 @@ import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pyrate_limiter import Duration, Limiter, Rate
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,9 +36,6 @@ if not _app_logger.handlers:
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown lifecycle."""
     # --- startup (previously @app.on_event("startup")) ---
-    env = os.getenv("ENV", "development")
-    rate_val = 100 if env != "testing" else 999999
-    app.state.limiter = Limiter(Rate(rate_val, Duration.MINUTE))
     app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=False)
     yield
     # --- shutdown (previously @app.on_event("shutdown")) ---
