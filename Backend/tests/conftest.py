@@ -106,6 +106,27 @@ async def db_session():
     await engine.dispose()
 
 
+def acting_as(user, role, team=None):
+    """Attach the identity a real request would have resolved from the token (feature 010).
+
+    Tests that build a `User` directly never go through `get_current_user`, so nothing sets
+    `active_identity` — and without one the actor resolves to zero grants, which is the
+    intended fail-closed behaviour but not what most tests are trying to exercise. Call this
+    to say which identity the actor is acting as.
+
+    `role` is a Role instance, `team` an optional Team; returns the user for chaining.
+    """
+    from app.core.identity import ActiveIdentity
+
+    user.active_identity = ActiveIdentity(
+        role_uuid=str(role.uuid),
+        team_uuid=str(team.uuid) if team is not None else None,
+        role_name=role.name,
+        team_name=team.name if team is not None else None,
+    )
+    return user
+
+
 class _Capturer:
     """Base capturer exposing the 6-digit code from the most recent message body."""
 

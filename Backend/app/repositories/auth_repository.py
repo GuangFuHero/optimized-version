@@ -28,23 +28,41 @@ class UserRepository(GenericRepository[User]):
         """Initialize with User as the managed model."""
         super().__init__(User)
 
-    async def get_user_permissions(self, db: AsyncSession, user_uuid: str) -> dict[str, Scope]:
-        """Resolve every capability the user holds to its widest scope (ADR-018/021).
+    async def get_user_permissions(
+        self, db: AsyncSession, user_uuid: str, *, identity=None
+    ) -> dict[str, Scope]:
+        """Resolve the capabilities of ONE identity to their widest scope (ADR-018/021/074).
 
-        Unions role-derived grants (via user_role_assign → role_permission_assign) with
-        direct grants (user_permission_assign), then collapses same-key scopes to the
-        widest one. Callers look up a specific key with ``.get(key, Scope.NONE)``.
+        Only the active identity's grants count. Union still applies, but within a single
+        identity: that identity's role grants, plus the direct grants bound to the same team.
+        A super_admin acting as a team member therefore holds the member's grants and none
+        of their own — the switch is real, not cosmetic.
+
+        `identity=None` means no usable identity, which yields no grants at all. That is the
+        fail-closed direction and covers both the roleless-account edge case and any caller
+        that resolves scopes for a `User` never bound to a request.
         """
+        if identity is None:
+            return {}
         role_grants_query = (
             select(Permission.key, RolePermissionAssign.scope)
             .join(RolePermissionAssign, RolePermissionAssign.permission_uuid == Permission.uuid)
             .join(UserRoleAssign, UserRoleAssign.role_uuid == RolePermissionAssign.role_uuid)
-            .where(UserRoleAssign.user_uuid == user_uuid)
+            .where(
+                UserRoleAssign.user_uuid == user_uuid,
+                UserRoleAssign.role_uuid == identity.role_uuid,
+                UserRoleAssign.team_uuid.is_not_distinct_from(identity.team_uuid),
+            )
         )
         direct_grants_query = (
             select(Permission.key, UserPermissionAssign.scope)
             .join(UserPermissionAssign, UserPermissionAssign.permission_uuid == Permission.uuid)
-            .where(UserPermissionAssign.user_uuid == user_uuid)
+            .where(
+                UserPermissionAssign.user_uuid == user_uuid,
+                # Direct grants have no role, so they key off the team alone: NULL belongs to
+                # the platform identity, a value to that team's identity (ADR-073).
+                UserPermissionAssign.team_uuid.is_not_distinct_from(identity.team_uuid),
+            )
         )
         role_rows = (await db.execute(role_grants_query)).all()
         direct_rows = (await db.execute(direct_grants_query)).all()
@@ -79,14 +97,23 @@ class UserRepository(GenericRepository[User]):
         )
         return [(key, scope) for key, scope in result.all()]
 
-    async def assign_role(self, db: AsyncSession, user_uuid: str, role_uuid: str) -> bool:
+    async def assign_role(
+        self, db: AsyncSession, user_uuid: str, role_uuid: str, *, role_kind: str = "platform"
+    ) -> bool:
         """將使用者指派特定角色 (role)。
 
         使用 PostgreSQL ON CONFLICT 優化為單一 SQL 語句，確保原子性與效能。
+
+        Platform-only: `bootstrap_admin.py` is the sole caller and grants super_admin, so
+        there is no team to attach (feature 010, ADR-073). The conflict target is the partial
+        index on platform grants, since the plain unique key includes team_uuid and Postgres
+        does not treat two NULLs as equal.
         """
         stmt = insert(UserRoleAssign).values(
             user_uuid=user_uuid,
             role_uuid=role_uuid,
+            team_uuid=None,
+            role_kind=role_kind,
         )
         stmt = stmt.on_conflict_do_nothing(index_elements=["user_uuid", "role_uuid"])
         stmt = stmt.returning(UserRoleAssign.uuid)

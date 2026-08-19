@@ -16,6 +16,7 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope
 from app.db.session import SessionLocal
 from app.models.auth import User
+from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import user_repository
 
 # --- 密碼處理框架 ---
@@ -162,7 +163,8 @@ def hash_refresh_token(token: str) -> str:
 
 
 def create_access_token(
-        data: dict, expires_delta: timedelta | None = None, sid: str | None = None
+        data: dict, expires_delta: timedelta | None = None, sid: str | None = None,
+        act: str | None = None,
 ) -> str:
     """Create a signed JWT access token, tagging it with type/jti and optional session id."""
     to_encode = data.copy()
@@ -173,6 +175,9 @@ def create_access_token(
         "type": "access",
         "jti": secrets.token_hex(16),
         "sid": sid,
+        # The identity this token acts as (ADR-069). Absent means "no identity resolved",
+        # which yields no grants at all.
+        "act": act,
     })
     return jwt.encode(to_encode, settings.JWT_SIGNING_KEY, algorithm=settings.ALGORITHM)
 
@@ -204,11 +209,24 @@ def _decode_access_payload(token: str) -> dict:
 
 
 async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
-    """FastAPI dependency resolving the current authenticated user from JWT."""
+    """Resolve the authenticated user AND the identity this token acts as (ADR-069/096).
+
+    An `act` claim that no longer names a grant the user holds — role revoked, role deleted,
+    team soft-deleted — is refused here rather than quietly downgraded. Silently dropping to
+    a lesser identity would leave the caller acting with permissions they cannot see they
+    lost; refusing makes it visible. `/auth/refresh` refuses the same case, so between them
+    the user is signed out and comes back on their platform identity.
+    """
     payload = _decode_access_payload(token)
     user = await user_repository.get_by_uuid(db, payload["sub"])
     if user is None:
         raise _credentials_exception()
+    act = payload.get("act")
+    if act:
+        identity = await active_identity_repository.resolve(db, str(user.uuid), act)
+        if identity is None:
+            raise _credentials_exception()
+        user.active_identity = identity
     return user
 
 
@@ -223,6 +241,8 @@ def _request_rbac_cache(request: Request) -> dict:
 
     Keyed by user uuid so one request's cache never leaks across users — relevant mainly
     for tests that swap `current_user` between calls within a single request lifecycle.
+    The identity does not need to be part of the key: it is fixed for the whole request,
+    having been resolved once from the token in `get_current_user`.
     """
     if not hasattr(request.state, "rbac_cache"):
         request.state.rbac_cache = {}
@@ -241,7 +261,9 @@ async def resolve_scope(
     if cache is not None and actor.uuid in cache:
         grants = cache[actor.uuid]
     else:
-        grants = await user_repository.get_user_permissions(db, actor.uuid)
+        grants = await user_repository.get_user_permissions(
+            db, actor.uuid, identity=getattr(actor, "active_identity", None)
+        )
         if cache is not None:
             cache[actor.uuid] = grants
     return grants.get(perm.value, Scope.NONE)
