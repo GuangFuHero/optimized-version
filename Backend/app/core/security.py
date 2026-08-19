@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import json
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -9,9 +10,11 @@ from typing import Protocol
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.context import request_identity
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope
 from app.db.session import SessionLocal
@@ -233,7 +236,28 @@ async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depe
         # feature (and any caller that does not track identity) working as they did.
         identity = await active_identity_repository.default_for_user(db, str(user.uuid))
     user.active_identity = identity
+    await _publish_identity_for_auditing(db, identity)
     return user
+
+
+async def _publish_identity_for_auditing(db: AsyncSession, identity) -> None:
+    """Make the active identity visible to the audit trigger (ADR-076).
+
+    Two writes, because they cover two different windows. The contextvar is what
+    `set_audit_session_variables` reads when a session opens a transaction, and covers every
+    session created later in this request. But THIS session's transaction already began —
+    resolving the identity needed a query — so its GUC has to be set directly, or every write
+    made through the session that authenticated the request would be logged without one.
+
+    `set_config(..., true)` is transaction-local, so nothing leaks into the next request
+    through a pooled connection.
+    """
+    if identity is None:
+        return
+    snapshot = json.dumps(identity.to_audit_context(), ensure_ascii=False)
+    request_identity.set(snapshot)
+    await db.execute(text("SELECT set_config('app.active_identity', :identity, true)"),
+                     {"identity": snapshot})
 
 
 async def get_current_session(token: str = Depends(oauth2_scheme)) -> tuple[str, str | None]:

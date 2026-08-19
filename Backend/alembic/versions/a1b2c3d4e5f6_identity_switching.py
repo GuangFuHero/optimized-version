@@ -39,6 +39,118 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+# The audit trigger function, in both shapes. Inlined rather than imported from
+# app.db.triggers so this revision keeps applying the same SQL after the application code
+# moves on: a migration that reads today's constant would rewrite an old database with a
+# body from a future it knows nothing about.
+_AUDIT_FUNC_WITH_CONTEXT = """
+CREATE OR REPLACE FUNCTION audit_trigger_func()
+RETURNS TRIGGER AS $$
+DECLARE
+    old_val JSONB := NULL;
+    new_val JSONB := NULL;
+    user_id UUID := NULL;
+    ip_addr VARCHAR := NULL;
+    r_id UUID := NULL;
+    ctx JSONB := NULL;
+BEGIN
+    BEGIN
+        user_id := NULLIF(current_setting('app.current_user_id', true), '')::UUID;
+    EXCEPTION WHEN OTHERS THEN
+        user_id := NULL;
+    END;
+
+    BEGIN
+        ip_addr := NULLIF(current_setting('app.client_ip', true), '');
+    EXCEPTION WHEN OTHERS THEN
+        ip_addr := NULL;
+    END;
+
+    BEGIN
+        ctx := NULLIF(current_setting('app.active_identity', true), '')::JSONB;
+    EXCEPTION WHEN OTHERS THEN
+        ctx := NULL;
+    END;
+
+    IF TG_OP = 'DELETE' THEN
+        r_id := OLD.uuid;
+        old_val := to_jsonb(OLD) - 'password_hash';
+    ELSIF TG_OP = 'UPDATE' THEN
+        r_id := NEW.uuid;
+        old_val := to_jsonb(OLD) - 'password_hash';
+        new_val := to_jsonb(NEW) - 'password_hash';
+    ELSE
+        r_id := NEW.uuid;
+        new_val := to_jsonb(NEW) - 'password_hash';
+    END IF;
+
+    INSERT INTO audit_logs (
+        uuid, table_name, action, row_id, old_values, new_values,
+        user_uuid, client_ip, context
+    ) VALUES (
+        gen_random_uuid(), TG_TABLE_NAME, TG_OP, r_id, old_val, new_val,
+        user_id, ip_addr, ctx
+    );
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+"""
+
+_AUDIT_FUNC_WITHOUT_CONTEXT = """
+CREATE OR REPLACE FUNCTION audit_trigger_func()
+RETURNS TRIGGER AS $$
+DECLARE
+    old_val JSONB := NULL;
+    new_val JSONB := NULL;
+    user_id UUID := NULL;
+    ip_addr VARCHAR := NULL;
+    r_id UUID := NULL;
+BEGIN
+    BEGIN
+        user_id := NULLIF(current_setting('app.current_user_id', true), '')::UUID;
+    EXCEPTION WHEN OTHERS THEN
+        user_id := NULL;
+    END;
+
+    BEGIN
+        ip_addr := NULLIF(current_setting('app.client_ip', true), '');
+    EXCEPTION WHEN OTHERS THEN
+        ip_addr := NULL;
+    END;
+
+    IF TG_OP = 'DELETE' THEN
+        r_id := OLD.uuid;
+        old_val := to_jsonb(OLD) - 'password_hash';
+    ELSIF TG_OP = 'UPDATE' THEN
+        r_id := NEW.uuid;
+        old_val := to_jsonb(OLD) - 'password_hash';
+        new_val := to_jsonb(NEW) - 'password_hash';
+    ELSE
+        r_id := NEW.uuid;
+        new_val := to_jsonb(NEW) - 'password_hash';
+    END IF;
+
+    INSERT INTO audit_logs (
+        uuid, table_name, action, row_id, old_values, new_values, user_uuid, client_ip
+    ) VALUES (
+        gen_random_uuid(), TG_TABLE_NAME, TG_OP, r_id, old_val, new_val, user_id, ip_addr
+    );
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+"""
+
+
 def upgrade() -> None:
     # 1. The composite FK below needs a unique key to point at. uuid is already the PK, so a
     #    UNIQUE that merely includes it costs nothing.
@@ -111,11 +223,17 @@ def upgrade() -> None:
     # 4. Which team someone belongs to is now a property of the roles they hold.
     op.drop_column("users", "team_uuid")
 
-    # 5. The identity a change was made under, snapshotted (ADR-076).
+    # 5. The identity a change was made under, snapshotted (ADR-076). The trigger has to be
+    #    replaced in the same step: it names the columns it inserts, so a database whose
+    #    function predates this column would keep writing rows without one.
     op.add_column("audit_logs", sa.Column("context", postgresql.JSONB(), nullable=True))
+    op.execute(_AUDIT_FUNC_WITH_CONTEXT)
 
 
 def downgrade() -> None:
+    # Function first: dropping the column out from under a trigger that still inserts into it
+    # would break every audited write.
+    op.execute(_AUDIT_FUNC_WITHOUT_CONTEXT)
     op.drop_column("audit_logs", "context")
 
     # users.team_uuid comes back and is refilled from the grants. Someone holding roles in
