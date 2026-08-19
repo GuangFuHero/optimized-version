@@ -2,11 +2,12 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.normalize import normalize_email, normalize_phone
 from app.core.redis import get_redis
@@ -37,8 +38,10 @@ async def login(
         redis=Depends(get_redis),
 ):
     """Email/phone + password login: contact → user → password identity → verify."""
-    cred_exc = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password",
+    cred_exc = ApiError(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        code=ErrorCode.CREDENTIALS_INVALID,
+        detail="Incorrect email or password",
         headers={"WWW-Authenticate": "Bearer"},
     )
     raw = form_data.username
@@ -72,8 +75,10 @@ async def refresh(
     try:
         sid, user_uuid, new_refresh = await repo.rotate(body.refresh_token)
     except (InvalidRefreshToken, RefreshTokenReuse) as err:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked refresh token",
+        raise ApiError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code=ErrorCode.REFRESH_TOKEN_INVALID,
+            detail="Invalid or revoked refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from err
     access_token = security.create_access_token(data={"sub": user_uuid}, sid=sid)

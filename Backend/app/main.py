@@ -6,14 +6,16 @@ import sys
 from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pyrate_limiter import Duration, Limiter, Rate
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.api import api_router
 from app.core import security
+from app.core.api_errors import ApiError
 from app.core.config import settings
 from app.core.context import AuditContextMiddleware
 from app.core.redis import get_redis
@@ -61,6 +63,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(AuditContextMiddleware)
+
+
+@app.exception_handler(ApiError)
+async def api_error_handler(_request: Request, exc: ApiError) -> JSONResponse:
+    """Emit `code` alongside `detail` so clients branch on the code instead of the English text."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "code": exc.code},
+        headers=exc.headers,
+    )
+
 
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(graphql_router, prefix="/graphql", tags=["圖資"])
