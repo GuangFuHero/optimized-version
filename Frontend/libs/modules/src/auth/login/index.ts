@@ -5,6 +5,7 @@ export {
   LoginForm,
   RegisterForm,
 } from './components';
+export { AuthFormError } from './utils/auth-form-error';
 export {
   normalizeIdentityValue,
   validateIdentityValue,

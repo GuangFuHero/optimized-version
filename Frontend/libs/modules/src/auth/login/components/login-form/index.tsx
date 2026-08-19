@@ -17,6 +17,7 @@ import { useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 
 import { getAuthColorScheme } from '../../theme/auth-theme';
+import { AuthFormError } from '../../utils/auth-form-error';
 import {
   normalizeIdentityValue,
   validateIdentityValue,
@@ -186,11 +187,13 @@ export function LoginForm({
       if (mode === 'register') {
         resetField('password');
       }
-    } catch {
+    } catch (error) {
       setSubmissionError(
-        mode === 'login'
-          ? loginFormText.loginFailedMessage
-          : loginFormText.registerFailedMessage,
+        error instanceof AuthFormError
+          ? error.message
+          : mode === 'login'
+            ? loginFormText.loginFailedMessage
+            : loginFormText.registerFailedMessage,
       );
     }
   });
