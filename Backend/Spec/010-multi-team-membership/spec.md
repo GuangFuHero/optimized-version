@@ -2,7 +2,7 @@
 
 **Date**: 2026-08-16（初版）／**2026-08-19 重大改版：改採完整身分切換**
 **Feature**: 010-multi-team-membership
-**Status**: ⏸ **Pending — 設計已定案，待團隊對 ADR-068 背書後才進實作**
+**Status**: ✅ **定案待實作**（2026-08-19 拍板；ADR-068 的地基決策已確定，不再等團隊背書）
 **Notion**: 補齊功能 → 「情境：一個人會有多個team」（backend-Popo）
 **併入本票**: 補齊功能 → 「移除後台權限，回去原有登入狀態」（見 §7）
 **Depends on**: RBAC v1（ADR-012~054）、RBAC runtime management（ADR-055~067）

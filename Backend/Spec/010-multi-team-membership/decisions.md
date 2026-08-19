@@ -2,7 +2,7 @@
 
 **Date**: 2026-08-16（初版）／**2026-08-19 重大改版**
 **Feature**: 010-multi-team-membership
-**Status**: ⏸ **Pending — 設計已定案，待團隊對 ADR-068 背書後才進實作**
+**Status**: ✅ **定案待實作**（2026-08-19 拍板；ADR-068 的地基決策已確定，不再等團隊背書）
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。068~076 為本票初版佔號；096~097 為改版新增（077~095 已由 011/012/013 佔用）。
 
 ---
@@ -59,7 +59,7 @@
 
 **取代關係**：取代 ADR-019 的「一人一 team」，以及 ADR-049 附錄 A 中 team scope 的 `actor.team_uuid` 語意（見 ADR-074）。
 
-**⚠️ 這條 ADR 是整票的地基，且尚未取得團隊背書——這是本票維持 Pending 的唯一原因。**
+**這條 ADR 是整票的地基**——069~076、096、097 全部建立在「一次只有一個身分生效、platform 角色亦然」之上。2026-08-19 拍板定案。
 
 ---
 
@@ -129,7 +129,7 @@ POST /auth/switch-identity { role_uuid, team_uuid? }
 
 **撤回理由**：它修的是一個**與多 team 完全無關的既有安全洞**——`get_current_user` 只解 JWT 取 `sub` 撈 user（`app/core/security.py:206-212`），從不驗證 `sid`，所以 `/auth/logout` 只殺得掉 refresh token，access token 仍可用滿 15 分鐘。
 
-該問題不該被本票的 Pending 狀態卡住，且它同時是 Notion「移除後台權限，回去原有登入狀態」那張子票缺的最後一塊（撤角色即時生效已經成立——權限每請求從 DB 解析、不烘進 JWT；缺的只有強制失效的能力）。已拆為獨立的 `Spec/014-session-revocation`。
+該問題與本票的排程無關，且它同時是 Notion「移除後台權限，回去原有登入狀態」那張子票缺的最後一塊（撤角色即時生效已經成立——權限每請求從 DB 解析、不烘進 JWT；缺的只有強制失效的能力）。已拆為獨立的 `Spec/014-session-revocation`。
 
 **注意**：本票**不依賴** Spec 014（見 ADR-069 的 `act` 位置決策）。兩者可各自獨立落地。
 
