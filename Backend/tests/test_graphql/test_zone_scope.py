@@ -16,12 +16,12 @@ from shapely.geometry import Point, Polygon
 from sqlalchemy import select
 
 from app.core.permissions import Perm
-from app.core.security import create_access_token
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from app.models.ticket_task import TicketTask
+from tests.conftest import token_for
 from tests.test_graphql.conftest import auth_header, test_db
 
 UPDATE_TICKET = """
@@ -42,14 +42,20 @@ OUTSIDE_ZONE_POINT = Point(123.5, 24.5)
 
 
 async def _make_zone_scoped_editor(team_uuid: str) -> tuple[str, str]:
-    """Create a user in `team_uuid` holding a role granting ticket.edit at 'zone' scope."""
+    """Create a user acting as a `team_uuid` role that grants ticket.edit at 'zone' scope.
+
+    Zone scope resolves the team off the active identity (ADR-074), so the role has to be
+    team-kind, the grant has to name the team, and the token has to act as that identity —
+    a platform identity has no team and would fail zone scope outright.
+    """
     async with test_db() as db:
         name = f"editor_{uuid_mod.uuid4().hex[:8]}"
-        user = User(name=name, team_uuid=team_uuid)
+        user = User(name=name)
         db.add(user)
         await db.flush()
 
-        role = Role(name=f"zone-editor-{uuid_mod.uuid4().hex[:8]}", kind="platform")
+        team = await db.get(Team, team_uuid)
+        role = Role(name=f"zone-editor-{uuid_mod.uuid4().hex[:8]}", kind="team")
         perm_result = await db.execute(
             select(Permission).where(Permission.key == Perm.TICKET_EDIT.value)
         )
@@ -61,10 +67,9 @@ async def _make_zone_scoped_editor(team_uuid: str) -> tuple[str, str]:
         db.add(role)
         await db.flush()
         db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="zone"))
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid))
 
-        token = create_access_token(data={"sub": str(user.uuid)})
-        return str(user.uuid), token
+        return str(user.uuid), token_for(user.uuid, role, team)
 
 
 @pytest_asyncio.fixture

@@ -16,6 +16,7 @@ from app.core.security import create_access_token
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.team import Team, TeamZoneAssign
+from tests.conftest import token_for
 from tests.test_graphql.conftest import auth_header, test_db
 
 CREATE_ZONE = """
@@ -119,18 +120,19 @@ async def _make_plain_user() -> str:
 
 
 async def _make_team_user(team_type: str) -> str:
-    """Create a user holding the full work_zone.* set, bound to a fresh team of `team_type`.
+    """Create a user holding the full work_zone.* set, acting as a role in a `team_type` team.
 
-    Mirrors `_make_gov_user()`, but the resulting user has a real `team_uuid` (instead of
-    `None`), so it exercises the team-type check in `_require_gov_zone_authority` rather than
-    short-circuiting on its early "platform-level holder" return.
+    Mirrors `_make_gov_user()`, but the token acts as a TEAM identity instead of a platform
+    one, so it exercises the team-type check in `_require_gov_zone_authority` rather than
+    short-circuiting on its early "platform-level holder" return. The team now lives on the
+    grant and on the token's `act` claim, not on the user row (ADR-073).
     """
     async with test_db() as db:
         team = Team(name=f"Team {uuid_mod.uuid4().hex[:8]}", type=team_type)
         db.add(team)
         await db.flush()
 
-        role = Role(name=f"{team_type}-{uuid_mod.uuid4().hex[:8]}", kind="platform")
+        role = Role(name=f"{team_type}-{uuid_mod.uuid4().hex[:8]}", kind="team")
         db.add(role)
         await db.flush()
         perm_cache: dict = {}
@@ -140,12 +142,12 @@ async def _make_team_user(team_type: str) -> str:
         await _grant(db, role, perm_cache, Perm.ZONE_ASSIGN, "all")
         await _grant(db, role, perm_cache, Perm.ZONE_DELETE, "all")
 
-        user = User(name=f"{team_type}_{uuid_mod.uuid4().hex[:8]}", team_uuid=team.uuid)
+        user = User(name=f"{team_type}_{uuid_mod.uuid4().hex[:8]}")
         db.add(user)
         await db.flush()
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid))
 
-        return create_access_token(data={"sub": str(user.uuid)})
+        return token_for(user.uuid, role, team)
 
 
 @pytest_asyncio.fixture

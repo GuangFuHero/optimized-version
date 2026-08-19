@@ -20,6 +20,7 @@ from app.core.security import create_access_token
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.team import Team
+from tests.conftest import auth_headers_for
 
 
 def _auth_header(user_uuid: str) -> dict:
@@ -60,9 +61,13 @@ async def _make_super_admin(db) -> str:
     return user_uuid
 
 
-async def _make_plain_user(db, *, name: str = "Plain User", team_uuid: str | None = None) -> str:
-    """Create a plain user (no roles) and return their uuid as a plain str."""
-    user = User(name=name, team_uuid=team_uuid)
+async def _make_plain_user(db, *, name: str = "Plain User") -> str:
+    """Create a plain user (no roles) and return their uuid as a plain str.
+
+    A user no longer carries a team of their own: which team someone belongs to is a
+    property of the roles they hold (ADR-072/073), so joining a team means granting one.
+    """
+    user = User(name=name)
     db.add(user)
     await db.flush()
     user_uuid = str(user.uuid)
@@ -70,8 +75,13 @@ async def _make_plain_user(db, *, name: str = "Plain User", team_uuid: str | Non
     return user_uuid
 
 
-async def _make_team_admin(db, team_uuid: str) -> str:
-    """Create a user in team_uuid holding team.view=team; return their uuid as a str."""
+async def _make_team_admin(db, team_uuid: str) -> tuple[str, dict]:
+    """Create a user holding team.view=team IN team_uuid; return (uuid, auth headers).
+
+    The headers matter: the grant only takes effect while the caller is acting as that
+    identity (ADR-068), and a token with no `act` falls back to the platform identity, which
+    holds nothing here.
+    """
     from app.core.permissions import Perm
 
     role = Role(name=f"team-viewer-{uuid4().hex[:8]}", kind="team")
@@ -80,13 +90,15 @@ async def _make_team_admin(db, team_uuid: str) -> str:
     perm_cache: dict = {}
     await _grant(db, role, perm_cache, Perm.TEAM_VIEW, "team")
 
-    user = User(name="Team Admin", team_uuid=team_uuid)
+    team = await db.get(Team, team_uuid)
+    user = User(name="Team Admin")
     db.add(user)
     await db.flush()
     user_uuid = str(user.uuid)
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
+    headers = auth_headers_for(user_uuid, role, team)
     await db.commit()
-    return user_uuid
+    return user_uuid, headers
 
 
 async def _make_role(db, *, name: str, kind: str) -> str:
@@ -185,8 +197,12 @@ async def test_assign_role_allows_demotion_when_another_super_admin_exists(clien
 
 
 @pytest.mark.asyncio
-async def test_assign_team_role_requires_existing_team_membership(client, db_session):
-    """A team-kind role cannot be granted before the user belongs to a team."""
+async def test_assign_team_role_through_the_platform_endpoint_is_refused(client, db_session):
+    """A team role cannot be granted here — it has no team to belong to (ADR-072).
+
+    Granting a team role IS joining that team, so the grant has to name one; this endpoint
+    does not take a team, hence POST /teams/{uuid}/members instead.
+    """
     admin_uuid = await _make_super_admin(db_session)
     await _make_role(db_session, name="member", kind="team")
     target_uuid = await _make_plain_user(db_session, name="No Team Yet")
@@ -200,8 +216,8 @@ async def test_assign_team_role_requires_existing_team_membership(client, db_ses
 
 
 @pytest.mark.asyncio
-async def test_add_team_member_sets_team_and_role(client, db_session):
-    """Adding a member sets users.team_uuid and grants the requested team-kind role."""
+async def test_add_team_member_grants_the_requested_role_in_that_team(client, db_session):
+    """Adding a member grants the requested team-kind role, bound to that team."""
     admin_uuid = await _make_super_admin(db_session)
     team_uuid = await _make_team(db_session, name="Team A", type_="gov")
     await _make_role(db_session, name="member", kind="team")
@@ -217,19 +233,32 @@ async def test_add_team_member_sets_team_and_role(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_add_team_member_conflicts_if_already_on_a_different_team(client, db_session):
-    """A user already on team B cannot be silently moved to team A via add-member."""
+async def test_add_team_member_lets_a_user_belong_to_two_teams(client, db_session):
+    """Being on team B is no bar to joining team A — holding both is the point (ADR-068).
+
+    This used to 409. The old model allowed one team per user, so the second add could only
+    be read as a silent move; now the two grants are two identities the user switches between.
+    """
     admin_uuid = await _make_super_admin(db_session)
     team_a_uuid = await _make_team(db_session, name="A", type_="gov")
     team_b_uuid = await _make_team(db_session, name="B", type_="gov")
-    target_uuid = await _make_plain_user(db_session, name="Already Elsewhere", team_uuid=team_b_uuid)
+    await _make_role(db_session, name="member", kind="team")
+    target_uuid = await _make_plain_user(db_session, name="Two Hats")
 
-    resp = await client.post(
-        f"/api/v1/admin/teams/{team_a_uuid}/members",
-        json={"user_uuid": target_uuid},
-        headers=_auth_header(admin_uuid),
-    )
-    assert resp.status_code == 409
+    for team_uuid in (team_b_uuid, team_a_uuid):
+        resp = await client.post(
+            f"/api/v1/admin/teams/{team_uuid}/members",
+            json={"user_uuid": target_uuid},
+            headers=_auth_header(admin_uuid),
+        )
+        assert resp.status_code == 200, resp.json()
+
+    rows = (
+        await db_session.execute(
+            select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid)
+        )
+    ).scalars().all()
+    assert {str(r.team_uuid) for r in rows} == {team_a_uuid, team_b_uuid}
 
 
 @pytest.mark.asyncio
@@ -251,11 +280,18 @@ async def test_team_admin_cannot_manage_a_different_teams_members(client, db_ses
     own_team_uuid = str(own_team.uuid)
     other_team_uuid = str(other_team.uuid)
 
-    team_admin_user = User(name="Team Admin", team_uuid=own_team_uuid)
+    team_admin_user = User(name="Team Admin")
     db_session.add(team_admin_user)
     await db_session.flush()
     team_admin_user_uuid = str(team_admin_user.uuid)
-    db_session.add(UserRoleAssign(user_uuid=team_admin_user.uuid, role_uuid=team_admin_role_uuid))
+    db_session.add(
+        UserRoleAssign(
+            user_uuid=team_admin_user.uuid,
+            role_uuid=team_admin_role_uuid,
+            team_uuid=own_team_uuid,
+        )
+    )
+    team_admin_headers = auth_headers_for(team_admin_user_uuid, team_admin_role, own_team)
 
     target = User(name="Outsider")
     db_session.add(target)
@@ -266,19 +302,21 @@ async def test_team_admin_cannot_manage_a_different_teams_members(client, db_ses
     resp = await client.post(
         f"/api/v1/admin/teams/{other_team_uuid}/members",
         json={"user_uuid": target_uuid},
-        headers=_auth_header(team_admin_user_uuid),
+        headers=team_admin_headers,
     )
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_remove_team_member_clears_team_uuid_and_role(client, db_session):
-    """Removing a member clears users.team_uuid and any team-kind role they held."""
+async def test_remove_team_member_revokes_every_grant_scoped_to_that_team(client, db_session):
+    """Removing a member revokes the roles they held in that team — that IS the membership."""
     admin_uuid = await _make_super_admin(db_session)
     team_uuid = await _make_team(db_session, name="Team A", type_="gov")
     team_role_uuid = await _make_role(db_session, name="member", kind="team")
-    target_uuid = await _make_plain_user(db_session, name="Departing", team_uuid=team_uuid)
-    db_session.add(UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid))
+    target_uuid = await _make_plain_user(db_session, name="Departing")
+    db_session.add(
+        UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_uuid)
+    )
     await db_session.commit()
 
     resp = await client.delete(
@@ -390,8 +428,8 @@ async def test_list_teams_team_admin_sees_only_own(client, db_session):
     """team.view=team returns only the caller's own team (ADR-053 boundary)."""
     my_team = await _make_team(db_session, name="My Team", type_="ngo")
     await _make_team(db_session, name="Other Team", type_="gov")
-    viewer_uuid = await _make_team_admin(db_session, my_team)
-    resp = await client.get("/api/v1/admin/teams", headers=_auth_header(viewer_uuid))
+    _, viewer_headers = await _make_team_admin(db_session, my_team)
+    resp = await client.get("/api/v1/admin/teams", headers=viewer_headers)
     assert resp.status_code == 200, resp.json()
     names = {t["name"] for t in resp.json()}
     assert names == {"My Team"}

@@ -22,6 +22,18 @@ from app.core.rbac_scopes import Scope, in_scope, scope_filter, widest
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.team import Team, TeamZoneAssign, WorkZone
+from tests.conftest import acting_as
+
+def _acting_in_team(actor, team):
+    """Attach a team identity to the actor (feature 010, ADR-073).
+
+    Which team an actor belongs to now lives on the active identity rather than on
+    `users.team_uuid`, and the scope engine reads only the identity's team — never the
+    role's own grants — so a stand-in role object carries all the information these tests
+    need. Grants are exercised in test_authz.py.
+    """
+    return acting_as(actor, SimpleNamespace(uuid=uuid4(), name="member"), team)
+
 
 # --- widest() ---
 
@@ -103,9 +115,10 @@ async def test_in_scope_team_matches_same_team(db):
     team = Team(name="T1", type="gov")
     db.add(team)
     await db.flush()
-    actor = User(name="A", team_uuid=team.uuid)
+    actor = User(name="A")
     db.add(actor)
     await db.flush()
+    _acting_in_team(actor, team)
     resource = SimpleNamespace(created_by=None, team_uuid=team.uuid, geometry=None)
     assert await in_scope(Scope.TEAM, actor=actor, resource=resource, db=db) is True
 
@@ -117,9 +130,10 @@ async def test_in_scope_team_rejects_different_team(db):
     team_b = Team(name="B", type="gov")
     db.add_all([team_a, team_b])
     await db.flush()
-    actor = User(name="Actor", team_uuid=team_a.uuid)
+    actor = User(name="Actor")
     db.add(actor)
     await db.flush()
+    _acting_in_team(actor, team_a)
     resource = SimpleNamespace(created_by=None, team_uuid=team_b.uuid, geometry=None)
     assert await in_scope(Scope.TEAM, actor=actor, resource=resource, db=db) is False
 
@@ -130,7 +144,7 @@ async def test_in_scope_team_false_when_actor_has_no_team(db):
     team = Team(name="T1", type="gov")
     db.add(team)
     await db.flush()
-    actor = User(name="A")  # no team_uuid
+    actor = User(name="A")  # platform identity, no team
     db.add(actor)
     await db.flush()
     resource = SimpleNamespace(created_by=None, team_uuid=team.uuid, geometry=None)
@@ -140,7 +154,7 @@ async def test_in_scope_team_false_when_actor_has_no_team(db):
 @pytest.mark.asyncio
 async def test_in_scope_team_false_for_geo_resource_with_no_team_uuid(db):
     """A geo resource (no team_uuid column) cleanly fails TEAM scope, never raises (ADR-045/049)."""
-    actor = User(name="A", team_uuid=None)
+    actor = User(name="A")
     db.add(actor)
     await db.flush()
     resource = Station(geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(actor.uuid))
@@ -156,9 +170,10 @@ async def test_in_scope_zone_matches_point_inside_assigned_zone(db):
     team = Team(name="T1", type="ngo")
     db.add(team)
     await db.flush()
-    actor = User(name="A", team_uuid=team.uuid)
+    actor = User(name="A")
     db.add(actor)
     await db.flush()
+    _acting_in_team(actor, team)
 
     zone_polygon = Polygon([(121.0, 24.5), (122.0, 24.5), (122.0, 25.5), (121.0, 25.5), (121.0, 24.5)])
     zone = WorkZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
@@ -181,9 +196,10 @@ async def test_in_scope_zone_rejects_point_outside_assigned_zone(db):
     team = Team(name="T1", type="ngo")
     db.add(team)
     await db.flush()
-    actor = User(name="A", team_uuid=team.uuid)
+    actor = User(name="A")
     db.add(actor)
     await db.flush()
+    _acting_in_team(actor, team)
 
     zone_polygon = Polygon([(121.0, 24.5), (122.0, 24.5), (122.0, 25.5), (121.0, 25.5), (121.0, 24.5)])
     zone = WorkZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
@@ -216,9 +232,10 @@ async def test_in_scope_zone_false_when_resource_has_no_geometry(db):
     team = Team(name="T1", type="ngo")
     db.add(team)
     await db.flush()
-    actor = User(name="A", team_uuid=team.uuid)
+    actor = User(name="A")
     db.add(actor)
     await db.flush()
+    _acting_in_team(actor, team)
     resource = SimpleNamespace(created_by=str(actor.uuid), team_uuid=None, geometry=None)
     assert await in_scope(Scope.ZONE, actor=actor, resource=resource, db=db) is False
 
@@ -283,9 +300,10 @@ async def test_scope_filter_team_on_geo_model_excludes_everything(db):
     team = Team(name="A", type="gov")
     db.add(team)
     await db.flush()
-    actor = User(name="Actor", team_uuid=team.uuid)
+    actor = User(name="Actor")
     db.add(actor)
     await db.flush()
+    _acting_in_team(actor, team)
     s = Station(geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(actor.uuid))
     db.add(s)
     await db.flush()
@@ -300,9 +318,10 @@ async def test_scope_filter_zone_matches_rows_inside_assigned_zone_only(db):
     team = Team(name="T1", type="ngo")
     db.add(team)
     await db.flush()
-    actor = User(name="A", team_uuid=team.uuid)
+    actor = User(name="A")
     db.add(actor)
     await db.flush()
+    _acting_in_team(actor, team)
 
     zone_polygon = Polygon([(121.0, 24.5), (122.0, 24.5), (122.0, 25.5), (121.0, 25.5), (121.0, 24.5)])
     zone = WorkZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
@@ -324,6 +343,18 @@ async def test_scope_filter_zone_matches_rows_inside_assigned_zone_only(db):
     assert uuids == {str(inside.uuid)}
 
 
+def _platformless_actor():
+    """A bare actor acting in some team, for the scope_filter tests that never touch the DB."""
+    from app.core.identity import ActiveIdentity
+
+    return SimpleNamespace(
+        uuid=uuid4(),
+        active_identity=ActiveIdentity(
+            role_uuid=str(uuid4()), team_uuid=str(uuid4()), role_name="member", team_name="T"
+        ),
+    )
+
+
 def test_scope_filter_none_excludes_everything():
     """Defensive branch — checkpoint 1 should already have 403'd before this is reached."""
     actor = User(name="A")
@@ -333,23 +364,27 @@ def test_scope_filter_none_excludes_everything():
 
 def test_scope_filter_team_uses_declared_boundary_for_team_model():
     """Team declares its own uuid as the team boundary, so team-scope filters on teams.uuid."""
-    actor = SimpleNamespace(uuid=uuid4(), team_uuid=uuid4())
+    actor = _platformless_actor()
     conds = scope_filter(Scope.TEAM, actor=actor, model=Team)
     assert len(conds) == 1
     assert "teams.uuid" in str(conds[0])
 
 
 def test_scope_filter_team_defaults_to_team_uuid_column():
-    """A model without a declared boundary keeps using its team_uuid column (regression)."""
-    actor = SimpleNamespace(uuid=uuid4(), team_uuid=uuid4())
-    conds = scope_filter(Scope.TEAM, actor=actor, model=User)
+    """A model without a declared boundary keeps using its team_uuid column (regression).
+
+    `User` used to be the example here; it no longer has a team_uuid column (ADR-073), so
+    the default is shown with a model that still does.
+    """
+    actor = _platformless_actor()
+    conds = scope_filter(Scope.TEAM, actor=actor, model=TeamZoneAssign)
     assert len(conds) == 1
-    assert "users.team_uuid" in str(conds[0])
+    assert "team_zone_assign.team_uuid" in str(conds[0])
 
 
 def test_scope_filter_own_and_zone_degrade_to_false_for_columnless_model():
     """OWN/ZONE degrade to false() (not AttributeError) when the model lacks the column."""
-    actor = SimpleNamespace(uuid=uuid4(), team_uuid=uuid4())
+    actor = _platformless_actor()
     own = scope_filter(Scope.OWN, actor=actor, model=Team)
     zone = scope_filter(Scope.ZONE, actor=actor, model=Team)
     assert str(own[0]) == str(false())

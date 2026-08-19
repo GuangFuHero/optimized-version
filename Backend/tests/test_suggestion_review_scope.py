@@ -24,14 +24,19 @@ from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssi
 from app.models.station_property import StationProperty, StationUpdateSuggestion
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from app.services.suggestion import review_station_suggestion
+from tests.conftest import acting_as
 
 _ZONE_POLY = Polygon([(121.0, 24.0), (121.0, 25.0), (122.0, 25.0), (122.0, 24.0), (121.0, 24.0)])
 _INSIDE = Point(121.5, 24.5)  # inside _ZONE_POLY
 _OUTSIDE = Point(123.5, 24.5)  # outside _ZONE_POLY
 
 
-async def _grant(db, user: User, perm: Perm, scope: str, role_name: str) -> None:
-    """Create a role granting `perm` at `scope` and assign it to `user`."""
+async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, team=None) -> None:
+    """Create a role granting `perm` at `scope`, assign it to `user`, and act as it.
+
+    Grants only count for the identity being acted as (ADR-068/074), so assigning without
+    activating would leave the reviewer with nothing.
+    """
     permission = (
         await db.execute(select(Permission).where(Permission.key == perm.value))
     ).scalar_one_or_none()
@@ -39,12 +44,19 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str) -> None
         permission = Permission(key=perm.value)
         db.add(permission)
         await db.flush()
-    role = Role(name=role_name, kind="platform")
+    role = Role(name=role_name, kind="team" if team is not None else "platform")
     db.add(role)
     await db.flush()
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    db.add(
+        UserRoleAssign(
+            user_uuid=user.uuid,
+            role_uuid=role.uuid,
+            team_uuid=team.uuid if team is not None else None,
+        )
+    )
     await db.flush()
+    acting_as(user, role, team)
 
 
 async def _zone_reviewer_with_property_suggestion(db, station_point: Point):
@@ -54,7 +66,7 @@ async def _zone_reviewer_with_property_suggestion(db, station_point: Point):
     team = Team(name="T1", type="gov")
     db.add(team)
     await db.flush()
-    reviewer = User(name="Reviewer", team_uuid=team.uuid)
+    reviewer = User(name="Reviewer")
     author = User(name="Author")
     db.add_all([reviewer, author])
     await db.flush()
@@ -67,7 +79,7 @@ async def _zone_reviewer_with_property_suggestion(db, station_point: Point):
             team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(reviewer.uuid)
         )
     )
-    await _grant(db, reviewer, Perm.STATION_REVIEW, "zone", "role-review")
+    await _grant(db, reviewer, Perm.STATION_REVIEW, "zone", "role-review", team=team)
 
     station = Station(geometry=from_shape(station_point, srid=4326), created_by=str(author.uuid))
     db.add(station)

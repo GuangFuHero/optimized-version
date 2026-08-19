@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,14 +88,20 @@ class UserRepository(GenericRepository[User]):
         )
         return list(result.scalars().all())
 
-    async def get_direct_grants(self, db: AsyncSession, user_uuid: str) -> list[tuple[str, str]]:
-        """A user's direct (per-user) capability->scope grants."""
+    async def get_direct_grants(
+        self, db: AsyncSession, user_uuid: str
+    ) -> list[tuple[str, str, str | None]]:
+        """A user's direct (per-user) capability->scope grants, with the team each binds to.
+
+        The team is part of the answer now (ADR-073): a grant with no team belongs to the
+        platform identity, one with a team belongs to that team's identity only.
+        """
         result = await db.execute(
-            select(Permission.key, UserPermissionAssign.scope)
+            select(Permission.key, UserPermissionAssign.scope, UserPermissionAssign.team_uuid)
             .join(UserPermissionAssign, UserPermissionAssign.permission_uuid == Permission.uuid)
             .where(UserPermissionAssign.user_uuid == user_uuid)
         )
-        return [(key, scope) for key, scope in result.all()]
+        return [(key, scope, str(team) if team else None) for key, scope, team in result.all()]
 
     async def assign_role(
         self, db: AsyncSession, user_uuid: str, role_uuid: str, *, role_kind: str = "platform"
@@ -115,7 +121,11 @@ class UserRepository(GenericRepository[User]):
             team_uuid=None,
             role_kind=role_kind,
         )
-        stmt = stmt.on_conflict_do_nothing(index_elements=["user_uuid", "role_uuid"])
+        # index_where names the partial index's predicate; without it Postgres cannot tell
+        # which index the conflict target means and rejects the statement outright.
+        stmt = stmt.on_conflict_do_nothing(
+            index_elements=["user_uuid", "role_uuid"], index_where=text("team_uuid IS NULL")
+        )
         stmt = stmt.returning(UserRoleAssign.uuid)
 
         result = await db.execute(stmt)
@@ -125,37 +135,74 @@ class UserRepository(GenericRepository[User]):
         return result.fetchone() is not None
 
     async def upsert_grant(
-        self, db: AsyncSession, *, user_uuid: str, permission_uuid: str, scope: str
+        self,
+        db: AsyncSession,
+        *,
+        user_uuid: str,
+        permission_uuid: str,
+        scope: str,
+        team_uuid: str | None = None,
     ) -> None:
-        """Insert or update one per-user grant's scope (PG ON CONFLICT on uq_user_perm)."""
+        """Insert or update one per-user grant's scope, for one identity (ADR-073).
+
+        A grant is per-identity, so the same capability can be held at different scopes in
+        different teams. Which unique key the upsert targets depends on whether a team is
+        given: platform grants collide on the partial index (Postgres does not treat two
+        NULL team_uuids as equal, so the plain key would let duplicates through), team grants
+        on uq_user_perm.
+        """
         stmt = insert(UserPermissionAssign).values(
-            user_uuid=user_uuid, permission_uuid=permission_uuid, scope=scope
+            user_uuid=user_uuid,
+            permission_uuid=permission_uuid,
+            scope=scope,
+            team_uuid=team_uuid,
         )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["user_uuid", "permission_uuid"], set_={"scope": scope}
-        )
+        if team_uuid is None:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["user_uuid", "permission_uuid"],
+                index_where=text("team_uuid IS NULL"),
+                set_={"scope": scope},
+            )
+        else:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["user_uuid", "permission_uuid", "team_uuid"],
+                set_={"scope": scope},
+            )
         await db.execute(stmt)
         await db.commit()
 
     async def delete_grant(
-        self, db: AsyncSession, *, user_uuid: str, permission_uuid: str
+        self, db: AsyncSession, *, user_uuid: str, permission_uuid: str, team_uuid: str | None = None
     ) -> int:
-        """Delete one per-user grant; returns rows removed (0 when absent)."""
+        """Delete one per-user grant from one identity; returns rows removed (0 when absent).
+
+        `is_not_distinct_from` rather than `==` so a platform grant (team_uuid NULL) is
+        matched — SQL equality against NULL is never true.
+        """
         result = await db.execute(
             delete(UserPermissionAssign).where(
                 UserPermissionAssign.user_uuid == user_uuid,
                 UserPermissionAssign.permission_uuid == permission_uuid,
+                UserPermissionAssign.team_uuid.is_not_distinct_from(team_uuid),
             )
         )
         await db.commit()
         return result.rowcount
 
-    async def unassign_role(self, db: AsyncSession, *, user_uuid: str, role_uuid: str) -> int:
-        """Delete a user↔role assignment; returns rows removed (0 when absent)."""
+    async def unassign_role(
+        self, db: AsyncSession, *, user_uuid: str, role_uuid: str, team_uuid: str | None = None
+    ) -> int:
+        """Delete one identity (user↔role↔team); returns rows removed (0 when absent).
+
+        Holding the same role in two teams is two identities (ADR-073), so revoking has to
+        say which one — dropping every row for the role would kick the user out of teams the
+        caller never mentioned.
+        """
         result = await db.execute(
             delete(UserRoleAssign).where(
                 UserRoleAssign.user_uuid == user_uuid,
                 UserRoleAssign.role_uuid == role_uuid,
+                UserRoleAssign.team_uuid.is_not_distinct_from(team_uuid),
             )
         )
         await db.commit()
