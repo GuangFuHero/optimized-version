@@ -35,6 +35,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 from app.core import security  # noqa: E402
 from app.core.redis import get_redis  # noqa: E402
+from app.core.security import create_access_token  # noqa: E402
 from app.main import app  # noqa: E402
 from app.messaging.email import get_email_sender  # noqa: E402
 from app.messaging.sms import get_sms_sender  # noqa: E402
@@ -104,6 +105,26 @@ async def db_session():
         await session.commit()
         yield session
     await engine.dispose()
+
+
+def token_for(user_uuid, role, team=None) -> str:
+    """Mint an access token that acts as a given identity (feature 010).
+
+    Production tokens carry an `act` claim naming the identity the session is acting as, and
+    `get_current_user` refuses a token whose identity it cannot resolve. A bare
+    `create_access_token(data={"sub": ...})` therefore authenticates but holds no identity,
+    which resolves to zero grants — correct fail-closed behaviour, but not what a test
+    exercising permissions wants. Use this instead.
+    """
+    from app.core.identity import encode_act
+
+    act = encode_act(str(role.uuid), str(team.uuid) if team is not None else None)
+    return create_access_token(data={"sub": str(user_uuid)}, act=act)
+
+
+def auth_headers_for(user_uuid, role, team=None) -> dict:
+    """Bearer headers for a token acting as the given identity."""
+    return {"Authorization": f"Bearer {token_for(user_uuid, role, team)}"}
 
 
 def acting_as(user, role, team=None):
