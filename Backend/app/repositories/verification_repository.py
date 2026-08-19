@@ -15,6 +15,7 @@ from app.core.security import hash_refresh_token
 PENDING_REG = "pending_reg:"
 PENDING_CONTACT = "pending_contact:"
 PENDING_PWRESET = "pending_pwreset:"
+PENDING_STEPUP = "stepup_old_channel:"
 MAX_OTP_ATTEMPTS = 5
 
 
@@ -106,6 +107,22 @@ class VerificationRepository:
     async def reissue_contact_verification(self, *, user_uuid: str, type_: str, value: str) -> str | None:
         """Reissue a contact code for `user_uuid`."""
         return await self._reissue(f"{PENDING_CONTACT}{user_uuid}:{type_}:{value}")
+
+    # --- step-up on the OLD channel, for SSO-only accounts replacing a contact (ADR-086) ---
+    # Its own key prefix, not the contact-verification one: the two are live at the same time
+    # during a replacement (one code to the old address, one to the new) and must not collide.
+    async def issue_old_channel_step_up(self, *, user_uuid: str, type_: str, value: str) -> str:
+        """Send-a-code-to-the-address-being-replaced; return the code to deliver."""
+        return await self._issue(
+            f"{PENDING_STEPUP}{user_uuid}:{type_}:{value}",
+            {"user_uuid": user_uuid, "type": type_, "value": value},
+        )
+
+    async def consume_old_channel_step_up(
+        self, *, user_uuid: str, type_: str, value: str, code: str
+    ) -> dict | None:
+        """Verify an old-channel step-up code; on success returns the pending payload."""
+        return await self._consume(f"{PENDING_STEPUP}{user_uuid}:{type_}:{value}", code)
 
     # --- password reset (verify-then-reset), logged-out, keyed by identifier ---
     async def issue_password_reset(self, *, user_uuid: str, type_: str, value: str) -> str:

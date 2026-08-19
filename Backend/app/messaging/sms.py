@@ -46,3 +46,14 @@ def build_sso_notice_sms() -> str:
 def get_sms_sender() -> SmsSender:
     """FastAPI dependency selecting the configured SMS sender (console for now)."""
     return ConsoleSmsSender()
+
+
+def build_contact_changed_sms(masked_new_value: str) -> str:
+    """Return the bilingual SMS telling the OLD channel that the contact was replaced.
+
+    The new value arrives masked (ADR-087): enough for the owner to recognise, not enough to
+    hand the full address to whoever else reads a forwarded message.
+    """
+    return (f"【{_BRAND_ZH}】您的聯絡方式已變更為 {masked_new_value}。若非本人操作請立即聯繫我們。 "
+            f"Your contact was changed to {masked_new_value}. "
+            "If this was not you, contact us immediately.")
