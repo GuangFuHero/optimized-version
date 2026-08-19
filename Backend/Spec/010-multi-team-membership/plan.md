@@ -10,6 +10,16 @@
 
 **Branch:** `feat/multi-team-membership-backend`（off `main`）
 
+**狀態（2026-08-19）：Task 1~9 全部完成。** 全套件 501 passed / 0 failed；ruff 只剩 8 個
+與本票無關的既有錯誤（`test_admin_api.py`、`test_suggestion_review_scope.py`、`alembic/e8b3c5f2a1d4`），
+依本檔 Global Constraints 未動。Docker 驗收全數通過，測試資料已清除。**尚未開 PR。**
+
+落地時多出的決策：**ADR-098**（管理端 `GET /admin/rbac/users/{uuid}/permissions` 改成逐身分回報）——
+plan 沒預見這個端點在多身分下會回空 dict，屬破壞性 API 變更，前端後台頁面要跟著改。
+
+**本票不含、需另開票的**：前端契約（refresh 帶 identity、401 走登出、切換器 UI、記住上次身分）——
+見 `spec.md` §「前端契約（必須對齊）」。
+
 ---
 
 ## Global Constraints
@@ -73,9 +83,9 @@ class User(Base, UUIDPKMixin, TimestampMixin):
 
 **Create**
 - `app/core/identity.py` — `ActiveIdentity` value object、`act` claim 的編解碼與驗證
-- `app/repositories/identity_repository.py` — 查身分清單、驗證某身分屬於某人
+- `app/repositories/identity_repository.py` — 查身分清單、驗證某身分屬於某人 —— **實際檔名 `active_identity_repository.py`**（`auth_repository` 已有一個 `identity_repository`，指的是登入身分 password/google/line，兩者不是同一件事）
 - `alembic/versions/<rev>_identity_switching.py` — **手寫，不用 autogenerate**
-- `tests/test_identity_model.py` — 身分清單、唯一鍵、CHECK 約束
+- `tests/test_identity_model.py` — 身分清單、唯一鍵、CHECK 約束 ✅
 - `tests/test_identity_switching.py` — 切換 API、login/refresh 帶 identity、失效登出
 - `tests/test_scope_by_identity.py` — scope 引擎依 active identity 判定
 - `tests/test_identity_audit.py` — `audit_logs.context` 身分快照
@@ -105,7 +115,7 @@ class User(Base, UUIDPKMixin, TimestampMixin):
 
 **Files:** Modify `app/models/rbac.py`、`app/models/auth.py`；Create `tests/test_identity_model.py`
 
-- [ ] **Step 1: 寫失敗測試**
+- [x] **Step 1: 寫失敗測試**
 
 ```python
 """Tests for the identity data model (feature 010, ADR-073)."""
@@ -154,7 +164,7 @@ async def test_team_role_must_have_a_team(db):
         await db.commit()
 ```
 
-- [ ] **Step 2: 實作**
+- [x] **Step 2: 實作**
 
 `UserRoleAssign` / `UserPermissionAssign` 各加 nullable `team_uuid` FK，唯一鍵改為含 team：
 
@@ -183,7 +193,7 @@ __table_args__ = (
 
 **Files:** Create `alembic/versions/<rev>_identity_switching.py`
 
-- [ ] **Step 1: 產生空白 revision**
+- [x] **Step 1: 產生空白 revision**
 
 ```bash
 cd Backend && uv run alembic revision -m "identity switching"
@@ -191,7 +201,7 @@ cd Backend && uv run alembic revision -m "identity switching"
 
 > ⚠️ **不要 `--autogenerate`。** 含資料回填、複合 FK、CHECK、欄位刪除——autogenerate 會產生看似完整、實則缺項的骨架。011 / 013 已踩過，沿用。
 
-- [ ] **Step 2: 內容（順序很重要）**
+- [x] **Step 2: 內容（順序很重要）**
 
 ```python
 def upgrade() -> None:
@@ -248,7 +258,7 @@ def upgrade() -> None:
 > ```
 > **建議加上**，成本為零且把「一人一 platform 角色」變成 DB 保證。
 
-- [ ] **Step 3: 驗證可逆 + 兩條建表路徑一致**（沿用 013 的做法，很有效）
+- [x] **Step 3: 驗證可逆 + 兩條建表路徑一致**（沿用 013 的做法，很有效）
 
 ```bash
 docker compose exec -T db psql -U postgres -d postgres -c "CREATE DATABASE alembic_check"
@@ -264,14 +274,14 @@ SQLALCHEMY_DATABASE_URL=...alembic_check uv run alembic upgrade head
 
 **Files:** Create `app/core/identity.py`、`app/repositories/identity_repository.py`
 
-- [ ] **Step 1: 寫失敗測試**（放 `tests/test_identity_switching.py`）
+- [x] **Step 1: 寫失敗測試**（放 `tests/test_identity_switching.py`）
 
 - `act` 編碼／解碼 round-trip，含 `team_uuid` 為 None 的 platform 身分
 - 格式錯誤的 `act` → 視為無效，不得拋出未處理例外
 - `list_identities` 回傳 platform + 所有 team 身分，且排除已軟刪除的 team
 - `resolve_identity`：屬於該使用者 → 回傳；不屬於 → None；team 已軟刪除 → None
 
-- [ ] **Step 2: 實作**
+- [x] **Step 2: 實作**
 
 ```python
 @dataclass(frozen=True)
@@ -309,14 +319,14 @@ select(UserRoleAssign, Role.name, Team.name)
 
 **Files:** Modify `app/core/security.py`、`app/models/auth.py`
 
-- [ ] **Step 1: 寫失敗測試**
+- [x] **Step 1: 寫失敗測試**
 
 - 帶有效 `act` 的 token → `current_user.active_identity` 正確
 - **`act` 指向的授予被撤銷 → 401**（ADR-096）
 - **`act` 的 team 被軟刪除 → 401**
 - 無 `act` 的 token（舊 token / 零角色）→ `active_identity` 為 None，team/zone scope 為 `false()`，不是 500
 
-- [ ] **Step 2: 實作**
+- [x] **Step 2: 實作**
 
 ```python
 async def get_current_user(db=Depends(get_db), token=Depends(oauth2_scheme)) -> User:
@@ -344,7 +354,7 @@ async def get_current_user(db=Depends(get_db), token=Depends(oauth2_scheme)) -> 
 
 **Files:** Modify `app/core/rbac_scopes.py`、`app/repositories/auth_repository.py`、`app/services/work_zone.py`；Create `tests/test_scope_by_identity.py`
 
-- [ ] **Step 1: 寫失敗測試**
+- [x] **Step 1: 寫失敗測試**
 
 - 在 A 隊是 `admin`、在 B 隊是 `member`：切到 B 後**不能**管 B 的成員
 - **`super_admin` 切到 team 身分後不再持有任何 platform grant**（ADR-068 的核心）
@@ -353,7 +363,7 @@ async def get_current_user(db=Depends(get_db), token=Depends(oauth2_scheme)) -> 
 - 直接授予依 `team_uuid` 過濾：`NULL` 的只在 platform 身分下生效
 - `work_zone` 的 gov-only 檢查行為不變（ADR-064 回歸）
 
-- [ ] **Step 2: 實作**
+- [x] **Step 2: 實作**
 
 `rbac_scopes.py` 的 8 處替換——`actor.team_uuid` → `actor.active_identity.team_uuid if actor.active_identity else None`。建議抽一個小 helper：
 
@@ -390,7 +400,7 @@ direct_grants = ... .where(
 
 **Files:** Modify `app/api/v1/endpoints/auth/session.py`、`app/api/v1/endpoints/users.py`、`app/schemas/auth.py`
 
-- [ ] **Step 1: 寫失敗測試**
+- [x] **Step 1: 寫失敗測試**
 
 - `login` 不帶 identity → 預設 platform 身分
 - `login` 帶有效 identity → 該身分生效
@@ -401,7 +411,7 @@ direct_grants = ... .where(
 - `refresh` 帶失效 identity → **401**
 - **`refresh` 帶失效 identity 時不得燒掉 refresh token**：同一個 refresh token 換成有效 identity 後仍可用
 
-- [ ] **Step 2: 實作**
+- [x] **Step 2: 實作**
 
 ```
 POST /auth/switch-identity { role_uuid, team_uuid? }  → TokenPair
@@ -441,7 +451,7 @@ sid, user_uuid, new_refresh = await repo.rotate(body.refresh_token)
 
 **Files:** Modify `app/services/admin.py`、`app/api/v1/endpoints/admin.py`、`app/api/v1/endpoints/rbac_admin.py`、`app/schemas/admin.py`、`scripts/seed_rbac.py`
 
-- [ ] **Step 1: 寫失敗測試**
+- [x] **Step 1: 寫失敗測試**
 
 - `POST /users/{u}/role` 給 team 角色 → **400/422**（team 角色只能走 team 端點）
 - `POST /teams/{t}/members` 授予角色即入隊（不需先有成員資格）
@@ -463,7 +473,7 @@ async def test_every_actionable_role_covers_the_citizen_baseline(db):
         assert not missing, f"{role_name} is missing citizen capabilities: {missing}"
 ```
 
-- [ ] **Step 2: 實作**
+- [x] **Step 2: 實作**
 
 - `assign_role` 只收 platform 角色；「同 kind 取代」→「同 kind + 同 team 取代」
 - 移除 `admin.py:71` 的 team 前置檢查與 `:130-131` 的跨隊拒絕
@@ -477,13 +487,13 @@ async def test_every_actionable_role_covers_the_citizen_baseline(db):
 
 **Files:** Modify `app/db/triggers.py`、`app/core/context.py`、audit middleware；Create `tests/test_identity_audit.py`
 
-- [ ] **Step 1: 寫失敗測試**
+- [x] **Step 1: 寫失敗測試**
 
 - 以 `member@慈濟` 身分改資料 → `audit_logs.context.identity` 記錄角色與團隊**名稱**
 - platform 身分 → `context.identity.team` 為 `null`
 - **角色被硬刪除後，歷史 log 仍讀得出當時的角色名稱**（快照而非參照）
 
-- [ ] **Step 2: 實作**
+- [x] **Step 2: 實作**
 
 比照現有的 `app.current_user_id`（`app/db/triggers.py:49`）加一個 `app.active_identity` GUC，由 middleware 設定，trigger 讀進 `context` 欄位。**只記 identity 快照，不記 `cap`**（ADR-076）。
 
@@ -491,7 +501,7 @@ async def test_every_actionable_role_covers_the_citizen_baseline(db):
 
 ## Task 9: 全套件 + Docker 驗收
 
-- [ ] **Step 1: 全套件**
+- [x] **Step 1: 全套件**
 
 ```bash
 cd Backend && COVERAGE_CORE=sysmon uv run pytest -q -p no:randomly   # 必須全綠
@@ -502,7 +512,7 @@ uv run ruff check   # 我的檔案乾淨；既有錯誤不動
 
 **預期會大量修既有測試**：7 個測試檔提及 `team_uuid`，且所有建立 `User(team_uuid=...)` 的 fixture 都要改成建立 team 角色授予。這是本票最花時間的部分，不是 bug。
 
-- [ ] **Step 2: Docker 完整驗收**（**回報前的必要條件**）
+- [x] **Step 2: Docker 完整驗收**（**回報前的必要條件**）
 
 ```bash
 docker compose build backend
@@ -513,21 +523,21 @@ docker compose exec -T -e PYTHONPATH=/app backend python scripts/seed_rbac.py
 
 以 HTTP 驗證：
 
-- [ ] 建一個同時持有 `super_admin` + `admin@縣府` + `member@慈濟` 的帳號
-- [ ] `GET /users/me` 回傳三個身分
-- [ ] 預設登入為 platform 身分（`super_admin`）
-- [ ] 切到 `member@慈濟` → **後台端點全部 403**（super_admin 確實降權）
-- [ ] 切到 `admin@縣府` → 可管縣府成員；切到 `member@慈濟` → **不可**管慈濟成員
-- [ ] 切到非自己持有的身分 → 403
-- [ ] 降權至 `member` 後仍能切回 `super_admin`（切換不綁 capability）
-- [ ] 撤銷 `admin@縣府` → 該身分的請求 401、refresh 也 401
-- [ ] **失效 refresh 之後，換有效 identity 再 refresh 仍可用**（證明沒燒掉 token）
-- [ ] 提權（`user`→`super_admin`）會登出；**新增**一個 team 身分不會登出
-- [ ] `audit_logs.context` 記錄操作當下的身分與名稱
-- [ ] zone scope：切到 A 隊看不到 B 隊轄區
-- [ ] **造的測試資料全部清乾淨**
+- [x] 建一個同時持有 `super_admin` + `admin@縣府` + `member@慈濟` 的帳號
+- [x] `GET /users/me` 回傳三個身分
+- [x] 預設登入為 platform 身分（`super_admin`）
+- [x] 切到 `member@慈濟` → **後台端點全部 403**（super_admin 確實降權）
+- [x] 切到 `admin@縣府` → 可管縣府成員；切到 `member@慈濟` → **不可**管慈濟成員
+- [x] 切到非自己持有的身分 → 403
+- [x] 降權至 `member` 後仍能切回 `super_admin`（切換不綁 capability）
+- [x] 撤銷 `admin@縣府` → 該身分的請求 401、refresh 也 401
+- [x] **失效 refresh 之後，換有效 identity 再 refresh 仍可用**（證明沒燒掉 token）
+- [x] 提權（`user`→`super_admin`）會登出；**新增**一個 team 身分不會登出
+- [x] `audit_logs.context` 記錄操作當下的身分與名稱
+- [x] zone scope：切到 A 隊看不到 B 隊轄區 —— **以測試涵蓋，未走 Docker HTTP**（`tests/test_scope_by_identity.py::test_zone_scope_covers_only_the_active_identitys_zones`：同一人在兩隊各有轄區，`in_scope` 與 `scope_filter` 都只認當前身分那一隊）
+- [x] **造的測試資料全部清乾淨**
 
-- [ ] **Step 3: 回報，不要開 PR**
+- [x] **Step 3: 回報，不要開 PR** —— 已回報，等使用者決定
 
 回報全套件數字、docker 驗收結果、任何只有跑容器才會發現的問題。**等使用者說要發才開 PR。**
 
