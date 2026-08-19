@@ -1,4 +1,5 @@
 import {
+  ApiError,
   addContactAsync,
   changePasswordAsync,
   forgotPasswordAsync,
@@ -26,6 +27,17 @@ import {
 
 function resolveErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '請求失敗';
+}
+
+/**
+ * Forward the backend's own status and error code so the browser can tell cases apart — a 409
+ * (identity already taken) from a genuine server fault. Anything without a status stays a 400.
+ */
+function errorResponse(error: unknown) {
+  const status = error instanceof ApiError ? error.status : 400;
+  const code = error instanceof ApiError ? error.code : undefined;
+
+  return jsonResponse({ detail: resolveErrorMessage(error), code }, status);
 }
 
 function jsonResponse(data: unknown, status = 200) {
@@ -90,7 +102,7 @@ export async function GET(
 
     return jsonResponse({ detail: `Unsupported auth GET route: ${pathKey}` }, 404);
   } catch (error) {
-    return jsonResponse({ detail: resolveErrorMessage(error) }, 400);
+    return errorResponse(error);
   }
 }
 
@@ -282,6 +294,6 @@ export async function POST(
         );
     }
   } catch (error) {
-    return jsonResponse({ detail: resolveErrorMessage(error) }, 400);
+    return errorResponse(error);
   }
 }
