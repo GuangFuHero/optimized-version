@@ -226,7 +226,13 @@ async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depe
         identity = await active_identity_repository.resolve(db, str(user.uuid), act)
         if identity is None:
             raise _credentials_exception()
-        user.active_identity = identity
+    else:
+        # No `act` at all is a different case from one that names a vanished identity: nothing
+        # was claimed, so fall back to the platform identity — the ADR-069 default, and what
+        # the caller holds anyway, so it grants nothing new. Keeps tokens minted before this
+        # feature (and any caller that does not track identity) working as they did.
+        identity = await active_identity_repository.default_for_user(db, str(user.uuid))
+    user.active_identity = identity
     return user
 
 
