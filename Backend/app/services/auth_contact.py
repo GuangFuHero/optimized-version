@@ -20,8 +20,13 @@ from app.repositories.auth_repository import contact_repository, identity_reposi
 from app.repositories.verification_repository import VerificationRepository
 
 
-class ContactError(Exception):
-    """Base for contact use-case failures; each subclass maps to one HTTP status."""
+class ContactError(ValueError):
+    """Base for contact use-case failures; each subclass maps to one HTTP status.
+
+    A `ValueError` subclass because that is how this codebase's use-case layer signals a
+    domain failure (ADR-032, and 20 raises across station/ticket services). The subclasses
+    exist so the endpoint can map each to its own status code instead of a blanket 400.
+    """
 
 
 class ContactConflict(ContactError):
