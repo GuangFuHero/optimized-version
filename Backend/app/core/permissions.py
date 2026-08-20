@@ -72,6 +72,13 @@ class Perm(StrEnum):
     FIELD_EDIT = "dynamic_field.edit"
     FIELD_DELETE = "dynamic_field.delete"
 
+    # Project Settings (the deployment's disaster name / types — feature 013, ADR-090)
+    # Its own capability rather than a reuse of dynamic_field.edit: changing the disaster
+    # types flips the visibility of a whole batch of fields at once, which is a much heavier
+    # act than editing one field's definition.
+    PROJECT_VIEW = "project.view"
+    PROJECT_EDIT = "project.edit"
+
     # Emergency Announcement
     ANN_VIEW = "announcement.view"
     ANN_PUBLISH = "announcement.publish"

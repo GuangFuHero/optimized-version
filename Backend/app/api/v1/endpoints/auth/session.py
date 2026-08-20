@@ -1,5 +1,6 @@
 """Session endpoints: password login, refresh-token rotation, and logout."""
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -24,7 +25,30 @@ from app.schemas.auth import RefreshRequest, TokenPair
 
 from .deps import get_rate_limiter, issue_token_pair
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+async def _record_activity(db: AsyncSession, user_uuid: str) -> None:
+    """Stamp `users.last_activity_at`, swallowing any failure (ADR-093).
+
+    Called only after the refresh token has already been rotated, so raising here would cost
+    the caller their session — see the note in `refresh`. The session is rolled back on
+    failure so the request's remaining work is not left inside an aborted transaction.
+    """
+    try:
+        user = await user_repository.get_by_uuid(db, user_uuid)
+        if user is not None:
+            await user_repository.update(
+                db, db_obj=user, obj_in={"last_activity_at": datetime.now(UTC)}
+            )
+    except Exception:  # noqa: BLE001 — observability must never fail the token exchange
+        logger.warning("Could not record last_activity_at for %s", user_uuid, exc_info=True)
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001 — the session is already unusable; nothing to salvage
+            logger.warning("Rollback after the activity write also failed", exc_info=True)
 
 
 @router.post("/login",
@@ -65,9 +89,26 @@ async def login(
              dependencies=[Depends(get_rate_limiter(10, 60))])
 async def refresh(
         body: RefreshRequest,
+        db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
 ):
-    """以 refresh token 換發新的 access token，並 rotate refresh token。"""
+    """以 refresh token 換發新的 access token，並 rotate refresh token。
+
+    Rotation is also where `users.last_activity_at` is recorded (ADR-093). Access tokens
+    live 15 minutes, so an active user rotates about that often — precise enough to answer
+    "has this account been used lately?", which is all the admin console needs. It is
+    deliberately NOT updated per request: `users` is in AUDITED_TABLES, so that would append
+    one `audit_logs` row per request and bury the audit trail under activity noise.
+
+    `SessionRepository` stays a pure Redis component — the DB write happens here, not there.
+
+    The write is deliberately best-effort. By the time `rotate()` returns it has already
+    burned the old refresh token (`session_repository.py:78` claims the `refresh_used:` flag),
+    so letting a DB error escape would 500 the request *after* the old token died: the client
+    never receives `new_refresh`, retries with the old one, and `rotate()` reads that as a
+    replay and revokes the entire session. A transient DB outage would sign the device out
+    permanently. `last_activity_at` is observability — it is not worth a user's session.
+    """
     repo = SessionRepository(redis)
     try:
         sid, user_uuid, new_refresh = await repo.rotate(body.refresh_token)
@@ -76,6 +117,7 @@ async def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from err
+    await _record_activity(db, user_uuid)
     access_token = security.create_access_token(data={"sub": user_uuid}, sid=sid)
     return TokenPair(
         access_token=access_token, refresh_token=new_refresh,
