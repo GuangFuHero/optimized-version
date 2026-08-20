@@ -232,7 +232,7 @@ def build_contact_changed_email(masked_new_value: str) -> tuple[str, str, str]:
     """Return (subject, html, text) telling the OLD address that the contact was replaced.
 
     Sent to the address being replaced, not the new one — this is the only mechanism that
-    lets a victim of session theft notice the takeover attempt (ADR-087). The new value is
+    lets a victim of session theft notice the takeover attempt (ADR-085). The new value is
     masked so a forwarded copy does not leak it in full.
     """
     subject = f"【{_BRAND_ZH}】聯絡方式已變更 Contact changed"

@@ -88,7 +88,7 @@ async def test_resend_no_pending_404(client, db_session, redis):
 
 @pytest.mark.asyncio
 async def test_add_second_email_requires_step_up(client, db_session, redis, capture_email):
-    """Feature 012 turned "second email → 409" into a REPLACEMENT gated by step-up (ADR-086).
+    """Feature 012 turned "second email → 409" into a REPLACEMENT gated by step-up (ADR-085).
 
     The account still cannot end up with two emails, but the refusal is now 422-asking-for-
     proof rather than a flat 409 — and crucially no code reaches the new address.
@@ -102,7 +102,7 @@ async def test_add_second_email_requires_step_up(client, db_session, redis, capt
 
 @pytest.mark.asyncio
 async def test_add_second_phone_requires_step_up(client, db_session, redis, capture_sms):
-    """Same replacement gate on the phone side (ADR-086)."""
+    """Same replacement gate on the phone side (ADR-085)."""
     user = await create_account(
         db_session, contact_type="phone", value="0912345678",
         password_hash=get_password_hash("secret", generate_salt()), name="Tester",
@@ -132,7 +132,7 @@ async def test_email_user_can_add_phone(client, db_session, redis, capture_sms):
 async def test_a_code_is_never_issued_to_a_new_address_without_step_up(
     client, db_session, redis, capture_email
 ):
-    """Where the replacement gate actually lives (ADR-086).
+    """Where the replacement gate actually lives (ADR-085).
 
     Feature 012 puts step-up at issue-time, not at verify, so this is the invariant that
     protects the account: an attacker holding only a session never gets a code delivered to

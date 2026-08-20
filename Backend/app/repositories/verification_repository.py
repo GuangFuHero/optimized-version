@@ -108,7 +108,7 @@ class VerificationRepository:
         """Reissue a contact code for `user_uuid`."""
         return await self._reissue(f"{PENDING_CONTACT}{user_uuid}:{type_}:{value}")
 
-    # --- step-up on the OLD channel, for SSO-only accounts replacing a contact (ADR-086) ---
+    # --- step-up on the OLD channel, for SSO-only accounts replacing a contact (ADR-085) ---
     # Its own key prefix, not the contact-verification one: the two are live at the same time
     # during a replacement (one code to the old address, one to the new) and must not collide.
     async def issue_old_channel_step_up(self, *, user_uuid: str, type_: str, value: str) -> str:

@@ -376,14 +376,14 @@ class ContactRepository(GenericRepository[UserContact]):
         return list((await db.execute(q)).scalars().all())
 
     async def count_by_user(self, db: AsyncSession, user_uuid: str) -> int:
-        """How many contacts the user owns — the login-channel guard counts these (ADR-088)."""
+        """How many contacts the user owns — the login-channel guard counts these (ADR-087)."""
         q = select(func.count()).select_from(UserContact).where(UserContact.user_uuid == user_uuid)
         return (await db.execute(q)).scalar() or 0
 
     async def replace_verified(
         self, db: AsyncSession, *, existing: UserContact, value: str
     ) -> UserContact:
-        """Swap a contact's value in ONE transaction (ADR-085).
+        """Swap a contact's value in ONE transaction (ADR-098).
 
         Delete-then-insert rather than an in-place UPDATE so the row identity changes and the
         audit trail shows a DELETE plus an INSERT — `user_contacts` is in AUDITED_TABLES and
@@ -404,7 +404,7 @@ class ContactRepository(GenericRepository[UserContact]):
         return contact
 
     async def delete_contact(self, db: AsyncSession, *, contact: UserContact) -> None:
-        """Hard-delete a contact row; audit_logs keeps the history (ADR-085)."""
+        """Hard-delete a contact row; audit_logs keeps the history (ADR-087)."""
         await db.delete(contact)
         await db.commit()
 

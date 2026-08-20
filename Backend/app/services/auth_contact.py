@@ -1,9 +1,9 @@
-"""Contact add / replace / delete use-cases (feature 012, ADR-085~088).
+"""Contact add / replace / delete use-cases (feature 012, ADR-085~089, 098).
 
 Extracted out of `app/api/v1/endpoints/auth/contacts.py` because this is where the
 branch-dense security logic lives — add vs replace, crossed with password vs SSO-only —
 and each combination fails differently. That belongs somewhere unit-testable rather than
-only reachable over HTTP (ADR-089).
+only reachable over HTTP (ADR-088).
 
 The rest of `app/api/v1/endpoints/auth/` still calls repositories directly; aligning it
 with the flat-service convention (ADR-013/047) is deliberately out of scope here.
@@ -45,7 +45,7 @@ class LastLoginChannel(ContactError):
 
 
 def _mask(type_: str, value: str) -> str:
-    """Mask a contact value for the change notification (ADR-087)."""
+    """Mask a contact value for the change notification (ADR-085)."""
     return mask_email(value) if type_ == "email" else mask_phone(value)
 
 
@@ -174,7 +174,7 @@ async def commit_contact_change(
 
     old_type, old_value = existing.type, existing.value
     await contact_repository.replace_verified(db, existing=existing, value=value)
-    # Tell the OLD channel, masked — the only way a victim finds out (ADR-087).
+    # Tell the OLD channel, masked — the only way a victim finds out (ADR-085).
     masked = _mask(type_, value)
     if old_type == "email":
         subject, html, text = build_contact_changed_email(masked)
@@ -185,7 +185,7 @@ async def commit_contact_change(
 
 
 async def delete_contact(db: AsyncSession, *, actor: User, type_: str) -> None:
-    """Remove one of the caller's contacts, refusing to strand the account (ADR-088).
+    """Remove one of the caller's contacts, refusing to strand the account (ADR-087).
 
     A contact IS the login identifier, so dropping the last one leaves an account with no
     password-reset destination and no way back in — unless an SSO identity still gets them

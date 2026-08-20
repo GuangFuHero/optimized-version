@@ -67,7 +67,7 @@ async def add_contact(
 ):
     """Start adding or replacing a contact: send a 6-digit code to the new value.
 
-    Replacing an existing contact of the same type additionally requires step-up (ADR-086).
+    Replacing an existing contact of the same type additionally requires step-up (ADR-085).
     For an SSO-only account, the first call without `step_up` is what delivers the code to
     the OLD channel, and answers 422 asking for it back.
     """

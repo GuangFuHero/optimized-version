@@ -59,7 +59,7 @@ async def _contacts_of(db, user_uuid, type_: str = "email") -> list[str]:
 
 
 # ──────────────────────────────────────────────
-# Step-up: the core protection (ADR-086)
+# Step-up: the core protection (ADR-085)
 # ──────────────────────────────────────────────
 
 async def test_replacing_a_contact_without_step_up_is_refused(client, db_session, redis, capture_email):
@@ -169,7 +169,7 @@ async def test_after_replacement_the_new_address_logs_in_and_the_old_does_not(
 async def test_replacement_notifies_the_old_channel_with_a_masked_value(
     client, db_session, redis, capture_email
 ):
-    """The only mechanism that lets a victim notice (ADR-087); the new value is masked."""
+    """The only mechanism that lets a victim notice (ADR-085); the new value is masked."""
     _, headers = await _password_user(db_session, redis)
     code = await _start_replacement(client, headers, "new@x.com", capture_email)
 
@@ -198,7 +198,7 @@ async def test_replacement_does_not_revoke_other_sessions(client, db_session, re
 
 
 # ──────────────────────────────────────────────
-# Delete: the account must keep a way back in (ADR-088)
+# Delete: the account must keep a way back in (ADR-087)
 # ──────────────────────────────────────────────
 
 async def test_deleting_the_last_contact_without_sso_is_refused(client, db_session, redis):
