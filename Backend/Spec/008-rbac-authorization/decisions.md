@@ -949,6 +949,61 @@ enforcement 呼叫（僅目錄 key），不符合「先有 enforcement 才發 ca
 - `Spec/Docs/rbac-permissions-design.md` §4.1：`super_admin` 列的模組枚舉加 `announcement`。
 - **零 schema / migration 影響**：純 `role_permission_assign` 資料列新增，沿用既有 `Permission` row。
 
+#### ADR-068 站點照片與站點聯絡欄位；photos 多型化為 `geometry`
+> **狀態：ACCEPTED（2026-08-20）。** PR #31 落地，本 ADR 於後續修正 PR 補寫。
+
+**Context**：PR #31 要讓站點也能掛照片、也能有自己的聯絡人。三件事當時只寫在 commit message 與
+migration docstring 裡，沒有進 ADR，reviewer 於 PR #31 review MEDIUM 3 指出。補寫如下，並一併收錄
+review 過程中新發現的兩個決策（照片移除的授權、跨 subtype 守衛）。
+
+**Decision**：
+
+1. **`photos.ref_type='ticket'` 改名為 `'geometry'`，而不是新增 `'station'` 值。** 一張 ticket 照片的
+   `ref_uuid` 存的本來就是 `tickets.uuid`，而它 **就是** `base_geometries.uuid`（joined-table
+   inheritance 共用 PK）。所以這個欄位從第一天起語意上就是「某個 base_geometries 子型別」，只是名字寫窄了。
+   改名後 station 免費得到同一套機制，dataloader 也只需要一個（`_make_photos_by_geometry_loader`，
+   `photos_by_ticket`/`photos_by_station` 共用）。uuid 全域唯一，兩個子型別的照片不可能互撞。
+   `ref_type='pole'`（secondary_locations）不受影響。
+2. **聯絡欄位加在 `stations`，不上推到 `base_geometries`。** 上推會連 `closure_areas` 等其他子型別
+   一起拿到「聯絡人」，而封閉區沒有聯絡人這個概念。`stations.contact_*` 與 `tickets.contact_*`
+   是**各自獨立的欄位**，只是剛好同名、也剛好都是 PII。
+3. **`station.view_pii` 的逐角色 scope 完全對齊 `ticket.view_pii`**（`user`=own、team 角色=zone、
+   `data_auditor`/`super_admin`=all、guest 一律遮罩）。兩者是同一種資料、同一種風險，沒有理由給不同答案；
+   遮罩實作也直接沿用 `app/graphql/masking.py`，不另開第二套機制。
+4. **照片移除（`detachStationPhoto`）gate 在 `station.review`，不是 `station.contribute`。** 掛照片是
+   刻意開放的群眾貢獻（ADR-063 [5]），但**移除是審核**。兩者共用同一個開放 capability 的話，任何註冊
+   使用者都能刪任何站點的照片。檢查點 2 因 `Photo` 自身無 geometry，比照 ADR-052 借用母站點的座標判
+   `zone`（同 `station.py:_property_scope_target`），否則 zone-scoped 的 team admin 永遠碰不到任何照片。
+5. **跨 subtype 守衛（決策 1 的直接代價）。** 因為 `ref_type='geometry'` 現在同時涵蓋 ticket 與 station，
+   任何 gate 在 `station.*` 的寫入/刪除都**必須**先確認 `ref_uuid` 解析得到一個 active station。少了這道
+   檢查，持有 `station.review` 的人就能刪掉由 `ticket.*` 管的 ticket 照片——這是權限邊界穿越，不是小瑕疵。
+   解析失敗一律回同一句 "Station photo not found"，不讓錯誤訊息透露該 uuid 其實屬於某張 ticket。
+
+**Consequences**：➕ 一套 photos 機制服務所有 base_geometries 子型別，未來新子型別零成本接上。
+➕ station 聯絡人與 ticket 聯絡人的遮罩行為一致，前端不用記兩種規則。➕ 照片有了移除路徑（PR #31 只加了
+attach，任何人都能無限掛、且沒有人刪得掉，連 super_admin 都不行）。
+➖ `ref_type` 不再自我描述——單看 `photos` 一列無法判斷是 ticket 還是 station 的照片，必須去 join。
+決策 5 的守衛就是這個代價的具體體現，任何新的 photos 寫入路徑都要記得付。
+➖ downgrade 會把 upgrade 後產生的 station 照片一併標回 `'ticket'`；round-trip 無損，且降版期間那些列的
+`ref_uuid` 是 station uuid，該 revision 的任何 ticket-photo 查詢都撈不到（migration 註解已據此更正）。
+
+**Blast Radius**：
+- migration `b8f4d2a6e1c3`：`photos.ref_type` 值改名 + `stations` 三個 nullable 欄位。`photos` 不是
+  audited table，故該 UPDATE 不需要 trigger-disable 處理。
+- `app/services/photo.py`、`app/graphql/geo/mutations.py`：attach/detach 兩個入口。
+- `app/graphql/loaders.py`：`photos_by_ticket`/`photos_by_station` 共用同一個 load function。
+- `app/graphql/geo/types.py:StationType`：三個遮罩 field resolver + `Create`/`UpdateStationInput`。
+- `scripts/seed_rbac.py`：`station.view_pii` 逐角色 grant。`station.review` 沿用既有 grant，未動。
+- **未解決、不在本 ADR 範圍**：`stations`/`tickets` 的聯絡欄位仍以明文進 `audit_logs`（trigger 只濾
+  `password_hash`）——PR #31 review LOW 7，待統一的 audit-log PII 政策。
+- `app/db/session.py` 補上 `expire_on_commit=False`（**修掉一個既存 bug，非本次新增**）：實作決策 3 的
+  遮罩 resolver 時發現，任何 mutation 只要回傳型別上掛了會讀 actor 的 async field resolver，就會炸
+  `MissingGreenlet`。成因是 service 一 commit 就 expire 了 session 內所有實例（含
+  `info.context["user"]`），接著 `resolve_scope` 讀 `actor.uuid` 觸發 lazy reload，而 async 下的 expired
+  attribute 只能靠 sync IO 重載。`createStation { contactName }` 與 `createTicket { contactName }` 皆
+  中彈——後者早於 PR #31（ADR-029 的 ticket 遮罩就有），只是既有測試從未在 mutation 回傳裡選過聯絡欄位，
+  所以沒人發現。
+
 ---
 
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
