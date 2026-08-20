@@ -129,8 +129,8 @@ tests/test_add_contact.py             三條斷言從「第二個 email → 409�
 - [x] `uv run pytest -q` 全套件 → **532 passed / 0 failed**（2026-08-20，rebase 到 #38 之後實跑；baseline 516 + 本票 16）
 - [x] 忘記密碼四端點與其三個測試檔零 diff
 - [x] `ruff check` 對本票改動的檔案全綠
-- [ ] **Docker 完整驗證未執行**（僅跑了上列 5 個測試檔，未跑全套件）— 依既有流程，開 PR 前要補
-- [ ] **PR 未開** — 等使用者決定
+- [x] **Docker 完整驗證通過**（2026-08-20，實跑；細節見下）
+- [x] **PR #39 已開**（stacked 在 #38 後）
 
 ## 已知缺口
 
@@ -148,3 +148,27 @@ tests/test_add_contact.py             三條斷言從「第二個 email → 409�
 **為什麼還要再接在 #38 後**：本票的測試原本用 `create_access_token` 直接發沒有 session 的 token。#38 之後那種 token 一律 401，16 個測試會全掛；而且 `tests/test_add_contact.py` 兩張票都改，本身就有文字衝突。改用 #38 的 `auth_headers_for(redis, ...)` 之後，`test_replacement_does_not_revoke_other_sessions` 反而變得更有意義——它現在驗的是真的 session 沒被撤掉，而不是一個沒人管的字串。
 
 **衝突在這裡解一次就好**，不留給日後合併的人。
+
+
+## Docker 驗收實測（2026-08-20）
+
+起容器、一次性資料庫 `dv012`、真的註冊登入操作：
+
+| 檢查 | 結果 |
+|---|---|
+| `GET /users/me` | `contacts` / `login_methods` 與 010 的 `identities` / `active_identity` **四個欄位並存**，互不干擾 |
+| 無 `step_up` 換信箱 | 422「更換聯絡方式需要輸入密碼」 |
+| 密碼錯誤換信箱 | 401；**兩種情況下新地址收到的信件數都是 0** |
+| 帶正確密碼 | 202，驗證碼寄到新地址 |
+| verify | 200「Contact replaced」 |
+| 舊管道通知 | 收到「聯絡方式已變更」，新值遮蔽為 `n***@***.com` |
+| 新信箱登入 / 舊信箱登入 | 200 / 401 |
+| `user_contacts` 資料列 | **只有一列**（舊列消失，不是兩列並存） |
+| 換完後舊 access token | 200 —— ADR-085「不撤 session」在 #38 的每請求 session 檢查下仍然成立 |
+| 刪唯一 contact 且無 SSO | 409「帳號至少需保留一個登入管道」 |
+| 加手機後刪 email | 204，改用手機登入 200、舊 email 登入 401 |
+| 再刪最後一個管道 | 409 |
+
+**「新地址收到 0 封信」是本票最重要的一條**——它證明 step-up 擋在發碼之前，持有 session 的攻擊者從頭到尾拿不到寄到自己地址的碼。
+
+驗證用一次性資料庫，驗完 drop，沒有動到 dev DB。
