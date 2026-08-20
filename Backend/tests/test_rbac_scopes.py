@@ -24,6 +24,7 @@ from app.models.geo import Station
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from tests.conftest import acting_as
 
+
 def _acting_in_team(actor, team):
     """Attach a team identity to the actor (feature 010, ADR-073).
 
