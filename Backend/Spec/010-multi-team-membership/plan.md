@@ -10,9 +10,8 @@
 
 **Branch:** `feat/multi-team-membership-backend`（off `main`）
 
-**狀態（2026-08-19）：Task 1~9 全部完成。** 全套件 501 passed / 0 failed；ruff 只剩 8 個
-與本票無關的既有錯誤（`test_admin_api.py`、`test_suggestion_review_scope.py`、`alembic/e8b3c5f2a1d4`），
-依本檔 Global Constraints 未動。Docker 驗收全數通過，測試資料已清除。**尚未開 PR。**
+**狀態（2026-08-19）：Task 1~9 全部完成。** 全套件 501 passed / 0 failed；`ruff check` 全綠
+（含清掉本分支繼承的 7 個既有錯誤，見 Global Constraints）。Docker 驗收全數通過，測試資料已清除。**尚未開 PR。**
 
 落地時多出的決策：**ADR-098**（管理端 `GET /admin/rbac/users/{uuid}/permissions` 改成逐身分回報）——
 plan 沒預見這個端點在多身分下會回空 dict，屬破壞性 API 變更，前端後台頁面要跟著改。
@@ -27,7 +26,7 @@ plan 沒預見這個端點在多身分下會回空 dict，屬破壞性 API 變�
 - **git root 是 `optimized-version/`（`Backend/` 的上層）**。一律 `git add Backend/<path>`，**絕不用 `git add -A` / `git add .`**（會掃進 `Frontend/` 等大型未追蹤目錄）。
 - 跑測試前先 `docker compose up -d db redis`。測試 `uv run pytest`，lint `uv run ruff check`。行長上限 110。
 - **驗收標準是全綠**。開工前先量一次 baseline 記下來。
-- 既有 ruff 錯誤在 `tests/test_admin_api.py`、`tests/test_suggestion_review_scope.py`、`alembic/versions/e8b3c5f2a1d4_*`——**不是你造成的，不要順手改**。
+- ~~既有 ruff 錯誤在 `tests/test_admin_api.py`、`tests/test_suggestion_review_scope.py`、`alembic/versions/e8b3c5f2a1d4_*`——**不是你造成的，不要順手改**。~~ **2026-08-20 撤銷：那 7 個已全部清掉，`ruff check` 現在是乾淨的，請維持在 0。** 留著紅的用意是不要混進無關 diff，但代價是新錯誤會藏在舊錯誤裡——本票就發生過一次（我自己加的 I001 混在 7 個既有錯誤中沒被發現）。門檻是 0 才看得出回歸。
 - **Spec 與實作放同一個 PR**。`spec.md` / `decisions.md` / 本檔目前在 `docs/backend-specs-010-013` 分支，開工時用 `git checkout docs/backend-specs-010-013 -- Backend/Spec/010-multi-team-membership/` 取到功能分支。
 - **完成後不要自己開 PR**：做完 §「Docker 驗收」回報結果，等使用者決定。
 
