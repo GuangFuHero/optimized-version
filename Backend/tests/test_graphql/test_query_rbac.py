@@ -48,6 +48,12 @@ mutation($stationUuid: UUID!, $url: String!) {
 }
 """
 
+UPDATE_STATION = """
+mutation($uuid: UUID!, $input: UpdateStationInput!) {
+    updateStation(uuid: $uuid, input: $input) { uuid contactName contactEmail contactPhone }
+}
+"""
+
 
 async def _create_station(client, token: str) -> str:
     resp = await client.post(
@@ -233,7 +239,7 @@ async def test_coordinator_sees_station_pii(client, coordinator_auth):
 
 @pytest.mark.asyncio
 async def test_attach_station_photo(client, coordinator_auth):
-    """attachStationPhoto creates a photo row that shows up under station.photos."""
+    """Mutation attachStationPhoto creates a photo row that shows up under station.photos."""
     _, coord_token = coordinator_auth
     station_uuid = await _create_station(client, coord_token)
 
@@ -260,3 +266,76 @@ async def test_attach_station_photo(client, coordinator_auth):
     assert "errors" not in body, body
     urls = [p["url"] for p in body["data"]["station"]["photos"]]
     assert "https://example/photo.jpg" in urls
+
+
+@pytest.mark.asyncio
+async def test_update_station_contact_fields(client, coordinator_auth):
+    """Contact fields can be edited, and leaving one out of the input does not erase it.
+
+    The second half is the part that can silently regress. The input type distinguishes three
+    states — field absent, field set to null, field set to a value — and only the last two
+    should write to the database. If an absent field were treated as null, editing just the
+    contact name would quietly wipe the email and phone.
+    """
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION,
+            "variables": {
+                "uuid": station_uuid,
+                "input": {
+                    "contactName": "New Contact",
+                    "contactEmail": "new@example.com",
+                    "contactPhone": "0987654321",
+                },
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station = body["data"]["updateStation"]
+    assert station["contactName"] == "New Contact"
+    assert station["contactEmail"] == "new@example.com"
+    assert station["contactPhone"] == "0987654321"
+
+    # Update only the name; email and phone must survive untouched (UNSET, not null).
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION,
+            "variables": {"uuid": station_uuid, "input": {"contactName": "Newer Contact"}},
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station = body["data"]["updateStation"]
+    assert station["contactName"] == "Newer Contact"
+    assert station["contactEmail"] == "new@example.com"
+    assert station["contactPhone"] == "0987654321"
+
+
+@pytest.mark.asyncio
+async def test_update_station_can_clear_a_contact_field(client, coordinator_auth):
+    """Passing null explicitly does clear a field — the other half of the distinction above."""
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION,
+            "variables": {"uuid": station_uuid, "input": {"contactPhone": None}},
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station = body["data"]["updateStation"]
+    assert station["contactPhone"] is None
+    assert station["contactName"] == "Station Contact"
+

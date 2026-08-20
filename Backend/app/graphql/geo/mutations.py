@@ -80,6 +80,20 @@ class GeoMutation:
         return PhotoType.from_model(photo)
 
     @strawberry.mutation
+    async def detach_station_photo(self, info: strawberry.types.Info, uuid: UUID) -> bool:
+        """Soft-delete a station photo. Returns True on success.
+
+        Requires station.review, because removing a photo is moderation — attaching one is
+        open to any registered account. The caller must also be in scope for the station the
+        photo hangs off. Anything that is not an active station photo errors as "not found",
+        including a ticket photo's uuid; both kinds share one table.
+        """
+        await photo_service.detach_station_photo(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
+        )
+        return True
+
+    @strawberry.mutation
     async def update_station(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateStationInput
     ) -> StationType:
@@ -94,7 +108,10 @@ class GeoMutation:
             changes["level"] = input.level
         if input.visibility is not None:
             changes["visibility"] = input.visibility.value
-        for field in ("type", "name", "description", "op_hour", "comment"):
+        for field in (
+            "type", "name", "description", "op_hour", "comment",
+            "contact_name", "contact_email", "contact_phone",
+        ):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
                 changes[field] = val

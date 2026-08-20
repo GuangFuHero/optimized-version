@@ -46,6 +46,10 @@ def downgrade() -> None:
     op.drop_column('stations', 'contact_email')
     op.drop_column('stations', 'contact_name')
 
-    # Safe: no station photos can exist pre-upgrade in this same downgrade path, so every
-    # 'geometry' row being reverted here was a 'ticket' row to begin with.
+    # Station photos added since the upgrade get relabelled 'ticket' here too: this UPDATE
+    # cannot tell the two apart, because station and ticket photos both store a
+    # base_geometries uuid in ref_uuid. That is safe rather than lossy — re-running the
+    # upgrade turns them back into 'geometry', and while downgraded their ref_uuid points at
+    # a station, so the ticket-photo queries that existed at this older revision never
+    # match them.
     op.execute("UPDATE photos SET ref_type = 'ticket' WHERE ref_type = 'geometry'")
