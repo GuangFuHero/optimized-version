@@ -165,8 +165,26 @@ except RedisError:
 
 - [x] `uv run pytest -q` → **517 passed / 0 failed**（baseline 501 + 本票 16）
 - [x] `uv run ruff check` 對本票改動的 7 個檔案全綠
-- [ ] **Docker 完整驗證未執行** — 開 PR 前要補：實際 logout 後拿舊 token 打 REST 與 GraphQL，兩邊都要 401
+- [x] **Docker 完整驗證通過**（2026-08-20，實跑；細節見下）
 - [ ] 回報使用者，由使用者決定是否發 PR（PR 需等 #37 先合）
+
+### Docker 驗收實測
+
+真的起容器、真的註冊登入、真的拿同一把 token 前後比對：
+
+| 檢查 | 結果 |
+|---|---|
+| logout 前 REST `/users/me` / GraphQL | 200 / 200 |
+| `POST /auth/logout` | 204 |
+| **logout 後，同一把 token** REST / GraphQL | **401 / 401** |
+| 匿名 GraphQL 查詢 | 200（Guest 不受影響） |
+| Redis 停掉後的已認證請求 | **401**，且 log 留下 `refusing the request: Redis (the session store) is unreachable` |
+| Redis 復原後 | 200 |
+| admin 踢人 → 被踢者下一個請求 | 204 → **401**；admin 自己不受影響（200） |
+| 非管理員呼叫踢人端點 | 403 |
+| 踢人的數量 | 只進 log（`revoked 3 session(s) for user …`），回應是 204 無 body |
+
+**驗證用的是一次性資料庫，沒有動到 dev DB。** dev DB 的 `alembic_version` 停在別的分支留下的 revision（`f2b7c9d4e0a3`），`alembic upgrade head` 會 `Can't locate revision`。與其修別人的 dev DB，這次另建 `disaster_rescue_dockerverify` 跑 migration + seed，驗完 drop 掉。開發時要在 dev DB 上跑這個分支，得先自行處理那個 revision。
 
 ```bash
 export TEST_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5433/disaster_rescue_test"
