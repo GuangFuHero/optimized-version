@@ -8,7 +8,7 @@
 
 **Source spec:** `Spec/012-account-profile/spec.md`（ADR-085~089、098）
 
-**Branch:** `feat/account-profile-backend`（off `main`）
+**Branch:** `feat/account-profile-backend`（**off `feat/session-revocation-backend`**，鏈子是 #37 → #38 → 本票；原本 off `main`，2026-08-20 重新排隊，見下方「排隊與改名」）
 
 > **⚠️ 本文件為完工後回填（2026-08-20）。** 實作先於 plan 完成，所以這裡的 Task 分解是照實際交付的順序整理的，不是當初的施工單。它的用途是讓 reviewer 有一條可依循的閱讀路線，並記下當時實際踩到的取捨。逐條的「設計 ↔ 程式碼 ↔ 測試」對照在 `spec.md` §10。
 >
@@ -126,12 +126,25 @@ tests/test_add_contact.py             三條斷言從「第二個 email → 409�
 
 ## 驗收狀態
 
-- [x] `uv run pytest tests/test_account_profile.py tests/test_add_contact.py tests/test_forgot_password.py tests/test_set_password.py tests/test_change_password_identity.py` → **48 passed**（2026-08-20 實跑；本機 db 在 5433，需 `TEST_DB_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/disaster_rescue_test`）
+- [x] `uv run pytest -q` 全套件 → **532 passed / 0 failed**（2026-08-20，rebase 到 #38 之後實跑；baseline 516 + 本票 16）
 - [x] 忘記密碼四端點與其三個測試檔零 diff
-- [x] `ruff check` 對本票改動的 10 個檔案全綠。**全 repo 仍有 7 個錯誤**，全部落在本票未觸碰的檔案（`alembic/versions/e8b3c5f2a1d4_*.py`、`tests/test_admin_api.py`、`tests/test_suggestion_review_scope.py`），是從 base 繼承的
+- [x] `ruff check` 對本票改動的檔案全綠
 - [ ] **Docker 完整驗證未執行**（僅跑了上列 5 個測試檔，未跑全套件）— 依既有流程，開 PR 前要補
 - [ ] **PR 未開** — 等使用者決定
 
 ## 已知缺口
 
 `spec.md` §9 列的「模擬 INSERT 失敗時舊列仍在」沒有對應測試，理由記在 `spec.md` §10.3。
+
+
+---
+
+## 排隊與改名（2026-08-20）
+
+本票原本掛在 `main` 上、與其他票無關，重新排隊後改成鏈子的第三棒：**#37（多 team）→ #38（session 撤銷）→ 本票**。
+
+**為什麼要接在 #37 後**：兩張票都往 `UserResponse` 塞了一個叫 `identities` 的欄位，意思完全不同——010 的是「可切換的 RBAC 身分」（role + 選填 team），本票的是「登入方式」（password / google / line）。`git merge-tree` 看不出問題，但真的 merge 會在 3 個檔案停下來；更糟的是若解衝突的人不知道兩者不同義、隨手留一個，被丟掉那邊的功能就靜靜壞了，Pydantic 不會報錯。**本票的欄位改名為 `login_methods`**（類別 `IdentityOut` → `LoginMethodOut`），理由見 ADR-089 的命名更正。
+
+**為什麼還要再接在 #38 後**：本票的測試原本用 `create_access_token` 直接發沒有 session 的 token。#38 之後那種 token 一律 401，16 個測試會全掛；而且 `tests/test_add_contact.py` 兩張票都改，本身就有文字衝突。改用 #38 的 `auth_headers_for(redis, ...)` 之後，`test_replacement_does_not_revoke_other_sessions` 反而變得更有意義——它現在驗的是真的 session 沒被撤掉，而不是一個沒人管的字串。
+
+**衝突在這裡解一次就好**，不留給日後合併的人。

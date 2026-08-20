@@ -136,12 +136,14 @@ POST /auth/contacts/verify { type, value, code }
   "contacts": [
     { "type": "email", "value": "me@example.com", "verified": true, "created_at": "..." }
   ],
-  "identities": [ { "provider": "google" } ]
+  "login_methods": [ { "provider": "google" } ],
+  "identities": [ ... ], "active_identity": { ... }   // ← 這兩個是 Spec/010 的 RBAC 身分
 }
 ```
 
 - 看自己的資料**不遮蔽**。
-- `identities` **只回 `provider`，不回 `provider_subject`**——subject 是 SSO 供應商的內部識別碼，前端不需要。
+- `login_methods` **只回 `provider`，不回 `provider_subject`**——subject 是 SSO 供應商的內部識別碼，前端不需要。
+- **欄位叫 `login_methods` 不叫 `identities`**：`identities` 已被 `Spec/010` 用於「可切換的 RBAC 身分」，同名會讓合併的人踩雷（見 ADR-089 的命名更正）。
 - 前端需要這兩個欄位來（1）顯示現值、（2）判斷自己是否 SSO-only 以決定走哪種 step-up。
 
 `UserUpdate` 維持只有 `name`——Notion 的「姓名/電話/信箱」中，電話與信箱走 contacts 流程，profile 本體只剩姓名。
@@ -156,7 +158,7 @@ POST /auth/contacts/verify { type, value, code }
 | `POST /auth/contacts/verify` | 取代時在同交易內 DELETE + INSERT；成功後通知舊管道 | 10/60（沿用） |
 | `POST /auth/contacts/resend` | 不變 | 2/60（沿用） |
 | `DELETE /auth/contacts/{type}` | **新增**，含登入管道守門 | 5/60 |
-| `GET /users/me` | 回應加 `contacts[]` / `identities[]` | — |
+| `GET /users/me` | 回應加 `contacts[]` / `login_methods[]` | — |
 | `PATCH /users/me` | 不變（僅 `name`） | — |
 
 ---
@@ -187,11 +189,11 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 |---|---|
 | `app/services/auth_contact.py` | **新檔**：`add_or_replace_contact()` / `verify_and_commit_contact()` / `delete_contact()`，含 step-up 判定與登入管道守門 |
 | `app/api/v1/endpoints/auth/contacts.py` | 瘦身為 input parse + 狀態碼對應；新增 `DELETE /contacts/{type}` |
-| `app/schemas/auth.py` | `AddContactRequest` 加 `step_up`；`UserResponse` 加 `contacts[]` / `identities[]`；新增 `ContactOut` / `IdentityOut` |
+| `app/schemas/auth.py` | `AddContactRequest` 加 `step_up`；`UserResponse` 加 `contacts[]` / `login_methods[]`；新增 `ContactOut` / `LoginMethodOut` |
 | `app/repositories/auth_repository.py` | `contact_repository` 加 `get_by_user_and_type()`、`replace_verified()`（同交易 DELETE+INSERT）、`count_by_user()`；`identity_repository` 加 `list_by_user()` |
 | `app/messaging/email.py` | 新增 `build_contact_changed_email()` |
 | `app/messaging/sms.py` | 新增 `build_contact_changed_sms()` |
-| `app/api/v1/endpoints/users.py` | `read_user_me` 改為載入 contacts / identities |
+| `app/api/v1/endpoints/users.py` | `read_user_me` 改為載入 contacts / login_methods |
 
 ---
 
@@ -210,7 +212,7 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | 功能 | 刪除最後一個 contact 且無 SSO → 409 |
 | 功能 | 刪除最後一個 contact 但有 SSO identity → 成功 |
 | 功能 | 刪除其中一個（尚有另一型別）→ 成功 |
-| 功能 | `GET /users/me` 回傳 contacts 與 identities，且 `identities` **不含** `provider_subject` |
+| 功能 | `GET /users/me` 回傳 contacts 與 login_methods，且 `login_methods` **不含** `provider_subject` |
 | 迴歸 | 忘記密碼四個端點行為完全不變 |
 
 ---
@@ -234,7 +236,7 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | 刪除守門：不得失去最後一個登入管道 | 087 | `app/services/auth_contact.py:187` `delete_contact()`；計數與 SSO 判定在 `auth_repository.py:304` / `:379` |
 | 舊列硬刪除，歷史交給 `audit_logs` | 087 | `app/repositories/auth_repository.py:332` `delete_contact()` |
 | 邏輯抽到 service，endpoint 只留 parse 與狀態碼對應 | 088 | `app/services/auth_contact.py`（新檔）；`app/api/v1/endpoints/auth/contacts.py:33` 的 `_STATUS_BY_ERROR` 是唯一的映射點 |
-| `GET /users/me` 回 `contacts[]` / `identities[]`，不回 `provider_subject` | 089 | `app/api/v1/endpoints/users.py:19-36`；schema 在 `app/schemas/auth.py:31`（`ContactOut`）、`:45`（`IdentityOut`） |
+| `GET /users/me` 回 `contacts[]` / `login_methods[]`，不回 `provider_subject` | 089 | `app/api/v1/endpoints/users.py` 的 `_profile()`（與 010 的身分清單同住一個函式）；schema 為 `ContactOut` / `LoginMethodOut` |
 | `DELETE /auth/contacts/{type}` 新端點 | 087 | `app/api/v1/endpoints/auth/contacts.py:114` |
 | `step_up` 條件必填 | 086 | `app/schemas/auth.py:167` `StepUp`、`:179` `AddContactRequest` |
 
@@ -253,7 +255,7 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | 刪最後一個且無 SSO → 409 | `test_deleting_the_last_contact_without_sso_is_refused`（`:202`） |
 | 刪最後一個但有 SSO → 成功 | `test_deleting_the_last_contact_is_allowed_with_an_sso_identity`（`:212`） |
 | 刪其中一個（尚有另一型別）→ 成功 | `test_deleting_one_of_two_contacts_is_allowed`（`:222`） |
-| `/users/me` 回 contacts / identities，不含 `provider_subject` | `test_users_me_returns_contacts_and_identities`（`:249`）、`test_users_me_never_exposes_provider_subject`（`:261`） |
+| `/users/me` 回 contacts / login_methods，不含 `provider_subject` | `test_users_me_returns_contacts_and_login_methods`、`test_users_me_never_exposes_provider_subject` |
 | 忘記密碼四端點行為完全不變 | 零改動佐證：`git diff main...HEAD -- app/api/v1/endpoints/auth/password.py tests/test_forgot_password.py tests/test_set_password.py tests/test_change_password_identity.py` 為空 |
 
 **超出 §9 的補充測試**：`test_sso_only_account_replaces_with_the_old_channel_code`（`:112`，SSO-only 的成功路徑）、`test_deleting_a_contact_type_the_user_does_not_have`（`:236`，404）、`test_users_me_does_not_mask_your_own_contacts`（`:271`）；以及 `tests/test_add_contact.py` 三條改寫——原本斷言「第二個 email → 409」的案例改為斷言「422 要求 step-up，且新地址收不到任何碼」（`:89`、`:104`、`:131`）。

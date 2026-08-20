@@ -140,7 +140,11 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 
 **Context**：`UserResponse` 目前只有 `name` / `credibility_score` / `uuid` / `created_at`（`app/schemas/auth.py:29-38`），前端做「個人資料設定」頁面連現值都拿不到；也無從判斷帳號是否 SSO-only，因而不知道該走哪種 step-up（ADR-085/086）。
 
-**Decision**：`UserResponse` 增加 `contacts[]`（`type` / `value` / `verified` / `created_at`）與 `identities[]`（**只含 `provider`**）。看自己的資料不遮蔽。`UserUpdate` 維持只有 `name`。
+**Decision**：`UserResponse` 增加 `contacts[]`（`type` / `value` / `verified` / `created_at`）與 `login_methods[]`（**只含 `provider`**）。看自己的資料不遮蔽。`UserUpdate` 維持只有 `name`。
+
+> **命名更正（2026-08-20）**：本欄位初版叫 `identities`，與 `Spec/010` 的 `identities`（可切換的 RBAC 身分＝role + 選填 team）**同名不同義**——一個是「你能用什麼方式登入」，一個是「你能以什麼身分行動」。兩張票都往 `UserResponse` 放一個 `identities`，合併時 git 會擋下來，但解衝突的人若不知道差異、隨手留一個，被留下的那邊功能就壞了，而且 Pydantic 不會報錯、要到執行期才發現。
+>
+> 改本票這邊而非 010：`identities` 是 010 身分切換的核心詞彙，散在它的 ADR、spec 與測試裡；本票的語意用 `login_methods` 描述反而更準（值就是 password / google / line）。schema 類別一併從 `IdentityOut` 改為 `LoginMethodOut`。前端當時尚未消費 `/users/me`，改名成本為零。
 
 **Consequences**：
 ➕ 前端能顯示現值，也能正確選擇 step-up 方式。
