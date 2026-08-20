@@ -41,7 +41,9 @@ async def get_context(request: Request):
         token = auth[7:] if auth.startswith("Bearer ") else ""
         user = None
         if token:
-            user = await get_current_user(db=db, token=token)
+            # redis comes from app.state because this path bypasses FastAPI's dependency
+            # injection — get_current_user needs it to check the token's session (ADR-102).
+            user = await get_current_user(db=db, token=token, redis=request.app.state.redis)
         yield {"db": db, "user": user, "loaders": build_loaders(db), "_rbac_cache": {}}
     finally:
         await db_gen.aclose()

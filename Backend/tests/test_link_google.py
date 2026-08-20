@@ -3,19 +3,20 @@ import json
 
 import pytest
 
-from app.core.security import create_access_token, generate_salt, get_password_hash
+from app.core.security import generate_salt, get_password_hash
 from app.services.auth_account import create_account
+from tests.conftest import auth_headers_for
 
 
 def _tok(sub="g-link-1", email="x@x.com", name="X"):
     return json.dumps({"sub": sub, "email": email, "email_verified": True, "name": name})
 
 
-async def _password_user(db_session, email="owner@x.com"):
+async def _password_user(db_session, redis, email="owner@x.com"):
     user = await create_account(
         db_session, name="Owner", contact_type="email", value=email,
         password_hash=get_password_hash("secret", generate_salt()))
-    headers = {"Authorization": f"Bearer {create_access_token(data={'sub': str(user.uuid)})}"}
+    headers = await auth_headers_for(redis, user.uuid)
     return user, headers
 
 
@@ -27,20 +28,20 @@ async def test_link_requires_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_link_attaches_google_identity(client, db_session):
+async def test_link_attaches_google_identity(client, db_session, redis):
     """A logged-in user can link a fresh Google identity."""
-    _, headers = await _password_user(db_session)
+    _, headers = await _password_user(db_session, redis)
     res = await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok()})
     assert res.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_link_adds_identity_but_no_contact(client, db_session):
+async def test_link_adds_identity_but_no_contact(client, db_session, redis):
     """Linking Google attaches a google identity to the current user without creating any contact."""
     from sqlalchemy import func, select
 
     from app.models.auth import UserContact, UserIdentity
-    user, headers = await _password_user(db_session)
+    user, headers = await _password_user(db_session, redis)
     user_uuid = user.uuid  # capture before the request commits db_session and expires `user`
     res = await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok()})
     assert res.status_code == 200
@@ -56,20 +57,20 @@ async def test_link_adds_identity_but_no_contact(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_link_sub_already_bound_elsewhere_409(client, db_session):
+async def test_link_sub_already_bound_elsewhere_409(client, db_session, redis):
     """Linking a Google sub already bound to another account is rejected with 409."""
     # sub already belongs to another (google) account
     await create_account(db_session, name="Other", provider="google", provider_subject="g-link-1",
                          contact_type="email", value="other@x.com")
-    _, headers = await _password_user(db_session)
+    _, headers = await _password_user(db_session, redis)
     res = await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok()})
     assert res.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_link_twice_409(client, db_session):
+async def test_link_twice_409(client, db_session, redis):
     """A user who already has a Google identity cannot link a second one."""
-    _, headers = await _password_user(db_session)
+    _, headers = await _password_user(db_session, redis)
     await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok()})
     res = await client.post("/api/v1/auth/link/google", headers=headers,
                             json={"id_token": _tok(sub="g-link-2")})

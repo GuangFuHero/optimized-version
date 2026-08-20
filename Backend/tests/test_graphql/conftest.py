@@ -22,6 +22,7 @@ from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssi
 from app.models.request import Tickets
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TicketTask
+from app.repositories.session_repository import SessionRepository
 from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
 
 _db_initialized = False
@@ -130,14 +131,22 @@ async def setup_db():
 
 
 @pytest_asyncio.fixture
-async def client():
-    """Provide an async HTTP test client connected to the FastAPI app."""
+async def client(redis):
+    """Provide an async HTTP test client connected to the FastAPI app.
+
+    `app.state.redis` is what the GraphQL context reads to check a token's session
+    (ADR-099/102) — it calls `get_current_user` directly instead of through FastAPI, so a
+    dependency override would not reach it. The lifespan that normally populates it does not
+    run under ASGITransport, so the fixture sets it.
+    """
+    app.state.redis = redis
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+    del app.state.redis
 
 
-async def _create_user_with_role(role_name: str) -> tuple[str, str]:
+async def _create_user_with_role(redis, role_name: str) -> tuple[str, str]:
     """Create a user, assign to role, return (user_uuid, token)."""
     async with test_db() as db:
         name = f"test_{uuid_mod.uuid4().hex[:8]}"
@@ -152,28 +161,29 @@ async def _create_user_with_role(role_name: str) -> tuple[str, str]:
         # The token must name the identity it acts as (feature 010): get_current_user refuses
         # a token whose identity it cannot resolve, and a token with none resolves to zero
         # grants. Every role in this fixture set is platform-kind, hence no team.
+        sid, _ = await SessionRepository(redis).create_session(str(user.uuid), "test")
         token = create_access_token(
-            data={"sub": str(user.uuid)}, act=encode_act(str(role.uuid), None)
+            data={"sub": str(user.uuid)}, sid=sid, act=encode_act(str(role.uuid), None)
         )
         return str(user.uuid), token
 
 
 @pytest_asyncio.fixture
-async def coordinator_auth():
+async def coordinator_auth(redis):
     """Return (user_uuid, token) for a user with Field Coordinator permissions."""
-    return await _create_user_with_role("Field Coordinator")
+    return await _create_user_with_role(redis, "Field Coordinator")
 
 
 @pytest_asyncio.fixture
-async def login_user_auth():
+async def login_user_auth(redis):
     """Return (user_uuid, token) for a user with Login User permissions."""
-    return await _create_user_with_role("Login User")
+    return await _create_user_with_role(redis, "Login User")
 
 
 @pytest_asyncio.fixture
-async def content_admin_auth():
+async def content_admin_auth(redis):
     """Return (user_uuid, token) for a user with content management permissions."""
-    return await _create_user_with_role("Content Admin")
+    return await _create_user_with_role(redis, "Content Admin")
 
 
 def auth_header(token: str) -> dict:

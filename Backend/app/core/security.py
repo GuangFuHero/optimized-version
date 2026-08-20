@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -10,6 +11,7 @@ from typing import Protocol
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +19,7 @@ from app.core.config import settings
 from app.core.context import request_identity
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope
+from app.core.redis import get_redis
 from app.db.session import SessionLocal
 from app.models.auth import User
 from app.repositories.active_identity_repository import active_identity_repository
@@ -191,6 +194,9 @@ async def get_db():
         yield session
 
 
+logger = logging.getLogger(__name__)
+
+
 def _credentials_exception() -> HTTPException:
     """Build the standard 401 used when an access token cannot be validated."""
     return HTTPException(
@@ -211,7 +217,46 @@ def _decode_access_payload(token: str) -> dict:
     return payload
 
 
-async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
+async def _require_live_session(redis, payload: dict) -> None:
+    """Refuse a token whose session is gone (ADR-099).
+
+    This is what makes every revocation path take effect at once: logout, logout-all,
+    change-password, reset-password and an admin kick all already delete `session:{sid}`,
+    they were simply never looked at on the request path. Checking here — before the user
+    lookup — also means a revoked token costs no database round trip.
+    """
+    # Imported here, not at module scope: session_repository imports this module for its
+    # token hashing, so a top-level import would close the cycle.
+    from app.repositories.session_repository import SessionRepository
+
+    sid = payload.get("sid")
+    # Only tokens that did not come from issue_token_pair lack a sid, and there is no live
+    # session to check them against. Letting them through would make "leave the sid out" a
+    # way around this check (ADR-101).
+    if not sid:
+        raise _credentials_exception()
+    try:
+        session = await SessionRepository(redis).session_is_live(sid)
+    except RedisError:
+        # Fail closed (ADR-100): with Redis unreachable we cannot tell a live session from a
+        # revoked one, and guessing "live" would hand anyone who can disrupt Redis a way to
+        # switch revocation off. The response is deliberately identical to an invalid token,
+        # so this log is the only thing that distinguishes "everyone was signed out" from
+        # "everyone's credentials broke".
+        logger.exception("refusing the request: Redis (the session store) is unreachable")
+        raise _credentials_exception() from None
+    # A session that names a different user than the token does is not a case that can arise
+    # today — both claims are signed — but pinning it here keeps sid/sub paired as an
+    # invariant a future path cannot quietly break (ADR-101).
+    if session is None or session.get("user_uuid") != payload["sub"]:
+        raise _credentials_exception()
+
+
+async def get_current_user(
+        db: AsyncSession = Depends(get_db),
+        token: str = Depends(oauth2_scheme),
+        redis=Depends(get_redis),
+) -> User:
     """Resolve the authenticated user AND the identity this token acts as (ADR-069/096).
 
     An `act` claim that no longer names a grant the user holds — role revoked, role deleted,
@@ -219,8 +264,13 @@ async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depe
     a lesser identity would leave the caller acting with permissions they cannot see they
     lost; refusing makes it visible. `/auth/refresh` refuses the same case, so between them
     the user is signed out and comes back on their platform identity.
+
+    `redis` is an ordinary parameter rather than something fetched from `app.state`, because
+    the GraphQL context calls this function directly instead of through FastAPI and has to
+    supply it itself (ADR-102).
     """
     payload = _decode_access_payload(token)
+    await _require_live_session(redis, payload)
     user = await user_repository.get_by_uuid(db, payload["sub"])
     if user is None:
         raise _credentials_exception()

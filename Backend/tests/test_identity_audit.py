@@ -30,7 +30,7 @@ async def _install_audit_trigger_on_users(db_session):
     await db_session.commit()
 
 
-async def _actor_with_identity(db, *, team_name: str | None):
+async def _actor_with_identity(db, redis, *, team_name: str | None):
     """A user holding one role, in a team when `team_name` is given.
 
     Returns (user_uuid, headers) — headers acting as exactly that identity.
@@ -55,7 +55,7 @@ async def _actor_with_identity(db, *, team_name: str | None):
         )
     )
     actor_uuid = str(actor.uuid)
-    headers = auth_headers_for(actor_uuid, role, team)
+    headers = await auth_headers_for(redis, actor_uuid, role, team)
     role_uuid = str(role.uuid)
     await db.commit()
     return actor_uuid, headers, role_uuid
@@ -84,9 +84,9 @@ async def _audit_row(db, actor_uuid: str) -> AuditLog:
     return logs[0]
 
 
-async def test_a_team_identity_is_recorded_with_its_role_and_team_names(client, db_session):
+async def test_a_team_identity_is_recorded_with_its_role_and_team_names(client, db_session, redis):
     """Acting as member@慈濟 records both names, not just uuids."""
-    actor_uuid, headers, role_uuid = await _actor_with_identity(db_session, team_name="慈濟")
+    actor_uuid, headers, role_uuid = await _actor_with_identity(db_session, redis, team_name="慈濟")
     await _rename_self(client, headers)
 
     identity = (await _audit_row(db_session, actor_uuid)).context["identity"]
@@ -95,9 +95,9 @@ async def test_a_team_identity_is_recorded_with_its_role_and_team_names(client, 
     assert identity["role_uuid"] == role_uuid
 
 
-async def test_a_platform_identity_records_a_null_team(client, db_session):
+async def test_a_platform_identity_records_a_null_team(client, db_session, redis):
     """A platform identity belongs to no team, and the snapshot says so rather than omitting it."""
-    actor_uuid, headers, _ = await _actor_with_identity(db_session, team_name=None)
+    actor_uuid, headers, _ = await _actor_with_identity(db_session, redis, team_name=None)
     await _rename_self(client, headers)
 
     identity = (await _audit_row(db_session, actor_uuid)).context["identity"]
@@ -106,13 +106,13 @@ async def test_a_platform_identity_records_a_null_team(client, db_session):
     assert identity["team_uuid"] is None
 
 
-async def test_the_snapshot_outlives_the_role_it_names(client, db_session):
+async def test_the_snapshot_outlives_the_role_it_names(client, db_session, redis):
     """Hard-deleting the role afterwards does not erase what the trail says (ADR-076).
 
     This is why names are copied in rather than joined at read time: DELETE /rbac/roles/{uuid}
     is a hard delete, so a uuid alone would dangle.
     """
-    actor_uuid, headers, role_uuid = await _actor_with_identity(db_session, team_name="慈濟")
+    actor_uuid, headers, role_uuid = await _actor_with_identity(db_session, redis, team_name="慈濟")
     await _rename_self(client, headers)
 
     await db_session.execute(delete(UserRoleAssign).where(UserRoleAssign.role_uuid == role_uuid))
