@@ -1,9 +1,12 @@
 """Script to seed initial RBAC v1 permissions, roles, and role-permission grants.
 
 ADR-026 drop-and-replace: platform roles (kind="platform", one per account, ADR-019) and
-team roles (kind="team", assigned per-team; resolved against the actor's own
-`users.team_uuid` — see app/models/rbac.py:UserRoleAssign). Scope values follow
+team roles (kind="team", assigned per-team on the grant row itself). Scope values follow
 app/core/rbac_scopes.py:Scope (none/own/team/gov/ngo/zone/all).
+
+Feature 010: a grant row carries its own team (`user_role_assign.team_uuid`) and exactly one
+identity is active per request, platform roles included. Every switchable, actionable role
+must therefore stand on its own — see ADR-097 and the station.contribute grants below.
 
 Only capabilities with a real enforcement point today (station/map/ticket/dynamic_field/
 user/team/work_zone/audit/rbac/announcement) are actually granted below; the rest of the Perm
@@ -103,6 +106,11 @@ ROLES_DATA = [
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
             Perm.STATION_ADD: "all",
+            # ADR-097: switchable identities must be self-sufficient. Team roles used to
+            # borrow this from the platform `user` role, which identity switching no longer
+            # keeps active — without it a field worker acting as their team would lose the
+            # one capability the role exists to exercise.
+            Perm.STATION_CONTRIBUTE: "all",
             Perm.STATION_EDIT: "zone",
             Perm.STATION_DELETE: "zone",
             Perm.STATION_REVIEW: "zone",
@@ -131,6 +139,7 @@ ROLES_DATA = [
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
             Perm.STATION_ADD: "all",
+            Perm.STATION_CONTRIBUTE: "all",  # ADR-097, see the admin role above
             Perm.STATION_EDIT: "zone",
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",

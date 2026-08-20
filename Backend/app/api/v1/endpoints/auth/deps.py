@@ -18,11 +18,16 @@ def _normalize_identifier(type_: str, value: str) -> str:
     return normalize_email(value) if type_ == "email" else normalize_phone(value)
 
 
-async def issue_token_pair(redis, request: Request, user_uuid: str) -> TokenPair:
-    """Create a session + access token for `user_uuid` and return the TokenPair (device from UA header)."""
+async def issue_token_pair(
+    redis, request: Request, user_uuid: str, *, act: str | None = None
+) -> TokenPair:
+    """Create a session + access token for `user_uuid` and return the TokenPair.
+
+    `act` is the identity the token acts as (ADR-069); device comes from the UA header.
+    """
     device = request.headers.get("user-agent", "unknown")
     sid, refresh_token = await SessionRepository(redis).create_session(user_uuid, device)
-    access_token = security.create_access_token(data={"sub": user_uuid}, sid=sid)
+    access_token = security.create_access_token(data={"sub": user_uuid}, sid=sid, act=act)
     return TokenPair(
         access_token=access_token, refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,

@@ -6,14 +6,26 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 
+class IdentitySummary(BaseModel):
+    """One identity a user may act as: a role, and the team it applies to if team-kind."""
+
+    role_uuid: UUID
+    role: str
+    team_uuid: UUID | None = None
+    team: str | None = None
+
+
 class AdminUserListItem(BaseModel):
-    """One row of the admin user list: identity plus current role/team assignment."""
+    """One row of the admin user list.
+
+    `identities` replaces the old single-valued `team_uuid` / `team_role`: a user can now
+    hold a role in several teams at once, so one column cannot describe them (ADR-073).
+    """
 
     uuid: UUID
     name: str
-    team_uuid: UUID | None
     platform_role: str | None
-    team_role: str | None
+    identities: list[IdentitySummary] = Field(default_factory=list)
 
 
 class AssignRoleRequest(BaseModel):

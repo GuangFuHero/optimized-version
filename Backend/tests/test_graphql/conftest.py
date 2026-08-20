@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.core.identity import encode_act
 from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.db.session import Base
@@ -148,7 +149,12 @@ async def _create_user_with_role(role_name: str) -> tuple[str, str]:
         role = result.scalar_one()
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
 
-        token = create_access_token(data={"sub": str(user.uuid)})
+        # The token must name the identity it acts as (feature 010): get_current_user refuses
+        # a token whose identity it cannot resolve, and a token with none resolves to zero
+        # grants. Every role in this fixture set is platform-kind, hence no team.
+        token = create_access_token(
+            data={"sub": str(user.uuid)}, act=encode_act(str(role.uuid), None)
+        )
         return str(user.uuid), token
 
 

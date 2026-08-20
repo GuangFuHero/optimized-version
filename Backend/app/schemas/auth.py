@@ -29,10 +29,12 @@ class UserBase(BaseModel):
 
 
 class UserResponse(UserBase):
-    """Full user profile response."""
+    """Full user profile response, including which identity is in effect (ADR-068)."""
 
     uuid: UUID
     created_at: datetime
+    identities: list["IdentityOption"] = Field(default_factory=list)
+    active_identity: "IdentityOption | None" = None
 
     class Config:
         """Pydantic config: allow reading from ORM model attributes."""
@@ -46,6 +48,34 @@ class UserUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=100)
 
 
+class IdentityOption(BaseModel):
+    """An identity the caller may switch to (ADR-068)."""
+
+    role_uuid: UUID
+    role: str
+    team_uuid: UUID | None = None
+    team: str | None = None
+
+
+class AccessTokenResponse(BaseModel):
+    """A re-signed access token, with no refresh token.
+
+    Switching identity does not rotate the refresh token (ADR-070), and the server only ever
+    stores its hash, so there is nothing to echo back — the client keeps the one it has.
+    """
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class SwitchIdentityRequest(BaseModel):
+    """Body naming the identity to switch to. Must be one the caller already holds."""
+
+    role_uuid: UUID
+    team_uuid: UUID | None = None
+
+
 class TokenPair(BaseModel):
     """Access + refresh token pair returned by login/refresh."""
 
@@ -56,9 +86,15 @@ class TokenPair(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    """Request body carrying a refresh token to exchange."""
+    """Request body carrying a refresh token to exchange.
+
+    `identity` is the identity the client is currently acting as, read off its own access
+    token. Without it the new token would fall back to the platform identity and silently
+    bounce the user out of their team identity every 15 minutes (ADR-069).
+    """
 
     refresh_token: str
+    identity: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):

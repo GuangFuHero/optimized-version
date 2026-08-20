@@ -18,12 +18,14 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope
 from app.models.auth import User
 from app.models.rbac import Role, UserRoleAssign
+from app.models.team import Team
 from app.repositories.auth_repository import user_repository
 from app.schemas.admin import (
     AdminUserListItem,
     AssignRoleRequest,
     AssignRoleResponse,
     CreateTeamRequest,
+    IdentitySummary,
     TeamMemberRequest,
     TeamMemberResponse,
     TeamResponse,
@@ -34,20 +36,31 @@ from app.services.admin import AdminConflictError, AdminNotFoundError
 router = APIRouter()
 
 
-async def _role_names_by_user(db: AsyncSession, user_uuids: list[str]) -> dict[str, dict[str, str]]:
-    """Map each user_uuid to {"platform": role_name, "team": role_name} (whichever exist)."""
+async def _identities_by_user(
+    db: AsyncSession, user_uuids: list[str]
+) -> dict[str, list[IdentitySummary]]:
+    """Map each user_uuid to every identity they hold (ADR-073)."""
     if not user_uuids:
         return {}
     rows = (
         await db.execute(
-            select(UserRoleAssign.user_uuid, Role.name, Role.kind)
+            select(
+                UserRoleAssign.user_uuid, UserRoleAssign.role_uuid, Role.name,
+                UserRoleAssign.team_uuid, Team.name,
+            )
             .join(Role, Role.uuid == UserRoleAssign.role_uuid)
+            .outerjoin(Team, Team.uuid == UserRoleAssign.team_uuid)
             .where(UserRoleAssign.user_uuid.in_(user_uuids))
+            .order_by(UserRoleAssign.team_uuid.is_not(None), Role.name)
         )
     ).all()
-    result: dict[str, dict[str, str]] = {}
-    for user_uuid, role_name, kind in rows:
-        result.setdefault(str(user_uuid), {})[kind] = role_name
+    result: dict[str, list[IdentitySummary]] = {}
+    for user_uuid, role_uuid, role_name, team_uuid, team_name in rows:
+        result.setdefault(str(user_uuid), []).append(
+            IdentitySummary(
+                role_uuid=role_uuid, role=role_name, team_uuid=team_uuid, team=team_name
+            )
+        )
     return result
 
 
@@ -61,16 +74,17 @@ async def list_users(
     limit: int = 100,
     db: AsyncSession = Depends(security.get_db),
 ):
-    """List users with their current platform/team role names (checkpoint 1 only)."""
+    """List users with every identity they hold (checkpoint 1 only)."""
     users = await user_repository.get_multi(db, skip=skip, limit=limit)
-    roles_by_user = await _role_names_by_user(db, [str(u.uuid) for u in users])
+    identities = await _identities_by_user(db, [str(u.uuid) for u in users])
     return [
         AdminUserListItem(
             uuid=u.uuid,
             name=u.name,
-            team_uuid=u.team_uuid,
-            platform_role=roles_by_user.get(str(u.uuid), {}).get("platform"),
-            team_role=roles_by_user.get(str(u.uuid), {}).get("team"),
+            platform_role=next(
+                (i.role for i in identities.get(str(u.uuid), []) if i.team_uuid is None), None
+            ),
+            identities=identities.get(str(u.uuid), []),
         )
         for u in users
     ]
@@ -83,7 +97,11 @@ async def assign_role(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Grant a user a platform or team role, replacing any existing role of the same kind."""
+    """Grant a user a PLATFORM role, replacing the one they hold.
+
+    Team roles go through POST /teams/{team_uuid}/members, where the team is unambiguous —
+    granting a team role IS joining that team (ADR-072).
+    """
     try:
         assignment = await admin_service.assign_role(
             db, actor=current_user, user_uuid=str(user_uuid), role_name=body.role_name
@@ -142,7 +160,11 @@ async def add_team_member(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Add a user to a team, optionally granting a team-kind role in the same call."""
+    """Add a user to a team by granting them a role in it (defaults to `member`).
+
+    A user may belong to several teams at once; this replaces only the role they held in
+    THIS team (ADR-072/073).
+    """
     try:
         user = await admin_service.add_team_member(
             db, actor=current_user, team_uuid=str(team_uuid),
@@ -152,7 +174,7 @@ async def add_team_member(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
     except AdminConflictError as err:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
-    return TeamMemberResponse(uuid=user.uuid, team_uuid=user.team_uuid)
+    return TeamMemberResponse(uuid=user.uuid, team_uuid=team_uuid)
 
 
 @router.delete("/teams/{team_uuid}/members/{user_uuid}", response_model=TeamMemberResponse)
@@ -162,11 +184,13 @@ async def remove_team_member(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Remove a user from a team, clearing any team-kind role grant they held."""
+    """Remove a user from a team by revoking every grant scoped to it (ADR-072)."""
     try:
         user = await admin_service.remove_team_member(
             db, actor=current_user, team_uuid=str(team_uuid), user_uuid=str(user_uuid)
         )
     except AdminNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
-    return TeamMemberResponse(uuid=user.uuid, team_uuid=user.team_uuid)
+    # None: they are out of this team now. A user may still belong to others — GET /admin/users
+    # lists every identity they hold.
+    return TeamMemberResponse(uuid=user.uuid, team_uuid=None)

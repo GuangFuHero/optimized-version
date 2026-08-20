@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.context import request_client_ip, request_user_uuid
+from app.core.context import request_client_ip, request_identity, request_user_uuid
 from app.models.base import Base as Base  # noqa: F401 — re-export single source of truth
 
 # 從設定檔獲取連線字串
@@ -20,6 +20,7 @@ def set_audit_session_variables(session, transaction, connection):
     """Set transaction-scoped PostgreSQL variables for user attribution during writes."""
     user_uuid = request_user_uuid.get()
     client_ip = request_client_ip.get()
+    identity = request_identity.get()
 
 
     if user_uuid:
@@ -31,5 +32,10 @@ def set_audit_session_variables(session, transaction, connection):
         connection.execute(
             text("SELECT set_config('app.client_ip', :client_ip, true)"),
             {"client_ip": client_ip},
+        )
+    if identity:
+        connection.execute(
+            text("SELECT set_config('app.active_identity', :identity, true)"),
+            {"identity": identity},
         )
 

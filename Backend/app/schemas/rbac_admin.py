@@ -66,18 +66,33 @@ class MatrixResponse(BaseModel):
     roles: list[RoleGrants]
 
 
-class RoleRef(BaseModel):
-    """A role a user holds."""
+class IdentityPermissions(BaseModel):
+    """One identity a user holds, and what it can actually do (ADR-098)."""
 
-    uuid: UUID
-    name: str
+    role_uuid: UUID
+    role: str
     kind: str
+    team_uuid: UUID | None
+    team: str | None
+    effective: dict[str, str]
+
+
+class DirectGrant(BaseModel):
+    """One per-user grant and the identity it binds to (NULL team = the platform identity)."""
+
+    capability: str
+    scope: str
+    team_uuid: UUID | None
 
 
 class UserPermissionsResponse(BaseModel):
-    """A user's roles, direct grants, and resolved effective permissions."""
+    """A user's identities with each one's effective permissions, plus their direct grants.
+
+    Effective permissions are reported per identity rather than as one merged set, because
+    after ADR-068 a user only ever exercises one identity at a time — a single merged answer
+    would describe a state the user is never actually in (ADR-098).
+    """
 
     user_uuid: UUID
-    roles: list[RoleRef]
-    direct_grants: dict[str, str]
-    effective: dict[str, str]
+    identities: list[IdentityPermissions]
+    direct_grants: list[DirectGrant]

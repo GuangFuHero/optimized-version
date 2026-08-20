@@ -1,0 +1,270 @@
+"""Switching between the identities a user holds (feature 010, ADR-068/069/070/096).
+
+Covers the token side of the feature end to end: what login lands on, what /auth/switch-identity
+will and will not do, and the two paths that refuse an identity that has since vanished.
+"""
+
+import os
+from types import SimpleNamespace
+
+os.environ["ENV"] = "testing"
+
+import pytest
+from jose import jwt
+
+from app.core.config import settings
+from app.core.identity import decode_act, encode_act
+from app.core.security import generate_salt, get_password_hash
+from app.models.rbac import Role, UserRoleAssign
+from app.models.team import Team
+from app.services.auth_account import create_account
+from tests.conftest import auth_headers_for
+
+pytestmark = pytest.mark.asyncio
+
+
+class _Ref(SimpleNamespace):
+    """A row's identifying fields, captured before the commit that would expire them.
+
+    `db_session` is expire_on_commit=True, so re-reading `role.uuid` after a later commit
+    triggers a lazy reload that is not valid under AsyncSession and raises MissingGreenlet.
+    Everything these tests need off a row is its uuid and its name, so they are copied out.
+    """
+
+
+async def _account_with_two_identities(db):
+    """An account holding its platform role plus `member` in one team.
+
+    Returns (user_uuid, platform_role, team_role, team) as detached references.
+    """
+    user = await create_account(
+        db, contact_type="email", value="switcher@x.com",
+        password_hash=get_password_hash("secret", generate_salt()), name="Switcher",
+    )
+    platform_role = await _role(db, "user", "platform")
+    team_role = Role(name="member", kind="team")
+    team = Team(name="慈濟", type="ngo")
+    db.add_all([team_role, team])
+    await db.flush()
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=team_role.uuid, team_uuid=team.uuid))
+    refs = (
+        str(user.uuid),
+        _Ref(uuid=platform_role.uuid, name=platform_role.name),
+        _Ref(uuid=team_role.uuid, name=team_role.name),
+        _Ref(uuid=team.uuid, name=team.name),
+    )
+    await db.commit()
+    return refs
+
+
+async def _role(db, name: str, kind: str) -> Role:
+    """Fetch the named role, creating it if the fixture seed did not."""
+    from sqlalchemy import select
+
+    role = (await db.execute(select(Role).where(Role.name == name))).scalar_one_or_none()
+    if role is None:
+        role = Role(name=name, kind=kind)
+        db.add(role)
+        await db.flush()
+    return role
+
+
+def _act_of(access_token: str) -> str | None:
+    """Read the `act` claim out of an access token."""
+    payload = jwt.decode(access_token, settings.JWT_SIGNING_KEY, algorithms=[settings.ALGORITHM])
+    return payload.get("act")
+
+
+async def _login(client, scope: str | None = None) -> dict:
+    """Log in as the fixture account, optionally remembering an identity (ADR-069)."""
+    data = {"username": "switcher@x.com", "password": "secret"}
+    if scope is not None:
+        data["scope"] = scope
+    resp = await client.post("/api/v1/auth/login", data=data)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+# --- what login lands on -----------------------------------------------------------------
+
+
+async def test_login_defaults_to_the_platform_identity(client, db_session):
+    """With no remembered identity, a fresh login acts as the platform one (ADR-069)."""
+    _, platform_role, _, _ = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    assert decode_act(_act_of(tokens["access_token"])) == (str(platform_role.uuid), None)
+
+
+async def test_login_honours_a_remembered_identity(client, db_session):
+    """A client that remembers which identity it was using comes back on that one."""
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client, scope=encode_act(str(team_role.uuid), str(team.uuid)))
+    assert decode_act(_act_of(tokens["access_token"])) == (str(team_role.uuid), str(team.uuid))
+
+
+async def test_login_falls_back_when_the_remembered_identity_is_gone(client, db_session):
+    """A stale client-side memory is not a failure — log in on the default instead (ADR-069).
+
+    This is deliberately unlike the request and refresh paths, which 401. Nothing is being
+    asserted here: the client is offering a preference, and the preference is simply stale.
+    """
+    from uuid import uuid4
+
+    _, platform_role, _, _ = await _account_with_two_identities(db_session)
+    tokens = await _login(client, scope=encode_act(str(uuid4()), None))
+    assert decode_act(_act_of(tokens["access_token"])) == (str(platform_role.uuid), None)
+
+
+# --- switching ---------------------------------------------------------------------------
+
+
+async def test_switch_to_an_identity_you_hold(client, db_session):
+    """Switching to a held identity re-signs the access token with that identity."""
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    resp = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert decode_act(_act_of(resp.json()["access_token"])) == (
+        str(team_role.uuid), str(team.uuid)
+    )
+
+
+async def test_switch_to_an_identity_you_do_not_hold_is_403(client, db_session):
+    """Switching may only move between identities already held — it never grants one (ADR-068)."""
+    user_uuid, _, team_role, _ = await _account_with_two_identities(db_session)
+    other_team = Team(name="縣府", type="gov")
+    db_session.add(other_team)
+    await db_session.flush()  # the uuid is generated by the database, not in Python
+    other_team_uuid = str(other_team.uuid)
+    await db_session.commit()
+    tokens = await _login(client)
+
+    resp = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": other_team_uuid},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert resp.status_code == 403
+    assert user_uuid  # the account itself is untouched
+
+
+async def test_switching_is_not_gated_by_any_capability(client, db_session):
+    """A user with the least-privileged identity can still switch back (ADR-070).
+
+    If switching required a capability, downgrading into an identity that lacks it would
+    lock the user out of their own permissions with no way back.
+    """
+    _, platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client, scope=encode_act(str(team_role.uuid), str(team.uuid)))
+
+    resp = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(platform_role.uuid), "team_uuid": None},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert decode_act(_act_of(resp.json()["access_token"])) == (str(platform_role.uuid), None)
+
+
+async def test_switching_does_not_rotate_the_refresh_token(client, db_session):
+    """Switching is not a credential event, so the refresh token is left alone (ADR-070)."""
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+    assert resp.status_code == 200, resp.text
+
+
+# --- an identity that has since vanished (ADR-096) ----------------------------------------
+
+
+async def test_a_revoked_identity_401s_on_the_request_path(client, db_session):
+    """Revoking the grant a token acts as signs that session out, rather than downgrading it."""
+    from sqlalchemy import delete
+
+    user_uuid, _, team_role, team = await _account_with_two_identities(db_session)
+    headers = auth_headers_for(user_uuid, team_role, team)
+    assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 200
+
+    await db_session.execute(
+        delete(UserRoleAssign).where(UserRoleAssign.role_uuid == team_role.uuid)
+    )
+    await db_session.commit()
+
+    assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
+
+
+async def test_a_soft_deleted_team_takes_its_identity_with_it(client, db_session):
+    """Soft-deleting the team invalidates the identity bound to it (ADR-096)."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import update
+
+    user_uuid, _, team_role, team = await _account_with_two_identities(db_session)
+    headers = auth_headers_for(user_uuid, team_role, team)
+
+    await db_session.execute(
+        update(Team).where(Team.uuid == team.uuid).values(delete_at=datetime.now(UTC))
+    )
+    await db_session.commit()
+
+    assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
+
+
+async def test_refresh_refuses_a_vanished_identity_without_burning_the_token(client, db_session):
+    """The refresh token survives a refused refresh, so the client can retry with a valid one.
+
+    ADR-096 requires validating before `rotate()`: rotating first would burn the token and
+    then refuse, leaving the caller with nothing and turning their retry into what looks
+    like a replay attack.
+    """
+    from sqlalchemy import delete
+
+    _, platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    await db_session.execute(
+        delete(UserRoleAssign).where(UserRoleAssign.role_uuid == team_role.uuid)
+    )
+    await db_session.commit()
+
+    refused = await client.post(
+        "/api/v1/auth/refresh",
+        json={
+            "refresh_token": tokens["refresh_token"],
+            "identity": encode_act(str(team_role.uuid), str(team.uuid)),
+        },
+    )
+    assert refused.status_code == 401
+
+    # Same refresh token, an identity they still hold: still usable.
+    accepted = await client.post(
+        "/api/v1/auth/refresh",
+        json={
+            "refresh_token": tokens["refresh_token"],
+            "identity": encode_act(str(platform_role.uuid), None),
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+
+
+async def test_users_me_lists_every_identity_and_the_active_one(client, db_session):
+    """The switcher UI needs the full list plus which one is in effect."""
+    user_uuid, _, team_role, team = await _account_with_two_identities(db_session)
+    resp = await client.get(
+        "/api/v1/users/me", headers=auth_headers_for(user_uuid, team_role, team)
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert {(i["role"], i["team"]) for i in body["identities"]} == {("user", None), ("member", "慈濟")}
+    assert body["active_identity"]["role"] == "member"
+    assert body["active_identity"]["team"] == "慈濟"

@@ -1,5 +1,21 @@
 # RBAC v1 完整實作規格（ADR-012~050 · Schema · Pseudocode · Blast Radius · Tasks）
 
+> ## ⚠️ 讀本文件前先看這段（2026-08-19）
+>
+> `Spec/010-multi-team-membership` 推翻了本文件的兩個地基假設。本文件其餘部分仍然有效，但凡是牽涉到
+> 「使用者屬於哪個 team」的敘述，一律以 010 為準：
+>
+> | 本文件說 | 現在是 |
+> |---|---|
+> | 一人一 team，存在 `users.team_uuid`（ADR-019/039） | 一人可屬多個 team；`users.team_uuid` **已刪除**，team 存在授予列上（010/ADR-073） |
+> | effective = 平台 grants ∪ team grants ∪ 直接 grants（ADR-019） | **一次只有一個身分生效**，平台角色也會被切走；聯集只發生在同一身分內（010/ADR-068/074） |
+> | team / zone scope 讀 `actor.team_uuid`（ADR-049 附錄 A、ADR-028） | 讀 **active identity 的 team**；多隊不做聯集（010/ADR-074） |
+>
+> 受影響的個別 ADR 標題下都有各自的取代註記。**已被反轉的**：ADR-019、ADR-039。
+> **語意被改寫的**：ADR-028、ADR-049 附錄 A、ADR-032 的 team 角色前置檢查。
+>
+> ---
+>
 > **實作狀態（2026-07-06）**：**Phase 0 + Phase 1 + Phase 2 + Phase 3 + Phase 4 已全部完成並驗證**（`pytest` 367 passed；`ruff check` 乾淨，除了一個與本次工作無關、我沒碰過的既有問題：`tests/test_graphql/test_mutations.py` 的 import 排序）。RBAC v1 規劃的四個 Phase 至此全部落地。
 >
 > **Review 後重構（2026-07-06，ADR-047）**：使用者 review 時指出 Phase 1 的「一動作一檔 + Command dataclass」跟專案既有的扁平 service 慣例（`auth_account.py`）並存、混淆架構。已把 7 個 domain（station/ticket/closure_area/config/suggestion/work_zone/admin）從 `app/services/<domain>/<action>.py` 收攏成扁平的 `app/services/<domain>.py`（具名函式、直接傳參、無 Command），對齊 `auth_account.py`。**行為零變更,`pytest` 367/367 重構前後皆全過。** 詳見 ADR-047;§6 與 ADR-016 已標註被取代。
@@ -37,7 +53,7 @@
 > - `tests/test_graphql/test_team_scope.py`：端到端驗證——同 team 使用者靠 `ticket.edit=team` 真的能改別人建立的 ticket；跨 team 同樣的 grant 會 404 不是 403。
 >
 > **Phase 0/1 落地決策（正式收錄為 ADR，見 §1）**：落地過程中做的每個決策都已補寫成完整的 `#### ADR-0XX`（Context/Decision/Consequences），不再只留在這段狀態說明的散列裡——
-> - **ADR-039** `UserRoleAssign` 不帶 `team_uuid` 欄位（§2B 原稿曾寫要存，落地時發現會跟 `users.team_uuid` 產生雙重事實來源）。
+> - **ADR-039** `UserRoleAssign` 不帶 `team_uuid` 欄位（§2B 原稿曾寫要存，落地時發現會跟 `users.team_uuid` 產生雙重事實來源）。**已被 010/ADR-073 反轉**——原稿是對的，只是當時的「一人一 team」前提讓它看起來多餘。
 > - **ADR-023 落地修正**（附加在 ADR-023 本文下方）：檢查點2 的狀態碼依 scope 種類分兩種——`own` 不符 403、`team`/`gov`/`ngo`/`zone` 不符 404，原稿「一律 404」過寬。
 > - **ADR-040** `app/services/authz.py:require_scope`——兩檢查點邏輯從 `context.check_permission` 抽成 entrypoint-agnostic 共用函式，ADR-013「GraphQL/REST/AI 共用同一流程」真正落地的地方。
 > - **ADR-041** use-case 一律收 `actor: User`（非 Optional），匿名擋在 `require_authenticated(info)`，不是 use-case 內部自己防禦。
@@ -74,6 +90,11 @@
 **Consequences**：➕ 可預測、**H4 消失**。➖ 無法對單人精準扣某能力（靠 role 設計）。
 
 #### ADR-019 一人一 team + 兩軸 union 組合
+> **狀態：被 `Spec/010-multi-team-membership` 的 ADR-068 取代（2026-08-19）。** 「一人一 team」與
+> 「effective = 平台 grants ∪ team grants」兩者都已不成立。一個人可以在任意多個 team 各持一個角色，
+> 且**任一時刻只有一個身分生效**——平台角色也會被切走，所以聯集的對象從「所有角色」縮成「當前身分的
+> 角色授予 + 綁在同一身分的直接授予」。下方的範例（平台給 `map.view`、team 給 `map.edit` → 兩者兼得）
+> 正是現在**不會**發生的事。
 **Decision**：一帳號 = 一平台角色 + 一 team 角色（**最多一 team**）。effective = 平台 grants ∪ team grants ∪ 直接 grants，全 additive、無 override。
 **範例**：平台給 `map.view`，team 給 `map.edit` → `map.view + map.edit`。
 **對應**：OPEN_Q #10 的「正交 OR 組合」。
@@ -127,6 +148,9 @@
 - `team` → `model.team_uuid == actor.team_uuid`
 - `gov`/`ngo` → `model.team_uuid IN (SELECT uuid FROM teams WHERE type = <actor 所屬 team 的 type，用 correlated subquery 查，不額外一次 DB round trip>)`
 - `zone` → `EXISTS(SELECT 1 FROM work_zones JOIN team_zone_assign ... WHERE team_zone_assign.team_uuid = actor.team_uuid AND ST_Contains(work_zones.geometry, model.geometry))`
+
+> **2026-08-19（010/ADR-074）**：上面每一處 `actor.team_uuid` 現在都是 **active identity 的 team**
+> （`app/core/rbac_scopes.py:_active_team`）。`gov`/`ngo` 兩列已於 ADR-049 整個退場。
 - `none` → `false()`（防禦性；checkpoint1 應該已經擋掉，理論上不會走到這裡）
 所有需要 scope 過濾的 repo list/count 方法新增 `extra_filters: Sequence = ()` 參數，用 `query.where(*extra_filters)` 套用。
 **Consequences**：➕ 單物件檢查與 list 過濾共用同一套 Scope 語意，不會出現兩份互相漂移的權限邏輯。➖ gov/ngo/zone 的 SQL 較複雜（subquery/EXISTS），但目前所有角色的 `station.view`/`map.view` 皆為 `all`，只有 `ticket.view`（`user`=own、`gov_manager`=gov、`ngo_manager`=zone、其餘=all）真正會用到非 all 分支——其餘分支的正確性由 `tests/test_rbac_scopes.py`/`test_authz.py` 的單元測試釘住，非等到有真實 zone 資料才驗證。
@@ -149,7 +173,7 @@
 
 #### ADR-032 一人一角色（每種 kind）由 use-case 層強制，非 DB 約束；最後一個 super_admin 禁止被踢
 **Context**：T117 的「指派角色」端點要決定：(1) 使用者已有同 kind（platform/team）角色時，新指派要怎麼處理；(2) 如果要拿掉的剛好是全平台唯一的 `super_admin`，會造成沒有人能再指派角色的鎖死局面（沒有 UI 路徑能恢復）。
-**Decision**：`app/services/admin/assign_role.py` 在指派新角色前，查詢並刪除該使用者「同 kind」的既有角色指派（一人一 platform role + 一 team role，ADR-019 的落地方式，見 `app/models/rbac.py:UserRoleAssign` docstring——刻意不做 DB unique 約束，因為「同 kind 只能一個」是一個會隨業務演進的政策，不是資料完整性不變量）。指派 platform 角色前，若目標使用者目前持有 `super_admin` 且新角色不是 `super_admin`，會先數一次「扣掉這個人之後還剩幾個 super_admin」，`0` 就整個操作失敗（`AdminConflictError` → HTTP 409）。找不到使用者/角色是 `AdminNotFoundError`（404）；team 角色要求先有 `users.team_uuid` 是 `AdminConflictError`（409）——這兩個型別都是 `ValueError` 的子類別（`app/services/admin/errors.py`），沿用既有 use-case 層「拋 `ValueError` 表示網域層失敗」的慣例（例如 `app/services/station/update.py` 的 `"Station not found"`），只是額外分兩個子類別讓 REST endpoint 能分別對應到不同的 HTTP 狀態碼，而不是每個 domain 錯誤都回一律的 400。
+**Decision**：`app/services/admin/assign_role.py` 在指派新角色前，查詢並刪除該使用者「同 kind」的既有角色指派（一人一 platform role + 一 team role，ADR-019 的落地方式，見 `app/models/rbac.py:UserRoleAssign` docstring——刻意不做 DB unique 約束，因為「同 kind 只能一個」是一個會隨業務演進的政策，不是資料完整性不變量）。指派 platform 角色前，若目標使用者目前持有 `super_admin` 且新角色不是 `super_admin`，會先數一次「扣掉這個人之後還剩幾個 super_admin」，`0` 就整個操作失敗（`AdminConflictError` → HTTP 409）。找不到使用者/角色是 `AdminNotFoundError`（404）；team 角色要求先有 `users.team_uuid` 是 `AdminConflictError`（409，**已於 010/ADR-072 移除**——授予 team 角色本身就是入隊，不再有「要先屬於某 team」的前置條件；現在這個端點一律拒收 team 角色，改走 `POST /admin/teams/{uuid}/members`）——這兩個型別都是 `ValueError` 的子類別（`app/services/admin/errors.py`），沿用既有 use-case 層「拋 `ValueError` 表示網域層失敗」的慣例（例如 `app/services/station/update.py` 的 `"Station not found"`），只是額外分兩個子類別讓 REST endpoint 能分別對應到不同的 HTTP 狀態碼，而不是每個 domain 錯誤都回一律的 400。
 **Consequences**：➕ 不會有「所有人都被鎖在 RBAC 系統外面」的不可逆事故。➖ 目前只擋「最後一個 super_admin 被換掉」，沒有擋「刪除使用者本身」（因為目前沒有 admin API 刪除使用者的端點）——之後如果加，需要同樣的計數保護。
 
 #### ADR-033 `rbac_test` 路由改成白名單制（僅 `development`/`testing`），不是黑名單制（`!= production`）
@@ -185,6 +209,11 @@
 **Consequences**：➕ 權限矩陣跟「誰該做什麼」的業務語意一致；`super_admin` 這次沒有遺漏。➖ 無。
 
 #### ADR-039 `UserRoleAssign` 不帶 `team_uuid` 欄位
+> **狀態：被 `Spec/010-multi-team-membership` 的 ADR-073 反轉（2026-08-19）。** 本條的整個理由建立在
+> 「`users.team_uuid` 是唯一事實來源」之上；該欄位已經移除，team 現在就住在授予列上
+> （`user_role_assign.team_uuid`、`user_permission_assign.team_uuid`）。原本擔心的雙重事實來源不再存在，
+> 因為只剩一份。授予列同時冗餘一個 `role_kind`，由複合 FK `(role_uuid, role_kind) → roles(uuid, kind)`
+> 擔保它不會漂掉，好讓 CHECK 能跨表看到角色種類。
 **Context**：本文件原稿 §2B 曾把 `UserRoleAssign` 設計成連 `team_uuid` 都存一份（`team_uuid: Mapped[str | None]`），Phase 0 落地時發現這會造成雙重事實來源。
 **Decision**：`UserRoleAssign` 不帶 `team_uuid` 欄位；team 角色永遠透過 `users.team_uuid` 判定（ADR-019「一人一 team」的唯一事實來源）。實作見 `app/models/rbac.py:UserRoleAssign` docstring。
 **Consequences**：➕ 不會有「使用者的 `team_uuid` 跟他某筆角色指派上存的 `team_uuid` 兜不起來」的資料漂移問題。➖ 無——一人一 team 本來就代表這欄位是多餘的。
@@ -406,6 +435,7 @@ class UserPermissionAssign(Base, UUIDPKMixin):
 ### 2C. 變更既有
 ```python
 # users (auth.py): 加單一 team_uuid（一人一 team, ADR-019）
+#   ⚠️ 已於 010/ADR-073 移除（alembic a1b2c3d4e5f6）。team 改由授予列攜帶，見 user_role_assign.team_uuid。
 team_uuid: Mapped[str | None] = mapped_column(ForeignKey("teams.uuid"), nullable=True, index=True)
 
 # base_geometries (base.py 的 BaseGeometry / geo.py): 加 team_uuid（team/gov/ngo scope 的資源歸屬）
@@ -956,17 +986,22 @@ enforcement 呼叫（僅目錄 key），不符合「先有 enforcement 才發 ca
 |---|---|---|
 | none | `false()`（防禦性；CP1 應已先擋掉） | — |
 | own | `resource.created_by == actor.uuid` | — |
-| team | `resource.<team 邊界欄位> == actor.team_uuid`（預設欄位 `team_uuid`；`Team` 宣告 `uuid`）。**只用於團隊成員管理**，不套用在 geo 資源 | 一人一 team（`users.team_uuid`）、`__team_scope_attr__`（ADR-053） |
-| zone | `ST_Contains(actor 所屬 team 被指派的 WorkZone, resource.geometry)` | `work_zones`+`team_zone_assign`（ADR-049/052） |
+| team | `resource.<team 邊界欄位> == actor 當前身分的 team`（預設欄位 `team_uuid`；`Team` 宣告 `uuid`）。**只用於團隊成員管理**，不套用在 geo 資源 | active identity（010/ADR-074）、`__team_scope_attr__`（ADR-053） |
+| zone | `ST_Contains(actor 當前身分那個 team 被指派的 WorkZone, resource.geometry)` | `work_zones`+`team_zone_assign`（ADR-049/052） |
 | all | 全域 | — |
 
-最寬勝：`all > zone > team > own > none`（見 `app/core/rbac_scopes.py:WIDTH`）。gov/ngo scope 已於 ADR-049 退場——組織身分改由 `users.team_uuid → team.type` 表達，不進 scope。
+最寬勝：`all > zone > team > own > none`（見 `app/core/rbac_scopes.py:WIDTH`）。gov/ngo scope 已於 ADR-049 退場——組織身分改由 team 的 `type` 表達，不進 scope。
+
+> **2026-08-19 更新（010/ADR-074）**：表中所有 `actor.team_uuid` 都已改讀 **active identity 的 team**
+> （`app/core/rbac_scopes.py:_active_team`）。差別不只是換一個欄位：一個人同時屬於多個 team 時，
+> team / zone scope **只涵蓋當前身分那一隊，不做跨隊聯集**；當前身分是 platform 身分時（無 team），
+> 兩者一律 `false()`。沒有解析出身分的 `User`（例如在請求之外從 DB 撈出來的）同樣是 `false()`——fail-closed。
 
 ## 附錄 B. D 版 schema 修正（已納入 §2）
 1. scope 綁 `role_permission_assign`（非 permission）→ 同 perm 不同 role 可不同 scope。**最關鍵。**
 2. `teams.type`(gov/ngo)。
 3. role 定義全域、team 綁在 `user_role_assign`（非 roles.team_uuid 每 team 複製）。
-4. users 單 `team_uuid`（一人一 team 已定）。
+4. users 單 `team_uuid`（一人一 team 已定）。**已於 010/ADR-073 撤銷**：欄位移除，team 改存在授予列上。
 
 ## 附錄 C. 對 RBAC_SPEC_OPEN_QUESTIONS 的解答
 - #10 兩軸組合 → ADR-019（union/OR、無 override、跨 team 404）。
