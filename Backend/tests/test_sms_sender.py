@@ -33,10 +33,14 @@ def test_build_verification_sms_has_code():
     build_sso_notice_sms,
 ])
 def test_bodies_fit_one_kotsms_point(build):
-    """Every body stays within KotSMS's 70-character 1-point bracket and carries the sender identity."""
+    """Every body fits KotSMS's 70-char 1-point bracket and leads with the 實名制 sender identity.
+
+    The identity must match the registered entity exactly — a mismatch is dropped by the carriers
+    while the API still answers statuscode=1, so nothing else would catch it.
+    """
     body = build()
     assert len(body) <= 70
-    assert body.startswith("【島嶼守望】")
+    assert body.startswith("開放文化基金會 ")
 
 
 def test_get_sms_sender_defaults_to_console(monkeypatch):
