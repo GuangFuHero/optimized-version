@@ -4,6 +4,7 @@ Same flat-service style as station.py: `db` first, keyword-only args, each funct
 its own authz + validation + persistence (ADR-013/014/015/022).
 """
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from sqlalchemy.exc import IntegrityError
@@ -196,12 +197,22 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     """Update a ticket task (checkpoint 1 ticket.edit, then checkpoint 2 against the task).
 
     TicketTask carries no team_uuid, so only `own`/`all` scope can match it.
+
+    `completed_at` is stamped/cleared here (not by the caller) whenever `status` crosses
+    the 'fulfilled' boundary — feeds the analytics time-to-completion metric.
     """
     task = await ticket_task_repository.get_by_uuid_active(db, uuid)
     if not task:
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
-    return await ticket_task_repository.update(db, db_obj=task, obj_in=changes)
+
+    obj_in = dict(changes)
+    new_status = obj_in.get("status")
+    if new_status == "fulfilled" and task.status != "fulfilled":
+        obj_in["completed_at"] = datetime.now(UTC)
+    elif new_status is not None and new_status != "fulfilled" and task.status == "fulfilled":
+        obj_in["completed_at"] = None
+    return await ticket_task_repository.update(db, db_obj=task, obj_in=obj_in)
 
 
 async def create_task_property(
