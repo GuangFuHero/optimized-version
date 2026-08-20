@@ -29,7 +29,7 @@ reading `tickets.status` directly:
     ongoing     -- otherwise (>=1 assignment, not fully fulfilled)
 """
 
-from datetime import date, datetime, time, timedelta
+from datetime import date
 from zoneinfo import ZoneInfo
 
 from geoalchemy2 import Geography
@@ -39,28 +39,11 @@ from sqlalchemy.orm import aliased
 
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
+from app.services.analytics_common import category_expr, local_bounds, resolve_granularity
 
 # Duplicate-detection thresholds (ADR: "context flag, not urgency" — tunable, not user-facing).
 DUPLICATE_DISTANCE_METERS = 200
 DUPLICATE_TIME_WINDOW_HOURS = 24
-
-
-def _local_bounds(
-    start_date: date | None, end_date: date | None, tz: ZoneInfo
-) -> tuple[datetime | None, datetime | None]:
-    """Convert an inclusive local-calendar date range into a UTC instant range.
-
-    Returns a [start, end) pair suitable for filtering a timestamptz column (see Part
-    1.5: a bare date from the frontend means local midnight in `tz`, not UTC midnight).
-    """
-    lower = datetime.combine(start_date, time.min, tzinfo=tz) if start_date else None
-    upper = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=tz) if end_date else None
-    return lower, upper
-
-
-def _granularity(x_granularity: str) -> str:
-    """Normalize the x_granularity param to a Postgres date_trunc field name."""
-    return "week" if x_granularity == "week" else "day"
 
 
 def _task_rollup_subquery():
@@ -111,12 +94,20 @@ async def get_ticket_count(
     `x="date"` groups by `Tickets.created_at` EXCEPT when `bucket == "completed"`,
     which groups by each ticket's own completion day (`max(completed_at)` across its
     tasks) instead — "how many tickets finished on day X", matching
-    get_net_backlog_change's "completed" series. `x="category"` groups by `task_type`.
+    get_net_backlog_change's "completed" series. `x="category"` groups by `task_type`,
+    with NULLs labelled (see analytics_common.UNCATEGORIZED_LABEL).
+
+    Note the two paths classify differently: the ungrouped/`x="category"` path counts
+    via `_bucket_expr` (i.e. `ticket_tasks.status`), while the `bucket="completed",
+    x="date"` path counts only tickets that actually carry a completion timestamp — a
+    row with no `completed_at` can't be placed on a time axis at all. Migration
+    a1b2c3d4e5f6 backfills `completed_at` for rows that predate the column, so the two
+    agree; without that backfill the date series would undercount.
     """
     rollup = _task_rollup_subquery()
     bucket_expr = _bucket_expr(rollup)
-    lower, upper = _local_bounds(start_date, end_date, tz)
-    granularity = _granularity(x_granularity)
+    lower, upper = local_bounds(start_date, end_date, tz)
+    granularity = resolve_granularity(x_granularity)
 
     if bucket == "completed" and x == "date":
         completion = (
@@ -127,7 +118,15 @@ async def get_ticket_count(
             .select_from(Tickets)
             .join(rollup, rollup.c.ticket_uuid == Tickets.uuid)
             .join(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
-            .where(Tickets.delete_at.is_(None), TicketTask.delete_at.is_(None), bucket_expr == "completed")
+            .where(
+                Tickets.delete_at.is_(None),
+                TicketTask.delete_at.is_(None),
+                bucket_expr == "completed",
+                # No completion timestamp -> no day to plot it on. Without this the NULL
+                # survives max(), date_trunc returns NULL, and the caller's sort blows up
+                # comparing None to datetime.
+                TicketTask.completed_at.is_not(None),
+            )
             .group_by(Tickets.uuid)
             .subquery()
         )
@@ -150,8 +149,9 @@ async def get_ticket_count(
         cols.insert(0, period.label("x"))
         group_cols.append(period)
     elif x == "category":
-        cols.insert(0, Tickets.task_type.label("x"))
-        group_cols.append(Tickets.task_type)
+        category = category_expr(Tickets.task_type)
+        cols.insert(0, category.label("x"))
+        group_cols.append(category)
 
     query = (
         select(*cols)
@@ -184,8 +184,8 @@ async def get_completion_rate(
     """
     rollup = _task_rollup_subquery()
     bucket_expr = _bucket_expr(rollup)
-    lower, upper = _local_bounds(start_date, end_date, tz)
-    granularity = _granularity(x_granularity)
+    lower, upper = local_bounds(start_date, end_date, tz)
+    granularity = resolve_granularity(x_granularity)
 
     cols = [
         func.count(Tickets.uuid).filter(bucket_expr == "completed").label("completed"),
@@ -197,8 +197,9 @@ async def get_completion_rate(
         cols.insert(0, period.label("x"))
         group_cols.append(period)
     elif x == "category":
-        cols.insert(0, Tickets.task_type.label("x"))
-        group_cols.append(Tickets.task_type)
+        category = category_expr(Tickets.task_type)
+        cols.insert(0, category.label("x"))
+        group_cols.append(category)
 
     query = (
         select(*cols)
@@ -237,7 +238,7 @@ async def get_age_distribution(
     """
     rollup = _task_rollup_subquery()
     bucket_expr = _bucket_expr(rollup)
-    lower, upper = _local_bounds(start_date, end_date, tz)
+    lower, upper = local_bounds(start_date, end_date, tz)
 
     age_hours = func.extract("epoch", func.now() - Tickets.created_at) / 3600.0
     age_bucket = case(
@@ -276,7 +277,7 @@ async def get_time_to_completion(
     `x="category"` splits by task_type; no date form (task-level durations aren't
     naturally date-groupable without further design), so `x_granularity` is unused.
     """
-    lower, upper = _local_bounds(start_date, end_date, tz)
+    lower, upper = local_bounds(start_date, end_date, tz)
     duration = func.extract("epoch", TicketTask.completed_at - TicketTask.created_at)
 
     cols = [
@@ -314,9 +315,13 @@ async def get_net_backlog_change(
     grouped by the day the *last* of a ticket's tasks was fulfilled (when the whole
     ticket finished) — the two series are independent, so a ticket created before the
     window can still show up in "completed" if it finished inside it.
+
+    A fully-fulfilled ticket whose tasks carry no `completed_at` is absent from the
+    "completed" series (it has no day to be attributed to) — migration a1b2c3d4e5f6
+    backfills those, so in practice the series is complete.
     """
-    granularity = _granularity(x_granularity)
-    lower, upper = _local_bounds(start_date, end_date, tz)
+    granularity = resolve_granularity(x_granularity)
+    lower, upper = local_bounds(start_date, end_date, tz)
     rollup = _task_rollup_subquery()
     bucket_expr = _bucket_expr(rollup)
 
@@ -336,7 +341,13 @@ async def get_net_backlog_change(
         .select_from(Tickets)
         .join(rollup, rollup.c.ticket_uuid == Tickets.uuid)
         .join(TicketTask, TicketTask.ticket_uuid == Tickets.uuid)
-        .where(Tickets.delete_at.is_(None), TicketTask.delete_at.is_(None), bucket_expr == "completed")
+        .where(
+            Tickets.delete_at.is_(None),
+            TicketTask.delete_at.is_(None),
+            bucket_expr == "completed",
+            # See get_ticket_count: a task with no completed_at has no day to land on.
+            TicketTask.completed_at.is_not(None),
+        )
         .group_by(Tickets.uuid)
         .subquery()
     )
@@ -378,7 +389,7 @@ async def get_task_completion_distribution(
     `x_granularity` are accepted (dispatch-signature uniformity) but unused; catalog
     marks this `allowed_x={None}`.
     """
-    lower, upper = _local_bounds(start_date, end_date, tz)
+    lower, upper = local_bounds(start_date, end_date, tz)
     query = select(
         func.count(TicketTask.uuid).filter(TicketTask.status == "fulfilled").label("completed"),
         func.count(TicketTask.uuid).filter(TicketTask.status != "canceled").label("total"),
@@ -422,9 +433,22 @@ async def get_duplicate_count(
     within the distance/time thresholds above — a context flag, not an urgency signal.
     `x="date"` groups flagged tickets by their own creation day/week; `x="category"`
     by task_type.
+
+    `start_date` and `end_date` are REQUIRED here, unlike every other metric. This is a
+    self-join: without a bound it pairs the whole `tickets` table against itself, which
+    is O(n^2), and the `::geography` cast means the `gist(geometry)` index can't serve
+    the ST_DWithin predicate (it degrades to a join filter). An expression index on
+    `(geometry::geography)` doesn't rescue it either — in a disaster-response dataset
+    tickets cluster in one area, so nearly every pair genuinely is within the distance
+    threshold and the cost is the size of the result set, which no index can prune.
+    Bounding the input is the only fix that works. The endpoint layer turns this
+    ValueError into a 400; `chart_render.CATALOG` advertises it as `requires_date_range`
+    so the frontend can enforce it up front.
     """
-    lower, upper = _local_bounds(start_date, end_date, tz)
-    granularity = _granularity(x_granularity)
+    if start_date is None or end_date is None:
+        raise ValueError("duplicate_count requires both start_date and end_date")
+    lower, upper = local_bounds(start_date, end_date, tz)
+    granularity = resolve_granularity(x_granularity)
     a = aliased(Tickets)
     b = aliased(Tickets)
 

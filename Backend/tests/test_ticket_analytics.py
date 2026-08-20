@@ -6,7 +6,7 @@ filter, age-distribution bucketing, duplicate-ticket detection, and the "ignore 
 it doesn't apply" behavior in app.services.chart_render.resolve().
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -17,7 +17,8 @@ from app.models.auth import User
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import ticket_analytics
-from app.services.chart_render import resolve
+from app.services.analytics_common import UNCATEGORIZED_LABEL
+from app.services.chart_render import _render_pivoted, render_chart, resolve
 
 UTC_TZ = ZoneInfo("UTC")
 
@@ -188,8 +189,12 @@ async def test_duplicate_count_flags_nearby_same_category_tickets(db):
     db.add_all([near_a, near_b, far])
     await db.commit()
 
+    # A date range is mandatory for this metric (see
+    # test_duplicate_count_requires_a_date_range) — window it around the fixtures.
+    today = now.date()
     rows = await ticket_analytics.get_duplicate_count(
-        db, x=None, x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ
+        db, x=None, x_granularity="day",
+        start_date=today - timedelta(days=1), end_date=today + timedelta(days=1), tz=UTC_TZ,
     )
     assert rows == [{"count": 2}]
 
@@ -210,3 +215,128 @@ def test_resolve_still_rejects_invalid_chart_type():
     """Unlike x, chart_type stays strictly validated."""
     with pytest.raises(ValueError, match="chart_type"):
         resolve("tickets", "net_backlog_change", "date", "pie")
+
+
+@pytest.mark.asyncio
+async def test_ticket_count_category_labels_null_task_type(db):
+    """A NULL task_type becomes a real label, so a line chart can sort the axis.
+
+    Regression for the PR #32 review's H1a: task_type is nullable and was grouped raw, so
+    `x=category&chart_type=line` mixed None with str in chart_render's sort and 500'd.
+    """
+    user_uuid = await _make_user(db)
+    db.add_all([_make_ticket(user_uuid, task_type="rescue"), _make_ticket(user_uuid, task_type=None)])
+    await db.flush()
+
+    rows = await ticket_analytics.get_ticket_count(
+        db, bucket=None, x="category", x_granularity="day",
+        start_date=None, end_date=None, tz=UTC_TZ,
+    )
+    labels = {r["x"] for r in rows}
+    assert None not in labels
+    assert labels == {"rescue", UNCATEGORIZED_LABEL}
+
+    # The whole point: this shape must now render as a line chart without raising.
+    html = render_chart("tickets", "total_tickets", rows, x="category", chart_type="line")
+    assert html.startswith("<div")
+
+
+@pytest.mark.asyncio
+async def test_completion_rate_category_labels_null_task_type(db):
+    """get_completion_rate shares the H1a grouping, so it gets the same label treatment."""
+    user_uuid = await _make_user(db)
+    db.add_all([_make_ticket(user_uuid, task_type=None)])
+    await db.flush()
+
+    rows = await ticket_analytics.get_completion_rate(
+        db, x="category", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+    )
+    assert [r["x"] for r in rows] == [UNCATEGORIZED_LABEL]
+    assert render_chart("tickets", "completion_rate", rows, x="category", chart_type="line")
+
+
+@pytest.mark.asyncio
+async def test_net_backlog_change_skips_tasks_without_completed_at(db):
+    """An unstamped fulfilled task can't be placed on a day, so it stays out of the series.
+
+    Regression for H1b: max(completed_at) returned NULL for tasks fulfilled before the
+    column existed, date_trunc turned that into a NULL key, and the sort raised TypeError
+    comparing None to datetime. Migration a1b2c3d4e5f6 backfills those rows; this asserts
+    the query is safe even if one slips through.
+    """
+    user_uuid = await _make_user(db)
+    stamped_ticket = _make_ticket(user_uuid)
+    unstamped_ticket = _make_ticket(user_uuid)
+    db.add_all([stamped_ticket, unstamped_ticket])
+    await db.flush()
+
+    completed_at = datetime(2026, 8, 10, 6, 0, tzinfo=UTC)
+    for ticket, stamp in ((stamped_ticket, completed_at), (unstamped_ticket, None)):
+        task = _make_task(str(ticket.uuid), user_uuid, status="fulfilled")
+        task.completed_at = stamp
+        db.add(task)
+        await db.flush()
+        db.add(TaskAssignment(task_uuid=str(task.uuid), actor_uuid=user_uuid, status="completed"))
+    await db.flush()
+
+    rows = await ticket_analytics.get_net_backlog_change(
+        db, x="date", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+    )
+    assert all(r["x"] is not None for r in rows)
+    # Exactly one ticket has a completion day; the unstamped one is absent from that series.
+    assert sum(r["completed_count"] for r in rows) == 1
+    assert render_chart("tickets", "net_backlog_change", rows, x="date", chart_type="line")
+
+
+@pytest.mark.asyncio
+async def test_ticket_count_completed_by_date_skips_unstamped(db):
+    """The bucket="completed", x="date" path has the same NULL-date exposure as H1b."""
+    user_uuid = await _make_user(db)
+    ticket = _make_ticket(user_uuid)
+    db.add(ticket)
+    await db.flush()
+    task = _make_task(str(ticket.uuid), user_uuid, status="fulfilled")
+    task.completed_at = None
+    db.add(task)
+    await db.flush()
+    db.add(TaskAssignment(task_uuid=str(task.uuid), actor_uuid=user_uuid, status="completed"))
+    await db.flush()
+
+    rows = await ticket_analytics.get_ticket_count(
+        db, bucket="completed", x="date", x_granularity="day",
+        start_date=None, end_date=None, tz=UTC_TZ,
+    )
+    assert all(r["x"] is not None for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_count_requires_a_date_range(db):
+    """duplicate_count refuses an unbounded query — it's an O(n^2) self-join (H3)."""
+    with pytest.raises(ValueError, match="requires both start_date and end_date"):
+        await ticket_analytics.get_duplicate_count(
+            db, x=None, x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+        )
+    with pytest.raises(ValueError, match="requires both start_date and end_date"):
+        await ticket_analytics.get_duplicate_count(
+            db, x=None, x_granularity="day",
+            start_date=date(2026, 8, 1), end_date=None, tz=UTC_TZ,
+        )
+    # With both bounds it runs normally.
+    rows = await ticket_analytics.get_duplicate_count(
+        db, x=None, x_granularity="day",
+        start_date=date(2026, 8, 1), end_date=date(2026, 8, 31), tz=UTC_TZ,
+    )
+    assert rows == [{"count": 0}]
+
+
+def test_render_pivoted_line_tolerates_a_none_key():
+    """Backstop at the shared render boundary: a None key sorts last instead of raising."""
+    fig = _render_pivoted(["b", None, "a"], {"v": [1, 2, 3]}, "line")
+    assert list(fig.data[0].x) == ["a", "b", None]
+
+
+def test_resolve_forced_x_fallback_is_deterministic():
+    """allowed_x is an ordered tuple, so a forced-shape metric's fallback is stable."""
+    for _ in range(5):
+        assert resolve("tickets", "net_backlog_change", "category", None) == ("date", "line")
+        assert resolve("stations", "station_freshness_trend", "category", None) == ("date", "line")

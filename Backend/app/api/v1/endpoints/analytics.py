@@ -100,10 +100,16 @@ _LAYOUT_OVERRIDES_DESCRIPTION = (
 
 
 def _parse_tz(tz: str) -> ZoneInfo:
-    """Validate an IANA timezone name (see Spec/Docs/er-diagram.md's 2026-08-07 note)."""
+    """Validate an IANA timezone name (see Spec/Docs/er-diagram.md's 2026-08-07 note).
+
+    ZoneInfo splits its rejections across two unrelated exception types: an unknown but
+    well-formed key ('Nope/Nope') raises ZoneInfoNotFoundError, while a malformed one
+    ('', '/etc/passwd', '..') raises ValueError. Both are client errors, so both are 400
+    — catching only the first turned an empty `?tz=` into a 500.
+    """
     try:
         return ZoneInfo(tz)
-    except ZoneInfoNotFoundError as err:
+    except (ZoneInfoNotFoundError, ValueError) as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown timezone: {tz!r}"
         ) from err
@@ -135,21 +141,63 @@ def _serialize_spec(spec: dict) -> YMetricSpec:
         allowed_x=sorted("none" if v is None else v for v in spec["allowed_x"]),
         default_chart_type=spec["default_chart_type"],
         allowed_chart_types=sorted(spec["allowed_chart_types"]),
+        requires_date_range=spec.get("requires_date_range", False),
     )
+
+
+async def _render_domain(
+    domain: str, metric_fns: dict, db: AsyncSession, *,
+    y, x, x_granularity, chart_type,
+    start_date: date | None, end_date: date | None, tz: str,
+    theme, width: int | None, height: int | None, layout_overrides: str | None,
+) -> ChartResponse:
+    """Shared body of both chart endpoints — resolve, query, render.
+
+    The two handlers keep their own signatures so OpenAPI documents each domain's real
+    `y` enum, but everything after parameter binding is identical, so it lives here.
+
+    Every 400 on these endpoints originates in this one try block: `_parse_tz` and
+    `_parse_layout_overrides` raise HTTPException directly, and `resolve()` / the metric
+    functions / Plotly's own schema validation all signal bad input with ValueError.
+    """
+    try:
+        tzinfo = _parse_tz(tz)
+        overrides = _parse_layout_overrides(layout_overrides)
+        x_value = x.value if x is not None else None
+        chart_type_value = chart_type.value if chart_type is not None else None
+
+        resolved_x, resolved_chart_type = chart_render.resolve(
+            domain, y.value, x_value, chart_type_value
+        )
+        data = await metric_fns[y](
+            db, x=resolved_x, x_granularity=x_granularity.value,
+            start_date=start_date, end_date=end_date, tz=tzinfo,
+        )
+        html = chart_render.render_chart(
+            domain, y.value, data,
+            x=resolved_x, chart_type=resolved_chart_type,
+            theme=theme.value, width=width, height=height, layout_overrides=overrides,
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
+    return ChartResponse(html=html)
 
 
 @router.get(
     "/catalog",
     response_model=CatalogResponse,
-    dependencies=[security.has_permission(Perm.TICKET_VIEW)],
+    dependencies=[Depends(security.get_current_user)],
 )
 async def get_analytics_catalog():
     """Machine-readable y-metric catalog: valid `x` values and chart types per metric.
 
     The source of truth behind the "ignore x when it doesn't apply" behavior on both
     chart endpoints below — build x/y dropdowns from this response instead of
-    hardcoding the rules client-side (see Backend/scripts/analytics_demo.html for an
-    example consumer).
+    hardcoding the rules client-side.
+
+    Authentication only, no capability: the response is a static description of this
+    API's own shape and contains no records. Gating it on ticket.view (as it originally
+    was) locked a station-only role out of the station catalog it is allowed to chart.
     """
     return CatalogResponse(
         tickets={k: _serialize_spec(v) for k, v in chart_render.CATALOG["tickets"].items()},
@@ -181,25 +229,12 @@ async def get_ticket_chart(
     See the module docstring for the x/y model and example queries, and GET
     /analytics/catalog for the full per-metric rules.
     """
-    tzinfo = _parse_tz(tz)
-    overrides = _parse_layout_overrides(layout_overrides)
-    x_value = x.value if x is not None else None
-    chart_type_value = chart_type.value if chart_type is not None else None
-
-    try:
-        resolved_x, resolved_chart_type = chart_render.resolve("tickets", y.value, x_value, chart_type_value)
-        data = await TICKET_METRIC_FNS[y](
-            db, x=resolved_x, x_granularity=x_granularity.value,
-            start_date=start_date, end_date=end_date, tz=tzinfo,
-        )
-        html = chart_render.render_chart(
-            "tickets", y.value, data,
-            x=resolved_x, chart_type=resolved_chart_type,
-            theme=theme.value, width=width, height=height, layout_overrides=overrides,
-        )
-    except ValueError as err:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
-    return ChartResponse(html=html)
+    return await _render_domain(
+        "tickets", TICKET_METRIC_FNS, db,
+        y=y, x=x, x_granularity=x_granularity, chart_type=chart_type,
+        start_date=start_date, end_date=end_date, tz=tz,
+        theme=theme, width=width, height=height, layout_overrides=layout_overrides,
+    )
 
 
 @router.get(
@@ -226,22 +261,9 @@ async def get_station_chart(
     See the module docstring for the x/y model and example queries, and GET
     /analytics/catalog for the full per-metric rules.
     """
-    tzinfo = _parse_tz(tz)
-    overrides = _parse_layout_overrides(layout_overrides)
-    x_value = x.value if x is not None else None
-    chart_type_value = chart_type.value if chart_type is not None else None
-
-    try:
-        resolved_x, resolved_chart_type = chart_render.resolve("stations", y.value, x_value, chart_type_value)
-        data = await STATION_METRIC_FNS[y](
-            db, x=resolved_x, x_granularity=x_granularity.value,
-            start_date=start_date, end_date=end_date, tz=tzinfo,
-        )
-        html = chart_render.render_chart(
-            "stations", y.value, data,
-            x=resolved_x, chart_type=resolved_chart_type,
-            theme=theme.value, width=width, height=height, layout_overrides=overrides,
-        )
-    except ValueError as err:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
-    return ChartResponse(html=html)
+    return await _render_domain(
+        "stations", STATION_METRIC_FNS, db,
+        y=y, x=x, x_granularity=x_granularity, chart_type=chart_type,
+        start_date=start_date, end_date=end_date, tz=tz,
+        theme=theme, width=width, height=height, layout_overrides=layout_overrides,
+    )

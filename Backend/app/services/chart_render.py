@@ -18,64 +18,69 @@ with `x=date` on a metric that allows both individually but not combined).
 
 import plotly.graph_objects as go
 
-# --- Y-metric catalog: allowed_x is a set that may contain None (aggregate/no grouping),
-# "date", and/or "category". See GET /api/v1/analytics/catalog for the JSON version. ---
+# --- Y-metric catalog: allowed_x is an ordered tuple that may contain None (aggregate/no
+# grouping), "date", and/or "category" — ordered because resolve() falls back to its first
+# entry for forced-shape metrics. `requires_date_range` (absent = False) marks a metric
+# that refuses an unbounded query. See GET /api/v1/analytics/catalog for the JSON version. ---
 
 _TICKET_CATALOG = {
     "total_tickets": {
-        "allowed_x": {None, "date", "category"},
-        "default_chart_type": "bar", "allowed_chart_types": {"bar", "line", "pie"},
+        "allowed_x": (None, "date", "category"),
+        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
     },
     "ongoing_tickets": {
-        "allowed_x": {None, "date", "category"},
-        "default_chart_type": "bar", "allowed_chart_types": {"bar", "line", "pie"},
+        "allowed_x": (None, "date", "category"),
+        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
     },
     "unassigned_tickets": {
-        "allowed_x": {None, "date", "category"},
-        "default_chart_type": "bar", "allowed_chart_types": {"bar", "line", "pie"},
+        "allowed_x": (None, "date", "category"),
+        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
     },
     "completed_tickets": {
-        "allowed_x": {None, "date", "category"},
-        "default_chart_type": "bar", "allowed_chart_types": {"bar", "line", "pie"},
+        "allowed_x": (None, "date", "category"),
+        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
     },
     "completion_rate": {
-        "allowed_x": {None, "date", "category"},
-        "default_chart_type": "bar", "allowed_chart_types": {"bar", "line"},
+        "allowed_x": (None, "date", "category"),
+        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line"),
     },
     "age_distribution": {
-        "allowed_x": {None},  # forced shape: always grouped by age bucket internally
-        "default_chart_type": "bar", "allowed_chart_types": {"bar"},
+        "allowed_x": (None,),  # forced shape: always grouped by age bucket internally
+        "default_chart_type": "bar", "allowed_chart_types": ("bar",),
     },
     "time_to_completion": {
-        "allowed_x": {None, "category"},
-        "default_chart_type": "bar", "allowed_chart_types": {"bar"},
+        "allowed_x": (None, "category"),
+        "default_chart_type": "bar", "allowed_chart_types": ("bar",),
     },
     "net_backlog_change": {
-        "allowed_x": {"date"},  # forced shape: always date-grouped
-        "default_chart_type": "line", "allowed_chart_types": {"line", "bar"},
+        "allowed_x": ("date",),  # forced shape: always date-grouped
+        "default_chart_type": "line", "allowed_chart_types": ("line", "bar"),
     },
     "task_completion_distribution": {
-        "allowed_x": {None},  # forced shape: fixed completed/remaining pie
-        "default_chart_type": "pie", "allowed_chart_types": {"pie"},
+        "allowed_x": (None,),  # forced shape: fixed completed/remaining pie
+        "default_chart_type": "pie", "allowed_chart_types": ("pie",),
     },
     "duplicate_count": {
-        "allowed_x": {None, "date", "category"},
-        "default_chart_type": "bar", "allowed_chart_types": {"bar", "pie"},
+        "allowed_x": (None, "date", "category"),
+        "default_chart_type": "bar", "allowed_chart_types": ("bar", "pie"),
+        # Self-join: unbounded it is O(n^2). ticket_analytics.get_duplicate_count rejects
+        # a missing range outright; this flag lets the frontend require the dates up front.
+        "requires_date_range": True,
     },
 }
 
 _STATION_CATALOG = {
     "station_count": {
-        "allowed_x": {None, "category"},
-        "default_chart_type": "bar", "allowed_chart_types": {"bar", "pie"},
+        "allowed_x": (None, "category"),
+        "default_chart_type": "bar", "allowed_chart_types": ("bar", "pie"),
     },
     "station_status_count": {
-        "allowed_x": {None, "category"},
-        "default_chart_type": "pie", "allowed_chart_types": {"pie", "bar"},
+        "allowed_x": (None, "category"),
+        "default_chart_type": "pie", "allowed_chart_types": ("pie", "bar"),
     },
     "station_freshness_trend": {
-        "allowed_x": {"date"},  # forced shape: always date-grouped
-        "default_chart_type": "line", "allowed_chart_types": {"line", "bar"},
+        "allowed_x": ("date",),  # forced shape: always date-grouped
+        "default_chart_type": "line", "allowed_chart_types": ("line", "bar"),
     },
 }
 
@@ -107,7 +112,9 @@ def resolve(domain: str, y: str, x: str | None, chart_type: str | None) -> tuple
         # otherwise (e.g. net_backlog_change/station_freshness_trend always group by
         # date — allowed_x={"date"} with no None — so an irrelevant x still lands on
         # "date", not silently ungrouped).
-        resolved_x = None if None in spec["allowed_x"] else next(iter(spec["allowed_x"]))
+        # allowed_x is an ordered tuple, so the forced-grouping fallback is deterministic
+        # (a set would make [0] arbitrary the moment a metric had two forced values).
+        resolved_x = None if None in spec["allowed_x"] else spec["allowed_x"][0]
 
     return resolved_x, resolved_chart_type
 
@@ -130,7 +137,11 @@ def _render_pivoted(x_values: list, series: dict[str, list], chart_type: str) ->
         # of showing a clean trend. Sort here so every line chart is correct regardless
         # of which query produced its rows (some data-layer functions already return
         # date-sorted rows; this makes it true unconditionally, not by convention).
-        order = sorted(range(len(x_values)), key=lambda i: x_values[i])
+        # The `is None` half of the key is a backstop: the data layer labels NULL
+        # categories and drops NULL dates, so None shouldn't reach here — but this is the
+        # one function every metric's line chart flows through, and mixing None with str
+        # or datetime raises TypeError, which would surface as a 500.
+        order = sorted(range(len(x_values)), key=lambda i: (x_values[i] is None, x_values[i]))
         x_values = [x_values[i] for i in order]
         series = {name: [values[i] for i in order] for name, values in series.items()}
         fig = go.Figure()

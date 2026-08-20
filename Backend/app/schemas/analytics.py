@@ -98,6 +98,11 @@ class YMetricSpec(BaseModel):
         description="Valid values for `chart_type` on this y-metric — unlike `x`, an "
         "unsupported chart_type is rejected with 400."
     )
+    requires_date_range: bool = Field(
+        description="When true, `start_date` and `end_date` are mandatory for this "
+        "y-metric and omitting either is a 400 — the underlying query is too expensive "
+        "to run unbounded. Currently only `duplicate_count`."
+    )
 
 
 class CatalogResponse(BaseModel):
