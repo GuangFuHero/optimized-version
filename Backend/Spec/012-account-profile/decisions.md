@@ -2,7 +2,7 @@
 
 **Date**: 2026-08-16
 **Feature**: 012-account-profile
-**Status**: 定案，待實作
+**Status**: 定案，已實作（實作對照見 `spec.md` §10）
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/011-resource-search/decisions.md`。
 
 > **編號更正（2026-08-19）**：本票原編為 ADR-084~089，但 011 在 docker 驗證階段追加了自己的 ADR-084（「過短查詢維持拋錯」），造成撞號。因 011 已在 PR #35、013 已在 PR #36，兩者都不宜再動，故把本票的 ADR-084 挪到 **ADR-098**，其餘 085~089 不變。ADR 是全域序號，一份 spec 的編號不必連續（`Spec/010` 亦為 068~076 + 096~097）。

@@ -2,7 +2,7 @@
 
 **Date**: 2026-08-16
 **Feature**: 012-account-profile
-**Status**: Approved design, pending implementation
+**Status**: 已實作（見 §10 實作對照）；`plan.md` 為完工後回填
 **Notion**: 補齊功能 →「系統性 - Account Profile 設定（姓名/電話/信箱）+ 忘記密碼」（backend-Popo，08-13~08-17）
 **Depends on**: 既有 auth 流程（`app/api/v1/endpoints/auth/`）、verification code 基礎設施（`app/repositories/verification_repository.py`）、messaging（`app/messaging/email.py`、`sms.py`）
 
@@ -212,3 +212,54 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | 功能 | 刪除其中一個（尚有另一型別）→ 成功 |
 | 功能 | `GET /users/me` 回傳 contacts 與 identities，且 `identities` **不含** `provider_subject` |
 | 迴歸 | 忘記密碼四個端點行為完全不變 |
+
+---
+
+## 10. 實作對照（2026-08-20 回填）
+
+本節在實作完成後補上，讓 reviewer 能逐條驗證「設計說要做的」與「程式碼實際做的」是否一致。
+分支 `feat/account-profile-backend`，兩個 commit：`5ab9a3569`（spec + ADR）、`cd70b0795`（實作）。
+
+### 10.1 設計 → 程式碼落點
+
+| 設計條目 | ADR | 落點 |
+|---|---|---|
+| verify-then-replace，同交易原子取代 | 098 | `app/repositories/auth_repository.py:309` `replace_verified()` |
+| step-up 判定完全在後端，依帳號形狀決定驗哪一種 | 085/086 | `app/services/auth_contact.py:61` `_require_step_up()` |
+| 有 password identity → 驗密碼 | 085 | `app/services/auth_contact.py:80-86` |
+| SSO-only → 發碼到舊管道並驗證 | 085 | `app/services/auth_contact.py:88-102`；碼的存取為獨立 key prefix，`app/repositories/verification_repository.py:114` / `:121` |
+| 首次新增不設門檻 | 086 | `app/services/auth_contact.py:127`（`existing is None` 直接跳過 step-up） |
+| 更換成功後通知舊管道，新值部分遮蔽 | 085 | `app/services/auth_contact.py:177-183`；builder 在 `app/messaging/email.py:231` / `app/messaging/sms.py:51` |
+| 不撤銷 session | 085 | 反向證據：`auth_contact.py` 全檔無 `SessionRepository` 引用 |
+| 刪除守門：不得失去最後一個登入管道 | 087 | `app/services/auth_contact.py:187` `delete_contact()`；計數與 SSO 判定在 `auth_repository.py:304` / `:379` |
+| 舊列硬刪除，歷史交給 `audit_logs` | 087 | `app/repositories/auth_repository.py:332` `delete_contact()` |
+| 邏輯抽到 service，endpoint 只留 parse 與狀態碼對應 | 088 | `app/services/auth_contact.py`（新檔）；`app/api/v1/endpoints/auth/contacts.py:33` 的 `_STATUS_BY_ERROR` 是唯一的映射點 |
+| `GET /users/me` 回 `contacts[]` / `identities[]`，不回 `provider_subject` | 089 | `app/api/v1/endpoints/users.py:19-36`；schema 在 `app/schemas/auth.py:31`（`ContactOut`）、`:45`（`IdentityOut`） |
+| `DELETE /auth/contacts/{type}` 新端點 | 087 | `app/api/v1/endpoints/auth/contacts.py:114` |
+| `step_up` 條件必填 | 086 | `app/schemas/auth.py:167` `StepUp`、`:179` `AddContactRequest` |
+
+### 10.2 §9 測試計畫 → 測試函式
+
+| §9 案例 | 測試 |
+|---|---|
+| 持有 session 但提不出證明 → 無法更換 | `test_replacing_a_contact_without_step_up_is_refused`（`tests/test_account_profile.py:63`） |
+| step-up 密碼錯 → 401 且不消耗新管道的碼 | `test_replacing_with_a_wrong_password_is_refused_and_burns_no_code`（`:74`） |
+| SSO-only 未帶舊管道碼 → 422 | `test_sso_only_account_gets_a_code_on_the_old_channel`（`:99`） |
+| 更換成功後舊管道收到通知，新值遮蔽 | `test_replacement_notifies_the_old_channel_with_a_masked_value`（`:167`） |
+| 其他 session 仍有效 | `test_replacement_does_not_revoke_other_sessions`（`:183`） |
+| 首次新增不需 step-up | `test_first_contact_of_a_type_needs_no_step_up`（`:88`） |
+| 取代為原子操作 | `test_replacement_swaps_the_row_atomically`（`:137`）— **僅成功路徑，見 10.3** |
+| 取代後新值可登入、舊值不可 | `test_after_replacement_the_new_address_logs_in_and_the_old_does_not`（`:149`） |
+| 刪最後一個且無 SSO → 409 | `test_deleting_the_last_contact_without_sso_is_refused`（`:202`） |
+| 刪最後一個但有 SSO → 成功 | `test_deleting_the_last_contact_is_allowed_with_an_sso_identity`（`:212`） |
+| 刪其中一個（尚有另一型別）→ 成功 | `test_deleting_one_of_two_contacts_is_allowed`（`:222`） |
+| `/users/me` 回 contacts / identities，不含 `provider_subject` | `test_users_me_returns_contacts_and_identities`（`:249`）、`test_users_me_never_exposes_provider_subject`（`:261`） |
+| 忘記密碼四端點行為完全不變 | 零改動佐證：`git diff main...HEAD -- app/api/v1/endpoints/auth/password.py tests/test_forgot_password.py tests/test_set_password.py tests/test_change_password_identity.py` 為空 |
+
+**超出 §9 的補充測試**：`test_sso_only_account_replaces_with_the_old_channel_code`（`:112`，SSO-only 的成功路徑）、`test_deleting_a_contact_type_the_user_does_not_have`（`:236`，404）、`test_users_me_does_not_mask_your_own_contacts`（`:271`）；以及 `tests/test_add_contact.py` 三條改寫——原本斷言「第二個 email → 409」的案例改為斷言「422 要求 step-up，且新地址收不到任何碼」（`:89`、`:104`、`:131`）。
+
+### 10.3 已知缺口
+
+**§9 的「模擬 INSERT 失敗時舊列仍在」沒有對應測試。** `test_replacement_swaps_the_row_atomically` 只驗成功路徑（舊列消失、新列出現），沒有注入失敗來證明交易會整個回捲。
+
+不補的理由：`replace_verified()` 的 DELETE + INSERT 走同一個 `AsyncSession`，回捲由 SQLAlchemy 的交易邊界保證，測它等於測 SQLAlchemy。真正該擋的失效模式——「先刪後加，中間空窗」——在 ADR-098 就被設計否決了，程式碼裡不存在那條路徑。**記在這裡而非默默略過**，因為它是 §9 明列卻沒交付的一條。
