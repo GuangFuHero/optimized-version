@@ -148,8 +148,12 @@ export function LoginForm({
 
     try {
       await action();
-    } catch {
-      setSubmissionError(loginFormText.actionFailedMessage);
+    } catch (error) {
+      setSubmissionError(
+        error instanceof AuthFormError
+          ? error.message
+          : loginFormText.actionFailedMessage,
+      );
     }
   }
 
@@ -188,12 +192,13 @@ export function LoginForm({
         resetField('password');
       }
     } catch (error) {
+      const fallbackMessage =
+        mode === 'login'
+          ? loginFormText.loginFailedMessage
+          : loginFormText.registerFailedMessage;
+
       setSubmissionError(
-        error instanceof AuthFormError
-          ? error.message
-          : mode === 'login'
-            ? loginFormText.loginFailedMessage
-            : loginFormText.registerFailedMessage,
+        error instanceof AuthFormError ? error.message : fallbackMessage,
       );
     }
   });

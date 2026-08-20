@@ -1,8 +1,4 @@
 import {
-  resolveClientIp,
-  runWithClientIp,
-} from '@rescue-frontend/data-access/server';
-import {
   ApiError,
   addContactAsync,
   changePasswordAsync,
@@ -28,6 +24,7 @@ import {
   applyBackendAuthResponseCookies,
   resolveBackendAuthTokenAsync,
 } from '../../../../../lib/server-backend-auth';
+import { withClientIpAsync } from '../../../../../lib/client-ip';
 
 function resolveErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '請求失敗';
@@ -92,22 +89,12 @@ function getPathKey(segments: string[] | undefined) {
 
 type RouteContext = { params: Promise<{ segments?: string[] }> };
 
-/**
- * Attach the browser's IP to every backend call this request makes.
- *
- * The backend rate-limits per caller IP. Every call it sees comes from this server, so without
- * forwarding, all users share a single allowance.
- */
-function withClientIp<T>(request: NextRequest, handler: () => Promise<T>) {
-  return runWithClientIp(resolveClientIp(request.headers), handler);
-}
-
 export async function GET(request: NextRequest, context: RouteContext) {
-  return withClientIp(request, () => handleGetAsync(request, context));
+  return withClientIpAsync(() => handleGetAsync(request, context));
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  return withClientIp(request, () => handlePostAsync(request, context));
+  return withClientIpAsync(() => handlePostAsync(request, context));
 }
 
 async function handleGetAsync(

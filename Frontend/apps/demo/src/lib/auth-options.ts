@@ -5,12 +5,7 @@ import {
   loginAsync,
   type ITokenPair,
 } from '@rescue-frontend/data-access';
-import {
-  resolveClientIp,
-  runWithClientIp,
-} from '@rescue-frontend/data-access/server';
 import type { NextAuthOptions } from 'next-auth';
-import { headers } from 'next/headers';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import LineProvider from 'next-auth/providers/line';
@@ -20,6 +15,7 @@ import {
   refreshBackendAuthTokenAsync,
   type BackendAuthToken,
 } from './server-backend-auth';
+import { withClientIpAsync } from './client-ip';
 
 type AuthenticatedUser = {
   id: string;
@@ -32,17 +28,6 @@ type AuthenticatedUser = {
   expiresIn: number;
 };
 
-/**
- * Attach the browser's IP so the backend rate-limits this login against the right caller.
- *
- * Login does not go through the BFF route, so it needs its own wrapper.
- */
-async function runLoginWithClientIpAsync<T>(handler: () => Promise<T>) {
-  const headerStore = await headers();
-
-  return runWithClientIp(resolveClientIp(headerStore), handler);
-}
-
 async function loginWithCredentials(
   username: string,
   password: string,
@@ -50,9 +35,7 @@ async function loginWithCredentials(
   let payload: ITokenPair;
 
   try {
-    payload = await runLoginWithClientIpAsync(() =>
-      loginAsync(username, password),
-    );
+    payload = await withClientIpAsync(() => loginAsync(username, password));
   } catch {
     return null;
   }
@@ -86,23 +69,25 @@ async function completeOAuthLoginAsync({
   fallbackEmail?: string | null;
   fallbackName?: string | null;
 }) {
-  const tokenPair =
-    provider === 'google'
-      ? await googleSsoAsync({ id_token: idToken })
-      : await lineSsoAsync({ id_token: idToken });
+  return withClientIpAsync(async () => {
+    const tokenPair =
+      provider === 'google'
+        ? await googleSsoAsync({ id_token: idToken })
+        : await lineSsoAsync({ id_token: idToken });
 
-  const currentUser = await getCurrentUserAsync(tokenPair.access_token);
+    const currentUser = await getCurrentUserAsync(tokenPair.access_token);
 
-  return {
-    id: currentUser.uuid,
-    email: fallbackEmail,
-    loginIdentity: fallbackEmail,
-    name: currentUser.name ?? fallbackName,
-    accessToken: tokenPair.access_token,
-    refreshToken: tokenPair.refresh_token,
-    tokenType: tokenPair.token_type ?? 'bearer',
-    expiresIn: tokenPair.expires_in,
-  } satisfies AuthenticatedUser;
+    return {
+      id: currentUser.uuid,
+      email: fallbackEmail,
+      loginIdentity: fallbackEmail,
+      name: currentUser.name ?? fallbackName,
+      accessToken: tokenPair.access_token,
+      refreshToken: tokenPair.refresh_token,
+      tokenType: tokenPair.token_type ?? 'bearer',
+      expiresIn: tokenPair.expires_in,
+    } satisfies AuthenticatedUser;
+  });
 }
 
 export const authOptions: NextAuthOptions = {
