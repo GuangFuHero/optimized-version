@@ -60,8 +60,10 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, team=No
 
 
 async def _zone_reviewer_with_property_suggestion(db, station_point: Point):
-    """Set up a gov team with a WorkZone, a station.review=zone reviewer, and a pending
-    property suggestion whose parent station sits at `station_point`. Returns the suggestion.
+    """Build a gov team with a WorkZone, a station.review=zone reviewer, and a suggestion.
+
+    The pending property suggestion's parent station sits at `station_point`. Returns the
+    suggestion.
     """
     team = Team(name="T1", type="gov")
     db.add(team)
@@ -108,8 +110,11 @@ async def _zone_reviewer_with_property_suggestion(db, station_point: Point):
 
 @pytest.mark.asyncio
 async def test_zone_reviewer_can_review_property_suggestion_inside_zone(db):
-    """The parent station sits inside the reviewer's WorkZone, so the borrowed-geometry
-    checkpoint 2 passes and the change applies (PR #24 [3])."""
+    """A property inside the reviewer's WorkZone can be reviewed.
+
+    The property has no geometry of its own; checkpoint 2 borrows the parent station's,
+    which is what makes this pass (PR #24 [3]).
+    """
     reviewer, prop, suggestion = await _zone_reviewer_with_property_suggestion(db, _INSIDE)
 
     reviewed = await review_station_suggestion(
@@ -124,8 +129,11 @@ async def test_zone_reviewer_can_review_property_suggestion_inside_zone(db):
 
 @pytest.mark.asyncio
 async def test_zone_reviewer_is_404_for_property_suggestion_outside_zone(db):
-    """Zone is still enforced: a property whose parent station is outside the WorkZone
-    still 404s — the fix borrows geometry, it does not blanket-open property reviews."""
+    """A property whose parent station is outside the WorkZone still 404s.
+
+    Zone is still enforced: borrowing the parent's geometry widens what checkpoint 2 can
+    see, it does not blanket-open property reviews.
+    """
     reviewer, _prop, suggestion = await _zone_reviewer_with_property_suggestion(db, _OUTSIDE)
 
     with pytest.raises(HTTPException) as exc:

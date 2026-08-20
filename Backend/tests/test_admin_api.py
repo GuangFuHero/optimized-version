@@ -1,7 +1,8 @@
-"""Integration tests for the minimal admin REST API (T117, Spec/008-rbac-authorization/decisions.md ADR-031/032).
+"""Integration tests for the minimal admin REST API (T117, ADR-031/032).
 
 Covers: role assignment (platform + team kind), the last-super_admin lockout guard, and
-team membership add/remove including the checkpoint-2 cross-team 404 (ADR-023).
+team membership add/remove including the checkpoint-2 cross-team 404 (ADR-023). Those ADRs
+live in `Spec/008-rbac-authorization/decisions.md`.
 
 Every uuid used after a later `db_session.commit()` is captured into a plain `str` the
 moment the row is created, never re-read off the ORM object afterward: `db_session` is
