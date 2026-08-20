@@ -226,3 +226,31 @@ def get_email_sender() -> EmailSender:
         from app.messaging.smtp2go import Smtp2goEmailSender  # noqa: PLC0415 — optional adapter
         return Smtp2goEmailSender()
     return ConsoleEmailSender()
+
+
+def build_contact_changed_email(masked_new_value: str) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the OLD address that the contact was replaced.
+
+    Sent to the address being replaced, not the new one — this is the only mechanism that
+    lets a victim of session theft notice the takeover attempt (ADR-085). The new value is
+    masked so a forwarded copy does not leak it in full.
+    """
+    subject = f"【{_BRAND_ZH}】聯絡方式已變更 Contact changed"
+    html = _render_email(
+        h1="聯絡方式已變更 Contact changed",
+        notices=[
+            f"您帳號的聯絡方式已變更為 {masked_new_value}。",
+            ('<span style="' + _S_NOTICE_EN + '">Your account contact was changed to '
+             f'{masked_new_value}.</span>'),
+        ],
+        footer_lines=[
+            "若非本人操作，請立即聯繫我們。 If this was not you, contact us immediately.",
+            _FOOTER_BRAND,
+        ],
+    )
+    text = (
+        f"您帳號的聯絡方式已變更為 {masked_new_value}。\n"
+        f"Your account contact was changed to {masked_new_value}.\n"
+        "若非本人操作，請立即聯繫我們。\n"
+    )
+    return subject, html, text
