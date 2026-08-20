@@ -1,8 +1,9 @@
 """Repositories for stations, closure areas, station properties, and crowd sourcing."""
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.search import like_pattern, matches, normalize_query
 from app.infrastructure.repository.base import GenericRepository
 from app.models.geo import ClosureArea, Station
 from app.models.secondary_location import SecondaryLocation
@@ -24,40 +25,100 @@ class StationRepository(GenericRepository[Station]):
         """Initialize with Station as the managed model."""
         super().__init__(Station)
 
+    def _search_condition(self, term: str):
+        """Match the station itself, its properties, or its address (ADR-079/080).
+
+        The related tables are reached with EXISTS rather than a JOIN: a station with
+        three matching properties would otherwise be returned three times, inflating
+        totalCount and skipping rows when paging.
+        """
+        pattern = like_pattern(term)
+        return or_(
+            matches(self.model.search_text, pattern),
+            exists(
+                select(1).where(
+                    StationProperty.station_uuid == self.model.uuid,
+                    StationProperty.delete_at.is_(None),
+                    matches(StationProperty.search_text, pattern),
+                )
+            ),
+            exists(
+                select(1).where(
+                    SecondaryLocation.geometry_uuid == self.model.uuid,
+                    matches(SecondaryLocation.search_text, pattern),
+                )
+            ),
+        )
+
+    def _active_conditions(
+        self, *, bounds=None, station_type: str | None = None,
+        q: str | None = None, extra_filters=(),
+    ) -> list:
+        """The single source of truth for "which stations match this request".
+
+        Both list_active() and count_active() MUST build their WHERE clause from this and
+        nothing else. A condition present in one but not the other makes totalCount
+        disagree with the rows actually returned, which silently breaks pagination — and
+        no existing test would go red.
+        """
+        conditions = [self.model.delete_at.is_(None), *extra_filters]
+        if bounds:
+            conditions.append(
+                func.ST_Intersects(
+                    self.model.geometry,
+                    func.ST_MakeEnvelope(
+                        bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
+                    ),
+                )
+            )
+        if station_type:
+            conditions.append(self.model.type == station_type)
+        term = normalize_query(q)
+        if term is not None:
+            conditions.append(self._search_condition(term))
+        return conditions
+
+    def _order_by(self, term: str | None) -> list:
+        """Relevance first when searching, otherwise the standing order (ADR-083).
+
+        similarity() is scored against the station's own search_text, so rows matched only
+        through a property or address score 0 and sort last among the matches — a station
+        *named* after the keyword is more relevant than one that merely stocks it.
+        """
+        standing = [
+            self.model.priority_score.desc().nulls_last(), self.model.created_at.desc()
+        ]
+        if term is None:
+            return standing
+        return [func.similarity(self.model.search_text, term).desc(), *standing]
+
     async def list_active(
         self, db: AsyncSession, *,
-        bounds=None, station_type: str | None = None,
+        bounds=None, station_type: str | None = None, q: str | None = None,
         skip: int = 0, limit: int = 50, extra_filters=(),
     ) -> list[Station]:
-        """List active stations with optional bbox/type filter and RBAC scope_filter conditions."""
-        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
-        if bounds:
-            bbox = func.ST_MakeEnvelope(
-                bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
-            )
-            query = query.where(func.ST_Intersects(self.model.geometry, bbox))
-        if station_type:
-            query = query.where(self.model.type == station_type)
+        """List active stations with optional bbox/type/keyword filter and RBAC scope conditions."""
+        conditions = self._active_conditions(
+            bounds=bounds, station_type=station_type, q=q, extra_filters=extra_filters
+        )
         result = await db.execute(
-            query.order_by(
-                self.model.priority_score.desc().nulls_last(), self.model.created_at.desc()
-            ).offset(skip).limit(limit)
+            select(self.model).where(*conditions)
+            .order_by(*self._order_by(normalize_query(q)))
+            .offset(skip).limit(limit)
         )
         return result.scalars().all()
 
     async def count_active(
-        self, db: AsyncSession, *, bounds=None, station_type: str | None = None, extra_filters=()
+        self, db: AsyncSession, *,
+        bounds=None, station_type: str | None = None, q: str | None = None, extra_filters=(),
     ) -> int:
-        """Count active stations with optional bbox/type filter and RBAC scope_filter conditions."""
-        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
-        if bounds:
-            bbox = func.ST_MakeEnvelope(
-                bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
-            )
-            query = query.where(func.ST_Intersects(self.model.geometry, bbox))
-        if station_type:
-            query = query.where(self.model.type == station_type)
-        return await db.scalar(select(func.count()).select_from(query.subquery()))
+        """Count active stations — MUST use the same conditions as list_active()."""
+        conditions = self._active_conditions(
+            bounds=bounds, station_type=station_type, q=q, extra_filters=extra_filters
+        )
+        return await db.scalar(
+            select(func.count()).select_from(select(self.model).where(*conditions).subquery())
+        )
 
     async def get_high_level_stations(self, db: AsyncSession, min_level: int) -> list[Station]:
         """Return all stations with a level at or above min_level."""

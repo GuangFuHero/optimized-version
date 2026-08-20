@@ -75,6 +75,10 @@ async def _ensure_test_database():
     eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
     async with eng.connect() as conn:
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
+        # pg_trgm supplies the gin_trgm_ops operator class used by the search_text indexes.
+        # Base.metadata.create_all builds those indexes, so without this every schema
+        # creation below fails — not one test, the whole suite.
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     await eng.dispose()
 
 
