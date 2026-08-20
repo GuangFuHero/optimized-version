@@ -103,7 +103,11 @@ async def update_station(
     if geometry is not None:
         validate_point(geometry)
         obj_in["geometry"] = geojson_to_geom(geometry)
-    if "operational_status" in obj_in:
+    # Only re-stamp on an actual transition. Testing for the key's presence instead
+    # meant a client that PUTs the whole form back bumped status_changed_at on every
+    # save, and station_freshness_trend reads exactly that column — so an unchanged
+    # station kept re-entering the "closed" series.
+    if obj_in.get("operational_status") not in (None, station.operational_status):
         obj_in["status_changed_at"] = datetime.now(UTC)
     return await station_repository.update(db, db_obj=station, obj_in=obj_in)
 
