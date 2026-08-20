@@ -12,6 +12,7 @@ from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.db.session import engine as app_engine
 from app.models.auth import User
+from app.models.geo import Station
 from app.models.photo import Photo
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
@@ -64,7 +65,7 @@ async def test_tickets_photos_uses_single_batched_query(client, coordinator_auth
         for t in tickets:
             for j in range(2):
                 db.add(Photo(
-                    ref_uuid=t.uuid, ref_type="ticket",
+                    ref_uuid=t.uuid, ref_type="geometry",
                     url=f"https://example/{t.uuid}/{j}.jpg",
                     created_by=user_uuid,
                 ))
@@ -79,6 +80,48 @@ async def test_tickets_photos_uses_single_batched_query(client, coordinator_auth
     body = resp.json()
     assert "errors" not in body, body
     items = body["data"]["tickets"]["items"]
+    assert sum(len(it["photos"]) for it in items) >= 6
+    assert counter.count == 1, (
+        f"expected 1 SELECT against photos, got {counter.count} (N+1 regression)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_stations_photos_uses_single_batched_query(client, coordinator_auth):
+    """Asking for photos across N stations must issue one SELECT against photos.
+
+    Mirrors test_tickets_photos_uses_single_batched_query: a station's uuid IS its
+    base_geometries.uuid (shared PK), so the exact same ref_type='geometry' photos row
+    that serves tickets also serves stations via the shared photos_by_geometry loader.
+    """
+    user_uuid, _ = coordinator_auth
+
+    async with _test_db_ctx() as db:
+        stations: list[Station] = []
+        for i in range(3):
+            s = Station(geometry=from_shape(Point(121.6 + i * 0.001, 25.0), srid=4326), created_by=user_uuid)
+            db.add(s)
+            stations.append(s)
+        await db.flush()
+
+        for s in stations:
+            for j in range(2):
+                db.add(Photo(
+                    ref_uuid=s.uuid, ref_type="geometry",
+                    url=f"https://example/{s.uuid}/{j}.jpg",
+                    created_by=user_uuid,
+                ))
+        await db.flush()
+
+    with _SelectCounter("photos") as counter:
+        resp = await client.post("/graphql", json={
+            "query": "query { stations { items { uuid photos { url } } } }"
+        })
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "errors" not in body, body
+    items = body["data"]["stations"]["items"]
     assert sum(len(it["photos"]) for it in items) >= 6
     assert counter.count == 1, (
         f"expected 1 SELECT against photos, got {counter.count} (N+1 regression)"

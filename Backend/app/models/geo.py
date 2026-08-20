@@ -63,6 +63,9 @@ class Station(BaseGeometry):
     is_official: Mapped[bool] = mapped_column(Boolean, default=False)
     priority_score: Mapped[float | None] = mapped_column(Float)
     updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), nullable=True)
+    contact_name: Mapped[str | None] = mapped_column(String(100))
+    contact_email: Mapped[str | None] = mapped_column(String(100))
+    contact_phone: Mapped[str | None] = mapped_column(String(50))
 
     __mapper_args__ = {
         "polymorphic_identity": "station",

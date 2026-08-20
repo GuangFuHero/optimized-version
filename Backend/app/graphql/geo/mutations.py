@@ -23,7 +23,9 @@ from app.graphql.geo.types import (
     UpdateStationInput,
     UpdateStationPropertyInput,
 )
+from app.graphql.tickets.types import PhotoType
 from app.services import closure_area as closure_area_service
+from app.services import photo as photo_service
 from app.services import station as station_service
 
 
@@ -55,9 +57,27 @@ class GeoMutation:
             type=input.type, name=input.name, description=input.description,
             op_hour=input.op_hour, level=input.level, comment=input.comment,
             source=input.source, visibility=input.visibility.value,
+            contact_name=input.contact_name, contact_email=input.contact_email,
+            contact_phone=input.contact_phone,
             secondary_location=sl_dict,
         )
         return StationType.from_model(station)
+
+    @strawberry.mutation
+    async def attach_station_photo(
+        self, info: strawberry.types.Info, station_uuid: UUID, url: str
+    ) -> PhotoType:
+        """Attach a photo to a station.
+
+        Open crowd-sourcing (station.contribute) — anyone holding the capability may
+        attach a photo to any station, matching the property/rating contribution model.
+        Returns the created PhotoType.
+        """
+        photo = await photo_service.attach_photo_to_geometry(
+            info.context["db"], actor=require_authenticated(info),
+            base_geometry_uuid=str(station_uuid), url=url,
+        )
+        return PhotoType.from_model(photo)
 
     @strawberry.mutation
     async def update_station(

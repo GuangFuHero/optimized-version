@@ -54,7 +54,8 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
                 db, CrowdSourcing, "item_uuid", CrowdSourcingType
             )
         ),
-        "photos_by_ticket": DataLoader(load_fn=_make_photos_by_ticket_loader(db)),
+        "photos_by_ticket": DataLoader(load_fn=_make_photos_by_geometry_loader(db)),
+        "photos_by_station": DataLoader(load_fn=_make_photos_by_geometry_loader(db)),
         "tasks_by_ticket": DataLoader(
             load_fn=_make_one_to_many_loader(
                 db, TicketTask, "ticket_uuid", TicketTaskType, soft_delete=True
@@ -114,15 +115,20 @@ def _make_one_to_one_loader(
     return load_fn
 
 
-def _make_photos_by_ticket_loader(db: AsyncSession):
-    """Polymorphic photos: filter by ``ref_type='ticket'`` in addition to ref_uuid."""
+def _make_photos_by_geometry_loader(db: AsyncSession):
+    """Polymorphic photos: filter by ``ref_type='geometry'`` in addition to ref_uuid.
 
-    async def load_fn(ticket_uuids: list[str]) -> list[list[PhotoType]]:
+    ``ref_uuid`` is a base_geometries.uuid, which is also a ticket's or a station's own
+    uuid (shared PK via joined-table inheritance) — so this one loader serves both
+    ``photos_by_ticket`` and ``photos_by_station``.
+    """
+
+    async def load_fn(geometry_uuids: list[str]) -> list[list[PhotoType]]:
         rows = (
             await db.execute(
                 select(Photo).where(
-                    Photo.ref_type == "ticket",
-                    Photo.ref_uuid.in_(ticket_uuids),
+                    Photo.ref_type == "geometry",
+                    Photo.ref_uuid.in_(geometry_uuids),
                     Photo.delete_at.is_(None),
                 )
             )
@@ -130,7 +136,7 @@ def _make_photos_by_ticket_loader(db: AsyncSession):
         grouped: dict[str, list[PhotoType]] = defaultdict(list)
         for row in rows:
             grouped[str(row.ref_uuid)].append(PhotoType.from_model(row))
-        return [grouped[str(uuid)] for uuid in ticket_uuids]
+        return [grouped[str(uuid)] for uuid in geometry_uuids]
 
     return load_fn
 
