@@ -5,6 +5,8 @@
 **Status**: 定案，已實作（實作對照見 `spec.md` §10）
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/011-resource-search/decisions.md`。
 
+> **命名的優先順序（2026-08-20）**：ADR 編號是全域遞增的，**後續的 ADR 覆蓋先前的**——也覆蓋沒有 ADR 背書的既有程式碼寫法。本檔的 ADR-089 與 `Spec/010` 的 ADR-068/069 在 `identities` 一詞上曾經相撞，依此原則由 089 定奪（見該條）。
+
 > **編號更正（2026-08-19）**：本票原編為 ADR-084~089，但 011 在 docker 驗證階段追加了自己的 ADR-084（「過短查詢維持拋錯」），造成撞號。因 011 已在 PR #35、013 已在 PR #36，兩者都不宜再動，故把本票的 ADR-084 挪到 **ADR-098**，其餘 085~089 不變。ADR 是全域序號，一份 spec 的編號不必連續（`Spec/010` 亦為 068~076 + 096~097）。
 
 ---
@@ -134,7 +136,7 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 
 ---
 
-### ADR-089 `GET /users/me` 回傳 contacts 與 identities；`UserUpdate` 維持只有 name
+### ADR-089 `GET /users/me` 回傳 contacts 與 login_methods；`UserUpdate` 維持只有 name
 
 **白話**：讓使用者看得到自己目前的信箱、手機，以及是用什麼方式登入的。
 
@@ -144,7 +146,21 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 
 > **命名更正（2026-08-20）**：本欄位初版叫 `identities`，與 `Spec/010` 的 `identities`（可切換的 RBAC 身分＝role + 選填 team）**同名不同義**——一個是「你能用什麼方式登入」，一個是「你能以什麼身分行動」。兩張票都往 `UserResponse` 放一個 `identities`，合併時 git 會擋下來，但解衝突的人若不知道差異、隨手留一個，被留下的那邊功能就壞了，而且 Pydantic 不會報錯、要到執行期才發現。
 >
-> 改本票這邊而非 010：`identities` 是 010 身分切換的核心詞彙，散在它的 ADR、spec 與測試裡；本票的語意用 `login_methods` 描述反而更準（值就是 password / google / line）。schema 類別一併從 `IdentityOut` 改為 `LoginMethodOut`。前端當時尚未消費 `/users/me`，改名成本為零。
+> **決定：本票的欄位改名為 `login_methods`**（schema 類別 `IdentityOut` → `LoginMethodOut`），`identities` 留給 010。
+>
+> **依據是「後續的 ADR 優先」**：
+>
+> | 命名 | 由誰決定 | 有無 ADR |
+> |---|---|---|
+> | `UserIdentity` / `user_identities` / `IdentityRepository`＝登入方式 | 2026-01-17 既有程式碼 | **無** |
+> | `identities`＝可切換的 RBAC 身分 | ADR-068 / ADR-069 | 有 |
+> | `login_methods`＝登入方式（本條） | **ADR-089** | 有 |
+>
+> 曾一度以為該反過來改 010——理由是 codebase 從 2026-01 起「identity」一直指登入方式，010 才是後來借用該詞的一方，所以本票沿用 model 命名才叫依循 codebase。**該理由不成立**：那個 model 命名背後沒有任何 ADR，只是既有寫法；而有 ADR 的兩者之中，本條（089）在 010 的身分命名（068/069）之後。後續的 ADR 覆蓋先前的，也覆蓋沒有 ADR 的既有寫法。
+>
+> 附帶效果是 API 層的名字比 model 名更精確：值就是 password / google / line，`login_methods` 直說了它是什麼。model 與 repository 維持既有名稱不動——本條只決定 API 契約，不改資料層。
+>
+> 前端當時尚未消費 `/users/me`，改名成本為零。
 
 **Consequences**：
 ➕ 前端能顯示現值，也能正確選擇 step-up 方式。

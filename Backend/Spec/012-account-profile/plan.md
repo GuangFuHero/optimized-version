@@ -143,7 +143,7 @@ tests/test_add_contact.py             三條斷言從「第二個 email → 409�
 
 本票原本掛在 `main` 上、與其他票無關，重新排隊後改成鏈子的第三棒：**#37（多 team）→ #38（session 撤銷）→ 本票**。
 
-**為什麼要接在 #37 後**：兩張票都往 `UserResponse` 塞了一個叫 `identities` 的欄位，意思完全不同——010 的是「可切換的 RBAC 身分」（role + 選填 team），本票的是「登入方式」（password / google / line）。`git merge-tree` 看不出問題，但真的 merge 會在 3 個檔案停下來；更糟的是若解衝突的人不知道兩者不同義、隨手留一個，被丟掉那邊的功能就靜靜壞了，Pydantic 不會報錯。**本票的欄位改名為 `login_methods`**（類別 `IdentityOut` → `LoginMethodOut`），理由見 ADR-089 的命名更正。
+**為什麼要接在 #37 後**：兩張票都往 `UserResponse` 塞了一個叫 `identities` 的欄位，意思完全不同——010 的是「可切換的 RBAC 身分」（role + 選填 team），本票的是「登入方式」（password / google / line）。`git merge-tree` 看不出問題，但真的 merge 會在 3 個檔案停下來；更糟的是若解衝突的人不知道兩者不同義、隨手留一個，被丟掉那邊的功能就靜靜壞了，Pydantic 不會報錯。**本票的欄位改名為 `login_methods`**（類別 `IdentityOut` → `LoginMethodOut`）——依「後續的 ADR 覆蓋先前的」，由 ADR-089 定奪；資料層的 `UserIdentity` 維持原名。理由見 ADR-089 的命名更正。
 
 **為什麼還要再接在 #38 後**：本票的測試原本用 `create_access_token` 直接發沒有 session 的 token。#38 之後那種 token 一律 401，16 個測試會全掛；而且 `tests/test_add_contact.py` 兩張票都改，本身就有文字衝突。改用 #38 的 `auth_headers_for(redis, ...)` 之後，`test_replacement_does_not_revoke_other_sessions` 反而變得更有意義——它現在驗的是真的 session 沒被撤掉，而不是一個沒人管的字串。
 

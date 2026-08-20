@@ -143,7 +143,7 @@ POST /auth/contacts/verify { type, value, code }
 
 - 看自己的資料**不遮蔽**。
 - `login_methods` **只回 `provider`，不回 `provider_subject`**——subject 是 SSO 供應商的內部識別碼，前端不需要。
-- **欄位叫 `login_methods` 不叫 `identities`**：`identities` 已被 `Spec/010` 用於「可切換的 RBAC 身分」，同名會讓合併的人踩雷（見 ADR-089 的命名更正）。
+- **欄位叫 `login_methods` 不叫 `identities`**：`identities` 已被 `Spec/010`（ADR-068/069）用於「可切換的 RBAC 身分」，同名會讓合併的人踩雷。由**後續的 ADR-089** 定奪——資料層的 `UserIdentity` / `user_identities` 維持原名不動，本條只決定 API 契約（見 ADR-089 的命名更正）。
 - 前端需要這兩個欄位來（1）顯示現值、（2）判斷自己是否 SSO-only 以決定走哪種 step-up。
 
 `UserUpdate` 維持只有 `name`——Notion 的「姓名/電話/信箱」中，電話與信箱走 contacts 流程，profile 本體只剩姓名。
