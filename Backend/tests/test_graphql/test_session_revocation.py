@@ -13,7 +13,12 @@ import pytest
 from app.models.auth import User
 from app.repositories.session_repository import SessionRepository
 from tests.conftest import token_for
-from tests.test_graphql.conftest import auth_header, test_db
+
+# `test_db` is aliased on import: pytest collects any module-level name starting with
+# `test_`, and importing it unaliased adds a no-op "test" to the run (three other files
+# in this package already do that).
+from tests.test_graphql.conftest import auth_header
+from tests.test_graphql.conftest import test_db as _test_db
 
 pytestmark = pytest.mark.asyncio
 
@@ -22,7 +27,7 @@ TYPENAME = {"query": "{ __typename }"}
 
 async def _user_with_token(redis) -> tuple[str, str]:
     """A bare user plus a token backed by a live session."""
-    async with test_db() as db:
+    async with _test_db() as db:
         user = User(name=f"revoked_{uuid_mod.uuid4().hex[:8]}")
         db.add(user)
         await db.flush()

@@ -163,7 +163,7 @@ except RedisError:
 
 ## Task 7: 全套件 + Docker 驗收
 
-- [x] `uv run pytest -q` → **517 passed / 0 failed**（baseline 501 + 本票 16）
+- [x] `uv run pytest -q` → **516 passed / 0 failed**（baseline 501 + 本票 15）
 - [x] `uv run ruff check` 對本票改動的 7 個檔案全綠
 - [x] **Docker 完整驗證通過**（2026-08-20，實跑；細節見下）
 - [ ] 回報使用者，由使用者決定是否發 PR（PR 需等 #37 先合）
@@ -218,5 +218,7 @@ docker exec backend-db-1 psql -U postgres -c "DROP DATABASE IF EXISTS disaster_r
 **2. 踢人端點是 checkpoint 1 only，不是「沿用既有 scope 判定」。** ADR-103 初版的說法站不住：010 之後使用者沒有單一 team，目標使用者身上沒有 team 可供 checkpoint 2 比對。ADR 已更正，實務影響為零（seed 裡只有 `super_admin` 持有 `user.edit`）。
 
 **3. GraphQL 的撤銷測試必須住在 `tests/test_graphql/`。** 一開始寫在 `tests/test_session_revocation.py`，單獨跑會過、全套件跑會炸 `attached to a different loop`——GraphQL 請求不吃 `get_db` override，用的是真正的 application engine，而 `tests/test_graphql/` 的 fixture 才處理它的生命週期。已搬到 `tests/test_graphql/test_session_revocation.py`，兩邊都留了指路的註解。
+
+**4. `test_db` 被 pytest 當成測試收集。** `tests/test_graphql/conftest.py` 的 `test_db` 是個 async context manager，但名字以 `test_` 開頭——直接 import 進測試檔，pytest 就會把它收成一個什麼都不做的「測試」。本票的 GraphQL 測試檔改用 `as _test_db` 別名避開。**`test_queries.py` / `test_work_zone.py` / `test_zone_scope.py` 三個既有檔案仍有這個問題**（各多算一個空測試），屬既有噪音，不在本票順手改。
 
 計畫沒預料到、但確實踩到的一處：**`tests/test_security.py` 有自己的 `client` fixture**（`:32`），沒有 `get_redis` override。認證一旦要讀 Redis，那個 fixture 底下的每個已認證路由都 500。已補上與共用 fixture 相同的接線。這正是 Task 2 要排在 Task 3 之前的理由——它是在加了檢查之後才紅的，而那時全套件其餘部分是綠的，所以一眼就能定位。
