@@ -16,6 +16,7 @@ from app.models.auth import User
 from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
 from app.repositories.auth_repository import role_repository, user_repository
+from app.repositories.session_repository import SessionRepository
 from app.repositories.team_repository import team_repository
 from app.services.authz import require_scope
 
@@ -200,6 +201,29 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
     await db.commit()
     await db.refresh(target)
     return target
+
+
+async def revoke_user_sessions(db: AsyncSession, redis, *, actor: User, user_uuid: str) -> int:
+    """End every session the target holds; returns how many were revoked (ADR-103).
+
+    Checkpoint 1 only, on `user.edit`. There is no meaningful checkpoint 2 here: since
+    feature 010 a user has no single team (membership is whichever teams their grants name),
+    so there is no team on the target to scope against. In the current seed `user.edit`
+    belongs to `super_admin` alone, which matches how `assign_role` treats `rbac.assign`.
+
+    Idempotent by design — a target with nothing live still succeeds, because the caller is
+    asking for the end state "this person has no live sessions", not for an event.
+    """
+    await require_scope(actor, Perm.USER_EDIT, db)
+
+    target = await user_repository.get_by_uuid(db, user_uuid)
+    if target is None:
+        raise AdminNotFoundError("User not found")
+
+    repo = SessionRepository(redis)
+    members = await repo.redis.smembers(repo.USER_SESSIONS + str(target.uuid))
+    await repo.revoke_all_for_user(str(target.uuid))
+    return len(members)
 
 
 async def create_team(

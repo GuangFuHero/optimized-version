@@ -2,7 +2,7 @@
 
 **Date**: 2026-08-20
 **Feature**: 014-session-revocation
-**Status**: 定案，待實作
+**Status**: 定案，**已實作**（2026-08-20；驗收見 `plan.md`）
 **Notion**: 補齊功能 →「移除後台權限，回去原有登入狀態」（backend-Popo，08-18~08-22）——本票交付該子票缺的最後一塊
 **來源**: `Spec/010-multi-team-membership/decisions.md` 的 ADR-071 撤回時拆出
 **Depends on**: `feat/multi-team-membership-backend`（PR #37）。本票改的 `get_current_user` 正是 010 大幅改寫過的函式，基於 `main` 會保證衝突。
@@ -106,7 +106,7 @@ refresh 不帶 access token，走的是 `rotate()`，本來就會查 session。
 
 `Spec/010` 的 spec.md §7 明列「一般 access token 的撤銷（登出／**踢人**）由 `Spec/014` 提供」，所以踢人在本票範圍內。
 
-- **權限**：`Perm.USER_EDIT`，沿用既有 scope 判定（ADR-103）。
+- **權限**：`Perm.USER_EDIT`，checkpoint 1 only（ADR-103——初版寫「沿用既有 scope 判定」，實作時更正）。
 - **回應**：204，並回報撤掉幾個 session 於 log。不回報數量給呼叫端——那會洩漏該使用者有幾台裝置在線。
 - **冪等**：對沒有任何 session 的使用者回 204，不是 404。
 

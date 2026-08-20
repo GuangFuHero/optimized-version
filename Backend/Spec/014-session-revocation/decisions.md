@@ -2,7 +2,7 @@
 
 **Date**: 2026-08-20
 **Feature**: 014-session-revocation
-**Status**: 定案，待實作
+**Status**: 定案，**已實作**（2026-08-20）
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/012-account-profile/decisions.md` 的 ADR-098。
 
 **前情**：本票源自 `Spec/010` 的 ADR-071（access token 撤銷 / fail-closed）。該 ADR 在 010 的改版中撤回並拆出，理由是它修的是一個與多 team 無關的既有安全洞。這裡是它的完整版本。
@@ -99,6 +99,8 @@
 
 **測試的 `client` fixture 仍要補上 `app.state.redis`**：即使本票讓 GraphQL 顯式傳入，`app.state.redis` 缺失是一個會在別處再次咬人的既有落差，順手補齊成本為零。
 
+**實作補充（2026-08-20）**：`SessionRepository` 的匯入必須寫在函式內，不能放模組頂層——`app/repositories/session_repository.py:8` 反過來從 `app.core.security` 匯入 token hashing，頂層匯入會把循環閉合。這只是一個 import 位置的限制，不影響本 ADR 的決策。
+
 ---
 
 ### ADR-103 踢人端點用 `Perm.USER_EDIT`，不新增專用 permission
@@ -107,13 +109,17 @@
 
 **Context**：`Spec/010` 的 spec.md §7 明列踢人由本票提供，但目前沒有任何端點。權限有兩條路：復用 `Perm.USER_EDIT`（`app/core/permissions.py:54`），或新增 `user.revoke_sessions`。
 
-**Decision**：復用 `Perm.USER_EDIT`，沿用既有 scope 判定。端點為 `POST /admin/users/{uuid}/revoke-sessions`，回 204。
+**Decision**：復用 `Perm.USER_EDIT`，**checkpoint 1 only**。端點為 `POST /admin/users/{uuid}/revoke-sessions`，回 204。
 
 **Consequences**：
 ➕ 不動 seed、不動權限矩陣、不需要前端在權限管理頁多顯示一個項目。
 ➕ 語意站得住：能編輯一個使用者的帳號，就能終止他的 session；反過來說，只能看（`USER_VIEW`）的人踢不了人。
-➕ scope 判定沿用既有規則，所以 team admin 能踢的範圍與他能編輯的範圍一致，不需要另定一套。
+➕ 與 `assign_role` 對 `rbac.assign` 的處理同形（`app/services/admin.py:58`），不製造第二種模式。
 ➖ 無法把「踢人」單獨授予給不能改帳號的角色。**YAGNI**：現在沒有這種角色，真出現時再拆一個 permission 出來，成本只有一次 seed 變更。
+
+> **更正（2026-08-20，實作時發現）**：本 ADR 初版寫「沿用既有 scope 判定，所以 team admin 能踢的範圍與他能編輯的範圍一致」。**那是錯的**——`Spec/010` 之後使用者已經沒有單一 team（成員資格是他的授予各自指向哪些 team），所以「目標使用者」這個 resource 上根本沒有 team 可供 checkpoint 2 比對。改為 checkpoint 1 only。
+>
+> 實務影響是零：現行 seed 裡 `user.edit` 只有 `super_admin` 持有（`scripts/seed_rbac.py:85`），本來就沒有 team admin 能走到這個端點。真要讓 team admin 踢自己隊員，需要的是「以什麼定義目標的 team」這個設計決策，那是另一張票。
 
 **回應不帶撤銷數量**：回 204 而非「撤掉了 N 個」。N 會洩漏該使用者有幾台裝置在線，對呼叫端也沒有用處。數量寫進 log 即可。
 

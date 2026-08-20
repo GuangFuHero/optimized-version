@@ -43,7 +43,7 @@
 
 **Files:** Modify `app/repositories/session_repository.py`；Create `tests/test_session_revocation.py`
 
-- [ ] 新增查詢函式，讀不到回 `None`，連線失敗**讓例外往上拋**（不要吞成 `None`——那會把 Redis 故障偽裝成「session 已撤銷」，ADR-100 要的 log 就沒有原因可寫）
+- [x] 新增查詢函式，讀不到回 `None`，連線失敗**讓例外往上拋**（不要吞成 `None`——那會把 Redis 故障偽裝成「session 已撤銷」，ADR-100 要的 log 就沒有原因可寫）
 
 ```python
 async def session_is_live(self, sid: str) -> dict | None:
@@ -61,10 +61,10 @@ async def session_is_live(self, sid: str) -> dict | None:
 
 **Files:** Modify `tests/conftest.py`
 
-- [ ] `token_for` 改為 async 並建立真的 session
-- [ ] `auth_headers_for` 跟著改 async
-- [ ] `client` fixture 補上 `app.state.redis`（ADR-102）
-- [ ] 逐一修 13 個檔案裡直呼 `create_access_token` 的 30 處
+- [x] `token_for` 改為 async 並建立真的 session
+- [x] `auth_headers_for` 跟著改 async
+- [x] `client` fixture 補上 `app.state.redis`（ADR-102）
+- [x] 逐一修 13 個檔案裡直呼 `create_access_token` 的 30 處
 
 ```python
 async def token_for(redis, user_uuid, role, team=None) -> str:
@@ -98,9 +98,9 @@ grep -rn "create_access_token" tests/ | grep -v conftest.py
 
 **Files:** Modify `app/core/security.py`
 
-- [ ] `get_current_user` 增加 `redis` 參數（`Depends(get_redis)`）
-- [ ] 解碼後、撈 user 前插入檢查
-- [ ] 無 `sid` → 401；session 不存在 → 401；`user_uuid` 不符 → 401
+- [x] `get_current_user` 增加 `redis` 參數（`Depends(get_redis)`）
+- [x] 解碼後、撈 user 前插入檢查
+- [x] 無 `sid` → 401；session 不存在 → 401；`user_uuid` 不符 → 401
 
 ```python
 payload = _decode_access_payload(token)
@@ -123,7 +123,7 @@ if session is None or session["user_uuid"] != payload["sub"]:
 
 **Files:** Modify `app/graphql/context.py`
 
-- [ ] 從 `request.app.state.redis` 取得 client，顯式傳入 `get_current_user`
+- [x] 從 `request.app.state.redis` 取得 client，顯式傳入 `get_current_user`
 
 ```python
 user = await get_current_user(db=db, token=token, redis=request.app.state.redis)
@@ -135,8 +135,8 @@ user = await get_current_user(db=db, token=token, redis=request.app.state.redis)
 
 **Files:** Modify `app/core/security.py`
 
-- [ ] 包住 Redis 呼叫，`RedisError` 轉 401
-- [ ] **error log 帶原因**，對外回應與一般 401 不可區分
+- [x] 包住 Redis 呼叫，`RedisError` 轉 401
+- [x] **error log 帶原因**，對外回應與一般 401 不可區分
 
 ```python
 try:
@@ -155,17 +155,17 @@ except RedisError:
 
 **Files:** Modify `app/services/admin.py`、`app/api/v1/endpoints/admin.py`
 
-- [ ] service：`revoke_user_sessions(db, redis, *, actor, target_uuid)`，先確認 target 存在（404）、再 `require_scope`、再 `revoke_all_for_user`
-- [ ] endpoint：`POST /users/{uuid}/revoke-sessions`，`Perm.USER_EDIT`，回 204
-- [ ] 撤銷數量寫 log，不回給呼叫端
+- [x] service：`revoke_user_sessions(db, redis, *, actor, target_uuid)`，先確認 target 存在（404）、再 `require_scope`、再 `revoke_all_for_user`
+- [x] endpoint：`POST /users/{uuid}/revoke-sessions`，`Perm.USER_EDIT`，回 204
+- [x] 撤銷數量寫 log，不回給呼叫端
 
 **scope 檢查沿用 `require_scope`**，與 admin.py 其餘寫入動作同形——不要自己寫一套 team 比對，那是 `Spec/010` 之後最容易寫錯的地方。
 
 ## Task 7: 全套件 + Docker 驗收
 
-- [ ] `uv run pytest` 全綠（本機 db 在 5433，見下方指令）
-- [ ] `uv run ruff check` 對本票改動的檔案全綠
-- [ ] Docker 完整驗證：實際 logout 後拿舊 token 打 REST 與 GraphQL，兩邊都要 401
+- [x] `uv run pytest -q` → **517 passed / 0 failed**（baseline 501 + 本票 16）
+- [x] `uv run ruff check` 對本票改動的 7 個檔案全綠
+- [ ] **Docker 完整驗證未執行** — 開 PR 前要補：實際 logout 後拿舊 token 打 REST 與 GraphQL，兩邊都要 401
 - [ ] 回報使用者，由使用者決定是否發 PR（PR 需等 #37 先合）
 
 ```bash
@@ -187,3 +187,18 @@ docker exec backend-db-1 psql -U postgres -c "DROP DATABASE IF EXISTS disaster_r
 
 3. **baseline 是全綠。** 2026-08-20 在本分支的基底（`feat/multi-team-membership-backend`）實跑 `uv run pytest -q` → **501 passed / 0 failed**，`tests/test_graphql/` 131 passed。所以本票落地後出現的每一個紅燈都是本票造成的，沒有需要事先扣掉的既有失敗。
 4. **Redis 測試用的是 db 15 的真 redis**（`tests/conftest.py:48`），不是 fakeredis——所以 session 的建立與撤銷在測試裡都是真的，這對本票是好事。
+
+
+---
+
+## 實作紀錄（2026-08-20）
+
+實際交付與計畫的差異，三處：
+
+**1. `SessionRepository` 只能在函式內匯入。** `app/repositories/session_repository.py:8` 反過來從 `app.core.security` 匯入 token hashing，模組頂層匯入會閉合循環。`_require_live_session` 內部匯入，原因寫在該處註解。
+
+**2. 踢人端點是 checkpoint 1 only，不是「沿用既有 scope 判定」。** ADR-103 初版的說法站不住：010 之後使用者沒有單一 team，目標使用者身上沒有 team 可供 checkpoint 2 比對。ADR 已更正，實務影響為零（seed 裡只有 `super_admin` 持有 `user.edit`）。
+
+**3. GraphQL 的撤銷測試必須住在 `tests/test_graphql/`。** 一開始寫在 `tests/test_session_revocation.py`，單獨跑會過、全套件跑會炸 `attached to a different loop`——GraphQL 請求不吃 `get_db` override，用的是真正的 application engine，而 `tests/test_graphql/` 的 fixture 才處理它的生命週期。已搬到 `tests/test_graphql/test_session_revocation.py`，兩邊都留了指路的註解。
+
+計畫沒預料到、但確實踩到的一處：**`tests/test_security.py` 有自己的 `client` fixture**（`:32`），沒有 `get_redis` override。認證一旦要讀 Redis，那個 fixture 底下的每個已認證路由都 500。已補上與共用 fixture 相同的接線。這正是 Task 2 要排在 Task 3 之前的理由——它是在加了檢查之後才紅的，而那時全套件其餘部分是綠的，所以一眼就能定位。
