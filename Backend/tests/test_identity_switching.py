@@ -188,12 +188,12 @@ async def test_switching_does_not_rotate_the_refresh_token(client, db_session):
 # --- an identity that has since vanished (ADR-096) ----------------------------------------
 
 
-async def test_a_revoked_identity_401s_on_the_request_path(client, db_session):
+async def test_a_revoked_identity_401s_on_the_request_path(client, db_session, redis):
     """Revoking the grant a token acts as signs that session out, rather than downgrading it."""
     from sqlalchemy import delete
 
     user_uuid, _, team_role, team = await _account_with_two_identities(db_session)
-    headers = auth_headers_for(user_uuid, team_role, team)
+    headers = await auth_headers_for(redis, user_uuid, team_role, team)
     assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 200
 
     await db_session.execute(
@@ -204,14 +204,14 @@ async def test_a_revoked_identity_401s_on_the_request_path(client, db_session):
     assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
 
 
-async def test_a_soft_deleted_team_takes_its_identity_with_it(client, db_session):
+async def test_a_soft_deleted_team_takes_its_identity_with_it(client, db_session, redis):
     """Soft-deleting the team invalidates the identity bound to it (ADR-096)."""
     from datetime import UTC, datetime
 
     from sqlalchemy import update
 
     user_uuid, _, team_role, team = await _account_with_two_identities(db_session)
-    headers = auth_headers_for(user_uuid, team_role, team)
+    headers = await auth_headers_for(redis, user_uuid, team_role, team)
 
     await db_session.execute(
         update(Team).where(Team.uuid == team.uuid).values(delete_at=datetime.now(UTC))
@@ -257,11 +257,11 @@ async def test_refresh_refuses_a_vanished_identity_without_burning_the_token(cli
     assert accepted.status_code == 200, accepted.text
 
 
-async def test_users_me_lists_every_identity_and_the_active_one(client, db_session):
+async def test_users_me_lists_every_identity_and_the_active_one(client, db_session, redis):
     """The switcher UI needs the full list plus which one is in effect."""
     user_uuid, _, team_role, team = await _account_with_two_identities(db_session)
     resp = await client.get(
-        "/api/v1/users/me", headers=auth_headers_for(user_uuid, team_role, team)
+        "/api/v1/users/me", headers=await auth_headers_for(redis, user_uuid, team_role, team)
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()

@@ -107,24 +107,38 @@ async def db_session():
     await engine.dispose()
 
 
-def token_for(user_uuid, role, team=None) -> str:
-    """Mint an access token that acts as a given identity (feature 010).
+async def token_for(redis, user_uuid, role=None, team=None) -> str:
+    """Mint an access token backed by a real session (features 010 + 014).
 
-    Production tokens carry an `act` claim naming the identity the session is acting as, and
-    `get_current_user` refuses a token whose identity it cannot resolve. A bare
-    `create_access_token(data={"sub": ...})` therefore authenticates but holds no identity,
-    which resolves to zero grants — correct fail-closed behaviour, but not what a test
-    exercising permissions wants. Use this instead.
+    Two things make a production token work, and a test token has to have both:
+
+    - an `act` claim naming the identity the session acts as (010). A bare
+      `create_access_token(data={"sub": ...})` authenticates but holds no identity, which
+      resolves to zero grants — correct fail-closed behaviour, but not what a test
+      exercising permissions wants. Pass `role` (and `team`) to get one.
+    - a live `session:{sid}` in Redis (014). `get_current_user` refuses a token whose
+      session it cannot find, so a token minted without one authenticates nothing.
+
+    Deliberately mints the same shape production does rather than letting tests bypass the
+    session check: the check IS the feature, and revocation tests need a real session to
+    revoke (ADR-105).
+
+    `role=None` mints an authenticated token with no identity — for tests that only need
+    "somebody is logged in" (linking an SSO account, setting a password, and so on).
     """
     from app.core.identity import encode_act
+    from app.repositories.session_repository import SessionRepository
 
-    act = encode_act(str(role.uuid), str(team.uuid) if team is not None else None)
-    return create_access_token(data={"sub": str(user_uuid)}, act=act)
+    sid, _ = await SessionRepository(redis).create_session(str(user_uuid), "test")
+    act = None
+    if role is not None:
+        act = encode_act(str(role.uuid), str(team.uuid) if team is not None else None)
+    return create_access_token(data={"sub": str(user_uuid)}, sid=sid, act=act)
 
 
-def auth_headers_for(user_uuid, role, team=None) -> dict:
-    """Bearer headers for a token acting as the given identity."""
-    return {"Authorization": f"Bearer {token_for(user_uuid, role, team)}"}
+async def auth_headers_for(redis, user_uuid, role=None, team=None) -> dict:
+    """Bearer headers for a token acting as the given identity, backed by a live session."""
+    return {"Authorization": f"Bearer {await token_for(redis, user_uuid, role, team)}"}
 
 
 def acting_as(user, role, team=None):
@@ -198,11 +212,17 @@ async def client(db_session, redis):
 
     app.dependency_overrides[security.get_db] = override_get_db
     app.dependency_overrides[get_redis] = lambda: redis
+    # The GraphQL context reads redis off app.state, not through the dependency, because it
+    # calls get_current_user directly rather than via FastAPI (ADR-102). Overriding only the
+    # dependency would leave that path pointing at whatever the lifespan left behind — and
+    # the lifespan does not run under ASGITransport, so it points at nothing.
+    app.state.redis = redis
     app.dependency_overrides[get_google_verifier] = lambda: FakeGoogleVerifier()
     app.dependency_overrides[get_line_verifier] = lambda: FakeLineVerifier()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+    del app.state.redis
 
 
 @pytest.fixture

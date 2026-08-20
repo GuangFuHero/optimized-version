@@ -41,7 +41,7 @@ INSIDE_ZONE_POINT = Point(121.5, 24.5)
 OUTSIDE_ZONE_POINT = Point(123.5, 24.5)
 
 
-async def _make_zone_scoped_editor(team_uuid: str) -> tuple[str, str]:
+async def _make_zone_scoped_editor(redis, team_uuid: str) -> tuple[str, str]:
     """Create a user acting as a `team_uuid` role that grants ticket.edit at 'zone' scope.
 
     Zone scope resolves the team off the active identity (ADR-074), so the role has to be
@@ -69,7 +69,7 @@ async def _make_zone_scoped_editor(team_uuid: str) -> tuple[str, str]:
         db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="zone"))
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid))
 
-        return str(user.uuid), token_for(user.uuid, role, team)
+        return str(user.uuid), await token_for(redis, user.uuid, role, team)
 
 
 @pytest_asyncio.fixture
@@ -122,9 +122,9 @@ async def _make_ticket_at(point: Point) -> str:
 
 
 @pytest.mark.asyncio
-async def test_zone_scope_grants_edit_on_a_ticket_inside_the_assigned_zone(client, team_assigned_to_zone):
+async def test_zone_scope_grants_edit_on_a_ticket_inside_the_assigned_zone(client, redis, team_assigned_to_zone):
     """A `ticket.edit=zone` grant lets the team's member edit a ticket inside its assigned zone."""
-    _, editor_token = await _make_zone_scoped_editor(team_assigned_to_zone)
+    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone)
     ticket_uuid = await _make_ticket_at(INSIDE_ZONE_POINT)
 
     resp = await client.post(
@@ -141,9 +141,9 @@ async def test_zone_scope_grants_edit_on_a_ticket_inside_the_assigned_zone(clien
 
 
 @pytest.mark.asyncio
-async def test_zone_scope_404s_for_a_ticket_outside_the_assigned_zone(client, team_assigned_to_zone):
+async def test_zone_scope_404s_for_a_ticket_outside_the_assigned_zone(client, redis, team_assigned_to_zone):
     """The same grant 404s (not 403) for a ticket outside the team's assigned zone (ADR-023)."""
-    _, editor_token = await _make_zone_scoped_editor(team_assigned_to_zone)
+    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone)
     ticket_uuid = await _make_ticket_at(OUTSIDE_ZONE_POINT)
 
     resp = await client.post(
@@ -177,14 +177,14 @@ async def _make_task_under(ticket_uuid: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, team_assigned_to_zone):
+async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, redis, team_assigned_to_zone):
     """ADR-052 (direction B): a task inherits its parent ticket's location for the zone check.
 
     A TicketTask has no geometry of its own, so a `ticket.edit=zone` grant would never match
     it directly; borrowing the parent ticket's point lets a zone editor moderate tasks under
     tickets inside the team's assigned zone (which they own neither).
     """
-    _, editor_token = await _make_zone_scoped_editor(team_assigned_to_zone)
+    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone)
     ticket_uuid = await _make_ticket_at(INSIDE_ZONE_POINT)
     task_uuid = await _make_task_under(ticket_uuid)
 
@@ -202,9 +202,9 @@ async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, te
 
 
 @pytest.mark.asyncio
-async def test_zone_scope_404s_task_under_ticket_outside_zone(client, team_assigned_to_zone):
+async def test_zone_scope_404s_task_under_ticket_outside_zone(client, redis, team_assigned_to_zone):
     """Symmetric to the ticket-level case: a task under a ticket OUTSIDE the zone is 404."""
-    _, editor_token = await _make_zone_scoped_editor(team_assigned_to_zone)
+    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone)
     ticket_uuid = await _make_ticket_at(OUTSIDE_ZONE_POINT)
     task_uuid = await _make_task_under(ticket_uuid)
 
@@ -222,14 +222,14 @@ async def test_zone_scope_404s_task_under_ticket_outside_zone(client, team_assig
 
 
 @pytest.mark.asyncio
-async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, team_assigned_to_zone):
+async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, redis, team_assigned_to_zone):
     """Soft-deleting a work zone immediately lapses the zone scope it granted.
 
     rbac_scopes.py filters `WorkZone.delete_at IS NULL` on both the in_scope and scope_filter
     paths, so no cache invalidation or assignment cleanup is needed — but that has to stay
     true, hence this test. A lapsed zone scope surfaces as 404, not 403 (ADR-023).
     """
-    _, editor_token = await _make_zone_scoped_editor(team_assigned_to_zone)
+    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone)
     ticket_uuid = await _make_ticket_at(INSIDE_ZONE_POINT)
 
     # Baseline: while the zone is live, the zone-scoped grant reaches the ticket.
@@ -266,9 +266,9 @@ async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, team_
 
 
 @pytest.mark.asyncio
-async def test_zone_scope_denies_a_team_with_no_zone_assignment_at_all(client, unassigned_team):
+async def test_zone_scope_denies_a_team_with_no_zone_assignment_at_all(client, redis, unassigned_team):
     """A `zone`-scoped grant with no assigned zone at all denies everything (in_scope -> False)."""
-    _, editor_token = await _make_zone_scoped_editor(unassigned_team)
+    _, editor_token = await _make_zone_scoped_editor(redis, unassigned_team)
     ticket_uuid = await _make_ticket_at(INSIDE_ZONE_POINT)
 
     resp = await client.post(
