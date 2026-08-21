@@ -729,6 +729,46 @@ async def test_create_ticket_rejects_non_point_geometry(client, coordinator_auth
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("contactName", "A" * 300),   # tickets.contact_name is String(100)
+        ("contactEmail", "b" * 300),  # String(100)
+        ("contactPhone", "9" * 300),  # String(50)
+    ],
+)
+async def test_create_ticket_rejects_over_long_contact(client, coordinator_auth, field, value):
+    """A ticket's contact columns are as short as a station's, and leak the same way.
+
+    tickets.contact_* and stations.contact_* are independent columns of identical width, so
+    both go through validate_contact_fields. Without it asyncpg's truncation error quotes the
+    whole INSERT, handing the tickets table layout to any authenticated caller.
+    """
+    _, token = coordinator_auth
+    variables = {
+        "input": {
+            "title": "Need medics",
+            "geometry": POINT_TAIPEI,
+            "contactName": "Alice",
+            "priority": "high",
+        }
+    }
+    variables["input"][field] = value
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_TICKET, "variables": variables},
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    assert "errors" in body, body
+    message = body["errors"][0]["message"]
+    assert "SQL:" not in message, message
+    assert "INSERT" not in message.upper(), message
+    assert "tickets" not in message, message
+
+
+@pytest.mark.asyncio
 async def test_update_ticket_valid_transition(client, coordinator_auth):
     """Hypothesis: valid status transitions are accepted by the API.
 

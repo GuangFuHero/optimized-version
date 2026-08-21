@@ -8,11 +8,14 @@ characters, and the API returns database errors to the caller verbatim, so an un
 over-long url leaks the table layout in its error message. https-only keeps `javascript:`
 and `data:` payloads out of a field that anonymous visitors read back.
 
-**Removing a photo is moderation, adding one is not.** Any registered account may attach a
-photo to any station, so removal is deliberately gated on a different, scarcer capability.
-The last test is the subtle one: stations and tickets share the photos table and a row does
-not record which kind it is, so a check that only verified "is this a photo?" would let a
-station moderator delete a ticket's photos.
+**Removing someone else's photo is moderation, adding one is not.** Any registered account
+may attach a photo to any station, so removing another person's is deliberately gated on a
+different, scarcer capability. Removing *your own* is the one exemption, and it costs exactly
+what attaching cost. The ticket-photo test is the subtle one: stations and tickets share the
+photos table and a row does not record which kind it is, so a check that only verified "is
+this a photo?" would let a station moderator delete a ticket's photos — and because that
+test's actor is also the ticket photo's uploader, it doubles as the guard on the uploader
+exemption running *after* the station lookup rather than before it.
 """
 
 import uuid as uuid_mod
@@ -153,6 +156,7 @@ async def team_assigned_to_zone() -> str:
         "not a url at all",
         "http://example.com/photo.jpg",         # plain http is rejected too
         "   ",                                  # whitespace-only
+        "https://",                             # scheme but no host — an empty <img src>
     ],
 )
 async def test_attach_station_photo_rejects_bad_url(client, coordinator_auth, bad_url):
@@ -189,18 +193,38 @@ async def test_attach_station_photo_accepts_https_and_trims(client, coordinator_
     assert body["data"]["attachStationPhoto"]["url"] == "https://example.com/photo.jpg"
 
 
+@pytest.mark.asyncio
+async def test_attach_station_photo_accepts_uppercase_scheme(client, coordinator_auth):
+    """`HTTPS://` is the same scheme as `https://` — url schemes are case-insensitive.
+
+    RFC 3986 3.1. A literal `startswith("https://")` refuses a perfectly valid url, which is
+    why the check parses the url instead of matching a prefix.
+    """
+    _, token = coordinator_auth
+    station_uuid = await _create_station(client, token)
+
+    body = await _attach(client, token, station_uuid, "HTTPS://example.com/photo.jpg")
+    assert "errors" not in body, body
+
+
 # --- A6: moderated removal --------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_detach_station_photo_removes_it(client, coordinator_auth):
+async def test_detach_station_photo_removes_it(client, coordinator_auth, contributor_auth):
     """Someone who can moderate stations can remove a photo, and the read path forgets it.
 
     Removal is a soft delete, so this also confirms the query path filters deleted rows
     rather than the row being physically gone.
+
+    The photo is uploaded by a *different* account from the one that removes it, so this
+    exercises the station.review path specifically. Were both the same account, the uploader
+    exemption would satisfy the mutation on its own and this test would no longer prove that
+    moderators can reach other people's photos.
     """
     _, token = coordinator_auth
+    _, uploader_token = contributor_auth
     station_uuid = await _create_station(client, token)
-    photo_uuid = (await _attach(client, token, station_uuid,
+    photo_uuid = (await _attach(client, uploader_token, station_uuid,
                                "https://example.com/p.jpg"))["data"]["attachStationPhoto"]["uuid"]
 
     body = await _detach(client, token, photo_uuid)
@@ -215,19 +239,24 @@ async def test_detach_station_photo_removes_it(client, coordinator_auth):
 
 @pytest.mark.asyncio
 async def test_detach_station_photo_denied_without_review(client, contributor_auth):
-    """Being able to add a photo does not imply being able to delete one.
+    """Being able to add a photo does not imply being able to delete *someone else's*.
 
-    This user has the capability every registered account gets, which is enough to attach.
-    Removal needs the moderation capability they lack, so the attempt fails and the photo
-    survives. If both actions ever share one capability, this test is what catches it.
+    Both accounts here hold the capability every registered account gets, which is enough to
+    attach. Deleting a photo they did not upload needs the moderation capability neither has,
+    so the attempt fails and the photo survives. If removal ever falls back to
+    station.contribute for photos in general — rather than only for the uploader's own — this
+    test is what catches it.
     """
-    _, token = contributor_auth
-    station_uuid = await _create_station(client, token)
-    attached = await _attach(client, token, station_uuid, "https://example.com/p.jpg")
+    _, uploader_token = contributor_auth
+    _, other_token = await _make_user_with_grants(
+        {Perm.STATION_ADD: "all", Perm.STATION_CONTRIBUTE: "all", Perm.STATION_VIEW: "all"}
+    )
+    station_uuid = await _create_station(client, uploader_token)
+    attached = await _attach(client, uploader_token, station_uuid, "https://example.com/p.jpg")
     assert "errors" not in attached, attached
     photo_uuid = attached["data"]["attachStationPhoto"]["uuid"]
 
-    body = await _detach(client, token, photo_uuid)
+    body = await _detach(client, other_token, photo_uuid)
     assert "errors" in body, body
 
     # Still there.
@@ -235,6 +264,31 @@ async def test_detach_station_photo_denied_without_review(client, contributor_au
         "/graphql", json={"query": STATION_PHOTOS, "variables": {"uuid": station_uuid}}
     )
     assert len(resp.json()["data"]["station"]["photos"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_detach_station_photo_uploader_removes_own(client, contributor_auth):
+    """The uploader can remove their own photo without holding station.review.
+
+    station.review is seeded only at super_admin/all and team admin/zone, so without this
+    exemption someone who uploaded the wrong photo could not take it down and had to find a
+    moderator. Undoing a contribution costs what making it cost: station.contribute, the same
+    capability attach requires, with no scope check — the mirror of attach.
+    """
+    _, token = contributor_auth
+    station_uuid = await _create_station(client, token)
+    attached = await _attach(client, token, station_uuid, "https://example.com/mine.jpg")
+    assert "errors" not in attached, attached
+    photo_uuid = attached["data"]["attachStationPhoto"]["uuid"]
+
+    body = await _detach(client, token, photo_uuid)
+    assert "errors" not in body, body
+    assert body["data"]["detachStationPhoto"] is True
+
+    resp = await client.post(
+        "/graphql", json={"query": STATION_PHOTOS, "variables": {"uuid": station_uuid}}
+    )
+    assert resp.json()["data"]["station"]["photos"] == []
 
 
 @pytest.mark.asyncio
@@ -277,6 +331,11 @@ async def test_detach_station_photo_rejects_a_ticket_photo(client, coordinator_a
     mutation has to resolve the owner before deciding. The response must also be
     indistinguishable from an unknown uuid, or it becomes a way to test whether a given uuid
     is a ticket.
+
+    This actor is also the ticket photo's `created_by`, which makes the test do double duty:
+    it fails if the uploader exemption in detach_station_photo is ever moved *above* the
+    active-station lookup, because a ticket photo's uploader would then delete it through a
+    station mutation — exactly the boundary the lookup exists to hold.
     """
     user_uuid, token = coordinator_auth
     resp = await client.post(

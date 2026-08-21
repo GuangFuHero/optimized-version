@@ -83,10 +83,11 @@ class GeoMutation:
     async def detach_station_photo(self, info: strawberry.types.Info, uuid: UUID) -> bool:
         """Soft-delete a station photo. Returns True on success.
 
-        Requires station.review, because removing a photo is moderation — attaching one is
-        open to any registered account. The caller must also be in scope for the station the
-        photo hangs off. Anything that is not an active station photo errors as "not found",
-        including a ticket photo's uuid; both kinds share one table.
+        The uploader may remove their own photo with the station.contribute that created it.
+        Removing anyone else's is moderation: it requires station.review, and the caller must
+        also be in scope for the station the photo hangs off. Anything that is not an active
+        station photo errors as "not found", including a ticket photo's uuid — both kinds
+        share one table, and that check runs before the uploader exemption.
         """
         await photo_service.detach_station_photo(
             info.context["db"], actor=require_authenticated(info), uuid=str(uuid)

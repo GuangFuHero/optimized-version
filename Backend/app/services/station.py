@@ -23,7 +23,7 @@ from app.repositories.geo_repository import (
     station_repository,
 )
 from app.services.authz import require_scope
-from app.services.geo_validation import validate_point
+from app.services.geo_validation import validate_contact_fields, validate_point
 
 
 async def create_station(
@@ -51,6 +51,13 @@ async def create_station(
     """
     await require_scope(actor, Perm.STATION_ADD, db)
     validate_point(geometry)
+    validate_contact_fields(
+        {
+            "contact_name": contact_name,
+            "contact_email": contact_email,
+            "contact_phone": contact_phone,
+        }
+    )
 
     station = await station_repository.add(
         db,
@@ -92,6 +99,7 @@ async def update_station(
     if not station:
         raise ValueError("Station not found")
     await require_scope(actor, Perm.STATION_EDIT, db, resource=station)
+    validate_contact_fields(changes)
 
     obj_in = dict(changes)
     if geometry is not None:

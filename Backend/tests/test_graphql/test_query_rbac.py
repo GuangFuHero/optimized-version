@@ -339,3 +339,84 @@ async def test_update_station_can_clear_a_contact_field(client, coordinator_auth
     assert station["contactPhone"] is None
     assert station["contactName"] == "Station Contact"
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("contactName", "A" * 300),   # column is String(100)
+        ("contactEmail", "b" * 300),  # String(100)
+        ("contactPhone", "9" * 300),  # String(50)
+    ],
+)
+async def test_create_station_rejects_over_long_contact(client, coordinator_auth, field, value):
+    """An over-long contact value is refused in the service, and the error carries no SQL.
+
+    Same reasoning as the photo-url length check: these are short columns, the schema installs
+    no error masking, and asyncpg's truncation error quotes the whole statement — so letting
+    the database reject it hands the stations table layout to any authenticated caller.
+    """
+    _, coord_token = coordinator_auth
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {
+                "input": {
+                    "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
+                    field: value,
+                }
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" in body, body
+    message = body["errors"][0]["message"]
+    assert "SQL:" not in message, message
+    assert "INSERT" not in message.upper(), message
+    assert "stations" not in message, message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("contactName", "A" * 300),
+        ("contactEmail", "b" * 300),
+        ("contactPhone", "9" * 300),
+    ],
+)
+async def test_update_station_rejects_over_long_contact(client, coordinator_auth, field, value):
+    """The update path needs the same check as create — it is a second write to the columns.
+
+    updateStation only gained contact fields alongside this validation, so without the check
+    here the mutation would leak `UPDATE stations SET contact_... [parameters: ...]` verbatim.
+    """
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION,
+            "variables": {"uuid": station_uuid, "input": {field: value}},
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" in body, body
+    message = body["errors"][0]["message"]
+    assert "SQL:" not in message, message
+    assert "UPDATE" not in message.upper(), message
+    assert "stations" not in message, message
+
+    # And the stored value is untouched.
+    resp = await client.post(
+        "/graphql",
+        json={"query": STATION_DETAIL_WITH_PII, "variables": {"uuid": station_uuid}},
+        headers=auth_header(coord_token),
+    )
+    assert resp.json()["data"]["station"]["contactName"] == "Station Contact"

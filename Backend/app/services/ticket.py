@@ -22,7 +22,7 @@ from app.repositories.tickets_repository import (
     ticket_task_repository,
 )
 from app.services.authz import require_scope
-from app.services.geo_validation import validate_point
+from app.services.geo_validation import validate_contact_fields, validate_point
 
 # Business rule (ADR-020): status transitions live here, not in the RBAC layer.
 VALID_TRANSITIONS = {
@@ -85,6 +85,13 @@ async def create_ticket(
     """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner)."""
     await require_scope(actor, Perm.TICKET_ADD, db)
     validate_point(geometry, entity="Ticket")
+    validate_contact_fields(
+        {
+            "contact_name": contact_name,
+            "contact_email": contact_email,
+            "contact_phone": contact_phone,
+        }
+    )
     return await ticket_repository.create(
         db,
         obj_in={

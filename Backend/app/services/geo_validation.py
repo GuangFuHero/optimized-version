@@ -1,4 +1,4 @@
-"""Geometry validation shared by the station/closure_area use-cases (ADR-013).
+"""Input validation shared by the geo use-cases (ADR-013).
 
 This used to be private helpers inside app/graphql/geo/mutations.py; validation is
 business logic, so it moved into the use-case layer along with everything else that
@@ -31,3 +31,25 @@ def validate_polygon(geojson: dict, *, entity: str = "Closure area") -> None:
     geom = shape(geojson)
     if geom.geom_type not in ("Polygon", "MultiPolygon"):
         raise ValueError(f"{entity} geometry must be Polygon or MultiPolygon")
+
+
+_CONTACT_LIMITS = {  # stations.contact_* / tickets.contact_* — same widths in both tables
+    "contact_name": 100, "contact_email": 100, "contact_phone": 50,
+}
+
+
+def validate_contact_fields(fields: dict) -> None:
+    """Raise ValueError if any contact value is too long for its column.
+
+    Checked here rather than left to the database for the same reason as
+    `validate_photo_url` in photo.py: these are short columns, the schema installs no error
+    masking, and asyncpg's truncation error quotes the whole statement — so an unchecked
+    value hands the table layout to any authenticated caller.
+
+    Absent keys and explicit nulls are both skipped, so this is safe to hand an
+    already-diffed `changes` dict where a null means "clear this field".
+    """
+    for name, limit in _CONTACT_LIMITS.items():
+        val = fields.get(name)
+        if val is not None and len(val.strip()) > limit:
+            raise ValueError(f"{name} must be at most {limit} characters")
