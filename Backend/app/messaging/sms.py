@@ -1,11 +1,19 @@
-"""SMS delivery: abstract sender + dev console impl. Real provider (Twilio/SNS) deferred."""
+"""SMS delivery: abstract sender + dev console impl. Real delivery goes through 簡訊王 (kotsms)."""
 
 import logging
 from typing import Protocol
 
+from app.core.config import settings
+
 logger = logging.getLogger("app.sms")
 
-_BRAND_ZH = "島嶼守望"
+# Sender identity required by Taiwan's 簡訊實名制 (in force since 2025-11-01). This is the registered
+# entity, NOT the product name — it MUST match what KotSMS approved for this account character for
+# character (full/half width, case, punctuation) or the carriers drop the message. The API still
+# answers statuscode=1 in that case, so a mismatch fails silently. Verified by live send on
+# 2026-08-15: bare identity, no 【】, arrives on the handset. Bodies stay Chinese-only and under
+# 70 chars so each send costs 1 point instead of 2.
+_SENDER_IDENTITY_ZH = "開放文化基金會"
 
 
 class SmsSender(Protocol):
@@ -25,24 +33,23 @@ class ConsoleSmsSender:
 
 
 def build_verification_sms(code: str) -> str:
-    """Return the bilingual SMS body carrying a verification code (register + add-contact)."""
-    return (f"【{_BRAND_ZH}】您的驗證碼是 {code}，10 分鐘內有效。 "
-            f"Your verification code is {code}, expires in 10 minutes.")
+    """Return the SMS body carrying a verification code (register + add-contact)."""
+    return f"{_SENDER_IDENTITY_ZH} 您的驗證碼是 {code}，10 分鐘內有效。"
 
 
 def build_password_reset_sms(code: str) -> str:
-    """Return the bilingual SMS body carrying a password-reset code."""
-    return (f"【{_BRAND_ZH}】您的密碼重設驗證碼是 {code}，10 分鐘內有效。 "
-            f"Your password reset code is {code}, expires in 10 minutes.")
+    """Return the SMS body carrying a password-reset code."""
+    return f"{_SENDER_IDENTITY_ZH} 您的密碼重設驗證碼是 {code}，10 分鐘內有效。"
 
 
 def build_sso_notice_sms() -> str:
-    """Return the bilingual SMS telling an SSO-only user there is no password to reset (no code)."""
-    return (f"【{_BRAND_ZH}】此帳號使用第三方登入，無密碼可重設，請改用該服務登入。 "
-            "This account uses a third-party login and has no password set; "
-            "please sign in with that provider.")
+    """Return the SMS telling an SSO-only user there is no password to reset (no code)."""
+    return f"{_SENDER_IDENTITY_ZH} 此帳號使用第三方登入，無密碼可重設，請改用該服務登入。"
 
 
 def get_sms_sender() -> SmsSender:
-    """FastAPI dependency selecting the configured SMS sender (console for now)."""
+    """FastAPI dependency selecting the configured SMS sender."""
+    if settings.SMS_PROVIDER == "kotsms":
+        from app.messaging.kotsms import KotSmsSender  # noqa: PLC0415 — optional adapter
+        return KotSmsSender()
     return ConsoleSmsSender()

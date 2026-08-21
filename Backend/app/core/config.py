@@ -36,8 +36,11 @@ class Settings(BaseSettings):
 
     PHONE_DEFAULT_REGION: str = os.getenv("PHONE_DEFAULT_REGION", "TW")
     OTP_TTL_SECONDS: int = 600  # 10 min, unified email+phone code TTL
-    SMS_PROVIDER: str = os.getenv("SMS_PROVIDER", "console")  # console (real adapter deferred)
+    SMS_PROVIDER: str = os.getenv("SMS_PROVIDER", "console")  # console | kotsms
     SMTP2GO_API_KEY: str = os.getenv("SMTP2GO_API_KEY", "")
+    # 簡訊王 API 認證用的就是網頁登入的那組帳密（帳號在會員區「基本資料 → 您的帳號名稱」）。
+    KOTSMS_USERNAME: str = os.getenv("KOTSMS_USERNAME", "")
+    KOTSMS_PASSWORD: str = os.getenv("KOTSMS_PASSWORD", "")
 
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
 

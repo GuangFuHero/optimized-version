@@ -15,6 +15,7 @@ import {
   refreshBackendAuthTokenAsync,
   type BackendAuthToken,
 } from './server-backend-auth';
+import { withClientIpAsync } from './client-ip';
 
 type AuthenticatedUser = {
   id: string;
@@ -34,7 +35,7 @@ async function loginWithCredentials(
   let payload: ITokenPair;
 
   try {
-    payload = await loginAsync(username, password);
+    payload = await withClientIpAsync(() => loginAsync(username, password));
   } catch {
     return null;
   }
@@ -68,23 +69,25 @@ async function completeOAuthLoginAsync({
   fallbackEmail?: string | null;
   fallbackName?: string | null;
 }) {
-  const tokenPair =
-    provider === 'google'
-      ? await googleSsoAsync({ id_token: idToken })
-      : await lineSsoAsync({ id_token: idToken });
+  return withClientIpAsync(async () => {
+    const tokenPair =
+      provider === 'google'
+        ? await googleSsoAsync({ id_token: idToken })
+        : await lineSsoAsync({ id_token: idToken });
 
-  const currentUser = await getCurrentUserAsync(tokenPair.access_token);
+    const currentUser = await getCurrentUserAsync(tokenPair.access_token);
 
-  return {
-    id: currentUser.uuid,
-    email: fallbackEmail,
-    loginIdentity: fallbackEmail,
-    name: currentUser.name ?? fallbackName,
-    accessToken: tokenPair.access_token,
-    refreshToken: tokenPair.refresh_token,
-    tokenType: tokenPair.token_type ?? 'bearer',
-    expiresIn: tokenPair.expires_in,
-  } satisfies AuthenticatedUser;
+    return {
+      id: currentUser.uuid,
+      email: fallbackEmail,
+      loginIdentity: fallbackEmail,
+      name: currentUser.name ?? fallbackName,
+      accessToken: tokenPair.access_token,
+      refreshToken: tokenPair.refresh_token,
+      tokenType: tokenPair.token_type ?? 'bearer',
+      expiresIn: tokenPair.expires_in,
+    } satisfies AuthenticatedUser;
+  });
 }
 
 export const authOptions: NextAuthOptions = {

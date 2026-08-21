@@ -7,6 +7,8 @@ import { encode, getToken, type JWT } from 'next-auth/jwt';
 import { cookies, headers } from 'next/headers';
 import type { NextResponse } from 'next/server';
 
+import { withClientIpAsync } from './client-ip';
+
 export const AUTH_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 const ACCESS_TOKEN_REFRESH_BUFFER_MS = 30_000;
@@ -87,9 +89,11 @@ export async function refreshBackendAuthTokenAsync(
   }
 
   try {
-    const refreshedTokenPair = await refreshAsync({
-      refresh_token: token.refreshToken,
-    });
+    // /auth/refresh is rate-limited per caller, and refreshes fire on their own schedule as access
+    // tokens age out — unattributed, they would all pile onto this container's allowance.
+    const refreshedTokenPair = await withClientIpAsync(() =>
+      refreshAsync({ refresh_token: token.refreshToken as string }),
+    );
 
     return applyTokenPairToBackendAuthToken(token, refreshedTokenPair);
   } catch {

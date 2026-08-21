@@ -2,11 +2,12 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.api_errors import ApiError, ErrorCode
 from app.core.normalize import normalize_email
 from app.core.redis import get_redis
 from app.models.auth import User
@@ -46,20 +47,28 @@ async def sso_google(
     try:
         gid = await verifier.verify(body.id_token)
     except GoogleTokenVerificationError as err:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid Google token") from err
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID, detail="Invalid Google token",
+        ) from err
 
     identity = await identity_repository.get_by_provider_subject(db, provider="google", subject=gid.sub)
     if identity is None:
         if not gid.email_verified:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Google email not verified")
+            raise ApiError(
+                status.HTTP_400_BAD_REQUEST, ErrorCode.SSO_EMAIL_UNVERIFIED,
+                detail="Google email not verified",
+            )
         try:
             email = normalize_email(gid.email)
         except ValueError as err:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Google email not verified") from err
+            raise ApiError(
+                status.HTTP_400_BAD_REQUEST, ErrorCode.SSO_EMAIL_UNVERIFIED,
+                detail="Google email not verified",
+            ) from err
         if await contact_repository.is_value_taken(db, type_="email", value=email):
-            raise HTTPException(
+            raise ApiError(
                 status.HTTP_409_CONFLICT,
-                detail="Email already in use; log in and link Google in settings",
+                ErrorCode.SSO_EMAIL_TAKEN, detail="Email already in use; log in and link Google in settings",
             )
         name = gid.name or email.split("@")[0]
         try:
@@ -72,8 +81,9 @@ async def sso_google(
             identity = await identity_repository.get_by_provider_subject(
                 db, provider="google", subject=gid.sub)
             if identity is None:
-                raise HTTPException(
+                raise ApiError(
                     status.HTTP_409_CONFLICT,
+                    ErrorCode.SSO_EMAIL_TAKEN,
                     detail="Email already in use; log in and link Google in settings",
                 ) from err
             user = await user_repository.get_by_uuid(db, identity.user_uuid)
@@ -96,25 +106,36 @@ async def link_google(
     try:
         gid = await verifier.verify(body.id_token)
     except GoogleTokenVerificationError as err:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid Google token") from err
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID, detail="Invalid Google token",
+        ) from err
 
     # this Google sub already bound somewhere?
     existing = await identity_repository.get_by_provider_subject(db, provider="google", subject=gid.sub)
     if existing is not None:
         if str(existing.user_uuid) == str(current_user.uuid):
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="Google account already linked")
-        raise HTTPException(status.HTTP_409_CONFLICT,
+            raise ApiError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.SSO_ALREADY_LINKED,
+                detail="Google account already linked",
+            )
+        raise ApiError(status.HTTP_409_CONFLICT,
+                            ErrorCode.SSO_LINKED_ELSEWHERE,
                             detail="This Google account is already linked to another account")
     # current user already has a (different) google identity?
     if await identity_repository.get_user_identity(db, str(current_user.uuid), "google") is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Google account already linked")
+        raise ApiError(
+            status.HTTP_409_CONFLICT, ErrorCode.SSO_ALREADY_LINKED, detail="Google account already linked",
+        )
     try:
         await identity_repository.create(db, obj_in={
             "user_uuid": current_user.uuid, "provider": "google", "provider_subject": gid.sub,
         })
     except IntegrityError as err:  # concurrent link race
         await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already linked") from err
+        raise ApiError(
+            status.HTTP_409_CONFLICT, ErrorCode.SSO_ALREADY_LINKED, detail="Already linked",
+        ) from err
     return {"detail": "Google account linked"}
 
 
@@ -131,7 +152,9 @@ async def sso_line(
     try:
         lid = await verifier.verify(body.id_token)
     except LineTokenVerificationError as err:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid LINE token") from err
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID, detail="Invalid LINE token",
+        ) from err
 
     identity = await identity_repository.get_by_provider_subject(db, provider="line", subject=lid.sub)
     if identity is None:
@@ -155,7 +178,9 @@ async def sso_line(
             identity = await identity_repository.get_by_provider_subject(
                 db, provider="line", subject=lid.sub)
             if identity is None:
-                raise HTTPException(status.HTTP_409_CONFLICT, detail="LINE account conflict") from err
+                raise ApiError(
+                    status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail="LINE account conflict",
+                ) from err
             user = await user_repository.get_by_uuid(db, identity.user_uuid)
     else:
         user = await user_repository.get_by_uuid(db, identity.user_uuid)
@@ -176,21 +201,30 @@ async def link_line(
     try:
         lid = await verifier.verify(body.id_token)
     except LineTokenVerificationError as err:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid LINE token") from err
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID, detail="Invalid LINE token",
+        ) from err
 
     existing = await identity_repository.get_by_provider_subject(db, provider="line", subject=lid.sub)
     if existing is not None:
         if str(existing.user_uuid) == str(current_user.uuid):
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="LINE account already linked")
-        raise HTTPException(status.HTTP_409_CONFLICT,
+            raise ApiError(
+                status.HTTP_409_CONFLICT, ErrorCode.SSO_ALREADY_LINKED, detail="LINE account already linked",
+            )
+        raise ApiError(status.HTTP_409_CONFLICT,
+                            ErrorCode.SSO_LINKED_ELSEWHERE,
                             detail="This LINE account is already linked to another account")
     if await identity_repository.get_user_identity(db, str(current_user.uuid), "line") is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="LINE account already linked")
+        raise ApiError(
+            status.HTTP_409_CONFLICT, ErrorCode.SSO_ALREADY_LINKED, detail="LINE account already linked",
+        )
     try:
         await identity_repository.create(db, obj_in={
             "user_uuid": current_user.uuid, "provider": "line", "provider_subject": lid.sub,
         })
     except IntegrityError as err:
         await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already linked") from err
+        raise ApiError(
+            status.HTTP_409_CONFLICT, ErrorCode.SSO_ALREADY_LINKED, detail="Already linked",
+        ) from err
     return {"detail": "LINE account linked"}

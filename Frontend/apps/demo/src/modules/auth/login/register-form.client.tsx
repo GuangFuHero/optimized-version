@@ -14,13 +14,32 @@ import { startTransition, useState } from 'react';
 import {
   type AuthIdentityType,
 } from '@rescue-frontend/data-access';
-import { RegisterForm } from '@rescue-frontend/modules';
+import { AuthFormError, RegisterForm } from '@rescue-frontend/modules';
 import {
   registerAsync,
   resendVerificationAsync,
   verifyAsync,
 } from '../api/client';
+import { resolveAuthErrorMessage } from '../api/error-messages';
 import { createHashedCredentialAsync } from './credentials';
+
+const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
+  email:
+    '此電子郵件已經註冊過了，請直接登入。若當初是用 Google 或 LINE 註冊，請改用該方式登入。',
+  phone: '此手機號碼已經註冊過了，請直接登入。',
+};
+
+const VERIFY_FALLBACK_MESSAGE = '驗證失敗，請稍後再試。';
+const RESEND_FALLBACK_MESSAGE = '重新發送失敗，請稍後再試。';
+
+/**
+ * The account exists by this point — the code was accepted and only the automatic sign-in failed.
+ * Telling the user "verification failed" would send them back to register and straight into a 409.
+ */
+const SIGN_IN_FAILED_MESSAGE =
+  '帳號已建立完成，但自動登入沒有成功。請返回登入頁手動登入。';
+
+class SignInFailedError extends Error {}
 
 interface PendingRegistration {
   identityType: AuthIdentityType;
@@ -72,7 +91,7 @@ export default function RegisterFormClient() {
       });
 
       if (result?.error) {
-        throw new Error(result.error);
+        throw new SignInFailedError(result.error);
       }
 
       setVerificationSuccess('帳號驗證完成，正在登入。');
@@ -82,7 +101,9 @@ export default function RegisterFormClient() {
       });
     } catch (error) {
       setVerificationError(
-        error instanceof Error ? error.message : '驗證失敗，請稍後再試',
+        error instanceof SignInFailedError
+          ? SIGN_IN_FAILED_MESSAGE
+          : resolveAuthErrorMessage(error, VERIFY_FALLBACK_MESSAGE),
       );
     } finally {
       setIsVerifying(false);
@@ -106,7 +127,7 @@ export default function RegisterFormClient() {
       setVerificationSuccess('已重新發送驗證碼。');
     } catch (error) {
       setVerificationError(
-        error instanceof Error ? error.message : '重新發送失敗，請稍後再試',
+        resolveAuthErrorMessage(error, RESEND_FALLBACK_MESSAGE),
       );
     } finally {
       setIsResending(false);
@@ -198,19 +219,27 @@ export default function RegisterFormClient() {
         const trimmedName = name?.trim();
 
         if (!trimmedName) {
-          throw new Error('請輸入顯示名稱');
+          throw new AuthFormError('請輸入顯示名稱');
         }
 
         const { saltFrontend, hashedPassword } =
           await createHashedCredentialAsync(password);
 
-        await registerAsync({
-          name: trimmedName,
-          password: hashedPassword,
-          salt_frontend: saltFrontend,
-          type: identityType,
-          value: normalizedIdentity,
-        });
+        try {
+          await registerAsync({
+            name: trimmedName,
+            password: hashedPassword,
+            salt_frontend: saltFrontend,
+            type: identityType,
+            value: normalizedIdentity,
+          });
+        } catch (error) {
+          throw new AuthFormError(
+            resolveAuthErrorMessage(error, '註冊失敗，請稍後再試。', {
+              identifier_taken: IDENTITY_TAKEN_MESSAGE[identityType],
+            }),
+          );
+        }
 
         setPendingRegistration({
           identityType,
