@@ -23,7 +23,7 @@ from app.repositories.geo_repository import (
     station_repository,
 )
 from app.services.authz import require_scope
-from app.services.geo_validation import validate_point
+from app.services.geo_validation import normalize_contact_fields, validate_point
 
 
 async def create_station(
@@ -39,6 +39,9 @@ async def create_station(
     comment: str | None,
     source: str,
     visibility: str,
+    contact_name: str | None = None,
+    contact_email: str | None = None,
+    contact_phone: str | None = None,
     secondary_location: dict | None = None,
 ) -> Station:
     """Create a station (checkpoint 1 only — a new station has no prior owner to scope-check).
@@ -48,6 +51,13 @@ async def create_station(
     """
     await require_scope(actor, Perm.STATION_ADD, db)
     validate_point(geometry)
+    contacts = normalize_contact_fields(
+        {
+            "contact_name": contact_name,
+            "contact_email": contact_email,
+            "contact_phone": contact_phone,
+        }
+    )
 
     station = await station_repository.add(
         db,
@@ -62,6 +72,10 @@ async def create_station(
             "comment": comment,
             "source": source,
             "visibility": visibility,
+            # Spread the normalized values, never the raw arguments: the length check ran
+            # against the stripped strings, so storing the originals is what round 3 of the
+            # PR #40 review found leaking the INSERT.
+            **contacts,
         },
     )
     if secondary_location:
@@ -87,7 +101,7 @@ async def update_station(
         raise ValueError("Station not found")
     await require_scope(actor, Perm.STATION_EDIT, db, resource=station)
 
-    obj_in = dict(changes)
+    obj_in = normalize_contact_fields(changes)
     if geometry is not None:
         validate_point(geometry)
         obj_in["geometry"] = geojson_to_geom(geometry)

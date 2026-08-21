@@ -22,7 +22,7 @@ from app.repositories.tickets_repository import (
     ticket_task_repository,
 )
 from app.services.authz import require_scope
-from app.services.geo_validation import validate_point
+from app.services.geo_validation import normalize_contact_fields, validate_point
 
 # Business rule (ADR-020): status transitions live here, not in the RBAC layer.
 VALID_TRANSITIONS = {
@@ -85,6 +85,16 @@ async def create_ticket(
     """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner)."""
     await require_scope(actor, Perm.TICKET_ADD, db)
     validate_point(geometry, entity="Ticket")
+    contacts = normalize_contact_fields(
+        {
+            "contact_name": contact_name,
+            "contact_email": contact_email,
+            "contact_phone": contact_phone,
+        },
+        # tickets.contact_name is NOT NULL, unlike the station column of the same name, so a
+        # whitespace-only value has to be refused here rather than normalized to None.
+        required=frozenset({"contact_name"}),
+    )
     return await ticket_repository.create(
         db,
         obj_in={
@@ -93,9 +103,8 @@ async def create_ticket(
             "created_by": str(actor.uuid),
             "title": title,
             "description": description,
-            "contact_name": contact_name,
-            "contact_email": contact_email,
-            "contact_phone": contact_phone,
+            # Normalized, not raw — same reason as create_station in station.py.
+            **contacts,
             "status": "pending",
             "priority": priority,
             "task_type": task_type,
