@@ -1011,11 +1011,65 @@ FR-023 的檢舉流程，見 Blast Radius。
 - `app/graphql/loaders.py`：`photos_by_ticket`/`photos_by_station` 共用同一個 load function。
 - `app/graphql/geo/types.py:StationType`：三個遮罩 field resolver + `Create`/`UpdateStationInput`。
 - `scripts/seed_rbac.py`：`station.view_pii` 逐角色 grant。`station.review` 沿用既有 grant，未動。
-- `app/services/geo_validation.py`：新增 `validate_contact_fields`，由 `station.py` 的
+- `app/services/geo_validation.py`：新增 `normalize_contact_fields`，由 `station.py` 的
   `create_station`/`update_station` 與 `ticket.py` 的 `create_ticket` 共用。`stations.contact_*` 與
   `tickets.contact_*` 雖是各自獨立的欄位（決策 2），寬度卻相同（100/100/50），所以共用一組上限。理由同
-  `validate_photo_url`：欄位短、schema 沒裝 error masking、asyncpg 的截斷錯誤會把整句 SQL 連參數一起
-  回給呼叫端。**`updateStation` 的聯絡欄位是 PR #31 新開的寫入口**，當時沒帶驗證。
+  `normalize_photo_url`：欄位短、asyncpg 的截斷錯誤會把整句 SQL 連參數一起回給呼叫端。
+  **`updateStation` 的聯絡欄位是 PR #31 新開的寫入口**，當時沒帶驗證。
+  ➖ **「被驗證的字串」與「被寫進資料庫的字串」必須是同一個。** 所以這個函式一次做完 strip 與長度檢查、
+  回傳正規化後的 dict，呼叫端存回傳值而不是原始參數。第一版把兩件事拆開——檢查 `len(val.strip())`、卻存
+  `val`——於是 10 個前置空白 + 95 個字元通過了 100 字元的檢查，再由 asyncpg 把整句 INSERT 連 `stations`
+  全部欄位回給呼叫端（PR #40 review round 3）。尾端空白驗不出這個洞：PostgreSQL 對超長但多出來的字元
+  全是空白的值會靜默截斷而不報錯，所以只有前置空白會重現，而當時新增的六個 parametrize case 全是純長
+  字串。
+  ➖ 同一個理由，`photo.py` 的 `validate_photo_url` 一併改名為 `normalize_photo_url` 並回傳 strip 過的
+  url，由 `attach_photo_to_geometry` 存回傳值。舊版是「驗證函式 strip 進區域變數、寫入端自己再 strip
+  一次」——兩次 strip 剛好一致，但那正是聯絡欄位出事的形狀，只差沒被踩到。現在這個 invariant 由回傳值
+  結構性保證，不再靠兩處自律。
+  ➖ **strip 後為空字串者存 `None`**（空白即「沒填」，`masking.py` 對 falsy 一律短路，`""` 與 NULL 在輸
+  出端等價）。唯一例外由呼叫端用 `required=` 指名，因為兩張表在這裡不一致：`tickets.contact_name` 是
+  NOT NULL（`models/request.py`），`stations.contact_name` 可為 NULL（`models/geo.py`）。一律轉 NULL
+  會讓 `createTicket(contactName: "   ")` 撞 IntegrityError——在裝上 `MaskErrors` 之後就是一句
+  `Unexpected error.`，把一個純粹的 400 包裝成伺服器故障。所以 required 欄位在 service 層擋掉、給
+  `contact_name is required`。**不要把這兩條路徑合併成一句 `val or None`。**
+- `app/graphql/schema.py`：掛上 `MaskErrors`（`_should_mask` allow-list）。**這原本規劃另開 PR，改成
+  在本 PR 一起做**，理由與更正如下。
+  ➖ 逐欄位補長度驗證是打地鼠，因為問題的層級不在欄位。**真正的規則是「Strawberry input 的 `str` 落進
+  `varchar(n)`」**：REST 側一直是乾淨的，因為 `app/schemas/*.py` 每個欄位都帶 pydantic `max_length`；
+  Strawberry 的 input 型別完全不帶長度約束。所以這是整個 GraphQL 寫入面的問題，不是聯絡欄位的問題。
+  實測（皆非 #31/#40 引入）**7 個 mutation、23 個欄位級入口**會把整句 statement 連欄位清單回給呼叫端：
+
+  ```
+    createStation            type(50) opHour(100) source(50)
+      .secondaryLocation     county/city/poleId/poleType(50)
+                             lane/alley/no/floor/room(20)
+    updateStation            type(50) opHour(100)
+    createClosureArea        status(50)          updateClosureArea  status(50)
+    createStationProperty    propertyType(50) propertyName(100)
+    createTicket             title(200) priority(20) taskType(50) disasterType(50)
+    reviewStationSuggestion  核准時 -> UPDATE stations ...
+  ```
+
+  最後一個是間接路徑，也是「逐欄位驗證」根本擋不到的證據：`station_update_suggestions.new_value` 是
+  無上限的 `String`，超長值先存得下，等到核准時 `setattr` 才寫進窄欄位，於是 statement 洩給**審核者**
+  而不是投稿者。建議入口本身沒有任何地方可以攔。
+  ➖ **更正原本的延後理由。** 舊版寫「會改動現有測試斷言的錯誤字串」——實測不成立。全 suite 的錯誤訊息
+  斷言只有兩種來源：service 層的 `ValueError`（ADR-013/014 的約定）與 authz 的 `HTTPException`
+  （`Permission Denied.` / `Not Found.`），兩者都在 allow-list 內原樣通過；第三種是 graphql-core 自己的
+  input coercion（`not a valid value`），`original_error is None`，也放行。裝上 extension 前後皆
+  `505 passed`，零改動。
+  ➖ **由此產生一條新約定：要讓客戶端看到的錯誤必須是 `ValueError`（或 `HTTPException`）。** 其他型別一
+  律變成 `Unexpected error.`。新增自訂例外類別時若不繼承 `ValueError`，訊息會無聲消失。
+  ➖ **遮罩不犧牲可除錯性。** strawberry 在 extension 改寫 result **之前**就跑完 `Schema.process_errors`
+  （`strawberry/schema/schema.py` 的 `_execute` 內有註解明說這是為了 `MaskErrors`），
+  `StrawberryLogger` 帶 `exc_info` 記錄原始例外。實測確認：客戶端拿到 `Unexpected error.`，
+  `strawberry.execution` logger 同時仍印出完整的 `StringDataRightTruncationError` 與 `INSERT INTO
+  stations (...)`。不要因為「錯誤看不到了」而把它拆掉。
+  ➖ 服務層的逐欄位驗證**沒有**因此變成多餘：`contact_*` 與 `photos.url` 仍需要給出可行動的 400
+  （`must be at most 100 characters`），而不是一句 `Unexpected error.`。但既有的三組「錯誤訊息不含
+  SQL」測試在裝上遮罩後會**單靠遮罩就通過**——把 service 的驗證刪掉也還是綠的。所以那幾個測試都補了正向
+  斷言（`must be at most` / `Photo url`），讓它們證明的是驗證而不是遮罩。已用 mutation 驗過：補之前刪掉
+  `normalize_contact_fields` 是 3 passed，補之後是 3 failed。
 - **未解決、不在本 ADR 範圍**：`stations`/`tickets` 的聯絡欄位仍以明文進 `audit_logs`（trigger 只濾
   `password_hash`）——PR #31 review LOW 7，待統一的 audit-log PII 政策。
 - **未解決、不在本 ADR 範圍**：FR-023 要求的「回報不當照片」流程尚未實作。`detachStationPhoto` 只補上了
