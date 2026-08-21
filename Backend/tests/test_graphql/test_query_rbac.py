@@ -48,6 +48,12 @@ mutation($stationUuid: UUID!, $url: String!) {
 }
 """
 
+UPDATE_STATION = """
+mutation($uuid: UUID!, $input: UpdateStationInput!) {
+    updateStation(uuid: $uuid, input: $input) { uuid contactName contactEmail contactPhone }
+}
+"""
+
 
 async def _create_station(client, token: str) -> str:
     resp = await client.post(
@@ -233,7 +239,7 @@ async def test_coordinator_sees_station_pii(client, coordinator_auth):
 
 @pytest.mark.asyncio
 async def test_attach_station_photo(client, coordinator_auth):
-    """attachStationPhoto creates a photo row that shows up under station.photos."""
+    """Mutation attachStationPhoto creates a photo row that shows up under station.photos."""
     _, coord_token = coordinator_auth
     station_uuid = await _create_station(client, coord_token)
 
@@ -260,3 +266,290 @@ async def test_attach_station_photo(client, coordinator_auth):
     assert "errors" not in body, body
     urls = [p["url"] for p in body["data"]["station"]["photos"]]
     assert "https://example/photo.jpg" in urls
+
+
+@pytest.mark.asyncio
+async def test_update_station_contact_fields(client, coordinator_auth):
+    """Contact fields can be edited, and leaving one out of the input does not erase it.
+
+    The second half is the part that can silently regress. The input type distinguishes three
+    states — field absent, field set to null, field set to a value — and only the last two
+    should write to the database. If an absent field were treated as null, editing just the
+    contact name would quietly wipe the email and phone.
+    """
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION,
+            "variables": {
+                "uuid": station_uuid,
+                "input": {
+                    "contactName": "New Contact",
+                    "contactEmail": "new@example.com",
+                    "contactPhone": "0987654321",
+                },
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station = body["data"]["updateStation"]
+    assert station["contactName"] == "New Contact"
+    assert station["contactEmail"] == "new@example.com"
+    assert station["contactPhone"] == "0987654321"
+
+    # Update only the name; email and phone must survive untouched (UNSET, not null).
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION,
+            "variables": {"uuid": station_uuid, "input": {"contactName": "Newer Contact"}},
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station = body["data"]["updateStation"]
+    assert station["contactName"] == "Newer Contact"
+    assert station["contactEmail"] == "new@example.com"
+    assert station["contactPhone"] == "0987654321"
+
+
+@pytest.mark.asyncio
+async def test_update_station_can_clear_a_contact_field(client, coordinator_auth):
+    """Passing null explicitly does clear a field — the other half of the distinction above."""
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION,
+            "variables": {"uuid": station_uuid, "input": {"contactPhone": None}},
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station = body["data"]["updateStation"]
+    assert station["contactPhone"] is None
+    assert station["contactName"] == "Station Contact"
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("contactName", "A" * 300),   # column is String(100)
+        ("contactEmail", "b" * 300),  # String(100)
+        ("contactPhone", "9" * 300),  # String(50)
+    ],
+)
+async def test_create_station_rejects_over_long_contact(client, coordinator_auth, field, value):
+    """An over-long contact value is refused in the service, and the error carries no SQL.
+
+    Same reasoning as the photo-url length check: these are short columns, and letting the
+    database reject them yields asyncpg's truncation error, which quotes the whole statement.
+    The schema's MaskErrors stops that from reaching the caller, so what this test defends is
+    the other half — an actionable 400 rather than an opaque "Unexpected error.".
+    """
+    _, coord_token = coordinator_auth
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {
+                "input": {
+                    "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
+                    field: value,
+                }
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" in body, body
+    message = body["errors"][0]["message"]
+    # Positive assertion first: since the schema installs MaskErrors, the negative
+    # assertions below would also pass with the service validator deleted. This one is
+    # what keeps the check in the service load-bearing rather than the mask.
+    assert "must be at most" in message, message
+    assert "SQL:" not in message, message
+    assert "INSERT" not in message.upper(), message
+    assert "stations" not in message, message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value,expected",
+    [
+        # Raw length exceeds the column, stripped length does not: 10 spaces + 95 chars into
+        # varchar(100), and 10 spaces + 45 digits into varchar(50).
+        pytest.param("contactName", " " * 10 + "A" * 95, "A" * 95, id="name-leading-ws"),
+        pytest.param("contactPhone", " " * 10 + "9" * 45, "9" * 45, id="phone-leading-ws"),
+        # Trailing padding only, comfortably inside the column — asserts the value is stored
+        # trimmed rather than merely accepted.
+        pytest.param("contactName", "  Padded Name  ", "Padded Name", id="name-both-sides"),
+    ],
+)
+async def test_create_station_stores_contact_stripped(
+    client, coordinator_auth, field, value, expected
+):
+    """A contact value that only fits after stripping is stored stripped, not raw.
+
+    This is the leading-whitespace case the plain `"A" * 300` parametrizations above cannot
+    reach. The check measures the stripped string, so the service has to persist that same
+    string — an earlier version validated `val.strip()` and stored `val`, which sailed
+    through the check and then leaked the whole INSERT from asyncpg (PR #40 review round 3).
+
+    Trailing whitespace alone would not have caught it: PostgreSQL silently truncates
+    trailing spaces to fit a varchar(n) rather than erroring, so the database was already
+    doing half the job. Leading whitespace counts toward the length and gets no such mercy.
+    """
+    _, coord_token = coordinator_auth
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {
+                "input": {
+                    "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
+                    field: value,
+                }
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station_uuid = body["data"]["createStation"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": STATION_DETAIL_WITH_PII, "variables": {"uuid": station_uuid}},
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    assert body["data"]["station"][field] == expected
+
+
+@pytest.mark.asyncio
+async def test_create_station_blank_contact_stores_null(client, coordinator_auth):
+    """A whitespace-only contact value is absence, not content — it lands as NULL.
+
+    All three station contact columns are nullable (models/geo.py), so blank collapses to
+    NULL rather than "". The masking resolvers short-circuit on falsy either way, but "" and
+    NULL both being reachable would make "does this station have a contact?" two questions.
+    tickets.contact_name is NOT NULL and therefore takes the opposite path — see
+    test_create_ticket_rejects_blank_contact_name in test_mutations.py.
+    """
+    _, coord_token = coordinator_auth
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {
+                "input": {
+                    "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
+                    "contactName": "   ",
+                    "contactPhone": "\t\n ",
+                }
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station_uuid = body["data"]["createStation"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": STATION_DETAIL_WITH_PII, "variables": {"uuid": station_uuid}},
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    assert body["data"]["station"]["contactName"] is None, body
+    assert body["data"]["station"]["contactPhone"] is None, body
+
+
+@pytest.mark.asyncio
+async def test_update_station_stores_contact_stripped(client, coordinator_auth):
+    """The update path normalizes the same way — it is a second write to the same columns."""
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION,
+            "variables": {
+                "uuid": station_uuid,
+                "input": {
+                    "contactPhone": " " * 10 + "9" * 45,  # 55 raw into varchar(50)
+                    "contactName": "  Trimmed Contact  ",
+                },
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station = body["data"]["updateStation"]
+    assert station["contactPhone"] == "9" * 45
+    assert station["contactName"] == "Trimmed Contact"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("contactName", "A" * 300),
+        ("contactEmail", "b" * 300),
+        ("contactPhone", "9" * 300),
+    ],
+)
+async def test_update_station_rejects_over_long_contact(client, coordinator_auth, field, value):
+    """The update path needs the same check as create — it is a second write to the columns.
+
+    updateStation only gained contact fields alongside this validation, so without the check
+    here the mutation would leak `UPDATE stations SET contact_... [parameters: ...]` verbatim.
+    """
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION,
+            "variables": {"uuid": station_uuid, "input": {field: value}},
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" in body, body
+    message = body["errors"][0]["message"]
+    # Positive assertion first: since the schema installs MaskErrors, the negative
+    # assertions below would also pass with the service validator deleted. This one is
+    # what keeps the check in the service load-bearing rather than the mask.
+    assert "must be at most" in message, message
+    assert "SQL:" not in message, message
+    assert "UPDATE" not in message.upper(), message
+    assert "stations" not in message, message
+
+    # And the stored value is untouched.
+    resp = await client.post(
+        "/graphql",
+        json={"query": STATION_DETAIL_WITH_PII, "variables": {"uuid": station_uuid}},
+        headers=auth_header(coord_token),
+    )
+    assert resp.json()["data"]["station"]["contactName"] == "Station Contact"
