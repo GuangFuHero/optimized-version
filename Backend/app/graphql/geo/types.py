@@ -206,21 +206,27 @@ class StationType:
         resource = SimpleNamespace(created_by=self.created_by, geometry=self._geometry_raw)
         return await in_scope(scope, actor=user, resource=resource, db=info.context["db"])
 
-    @strawberry.field(description="Station contact name — masked unless the caller holds station.view_pii here")
+    @strawberry.field(
+        description="Station contact name — masked unless the caller holds station.view_pii here"
+    )
     async def contact_name(self, info: strawberry.types.Info) -> str | None:
         """Return the contact name raw if in scope, otherwise masked."""
         if await self._pii_visible(info):
             return self._contact_name_raw
         return mask_name(self._contact_name_raw)
 
-    @strawberry.field(description="Station contact email — masked unless the caller holds station.view_pii here")
+    @strawberry.field(
+        description="Station contact email — masked unless the caller holds station.view_pii here"
+    )
     async def contact_email(self, info: strawberry.types.Info) -> str | None:
         """Return the contact email raw if in scope, otherwise masked."""
         if await self._pii_visible(info):
             return self._contact_email_raw
         return mask_email(self._contact_email_raw)
 
-    @strawberry.field(description="Station contact phone — masked unless the caller holds station.view_pii here")
+    @strawberry.field(
+        description="Station contact phone — masked unless the caller holds station.view_pii here"
+    )
     async def contact_phone(self, info: strawberry.types.Info) -> str | None:
         """Return the contact phone raw if in scope, otherwise masked."""
         if await self._pii_visible(info):
@@ -332,6 +338,9 @@ class UpdateStationInput:
         default=None,
         description="Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed'",
     )
+    contact_name: str | None = strawberry.UNSET
+    contact_email: str | None = strawberry.UNSET
+    contact_phone: str | None = strawberry.UNSET
 
 
 # --- Closure Area ---

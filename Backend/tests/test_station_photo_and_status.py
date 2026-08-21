@@ -1,8 +1,10 @@
-"""Service-level tests for the PR #32 review's M2 and M3 findings.
+"""Service-level tests for the PR #32 review's M3 finding.
 
-M2: `attach_photo_to_geometry` stored `url` verbatim, so an over-long URL surfaced as an
-asyncpg StringDataRightTruncationError (a 500) rather than a rejection, and a
-non-fetchable scheme could be persisted into a column the frontend renders.
+M2 (photo url validation) lived here too until the merge with main, which landed the same
+check as `normalize_photo_url` with stricter rules — https-only, and the stripped url is
+returned so the validated and stored strings cannot drift. Its end-to-end cases in
+tests/test_graphql/test_station_photo.py cover strictly more than these did, so the
+duplicate service-level block was dropped rather than kept in two places.
 
 M3: `update_station` stamped `status_changed_at` whenever the key was *present* rather
 than when the value *changed*, so a client PUTting the whole form back re-stamped it —
@@ -24,7 +26,6 @@ from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
-from app.services.photo import validate_photo_url
 from app.services.station import update_station
 
 
@@ -43,50 +44,6 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str) -> None
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     await db.flush()
-
-
-# --- M2: photo url validation ---
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "javascript:alert(document.cookie)",
-        "data:text/html,<script>alert(1)</script>",
-        "ftp://example.com/a.jpg",
-        "/relative/path.jpg",
-        "https://",           # scheme but no host
-        "",
-        "https://example.com/" + "a" * 500,  # over the String(500) column
-    ],
-)
-def test_validate_photo_url_rejects(url):
-    """Anything that isn't a bounded http(s) URL with a host is a ValueError, not a 500."""
-    with pytest.raises(ValueError):
-        validate_photo_url(url)
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "http://example.com/a.jpg",
-        "https://example.com/a.jpg?x=1#frag",
-        "https://cdn.example.com:8443/deep/path/a.png",
-    ],
-)
-def test_validate_photo_url_accepts(url):
-    """Ordinary image URLs still pass."""
-    validate_photo_url(url)
-
-
-def test_validate_photo_url_boundary_is_the_column_width():
-    """Exactly 500 chars is allowed; 501 is not — matching models/photo.py's String(500)."""
-    prefix = "https://e.com/"
-    at_limit = prefix + "a" * (500 - len(prefix))
-    assert len(at_limit) == 500
-    validate_photo_url(at_limit)
-    with pytest.raises(ValueError):
-        validate_photo_url(at_limit + "a")
 
 
 # --- M3: status_changed_at only moves on a real transition ---

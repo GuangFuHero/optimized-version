@@ -40,7 +40,10 @@ class PhotoType:
     uuid: UUID
     ref_uuid: str = strawberry.field(description="UUID of the parent entity this photo is attached to")
     ref_type: str = strawberry.field(
-        description="'geometry' (attached to a ticket or station) or 'pole' (attached to a secondary_location)"
+        description=(
+            "'geometry' (attached to a ticket or station) "
+            "or 'pole' (attached to a secondary_location)"
+        )
     )
     url: str = strawberry.field(description="Public URL of the uploaded photo")
     created_by: str = strawberry.field(description="UUID of the user who uploaded this photo")

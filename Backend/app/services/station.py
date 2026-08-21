@@ -24,7 +24,7 @@ from app.repositories.geo_repository import (
     station_repository,
 )
 from app.services.authz import require_scope
-from app.services.geo_validation import validate_point
+from app.services.geo_validation import normalize_contact_fields, validate_point
 
 
 async def create_station(
@@ -53,6 +53,13 @@ async def create_station(
     """
     await require_scope(actor, Perm.STATION_ADD, db)
     validate_point(geometry)
+    contacts = normalize_contact_fields(
+        {
+            "contact_name": contact_name,
+            "contact_email": contact_email,
+            "contact_phone": contact_phone,
+        }
+    )
 
     station = await station_repository.add(
         db,
@@ -67,9 +74,10 @@ async def create_station(
             "comment": comment,
             "source": source,
             "visibility": visibility,
-            "contact_name": contact_name,
-            "contact_email": contact_email,
-            "contact_phone": contact_phone,
+            # Spread the normalized values, never the raw arguments: the length check ran
+            # against the stripped strings, so storing the originals is what round 3 of the
+            # PR #40 review found leaking the INSERT.
+            **contacts,
             "operational_status": operational_status,
             # Stamped on every operational_status assignment, including creation, so
             # analytics' freshness-trend query never has to special-case a null here.
@@ -99,7 +107,7 @@ async def update_station(
         raise ValueError("Station not found")
     await require_scope(actor, Perm.STATION_EDIT, db, resource=station)
 
-    obj_in = dict(changes)
+    obj_in = normalize_contact_fields(changes)
     if geometry is not None:
         validate_point(geometry)
         obj_in["geometry"] = geojson_to_geom(geometry)
