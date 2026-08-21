@@ -21,12 +21,14 @@ from app.services.authz import require_scope
 _MAX_URL_LEN = 500  # matches app/models/photo.py: url = mapped_column(String(500))
 
 
-def validate_photo_url(url: str) -> None:
-    """Reject a photo url that is blank, too long for the column, or not https.
+def normalize_photo_url(url: str) -> str:
+    """Return a photo url stripped, or raise if it is blank, too long, or not https.
 
     Length is checked here rather than left to the database because `photos.url` is a
-    500-character column: an over-long value fails at INSERT time, and the driver's error
-    message quotes the whole statement, so the table layout would leak to the caller.
+    500-character column, and "must be at most 500 characters" is actionable where the
+    driver's truncation error is not. The schema's `MaskErrors` keeps that error from leaking
+    the statement, but only by replacing it with "Unexpected error." — it is the backstop for
+    the columns nobody validated, not a substitute for a real 400 on the ones we did.
 
     Scheme is restricted to https because photo urls are read back by anonymous visitors. An
     allowlist keeps `javascript:` and `data:` payloads out of the table entirely, instead of
@@ -41,6 +43,11 @@ def validate_photo_url(url: str) -> None:
 
     Length is checked before parsing so an over-long url is reported as too long rather
     than as a malformed one.
+
+    The stripped url is returned and the caller stores *that*, so the validated string and
+    the stored string cannot drift apart. They used to be two independent `.strip()` calls
+    that agreed by coincidence — the same split that leaked the contact-field INSERT when
+    `normalize_contact_fields`' predecessor validated one string and stored another.
     """
     url = (url or "").strip()
     if not url:
@@ -50,6 +57,7 @@ def validate_photo_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.netloc:
         raise ValueError("Photo url must be an https:// URL with a host")
+    return url
 
 
 async def attach_photo_to_geometry(
@@ -66,7 +74,7 @@ async def attach_photo_to_geometry(
     wired up today.
     """
     await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
-    validate_photo_url(url)
+    url = normalize_photo_url(url)
     if not await station_repository.get_by_uuid_active(db, base_geometry_uuid):
         raise ValueError("Station not found")
     return await photo_repository.create(
@@ -76,7 +84,7 @@ async def attach_photo_to_geometry(
             # 'geometry' means "ref_uuid points at a base_geometries row" — a station here,
             # a ticket elsewhere. The other value in use is 'pole', for secondary locations.
             "ref_type": "geometry",
-            "url": url.strip(),
+            "url": url,
             "created_by": str(actor.uuid),
         },
     )

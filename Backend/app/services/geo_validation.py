@@ -38,18 +38,43 @@ _CONTACT_LIMITS = {  # stations.contact_* / tickets.contact_* — same widths in
 }
 
 
-def validate_contact_fields(fields: dict) -> None:
-    """Raise ValueError if any contact value is too long for its column.
+def normalize_contact_fields(fields: dict, *, required: frozenset[str] = frozenset()) -> dict:
+    """Return `fields` with contact values stripped, raising if one is too long for its column.
 
-    Checked here rather than left to the database for the same reason as
-    `validate_photo_url` in photo.py: these are short columns, the schema installs no error
-    masking, and asyncpg's truncation error quotes the whole statement — so an unchecked
-    value hands the table layout to any authenticated caller.
+    Length is checked here rather than left to the database for the same reason as
+    `normalize_photo_url` in photo.py: a caller who typed too much deserves
+    "contact_name must be at most 100 characters", not the driver's truncation error. The
+    schema's `MaskErrors` now stops that error from leaking the statement, but it turns it
+    into an opaque "Unexpected error." — the mask is the backstop, this is the 400.
 
-    Absent keys and explicit nulls are both skipped, so this is safe to hand an
-    already-diffed `changes` dict where a null means "clear this field".
+    Stripping and checking are one operation, and callers must persist what comes back,
+    because splitting them is what broke this the first time (PR #40 review round 3). An
+    earlier version measured `len(val.strip())` while the services stored `val`, so ten
+    leading spaces plus 95 characters passed a 100-character check and then leaked the whole
+    INSERT from the driver. Trailing padding hid it: PostgreSQL silently truncates trailing
+    spaces to fit a varchar(n) instead of erroring, so only leading whitespace reproduced.
+
+    Absent keys and explicit nulls are both skipped and non-contact keys pass through
+    untouched, so this is safe to hand an already-diffed `changes` dict where a null means
+    "clear this field".
+
+    A value that is only whitespace normalizes to `None` — blank means absent, and the
+    masking helpers already treat "" and NULL alike (masking.py short-circuits on falsy). The
+    exception is `required`, which must be named per-caller rather than inferred, because the
+    two tables disagree: `tickets.contact_name` is NOT NULL (models/request.py) while
+    `stations.contact_name` is nullable (models/geo.py). Blanking a required column would
+    fail at INSERT as an IntegrityError — a 500 shape for what is really a 400 — so it is
+    refused here with a domain message instead.
     """
+    out = dict(fields)
     for name, limit in _CONTACT_LIMITS.items():
-        val = fields.get(name)
-        if val is not None and len(val.strip()) > limit:
+        val = out.get(name)
+        if val is None:
+            continue
+        val = val.strip()
+        if len(val) > limit:
             raise ValueError(f"{name} must be at most {limit} characters")
+        if not val and name in required:
+            raise ValueError(f"{name} is required")
+        out[name] = val or None
+    return out

@@ -353,9 +353,10 @@ async def test_update_station_can_clear_a_contact_field(client, coordinator_auth
 async def test_create_station_rejects_over_long_contact(client, coordinator_auth, field, value):
     """An over-long contact value is refused in the service, and the error carries no SQL.
 
-    Same reasoning as the photo-url length check: these are short columns, the schema installs
-    no error masking, and asyncpg's truncation error quotes the whole statement — so letting
-    the database reject it hands the stations table layout to any authenticated caller.
+    Same reasoning as the photo-url length check: these are short columns, and letting the
+    database reject them yields asyncpg's truncation error, which quotes the whole statement.
+    The schema's MaskErrors stops that from reaching the caller, so what this test defends is
+    the other half — an actionable 400 rather than an opaque "Unexpected error.".
     """
     _, coord_token = coordinator_auth
 
@@ -375,9 +376,137 @@ async def test_create_station_rejects_over_long_contact(client, coordinator_auth
     body = resp.json()
     assert "errors" in body, body
     message = body["errors"][0]["message"]
+    # Positive assertion first: since the schema installs MaskErrors, the negative
+    # assertions below would also pass with the service validator deleted. This one is
+    # what keeps the check in the service load-bearing rather than the mask.
+    assert "must be at most" in message, message
     assert "SQL:" not in message, message
     assert "INSERT" not in message.upper(), message
     assert "stations" not in message, message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value,expected",
+    [
+        # Raw length exceeds the column, stripped length does not: 10 spaces + 95 chars into
+        # varchar(100), and 10 spaces + 45 digits into varchar(50).
+        pytest.param("contactName", " " * 10 + "A" * 95, "A" * 95, id="name-leading-ws"),
+        pytest.param("contactPhone", " " * 10 + "9" * 45, "9" * 45, id="phone-leading-ws"),
+        # Trailing padding only, comfortably inside the column — asserts the value is stored
+        # trimmed rather than merely accepted.
+        pytest.param("contactName", "  Padded Name  ", "Padded Name", id="name-both-sides"),
+    ],
+)
+async def test_create_station_stores_contact_stripped(
+    client, coordinator_auth, field, value, expected
+):
+    """A contact value that only fits after stripping is stored stripped, not raw.
+
+    This is the leading-whitespace case the plain `"A" * 300` parametrizations above cannot
+    reach. The check measures the stripped string, so the service has to persist that same
+    string — an earlier version validated `val.strip()` and stored `val`, which sailed
+    through the check and then leaked the whole INSERT from asyncpg (PR #40 review round 3).
+
+    Trailing whitespace alone would not have caught it: PostgreSQL silently truncates
+    trailing spaces to fit a varchar(n) rather than erroring, so the database was already
+    doing half the job. Leading whitespace counts toward the length and gets no such mercy.
+    """
+    _, coord_token = coordinator_auth
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {
+                "input": {
+                    "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
+                    field: value,
+                }
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station_uuid = body["data"]["createStation"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": STATION_DETAIL_WITH_PII, "variables": {"uuid": station_uuid}},
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    assert body["data"]["station"][field] == expected
+
+
+@pytest.mark.asyncio
+async def test_create_station_blank_contact_stores_null(client, coordinator_auth):
+    """A whitespace-only contact value is absence, not content — it lands as NULL.
+
+    All three station contact columns are nullable (models/geo.py), so blank collapses to
+    NULL rather than "". The masking resolvers short-circuit on falsy either way, but "" and
+    NULL both being reachable would make "does this station have a contact?" two questions.
+    tickets.contact_name is NOT NULL and therefore takes the opposite path — see
+    test_create_ticket_rejects_blank_contact_name in test_mutations.py.
+    """
+    _, coord_token = coordinator_auth
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_STATION,
+            "variables": {
+                "input": {
+                    "geometry": {"type": "Point", "coordinates": [121.5, 25.0]},
+                    "contactName": "   ",
+                    "contactPhone": "\t\n ",
+                }
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station_uuid = body["data"]["createStation"]["uuid"]
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": STATION_DETAIL_WITH_PII, "variables": {"uuid": station_uuid}},
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    assert body["data"]["station"]["contactName"] is None, body
+    assert body["data"]["station"]["contactPhone"] is None, body
+
+
+@pytest.mark.asyncio
+async def test_update_station_stores_contact_stripped(client, coordinator_auth):
+    """The update path normalizes the same way — it is a second write to the same columns."""
+    _, coord_token = coordinator_auth
+    station_uuid = await _create_station(client, coord_token)
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": UPDATE_STATION,
+            "variables": {
+                "uuid": station_uuid,
+                "input": {
+                    "contactPhone": " " * 10 + "9" * 45,  # 55 raw into varchar(50)
+                    "contactName": "  Trimmed Contact  ",
+                },
+            },
+        },
+        headers=auth_header(coord_token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    station = body["data"]["updateStation"]
+    assert station["contactPhone"] == "9" * 45
+    assert station["contactName"] == "Trimmed Contact"
 
 
 @pytest.mark.asyncio
@@ -409,6 +538,10 @@ async def test_update_station_rejects_over_long_contact(client, coordinator_auth
     body = resp.json()
     assert "errors" in body, body
     message = body["errors"][0]["message"]
+    # Positive assertion first: since the schema installs MaskErrors, the negative
+    # assertions below would also pass with the service validator deleted. This one is
+    # what keeps the check in the service load-bearing rather than the mask.
+    assert "must be at most" in message, message
     assert "SQL:" not in message, message
     assert "UPDATE" not in message.upper(), message
     assert "stations" not in message, message

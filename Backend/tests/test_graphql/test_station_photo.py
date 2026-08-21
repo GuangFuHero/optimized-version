@@ -173,6 +173,10 @@ async def test_attach_station_photo_rejects_bad_url(client, coordinator_auth, ba
     message = body["errors"][0]["message"]
     # The point of validating length: asyncpg's truncation error quotes the whole
     # statement, which leaked the photos table layout to any authenticated caller.
+    # Positive assertion first: since the schema installs MaskErrors, the negative
+    # assertions below would also pass with the service validator deleted. This one is
+    # what keeps the check in the service load-bearing rather than the mask.
+    assert "Photo url" in message, message
     assert "INSERT" not in message.upper(), message
     assert "photos" not in message, message
 
