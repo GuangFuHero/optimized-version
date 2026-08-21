@@ -970,10 +970,20 @@ review 過程中新發現的兩個決策（照片移除的授權、跨 subtype �
 3. **`station.view_pii` 的逐角色 scope 完全對齊 `ticket.view_pii`**（`user`=own、team 角色=zone、
    `data_auditor`/`super_admin`=all、guest 一律遮罩）。兩者是同一種資料、同一種風險，沒有理由給不同答案；
    遮罩實作也直接沿用 `app/graphql/masking.py`，不另開第二套機制。
-4. **照片移除（`detachStationPhoto`）gate 在 `station.review`，不是 `station.contribute`。** 掛照片是
-   刻意開放的群眾貢獻（ADR-063 [5]），但**移除是審核**。兩者共用同一個開放 capability 的話，任何註冊
-   使用者都能刪任何站點的照片。檢查點 2 因 `Photo` 自身無 geometry，比照 ADR-052 借用母站點的座標判
-   `zone`（同 `station.py:_property_scope_target`），否則 zone-scoped 的 team admin 永遠碰不到任何照片。
+4. **移除「別人的」照片 gate 在 `station.review`；移除「自己的」只需 `station.contribute`。** 掛照片是
+   刻意開放的群眾貢獻（ADR-063 [5]），但**移除他人的照片是審核**。兩者完全共用同一個開放 capability
+   的話，任何註冊使用者都能刪任何站點的照片。檢查點 2 因 `Photo` 自身無 geometry，比照 ADR-052 借用母
+   站點的座標判 `zone`（同 `station.py:_property_scope_target`），否則 zone-scoped 的 team admin 永遠
+   碰不到任何照片。
+
+   上傳者例外（PR #40 review 補上）：`station.review` 只 seed 在 super_admin/`all` 與 team admin/`zone`
+   （`seed_rbac.py:79,111`），所以在此之前上傳錯照片的人自己刪不掉，得去找 moderator。**收回一個貢獻應
+   該只需要當初做出它的成本**——即 `station.contribute`，且比照 attach 不做 scope 檢查。這與 `user` 角色
+   在 `station.edit`/`station.delete` 上已經持有的 `own` 是同一套語意。
+   **這個例外必須寫在函式內、且排在決策 5 的 active-station 守衛「之後」**，不可以改用
+   `STATION_REVIEW: "own"` 去 seed：`station.review` 同時 gate 了 `suggestion.py` 的
+   `review_suggestion`，那裡的 `own` 意思是「我建立的站點」，給下去等於讓任何人自審自己站點上的
+   suggestion——審核繞道，而且從照片這邊的程式碼完全看不出來。
 5. **跨 subtype 守衛（決策 1 的直接代價）。** 因為 `ref_type='geometry'` 現在同時涵蓋 ticket 與 station，
    任何 gate 在 `station.*` 的寫入/刪除都**必須**先確認 `ref_uuid` 解析得到一個 active station。少了這道
    檢查，持有 `station.review` 的人就能刪掉由 `ticket.*` 管的 ticket 照片——這是權限邊界穿越，不是小瑕疵。
@@ -986,6 +996,13 @@ attach，任何人都能無限掛、且沒有人刪得掉，連 super_admin 都�
 決策 5 的守衛就是這個代價的具體體現，任何新的 photos 寫入路徑都要記得付。
 ➖ downgrade 會把 upgrade 後產生的 station 照片一併標回 `'ticket'`；round-trip 無損，且降版期間那些列的
 `ref_uuid` 是 station uuid，該 revision 的任何 ticket-photo 查詢都撈不到（migration 註解已據此更正）。
+➖ **`attachStationPhoto` 刻意不設每站上限、也不設 rate limit。** 這不是漏掉，是規格已經選過：FR-023 與
+其 clarification 定的是「即時顯示 + 事後檢舉」，明確不做 pre-moderation；`Spec/Docs/mapping-stations.csv`
+要求「支援多張照片」，沒有任何規格定義的上限數字可用，硬挑一個等於自己發明政策；FR-046 又要求照片審核政策
+必須可由後台設定，所以就算要做，硬編常數也是錯的形狀。另外現有的 rate limiter
+（`app/api/v1/endpoints/auth/deps.py:33`）是 FastAPI **route** dependency，而 GraphQL 只掛在單一
+`/graphql` route 上，掛上去會連查詢一起限流，無法表達「每分鐘幾次 attachStationPhoto」。真正的修法是
+FR-023 的檢舉流程，見 Blast Radius。
 
 **Blast Radius**：
 - migration `b8f4d2a6e1c3`：`photos.ref_type` 值改名 + `stations` 三個 nullable 欄位。`photos` 不是
@@ -994,8 +1011,16 @@ attach，任何人都能無限掛、且沒有人刪得掉，連 super_admin 都�
 - `app/graphql/loaders.py`：`photos_by_ticket`/`photos_by_station` 共用同一個 load function。
 - `app/graphql/geo/types.py:StationType`：三個遮罩 field resolver + `Create`/`UpdateStationInput`。
 - `scripts/seed_rbac.py`：`station.view_pii` 逐角色 grant。`station.review` 沿用既有 grant，未動。
+- `app/services/geo_validation.py`：新增 `validate_contact_fields`，由 `station.py` 的
+  `create_station`/`update_station` 與 `ticket.py` 的 `create_ticket` 共用。`stations.contact_*` 與
+  `tickets.contact_*` 雖是各自獨立的欄位（決策 2），寬度卻相同（100/100/50），所以共用一組上限。理由同
+  `validate_photo_url`：欄位短、schema 沒裝 error masking、asyncpg 的截斷錯誤會把整句 SQL 連參數一起
+  回給呼叫端。**`updateStation` 的聯絡欄位是 PR #31 新開的寫入口**，當時沒帶驗證。
 - **未解決、不在本 ADR 範圍**：`stations`/`tickets` 的聯絡欄位仍以明文進 `audit_logs`（trigger 只濾
   `password_hash`）——PR #31 review LOW 7，待統一的 audit-log PII 政策。
+- **未解決、不在本 ADR 範圍**：FR-023 要求的「回報不當照片」流程尚未實作。`detachStationPhoto` 只補上了
+  moderator 的「動作」，缺的是「佇列」——依 spec 006 應建在 `FlaggedItem`（`entity_type`/`entity_id`/
+  `flag_category`）與 FR-031/032 的 flagged-items queue 之上，再接上這裡的 `detachStationPhoto`。另開 PR。
 - `app/db/session.py` 補上 `expire_on_commit=False`（**修掉一個既存 bug，非本次新增**）：實作決策 3 的
   遮罩 resolver 時發現，任何 mutation 只要回傳型別上掛了會讀 actor 的 async field resolver，就會炸
   `MissingGreenlet`。成因是 service 一 commit 就 expire 了 session 內所有實例（含
