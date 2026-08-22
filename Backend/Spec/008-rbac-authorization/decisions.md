@@ -949,6 +949,140 @@ enforcement 呼叫（僅目錄 key），不符合「先有 enforcement 才發 ca
 - `Spec/Docs/rbac-permissions-design.md` §4.1：`super_admin` 列的模組枚舉加 `announcement`。
 - **零 schema / migration 影響**：純 `role_permission_assign` 資料列新增，沿用既有 `Permission` row。
 
+#### ADR-068 站點照片與站點聯絡欄位；photos 多型化為 `geometry`
+> **狀態：ACCEPTED（2026-08-20）。** PR #31 落地，本 ADR 於後續修正 PR 補寫。
+
+**Context**：PR #31 要讓站點也能掛照片、也能有自己的聯絡人。三件事當時只寫在 commit message 與
+migration docstring 裡，沒有進 ADR，reviewer 於 PR #31 review MEDIUM 3 指出。補寫如下，並一併收錄
+review 過程中新發現的兩個決策（照片移除的授權、跨 subtype 守衛）。
+
+**Decision**：
+
+1. **`photos.ref_type='ticket'` 改名為 `'geometry'`，而不是新增 `'station'` 值。** 一張 ticket 照片的
+   `ref_uuid` 存的本來就是 `tickets.uuid`，而它 **就是** `base_geometries.uuid`（joined-table
+   inheritance 共用 PK）。所以這個欄位從第一天起語意上就是「某個 base_geometries 子型別」，只是名字寫窄了。
+   改名後 station 免費得到同一套機制，dataloader 也只需要一個（`_make_photos_by_geometry_loader`，
+   `photos_by_ticket`/`photos_by_station` 共用）。uuid 全域唯一，兩個子型別的照片不可能互撞。
+   `ref_type='pole'`（secondary_locations）不受影響。
+2. **聯絡欄位加在 `stations`，不上推到 `base_geometries`。** 上推會連 `closure_areas` 等其他子型別
+   一起拿到「聯絡人」，而封閉區沒有聯絡人這個概念。`stations.contact_*` 與 `tickets.contact_*`
+   是**各自獨立的欄位**，只是剛好同名、也剛好都是 PII。
+3. **`station.view_pii` 的逐角色 scope 完全對齊 `ticket.view_pii`**（`user`=own、team 角色=zone、
+   `data_auditor`/`super_admin`=all、guest 一律遮罩）。兩者是同一種資料、同一種風險，沒有理由給不同答案；
+   遮罩實作也直接沿用 `app/graphql/masking.py`，不另開第二套機制。
+4. **移除「別人的」照片 gate 在 `station.review`；移除「自己的」只需 `station.contribute`。** 掛照片是
+   刻意開放的群眾貢獻（ADR-063 [5]），但**移除他人的照片是審核**。兩者完全共用同一個開放 capability
+   的話，任何註冊使用者都能刪任何站點的照片。檢查點 2 因 `Photo` 自身無 geometry，比照 ADR-052 借用母
+   站點的座標判 `zone`（同 `station.py:_property_scope_target`），否則 zone-scoped 的 team admin 永遠
+   碰不到任何照片。
+
+   上傳者例外（PR #40 review 補上）：`station.review` 只 seed 在 super_admin/`all` 與 team admin/`zone`
+   （`seed_rbac.py:79,111`），所以在此之前上傳錯照片的人自己刪不掉，得去找 moderator。**收回一個貢獻應
+   該只需要當初做出它的成本**——即 `station.contribute`，且比照 attach 不做 scope 檢查。這與 `user` 角色
+   在 `station.edit`/`station.delete` 上已經持有的 `own` 是同一套語意。
+   **這個例外必須寫在函式內、且排在決策 5 的 active-station 守衛「之後」**，不可以改用
+   `STATION_REVIEW: "own"` 去 seed：`station.review` 同時 gate 了 `suggestion.py` 的
+   `review_suggestion`，那裡的 `own` 意思是「我建立的站點」，給下去等於讓任何人自審自己站點上的
+   suggestion——審核繞道，而且從照片這邊的程式碼完全看不出來。
+5. **跨 subtype 守衛（決策 1 的直接代價）。** 因為 `ref_type='geometry'` 現在同時涵蓋 ticket 與 station，
+   任何 gate 在 `station.*` 的寫入/刪除都**必須**先確認 `ref_uuid` 解析得到一個 active station。少了這道
+   檢查，持有 `station.review` 的人就能刪掉由 `ticket.*` 管的 ticket 照片——這是權限邊界穿越，不是小瑕疵。
+   解析失敗一律回同一句 "Station photo not found"，不讓錯誤訊息透露該 uuid 其實屬於某張 ticket。
+
+**Consequences**：➕ 一套 photos 機制服務所有 base_geometries 子型別，未來新子型別零成本接上。
+➕ station 聯絡人與 ticket 聯絡人的遮罩行為一致，前端不用記兩種規則。➕ 照片有了移除路徑（PR #31 只加了
+attach，任何人都能無限掛、且沒有人刪得掉，連 super_admin 都不行）。
+➖ `ref_type` 不再自我描述——單看 `photos` 一列無法判斷是 ticket 還是 station 的照片，必須去 join。
+決策 5 的守衛就是這個代價的具體體現，任何新的 photos 寫入路徑都要記得付。
+➖ downgrade 會把 upgrade 後產生的 station 照片一併標回 `'ticket'`；round-trip 無損，且降版期間那些列的
+`ref_uuid` 是 station uuid，該 revision 的任何 ticket-photo 查詢都撈不到（migration 註解已據此更正）。
+➖ **`attachStationPhoto` 刻意不設每站上限、也不設 rate limit。** 這不是漏掉，是規格已經選過：FR-023 與
+其 clarification 定的是「即時顯示 + 事後檢舉」，明確不做 pre-moderation；`Spec/Docs/mapping-stations.csv`
+要求「支援多張照片」，沒有任何規格定義的上限數字可用，硬挑一個等於自己發明政策；FR-046 又要求照片審核政策
+必須可由後台設定，所以就算要做，硬編常數也是錯的形狀。另外現有的 rate limiter
+（`app/api/v1/endpoints/auth/deps.py:33`）是 FastAPI **route** dependency，而 GraphQL 只掛在單一
+`/graphql` route 上，掛上去會連查詢一起限流，無法表達「每分鐘幾次 attachStationPhoto」。真正的修法是
+FR-023 的檢舉流程，見 Blast Radius。
+
+**Blast Radius**：
+- migration `b8f4d2a6e1c3`：`photos.ref_type` 值改名 + `stations` 三個 nullable 欄位。`photos` 不是
+  audited table，故該 UPDATE 不需要 trigger-disable 處理。
+- `app/services/photo.py`、`app/graphql/geo/mutations.py`：attach/detach 兩個入口。
+- `app/graphql/loaders.py`：`photos_by_ticket`/`photos_by_station` 共用同一個 load function。
+- `app/graphql/geo/types.py:StationType`：三個遮罩 field resolver + `Create`/`UpdateStationInput`。
+- `scripts/seed_rbac.py`：`station.view_pii` 逐角色 grant。`station.review` 沿用既有 grant，未動。
+- `app/services/geo_validation.py`：新增 `normalize_contact_fields`，由 `station.py` 的
+  `create_station`/`update_station` 與 `ticket.py` 的 `create_ticket` 共用。`stations.contact_*` 與
+  `tickets.contact_*` 雖是各自獨立的欄位（決策 2），寬度卻相同（100/100/50），所以共用一組上限。理由同
+  `normalize_photo_url`：欄位短、asyncpg 的截斷錯誤會把整句 SQL 連參數一起回給呼叫端。
+  **`updateStation` 的聯絡欄位是 PR #31 新開的寫入口**，當時沒帶驗證。
+  ➖ **「被驗證的字串」與「被寫進資料庫的字串」必須是同一個。** 所以這個函式一次做完 strip 與長度檢查、
+  回傳正規化後的 dict，呼叫端存回傳值而不是原始參數。第一版把兩件事拆開——檢查 `len(val.strip())`、卻存
+  `val`——於是 10 個前置空白 + 95 個字元通過了 100 字元的檢查，再由 asyncpg 把整句 INSERT 連 `stations`
+  全部欄位回給呼叫端（PR #40 review round 3）。尾端空白驗不出這個洞：PostgreSQL 對超長但多出來的字元
+  全是空白的值會靜默截斷而不報錯，所以只有前置空白會重現，而當時新增的六個 parametrize case 全是純長
+  字串。
+  ➖ 同一個理由，`photo.py` 的 `validate_photo_url` 一併改名為 `normalize_photo_url` 並回傳 strip 過的
+  url，由 `attach_photo_to_geometry` 存回傳值。舊版是「驗證函式 strip 進區域變數、寫入端自己再 strip
+  一次」——兩次 strip 剛好一致，但那正是聯絡欄位出事的形狀，只差沒被踩到。現在這個 invariant 由回傳值
+  結構性保證，不再靠兩處自律。
+  ➖ **strip 後為空字串者存 `None`**（空白即「沒填」，`masking.py` 對 falsy 一律短路，`""` 與 NULL 在輸
+  出端等價）。唯一例外由呼叫端用 `required=` 指名，因為兩張表在這裡不一致：`tickets.contact_name` 是
+  NOT NULL（`models/request.py`），`stations.contact_name` 可為 NULL（`models/geo.py`）。一律轉 NULL
+  會讓 `createTicket(contactName: "   ")` 撞 IntegrityError——在裝上 `MaskErrors` 之後就是一句
+  `Unexpected error.`，把一個純粹的 400 包裝成伺服器故障。所以 required 欄位在 service 層擋掉、給
+  `contact_name is required`。**不要把這兩條路徑合併成一句 `val or None`。**
+- `app/graphql/schema.py`：掛上 `MaskErrors`（`_should_mask` allow-list）。**這原本規劃另開 PR，改成
+  在本 PR 一起做**，理由與更正如下。
+  ➖ 逐欄位補長度驗證是打地鼠，因為問題的層級不在欄位。**真正的規則是「Strawberry input 的 `str` 落進
+  `varchar(n)`」**：REST 側一直是乾淨的，因為 `app/schemas/*.py` 每個欄位都帶 pydantic `max_length`；
+  Strawberry 的 input 型別完全不帶長度約束。所以這是整個 GraphQL 寫入面的問題，不是聯絡欄位的問題。
+  實測（皆非 #31/#40 引入）**7 個 mutation、23 個欄位級入口**會把整句 statement 連欄位清單回給呼叫端：
+
+  ```
+    createStation            type(50) opHour(100) source(50)
+      .secondaryLocation     county/city/poleId/poleType(50)
+                             lane/alley/no/floor/room(20)
+    updateStation            type(50) opHour(100)
+    createClosureArea        status(50)          updateClosureArea  status(50)
+    createStationProperty    propertyType(50) propertyName(100)
+    createTicket             title(200) priority(20) taskType(50) disasterType(50)
+    reviewStationSuggestion  核准時 -> UPDATE stations ...
+  ```
+
+  最後一個是間接路徑，也是「逐欄位驗證」根本擋不到的證據：`station_update_suggestions.new_value` 是
+  無上限的 `String`，超長值先存得下，等到核准時 `setattr` 才寫進窄欄位，於是 statement 洩給**審核者**
+  而不是投稿者。建議入口本身沒有任何地方可以攔。
+  ➖ **更正原本的延後理由。** 舊版寫「會改動現有測試斷言的錯誤字串」——實測不成立。全 suite 的錯誤訊息
+  斷言只有兩種來源：service 層的 `ValueError`（ADR-013/014 的約定）與 authz 的 `HTTPException`
+  （`Permission Denied.` / `Not Found.`），兩者都在 allow-list 內原樣通過；第三種是 graphql-core 自己的
+  input coercion（`not a valid value`），`original_error is None`，也放行。裝上 extension 前後皆
+  `505 passed`，零改動。
+  ➖ **由此產生一條新約定：要讓客戶端看到的錯誤必須是 `ValueError`（或 `HTTPException`）。** 其他型別一
+  律變成 `Unexpected error.`。新增自訂例外類別時若不繼承 `ValueError`，訊息會無聲消失。
+  ➖ **遮罩不犧牲可除錯性。** strawberry 在 extension 改寫 result **之前**就跑完 `Schema.process_errors`
+  （`strawberry/schema/schema.py` 的 `_execute` 內有註解明說這是為了 `MaskErrors`），
+  `StrawberryLogger` 帶 `exc_info` 記錄原始例外。實測確認：客戶端拿到 `Unexpected error.`，
+  `strawberry.execution` logger 同時仍印出完整的 `StringDataRightTruncationError` 與 `INSERT INTO
+  stations (...)`。不要因為「錯誤看不到了」而把它拆掉。
+  ➖ 服務層的逐欄位驗證**沒有**因此變成多餘：`contact_*` 與 `photos.url` 仍需要給出可行動的 400
+  （`must be at most 100 characters`），而不是一句 `Unexpected error.`。但既有的三組「錯誤訊息不含
+  SQL」測試在裝上遮罩後會**單靠遮罩就通過**——把 service 的驗證刪掉也還是綠的。所以那幾個測試都補了正向
+  斷言（`must be at most` / `Photo url`），讓它們證明的是驗證而不是遮罩。已用 mutation 驗過：補之前刪掉
+  `normalize_contact_fields` 是 3 passed，補之後是 3 failed。
+- **未解決、不在本 ADR 範圍**：`stations`/`tickets` 的聯絡欄位仍以明文進 `audit_logs`（trigger 只濾
+  `password_hash`）——PR #31 review LOW 7，待統一的 audit-log PII 政策。
+- **未解決、不在本 ADR 範圍**：FR-023 要求的「回報不當照片」流程尚未實作。`detachStationPhoto` 只補上了
+  moderator 的「動作」，缺的是「佇列」——依 spec 006 應建在 `FlaggedItem`（`entity_type`/`entity_id`/
+  `flag_category`）與 FR-031/032 的 flagged-items queue 之上，再接上這裡的 `detachStationPhoto`。另開 PR。
+- `app/db/session.py` 補上 `expire_on_commit=False`（**修掉一個既存 bug，非本次新增**）：實作決策 3 的
+  遮罩 resolver 時發現，任何 mutation 只要回傳型別上掛了會讀 actor 的 async field resolver，就會炸
+  `MissingGreenlet`。成因是 service 一 commit 就 expire 了 session 內所有實例（含
+  `info.context["user"]`），接著 `resolve_scope` 讀 `actor.uuid` 觸發 lazy reload，而 async 下的 expired
+  attribute 只能靠 sync IO 重載。`createStation { contactName }` 與 `createTicket { contactName }` 皆
+  中彈——後者早於 PR #31（ADR-029 的 ticket 遮罩就有），只是既有測試從未在 mutation 回傳裡選過聯絡欄位，
+  所以沒人發現。
+
 ---
 
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）

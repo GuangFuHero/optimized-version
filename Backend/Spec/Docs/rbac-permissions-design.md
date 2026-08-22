@@ -47,7 +47,7 @@
 | 模組 | 能力鍵 |
 | :--- | :--- |
 | **Ticket（求助單）** | `ticket.view` ★、`ticket.view_pii`、`ticket.add`、`ticket.edit`、`ticket.delete`、`ticket.assign`、`ticket.review`、`ticket.export` |
-| **Station（資源站點）** | `station.view` ★、`station.add`、`station.edit`、`station.delete`、`station.review` |
+| **Station（資源站點）** | `station.view` ★、`station.view_pii`、`station.add`、`station.contribute`、`station.edit`、`station.delete`、`station.review` |
 | **Map（地圖圖層/封閉區）** | `map.view` ★、`map.add`、`map.edit`、`map.delete` |
 | **Announcement（緊急公告）** | `announcement.view` ★、`announcement.publish`、`announcement.edit`、`announcement.delete` |
 | **AI Duplicate（重複審核）** | `ai_duplicate.view`、`ai_duplicate.review` |
@@ -84,29 +84,35 @@
 - **檢查點 2**：這一筆資源在不在我的 scope 內（**必先 load 才有 `created_by`/`geometry`**）。`own` 不符 → **403**；`team`/`zone` 不符 → **404**（不洩漏跨邊界資源存在）。
 - 共用實作：`app/services/authz.py:require_scope`（GraphQL / REST / 未來 entrypoint 共用同一流程）。
 
-### 3.3 PII 遮罩（ADR-029/048）
+### 3.3 PII 遮罩（ADR-029/048/068）
 `ticket.view_pii` 不在 scope 內時，聯絡欄位回傳遮罩值（看起來像「沒填」），逐角色判定：`user`=own（只看自己的單原值）、team 角色=zone、`data_auditor`/`super_admin`=all、guest=一律遮罩。
+
+`stations` 也有自己的 `contact_name`/`contact_email`/`contact_phone`（**獨立欄位，與 `tickets` 的同名欄位無關**，ADR-068），由 `station.view_pii` 以完全相同的機制與逐角色 scope 遮罩——`app/graphql/geo/types.py:StationType` 的三個 field resolver 與 `TicketType` 對齊，共用 `app/graphql/masking.py`。判定表同上。
+
+> 遮罩只擋讀取路徑。這些欄位仍會以明文進 `audit_logs`（`stations`/`tickets` 都是 audited table，trigger 只濾 `password_hash`）——見 PR #31 review LOW 7，待未來的 audit-log PII 政策統一處理。
 
 ---
 
 ## 4. 預設角色（`scripts/seed_rbac.py`）
 
 > 一帳號 = 一 `platform` 角色 + 最多一 `team` 角色，effective = 兩者 grant 的聯集（ADR-019）。
+>
+> **下表列的是各角色自己的 grant，不是有效權限。** 指派 team 角色只替換同 kind 的舊角色，所以 team 角色持有者仍保有預設 platform 角色 `user` 的所有 grant。實例：team `admin` 自己沒有 `station.contribute`，但聯集 `user` 的 `all` 之後有效 scope 就是 `all`——不要把下表的空白讀成 403。
 
 ### 4.1 Platform 角色（每帳號一個）
 
 | 角色 | 定位 | scope grant 重點 |
 | :--- | :--- | :--- |
-| **`user`** | 一般民眾（每個註冊帳號的預設） | `map.view`/`station.view`/`ticket.view`=all；`station.add`/`ticket.add`=all；`station.edit`/`station.delete`/`ticket.edit`/`ticket.delete`/`ticket.assign`=own；`ticket.view_pii`=own |
-| **`data_auditor`** | 監督查核（唯讀，看全部含 PII） | `map.view`/`station.view`/`ticket.view`=all；`ticket.view_pii`=all；`user.view`=all；`audit.view`=all |
+| **`user`** | 一般民眾（每個註冊帳號的預設） | `map.view`/`station.view`/`ticket.view`=all；`station.add`/`ticket.add`=all；**`station.contribute`=all**（群眾貢獻刻意開放，ADR-063 [5]）；`station.edit`/`station.delete`/`ticket.edit`/`ticket.delete`/`ticket.assign`=own；`ticket.view_pii`/**`station.view_pii`**=own |
+| **`data_auditor`** | 監督查核（唯讀，看全部含 PII） | `map.view`/`station.view`/`ticket.view`=all；`ticket.view_pii`/**`station.view_pii`**=all；`user.view`=all；`audit.view`=all |
 | **`super_admin`** | 平台最高權限（1–2 人） | 上述所有模組 + user/team/work_zone/rbac/audit/announcement 全部 = all（**唯一持有 `rbac.assign`/`rbac.edit`、`team.edit`**） |
 
 ### 4.2 Team 角色（綁在 `user_role_assign`；組織 = 該 team 的 `type`）
 
 | 角色 | 定位 | scope grant 重點 |
 | :--- | :--- | :--- |
-| **`admin`** | 團隊協調員 | 操作類（station/ticket 的 edit/delete/review/assign）=**zone**；`team.view`/`team.member.manage`=team；`work_zone.view/add/edit/assign/delete`=all；view/add=all |
-| **`member`** | 團隊現場人員 | station/ticket 的 edit=**zone**；delete/assign 維持 own；`ticket.view_pii`=zone；`team.view`=team；**無**團隊管理、**無**畫 zone |
+| **`admin`** | 團隊協調員 | 操作類（station/ticket 的 edit/delete/review/assign）=**zone**；`ticket.view_pii`/**`station.view_pii`**=zone；`team.view`/`team.member.manage`=team；`work_zone.view/add/edit/assign/delete`=all；view/add=all |
+| **`member`** | 團隊現場人員 | station/ticket 的 edit=**zone**；delete/assign 維持 own；`ticket.view_pii`/**`station.view_pii`**=zone；`team.view`=team；**無**團隊管理、**無**畫 zone |
 
 > 「政府協調員」= `admin` 角色 + `gov` 型 team；「NGO 協調員」= `admin` 角色 + `ngo` 型 team。組織差異只在 team.type，不在角色。
 
