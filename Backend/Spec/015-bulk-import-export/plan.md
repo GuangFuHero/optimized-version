@@ -181,120 +181,84 @@ TEXT_COLUMNS = frozenset(
 >
 > **完成 2026-08-22**：`tests/test_tabular.py` 20 passed，全套件 568 passed / 0 failed，ruff 乾淨。
 
-## Task 5: 匯出
+## Task 5: 匯出 ✅
 
 **Files:** Create `app/services/bulk_export.py`, `app/api/v1/endpoints/bulk.py`, `app/schemas/bulk.py`, `tests/test_bulk_export.py`；Modify `app/api/v1/api.py`
 
-- [ ] `GET /api/v1/bulk/stations/export?station_type=&format=`：檢 `station.export`，依 scope 取資料
-- [ ] `GET /api/v1/bulk/tickets/export?task_type=&format=`：檢 `ticket.export`
-- [ ] ticket 的三個 contact 欄逐筆套 PII scope
+- [x] `GET /api/v1/bulk/stations/export?station_type=&format=`：檢 `station.export`，依 scope 取資料
+- [x] `GET /api/v1/bulk/tickets/export?task_type=&format=`：檢 `ticket.export`
+- [x] ticket 的三個 contact 欄逐筆套 PII scope（`all` / `none` 不再查 DB，只有 own/zone 逐筆判斷）
+- [x] 空結果也回一份只有表頭的檔（ADR-119 的空範本）
+- [x] 關聯資料兩次查詢取完，不是 2N 次
+- [x] 12 個測試：表頭佈局、座標欄、zone 範圍、403、空範本、CSV/XLSX 一致、格式拒絕、XLSX 文字格式、一列一 task、動態值、**同一份檔裡逐列遮罩**、無 view_pii 全遮罩
 
-```python
-# ADR-109: the same per-row ticket.view_pii decision the GraphQL field resolvers make
-# (app/graphql/tickets/types.py:375). Export is a second read path onto the same data — if
-# it skipped this, the own/zone tiers would guard the screen and not the export button.
-```
-
-- [ ] 空結果也要回一份只有表頭的檔（ADR-119 的空範本）
-- [ ] 註冊 router 到 `api.py`
-- [ ] 測試：`super_admin` 匯出 shelter，表頭 = 固定欄位 + 3 個 `prop.`，順序穩定
-- [ ] 測試：team admin（zone scope）匯出，只拿到自己 WorkZone 內的站點
-- [ ] 測試：`member` 匯出 → 403
-- [ ] 測試：zone scope 的人匯出 ticket，**在 zone 內的列是明碼、zone 外的列是遮罩**（同一份檔裡兩種都有）
-- [ ] 測試：空庫匯出得到只有表頭的檔，且該檔的表頭與有資料時完全相同
-- [ ] 測試：CSV 與 XLSX 兩種格式的內容一致
-
-## Task 6: 比對引擎
+## Task 6: 比對引擎 ✅
 
 **Files:** Create `app/services/bulk_match.py`, `tests/test_bulk_match.py`
 
-- [ ] `match_stations(db, rows)`：名稱正規化後 join `secondary_locations` 比 `county` + `city`
-- [ ] `match_tickets(db, rows)`：`title` + `contact_phone`（電話先過 `app/core/normalize.py` 的正規化）
-- [ ] `match_task(db, ticket_uuid, task_type, task_name)`
-- [ ] 三種結果：`Matched(uuid)` / `NoMatch` / `Ambiguous(uuids)`
-- [ ] 檔內同鍵偵測：先掃一遍整份，同鍵的列全部標成失敗並互相指出列號（ADR-113）
-- [ ] 測試：恰好一筆 → `Matched`
-- [ ] 測試：同名不同縣市 → 兩筆都不會被誤配
-- [ ] 測試：同名同縣市兩筆 → `Ambiguous`，且錯誤訊息含兩個 uuid
-- [ ] 測試：檔內兩列同鍵 → 兩列都失敗，訊息互指列號（**不是後蓋前**）
-- [ ] 測試：`name` 為 NULL 的既有 station 不會被空白名稱的列配中
+- [x] `build_station_index` / `build_ticket_index`：**整份檔比對一次索引查詢**，不是每列一次查詢
+- [x] `match_task`：在已比對到的 ticket 底下比對
+- [x] `Match(kind=matched/no_match/ambiguous)`
+- [x] `duplicate_key_rows`：檔內同鍵的列互指列號，全部失敗
+- [x] 正規化：NFKC（全半形）+ 空白收斂 + casefold；電話先試 E.164，失敗退回純數字
+- [x] 14 個測試，含 soft-delete 不可比中、無地址的舊資料可比中
 
-## Task 7: 列驗證
+> **為什麼是索引而不是逐列 SQL**：正規化（NFKC、casefold、電話形狀）在 SQL 裡做不乾淨，做了就會有兩套實作。索引把正規化留在 Python 一份，代價是把該表的比對欄位讀進記憶體——以本專案的資料量可接受。
+
+## Task 7: 列驗證 ✅
 
 **Files:** Create `app/services/bulk_validate.py`, `tests/test_bulk_validate.py`
 
-- [ ] 固定欄位：型別、enum（`priority` / `visibility` / `status`）、必填
-- [ ] 座標：新增列必填且過 `validate_point`；更新列空白 → 不動（ADR-123）
-- [ ] 動態欄位：照 `list_by_type` 的定義驗（ADR-117）——未定義的 `prop.` 欄位、`Enum` 值不在 `enum_options`、型別轉不動，三者都是該列失敗
-- [ ] 遮罩偵測：含 `◯` 或符合 `mask_phone` 樣式的電話 → 該列失敗（ADR-109）
+- [x] 型別轉換（Integer / Float / Boolean / Enum）+ 可讀錯誤訊息
+- [x] 座標：新增必填、更新可空、範圍檢查（ADR-123）
+- [x] 動態欄位照 `list_by_type` 驗（ADR-117）；未定義的 `prop.` 欄位**有值才失敗**
+- [x] 遮罩偵測：`◯` 或 `*` 出現在 contact 欄 → 該列失敗（ADR-109）
+- [x] `writable_values`：空白不進、依方向濾掉不可寫的欄位（ADR-108/121）
+- [x] 錯誤列號照試算表（表頭是第 1 列）
+- [x] 20 個測試，含「一列三個問題一次全回」
 
-```python
-# ADR-109: a masked phone means the caller could not see this row's PII on the way out, so
-# they must not be able to write it back in. Failing loudly beats the alternative — a masked
-# value never matches (ADR-107), so a silent pass would quietly create a duplicate ticket.
-```
+> **`priority` 仍是純字串。** `low/medium/high/critical` 在 codebase 裡只存在於 GraphQL description，沒有 enum、沒有常數、單筆寫入也不驗。驗它等於由本票發明正式字彙，且 ADR-117 授權的不對稱只涵蓋動態欄位。**待使用者裁決**；`visibility`（真的 `Visibility` enum）與 ticket `status`（`VALID_TRANSITIONS` 的 keys）都接既有來源，沒有發明東西。
 
-- [ ] 測試：`prop.capacity_total` 填 `"abc"` → 失敗，訊息點名該欄位
-- [ ] 測試：`prop.crowd_level` 填 `"extreme"`（不在 `enum_options`）→ 失敗
-- [ ] 測試：config 沒定義的 `prop.foo` → 失敗
-- [ ] 測試：`is_active=false` 的欄位出現在檔裡 → 失敗（因為不在 `list_by_type` 的結果裡）
-- [ ] 測試：遮罩電話 `09*****678` → 失敗，訊息提到 PII 權限
-- [ ] 測試：更新列座標空白 → 通過；新增列座標空白 → 失敗
-- [ ] 測試：單筆 GraphQL 寫入仍然不驗證型別（**確認 ADR-092 沒有被順手改掉**）
+## Task 8: preview 端點 ✅
 
-## Task 8: preview 端點
+**Files:** Modify `app/api/v1/endpoints/bulk.py`；Create `app/schemas/bulk.py`
 
-**Files:** Modify `app/api/v1/endpoints/bulk.py`, `app/schemas/bulk.py`；Create `tests/test_bulk_preview.py`
+- [x] `POST /api/v1/bulk/{stations|tickets}/import/preview`（multipart）：檢 `*.import`（**探測防護**）
+- [x] 上限在最前面：> 500 列或 > 2 MB → 400（ADR-116）
+- [x] 回傳偵測欄位、建議映射、配不到的欄位、前 20 列、**所有**錯誤、被略過的動態欄位
+- [x] 測試：preview 零寫入、403、一次回三個錯、映射建議、略過欄位說明、超量拒絕
 
-- [ ] `POST /api/v1/bulk/{stations|tickets}/import/preview`（multipart）：檢 `*.import`
-- [ ] 上限檢查在最前面：> 500 列或 > 2 MB → 400（ADR-116）
-- [ ] 回傳：偵測到的欄位、建議映射（表頭同名自動配對）、前 20 列預覽、**所有**錯誤列、被略過的欄位與原因
-- [ ] 測試：沒有 `*.import` → 403（**探測防護**，ADR-110）
-- [ ] 測試：501 列 → 400，且錯誤訊息說得出上限
-- [ ] 測試：一份有 3 個不同錯誤的檔，`preview` 一次回三個（不是碰到第一個就停）
-- [ ] 測試：`preview` 完全不寫資料庫（前後 `audit_logs` 筆數不變）
-- [ ] 測試：Task 5 匯出的檔直接丟進 `preview` → 零錯誤（**往返對稱的守門測試**）
+## Task 9: station 匯入 commit ✅
 
-## Task 9: station 匯入 commit
+**Files:** Create `app/services/bulk_import.py`, `tests/test_bulk_import_station.py`
 
-**Files:** Create `app/services/bulk_import.py`；Modify `app/api/v1/endpoints/bulk.py`；Create `tests/test_bulk_import_station.py`
+- [x] 逐列：比對 → 驗證 → `create_station`(+`secondary_location`) 或 `update_station`
+- [x] 動態欄位走 `create_station_property` / `update_station_property`
+- [x] 失敗列跳過並收集，回成功/失敗筆數 + 錯誤報告（ADR-112）
+- [x] 20 個測試，含**冪等**、**匯出→匯回零錯誤**、zone 越界失敗、只有 import 沒有 add 全失敗、檔內同鍵全失敗、型別不符拒絕
 
-- [ ] `POST /api/v1/bulk/stations/import/commit`（multipart：檔 + mapping）
-- [ ] 逐列：比對 → 驗證 → 新增（`create_station` + 選填 `secondary_location`）或更新（`update_station`）
-- [ ] 動態欄位：`create_station_property` / `update_station_property`
-- [ ] 空白 = 不動（ADR-121）；比對鍵欄位在更新列上忽略（ADR-108）
-- [ ] 失敗列跳過並收集，回成功/失敗筆數 + 逐列錯誤報告（ADR-112）
-- [ ] 整個請求產一個 batch uuid，放進回應與錯誤報告（**不進資料庫**，ADR-124）
-- [ ] 測試：比對不中 + 有座標 → 新增，且 `created_by` 是匯入者
-- [ ] 測試：比對中 → 更新，且 `uuid` 不變（**沒有偷偷新增**）
-- [ ] 測試：更新列改了 `county` → 該欄位被忽略，DB 裡的地址不變（ADR-108）
-- [ ] 測試：更新列某欄空白 → DB 該欄保持原值（ADR-121）
-- [ ] 測試：一份 5 列的檔中 2 列有錯 → 3 列進了、2 列在報告裡，且報告帶列號與原因
-- [ ] 測試：team admin 匯入自己 zone 外的既有站點 → 該列因 checkpoint 2 失敗（**匯入沒有繞過 scope**）
-- [ ] 測試：只有 `station.import` 沒有 `station.add` → 新增列全失敗（ADR-110）
-- [ ] 測試：同一份檔連匯兩次 → 第二次全部走更新，總筆數不變（**冪等**）
+> **新建站點的 `source` 寫成 `"import"`**：`create_station` 要求這個參數，而「這筆是從檔案進來的」本來就值得留下。
 
-## Task 10: ticket 匯入 commit
+## Task 10: ticket 匯入 commit ✅
 
 **Files:** Modify `app/services/bulk_import.py`；Create `tests/test_bulk_import_ticket.py`
 
-- [ ] 一列 = 一張單 + 一個 task（ADR-120）：`create_ticket` → `create_ticket_task` → `create_task_property`
-- [ ] status 先跟 DB 現值 diff，相同就不放進 `changes`（ADR-122）
-- [ ] 新增列忽略 status 欄——`create_ticket` 一律寫 `"pending"`
-- [ ] 測試：新增列建出 ticket + task + 動態欄位三層都在
-- [ ] 測試：**匯出一批 `completed` 的單，原封不動匯回 → 零錯誤**（ADR-122 的核心回歸測試）
-- [ ] 測試：`completed` → `pending` → 該列失敗，訊息提到狀態轉換
-- [ ] 測試：`pending` → `in_progress` → 成功
-- [ ] 測試：同一張單有兩個 task → 匯出兩列，匯回後仍是兩個 task（沒有互相覆蓋）
-- [ ] 測試：更新列改了 `contact_phone` → 忽略（ADR-108），且比對仍以原電話進行
-- [ ] 測試：zone scope 的人匯出 100 列、改完匯回 → zone 外的列全部失敗於遮罩偵測，zone 內的成功（ADR-109 的整條路徑）
+- [x] 一列 = 一張單 + 一個 task（ADR-120）
+- [x] status 先跟 DB 現值 diff，相同就不送（ADR-122）；新增列忽略 status
+- [x] 13 個測試，含 **completed 原封匯回零錯誤**、非法轉換失敗、合法轉換成功、遮罩電話擋下、**zone scope 匯出 100 列只改得回區內那些**
 
-## Task 11: 錯誤報告下載
+> **實作時抓到的真 bug**：同一份檔裡兩列共用同一張單（不同任務）時，第二列又建了一張新單——比對索引是開檔時建的，不知道第一列剛建了什麼。修法是讓索引在匯入過程中登記新建的 uuid，並且**在寫入當下**重新解析比對結果，而不是沿用規劃階段的判斷。
 
-**Files:** Modify `app/api/v1/endpoints/bulk.py`, `app/services/bulk_import.py`；Modify `tests/test_bulk_import_station.py`
+## Task 11: 錯誤報告 ✅
 
-- [ ] `commit` 的回應同時帶 JSON 錯誤陣列與一份可下載的錯誤檔（原列內容 + 一欄 `error`），格式與上傳格式相同
-- [ ] 測試：錯誤檔的表頭 = 原表頭 + `error`，且修好 `error` 指出的問題後可以直接再匯一次
+**Files:** Modify `app/services/bulk_import.py`, `app/schemas/bulk.py`
+
+- [x] `commit` 回應同時帶 JSON 錯誤陣列與一份可下載的錯誤檔（原列 + `error` 欄），格式與上傳相同
+- [x] 測試：錯誤檔表頭 = 原表頭 + `error`，只含失敗的列
+
+> **報告為什麼內嵌 base64 而不是給下載網址**：端點是無狀態的（ADR-114），而且報告描述的是**這一次**執行——commit 之後有些列已經存在了，拿同一份檔重跑不會得到同一份報告。
+
+> **完成 2026-08-22**：全套件 **647 passed / 0 failed**，ruff 對本票新增的檔案全綠（repo 既有的 7 個錯誤不變）。
 
 ## Task 12: docker 完整驗證
 
