@@ -87,7 +87,7 @@ async def db():
         await conn.execute(text("CREATE SCHEMA public;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
         await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
         yield session
     await engine.dispose()
@@ -102,7 +102,7 @@ async def db_session():
         await conn.execute(text("CREATE SCHEMA public;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
         await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
         session.add(Role(name="user", kind="platform"))
         await session.commit()

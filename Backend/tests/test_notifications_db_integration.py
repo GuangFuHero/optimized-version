@@ -106,9 +106,11 @@ async def test_resolve_gov_and_zone_ngo_with_postgis(db: AsyncSession):
         geometry=WKTElement("SRID=4326;POINT(121.6 23.99)", srid=4326),
     )
     db.add(station_inside)
-    await db.commit()
-
+    # Read the PK after flush but before commit: the session expires attributes on commit
+    # (matching app/db/session.py), so touching them afterwards would need a reload.
+    await db.flush()
     station_id = station_inside.uuid
+    await db.commit()
     recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, station_uuid=station_id)
     assert str(gov_uid) in recipients
     assert str(ngo_admin_uid) in recipients
@@ -180,6 +182,8 @@ async def test_notification_dispatch_persists_across_sessions(db: AsyncSession):
         explicit_recipients=[rec_id],
     )
     assert len(notifs) == 1
+    # dispatch() commits, so the objects it returns are expired — refresh before reading.
+    await db.refresh(notifs[0])
     notif_uuid = notifs[0].uuid
 
     # 模擬連線結束，建立全新的 Engine 與 Session 查詢真實資料庫
@@ -197,3 +201,62 @@ async def test_notification_dispatch_persists_across_sessions(db: AsyncSession):
         assert persisted.created_at is not None
 
     await test_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_add_team_member_returns_usable_object_after_dispatch(db: AsyncSession):
+    """A mutation that dispatches a notification must still hand back a readable object.
+
+    Regression test: `dispatch()` commits, and sessions run with expire_on_commit=True
+    (app/db/session.py), so every ORM object the caller still holds is expired at that
+    point. `add_team_member` used to read `team.name` inside the dispatch arguments and
+    return `target` straight after — both raised MissingGreenlet in async, 500ing
+    POST /api/v1/admin/teams/{uuid}/members. This asserts the whole path the endpoint
+    walks, including the attribute reads it performs on the return value.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import admin as admin_service
+
+    team = Team(name="慈濟基金會-花蓮聯絡處", type="ngo", status="active")
+    role = Role(name="member", kind="team")
+    db.add_all([team, role])
+    await db.flush()
+    team_id = team.uuid
+    await db.commit()
+
+    actor = User(name="Coordinator")
+    target = User(name="新志工小明")
+    db.add_all([actor, target])
+    await db.flush()
+    actor_id, target_id = actor.uuid, target.uuid
+    await db.commit()
+
+    actor_obj = await db.get(User, actor_id)
+    with patch("app.services.admin.require_scope", new_callable=AsyncMock):
+        returned = await admin_service.add_team_member(
+            db,
+            actor=actor_obj,
+            team_uuid=str(team_id),
+            user_uuid=str(target_id),
+            team_role_name="member",
+        )
+
+    # Exactly what app/api/v1/endpoints/admin.py does with the return value.
+    assert returned.uuid == target_id
+    assert str(returned.team_uuid) == str(team_id)
+
+    # And the notification itself landed.
+    rows = (
+        (
+            await db.execute(
+                select(Notification).where(
+                    Notification.recipient_uuid == target_id,
+                    Notification.type == "team_member_added",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
