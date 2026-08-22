@@ -145,22 +145,41 @@
 
 **純格式層，零業務邏輯**——它只認識「一列 = dict[str, str]」。
 
-- [ ] `uv add openpyxl`
-- [ ] `read_table(raw: bytes, filename: str) -> list[dict[str, str]]`，依副檔名分派；空表頭 / 重複表頭 → `ValueError`
-- [ ] `write_csv(headers, rows) -> bytes`：**帶 UTF-8 BOM**
-- [ ] `write_xlsx(headers, rows, text_columns) -> bytes`：`text_columns` 內的欄位寫成文字格式儲存格
+- [x] `uv add openpyxl`
+- [x] `read_table(raw: bytes, filename: str) -> Table`，依副檔名分派（大小寫不敏感）
+- [x] 空表頭 / 重複表頭 / 空檔 / 不支援的副檔名 → `TableFormatError`
+- [x] 非 UTF-8 的 CSV → 專屬錯誤訊息（本地 Big5 匯出很常見）
+- [x] `write_csv(headers, rows) -> bytes`：**帶 UTF-8 BOM**
+- [x] `write_xlsx(headers, rows, *, text_columns) -> bytes`：`text_columns` 內的欄位寫成文字格式儲存格
+- [x] 讀取時的資料清理：整數不帶小數尾巴、空白格變空字串、全空的列丟掉
 
 ```python
-# ADR-115: Excel infers types on open. Without this, 0912345678 comes back as 912345678 —
-# and contact_phone is a ticket's match key (ADR-107), so a silent leading-zero loss turns
-# an entire round-trip into "nothing matched, everything is new".
-TEXT_COLUMNS = frozenset({"contact_phone", "contact_name", "no", "floor", "room", "uuid"})
+# ADR-115: Excel infers a type for every cell it opens. Left alone it reads 0912345678 as
+# the number 912345678, and `contact_phone` is a ticket's match key (ADR-107) — a silently
+# dropped leading zero turns a whole round-trip into "nothing matched, everything is new".
+TEXT_COLUMNS = frozenset(
+    {"uuid", "contact_phone", "contact_name", "name", "title", "no", "floor", "room"}
+)
 ```
 
-- [ ] 測試：`write_csv` 的輸出以 BOM 開頭，中文欄位讀回來不亂碼
-- [ ] 測試：`0912345678` 寫進 XLSX 再讀回來仍然是 `"0912345678"`（前導 0 在）
-- [ ] 測試：CSV 往返同上
-- [ ] 測試：`.txt` 之類的副檔名 → `ValueError`
+- [x] 測試：`write_csv` 的輸出以 BOM 開頭，中文與前導 0 往返不變
+- [x] 測試：沒有 BOM 的外部 CSV 也讀得進來
+- [x] 測試：Big5 檔 → 錯誤訊息點名 UTF-8
+- [x] 測試：XLSX 的 `contact_phone` 儲存格 `number_format == "@"`
+- [x] 測試：試算表存的整數 `200` 讀回來是 `"200"` 不是 `"200.0"`
+- [x] 測試：空白格 → `""`；結尾的空列被丟掉
+- [x] 測試：只有表頭的檔仍然報得出表頭（空範本，ADR-119）
+- [x] 測試：重複表頭 / 空白表頭 / 空檔 / `.txt` `.json` `.md` 都被拒絕
+
+> **與原規劃的三點差異**
+>
+> 1. `read_table` 回的是 `Table(headers, rows)` 而不是 `list[dict]`。**只有表頭的空範本沒有第一列可以推導表頭**，而那正是 ADR-119 要的東西。
+> 2. 錯誤型別是 `TableFormatError(ValueError)`，不是裸的 `ValueError`——沿用 repo 既有的 `ContactError` 形狀，端點可以只攔這一種來回 400。
+> 3. `TEXT_COLUMNS` 多收了 `name` 與 `title`：它們是比對鍵，而「12345 號站」這種名稱一樣會被 Excel 當成數字。
+>
+> **CSV 的 BOM 不能阻止 Excel 重新推斷型別**——CSV 裡沒有任何東西可以。那是 XLSX 的工作；CSV 留著是因為外部來源很多只給 CSV。程式註解與測試都照這個講法寫，沒有誇大。
+>
+> **完成 2026-08-22**：`tests/test_tabular.py` 20 passed，全套件 568 passed / 0 failed，ruff 乾淨。
 
 ## Task 5: 匯出
 
