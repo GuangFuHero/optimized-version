@@ -145,22 +145,31 @@ async def add_team_member(
         )
         db.add(UserRoleAssign(user_uuid=target.uuid, role_uuid=role.uuid))
 
+    # Read every attribute we still need BEFORE committing: the session runs with
+    # expire_on_commit=True (app/db/session.py), so `team` and `actor` are expired the
+    # moment we commit, and touching them afterwards raises MissingGreenlet in async.
+    team_name = team.name
+    team_id = team.uuid
+    actor_uid = actor.uuid
+
     await db.commit()
     await db.refresh(target)
+    target_id = target.uuid
 
     # 觸發 team_member_added 通知 (High)
     await NotificationService.dispatch(
         db,
         event_type="team_member_added",
-        title=f"歡迎加入團隊：{team.name}",
-        body=f"您已成功加入團隊「{team.name}」{f'，擔任 {team_role_name}' if team_role_name else ''}。",
+        title=f"歡迎加入團隊：{team_name}",
+        body=f"您已成功加入團隊「{team_name}」{f'，擔任 {team_role_name}' if team_role_name else ''}。",
         priority="high",
-        actor_uuid=actor.uuid,
+        actor_uuid=actor_uid,
         ref_type="team",
-        ref_uuid=team.uuid,
-        explicit_recipients=[str(target.uuid)],
+        ref_uuid=team_id,
+        explicit_recipients=[str(target_id)],
     )
-    await db.commit()
+    # dispatch() commits, which expires `target` again — refresh so the caller can read it.
+    await db.refresh(target)
     return target
 
 

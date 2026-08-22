@@ -39,6 +39,11 @@ class NotificationService:
         """Create and batch-insert notifications for a resolved list of recipients.
 
         Automatically excludes actor_uuid so users are not notified of their own actions.
+
+        Commits before returning. Sessions run with expire_on_commit=True, so the returned
+        Notification instances are expired — callers that need to read attributes off them
+        must refresh first. Callers must also read anything they still need from their own
+        ORM objects *before* calling this, for the same reason.
         """
         actor_obj = _to_uuid_obj(actor_uuid)
         ref_obj = _to_uuid_obj(ref_uuid)
