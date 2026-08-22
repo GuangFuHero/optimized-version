@@ -74,12 +74,15 @@ GET  /bulk/{stations|tickets}/export        POST /bulk/{...}/import/preview   (�
 
 ### 比對鍵欄位在更新列上是唯讀的
 
-這不是本票加的限制，是既有服務本來就長這樣（ADR-108）：
+**結構性的理由**：比對鍵是從這一列自己的值算出來的。等到某列被判定為「更新」，它的比對鍵欄位在檔案裡的值**必然已經等於**資料庫那筆的值——寫回去保證是空操作。所以 `name` / `title` 就算既有服務收得下，在匯入路徑上也標成僅新增，而不是留著讓它看起來可編輯。
+
+**外加既有服務的限制**（ADR-108）：
 
 - `UpdateStationInput` 沒有 `secondary_location`，也沒有 `source`（`app/graphql/geo/types.py:214`）。
-- `UpdateTicketInput` 沒有任何 `contact_*` 欄位（`app/graphql/tickets/types.py:491`）。
+- `UpdateTicketInput` 沒有任何 `contact_*`，**也沒有 geometry**（`app/graphql/tickets/types.py:491`）。
+- `UpdateTicketTaskInput` 沒有 `task_description` / `quantity`（`app/graphql/tickets/types.py:244`）。
 
-**代價要講明**：打錯的聯絡電話、打錯的縣市區，匯入修不了，只能去 UI 改。反過來說也代表匯入永遠不會把一筆資料「改成別人」。
+**代價要講明**：打錯的聯絡電話、打錯的縣市區、放錯位置的求助單，匯入都修不了，只能去 UI 改。反過來說也代表匯入永遠不會把一筆資料「改成別人」。
 
 ---
 
@@ -106,21 +109,25 @@ CSV 與 XLSX 雙向（ADR-115）。CSV 匯出帶 UTF-8 BOM，XLSX 把電話、�
 | station | 讀寫 |
 |---|---|
 | `uuid` | 唯讀（參考用，不參與比對） |
-| `name`, `type`, `description`, `op_hour`, `level`, `comment`, `visibility` | 新增 + 更新 |
+| `type`, `description`, `op_hour`, `level`, `comment`, `visibility` | 新增 + 更新 |
 | `latitude`, `longitude` | 新增必填；更新時空白 = 保留原座標 |
-| `source` | 僅新增 |
-| `county`, `city`, `lane`, `alley`, `no`, `floor`, `room` | 僅新增（ADR-108） |
+| `name` | 僅新增（比對鍵，ADR-108） |
+| `county`, `city` | 僅新增（比對鍵，且 `UpdateStationInput` 沒有 `secondary_location`） |
+| `lane`, `alley`, `no`, `floor`, `room` | 僅新增（同上，地址整組只在建立時可寫） |
+| `source` | 僅新增（不在 `UpdateStationInput` 裡） |
 | `verification_status`, `is_official`, `confidence_score`, `created_at`, `updated_at` | 唯讀 |
 
 | ticket | 讀寫 |
 |---|---|
 | `uuid` | 唯讀 |
-| `title`, `description`, `priority`, `disaster_type` | 新增 + 更新 |
+| `description`, `priority`, `disaster_type` | 新增 + 更新 |
 | `status` | 更新（走狀態機，ADR-122）；新增時忽略——`create_ticket` 一律寫 `"pending"`（`app/services/ticket.py:99`） |
-| `contact_name`, `contact_email`, `contact_phone` | 僅新增（ADR-108）；匯出時逐筆遮罩（ADR-109） |
-| `latitude`, `longitude` | 新增必填 |
+| `title` | 僅新增（比對鍵，ADR-108） |
+| `contact_name`, `contact_email`, `contact_phone` | 僅新增；`contact_phone` 同時是比對鍵。匯出時逐筆遮罩（ADR-109） |
+| `latitude`, `longitude` | 僅新增，且新增時必填——**`UpdateTicketInput` 沒有 geometry**，求助單的位置建立後就固定了 |
 | `visibility`, `task_type` | 僅新增 |
-| `task_name`, `task_description`, `task_quantity` | 新增 + 更新（`update_ticket_task`） |
+| `task_name` | 僅新增（task 層的比對鍵） |
+| `task_description`, `task_quantity` | 僅新增——**`UpdateTicketTaskInput` 沒有這兩個欄位**（它只收 status / progress_note / review_note / moderation_status / visibility） |
 | `verification_status`, `review_note`, `created_at` | 唯讀 |
 
 ### 動態欄位

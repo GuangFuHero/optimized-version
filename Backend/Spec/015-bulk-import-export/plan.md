@@ -115,24 +115,29 @@
 
 一份表頭 = 固定欄位（寫死，見 spec §5）+ 動態欄位（來自 config）。**兩邊共用，匯出與匯入用的是同一份定義。**
 
-- [ ] `ColumnSpec`：`name` / `header` / `writable_on_create` / `writable_on_update` / `data_type`
-- [ ] `station_columns(db, station_type, disaster_types)`：固定欄位 + `list_by_type` 回傳中 `data_type == "Integer"` 的 `prop.<name>`
-- [ ] `ticket_columns(db, task_type, disaster_types)`：固定欄位 + `list_by_type` 全部型別的 `prop.<name>`
-- [ ] `skipped_station_columns(...)`：回傳被略過的欄位與原因，給 `preview` 顯示（ADR-118）
+- [x] `ColumnSpec`（frozen dataclass）：`header` / `field` / `data_type` / `enum_options` / `is_dynamic` / `writable_on_create` / `writable_on_update` / `required_on_create`
+- [x] `station_columns(db, station_type)`：固定欄位 + `list_by_type` 中 `data_type == "Integer"` 的 `prop.<name>`
+- [x] `ticket_columns(db, task_type)`：固定欄位 + `list_by_type` 全部型別的 `prop.<name>`
+- [x] `dynamic_columns_skipped_for_station(db, station_type)`：回傳被略過的欄位與原因，給 `preview` 顯示（ADR-118）
+- [x] 測試：`shelter` 只拿到 Integer 欄位，`water` 拿到 0 個動態欄位
+- [x] 測試：`is_active=false` 的 config 不出現在表頭（免費得到的，因為走 `list_by_type`）
+- [x] 測試：不屬於本部署 `disaster_types` 的 config 不出現；未設定的部署則不過濾
+- [x] 測試：`'all'` bucket 的欄位會併進每一種 station type
+- [x] 測試：略過的欄位帶得出 `property_name` / `data_type` / 原因
+- [x] 測試：ticket 的動態欄位全型別都在（含 String）
+- [x] 測試：比對鍵欄位、唯讀欄位、`status`、座標必填的 writability 都符合 spec §5
+- [x] 測試：欄位順序穩定，動態欄位照 `(sort_order, property_name)`
 
-```python
-# ADR-118: station_properties can only store a number (`quantity`), so a config row of any
-# other data_type has nowhere to put its value — those fields are skipped rather than
-# emitted as columns that would fail on the way back in. 32 of the 37 seeded station configs
-# fall here; that is an existing schema gap, not something this feature introduced.
-UNSTORABLE_ON_STATION = "station_properties cannot store a {data_type} value"
-```
-
-- [ ] 測試：`shelter` 得到 3 個 `prop.` 欄位（`capacity_total` / `beds_available` / `price`，皆為 `Integer`），`water` 得到 0 個
-- [ ] 測試：`is_active=false` 的 config 不出現在表頭（免費得到的，因為走 `list_by_type`）
-- [ ] 測試：不屬於本部署 `disaster_types` 的 config 不出現
-- [ ] 測試：`skipped_station_columns` 對 `water` 回傳 `is_potable`(Boolean)、`water_level`(Enum) 與 `crowd_level`(Enum，來自 `'all'` bucket) 各帶原因
-- [ ] 測試：ticket 的 `rescue` 型別四個 `prop.` 欄位全在（含 String 型）
+> **與原規劃的兩點差異**
+>
+> 1. `disaster_types` 不由呼叫端傳入，`bulk_columns` 自己讀 `project_settings_repository.get_current_disaster_types`（跟 013 的 GraphQL resolver 同一條路）。少一個參數可以傳錯。
+> 2. 函式名是 `dynamic_columns_skipped_for_station`，不是 `skipped_station_columns`——它回的不是欄位，是「沒能變成欄位的東西」。
+>
+> **逐欄核對出來的 spec 修正**（spec §5 與 ADR-108 已同步）：`name` / `title` 是比對鍵，寫回去必然是空操作，所以標成僅新增；`UpdateTicketInput` 沒有 geometry，所以求助單座標僅新增；`UpdateTicketTaskInput` 沒有 `task_description` / `quantity`，所以那兩欄也僅新增。
+>
+> **`priority` 暫時當純字串**：`low/medium/high/critical` 這組字彙在 codebase 裡只存在於 GraphQL 的 description 文字，沒有任何 enum 或常數，單筆寫入也不驗。Task 7 要驗它的話等於由本票發明一組正式字彙——待決定，見 Task 7。
+>
+> **完成 2026-08-22**：`tests/test_bulk_columns.py` 16 passed，全套件 548 passed / 0 failed，ruff 乾淨。
 
 ## Task 4: 表格讀寫層
 

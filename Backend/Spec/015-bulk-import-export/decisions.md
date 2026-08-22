@@ -61,14 +61,21 @@
 
 **白話**：匯入可以用電話認出這張單，但不能改這支電話。
 
-**Context**：不是本票加的限制——既有的更新服務本來就不收這些欄位：`UpdateStationInput` 沒有 `secondary_location` 也沒有 `source`（`app/graphql/geo/types.py:214`）；`UpdateTicketInput` 沒有任何 `contact_*`（`app/graphql/tickets/types.py:491`）。
+**Context**：兩個獨立的理由指向同一個結論。
+
+**結構性**：比對鍵是從這一列自己的值算出來的，所以一旦某列被判定為「更新」，它的比對鍵欄位在檔案裡的值必然已經等於資料庫那筆的值。寫回去保證是空操作——想改名字得用舊名字去比對，而檔案裡放的是新名字，那只會變成新增。因此 `name` / `title` 就算 `UpdateStationInput` / `UpdateTicketInput` 收得下，也一樣標成僅新增。
+
+**既有服務的限制**（Task 3 逐欄核對出來的，比原本記的更廣）：
+- `UpdateStationInput` 沒有 `secondary_location`，也沒有 `source`（`app/graphql/geo/types.py:214`）。
+- `UpdateTicketInput` 沒有任何 `contact_*`，**也沒有 geometry**——求助單的位置建立後就固定了（`app/graphql/tickets/types.py:491`）。
+- `UpdateTicketTaskInput` 只收 status / progress_note / review_note / moderation_status / visibility，**沒有 `task_description` 與 `quantity`**（`app/graphql/tickets/types.py:244`）。
 
 **Decision**：維持現狀。這些欄位在匯出檔裡照出，但更新列上一律忽略（不是失敗，是忽略——它們在往返時本來就會原封帶回來）。
 
 **Consequences**：
 ➕ 匯入永遠不會把一筆資料「改成別人」——比對鍵不動，被更新的就一定還是被比中的那筆。
 ➕ 不必為了匯入去擴充兩個既有的 update 服務與它們的測試。
-➖ **打錯的電話、打錯的縣市區，匯入修不了**，只能去 UI 改。
+➖ **打錯的電話、打錯的縣市區、放錯位置的求助單，匯入都修不了**，只能去 UI 改。
 
 **為什麼是忽略而不是報錯**：往返情境下這些欄位一定有值（匯出帶出來的），報錯等於每一列都失敗。
 
