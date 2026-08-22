@@ -65,6 +65,10 @@ ROLES_DATA = [
             Perm.TICKET_VIEW_PII: "all",
             Perm.USER_VIEW: "all",
             Perm.AUDIT_VIEW: "all",
+            # ADR-111: oversight reads the whole platform, so its export reaches everything.
+            # No import counterpart — this role has no write path anywhere else either.
+            Perm.STATION_EXPORT: "all",
+            Perm.TICKET_EXPORT: "all",
         },
     },
     {
@@ -84,6 +88,8 @@ ROLES_DATA = [
                 Perm.TEAM_VIEW, Perm.TEAM_EDIT, Perm.TEAM_MEMBER_MANAGE,
                 Perm.ZONE_VIEW, Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN, Perm.ZONE_DELETE,
                 Perm.PROJECT_VIEW, Perm.PROJECT_EDIT,
+                Perm.STATION_EXPORT, Perm.STATION_IMPORT,
+                Perm.TICKET_EXPORT, Perm.TICKET_IMPORT,
             ],
             "all",
         ),
@@ -121,6 +127,15 @@ ROLES_DATA = [
             Perm.ZONE_EDIT: "all",
             Perm.ZONE_ASSIGN: "all",
             Perm.ZONE_DELETE: "all",
+            # ADR-111: export is zone-scoped so a team's file only ever contains its own
+            # responsibility area — no extra range parameter needed on the endpoint. Import
+            # is "all" because the real per-row gate is the station.edit/ticket.edit zone
+            # check each row runs anyway; a zone scope here would look meaningful and change
+            # nothing.
+            Perm.STATION_EXPORT: "zone",
+            Perm.STATION_IMPORT: "all",
+            Perm.TICKET_EXPORT: "zone",
+            Perm.TICKET_IMPORT: "all",
         },
     },
     {

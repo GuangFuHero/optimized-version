@@ -51,7 +51,7 @@
 
 **Files:** Modify `app/core/permissions.py`, `scripts/seed_rbac.py`, `RBAC_RESOURCE_ROLE_MATRIX.md`；Create `tests/test_bulk_permissions.py`
 
-- [ ] `Perm` 新增三個 key（`ticket.export` 已存在，不動）
+- [x] `Perm` 新增三個 key（`ticket.export` 已存在，不動）
 
 實際落地的樣子（key 依模組分組，不是擠成一塊）：
 
@@ -68,10 +68,21 @@
     STATION_IMPORT = "station.import"
 ```
 
-- [ ] `seed_rbac.py` 依 ADR-111 的矩陣加 grant：super_admin 四個都 `all`；`data_auditor` 加 `STATION_EXPORT: "all"` 與 `TICKET_EXPORT: "all"`；team `admin` 加 `*_EXPORT: "zone"` 與 `*_IMPORT: "all"`；`member` 與 `user` 不動
-- [ ] 更新 `seed_rbac.py:10` 的檔頭註解——`ticket.export` 不再是「尚未被任何角色使用」
-- [ ] 測試：四個 key 的 `resolve_scope` 對五個角色各自回傳預期值；`member` / `user` 拿到 `Scope.NONE`
-- [ ] **跑一次全套件**，確認 seed 改動沒有打到既有 RBAC 測試
+- [x] `seed_rbac.py` 依 ADR-111 的矩陣加 grant：super_admin 四個都 `all`；`data_auditor` 加 `STATION_EXPORT: "all"` 與 `TICKET_EXPORT: "all"`；team `admin` 加 `*_EXPORT: "zone"` 與 `*_IMPORT: "all"`；`member` 與 `user` 不動
+- [x] 更新 `seed_rbac.py:10` 的檔頭註解——`ticket.export` 不再是「尚未被任何角色使用」
+- [x] 測試：四個 key 的 `resolve_scope` 對五個角色各自回傳預期值；`member` / `user` 拿到 `Scope.NONE`
+- [x] **跑一次全套件**，確認 seed 改動沒有打到既有 RBAC 測試 —— **523 passed, 0 failed**
+
+> **完成 2026-08-22**：`tests/test_bulk_permissions.py` 14 passed，全套件 523 passed / 0 failed，ruff 乾淨。
+>
+> 順手補的：`station.contribute` 一直被 `seed_rbac.py` 授予卻從未列進 `RBAC_RESOURCE_ROLE_MATRIX.md`（既有落差，與本票無關），一併補上該列。
+>
+> **跑測試的環境變數**：本機 5432 被另一個專案佔用，本專案的 Postgres 在 5433。`TEST_DB_URL` 與 `TEST_ADMIN_DB_URL` **兩個都要設**——後者是 conftest 用來 `CREATE DATABASE` 的維護連線，有自己的預設值 5432。
+>
+> ```
+> export TEST_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5433/disaster_rescue_test"
+> export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5433/postgres"
+> ```
 
 ## Task 2: 稽核接線
 
