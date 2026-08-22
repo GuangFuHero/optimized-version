@@ -106,26 +106,6 @@ async def db_session():
     await engine.dispose()
 
 
-@pytest_asyncio.fixture
-async def app_like_db():
-    """Fresh schema per test, with the session configured the way the running app configures it.
-
-    `db` above uses `expire_on_commit=True`, which is stricter than production: the app's
-    `SessionLocal` is an `async_sessionmaker`, whose default is False (app/db/session.py:15).
-    The difference matters for any code that calls several auto-committing services in a row
-    — feature 015's bulk import does — because under expiry an object loaded before the first
-    commit reloads lazily on next access, which async SQLAlchemy cannot do.
-    """
-    engine = create_async_engine(TEST_DB_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with factory() as session:
-        yield session
-    await engine.dispose()
-
-
 class _Capturer:
     """Base capturer exposing the 6-digit code from the most recent message body."""
 

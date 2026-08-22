@@ -29,7 +29,7 @@ from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TaskProperty, TicketTask
-from app.services.authz import require_scope
+from app.services.authz import require_scope, stable_actor
 from app.services.bulk_columns import station_columns, ticket_columns
 
 CSV_FORMAT = "csv"
@@ -160,34 +160,35 @@ async def export_stations(
     An empty result still produces a file: a header-only export is the import template
     (ADR-119), and handing back a blank template is the intended way to start from nothing.
     """
-    scope = await require_scope(actor, Perm.STATION_EXPORT, db)
-    columns = await station_columns(db, station_type)
+    async with stable_actor(db, actor):
+        scope = await require_scope(actor, Perm.STATION_EXPORT, db)
+        columns = await station_columns(db, station_type)
 
-    stations = list(
-        (
-            await db.execute(
-                select(Station)
-                .where(
-                    Station.delete_at.is_(None),
-                    Station.type == station_type,
-                    *scope_filter(scope, actor=actor, model=Station),
+        stations = list(
+            (
+                await db.execute(
+                    select(Station)
+                    .where(
+                        Station.delete_at.is_(None),
+                        Station.type == station_type,
+                        *scope_filter(scope, actor=actor, model=Station),
+                    )
+                    .order_by(Station.created_at)
+                    .limit(MAX_EXPORT_ROWS)
                 )
-                .order_by(Station.created_at)
-                .limit(MAX_EXPORT_ROWS)
-            )
-        ).scalars()
-    )
-    related = await _station_rows(db, stations)
-    rows = [
-        _station_row(
-            station,
-            related["addresses"].get(str(station.uuid)),
-            related["properties"].get(str(station.uuid), {}),
-            columns,
+            ).scalars()
         )
-        for station in stations
-    ]
-    return _render(columns, rows, stem=f"stations-{station_type}", file_format=file_format)
+        related = await _station_rows(db, stations)
+        rows = [
+            _station_row(
+                station,
+                related["addresses"].get(str(station.uuid)),
+                related["properties"].get(str(station.uuid), {}),
+                columns,
+            )
+            for station in stations
+        ]
+        return _render(columns, rows, stem=f"stations-{station_type}", file_format=file_format)
 
 
 # --- tickets ---
@@ -235,59 +236,60 @@ async def export_tickets(
     db: AsyncSession, *, actor: User, task_type: str, file_format: str = CSV_FORMAT
 ) -> ExportFile:
     """Render one row per (ticket, task) pair of `task_type` the caller may see (ADR-120)."""
-    scope = await require_scope(actor, Perm.TICKET_EXPORT, db)
-    columns = await ticket_columns(db, task_type)
-    may_see_pii = await _pii_decider(db, actor)
+    async with stable_actor(db, actor):
+        scope = await require_scope(actor, Perm.TICKET_EXPORT, db)
+        columns = await ticket_columns(db, task_type)
+        may_see_pii = await _pii_decider(db, actor)
 
-    pairs = list(
-        (
-            await db.execute(
-                select(TicketTask, Tickets)
-                .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
-                .where(
-                    TicketTask.delete_at.is_(None),
-                    Tickets.delete_at.is_(None),
-                    TicketTask.task_type == task_type,
-                    *scope_filter(scope, actor=actor, model=Tickets),
+        pairs = list(
+            (
+                await db.execute(
+                    select(TicketTask, Tickets)
+                    .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
+                    .where(
+                        TicketTask.delete_at.is_(None),
+                        Tickets.delete_at.is_(None),
+                        TicketTask.task_type == task_type,
+                        *scope_filter(scope, actor=actor, model=Tickets),
+                    )
+                    .order_by(TicketTask.created_at)
+                    .limit(MAX_EXPORT_ROWS)
                 )
-                .order_by(TicketTask.created_at)
-                .limit(MAX_EXPORT_ROWS)
-            )
-        ).all()
-    )
+            ).all()
+        )
 
-    task_uuids = [str(task.uuid) for task, _ in pairs]
-    properties: dict[str, dict[str, TaskProperty]] = {}
-    if task_uuids:
-        for row in (
-            await db.execute(
-                select(TaskProperty).where(
-                    TaskProperty.task_uuid.in_(task_uuids), TaskProperty.delete_at.is_(None)
+        task_uuids = [str(task.uuid) for task, _ in pairs]
+        properties: dict[str, dict[str, TaskProperty]] = {}
+        if task_uuids:
+            for row in (
+                await db.execute(
+                    select(TaskProperty).where(
+                        TaskProperty.task_uuid.in_(task_uuids), TaskProperty.delete_at.is_(None)
+                    )
                 )
-            )
-        ).scalars():
-            properties.setdefault(str(row.task_uuid), {})[row.property_name] = row
+            ).scalars():
+                properties.setdefault(str(row.task_uuid), {})[row.property_name] = row
 
-    rows = []
-    for task, ticket in pairs:
-        latitude, longitude = _coordinates(ticket.geometry)
-        row = {
-            "uuid": _text(ticket.uuid),
-            "latitude": latitude,
-            "longitude": longitude,
-            "task_type": _text(task.task_type),
-            "task_name": _text(task.task_name),
-            "task_description": _text(task.task_description),
-            "task_quantity": _text(task.quantity),
-            **_contact_fields(ticket, visible=await may_see_pii(ticket)),
-        }
-        for field in ("title", "description", "status", "priority", "disaster_type",
-                      "visibility", "verification_status", "review_note", "created_at"):
-            row[field] = _text(getattr(ticket, field, None))
-        for column in columns:
-            if column.is_dynamic:
-                prop = properties.get(str(task.uuid), {}).get(column.field)
-                row[column.header] = _text(prop.property_value) if prop else ""
-        rows.append(row)
+        rows = []
+        for task, ticket in pairs:
+            latitude, longitude = _coordinates(ticket.geometry)
+            row = {
+                "uuid": _text(ticket.uuid),
+                "latitude": latitude,
+                "longitude": longitude,
+                "task_type": _text(task.task_type),
+                "task_name": _text(task.task_name),
+                "task_description": _text(task.task_description),
+                "task_quantity": _text(task.quantity),
+                **_contact_fields(ticket, visible=await may_see_pii(ticket)),
+            }
+            for field in ("title", "description", "status", "priority", "disaster_type",
+                          "visibility", "verification_status", "review_note", "created_at"):
+                row[field] = _text(getattr(ticket, field, None))
+            for column in columns:
+                if column.is_dynamic:
+                    prop = properties.get(str(task.uuid), {}).get(column.field)
+                    row[column.header] = _text(prop.property_value) if prop else ""
+            rows.append(row)
 
-    return _render(columns, rows, stem=f"tickets-{task_type}", file_format=file_format)
+        return _render(columns, rows, stem=f"tickets-{task_type}", file_format=file_format)

@@ -24,7 +24,7 @@ from app.repositories.geo_repository import station_property_repository
 from app.repositories.tickets_repository import task_property_repository, ticket_repository
 from app.services import station as station_service
 from app.services import ticket as ticket_service
-from app.services.authz import require_scope
+from app.services.authz import require_scope, stable_actor
 from app.services.bulk_columns import (
     ColumnSpec,
     dynamic_columns_skipped_for_station,
@@ -491,15 +491,16 @@ async def preview_stations(
     Checked against `station.import` like `commit` is — otherwise it would be a way for
     someone without the capability to probe what is in the database (ADR-110).
     """
-    await require_scope(actor, Perm.STATION_IMPORT, db)
-    table, rows = await _read(raw, filename, mapping)
-    columns = await station_columns(db, station_type)
-    plans = await _plan_stations(db, station_type=station_type, rows=rows, columns=columns)
-    skipped = tuple(
-        {"property_name": s.property_name, "data_type": s.data_type, "reason": s.reason}
-        for s in await dynamic_columns_skipped_for_station(db, station_type)
-    )
-    return _preview_of(table, plans, columns, skipped=skipped)
+    async with stable_actor(db, actor):
+        await require_scope(actor, Perm.STATION_IMPORT, db)
+        table, rows = await _read(raw, filename, mapping)
+        columns = await station_columns(db, station_type)
+        plans = await _plan_stations(db, station_type=station_type, rows=rows, columns=columns)
+        skipped = tuple(
+            {"property_name": s.property_name, "data_type": s.data_type, "reason": s.reason}
+            for s in await dynamic_columns_skipped_for_station(db, station_type)
+        )
+        return _preview_of(table, plans, columns, skipped=skipped)
 
 
 async def preview_tickets(
@@ -507,11 +508,12 @@ async def preview_tickets(
     task_type: str, mapping: dict[str, str] | None = None,
 ) -> PreviewResult:
     """Dry-run a ticket file. Same contract as `preview_stations`."""
-    await require_scope(actor, Perm.TICKET_IMPORT, db)
-    table, rows = await _read(raw, filename, mapping)
-    columns = await ticket_columns(db, task_type)
-    plans, _ = await _plan_tickets(db, task_type=task_type, rows=rows, columns=columns)
-    return _preview_of(table, plans, columns)
+    async with stable_actor(db, actor):
+        await require_scope(actor, Perm.TICKET_IMPORT, db)
+        table, rows = await _read(raw, filename, mapping)
+        columns = await ticket_columns(db, task_type)
+        plans, _ = await _plan_tickets(db, task_type=task_type, rows=rows, columns=columns)
+        return _preview_of(table, plans, columns)
 
 
 async def _commit(
@@ -530,6 +532,24 @@ async def _commit(
     created = updated = 0
     partial: list[int] = []
 
+    created, updated, partial = await _write_all(db, plans, write, failures)
+
+    errors = tuple(error for _, row_errors in sorted(failures.items()) for error in row_errors)
+    return ImportOutcome(
+        batch_id=str(uuid4()),
+        created=created,
+        updated=updated,
+        failed=len(failures),
+        errors=errors,
+        error_report=_as_report(table, failures, filename=filename),
+        partial_rows=tuple(partial),
+    )
+
+
+async def _write_all(db, plans, write, failures) -> tuple[int, int, list[int]]:
+    """Run every writable row, recording a failure instead of stopping at the first."""
+    created = updated = 0
+    partial: list[int] = []
     for plan in plans:
         if not plan.ok:
             continue
@@ -548,17 +568,7 @@ async def _commit(
             updated += 1
         else:
             created += 1
-
-    errors = tuple(error for _, row_errors in sorted(failures.items()) for error in row_errors)
-    return ImportOutcome(
-        batch_id=str(uuid4()),
-        created=created,
-        updated=updated,
-        failed=len(failures),
-        errors=errors,
-        error_report=_as_report(table, failures, filename=filename),
-        partial_rows=tuple(partial),
-    )
+    return created, updated, partial
 
 
 async def commit_stations(
@@ -566,15 +576,18 @@ async def commit_stations(
     station_type: str, mapping: dict[str, str] | None = None,
 ) -> ImportOutcome:
     """Import a station file: matched rows are updated, unmatched ones created (ADR-106)."""
-    await require_scope(actor, Perm.STATION_IMPORT, db)
-    table, rows = await _read(raw, filename, mapping)
-    columns = await station_columns(db, station_type)
-    plans = await _plan_stations(db, station_type=station_type, rows=rows, columns=columns)
+    async with stable_actor(db, actor):
+        await require_scope(actor, Perm.STATION_IMPORT, db)
+        table, rows = await _read(raw, filename, mapping)
+        columns = await station_columns(db, station_type)
+        plans = await _plan_stations(db, station_type=station_type, rows=rows, columns=columns)
 
-    async def write(plan: RowPlan) -> None:
-        await _write_station(db, actor=actor, plan=plan, columns=columns, station_type=station_type)
+        async def write(plan: RowPlan) -> None:
+            await _write_station(
+                db, actor=actor, plan=plan, columns=columns, station_type=station_type
+            )
 
-    return await _commit(db, table=table, plans=plans, write=write, filename=filename)
+        return await _commit(db, table=table, plans=plans, write=write, filename=filename)
 
 
 async def commit_tickets(
@@ -582,14 +595,15 @@ async def commit_tickets(
     task_type: str, mapping: dict[str, str] | None = None,
 ) -> ImportOutcome:
     """Import a ticket file: one row is one ticket plus one task (ADR-120)."""
-    await require_scope(actor, Perm.TICKET_IMPORT, db)
-    table, rows = await _read(raw, filename, mapping)
-    columns = await ticket_columns(db, task_type)
-    plans, index = await _plan_tickets(db, task_type=task_type, rows=rows, columns=columns)
+    async with stable_actor(db, actor):
+        await require_scope(actor, Perm.TICKET_IMPORT, db)
+        table, rows = await _read(raw, filename, mapping)
+        columns = await ticket_columns(db, task_type)
+        plans, index = await _plan_tickets(db, task_type=task_type, rows=rows, columns=columns)
 
-    async def write(plan: RowPlan) -> None:
-        await _write_ticket(
-            db, actor=actor, plan=plan, columns=columns, task_type=task_type, index=index
-        )
+        async def write(plan: RowPlan) -> None:
+            await _write_ticket(
+                db, actor=actor, plan=plan, columns=columns, task_type=task_type, index=index
+            )
 
-    return await _commit(db, table=table, plans=plans, write=write, filename=filename)
+        return await _commit(db, table=table, plans=plans, write=write, filename=filename)

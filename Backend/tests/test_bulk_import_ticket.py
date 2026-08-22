@@ -39,12 +39,6 @@ HEADERS = (
 )
 
 
-@pytest.fixture
-def db(app_like_db):
-    """Use the app-configured session: bulk import chains several auto-committing services."""
-    return app_like_db
-
-
 def _row(title, *, phone="0912345678", status="", task_name="送水", people="", description=""):
     return {
         "uuid": "", "title": title, "status": status, "priority": "high",
@@ -292,6 +286,7 @@ async def test_a_zone_scoped_export_comes_back_half_writable(db):
     db.add(zone)
     await db.flush()
     db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))
+    team_uuid = team.uuid  # read before the commit expires it
     await db.commit()
 
     author = await _importer(db)  # creates both tickets with full reach
@@ -301,7 +296,7 @@ async def test_a_zone_scoped_export_comes_back_half_writable(db):
     ])
     await commit_tickets(db, actor=author, raw=raw, filename=filename, task_type="rescue")
 
-    zoned = User(name="Zoned", team_uuid=team.uuid)
+    zoned = User(name="Zoned", team_uuid=team_uuid)
     db.add(zoned)
     await db.flush()
     await _grant(

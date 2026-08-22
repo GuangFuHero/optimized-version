@@ -260,27 +260,61 @@ TEXT_COLUMNS = frozenset(
 
 > **完成 2026-08-22**：全套件 **647 passed / 0 failed**，ruff 對本票新增的檔案全綠（repo 既有的 7 個錯誤不變）。
 
-## Task 12: docker 完整驗證
+## Task 12: docker 完整驗證 ✅
 
 **Files:** —
 
-- [ ] `alembic upgrade head` 之後確認 `station_properties` / `task_properties` 真的掛上 audit trigger（Task 2 的 `b3f1c07d2a95`）
-- [ ] `python scripts/seed_rbac.py` 冪等重跑，確認 4 個 key 的 grant 正確落地
-- [ ] 用真實 seed 資料手動走一次完整往返：匯出 shelter → Excel 開起來改兩個值 → 存檔 → preview → commit → 再匯出比對
-- [ ] 用 LibreOffice/Excel 實際開一次 CSV，確認中文不亂碼、電話前導 0 還在
-- [ ] `COVERAGE_CORE=sysmon uv run pytest --cov=app --cov-report=term-missing`，確認新模組 ≥ 80%
-- [ ] `uv run ruff check`
+- [x] `alembic upgrade head` 之後確認 `station_properties` / `task_properties` 真的掛上 audit trigger
+- [x] `scripts/seed_rbac.py` 重跑，四個 key 的 grant 與 ADR-111 逐格相符
+- [x] 用**真實 seed 資料**手動走完整往返：匯出空範本 → 填 3 列 → preview → commit → 匯出 → 匯回
+- [x] CSV 與 XLSX 兩種格式各走一次往返
+- [x] ticket 側：一張單兩個任務、遮罩值擋下、data_auditor 匯入 403
+- [x] `COVERAGE_CORE=sysmon` 覆蓋率
+- [x] `uv run ruff check`
 
-> **coverage 提醒**：`pytest --cov` 的預設 tracer 量不到 ASGI client 走的路徑，會把 service / endpoint 的覆蓋率誤報成偏低。一定要帶 `COVERAGE_CORE=sysmon`。
+### 驗證結果（2026-08-22，`bulk015` 乾淨資料庫）
 
----
+| 檢查 | 結果 |
+|---|---|
+| trigger 掛上 | `audit_trigger_station_properties` / `audit_trigger_task_properties` 都在 |
+| grant 矩陣 | 10 筆 grant 與 ADR-111 完全相符；`member` / `user` 一筆都沒有 |
+| 空範本表頭 | shelter 只出現 `prop.beds_available` / `prop.capacity_total` / `prop.price`——真實 seed 的 8 個 shelter 欄位裡就這 3 個是 Integer（ADR-118 實地驗證） |
+| preview 略過欄位 | 6 個（含 `'all'` bucket 的 `crowd_level`），各帶型別與原因 |
+| preview 錯誤 | 3 個問題一次全回，列號照試算表 |
+| commit | created 1 / failed 2；錯誤報告是原列 + `error` 欄 |
+| CSV 往返 | created 0 / **updated 1** / failed 0 |
+| XLSX 往返 | created 0 / **updated 1** / failed 0，站點總數維持 1 |
+| ticket 一列一任務 | 兩列同一張單 → tickets 1 / tasks 2 / props 2 |
+| 電話前導 0 | DB 裡是 `0912345678`，往返後未變 |
+| 遮罩值回寫 | 兩欄都擋下並說明是 PII 權限問題，資料未變 |
+| data_auditor | 匯出 200（seed 給它 `view_pii: all`，明碼正確）；匯入 **403** |
+| member | 匯出 **403** |
+| 稽核 | `station_properties` INSERT 1、`task_properties` INSERT 2 |
+
+**覆蓋率（`COVERAGE_CORE=sysmon`）**
+
+```
+app/services/bulk_columns.py     100%
+app/services/bulk_export.py       99%
+app/services/bulk_match.py        99%
+app/services/bulk_import.py       97%
+app/services/bulk_validate.py     94%
+app/core/tabular.py               92%
+app/schemas/bulk.py              100%
+app/api/v1/endpoints/bulk.py      91%
+TOTAL                             96%
+```
+
+> **docker 抓到的真 bug**：`MissingGreenlet`。一列會呼叫好幾個各自 commit 的 service，而 commit 預設會 expire 所有已載入物件——包含 `actor`，下一列的 `require_scope` 讀它就會觸發同步 lazy load，async SQLAlchemy 做不到。修法是 `app/services/authz.py` 新增 `stable_actor` context manager，在操作期間暫停 expiry 並補載已失效的 actor。
+>
+> **這個 bug 差點被我自己寫的 fixture 藏起來**：我原本加了一個 `app_like_db`，宣稱「與 app 一致」用 `expire_on_commit=False`——但正式的 `async_sessionmaker` 其實是 True，那個 fixture 只是把問題蓋掉。已刪除，匯入測試現在跑的就是 production 設定。
 
 ## 驗收
 
-- [ ] 匯出的檔直接匯回去零錯誤（station 與 ticket 各一次）
-- [ ] 同一份檔連匯兩次，第二次全部走更新、總筆數不變
-- [ ] 一份含錯誤的檔：好的列進了、壞的列在報告裡且訊息可診斷
-- [ ] zone scope 的人匯不到、也改不到自己負責區以外的資料
-- [ ] `member` 與 `user` 對四個端點全部 403
-- [ ] `station_properties` / `task_properties` 的變更會出現在 `audit_logs` 裡
-- [ ] 全套件綠燈，新模組覆蓋率 ≥ 80%
+- [x] 匯出的檔直接匯回去零錯誤（station 與 ticket 各一次，CSV + XLSX）
+- [x] 同一份檔連匯兩次，第二次全部走更新、總筆數不變
+- [x] 一份含錯誤的檔：好的列進了、壞的列在報告裡且訊息可診斷
+- [x] zone scope 的人匯不到、也改不到自己負責區以外的資料
+- [x] `member` 與 `user` 對四個端點全部 403
+- [x] `station_properties` / `task_properties` 的變更會出現在 `audit_logs` 裡
+- [x] 全套件綠燈（**662 passed**），新模組覆蓋率 **96%**

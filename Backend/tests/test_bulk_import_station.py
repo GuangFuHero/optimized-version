@@ -33,13 +33,6 @@ from app.services.bulk_import import (
     preview_stations,
 )
 
-
-@pytest.fixture
-def db(app_like_db):
-    """Use the app-configured session: bulk import chains several auto-committing services."""
-    return app_like_db
-
-
 IN_ZONE = Point(121.50, 25.00)
 OUT_OF_ZONE = Point(121.90, 25.40)
 ZONE_POLYGON = Polygon([(121.4, 24.9), (121.6, 24.9), (121.6, 25.1), (121.4, 25.1)])
@@ -335,22 +328,17 @@ async def test_a_zone_scoped_importer_cannot_update_outside_its_area(db):
     """Import is not a way around the per-row scope check (ADR-110)."""
     await _configs(db)
     team = Team(name="Hualien", type="gov")
-    db.add(team)
-    await db.flush()
     assigner = User(name="assigner")
-    db.add(assigner)
     zone = WorkZone(name="Z", geometry=from_shape(ZONE_POLYGON, srid=4326))
-    db.add(zone)
+    db.add_all([team, assigner, zone])
     await db.flush()
-    db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))
-    await db.commit()
+    # Every uuid is read here, before the first commit: a commit expires loaded objects, and
+    # async SQLAlchemy cannot reload one lazily.
+    team_uuid, assigner_uuid, zone_uuid = team.uuid, str(assigner.uuid), zone.uuid
 
-    actor = await _importer(db, scope="zone")
-    actor.team_uuid = team.uuid
-    await db.commit()
-
+    db.add(TeamZoneAssign(team_uuid=team_uuid, zone_uuid=zone_uuid, assigned_by=assigner_uuid))
     outsider = Station(
-        geometry=from_shape(OUT_OF_ZONE, srid=4326), created_by=str(assigner.uuid),
+        geometry=from_shape(OUT_OF_ZONE, srid=4326), created_by=assigner_uuid,
         type="shelter", name="區外站", level=0, visibility="public",
     )
     db.add(outsider)
@@ -358,6 +346,10 @@ async def test_a_zone_scoped_importer_cannot_update_outside_its_area(db):
     db.add(SecondaryLocation(
         geometry_uuid=str(outsider.uuid), location_type="address", county="宜蘭縣", city="蘇澳鎮"
     ))
+    await db.commit()
+
+    actor = await _importer(db, scope="zone")
+    actor.team_uuid = team_uuid
     await db.commit()
 
     raw, filename = _file([
