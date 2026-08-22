@@ -225,6 +225,8 @@ grant 矩陣（ADR-111）：
 
 本票只補一件事：把 `station_properties` 與 `task_properties` 加進 `AUDITED_TABLES`——它們現在不在裡面，**動態欄位的變更完全不留痕跡**。
 
+這需要一支只掛 trigger、不改結構的 migration：`AUDITED_TABLES` 只是 Python list，`71bd05e07df3` 迭代的是凍結的快照清單，往清單追加表名對已 migrate 的資料庫沒有作用（既有慣例見 `c219aac56556`）。
+
 **批量的批次追溯本票不做**（ADR-124）。原本的設計是把一個 batch uuid 塞進 `audit_logs.context`，但那個欄位與它依賴的 `app.active_identity` 都是 feature 010（PR #37）帶進來的，本票的基底 #36 從 `main` 開，拿不到。batch uuid 仍會產生，但只出現在 HTTP 回應與錯誤報告裡。
 
 **代價**：匯入造成的變更在 `audit_logs` 裡跟一筆一筆手改長得一模一樣，出事時圈不出「那一次匯入」。010 合進 `main` 之後另開小票補。

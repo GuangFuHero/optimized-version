@@ -15,7 +15,7 @@
 ## Global Constraints
 
 - **不新寫寫入邏輯。** 每一列最終都要走 `create_station` / `update_station` / `create_station_property` / `update_station_property` / `create_ticket` / `update_ticket` / `create_ticket_task` / `update_ticket_task` / `create_task_property` / `update_task_property`。這些函式已經各自處理 authz + 驗證 + 持久化（ADR-014）。如果你發現需要繞過其中一個，那是設計理解錯了。
-- **不動 schema。** 本票零 migration（ADR-118 / ADR-124）。
+- **不動 schema。** 零新表、零新欄位（ADR-118 / ADR-124）。唯一的 migration 是 Task 2 那支——它只掛 audit trigger，不改任何結構。
 - **不動單筆 GraphQL 寫入路徑。** ADR-092 在那邊仍然有效（ADR-117）。
 - **不動 `station_properties` / `task_properties` 的資料模型。** station 只支援 `Integer` 是刻意的（ADR-118）。
 - **PR 依賴 #36。** #36 未合併前本票不能合。
@@ -86,22 +86,28 @@
 
 ## Task 2: 稽核接線
 
-**Files:** Modify `app/db/triggers.py`；Create `tests/test_bulk_audit.py`
+**Files:** Modify `app/db/triggers.py`；Create `alembic/versions/b3f1c07d2a95_audit_dynamic_field_tables.py`, `tests/test_bulk_audit.py`
 
-- [ ] `AUDITED_TABLES` 加入 `station_properties`、`task_properties`
+- [x] `AUDITED_TABLES` 加入 `station_properties`、`task_properties`
+- [x] **加一支 migration 真的把 trigger 掛上去**——見下方「清單本身不會生效」
+- [x] 測試：`station_properties` 的 INSERT / UPDATE / DELETE 會產生 audit 列（本 task 之前是紅的）
+- [x] 測試：`task_properties` 的 INSERT / UPDATE 同上，且 `property_value` 前後值都在
+- [x] 測試：守門——`AUDITED_TABLES` 裡每一張表都要有某支 migration 真的掛過它的 trigger
+- [x] 實跑 `alembic upgrade head` / `downgrade -1` 驗證 trigger 掛上與移除
 
-```python
-    # Feature 015: dynamic-field values were never audited — a station's quantity or a
-    # task's property could be changed with no trail at all. Bulk import writes them in
-    # batches, which makes the gap much easier to hit (ADR-124).
-    "station_properties",
-    "task_properties",
-```
-
-- [ ] 測試：`station_properties` 的 INSERT / UPDATE 現在會產生 audit 列（這條在本 task 之前是紅的）
-- [ ] 測試：`task_properties` 同上
+> **清單本身不會生效。** `AUDITED_TABLES` 只是 Python list；真正掛 trigger 的是 migration，而
+> `71bd05e07df3` 迭代的是**凍結的快照清單**（`_AUDITED_TABLES_AT_THIS_REVISION`）。所以往
+> `AUDITED_TABLES` 追加表名，對已經 migrate 過的資料庫**完全沒有作用**。既有慣例是每次追加就
+> 補一支自帶凍結清單的 migration（`c219aac56556` 補 RBAC v1 的表、013 補 `project_settings`），
+> 本票沿用同一形狀。
+>
+> 這個失敗模式是**無聲的**：清單說有稽核、測試套件也同意（因為 fixture 在 runtime 自己掛
+> trigger），只有正式環境一筆 audit 都不會寫。所以測試裡放了一條靜態守門，比對
+> `AUDITED_TABLES` 與所有 migration 實際掛過的表。
 
 > **本票不做批次追溯**（ADR-124）。batch uuid 只出現在 HTTP 回應與錯誤報告裡，不進資料庫——`audit_logs.context` 與 `app.active_identity` 都是 feature 010（PR #37）帶進來的，這個基底拿不到。不要為了它去改 `audit_trigger_func`：010 也在改同一支 function。
+
+> **完成 2026-08-22**：`tests/test_bulk_audit.py` 9 passed，全套件 532 passed / 0 failed，ruff 乾淨。
 
 ## Task 3: 欄位表頭模型
 
@@ -270,7 +276,7 @@ TEXT_COLUMNS = frozenset({"contact_phone", "contact_name", "no", "floor", "room"
 
 **Files:** —
 
-- [ ] `alembic upgrade head` 之後確認 `station_properties` / `task_properties` 真的掛上 audit trigger（本票零 migration，trigger 靠既有流程套上）
+- [ ] `alembic upgrade head` 之後確認 `station_properties` / `task_properties` 真的掛上 audit trigger（Task 2 的 `b3f1c07d2a95`）
 - [ ] `python scripts/seed_rbac.py` 冪等重跑，確認 4 個 key 的 grant 正確落地
 - [ ] 用真實 seed 資料手動走一次完整往返：匯出 shelter → Excel 開起來改兩個值 → 存檔 → preview → commit → 再匯出比對
 - [ ] 用 LibreOffice/Excel 實際開一次 CSV，確認中文不亂碼、電話前導 0 還在

@@ -388,14 +388,16 @@
 
 **同時仍然要做**的是把 `station_properties` 與 `task_properties` 加進 `AUDITED_TABLES`——這半邊不依賴 010，而且它補的是一個既有盲點：動態欄位的變更目前完全不留痕跡。
 
+**這需要一支 migration。** `AUDITED_TABLES` 只是 Python list，真正掛 trigger 的是 migration，而 `71bd05e07df3` 迭代的是凍結的快照清單。往清單追加表名對已 migrate 的資料庫沒有作用——既有慣例是補一支自帶凍結清單的 migration（`c219aac56556` 之於 RBAC v1 的表、013 之於 `project_settings`）。本票的 `b3f1c07d2a95` 沿用同一形狀。它**只掛 trigger，不改任何結構**，所以「零新表、零新欄位」仍然成立。
+
 **Consequences**：
-➕ 本票維持零 migration、零 schema 變更。
+➕ 本票維持零新表、零新欄位。唯一的 migration 只掛 audit trigger，不改結構。
 ➕ 不去改 `audit_trigger_func`，就不會跟 010 對同一支 trigger 的改動在合併時互撞。
 ➕ 動態欄位的變更從此有稽核紀錄（含匯入造成的）。
 ➖ **匯入造成的變更在 `audit_logs` 裡跟一筆一筆手改長得一模一樣**，出事時沒有辦法圈出「那一次匯入」。
 ➖ 使用者關掉分頁之後就失去那份錯誤報告，沒有地方可以回頭查。
 
-**補回來的時機**：010 合進 `main` 之後另開一張小票，那時 `context` 欄已經在，加一個 `import_batch` 鍵才真的是零 migration。
+**補回來的時機**：010 合進 `main` 之後另開一張小票，那時 `context` 欄已經在，加一個 `import_batch` 鍵才真的不必碰 migration。
 
 **否決「本票自己加一支 migration」的理由**：要給 `audit_logs` 加欄位並改 `audit_trigger_func`，而 010 也在改同一支 function。兩張未合併的 PR 各自改同一段 PL/pgSQL，合併時會是手工解衝突，而換到的只是一個「事後查得到」的便利——不是正確性。
 
