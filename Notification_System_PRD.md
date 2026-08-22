@@ -157,23 +157,39 @@ Please design states for: empty, unread-urgent (toast + panel), unread-normal, r
 | # | Question (問題) | Owner | Status | Decision Summary (決議摘要) |
 |---|---|---|---|---|
 | 1 | `teams.status` has no `pending`/`rejected` states — is org/team verification actually a future schema addition, or out of scope entirely for this platform? | Dan / Cedric, Carol | **Resolved (決議)** | **MVP 暫不實作**。團隊建立預設即為 `active`，不加入審核通知；待未來有組織驗證需求時，於 v2 統一增加 `teams.status` 與對應通知。 |
-| 2 | What capability key(s) define the `dedup.manage` recipient set — is it one key for both `dedup_flag_ticket` and `dedup_flag_station`, or two separate keys? | Dan / Cedric | **Resolved (決議)** | **拆分為獨立 Key**：定義 `dedup.ticket.manage` 與 `dedup.station.manage`，讓工單與站點去重職責分離，避免通知疲勞。 |
+| 2 | What capability key(s) define the dedup recipient set — one key for both `dedup_flag_ticket` and `dedup_flag_station`, or two separate keys? | Dan / Cedric | **Resolved（2026-08-22 修正）** | **改用既有的 `ai_duplicate.review`**（單一 key，工單與站點共用）。原決議要求新定義 `dedup.ticket.manage` / `dedup.station.manage`，但那兩個鍵值從未建立於 `Perm` catalog，實作照抄後解析出空集合。**注意：`ai_duplicate.review` 目前無任何 role/user 持有，MVP 刻意不授權**——詳見 §9.1 第 2 點。 |
 | 3 | Does `announcement_published` need role/team targeting in MVP, or is `all` sufficient? | Carol | **Resolved (決議)** | **MVP 僅支援 `all`**。全站公告一律廣播全體活躍用戶；定向公告留待後續版本擴充。 |
 | 4 | Retention: how long before `delete_at` is set on read notifications? | Dan / Cedric | **Resolved (決議)** | **30 天自動軟刪除**。由排程工作（Cron/Worker）定期將已讀超過 30 天或建立超過 90 天的通知標記 `delete_at`。 |
 | 5 | Is the forced-check approach for `zone_assigned` (§6) sufficient, or does backend want a shorter dedicated poll interval for that type only? | Dan / Cedric | **Resolved (決議)** | **焦點刷新 + 30s 常規輪詢**。維持 PRD 建議，於分頁切換/進入地圖時強制觸發一次，其餘維持 30~60s 輪詢即可。 |
 | 6 | "Mark all as read" — instant or confirm-first? | Haoyuan | **Resolved (決議)** | **立即執行 (Instant) + Toast 提示**。點擊後立即樂觀更新並呼叫 API，右下角跳出 Toast 提示，操作最輕快流暢。 |
 | 7 | `resource_station_updated` is currently scoped to *all* Gov teams platform-wide. Should this narrow to Gov teams whose `work_zones` geographically overlap the station? | Carol, Dan / Cedric | **Resolved (決議)** | **MVP 全體 Gov，v2 擴充地理過濾**。MVP 先採全體 Gov 接收確保情資不漏接；資料庫保留空間資訊，未來再升級為 PostGIS 區域過濾。 |
-| 8 | Do NGOs ever get notified about resource stations, or is `resource_station_updated` exclusively a Gov-facing notification? | Carol | **Resolved (決議)** | **Gov 全體 + 責任區 NGO Admin**。除了全體政府人員外，若該站點位於某 NGO 的指派工作區 (`team_zone_assign`) 內，該 NGO 的 `ngo_admin` 也應接收異動通知。 |
+| 8 | Do NGOs ever get notified about resource stations, or is `resource_station_updated` exclusively a Gov-facing notification? | Carol | **Resolved (決議)** | **Gov 全體 + 責任區 NGO Admin**。除了全體政府人員外，若該站點位於某 NGO 的指派工作區 (`team_zone_assign`) 內，該 NGO 團隊的 `admin` 也應接收異動通知（ADR-049：`roles` 無 `ngo_admin`，組織別由 `teams.type` 決定）。 |
 
 ### 9.1 Detailed Decision Notes (決議詳細說明)
 1. **Q1 團隊審核 (Team Verification)**: MVP 聚焦於核心災情調度與任務派發，避免前置過多流程阻礙。
-2. **Q2 去重權限 (Dedup Keys)**: 拆分 `dedup.ticket.manage` 與 `dedup.station.manage`，後端解析 recipient 時分別查詢持有對應權限的使用者。
+2. **Q2 去重權限 (Dedup Keys)**: 改用既有的 `ai_duplicate.review`（語義吻合：`.view` = 看得到重複清單，`.review` = 能裁決）。原決議「拆成兩個 key」的意圖（避免通知疲勞）待去重功能實作時重新評估。
+
+   **權限歸屬目前暫定未定 —— MVP 刻意不授權。** `ai_duplicate.review` 沒有任何 role 或 user 持有
+   （`role_permission_assign` / `user_permission_assign` 實查皆為 0），因此 `dedup_flag_ticket` 與
+   `dedup_flag_station` 兩種通知在 MVP **不會有任何收件人**。**這是刻意的決定，不是 bug。**
+
+   現有五個角色沒有一個適合的持有者：`admin` / `member` 是 **team 軸**角色（每個團隊各一份，職責是管自己的
+   團隊與責任區，跨團隊的重複資料裁決不屬於任何單一團隊的 admin）；`data_auditor` 是**純唯讀**監督角色
+   （六個能力全是 `view`，seed 註解明言 Oversight only — no edit/review/make）；`super_admin` 是無差別的
+   最高權角色；`user` 是一般民眾。另注意 `resolve_permission` **不套用地理過濾**，而 `admin` 現有的
+   `station.review` / `ticket.review` 都是 `zone` scope——直接授給 `admin` 會變成全平台每個團隊的 admin
+   都收到每一則重複標記通知。
+
+   待去重功能真正實作時再決定，兩條可行路徑：(a) 新增平台軸角色（如 `data_steward`）持有
+   `ai_duplicate.view` + `.review`；(b) 用 `user_permission_assign` 個別授予（ADR-018 exception grant）。
+   現在不決定的理由：去重功能鏈整條未接（無審核介面、無審核流程、無相關 PR），授了也無人能行動，
+   且符合 ADR-050（capability 先註冊，有 enforcement point 後才授予）。
 3. **Q3 公告定向 (Announcement Targeting)**: MVP 發布公告即發布給所有 active 使用者 (`scope: all`)。
 4. **Q4 保留機制 (Data Retention)**: 定期排程軟刪除（已讀 30 天 / 未讀 90 天），保護資料庫查詢效能。
 5. **Q5 輪詢間隔 (Polling)**: 頁面切換、進入地圖/工單列表、分頁 Focus 時強制打 `GET /notifications/unread-count`，背景輪詢維持 30-60 秒。
 6. **Q6 全部已讀 (Mark All Read)**: 前端直接樂觀更新為已讀並非同步送出 `PATCH /notifications/read-all`，搭配短暫 Toast。
 7. **Q7 區域過濾 (Gov Spatial Filter)**: MVP 保持全體 Gov 廣播，降低 PostGIS 空間計算複雜度。
-8. **Q8 NGO 資源站通知 (NGO Station Notifications)**: 當 Station 異動時，後端解析該 Station 所在位置之 `work_zones`，若有指派對應 NGO 團隊，將該團隊之 `ngo_admin` 一併列入接收者清單。
+8. **Q8 NGO 資源站通知 (NGO Station Notifications)**: 當 Station 異動時，後端解析該 Station 所在位置之 `work_zones`，若有指派對應 NGO 團隊，將該團隊持有 `admin` 角色者一併列入接收者清單（`teams.type='ngo'` + `Role.name='admin'`）。
 
 ---
 
