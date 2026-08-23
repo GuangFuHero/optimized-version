@@ -14,6 +14,9 @@ from uuid import UUID
 from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import Perm
+from app.core.rbac_scopes import Scope, in_scope
+from app.core.security import resolve_scope
 from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.geo import Station
@@ -21,6 +24,7 @@ from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
+from app.services.history_fields import Tier, spec_for
 
 TICKET = "ticket"
 STATION = "station"
@@ -373,3 +377,130 @@ def actor_view(event: Event, names: dict[str, tuple[str, bool]]) -> ActorView:
     return ActorView(
         uuid=event.actor_uuid, name=name, kind=event.actor_kind, is_removed=is_removed
     )
+
+
+# --- visibility (ADR-130) ---
+
+_GEOMETRY_COLUMN = "geometry"
+
+
+@dataclass(frozen=True)
+class Visibility:
+    """What this caller may see beyond the public tier.
+
+    Resolved once per request rather than per event: `resolve_scope` hits the DB, and the
+    answer cannot change part-way through a single timeline.
+    """
+
+    pii: bool = False
+    audit: bool = False
+
+
+async def resolve_visibility(
+    db: AsyncSession, *, actor, resource, cache: dict | None = None
+) -> Visibility:
+    """Which tiers this caller unlocks on this resource (ADR-130).
+
+    PII reuses `ticket.view_pii` and runs checkpoint 2 against the resource, so it means the
+    same thing here as it does on the single-row query. AUDIT needs only the capability:
+    `audit.view` is granted `all` or not at all, and it is oversight over the whole platform
+    by definition.
+    """
+    if actor is None:
+        return Visibility()
+
+    pii_scope = await resolve_scope(actor, Perm.TICKET_VIEW_PII, db, cache=cache)
+    pii = pii_scope == Scope.ALL or (
+        pii_scope != Scope.NONE
+        and await in_scope(pii_scope, actor=actor, resource=resource, db=db)
+    )
+    audit = await resolve_scope(actor, Perm.AUDIT_VIEW, db, cache=cache) != Scope.NONE
+    return Visibility(pii=pii, audit=audit)
+
+
+def _render_value(value, names: dict[str, tuple[str, bool]], change: Change):
+    """Assignment actors become names; everything else passes through.
+
+    ADR-143 keeps exactly one foreign key, and it would be useless as a bare uuid.
+    """
+    if change.table == _ASSIGNMENTS and change.field == "actor_uuid" and value:
+        name, _ = names.get(str(value), (None, False))
+        return name
+    return value
+
+
+def _render_change(
+    change: Change, *, entity: str, names: dict, visibility: Visibility
+) -> dict | None:
+    """One field change as the API reports it, or None when the caller may not see it."""
+    spec = spec_for(entity, change.table, change.field)
+    if spec is None:
+        return None
+
+    if spec.tier is Tier.AUDIT and not visibility.audit:
+        return None
+
+    # ADR-141: geometry never carries a value under any tier — WKB is unreadable and a
+    # decoded coordinate is location data. The tier only decides whether the fact appears.
+    if change.field == _GEOMETRY_COLUMN:
+        if spec.tier is Tier.PII and not visibility.pii:
+            return None
+        return {"field": change.field, "before": None, "after": None, "changed": True}
+
+    if spec.tier is Tier.PII and not visibility.pii:
+        if spec.mask is None:
+            # Nothing to reveal partially without inventing plausible location data, so the
+            # change is reported as having happened and the values are withheld (ADR-142).
+            return {"field": change.field, "before": None, "after": None, "changed": True}
+        return {
+            "field": change.field,
+            "before": spec.mask(change.before),
+            "after": spec.mask(change.after),
+        }
+
+    return {
+        "field": change.field,
+        "before": _render_value(change.before, names, change),
+        "after": _render_value(change.after, names, change),
+    }
+
+
+def render_events(
+    events: list[Event], *, entity: str, names: dict, visibility: Visibility
+) -> list[dict]:
+    """Serialise events, dropping whatever this caller may not see (ADR-130/145).
+
+    Field names and raw values go out as they are; Chinese labels and status wording are the
+    frontend's job, so the response stays re-sortable and filterable (ADR-145).
+
+    An event whose every change was filtered away is still returned: "somebody edited this
+    at 09:12, and you cannot see what" is true and useful, and hiding the event entirely
+    would misrepresent the timeline as quieter than it was.
+    """
+    rendered = []
+    for event in events:
+        changes = [
+            change
+            for change in (
+                _render_change(c, entity=entity, names=names, visibility=visibility)
+                for c in event.changes
+            )
+            if change is not None
+        ]
+        actor = actor_view(event, names)
+        payload = {
+            "event_type": event.event_type,
+            "at": event.at,
+            "entity": entity,
+            "actor": {
+                "uuid": str(actor.uuid) if actor.uuid else None,
+                "name": actor.name,
+                "kind": actor.kind,
+                "is_removed": actor.is_removed,
+            },
+            "changes": changes,
+        }
+        if visibility.audit:
+            payload["raw"] = event.raw
+        rendered.append(payload)
+    return rendered
