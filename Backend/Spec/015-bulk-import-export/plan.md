@@ -217,7 +217,7 @@ TEXT_COLUMNS = frozenset(
 - [x] 錯誤列號照試算表（表頭是第 1 列）
 - [x] 20 個測試，含「一列三個問題一次全回」
 
-> **`priority` 仍是純字串。** `low/medium/high/critical` 在 codebase 裡只存在於 GraphQL description，沒有 enum、沒有常數、單筆寫入也不驗。驗它等於由本票發明正式字彙，且 ADR-117 授權的不對稱只涵蓋動態欄位。**待使用者裁決**；`visibility`（真的 `Visibility` enum）與 ticket `status`（`VALID_TRANSITIONS` 的 keys）都接既有來源，沒有發明東西。
+> **`priority` 維持純字串，不驗**（**ADR-126，2026-08-23 拍板**）。`low/medium/high/critical` 在 codebase 裡只存在於 GraphQL description，沒有 enum、沒有常數、單筆寫入也不驗；驗它等於由本票發明一組產品字彙，且 ADR-117 授權的不對稱只涵蓋動態欄位。`visibility`（真的 `Visibility` enum）與 ticket `status`（`VALID_TRANSITIONS` 的 keys）都接既有來源，沒有發明東西。零程式改動。
 
 ## Task 8: preview 端點 ✅
 

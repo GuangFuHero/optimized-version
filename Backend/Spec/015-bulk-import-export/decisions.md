@@ -1,4 +1,4 @@
-# 批量匯入匯出 — ADR 全集（ADR-106~125）
+# 批量匯入匯出 — ADR 全集（ADR-106~126）
 
 **Date**: 2026-08-21
 **Feature**: 015-bulk-import-export
@@ -431,3 +431,27 @@
 **否決 base 在 main 的理由**：#36 合併之後會留下一個默默的語意漏洞——`is_active=false` 的欄位依然能匯入。這是 `git merge-tree` 看不出來、真 merge 才會炸的那種衝突。
 
 **否決「等 #36 合完再開工」的理由**：#35~#39 何時合不在本票手上，而 Notion 的排程是 08-18~08-22。
+
+---
+
+### ADR-126 `priority` 匯入時不驗值；維持純字串
+
+**白話**：求助單的緊急程度，匯入時填什麼就收什麼，不擋。
+
+**Context**：ADR-117 讓匯入路徑開始驗證，實作 Task 7 時才發現 `priority` 沒有可以照著驗的東西：
+
+- `low` / `medium` / `high` / `critical` 這組字彙在 codebase 裡**只存在於 GraphQL 的 description 文字**（`app/graphql/tickets/types.py:327/476/499`），沒有 enum、沒有常數、沒有 CHECK 約束。
+- `create_ticket` / `update_ticket` 都不驗它（`app/services/ticket.py:70`）。
+
+對照之下另外兩個看起來相似的欄位都有真值來源，本票直接接上、沒有發明東西：`visibility` 接 `app/graphql/shared.py:9` 的 `Visibility` enum，ticket `status` 接 `VALID_TRANSITIONS` 的 keys。
+
+**Decision**：`priority` 的 `ColumnSpec` 維持 `data_type="String"`，匯入不驗。
+
+**Consequences**：
+➕ 本票不會發明一組別人擁有的產品字彙。這四個值哪天要收斂成 enum，是 ticket 模組自己的決定，屆時 `bulk_columns` 只要改一行接上去。
+➕ ADR-117 的不對稱維持在它宣告的範圍內——**只涵蓋動態欄位**。`priority` 是固定欄位，讓匯入擋一個單筆寫入不擋的固定欄位，等於偷偷擴大那條 ADR。
+➖ 匯入檔可以寫 `priority=urgent` 而不會有任何抱怨，跟今天在 UI 上打一樣的字一樣不會有抱怨。**這不是本票造成的落差，是既有的。**
+
+**否決「本票直接定義四個值並驗」的理由**：那是產品決策偽裝成實作細節。定下來之後，任何既有資料裡不在這四個值裡的 `priority` 都會在下一次匯入時整列失敗——而那些資料是怎麼進去的、該不該存在，本票沒有立場回答。
+
+**要修的話該怎麼修**：先在 `app/graphql/tickets` 建一個 `Priority` enum 當單一真值來源，讓 `create_ticket` / `update_ticket` 一起驗，`bulk_columns` 再接上去。那是一張獨立的小票，不是這裡的側寫。
