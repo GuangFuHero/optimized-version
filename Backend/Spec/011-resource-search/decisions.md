@@ -1,8 +1,8 @@
-# Resource Search — ADR 全集（ADR-077~084、146~147）
+# Resource Search — ADR 全集（ADR-077~084、146~148）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
-**Status**: 已實作（PR #35）；ADR-146~147 為 review 後的修正
+**Status**: 已實作（PR #35）；ADR-146~148 為 review 後的修正
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/010-multi-team-membership/decisions.md`（ADR-068~076）。
 
 ---
@@ -258,3 +258,40 @@ q 無值：<既有排序>                                                （維�
 ➕ 新增 `test_mid_string_name_match_outranks_property_only_match` 守住這個案例——fixture 刻意分兩個 transaction 建立（`now()` 是 transaction-scoped，同一個 transaction 會讓兩列 `created_at` 相同、tiebreaker 變成隨機），並讓時間序把**錯的**那列排前面，所以舊排序必紅。
 ➖ `ORDER BY` 多一個運算式。命中集已被索引收斂，成本可忽略。
 ➖ 沒有解決「`similarity()` 對中文本來就不準」這件事本身。真正的詞彙級相關性需要 ADR-078 否決過的斷詞擴充，不在本票範圍。
+
+---
+
+### ADR-148 為搜尋 `EXISTS` 相關的四個外鍵欄位建索引
+
+**白話**：關聯表上「指回母表」的那個欄位一直沒有索引，平常看不出來，但在最壞情況會讓查詢從 0.7 秒變成 54.8 秒。
+
+**Context**：ADR-080 讓每個關聯表以 `EXISTS` 加入、與主表條件 `OR` 串接。PostgreSQL 只有在 `EXISTS` 是 top-level conjunct 時才能 flatten 成 semi-join；在 `OR` 底下它維持 `SubPlan`。
+
+實測（20k 母表 / 60k 子表，PostgreSQL 16）：預設 `work_mem` 下 planner 會把 SubPlan **hash** 起來只跑一次（`hashed SubPlan`，0.69 秒）；但 hash 塞不進 `work_mem` 時退化成真正的相關子查詢，`loops=20000`、**54.8 秒**。而且退化時的計畫長這樣：
+
+```
+SubPlan 1
+  ->  Bitmap Heap Scan on child c (actual rows=1 loops=20000)
+        Filter: ((delete_at IS NULL) AND (parent_uuid = p.uuid))
+                                          ^^^ 出現在 Filter 而非 Index Cond
+```
+
+`parent_uuid = p.uuid` 落在 `Filter:` 而不是 `Index Cond:`，就是外鍵沒有索引的直接後果——PostgreSQL **不會**自動為外鍵建索引。查證確認四個欄位在 model（無 `index=True`）與全部 migration 中都沒有索引。
+
+**Decision**：新增 migration `b7e4c1a90d52`，為下列四欄各建一個 btree 索引，並在 model 上同步加 `index=True`（兩邊都改，理由見 ADR-149）：
+
+| 欄位 | 用於 |
+|---|---|
+| `station_properties.station_uuid` | `geo_repository._search_condition` |
+| `secondary_locations.geometry_uuid` | 同上（僅 station；ticket 那支已依 ADR-146 移除）|
+| `ticket_tasks.ticket_uuid` | `tickets_repository._search_condition` |
+| `task_properties.task_uuid` | 同上（巢狀第二層）|
+
+**Consequences**：
+➕ 擋掉退化情境的最壞成本，也讓所有「載入某列的子項目」路徑受惠——這四欄本來就該有索引，搜尋只是讓缺漏變成負載相關。
+➕ 四個 btree 索引，寫入成本與空間都可忽略。
+➖ 不解決主表 trigram 索引失效（見下方「本票不處理」）。
+
+**本票不處理（另開票）**：`OR` 會讓**主表自己的** trigram 索引無法使用，強制 Seq Scan。實測 2 萬列、子查詢命中 0 列的最便宜情況：不含 `OR` 走索引 3.2ms，含 `OR` 走 Seq Scan **663ms**（205 倍）。也就是說 ADR-081 為主表建的 `ix_*_search_text_trgm`，在真正的搜尋路徑上用不到。
+
+要根治得把 `OR` 拆成 `UNION`（各分支各走各的索引，再合併去重）。**否決在本票做的理由**：`_active_conditions()` 的「`list_active` 與 `count_active` 必須從同一組條件建 WHERE」是這個 PR 刻意建立的不變式，其 docstring 明寫破壞它「no existing test would go red」；拆成 `UNION` 要同時重寫兩條路徑的條件組裝與排序，風險與這一票的範圍不對稱。

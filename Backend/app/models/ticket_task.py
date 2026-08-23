@@ -23,7 +23,7 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     """ORM model for a task derived from a support ticket."""
 
     __tablename__ = "ticket_tasks"
-    ticket_uuid: Mapped[str] = mapped_column(ForeignKey("tickets.uuid"))
+    ticket_uuid: Mapped[str] = mapped_column(ForeignKey("tickets.uuid"), index=True)
     route_uuid: Mapped[str | None] = mapped_column(ForeignKey("routes.uuid"), nullable=True)
     task_type: Mapped[str] = mapped_column(String(50))
     task_name: Mapped[str] = mapped_column(String(200))
@@ -57,7 +57,7 @@ class TaskProperty(Base, UUIDPKMixin, TimestampMixin):
     """ORM model for a key-value property attached to a ticket task."""
 
     __tablename__ = "task_properties"
-    task_uuid: Mapped[str] = mapped_column(ForeignKey("ticket_tasks.uuid"))
+    task_uuid: Mapped[str] = mapped_column(ForeignKey("ticket_tasks.uuid"), index=True)
     property_name: Mapped[str] = mapped_column(String(100))
     property_value: Mapped[str] = mapped_column(String)
     quantity: Mapped[int | None] = mapped_column(Integer)

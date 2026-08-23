@@ -176,7 +176,8 @@ q 無值：priority_score DESC NULLS LAST, created_at DESC        （維持現�
 
 | 檔案 | 改動 |
 |---|---|
-| `alembic/versions/<new>.py` | `CREATE EXTENSION pg_trgm`；6 張表加 `search_text` generated column + GIN 索引；`COMMENT ON COLUMN secondary_locations.lane/alley` 註明實際語意 |
+| `alembic/versions/f2b7c9d4e0a3_...py` | `CREATE EXTENSION pg_trgm`；6 張表加 `search_text` generated column（`varchar` + `NOT NULL`，與 `create_all` 逐字相符，ADR-149）+ GIN 索引；`COMMENT ON COLUMN secondary_locations.lane/alley` 註明實際語意 |
+| `alembic/versions/b7e4c1a90d52_...py` | 4 個搜尋 `EXISTS` 相關外鍵欄位的 btree 索引（ADR-148）；model 同步加 `index=True` |
 | `app/models/geo.py` | `Station` 加 `search_text`（`Mapped[str]`，唯讀） |
 | `app/models/request.py` | `Tickets` 同上 |
 | `app/models/ticket_task.py` | `TicketTask` / `TaskProperty` 同上 |

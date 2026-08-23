@@ -11,7 +11,7 @@ class StationProperty(Base, UUIDPKMixin, TimestampMixin):
     """ORM model for a property (facility, supply, or service) belonging to a station."""
 
     __tablename__ = "station_properties"
-    station_uuid: Mapped[str] = mapped_column(ForeignKey("stations.uuid"))
+    station_uuid: Mapped[str] = mapped_column(ForeignKey("stations.uuid"), index=True)
     property_type: Mapped[str] = mapped_column(String(50))  # facility/supply/service
     property_name: Mapped[str] = mapped_column(String(100))
     quantity: Mapped[int | None] = mapped_column(Integer)

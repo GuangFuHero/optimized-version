@@ -11,7 +11,7 @@ class SecondaryLocation(Base, UUIDPKMixin):
     """ORM model for a secondary address or pole location linked to a geometry."""
 
     __tablename__ = "secondary_locations"
-    geometry_uuid: Mapped[str] = mapped_column(ForeignKey("base_geometries.uuid"))
+    geometry_uuid: Mapped[str] = mapped_column(ForeignKey("base_geometries.uuid"), index=True)
     location_type: Mapped[str] = mapped_column(String(50))  # address/pole
     county: Mapped[str | None] = mapped_column(String(50))
     city: Mapped[str | None] = mapped_column(String(50))
