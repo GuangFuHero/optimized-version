@@ -434,3 +434,20 @@ ADR-150 推理的是「單次查詢的成本」，沒有涵蓋「未驗證的重
 **新增守衛**：`tests/test_search_ordering.py`，**結構性**斷言 `_order_by()` 在兩個 repository、`term` 有無兩種分支下，最後一個 clause 都是主鍵，且搜尋只在 standing order 前面「加」兩個 relevance 鍵而非取代它。
 
 刻意記下的一點：先寫的行為測試（`test_paging_a_run_of_tied_rows_loses_no_row`，六列全打平後翻兩頁）**拿掉修正也照樣綠**——PostgreSQL 對六列在單一計畫下剛好是決定性的。它因此不是這個修正的守衛，只是端到端 smoke；真正守住的是上述結構性測試。已驗證：拿掉 `uuid.desc()` 後結構性測試轉紅（`ends on 'base_geometries.created_at DESC', which is not unique`）。
+
+---
+
+### ADR-154 GraphQL 搜尋測試明確指定 `limit`，並在斷言前先檢查是否撞到頁面上限
+
+**白話**：測試庫的資料會跨整個 session 累積，而 resolver 預設一頁只回 50 筆。等測試多到超過 50 筆，那些「總數要等於回傳筆數」的斷言就會因為跟測試意圖無關的理由變紅。
+
+**Context**：`seeded_stations` 的 docstring 自己寫了「The GraphQL suite creates its schema once per session (`_ensure_db`), so rows from other tests accumulate in the same tables」，並據此改用 membership 而非精確筆數。但三處 `totalCount == len(items)`（`test_total_count_reflects_the_filter`、`test_ticket_total_count_reflects_the_filter`、`test_station_matched_through_a_property_appears_once`）仍隱含「這一頁裝得下全部」。membership 斷言其實有同一個問題——被擠出前 50 筆的 seeded row 也會讓斷言失敗。
+
+**Decision**：五份 query document 都改為接受 `$limit: Int!`，由 `_stations()` / `_tickets()` 統一填入 `PAGE_LIMIT = 500`（單一常數來源，不在 document 裡寫死數字）。三處斷言改走 `_assert_total_count_matches_items()`，它**先**斷言 `len(items) < PAGE_LIMIT`，訊息明講「撞到 PAGE_LIMIT，請調高而不是放寬斷言」。
+
+**否決改成 `totalCount >= len(items)` 的理由**：那會讓斷言恆真，等於刪掉這三個測試真正在測的東西（`count_active` 與 `list_active` 必須套用同一組條件——這是 `_active_conditions` docstring 明寫「no existing test would go red」的那個不變式）。
+
+**Consequences**：
+➕ 斷言與資料累積解耦；membership 斷言一併受惠。
+➕ 若真的成長到 500 筆，失敗訊息直接說明原因與做法。
+➖ 每次查詢回傳更多列，測試略慢；以目前規模不可量測。

@@ -20,9 +20,32 @@ from app.models.station_property import StationProperty
 from app.models.ticket_task import TaskProperty, TicketTask
 from tests.test_graphql.conftest import test_db
 
+# The GraphQL suite builds its schema once per session (`_ensure_db`), so rows from every
+# other test accumulate in these tables, and the resolver default is limit=50. Left alone,
+# a growing suite would eventually cap these pages — turning "totalCount equals the rows
+# returned" into a failure about page size rather than about the predicate under test, and
+# quietly dropping seeded rows out of the membership assertions (ADR-154). Every query
+# document below therefore takes an explicit $limit, which _stations()/_tickets() fill in.
+PAGE_LIMIT = 500
+
+
+def _assert_total_count_matches_items(page: dict) -> None:
+    """count_active and list_active must agree — the assertion these tests actually make.
+
+    The page-size check comes first so that if the suite ever does grow past PAGE_LIMIT
+    matching rows, the failure says exactly that instead of looking like a broken predicate.
+    """
+    items = page["items"]
+    assert len(items) < PAGE_LIMIT, (
+        f"page hit PAGE_LIMIT ({PAGE_LIMIT}); totalCount can no longer equal len(items) — "
+        "raise PAGE_LIMIT rather than relaxing this assertion"
+    )
+    assert page["pageInfo"]["totalCount"] == len(items)
+
+
 STATIONS_Q = """
-query($q: String) {
-  stations(q: $q) {
+query($q: String, $limit: Int!) {
+  stations(q: $q, limit: $limit) {
     items { uuid name }
     pageInfo { totalCount }
   }
@@ -30,8 +53,8 @@ query($q: String) {
 """
 
 STATIONS_Q_WITH_TYPE = """
-query($q: String, $stationType: String) {
-  stations(q: $q, stationType: $stationType) {
+query($q: String, $stationType: String, $limit: Int!) {
+  stations(q: $q, stationType: $stationType, limit: $limit) {
     items { uuid name }
     pageInfo { totalCount }
   }
@@ -39,8 +62,8 @@ query($q: String, $stationType: String) {
 """
 
 TICKETS_Q = """
-query($q: String) {
-  tickets(q: $q) {
+query($q: String, $limit: Int!) {
+  tickets(q: $q, limit: $limit) {
     items { uuid title }
     pageInfo { totalCount }
   }
@@ -48,8 +71,8 @@ query($q: String) {
 """
 
 TICKETS_Q_WITH_STATUS = """
-query($q: String, $status: String) {
-  tickets(q: $q, status: $status) {
+query($q: String, $status: String, $limit: Int!) {
+  tickets(q: $q, status: $status, limit: $limit) {
     items { uuid title }
     pageInfo { totalCount }
   }
@@ -117,11 +140,16 @@ async def seeded_tickets(coordinator_auth):
 
 
 async def _stations(client, query=STATIONS_Q, **variables):
+    # PAGE_LIMIT unless a test asks for a specific page — see the note above the query
+    # documents. Harmless for documents that do not declare $limit: GraphQL ignores extra
+    # values, it only rejects declared-but-unused variables.
+    variables.setdefault("limit", PAGE_LIMIT)
     resp = await client.post("/graphql", json={"query": query, "variables": variables})
     return resp.json()
 
 
 async def _tickets(client, query=TICKETS_Q, **variables):
+    variables.setdefault("limit", PAGE_LIMIT)
     resp = await client.post("/graphql", json={"query": query, "variables": variables})
     return resp.json()
 
@@ -169,8 +197,7 @@ async def test_single_character_query_is_rejected(client, seeded_stations):
 @pytest.mark.asyncio
 async def test_total_count_reflects_the_filter(client, seeded_stations):
     """count_active must apply the same predicate as list_active, or paging breaks."""
-    data = (await _stations(client, q="光復"))["data"]["stations"]
-    assert data["pageInfo"]["totalCount"] == len(data["items"])
+    _assert_total_count_matches_items((await _stations(client, q="光復"))["data"]["stations"])
 
 
 @pytest.mark.asyncio
@@ -310,8 +337,7 @@ async def test_ticket_search_composes_with_status_filter(client, seeded_tickets)
 @pytest.mark.asyncio
 async def test_ticket_total_count_reflects_the_filter(client, seeded_tickets):
     """count_active must apply the same predicate as list_active."""
-    data = (await _tickets(client, q="需要"))["data"]["tickets"]
-    assert data["pageInfo"]["totalCount"] == len(data["items"])
+    _assert_total_count_matches_items((await _tickets(client, q="需要"))["data"]["tickets"])
 
 
 # ──────────────────────────────────────────────
@@ -319,8 +345,8 @@ async def test_ticket_total_count_reflects_the_filter(client, seeded_tickets):
 # ──────────────────────────────────────────────
 
 STATIONS_Q_ORDERED = """
-query($q: String) {
-  stations(q: $q) { items { uuid name } }
+query($q: String, $limit: Int!) {
+  stations(q: $q, limit: $limit) { items { uuid name } }
 }
 """
 
@@ -439,10 +465,9 @@ async def test_station_matched_through_a_property_appears_once(client, coordinat
         await db.flush()
         station_uuid = str(station.uuid)
 
-    body = await _stations(client, q="發電機")
-    items = body["data"]["stations"]["items"]
-    assert [i["uuid"] for i in items].count(station_uuid) == 1
-    assert body["data"]["stations"]["pageInfo"]["totalCount"] == len(items)
+    page = (await _stations(client, q="發電機"))["data"]["stations"]
+    assert [i["uuid"] for i in page["items"]].count(station_uuid) == 1
+    _assert_total_count_matches_items(page)
 
 
 @pytest.mark.asyncio
