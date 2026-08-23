@@ -74,9 +74,14 @@ def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
     for table, expr in _SEARCH_TEXT:
+        # `varchar` + NOT NULL, not `text` and nullable: this must match exactly what
+        # Base.metadata.create_all emits for `Mapped[str] = mapped_column(String,
+        # Computed(..., persisted=True))`, because the test database is built by
+        # create_all and production by this migration. NOT NULL is safe — every part of
+        # the expression is coalesce()-wrapped, so the result is never NULL. (ADR-149)
         op.execute(
-            f"ALTER TABLE {table} ADD COLUMN search_text text "
-            f"GENERATED ALWAYS AS ({expr}) STORED"
+            f"ALTER TABLE {table} ADD COLUMN search_text varchar "
+            f"GENERATED ALWAYS AS ({expr}) STORED NOT NULL"
         )
         op.execute(
             f"CREATE INDEX ix_{table}_search_text_trgm "

@@ -1,8 +1,8 @@
-# Resource Search — ADR 全集（ADR-077~084、146~148）
+# Resource Search — ADR 全集（ADR-077~084、146~149）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
-**Status**: 已實作（PR #35）；ADR-146~148 為 review 後的修正
+**Status**: 已實作（PR #35）；ADR-146~149 為 review 後的修正
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/010-multi-team-membership/decisions.md`（ADR-068~076）。
 
 ---
@@ -295,3 +295,26 @@ SubPlan 1
 **本票不處理（另開票）**：`OR` 會讓**主表自己的** trigram 索引無法使用，強制 Seq Scan。實測 2 萬列、子查詢命中 0 列的最便宜情況：不含 `OR` 走索引 3.2ms，含 `OR` 走 Seq Scan **663ms**（205 倍）。也就是說 ADR-081 為主表建的 `ix_*_search_text_trgm`，在真正的搜尋路徑上用不到。
 
 要根治得把 `OR` 拆成 `UNION`（各分支各走各的索引，再合併去重）。**否決在本票做的理由**：`_active_conditions()` 的「`list_active` 與 `count_active` 必須從同一組條件建 WHERE」是這個 PR 刻意建立的不變式，其 docstring 明寫破壞它「no existing test would go red」；拆成 `UNION` 要同時重寫兩條路徑的條件組裝與排序，風險與這一票的範圍不對稱。
+
+---
+
+### ADR-149 migration 的 DDL 必須與 `create_all` 產出的 DDL 逐字相符
+
+**白話**：測試資料庫是用 model 建的，正式環境是用 migration 建的。兩邊寫得不一樣，測試就等於在驗一個永遠不會上線的東西。
+
+**Context**：`f2b7c9d4e0a3` 原本產出 `search_text text GENERATED ALWAYS AS (...) STORED`（`text`、可為 NULL）；而 model 是 `Mapped[str]` + `String` + `Computed(persisted=True)`，實際 compile 出來是：
+
+```sql
+search_text VARCHAR GENERATED ALWAYS AS (coalesce(title,'')) STORED NOT NULL
+```
+
+型別與 nullability 都不同。`tests/conftest.py:91,104` 用 `Base.metadata.create_all` 建測試庫、完全不跑 migration，所以 `tests/test_search_schema.py`（自陳目的是守住「API 層看不見的東西」）驗的是一個不會上線的 schema。另一個症狀是 `alembic revision --autogenerate` 會在六張表上永久回報幽靈 diff。
+
+**Decision**：改 migration 側，讓它與 `create_all` 一致：`varchar` + `NOT NULL`。`NOT NULL` 是安全的——`search_text_expression()` 的每個 part 都有 `coalesce` 包住，結果不可能是 NULL。
+
+同時確立通則：**新增 migration 時，DDL 必須與 model 在 `create_all` 下的產出逐字相符**，兩邊都要改。ADR-148 的四個索引因此同時加了 `index=True`，索引命名也沿用 SQLAlchemy 的 `ix_<table>_<column>` 慣例。
+
+**Consequences**：
+➕ `test_search_schema.py` 開始驗到真正會上線的 schema。
+➕ `autogenerate` 的幽靈 diff 消失。
+➖ 兩份 DDL 仍是手動維持一致，沒有自動守衛。真正的解法是加一支「跑 migration 建庫、與 `create_all` 建的庫做 schema diff」的測試——值得做，但屬於測試基礎建設，另開票。
