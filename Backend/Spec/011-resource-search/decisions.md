@@ -1,8 +1,8 @@
-# Resource Search — ADR 全集（ADR-077~084、146）
+# Resource Search — ADR 全集（ADR-077~084、146~147）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
-**Status**: 已實作（PR #35）；ADR-146 為 review 後的修正
+**Status**: 已實作（PR #35）；ADR-146~147 為 review 後的修正
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/010-multi-team-membership/decisions.md`（ADR-068~076）。
 
 ---
@@ -129,6 +129,8 @@
 
 ### ADR-083 `q` 有值時以相關性優先排序，既有排序降為 tiebreaker
 
+> **排序鍵被 ADR-147 取代**：`similarity()` 對中文常為 0，改為「自身命中」布林優先、`similarity()` 降為組內排序。本 ADR 的其餘部分（分支處理、`priority_score` 為 no-op tiebreaker）仍成立。
+
 **白話**：有關鍵字時，最像的排前面；沒關鍵字時，維持原本的排序。
 
 **Context**：`stations` 現行排序為 `priority_score DESC NULLS LAST, created_at DESC`（`app/repositories/geo_repository.py:43`）。搜尋通常期待「最相關的在前」，兩者看似衝突。
@@ -219,3 +221,40 @@ backend-1 |   File "/app/app/core/search.py", line 74, in build_search_condition
 **與 Spec/016 ADR-142 的關係**：016 把詳細地址一律歸 PII 層，實作時改成 `FIELD_TIERS` 以 `(entity, table)` 為鍵，理由與本 ADR 相同——同一張表在兩個 entity 下語意不同。兩者結論一致，本 ADR 是同一個原則在搜尋路徑上的套用。016 的 `decisions.md` 尚未同步該修正。
 
 **另案**：`StationType.secondary_location` 這個 resolver 完全沒有 PII 閘門（016 的 ADR-142 已記錄）。站點地址本來就該公開，所以那不是洩漏，但兩邊的規則需要在同一個地方寫清楚。
+
+---
+
+### ADR-147 相關性排序改為「自身命中」布林優先，`similarity()` 降為組內排序
+
+**白話**：先分成「站名自己就含關鍵字」和「靠關聯表才找到」兩組，前者整組排在前面；`similarity()` 只負責組內誰前誰後。
+
+**Context**：ADR-083 只用 `similarity()` 排序，`_order_by()` 的 docstring 據此宣稱「只透過 property 或地址命中的列得分為 0，排在命中集最後」。Review（2026-08-23）實測發現這個保證在中文上不成立。
+
+`pg_trgm` 為查詢字串補上前後 padding 才組出 trigram（`show_trgm('光復')` = `{"  光", " 光復", "光復 "}`），所以**關鍵字必須位於文字開頭**才有交集：
+
+| 自身 `search_text` | `ILIKE '%光復%'` | `similarity(t, '光復')` |
+|---|---|---|
+| `光復鄉物資站` | ✅ | 0.25 |
+| `花蓮縣光復鄉救災站` | ✅ | **0** |
+| `大進國小光復收容所` | ✅ | **0** |
+| `光復國中 物資發放與住宿登記…` | ✅ | 0.051 |
+
+「花蓮縣光復鄉救災站」自身名稱就含關鍵字，卻與「只靠 property 命中」同樣得 0，排序整個退化成 `created_at DESC`。而台灣地名幾乎都帶縣市前綴，這是常態而非邊角案例。
+
+原本的守衛測試 `test_name_match_outranks_property_only_match` 看不出來，因為它把**完整站名**當查詢字串（`similarity` = 1.0）。順帶一提，該測試裡的落敗列得 0.18 而非 docstring 說的 0——`similarity()` 是重疊度不是命中指示器，這一點 docstring 從一開始就寫錯了。
+
+**Decision**：`_order_by()` 改為三層（station）／三層（ticket）：
+
+```
+q 有值：(search_text ILIKE :pattern) DESC, similarity(search_text, :q) DESC, <既有排序>
+q 無值：<既有排序>                                                （維持現狀）
+```
+
+布林用的是 `matches()`（與 `_search_condition` 同一支），確保「排序認定的命中」與「查詢認定的命中」定義完全一致。
+
+**Consequences**：
+➕ ADR-083 想要的語意（名稱命中 > 關聯命中）現在真的成立，且不受 CJK padding 影響。
+➕ `similarity()` 仍保留為第二鍵，命中組內部依然有相關性梯度。
+➕ 新增 `test_mid_string_name_match_outranks_property_only_match` 守住這個案例——fixture 刻意分兩個 transaction 建立（`now()` 是 transaction-scoped，同一個 transaction 會讓兩列 `created_at` 相同、tiebreaker 變成隨機），並讓時間序把**錯的**那列排前面，所以舊排序必紅。
+➖ `ORDER BY` 多一個運算式。命中集已被索引收斂，成本可忽略。
+➖ 沒有解決「`similarity()` 對中文本來就不準」這件事本身。真正的詞彙級相關性需要 ADR-078 否決過的斷詞擴充，不在本票範圍。

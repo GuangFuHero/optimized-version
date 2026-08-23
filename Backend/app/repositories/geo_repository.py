@@ -79,18 +79,29 @@ class StationRepository(GenericRepository[Station]):
         return conditions
 
     def _order_by(self, term: str | None) -> list:
-        """Relevance first when searching, otherwise the standing order (ADR-083).
+        """Relevance first when searching, otherwise the standing order (ADR-083/147).
 
-        similarity() is scored against the station's own search_text, so rows matched only
-        through a property or address score 0 and sort last among the matches — a station
-        *named* after the keyword is more relevant than one that merely stocks it.
+        Two keys, in this order:
+
+        1. Whether the station's *own* search_text matches — a station named after the
+           keyword outranks one that merely stocks it or sits on that street.
+        2. similarity(), to grade within each of those two groups.
+
+        The boolean has to come first because similarity() cannot carry this on its own
+        for CJK (ADR-147): pg_trgm pads a query to form trigrams, so a keyword that is not
+        at the start of the text scores exactly 0 — `similarity('花蓮縣光復鄉救災站',
+        '光復')` is 0, indistinguishable from a station reached only through a property.
         """
         standing = [
             self.model.priority_score.desc().nulls_last(), self.model.created_at.desc()
         ]
         if term is None:
             return standing
-        return [func.similarity(self.model.search_text, term).desc(), *standing]
+        return [
+            matches(self.model.search_text, like_pattern(term)).desc(),
+            func.similarity(self.model.search_text, term).desc(),
+            *standing,
+        ]
 
     async def list_active(
         self, db: AsyncSession, *,

@@ -471,8 +471,10 @@ async def test_related_table_search_still_excludes_pii(client, seeded_tickets):
 async def test_name_match_outranks_property_only_match(client, coordinator_auth):
     """Relevance ordering: a station named 發電機站 ranks above one that merely has one.
 
-    similarity() is computed against the station's own search_text, so rows matched only
-    through a related table score 0 and sort last among the matches (ADR-083).
+    The easy case — the query IS the station's whole name, so similarity() returns 1.0
+    against 0.18 for the other row. Note the loser scores 0.18, not 0: similarity() grades
+    trigram overlap, it does not indicate "matched". test_mid_string_name_match_outranks_
+    property_only_match covers the case similarity() genuinely cannot express (ADR-147).
     """
     user_uuid, _ = coordinator_auth
     async with test_db() as db:
@@ -498,6 +500,53 @@ async def test_name_match_outranks_property_only_match(client, coordinator_auth)
     body = await _stations(client, query=STATIONS_Q_ORDERED, q="排序發電機站")
     order = [i["uuid"] for i in body["data"]["stations"]["items"]]
     assert order.index(named_uuid) < order.index(other_uuid)
+
+
+@pytest.mark.asyncio
+async def test_mid_string_name_match_outranks_property_only_match(client, coordinator_auth):
+    """ADR-147: ranking must survive similarity() returning 0 for a real name match.
+
+    pg_trgm pads a query to build trigrams, so a CJK keyword that is not at the *start*
+    of the text scores exactly 0 — `similarity('花蓮縣光復鄉救災站', '光復')` is 0, the
+    same as a station reached only through a property. Ordering on similarity() alone
+    therefore falls through to created_at here, and the fixtures are committed in that
+    order deliberately so that fallback puts the WRONG station first.
+    """
+    user_uuid, _ = coordinator_auth
+    # Separate transactions: now() is transaction-scoped, so one block would give both
+    # rows an identical created_at and the tiebreaker would be arbitrary.
+    async with test_db() as db:
+        named = Station(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=user_uuid,
+            name="花蓮縣光復鄉救災站", type="shelter", level=1,
+        )
+        db.add(named)
+        await db.flush()
+        named_uuid = str(named.uuid)
+
+    async with test_db() as db:
+        other = Station(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=user_uuid,
+            name="中正路臨時站", type="shelter", level=1,
+        )
+        db.add(other)
+        await db.flush()
+        db.add(
+            StationProperty(
+                station_uuid=other.uuid, property_type="facility",
+                property_name="光復物資調度", created_by=user_uuid,
+            )
+        )
+        await db.flush()
+        other_uuid = str(other.uuid)
+
+    body = await _stations(client, query=STATIONS_Q_ORDERED, q="光復")
+    order = [i["uuid"] for i in body["data"]["stations"]["items"]]
+    assert named_uuid in order and other_uuid in order
+    assert order.index(named_uuid) < order.index(other_uuid), (
+        "a station whose own name contains the keyword must outrank one matched only "
+        "through a property, even when similarity() scores both 0"
+    )
 
 
 TICKET_TASKS_Q = """

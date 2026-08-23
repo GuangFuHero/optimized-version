@@ -86,14 +86,16 @@ class TicketRepository(GenericRepository[Tickets]):
         return conditions
 
     def _order_by(self, term: str | None) -> list:
-        """Relevance first when searching, otherwise newest first (ADR-083).
+        """Relevance first when searching, otherwise newest first (ADR-083/147).
 
-        similarity() scores the ticket's own search_text, so tickets reachable only
-        through a task score 0 and sort last among the matches.
+        Same two-key shape as StationRepository._order_by — "the ticket's own text
+        matched" as a boolean first, then similarity() to grade within each group. See
+        that docstring for why similarity() alone cannot express this for CJK.
         """
         if term is None:
             return [self.model.created_at.desc()]
         return [
+            matches(self.model.search_text, like_pattern(term)).desc(),
             func.similarity(self.model.search_text, term).desc(),
             self.model.created_at.desc(),
         ]
