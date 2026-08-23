@@ -76,8 +76,11 @@ def test_contact_fields_reuse_the_existing_masking_helpers():
 
 
 def test_address_and_geometry_are_pii_without_a_masker():
-    """ADR-141/142: withheld rather than masked, since inventing a partial address or a
-    partial coordinate would fabricate plausible-looking location data."""
+    """Address and coordinate are PII but carry no masker.
+
+    ADR-141/142: they are withheld rather than masked, since inventing a partial address or
+    a partial coordinate would fabricate plausible-looking location data.
+    """
     for column in ("county", "city", "lane", "no", "floor", "room"):
         spec = FIELD_TIERS["secondary_locations"][column]
         assert spec.tier is Tier.PII and spec.mask is None, column
@@ -109,8 +112,11 @@ def test_dedup_and_scoring_columns_are_excluded_everywhere():
 
 
 def test_the_only_foreign_key_kept_is_the_assignee():
-    """ADR-143 drops foreign keys, with one deliberate exception: on a task assignment the
-    actor_uuid *is* the event, so it stays and gets resolved to a name."""
+    """Foreign keys are dropped, with exactly one deliberate exception.
+
+    ADR-143: on a task assignment the actor_uuid *is* the event, so it stays and gets
+    resolved to a display name rather than emitted as a bare uuid.
+    """
     assert FIELD_TIERS["task_assignments"]["actor_uuid"].tier is Tier.PUBLIC
     for table, spec in FIELD_TIERS.items():
         for column in spec:
