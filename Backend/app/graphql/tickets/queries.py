@@ -53,11 +53,19 @@ class RequestQuery:
         separately in tickets/types.py (contact_* resolvers). (gov/ngo scope was removed
         in ADR-049.)
 
-        `q` is a keyword filter over the ticket's title and description (ADR-077/079).
-        contact_name / contact_email / contact_phone are deliberately NOT searchable:
-        those fields are masked per-field above, and letting them feed the search index
-        would make that masking meaningless — anyone could locate a ticket by typing its
-        reporter's phone number. 2–50 characters; outside that range raises.
+        `q` is a keyword filter over the ticket's title and description, and — via EXISTS
+        — its tasks and those tasks' properties (ADR-077/079/080).
+
+        Two things are deliberately NOT searchable. contact_name / contact_email /
+        contact_phone, because those fields are masked per-field above and letting them
+        feed the search index would make that masking meaningless — anyone could locate a
+        ticket by typing its reporter's phone number. And the ticket's address
+        (secondary_locations), for the same reason at one remove: the caller here may be
+        an anonymous Guest, TicketType returns no address field, so a match would confirm
+        a street address the API never shows (ADR-146). A *station's* address is
+        searchable — same table, but there it is a shelter's public location.
+
+        2–50 characters; outside that range raises.
         """
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)

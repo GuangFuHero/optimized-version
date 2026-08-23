@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.search import like_pattern, matches, normalize_query
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
-from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 
 
@@ -18,12 +17,17 @@ class TicketRepository(GenericRepository[Tickets]):
         super().__init__(Tickets)
 
     def _search_condition(self, term: str):
-        """Match the ticket itself, its tasks, those tasks' properties, or its address.
+        """Match the ticket itself, its tasks, or those tasks' properties.
 
         EXISTS rather than JOIN throughout (ADR-080) — a ticket with three matching task
         properties would otherwise be returned three times, inflating totalCount and
         skipping rows when paging. The task branch nests a second EXISTS so a ticket is
         reachable through a property of one of its tasks.
+
+        A ticket's address (secondary_locations) is deliberately NOT searchable, unlike a
+        station's — see ADR-146. The same table means "shelter location" under a station
+        and "the requester's home" under a ticket, and ticket.view is public, so searching
+        it would let an anonymous caller confirm a street address the API never returns.
         """
         pattern = like_pattern(term)
         return or_(
@@ -42,12 +46,6 @@ class TicketRepository(GenericRepository[Tickets]):
                             )
                         ),
                     ),
-                )
-            ),
-            exists(
-                select(1).where(
-                    SecondaryLocation.geometry_uuid == self.model.uuid,
-                    matches(SecondaryLocation.search_text, pattern),
                 )
             ),
         )
@@ -91,7 +89,7 @@ class TicketRepository(GenericRepository[Tickets]):
         """Relevance first when searching, otherwise newest first (ADR-083).
 
         similarity() scores the ticket's own search_text, so tickets reachable only
-        through a task or address score 0 and sort last among the matches.
+        through a task score 0 and sort last among the matches.
         """
         if term is None:
             return [self.model.created_at.desc()]

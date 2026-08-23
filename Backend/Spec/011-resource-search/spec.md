@@ -30,6 +30,7 @@
 - **跨型別的全站搜尋端點**：不做 `search(q, types: [...])` 回傳混合結果（ADR-077）。跨表分頁與排序做不對，且 UIUX 規劃的是 Tickets / Resource Stations 兩張獨立表格。
 - **中文斷詞**：不引入 `zhparser` / `pgroonga`（ADR-078）。
 - **以 PII 反查**：`contact_name` / `contact_email` / `contact_phone` 永不可搜（ADR-079）。若日後需要「用電話找工單」，做成獨立且需專屬 capability 的功能，不混進一般搜尋。
+- **以住址反查工單**：`secondary_locations` 掛在 ticket 下時永不可搜（ADR-146）。同一張表掛在 station 下仍可搜——那是避難所位置，本來就公開。
 - **搜尋備註欄位**：`comment` / `progress_note` / `pole_note` 排除（ADR-079）。
 - **相關性調權**：不做欄位加權（標題命中 > 描述命中）、不做同義詞、不做拼音／注音容錯。
 - **搜尋歷程 / 熱門關鍵字統計**。
@@ -57,7 +58,7 @@
 | `ticket_tasks` | `task_name`、`task_description` |
 | `station_properties` | `property_name` |
 | `task_properties` | `property_name`、`property_value` |
-| `secondary_locations` | `county`、`city`、`lane`、`alley`、`no`、`floor`、`room`、`pole_id` |
+| `secondary_locations` | `county`、`city`、`lane`、`alley`、`no`、`floor`、`room`、`pole_id`（**只有掛在 station 下時可搜**，見 ADR-146） |
 
 **明確排除**
 
@@ -67,6 +68,7 @@
 | `stations.comment`、`station_properties.comment`、`task_properties.comment` | 操作備註，自由文字，雜訊高 |
 | `ticket_tasks.progress_note` | 同上 |
 | `secondary_locations.pole_note` | 同上 |
+| `secondary_locations.*`（掛在 `tickets` 下時） | PII。同一張表掛在 station 下是避難所位置（地圖上本來就公開），掛在 ticket 下是報案人住家。`ticket.view` 對未登入者開放，而 `TicketType` 不回傳任何地址欄位——可搜等於給出一個「讀不到但問得到」的 oracle（ADR-146） |
 
 > **`secondary_locations` 欄位語意警告**：`lane` 實際存的是**路／街（road）**、`alley` 實際存的是**巷弄**，與欄位字面意思不符，且 model 沒有任何註解說明（`app/models/secondary_location.py:17-18`）。本 spec 順手補上 `COMMENT ON COLUMN`（見 §7），改名另案處理。
 
@@ -126,7 +128,8 @@ CREATE INDEX ix_stations_search_text_trgm
 
 **必須是 `EXISTS` 不是 `JOIN`**：一個站點有 N 筆 property，`JOIN` 會讓它在結果中出現 N 次，`count_active` 算出膨脹的總數、分頁跳號。既有的 zone scope 已經是這個模式（`app/core/rbac_scopes.py:141-147`），照抄即可。
 
-`tickets` 同理，關聯的是 `ticket_tasks` → `task_properties` 與 `secondary_locations`。
+`tickets` 同理，關聯的是 `ticket_tasks` → `task_properties`（第二層 `EXISTS` 巢狀在第一層裡）。
+**`tickets` 沒有 `secondary_locations` 那一支**——這是 station 與 ticket 唯一不對稱的地方，理由見 ADR-146。
 
 ### 排序
 

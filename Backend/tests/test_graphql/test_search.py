@@ -1,8 +1,11 @@
-"""End-to-end keyword search tests (feature 011, Phase 1).
+"""End-to-end keyword search tests (feature 011).
 
-Phase 1 covers the main tables only — `stations.name/description` and
-`tickets.title/description`. Reaching into station properties, task properties and
-addresses via EXISTS subqueries is Phase 2.
+Covers the main tables (`stations.name/description`, `tickets.title/description`) and the
+related tables reached via EXISTS subqueries: station properties, a station's address,
+ticket tasks and task properties (ADR-080).
+
+A ticket's address is the one related table deliberately left unsearchable — see
+test_ticket_search_cannot_find_by_address and ADR-146.
 """
 
 import pytest
@@ -247,6 +250,50 @@ async def test_ticket_search_cannot_find_by_contact_email(client, seeded_tickets
     assert seeded_tickets["需要飲用水"] not in _uuids(
         await _tickets(client, q="wang@example.com"), "tickets"
     )
+
+
+@pytest_asyncio.fixture
+async def ticket_with_address(coordinator_auth):
+    """A ticket carrying a secondary_locations row.
+
+    Nothing in app/ writes one today — CreateTicketInput has no address field and
+    services/station.py is the only writer — so this is built by hand. That is the point:
+    the guard has to hold for the day someone adds ticket addresses, not just today.
+    """
+    user_uuid, _ = coordinator_auth
+    async with test_db() as db:
+        ticket = Tickets(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid, title="住址不可搜工單", description="無關描述",
+            contact_name="陳先生", status="pending", priority="high", visibility="public",
+        )
+        db.add(ticket)
+        await db.flush()
+        db.add(
+            SecondaryLocation(
+                geometry_uuid=ticket.uuid, location_type="address",
+                county="花蓮縣", city="光復鄉", lane="中正路", alley="12巷", no="3號",
+                floor="4樓", room="A室",
+            )
+        )
+        await db.flush()
+        return str(ticket.uuid)
+
+
+@pytest.mark.asyncio
+async def test_ticket_search_cannot_find_by_address(client, ticket_with_address):
+    """ADR-146: a ticket's address must not be searchable, unlike a station's.
+
+    _tickets() sends no Authorization header, so this caller is an anonymous Guest —
+    which ticket.view grants Scope.ALL (PUBLIC_PERMS, ADR-025/027). TicketType exposes no
+    address field, so a hit here would be an oracle: the caller confirms a street address,
+    floor and room the API itself never returns, and can binary-search towards it. Same
+    threat model as test_ticket_search_cannot_find_by_phone.
+    """
+    for term in ["中正路", "12巷", "光復鄉中正路"]:
+        assert ticket_with_address not in _uuids(
+            await _tickets(client, q=term), "tickets"
+        ), f"ticket became findable by its address via {term!r}"
 
 
 @pytest.mark.asyncio

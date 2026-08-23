@@ -1,8 +1,8 @@
-# Resource Search — ADR 全集（ADR-077~084）
+# Resource Search — ADR 全集（ADR-077~084、146）
 
-**Date**: 2026-08-16
+**Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
-**Status**: Phase 1 已實作；Phase 2 待實作
+**Status**: 已實作（PR #35）；ADR-146 為 review 後的修正
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/010-multi-team-membership/decisions.md`（ADR-068~076）。
 
 ---
@@ -48,6 +48,8 @@
 ---
 
 ### ADR-079 可搜欄位正向表列；PII 與備註類欄位永不可搜
+
+> **部分被 ADR-146 取代**：`secondary_locations` 的可搜性從「整張表」收斂為「只在掛於 station 下時」。
 
 **白話**：明列哪些欄位可以被搜到，其餘一律不可搜。個資欄位與操作備註都排除。
 
@@ -176,3 +178,44 @@ backend-1 |   File "/app/app/core/search.py", line 74, in build_search_condition
 **否決「回空結果」的理由**：使用者得不到任何說明，只看到「查不到」，無從得知是關鍵字太短還是真的沒有資料。
 
 **否決「新增 error 處理」的理由**：正確但會改變**全站**既有錯誤的記錄行為，超出本票範圍。真要做應獨立開票，一次處理所有 domain error 的分類與記錄等級。
+
+---
+
+### ADR-146 `secondary_locations` 只在掛於 station 下時可搜；掛在 ticket 下永不可搜
+
+**白話**：同一張地址表，站點的地址可以搜，工單的地址不行。
+
+**Context**：ADR-079 的正向表列把 `secondary_locations` 整張表列為可搜，`tickets_repository._search_condition()` 因此 OR 了一支打到該表的 `EXISTS`。Review（2026-08-23）指出這條路徑是個 oracle：
+
+- `Perm.TICKET_VIEW` 在 `PUBLIC_PERMS` 裡（`app/core/permissions.py:115`），未登入者經 `app/graphql/context.py:69-71` 直接拿到 `Scope.ALL`，而 `scope_filter()` 對 `Scope.ALL` 回傳空 list（`app/core/rbac_scopes.py:111-112`）——不做任何過濾。
+- `TicketType` 沒有任何地址欄位（`secondary_location` 這個 resolver 掛在 `StationType` 上，`app/graphql/geo/types.py:147`）。
+- `SecondaryLocation.search_text` 含 `county/city/lane/alley/no/floor/room/pole_id`，是完整門牌。
+
+三者合起來：未登入者送 `tickets(q:"中正路12巷3號")`，有回傳就等於確認了那張工單的門牌、樓層、房號——一個 API 本身不會回傳的值。而且可以逐段逼近試出來。
+
+**這正是 ADR-079 拿 `contact_*` 舉例拒絕的同一種攻擊**，只是換成住址。ADR-079 當時把「地址」與「PII」當成兩件事，漏掉了「地址在 ticket 語境下就是報案人住家」。
+
+**這張表是什麼**：`secondary_locations` 是 geometry 的補充定位表，`location_type` 分兩種——`address`（`county/city/lane/alley/no/floor/room`，補經緯度說不出的「四樓 A 室」）與 `pole`（`pole_id/pole_type/pole_photo_uuid/pole_note`，災區沒門牌時的電桿定位）。
+
+**它的 FK 指向 `base_geometries.uuid` 而非 `stations.uuid`**（`alembic/versions/a2a8e4d8c51d_...py:93`）。`base_geometries` 是 polymorphic 基底，底下有 `base` / `closure_area` / `station` / `request`(=ticket)。**schema 層本來就設計成任何 geometry 都能掛地址**——所以那支 ticket 分支不是筆誤，是照著 schema 的意圖寫的。
+
+**但實際只接了 station 一邊**：寫入只有 `CreateStationInput.secondary_location` → `app/graphql/geo/mutations.py:43-58` → `app/services/station.py:67-70`；讀取只有 `StationType.secondary_location`（`app/graphql/geo/types.py:147`）。ticket 建立與讀取都沒接，`CreateTicketInput` 沒有地址欄位，PR 自己的測試也只覆蓋 station 那一支。
+
+因此這條路徑今天**比對不到任何資料**，拿掉是零功能損失。**但「今天沒資料」不是主要理由**——恰恰相反：schema 意圖涵蓋 ticket，代表「有人把 ticket 地址接上」不是假想而是遲早的事。那天一到，搜尋會**自動生效並無聲變成洩漏**，而做接線那件事的人不會想到要回頭檢查搜尋路徑。這才是必須現在拿掉、而非留註解提醒的原因。
+
+**Decision**：`tickets_repository._search_condition()` 移除 `secondary_locations` 分支。`geo_repository`（station）那支保留不動。可搜性的判斷單位從「表」改成「**(entity, 表)**」。
+
+否決「用 `TICKET_VIEW_PII` 把關」：要把 scope 從 resolver 穿到 repository，破壞 repository 層不碰 RBAC 的分界，且 `list_active` / `count_active` 兩邊都得傳、漏一邊就 `totalCount` 對不上（正是 `_active_conditions()` docstring 警告的那個坑）——而這一切是為了一條今天沒有資料、也沒有使用者的路徑。
+
+否決「保留並寫進已知限制」：文件提醒在「加一個地址欄位」的 PR 裡幾乎不會被讀到，而洩漏是無聲生效的。
+
+**Consequences**：
+➕ 封死方式是「資料根本不進查詢」，不依賴 runtime 條件判斷——與 ADR-079 選擇正向表列的理由一致。
+➕ 順帶少一層 `EXISTS`，工單搜尋的查詢計畫變淺。
+➕ 新增測試 `test_ticket_search_cannot_find_by_address` 用手工建的 ticket + 地址列把守，未來有人讓工單帶地址時會紅。
+➖ 日後若工單真的要帶地址且需要可搜，得同時設計 PII 閘門，不會自動生效。這是刻意的。
+➖ station 與 ticket 的搜尋行為不對稱，讀 `spec.md` §3 表格時需要額外一句說明（已補）。
+
+**與 Spec/016 ADR-142 的關係**：016 把詳細地址一律歸 PII 層，實作時改成 `FIELD_TIERS` 以 `(entity, table)` 為鍵，理由與本 ADR 相同——同一張表在兩個 entity 下語意不同。兩者結論一致，本 ADR 是同一個原則在搜尋路徑上的套用。016 的 `decisions.md` 尚未同步該修正。
+
+**另案**：`StationType.secondary_location` 這個 resolver 完全沒有 PII 閘門（016 的 ADR-142 已記錄）。站點地址本來就該公開，所以那不是洩漏，但兩邊的規則需要在同一個地方寫清楚。
