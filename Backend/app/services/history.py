@@ -15,6 +15,7 @@ from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit import AuditLog
+from app.models.auth import User
 from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
@@ -313,3 +314,62 @@ def build_events(rows: list[AuditLog]) -> list[Event]:
 
     events.sort(key=lambda e: e.at, reverse=True)
     return events
+
+
+# --- actor resolution (ADR-136) ---
+
+
+@dataclass(frozen=True)
+class ActorView:
+    """How an actor is presented. `is_removed` is a flag, never a reason to hide the name.
+
+    There is no "unknown" state: users are soft-deleted, so a uuid that appears here always
+    resolves. Notion listed orphaned uuids as a known gap; it is not one (ADR-136).
+    """
+
+    uuid: UUID | None
+    name: str | None
+    kind: str
+    is_removed: bool = False
+
+
+def _referenced_user_uuids(events: list[Event]) -> set[str]:
+    """Every user uuid the timeline will need a name for.
+
+    Includes assignees, not just the person who acted: on a task assignment the interesting
+    part is who the task went to (ADR-143's one kept foreign key).
+    """
+    referenced = {str(e.actor_uuid) for e in events if e.actor_uuid is not None}
+    for event in events:
+        for change in event.changes:
+            if change.table == _ASSIGNMENTS and change.field == "actor_uuid":
+                referenced.update(str(v) for v in (change.before, change.after) if v)
+    return referenced
+
+
+async def resolve_actors(db: AsyncSession, events: list[Event]) -> dict[str, tuple[str, bool]]:
+    """Look up every referenced user in one query, as {uuid: (name, is_removed)}.
+
+    Batched deliberately: resolving per event would put a query behind every row of the
+    timeline, which is the N+1 this feature's REST shape was chosen to avoid in the first
+    place (ADR-138).
+    """
+    referenced = _referenced_user_uuids(events)
+    if not referenced:
+        return {}
+    rows = (
+        await db.execute(
+            select(User.uuid, User.name, User.delete_at).where(User.uuid.in_(referenced))
+        )
+    ).all()
+    return {str(uuid): (name, delete_at is not None) for uuid, name, delete_at in rows}
+
+
+def actor_view(event: Event, names: dict[str, tuple[str, bool]]) -> ActorView:
+    """Present one event's actor."""
+    if event.actor_uuid is None:
+        return ActorView(uuid=None, name=None, kind=event.actor_kind)
+    name, is_removed = names.get(str(event.actor_uuid), (None, False))
+    return ActorView(
+        uuid=event.actor_uuid, name=name, kind=event.actor_kind, is_removed=is_removed
+    )
