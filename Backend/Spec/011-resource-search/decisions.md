@@ -1,8 +1,8 @@
-# Resource Search — ADR 全集（ADR-077~084、146~149）
+# Resource Search — ADR 全集（ADR-077~084、146~150）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
-**Status**: 已實作（PR #35）；ADR-146~149 為 review 後的修正
+**Status**: 已實作（PR #35）；ADR-146~150 為 review 後的修正
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/010-multi-team-membership/decisions.md`（ADR-068~076）。
 
 ---
@@ -110,6 +110,8 @@
 ---
 
 ### ADR-082 查詢字串長度限制 2~50 字元
+
+> **下限的理由被 ADR-150 更正**：實測 2 字的行為與本 ADR 描述的 1 字相同。下限維持 2，但不再宣稱 2 字能取得索引選擇性。上限（50 字）不受影響。
 
 **白話**：太短的關鍵字搜了沒意義又很慢，太長的是攻擊。兩邊都擋掉。
 
@@ -318,3 +320,32 @@ search_text VARCHAR GENERATED ALWAYS AS (coalesce(title,'')) STORED NOT NULL
 ➕ `test_search_schema.py` 開始驗到真正會上線的 schema。
 ➕ `autogenerate` 的幽靈 diff 消失。
 ➖ 兩份 DDL 仍是手動維持一致，沒有自動守衛。真正的解法是加一支「跑 migration 建庫、與 `create_all` 建的庫做 schema diff」的測試——值得做，但屬於測試基礎建設，另開票。
+
+---
+
+### ADR-150 `MIN_QUERY_LENGTH` 維持 2，但更正 ADR-082 的錯誤前提
+
+**白話**：兩個中文字的搜尋其實跟一個字一樣慢，ADR-082 當初以為兩個字就沒問題了。我們還是維持兩個字，因為那是使用者真正會打的長度，但要把代價寫清楚，不要假裝索引有在生效。
+
+**Context**：ADR-082 的下限理由是「中文 1 個字的 trigram 選擇性極差，索引形同失效退化為全表掃描」，據此把下限設在 2。實測顯示 **2 個字的行為與它描述的 1 個字完全相同**。
+
+`pg_trgm` 從 `%…%` LIKE pattern 抽索引鍵時**不做 padding**（前後文未知），所以 2 個字元湊不出完整 trigram，`extractQuery` 產不出鍵，退回 `GIN_SEARCH_MODE_ALL`——掃整個 GIN 索引再逐列 recheck。20 萬列雜訊 + 3 列命中，`enable_seqscan = off`：
+
+| 查詢 | Bitmap Index Scan 吐回 | Recheck 刷掉 | Buffers | 時間 |
+|---|---|---|---|---|
+| `%信義%`（2 字）| **200,003 列（全表）** | 200,000 | 2475 | 111.5 ms |
+| `%信義路%`（3 字）| 3 列 | 0 | 4 | 0.04 ms |
+
+**2780 倍**。注意 `show_trgm('光復')` 會回 3 個 trigram，那是對**欄位值**做的 padding，與 LIKE pattern 的抽鍵路徑不同——這正是原本判斷失準的地方。
+
+**Decision**：`MIN_QUERY_LENGTH` 維持 2。ADR-082 的下限理由以本 ADR 更正（依 ADR 相撞後續者勝）。
+
+**否決提高到 3 的理由**：中文 2 字（「光復」「花蓮」「志工」）是核心使用情境，ADR-078 自己舉的例子就是「光復」，ADR-082 自己也寫「實際使用情境中查詢長度預期為 2~6 字」。為了索引選擇性砍掉最常見的查詢長度，是拿功能換一個沒有使用者在抱怨的效能數字。
+
+**Consequences**：
+➕ 使用者行為不變。
+➕ 代價從「以為有索引」變成「知道沒有索引」，日後若真的出現效能問題，第一個要看的地方已經寫在這裡。
+➖ 2 字查詢的成本隨資料列數線性成長。以目前的資料規模（單一縣市的災防站點與工單，數千列量級）可接受；若成長到十萬列量級需要重新評估。
+➖ ADR-082 的上限（50 字）不受影響，仍然成立。
+
+**新增守衛**：`test_two_character_query_gets_no_selectivity_from_the_trigram_index` 用 2000 列實際資料跑 `EXPLAIN (ANALYZE)`，斷言 2 字查詢的 Bitmap Index Scan 吐回全表、3 字查詢吐回 1 列。它**不是**回歸測試而是事實釘樁——若日後 pg_trgm 或 planner 改變讓 2 字變得有選擇性，它會紅，屆時本 ADR 應重新評估。這也兌現了 `test_station_search_index_is_usable_by_the_planner` docstring 裡「Actual query performance is validated separately against realistic data volumes」那句先前沒有對應實作的承諾。

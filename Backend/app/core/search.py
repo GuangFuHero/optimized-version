@@ -9,8 +9,6 @@ Lives in app/core/ rather than app/graphql/ because repositories consume it, and
 repository must not import from the GraphQL layer.
 """
 
-from sqlalchemy import or_
-
 # Lengths are Python str lengths, i.e. Unicode code point counts. For CJK queries
 # "2 code points" is exactly "2 characters", which is the semantics we want.
 MIN_QUERY_LENGTH = 2
@@ -85,14 +83,3 @@ def matches(column, pattern: str):
     """
     return column.ilike(pattern, escape=_ESCAPE_CHAR)
 
-
-def any_matches(pattern: str, first_column, *more_columns):
-    """OR together an ILIKE predicate over each column.
-
-    At least one column is required *by the signature*. ``or_()`` accepts zero clauses and
-    silently produces an empty condition (deprecation warning only, SQLAlchemy 2.0.45),
-    which would quietly corrupt the caller's query instead of failing — so the invariant
-    is enforced structurally rather than by a runtime check.
-    """
-    columns = (first_column, *more_columns)
-    return or_(*(matches(col, pattern) for col in columns))

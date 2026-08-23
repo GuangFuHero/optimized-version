@@ -5,15 +5,9 @@ import pytest
 from app.core.search import (
     MAX_QUERY_LENGTH,
     SearchQueryError,
-    any_matches,
     like_pattern,
     normalize_query,
 )
-from app.models.geo import Station
-
-
-def _compiled(cond) -> str:
-    return str(cond.compile(compile_kwargs={"literal_binds": True}))
 
 
 def test_none_query_produces_no_condition():
@@ -54,17 +48,6 @@ def test_surrounding_whitespace_does_not_count_towards_the_minimum():
         normalize_query("  水  ")
 
 
-def test_calling_without_a_column_is_a_type_error():
-    """The invariant is enforced by the signature, not by a runtime check.
-
-    SQLAlchemy's or_() accepts zero clauses and silently yields an empty condition
-    (deprecation warning only), so a missing column would corrupt the caller's query
-    rather than fail loudly. The signature must make that unrepresentable.
-    """
-    with pytest.raises(TypeError):
-        any_matches(like_pattern("光復"))
-
-
 # --- wildcard escaping -------------------------------------------------------
 # _escape() handles three characters in the order \ then % then _ — the escape
 # character itself must go first, or the backslashes it introduces get escaped a
@@ -90,9 +73,3 @@ def test_mixed_wildcards_are_escaped_in_the_right_order():
     r"""`100%\_` must not double-escape: the \ introduced by escaping % is left alone."""
     compiled = like_pattern(r"100%\_")
     assert r"100\%\\\_" in compiled
-
-
-def test_multiple_columns_are_or_ed():
-    """Several columns collapse into one OR clause, not one condition each."""
-    compiled = _compiled(any_matches(like_pattern("光復"), Station.name, Station.description))
-    assert " OR " in compiled  # one OR clause, not one condition per column

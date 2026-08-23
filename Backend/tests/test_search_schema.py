@@ -5,6 +5,8 @@ search index (ADR-079's positive list), and whether the trigram operator class i
 so the planner can use the index at all (ADR-081).
 """
 
+import re
+
 import pytest
 from sqlalchemy import text
 
@@ -176,3 +178,97 @@ async def test_station_search_index_is_usable_by_the_planner(db):
     ).all()
     plan = "\n".join(row[0] for row in rows)
     assert "ix_stations_search_text_trgm" in plan, plan
+
+
+async def _bulk_insert_stations(db, count: int, name_expr: str) -> None:
+    """Insert `count` stations across both halves of the joined-table inheritance.
+
+    `name_expr` is a SQL expression over `g` (the generate_series value) producing the
+    station name, so callers control what does and does not share trigrams with a needle.
+    """
+    await db.execute(
+        text(
+            "INSERT INTO base_geometries (uuid, property_name, geometry) "
+            "SELECT gen_random_uuid(), 'station', ST_SetSRID(ST_MakePoint(121.4, 23.6), 4326) "
+            "FROM generate_series(1, :n) g"
+        ),
+        {"n": count},
+    )
+    await db.execute(
+        text(
+            "INSERT INTO stations (uuid, name, description, level, is_duplicate, "
+            "is_temporary, is_official) "
+            f"SELECT bg.uuid, {name_expr}, '', 0, false, false, false "
+            "FROM (SELECT uuid, row_number() OVER (ORDER BY uuid) AS g "
+            "      FROM base_geometries WHERE property_name = 'station') bg"
+        )
+    )
+    await db.execute(text("ANALYZE stations"))
+
+
+def _bitmap_index_scan_rows(plan: str) -> int:
+    """Rows the Bitmap Index Scan actually returned, i.e. how far the index narrowed.
+
+    This is the number that matters, not the Bitmap Heap Scan's — the heap scan reports
+    rows surviving the recheck, which is selective either way.
+    """
+    rows = re.search(r"Bitmap Index Scan\b.*?\(actual\b[^)]*?\brows=(\d+)", plan, re.S)
+    assert rows, f"could not read the Bitmap Index Scan row count from plan:\n{plan}"
+    return int(rows.group(1))
+
+
+async def _index_rows_for(db, term: str) -> int:
+    await db.execute(text("SET LOCAL enable_seqscan = off"))
+    rows = (
+        await db.execute(
+            text(
+                "EXPLAIN (ANALYZE) SELECT uuid FROM stations "
+                f"WHERE search_text ILIKE '%{term}%'"
+            )
+        )
+    ).all()
+    return _bitmap_index_scan_rows("\n".join(row[0] for row in rows))
+
+
+async def test_two_character_query_gets_no_selectivity_from_the_trigram_index(db):
+    """ADR-150: pins down the cost the 2-character minimum knowingly accepts.
+
+    pg_trgm extracts index keys from a `%...%` LIKE pattern only when the literal can form
+    a full 3-character trigram — it cannot pad, because the surrounding text is unknown.
+    A 2-character pattern yields no keys, so the scan falls back to GIN_SEARCH_MODE_ALL:
+    the whole index is walked and every row rechecked.
+
+    This is NOT a regression to fix — ADR-150 chose to keep MIN_QUERY_LENGTH at 2 because
+    2-character CJK queries ("光復", "花蓮") are the main use case. The test exists so the
+    number stays honest: if a future pg_trgm or planner change makes 2 characters
+    selective, this goes red and ADR-150 can be revisited.
+    """
+    total = 2000
+    await _bulk_insert_stations(db, total, "'花蓮縣光復鄉中正路' || bg.g || '號'")
+    await db.execute(
+        text(
+            "INSERT INTO base_geometries (uuid, property_name, geometry) "
+            "VALUES (:u, 'station', ST_SetSRID(ST_MakePoint(121.4, 23.6), 4326))"
+        ),
+        {"u": _STATION_UUID},
+    )
+    await db.execute(
+        text(
+            "INSERT INTO stations (uuid, name, description, level, is_duplicate, "
+            "is_temporary, is_official) VALUES (:u, '台北市信義路四段站', '', 0, "
+            "false, false, false)"
+        ),
+        {"u": _STATION_UUID},
+    )
+    await db.execute(text("ANALYZE stations"))
+
+    two_char = await _index_rows_for(db, "信義")
+    three_char = await _index_rows_for(db, "信義路")
+
+    assert three_char == 1, (
+        f"a 3-character term must be selective, index returned {three_char} rows"
+    )
+    assert two_char > total, (
+        "if this fails, a 2-character term became selective — pg_trgm or the planner "
+        f"changed and ADR-150 should be revisited (index returned {two_char} rows)"
+    )
