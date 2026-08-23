@@ -53,6 +53,7 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | station.view | all（公開） | all | all | all | all | all |
+| **station.view_history** | — | own | all | all | zone | zone |
 | station.add | — | all | — | all | all | all |
 | station.edit | — | own | — | all | zone | zone |
 | station.delete | — | own | — | all | zone | own |
@@ -67,6 +68,7 @@
 |---|---|---|---|---|---|---|
 | ticket.view | all（公開） | all | all | all | all | all |
 | **ticket.view_pii** | —（遮罩） | own | all | all | zone | zone |
+| **ticket.view_history** | — | own | all | all | zone | zone |
 | ticket.add | — | all | — | all | all | all |
 | ticket.edit | — | own | — | all | zone | zone |
 | ticket.delete | — | own | — | all | zone | own |
@@ -158,9 +160,24 @@
 ### PII 遮罩（ADR-049）
 `ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩、user→own、team admin/member→zone、data_auditor/super_admin→all。
 
+### 異動時間軸的四層可見度（ADR-127~130，功能 016）
+`*.view_history` 是**進入時間軸的門票**，它決定看得到「哪些資源」的歷史；`audit.view` 決定看得到「多深」。同一個時間軸依 caller 權限分四層揭露：
+
+| 層級 | 內容 | 解鎖條件 |
+|---|---|---|
+| 一般 | 業務欄位（狀態、優先度、名稱、營業時間…） | `*.view_history` |
+| PII | `contact_*`、詳細地址、精確座標 | `ticket.view_pii` 且 in scope，否則遮罩／不給值 |
+| 稽核 | `review_note`、`moderation_status` | `audit.view` |
+| RAW | 整列原始 audit 負載 | `audit.view` |
+
+`data_auditor` 與 `super_admin` 同時持有 `audit.view=all` 與 `ticket.view_pii=all`，因此自動看得到四層全部，**沒有任何特例程式**。
+
+> **團隊角色是 `zone` 不是 `team`。** ADR-049 把 `team_uuid` 從 `base_geometries` 移除後，`in_scope()` 的 TEAM 分支對 ticket/station 永遠回 `False`（`app/core/rbac_scopes.py:77`）——對地理資源發 `team` 等於發一個不成立的授權。
+
 ### 「已定義、但目前無角色授予」的 capability（ahead-of-feature，ADR-050）
 下列 key 存在於目錄、但 seed 沒發給任何角色，等對應功能實作時才會接上 enforcement：
-`ticket.export`、`ai_duplicate.view`、`ai_duplicate.review`、`pre_departure.view/publish/edit`。
+`ai_duplicate.view`、`ai_duplicate.review`、`pre_departure.view/publish/edit`。
+（`ticket.export` 自功能 015 起已授予；`audit.view` 自功能 016 起首次真正被 enforcement 消費。）
 
 ### 相關 ADR
-ADR-018（union）、ADR-019（兩軸/一人一 team）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）。
+ADR-018（union）、ADR-019（兩軸/一人一 team）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）。

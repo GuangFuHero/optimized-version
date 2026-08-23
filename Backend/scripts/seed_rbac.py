@@ -47,6 +47,11 @@ ROLES_DATA = [
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",      # help-request board is public (ADR-027)
             Perm.TICKET_VIEW_PII: "own",  # only your own request's contact info; others masked
+            # ADR-128: the timeline mirrors view_pii's tiering exactly. `own` is what makes
+            # Notion's front-of-house requirement real — a requester following their own
+            # ticket's progress — without exposing anyone else's.
+            Perm.TICKET_VIEW_HISTORY: "own",
+            Perm.STATION_VIEW_HISTORY: "own",
             Perm.TICKET_ADD: "all",
             Perm.TICKET_EDIT: "own",
             Perm.TICKET_DELETE: "own",
@@ -65,6 +70,11 @@ ROLES_DATA = [
             Perm.TICKET_VIEW_PII: "all",
             Perm.USER_VIEW: "all",
             Perm.AUDIT_VIEW: "all",
+            # ADR-130: audit.view is no longer the ticket into the timeline (that is
+            # *.view_history), but it still unlocks its top two tiers — the review columns
+            # and the raw audit payload.
+            Perm.TICKET_VIEW_HISTORY: "all",
+            Perm.STATION_VIEW_HISTORY: "all",
             # ADR-111: oversight reads the whole platform, so its export reaches everything.
             # No import counterpart — this role has no write path anywhere else either.
             Perm.STATION_EXPORT: "all",
@@ -77,9 +87,11 @@ ROLES_DATA = [
         "permissions": dict.fromkeys(
             [
                 Perm.MAP_VIEW, Perm.MAP_ADD, Perm.MAP_EDIT, Perm.MAP_DELETE,
-                Perm.STATION_VIEW, Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
+                Perm.STATION_VIEW, Perm.STATION_VIEW_HISTORY,
+                Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
                 Perm.STATION_DELETE, Perm.STATION_REVIEW,
-                Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_ADD, Perm.TICKET_EDIT,
+                Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_VIEW_HISTORY,
+                Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
                 Perm.FIELD_VIEW, Perm.FIELD_ADD, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
                 Perm.ANN_VIEW, Perm.ANN_PUBLISH, Perm.ANN_EDIT, Perm.ANN_DELETE,
@@ -115,6 +127,11 @@ ROLES_DATA = [
             Perm.STATION_REVIEW: "zone",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
+            # ADR-128: `zone`, never `team`. ADR-049 removed team_uuid from base_geometries,
+            # so in_scope()'s TEAM branch can never match a geo resource — granting `team`
+            # here would be an authorization that silently never holds.
+            Perm.TICKET_VIEW_HISTORY: "zone",
+            Perm.STATION_VIEW_HISTORY: "zone",
             Perm.TICKET_ADD: "all",
             Perm.TICKET_EDIT: "zone",
             Perm.TICKET_DELETE: "zone",
@@ -151,6 +168,10 @@ ROLES_DATA = [
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
+            # ADR-128: field workers need the timeline for the resources they actually work
+            # — who took a task, who dropped it — so it matches view_pii at `zone`.
+            Perm.TICKET_VIEW_HISTORY: "zone",
+            Perm.STATION_VIEW_HISTORY: "zone",
             Perm.TICKET_ADD: "all",
             Perm.TICKET_EDIT: "zone",
             Perm.TICKET_DELETE: "own",
