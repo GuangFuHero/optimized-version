@@ -3,7 +3,7 @@
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.search import like_pattern, matches, normalize_query
+from app.core.search import like_pattern, matches, normalize_query, search_timeout
 from app.infrastructure.repository.base import GenericRepository
 from app.models.geo import ClosureArea, Station
 from app.models.secondary_location import SecondaryLocation
@@ -109,14 +109,16 @@ class StationRepository(GenericRepository[Station]):
         skip: int = 0, limit: int = 50, extra_filters=(),
     ) -> list[Station]:
         """List active stations with optional bbox/type/keyword filter and RBAC scope conditions."""
+        term = normalize_query(q)
         conditions = self._active_conditions(
             bounds=bounds, station_type=station_type, q=q, extra_filters=extra_filters
         )
-        result = await db.execute(
-            select(self.model).where(*conditions)
-            .order_by(*self._order_by(normalize_query(q)))
-            .offset(skip).limit(limit)
-        )
+        async with search_timeout(db, term):
+            result = await db.execute(
+                select(self.model).where(*conditions)
+                .order_by(*self._order_by(term))
+                .offset(skip).limit(limit)
+            )
         return result.scalars().all()
 
     async def count_active(
@@ -127,9 +129,10 @@ class StationRepository(GenericRepository[Station]):
         conditions = self._active_conditions(
             bounds=bounds, station_type=station_type, q=q, extra_filters=extra_filters
         )
-        return await db.scalar(
-            select(func.count()).select_from(select(self.model).where(*conditions).subquery())
-        )
+        async with search_timeout(db, normalize_query(q)):
+            return await db.scalar(
+                select(func.count()).select_from(select(self.model).where(*conditions).subquery())
+            )
 
     async def get_high_level_stations(self, db: AsyncSession, min_level: int) -> list[Station]:
         """Return all stations with a level at or above min_level."""

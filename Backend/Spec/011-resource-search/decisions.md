@@ -379,3 +379,35 @@ search_text VARCHAR GENERATED ALWAYS AS (coalesce(title,'')) STORED NOT NULL
 ➖ 超過 500 字的站名，超出部分不可搜——與 `description` 相同取捨。
 
 **新增守衛**：`tests/test_search_schema.py::test_unbounded_columns_are_truncated`。對 `EXPECTED_SOURCE_COLUMNS` 的每一欄查 `information_schema.columns.character_maximum_length`，為 NULL 者就斷言生成運算式中該欄被 `left(...)` 包住。**結構性斷言而非列舉已知長欄位**——日後任何人往任何 `search_text` 加一個無上限 `String`，不必記得這張 ADR 也會被擋下。已驗證：還原成 `plain("name")` 後此測試轉紅（`AssertionError: stations.name has no length limit and is not truncated in search_text`），修好後轉綠。
+
+---
+
+### ADR-152 搜尋路徑加上 per-statement timeout；rate limit 另案
+
+**白話**：兩個中文字的搜尋本來就沒有索引可用（ADR-150 已經量過），而搜尋端點匿名就能打、又沒有速率限制。我們不能讓一次查詢無限期佔住連線，所以給它一個 3 秒上限。
+
+**Context**：三件事疊在一起才構成問題，單獨看每一件都已被既有 ADR 接受：
+
+1. ADR-150 實測 2 字查詢會走完整個 GIN 索引再逐列 recheck，且 2 字是核心使用情境。
+2. `stations(q:)` / `tickets(q:)` 是 `PUBLIC_PERMS`，匿名 Guest 可呼叫（ADR-025/027）——`test_ticket_search_cannot_find_by_address` 就是刻意不帶 auth header 打的。
+3. `/graphql` 掛在 `app/main.py:66`，沒有掛任何 rate limiter；`get_rate_limiter` 目前只用在 auth endpoints。
+
+ADR-150 推理的是「單次查詢的成本」，沒有涵蓋「未驗證的重複呼叫者」。ADR-148 的 header 量到 `OR` + EXISTS SubPlan hash 溢出磁碟時單次 54.8 秒——那個數字乘上不受限的呼叫次數就是可用的資源耗盡原語。
+
+**Decision**：在搜尋路徑上加 per-statement timeout（`SEARCH_STATEMENT_TIMEOUT_MS = 3000`），實作為 `app/core/search.py::search_timeout()` async context manager，`term is None` 時完全 no-op，由兩個 repository 的 `list_active` / `count_active` 包住 execute。逾時的 SQLSTATE 57014 轉成 `SearchTimeoutError(ValueError)`，與 `SearchQueryError` 同一套契約，讓 Strawberry 把可讀訊息當成 `errors[0].message` 吐出，而不是把 driver 錯誤原樣外洩。
+
+用 `SELECT set_config('statement_timeout', :ms, true)` 而非 `SET LOCAL`：值本身與使用者無關但仍走參數綁定，並且沿用 `app/db/session.py:18` 稽核變數已經在用的同一種寫法。`is_local => true` 使它隨 commit/rollback 自動還原，因此**沒有需要手動 reset 的東西，也沒有洩漏到下一個請求的路徑**。
+
+兩個刻意的副作用：
+- 同一請求後續的 resolver 也會被這個上限涵蓋（graphql-core 讓同層 root field 共用一個 AsyncSession，見 `app/graphql/context.py`）。公開讀取路徑被端到端地綁上限是目的，不是意外。
+- Mutation 走不到這段程式碼，寫入路徑維持伺服器預設。
+
+**否決 `/graphql` 全域 rate limit 的理由（本票）**：它擋的是頻率而不是單次成本，54.8 秒的查詢仍會發生；而且要同時決定一個對前端夠寬的速率上限，並確認 `fastapi_limiter` 在 GraphQL 路徑上的行為（目前只驗證過 auth endpoints）。這是營運層決策，範圍與這一票不對稱。**timeout 綁單次成本，rate limit 綁頻率，兩者不互相取代**——rate limit 仍應在正式對外前補上，另開票。
+
+**Consequences**：
+➕ 單一連線可被佔用的時間從無上限變成 3 秒。
+➕ 使用者得到可讀訊息而非 driver 錯誤。
+➖ 只擋單次成本，不擋高頻重複呼叫（見上）。
+➖ 若資料量成長到合法搜尋逼近 3 秒，使用者會看到逾時而不是慢——屆時該處理的是查詢計畫（ADR-148 未處理的 `OR` → `UNION`），不是調高這個數字。
+
+**新增守衛**：`tests/test_search_timeout.py` 四項——逾時真的會取消（`pg_sleep(3)` 對 100ms 上限）、`term=None` 完全不動 `statement_timeout`、設定隨 rollback 還原、以及**只有 57014 會被改標成 `SearchTimeoutError`**（`SELECT 1/0` 必須原樣往上拋，否則搜尋路徑上任何查詢 bug 都會被偽裝成「你的搜尋太慢」而掩蓋真正的錯誤）。

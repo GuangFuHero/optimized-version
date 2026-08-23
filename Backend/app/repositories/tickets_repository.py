@@ -3,7 +3,7 @@
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.search import like_pattern, matches, normalize_query
+from app.core.search import like_pattern, matches, normalize_query, search_timeout
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
@@ -113,14 +113,16 @@ class TicketRepository(GenericRepository[Tickets]):
         extra_filters=(),
     ) -> list[Tickets]:
         """List active tickets with optional bbox/status/priority/keyword filter and RBAC scope."""
+        term = normalize_query(q)
         conditions = self._active_conditions(
             bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters
         )
-        result = await db.execute(
-            select(self.model).where(*conditions)
-            .order_by(*self._order_by(normalize_query(q)))
-            .offset(skip).limit(limit)
-        )
+        async with search_timeout(db, term):
+            result = await db.execute(
+                select(self.model).where(*conditions)
+                .order_by(*self._order_by(term))
+                .offset(skip).limit(limit)
+            )
         return result.scalars().all()
 
     async def count_active(
@@ -137,9 +139,10 @@ class TicketRepository(GenericRepository[Tickets]):
         conditions = self._active_conditions(
             bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters
         )
-        return await db.scalar(
-            select(func.count()).select_from(select(self.model).where(*conditions).subquery())
-        )
+        async with search_timeout(db, normalize_query(q)):
+            return await db.scalar(
+                select(func.count()).select_from(select(self.model).where(*conditions).subquery())
+            )
 
 
 class TicketTaskRepository(GenericRepository[TicketTask]):

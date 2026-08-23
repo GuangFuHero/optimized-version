@@ -9,10 +9,27 @@ Lives in app/core/ rather than app/graphql/ because repositories consume it, and
 repository must not import from the GraphQL layer.
 """
 
+from contextlib import asynccontextmanager
+
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+
 # Lengths are Python str lengths, i.e. Unicode code point counts. For CJK queries
 # "2 code points" is exactly "2 characters", which is the semantics we want.
 MIN_QUERY_LENGTH = 2
 MAX_QUERY_LENGTH = 50
+
+# Wall-clock ceiling for a single search statement (ADR-152). A 2-character CJK query has
+# no trigram selectivity at all (ADR-150) — it walks the whole GIN index and rechecks every
+# row — and `stations(q:)` / `tickets(q:)` are callable by an anonymous Guest (ADR-025/027)
+# on an endpoint with no rate limiter. Without this bound, one unauthenticated caller can
+# hold a connection for as long as the planner takes (measured at 54.8s once the EXISTS
+# SubPlan hash spills to disk). 3s is well above any legitimate search on realistic data.
+SEARCH_STATEMENT_TIMEOUT_MS = 3000
+
+# PostgreSQL raises query_canceled when statement_timeout fires. Both asyncpg (.sqlstate)
+# and psycopg (.pgcode) expose it on the driver exception SQLAlchemy wraps.
+_QUERY_CANCELED_SQLSTATE = "57014"
 
 # ILIKE wildcards. User input containing these must be escaped or it changes the meaning
 # of the query ("100%" would become "anything starting with 100").
@@ -29,6 +46,62 @@ class SearchQueryError(ValueError):
     exceptions and Strawberry surfaces str(exc) as errors[0].message. No masking extension
     is configured (app/graphql/schema.py), so nothing further is needed to expose this.
     """
+
+
+class SearchTimeoutError(ValueError):
+    """Raised when a search statement exceeds SEARCH_STATEMENT_TIMEOUT_MS.
+
+    Same ValueError-based contract as SearchQueryError: Strawberry surfaces str(exc) as
+    errors[0].message, so the caller is told the search was too expensive rather than
+    seeing a raw driver error (which would leak SQL state into the API response).
+    """
+
+
+def _is_statement_timeout(exc: DBAPIError) -> bool:
+    """True if `exc` is PostgreSQL cancelling a statement that hit statement_timeout."""
+    orig = exc.orig
+    code = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+    return code == _QUERY_CANCELED_SQLSTATE
+
+
+@asynccontextmanager
+async def search_timeout(db, term: str | None):
+    """Bound every statement in this transaction while a keyword search runs (ADR-152).
+
+    A no-op when `term` is None, so the non-search list/count paths keep their previous
+    behaviour exactly.
+
+    `set_config(..., is_local => true)` rather than `SET LOCAL` because the value is user-
+    independent but still parameterised, matching the audit variables already set this way
+    in app/db/session.py. Being transaction-scoped, it reverts on commit or rollback —
+    there is nothing to reset, and no way for it to leak into a later request.
+
+    Two deliberate consequences of transaction scope, both wanted:
+
+    - It also covers the count query and any nested resolver that runs later in the same
+      request, because graphql-core shares one AsyncSession across sibling root fields
+      (see app/graphql/context.py). A public read path being bounded end-to-end is the
+      point, not a side effect.
+    - Mutations never reach this code, so write paths keep the server default.
+
+    Note this bounds *one statement's* cost, not the request rate — a caller can still
+    repeat the query. Rate limiting `/graphql` is tracked separately (ADR-152).
+    """
+    if term is None:
+        yield
+        return
+    await db.execute(
+        text("SELECT set_config('statement_timeout', :ms, true)"),
+        {"ms": str(SEARCH_STATEMENT_TIMEOUT_MS)},
+    )
+    try:
+        yield
+    except DBAPIError as exc:
+        if _is_statement_timeout(exc):
+            raise SearchTimeoutError(
+                f"搜尋耗時過長已中止，請改用更明確的關鍵字（上限 {SEARCH_STATEMENT_TIMEOUT_MS // 1000} 秒）"
+            ) from exc
+        raise
 
 
 def _escape(value: str) -> str:
