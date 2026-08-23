@@ -411,3 +411,26 @@ ADR-150 推理的是「單次查詢的成本」，沒有涵蓋「未驗證的重
 ➖ 若資料量成長到合法搜尋逼近 3 秒，使用者會看到逾時而不是慢——屆時該處理的是查詢計畫（ADR-148 未處理的 `OR` → `UNION`），不是調高這個數字。
 
 **新增守衛**：`tests/test_search_timeout.py` 四項——逾時真的會取消（`pg_sleep(3)` 對 100ms 上限）、`term=None` 完全不動 `statement_timeout`、設定隨 rollback 還原、以及**只有 57014 會被改標成 `SearchTimeoutError`**（`SELECT 1/0` 必須原樣往上拋，否則搜尋路徑上任何查詢 bug 都會被偽裝成「你的搜尋太慢」而掩蓋真正的錯誤）。
+
+---
+
+### ADR-153 排序尾端必須是唯一鍵（主鍵）
+
+**白話**：分頁是靠 OFFSET/LIMIT 切的，如果排序有一整段分不出先後，資料庫每次執行的順序可以不一樣，翻頁就會同一筆看到兩次、另一筆永遠看不到。
+
+**Context**：`_order_by` 原本的尾端是 `created_at DESC`（tickets）與 `priority_score DESC NULLS LAST, created_at DESC`（stations），沒有一個是唯一的。搜尋讓「打平」從例外變成常態：
+
+- 只透過關聯表命中的列，兩個新的 relevance 前導鍵會**同時**打平——ILIKE 布林是 `false`，`similarity()` 是 `0.0`（ADR-147 已說明 CJK 中段命中剛好是 0）。
+- `priority_score` 多數為 NULL。
+- `created_at` 是 `server_default=func.now()`，而 `now()` 是 **transaction-scoped**——一次批次匯入就讓整批列共用同一個時間戳。這點 PR 自己在 `test_mid_string_name_match_outranks_property_only_match` 的說明裡已經承認。
+
+**Decision**：兩個 repository 的 `_order_by` 尾端都補 `uuid.desc()`，**含 `term is None` 的分支**——非搜尋路徑的 `created_at` 一樣不唯一，同一個 bug。
+
+**Consequences**：
+➕ 排序成為全序，OFFSET/LIMIT 分頁在任何資料形狀下都不重不漏。
+➕ 順帶修好非搜尋的列表分頁。
+➖ 多一個排序鍵；由於前面的鍵已經幾乎決定順序，實務成本可忽略。
+
+**新增守衛**：`tests/test_search_ordering.py`，**結構性**斷言 `_order_by()` 在兩個 repository、`term` 有無兩種分支下，最後一個 clause 都是主鍵，且搜尋只在 standing order 前面「加」兩個 relevance 鍵而非取代它。
+
+刻意記下的一點：先寫的行為測試（`test_paging_a_run_of_tied_rows_loses_no_row`，六列全打平後翻兩頁）**拿掉修正也照樣綠**——PostgreSQL 對六列在單一計畫下剛好是決定性的。它因此不是這個修正的守衛，只是端到端 smoke；真正守住的是上述結構性測試。已驗證：拿掉 `uuid.desc()` 後結構性測試轉紅（`ends on 'base_geometries.created_at DESC', which is not unique`）。

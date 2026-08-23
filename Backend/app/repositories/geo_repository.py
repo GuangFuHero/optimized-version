@@ -79,9 +79,9 @@ class StationRepository(GenericRepository[Station]):
         return conditions
 
     def _order_by(self, term: str | None) -> list:
-        """Relevance first when searching, otherwise the standing order (ADR-083/147).
+        """Relevance first when searching, otherwise the standing order (ADR-083/147/153).
 
-        Two keys, in this order:
+        Two relevance keys, in this order:
 
         1. Whether the station's *own* search_text matches — a station named after the
            keyword outranks one that merely stocks it or sits on that street.
@@ -92,8 +92,18 @@ class StationRepository(GenericRepository[Station]):
         at the start of the text scores exactly 0 — `similarity('花蓮縣光復鄉救災站',
         '光復')` is 0, indistinguishable from a station reached only through a property.
         """
+        # `uuid` last is not decoration: it is the only unique key in the list, and
+        # without it a page boundary can fall inside a run of rows that tie on every
+        # preceding key — the client then sees a row twice and never sees another
+        # (ADR-153). Searching makes ties the common case rather than the exception:
+        # every row matched only through a related table ties on BOTH relevance keys
+        # (the boolean is false, similarity() is 0 — see the ADR-147 note above), and
+        # `created_at` defaults to func.now(), which is transaction-scoped, so a bulk
+        # insert leaves a whole block sharing one timestamp.
         standing = [
-            self.model.priority_score.desc().nulls_last(), self.model.created_at.desc()
+            self.model.priority_score.desc().nulls_last(),
+            self.model.created_at.desc(),
+            self.model.uuid.desc(),
         ]
         if term is None:
             return standing

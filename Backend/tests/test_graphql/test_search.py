@@ -549,6 +549,63 @@ async def test_mid_string_name_match_outranks_property_only_match(client, coordi
     )
 
 
+STATIONS_Q_PAGED = """
+query($q: String, $skip: Int!, $limit: Int!) {
+  stations(q: $q, skip: $skip, limit: $limit) { items { uuid } }
+}
+"""
+
+
+@pytest.mark.asyncio
+async def test_paging_a_run_of_tied_rows_loses_no_row(client, coordinator_auth):
+    """ADR-153: two pages over a run of fully-tied rows must cover each row exactly once.
+
+    Every row here ties on every key the sort had before the tiebreaker was added: none of
+    the names contain the keyword (so the ILIKE boolean is false and similarity() is 0 —
+    ADR-147), priority_score is NULL for all six, and created_at comes from
+    `server_default=func.now()`, which is transaction-scoped, so one INSERT block gives
+    them an identical timestamp.
+
+    Honest about its own limits: this passes with OR without the uuid tiebreaker, because
+    PostgreSQL happens to sort six rows deterministically under one plan — the freedom to
+    reorder is real but only shows up at volume or across plan changes. The actual guard
+    for the fix is the structural one in tests/test_search_ordering.py; this test is the
+    end-to-end smoke check that paging over ties is not obviously broken.
+    """
+    user_uuid, _ = coordinator_auth
+    term = "分頁綁定測試物資"
+    expected = set()
+    async with test_db() as db:
+        for i in range(6):
+            station = Station(
+                geometry=from_shape(Point(121.5, 25.0), srid=4326),
+                created_by=user_uuid, name=f"分頁站{i}", type="shelter", level=1,
+            )
+            db.add(station)
+            await db.flush()
+            db.add(
+                StationProperty(
+                    station_uuid=station.uuid, property_type="supply",
+                    property_name=term, created_by=user_uuid,
+                )
+            )
+            expected.add(str(station.uuid))
+        await db.flush()
+
+    pages = []
+    for skip in (0, 3):
+        body = await _stations(client, query=STATIONS_Q_PAGED, q=term, skip=skip, limit=3)
+        pages.append([i["uuid"] for i in body["data"]["stations"]["items"]])
+
+    first, second = pages
+    assert not set(first) & set(second), (
+        f"a row appeared on both pages: {sorted(set(first) & set(second))}"
+    )
+    assert set(first) | set(second) == expected, (
+        "paging did not cover every matching row exactly once"
+    )
+
+
 TICKET_TASKS_Q = """
 query($ticketUuid: String!, $q: String) {
   ticketTasks(ticketUuid: $ticketUuid, q: $q) { uuid taskName }
