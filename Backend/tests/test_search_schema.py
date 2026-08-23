@@ -272,3 +272,48 @@ async def test_two_character_query_gets_no_selectivity_from_the_trigram_index(db
         "if this fails, a 2-character term became selective — pg_trgm or the planner "
         f"changed and ADR-150 should be revisited (index returned {two_char} rows)"
     )
+
+
+@pytest.mark.parametrize("table", sorted(EXPECTED_SOURCE_COLUMNS))
+async def test_unbounded_columns_are_truncated(db, table):
+    """Every source column without a VARCHAR length limit must be `left(..., 500)`-wrapped.
+
+    ADR-081 bounds the index cost by truncating long text, but the rule was applied by
+    hand and `stations.name` slipped through: it is `mapped_column(String)` with no length
+    and no validation on CreateStationInput, so one pasted document would have put one
+    trigram entry per character into ix_stations_search_text_trgm (ADR-151).
+
+    Asserting the rule structurally rather than listing the known-long columns is the
+    point — a future `String` column added to any search_text is caught here whether or
+    not anyone remembers this ADR. Columns that DO carry a length (title, task_name,
+    property_name, the address parts) are already bounded by the column type and are
+    deliberately left untruncated so short fields stay fully searchable.
+    """
+    expr = await db.scalar(
+        text(
+            "SELECT pg_get_expr(d.adbin, d.adrelid) FROM pg_attrdef d "
+            "JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum "
+            "WHERE a.attrelid = CAST(:t AS regclass) AND a.attname = 'search_text'"
+        ),
+        {"t": table},
+    )
+    assert expr is not None, f"{table}.search_text has no generation expression"
+
+    for col in sorted(EXPECTED_SOURCE_COLUMNS[table]):
+        max_length = await db.scalar(
+            text(
+                "SELECT character_maximum_length FROM information_schema.columns "
+                "WHERE table_name = :t AND column_name = :c"
+            ),
+            {"t": table, "c": col},
+        )
+        if max_length is not None:
+            continue
+        # PostgreSQL renders the fragment as: "left"((COALESCE(col, ''...))::text, 500)
+        assert re.search(
+            rf'"?left"?\s*\(\s*\(*\s*COALESCE\(\s*{re.escape(col)}\b', expr, re.I
+        ), (
+            f"{table}.{col} has no length limit and is not truncated in search_text — "
+            f"use truncated() rather than plain() in the model AND in the migration "
+            f"(ADR-081/151). Expression was:\n{expr}"
+        )

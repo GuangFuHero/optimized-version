@@ -349,3 +349,33 @@ search_text VARCHAR GENERATED ALWAYS AS (coalesce(title,'')) STORED NOT NULL
 ➖ ADR-082 的上限（50 字）不受影響，仍然成立。
 
 **新增守衛**：`test_two_character_query_gets_no_selectivity_from_the_trigram_index` 用 2000 列實際資料跑 `EXPLAIN (ANALYZE)`，斷言 2 字查詢的 Bitmap Index Scan 吐回全表、3 字查詢吐回 1 列。它**不是**回歸測試而是事實釘樁——若日後 pg_trgm 或 planner 改變讓 2 字變得有選擇性，它會紅，屆時本 ADR 應重新評估。這也兌現了 `test_station_search_index_is_usable_by_the_planner` docstring 裡「Actual query performance is validated separately against realistic data volumes」那句先前沒有對應實作的承諾。
+
+---
+
+### ADR-151 `stations.name` 必須 `truncated()`；「無長度上限就要截斷」升格為結構性規則
+
+**白話**：ADR-081 為了鎖住索引成本把長文字截在 500 字，但這條規則是手動套的，`stations.name` 漏掉了。它是沒有長度上限的欄位，貼一份文件進去就會在索引裡塞進等量的條目。
+
+**Context**：本 PR 裡所有用 `plain()`（不截斷）的欄位都有 VARCHAR 長度上限——`tickets.title` 200、`ticket_tasks.task_name` 200、`station_properties.property_name` 100、`secondary_locations` 各段 20/50。實測 `information_schema.columns` 確認：
+
+| 欄位 | `character_maximum_length` | 生成片段 |
+|---|---|---|
+| `stations.name` | **NULL（無上限）** | **`plain()`** ← 唯一的例外 |
+| `stations.description` | NULL | `truncated()` |
+| `tickets.description` | NULL | `truncated()` |
+| `ticket_tasks.task_description` | NULL | `truncated()` |
+| `task_properties.property_value` | NULL | `truncated()` |
+| 其餘 | 100–200 | `plain()` |
+
+`Station.name` 宣告為 `mapped_column(String)`（`app/models/geo.py:51`），且 `CreateStationInput.name`（`app/graphql/geo/types.py:191`）沒有任何長度驗證。有 `station.add` 權限者送一個 5 MB 名稱，就會為那一列在 `ix_stations_search_text_trgm` 產生約 500 萬個 trigram 條目——正是 `app/models/search.py` 註解裡「單列貼進 5 萬字就會產生 5 萬個條目」要防的事。
+
+**Decision**：`Station.search_text` 的 `name` 改用 `truncated()`，migration `f2b7c9d4e0a3` 同步（依 ADR-149）。同時把規則升格：**任何進入 `search_text` 且沒有 VARCHAR 長度上限的欄位都必須 `truncated()`**。
+
+**否決「改為 `String(200)` + input 驗證」的理由**：那是欄位型別變更，會連動 GraphQL 型別與前端表單，且對已存在的長名稱需要資料清理；截斷是 ADR-081 已經確立的手段，一致套用即可，成本一個字。欄位長度該不該收斂是另一張票。
+
+**Consequences**：
+➕ 索引成本回到 ADR-081 承諾的定值上限。
+➕ 規則從「記得要做」變成測試守住的結構性不變式。
+➖ 超過 500 字的站名，超出部分不可搜——與 `description` 相同取捨。
+
+**新增守衛**：`tests/test_search_schema.py::test_unbounded_columns_are_truncated`。對 `EXPECTED_SOURCE_COLUMNS` 的每一欄查 `information_schema.columns.character_maximum_length`，為 NULL 者就斷言生成運算式中該欄被 `left(...)` 包住。**結構性斷言而非列舉已知長欄位**——日後任何人往任何 `search_text` 加一個無上限 `String`，不必記得這張 ADR 也會被擋下。已驗證：還原成 `plain("name")` 後此測試轉紅（`AssertionError: stations.name has no length limit and is not truncated in search_text`），修好後轉綠。
