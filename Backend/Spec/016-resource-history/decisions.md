@@ -2,7 +2,7 @@
 
 **Date**: 2026-08-23
 **Feature**: 016-resource-history
-**Status**: 定案，待實作
+**Status**: 已實作、已驗證
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/015-bulk-import-export/decisions.md` 的 ADR-126。
 **Notion**: 補齊功能 →「系統性 - Ticket/Resource Station History（版本歷史）」（backend-Popo，排 08-18~08-22，2026-08-18 自 Dan/Cedric 移交）
 

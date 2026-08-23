@@ -24,6 +24,7 @@ from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
+from app.services.authz import require_scope
 from app.services.history_fields import Tier, spec_for
 
 TICKET = "ticket"
@@ -504,3 +505,51 @@ def render_events(
             payload["raw"] = event.raw
         rendered.append(payload)
     return rendered
+
+
+# --- orchestration (ADR-139) ---
+
+MAX_PAGE = 200
+
+_HISTORY_PERM = {TICKET: Perm.TICKET_VIEW_HISTORY, STATION: Perm.STATION_VIEW_HISTORY}
+
+
+@dataclass(frozen=True)
+class Timeline:
+    """One page of a resource's history, plus what paging needs to describe itself."""
+
+    events: list[dict]
+    total: int
+    truncated: bool
+
+
+async def load_timeline(
+    db: AsyncSession, *, actor, entity: str, uuid: str | UUID, limit: int, offset: int
+) -> Timeline:
+    """Authorize, aggregate and render one resource's timeline.
+
+    Slicing is done here rather than in SQL because neither of the two things being paged
+    survives a LIMIT: the rows arrive from two separate queries, and an event is several
+    rows folded together. Cutting in SQL would split a transaction across a page boundary
+    and show one edit twice (ADR-139).
+    """
+    resource = await entity_exists(db, entity=entity, uuid=uuid)
+    if resource is None:
+        raise ValueError(f"{entity} not found")
+
+    cache: dict = {}
+    await require_scope(actor, _HISTORY_PERM[entity], db, resource=resource, cache=cache)
+
+    ids = await resolve_scope_ids(db, entity=entity, uuid=uuid)
+    rows, truncated = await fetch_audit_rows(db, ids=ids)
+    events = build_events(rows)
+
+    page = events[offset : offset + limit]
+    names = await resolve_actors(db, page)
+    visibility = await resolve_visibility(db, actor=actor, resource=resource, cache=cache)
+
+    return Timeline(
+        events=render_events(page, entity=entity, names=names, visibility=visibility),
+        total=len(events),
+        truncated=truncated,
+    )

@@ -2,7 +2,7 @@
 
 **Date**: 2026-08-23
 **Feature**: 016-resource-history
-**Status**: 定案，待實作
+**Status**: 已實作、已驗證
 **Notion**: 補齊功能 →「系統性 - Ticket/Resource Station History（版本歷史）」（backend-Popo，排 08-18~08-22）
 **Depends on**: `feat/bulk-import-export-backend`（PR #42）。時間軸要涵蓋 `station_properties` 與 `task_properties` 的異動，而這兩張表的 audit trigger 只在 015 的分支上（ADR-140）。
 **ADR**: `decisions.md`，ADR-127~145
