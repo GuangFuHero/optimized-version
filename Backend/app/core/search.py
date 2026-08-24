@@ -9,7 +9,7 @@ Lives in app/core/ rather than app/graphql/ because repositories consume it, and
 repository must not import from the GraphQL layer.
 """
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -66,23 +66,24 @@ def _is_statement_timeout(exc: DBAPIError) -> bool:
 
 @asynccontextmanager
 async def search_timeout(db, term: str | None):
-    """Bound every statement in this transaction while a keyword search runs (ADR-152).
+    """Bound the statements a keyword search runs, and only those (ADR-152/156).
 
     A no-op when `term` is None, so the non-search list/count paths keep their previous
     behaviour exactly.
 
     `set_config(..., is_local => true)` rather than `SET LOCAL` because the value is user-
     independent but still parameterised, matching the audit variables already set this way
-    in app/db/session.py. Being transaction-scoped, it reverts on commit or rollback —
-    there is nothing to reset, and no way for it to leak into a later request.
+    in app/db/session.py.
 
-    Two deliberate consequences of transaction scope, both wanted:
+    **The setting is restored on the way out** (ADR-156). Transaction scope alone is not
+    enough: a GraphQL request is one transaction on one shared AsyncSession
+    (app/graphql/context.py), so without the reset the ceiling would also apply to every
+    sibling root field resolved after the search — fields that never asked for a search,
+    whose cancellation would surface as a raw driver error, because the translation below
+    only covers this block. The search itself stays bounded either way, which is what
+    ADR-152 is actually protecting.
 
-    - It also covers the count query and any nested resolver that runs later in the same
-      request, because graphql-core shares one AsyncSession across sibling root fields
-      (see app/graphql/context.py). A public read path being bounded end-to-end is the
-      point, not a side effect.
-    - Mutations never reach this code, so write paths keep the server default.
+    Mutations never reach this code, so write paths keep the server default.
 
     Note this bounds *one statement's* cost, not the request rate — a caller can still
     repeat the query. Rate limiting `/graphql` is tracked separately (ADR-152).
@@ -90,6 +91,7 @@ async def search_timeout(db, term: str | None):
     if term is None:
         yield
         return
+    previous = await db.scalar(text("SELECT current_setting('statement_timeout')"))
     await db.execute(
         text("SELECT set_config('statement_timeout', :ms, true)"),
         {"ms": str(SEARCH_STATEMENT_TIMEOUT_MS)},
@@ -102,6 +104,25 @@ async def search_timeout(db, term: str | None):
                 f"搜尋耗時過長已中止，請改用更明確的關鍵字（上限 {SEARCH_STATEMENT_TIMEOUT_MS // 1000} 秒）"
             ) from exc
         raise
+    finally:
+        await _restore_statement_timeout(db, previous)
+
+
+async def _restore_statement_timeout(db, previous: str) -> None:
+    """Put `statement_timeout` back, tolerating an already-poisoned transaction.
+
+    Whenever the search raised a database error, PostgreSQL has aborted the transaction
+    and rejects every further statement until rollback — including this one. That path
+    needs no reset: rollback discards the transaction-local setting anyway. Swallowing
+    the failure here keeps the original error (SearchTimeoutError, or whatever the search
+    actually hit) as the one the caller sees, instead of masking it with a secondary
+    "current transaction is aborted".
+    """
+    with suppress(DBAPIError):
+        await db.execute(
+            text("SELECT set_config('statement_timeout', :previous, true)"),
+            {"previous": previous},
+        )
 
 
 def _escape(value: str) -> str:

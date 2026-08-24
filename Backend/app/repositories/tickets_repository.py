@@ -188,7 +188,21 @@ class TicketTaskRepository(GenericRepository[TicketTask]):
                     ),
                 )
             )
-        result = await db.execute(query.order_by(self.model.created_at.desc()).offset(skip).limit(limit))
+        # Same total-order rule as the two list_active() paths (ADR-153): created_at comes
+        # from server_default=func.now(), which is transaction-scoped, so a batch of tasks
+        # created for one ticket in one transaction all share a timestamp. Without the
+        # primary key underneath, OFFSET/LIMIT pages over that batch can repeat a row and
+        # never return another.
+        #
+        # search_timeout() for the same reason list_active() has it (ADR-152): when `q` is
+        # set this runs a trigram ILIKE plus a correlated EXISTS, and ticket.view is in
+        # PUBLIC_PERMS — an anonymous Guest reaches it on an endpoint with no rate limiter.
+        # It is a no-op when `term` is None, so the plain list path is unchanged.
+        async with search_timeout(db, term):
+            result = await db.execute(
+                query.order_by(self.model.created_at.desc(), self.model.uuid.desc())
+                .offset(skip).limit(limit)
+            )
         return result.scalars().all()
 
 

@@ -43,8 +43,10 @@ def _truncated(column: str) -> str:
     return f"left(coalesce({column}, ''), {_TRUNCATE})"
 
 
-def _expr(*fragments: str) -> str:
-    return " || ' ' || ".join(fragments)
+def _expr(*fragments: str, separator: str = " ") -> str:
+    # Mirrors search_text_expression() in app/models/search.py, separator included —
+    # secondary_locations concatenates address parts with nothing between them (ADR-155).
+    return f" || '{separator}' || ".join(fragments) if separator else " || ".join(fragments)
 
 
 _SEARCH_TEXT: list[tuple[str, str]] = [
@@ -64,6 +66,7 @@ _SEARCH_TEXT: list[tuple[str, str]] = [
             _plain("floor"),
             _plain("room"),
             _plain("pole_id"),
+            separator="",
         ),
     ),
 ]

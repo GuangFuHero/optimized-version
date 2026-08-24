@@ -35,8 +35,12 @@ class SecondaryLocation(Base, UUIDPKMixin):
     pole_note: Mapped[str | None] = mapped_column(String)
 
     # Keyword-search column (ADR-079/081). Every address part is short, so nothing is
-    # truncated. `pole_note` is excluded (free-text note). Concatenating the parts is what
-    # lets "光復鄉中正巷" match — no single column holds that whole string.
+    # truncated. `pole_note` is excluded (free-text note).
+    #
+    # separator="" (ADR-155): a Chinese address is one continuous string — nobody types
+    # "光復鄉 中正路". With the default space separator the stored value would be
+    # "花蓮縣 光復鄉 中正路 …" and the contiguous ILIKE '%光復鄉中正路%' could never match,
+    # which is exactly the cross-field case ADR-081 exists for.
     search_text: Mapped[str] = mapped_column(
         String,
         Computed(
@@ -49,6 +53,7 @@ class SecondaryLocation(Base, UUIDPKMixin):
                 plain("floor"),
                 plain("room"),
                 plain("pole_id"),
+                separator="",
             ),
             persisted=True,
         ),

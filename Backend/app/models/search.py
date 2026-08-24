@@ -30,14 +30,27 @@ def plain(column: str) -> str:
     return f"coalesce({column}, '')"
 
 
-def search_text_expression(*fragments: str) -> str:
-    """Join field fragments into one space-separated generation expression.
+def search_text_expression(*fragments: str, separator: str = " ") -> str:
+    """Join field fragments into one generation expression.
 
     Concatenating into a single column (rather than indexing each field separately) is
-    what lets a query span fields — "光復鄉中正巷" matches even though no single column
-    contains the whole string (ADR-081).
+    what lets a query span fields at all — no single column holds the whole string.
+
+    `separator` decides whether a query may span two fields *contiguously*. The search
+    predicate is one uninterrupted ``ILIKE '%term%'`` (app/core/search.py), so anything
+    put between two fragments must also appear, in that exact position, in what the user
+    typed:
+
+    - **`" "` (default)** — for fields a user would never run together, like a station's
+      name and its description. A cross-field query still needs a space where the fields
+      meet, which is the natural way to type "光復國小 收容所".
+    - **`""`** — for fields that form one continuous string in the source domain. A
+      Chinese address is written 花蓮縣光復鄉中正路, never with spaces, so
+      secondary_locations concatenates with no separator (ADR-155). The cost is that
+      adjacent fields can form a spurious substring across their boundary; for address
+      parts that is a far smaller problem than not matching at all.
     """
-    return " || ' ' || ".join(fragments)
+    return f" || '{separator}' || ".join(fragments) if separator else " || ".join(fragments)
 
 
 def search_text_index(table: str) -> Index:

@@ -7,10 +7,14 @@ plan. The property that actually matters ("the last sort key is unique") is only
 observable in the clause itself, so that is what is asserted here.
 """
 
+import pytest
+
 from app.models.geo import Station
 from app.models.request import Tickets
+from app.models.ticket_task import TicketTask
 from app.repositories.geo_repository import StationRepository
-from app.repositories.tickets_repository import TicketRepository
+from app.repositories.tickets_repository import TicketRepository, TicketTaskRepository
+from tests.fakes import CapturingSession
 
 # Both branches of _order_by: the standing order, and the relevance order used when the
 # caller passed `q`. Neither may end on a non-unique key.
@@ -60,3 +64,23 @@ def test_searching_only_prepends_relevance_keys():
             f"  standing:  {standing}\n  searching: {searching}"
         )
         assert len(searching) == len(standing) + 2, "expected exactly two relevance keys"
+
+
+@pytest.mark.asyncio
+async def test_list_by_ticket_also_ends_on_the_primary_key():
+    """Same rule for the third paged list, which builds its ORDER BY inline.
+
+    TicketTaskRepository has no _order_by() to inspect — the clause is attached where the
+    statement is executed — so this asserts on the statement the repository actually
+    hands the session. `TicketTask.created_at` is a server_default=func.now(), which is
+    transaction-scoped: every task created for one ticket in one transaction shares a
+    timestamp, so the tie this guards against is the normal case, not an edge case.
+    """
+    db = CapturingSession()
+    await TicketTaskRepository().list_by_ticket(db, "00000000-0000-0000-0000-000000000000")
+
+    last = list(db.statements[-1]._order_by_clauses)[-1]
+    assert _rendered(last) == _rendered(TicketTask.uuid.desc()), (
+        f"list_by_ticket ends on {_rendered(last)!r}, which is not unique — append the "
+        f"primary key so the order is total (ADR-153)"
+    )

@@ -38,3 +38,43 @@ class FakeLineVerifier:
         return LineIdentity(
             sub=str(claims["sub"]), name=claims.get("name"), email=claims.get("email")
         )
+
+
+class CapturingSession:
+    """Test double for AsyncSession that records every statement handed to it.
+
+    For assertions about the SQL a repository *builds* — the ORDER BY it ends on, whether
+    it wrapped the search in a statement-timeout — which are invisible from the rows a
+    real query returns at test-suite data volumes.
+    """
+
+    def __init__(self):
+        """Start with an empty statement log."""
+        self.statements = []
+
+    async def execute(self, statement, params=None):
+        """Record the statement and return an empty result."""
+        self.statements.append(statement)
+        return _EmptyResult()
+
+    async def scalar(self, statement, params=None):
+        """Record the statement and return a harmless scalar."""
+        self.statements.append(statement)
+        return 0
+
+    def sql(self) -> str:
+        """Every recorded statement as one string, for substring assertions."""
+        return "\n".join(str(s) for s in self.statements)
+
+
+class _EmptyResult:
+    """The slice of SQLAlchemy's Result that repositories actually call."""
+
+    def scalars(self):
+        """Return self — `.scalars().all()` is the only chain used."""
+        return self
+
+    def all(self):
+        """No rows."""
+        return []
+

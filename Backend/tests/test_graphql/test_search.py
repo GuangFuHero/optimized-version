@@ -440,6 +440,19 @@ async def test_station_search_reaches_into_its_address(client, station_with_addr
 
 
 @pytest.mark.asyncio
+async def test_station_search_spans_two_address_fields(client, station_with_address):
+    """A query running two address fields together must match (ADR-081/155).
+
+    "光復鄉中正路" is how a user actually types an address — 鳳林鎮 sits in `city` and
+    中正路 in `lane`, so no single column holds the whole string. This is the case the
+    single concatenated search_text column exists for; with a separator between the parts
+    the contiguous ILIKE could never match it.
+    """
+    found = _uuids(await _stations(client, q="鳳林鎮中正路"), "stations")
+    assert station_with_address in found
+
+
+@pytest.mark.asyncio
 async def test_station_matched_through_a_property_appears_once(client, coordinator_auth):
     """A station with several matching properties must not be duplicated (ADR-080).
 

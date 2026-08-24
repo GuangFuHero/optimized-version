@@ -86,6 +86,8 @@
 
 ### ADR-081 每張表一個 `search_text` generated column + 單一 GIN 索引；長欄位截斷 500 字元
 
+> **本 ADR 宣稱的跨欄位命中，實作上被分隔符擋掉了，已由 ADR-155 修正。** 下方「➕ 跨欄位命中」那條在 ADR-155 之前是不成立的。
+
 **白話**：不是每個欄位建一個索引，而是把該表所有可搜欄位串成一欄，只建一個索引。長描述超過 500 字的部分不進索引。
 
 **Context**：兩個選項：
@@ -99,7 +101,7 @@
 **Decision**：採 B。長文字欄位在 generated column 內以 `left(..., 500)` 截斷。
 
 **Consequences**：
-➕ **跨欄位命中**：搜「光復鄉中正巷」在 A 是一個都搜不到（每個欄位各自比對，沒有任何單一欄位包含完整字串），在 B 因為欄位已串接而能命中。這是 B 最實質的優勢。
+➕ **跨欄位命中**：搜「光復鄉中正巷」在 A 是一個都搜不到（每個欄位各自比對，沒有任何單一欄位包含完整字串），在 B 因為欄位已串接而能命中。這是 B 最實質的優勢。（**前提是串接時不放分隔符——見 ADR-155**。）
 ➕ 查詢計畫可預測（單一索引掃描），不隨資料分布飄移。
 ➕ 索引數 16 → 6。GIN 索引本身的體積大於複製一份文字，B 反而更省磁碟。
 ➕ 截斷讓索引成本有硬性上界，不隨使用者輸入失控。
@@ -394,12 +396,14 @@ search_text VARCHAR GENERATED ALWAYS AS (coalesce(title,'')) STORED NOT NULL
 
 ADR-150 推理的是「單次查詢的成本」，沒有涵蓋「未驗證的重複呼叫者」。ADR-148 的 header 量到 `OR` + EXISTS SubPlan hash 溢出磁碟時單次 54.8 秒——那個數字乘上不受限的呼叫次數就是可用的資源耗盡原語。
 
-**Decision**：在搜尋路徑上加 per-statement timeout（`SEARCH_STATEMENT_TIMEOUT_MS = 3000`），實作為 `app/core/search.py::search_timeout()` async context manager，`term is None` 時完全 no-op，由兩個 repository 的 `list_active` / `count_active` 包住 execute。逾時的 SQLSTATE 57014 轉成 `SearchTimeoutError(ValueError)`，與 `SearchQueryError` 同一套契約，讓 Strawberry 把可讀訊息當成 `errors[0].message` 吐出，而不是把 driver 錯誤原樣外洩。
+**Decision**：在搜尋路徑上加 per-statement timeout（`SEARCH_STATEMENT_TIMEOUT_MS = 3000`），實作為 `app/core/search.py::search_timeout()` async context manager，`term is None` 時完全 no-op，由兩個 repository 的 `list_active` / `count_active` 包住 execute。
 
-用 `SELECT set_config('statement_timeout', :ms, true)` 而非 `SET LOCAL`：值本身與使用者無關但仍走參數綁定，並且沿用 `app/db/session.py:18` 稽核變數已經在用的同一種寫法。`is_local => true` 使它隨 commit/rollback 自動還原，因此**沒有需要手動 reset 的東西，也沒有洩漏到下一個請求的路徑**。
+> **補正（2026-08-24，PR #35 審查）**：漏了 `TicketTaskRepository.list_by_ticket`（GraphQL `ticketTasks(q:)`）。它跑的是同一形狀的述詞——`ticket_tasks.search_text` 上的 trigram ILIKE，OR 一個對 `task_properties` 的關聯 EXISTS——卻沒有包 `search_timeout`。`ticket.view` 同樣在 `PUBLIC_PERMS`，匿名 Guest 一樣打得到，所以上述威脅模型原封不動適用；唯一擋著的只是「一張 ticket 的 task 數量不多」，那是資料形狀的假設，不是界線。已補上，並把守衛改成**遍歷全部三條搜尋路徑**（`test_every_public_search_path_sets_the_timeout`），讓日後新增第四條時漏包會直接紅。逾時的 SQLSTATE 57014 轉成 `SearchTimeoutError(ValueError)`，與 `SearchQueryError` 同一套契約，讓 Strawberry 把可讀訊息當成 `errors[0].message` 吐出，而不是把 driver 錯誤原樣外洩。
+
+用 `SELECT set_config('statement_timeout', :ms, true)` 而非 `SET LOCAL`：值本身與使用者無關但仍走參數綁定，並且沿用 `app/db/session.py:18` 稽核變數已經在用的同一種寫法。`is_local => true` 使它隨 commit/rollback 自動還原，因此沒有洩漏到下一個請求的路徑。
 
 兩個刻意的副作用：
-- 同一請求後續的 resolver 也會被這個上限涵蓋（graphql-core 讓同層 root field 共用一個 AsyncSession，見 `app/graphql/context.py`）。公開讀取路徑被端到端地綁上限是目的，不是意外。
+- ~~同一請求後續的 resolver 也會被這個上限涵蓋（graphql-core 讓同層 root field 共用一個 AsyncSession，見 `app/graphql/context.py`）。公開讀取路徑被端到端地綁上限是目的，不是意外。~~ **已由 ADR-156 推翻**：範圍本身可以爭論，但「錯誤轉譯沒有跟著擴大範圍」不是設計選擇，那讓沒要求搜尋的欄位拿到原始 driver 錯誤。
 - Mutation 走不到這段程式碼，寫入路徑維持伺服器預設。
 
 **否決 `/graphql` 全域 rate limit 的理由（本票）**：它擋的是頻率而不是單次成本，54.8 秒的查詢仍會發生；而且要同時決定一個對前端夠寬的速率上限，並確認 `fastapi_limiter` 在 GraphQL 路徑上的行為（目前只驗證過 auth endpoints）。這是營運層決策，範圍與這一票不對稱。**timeout 綁單次成本，rate limit 綁頻率，兩者不互相取代**——rate limit 仍應在正式對外前補上，另開票。
@@ -410,7 +414,7 @@ ADR-150 推理的是「單次查詢的成本」，沒有涵蓋「未驗證的重
 ➖ 只擋單次成本，不擋高頻重複呼叫（見上）。
 ➖ 若資料量成長到合法搜尋逼近 3 秒，使用者會看到逾時而不是慢——屆時該處理的是查詢計畫（ADR-148 未處理的 `OR` → `UNION`），不是調高這個數字。
 
-**新增守衛**：`tests/test_search_timeout.py` 四項——逾時真的會取消（`pg_sleep(3)` 對 100ms 上限）、`term=None` 完全不動 `statement_timeout`、設定隨 rollback 還原、以及**只有 57014 會被改標成 `SearchTimeoutError`**（`SELECT 1/0` 必須原樣往上拋，否則搜尋路徑上任何查詢 bug 都會被偽裝成「你的搜尋太慢」而掩蓋真正的錯誤）。
+**新增守衛**：`tests/test_search_timeout.py`——逾時真的會取消（`pg_sleep(3)` 對 100ms 上限）、`term=None` 完全不動 `statement_timeout`、設定隨 rollback 還原、以及**只有 57014 會被改標成 `SearchTimeoutError`**（`SELECT 1/0` 必須原樣往上拋，否則搜尋路徑上任何查詢 bug 都會被偽裝成「你的搜尋太慢」而掩蓋真正的錯誤）。
 
 ---
 
@@ -425,6 +429,8 @@ ADR-150 推理的是「單次查詢的成本」，沒有涵蓋「未驗證的重
 - `created_at` 是 `server_default=func.now()`，而 `now()` 是 **transaction-scoped**——一次批次匯入就讓整批列共用同一個時間戳。這點 PR 自己在 `test_mid_string_name_match_outranks_property_only_match` 的說明裡已經承認。
 
 **Decision**：兩個 repository 的 `_order_by` 尾端都補 `uuid.desc()`，**含 `term is None` 的分支**——非搜尋路徑的 `created_at` 一樣不唯一，同一個 bug。
+
+> **補正（2026-08-24，PR #35 審查）**：漏了第三條分頁路徑。`TicketTaskRepository.list_by_ticket`（GraphQL `ticketTasks`）當時仍是 `order_by(created_at.desc())`，是同一個 bug 的第三個實例。它沒有 `_order_by()` 方法（clause 直接寫在 execute 那一行），所以上述結構性測試的 `_cases()` 掃不到它——**守衛的形狀決定了它守得到什麼**。已補 `uuid.desc()`，並新增 `test_list_by_ticket_also_ends_on_the_primary_key`，改為斷言 repository 實際交給 session 的 statement（`tests/fakes.py::CapturingSession`），不依賴 repository 是否剛好長出 `_order_by()`。
 
 **Consequences**：
 ➕ 排序成為全序，OFFSET/LIMIT 分頁在任何資料形狀下都不重不漏。
@@ -451,3 +457,63 @@ ADR-150 推理的是「單次查詢的成本」，沒有涵蓋「未驗證的重
 ➕ 斷言與資料累積解耦；membership 斷言一併受惠。
 ➕ 若真的成長到 500 筆，失敗訊息直接說明原因與做法。
 ➖ 每次查詢回傳更多列，測試略慢；以目前規模不可量測。
+
+---
+
+### ADR-155 地址欄位的 `search_text` 以無分隔符串接
+
+**白話**：`search_text` 原本把每個欄位用空白串起來，可是中文地址沒人打空白，所以「光復鄉中正路」反而一筆都搜不到。地址那張表改成直接黏在一起。
+
+**Context**：`search_text_expression()` 用 `" || ' ' || "` 串接，`secondary_locations` 因此存成 `'花蓮縣 光復鄉 中正路 12巷 3號'`。而查詢述詞是單一**連續**的 `ILIKE '%<term>%'`（`app/core/search.py:like_pattern`），使用者打的 `光復鄉中正路` 不含空白，這個連續子字串在存起來的值裡不存在。
+
+實測（PostgreSQL）：
+
+```sql
+'花蓮縣 光復鄉 中正路 12巷 3號' ILIKE '%光復鄉中正路%'  -- false ← 使用者的實際打法
+'花蓮縣 光復鄉 中正路 12巷 3號' ILIKE '%光復鄉 中正路%'  -- true  ← 要剛好在對的位置打空白
+'花蓮縣光復鄉中正路12巷3號'     ILIKE '%光復鄉中正路%'  -- true  ← 拿掉分隔符
+```
+
+也就是說，ADR-081 稱為「B 最實質的優勢」的跨欄位命中，只在使用者猜中我們內部的分隔方式時才成立。ADR-081 與 `app/models/search.py` 註解舉的例子 `光復鄉中正巷` 本身就是不含空白寫的——文件舉的例子在自己的實作下是失敗的。既有測試 `test_station_search_reaches_into_its_address` 只搜單一欄位詞 `中正路`，抓不到這件事。
+
+**Decision**：`search_text_expression()` 加上 `separator` 參數（預設仍為 `" "`），`secondary_locations` 傳 `separator=""`。migration `f2b7c9d4e0a3` 的 `_expr()` 同步改（ADR-149：兩邊 DDL 必須逐字相符，已比對確認）。
+
+其餘四張表維持空白分隔：`stations` 的 `name` + `description`、`tickets` 的 `title` + `description` 之類，是使用者不會連著打的兩件事，中間留空白反而讓「光復國小 收容所」這種自然打法可以命中，同時避免跨欄位邊界的假命中。
+
+**判準**：**欄位在來源領域裡是否構成一個連續字串**。中文地址是（花蓮縣光復鄉中正路），標題與描述不是。
+
+**Consequences**：
+➕ ADR-081 宣稱的跨欄位命中真的成立了；新增端到端測試 `test_station_search_spans_two_address_fields` 與 schema 測試 `test_address_search_text_concatenates_without_a_separator` 釘住。
+➖ 相鄰地址欄位會在邊界黏出假的子字串（`no='3號'` + `floor='4樓'` → `3號4樓`，搜 `號4` 會中）。地址情境下影響遠小於「完全搜不到」。
+➖ 判準是人工套用的，沒有自動守衛能判斷「這兩個欄位算不算連續」。`search_text_expression()` 的 docstring 是這個判準的唯一落點。
+◾ 無 backfill 問題：`search_text` 是 generated column，改運算式即全表重算；本 migration 尚未合併，直接改在原地而非新增一支 drop/re-add 的 migration。
+
+---
+
+### ADR-156 `search_timeout` 離開時把 `statement_timeout` 設回原值
+
+**白話**：搜尋設的 3 秒上限，設下去之後不會在搜尋結束時收回，會一路套用到同一個請求裡後面所有的 SQL——包括根本沒要求搜尋的欄位。改成離開搜尋窗口時把它設回去。
+
+**Context**：ADR-152 把「同一請求後續的 resolver 也被涵蓋」列為刻意的副作用。範圍本身可以爭論，但有一件它沒考慮到的事：**錯誤轉譯並沒有跟著擴大到同樣的範圍**。
+
+- `set_config(..., is_local => true)` 的作用域是 **transaction**，不是 `async with` 區塊。
+- 一個 GraphQL 請求是一個 transaction、一個共用的 `AsyncSession`（`app/graphql/context.py:30` 的註解自己就寫了同層 root field 並行解析且共用 session）。
+- 但 57014 → `SearchTimeoutError` 的轉譯只包在 `async with` 裡面。
+
+於是 `{ stations(q:"光復"){…} someHeavyField{…} }` 這種查詢，`someHeavyField` 會憑空吃到一個它沒同意的 3 秒上限；踩到的時候拋的是原始 `DBAPIError`（SQLSTATE 57014），driver 原文進 `errors[0].message`，而且 PostgreSQL 砍掉 statement 之後整個 transaction abort，**該請求剩下的欄位全部一起失敗**。
+
+實測（`SELECT current_setting('statement_timeout')` 在離開 `async with` 之後仍是 `'3s'`；接著 `SELECT pg_sleep(5)` 在 3 秒被砍，拋 `DBAPIError sqlstate=57014`，訊息 `canceling statement due to statement timeout`）。
+
+**Decision**：`search_timeout()` 進場時先讀 `current_setting('statement_timeout')`，離開時在 `finally` 設回去。**搜尋本身的 3 秒上限完全不變**——ADR-152 真正要保護的是「單次搜尋不能無限期佔住連線」，那一點不受影響。
+
+reset 用 `_restore_statement_timeout()` 包住並吞掉 `DBAPIError`：搜尋若是被資料庫錯誤中斷（含逾時本身），PostgreSQL 已經 abort transaction、拒絕後續任何 statement，reset 必然失敗；而那條路徑本來就不需要 reset（rollback 會丟掉 transaction-local 設定）。吞掉是為了**不讓 reset 的失敗蓋掉它正在收尾的那個原始錯誤**——否則使用者看到的會是「current transaction is aborted」而不是「搜尋耗時過長」。
+
+**否決的替代方案**：保留範圍、把 57014 的轉譯提到 GraphQL 層（Strawberry extension）。它能修好訊息，但修不掉「沒要求搜尋的欄位被砍、整個請求連坐」。而且 reset 之後那層集中轉譯幾乎碰不到，多一層要維護的東西。
+
+**Consequences**：
+➕ 上限只綁在它該綁的東西上；sibling field 不再被連坐。
+➕ 「被砍卻拿到原始 driver 錯誤」的路徑消失——會被砍的只剩搜尋自己，而那一條有轉譯。
+➖ 每次搜尋多兩個 round-trip（讀原值、寫回原值）。相對於它保護的那個 3 秒可忽略。
+➖ 若之後真的想要「公開讀取路徑端到端有界」，那要另外做，而且要連錯誤轉譯一起做。
+
+**新增守衛**：`tests/test_search_timeout.py` 三項——離開窗口後設定回到原值、**搜尋後的 statement 不再被搜尋的上限砍掉**（行為，不只是設定值）、以及逾時仍回報 `SearchTimeoutError` 而不是 reset 失敗的錯誤。

@@ -87,6 +87,40 @@ async def test_ticket_search_text_excludes_pii(db):
     assert "0912345678" not in value
 
 
+_ADDRESS_UUID = "44444444-4444-4444-4444-444444444444"
+
+
+async def test_address_search_text_concatenates_without_a_separator(db):
+    """ADR-155: a Chinese address is one continuous string, so nothing may sit between parts.
+
+    The search predicate is a single contiguous ILIKE (app/core/search.py), so a space
+    between 光復鄉 and 中正路 in the stored value makes q="光復鄉中正路" unmatchable — the
+    exact cross-field case ADR-081 justifies the single search_text column with.
+    """
+    await db.execute(
+        text(
+            "INSERT INTO base_geometries (uuid, property_name, geometry) "
+            "VALUES (:u, 'station', ST_SetSRID(ST_MakePoint(121.4, 23.6), 4326))"
+        ),
+        {"u": _ADDRESS_UUID},
+    )
+    await db.execute(
+        text(
+            "INSERT INTO secondary_locations (uuid, geometry_uuid, location_type, county, "
+            "city, lane, alley, no) VALUES (gen_random_uuid(), :u, 'address', '花蓮縣', "
+            "'光復鄉', '中正路', '12巷', '3號')"
+        ),
+        {"u": _ADDRESS_UUID},
+    )
+    await db.commit()
+
+    value = await db.scalar(
+        text("SELECT search_text FROM secondary_locations WHERE geometry_uuid = :u"),
+        {"u": _ADDRESS_UUID},
+    )
+    assert "光復鄉中正路" in value, f"address parts are not contiguous: {value!r}"
+
+
 @pytest.mark.parametrize(
     "table",
     [
