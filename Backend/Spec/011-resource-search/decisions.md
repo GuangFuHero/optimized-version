@@ -504,6 +504,8 @@ ADR-150 推理的是「單次查詢的成本」，沒有涵蓋「未驗證的重
 
 實測（`SELECT current_setting('statement_timeout')` 在離開 `async with` 之後仍是 `'3s'`；接著 `SELECT pg_sleep(5)` 在 3 秒被砍，拋 `DBAPIError sqlstate=57014`，訊息 `canceling statement due to statement timeout`）。
 
+> **還原的機制已由 ADR-157 取代**：「進場讀原值、離場寫回」在並行的 sibling 搜尋下會把上限反而留在 transaction 裡。本 ADR 的目標不變，實作改為巢狀感知 + `RESET`。逾時之後的收尾另見 ADR-158。
+
 **Decision**：`search_timeout()` 進場時先讀 `current_setting('statement_timeout')`，離開時在 `finally` 設回去。**搜尋本身的 3 秒上限完全不變**——ADR-152 真正要保護的是「單次搜尋不能無限期佔住連線」，那一點不受影響。
 
 reset 用 `_restore_statement_timeout()` 包住並吞掉 `DBAPIError`：搜尋若是被資料庫錯誤中斷（含逾時本身），PostgreSQL 已經 abort transaction、拒絕後續任何 statement，reset 必然失敗；而那條路徑本來就不需要 reset（rollback 會丟掉 transaction-local 設定）。吞掉是為了**不讓 reset 的失敗蓋掉它正在收尾的那個原始錯誤**——否則使用者看到的會是「current transaction is aborted」而不是「搜尋耗時過長」。
@@ -517,3 +519,61 @@ reset 用 `_restore_statement_timeout()` 包住並吞掉 `DBAPIError`：搜尋�
 ➖ 若之後真的想要「公開讀取路徑端到端有界」，那要另外做，而且要連錯誤轉譯一起做。
 
 **新增守衛**：`tests/test_search_timeout.py` 三項——離開窗口後設定回到原值、**搜尋後的 statement 不再被搜尋的上限砍掉**（行為，不只是設定值）、以及逾時仍回報 `SearchTimeoutError` 而不是 reset 失敗的錯誤。
+
+---
+
+### ADR-157 `statement_timeout` 的還原改為巢狀感知 + `RESET`，不再讀回原值
+
+**白話**：ADR-156 的「進場讀原值、離場寫回去」在兩個搜尋欄位同時進行時會壞掉——後進來的那個把前一個設的 3 秒當成「原值」，離場時再把 3 秒寫回去，於是上限反而永久留在整個 transaction 裡，正好是 ADR-156 要防的事。改成只有最外層的搜尋窗口動這個設定，而且用 `RESET` 而不是寫回讀到的值。
+
+**Context**：ADR-156 自己引用的 `app/graphql/context.py:30` 就寫著同層 root field 是**並行**解析、共用一個 `AsyncSession`。而 `set_config(..., is_local => true)` 寫的是一個 **transaction 層級的單一值**，不是每個呼叫者各有一份。兩者相加就是典型的 read-modify-write 競態：
+
+- A 讀到 `previous='0'`，設成 `3s`。
+- B（`{ stations(q:) tickets(q:) }` 的另一半）接著讀到 `previous='3s'`——A 的值，不是預設值。
+- A 還原成 `'0'`；B 之後還原成 `'3s'`。
+- 該 transaction 剩下的每一條語句都帶著 3 秒上限，而且被砍時拋的是未轉譯的 57014。
+
+實測（`tests/test_search_timeout.py::test_interleaved_sibling_searches_do_not_leave_the_ceiling_behind`，把上限 patch 成 100ms）：修正前 `SHOW statement_timeout` 在兩個窗口都關閉後仍是 `'100ms'`，預期 `'0'`。原有的 `test_the_ceiling_does_not_outlive_the_search_window` 是單一序列呼叫，抓不到這條路徑。
+
+**Decision**：兩件事一起做，缺一不可。
+
+1. **巢狀計數**：深度存在 session 物件上（`_search_timeout_depth`），因為 session 正是這些窗口共用的東西。只有最外層設定與還原；內層的進出完全不碰設定，所以內層離場不會把還在跑的外層搜尋的上限拆掉。
+2. **`RESET statement_timeout` 取代寫回讀到的值**：不需要先讀，就沒有 read-modify-write 可以被競態破壞。`RESET` 回到 session 預設值，而全 codebase 只有這裡設過 `statement_timeout`（已 grep 確認），所以 session 預設就是 server 預設。順帶把 ADR-156 那個「每次搜尋多兩個 round-trip」的代價砍成一個。
+
+**否決的替代方案**：
+- 用 `asyncio.Lock` 序列化搜尋窗口。會把並行的 sibling 搜尋變成序列化，付出的是延遲，換到的東西計數器就能給。
+- 改成 per-statement 層級的 timeout（`options` / `execution_options`）。asyncpg 的 timeout 走的是 client 端取消，錯誤形狀跟 57014 不同，等於要重寫 ADR-152 的轉譯與它的測試。範圍過大。
+
+**Consequences**：
+➕ ADR-156 的保證在它原本就宣稱要處理的並行情境下真的成立。
+➕ 少一個 round-trip。
+➖ 深度計數靠在 session 物件上動態掛屬性；換掉 session 型別時要記得它存在（測試的 `CapturingSession` fake 已涵蓋）。
+➖ `RESET` 是回到 session 預設，不是「進場當下的值」。若未來有人在搜尋之外設 transaction-local 的 `statement_timeout`，這裡會把它清掉——目前沒有這種呼叫者，真的出現時這條要重審。
+
+**新增守衛**：`tests/test_search_timeout.py` 兩項——重疊的 sibling 搜尋窗口關閉後設定必須回到預設值、以及內層窗口離場不得把外層搜尋的上限拆掉。
+
+---
+
+### ADR-158 搜尋被 timeout 砍掉時主動 rollback，讓同請求其餘欄位還能拿到資料
+
+**白話**：搜尋真的跑滿 3 秒被 PostgreSQL 砍掉之後，整個 transaction 就是廢的，同一個請求後面的欄位全部拿到「current transaction is aborted」。在拋出 `SearchTimeoutError` 之前先 rollback，後面的欄位就會開一個新 transaction 正常運作。
+
+**Context**：ADR-156 處理掉了「沒要求搜尋的欄位被上限砍掉」，但沒處理「搜尋自己真的被砍掉之後」。PostgreSQL 取消 statement 會 abort transaction，而 session 是整個請求共用的。`{ stations(q:"光復"){…} announcements{…} }` 在搜尋逾時的情況下，`stations` 拿到正確的中文逾時訊息，`announcements` 拿到的卻是第二個完全沒有解釋的 `25P02` raw `DBAPIError`——它本來是可以正常回資料的。
+
+`test_a_cancelled_search_still_reports_the_timeout_not_the_reset_failure` 裡那句手動的 `await db.rollback()`，正是 production 路徑缺的那一步。
+
+實測（`tests/test_search_timeout.py::test_a_field_resolved_after_a_cancelled_search_still_gets_its_data`）：修正前逾時後的 `SELECT 1` 拋 `InFailedSQLTransactionError`。
+
+**Decision**：在 57014 分支裡、拋 `SearchTimeoutError` 之前呼叫 `await db.rollback()`。搜尋路徑是唯讀的（mutation 不會走到這裡，ADR-152），所以沒有任何未 commit 的工作會被丟掉；而 transaction 當下已經是廢的，rollback 不會讓任何原本能成功的事情失敗。
+
+rollback 成功時就跳過還原 `statement_timeout`——rollback 本來就會丟掉 transaction-local 設定，再送一條 `RESET` 只會憑空開一個新的空 transaction。rollback 自己失敗時（包成 `_rollback_aborted_transaction()` 回傳 bool）維持 ADR-156 的行為：吞掉、照常還原、原始錯誤不被蓋掉。
+
+**否決的替代方案**：讓 GraphQL 層在請求收尾時 rollback。那時候 sibling 欄位早就失敗了，救不到它們。
+
+**Consequences**：
+➕ 逾時只讓搜尋那個欄位變 null，不再連坐整個請求。
+➕ 呼叫者不會再看到第二個無法解讀的內部錯誤。
+➖ rollback 會結束當下的 transaction，所以同請求中在搜尋**之前**已讀取的資料不會被重讀一次的欄位共用同一個快照。唯讀路徑，且本來就沒有跨欄位的快照一致性保證。
+➖ 與 ADR-157 的並行前提相同：rollback 發生時若有 sibling 語句正在飛，它會失敗——但它在 transaction 已 abort 的當下本來就注定失敗。
+
+**新增守衛**：`tests/test_search_timeout.py::test_a_field_resolved_after_a_cancelled_search_still_gets_its_data`。

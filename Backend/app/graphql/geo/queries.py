@@ -46,9 +46,10 @@ class GeoQuery:
             info: Strawberry resolver context providing the database session.
             bounds: Optional lat/lng bbox to spatially filter results via ST_Intersects.
             station_type: Optional type filter (e.g. 'shelter', 'supply', 'medical').
-            q: Optional keyword filter over the station's name and description
-                (ADR-077/079). 2–50 characters; outside that range raises. Composes with
-                every other filter rather than replacing them.
+            q: Optional keyword filter over the station's own name and description, its
+                properties, and its address — including the full secondary-location
+                address and pole_id (ADR-077/079/080). 2–50 characters; outside that range
+                raises. Composes with every other filter rather than replacing them.
             skip: Pagination offset.
             limit: Max results per page (default 50).
 

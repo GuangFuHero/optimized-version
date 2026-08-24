@@ -12,7 +12,7 @@ repository must not import from the GraphQL layer.
 from contextlib import asynccontextmanager, suppress
 
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 
 # Lengths are Python str lengths, i.e. Unicode code point counts. For CJK queries
 # "2 code points" is exactly "2 characters", which is the semantics we want.
@@ -30,6 +30,10 @@ SEARCH_STATEMENT_TIMEOUT_MS = 3000
 # PostgreSQL raises query_canceled when statement_timeout fires. Both asyncpg (.sqlstate)
 # and psycopg (.pgcode) expose it on the driver exception SQLAlchemy wraps.
 _QUERY_CANCELED_SQLSTATE = "57014"
+
+# Nesting depth of the search windows currently open on one session, stashed on the session
+# itself because that is what the windows share (ADR-157).
+_DEPTH_ATTR = "_search_timeout_depth"
 
 # ILIKE wildcards. User input containing these must be escaped or it changes the meaning
 # of the query ("100%" would become "anything starting with 100").
@@ -66,7 +70,7 @@ def _is_statement_timeout(exc: DBAPIError) -> bool:
 
 @asynccontextmanager
 async def search_timeout(db, term: str | None):
-    """Bound the statements a keyword search runs, and only those (ADR-152/156).
+    """Bound the statements a keyword search runs, and only those (ADR-152/156/157/158).
 
     A no-op when `term` is None, so the non-search list/count paths keep their previous
     behaviour exactly.
@@ -83,6 +87,16 @@ async def search_timeout(db, term: str | None):
     only covers this block. The search itself stays bounded either way, which is what
     ADR-152 is actually protecting.
 
+    **The restore is nesting-aware** (ADR-157). That same shared session means two sibling
+    `q:` resolvers interleave: each of them entering and leaving its own window, while the
+    setting they are both writing is one transaction-wide value. Only the outermost window
+    touches it, so an inner one cannot restore the ceiling out from under an outer search,
+    and — the actual bug this replaces — cannot capture the outer window's ceiling as if it
+    were the default and leave it applied to the rest of the transaction. `RESET` rather
+    than writing back a previously read value is what makes that possible: it needs no
+    read, so there is no read-modify-write to lose. Nothing else in the codebase sets
+    `statement_timeout`, so the session default it reverts to is the server default.
+
     Mutations never reach this code, so write paths keep the server default.
 
     Note this bounds *one statement's* cost, not the request rate — a caller can still
@@ -91,38 +105,61 @@ async def search_timeout(db, term: str | None):
     if term is None:
         yield
         return
-    previous = await db.scalar(text("SELECT current_setting('statement_timeout')"))
-    await db.execute(
-        text("SELECT set_config('statement_timeout', :ms, true)"),
-        {"ms": str(SEARCH_STATEMENT_TIMEOUT_MS)},
-    )
+    depth = getattr(db, _DEPTH_ATTR, 0)
+    setattr(db, _DEPTH_ATTR, depth + 1)
+    is_outermost = depth == 0
+    if is_outermost:
+        await db.execute(
+            text("SELECT set_config('statement_timeout', :ms, true)"),
+            {"ms": str(SEARCH_STATEMENT_TIMEOUT_MS)},
+        )
+    needs_restore = True
     try:
         yield
     except DBAPIError as exc:
         if _is_statement_timeout(exc):
+            # Rolling back discards the transaction-local ceiling with it (ADR-158).
+            needs_restore = not await _rollback_aborted_transaction(db)
             raise SearchTimeoutError(
                 f"搜尋耗時過長已中止，請改用更明確的關鍵字（上限 {SEARCH_STATEMENT_TIMEOUT_MS // 1000} 秒）"
             ) from exc
         raise
     finally:
-        await _restore_statement_timeout(db, previous)
+        setattr(db, _DEPTH_ATTR, getattr(db, _DEPTH_ATTR, 1) - 1)
+        if is_outermost and needs_restore:
+            await _restore_statement_timeout(db)
 
 
-async def _restore_statement_timeout(db, previous: str) -> None:
+async def _rollback_aborted_transaction(db) -> bool:
+    """Discard the transaction PostgreSQL aborted when it cancelled the search (ADR-158).
+
+    A cancelled statement leaves the transaction in a state where every further statement
+    fails with 25P02. The session is shared by every root field of the request
+    (app/graphql/context.py), so without this the sibling fields resolved after the search
+    fail with an opaque "current transaction is aborted" instead of returning their data.
+    Read paths only, so there is never uncommitted work here to lose.
+
+    Returns whether the rollback succeeded, i.e. whether the transaction-local ceiling is
+    already gone and the caller can skip restoring it.
+    """
+    try:
+        await db.rollback()
+    except SQLAlchemyError:
+        return False
+    return True
+
+
+async def _restore_statement_timeout(db) -> None:
     """Put `statement_timeout` back, tolerating an already-poisoned transaction.
 
-    Whenever the search raised a database error, PostgreSQL has aborted the transaction
-    and rejects every further statement until rollback — including this one. That path
-    needs no reset: rollback discards the transaction-local setting anyway. Swallowing
-    the failure here keeps the original error (SearchTimeoutError, or whatever the search
-    actually hit) as the one the caller sees, instead of masking it with a secondary
-    "current transaction is aborted".
+    Whenever the search raised a database error other than a timeout, PostgreSQL has
+    aborted the transaction and rejects every further statement until rollback — including
+    this one. That path needs no reset: rollback discards the transaction-local setting
+    anyway. Swallowing the failure here keeps the original error as the one the caller
+    sees, instead of masking it with a secondary "current transaction is aborted".
     """
     with suppress(DBAPIError):
-        await db.execute(
-            text("SELECT set_config('statement_timeout', :previous, true)"),
-            {"previous": previous},
-        )
+        await db.execute(text("RESET statement_timeout"))
 
 
 def _escape(value: str) -> str:

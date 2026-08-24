@@ -6,6 +6,8 @@ all (ADR-150) — it walks the whole GIN index and rechecks every row. These tes
 bound that keeps one such statement from holding a connection indefinitely.
 """
 
+import asyncio
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -135,6 +137,71 @@ async def test_a_cancelled_search_still_reports_the_timeout_not_the_reset_failur
 
     assert "搜尋" in str(excinfo.value)
     await db.rollback()
+
+
+async def test_interleaved_sibling_searches_do_not_leave_the_ceiling_behind(db, monkeypatch):
+    """ADR-157: two `q:` root fields overlapping on the shared session must still restore.
+
+    graphql-core resolves sibling root fields concurrently on one AsyncSession
+    (app/graphql/context.py), and the ceiling they set is one transaction-wide value. When
+    the windows overlap, a read-then-write-back restore has the inner one reading the outer
+    one's ceiling as if it were the default — and putting it back at the end, where it binds
+    every remaining statement in the transaction. Sequential entry/exit does not exercise
+    this; the overlap is the whole point.
+    """
+    monkeypatch.setattr(search, "SEARCH_STATEMENT_TIMEOUT_MS", 100)
+    await db.execute(text("SELECT 1"))
+    default = await _statement_timeout(db)
+
+    inner_entered = asyncio.Event()
+
+    async def outer():
+        async with search_timeout(db, "光復"):
+            await inner_entered.wait()
+            await asyncio.sleep(0.05)  # leaves only after the inner window opened
+
+    async def inner():
+        await asyncio.sleep(0.01)  # opens after the outer window set the ceiling
+        async with search_timeout(db, "光復"):
+            inner_entered.set()
+            await asyncio.sleep(0.1)  # ...and closes after the outer one did
+
+    await asyncio.gather(outer(), inner())
+
+    assert await _statement_timeout(db) == default
+
+
+async def test_the_search_stays_bounded_while_a_sibling_search_window_is_open(db, monkeypatch):
+    """The other half of ADR-157: nesting-awareness must not drop the bound itself.
+
+    Only the outermost window touches the setting, so an inner window closing must not
+    reset the ceiling out from under a search that is still running.
+    """
+    monkeypatch.setattr(search, "SEARCH_STATEMENT_TIMEOUT_MS", 100)
+    await db.execute(text("SELECT 1"))
+    default = await _statement_timeout(db)
+
+    async with search_timeout(db, "光復"):
+        async with search_timeout(db, "中正"):
+            pass
+        assert await _statement_timeout(db) != default, "inner exit dropped the bound"
+
+
+async def test_a_field_resolved_after_a_cancelled_search_still_gets_its_data(db, monkeypatch):
+    """ADR-158: the cancelled search must not take the rest of the request down with it.
+
+    PostgreSQL aborts the transaction when it cancels the statement, and the session is
+    shared by every root field. Without the rollback, `{ stations(q:) announcements }` has
+    the search return the timeout message and `announcements` fail with an unrelated,
+    unexplained 25P02 instead of returning its rows.
+    """
+    monkeypatch.setattr(search, "SEARCH_STATEMENT_TIMEOUT_MS", 100)
+
+    with pytest.raises(SearchTimeoutError):
+        async with search_timeout(db, "光復"):
+            await db.execute(text("SELECT pg_sleep(3)"))
+
+    assert await db.scalar(text("SELECT 1")) == 1  # the sibling field, no rollback of its own
 
 
 async def test_every_public_search_path_sets_the_timeout():
