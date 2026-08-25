@@ -115,6 +115,41 @@ async def test_login_falls_back_when_the_remembered_identity_is_gone(client, db_
     assert decode_act(_act_of(tokens["access_token"])) == (str(platform_role.uuid), None)
 
 
+# --- a malformed act claim ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "act",
+    ["garbage:", "garbage:also-garbage", "00000000-0000-4000-8000-000000000001:not-a-uuid", ":", "x"],
+)
+async def test_decode_act_rejects_anything_that_is_not_a_uuid_pair(act):
+    """Both halves are validated here, not just split apart.
+
+    `resolve()` binds them straight into `uuid` columns; an unvalidated value would reach the
+    driver and surface as a 500 rather than the None this function exists to return.
+    """
+    assert decode_act(act) is None
+
+
+async def test_login_with_a_malformed_remembered_identity_falls_back(client, db_session):
+    """`scope` is free-form text from an unauthenticated client — garbage must not 500."""
+    _, platform_role, _, _ = await _account_with_two_identities(db_session)
+    tokens = await _login(client, scope="garbage:")
+    assert decode_act(_act_of(tokens["access_token"])) == (str(platform_role.uuid), None)
+
+
+async def test_refresh_with_a_malformed_identity_is_401(client, db_session):
+    """`identity` is free-form too; a value that parses to nothing is treated as vanished."""
+    await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    resp = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": tokens["refresh_token"], "identity": "garbage:"},
+    )
+    assert resp.status_code == 401
+
+
 # --- switching ---------------------------------------------------------------------------
 
 
