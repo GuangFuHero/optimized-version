@@ -124,7 +124,7 @@ access token payload: { sub, sid, jti, act, exp, iat, type }
 POST /auth/switch-identity { role_uuid, team_uuid? }
   1. 驗該身分屬於呼叫者（且 team 未被軟刪除）→ 否則 403
   2. 以新的 act 簽發 access token
-  3. 回傳 TokenPair（refresh token 不輪替）
+  3. 回傳 AccessTokenResponse（只有 access token；refresh token 不輪替也不回傳）
 ```
 
 **不動 session、不撤舊 session。** 只影響當前裝置。
@@ -206,7 +206,7 @@ POST /auth/switch-identity { role_uuid, team_uuid? }
 1. **NextAuth JWT 多存 `activeIdentity`**，login / refresh 時帶上。
 2. **收到 401 要走登出流程。** 目前 `Frontend/apps/demo/src/lib/server-backend-auth.ts:71-77` 只依過期時間決定要不要 refresh，整個 auth lib 沒有 401 處理也沒有 signOut——不補的話，身分被撤時使用者會卡在「畫面壞掉但沒被登出」的狀態。
 3. **切換器 UI** 消費 `GET /users/me` 的身分清單。
-4. 切換回傳 TokenPair，可直接餵給既有的 `applyTokenPairToBackendAuthToken`。
+4. **切換只回傳 access token**（`AccessTokenResponse`：`access_token` / `token_type` / `expires_in`），**不可**整包餵給 `applyTokenPairToBackendAuthToken`——該 helper 會無條件寫 `refreshToken: tokenPair.refresh_token`（`Frontend/apps/demo/src/lib/server-backend-auth.ts:56-68`），把既有的 refresh token 蓋成 `undefined`，下一次 refresh 就會 `RefreshAccessTokenError` 把使用者登出。前端必須只 merge access token 與到期時間，refresh token 沿用現有的那一個。後端存的是 refresh token 的雜湊，本來就沒有明文可以回吐（ADR-070）。
 
 ---
 

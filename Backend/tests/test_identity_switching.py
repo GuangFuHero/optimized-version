@@ -169,6 +169,26 @@ async def test_switch_to_an_identity_you_hold(client, db_session):
     )
 
 
+async def test_switch_returns_the_access_token_alone(client, db_session):
+    """No `refresh_token` in the response — the client keeps the one it already has (ADR-070).
+
+    The server stores only that token's hash, so there is nothing to echo back. The frontend
+    must therefore merge the access token into its stored pair rather than replacing the pair
+    wholesale, or it would overwrite its refresh token with `undefined` and be signed out at
+    the next refresh.
+    """
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    resp = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert set(resp.json()) == {"access_token", "token_type", "expires_in"}
+
+
 async def test_switch_to_an_identity_you_do_not_hold_is_403(client, db_session):
     """Switching may only move between identities already held — it never grants one (ADR-068)."""
     user_uuid, _, team_role, _ = await _account_with_two_identities(db_session)

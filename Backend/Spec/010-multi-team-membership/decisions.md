@@ -81,7 +81,7 @@
 
 **為何 `act` 放 JWT 而非 session**：曾考慮把 `act` 存在 Redis session（`Spec/014` 本來就會為每個請求讀一次 session，增量成本為零，且切換可即時生效、無並存視窗）。否決理由是**前端負擔**：
 
-- 前端已有現成的 TokenPair 處理管線（`applyTokenPairToBackendAuthToken`），切換回傳 TokenPair 幾乎零新邏輯；存 session 則要新寫一套身分狀態管理。
+- 前端已有現成的 token 處理管線（`applyTokenPairToBackendAuthToken`），切換只要把新的 access token 併進去即可，幾乎零新邏輯；存 session 則要新寫一套身分狀態管理。（注意：**不能整包丟給該 helper**——它會把 refresh token 覆蓋成 `undefined`，見 ADR-070 的回應格式。）
 - 前端可直接解 JWT payload 讀 `act`，永遠知道當前身分，不必額外呼叫 API。
 - 同一瀏覽器的多個分頁共用 session，存 session 會讓「分頁 A 切換身分」**默默改變分頁 B 的行為**而 B 的畫面毫無所覺。
 
@@ -107,7 +107,7 @@
 POST /auth/switch-identity { role_uuid, team_uuid? }
   1. 驗該身分屬於呼叫者（user_role_assign 有對應列，且 team 未被軟刪除）→ 否則 403
   2. 以新的 act 簽發 access token
-  3. 回傳 TokenPair（refresh token 不輪替 —— 切換不該燒掉它）
+  3. 回傳 AccessTokenResponse（只有 access token —— refresh token 不輪替、也不回傳）
 ```
 
 **不動 session、不撤舊 session、不輪替 refresh token。**
