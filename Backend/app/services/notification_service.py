@@ -40,10 +40,11 @@ class NotificationService:
 
         Automatically excludes actor_uuid so users are not notified of their own actions.
 
-        Commits before returning. Sessions run with expire_on_commit=True, so the returned
-        Notification instances are expired — callers that need to read attributes off them
-        must refresh first. Callers must also read anything they still need from their own
-        ORM objects *before* calling this, for the same reason.
+        Commits before returning. Production sessions use expire_on_commit=False
+        (app/db/session.py), but the test suite runs with SQLAlchemy's default True
+        (tests/conftest.py) so callers are held to the stricter contract: read anything you
+        still need off your own ORM objects *before* calling this, and refresh the returned
+        Notification instances before reading their attributes.
         """
         actor_obj = _to_uuid_obj(actor_uuid)
         ref_obj = _to_uuid_obj(ref_uuid)
