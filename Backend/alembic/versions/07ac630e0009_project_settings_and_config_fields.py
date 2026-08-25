@@ -28,8 +28,14 @@ The seeded rows all get `disaster_types = '{}'`, so they stay enabled under ever
 setting — no backfill needed.
 
 Revision ID: 07ac630e0009
-Revises: e1f2a3b4c5d6
+Revises: f2b7c9d4e0a3
 Create Date: 2026-08-16
+
+Chained after the search-index revision (feature 012, PR #35) rather than after
+`e1f2a3b4c5d6`, which both features branched from. Two revisions sharing one parent is two
+alembic heads the moment both land on main, and `alembic upgrade head` refuses to run with
+more than one head. Feature 012 merges first; until it does, this branch on its own cannot
+resolve `f2b7c9d4e0a3`.
 
 """
 from collections.abc import Sequence
@@ -42,7 +48,7 @@ from app.db.triggers import get_audit_trigger_sql
 
 # revision identifiers, used by Alembic.
 revision: str = '07ac630e0009'
-down_revision: str | Sequence[str] | None = 'e1f2a3b4c5d6'
+down_revision: str | Sequence[str] | None = 'f2b7c9d4e0a3'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

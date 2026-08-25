@@ -3,8 +3,9 @@
 `list_by_type` answers "which fields should the form show right now": the requested target
 type (plus the universal 'all' bucket for stations), narrowed to fields enabled for the
 deployment's current disaster types (ADR-091), excluding deactivated fields (ADR-095), in a
-stable order. Before feature 013 there was no ORDER BY at all, so the same query could come
-back in a different order twice in a row.
+totally ordered list. Before feature 013 there was no ORDER BY at all, so the same query
+could come back in a different order twice in a row. Pass `include_inactive=True` for the
+management view that can still see retired fields (ADR-096).
 """
 
 from sqlalchemy import ARRAY, String, cast, func, or_, select, true
@@ -42,23 +43,36 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
         super().__init__(StationPropertyConfig)
 
     async def list_by_type(
-        self, db: AsyncSession, station_type: str, *, disaster_types: list[str] | None = None
+        self, db: AsyncSession, station_type: str, *, disaster_types: list[str] | None = None,
+        include_inactive: bool = False,
     ) -> list[StationPropertyConfig]:
-        """Return active configs for the station type (plus universal 'all' ones), ordered."""
+        """Return active configs for the station type (plus universal 'all' ones), ordered.
+
+        `include_inactive` is the management view (ADR-096): retired fields are invisible to
+        every form path, so without it a deactivated field could never be found again.
+
+        The order ends on `uuid` because this query unions the type's own rows with the 'all'
+        bucket, where `(sort_order, property_name)` is NOT unique — `('all', 'crowd_level')`
+        and `('shelter', 'crowd_level')` both sit at sort_order 0 and would otherwise come
+        back in whatever order the plan produced (ADR-097).
+        """
+        conditions = [
+            or_(self.model.station_type == station_type, self.model.station_type == "all"),
+            _enabled_for(self.model.disaster_types, disaster_types or []),
+        ]
+        if not include_inactive:
+            conditions.append(self.model.is_active.is_(True))
         result = await db.execute(
             select(self.model)
-            .where(
-                or_(self.model.station_type == station_type, self.model.station_type == "all"),
-                _enabled_for(self.model.disaster_types, disaster_types or []),
-                self.model.is_active.is_(True),
-            )
-            .order_by(self.model.sort_order, self.model.property_name)
+            .where(*conditions)
+            .order_by(self.model.sort_order, self.model.property_name, self.model.uuid)
         )
         return result.scalars().all()
 
     async def upsert(
         self, db: AsyncSession, *,
-        station_type: str, property_name: str, data_type: str, enum_options,
+        station_type: str, property_name: str, data_type: str,
+        enum_options: list[str] | None = None,
         disaster_types: list[str] | None = None, label: str | None = None,
         sort_order: int | None = None, is_active: bool | None = None,
     ) -> StationPropertyConfig:
@@ -76,8 +90,10 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
             )
             return result.scalar_one_or_none()
 
-        optional = _optional_config_fields(disaster_types, label, sort_order, is_active)
-        update_values = {"data_type": data_type, "enum_options": enum_options, **optional}
+        optional = _optional_config_fields(
+            enum_options, disaster_types, label, sort_order, is_active
+        )
+        update_values = {"data_type": data_type, **optional}
         return await _upsert_with_conflict_retry(
             self, db, lookup=lookup, update_values=update_values,
             create_values={
@@ -94,23 +110,33 @@ class TaskPropertyConfigRepository(GenericRepository[TaskPropertyConfig]):
         super().__init__(TaskPropertyConfig)
 
     async def list_by_type(
-        self, db: AsyncSession, task_type: str, *, disaster_types: list[str] | None = None
+        self, db: AsyncSession, task_type: str, *, disaster_types: list[str] | None = None,
+        include_inactive: bool = False,
     ) -> list[TaskPropertyConfig]:
-        """Return active configs for the given task type, ordered."""
+        """Return active configs for the given task type, ordered.
+
+        `include_inactive` is the management view (ADR-096), as on the station side. The
+        order ends on `uuid` for the same reason there — here it is already total (this query
+        has no 'all' bucket, and `(task_type, property_name)` is unique), so it is only
+        belt-and-braces, but it keeps the two queries reading identically.
+        """
+        conditions = [
+            self.model.task_type == task_type,
+            _enabled_for(self.model.disaster_types, disaster_types or []),
+        ]
+        if not include_inactive:
+            conditions.append(self.model.is_active.is_(True))
         result = await db.execute(
             select(self.model)
-            .where(
-                self.model.task_type == task_type,
-                _enabled_for(self.model.disaster_types, disaster_types or []),
-                self.model.is_active.is_(True),
-            )
-            .order_by(self.model.sort_order, self.model.property_name)
+            .where(*conditions)
+            .order_by(self.model.sort_order, self.model.property_name, self.model.uuid)
         )
         return result.scalars().all()
 
     async def upsert(
         self, db: AsyncSession, *,
-        task_type: str, property_name: str, data_type: str, enum_options,
+        task_type: str, property_name: str, data_type: str,
+        enum_options: list[str] | None = None,
         disaster_types: list[str] | None = None, label: str | None = None,
         sort_order: int | None = None, is_active: bool | None = None,
     ) -> TaskPropertyConfig:
@@ -124,8 +150,10 @@ class TaskPropertyConfigRepository(GenericRepository[TaskPropertyConfig]):
             )
             return result.scalar_one_or_none()
 
-        optional = _optional_config_fields(disaster_types, label, sort_order, is_active)
-        update_values = {"data_type": data_type, "enum_options": enum_options, **optional}
+        optional = _optional_config_fields(
+            enum_options, disaster_types, label, sort_order, is_active
+        )
+        update_values = {"data_type": data_type, **optional}
         return await _upsert_with_conflict_retry(
             self, db, lookup=lookup, update_values=update_values,
             create_values={
@@ -157,16 +185,21 @@ async def _upsert_with_conflict_retry(repo, db, *, lookup, create_values, update
 
 
 def _optional_config_fields(
-    disaster_types: list[str] | None, label: str | None,
+    enum_options: list[str] | None, disaster_types: list[str] | None, label: str | None,
     sort_order: int | None, is_active: bool | None,
 ) -> dict:
-    """Keep only the presentation fields the caller actually supplied.
+    """Keep only the fields the caller actually supplied.
 
     Omitted fields keep their stored value on update and their column default on insert, so
     a caller that only cares about `data_type` never silently resets a field's ordering or
     disables it.
+
+    `enum_options` obeys the same rule (ADR-098): editing an Enum field's label used to blank
+    its options, because the update always carried the input's default `None`. Clearing the
+    options is spelled `enum_options=[]` — an empty list is supplied, not omitted.
     """
     supplied = {
+        "enum_options": enum_options,
         "disaster_types": (
             None if disaster_types is None else normalize_disaster_types(disaster_types)
         ),

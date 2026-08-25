@@ -102,7 +102,7 @@ WHERE (station_type = :station_type OR station_type = 'all')
 
 `&&` 是 PostgreSQL 的陣列交集運算子——混合災害天然支援，不需要迴圈或多次查詢。
 
-停用的欄位不回傳：查詢一律追加 `AND is_active = true`。排序改為 `ORDER BY sort_order, property_name`——目前完全沒有 `ORDER BY`（`app/repositories/config_repository.py:17-26`），前端拿到的順序不保證穩定。
+停用的欄位不回傳：查詢預設追加 `AND is_active = true`，管理端可用 `includeInactive: true` 取回已停用欄位（需 `dynamic_field.edit`，ADR-096）。排序改為 `ORDER BY sort_order, property_name, uuid`（以 `uuid` 收尾才是全序，ADR-097）——目前完全沒有 `ORDER BY`（`app/repositories/config_repository.py:17-26`），前端拿到的順序不保證穩定。
 
 當前災害型別集合從 `project_settings.disaster_types` 讀取，每次請求查一次（單列表，可快取於 request scope）。
 

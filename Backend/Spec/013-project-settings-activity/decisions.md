@@ -1,4 +1,4 @@
-# Project Settings & Account Activity — ADR 全集（ADR-090~095）
+# Project Settings & Account Activity — ADR 全集（ADR-090~099）
 
 **Date**: 2026-08-16
 **Feature**: 013-project-settings-activity
@@ -211,3 +211,62 @@ app/services/ticket.py:207-231    create_task_property
 ➖ 前端要處理 `label` 為 `NULL` 的回退邏輯。
 
 **刻意未加的欄位**（等前端提出實際需求再補，屆時仍是純加欄位）：`required`、`unit`、`hint`、`default_value`、`min` / `max`、`group`。`project_settings` 同理未加 `ended_at`、`status`、`default_bounds`、`contact_info`。
+
+---
+
+## PR #36 code review 後補的決策（ADR-096~099）
+
+以下四項是 PR #36 review 實測後拍板的修正，全部有對應測試。
+
+### ADR-096 停用欄位需要一條看得到的路：`includeInactive`（需 `dynamic_field.edit`）
+
+**白話**：欄位一旦停用就完全消失在 API 上，等於救不回來。加一個查詢參數讓有編輯權的人看得到已停用欄位。
+
+**Context**：ADR-095 把 `is_active` 定位成「退役但保留資料」，但 `list_by_type` 是全 codebase 唯一的讀取路徑（`app/graphql/config/queries.py:40`、`:58` 是僅有的兩個呼叫端），而它一律追加 `is_active = true` 與災害類型條件。實測：把欄位設為 `is_active=false` 後 `stationPropertyConfigs` 回傳 `[]`，DB 列仍在但沒有任何 API 列得出來。要復原只能靠人記得完整的 `property_name` 並重打 `data_type` / `enum_options`——「退役」實際上等同「遺失」。
+
+**Decision**：`list_by_type` 增加 `include_inactive: bool = False`；GraphQL 兩個 query 增加 `includeInactive` 參數，為 true 時**額外**要求 `dynamic_field.edit`。表單路徑（不傳參數）行為完全不變。
+
+災害類型過濾**不受** `include_inactive` 影響：那是「這次災害要不要收集」，不是「這個欄位還存不存在」，兩者語意不同。
+
+**Consequences**：
+➕ 停用欄位可被列出、可用同一個 `upsert` 重新啟用。
+➕ 一般使用者的表單路徑一個字都沒變。
+➖ 多一個參數要在前端管理介面接。
+➖ 災害類型過濾掉的欄位仍然列不出來（需要先改 project settings 才看得到）——本次不處理。
+
+### ADR-097 station 查詢的排序必須以 `uuid` 收尾
+
+**白話**：`('all', X)` 和 `('shelter', X)` 兩列排序鍵完全一樣，順序還是會跳。
+
+**Context**：ADR-095 加了 `ORDER BY sort_order, property_name`，但 station 查詢會把該類型自己的列和 `'all'` 桶 union 起來，唯一鍵是 `(station_type, property_name)`——`('all','crowd_level')` 與 `('shelter','crowd_level')` 兩個排序鍵全部打平。實測：建立這組打平的列後查一次，接著只對其中一列做一次不改值的 `UPDATE`（tuple 移到 heap 尾端），查詢與資料皆未變而回傳順序翻轉，連跑三次結果一致。
+
+**Decision**：`ORDER BY sort_order, property_name, uuid`。task 側的排序其實已是全序（無 `'all'` 桶且 `(task_type, property_name)` 唯一），仍一併加上，讓兩個查詢讀起來一致。
+
+**Consequences**：
+➕ 排序成為全序，同一份資料的回傳順序可重現。
+➖ 打平時的相對順序由 `uuid` 決定，也就是任意但穩定；真要指定順序請用 `sort_order`。
+
+### ADR-098 `enum_options` 比照其他欄位：省略=不動，`[]`=清空
+
+**白話**：只想改個顯示名稱，卻會把 Enum 的選項整組清掉。
+
+**Context**：`update_values` 無條件帶入 `enum_options`，而輸入型別的 `enum_options` 預設是 `None`（`app/graphql/config/types.py`）。ADR-095 之後 `upsert` 成了設定 `label` / `sort_order` / `is_active` 的手段，於是 `{propertyName, dataType:"Enum", label:"人潮"}` 這種自然呼叫會讓該列變成 `data_type='Enum'` 但 `enum_options = NULL`。實測確認：回傳與 DB 皆為 `None`，而同一次呼叫的 `sort_order` / `label` 都被完整保留——是這一欄的處理與 `_optional_config_fields` 不一致。
+
+**Decision**：`enum_options` 併入 `_optional_config_fields`，套用同一套 `None` 代表「未提供」的規則。清空選項改用 `enum_options: []`（空陣列是「有提供」，會通過過濾）。
+
+**Consequences**：
+➕ 部分更新的語意在所有欄位上一致。
+➕ 改 label 不再破壞表單選項。
+➖ 明確傳 `null` 會被當成「不動」而非「清空」；清空必須傳 `[]`。這是為了跟旁邊四個欄位共用同一套規則，而不是替單一欄位引入 `UNSET` 機制。
+
+### ADR-099 feature 013 的 migration 改掛在 feature 012 之後
+
+**白話**：兩個 feature 的 migration 都掛在同一個 parent，一起合進 main 就變成雙 head，部署會斷。
+
+**Context**：`07ac630e0009`（feature 013）與 `f2b7c9d4e0a3`（feature 012 搜尋索引）的 `down_revision` 都是 `e1f2a3b4c5d6`。各自單獨看都是單 head，但兩邊都進 main 後 `alembic heads` 會列出兩個 head，`alembic upgrade head` 直接中止（實測輸出：`FAILED: Multiple head revisions are present`）。
+
+**Decision**：feature 012 先合併；`07ac630e0009.down_revision` 改為 `f2b7c9d4e0a3`，鏈成單線。
+
+**Consequences**：
+➕ 合併後 `alembic upgrade head` 單 head 可正常跑完。
+➖ 在 feature 012 進 main 之前，本分支單獨 checkout 跑 alembic 會找不到 parent revision。這是刻意接受的相依性——PR 合併順序因此固定。
