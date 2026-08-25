@@ -15,6 +15,20 @@ from sqlalchemy import func
 # shows an honest "uncategorized" bar instead of a blank one.
 UNCATEGORIZED_LABEL = "uncategorized"
 
+# Widest start->end span accepted by ticket_analytics.get_duplicate_count, whose self-join
+# grows with the rows in range. With no statement_timeout and no rate limit deployed, this
+# cap is the only thing stopping one request from holding a connection indefinitely.
+MAX_DUPLICATE_RANGE_DAYS = 120
+
+
+class AnalyticsInputError(ValueError):
+    """A bad query parameter; app/api/v1/endpoints/analytics.py turns it into HTTP 400.
+
+    A ValueError subclass so existing `except ValueError` callers still work, but distinct
+    enough that the endpoint can 400 on a real client mistake without also blaming the
+    caller for an internal bug, which raises a plain ValueError.
+    """
+
 
 def local_bounds(
     start_date: date | None, end_date: date | None, tz: ZoneInfo

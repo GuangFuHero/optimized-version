@@ -1,10 +1,10 @@
-"""station operational status and task completed_at
+"""station operational status and task completed_at/canceled_at
 
 Adds ``stations.operational_status`` (active/temporarily_closed/permanently_closed,
 default active) + ``stations.status_changed_at`` (stamped whenever operational_status
-changes), and ``ticket_tasks.completed_at`` (stamped when status transitions to
-fulfilled). Backs the analytics dashboard's station freshness-trend and ticket
-time-to-completion metrics.
+changes), and ``ticket_tasks.completed_at`` / ``ticket_tasks.canceled_at`` (stamped when
+status transitions to fulfilled / canceled). Backs the analytics dashboard's station
+freshness-trend, ticket time-to-completion, and backlog-drain metrics.
 
 Revision ID: a1b2c3d4e5f6
 Revises: b8f4d2a6e1c3
@@ -24,25 +24,31 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Add station operational_status/status_changed_at and ticket_tasks.completed_at."""
+    """Add station operational_status/status_changed_at and task completed_at/canceled_at."""
     op.add_column(
         'stations',
         sa.Column('operational_status', sa.String(20), nullable=False, server_default='active'),
     )
     op.add_column('stations', sa.Column('status_changed_at', sa.DateTime(timezone=True), nullable=True))
     op.add_column('ticket_tasks', sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True))
+    op.add_column('ticket_tasks', sa.Column('canceled_at', sa.DateTime(timezone=True), nullable=True))
 
-    # Backfill tasks that were already fulfilled before this column existed. Without it
-    # they keep completed_at IS NULL while still classifying as "completed" (the bucket
-    # expression reads `status`), so max(completed_at) returns NULL and the analytics
-    # date series has to drop them. `updated_at` is an approximation of the fulfil moment
-    # — the last write of any kind — not the exact transition; it is the best signal
-    # available for rows that predate the column.
+    # Backfill rows that reached these states before the columns existed. Analytics reads
+    # `status` to decide a task is done or called off, but plots it by timestamp — so a NULL
+    # here silently drops the row from every date-based chart. `updated_at` (last write of
+    # any kind) only approximates the transition, but it is the only signal these rows have.
     op.execute(
         """
         UPDATE ticket_tasks
            SET completed_at = updated_at
          WHERE status = 'fulfilled' AND completed_at IS NULL
+        """
+    )
+    op.execute(
+        """
+        UPDATE ticket_tasks
+           SET canceled_at = updated_at
+         WHERE status = 'canceled' AND canceled_at IS NULL
         """
     )
 
@@ -65,8 +71,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Drop ticket_tasks.completed_at and station operational_status/status_changed_at."""
+    """Drop the task timestamps and station operational_status/status_changed_at."""
     op.execute("ALTER TABLE stations DROP CONSTRAINT IF EXISTS ck_stations_operational_status")
+    op.drop_column('ticket_tasks', 'canceled_at')
     op.drop_column('ticket_tasks', 'completed_at')
     op.drop_column('stations', 'status_changed_at')
     op.drop_column('stations', 'operational_status')

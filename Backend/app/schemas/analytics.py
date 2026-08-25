@@ -16,6 +16,7 @@ class TicketYMetric(str, Enum):
     ongoing_tickets = "ongoing_tickets"
     unassigned_tickets = "unassigned_tickets"
     completed_tickets = "completed_tickets"
+    canceled_tickets = "canceled_tickets"
     completion_rate = "completion_rate"
     age_distribution = "age_distribution"
     time_to_completion = "time_to_completion"
@@ -102,6 +103,12 @@ class YMetricSpec(BaseModel):
         description="When true, `start_date` and `end_date` are mandatory for this "
         "y-metric and omitting either is a 400 — the underlying query is too expensive "
         "to run unbounded. Currently only `duplicate_count`."
+    )
+    max_range_days: int | None = Field(
+        default=None,
+        description="Widest allowed span between `start_date` and `end_date` for this "
+        "y-metric, in days; a wider range is a 400. Null means no limit. Clamp the date "
+        "picker to this instead of waiting for the error.",
     )
 
 

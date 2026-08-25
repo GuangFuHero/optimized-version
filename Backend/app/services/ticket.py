@@ -207,8 +207,8 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
 
     TicketTask carries no team_uuid, so only `own`/`all` scope can match it.
 
-    `completed_at` is stamped/cleared here (not by the caller) whenever `status` crosses
-    the 'fulfilled' boundary — feeds the analytics time-to-completion metric.
+    `completed_at` / `canceled_at` are maintained here, not by the caller — see below for
+    why each is cleared as well as set.
     """
     task = await ticket_task_repository.get_by_uuid_active(db, uuid)
     if not task:
@@ -217,10 +217,18 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
 
     obj_in = dict(changes)
     new_status = obj_in.get("status")
-    if new_status == "fulfilled" and task.status != "fulfilled":
-        obj_in["completed_at"] = datetime.now(UTC)
-    elif new_status is not None and new_status != "fulfilled" and task.status == "fulfilled":
-        obj_in["completed_at"] = None
+    if new_status is not None and new_status != task.status:
+        # Each timestamp records when the task entered that state, and is cleared when it
+        # leaves. Clearing matters because analytics plots a task on the day its timestamp
+        # gives: a re-opened task keeping a stale completed_at still reads as finished.
+        if new_status == "fulfilled":
+            obj_in["completed_at"] = datetime.now(UTC)
+        elif task.status == "fulfilled":
+            obj_in["completed_at"] = None
+        if new_status == "canceled":
+            obj_in["canceled_at"] = datetime.now(UTC)
+        elif task.status == "canceled":
+            obj_in["canceled_at"] = None
     return await ticket_task_repository.update(db, db_obj=task, obj_in=obj_in)
 
 

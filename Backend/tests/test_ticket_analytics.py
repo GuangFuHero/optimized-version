@@ -1,9 +1,9 @@
 """Unit tests for ticket/task analytics aggregation and the chart_render x resolution.
 
-Covers the trickiest pieces: the unassigned/ongoing/completed bucket classification
-(now exposed as get_ticket_count(bucket=...)), date-grouping on top of a bucket
-filter, age-distribution bucketing, duplicate-ticket detection, and the "ignore x when
-it doesn't apply" behavior in app.services.chart_render.resolve().
+Covers the trickiest pieces: the four-way bucket classification (exposed as
+get_ticket_count(bucket=...)), date-grouping on top of a bucket filter, age-distribution
+bucketing, duplicate-ticket detection, and the "ignore x when it doesn't apply" behavior
+in app.services.chart_render.resolve().
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -61,11 +61,11 @@ async def _count(db, *, bucket, x=None, x_granularity="day") -> int:
 
 @pytest.mark.asyncio
 async def test_ticket_count_buckets(db):
-    """Classify tickets as unassigned/ongoing/completed based on their tasks.
+    """Classify tickets into the four buckets based on their tasks.
 
-    unassigned (no tasks / no assignments), ongoing (assigned, not all fulfilled),
-    and completed (all non-canceled tasks fulfilled); bucket=None (total_tickets)
-    counts every ticket regardless of bucket.
+    unassigned (no tasks or no assignments), ongoing (assigned, not all fulfilled), and
+    completed (all un-canceled tasks fulfilled). bucket=None counts every ticket. The
+    canceled bucket has its own test below.
     """
     user_uuid = await _make_user(db)
 
@@ -96,6 +96,64 @@ async def test_ticket_count_buckets(db):
     assert await _count(db, bucket="unassigned") == 2  # A, B
     assert await _count(db, bucket="ongoing") == 1  # C
     assert await _count(db, bucket="completed") == 1  # D
+    assert await _count(db, bucket="canceled") == 0  # nothing was called off here
+
+
+@pytest.mark.asyncio
+async def test_a_fully_canceled_ticket_leaves_every_open_work_metric(db):
+    """A ticket whose only task was canceled has no outstanding work, and must show that.
+
+    Before the "canceled" bucket, such a ticket matched neither "unassigned" (it has an
+    assignment) nor "completed" (no un-canceled task), so it fell through to "ongoing"
+    permanently — inflating four metrics at once.
+    """
+    user_uuid = await _make_user(db)
+    ticket = _make_ticket(user_uuid)
+    db.add(ticket)
+    await db.flush()
+
+    task = _make_task(str(ticket.uuid), user_uuid, status="canceled")
+    task.canceled_at = datetime.now(UTC)
+    db.add(task)
+    await db.flush()
+    db.add(TaskAssignment(task_uuid=task.uuid, actor_uuid=user_uuid, status="accepted"))
+    await db.commit()
+
+    assert await _count(db, bucket=None) == 1  # still a real ticket
+    assert await _count(db, bucket="canceled") == 1
+    assert await _count(db, bucket="ongoing") == 0
+    assert await _count(db, bucket="completed") == 0
+    assert await _count(db, bucket="unassigned") == 0
+
+    # Excluded from the ratio entirely rather than counted as a delivery failure.
+    rate = await ticket_analytics.get_completion_rate(
+        db, x=None, x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+    )
+    assert rate[0]["total"] == 0
+    assert rate[0]["completed"] == 0
+
+    # Entered the backlog as new, left it as canceled, so the day nets out to zero.
+    backlog = await ticket_analytics.get_net_backlog_change(
+        db, x="date", x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+    )
+    assert len(backlog) == 1
+    assert backlog[0]["new_count"] == 1
+    assert backlog[0]["completed_count"] == 0
+    assert backlog[0]["canceled_count"] == 1
+    assert backlog[0]["net_change"] == 0
+
+    # No longer ageing — there is no outstanding work to be overdue.
+    ages = await ticket_analytics.get_age_distribution(
+        db, x=None, x_granularity="day", start_date=None, end_date=None, tz=UTC_TZ,
+    )
+    assert sum(row["count"] for row in ages) == 0
+
+    # And it appears on the day it was called off, matching the backlog drain series.
+    by_day = await ticket_analytics.get_ticket_count(
+        db, bucket="canceled", x="date", x_granularity="day",
+        start_date=None, end_date=None, tz=UTC_TZ,
+    )
+    assert [row["count"] for row in by_day] == [1]
 
 
 @pytest.mark.asyncio

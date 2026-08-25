@@ -38,6 +38,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
 from app.core.permissions import Perm
+from app.core.rbac_scopes import Scope, scope_filter
+from app.models.auth import User
+from app.models.geo import Station
+from app.models.request import Tickets
 from app.schemas.analytics import (
     CatalogResponse,
     ChartResponse,
@@ -50,6 +54,7 @@ from app.schemas.analytics import (
     YMetricSpec,
 )
 from app.services import chart_render, station_analytics, ticket_analytics
+from app.services.analytics_common import AnalyticsInputError
 
 router = APIRouter()
 
@@ -58,6 +63,7 @@ TICKET_METRIC_FNS = {
     TicketYMetric.ongoing_tickets: partial(ticket_analytics.get_ticket_count, bucket="ongoing"),
     TicketYMetric.unassigned_tickets: partial(ticket_analytics.get_ticket_count, bucket="unassigned"),
     TicketYMetric.completed_tickets: partial(ticket_analytics.get_ticket_count, bucket="completed"),
+    TicketYMetric.canceled_tickets: partial(ticket_analytics.get_ticket_count, bucket="canceled"),
     TicketYMetric.completion_rate: ticket_analytics.get_completion_rate,
     TicketYMetric.age_distribution: ticket_analytics.get_age_distribution,
     TicketYMetric.time_to_completion: ticket_analytics.get_time_to_completion,
@@ -142,6 +148,7 @@ def _serialize_spec(spec: dict) -> YMetricSpec:
         default_chart_type=spec["default_chart_type"],
         allowed_chart_types=sorted(spec["allowed_chart_types"]),
         requires_date_range=spec.get("requires_date_range", False),
+        max_range_days=spec.get("max_range_days"),
     )
 
 
@@ -150,15 +157,18 @@ async def _render_domain(
     y, x, x_granularity, chart_type,
     start_date: date | None, end_date: date | None, tz: str,
     theme, width: int | None, height: int | None, layout_overrides: str | None,
+    extra_filters: list,
 ) -> ChartResponse:
     """Shared body of both chart endpoints — resolve, query, render.
 
     The two handlers keep their own signatures so OpenAPI documents each domain's real
     `y` enum, but everything after parameter binding is identical, so it lives here.
+    `extra_filters` is the caller's RBAC row filter; see the service module docstrings.
 
-    Every 400 on these endpoints originates in this one try block: `_parse_tz` and
-    `_parse_layout_overrides` raise HTTPException directly, and `resolve()` / the metric
-    functions / Plotly's own schema validation all signal bad input with ValueError.
+    Every 400 comes from `_parse_tz` / `_parse_layout_overrides`, which raise HTTPException
+    themselves, or from an AnalyticsInputError below. Catching that narrow type rather than
+    ValueError is deliberate: our own bugs raise plain ValueError, and 400-ing those would
+    file a server fault as the caller's mistake and echo internal text back to them.
     """
     try:
         tzinfo = _parse_tz(tz)
@@ -172,13 +182,14 @@ async def _render_domain(
         data = await metric_fns[y](
             db, x=resolved_x, x_granularity=x_granularity.value,
             start_date=start_date, end_date=end_date, tz=tzinfo,
+            extra_filters=extra_filters,
         )
         html = chart_render.render_chart(
             domain, y.value, data,
             x=resolved_x, chart_type=resolved_chart_type,
             theme=theme.value, width=width, height=height, layout_overrides=overrides,
         )
-    except ValueError as err:
+    except AnalyticsInputError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
     return ChartResponse(html=html)
 
@@ -205,11 +216,7 @@ async def get_analytics_catalog():
     )
 
 
-@router.get(
-    "/tickets/chart",
-    response_model=ChartResponse,
-    dependencies=[security.has_permission(Perm.TICKET_VIEW)],
-)
+@router.get("/tickets/chart", response_model=ChartResponse)
 async def get_ticket_chart(
     y: TicketYMetric = Query(..., description=_Y_DESCRIPTION),
     x: ChartX | None = Query(None, description=_X_DESCRIPTION),
@@ -222,26 +229,30 @@ async def get_ticket_chart(
     width: int | None = Query(None, description="Figure width in px; omit for Plotly's default."),
     height: int | None = Query(None, description="Figure height in px; omit for Plotly's default."),
     layout_overrides: str | None = Query(None, description=_LAYOUT_OVERRIDES_DESCRIPTION),
+    scope: Scope = security.has_permission(Perm.TICKET_VIEW),
+    current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
 ):
     """Render one ticket/task metric as a Plotly chart.
 
     See the module docstring for the x/y model and example queries, and GET
     /analytics/catalog for the full per-metric rules.
+
+    `scope` is a bound parameter, not a `dependencies=[]` entry, because FastAPI discards a
+    dependency's return value there. The permission check is the same either way, but the
+    resolved scope is needed to narrow the rows — otherwise a caller holding `ticket.view`
+    at `own` gets totals for the whole table.
     """
     return await _render_domain(
         "tickets", TICKET_METRIC_FNS, db,
         y=y, x=x, x_granularity=x_granularity, chart_type=chart_type,
         start_date=start_date, end_date=end_date, tz=tz,
         theme=theme, width=width, height=height, layout_overrides=layout_overrides,
+        extra_filters=scope_filter(scope, actor=current_user, model=Tickets),
     )
 
 
-@router.get(
-    "/stations/chart",
-    response_model=ChartResponse,
-    dependencies=[security.has_permission(Perm.STATION_VIEW)],
-)
+@router.get("/stations/chart", response_model=ChartResponse)
 async def get_station_chart(
     y: StationYMetric = Query(..., description=_Y_DESCRIPTION),
     x: ChartX | None = Query(None, description=_X_DESCRIPTION),
@@ -254,16 +265,20 @@ async def get_station_chart(
     width: int | None = Query(None, description="Figure width in px; omit for Plotly's default."),
     height: int | None = Query(None, description="Figure height in px; omit for Plotly's default."),
     layout_overrides: str | None = Query(None, description=_LAYOUT_OVERRIDES_DESCRIPTION),
+    scope: Scope = security.has_permission(Perm.STATION_VIEW),
+    current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
 ):
     """Render one station metric as a Plotly chart.
 
     See the module docstring for the x/y model and example queries, and GET
-    /analytics/catalog for the full per-metric rules.
+    /analytics/catalog for the full per-metric rules. `scope` is a bound parameter rather
+    than a route dependency for the reason given on the ticket endpoint above.
     """
     return await _render_domain(
         "stations", STATION_METRIC_FNS, db,
         y=y, x=x, x_granularity=x_granularity, chart_type=chart_type,
         start_date=start_date, end_date=end_date, tz=tz,
         theme=theme, width=width, height=height, layout_overrides=layout_overrides,
+        extra_filters=scope_filter(scope, actor=current_user, model=Station),
     )

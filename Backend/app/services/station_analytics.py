@@ -3,9 +3,13 @@
 Same rationale as ticket_analytics.py: read-only reporting queries, plain SQLAlchemy
 Core `select()` statements rather than repository methods, returning plain lists of
 dicts for chart_render.py to plot. Every function shares the uniform keyword-only
-`(db, *, x, x_granularity, start_date, end_date, tz)` signature described in
-ticket_analytics.py's module docstring, even where a metric ignores some of those
+`(db, *, x, x_granularity, start_date, end_date, tz, extra_filters)` signature described
+in ticket_analytics.py's module docstring, even where a metric ignores some of those
 (get_station_freshness_trend ignores `x`; the others ignore `x_granularity`).
+
+`extra_filters` is the caller's RBAC row filter — WHERE clauses from
+app.core.rbac_scopes.scope_filter against `Station`, empty for `all` scope. Every query
+must apply it; an aggregate that skips it leaks numbers, if not rows.
 """
 
 from datetime import date
@@ -23,6 +27,7 @@ CLOSED_OPERATIONAL_STATUSES = ("temporarily_closed", "permanently_closed")
 async def get_station_count(
     db: AsyncSession, *,
     x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
+    extra_filters: list | None = None,
 ) -> list[dict]:
     """Count of active stations, overall or grouped by `type` (x="category").
 
@@ -37,7 +42,7 @@ async def get_station_count(
         cols.insert(0, category.label("x"))
         group_cols.append(category)
 
-    query = select(*cols).where(Station.delete_at.is_(None))
+    query = select(*cols).where(Station.delete_at.is_(None), *(extra_filters or []))
     if lower is not None:
         query = query.where(Station.created_at >= lower)
     if upper is not None:
@@ -52,8 +57,13 @@ async def get_station_count(
 async def get_station_status_count(
     db: AsyncSession, *,
     x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
+    extra_filters: list | None = None,
 ) -> list[dict]:
-    """Count of active stations, overall or grouped by `operational_status` (x="category")."""
+    """Count of active stations grouped by `operational_status` (x="category").
+
+    The catalog forces `x="category"` here, so the ungrouped branch below is unreachable
+    via the API — it would just repeat get_station_count. Kept for direct callers.
+    """
     lower, upper = local_bounds(start_date, end_date, tz)
     cols = [func.count(Station.uuid).label("count")]
     group_cols = []
@@ -61,7 +71,7 @@ async def get_station_status_count(
         cols.insert(0, Station.operational_status.label("x"))
         group_cols.append(Station.operational_status)
 
-    query = select(*cols).where(Station.delete_at.is_(None))
+    query = select(*cols).where(Station.delete_at.is_(None), *(extra_filters or []))
     if lower is not None:
         query = query.where(Station.created_at >= lower)
     if upper is not None:
@@ -76,6 +86,7 @@ async def get_station_status_count(
 async def get_station_freshness_trend(
     db: AsyncSession, *,
     x: str | None, x_granularity: str, start_date: date | None, end_date: date | None, tz: ZoneInfo,
+    extra_filters: list | None = None,
 ) -> list[dict]:
     """Per day/week: newly added stations vs newly closed stations.
 
@@ -84,6 +95,13 @@ async def get_station_freshness_trend(
     "Added" uses `created_at`; "closed" uses `status_changed_at` where
     operational_status is one of CLOSED_OPERATIONAL_STATUSES. A closed station with no
     `status_changed_at` is skipped — there is no day to attribute it to.
+
+    The "closed" series is point-in-time, not history: it reads the station's *current*
+    `operational_status` but plots it on `status_changed_at`, which services/station.py
+    overwrites on every transition. A station closed and later reopened matches neither
+    predicate, so its closure vanishes entirely and the same report run twice shows a
+    different past. "Added" is safe — `created_at` never changes. Faithful history needs a
+    status-transition table, out of scope here.
     """
     granularity = resolve_granularity(x_granularity)
     lower, upper = local_bounds(start_date, end_date, tz)
@@ -91,7 +109,7 @@ async def get_station_freshness_trend(
     added_period = func.date_trunc(granularity, func.timezone(tz.key, Station.created_at))
     added_query = select(
         added_period.label("x"), func.count(Station.uuid).label("added_count")
-    ).where(Station.delete_at.is_(None))
+    ).where(Station.delete_at.is_(None), *(extra_filters or []))
     if lower is not None:
         added_query = added_query.where(Station.created_at >= lower)
     if upper is not None:
@@ -106,6 +124,7 @@ async def get_station_freshness_trend(
         Station.delete_at.is_(None),
         Station.operational_status.in_(CLOSED_OPERATIONAL_STATUSES),
         Station.status_changed_at.is_not(None),
+        *(extra_filters or []),
     )
     if lower is not None:
         closed_query = closed_query.where(Station.status_changed_at >= lower)

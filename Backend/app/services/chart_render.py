@@ -18,10 +18,13 @@ with `x=date` on a metric that allows both individually but not combined).
 
 import plotly.graph_objects as go
 
-# --- Y-metric catalog: allowed_x is an ordered tuple that may contain None (aggregate/no
+from app.services.analytics_common import MAX_DUPLICATE_RANGE_DAYS, AnalyticsInputError
+
+# --- Y-metric catalog. `allowed_x` is an ordered tuple that may contain None (aggregate/no
 # grouping), "date", and/or "category" — ordered because resolve() falls back to its first
-# entry for forced-shape metrics. `requires_date_range` (absent = False) marks a metric
-# that refuses an unbounded query. See GET /api/v1/analytics/catalog for the JSON version. ---
+# entry for the "forced shape" metrics, the ones that are only meaningful grouped one way.
+# `requires_date_range` and `max_range_days` (both optional) mark a metric that refuses an
+# unbounded or over-wide query. See GET /api/v1/analytics/catalog for the JSON version. ---
 
 _TICKET_CATALOG = {
     "total_tickets": {
@@ -37,6 +40,10 @@ _TICKET_CATALOG = {
         "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
     },
     "completed_tickets": {
+        "allowed_x": (None, "date", "category"),
+        "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
+    },
+    "canceled_tickets": {
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar", "allowed_chart_types": ("bar", "line", "pie"),
     },
@@ -63,9 +70,11 @@ _TICKET_CATALOG = {
     "duplicate_count": {
         "allowed_x": (None, "date", "category"),
         "default_chart_type": "bar", "allowed_chart_types": ("bar", "pie"),
-        # Self-join: unbounded it is O(n^2). ticket_analytics.get_duplicate_count rejects
-        # a missing range outright; this flag lets the frontend require the dates up front.
+        # Self-join, so cost grows with the rows in range; get_duplicate_count rejects a
+        # missing or over-wide range. Published here so the frontend can clamp its date
+        # picker rather than discovering the limits through a 400.
         "requires_date_range": True,
+        "max_range_days": MAX_DUPLICATE_RANGE_DAYS,
     },
 }
 
@@ -75,7 +84,10 @@ _STATION_CATALOG = {
         "default_chart_type": "bar", "allowed_chart_types": ("bar", "pie"),
     },
     "station_status_count": {
-        "allowed_x": (None, "category"),
+        # Forced shape, like station_freshness_trend below: ungrouped, "how many stations
+        # per status" collapses to one 100% slice repeating station_count. So "category" is
+        # the only allowed value and any other `x` falls back to it.
+        "allowed_x": ("category",),
         "default_chart_type": "pie", "allowed_chart_types": ("pie", "bar"),
     },
     "station_freshness_trend": {
@@ -90,18 +102,18 @@ CATALOG = {"tickets": _TICKET_CATALOG, "stations": _STATION_CATALOG}
 def resolve(domain: str, y: str, x: str | None, chart_type: str | None) -> tuple[str | None, str]:
     """Resolve the effective (x, chart_type) for a (domain, y) request.
 
-    Raises ValueError for an unknown y or a chart_type outside that metric's
-    allowed_chart_types (endpoint layer turns that into HTTP 400). Never raises over
-    `x` — see module docstring's "ignore, don't reject" rule.
+    Raises AnalyticsInputError for an unknown y or a chart_type outside that metric's
+    allowed_chart_types; the endpoint layer turns that into HTTP 400. Never raises over
+    `x` — see the module docstring's "ignore, don't reject" rule.
     """
     catalog = CATALOG.get(domain)
     if catalog is None or y not in catalog:
-        raise ValueError(f"Unknown metric {y!r} for domain {domain!r}")
+        raise AnalyticsInputError(f"Unknown metric {y!r} for domain {domain!r}")
     spec = catalog[y]
 
     resolved_chart_type = chart_type or spec["default_chart_type"]
     if resolved_chart_type not in spec["allowed_chart_types"]:
-        raise ValueError(f"chart_type={resolved_chart_type!r} is not valid for y={y!r}")
+        raise AnalyticsInputError(f"chart_type={resolved_chart_type!r} is not valid for y={y!r}")
 
     resolved_x = x
     if resolved_chart_type == "pie" and resolved_x == "date":
@@ -197,6 +209,10 @@ def _fig_completed_tickets(data, chart_type):
     return _fig_count_metric(data, chart_type, series_label="completed tickets")
 
 
+def _fig_canceled_tickets(data, chart_type):
+    return _fig_count_metric(data, chart_type, series_label="canceled tickets")
+
+
 def _fig_completion_rate(data, chart_type):
     return _fig_count_metric(data, chart_type, value_key="rate", series_label="completion rate")
 
@@ -213,10 +229,12 @@ def _fig_time_to_completion(data, chart_type):
 
 
 def _fig_net_backlog_change(data, chart_type):
+    # The two ways out of the backlog; both are already subtracted in "net change".
     x_values = [row["x"] for row in data]
     series = {
         "new": [row["new_count"] for row in data],
         "completed": [row["completed_count"] for row in data],
+        "canceled": [row["canceled_count"] for row in data],
         "net change": [row["net_change"] for row in data],
     }
     return _render_pivoted(x_values, series, chart_type)
@@ -256,6 +274,7 @@ _FIGURE_BUILDERS = {
         "ongoing_tickets": _fig_ongoing_tickets,
         "unassigned_tickets": _fig_unassigned_tickets,
         "completed_tickets": _fig_completed_tickets,
+        "canceled_tickets": _fig_canceled_tickets,
         "completion_rate": _fig_completion_rate,
         "age_distribution": _fig_age_distribution,
         "time_to_completion": _fig_time_to_completion,
@@ -286,15 +305,16 @@ def render_chart(
     `layout_overrides` — arbitrary keys from the Layout reference
     (https://plotly.com/python/reference/layout/), applied via `update_layout(**...)`.
     A Plotly figure is pure JSON, not executable code, so this passthrough is safe;
-    Plotly's own schema validation rejects unknown keys (raises ValueError, which the
-    endpoint layer turns into HTTP 400).
+    Plotly's own schema validation rejects unknown keys, which this function re-raises as
+    AnalyticsInputError for the endpoint layer to return as HTTP 400.
 
     `data` is expected to already reflect the *resolved* `x` (the caller — the
     analytics endpoint — calls resolve() before querying, so the DB grouping and the
     chart grouping always agree). This function re-resolves `chart_type` internally
     anyway (idempotent, harmless) so it stays safe to call standalone.
 
-    Raises ValueError on an unknown y or an unsupported chart_type for it.
+    Raises AnalyticsInputError on an unknown y, an unsupported chart_type for it, or an
+    invalid layout_overrides key.
     """
     _resolved_x, resolved_chart_type = resolve(domain, y, x, chart_type)
     fig = _FIGURE_BUILDERS[domain][y](data, resolved_chart_type)
@@ -303,7 +323,13 @@ def render_chart(
     if width is not None or height is not None:
         fig.update_layout(width=width, height=height)
     if layout_overrides:
-        fig.update_layout(**layout_overrides)
+        # The only caller-supplied data here, so the only thing that can fail through no
+        # fault of ours. Re-raised as AnalyticsInputError to keep the 400; a bare ValueError
+        # escaping this function means our own bug, and is left to surface as a 500.
+        try:
+            fig.update_layout(**layout_overrides)
+        except ValueError as err:
+            raise AnalyticsInputError(f"invalid layout_overrides: {err}") from err
 
     # plotly.io.to_html reference: https://plotly.com/python-api-reference/generated/plotly.io.to_html.html
     return fig.to_html(full_html=False, include_plotlyjs=False)
