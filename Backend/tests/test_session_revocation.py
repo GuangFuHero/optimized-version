@@ -271,3 +271,46 @@ async def test_kicking_requires_user_edit(client, db_session, redis):
     res = await client.post(_kick(target_uuid), headers=plain_headers)
 
     assert res.status_code == 403
+
+
+# --------------------------------------------------------------------------------------
+# The same check on the logout endpoints (ADR-106)
+# --------------------------------------------------------------------------------------
+
+
+async def test_logout_all_is_refused_once_the_session_is_gone(client, db_session, redis):
+    """A revoked token must not be able to sign the user out of a session it never held.
+
+    `get_current_session` decodes the token without looking at the session, so before
+    ADR-106 a token that had already been revoked could still reach this endpoint. That is
+    not the harmless no-op it looks like: an intruder holding a token the victim just
+    revoked could keep calling it, kicking the victim out of every session they created
+    afterwards until the stolen token expired.
+    """
+    user_uuid = await _user(db_session, email="dos@x.com")
+    stolen = await auth_headers_for(redis, user_uuid)
+    assert (await client.post("/api/v1/auth/logout-all", headers=stolen)).status_code == 204
+
+    fresh = await auth_headers_for(redis, user_uuid)  # the user signs back in
+
+    assert (await client.post("/api/v1/auth/logout-all", headers=stolen)).status_code == 401
+    assert (await client.get(ME, headers=fresh)).status_code == 200  # still signed in
+
+
+async def test_logout_is_refused_once_the_session_is_gone(client, db_session, redis):
+    """Same hole on the single-device endpoint."""
+    user_uuid = await _user(db_session, email="dos2@x.com")
+    headers = await auth_headers_for(redis, user_uuid)
+    assert (await client.post("/api/v1/auth/logout", headers=headers)).status_code == 204
+
+    assert (await client.post("/api/v1/auth/logout", headers=headers)).status_code == 401
+
+
+async def test_logout_refuses_a_token_with_no_sid(client, db_session, redis):
+    """`logout` used to treat a sid-less token as a no-op; it is now refused like anywhere else."""
+    user_uuid = await _user(db_session, email="nosid@x.com")
+    token = create_access_token(data={"sub": user_uuid})  # no sid
+
+    res = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"})
+
+    assert res.status_code == 401

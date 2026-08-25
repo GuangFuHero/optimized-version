@@ -164,7 +164,9 @@ async def logout(
 ):
     """Log out the CURRENT device only: revoke this session (its refresh token).
 
-    Use /auth/logout-all to sign out every device. (A token minted without a sid is a no-op.)
+    Use /auth/logout-all to sign out every device. A token whose session is already gone is
+    refused with 401 by `get_current_session` before reaching here (ADR-106), so `sid` is
+    only ever falsy for a token that never had one — which is refused by the same check.
     """
     _user_uuid, sid = session
     if sid:
