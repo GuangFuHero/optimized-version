@@ -314,3 +314,50 @@ async def test_logout_refuses_a_token_with_no_sid(client, db_session, redis):
     res = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"})
 
     assert res.status_code == 401
+
+
+# --------------------------------------------------------------------------------------
+# The kick is Scope.ALL only (ADR-107)
+# --------------------------------------------------------------------------------------
+
+
+async def _kicker_at_scope(db, redis, scope: str):
+    """Bearer headers for a user holding `user.edit` at the given scope."""
+    from app.core.permissions import Perm
+    from app.models.auth import User
+    from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+
+    role = Role(name=f"kicker_{scope}", kind="platform")
+    permission = Permission(key=Perm.USER_EDIT.value)
+    db.add_all([role, permission])
+    await db.flush()
+    db.add(RolePermissionAssign(
+        role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
+    ))
+    actor = User(name=f"Kicker {scope}")
+    db.add(actor)
+    await db.flush()
+    db.add(UserRoleAssign(user_uuid=actor.uuid, role_uuid=role.uuid))
+    actor_uuid = str(actor.uuid)
+    role_ref = type("R", (), {"uuid": role.uuid})
+    await db.commit()
+    return await auth_headers_for(redis, actor_uuid, role_ref)
+
+
+@pytest.mark.parametrize("scope", ["own", "team", "gov", "ngo", "zone"])
+async def test_kicking_needs_user_edit_at_scope_all(client, db_session, redis, scope):
+    """A narrow `user.edit` must not silently become "sign anyone out" (ADR-107).
+
+    There is no checkpoint 2 on this endpoint — since feature 010 the target has no single
+    team to scope against — so without this every scope would behave as `all`. The RBAC
+    matrix is editable at runtime, so "the seed only gives this to super_admin" is not a
+    property the endpoint can rely on.
+    """
+    target_uuid = await _user(db_session, email=f"target_{scope}@x.com")
+    target_headers = await auth_headers_for(redis, target_uuid)
+    headers = await _kicker_at_scope(db_session, redis, scope)
+
+    res = await client.post(_kick(target_uuid), headers=headers)
+
+    assert res.status_code == 403, res.text
+    assert (await client.get(ME, headers=target_headers)).status_code == 200  # still signed in
