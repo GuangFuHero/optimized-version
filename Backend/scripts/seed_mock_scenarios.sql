@@ -22,7 +22,7 @@ BEGIN;
 
 -- 0. 清除既有 seed(依前綴,可重跑)
 -- team_zone_assign 先清(引用 teams/work_zones/users),再清 work_zones(引用 users),
--- 最後(users 清完後)才能清 teams,否則 users.team_uuid FK 會擋刪除。
+-- 最後(user_role_assign 清完後)才能清 teams,否則 user_role_assign.team_uuid FK 會擋刪除。
 DELETE FROM team_zone_assign
  WHERE uuid::text LIKE '30000000-%'
     OR zone_uuid::text LIKE '20000000-%'
@@ -133,8 +133,11 @@ FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
 -- ADR-026 dropped the Group/Policy model: the old 'Login User' group is now the `user` platform
 -- role that every registered account gets (see scripts/seed_rbac.py). role_uuid is NOT NULL, so
 -- this fails loudly rather than silently if seed_rbac.py has not been run on this database first.
-INSERT INTO user_role_assign (uuid, user_uuid, role_uuid)
-SELECT gen_random_uuid(), u.uuid, (SELECT uuid FROM roles WHERE name='user' AND kind='platform')
+-- role_kind 與 team_uuid 是 ADR-073 之後的必填欄位:平台角色的 kind='platform'、team_uuid 必須為
+-- NULL(ck_ura_role_team_kind),而 role_kind 另有複合 FK 指向 roles(uuid, kind),寫錯會被擋下。
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid)
+SELECT gen_random_uuid(), u.uuid,
+       (SELECT uuid FROM roles WHERE name='user' AND kind='platform'), 'platform', NULL
 FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
 
 -- 1c. TEAMS — RBAC v1 組織身分(13 個:官方 4 + NGO 9,對照 note/mock-data-users.csv 的「角色」欄)
@@ -153,9 +156,12 @@ INSERT INTO teams (uuid, name, type, tax_id, status) VALUES
  ('10000000-0000-4000-8000-000000000012','善牧基金會-宜蘭','ngo',NULL,'active'),
  ('10000000-0000-4000-8000-000000000013','冬山鄉公所-民政課','gov',NULL,'active');
 
--- 1d. 13 個官方/NGO 帳號指向所屬 team,並賦予 team admin 角色(團隊協調者,帶 zone-scoped 授權)。
--- 24 個志工帳號維持 team_uuid=NULL、只有 1b 給的 user 平台角色,才會與官方/NGO 形成對比。
-UPDATE users SET team_uuid = m.team_uuid::uuid
+-- 1d. 13 個官方/NGO 帳號取得所屬 team 的 admin 身分(團隊協調者,帶 zone-scoped 授權)。
+-- ADR-068/073:「屬於哪個 team」不再是 users 的欄位(users.team_uuid 已被 a1b2c3d4e5f6 移除),
+-- 而是 user_role_assign 這一列的性質——一筆 team 角色的授予就是一個身分。
+-- 24 個志工帳號不拿 team 身分,只有 1b 給的 user 平台角色,才會與官方/NGO 形成對比。
+INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid)
+SELECT gen_random_uuid(), m.user_uuid::uuid, r.uuid, 'team', m.team_uuid::uuid
 FROM (VALUES
  ('c0000000-0000-4000-8000-000000000021','10000000-0000-4000-8000-000000000001'),
  ('c0000000-0000-4000-8000-000000000022','10000000-0000-4000-8000-000000000002'),
@@ -171,11 +177,7 @@ FROM (VALUES
  ('c0000000-0000-4000-8000-000000000036','10000000-0000-4000-8000-000000000012'),
  ('c0000000-0000-4000-8000-000000000037','10000000-0000-4000-8000-000000000013')
 ) AS m(user_uuid, team_uuid)
-WHERE users.uuid::text = m.user_uuid;
-
-INSERT INTO user_role_assign (uuid, user_uuid, role_uuid)
-SELECT gen_random_uuid(), u.uuid, (SELECT uuid FROM roles WHERE name='admin' AND kind='team')
-FROM users u WHERE u.team_uuid::text LIKE '10000000-%';
+CROSS JOIN (SELECT uuid FROM roles WHERE name='admin' AND kind='team') r;
 
 -- 2. STATIONS — base_geometries + stations + EAV + 投票
 INSERT INTO base_geometries (uuid, property_name, geometry, created_by, created_at, updated_at) VALUES
