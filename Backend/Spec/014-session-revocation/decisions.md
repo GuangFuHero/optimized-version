@@ -1,8 +1,8 @@
-# Session Revocation — ADR 全集（ADR-099~105）
+# Session Revocation — ADR 全集（ADR-099~107）
 
 **Date**: 2026-08-20
 **Feature**: 014-session-revocation
-**Status**: 定案，**已實作**（2026-08-20）
+**Status**: 定案，**已實作**（2026-08-20；ADR-106/107 為 2026-08-25 code review 後補）
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/012-account-profile/decisions.md` 的 ADR-098。
 
 **前情**：本票源自 `Spec/010` 的 ADR-071（access token 撤銷 / fail-closed）。該 ADR 在 010 的改版中撤回並拆出，理由是它修的是一個與多 team 無關的既有安全洞。這裡是它的完整版本。
@@ -125,6 +125,8 @@
 
 **冪等**：沒有任何 session 的使用者也回 204，不是 404。呼叫端要的是「這個人現在沒有活著的 session」這個結果狀態，不是「我剛剛撤掉了東西」這個事件。
 
+> **後續收斂：見 ADR-107（2026-08-25）。** 上面「實務影響是零」的推論只在現行 seed 下成立，而 RBAC 矩陣是執行期可改的。踢人端點已改為明確要求 `Scope.ALL`。
+
 ---
 
 ### ADR-104 只讀不寫：不在請求路徑上更新 `last_used_at`
@@ -165,3 +167,69 @@
 **否決 B 的理由**：讓安全檢查在測試環境失效，等於這條路徑從來沒有被測過。本票的整個價值就在那個檢查上。
 
 **專案已有先例**：`get_rate_limiter` 確實在測試環境繞過（`app/api/v1/endpoints/auth/deps.py:38-49`）。差別是限流是**噪音**——它跟被測行為無關，繞過它不影響任何斷言的意義；session 檢查是**被測行為本身**。這兩者不該用同一個標準。
+
+---
+
+### ADR-106 `get_current_session` 也要做同一個 live-session 檢查
+
+**白話**：登出端點原本只解 JWT、不看 session 死活，所以一張已經被撤銷的 token 還是打得動它。現在同一個檢查也放進去。
+
+**Date**: 2026-08-25（PR #38 code review 後補）
+
+**Context**：ADR-099 把檢查放在 `get_current_user`。但認證路徑上有**第二道門**：`get_current_session`（`app/core/security.py:313`），它只呼叫 `_decode_access_payload` 就回傳 `(sub, sid)`，刻意不查 DB。三個端點用它：
+
+| 端點 | 當時的防護 |
+|---|---|
+| `POST /auth/switch-identity` | 同時掛了 `get_current_user` → **有**被檢查 |
+| `POST /auth/logout` | 只有 `get_current_session` → **沒有** |
+| `POST /auth/logout-all` | 只有 `get_current_session` → **沒有** |
+
+當時的判斷是「登出是冪等的，重複呼叫無害」。**那個判斷是錯的**，因為它只看了「對呼叫者無害」，沒看「對被害者有害」：
+
+一個持有已撤銷 token 的入侵者，可以持續呼叫 `/auth/logout-all`。受害者每次重新登入，都會被那張死 token 立刻踢出去——直到它自然過期（最多 15 分鐘）。也就是說，本票原本要修的問題（撤銷後仍有 15 分鐘的空窗）在這條路徑上不但沒被修掉，還被放大成一個可被主動利用的騷擾手段。
+
+review 時以測試實證：撤銷 → `/users/me` 回 401（token 確實死了），但 `/auth/logout-all` 仍回 204，且受害者剛建立的新 session 被踢掉。同一組測試中 `/auth/switch-identity` 回 401，證明 401 在該環境是可達的——兩個 204 純粹來自漏檢查。
+
+**Decision**：把 `_require_live_session` 放進 `get_current_session`，它多收一個 `redis=Depends(get_redis)` 參數。三個端點都不用改。
+
+**否決的替代方案**：讓 logout / logout-all 改掛 `get_current_user`。語意上一致，但每次登出多一次 DB 查詢 + identity 解析，而 `get_current_session` 存在的理由就是「不碰 DB」；而且它只修了今天這兩個端點，未來任何新端點用了這個 dependency 一樣會漏。**修 dependency 而不是修呼叫端**，是因為問題出在 dependency 的保證不完整，不是出在誰用了它。
+
+**Consequences**：
+➕ 一處修好三個端點，未來用到 `get_current_session` 的端點自動被保護。
+➕ 仍然沒有 DB 查詢——只多一次 Redis GET，與 ADR-099 對請求路徑的成本評估一致。
+➖ **行為變更**：沒有 `sid` 的 token 呼叫 `/auth/logout` 從「204 no-op」變成 401。這是刻意的，理由與 ADR-101 相同——如果「不帶 sid」能繞過檢查，那檢查就不成立。`app/api/v1/endpoints/auth/session.py:163` 的 docstring 已同步更正。
+➖ `/auth/switch-identity` 現在一個請求讀兩次 Redis（`get_current_session` 一次、`get_current_user` 一次）。兩次都是同一個 key 的 GET，可忽略；真要消除得引進 request-scoped 快取，成本高於收益（YAGNI）。
+
+---
+
+### ADR-107 踢人端點明確要求 `Scope.ALL`
+
+**白話**：只要有「編輯使用者」這個權限就能踢人——不管那個權限的範圍寫的是 own 還是 team。現在明確要求範圍必須是 all。
+
+**Date**: 2026-08-25（PR #38 code review 後補）
+
+**Context**：ADR-103 把踢人定為 **checkpoint 1 only**，理由正確：feature 010 之後使用者沒有單一 team，目標身上沒有 team 可供 checkpoint 2 比對。
+
+但 `require_scope` 在不傳 `resource` 時，只要 scope != `NONE` 就放行（`app/services/authz.py:29-38`）。所以 **`own` / `team` / `zone` 全部等同 `all`**。ADR-103 的更正段落寫「實務影響是零，因為現行 seed 裡 `user.edit` 只有 `super_admin` 持有」——seed 屬實，但**這個推論站不住**：
+
+feature 009 的 RBAC 矩陣是**執行期可改**的（`app/schemas/rbac_admin.py:13-16` 接受任何 `Scope` 值寫進任何 role×permission 格子）。哪天為了「讓 team admin 能改隊員資料」把 `user.edit` 設成 `team`，那個角色就同時默默拿到了**踢全站任何人**的能力，而且權限矩陣畫面上完全看不出來。「目前的 seed 長什麼樣」不是端點可以依賴的性質。
+
+review 時以測試實證：`user.edit = own` 的角色踢一個毫無關係的使用者，回 204 且對方確實被登出；對照組（完全沒有 `user.edit`）回 403，證明權限閘門本身是通的。
+
+**Decision**：踢人端點明確要求 `Scope.ALL`，否則 403。
+
+```python
+scope = await require_scope(actor, Perm.USER_EDIT, db)
+if scope != Scope.ALL:
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
+```
+
+**否決的替代方案**：新增專用 permission `user.revoke_sessions`。語意最乾淨，但要動 seed、權限矩陣、前端顯示，而且 ADR-103 已經論證過 YAGNI。真的出現「能踢人但不能改帳號」的角色需求時再拆，這個決定不會擋路。
+
+**Consequences**：
+➕ 把 ADR-103 那句「這個 resource 上沒有 team 可比對」從**文字裡的假設**變成**程式裡的強制**。
+➕ 對現行 seed 零影響：`super_admin` 本來就是 `all`。
+➕ 未來真要開放 team admin 踢自己隊員時，會在這三行撞到，被迫先回答「目標的 team 怎麼定義」——那正是 ADR-103 說「那是另一張票」的那個設計決策。不會靜靜地放行。
+➖ 這是 ADR-103 的收斂而非推翻：權限沿用 `USER_EDIT` 的決定不變，只是補上範圍條件。
+
+**與 ADR-103 的關係**：ADR-103 仍然有效，本 ADR 只補上它遺漏的範圍條件。依專案慣例（後續 ADR 勝），實作以本 ADR 為準。
