@@ -260,3 +260,339 @@ async def test_add_team_member_returns_usable_object_after_dispatch(db: AsyncSes
         .all()
     )
     assert len(rows) == 1
+
+
+async def _gov_recipient_and_shelter(db: AsyncSession) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """Seed a Gov user, a shelter station, and a `beds_available` property on it.
+
+    Returns (gov_user_uuid, station_uuid, property_uuid). The Gov user is the expected
+    recipient of `resource_station_updated` (resolve_gov_and_zone_ngo, §Q7).
+    """
+    from app.models.station_property import StationProperty
+
+    gov_team = Team(name="光復鄉公所", type="gov", status="active")
+    db.add(gov_team)
+    await db.flush()
+
+    gov_user = User(name="Gov 情資專員", team_uuid=gov_team.uuid)
+    reporter = User(name="回報志工")
+    db.add_all([gov_user, reporter])
+    await db.flush()
+    gov_uid, reporter_uid = gov_user.uuid, reporter.uuid
+
+    station = Station(
+        name="大進國小收容中心",
+        type="shelter",
+        geometry=WKTElement("SRID=4326;POINT(121.42 23.66)", srid=4326),
+    )
+    db.add(station)
+    await db.flush()
+    station_id = station.uuid
+
+    prop = StationProperty(
+        station_uuid=station_id,
+        property_type="facility",
+        property_name="beds_available",
+        quantity=20,
+        status="verified",
+        weightings=1.0,
+        created_by=str(reporter_uid),
+    )
+    db.add(prop)
+    await db.flush()
+    prop_id = prop.uuid
+    await db.commit()
+    return gov_uid, station_id, prop_id
+
+
+@pytest.mark.asyncio
+async def test_operational_property_update_notifies_gov(db: AsyncSession):
+    """Changing an operational station property must fire `resource_station_updated`.
+
+    The 7-field whitelist used to live in `update_station`, checking keys of the station
+    mutation's `changes` dict. None of those names are columns on `stations` — every one
+    of them is an EAV row in `station_properties` (Spec/Docs/mapping-stations.csv), so the
+    branch was unreachable and no station update ever notified anyone. Beds dropping to
+    zero is exactly the situational-awareness event the notification exists for.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import station as station_service
+
+    gov_uid, station_id, prop_id = await _gov_recipient_and_shelter(db)
+    editor = User(name="站點管理員")
+    db.add(editor)
+    await db.flush()
+    editor_id = editor.uuid
+    await db.commit()
+
+    editor_obj = await db.get(User, editor_id)
+    with patch("app.services.station.require_scope", new_callable=AsyncMock):
+        returned = await station_service.update_station_property(
+            db, actor=editor_obj, uuid=str(prop_id), changes={"quantity": 0}
+        )
+
+    # The caller must still be able to read the object dispatch() left expired.
+    assert returned.quantity == 0
+
+    rows = (
+        (
+            await db.execute(
+                select(Notification).where(
+                    Notification.recipient_uuid == gov_uid,
+                    Notification.type == "resource_station_updated",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1, "Gov staff must be notified when beds_available changes"
+    assert str(rows[0].ref_uuid) == str(station_id), "Deep link must point at the station"
+    assert rows[0].ref_type == "station"
+
+
+@pytest.mark.asyncio
+async def test_non_operational_property_update_is_silent(db: AsyncSession):
+    """Static descriptors must not notify — only fast-changing operational values do.
+
+    `pet_friendly` is a real configured shelter property (alembic a2a8e4d8c51d) but it
+    describes the venue, not its live status. Notifying on it would add noise to the same
+    Gov inbox that needs to see beds hitting zero.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.station_property import StationProperty
+    from app.services import station as station_service
+
+    gov_uid, station_id, _ = await _gov_recipient_and_shelter(db)
+
+    editor = User(name="站點管理員")
+    db.add(editor)
+    await db.flush()
+    editor_id = editor.uuid
+
+    static_prop = StationProperty(
+        station_uuid=station_id,
+        property_type="facility",
+        property_name="pet_friendly",
+        quantity=None,
+        comment="false",
+        status="verified",
+        weightings=1.0,
+        created_by=str(editor_id),
+    )
+    db.add(static_prop)
+    await db.flush()
+    static_prop_id = static_prop.uuid
+    await db.commit()
+
+    editor_obj = await db.get(User, editor_id)
+    with patch("app.services.station.require_scope", new_callable=AsyncMock):
+        await station_service.update_station_property(
+            db, actor=editor_obj, uuid=str(static_prop_id), changes={"comment": "true"}
+        )
+
+    rows = (
+        (
+            await db.execute(
+                select(Notification).where(
+                    Notification.recipient_uuid == gov_uid,
+                    Notification.type == "resource_station_updated",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert rows == [], "A static descriptor change must not notify"
+
+
+@pytest.mark.asyncio
+async def test_approved_suggestion_on_boolean_property_notifies_gov(db: AsyncSession):
+    """Approving a suggestion that flips a Boolean operational value must notify Gov.
+
+    Boolean/Enum property values live in `station_properties.comment`, and
+    UpdateStationPropertyInput exposes no `comment` field — so the suggestion workflow is
+    the *only* way `is_open`, `water_level`, `supply_rationed` and `power_stable` ever
+    change. review_station_suggestion() applies the change with setattr + commit, bypassing
+    update_station_property entirely, so it needs its own dispatch.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.station_property import StationProperty, StationUpdateSuggestion
+    from app.services import suggestion as suggestion_service
+
+    gov_uid, station_id, _ = await _gov_recipient_and_shelter(db)
+
+    reviewer = User(name="審核員")
+    db.add(reviewer)
+    await db.flush()
+    reviewer_id = reviewer.uuid
+
+    # A gas station property whose value is carried in `comment`, not `quantity`.
+    prop = StationProperty(
+        station_uuid=station_id,
+        property_type="service",
+        property_name="is_open",
+        quantity=None,
+        comment="true",
+        status="verified",
+        weightings=1.0,
+        created_by=str(reviewer_id),
+    )
+    db.add(prop)
+    await db.flush()
+
+    sugg = StationUpdateSuggestion(
+        target_type="station_property",
+        target_uuid=str(prop.uuid),
+        field_name="comment",
+        new_value="false",
+        status="pending",
+        created_by=str(reviewer_id),
+    )
+    db.add(sugg)
+    await db.flush()
+    sugg_id = sugg.uuid
+    await db.commit()
+
+    reviewer_obj = await db.get(User, reviewer_id)
+    with patch("app.services.suggestion.require_scope", new_callable=AsyncMock):
+        reviewed = await suggestion_service.review_station_suggestion(
+            db, actor=reviewer_obj, uuid=str(sugg_id), approve=True, review_note=None
+        )
+
+    # The endpoint reads the returned suggestion straight after; dispatch() committed.
+    assert reviewed.status == "approved"
+
+    rows = (
+        (
+            await db.execute(
+                select(Notification).where(
+                    Notification.recipient_uuid == gov_uid,
+                    Notification.type == "resource_station_updated",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1, "Approving an is_open change must notify Gov"
+    assert str(rows[0].ref_uuid) == str(station_id)
+
+
+@pytest.mark.asyncio
+async def test_rejected_suggestion_does_not_notify(db: AsyncSession):
+    """A rejected suggestion changes nothing, so it must not notify."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.station_property import StationProperty, StationUpdateSuggestion
+    from app.services import suggestion as suggestion_service
+
+    gov_uid, station_id, _ = await _gov_recipient_and_shelter(db)
+
+    reviewer = User(name="審核員")
+    db.add(reviewer)
+    await db.flush()
+    reviewer_id = reviewer.uuid
+
+    prop = StationProperty(
+        station_uuid=station_id,
+        property_type="service",
+        property_name="is_open",
+        quantity=None,
+        comment="true",
+        status="verified",
+        weightings=1.0,
+        created_by=str(reviewer_id),
+    )
+    db.add(prop)
+    await db.flush()
+
+    sugg = StationUpdateSuggestion(
+        target_type="station_property",
+        target_uuid=str(prop.uuid),
+        field_name="comment",
+        new_value="false",
+        status="pending",
+        created_by=str(reviewer_id),
+    )
+    db.add(sugg)
+    await db.flush()
+    sugg_id = sugg.uuid
+    await db.commit()
+
+    reviewer_obj = await db.get(User, reviewer_id)
+    with patch("app.services.suggestion.require_scope", new_callable=AsyncMock):
+        await suggestion_service.review_station_suggestion(
+            db, actor=reviewer_obj, uuid=str(sugg_id), approve=False, review_note="無法查證"
+        )
+
+    rows = (
+        (
+            await db.execute(
+                select(Notification).where(
+                    Notification.recipient_uuid == gov_uid,
+                    Notification.type == "resource_station_updated",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert rows == [], "A rejected suggestion must not notify"
+
+
+@pytest.mark.asyncio
+async def test_rejected_property_edit_does_not_notify(db: AsyncSession):
+    """Edits to a property already marked `rejected` must stay silent.
+
+    station.contribute/station.edit are deliberately open, so anyone can keep editing
+    discredited crowd data. Paging every Gov team member for it is noise.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.station_property import StationProperty
+    from app.services import station as station_service
+
+    gov_uid, station_id, _ = await _gov_recipient_and_shelter(db)
+
+    editor = User(name="投稿者")
+    db.add(editor)
+    await db.flush()
+    editor_id = editor.uuid
+
+    prop = StationProperty(
+        station_uuid=station_id,
+        property_type="facility",
+        property_name="beds_available",
+        quantity=999,
+        status="rejected",
+        weightings=1.0,
+        created_by=str(editor_id),
+    )
+    db.add(prop)
+    await db.flush()
+    prop_id = prop.uuid
+    await db.commit()
+
+    editor_obj = await db.get(User, editor_id)
+    with patch("app.services.station.require_scope", new_callable=AsyncMock):
+        await station_service.update_station_property(
+            db, actor=editor_obj, uuid=str(prop_id), changes={"quantity": 888}
+        )
+
+    rows = (
+        (
+            await db.execute(
+                select(Notification).where(
+                    Notification.recipient_uuid == gov_uid,
+                    Notification.type == "resource_station_updated",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert rows == [], "A rejected property's edits must not notify"
