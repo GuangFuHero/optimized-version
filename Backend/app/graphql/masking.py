@@ -1,4 +1,4 @@
-"""PII masking helpers for ticket contact fields (ADR-049, ported from PR #23).
+"""PII masking helpers for ticket/station contact fields and addresses (ADR-049, from PR #23).
 
 Used by the `ticket.view_pii` field resolvers: when the caller's scope does NOT cover a
 ticket, its contact fields are returned *masked* (partial reveal) rather than null — a
@@ -48,6 +48,32 @@ def mask_email(email: str | None) -> str | None:
     tld = domain.rsplit(".", 1)[-1] if "." in domain else domain
     first = local[0] if local else ""
     return f"{first}***@***.{tld}"
+
+
+# First digit-led 巷/弄/號 group, or a 樓/室 — where the public pin stops and PII starts.
+_ADDRESS_PRIVATE_RE = re.compile(r"\d+(?:巷|弄|號)|\d+樓|[0-9A-Za-z]{1,8}室")
+
+
+def mask_address(formatted: str | None) -> str | None:
+    """Mask a Taiwanese address from 巷 onward, keeping 縣市/鄉鎮市區/村里/路/段.
+
+    ``花蓮縣光復鄉大全村中興路10號3樓`` → ``花蓮縣光復鄉大全村中興路◯◯◯``
+
+    Granularity is deliberate, and narrower than the other maskers. The parent's `geometry`
+    Point is already public and precise, so coarse location is not the secret here and masking
+    縣市 would be theatre. What the pin does NOT reveal is the 門牌 — an identity-grade key that
+    joins to household-registration and delivery records — nor which floor or room. So the cut
+    is made at the first 巷/弄/號/樓/室 segment, which is exactly the part the map cannot show.
+
+    A value with no such segment (a road-level address) is returned unchanged: there is nothing
+    in it the pin does not already give away.
+    """
+    if not formatted:
+        return formatted
+    m = _ADDRESS_PRIVATE_RE.search(formatted)
+    if m is None:
+        return formatted
+    return formatted[: m.start()] + _MASK_GLYPH * 3
 
 
 _PHONE_PUNCTUATION_RE = re.compile(r"[\s\-().+]")

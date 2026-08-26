@@ -193,6 +193,17 @@ main() {
             < scripts/seed_mock_scenarios.sql
     fi
 
+    # Address reference data: DETACHED and deliberately NOT gating the deploy. The OSM extract
+    # alone is 326 MB, which would blow the 60s readiness budget in step 9 and could trigger a
+    # rollback for a job that has nothing to do with whether the new code is healthy. It skips
+    # any dataset already loaded at the same upstream version, so re-running costs one HTTP HEAD.
+    # Progress: query `referenceData` (GraphQL) or `docker logs` on the container it prints.
+    # Until it finishes, normalizeAddress degrades — it reports which dataset is missing rather
+    # than failing. Force a reload by hand with: compose run --rm ... --force
+    log "[8b/9] launching reference-data import (detached; does NOT gate this deploy)"
+    compose run -d --rm -e PYTHONPATH=/app backend python scripts/import_reference_data.py \
+        || log "WARN: could not launch the reference-data import; run it by hand"
+
     log "[9/9] starting new backend + frontend + tunnel, waiting for backend readiness"
     STAGE=service                       # from here, failure = full image rollback
     compose up -d backend frontend cloudflared

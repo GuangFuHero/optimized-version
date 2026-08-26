@@ -1,6 +1,7 @@
 """GraphQL types for stations, closure areas, and station properties."""
 
 import asyncio
+from dataclasses import replace
 from datetime import datetime
 from types import SimpleNamespace
 from uuid import UUID
@@ -10,7 +11,7 @@ import strawberry
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
-from app.graphql.masking import mask_email, mask_name, mask_phone
+from app.graphql.masking import mask_address, mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import PageInfo, Visibility
 from app.graphql.tickets.types import PhotoType
@@ -31,19 +32,26 @@ class SecondaryLocationType:
     """GraphQL type for secondary address or pole location details."""
 
     uuid: UUID
-    geometry_uuid: str = strawberry.field(
-        description="UUID of the parent station this location belongs to"
-    )
-    location_type: str = strawberry.field(
-        description="Type of secondary location: 'address' or 'pole'"
-    )
+    geometry_uuid: str = strawberry.field(description="UUID of the parent station this location belongs to")
+    location_type: str = strawberry.field(description="Type of secondary location: 'address' or 'pole'")
     county: str | None = None
-    city: str | None = None
+    town: str | None = strawberry.field(default=None, description="鄉鎮市區 (replaced the old `city`)")
+    village: str | None = strawberry.field(default=None, description="村里")
+    road: str | None = None
+    section: str | None = strawberry.field(default=None, description="段")
     lane: str | None = None
     alley: str | None = None
     no: str | None = None
     floor: str | None = None
     room: str | None = None
+    formatted: str | None = strawberry.field(
+        default=None,
+        description="Canonical single-line address, masked from 巷 onward without the parent's view_pii",
+    )
+    normalization_status: str | None = strawberry.field(
+        default=None,
+        description="How far validation got: 'verified' | 'corrected' | 'unverified' | 'pin_mismatch'",
+    )
     pole_id: str | None = strawberry.field(
         default=None,
         description="Utility pole identifier (only set when location_type is 'pole')",
@@ -60,24 +68,66 @@ class SecondaryLocationType:
     def from_model(cls, m) -> "SecondaryLocationType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, geometry_uuid=m.geometry_uuid,
+            uuid=m.uuid,
+            geometry_uuid=m.geometry_uuid,
             location_type=m.location_type,
-            county=m.county, city=m.city, lane=m.lane, alley=m.alley,
-            no=m.no, floor=m.floor, room=m.room,
-            pole_id=m.pole_id, pole_type=m.pole_type, pole_note=m.pole_note,
+            county=m.county,
+            town=m.town,
+            village=m.village,
+            road=m.road,
+            section=m.section,
+            lane=m.lane,
+            alley=m.alley,
+            no=m.no,
+            floor=m.floor,
+            room=m.room,
+            formatted=m.formatted,
+            normalization_status=m.normalization_status,
+            pole_id=m.pole_id,
+            pole_type=m.pole_type,
+            pole_note=m.pole_note,
+        )
+
+    def masked(self) -> "SecondaryLocationType":
+        """Return a copy with the private part of the address removed.
+
+        Used by the parent type's resolver when the caller is out of scope for its `view_pii`
+        capability. Blanking the fine-grained fields as well as `formatted` matters: leaving
+        `no` populated beside a masked `formatted` would hand back exactly what was hidden.
+        """
+        return replace(
+            self,
+            formatted=mask_address(self.formatted),
+            lane=None,
+            alley=None,
+            no=None,
+            floor=None,
+            room=None,
         )
 
 
 @strawberry.input
 class SecondaryLocationInput:
-    """Input for attaching a secondary address or pole location to a station."""
+    """Input for attaching a secondary address or pole location to a station or ticket.
+
+    Supply either `raw` (a full address string, which is parsed) or the separate components.
+    Whichever arrives, the value stored is the *normalized* one — see
+    `app/services/address.py::validate_secondary_location`.
+    """
 
     location_type: str = strawberry.field(
         default="address",
         description="Type of secondary location: 'address' (default) or 'pole'",
     )
+    raw: str | None = strawberry.field(
+        default=None,
+        description="Full address as typed, e.g. '花蓮縣光復鄉中興路10號'. Wins over the fields below.",
+    )
     county: str | None = None
-    city: str | None = None
+    town: str | None = strawberry.field(default=None, description="鄉鎮市區")
+    village: str | None = strawberry.field(default=None, description="村里")
+    road: str | None = None
+    section: str | None = strawberry.field(default=None, description="段")
     lane: str | None = None
     alley: str | None = None
     no: str | None = None
@@ -87,15 +137,37 @@ class SecondaryLocationInput:
     pole_type: str | None = None
     pole_note: str | None = None
 
+    def to_dict(self) -> dict:
+        """Flatten to the payload `validate_secondary_location` expects.
+
+        One place builds this, so createStation / updateStation / createTicket cannot drift
+        apart in which fields they forward.
+        """
+        return {
+            "location_type": self.location_type,
+            "raw": self.raw,
+            "county": self.county,
+            "town": self.town,
+            "village": self.village,
+            "road": self.road,
+            "section": self.section,
+            "lane": self.lane,
+            "alley": self.alley,
+            "no": self.no,
+            "floor": self.floor,
+            "room": self.room,
+            "pole_id": self.pole_id,
+            "pole_type": self.pole_type,
+            "pole_note": self.pole_note,
+        }
+
 
 @strawberry.type
 class StationType:
     """GraphQL type representing a map station (shelter, supply point, etc.)."""
 
     uuid: UUID
-    property_name: str = strawberry.field(
-        description="Internal polymorphic discriminator — always 'station'"
-    )
+    property_name: str = strawberry.field(description="Internal polymorphic discriminator — always 'station'")
     geometry: GeoJSON | None = strawberry.field(
         default=None,
         description="GeoJSON geometry — Point for a station location, Polygon/MultiPolygon for an area",
@@ -221,10 +293,20 @@ class StationType:
         """Resolve photos attached to this station."""
         return await info.context["loaders"]["photos_by_station"].load(str(self.uuid))
 
-    @strawberry.field
+    @strawberry.field(
+        description="Address or pole location — the address is masked without station.view_pii here"
+    )
     async def secondary_location(self, info: strawberry.types.Info) -> SecondaryLocationType | None:
-        """Resolve the secondary address or pole location for this station."""
-        return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
+        """Resolve the secondary address or pole location, masking the address when out of scope.
+
+        An address is PII, and until this feature it was not treated as such: the columns were
+        county/city/lane/alley/no, which gave away little. They now carry a full 門牌, so this
+        resolver is gated exactly like `contact_name` / `contact_phone` above.
+        """
+        sl = await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
+        if sl is None or await self._pii_visible(info):
+            return sl
+        return sl.masked()
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list["StationPropertyType"]:
@@ -235,16 +317,26 @@ class StationType:
     def from_model(cls, m) -> "StationType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, property_name=m.property_name,
-            geometry=geom_to_geojson(m.geometry), created_by=m.created_by,
-            type=m.type, name=m.name, description=m.description,
-            op_hour=m.op_hour, level=m.level, comment=m.comment,
-            source=m.source, visibility=m.visibility,
+            uuid=m.uuid,
+            property_name=m.property_name,
+            geometry=geom_to_geojson(m.geometry),
+            created_by=m.created_by,
+            type=m.type,
+            name=m.name,
+            description=m.description,
+            op_hour=m.op_hour,
+            level=m.level,
+            comment=m.comment,
+            source=m.source,
+            visibility=m.visibility,
             verification_status=m.verification_status,
             confidence_score=m.confidence_score,
-            is_duplicate=m.is_duplicate, is_temporary=m.is_temporary,
-            is_official=m.is_official, priority_score=m.priority_score,
-            created_at=m.created_at, updated_at=m.updated_at,
+            is_duplicate=m.is_duplicate,
+            is_temporary=m.is_temporary,
+            is_official=m.is_official,
+            priority_score=m.priority_score,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
             _contact_name_raw=m.contact_name,
             _contact_email_raw=m.contact_email,
             _contact_phone_raw=m.contact_phone,
@@ -272,16 +364,10 @@ class CreateStationInput:
     )
     name: str | None = None
     description: str | None = None
-    op_hour: str | None = strawberry.field(
-        default=None, description="Operating hours in free-text format"
-    )
-    level: int = strawberry.field(
-        default=0, description="Importance level for map rendering (0 = default)"
-    )
+    op_hour: str | None = strawberry.field(default=None, description="Operating hours in free-text format")
+    level: int = strawberry.field(default=0, description="Importance level for map rendering (0 = default)")
     comment: str | None = None
-    source: str = strawberry.field(
-        default="user", description="Data origin: 'user' (default) or 'official'"
-    )
+    source: str = strawberry.field(default="user", description="Data origin: 'user' (default) or 'official'")
     visibility: Visibility = strawberry.field(
         default=Visibility.public,
         description="Visibility: 'public' (default), 'restricted', or 'internal'",
@@ -314,9 +400,14 @@ class UpdateStationInput:
     contact_name: str | None = strawberry.UNSET
     contact_email: str | None = strawberry.UNSET
     contact_phone: str | None = strawberry.UNSET
+    secondary_location: SecondaryLocationInput | None = strawberry.field(
+        default=strawberry.UNSET,
+        description="Replaces the station's address wholesale; omit to leave it unchanged",
+    )
 
 
 # --- Closure Area ---
+
 
 @strawberry.type
 class ClosureAreaType:
@@ -332,16 +423,12 @@ class ClosureAreaType:
     created_by: str | None = strawberry.field(
         default=None, description="UUID of the user who reported this closure"
     )
-    status: str = strawberry.field(
-        default="", description="Current closure status: 'dangerous', 'block'"
-    )
+    status: str = strawberry.field(default="", description="Current closure status: 'dangerous', 'block'")
     information_source: str | None = strawberry.field(
         default=None,
         description="Source of the closure report, e.g. agency name or URL",
     )
-    comment: str | None = strawberry.field(
-        default=None, description="Additional notes about this closure"
-    )
+    comment: str | None = strawberry.field(default=None, description="Additional notes about this closure")
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -349,10 +436,15 @@ class ClosureAreaType:
     def from_model(cls, m) -> "ClosureAreaType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, property_name=m.property_name,
-            geometry=geom_to_geojson(m.geometry), created_by=m.created_by,
-            status=m.status, information_source=m.information_source,
-            comment=m.comment, created_at=m.created_at, updated_at=m.updated_at,
+            uuid=m.uuid,
+            property_name=m.property_name,
+            geometry=geom_to_geojson(m.geometry),
+            created_by=m.created_by,
+            status=m.status,
+            information_source=m.information_source,
+            comment=m.comment,
+            created_at=m.created_at,
+            updated_at=m.updated_at,
         )
 
 
@@ -368,12 +460,8 @@ class ClosureAreaConnection:
 class CreateClosureAreaInput:
     """Input for creating a new closure area."""
 
-    geometry: GeoJSON = strawberry.field(
-        description="GeoJSON Polygon or MultiPolygon — must not be a Point"
-    )
-    status: str = strawberry.field(
-        description="Initial closure status: 'active', 'cleared', or 'unknown'"
-    )
+    geometry: GeoJSON = strawberry.field(description="GeoJSON Polygon or MultiPolygon — must not be a Point")
+    status: str = strawberry.field(description="Initial closure status: 'active', 'cleared', or 'unknown'")
     information_source: str | None = strawberry.field(
         default=None, description="Source of the closure report, e.g. agency name or URL"
     )
@@ -392,14 +480,13 @@ class UpdateClosureAreaInput:
 
 # --- Station Property ---
 
+
 @strawberry.type
 class StationPropertyType:
     """GraphQL type representing a property (supply item, service) on a station."""
 
     uuid: UUID
-    station_uuid: str = strawberry.field(
-        description="UUID of the parent station this property belongs to"
-    )
+    station_uuid: str = strawberry.field(description="UUID of the parent station this property belongs to")
     property_type: str = strawberry.field(
         description="Category of this property, e.g. 'supply', 'service', 'equipment'"
     )
@@ -431,10 +518,15 @@ class StationPropertyType:
     def from_model(cls, m) -> "StationPropertyType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, station_uuid=m.station_uuid,
-            property_type=m.property_type, property_name=m.property_name,
-            quantity=m.quantity, comment=m.comment, status=m.status,
-            weightings=m.weightings, created_by=m.created_by,
+            uuid=m.uuid,
+            station_uuid=m.station_uuid,
+            property_type=m.property_type,
+            property_name=m.property_name,
+            quantity=m.quantity,
+            comment=m.comment,
+            status=m.status,
+            weightings=m.weightings,
+            created_by=m.created_by,
             created_at=m.created_at,
         )
 
@@ -443,12 +535,8 @@ class StationPropertyType:
 class CreateStationPropertyInput:
     """Input for adding a new property to a station."""
 
-    station_uuid: str = strawberry.field(
-        description="UUID of the station to attach this property to"
-    )
-    property_type: str = strawberry.field(
-        description="Category: 'supply', 'service', or 'equipment'"
-    )
+    station_uuid: str = strawberry.field(description="UUID of the station to attach this property to")
+    property_type: str = strawberry.field(description="Category: 'supply', 'service', or 'equipment'")
     property_name: str = strawberry.field(
         description="Specific item name matching the property config schema"
     )
@@ -473,6 +561,7 @@ class UpdateStationPropertyInput:
 
 # --- CrowdSourcing ---
 
+
 @strawberry.type
 class CrowdSourcingType:
     """GraphQL type for a crowd-sourced rating submitted by a user for a station property."""
@@ -482,9 +571,7 @@ class CrowdSourcingType:
     item_uuid: str | None = strawberry.field(
         default=None, description="UUID of the specific StationProperty being rated"
     )
-    user_uuid: str = strawberry.field(
-        default="", description="UUID of the user who submitted this rating"
-    )
+    user_uuid: str = strawberry.field(default="", description="UUID of the user who submitted this rating")
     user_credibility_score: float = strawberry.field(
         default=0.0, description="Credibility score of the submitter at the time of submission"
     )
@@ -501,10 +588,13 @@ class CrowdSourcingType:
     def from_model(cls, m) -> "CrowdSourcingType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, station_uuid=m.station_uuid,
-            item_uuid=m.item_uuid, user_uuid=m.user_uuid,
+            uuid=m.uuid,
+            station_uuid=m.station_uuid,
+            item_uuid=m.item_uuid,
+            user_uuid=m.user_uuid,
             user_credibility_score=m.user_credibility_score,
-            rating=m.rating, distance_from_geometry=m.distance_from_geometry,
+            rating=m.rating,
+            distance_from_geometry=m.distance_from_geometry,
             created_at=m.created_at,
         )
 
@@ -518,9 +608,7 @@ class CreateCrowdSourcingInput:
         default=None,
         description="UUID of the StationProperty being rated — null for a general station rating",
     )
-    rating: str = strawberry.field(
-        description="Rating value: 'up', 'neutral', or 'down'"
-    )
+    rating: str = strawberry.field(description="Rating value: 'up', 'neutral', or 'down'")
     distance_from_geometry: float | None = strawberry.field(
         default=None,
         description="Distance in meters from the user to the station at time of submission",

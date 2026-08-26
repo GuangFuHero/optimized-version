@@ -7,11 +7,11 @@ import type { CodegenConfig } from '@graphql-codegen/cli';
  * 生成的檔案位於 `src/__generated__/`，不應手動修改。
  *
  * 執行：pnpm codegen
- * 預設讀取 libs/data-access/schema.graphql（由 backend 匯出）。
+ * 預設讀取 libs/data-access/src/graphql/schema.graphql（由 backend 匯出）。
  */
 const config: CodegenConfig = {
   // 優先使用本地 SDL 檔（由 backend 匯出），避免 codegen 每次都需要後端在線。
-  schema: 'libs/data-access/schema.graphql',
+  schema: 'libs/data-access/src/graphql/schema.graphql',
 
   // 掃描 src/graphql/**/*.graphql 作為 operation documents
   documents: ['libs/data-access/src/graphql/**/*.graphql'],

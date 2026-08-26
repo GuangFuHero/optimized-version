@@ -17,6 +17,12 @@ from app.models.rbac import (  # noqa: F401
     UserPermissionAssign,
     UserRoleAssign,
 )
+from app.models.reference import (  # noqa: F401
+    OsmAddressPoint,
+    ReferenceDataset,
+    RefRoad,
+    RefVillage,
+)
 from app.models.request import Tickets  # noqa: F401
 from app.models.route import Route  # noqa: F401
 from app.models.secondary_location import SecondaryLocation  # noqa: F401
@@ -27,4 +33,3 @@ from app.models.station_property import (  # noqa: F401
 )
 from app.models.team import Team, TeamZoneAssign, WorkZone  # noqa: F401
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask  # noqa: F401
-

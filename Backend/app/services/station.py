@@ -12,9 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
-from app.graphql.scalars import geojson_to_geom
+from app.graphql.scalars import geojson_to_geom, geom_to_geojson
 from app.models.auth import User
 from app.models.geo import Station
+from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import CrowdSourcing, StationProperty
 from app.repositories.geo_repository import (
     crowd_sourcing_repository,
@@ -22,6 +23,7 @@ from app.repositories.geo_repository import (
     station_property_repository,
     station_repository,
 )
+from app.services.address import validate_secondary_location
 from app.services.authz import require_scope
 from app.services.geo_validation import normalize_contact_fields, validate_point
 
@@ -58,6 +60,10 @@ async def create_station(
             "contact_phone": contact_phone,
         }
     )
+    # After require_scope, never before: validation messages name reference data, and an
+    # unauthorized caller must not be able to probe it. Same rule as normalize_contact_fields,
+    # the values below are the ones that get stored — never the raw input.
+    secondary_location = await validate_secondary_location(db, sl=secondary_location, geometry=geometry)
 
     station = await station_repository.add(
         db,
@@ -89,12 +95,20 @@ async def create_station(
 
 
 async def update_station(
-    db: AsyncSession, *, actor: User, uuid: str, geometry: dict | None = None, changes: dict
+    db: AsyncSession,
+    *,
+    actor: User,
+    uuid: str,
+    geometry: dict | None = None,
+    changes: dict,
+    secondary_location: dict | None = None,
 ) -> Station:
     """Update a station (checkpoint 1 station.edit, then checkpoint 2 against the loaded station).
 
     `changes` is the already-diffed non-geometry field dict (UNSET handling stays in the
     resolver); `geometry` is the raw GeoJSON dict, kept separate as it needs validating.
+    `secondary_location`, when given, replaces the station's address wholesale — addresses were
+    previously write-once at create, which left no way to fix one.
     """
     station = await station_repository.get_by_uuid_active(db, uuid)
     if not station:
@@ -105,7 +119,23 @@ async def update_station(
     if geometry is not None:
         validate_point(geometry)
         obj_in["geometry"] = geojson_to_geom(geometry)
-    return await station_repository.update(db, db_obj=station, obj_in=obj_in)
+    updated = await station_repository.update(db, db_obj=station, obj_in=obj_in)
+
+    if secondary_location is not None:
+        # Validate against the NEW geometry when one was supplied, so moving the pin and fixing
+        # the address in one call is graded against the position the caller actually meant.
+        normalized = await validate_secondary_location(
+            db, sl=secondary_location, geometry=geometry or geom_to_geojson(station.geometry)
+        )
+        existing = await db.scalar(
+            select(SecondaryLocation).where(SecondaryLocation.geometry_uuid == str(uuid))
+        )
+        if existing:
+            await secondary_location_repository.update(db, db_obj=existing, obj_in=normalized)
+        else:
+            await secondary_location_repository.add(db, obj_in={"geometry_uuid": str(uuid), **normalized})
+        await db.commit()
+    return updated
 
 
 async def delete_station(db: AsyncSession, *, actor: User, uuid: str) -> None:
@@ -178,9 +208,7 @@ async def update_station_property(
     prop = await station_property_repository.get_by_uuid_active(db, uuid)
     if not prop:
         raise ValueError("Station property not found")
-    await require_scope(
-        actor, Perm.STATION_EDIT, db, resource=await _property_scope_target(db, prop)
-    )
+    await require_scope(actor, Perm.STATION_EDIT, db, resource=await _property_scope_target(db, prop))
     return await station_property_repository.update(db, db_obj=prop, obj_in=changes)
 
 

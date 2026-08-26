@@ -41,23 +41,21 @@ class GeoMutation:
         attaches a secondary address or pole location. Requires station.add permission.
         Returns the created station.
         """
-        sl_dict = None
-        if input.secondary_location is not None:
-            sl = input.secondary_location
-            sl_dict = {
-                "location_type": sl.location_type,
-                "county": sl.county, "city": sl.city, "lane": sl.lane, "alley": sl.alley,
-                "no": sl.no, "floor": sl.floor, "room": sl.room,
-                "pole_id": sl.pole_id, "pole_type": sl.pole_type, "pole_note": sl.pole_note,
-            }
+        sl_dict = input.secondary_location.to_dict() if input.secondary_location else None
         station = await station_service.create_station(
             info.context["db"],
             actor=require_authenticated(info),
             geometry=input.geometry,
-            type=input.type, name=input.name, description=input.description,
-            op_hour=input.op_hour, level=input.level, comment=input.comment,
-            source=input.source, visibility=input.visibility.value,
-            contact_name=input.contact_name, contact_email=input.contact_email,
+            type=input.type,
+            name=input.name,
+            description=input.description,
+            op_hour=input.op_hour,
+            level=input.level,
+            comment=input.comment,
+            source=input.source,
+            visibility=input.visibility.value,
+            contact_name=input.contact_name,
+            contact_email=input.contact_email,
             contact_phone=input.contact_phone,
             secondary_location=sl_dict,
         )
@@ -74,8 +72,10 @@ class GeoMutation:
         Returns the created PhotoType.
         """
         photo = await photo_service.attach_photo_to_geometry(
-            info.context["db"], actor=require_authenticated(info),
-            base_geometry_uuid=str(station_uuid), url=url,
+            info.context["db"],
+            actor=require_authenticated(info),
+            base_geometry_uuid=str(station_uuid),
+            url=url,
         )
         return PhotoType.from_model(photo)
 
@@ -110,16 +110,27 @@ class GeoMutation:
         if input.visibility is not None:
             changes["visibility"] = input.visibility.value
         for field in (
-            "type", "name", "description", "op_hour", "comment",
-            "contact_name", "contact_email", "contact_phone",
+            "type",
+            "name",
+            "description",
+            "op_hour",
+            "comment",
+            "contact_name",
+            "contact_email",
+            "contact_phone",
         ):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
                 changes[field] = val
 
+        sl = input.secondary_location
         station = await station_service.update_station(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), geometry=input.geometry, changes=changes,
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
+            geometry=input.geometry,
+            changes=changes,
+            secondary_location=sl.to_dict() if sl not in (None, strawberry.UNSET) else None,
         )
         return StationType.from_model(station)
 
@@ -143,15 +154,21 @@ class GeoMutation:
         Validates geometry type. Requires map.add permission. Returns the created closure area.
         """
         area = await closure_area_service.create_closure_area(
-            info.context["db"], actor=require_authenticated(info),
-            geometry=input.geometry, status=input.status,
-            information_source=input.information_source, comment=input.comment,
+            info.context["db"],
+            actor=require_authenticated(info),
+            geometry=input.geometry,
+            status=input.status,
+            information_source=input.information_source,
+            comment=input.comment,
         )
         return ClosureAreaType.from_model(area)
 
     @strawberry.mutation
     async def update_closure_area(
-        self, info: strawberry.types.Info, uuid: UUID, input: UpdateClosureAreaInput,
+        self,
+        info: strawberry.types.Info,
+        uuid: UUID,
+        input: UpdateClosureAreaInput,
     ) -> ClosureAreaType:
         """Update a closure area's geometry, status, or notes.
 
@@ -167,8 +184,11 @@ class GeoMutation:
                 changes[field] = val
 
         area = await closure_area_service.update_closure_area(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), geometry=input.geometry, changes=changes,
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
+            geometry=input.geometry,
+            changes=changes,
         )
         return ClosureAreaType.from_model(area)
 
@@ -190,7 +210,9 @@ class StationPropertyMutation:
 
     @strawberry.mutation
     async def create_station_property(
-        self, info: strawberry.types.Info, input: CreateStationPropertyInput,
+        self,
+        info: strawberry.types.Info,
+        input: CreateStationPropertyInput,
     ) -> StationPropertyType:
         """Add a new property (supply item, service) to a station.
 
@@ -199,16 +221,22 @@ class StationPropertyMutation:
         Returns the created StationPropertyType.
         """
         prop = await station_service.create_station_property(
-            info.context["db"], actor=require_authenticated(info),
-            station_uuid=input.station_uuid, property_type=input.property_type,
-            property_name=input.property_name, quantity=input.quantity,
+            info.context["db"],
+            actor=require_authenticated(info),
+            station_uuid=input.station_uuid,
+            property_type=input.property_type,
+            property_name=input.property_name,
+            quantity=input.quantity,
             weightings=input.weightings,
         )
         return StationPropertyType.from_model(prop)
 
     @strawberry.mutation
     async def update_station_property(
-        self, info: strawberry.types.Info, uuid: UUID, input: UpdateStationPropertyInput,
+        self,
+        info: strawberry.types.Info,
+        uuid: UUID,
+        input: UpdateStationPropertyInput,
     ) -> StationPropertyType:
         """Update a station property's status, weightings, or quantity.
 
@@ -229,7 +257,9 @@ class StationPropertyMutation:
 
     @strawberry.mutation
     async def create_crowd_sourcing(
-        self, info: strawberry.types.Info, input: CreateCrowdSourcingInput,
+        self,
+        info: strawberry.types.Info,
+        input: CreateCrowdSourcingInput,
     ) -> CrowdSourcingType:
         """Submit or update a crowd-sourced rating for a station property.
 
@@ -239,8 +269,11 @@ class StationPropertyMutation:
         Returns the created or updated CrowdSourcingType.
         """
         cs = await station_service.rate_station_property(
-            info.context["db"], actor=require_authenticated(info),
-            station_uuid=input.station_uuid, item_uuid=input.item_uuid,
-            rating=input.rating, distance_from_geometry=input.distance_from_geometry,
+            info.context["db"],
+            actor=require_authenticated(info),
+            station_uuid=input.station_uuid,
+            item_uuid=input.item_uuid,
+            rating=input.rating,
+            distance_from_geometry=input.distance_from_geometry,
         )
         return CrowdSourcingType.from_model(cs)

@@ -75,6 +75,9 @@ async def _ensure_test_database():
     eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
     async with eng.connect() as conn:
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
+        # pg_trgm backs ref_roads' GIN index (fuzzy road matching). Base.metadata.create_all
+        # builds the schema for tests, and that index fails to create without the extension.
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     await eng.dispose()
 
 
@@ -151,6 +154,7 @@ async def redis():
 @pytest_asyncio.fixture
 async def client(db_session, redis):
     """HTTP client with db + redis + email-sender overrides bound to ONE fake redis."""
+
     async def override_get_db():
         yield db_session
 

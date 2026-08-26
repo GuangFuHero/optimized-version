@@ -15,12 +15,14 @@ from app.models.auth import User
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.repositories.auth_repository import user_repository
+from app.repositories.geo_repository import secondary_location_repository
 from app.repositories.tickets_repository import (
     task_assignment_repository,
     task_property_repository,
     ticket_repository,
     ticket_task_repository,
 )
+from app.services.address import validate_secondary_location
 from app.services.authz import require_scope
 from app.services.geo_validation import normalize_contact_fields, validate_point
 
@@ -81,8 +83,14 @@ async def create_ticket(
     task_type: str | None,
     visibility: str,
     disaster_type: str | None,
+    secondary_location: dict | None = None,
 ) -> Tickets:
-    """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner)."""
+    """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner).
+
+    Optionally attaches a street address. This needs no new table: secondary_locations keys on
+    base_geometries.uuid and Tickets is a BaseGeometry subclass, so the station machinery
+    already fits. Like create_station, the two inserts share one commit.
+    """
     await require_scope(actor, Perm.TICKET_ADD, db)
     validate_point(geometry, entity="Ticket")
     contacts = normalize_contact_fields(
@@ -95,7 +103,9 @@ async def create_ticket(
         # whitespace-only value has to be refused here rather than normalized to None.
         required=frozenset({"contact_name"}),
     )
-    return await ticket_repository.create(
+    # After require_scope, never before — see the same call in station.py::create_station.
+    secondary_location = await validate_secondary_location(db, sl=secondary_location, geometry=geometry)
+    ticket = await ticket_repository.create(
         db,
         obj_in={
             "property_name": "request",
@@ -112,6 +122,12 @@ async def create_ticket(
             "disaster_type": disaster_type,
         },
     )
+    if secondary_location:
+        await secondary_location_repository.add(
+            db, obj_in={"geometry_uuid": str(ticket.uuid), **secondary_location}
+        )
+        await db.commit()
+    return ticket
 
 
 async def update_ticket(

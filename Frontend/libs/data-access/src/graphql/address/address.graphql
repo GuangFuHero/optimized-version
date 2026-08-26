@@ -1,0 +1,46 @@
+# 地址正規化。無法解析時後端回傳 normalizable=false（而非 GraphQL error），
+# 前端應顯示 issues，不要當成請求失敗處理。
+query NormalizeAddress($input: NormalizeAddressInput!) {
+  normalizeAddress(input: $input) {
+    normalizable
+    status
+    formatted
+    county
+    town
+    village
+    road
+    section
+    lane
+    alley
+    no
+    floor
+    room
+    lat
+    lng
+    distanceM
+    issues
+    suggestions {
+      formatted
+      county
+      town
+      village
+      road
+      no
+      distanceM
+    }
+  }
+}
+
+# 參考資料匯入狀態。匯入與部署分離，status != "ready" 時地址功能會降級，
+# 前端可據此決定是否提供地址建議。
+query ReferenceData {
+  referenceData {
+    name
+    status
+    rowCount
+    sourceVersion
+    startedAt
+    finishedAt
+    error
+  }
+}

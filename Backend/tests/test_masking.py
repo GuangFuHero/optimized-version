@@ -1,12 +1,12 @@
 """Unit tests for app/graphql/masking.py (PII masking, ADR-049 / ported from PR #23)."""
 
-from app.graphql.masking import mask_email, mask_name, mask_phone
+from app.graphql.masking import mask_address, mask_email, mask_name, mask_phone
 
 
 def test_mask_name_cjk_fixed_width():
     """CJK name → first char + fixed ◯◯ (does not reveal real length)."""
     assert mask_name("王小明") == "王◯◯"
-    assert mask_name("陳" ) == "陳◯◯"
+    assert mask_name("陳") == "陳◯◯"
     assert mask_name("歐陽娜娜") == "歐◯◯"
 
 
@@ -71,3 +71,31 @@ def test_mask_phone_non_phone_is_masked_entirely():
     assert mask_phone("LINE: yilan_vol") == "◯◯◯"
     assert mask_phone("LINE: abc123456") == "◯◯◯"
     assert mask_phone("LINE: hualien_relief_2024") == "◯◯◯"
+
+
+def test_mask_address_cuts_at_the_house_number():
+    """縣市/鄉鎮市區/村里/路 survive; 號 and everything after it does not."""
+    assert mask_address("花蓮縣光復鄉大全村中興路10號") == "花蓮縣光復鄉大全村中興路◯◯◯"
+    assert mask_address("花蓮縣光復鄉大全村中興路10號3樓") == "花蓮縣光復鄉大全村中興路◯◯◯"
+
+
+def test_mask_address_cuts_at_the_lane():
+    """巷/弄 are as identifying as the 號 itself, so the cut is made at whichever comes first."""
+    assert mask_address("新北市板橋區文化路2段182巷3弄5號") == "新北市板橋區文化路2段◯◯◯"
+
+
+def test_mask_address_keeps_the_section():
+    """段 is part of the road name in practice and is visible on any map."""
+    assert mask_address("台中市西區台灣大道2段100號") == "台中市西區台灣大道2段◯◯◯"
+
+
+def test_mask_address_leaves_road_level_values_alone():
+    """Nothing private in a road-level address — the public map pin already shows this much."""
+    assert mask_address("花蓮縣光復鄉大全村") == "花蓮縣光復鄉大全村"
+    assert mask_address("花蓮縣光復鄉中興路") == "花蓮縣光復鄉中興路"
+
+
+def test_mask_address_empty_or_none():
+    """Falsy values pass through, matching the other maskers."""
+    assert mask_address(None) is None
+    assert mask_address("") == ""
