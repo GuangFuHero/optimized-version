@@ -103,6 +103,17 @@ _LAYOUT_OVERRIDES_DESCRIPTION = (
     "https://plotly.com/python/reference/layout/, e.g. "
     '\'{"title": {"text": "Custom title"}}\'.'
 )
+# Plotly's own minimum for layout.width/height. Below it update_layout raises a ValueError
+# that nothing catches — the try/except in chart_render covers layout_overrides only — so an
+# unbounded param 500'd. Rejecting it here keeps it off plotly entirely and, unlike a guard in
+# the service, publishes the minimum in the OpenAPI schema.
+_MIN_FIGURE_PX = 10
+_WIDTH_DESCRIPTION = (
+    f"Figure width in px, at least {_MIN_FIGURE_PX}; omit for Plotly's default."
+)
+_HEIGHT_DESCRIPTION = (
+    f"Figure height in px, at least {_MIN_FIGURE_PX}; omit for Plotly's default."
+)
 
 
 def _parse_tz(tz: str) -> ZoneInfo:
@@ -226,8 +237,8 @@ async def get_ticket_chart(
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
     tz: str = Query("UTC", description=_TZ_DESCRIPTION),
     theme: ChartTheme = Query(ChartTheme.light, description="Base Plotly template."),
-    width: int | None = Query(None, description="Figure width in px; omit for Plotly's default."),
-    height: int | None = Query(None, description="Figure height in px; omit for Plotly's default."),
+    width: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_WIDTH_DESCRIPTION),
+    height: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_HEIGHT_DESCRIPTION),
     layout_overrides: str | None = Query(None, description=_LAYOUT_OVERRIDES_DESCRIPTION),
     scope: Scope = security.has_permission(Perm.TICKET_VIEW),
     current_user: User = Depends(security.get_current_user),
@@ -262,8 +273,8 @@ async def get_station_chart(
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
     tz: str = Query("UTC", description=_TZ_DESCRIPTION),
     theme: ChartTheme = Query(ChartTheme.light, description="Base Plotly template."),
-    width: int | None = Query(None, description="Figure width in px; omit for Plotly's default."),
-    height: int | None = Query(None, description="Figure height in px; omit for Plotly's default."),
+    width: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_WIDTH_DESCRIPTION),
+    height: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_HEIGHT_DESCRIPTION),
     layout_overrides: str | None = Query(None, description=_LAYOUT_OVERRIDES_DESCRIPTION),
     scope: Scope = security.has_permission(Perm.STATION_VIEW),
     current_user: User = Depends(security.get_current_user),

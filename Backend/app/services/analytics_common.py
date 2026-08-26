@@ -20,6 +20,16 @@ UNCATEGORIZED_LABEL = "uncategorized"
 # cap is the only thing stopping one request from holding a connection indefinitely.
 MAX_DUPLICATE_RANGE_DAYS = 120
 
+# Outermost dates local_bounds can convert. Not a domain rule — these are the limits of what
+# the conversion and the driver can represent. `end_date + timedelta(days=1)` runs off
+# datetime.date at 9999-12-31, and asyncpg encodes a timestamptz via `.astimezone(utc)`
+# (pgproto/codecs/datetime.pyx), which underflows for 0001-01-01 under any positive UTC offset,
+# so `?start_date=0001-01-01&tz=Asia/Taipei` failed inside the driver rather than here. One day
+# of slack at each end covers every zone in tzdata: the widest offset at year 1 is +15:13
+# (America/Metlakatla), well under the 24h a full day of slack buys.
+MIN_ANALYTICS_DATE = date(1, 1, 2)
+MAX_ANALYTICS_DATE = date(9999, 12, 30)
+
 
 class AnalyticsInputError(ValueError):
     """A bad query parameter; app/api/v1/endpoints/analytics.py turns it into HTTP 400.
@@ -38,7 +48,16 @@ def local_bounds(
     Returns a [start, end) pair suitable for filtering a timestamptz column (see
     Spec/Docs/er-diagram.md Part 1.5: a bare date from the frontend means local midnight
     in `tz`, not UTC midnight).
+
+    Raises AnalyticsInputError outside [MIN_ANALYTICS_DATE, MAX_ANALYTICS_DATE]. FastAPI binds
+    both params as bare dates, so the full 0001..9999 range arrives here; the guard belongs in
+    this one shared helper rather than on each handler because every metric in both domains
+    funnels through it.
     """
+    if start_date is not None and start_date < MIN_ANALYTICS_DATE:
+        raise AnalyticsInputError(f"start_date must be on or after {MIN_ANALYTICS_DATE}")
+    if end_date is not None and end_date > MAX_ANALYTICS_DATE:
+        raise AnalyticsInputError(f"end_date must be on or before {MAX_ANALYTICS_DATE}")
     lower = datetime.combine(start_date, time.min, tzinfo=tz) if start_date else None
     upper = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=tz) if end_date else None
     return lower, upper

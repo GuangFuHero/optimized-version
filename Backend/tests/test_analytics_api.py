@@ -341,3 +341,88 @@ async def test_a_render_bug_is_not_reported_as_a_client_error(client, db_session
     # The test transport re-raises unhandled app exceptions, so the raise *is* the pass.
     with pytest.raises(ValueError, match="internal render bug"):
         await client.get(TICKETS_URL, params={"y": "total_tickets"}, headers=headers)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("url", [TICKETS_URL, STATIONS_URL])
+async def test_out_of_range_end_date_is_a_400(client, db_session, url):
+    """`end_date=9999-12-31` used to 500 every metric in both domains.
+
+    `local_bounds` builds its exclusive upper bound as `end_date + timedelta(days=1)`, which
+    runs off the end of `datetime.date`. FastAPI binds the param as a bare date, so the
+    OverflowError landed in a handler that catches only AnalyticsInputError.
+    """
+    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW, Perm.STATION_VIEW)
+    y = "total_tickets" if url == TICKETS_URL else "station_count"
+    res = await client.get(
+        url, params={"y": y, "end_date": "9999-12-31"}, headers=headers
+    )
+    assert res.status_code == 400
+    assert "end_date" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_out_of_range_start_date_is_a_400(client, db_session):
+    """The same defect on the lower bound, which the review missed.
+
+    `datetime.combine(date(1, 1, 1), time.min, tzinfo=+08:06)` builds fine, so nothing failed
+    in our code — asyncpg encodes a timestamptz via `.astimezone(utc)`, and that underflows.
+    Only reachable under a positive UTC offset, hence the explicit tz.
+    """
+    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    res = await client.get(
+        TICKETS_URL,
+        params={"y": "total_tickets", "start_date": "0001-01-01", "tz": "Asia/Taipei"},
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "start_date" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_boundary_dates_are_accepted(client, db_session):
+    """Control for the two above — one day inside each limit still renders.
+
+    Both bugs were off-by-one against the representable range, so a rejection test alone
+    would pass just as well against a bound that is a day too tight.
+    """
+    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    res = await client.get(
+        TICKETS_URL,
+        params={
+            "y": "total_tickets",
+            "start_date": "0001-01-02",
+            "end_date": "9999-12-30",
+            "tz": "Asia/Taipei",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("param", ["width", "height"])
+@pytest.mark.parametrize("value", [-1, 0, 9])
+async def test_undersized_figure_is_rejected(client, db_session, param, value):
+    """Plotly's layout width/height have a minimum of 10; below it update_layout raises.
+
+    The try/except in chart_render wraps layout_overrides only, so these two params reached
+    plotly unguarded and 500'd. Now bounded at the framework edge, like the enum params.
+    """
+    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    res = await client.get(
+        TICKETS_URL, params={"y": "total_tickets", param: value}, headers=headers
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_minimum_figure_size_is_accepted(client, db_session):
+    """Control for the above — plotly's actual minimum is not rejected."""
+    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    res = await client.get(
+        TICKETS_URL,
+        params={"y": "total_tickets", "width": 10, "height": 10},
+        headers=headers,
+    )
+    assert res.status_code == 200
