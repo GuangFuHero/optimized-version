@@ -24,6 +24,65 @@ from app.repositories.geo_repository import (
 )
 from app.services.authz import require_scope
 from app.services.geo_validation import normalize_contact_fields, validate_point
+from app.services.notification_resolver import NotificationRecipientResolver
+from app.services.notification_service import NotificationService
+
+# `station_properties.property_name` values whose changes are operational status updates
+# worth notifying Gov/NGO about (PRD §3 `resource_station_updated`).
+#
+# These are EAV rows, NOT columns on `stations` — a station's live status is stored in
+# `station_properties` (Backend/Spec/Docs/mapping-stations.csv). The previous whitelist
+# lived in update_station() and tested keys of the station mutation's `changes` dict, so
+# it could never match; it also listed `status` / `power_available` / `capacity_status`,
+# none of which exist anywhere in the schema. Every name below is a real row in
+# station_property_config (alembic a2a8e4d8c51d).
+#
+# Deliberately narrow: fast-changing situational-awareness values only. Static descriptors
+# (capacity_total, pet_friendly, fuel_types, price, ...) stay silent so the Gov inbox is not
+# flooded. Widening this list is a product decision — see PRD Q11.
+#
+# Which write path reaches which name: a property's value lives in `quantity` (Integer
+# properties) or in `comment` (Boolean/Enum properties — see scripts/seed_mock_scenarios.sql).
+# UpdateStationPropertyInput exposes only quantity/status/weightings, so the four
+# comment-backed names below change exclusively through the suggestion workflow
+# (SUGGESTABLE_FIELDS in app/graphql/suggestions/fields.py). Both paths notify.
+OPERATIONAL_PROPERTY_NAMES = {
+    "beds_available",  # shelter — 剩餘床位 (Integer → quantity)
+    "capacity_available",  # medical — 可收治量 (Integer → quantity)
+    "water_level",  # water — 供水充足程度 (Enum → comment)
+    "is_open",  # gas_station — 是否營業 (Boolean → comment)
+    "supply_rationed",  # supply — 是否限量 (Boolean → comment)
+    "power_stable",  # power — 供電是否穩定 (Boolean → comment)
+}
+
+
+async def notify_operational_status_change(
+    db: AsyncSession, *, station_uuid: str, property_name: str, actor_uuid: str | None
+) -> None:
+    """Tell Gov staff and the covering NGO admins that a station's live status changed.
+
+    Shared by the two write paths that can change an operational value: direct property
+    edits (update_station_property) and approved suggestions
+    (suggestion.review_station_suggestion).
+
+    Callers must commit their own write first and pass plain values, never ORM attributes —
+    dispatch() commits, and the test suite runs sessions with expire_on_commit=True
+    (tests/conftest.py), so anything read off an ORM object afterwards would be stale.
+    """
+    station = await station_repository.get_by_uuid_active(db, station_uuid)
+    station_name = (station.name if station else None) or "物資站"
+    recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, station_uuid)
+    await NotificationService.dispatch(
+        db,
+        event_type="resource_station_updated",
+        title=f"🏢 資源物資站狀態更新：{station_name}",
+        body=f"物資站「{station_name}」的「{property_name}」已更新，請留意最新營運狀況。",
+        priority="medium",
+        actor_uuid=actor_uuid,
+        ref_type="station",
+        ref_uuid=station_uuid,
+        explicit_recipients=recipients,
+    )
 
 
 async def create_station(
@@ -51,6 +110,7 @@ async def create_station(
     """
     await require_scope(actor, Perm.STATION_ADD, db)
     validate_point(geometry)
+    actor_uid = actor.uuid
     contacts = normalize_contact_fields(
         {
             "contact_name": contact_name,
@@ -63,7 +123,7 @@ async def create_station(
         db,
         obj_in={
             "geometry": geojson_to_geom(geometry),
-            "created_by": str(actor.uuid),
+            "created_by": str(actor_uid),
             "type": type,
             "name": name,
             "description": description,
@@ -85,6 +145,22 @@ async def create_station(
 
     await db.commit()
     await db.refresh(station)
+
+    # 觸發 resource_station_updated 通知
+    recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, str(station.uuid))
+    await NotificationService.dispatch(
+        db,
+        event_type="resource_station_updated",
+        title=f"🏢 新建物資資源站：{station.name or '物資站'}",
+        body=f"新建物資資源站「{station.name or station.uuid}」，請留意物資與避難整備狀況。",
+        priority="medium",
+        actor_uuid=actor_uid,
+        ref_type="station",
+        ref_uuid=station.uuid,
+        explicit_recipients=recipients,
+    )
+    await db.refresh(station)
+
     return station
 
 
@@ -100,12 +176,45 @@ async def update_station(
     if not station:
         raise ValueError("Station not found")
     await require_scope(actor, Perm.STATION_EDIT, db, resource=station)
+    actor_uid = actor.uuid
 
+    old_dup = station.is_duplicate
     obj_in = normalize_contact_fields(changes)
     if geometry is not None:
         validate_point(geometry)
         obj_in["geometry"] = geojson_to_geom(geometry)
-    return await station_repository.update(db, db_obj=station, obj_in=obj_in)
+    updated = await station_repository.update(db, db_obj=station, obj_in=obj_in)
+
+    # 觸發通知
+    #
+    # No operational-status branch here on purpose: a station's live status
+    # (beds_available, water_level, is_open, ...) is not a column on `stations`, so those
+    # names can never appear in `changes`. `resource_station_updated` for status changes
+    # fires from update_station_property() instead.
+    #
+    # NOTE: the dedup branch below is likewise unreachable today — UpdateStationInput
+    # exposes no is_duplicate / dedup_group_id field, so nothing can set them. It is left
+    # in place for the dedup feature that will write them (PRD Q2).
+    if ("is_duplicate" in changes and changes["is_duplicate"] and not old_dup) or (
+        "dedup_group_id" in changes and changes["dedup_group_id"]
+    ):
+        dedup_recipients = await NotificationRecipientResolver.resolve_permission(
+            db, Perm.AI_DUP_REVIEW.value
+        )
+        await NotificationService.dispatch(
+            db,
+            event_type="dedup_flag_station",
+            title=f"重複物資站待審核：{updated.name or '物資站'}",
+            body=f"物資站「{updated.name or updated.uuid}」已被系統標記為疑似重複項目，請進行審核。",
+            priority="medium",
+            actor_uuid=actor_uid,
+            ref_type="station",
+            ref_uuid=updated.uuid,
+            explicit_recipients=dedup_recipients,
+        )
+
+    await db.refresh(updated)
+    return updated
 
 
 async def delete_station(db: AsyncSession, *, actor: User, uuid: str) -> None:
@@ -174,14 +283,42 @@ async def update_station_property(
     The property has no geometry, so checkpoint 2 borrows the parent station's location for
     `zone` scope (ADR-052); `own` resolves against the property's creator. Without this a
     team role (`station.edit=zone`) could never edit any property, even inside its own zone.
+
+    Changing an operational value (OPERATIONAL_PROPERTY_NAMES) also fires
+    `resource_station_updated` to all Gov staff plus the NGO admins whose work zone covers
+    the station — those values are EAV rows here, not columns on `stations`. This mutation
+    only reaches the Integer ones (it writes `quantity`); the Boolean/Enum ones live in
+    `comment` and are changed through the suggestion workflow, which notifies too.
     """
     prop = await station_property_repository.get_by_uuid_active(db, uuid)
     if not prop:
         raise ValueError("Station property not found")
-    await require_scope(
-        actor, Perm.STATION_EDIT, db, resource=await _property_scope_target(db, prop)
-    )
-    return await station_property_repository.update(db, db_obj=prop, obj_in=changes)
+    await require_scope(actor, Perm.STATION_EDIT, db, resource=await _property_scope_target(db, prop))
+
+    # Hoist everything the notification needs before the write. Production sessions use
+    # expire_on_commit=False (app/db/session.py), but the test suite deliberately runs with
+    # SQLAlchemy's default True (tests/conftest.py) so this class of bug cannot hide; under
+    # that setting repository.update() and dispatch() both expire every loaded object.
+    property_name = prop.property_name
+    station_uuid = str(prop.station_uuid)
+    actor_uid = actor.uuid
+    old_value = (prop.quantity, prop.comment)
+
+    updated = await station_property_repository.update(db, db_obj=prop, obj_in=changes)
+
+    # `comment` cannot change here — UpdateStationPropertyInput has no such field — but it is
+    # part of the comparison so this stays correct if the input ever gains one.
+    if (
+        property_name in OPERATIONAL_PROPERTY_NAMES
+        and updated.status != "rejected"
+        and (updated.quantity, updated.comment) != old_value
+    ):
+        await notify_operational_status_change(
+            db, station_uuid=station_uuid, property_name=property_name, actor_uuid=actor_uid
+        )
+        await db.refresh(updated)
+
+    return updated
 
 
 async def rate_station_property(

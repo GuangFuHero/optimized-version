@@ -86,8 +86,9 @@ gcloud secrets versions access latest --secret=app-postgres-password
 6. infra up     start db + redis, wait until healthy
 7. backup       pg_dump | gzip | upload to GCS — if the backup fails, migration is NOT attempted
 8. migrate+seed alembic upgrade head → seed_rbac.py (idempotent) → mock seed (only if SEED_MOCK=true)
-9. restart+gate start the new backend → curl /readyz, retried 12 × 5s (60s budget) —
-                only a passing readiness check counts as a successful deploy
+9. restart+gate start the new backend + frontend + tunnel + retention → curl /readyz,
+                retried 12 × 5s (60s budget) — only a passing readiness check counts as a
+                successful deploy (the retention loop is not part of the readiness gate)
 ```
 
 Design rules baked into the script:
@@ -101,6 +102,42 @@ Design rules baked into the script:
 - Concurrency: a flock on `/var/lock/disaster-deploy.lock` makes a second concurrent deploy fail
   immediately with "another deploy is already in progress". The lock is released when the process
   exits (including crashes) — there are no stale-lock cleanup steps to run.
+
+---
+
+## Notification retention (the `retention` container)
+
+- **What:** soft-deletes notifications that were read more than 30 days ago, or created more than
+  90 days ago regardless of read state — the Q4 policy from the notification PRD. It sets
+  `delete_at`; nothing is physically removed.
+- **How it runs:** a `retention` service in `docker-compose.staging.yml`, started by step 9. It reuses
+  `disaster-backend:latest` (no separate build) and runs
+  `python scripts/run_retention_cleanup.py` in a `while true; sleep 86400` loop.
+- **Why a loop and not cron:** the schedule then lives in the repo and ships with the code, and there
+  is no VM-local crontab to recreate when the box is rebuilt. Trade-off: the timer restarts with the
+  container, so the daily run drifts to whenever the last deploy happened. That is fine for an
+  age-based policy measured in days — it is not a "runs at 03:00" guarantee, and nothing depends on
+  it being one.
+- **First run is immediate:** the loop cleans once at container start, so every deploy triggers a
+  cleanup pass. The UPDATE is idempotent — a second run right after the first affects 0 rows.
+- **Failures are non-fatal:** a failed run logs `[retention] run failed, retrying next cycle` and the
+  loop continues. It is deliberately NOT part of the readiness gate — retention falling over must
+  never roll back a good backend deploy.
+
+```bash
+# Did it run? (look for the 清理完成 line)
+docker compose logs retention | tail -20
+
+# Force a pass right now without waiting for the cycle
+docker compose exec retention python scripts/run_retention_cleanup.py
+
+# How many rows are currently soft-deleted
+docker compose exec -T db psql -U postgres -d postgres \
+  -c "SELECT count(*) FILTER (WHERE delete_at IS NOT NULL) AS deleted, count(*) AS total FROM notifications;"
+```
+
+**Caveat:** `delete_at` grows forever — this policy hides rows from the API, it does not reclaim
+space. If the table gets large, a separate hard-delete/partition step is a different piece of work.
 
 ---
 
