@@ -26,7 +26,14 @@ class NotificationRepository(GenericRepository[Notification]):
         limit: int = 20,
         unread_only: bool = False,
     ) -> list[Notification]:
-        """List notifications for a specific user ordered by created_at DESC."""
+        """List a user's notifications, urgent ones first, then newest first.
+
+        Sorting on created_at alone let an urgent `zone_assigned` sink below whatever
+        arrived after it — and the highest-volume trigger (createStation) is reachable by
+        any logged-in account, so a busy hour buries exactly the notification the recipient
+        must act on. Booleans sort false < true in Postgres, so DESC lifts urgent to the top
+        and leaves every other priority in pure recency order.
+        """
         conditions = [
             self.model.recipient_uuid == recipient_uuid,
             self.model.delete_at.is_(None),
@@ -37,7 +44,10 @@ class NotificationRepository(GenericRepository[Notification]):
         query = (
             select(self.model)
             .where(and_(*conditions))
-            .order_by(self.model.created_at.desc())
+            .order_by(
+                (self.model.priority == "urgent").desc(),
+                self.model.created_at.desc(),
+            )
             .offset(skip)
             .limit(limit)
         )

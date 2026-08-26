@@ -596,3 +596,46 @@ async def test_rejected_property_edit_does_not_notify(db: AsyncSession):
         .all()
     )
     assert rows == [], "A rejected property's edits must not notify"
+
+
+@pytest.mark.asyncio
+async def test_urgent_notifications_sort_above_newer_ones(db: AsyncSession):
+    """An urgent notification must outrank newer non-urgent ones in the panel.
+
+    `zone_assigned` is the only urgent trigger and it is time-sensitive field-ops
+    information. `createStation` — the highest-volume trigger, reachable by any logged-in
+    account — used to be able to bury it, because the list was ordered by created_at alone.
+    """
+    from app.repositories.notification_repository import notification_repository
+
+    recipient = User(name="收件人")
+    db.add(recipient)
+    await db.flush()
+    rec_id = recipient.uuid
+    await db.commit()
+
+    # Oldest row is the urgent one; the two medium rows arrive after it.
+    await NotificationService.dispatch(
+        db,
+        event_type="zone_assigned",
+        title="⚠️ 【緊急】新工作分區指派",
+        body="您的團隊已獲指派責任分區。",
+        priority="urgent",
+        explicit_recipients=[rec_id],
+    )
+    for n in range(2):
+        await NotificationService.dispatch(
+            db,
+            event_type="resource_station_updated",
+            title=f"🏢 新建物資資源站 {n}",
+            body="新建物資資源站。",
+            priority="medium",
+            explicit_recipients=[rec_id],
+        )
+
+    rows = await notification_repository.list_for_recipient(db, recipient_uuid=rec_id)
+    assert len(rows) == 3
+    assert rows[0].priority == "urgent", "Urgent must lead even though it is the oldest row"
+    # The rest keep pure recency order.
+    assert [r.priority for r in rows[1:]] == ["medium", "medium"]
+    assert rows[1].created_at >= rows[2].created_at
