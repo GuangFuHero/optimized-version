@@ -160,6 +160,8 @@ q 無值：priority_score DESC NULLS LAST, created_at DESC        （維持現�
 
 ### ADR-084 過短查詢維持拋錯，接受其在日誌留下 stack trace；由前端負責事前攔截
 
+> **已被 ADR-160 取代**：選項三（新增錯誤處理層區分使用者輸入錯誤與伺服器錯誤）當時被否決，現已採用。ADR-084 的其餘部分——維持拋錯、前端仍應在送出前攔截——不變。
+
 **白話**：使用者只打一個字時，後端會回一個明確的錯誤訊息，代價是伺服器日誌會留下一整段例外堆疊。我們接受這個噪音，改由前端在送出前就擋掉。
 
 **Context**：Phase 1 在 docker 環境端到端驗證時才發現——`SearchQueryError` 從 resolver 傳播出去後，Strawberry 會以 ERROR 等級連同完整 traceback 記錄：
@@ -579,3 +581,143 @@ rollback 成功時就跳過還原 `statement_timeout`——rollback 本來就會
 ➖ 與 ADR-157 的並行前提相同：rollback 發生時若有 sibling 語句正在飛，它會失敗——但它在 transaction 已 abort 的當下本來就注定失敗。
 
 **新增守衛**：`tests/test_search_timeout.py::test_a_field_resolved_after_a_cancelled_search_still_gets_its_data`。
+
+---
+
+### ADR-160 預期錯誤以 INFO 記錄且不帶 traceback，取代 ADR-084 的「接受噪音」
+
+**白話**：使用者打錯字不是伺服器出錯。訊息照樣記進日誌，但用 INFO、不附堆疊；真的當機才維持 ERROR + 完整 traceback。
+
+**取代**：ADR-084（選項三「新增 Strawberry error 處理」當時被否決）。依 ADR precedence，後續的勝。
+
+**Context**：PR #35 review 指出 ADR-084 把攔截責任交給前端站不住腳：
+
+> The PR description assigns this to the frontend ("the search box must not fire a request
+> below 2 characters"). That's a good UX guard, but it can't be the boundary here: the
+> endpoint is public and callable directly. Worth noting this also undercuts the 3s
+> `statement_timeout` — that bounds database cost, but nothing currently bounds log cost.
+
+這個反駁成立。`stations` / `tickets` 在 `PUBLIC_PERMS`，匿名可呼叫、沒有 rate limiter，前端 guard 攔不到直接打 `/graphql` 的人。ADR-152 的 3 秒上限綁的是資料庫成本，沒有東西綁日誌成本。
+
+**而且範圍比 ADR-084 認知的大得多。** `Schema.process_errors` 的預設實作對**每一個** error 呼叫 `StrawberryLogger.error(error, exc_info=error.original_error)`，所以這不是搜尋專屬問題——整個 service 層的 domain error 詞彙（ADR-013/014）都以 ERROR + traceback 記錄。實測：
+
+| 情境 | client 收到 | ERROR log | traceback |
+|---|---|---|---|
+| 搜尋長度違規（`SearchQueryError`） | `搜尋關鍵字至少 2 個字` | ✅ | ✅ |
+| 匿名打需授權查詢（`HTTPException`） | `403: Permission Denied.` | ✅ | ✅ |
+| UUID 格式錯（graphql-core coercion） | `Value cannot represent a UUID` | ✅ | ❌ |
+
+ADR-084 只看到搜尋這一格，所以把它當成「本功能要不要接受的取捨」；它其實是既有的全域行為。
+
+**Decision**：`app/graphql/schema.py` 以 `_Schema` 覆寫 `process_errors`。判斷「這是呼叫端的錯還是我們的錯」抽成單一述詞 `_is_expected()`，**遮蔽與記錄共用同一份 allow-list**：
+
+- `_is_expected()` 為真 → INFO，只記訊息，不附 `exc_info`
+- 其餘 → 維持 `StrawberryLogger.error`，ERROR + 完整 traceback，訊息保留原文（client 那端仍是 `Unexpected error.`）
+
+共用述詞是刻意的：訊息屬於契約的錯誤，不可能被當成當機記錄，反之亦然。兩者靠不同判斷式各自演化，正是這類 bug 的來源。
+
+**Consequences**：
+➕ 公開端點的日誌成本有了邊界，不再依賴前端行為。
+➕ 順帶修掉「權限拒絕也噴 traceback」——不是搜尋引入的，但同一個原因。
+➕ 真實故障在日誌裡重新變得顯眼；先前它們埋在使用者輸入錯誤的 traceback 之間。
+➕ 遮蔽與記錄不會再分岔。
+➖ `_Schema` 是 `strawberry.Schema` 的子類別，綁著 `process_errors` 的介面；Strawberry 升級時要留意。
+➖ INFO 等級在正式環境若被過濾掉，就看不到使用者輸入錯誤了。這是刻意的取捨——要查的時候把等級調開即可。
+
+**釘住的測試**（`tests/test_graphql/test_error_masking.py`）：
+`test_a_length_violation_is_not_logged_as_a_server_fault`、
+`test_permission_denied_is_not_logged_as_a_server_fault`、
+`test_an_unexpected_error_still_logs_at_error_with_its_traceback`。
+最後一條是必要配對——一個把所有東西都降成 INFO 的實作會通過前兩條，卻讓每個 500 悄悄消失。已實測：拿掉覆寫後前兩條紅，第三條綠。
+
+**前端**：ADR-084 的「搜尋框在字數 < 2 時不要送出請求」仍然成立，它是 UX 改善，只是不再被當成日誌噪音的解法。
+
+---
+
+### ADR-161 `search_text` 一律 deferred，不進 `select(Model)` 的預設欄位清單
+
+**白話**：這個欄位只用來比對，沒有任何 API 回傳它。不設 deferred 的話，每一次列表查詢——包含完全沒在搜尋的地圖列表——都會白白把它傳回來。
+
+**Context**：PR #35 review 指出 `select(self.model)` 會撈回所有欄位，而 `search_text` 現在是其中之一。`StationType` 沒有暴露它，但 `stations` 的一般列表路徑**每一次請求**都付這個成本，不只搜尋時。
+
+單筆上限由 DB 的實際運算式推得：`left(name, 500) || ' ' || left(description, 500)` = 1001 字元。預設 `limit: 50` 時，最壞情況約 50 KB／頁，全部是沒有人會讀的資料。
+
+**Decision**：六張可搜表的 `search_text` 全部宣告 `deferred=True`。
+
+deferral 只影響 SELECT 的欄位清單。搜尋本身不受影響——述詞與 `similarity()` 排序引用的是**欄位表達式**，不是已載入的屬性。已驗證：不帶 `q` 的 `stations(limit: 50)`，實體查詢裡 `search_text` 出現 0 次。
+
+`count_active()` 的子查詢仍然列出它（它是從 mapped selectable 建的），但那個查詢只回一個整數，沒有資料過網路，所以留著。
+
+**為何不用 `.options(defer(...))` 寫在 repository**：那要在每一個查詢路徑記得加，漏掉一個就退回原狀且沒有訊號。放在 model 上是預設安全。
+
+**Consequences**：
+➕ 沒帶 `q` 的地圖列表不再為搜尋功能付費。
+➕ 若有人日後在 Python 裡讀 `station.search_text`，會在 async session 上炸出 lazy-load 錯誤，而不是悄悄多一次查詢——這正是想要的。目前沒有任何地方這樣讀（所有測試都走 raw SQL）。
+➖ 新增可搜表時必須記得加。由 `test_search_text_is_deferred_on_every_searchable_model` 擋住，該測試從 mapper 讀狀態而非比對 SQL 字串，所以不會因查詢寫法改變而失效；`test_every_searchable_model_covers_its_table` 則確保表清單不會與 `EXPECTED_SOURCE_COLUMNS` 漂移。
+
+---
+
+### ADR-162 timeout window 開在 resolver（每請求一個），不是每個 statement 一個
+
+**白話**：一次搜尋要跑「算總數」和「取這一頁」兩句 SQL，原本各自開一次上限、各自收一次，等於六句話做兩句話的事。
+
+**Context**：PR #35 review 指出 `count_active()` 與 `list_active()` 各自 `async with search_timeout(...)`，而每個 window 進場要一句 `SELECT set_config(...)`、離場要一句 `RESET statement_timeout`。實測一次搜尋請求：
+
+```
+SET -> count -> RESET -> SET -> list -> RESET
+```
+
+**Decision**：把 window 開在 resolver，涵蓋 count 與 list 兩次呼叫。
+
+不需要新機制：`search_timeout()` 自 ADR-157 起就是 nesting-aware 的，repository 內層的 window 會看到 `depth > 0` 而跳過自己的 `set_config` / `RESET`。內層**保留不動**——它們讓其他直接呼叫 repository 的路徑仍然受保護。
+
+上限在語意上是**請求**層級的屬性，不是單一語句的，而 root field resolver 就是請求邊界，所以這也是它本來該在的位置。
+
+實測結果：
+
+```
+SET -> count -> list -> RESET
+```
+
+**Consequences**：
+➕ `statement_timeout` 語句從 4 條降到 2 條。本機資料庫無感；資料庫在遠端時省 4 個 round-trip。
+➕ 「上限是每請求一個」這件事現在寫在程式結構裡，而不只寫在註解裡。
+➖ 日後新增搜尋端點時要記得在 resolver 開 window。失敗模式是安全的——忘了就退回原本的六句話行為，仍然正確。
+➖ GraphQL 層現在 import `app.core.search`。方向合法（graphql → core），但搜尋的細節多洩漏了一點到 resolver。
+
+---
+
+### ADR-163 內層 window 逾時後補回上限，避免拆掉仍在飛行的外層搜尋
+
+**白話**：兩個搜尋同時跑，其中一個逾時被中止時，會順手把兩個共用的「3 秒上限」一起清掉，讓另一個還在跑的搜尋變成完全沒有上限。
+
+**Context**：PR #35 review 指出的一條 ADR-157 沒涵蓋到的互動路徑：
+
+> the rollback discards the _transaction-local_ `statement_timeout`, which is shared by
+> every open window on this session — not just the one that timed out.
+
+`set_config(..., is_local => true)` 寫的是**交易層級的單一值**，由這個 session 上每個開著的 window 共用。內層逾時後必須 rollback 才能讓交易脫離 aborted 狀態（ADR-158），而 rollback 連同這個值一起丟掉。外層 window 的 `is_outermost` 在進入時就決定了，它不會再跑一次 `set_config`。
+
+實測（外層 window 內）：
+
+```
+外層 window 內、內層進入前:      statement_timeout = 3s
+內層逾時: 搜尋耗時過長已中止...
+外層 window 內、內層逾時之後:    statement_timeout = 0      <- 無限制
+實證:pg_sleep(4) 跑完 4.01s,未被中止
+```
+
+**Decision**：在逾時分支裡，若 rollback 成功**且本 window 不是最外層**，重新套用一次 `set_config`。entry 與這裡共用同一個 `_apply_statement_timeout()` helper。
+
+以 `suppress(DBAPIError)` 包住：這已經是錯誤路徑，補套失敗不該取代呼叫端真正需要看到的 `SearchTimeoutError`。
+
+最外層自己逾時時不補——沒有外層需要保護，維持原本「rollback 已經清掉、跳過 RESET」的行為。
+
+**Consequences**：
+➕ 一個搜尋逾時不再拆掉另一個搜尋的上限。
+➕ ADR-157 推理過的巢狀模型現在在**錯誤路徑**上也成立，不只在正常路徑上。
+➖ 逾時路徑多一次 round-trip。只發生在已經花掉 3 秒的請求上。
+➖ 巢狀行為的分支又多一條。由 `test_an_inner_timeout_leaves_an_outer_search_still_bounded` 釘住，該測試同時斷言設定值回來了、以及它**真的還會取消語句**（只斷言前者的話，一個只寫回設定卻沒生效的實作也會過）。
+
+驗證：拿掉這段修正，該測試會紅；還原後綠。修正後實測外層 `pg_sleep(10)` 於 3.00s 被中止。
+

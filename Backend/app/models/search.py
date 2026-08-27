@@ -10,6 +10,14 @@ positive list.** Before changing any generation expression, check
 `Spec/011-resource-search/spec.md` §3 and update `EXPECTED_SOURCE_COLUMNS` in
 `tests/test_search_schema.py` — PII (`contact_*`) and free-text note fields
 (`comment` / `progress_note` / `pole_note`) must never enter the index.
+
+**Every `search_text` column must be declared `deferred=True`** (ADR-161). Nothing in the
+API exposes it — it exists only to be matched against in a WHERE clause — so left in the
+default column list it is transferred and hydrated by every `select(Model)`, including
+the plain list paths that never search. Deferral does not affect the search itself: the
+predicates and the `similarity()` ordering reference the column as an expression, not as
+a loaded attribute. `test_search_text_is_deferred_on_every_searchable_model` asserts it
+for all six tables.
 """
 
 from sqlalchemy import Index
