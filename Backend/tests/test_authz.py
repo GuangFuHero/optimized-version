@@ -181,3 +181,47 @@ async def test_require_scope_unions_grants_from_multiple_roles(db):
 
     scope = await require_scope(actor, Perm.TICKET_VIEW, db)
     assert scope == Scope.TEAM
+
+
+@pytest.mark.asyncio
+async def test_team_role_inherits_platform_grant_for_station_contribute(db):
+    """A team role that omits a capability does not revoke it; the platform role still grants it.
+
+    Every account keeps the default platform role it got at registration, because joining a
+    team only replaces a previous *team* role. Permissions from all of a user's roles are
+    added together and the widest scope wins, so a capability granted by the platform role
+    stays in force even though the team role says nothing about it.
+
+    This is worth a test because the seed file reads role-by-role, which invites the opposite
+    conclusion — that a team admin missing `station.contribute` from their own role would be
+    refused. They are not: the default role grants it at `all`. The second assertion is the
+    control, showing a capability the team role *does* narrow still applies at its own scope.
+    """
+    team = Team(name="Gov Team", type="gov")
+    db.add(team)
+    await db.flush()
+    actor = User(name="team admin", team_uuid=team.uuid)
+    db.add(actor)
+    await db.flush()
+
+    # Platform role "user": the grant lives here (seed_rbac.py station.contribute = all).
+    await _grant(db, actor, Perm.STATION_CONTRIBUTE, "all", "user")
+
+    # Team role "admin": operational grants, but nothing for station.contribute.
+    permission = Permission(key=Perm.STATION_EDIT.value)
+    db.add(permission)
+    await db.flush()
+    team_role = Role(name="admin", kind="team")
+    db.add(team_role)
+    await db.flush()
+    db.add(
+        RolePermissionAssign(
+            role_uuid=team_role.uuid, permission_uuid=permission.uuid, scope="zone"
+        )
+    )
+    db.add(UserRoleAssign(user_uuid=actor.uuid, role_uuid=team_role.uuid))
+    await db.flush()
+
+    assert await require_scope(actor, Perm.STATION_CONTRIBUTE, db) == Scope.ALL
+    assert await require_scope(actor, Perm.STATION_EDIT, db) == Scope.ZONE
+

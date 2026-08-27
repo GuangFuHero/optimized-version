@@ -12,7 +12,18 @@ from app.models.base import Base as Base  # noqa: F401 — re-export single sour
 SQLALCHEMY_DATABASE_URL = settings.SQLALCHEMY_DATABASE_URL
 
 engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=False)
-SessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=AsyncSession)
+# expire_on_commit=False is required here, not a preference. With SQLAlchemy's default
+# (True), commit() marks every loaded object's attributes as stale, and the next read of one
+# silently re-queries the database. Under asyncio there is no await point in that reload, so
+# it raises MissingGreenlet instead of working.
+#
+# It breaks any code that touches an ORM object after committing. The case that surfaced it:
+# a GraphQL mutation commits, then resolves the fields of the object it returns; a field
+# resolver checks the caller's permissions, which reads the logged-in user's uuid — and that
+# read fails, because commit() had just expired the user object too.
+SessionLocal = async_sessionmaker(
+    autocommit=False, autoflush=False, bind=engine, class_=AsyncSession, expire_on_commit=False
+)
 
 
 async def attribute_writes_to(db, user_uuid: str) -> None:

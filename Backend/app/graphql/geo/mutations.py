@@ -23,7 +23,9 @@ from app.graphql.geo.types import (
     UpdateStationInput,
     UpdateStationPropertyInput,
 )
+from app.graphql.tickets.types import PhotoType
 from app.services import closure_area as closure_area_service
+from app.services import photo as photo_service
 from app.services import station as station_service
 
 
@@ -55,9 +57,42 @@ class GeoMutation:
             type=input.type, name=input.name, description=input.description,
             op_hour=input.op_hour, level=input.level, comment=input.comment,
             source=input.source, visibility=input.visibility.value,
+            contact_name=input.contact_name, contact_email=input.contact_email,
+            contact_phone=input.contact_phone,
             secondary_location=sl_dict,
         )
         return StationType.from_model(station)
+
+    @strawberry.mutation
+    async def attach_station_photo(
+        self, info: strawberry.types.Info, station_uuid: UUID, url: str
+    ) -> PhotoType:
+        """Attach a photo to a station.
+
+        Open crowd-sourcing (station.contribute) — anyone holding the capability may
+        attach a photo to any station, matching the property/rating contribution model.
+        Returns the created PhotoType.
+        """
+        photo = await photo_service.attach_photo_to_geometry(
+            info.context["db"], actor=require_authenticated(info),
+            base_geometry_uuid=str(station_uuid), url=url,
+        )
+        return PhotoType.from_model(photo)
+
+    @strawberry.mutation
+    async def detach_station_photo(self, info: strawberry.types.Info, uuid: UUID) -> bool:
+        """Soft-delete a station photo. Returns True on success.
+
+        The uploader may remove their own photo with the station.contribute that created it.
+        Removing anyone else's is moderation: it requires station.review, and the caller must
+        also be in scope for the station the photo hangs off. Anything that is not an active
+        station photo errors as "not found", including a ticket photo's uuid — both kinds
+        share one table, and that check runs before the uploader exemption.
+        """
+        await photo_service.detach_station_photo(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
+        )
+        return True
 
     @strawberry.mutation
     async def update_station(
@@ -74,7 +109,10 @@ class GeoMutation:
             changes["level"] = input.level
         if input.visibility is not None:
             changes["visibility"] = input.visibility.value
-        for field in ("type", "name", "description", "op_hour", "comment"):
+        for field in (
+            "type", "name", "description", "op_hour", "comment",
+            "contact_name", "contact_email", "contact_phone",
+        ):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
                 changes[field] = val

@@ -41,6 +41,7 @@ ROLES_DATA = [
         "permissions": {
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
+            Perm.STATION_VIEW_PII: "own",  # only your own station's contact info; others masked
             Perm.STATION_ADD: "all",     # ADR-049: anyone (incl. citizens) can register a station
             Perm.STATION_CONTRIBUTE: "all",  # open crowd-sourcing: property/rating on any station
             Perm.STATION_EDIT: "own",
@@ -61,6 +62,7 @@ ROLES_DATA = [
         "permissions": {
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
+            Perm.STATION_VIEW_PII: "all",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "all",
             Perm.USER_VIEW: "all",
@@ -73,8 +75,8 @@ ROLES_DATA = [
         "permissions": dict.fromkeys(
             [
                 Perm.MAP_VIEW, Perm.MAP_ADD, Perm.MAP_EDIT, Perm.MAP_DELETE,
-                Perm.STATION_VIEW, Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
-                Perm.STATION_DELETE, Perm.STATION_REVIEW,
+                Perm.STATION_VIEW, Perm.STATION_VIEW_PII, Perm.STATION_ADD, Perm.STATION_CONTRIBUTE,
+                Perm.STATION_EDIT, Perm.STATION_DELETE, Perm.STATION_REVIEW,
                 Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
                 Perm.FIELD_VIEW, Perm.FIELD_ADD, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
@@ -103,6 +105,7 @@ ROLES_DATA = [
         "permissions": {
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
+            Perm.STATION_VIEW_PII: "zone",
             Perm.STATION_ADD: "all",
             Perm.STATION_EDIT: "zone",
             Perm.STATION_DELETE: "zone",
@@ -131,6 +134,7 @@ ROLES_DATA = [
         "permissions": {
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
+            Perm.STATION_VIEW_PII: "zone",
             Perm.STATION_ADD: "all",
             Perm.STATION_EDIT: "zone",
             Perm.STATION_DELETE: "own",
