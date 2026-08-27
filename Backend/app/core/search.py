@@ -46,18 +46,24 @@ _WILDCARDS = ("\\", "%", "_")
 class SearchQueryError(ValueError):
     """Raised when the caller's query string is outside the accepted length range.
 
-    Subclasses ValueError to match the existing GraphQL convention: resolvers raise plain
-    exceptions and Strawberry surfaces str(exc) as errors[0].message. No masking extension
-    is configured (app/graphql/schema.py), so nothing further is needed to expose this.
+    **Subclassing ValueError is what makes this message reach the client, and it is load-
+    bearing.** app/graphql/schema.py installs MaskErrors(should_mask_error=_should_mask),
+    and _should_mask allow-lists ValueError and HTTPException — everything else is replaced
+    with "Unexpected error." on the way out. Re-parenting this class onto a bare Exception
+    turns a helpful message into that placeholder.
+
+    Pinned end-to-end by test_single_character_query_is_rejected in
+    tests/test_graphql/test_search.py, which asserts the Chinese message reaches the
+    client through the real schema; it goes red if this stops being a ValueError.
     """
 
 
 class SearchTimeoutError(ValueError):
     """Raised when a search statement exceeds SEARCH_STATEMENT_TIMEOUT_MS.
 
-    Same ValueError-based contract as SearchQueryError: Strawberry surfaces str(exc) as
-    errors[0].message, so the caller is told the search was too expensive rather than
-    seeing a raw driver error (which would leak SQL state into the API response).
+    Same ValueError-based contract as SearchQueryError, and load-bearing for the same
+    reason (see there): the caller is told the search was too expensive rather than seeing
+    a raw driver error, which would leak SQL state into the API response.
     """
 
 
