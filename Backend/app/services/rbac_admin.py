@@ -100,7 +100,7 @@ async def get_role(db: AsyncSession, role_uuid: str) -> RoleGrants:
 async def get_user_permissions_detail(db: AsyncSession, user_uuid: str) -> UserPermissionsResponse:
     """A user's identities, each with its own effective permissions, plus their direct grants.
 
-    One identity, one answer (ADR-098). Resolving each separately costs one pair of queries
+    One identity, one answer (ADR-178). Resolving each separately costs one pair of queries
     per identity, which is what the admin view is for; nobody holds enough identities for
     that to matter.
     """

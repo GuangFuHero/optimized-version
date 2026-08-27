@@ -67,7 +67,7 @@ class MatrixResponse(BaseModel):
 
 
 class IdentityPermissions(BaseModel):
-    """One identity a user holds, and what it can actually do (ADR-098)."""
+    """One identity a user holds, and what it can actually do (ADR-178)."""
 
     role_uuid: UUID
     role: str
@@ -90,7 +90,7 @@ class UserPermissionsResponse(BaseModel):
 
     Effective permissions are reported per identity rather than as one merged set, because
     after ADR-068 a user only ever exercises one identity at a time — a single merged answer
-    would describe a state the user is never actually in (ADR-098).
+    would describe a state the user is never actually in (ADR-178).
     """
 
     user_uuid: UUID

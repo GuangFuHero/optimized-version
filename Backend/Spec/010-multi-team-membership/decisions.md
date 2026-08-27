@@ -1,4 +1,4 @@
-# Multi-Team Membership — ADR 全集（ADR-068~076、096、097）
+# Multi-Team Membership — ADR 全集（ADR-068~076、096~097、178~179）
 
 **Date**: 2026-08-16（初版）／**2026-08-19 重大改版**
 **Feature**: 010-multi-team-membership
@@ -330,7 +330,7 @@ ADR-068 改版正是採用了括號裡被否決的那條路。缺陷消失，**a
 
 ---
 
-### ADR-098 管理端的 `GET /admin/rbac/users/{uuid}/permissions` 改成逐身分回報
+### ADR-178 管理端的 `GET /admin/rbac/users/{uuid}/permissions` 改成逐身分回報
 
 **白話**：一個人有三個身分，「他有什麼權限」這句話就不再有唯一答案。後台要嘛騙人，要嘛把三組都列出來。
 
@@ -355,7 +355,7 @@ ADR-068 改版正是採用了括號裡被否決的那條路。缺陷消失，**a
 
 ---
 
-### ADR-159 Alembic revision ID 一律由 alembic 產生,不再手寫
+### ADR-179 Alembic revision ID 一律由 alembic 產生,不再手寫
 
 **白話**：手編的 revision ID 會撞號，而 alembic 撞號時**不會報錯**，只發一個警告然後靜默丟掉其中一個 migration。
 

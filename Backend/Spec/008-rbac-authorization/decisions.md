@@ -979,7 +979,7 @@ enforcement 呼叫（僅目錄 key），不符合「先有 enforcement 才發 ca
 - `Spec/Docs/rbac-permissions-design.md` §4.1：`super_admin` 列的模組枚舉加 `announcement`。
 - **零 schema / migration 影響**：純 `role_permission_assign` 資料列新增，沿用既有 `Permission` row。
 
-#### ADR-068 站點照片與站點聯絡欄位；photos 多型化為 `geometry`
+#### ADR-182 站點照片與站點聯絡欄位；photos 多型化為 `geometry`
 > **狀態：ACCEPTED（2026-08-20）。** PR #31 落地，本 ADR 於後續修正 PR 補寫。
 
 **Context**：PR #31 要讓站點也能掛照片、也能有自己的聯絡人。三件事當時只寫在 commit message 與
