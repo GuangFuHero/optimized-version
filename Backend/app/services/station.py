@@ -6,6 +6,7 @@ each owns its own authz (require_scope) + validation + persistence so resolvers 
 secondary_location) lives here.
 """
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from sqlalchemy import select
@@ -101,6 +102,7 @@ async def create_station(
     contact_name: str | None = None,
     contact_email: str | None = None,
     contact_phone: str | None = None,
+    operational_status: str = "active",
     secondary_location: dict | None = None,
 ) -> Station:
     """Create a station (checkpoint 1 only — a new station has no prior owner to scope-check).
@@ -136,6 +138,10 @@ async def create_station(
             # against the stripped strings, so storing the originals is what round 3 of the
             # PR #40 review found leaking the INSERT.
             **contacts,
+            "operational_status": operational_status,
+            # Stamped on every operational_status assignment, including creation, so
+            # analytics' freshness-trend query never has to special-case a null here.
+            "status_changed_at": datetime.now(UTC),
         },
     )
     if secondary_location:
@@ -183,11 +189,17 @@ async def update_station(
     if geometry is not None:
         validate_point(geometry)
         obj_in["geometry"] = geojson_to_geom(geometry)
+    # Only re-stamp on an actual transition. Testing for the key's presence instead
+    # meant a client that PUTs the whole form back bumped status_changed_at on every
+    # save, and station_freshness_trend reads exactly that column — so an unchanged
+    # station kept re-entering the "closed" series.
+    if obj_in.get("operational_status") not in (None, station.operational_status):
+        obj_in["status_changed_at"] = datetime.now(UTC)
     updated = await station_repository.update(db, db_obj=station, obj_in=obj_in)
 
     # 觸發通知
     #
-    # No operational-status branch here on purpose: a station's live status
+    # No operational-status branch here on purpose: the per-resource live status
     # (beds_available, water_level, is_open, ...) is not a column on `stations`, so those
     # names can never appear in `changes`. `resource_station_updated` for status changes
     # fires from update_station_property() instead.
