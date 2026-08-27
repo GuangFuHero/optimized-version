@@ -352,3 +352,62 @@ ADR-068 改版正是採用了括號裡被否決的那條路。缺陷消失，**a
 ➕ 後台看到的權限與請求時真正生效的權限是同一個東西。
 ➕ 「為什麼他做不了 X」有了直接答案：他持有 X 的那個身分不是現在這個。
 ➖ 破壞性 API 變更，前端後台頁面要跟著改；本票只改後端，需與前端對齊。
+
+---
+
+### ADR-159 Alembic revision ID 一律由 alembic 產生,不再手寫
+
+**白話**：手編的 revision ID 會撞號，而 alembic 撞號時**不會報錯**，只發一個警告然後靜默丟掉其中一個 migration。
+
+**範圍**：這是**跨功能的工程慣例**，不只適用於 010。寫在這裡是因為修正的執行點在本分支。
+
+**Context**：本功能的 `a1b2c3d4e5f6_identity_switching.py` 與 PR #32
+(`feature/bi-implement`) 的 `a1b2c3d4e5f6_station_operational_status_and_task_completed_at.py`
+是**兩個完全不同的 migration，卻共用同一個 revision ID**，parent 也不同
+（`e1f2a3b4c5d6` vs `b8f4d2a6e1c3`）。
+
+把兩個檔案同時放進 `alembic/versions/` 實測：
+
+```
+UserWarning: Revision a1b2c3d4e5f6 is present more than once
+8ebfc3903041 (head)
+b7e4c1a90d52 (head)
+a1b2c3d4e5f6 (head)
+a1b2c3d4e5f6 (head)
+
+ScriptDirectory.get_revision('a1b2c3d4e5f6')
+  -> station operational status and task completed_at/canceled_at
+```
+
+**只是 `UserWarning`，不是 error。** 部署不會停，另一個 migration 被靜默丟棄、永遠不會執行，
+schema 少了一半而沒有任何訊號。這比 multiple-head 危險：multiple-head 會讓
+`alembic upgrade head` 大聲失敗，撞號不會。
+
+根因是 revision ID 用**人編的序列**——`a1b2c3d4e5f6`、`e1f2a3b4c5d6`、`c3f2a1b4d5e6`、
+`b8f4d2a6e1c3` 一望即知不是隨機值。在同時開著 9 個 PR、其中 7 個帶 migration 的情況下，
+人編序列撞號是遲早的事，不是意外。
+
+**Decision**：
+
+1. **revision ID 一律用 `alembic revision` 產生**（`uuid4().hex[-12:]`），不再手寫。
+   即使 migration 本身是手寫的（computed column、operator class 這類 autogenerate
+   偵測不到的東西），ID 也要由工具產生。
+2. 本次把 `a1b2c3d4e5f6` 換成 `90c93167fa66`，在 #37 / #38 / #39 三個分支同步套用
+   —— 這三個分支上該檔案是同一個 blob，只改其中一個會讓三者分裂。
+   PR #32 是他人的分支，不需要因為我們的命名疏失而改動。
+3. **「merge 前重指 `down_revision`」視為機械步驟**，不是流程缺失。Alembic 的
+   migration 是單向鏈結串列，parent 硬寫在檔案裡，git rebase 不會改寫它。
+   只要有平行分支，誰先 merge 誰贏，後者一定要重指。接受它是例行動作即可。
+4. 重指優先於加 merge revision。merge revision 會**永久**留在版本樹裡
+   （main 已累積 `c7d8e9f0a1b2`、`8ebfc3903041` 兩個），而且解決不了下一次分岔
+   —— 你的 merge revision 和 main 的下一個 migration 依然是兩個 head。
+
+**Consequences**：
+➕ 消除撞號這類**靜默**失敗；剩下的 multiple-head 至少會大聲失敗。
+➕ 重指 `down_revision` 的成本明確且有界（一個字串），不再被誤當成流程問題來爭論。
+➖ 手寫 migration 時多一個步驟：先跑 `alembic revision` 拿 ID，再把內容填進去。
+➖ 本次改名要同步三個分支；三者未來若各自 rebase，需確認 ID 仍一致。
+⚠️ **本 ADR 不會自動被執行**。CI（`.github/workflows/`）目前只有 `ruff-check.yml`，
+   不跑測試、不檢查 migration。要讓撞號與 multiple-head 在 PR 階段被擋下來，
+   需要另外加一個 workflow 跑 `alembic heads` 並把 `present more than once`
+   視為失敗——**尚未實作，留待後續決定**。

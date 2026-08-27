@@ -157,7 +157,7 @@ INSERT INTO teams (uuid, name, type, tax_id, status) VALUES
  ('10000000-0000-4000-8000-000000000013','冬山鄉公所-民政課','gov',NULL,'active');
 
 -- 1d. 13 個官方/NGO 帳號取得所屬 team 的 admin 身分(團隊協調者,帶 zone-scoped 授權)。
--- ADR-068/073:「屬於哪個 team」不再是 users 的欄位(users.team_uuid 已被 a1b2c3d4e5f6 移除),
+-- ADR-068/073:「屬於哪個 team」不再是 users 的欄位(users.team_uuid 已被 90c93167fa66 移除),
 -- 而是 user_role_assign 這一列的性質——一筆 team 角色的授予就是一個身分。
 -- 24 個志工帳號不拿 team 身分,只有 1b 給的 user 平台角色,才會與官方/NGO 形成對比。
 INSERT INTO user_role_assign (uuid, user_uuid, role_uuid, role_kind, team_uuid)

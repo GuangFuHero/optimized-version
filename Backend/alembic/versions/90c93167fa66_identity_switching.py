@@ -20,7 +20,7 @@ Backfill: a team role held by a user with no team is an orphan the old schema al
 the new one forbids. Those rows are deleted rather than repaired — there is no team to
 repair them to, and the project is pre-production with mock data only.
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: 90c93167fa66
 Revises: e1f2a3b4c5d6
 Create Date: 2026-08-19
 
@@ -33,7 +33,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'a1b2c3d4e5f6'
+revision: str = '90c93167fa66'
 down_revision: str | Sequence[str] | None = 'e1f2a3b4c5d6'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
