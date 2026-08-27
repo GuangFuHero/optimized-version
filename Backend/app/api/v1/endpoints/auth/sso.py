@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.normalize import normalize_email
 from app.core.redis import get_redis
+from app.db.session import attribute_writes_to
 from app.models.auth import User
 from app.repositories.auth_repository import (
     contact_repository,
@@ -80,6 +81,9 @@ async def sso_google(
     else:
         user = await user_repository.get_by_uuid(db, identity.user_uuid)
 
+    # Same as the password path: no access token on the request, but the provider's ID token
+    # has just established who this is, so the audited write gets an actor (ADR-102).
+    await attribute_writes_to(db, str(user.uuid))
     await user_repository.update(db, db_obj=user, obj_in={"last_login_at": datetime.now(UTC)})
     return await issue_token_pair(redis, request, str(user.uuid))
 
@@ -160,6 +164,9 @@ async def sso_line(
     else:
         user = await user_repository.get_by_uuid(db, identity.user_uuid)
 
+    # Same as the password path: no access token on the request, but the provider's ID token
+    # has just established who this is, so the audited write gets an actor (ADR-102).
+    await attribute_writes_to(db, str(user.uuid))
     await user_repository.update(db, db_obj=user, obj_in={"last_login_at": datetime.now(UTC)})
     return await issue_token_pair(redis, request, str(user.uuid))
 

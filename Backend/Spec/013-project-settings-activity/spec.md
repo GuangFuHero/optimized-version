@@ -193,3 +193,10 @@ app/services/ticket.py:207-231    create_task_property      → 同上
 | 功能 | `AdminUserListItem` 回傳三個新欄位；`active_session_count` 反映實際 Redis session 數 |
 | 迴歸 | 動態欄位寫入行為不變——`data_type="enum"` 時任意字串仍可寫入（明確驗證未誤加驗證） |
 | 稽核 | `project_settings` 變更會寫入 `audit_logs` |
+| 功能 | 對不到任何欄位的 `disaster_types` 回傳 `warnings` 且寫 WARNING log，但仍寫入成功（ADR-101） |
+| 功能 | 對得到欄位的 `disaster_types` 不產生 `warnings`（警告必須安靜，否則就是雜訊） |
+| 功能 | 停用欄位只需 `isActive: false`，不必重送 `dataType`，且既有定義不被改寫（ADR-100） |
+| 功能 | 新增欄位仍必須提供 `dataType`，缺少時為 422 而非 500 |
+| 稽核 | `/auth/login`、`/auth/refresh`、SSO callback 寫入 `users` 時，`audit_logs.user_uuid` 為該使用者而非 NULL（ADR-102） |
+| 迴歸 | Redis 不可用時 `active_session_count` 仍降級為 `null`；但函式自身的長度不符 bug 不再被記成 Redis 故障（ADR-103） |
+| 迴歸 | 一次 `PATCH /admin/project-settings` 只讀一次設定列 |

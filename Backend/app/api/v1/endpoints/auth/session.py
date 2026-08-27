@@ -11,6 +11,7 @@ from app.core import security
 from app.core.config import settings
 from app.core.normalize import normalize_email, normalize_phone
 from app.core.redis import get_redis
+from app.db.session import attribute_writes_to
 from app.repositories.auth_repository import (
     contact_repository,
     identity_repository,
@@ -36,10 +37,16 @@ async def _record_activity(db: AsyncSession, user_uuid: str) -> None:
     Called only after the refresh token has already been rotated, so raising here would cost
     the caller their session — see the note in `refresh`. The session is rolled back on
     failure so the request's remaining work is not left inside an aborted transaction.
+
+    `users` is an audited table, so the write appends an `audit_logs` row; naming the actor
+    first is what keeps that row attributable (ADR-102).
     """
     try:
         user = await user_repository.get_by_uuid(db, user_uuid)
         if user is not None:
+            # `rotate()` resolved this uuid from the refresh token it just accepted, so the
+            # actor is known even though the request carried no access token (ADR-102).
+            await attribute_writes_to(db, user_uuid)
             await user_repository.update(
                 db, db_obj=user, obj_in={"last_activity_at": datetime.now(UTC)}
             )
@@ -80,6 +87,9 @@ async def login(
     identity = await identity_repository.get_password_identity(db, str(user.uuid))
     if identity is None or not security.verify_password(form_data.password, identity.password_hash):
         raise cred_exc
+    # The request carries no access token, so nothing has named an actor for the audit
+    # trigger — but the password check above just proved who this is (ADR-102).
+    await attribute_writes_to(db, str(user.uuid))
     await user_repository.update(db, db_obj=user, obj_in={"last_login_at": datetime.now(UTC)})
     return await issue_token_pair(redis, request, str(user.uuid))
 

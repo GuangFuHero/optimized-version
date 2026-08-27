@@ -18,6 +18,15 @@ from app.infrastructure.repository.base import GenericRepository
 from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
 
 
+class PropertyConfigValidationError(ValueError):
+    """Raised when an upsert cannot be carried out as asked.
+
+    Subclasses ValueError so the message survives the GraphQL masking extension
+    (`app/graphql/schema.py` allow-lists ValueError); re-parenting it onto a bare Exception
+    would turn it into "Unexpected error." on the way out.
+    """
+
+
 def _enabled_for(column, disaster_types: list[str]) -> ColumnElement[bool]:
     """Build the "is this field enabled for the current disaster" predicate.
 
@@ -71,7 +80,7 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
 
     async def upsert(
         self, db: AsyncSession, *,
-        station_type: str, property_name: str, data_type: str,
+        station_type: str, property_name: str, data_type: str | None = None,
         enum_options: list[str] | None = None,
         disaster_types: list[str] | None = None, label: str | None = None,
         sort_order: int | None = None, is_active: bool | None = None,
@@ -90,10 +99,9 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
             )
             return result.scalar_one_or_none()
 
-        optional = _optional_config_fields(
-            enum_options, disaster_types, label, sort_order, is_active
+        update_values = _optional_config_fields(
+            data_type, enum_options, disaster_types, label, sort_order, is_active
         )
-        update_values = {"data_type": data_type, **optional}
         return await _upsert_with_conflict_retry(
             self, db, lookup=lookup, update_values=update_values,
             create_values={
@@ -135,7 +143,7 @@ class TaskPropertyConfigRepository(GenericRepository[TaskPropertyConfig]):
 
     async def upsert(
         self, db: AsyncSession, *,
-        task_type: str, property_name: str, data_type: str,
+        task_type: str, property_name: str, data_type: str | None = None,
         enum_options: list[str] | None = None,
         disaster_types: list[str] | None = None, label: str | None = None,
         sort_order: int | None = None, is_active: bool | None = None,
@@ -150,10 +158,9 @@ class TaskPropertyConfigRepository(GenericRepository[TaskPropertyConfig]):
             )
             return result.scalar_one_or_none()
 
-        optional = _optional_config_fields(
-            enum_options, disaster_types, label, sort_order, is_active
+        update_values = _optional_config_fields(
+            data_type, enum_options, disaster_types, label, sort_order, is_active
         )
-        update_values = {"data_type": data_type, **optional}
         return await _upsert_with_conflict_retry(
             self, db, lookup=lookup, update_values=update_values,
             create_values={
@@ -174,6 +181,10 @@ async def _upsert_with_conflict_retry(repo, db, *, lookup, create_values, update
     existing = await lookup()
     if existing is not None:
         return await repo.update(db, db_obj=existing, obj_in=update_values)
+    if "data_type" not in create_values:
+        raise PropertyConfigValidationError(
+            "新增動態欄位時必須提供 data_type（既有欄位才可以省略）"
+        )
     try:
         return await repo.create(db, obj_in=create_values)
     except IntegrityError:
@@ -185,8 +196,8 @@ async def _upsert_with_conflict_retry(repo, db, *, lookup, create_values, update
 
 
 def _optional_config_fields(
-    enum_options: list[str] | None, disaster_types: list[str] | None, label: str | None,
-    sort_order: int | None, is_active: bool | None,
+    data_type: str | None, enum_options: list[str] | None, disaster_types: list[str] | None,
+    label: str | None, sort_order: int | None, is_active: bool | None,
 ) -> dict:
     """Keep only the fields the caller actually supplied.
 
@@ -197,8 +208,16 @@ def _optional_config_fields(
     `enum_options` obeys the same rule (ADR-098): editing an Enum field's label used to blank
     its options, because the update always carried the input's default `None`. Clearing the
     options is spelled `enum_options=[]` — an empty list is supplied, not omitted.
+
+    `data_type` follows the same rule as of ADR-100, and it is the one that made the rule
+    matter: it used to be written unconditionally, so retiring a field — which needs nothing
+    but `is_active: false` — forced the caller to restate what the field *is*, and a stale or
+    guessed value silently redefined it. Creation still requires it (the column is NOT NULL);
+    that is enforced in `_upsert_with_conflict_retry`, which is where the insert-vs-update
+    decision is actually made.
     """
     supplied = {
+        "data_type": data_type,
         "enum_options": enum_options,
         "disaster_types": (
             None if disaster_types is None else normalize_disaster_types(disaster_types)
@@ -206,6 +225,26 @@ def _optional_config_fields(
         "label": label, "sort_order": sort_order, "is_active": is_active,
     }
     return {k: v for k, v in supplied.items() if v is not None}
+
+
+async def disaster_types_in_use(db: AsyncSession) -> set[str]:
+    """Every disaster label that at least one config row is scoped to.
+
+    The vocabulary of real disaster types lives in PM-Scure's spec, not in this repository
+    (ADR-091), so there is nothing to validate a label against. What *is* knowable is which
+    labels the configured fields actually use, and that is enough to tell an operator that
+    the label they just saved matches none of them — the difference between a typo and a
+    disaster nobody has configured fields for yet (ADR-101).
+
+    Rows with an empty `disaster_types` are universal ("every type") and contribute no label,
+    which is correct here: they stay enabled whatever the deployment is set to, so they can
+    never be the thing a mistyped label was meant to reach.
+    """
+    labels: set[str] = set()
+    for model in (StationPropertyConfig, TaskPropertyConfig):
+        result = await db.execute(select(func.unnest(model.disaster_types)).distinct())
+        labels.update(result.scalars().all())
+    return labels
 
 
 station_property_config_repository = StationPropertyConfigRepository()

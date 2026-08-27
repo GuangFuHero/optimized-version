@@ -99,11 +99,19 @@ class UpsertPropertyConfigInput:
     only wants to change `data_type` never resets a field's ordering, and one that only wants
     to set a `label` never blanks an Enum's options (ADR-098). Clearing `enumOptions` is
     therefore spelled `enumOptions: []`, not `null`.
+
+    `dataType` obeys that rule too (ADR-100): retiring a field is `{propertyName, isActive:
+    false}`, with no need to restate what the field is. Creating one still requires it — the
+    column is NOT NULL — and omitting it there is a client error, not a 500.
     """
 
     property_name: str = strawberry.field(description="The property key to create or update")
-    data_type: str = strawberry.field(
-        description="Expected data type: 'string', 'integer', 'float', or 'enum'"
+    data_type: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Expected data type: 'string', 'integer', 'float', or 'enum'. Required when the "
+            "field is being created; omit to leave an existing field's type untouched"
+        ),
     )
     enum_options: list[str] | None = strawberry.field(
         default=None,
