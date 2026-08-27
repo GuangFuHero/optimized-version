@@ -41,6 +41,9 @@ class ErrorCode(StrEnum):
     SSO_EMAIL_TAKEN = "sso_email_taken"
     SSO_ALREADY_LINKED = "sso_already_linked"
     SSO_LINKED_ELSEWHERE = "sso_linked_elsewhere"
+    # A first login that raced another and could not complete. Distinct from the "taken" cases
+    # because the remedy is to retry, not to log in some other way.
+    SSO_SIGNIN_RACE = "sso_signin_race"
 
     # Throttling
     RATE_LIMITED = "rate_limited"

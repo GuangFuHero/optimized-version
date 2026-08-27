@@ -179,7 +179,7 @@ async def sso_line(
                 db, provider="line", subject=lid.sub)
             if identity is None:
                 raise ApiError(
-                    status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail="LINE account conflict",
+                    status.HTTP_409_CONFLICT, ErrorCode.SSO_SIGNIN_RACE, detail="LINE account conflict",
                 ) from err
             user = await user_repository.get_by_uuid(db, identity.user_uuid)
     else:

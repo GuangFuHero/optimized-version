@@ -36,6 +36,7 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   sso_email_taken: '這個信箱已經註冊過了。請先用原本的方式登入，再到設定裡綁定。',
   sso_already_linked: '這個帳號已經綁定過了。',
   sso_linked_elsewhere: '這個第三方帳號已經綁定到另一個帳號了。',
+  sso_signin_race: '登入沒有完成，請再試一次。',
 
   // Throttling — the allowance is per caller IP, but anyone sharing a NAT or office network
   // shares it, so the person seeing this may not have clicked at all.

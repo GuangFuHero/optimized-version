@@ -6,7 +6,7 @@ plain `HTTPException`, every assertion would stay green while clients silently f
 copy. That is the exact failure `app/core/api_errors.py` warns about, so it needs its own tests.
 
 Two layers here. The behavioural tests prove the handler emits `code` and that specific endpoints
-carry the right one. The structural test covers all 45 converted raise sites at once — per-site
+carry the right one. The structural test covers all 47 converted raise sites at once — per-site
 behavioural coverage is not practical, but a regression to `HTTPException` is detectable in the
 source.
 """
@@ -74,7 +74,7 @@ async def test_error_response_keeps_detail_alongside_code(client):
 
 
 def test_no_auth_endpoint_constructs_a_bare_http_exception():
-    """Guards all 45 converted raise sites at once.
+    """Guards all 47 converted raise sites at once.
 
     A site regressing to `HTTPException` answers without a code, and no behavioural test would
     notice unless that exact endpoint happened to be covered.
