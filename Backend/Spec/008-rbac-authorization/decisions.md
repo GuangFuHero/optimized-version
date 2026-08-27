@@ -435,7 +435,7 @@ class UserPermissionAssign(Base, UUIDPKMixin):
 ### 2C. 變更既有
 ```python
 # users (auth.py): 加單一 team_uuid（一人一 team, ADR-019）
-#   ⚠️ 已於 010/ADR-073 移除（alembic a1b2c3d4e5f6）。team 改由授予列攜帶，見 user_role_assign.team_uuid。
+#   ⚠️ 已於 010/ADR-073 移除（alembic 90c93167fa66）。team 改由授予列攜帶，見 user_role_assign.team_uuid。
 team_uuid: Mapped[str | None] = mapped_column(ForeignKey("teams.uuid"), nullable=True, index=True)
 
 # base_geometries (base.py 的 BaseGeometry / geo.py): 加 team_uuid（team/gov/ngo scope 的資源歸屬）
