@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
 from app.models.announcement import Announcement
+from app.services.notification_resolver import NotificationRecipientResolver
+from app.services.notification_service import NotificationService
 
 
 class AnnouncementRepository(GenericRepository[Announcement]):
@@ -23,9 +25,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         """Initialize with Announcement as the managed model."""
         super().__init__(Announcement)
 
-    async def list_announcements(
-        self, db: AsyncSession, *, only_active: bool
-    ) -> list[Announcement]:
+    async def list_announcements(self, db: AsyncSession, *, only_active: bool) -> list[Announcement]:
         """List non-deleted announcements.
 
         only_active=True  → active rows ordered by display_order ASC.
@@ -34,9 +34,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         """
         query = select(self.model).where(self.model.delete_at.is_(None))
         if only_active:
-            query = query.where(self.model.active.is_(True)).order_by(
-                self.model.display_order.asc()
-            )
+            query = query.where(self.model.active.is_(True)).order_by(self.model.display_order.asc())
         else:
             query = query.order_by(
                 self.model.display_order.asc().nulls_last(),
@@ -68,18 +66,31 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             if a.display_order is not None and a.display_order > removed:
                 a.display_order -= 1
 
-    async def create_at_end(
-        self, db: AsyncSession, *, content: str, created_by: str
-    ) -> Announcement:
+    async def create_at_end(self, db: AsyncSession, *, content: str, created_by: str) -> Announcement:
         """Create an active announcement appended at the bottom (largest order)."""
         live = await self._live_for_update(db)
         next_order = (live[-1].display_order + 1) if live else 1
-        obj = self.model(
-            content=content, created_by=created_by, active=True, display_order=next_order
-        )
+        obj = self.model(content=content, created_by=created_by, active=True, display_order=next_order)
         db.add(obj)
         await db.commit()
         await db.refresh(obj)
+
+        # 觸發 announcement_published 通知 (全站廣播)
+        recipients = await NotificationRecipientResolver.resolve_all_active(db)
+        summary = content[:80] + ("..." if len(content) > 80 else "")
+        await NotificationService.dispatch(
+            db,
+            event_type="announcement_published",
+            title="📢 全站重要公告",
+            body=summary,
+            priority="medium",
+            actor_uuid=created_by,
+            ref_type="announcement",
+            ref_uuid=obj.uuid,
+            explicit_recipients=recipients,
+        )
+        await db.refresh(obj)
+
         return obj
 
     async def move(self, db: AsyncSession, *, uuid: Any, up: bool) -> Announcement | None:
@@ -103,7 +114,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         return a
 
     async def set_active(
-        self, db: AsyncSession, *, uuid: Any, active: bool
+        self, db: AsyncSession, *, uuid: Any, active: bool, actor_uuid: Any = None
     ) -> Announcement | None:
         """Activate (append at end) or deactivate (null order + close gap) an announcement.
 
@@ -118,6 +129,23 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             target.active = True
             await db.commit()
             await db.refresh(target)
+
+            # 觸發 announcement_published 通知
+            recipients = await NotificationRecipientResolver.resolve_all_active(db)
+            summary = target.content[:80] + ("..." if len(target.content) > 80 else "")
+            await NotificationService.dispatch(
+                db,
+                event_type="announcement_published",
+                title="📢 全站重要公告",
+                body=summary,
+                priority="medium",
+                actor_uuid=actor_uuid or target.created_by,
+                ref_type="announcement",
+                ref_uuid=target.uuid,
+                explicit_recipients=recipients,
+            )
+            await db.refresh(target)
+
         elif not active and target.active:
             live = await self._live_for_update(db)
             self._remove_from_order(live, target)

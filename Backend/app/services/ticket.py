@@ -24,6 +24,8 @@ from app.repositories.tickets_repository import (
 )
 from app.services.authz import require_scope
 from app.services.geo_validation import normalize_contact_fields, validate_point
+from app.services.notification_resolver import NotificationRecipientResolver
+from app.services.notification_service import NotificationService
 
 # Business rule (ADR-020): status transitions live here, not in the RBAC layer.
 VALID_TRANSITIONS = {
@@ -215,21 +217,84 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
 
+    old_mod = task.moderation_status
+    old_status = task.status
+    old_dup = task.is_duplicate
+    task_id = task.uuid
+    task_name = task.task_name
+    task_created_by = str(task.created_by)
+
     obj_in = dict(changes)
     new_status = obj_in.get("status")
-    if new_status is not None and new_status != task.status:
+    if new_status is not None and new_status != old_status:
         # Each timestamp records when the task entered that state, and is cleared when it
         # leaves. Clearing matters because analytics plots a task on the day its timestamp
         # gives: a re-opened task keeping a stale completed_at still reads as finished.
         if new_status == "fulfilled":
             obj_in["completed_at"] = datetime.now(UTC)
-        elif task.status == "fulfilled":
+        elif old_status == "fulfilled":
             obj_in["completed_at"] = None
         if new_status == "canceled":
             obj_in["canceled_at"] = datetime.now(UTC)
-        elif task.status == "canceled":
+        elif old_status == "canceled":
             obj_in["canceled_at"] = None
-    return await ticket_task_repository.update(db, db_obj=task, obj_in=obj_in)
+
+    actor_uid = actor.uuid
+    updated_task = await ticket_task_repository.update(db, db_obj=task, obj_in=obj_in)
+    mod_status = updated_task.moderation_status
+    exec_status = updated_task.status
+
+    # 1. 審核狀態變更通知 (High)
+    if "moderation_status" in changes and changes["moderation_status"] != old_mod:
+        assignments = await task_assignment_repository.list_by_task(db, str(task_id))
+        recipients = {task_created_by} | {str(a.actor_uuid) for a in assignments}
+        await NotificationService.dispatch(
+            db,
+            event_type="ticket_task_moderation_update",
+            title=f"工單審核狀態更新：{task_name}",
+            body=f"工單任務「{task_name}」審核狀態已變更為【{mod_status}】。",
+            priority="high",
+            actor_uuid=actor_uid,
+            ref_type="ticket_task",
+            ref_uuid=task_id,
+            explicit_recipients=list(recipients),
+        )
+
+    # 2. 任務執行狀態變更通知 (Medium)
+    if "status" in changes and changes["status"] != old_status:
+        assignments = await task_assignment_repository.list_by_task(db, str(task_id))
+        recipients = {str(a.actor_uuid) for a in assignments}
+        await NotificationService.dispatch(
+            db,
+            event_type="ticket_task_status_update",
+            title=f"工單進度更新：{task_name}",
+            body=f"工單任務「{task_name}」狀態已變更為【{exec_status}】。",
+            priority="medium",
+            actor_uuid=actor_uid,
+            ref_type="ticket_task",
+            ref_uuid=task_id,
+            explicit_recipients=list(recipients),
+        )
+
+    # 3. 重複工單標記通知 (Medium)
+    if ("is_duplicate" in changes and changes["is_duplicate"] and not old_dup) or (
+        "dedup_group_id" in changes and changes["dedup_group_id"]
+    ):
+        dedup_managers = await NotificationRecipientResolver.resolve_permission(db, Perm.AI_DUP_REVIEW.value)
+        await NotificationService.dispatch(
+            db,
+            event_type="dedup_flag_ticket",
+            title=f"重複工單待審核：{task_name}",
+            body=f"工單任務「{task_name}」已被系統標記為疑似重複項目，請進行審核。",
+            priority="medium",
+            actor_uuid=actor_uid,
+            ref_type="ticket_task",
+            ref_uuid=task_id,
+            explicit_recipients=dedup_managers,
+        )
+
+    await db.refresh(updated_task)
+    return updated_task
 
 
 async def create_task_property(
@@ -294,8 +359,11 @@ async def assign_task_actor(
     if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
         raise ValueError("Actor already assigned to this task")
 
+    task_name = task.task_name
+    task_id = task.uuid
+    actor_uid = actor.uuid
     try:
-        return await task_assignment_repository.create(
+        assignment = await task_assignment_repository.create(
             db,
             obj_in={
                 "task_uuid": task_uuid,
@@ -304,6 +372,20 @@ async def assign_task_actor(
                 "status": "accepted",
             },
         )
+        # 觸發 task_assignment_created 通知 (High)
+        await NotificationService.dispatch(
+            db,
+            event_type="task_assignment_created",
+            title=f"📋 您有新的任務指派：{task_name}",
+            body=f"您已獲指派負責工單任務「{task_name}」。",
+            priority="high",
+            actor_uuid=actor_uid,
+            ref_type="ticket_task",
+            ref_uuid=task_id,
+            explicit_recipients=[target_actor],
+        )
+        await db.refresh(assignment)
+        return assignment
     except IntegrityError as exc:
         # Concurrent duplicate lost the race to uq_assignment_task_actor (PR #24 [10]) —
         # surface the same clean domain error instead of a raw 500.

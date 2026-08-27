@@ -7,7 +7,7 @@ status transitions to fulfilled / canceled). Backs the analytics dashboard's sta
 freshness-trend, ticket time-to-completion, and backlog-drain metrics.
 
 Revision ID: a1b2c3d4e5f6
-Revises: b8f4d2a6e1c3
+Revises: 8ebfc3903041
 Create Date: 2026-08-07
 
 """
@@ -18,7 +18,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'a1b2c3d4e5f6'
-down_revision: str | Sequence[str] | None = 'b8f4d2a6e1c3'
+down_revision: str | Sequence[str] | None = '8ebfc3903041'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

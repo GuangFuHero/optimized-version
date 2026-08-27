@@ -58,6 +58,33 @@ services:
     networks:
       - app-network
 
+  # Notification retention (PRD Q4): soft-deletes notifications read >30d ago or created
+  # >90d ago. cleanup_expired_notifications() and its CLI runner shipped without anything
+  # to call them, so the policy has never actually run in staging.
+  #
+  # A sleep loop rather than host cron or a systemd timer: the schedule then lives in the
+  # repo and ships with the deploy that ships the code, and there is no VM-local state to
+  # forget when the box is rebuilt. The trade-off is that the interval restarts with the
+  # container, so run time drifts across redeploys — acceptable for an age-based policy
+  # measured in days. Reuses the backend image; no build of its own.
+  retention:
+    image: disaster-backend:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    # The loop must swallow failures: a crashed run should log and retry tomorrow, not
+    # leave the container dead and the policy silently off again.
+    command: >
+      sh -c 'while true; do
+        python scripts/run_retention_cleanup.py || echo "[retention] run failed, retrying next cycle";
+        sleep 86400;
+      done'
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+
   frontend:
     build: ../Frontend
     image: disaster-frontend:latest
