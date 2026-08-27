@@ -238,7 +238,9 @@ async def test_search_text_generation_expression_has_not_drifted(db, table):
         assert col not in expr, f"{table}.search_text must never include {col} (ADR-079)"
 ```
 
-> **為何是「運算式漂移守衛」而不是「逐表 PII 斷言」**：`tickets` 是**唯一**有 `contact_*` 欄位的表，對其他五張表做 PII 斷言等於斷言一件恆真的事。真正的風險是「有人日後把某個備註欄位加進 generation 運算式」——這條測試同時擋住 PII 與備註兩類，且涵蓋全部 6 張表。
+> **為何是「運算式漂移守衛」而不是「逐表 PII 斷言」**：真正的風險是「有人日後把某個 PII 或備註欄位加進 generation 運算式」——這條測試同時擋住兩類，且涵蓋全部 6 張表，不需要維護一份「哪張表有哪些 PII 欄位」的清單。
+>
+> 這一點在寫下時的理由是「`tickets` 是唯一有 `contact_*` 欄位的表」，**該前提已不成立**：`stations` 在 `b8f4d2a6e1c3` 也加了 `contact_name` / `contact_email` / `contact_phone`（ADR-079 已補述）。守衛式寫法之所以正確，正是因為它不依賴那個前提——新表加上 PII 欄位時它自動涵蓋。
 
 跑 `uv run pytest tests/test_search_schema.py` — 應全部失敗（欄位不存在）。
 

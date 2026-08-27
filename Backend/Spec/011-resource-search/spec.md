@@ -67,6 +67,7 @@
 | 欄位 | 理由 |
 |---|---|
 | `tickets.contact_name` / `contact_email` / `contact_phone` | PII。可搜等於讓遮蔽（`app/graphql/tickets/types.py` 的 field resolver）形同虛設 |
+| `stations.contact_name` / `contact_email` / `contact_phone` | PII。`b8f4d2a6e1c3` 後 `stations` 也有這組欄位；排除規則一體適用（ADR-079） |
 | `stations.comment`、`station_properties.comment`、`task_properties.comment` | 操作備註，自由文字，雜訊高 |
 | `ticket_tasks.progress_note` | 同上 |
 | `secondary_locations.pole_note` | 同上 |

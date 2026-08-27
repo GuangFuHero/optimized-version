@@ -290,10 +290,11 @@ stations {
     string contact_name "nullable, String(100), independent of tickets.contact_name"
     string contact_email "nullable, String(100)"
     string contact_phone "nullable, String(50)"
-    string search_text "GENERATED ALWAYS AS name + left(description, 500), STORED"
+    string search_text "GENERATED ALWAYS AS left(name, 500) + left(description, 500), STORED"
 }
 %% INDEX: ix_stations_search_text_trgm USING gin (search_text gin_trgm_ops)
 %% NOTE: `comment` is deliberately NOT in search_text (free-text note, ADR-079)
+%% NOTE: contact_name/contact_email/contact_phone are PII and never enter search_text (ADR-079)
 base_geometries ||--|| stations : "inherits as"
 stations ||--o{ stations : "has sub-stations (child_station_uuid → parent)"
 %% CONSTRAINT: If base_geometries.geometry is Point → child_station_uuid must be NULL (points cannot be parents)

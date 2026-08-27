@@ -51,6 +51,8 @@
 
 > **部分被 ADR-146 取代**：`secondary_locations` 的可搜性從「整張表」收斂為「只在掛於 station 下時」。
 
+> **範圍擴充（2026-08-27）**：本 ADR 原本只談 `tickets` 的 `contact_*`，因為當時那是唯一持有這組欄位的表。`stations` 在 `b8f4d2a6e1c3`（station photos and contact fields）也加上了 `contact_name` / `contact_email` / `contact_phone`，所以「排除全部 `contact_*`」現在同時適用於兩張表。正向表列本來就把它們擋在外面——已驗證 `stations.search_text` 的 generation 運算式只含 `name` 與 `description`，用站點聯絡電話反查回傳 0 筆——這裡只是把文字補齊，不是行為變更。
+
 **白話**：明列哪些欄位可以被搜到，其餘一律不可搜。個資欄位與操作備註都排除。
 
 **Context**：`tickets` 的 `contact_name` / `contact_email` / `contact_phone`（`app/models/request.py:16-18`）在正常 API 是逐欄位遮蔽的（`app/graphql/tickets/types.py` 的 async field resolver + `app/graphql/masking.py`）。若這些欄位可搜，**用電話號碼就能反查工單**，遮蔽形同虛設。
