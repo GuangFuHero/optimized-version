@@ -1,8 +1,8 @@
-# Session Revocation — ADR 全集（ADR-099~107）
+# Session Revocation — ADR 全集（ADR-099~105、180~181）
 
 **Date**: 2026-08-20
 **Feature**: 014-session-revocation
-**Status**: 定案，**已實作**（2026-08-20；ADR-106/107 為 2026-08-25 code review 後補）
+**Status**: 定案，**已實作**（2026-08-20；ADR-180/181 為 2026-08-25 code review 後補）
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/012-account-profile/decisions.md` 的 ADR-098。
 
 **前情**：本票源自 `Spec/010` 的 ADR-071（access token 撤銷 / fail-closed）。該 ADR 在 010 的改版中撤回並拆出，理由是它修的是一個與多 team 無關的既有安全洞。這裡是它的完整版本。
@@ -125,7 +125,7 @@
 
 **冪等**：沒有任何 session 的使用者也回 204，不是 404。呼叫端要的是「這個人現在沒有活著的 session」這個結果狀態，不是「我剛剛撤掉了東西」這個事件。
 
-> **後續收斂：見 ADR-107（2026-08-25）。** 上面「實務影響是零」的推論只在現行 seed 下成立，而 RBAC 矩陣是執行期可改的。踢人端點已改為明確要求 `Scope.ALL`。
+> **後續收斂：見 ADR-181（2026-08-25）。** 上面「實務影響是零」的推論只在現行 seed 下成立，而 RBAC 矩陣是執行期可改的。踢人端點已改為明確要求 `Scope.ALL`。
 
 ---
 
@@ -170,7 +170,7 @@
 
 ---
 
-### ADR-106 `get_current_session` 也要做同一個 live-session 檢查
+### ADR-180 `get_current_session` 也要做同一個 live-session 檢查
 
 **白話**：登出端點原本只解 JWT、不看 session 死活，所以一張已經被撤銷的 token 還是打得動它。現在同一個檢查也放進去。
 
@@ -202,7 +202,7 @@ review 時以測試實證：撤銷 → `/users/me` 回 401（token 確實死了�
 
 ---
 
-### ADR-107 踢人端點明確要求 `Scope.ALL`
+### ADR-181 踢人端點明確要求 `Scope.ALL`
 
 **白話**：只要有「編輯使用者」這個權限就能踢人——不管那個權限的範圍寫的是 own 還是 team。現在明確要求範圍必須是 all。
 

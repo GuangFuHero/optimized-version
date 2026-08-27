@@ -13,7 +13,7 @@
 **狀態（2026-08-19）：Task 1~9 全部完成。** 全套件 501 passed / 0 failed；`ruff check` 全綠
 （含清掉本分支繼承的 7 個既有錯誤，見 Global Constraints）。Docker 驗收全數通過，測試資料已清除。**尚未開 PR。**
 
-落地時多出的決策：**ADR-098**（管理端 `GET /admin/rbac/users/{uuid}/permissions` 改成逐身分回報）——
+落地時多出的決策：**ADR-178**（管理端 `GET /admin/rbac/users/{uuid}/permissions` 改成逐身分回報）——
 plan 沒預見這個端點在多身分下會回空 dict，屬破壞性 API 變更，前端後台頁面要跟著改。
 
 **本票不含、需另開票的**：前端契約（refresh 帶 identity、401 走登出、切換器 UI、記住上次身分）——

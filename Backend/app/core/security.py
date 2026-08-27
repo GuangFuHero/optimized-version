@@ -316,7 +316,7 @@ async def get_current_session(
 ) -> tuple[str, str | None]:
     """Resolve (user_uuid, sid) from the access token without a DB hit.
 
-    Runs the same live-session check `get_current_user` does (ADR-106). This is the second
+    Runs the same live-session check `get_current_user` does (ADR-180). This is the second
     door onto the authenticated path, and leaving it unchecked left the logout endpoints
     reachable by a token that had already been revoked — which is not the harmless no-op it
     looks like: an intruder holding a revoked token could keep calling `/auth/logout-all`,

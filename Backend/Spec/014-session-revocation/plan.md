@@ -230,14 +230,14 @@ docker exec backend-db-1 psql -U postgres -c "DROP DATABASE IF EXISTS disaster_r
 
 review 報告見 scratchpad `PR38-review.md`；每一項都以實跑測試取證。本任務只處理其中兩項安全問題，其餘（稽核、lint、計數、測試缺口）未動。
 
-### 8-1 `get_current_session` 補上 live-session 檢查（ADR-106）
+### 8-1 `get_current_session` 補上 live-session 檢查（ADR-180）
 
 - [x] 先寫紅燈測試：`tests/test_session_revocation.py` 的 `test_logout_all_is_refused_once_the_session_is_gone` / `test_logout_is_refused_once_the_session_is_gone` / `test_logout_refuses_a_token_with_no_sid`
 - [x] `app/core/security.py:313` — `get_current_session` 多收 `redis=Depends(get_redis)`，呼叫 `_require_live_session`
 - [x] `app/api/v1/endpoints/auth/session.py:163` — logout 的 docstring 更正（sid-less token 不再是 no-op）
 - [x] 三個端點（logout / logout-all / switch-identity）都不用改
 
-### 8-2 踢人端點明確要求 `Scope.ALL`（ADR-107）
+### 8-2 踢人端點明確要求 `Scope.ALL`（ADR-181）
 
 - [x] 先寫紅燈測試：`test_kicking_needs_user_edit_at_scope_all`，parametrize `own/team/gov/ngo/zone`
 - [x] `app/services/admin.py:218-225` — `require_scope` 的回傳值拿來比對 `Scope.ALL`，否則 403

@@ -274,7 +274,7 @@ async def test_kicking_requires_user_edit(client, db_session, redis):
 
 
 # --------------------------------------------------------------------------------------
-# The same check on the logout endpoints (ADR-106)
+# The same check on the logout endpoints (ADR-180)
 # --------------------------------------------------------------------------------------
 
 
@@ -282,7 +282,7 @@ async def test_logout_all_is_refused_once_the_session_is_gone(client, db_session
     """A revoked token must not be able to sign the user out of a session it never held.
 
     `get_current_session` decodes the token without looking at the session, so before
-    ADR-106 a token that had already been revoked could still reach this endpoint. That is
+    ADR-180 a token that had already been revoked could still reach this endpoint. That is
     not the harmless no-op it looks like: an intruder holding a token the victim just
     revoked could keep calling it, kicking the victim out of every session they created
     afterwards until the stolen token expired.
@@ -317,7 +317,7 @@ async def test_logout_refuses_a_token_with_no_sid(client, db_session, redis):
 
 
 # --------------------------------------------------------------------------------------
-# The kick is Scope.ALL only (ADR-107)
+# The kick is Scope.ALL only (ADR-181)
 # --------------------------------------------------------------------------------------
 
 
@@ -346,7 +346,7 @@ async def _kicker_at_scope(db, redis, scope: str):
 
 @pytest.mark.parametrize("scope", ["own", "team", "gov", "ngo", "zone"])
 async def test_kicking_needs_user_edit_at_scope_all(client, db_session, redis, scope):
-    """A narrow `user.edit` must not silently become "sign anyone out" (ADR-107).
+    """A narrow `user.edit` must not silently become "sign anyone out" (ADR-181).
 
     There is no checkpoint 2 on this endpoint — since feature 010 the target has no single
     team to scope against — so without this every scope would behave as `all`. The RBAC

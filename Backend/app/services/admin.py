@@ -212,7 +212,7 @@ async def revoke_user_sessions(db: AsyncSession, redis, *, actor: User, user_uui
     grants name), so there is no team on the target to scope against — which is exactly why
     the scope has to be checked here instead. Without it every narrower grant would behave
     as `all`, and the RBAC matrix is editable at runtime, so today's seed (`user.edit` on
-    `super_admin` alone) is not a property this function can lean on (ADR-107).
+    `super_admin` alone) is not a property this function can lean on (ADR-181).
 
     Idempotent by design — a target with nothing live still succeeds, because the caller is
     asking for the end state "this person has no live sessions", not for an event.
@@ -221,7 +221,7 @@ async def revoke_user_sessions(db: AsyncSession, redis, *, actor: User, user_uui
     if scope != Scope.ALL:
         # Without a checkpoint 2 to narrow it, any grant would reach every user on the
         # platform — a `user.edit=own` role meant for "edit your own profile" would silently
-        # also mean "sign anyone out" (ADR-107). The RBAC matrix is editable at runtime, so
+        # also mean "sign anyone out" (ADR-181). The RBAC matrix is editable at runtime, so
         # the seed giving `user.edit` to super_admin alone is not something this endpoint
         # can rely on.
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
