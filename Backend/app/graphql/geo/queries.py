@@ -12,6 +12,7 @@ import strawberry
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
+from app.core.search import normalize_query, search_timeout
 from app.graphql.context import check_permission
 from app.graphql.geo.types import (
     BoundsInput,
@@ -59,13 +60,18 @@ class GeoQuery:
         db = info.context["db"]
         scope = await check_permission(info, Perm.STATION_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Station)
-        total = await station_repository.count_active(
-            db, bounds=bounds, station_type=station_type, q=q, extra_filters=extra_filters
-        )
-        items = await station_repository.list_active(
-            db, bounds=bounds, station_type=station_type, q=q, skip=skip, limit=limit,
-            extra_filters=extra_filters,
-        )
+        # One ceiling for the whole request, not one per statement (ADR-161). count and
+        # list are two halves of the same search, and search_timeout() is nesting-aware
+        # (ADR-157): the windows the repositories open inside see depth > 0 and skip their
+        # own set_config/RESET, so this costs two round-trips where it used to cost six.
+        async with search_timeout(db, normalize_query(q)):
+            total = await station_repository.count_active(
+                db, bounds=bounds, station_type=station_type, q=q, extra_filters=extra_filters
+            )
+            items = await station_repository.list_active(
+                db, bounds=bounds, station_type=station_type, q=q, skip=skip, limit=limit,
+                extra_filters=extra_filters,
+            )
         return StationConnection(
             items=[StationType.from_model(m) for m in items],
             page_info=PageInfo(

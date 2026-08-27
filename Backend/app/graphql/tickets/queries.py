@@ -13,6 +13,7 @@ import strawberry
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
+from app.core.search import normalize_query, search_timeout
 from app.graphql.context import check_permission
 from app.graphql.geo.types import BoundsInput
 from app.graphql.shared import PageInfo
@@ -70,14 +71,19 @@ class RequestQuery:
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Tickets)
-        total = await ticket_repository.count_active(
-            db, bounds=bounds, status=status, priority=priority, q=q,
-            extra_filters=extra_filters,
-        )
-        items = await ticket_repository.list_active(
-            db, bounds=bounds, status=status, priority=priority, q=q, skip=skip, limit=limit,
-            extra_filters=extra_filters,
-        )
+        # One ceiling for the whole request, not one per statement (ADR-161). count and
+        # list are two halves of the same search, and search_timeout() is nesting-aware
+        # (ADR-157): the windows the repositories open inside see depth > 0 and skip their
+        # own set_config/RESET, so this costs two round-trips where it used to cost six.
+        async with search_timeout(db, normalize_query(q)):
+            total = await ticket_repository.count_active(
+                db, bounds=bounds, status=status, priority=priority, q=q,
+                extra_filters=extra_filters,
+            )
+            items = await ticket_repository.list_active(
+                db, bounds=bounds, status=status, priority=priority, q=q, skip=skip, limit=limit,
+                extra_filters=extra_filters,
+            )
         return TicketConnection(
             items=[TicketType.from_model(m) for m in items],
             page_info=PageInfo(
