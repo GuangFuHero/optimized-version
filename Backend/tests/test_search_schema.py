@@ -8,7 +8,13 @@ so the planner can use the index at all (ADR-081).
 import re
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import inspect, text
+
+from app.models.geo import Station
+from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
+from app.models.station_property import StationProperty
+from app.models.ticket_task import TaskProperty, TicketTask
 
 pytestmark = pytest.mark.asyncio
 
@@ -351,3 +357,42 @@ async def test_unbounded_columns_are_truncated(db, table):
             f"use truncated() rather than plain() in the model AND in the migration "
             f"(ADR-081/151). Expression was:\n{expr}"
         )
+
+
+# 每個可搜 model 對應的 ORM class。與 EXPECTED_SOURCE_COLUMNS 同一組表,
+# 但這裡驗的是 ORM 層而非 DB 層。
+SEARCHABLE_MODELS = {
+    "stations": Station,
+    "tickets": Tickets,
+    "ticket_tasks": TicketTask,
+    "station_properties": StationProperty,
+    "task_properties": TaskProperty,
+    "secondary_locations": SecondaryLocation,
+}
+
+
+async def test_every_searchable_model_covers_its_table():
+    """SEARCHABLE_MODELS 與 EXPECTED_SOURCE_COLUMNS 必須是同一組表。
+
+    兩份清單分開維護會漂移;新增一張可搜表時,這裡先紅。
+    """
+    assert set(SEARCHABLE_MODELS) == set(EXPECTED_SOURCE_COLUMNS)
+
+
+@pytest.mark.parametrize("table", sorted(SEARCHABLE_MODELS))
+async def test_search_text_is_deferred_on_every_searchable_model(table):
+    """search_text 不得出現在 `select(Model)` 的預設欄位清單裡 (ADR-160).
+
+    這個欄位只用來在 WHERE 子句裡比對,沒有任何 API 型別暴露它。少了 deferred,
+    每一次列表查詢——包含完全沒帶 `q` 的地圖列表——都會把它傳回來並灌進 ORM 物件。
+    stations 的上限是 1001 字元,limit=50 時約 50 KB/頁的純浪費。
+
+    這是 ORM 層的斷言,不是 SQL 字串比對:直接問 mapper 這個欄位是不是 deferred,
+    所以不會因為查詢寫法改變而失效。
+    """
+    model = SEARCHABLE_MODELS[table]
+    prop = inspect(model).mapper.attrs["search_text"]
+    assert prop.deferred, (
+        f"{model.__name__}.search_text is not deferred — every select({model.__name__}) "
+        f"will transfer it, including the list paths that never search (ADR-160)"
+    )

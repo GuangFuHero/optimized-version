@@ -48,6 +48,7 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
             search_text_expression(plain("task_name"), truncated("task_description")),
             persisted=True,
         ),
+        deferred=True,
     )
 
     __table_args__ = (search_text_index("ticket_tasks"),)
@@ -71,6 +72,7 @@ class TaskProperty(Base, UUIDPKMixin, TimestampMixin):
             search_text_expression(plain("property_name"), truncated("property_value")),
             persisted=True,
         ),
+        deferred=True,
     )
 
     __table_args__ = (search_text_index("task_properties"),)

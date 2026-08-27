@@ -32,6 +32,7 @@ class Tickets(BaseGeometry):
     search_text: Mapped[str] = mapped_column(
         String,
         Computed(search_text_expression(plain("title"), truncated("description")), persisted=True),
+        deferred=True,
     )
 
     __mapper_args__ = {

@@ -24,7 +24,7 @@ class StationProperty(Base, UUIDPKMixin, TimestampMixin):
     # have one — this is the highest-value search target in the system. `comment` is
     # excluded (free-text notes).
     search_text: Mapped[str] = mapped_column(
-        String, Computed(plain("property_name"), persisted=True)
+        String, Computed(plain("property_name"), persisted=True), deferred=True
     )
 
     station = relationship("Station", back_populates="properties")

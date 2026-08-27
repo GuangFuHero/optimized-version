@@ -76,6 +76,7 @@ class Station(BaseGeometry):
     search_text: Mapped[str] = mapped_column(
         String,
         Computed(search_text_expression(truncated("name"), truncated("description")), persisted=True),
+        deferred=True,
     )
 
     __mapper_args__ = {

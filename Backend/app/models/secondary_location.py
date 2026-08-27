@@ -57,6 +57,7 @@ class SecondaryLocation(Base, UUIDPKMixin):
             ),
             persisted=True,
         ),
+        deferred=True,
     )
 
     __table_args__ = (search_text_index("secondary_locations"),)
