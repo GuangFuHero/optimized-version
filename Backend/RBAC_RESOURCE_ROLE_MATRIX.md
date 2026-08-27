@@ -61,11 +61,21 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | station.view | all（公開） | all | all | all | all | all |
+| **station.view_pii** | —（遮罩） | own | all | all | zone | zone |
 | station.add | — | all | — | all | all | all |
 | station.contribute | — | all | — | all | all | all |
 | station.edit | — | own | — | all | zone | zone |
 | station.delete | — | own | — | all | zone | own |
 | station.review | — | — | — | all | zone | — |
+
+> **⚠️ 本表每一欄是「該角色自己的 grant」。** 在 identity switching 之前，team 角色是疊加在
+> platform 角色之上的，所以空格不代表沒權限——聯集後仍可能有效。**那個讀法已經失效**：
+> 現在生效的只有「當前身分」那一個 identity 的 grant，platform 角色的授權不會帶進 team 身分
+> （ADR-074；`app/repositories/auth_repository.py:get_user_permissions`）。
+> 因此 `station.contribute` 這類原本靠 platform `user` 角色供應的能力，已改為直接授予 team
+> 角色（`scripts/seed_rbac.py`），否則現場人員切成團隊身分就會失去它。
+> 換句話說：對 team 角色而言，本表的空格現在**就是**沒有權限。要看某個人此刻的有效權限，
+> 仍請查 `GET /admin/rbac/matrix`——它解析的是該使用者當前的 identity。
 
 ### 求助單 Ticket
 

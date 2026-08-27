@@ -257,3 +257,38 @@ async def test_require_scope_403s_for_an_actor_with_no_active_identity(db):
     with pytest.raises(HTTPException) as exc:
         await require_scope(actor, Perm.STATION_EDIT, db)
     assert exc.value.status_code == 403
+
+@pytest.mark.asyncio
+async def test_a_team_identity_does_not_inherit_the_platform_role_grant(db):
+    """Replaces main's `test_team_role_inherits_platform_grant_for_station_contribute`.
+
+    That test asserted the opposite — that a capability granted by the platform `user` role
+    stays in force while acting as a team role, because permissions from all of a user's roles
+    were added together. Identity switching removes exactly that (ADR-074): only the active
+    identity's grants resolve, so a team identity that says nothing about a capability does
+    not have it, no matter what the platform role grants.
+
+    The behaviour it protected — a field worker acting as their team can still contribute —
+    is preserved, but by granting `station.contribute` directly to the team roles in
+    `scripts/seed_rbac.py` rather than by leaking the platform grant across identities. This
+    test pins the mechanism; `test_every_actionable_role_covers_the_citizen_baseline`
+    (tests/test_seed_rbac.py) pins the seed side, and more broadly than this one capability.
+    """
+    team = Team(name="Gov Team", type="gov")
+    db.add(team)
+    await db.flush()
+    actor = User(name="team admin")
+    db.add(actor)
+    await db.flush()
+
+    # Platform role "user" grants station.contribute, exactly as the seed does.
+    await _grant(db, actor, Perm.STATION_CONTRIBUTE, "all", "user")
+    # Team role "admin" narrows station.edit and says nothing about station.contribute.
+    await _grant(db, actor, Perm.STATION_EDIT, "zone", "admin", team=team)
+
+    # Acting as the team identity (granted last): the team role's own grant applies...
+    assert await require_scope(actor, Perm.STATION_EDIT, db) == Scope.ZONE
+    # ...and the platform role's does not come with it.
+    with pytest.raises(HTTPException) as exc:
+        await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
+    assert exc.value.status_code == 403

@@ -21,8 +21,17 @@ the new one forbids. Those rows are deleted rather than repaired — there is no
 repair them to, and the project is pre-production with mock data only.
 
 Revision ID: 90c93167fa66
-Revises: e1f2a3b4c5d6
+Revises: 8ebfc3903041
 Create Date: 2026-08-19
+
+Chained after main's current head rather than after `e1f2a3b4c5d6`, which this feature
+branched from. main has since added `b8f4d2a6e1c3` (station photos) and `f3e4d5c6b7a8`
+(notifications) off that same parent and merged them with `8ebfc3903041`; leaving this
+revision on the old parent made a third sibling, and `alembic upgrade head` refuses to
+run with more than one head. Re-pointed when main was merged into this branch.
+
+This binds the feature to a merge order: whichever of the currently open feature branches
+lands second has to be re-pointed at whatever main's head is by then.
 
 """
 from collections.abc import Sequence
@@ -34,7 +43,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '90c93167fa66'
-down_revision: str | Sequence[str] | None = 'e1f2a3b4c5d6'
+down_revision: str | Sequence[str] | None = '8ebfc3903041'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
