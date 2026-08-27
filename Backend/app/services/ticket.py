@@ -4,6 +4,7 @@ Same flat-service style as station.py: `db` first, keyword-only args, each funct
 its own authz + validation + persistence (ADR-013/014/015/022).
 """
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from sqlalchemy.exc import IntegrityError
@@ -223,6 +224,9 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     """Update a ticket task (checkpoint 1 ticket.edit, then checkpoint 2 against the task).
 
     TicketTask carries no team_uuid, so only `own`/`all` scope can match it.
+
+    `completed_at` / `canceled_at` are maintained here, not by the caller — see below for
+    why each is cleared as well as set.
     """
     task = await ticket_task_repository.get_by_uuid_active(db, uuid)
     if not task:
@@ -236,8 +240,23 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     task_name = task.task_name
     task_created_by = str(task.created_by)
 
+    obj_in = dict(changes)
+    new_status = obj_in.get("status")
+    if new_status is not None and new_status != old_status:
+        # Each timestamp records when the task entered that state, and is cleared when it
+        # leaves. Clearing matters because analytics plots a task on the day its timestamp
+        # gives: a re-opened task keeping a stale completed_at still reads as finished.
+        if new_status == "fulfilled":
+            obj_in["completed_at"] = datetime.now(UTC)
+        elif old_status == "fulfilled":
+            obj_in["completed_at"] = None
+        if new_status == "canceled":
+            obj_in["canceled_at"] = datetime.now(UTC)
+        elif old_status == "canceled":
+            obj_in["canceled_at"] = None
+
     actor_uid = actor.uuid
-    updated_task = await ticket_task_repository.update(db, db_obj=task, obj_in=changes)
+    updated_task = await ticket_task_repository.update(db, db_obj=task, obj_in=obj_in)
     mod_status = updated_task.moderation_status
     exec_status = updated_task.status
 

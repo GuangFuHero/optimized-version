@@ -17,7 +17,7 @@ because the column holds almost no data at this stage; `downgrade()` below is ex
 `alembic downgrade` still restores the old shape with its data intact.
 
 Revision ID: c4e7b91d3a02
-Revises: 8ebfc3903041
+Revises: a1b2c3d4e5f6
 Create Date: 2026-08-26
 
 """
@@ -30,7 +30,7 @@ from geoalchemy2 import Geometry
 
 # revision identifiers, used by Alembic.
 revision: str = "c4e7b91d3a02"
-down_revision: str | Sequence[str] | None = "8ebfc3903041"
+down_revision: str | Sequence[str] | None = "a1b2c3d4e5f6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

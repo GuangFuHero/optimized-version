@@ -8,6 +8,9 @@
 > `stations` gained its own `contact_name`/`contact_email`/`contact_phone` columns and
 > `photos.ref_type='ticket'` was renamed to `'geometry'` (now covers both tickets and
 > stations via `base_geometries.uuid`) on 2026-08-06.
+> `stations` gained `operational_status`/`status_changed_at` and `ticket_tasks` gained
+> `completed_at`, backing the analytics dashboard's station freshness-trend and ticket
+> time-to-completion metrics, on 2026-08-07.
 > Address normalization added `ref_roads`, `ref_villages`, `osm_address_points` and
 > `reference_datasets` to the Geospatial diagram, and reshaped `secondary_locations` —
 > `city` was *replaced* by `town`, plus new `village`/`road`/`section`/`formatted`/
@@ -299,6 +302,8 @@ stations {
     string contact_name "nullable, String(100), independent of tickets.contact_name"
     string contact_email "nullable, String(100)"
     string contact_phone "nullable, String(50)"
+    string operational_status "active/temporarily_closed/permanently_closed, String(20), default active, CHECK ck_stations_operational_status"
+    timestamp status_changed_at "nullable, stamped only when operational_status actually changes value"
 }
 base_geometries ||--|| stations : "inherits as"
 stations ||--o{ stations : "has sub-stations (child_station_uuid → parent)"
@@ -515,6 +520,7 @@ ticket_tasks {
     string visibility "public/restricted/internal"
     string review_note "nullable"
     uuid created_by FK
+    timestamp completed_at "nullable, stamped when status transitions to fulfilled; backfilled from updated_at for pre-existing fulfilled rows"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at

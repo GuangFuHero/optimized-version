@@ -57,6 +57,7 @@ class GeoMutation:
             contact_name=input.contact_name,
             contact_email=input.contact_email,
             contact_phone=input.contact_phone,
+            operational_status=input.operational_status.value,
             secondary_location=sl_dict,
         )
         return StationType.from_model(station)
@@ -109,6 +110,8 @@ class GeoMutation:
             changes["level"] = input.level
         if input.visibility is not None:
             changes["visibility"] = input.visibility.value
+        if input.operational_status is not None:
+            changes["operational_status"] = input.operational_status.value
         for field in (
             "type",
             "name",

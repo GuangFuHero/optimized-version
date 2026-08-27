@@ -27,6 +27,7 @@ dependencies = [
     "pyrate-limiter>=4.1.0",
     "osmium>=4.3.1",
     "pyshp>=3.1.6",
+    "plotly>=6.9.0",
 ]
 
 [dependency-groups]
