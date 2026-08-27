@@ -115,17 +115,25 @@ async def search_timeout(db, term: str | None):
     setattr(db, _DEPTH_ATTR, depth + 1)
     is_outermost = depth == 0
     if is_outermost:
-        await db.execute(
-            text("SELECT set_config('statement_timeout', :ms, true)"),
-            {"ms": str(SEARCH_STATEMENT_TIMEOUT_MS)},
-        )
+        await _apply_statement_timeout(db)
     needs_restore = True
     try:
         yield
     except DBAPIError as exc:
         if _is_statement_timeout(exc):
             # Rolling back discards the transaction-local ceiling with it (ADR-158).
-            needs_restore = not await _rollback_aborted_transaction(db)
+            rolled_back = await _rollback_aborted_transaction(db)
+            needs_restore = not rolled_back
+            if rolled_back and not is_outermost:
+                # The ceiling this rollback discarded was shared with every window still
+                # open on this session, and the outer one already ran its set_config —
+                # `is_outermost` is decided on entry, so it will not run it again. Without
+                # re-applying here, a sibling search that is still in flight would carry on
+                # with no bound at all (ADR-163). Suppressed rather than raised: this is
+                # already the error path, and a failure here must not replace the timeout
+                # the caller needs to see.
+                with suppress(DBAPIError):
+                    await _apply_statement_timeout(db)
             raise SearchTimeoutError(
                 f"搜尋耗時過長已中止，請改用更明確的關鍵字（上限 {SEARCH_STATEMENT_TIMEOUT_MS // 1000} 秒）"
             ) from exc
@@ -134,6 +142,19 @@ async def search_timeout(db, term: str | None):
         setattr(db, _DEPTH_ATTR, getattr(db, _DEPTH_ATTR, 1) - 1)
         if is_outermost and needs_restore:
             await _restore_statement_timeout(db)
+
+
+async def _apply_statement_timeout(db) -> None:
+    """Set the search ceiling for the rest of this transaction.
+
+    `set_config(..., is_local => true)` rather than `SET LOCAL` because the value is user-
+    independent but still parameterised, matching the audit variables already set this way
+    in app/db/session.py.
+    """
+    await db.execute(
+        text("SELECT set_config('statement_timeout', :ms, true)"),
+        {"ms": str(SEARCH_STATEMENT_TIMEOUT_MS)},
+    )
 
 
 async def _rollback_aborted_transaction(db) -> bool:

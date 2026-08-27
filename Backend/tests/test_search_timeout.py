@@ -230,3 +230,35 @@ async def test_no_timeout_when_those_same_paths_are_not_searching():
     db = CapturingSession()
     await TicketTaskRepository().list_by_ticket(db, "00000000-0000-0000-0000-000000000000")
     assert "set_config" not in db.sql()
+
+
+async def test_an_inner_timeout_leaves_an_outer_search_still_bounded(db, monkeypatch):
+    """ADR-163：內層 window 逾時後的 rollback 不得把外層搜尋的上限一起帶走。
+
+    上限是**交易層級**的單一值,由這個 session 上每一個開著的 window 共用
+    (`set_config(..., is_local => true)`)。內層逾時後必須 rollback 才能讓交易脫離
+    aborted 狀態 (ADR-158),而 rollback 連同這個值一起丟掉。外層 window 的
+    `is_outermost` 是進入時就決定的,它不會再跑一次 `set_config`——所以如果沒有在這裡
+    補回來,一個仍在飛行中的 sibling 搜尋會完全失去上限。
+
+    這是 ADR-157 推理過的巢狀情境裡沒被涵蓋到的一條互動路徑。
+    """
+    monkeypatch.setattr(search, "SEARCH_STATEMENT_TIMEOUT_MS", 3000)
+    await db.execute(text("SELECT 1"))
+
+    async with search_timeout(db, "外層"):
+        assert await _statement_timeout(db) == "3s"
+
+        with pytest.raises(SearchTimeoutError):
+            async with search_timeout(db, "內層"):
+                # 只把內層自己的那一句壓到 50ms,讓它逾時而不必真的等 3 秒
+                await db.execute(text("SELECT set_config('statement_timeout', '50', true)"))
+                await db.execute(text("SELECT pg_sleep(1)"))
+
+        assert await _statement_timeout(db) == "3s", (
+            "the inner rollback discarded the ceiling the outer search is still relying on"
+        )
+
+        # 設定值回來了還不夠——它必須真的還會取消語句。
+        with pytest.raises(DBAPIError):
+            await db.execute(text("SELECT pg_sleep(10)"))
