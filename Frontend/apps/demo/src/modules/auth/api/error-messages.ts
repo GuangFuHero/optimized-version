@@ -37,9 +37,20 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   sso_already_linked: '這個帳號已經綁定過了。',
   sso_linked_elsewhere: '這個第三方帳號已經綁定到另一個帳號了。',
 
-  // Throttling — the allowance is shared, so the person seeing this may not have clicked at all.
+  // Throttling — the allowance is per caller IP, but anyone sharing a NAT or office network
+  // shares it, so the person seeing this may not have clicked at all.
   rate_limited: '系統忙碌中，請等一分鐘後再試。',
 };
+
+/**
+ * Look up the copy for a backend error code, or `undefined` if we have none for it.
+ *
+ * For callers holding a bare code rather than an error — next-auth hands the login page one through
+ * `?error=`, having discarded the error object on the way.
+ */
+export function messageForCode(code: string) {
+  return MESSAGE_BY_CODE[code];
+}
 
 /**
  * Resolve user-facing copy for a failed auth call.

@@ -1,4 +1,5 @@
 import {
+  ApiError,
   getCurrentUserAsync,
   googleSsoAsync,
   lineSsoAsync,
@@ -17,6 +18,11 @@ import {
 } from './server-backend-auth';
 import { withClientIpAsync } from './client-ip';
 
+/** `account` with the slot `signIn` uses to hand its result to `jwt`. */
+type OAuthAccountWithBackendUser = {
+  backendUser?: AuthenticatedUser;
+};
+
 type AuthenticatedUser = {
   id: string;
   email?: string | null;
@@ -28,20 +34,32 @@ type AuthenticatedUser = {
   expiresIn: number;
 };
 
+/**
+ * Carries a backend error code out of `authorize` so the login page can say what actually happened.
+ *
+ * Returning `null` collapses every failure into next-auth's fixed `CredentialsSignin`, which the
+ * login page renders as "wrong password" — including a 429. next-auth v4 propagates a *thrown*
+ * error's message instead (`core/routes/callback.js`), so the code travels as the message and
+ * arrives as `result.error`.
+ */
+class CredentialsLoginError extends Error {}
+
 async function loginWithCredentials(
   username: string,
   password: string,
-): Promise<AuthenticatedUser | null> {
+): Promise<AuthenticatedUser> {
   let payload: ITokenPair;
 
   try {
     payload = await withClientIpAsync(() => loginAsync(username, password));
-  } catch {
-    return null;
+  } catch (error) {
+    throw new CredentialsLoginError(
+      error instanceof ApiError && error.code ? error.code : 'login_failed',
+    );
   }
 
   if (!payload.access_token) {
-    return null;
+    throw new CredentialsLoginError('login_failed');
   }
 
   const currentUser = await getCurrentUserAsync(payload.access_token);
@@ -70,10 +88,18 @@ async function completeOAuthLoginAsync({
   fallbackName?: string | null;
 }) {
   return withClientIpAsync(async () => {
-    const tokenPair =
-      provider === 'google'
-        ? await googleSsoAsync({ id_token: idToken })
-        : await lineSsoAsync({ id_token: idToken });
+    let tokenPair: ITokenPair;
+
+    try {
+      tokenPair =
+        provider === 'google'
+          ? await googleSsoAsync({ id_token: idToken })
+          : await lineSsoAsync({ id_token: idToken });
+    } catch (error) {
+      throw new CredentialsLoginError(
+        error instanceof ApiError && error.code ? error.code : 'login_failed',
+      );
+    }
 
     const currentUser = await getCurrentUserAsync(tokenPair.access_token);
 
@@ -169,6 +195,40 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    /**
+     * Exchange the provider's id_token here rather than in `jwt`, purely so failures keep their
+     * message. next-auth v4 propagates a throw from `signIn` as `?error=<message>` but rewrites one
+     * from `jwt` to a bare `?error=Callback`, which is why "this email is already registered, sign
+     * in and link Google in settings" could never reach the login page.
+     *
+     * The result is stashed on `account`, the one object next-auth hands to both callbacks. That is
+     * object identity in someone else's internals, so `jwt` recomputes when the stash is missing —
+     * if a future version clones `account`, login keeps working and only the message degrades.
+     */
+    signIn: async ({ account, profile }) => {
+      if (account?.provider !== 'google' && account?.provider !== 'line') {
+        return true;
+      }
+
+      const idToken =
+        typeof account.id_token === 'string' ? account.id_token : undefined;
+
+      if (!idToken) {
+        throw new Error(`Missing ${account.provider} id_token`);
+      }
+
+      (account as OAuthAccountWithBackendUser).backendUser =
+        await completeOAuthLoginAsync({
+          provider: account.provider,
+          idToken,
+          fallbackEmail:
+            typeof profile?.email === 'string' ? profile.email : undefined,
+          fallbackName:
+            typeof profile?.name === 'string' ? profile.name : undefined,
+        });
+
+      return true;
+    },
     jwt: async ({ token, user, account, profile }) => {
       if (account?.provider === 'google' || account?.provider === 'line') {
         const idToken =
@@ -178,14 +238,16 @@ export const authOptions: NextAuthOptions = {
           throw new Error(`Missing ${account.provider} id_token`);
         }
 
-        const authenticatedUser = await completeOAuthLoginAsync({
-          provider: account.provider,
-          idToken,
-          fallbackEmail:
-            typeof profile?.email === 'string' ? profile.email : undefined,
-          fallbackName:
-            typeof profile?.name === 'string' ? profile.name : undefined,
-        });
+        const authenticatedUser =
+          (account as OAuthAccountWithBackendUser).backendUser ??
+          (await completeOAuthLoginAsync({
+            provider: account.provider,
+            idToken,
+            fallbackEmail:
+              typeof profile?.email === 'string' ? profile.email : undefined,
+            fallbackName:
+              typeof profile?.name === 'string' ? profile.name : undefined,
+          }));
 
         return applyTokenPairToBackendAuthToken(
           {

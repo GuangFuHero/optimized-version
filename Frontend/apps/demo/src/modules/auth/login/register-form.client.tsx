@@ -79,16 +79,28 @@ export default function RegisterFormClient() {
         code,
       });
 
-      const result = await signIn('credentials', {
-        username: pendingRegistration.normalizedIdentity,
-        password: '',
-        accessToken: tokenPair.access_token,
-        refreshToken: tokenPair.refresh_token,
-        tokenType: tokenPair.token_type ?? 'bearer',
-        expiresIn: String(tokenPair.expires_in),
-        callbackUrl: '/map',
-        redirect: false,
-      });
+      // Past this line the account exists. Every way sign-in can fail — a returned `error`, a
+      // thrown network blip, a 500 from the next-auth route — means the same thing to the user, so
+      // they all have to arrive as the same error. Letting a throw escape to the outer catch would
+      // report "verification failed" and send them back to register, straight into a 409.
+      let result: Awaited<ReturnType<typeof signIn>>;
+
+      try {
+        result = await signIn('credentials', {
+          username: pendingRegistration.normalizedIdentity,
+          password: '',
+          accessToken: tokenPair.access_token,
+          refreshToken: tokenPair.refresh_token,
+          tokenType: tokenPair.token_type ?? 'bearer',
+          expiresIn: String(tokenPair.expires_in),
+          callbackUrl: '/map',
+          redirect: false,
+        });
+      } catch (error) {
+        throw new SignInFailedError(
+          error instanceof Error ? error.message : 'sign-in threw',
+        );
+      }
 
       if (result?.error) {
         throw new SignInFailedError(result.error);
