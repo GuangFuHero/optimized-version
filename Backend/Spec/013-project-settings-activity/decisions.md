@@ -261,6 +261,8 @@ app/services/ticket.py:207-231    create_task_property
 
 ### ADR-099 feature 013 的 migration 改掛在 feature 012 之後
 
+> **掛載點已由 ADR-105 更正**：本 ADR 寫的 `f2b7c9d4e0a3` 是當時 feature 012 的 head，PR #35 之後又加了 `b7e4c1a90d52`。掛在舊 head 上會重現本 ADR 要避免的兩個 head，已改掛 012 的現行 head。
+
 **白話**：兩個 feature 的 migration 都掛在同一個 parent，一起合進 main 就變成雙 head，部署會斷。
 
 **Context**：`07ac630e0009`（feature 013）與 `f2b7c9d4e0a3`（feature 012 搜尋索引）的 `down_revision` 都是 `e1f2a3b4c5d6`。各自單獨看都是單 head，但兩邊都進 main 後 `alembic heads` 會列出兩個 head，`alembic upgrade head` 直接中止（實測輸出：`FAILED: Multiple head revisions are present`）。
@@ -368,3 +370,34 @@ app/services/ticket.py:207-231    create_task_property
 **Consequences**：
 ➕ 下一個讀到這裡的人不會把它當成待清理的漂移。
 ➖ 兩個欄位定義仍然重複；若日後出現第二張「只更新不刪除」的表，值得抽一個 `UpdatedTimestampMixin`。
+
+---
+
+### ADR-105 掛載點改為 feature 012 的 head `b7e4c1a90d52`，不是 `f2b7c9d4e0a3`
+
+**白話**：ADR-099 把本 feature 的 migration 掛在 feature 012 的 `f2b7c9d4e0a3` 之下，用意是避免兩個 head。但那是「當時」012 的 head——PR #35 後來又在其上加了 `b7e4c1a90d52`，於是掛在舊 head 上反而會重現 ADR-099 想避免的那個故障。
+
+**Context**：把 main 併進本分支之後實測（乾淨資料庫、docker）：本分支單獨併 main 時 `alembic heads` 直接 `KeyError: 'f2b7c9d4e0a3'`——那是預期中的相依，feature 012 還沒進 main。但把 feature 012 也併進來之後：
+
+```
+alembic heads
+07ac630e0009 (head)
+b7e4c1a90d52 (head)
+
+alembic upgrade head
+FAILED: Multiple head revisions are present for given argument 'head'
+```
+
+兩者都掛在 `f2b7c9d4e0a3` 之下。這正是 PR #35 review 第一條描述的同一個故障，只是換了一組 revision。ADR-099 的推理沒有錯，它依據的事實過期了：`f2b7c9d4e0a3` 不再是 feature 012 的 head。
+
+**Options**：
+- **甲：改掛 `b7e4c1a90d52`**（採用）。feature 012 目前真正的 head，鏈回單線。
+- 乙：加一個 merge revision 把兩個 head 接起來。可行，但這裡沒有真正的分叉需要保留——兩個 feature 本來就是先後關係，多一個 merge revision 只是把線性歷史寫成分叉再收斂。
+- 丙：維持現狀，等合併時再處理。等於刻意讓 main 在合併當下壞掉。
+
+**Decision**：`07ac630e0009.down_revision` 改為 `b7e4c1a90d52`，migration 的 docstring 記下「掛的是 feature 012 的 **head**，而不是某個特定 revision」以及這次為何改號。實測結果：`alembic heads` 單一 head，`alembic upgrade head` 從 `e1f2a3b4c5d6` 一路跑到 `07ac630e0009` 完成。
+
+**Consequences**：
+➕ 兩個 feature 都進 main 之後，`alembic upgrade head` 仍是單 head。
+➖ 合併順序的相依性不變且更強：feature 012 必須先合併，而且本 revision 綁定的是 012 的 head——PR #35 若在合併前再加 migration，這裡要跟著改。
+➖ 這類「掛在別的 PR 的 head 上」的寫法本質上是脆弱的。真正的解法是兩個 feature 合併後由 main 產生 merge revision，但那需要先確定合併順序；在目前一次一個 PR 的節奏下，維持這個相依比較單純。
