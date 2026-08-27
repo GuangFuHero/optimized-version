@@ -97,10 +97,10 @@ class UpsertPropertyConfigInput:
 
     Omitting a field leaves it as it is (or at its column default on insert) — a caller that
     only wants to change `data_type` never resets a field's ordering, and one that only wants
-    to set a `label` never blanks an Enum's options (ADR-098). Clearing `enumOptions` is
+    to set a `label` never blanks an Enum's options (ADR-166). Clearing `enumOptions` is
     therefore spelled `enumOptions: []`, not `null`.
 
-    `dataType` obeys that rule too (ADR-100): retiring a field is `{propertyName, isActive:
+    `dataType` obeys that rule too (ADR-168): retiring a field is `{propertyName, isActive:
     false}`, with no need to restate what the field is. Creating one still requires it — the
     column is NOT NULL — and omitting it there is a client error, not a 500.
     """

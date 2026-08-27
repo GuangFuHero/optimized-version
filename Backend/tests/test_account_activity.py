@@ -159,12 +159,12 @@ async def test_session_count_degrades_to_null_when_redis_is_unavailable(client, 
 
 
 # ──────────────────────────────────────────────
-# PR #36 review findings (ADR-102)
+# PR #36 review findings (ADR-170)
 # ──────────────────────────────────────────────
 
 
 async def test_the_refresh_activity_write_names_an_actor(client, db_session):
-    """`users` is audited, and /auth/refresh carries no access token (ADR-102).
+    """`users` is audited, and /auth/refresh carries no access token (ADR-170).
 
     The audit trigger reads the actor from `app.current_user_id`, which the middleware fills
     from the caller's access token. This request has none — it is presenting a refresh token —
@@ -209,7 +209,7 @@ async def test_the_login_write_names_an_actor_too(client, db_session):
 
 
 async def test_a_session_count_bug_is_not_reported_as_a_redis_outage(caplog):
-    """A `strict=True` length mismatch is a bug here, not an outage (ADR-103).
+    """A `strict=True` length mismatch is a bug here, not an outage (ADR-171).
 
     Inside the `except`, such a bug degraded every user's count to `null` and logged it as
     "Redis unavailable", sending whoever investigated at a subsystem that was working.

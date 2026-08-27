@@ -31,7 +31,7 @@ async def upsert_station_property_config(
 ) -> StationPropertyConfig:
     """Create or update a station property config entry (checkpoint 1 only).
 
-    Every field except the key is optional and omitting one leaves it unchanged (ADR-098/099),
+    Every field except the key is optional and omitting one leaves it unchanged (ADR-166/099),
     so retiring a field is `is_active=False` alone. `data_type` is required only when the
     entry does not exist yet.
     """
@@ -64,7 +64,7 @@ async def upsert_task_property_config(
 ) -> TaskPropertyConfig:
     """Create or update a task property config entry (checkpoint 1 only).
 
-    Same partial-update semantics as the station side (ADR-098/099).
+    Same partial-update semantics as the station side (ADR-166/099).
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
     return await task_property_config_repository.upsert(

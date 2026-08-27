@@ -125,7 +125,7 @@
 | dynamic_field.delete | — | — | — | all | — | — |
 
 > 查詢的 `includeInactive: true`（管理端才看得到已停用欄位）在 `dynamic_field.view` 之外**額外**要求
-> `dynamic_field.edit`（ADR-096）：看得到誰把欄位退役，屬於「有權退役」的一環，而不是「有權填表單」。
+> `dynamic_field.edit`（ADR-164）：看得到誰把欄位退役，屬於「有權退役」的一環，而不是「有權填表單」。
 
 ### 專案設定 Project Settings
 

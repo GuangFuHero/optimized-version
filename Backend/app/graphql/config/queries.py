@@ -32,7 +32,7 @@ class PropertyConfigQuery:
         types in project settings is reflected here immediately — there is no "apply" step,
         which is exactly what splitting definition from activation bought (ADR-091).
 
-        `includeInactive: true` is the management view (ADR-096): it also returns retired
+        `includeInactive: true` is the management view (ADR-164): it also returns retired
         fields, which every form path hides, and is what makes a deactivated field
         recoverable at all. It needs dynamic_field.edit — seeing what someone retired belongs
         with the right to retire it, not with the right to fill in a form.

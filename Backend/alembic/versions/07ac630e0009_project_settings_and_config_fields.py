@@ -36,11 +36,11 @@ features branched from. Two revisions sharing one parent is two alembic heads th
 both land on main, and `alembic upgrade head` refuses to run with more than one head.
 Feature 012 merges first; until it does, this branch on its own cannot resolve its parent.
 
-The parent is `b7e4c1a90d52`, not `f2b7c9d4e0a3`. It was `f2b7c9d4e0a3` when ADR-099 was
+The parent is `b7e4c1a90d52`, not `f2b7c9d4e0a3`. It was `f2b7c9d4e0a3` when ADR-167 was
 written, because that was feature 012's head at the time; PR #35 then added `b7e4c1a90d52`
 (FK indexes for the search subqueries) on top of it. Chaining onto the old head would have
 reproduced the exact two-head failure this revision exists to avoid — verified against a
-real database (ADR-105).
+real database (ADR-173).
 
 """
 from collections.abc import Sequence

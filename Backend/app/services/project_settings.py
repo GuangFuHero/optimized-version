@@ -56,7 +56,7 @@ async def update_project_settings(
     The row is read once, here, and handed to `upsert()` so it does not read it again.
 
     A saved `disaster_types` label that no configured field is scoped to comes back as a
-    warning (ADR-101) — see `_unmatched_disaster_types`.
+    warning (ADR-169) — see `_unmatched_disaster_types`.
     """
     await require_scope(actor, Perm.PROJECT_EDIT, db)
     current = await project_settings_repository.get_singleton(db)
@@ -70,7 +70,7 @@ async def update_project_settings(
 
 
 async def _unmatched_disaster_types(db: AsyncSession, values: dict) -> tuple[str, ...]:
-    """Warn about saved disaster labels that no configured field is scoped to (ADR-101).
+    """Warn about saved disaster labels that no configured field is scoped to (ADR-169).
 
     Setting `disaster_types` re-scopes every dynamic field at once, and the match is exact
     string equality — so `"floods"` for `"flood"` is accepted, stores cleanly, and silently

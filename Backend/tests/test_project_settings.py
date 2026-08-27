@@ -263,7 +263,7 @@ async def test_empty_disaster_types_survives_normalization(db):
 
 
 # ──────────────────────────────────────────────
-# PR #36 review findings (ADR-100/100/101)
+# PR #36 review findings (ADR-168/100/101)
 # ──────────────────────────────────────────────
 
 
@@ -273,7 +273,7 @@ async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_
     `"floods"` for `"flood"` is exact-equality-different, so every flood-scoped field drops
     out of the station and task forms. There is no vocabulary to reject the label against
     (ADR-091), so the write still succeeds; what must not happen is it succeeding *silently*
-    (ADR-101).
+    (ADR-169).
     """
     admin_uuid = await _make_project_admin(db_session)
     db_session.add(StationPropertyConfig(
@@ -348,7 +348,7 @@ async def test_one_patch_reads_the_settings_row_once(client, db_session, monkeyp
 
 
 async def test_retiring_a_field_does_not_require_restating_its_type(db):
-    """`is_active=False` alone must retire a field, leaving its definition alone (ADR-100).
+    """`is_active=False` alone must retire a field, leaving its definition alone (ADR-168).
 
     While `data_type` was mandatory, retiring meant resending it, and a stale or guessed
     value silently redefined the field at the same time.

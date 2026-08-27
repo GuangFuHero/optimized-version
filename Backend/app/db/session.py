@@ -35,7 +35,7 @@ async def attribute_writes_to(db, user_uuid: str) -> None:
     `POST /auth/login` and `POST /auth/refresh` carry no access token — the caller is proving
     who they are, not asserting it — so the ContextVar is empty for the whole request and the
     `users` UPDATE each of them performs lands in `audit_logs` with `user_uuid = NULL`
-    (ADR-102). By the time either one writes, it has *just* established the identity.
+    (ADR-170). By the time either one writes, it has *just* established the identity.
 
     Setting the ContextVar alone is not enough there: the transaction is already open by then
     (both paths read from the database first), so `after_begin` has been and gone. Hence both

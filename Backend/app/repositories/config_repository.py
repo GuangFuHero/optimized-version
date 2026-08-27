@@ -5,7 +5,7 @@ type (plus the universal 'all' bucket for stations), narrowed to fields enabled 
 deployment's current disaster types (ADR-091), excluding deactivated fields (ADR-095), in a
 totally ordered list. Before feature 013 there was no ORDER BY at all, so the same query
 could come back in a different order twice in a row. Pass `include_inactive=True` for the
-management view that can still see retired fields (ADR-096).
+management view that can still see retired fields (ADR-164).
 """
 
 from sqlalchemy import ARRAY, String, cast, func, or_, select, true
@@ -57,13 +57,13 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
     ) -> list[StationPropertyConfig]:
         """Return active configs for the station type (plus universal 'all' ones), ordered.
 
-        `include_inactive` is the management view (ADR-096): retired fields are invisible to
+        `include_inactive` is the management view (ADR-164): retired fields are invisible to
         every form path, so without it a deactivated field could never be found again.
 
         The order ends on `uuid` because this query unions the type's own rows with the 'all'
         bucket, where `(sort_order, property_name)` is NOT unique — `('all', 'crowd_level')`
         and `('shelter', 'crowd_level')` both sit at sort_order 0 and would otherwise come
-        back in whatever order the plan produced (ADR-097).
+        back in whatever order the plan produced (ADR-165).
         """
         conditions = [
             or_(self.model.station_type == station_type, self.model.station_type == "all"),
@@ -123,7 +123,7 @@ class TaskPropertyConfigRepository(GenericRepository[TaskPropertyConfig]):
     ) -> list[TaskPropertyConfig]:
         """Return active configs for the given task type, ordered.
 
-        `include_inactive` is the management view (ADR-096), as on the station side. The
+        `include_inactive` is the management view (ADR-164), as on the station side. The
         order ends on `uuid` for the same reason there — here it is already total (this query
         has no 'all' bucket, and `(task_type, property_name)` is unique), so it is only
         belt-and-braces, but it keeps the two queries reading identically.
@@ -205,11 +205,11 @@ def _optional_config_fields(
     a caller that only cares about `data_type` never silently resets a field's ordering or
     disables it.
 
-    `enum_options` obeys the same rule (ADR-098): editing an Enum field's label used to blank
+    `enum_options` obeys the same rule (ADR-166): editing an Enum field's label used to blank
     its options, because the update always carried the input's default `None`. Clearing the
     options is spelled `enum_options=[]` — an empty list is supplied, not omitted.
 
-    `data_type` follows the same rule as of ADR-100, and it is the one that made the rule
+    `data_type` follows the same rule as of ADR-168, and it is the one that made the rule
     matter: it used to be written unconditionally, so retiring a field — which needs nothing
     but `is_active: false` — forced the caller to restate what the field *is*, and a stale or
     guessed value silently redefined it. Creation still requires it (the column is NOT NULL);
@@ -234,7 +234,7 @@ async def disaster_types_in_use(db: AsyncSession) -> set[str]:
     (ADR-091), so there is nothing to validate a label against. What *is* knowable is which
     labels the configured fields actually use, and that is enough to tell an operator that
     the label they just saved matches none of them — the difference between a typo and a
-    disaster nobody has configured fields for yet (ADR-101).
+    disaster nobody has configured fields for yet (ADR-169).
 
     Rows with an empty `disaster_types` are universal ("every type") and contribute no label,
     which is correct here: they stay enabled whatever the deployment is set to, so they can

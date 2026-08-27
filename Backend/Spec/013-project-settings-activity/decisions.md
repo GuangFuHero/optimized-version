@@ -1,4 +1,4 @@
-# Project Settings & Account Activity — ADR 全集（ADR-090~099）
+# Project Settings & Account Activity — ADR 全集（ADR-090~095、164~173）
 
 **Date**: 2026-08-16
 **Feature**: 013-project-settings-activity
@@ -214,11 +214,11 @@ app/services/ticket.py:207-231    create_task_property
 
 ---
 
-## PR #36 code review 後補的決策（ADR-096~099）
+## PR #36 code review 後補的決策（ADR-164~099）
 
 以下四項是 PR #36 review 實測後拍板的修正，全部有對應測試。
 
-### ADR-096 停用欄位需要一條看得到的路：`includeInactive`（需 `dynamic_field.edit`）
+### ADR-164 停用欄位需要一條看得到的路：`includeInactive`（需 `dynamic_field.edit`）
 
 **白話**：欄位一旦停用就完全消失在 API 上，等於救不回來。加一個查詢參數讓有編輯權的人看得到已停用欄位。
 
@@ -234,7 +234,7 @@ app/services/ticket.py:207-231    create_task_property
 ➖ 多一個參數要在前端管理介面接。
 ➖ 災害類型過濾掉的欄位仍然列不出來（需要先改 project settings 才看得到）——本次不處理。
 
-### ADR-097 station 查詢的排序必須以 `uuid` 收尾
+### ADR-165 station 查詢的排序必須以 `uuid` 收尾
 
 **白話**：`('all', X)` 和 `('shelter', X)` 兩列排序鍵完全一樣，順序還是會跳。
 
@@ -246,7 +246,7 @@ app/services/ticket.py:207-231    create_task_property
 ➕ 排序成為全序，同一份資料的回傳順序可重現。
 ➖ 打平時的相對順序由 `uuid` 決定，也就是任意但穩定；真要指定順序請用 `sort_order`。
 
-### ADR-098 `enum_options` 比照其他欄位：省略=不動，`[]`=清空
+### ADR-166 `enum_options` 比照其他欄位：省略=不動，`[]`=清空
 
 **白話**：只想改個顯示名稱，卻會把 Enum 的選項整組清掉。
 
@@ -259,9 +259,9 @@ app/services/ticket.py:207-231    create_task_property
 ➕ 改 label 不再破壞表單選項。
 ➖ 明確傳 `null` 會被當成「不動」而非「清空」；清空必須傳 `[]`。這是為了跟旁邊四個欄位共用同一套規則，而不是替單一欄位引入 `UNSET` 機制。
 
-### ADR-099 feature 013 的 migration 改掛在 feature 012 之後
+### ADR-167 feature 013 的 migration 改掛在 feature 012 之後
 
-> **掛載點已由 ADR-105 更正**：本 ADR 寫的 `f2b7c9d4e0a3` 是當時 feature 012 的 head，PR #35 之後又加了 `b7e4c1a90d52`。掛在舊 head 上會重現本 ADR 要避免的兩個 head，已改掛 012 的現行 head。
+> **掛載點已由 ADR-173 更正**：本 ADR 寫的 `f2b7c9d4e0a3` 是當時 feature 012 的 head，PR #35 之後又加了 `b7e4c1a90d52`。掛在舊 head 上會重現本 ADR 要避免的兩個 head，已改掛 012 的現行 head。
 
 **白話**：兩個 feature 的 migration 都掛在同一個 parent，一起合進 main 就變成雙 head，部署會斷。
 
@@ -275,14 +275,14 @@ app/services/ticket.py:207-231    create_task_property
 
 ---
 
-### ADR-100 `data_type` 比照其他欄位：省略=不動；只有新增時必填
+### ADR-168 `data_type` 比照其他欄位：省略=不動；只有新增時必填
 
 **白話**：停用一個動態欄位不該需要重新說明「這個欄位是什麼型別」。原本 `data_type` 是 upsert 唯一必填的非鍵欄位，而且每次都會被無條件寫入，於是想停用欄位的呼叫端被迫附帶一個 `dataType`——猜錯就順手把欄位定義改掉了。
 
-**Context**：ADR-095 加上 `is_active` 讓欄位可以退役，ADR-098 把「省略=不動」定為 upsert 的通則。但 `data_type` 沒有跟上：`config_repository` 的 `update_values = {"data_type": data_type, **optional}` 讓它繞過了 `_optional_config_fields()` 的過濾。實測（PR #36 review）：對一個 `data_type='integer'` 的既有欄位送 `{property_name, data_type: 'string', is_active: false}`，欄位確實停用了，型別也一併被改寫成 `string`，沒有任何警告。
+**Context**：ADR-095 加上 `is_active` 讓欄位可以退役，ADR-166 把「省略=不動」定為 upsert 的通則。但 `data_type` 沒有跟上：`config_repository` 的 `update_values = {"data_type": data_type, **optional}` 讓它繞過了 `_optional_config_fields()` 的過濾。實測（PR #36 review）：對一個 `data_type='integer'` 的既有欄位送 `{property_name, data_type: 'string', is_active: false}`，欄位確實停用了，型別也一併被改寫成 `string`，沒有任何警告。
 
 **Options**：
-- **甲：`data_type` 併入選填集合**（採用）。與 ADR-098 同一條規則，呼叫端 `{propertyName, isActive: false}` 即可退役。
+- **甲：`data_type` 併入選填集合**（採用）。與 ADR-166 同一條規則，呼叫端 `{propertyName, isActive: false}` 即可退役。
 - 乙：另開 `retireStationPropertyConfig` / `retireTaskPropertyConfig` mutation。語意最明確，但多兩個 mutation、兩組權限與測試，而且沒有解決「一般編輯也會誤改型別」這半邊。
 
 **Decision**：`data_type` 改為 `str | None = None` 並交給 `_optional_config_fields()`。欄位是 NOT NULL，所以**新增**時仍必填——這個檢查放在 `_upsert_with_conflict_retry()` 裡，因為那裡才是真正決定 insert 或 update 的地方；缺少時拋 `PropertyConfigValidationError`（繼承 `ValueError`，訊息才能穿過 GraphQL 的 `MaskErrors`），是 client error 而不是 500。
@@ -294,7 +294,7 @@ app/services/ticket.py:207-231    create_task_property
 
 ---
 
-### ADR-101 `disaster_types` 對不到任何欄位時回傳 warning，不擋下寫入
+### ADR-169 `disaster_types` 對不到任何欄位時回傳 warning，不擋下寫入
 
 **白話**：災害型別打錯字（`floods` 之於 `flood`）目前完全沒有回饋——回 200、存進去、然後所有該型別的動態欄位從表單上消失。運維沒有任何辦法分辨「打錯字」和「這個型別本來就還沒設欄位」。
 
@@ -317,7 +317,7 @@ app/services/ticket.py:207-231    create_task_property
 
 ---
 
-### ADR-102 `/auth/login`、`/auth/refresh`、SSO callback 的 `users` 寫入要指名 actor
+### ADR-170 `/auth/login`、`/auth/refresh`、SSO callback 的 `users` 寫入要指名 actor
 
 **白話**：這幾條路徑都會更新 `users`（`last_login_at` / `last_activity_at`），而 `users` 是被稽核的表，所以每次都會寫一筆 `audit_logs`。但它們身上沒有 access token——使用者正在「證明」自己是誰，而不是「主張」——所以稽核觸發器讀到的 actor 是空的，每一筆都寫成 `user_uuid = NULL`。
 
@@ -339,7 +339,7 @@ app/services/ticket.py:207-231    create_task_property
 
 ---
 
-### ADR-103 `strict=True` 的 zip 移出 `except`：程式錯誤不得偽裝成 Redis 故障
+### ADR-171 `strict=True` 的 zip 移出 `except`：程式錯誤不得偽裝成 Redis 故障
 
 **白話**：`_session_counts()` 的 `except Exception` 原本連 `strict=True` zip 拋的 `ValueError` 一起吃掉。那是這個函式自己的 bug，卻會被記成「Redis unavailable」，把查問題的人指向一個運作正常的子系統。
 
@@ -357,7 +357,7 @@ app/services/ticket.py:207-231    create_task_property
 
 ---
 
-### ADR-104 `project_settings` 不繼承 `TimestampMixin`，理由寫在欄位上方
+### ADR-172 `project_settings` 不繼承 `TimestampMixin`，理由寫在欄位上方
 
 **白話**：`created_at` / `updated_at` 是逐字從 `TimestampMixin` 抄過來的，但沒有任何一行說明為什麼不直接繼承，讀起來像是無意的偏移。
 
@@ -373,9 +373,9 @@ app/services/ticket.py:207-231    create_task_property
 
 ---
 
-### ADR-105 掛載點改為 feature 012 的 head `b7e4c1a90d52`，不是 `f2b7c9d4e0a3`
+### ADR-173 掛載點改為 feature 012 的 head `b7e4c1a90d52`，不是 `f2b7c9d4e0a3`
 
-**白話**：ADR-099 把本 feature 的 migration 掛在 feature 012 的 `f2b7c9d4e0a3` 之下，用意是避免兩個 head。但那是「當時」012 的 head——PR #35 後來又在其上加了 `b7e4c1a90d52`，於是掛在舊 head 上反而會重現 ADR-099 想避免的那個故障。
+**白話**：ADR-167 把本 feature 的 migration 掛在 feature 012 的 `f2b7c9d4e0a3` 之下，用意是避免兩個 head。但那是「當時」012 的 head——PR #35 後來又在其上加了 `b7e4c1a90d52`，於是掛在舊 head 上反而會重現 ADR-167 想避免的那個故障。
 
 **Context**：把 main 併進本分支之後實測（乾淨資料庫、docker）：本分支單獨併 main 時 `alembic heads` 直接 `KeyError: 'f2b7c9d4e0a3'`——那是預期中的相依，feature 012 還沒進 main。但把 feature 012 也併進來之後：
 
@@ -388,7 +388,7 @@ alembic upgrade head
 FAILED: Multiple head revisions are present for given argument 'head'
 ```
 
-兩者都掛在 `f2b7c9d4e0a3` 之下。這正是 PR #35 review 第一條描述的同一個故障，只是換了一組 revision。ADR-099 的推理沒有錯，它依據的事實過期了：`f2b7c9d4e0a3` 不再是 feature 012 的 head。
+兩者都掛在 `f2b7c9d4e0a3` 之下。這正是 PR #35 review 第一條描述的同一個故障，只是換了一組 revision。ADR-167 的推理沒有錯，它依據的事實過期了：`f2b7c9d4e0a3` 不再是 feature 012 的 head。
 
 **Options**：
 - **甲：改掛 `b7e4c1a90d52`**（採用）。feature 012 目前真正的 head，鏈回單線。
