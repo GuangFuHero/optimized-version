@@ -193,9 +193,11 @@ main() {
             < scripts/seed_mock_scenarios.sql
     fi
 
-    log "[9/9] starting new backend + frontend + tunnel, waiting for backend readiness"
+    log "[9/9] starting new backend + frontend + tunnel + retention, waiting for backend readiness"
     STAGE=service                       # from here, failure = full image rollback
-    compose up -d backend frontend cloudflared
+    # `retention` runs the notification cleanup loop (PRD Q4) off the same backend image.
+    # Named explicitly like the rest: this file never does a bare `compose up`.
+    compose up -d backend frontend cloudflared retention
     wait_ready || false                 # backend readiness gates rollback (frontend/tunnel do not)
 
     trap - ERR

@@ -18,7 +18,11 @@ from app.repositories.geo_repository import (
     station_suggestion_repository,
 )
 from app.services.authz import require_scope
-from app.services.station import _property_scope_target
+from app.services.station import (
+    OPERATIONAL_PROPERTY_NAMES,
+    _property_scope_target,
+    notify_operational_status_change,
+)
 
 # Maps a suggestion's target_type to the repository that owns that table.
 _TARGET_REPOS = {
@@ -88,20 +92,42 @@ async def review_station_suggestion(
     if not target:
         raise ValueError("Target no longer exists")
     scope_target = (
-        await _property_scope_target(db, target)
-        if suggestion.target_type == "station_property"
-        else target
+        await _property_scope_target(db, target) if suggestion.target_type == "station_property" else target
     )
     await require_scope(actor, Perm.STATION_REVIEW, db, resource=scope_target)
 
+    # An approved suggestion is the only way to change a Boolean/Enum operational value:
+    # those live in station_properties.comment and UpdateStationPropertyInput cannot write
+    # it. Without this the four comment-backed names in OPERATIONAL_PROPERTY_NAMES would
+    # change silently and Gov would never hear about it.
+    operational_change: tuple[str, str] | None = None
     if approve:
         value = coerce_and_validate(suggestion.target_type, suggestion.field_name, suggestion.new_value)
+        previous = getattr(target, suggestion.field_name, None)
         setattr(target, suggestion.field_name, value)
+        if (
+            suggestion.target_type == "station_property"
+            and value != previous
+            and target.property_name in OPERATIONAL_PROPERTY_NAMES
+            and target.status != "rejected"
+        ):
+            # Read after setattr on purpose: property_name is itself suggestable, so this
+            # picks up the name the row now carries.
+            operational_change = (str(target.station_uuid), target.property_name)
 
     suggestion.status = "approved" if approve else "rejected"
-    suggestion.reviewed_by = str(actor.uuid)
+    actor_uid = actor.uuid
+    suggestion.reviewed_by = str(actor_uid)
     suggestion.review_note = review_note
 
     await db.commit()
     await db.refresh(suggestion)
+
+    if operational_change:
+        station_uuid, property_name = operational_change
+        await notify_operational_status_change(
+            db, station_uuid=station_uuid, property_name=property_name, actor_uuid=actor_uid
+        )
+        await db.refresh(suggestion)
+
     return suggestion

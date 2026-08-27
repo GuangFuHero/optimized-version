@@ -83,7 +83,9 @@ async def db():
     """Fresh schema per test, UNSEEDED (for model/repo/service/gate unit tests). Wipes the test DB."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP SCHEMA public CASCADE;"))
+        await conn.execute(text("CREATE SCHEMA public;"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
@@ -96,7 +98,9 @@ async def db_session():
     """Fresh schema + seeded default 'user' platform role per test (self-contained; wipes the test DB)."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP SCHEMA public CASCADE;"))
+        await conn.execute(text("CREATE SCHEMA public;"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
@@ -151,6 +155,7 @@ async def redis():
 @pytest_asyncio.fixture
 async def client(db_session, redis):
     """HTTP client with db + redis + email-sender overrides bound to ONE fake redis."""
+
     async def override_get_db():
         yield db_session
 
