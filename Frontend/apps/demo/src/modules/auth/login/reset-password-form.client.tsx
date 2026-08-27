@@ -10,6 +10,7 @@ import {
   type AuthIdentityType,
 } from '@rescue-frontend/modules';
 import { resetPasswordAsync } from '../api/client';
+import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
 import { createHashedCredentialAsync } from './credentials';
 
@@ -78,7 +79,7 @@ export default function ResetPasswordFormClient() {
       });
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : '重設密碼失敗，請稍後再試',
+        resolveAuthErrorMessage(error, '重設密碼失敗，請稍後再試。'),
       );
     } finally {
       setIsSubmitting(false);

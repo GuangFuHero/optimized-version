@@ -1,10 +1,11 @@
 """Contact endpoints: verify-then-attach add, verify, and resend for the current account."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.api_errors import ApiError, ErrorCode
 from app.core.redis import get_redis
 from app.messaging.email import build_contact_verification_email, get_email_sender
 from app.messaging.sms import build_verification_sms, get_sms_sender
@@ -32,12 +33,18 @@ async def add_contact(
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid identifier") from err
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID, detail="Invalid identifier",
+        ) from err
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"{body.type.capitalize()} already in use")
+        raise ApiError(
+            status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN,
+            detail=f"{body.type.capitalize()} already in use",
+        )
     if await contact_repository.user_has_contact_type(
             db, user_uuid=str(current_user.uuid), type_=body.type):
-        raise HTTPException(status.HTTP_409_CONFLICT,
+        raise ApiError(status.HTTP_409_CONFLICT,
+                            ErrorCode.CONTACT_TYPE_TAKEN,
                             detail=f"This account already has a verified {body.type}")
     code = await VerificationRepository(redis).issue_contact_verification(
         user_uuid=str(current_user.uuid), type_=body.type, value=ident)
@@ -60,25 +67,28 @@ async def verify_contact(
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code") from err
+        raise ApiError(
+            status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID, detail="Invalid or expired code",
+        ) from err
     # Conflict checks BEFORE consuming the code: a 409 must not burn the user's pending code (they keep
     # the code and can retry once the conflict clears). Order: normalize (422/400) → 409 → consume (400).
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail="Already in use")
     if await contact_repository.user_has_contact_type(
             db, user_uuid=str(current_user.uuid), type_=body.type):
-        raise HTTPException(status.HTTP_409_CONFLICT,
+        raise ApiError(status.HTTP_409_CONFLICT,
+                            ErrorCode.CONTACT_TYPE_TAKEN,
                             detail=f"This account already has a verified {body.type}")
     payload = await VerificationRepository(redis).consume_contact_verification(
         user_uuid=str(current_user.uuid), type_=body.type, value=ident, code=body.code)
     if payload is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
+        raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID, detail="Invalid or expired code")
     try:
         await contact_repository.create_verified(
             db, user_uuid=current_user.uuid, type_=body.type, value=ident)
     except IntegrityError as err:  # F-C: rare race — value claimed between the check above and the insert
         await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use") from err
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail="Already in use") from err
     return {"detail": "Contact added"}
 
 
@@ -96,17 +106,22 @@ async def resend_contact(
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid identifier") from err
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID, detail="Invalid identifier",
+        ) from err
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail="Already in use")
     if await contact_repository.user_has_contact_type(
             db, user_uuid=str(current_user.uuid), type_=body.type):
-        raise HTTPException(status.HTTP_409_CONFLICT,
+        raise ApiError(status.HTTP_409_CONFLICT,
+                            ErrorCode.CONTACT_TYPE_TAKEN,
                             detail=f"This account already has a verified {body.type}")
     code = await VerificationRepository(redis).reissue_contact_verification(
         user_uuid=str(current_user.uuid), type_=body.type, value=ident)
     if code is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No pending contact verification")
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.NO_PENDING_CONTACT, detail="No pending contact verification",
+        )
     if body.type == "email":
         subject, html, text = build_contact_verification_email(code)
         await email_sender.send(ident, subject, html, text)
