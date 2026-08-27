@@ -141,6 +141,13 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: '/login',
+    // Redirect-based failures (the OAuth flow) land here, not just sign-in.
+    //
+    // next-auth's error route only bounces a fixed allowlist of its own codes back to the sign-in
+    // page; anything else — including every backend code the `signIn` callback now throws — falls
+    // through to its built-in error page, where our copy never runs. Pointing `error` at the login
+    // page is what lets `sso_email_taken` reach the person who triggered it.
+    error: '/login',
   },
   providers: [
     GoogleProvider({
