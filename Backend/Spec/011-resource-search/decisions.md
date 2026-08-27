@@ -1,8 +1,8 @@
-# Resource Search — ADR 全集（ADR-077~084、146~150）
+# Resource Search — ADR 全集（ADR-077~084、146~158、174~177）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
-**Status**: 已實作（PR #35）；ADR-146~150 為 review 後的修正
+**Status**: 已實作（PR #35）；ADR-146~158 為 review 後的修正，ADR-174~177 為第二輪 review 後的修正
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/010-multi-team-membership/decisions.md`（ADR-068~076）。
 
 ---
@@ -160,7 +160,7 @@ q 無值：priority_score DESC NULLS LAST, created_at DESC        （維持現�
 
 ### ADR-084 過短查詢維持拋錯，接受其在日誌留下 stack trace；由前端負責事前攔截
 
-> **已被 ADR-160 取代**：選項三（新增錯誤處理層區分使用者輸入錯誤與伺服器錯誤）當時被否決，現已採用。ADR-084 的其餘部分——維持拋錯、前端仍應在送出前攔截——不變。
+> **已被 ADR-174 取代**：選項三（新增錯誤處理層區分使用者輸入錯誤與伺服器錯誤）當時被否決，現已採用。ADR-084 的其餘部分——維持拋錯、前端仍應在送出前攔截——不變。
 
 **白話**：使用者只打一個字時，後端會回一個明確的錯誤訊息，代價是伺服器日誌會留下一整段例外堆疊。我們接受這個噪音，改由前端在送出前就擋掉。
 
@@ -584,7 +584,7 @@ rollback 成功時就跳過還原 `statement_timeout`——rollback 本來就會
 
 ---
 
-### ADR-160 預期錯誤以 INFO 記錄且不帶 traceback，取代 ADR-084 的「接受噪音」
+### ADR-174 預期錯誤以 INFO 記錄且不帶 traceback，取代 ADR-084 的「接受噪音」
 
 **白話**：使用者打錯字不是伺服器出錯。訊息照樣記進日誌，但用 INFO、不附堆疊；真的當機才維持 ERROR + 完整 traceback。
 
@@ -634,7 +634,7 @@ ADR-084 只看到搜尋這一格，所以把它當成「本功能要不要接受
 
 ---
 
-### ADR-161 `search_text` 一律 deferred，不進 `select(Model)` 的預設欄位清單
+### ADR-175 `search_text` 一律 deferred，不進 `select(Model)` 的預設欄位清單
 
 **白話**：這個欄位只用來比對，沒有任何 API 回傳它。不設 deferred 的話，每一次列表查詢——包含完全沒在搜尋的地圖列表——都會白白把它傳回來。
 
@@ -657,7 +657,7 @@ deferral 只影響 SELECT 的欄位清單。搜尋本身不受影響——述詞
 
 ---
 
-### ADR-162 timeout window 開在 resolver（每請求一個），不是每個 statement 一個
+### ADR-176 timeout window 開在 resolver（每請求一個），不是每個 statement 一個
 
 **白話**：一次搜尋要跑「算總數」和「取這一頁」兩句 SQL，原本各自開一次上限、各自收一次，等於六句話做兩句話的事。
 
@@ -687,7 +687,7 @@ SET -> count -> list -> RESET
 
 ---
 
-### ADR-163 內層 window 逾時後補回上限，避免拆掉仍在飛行的外層搜尋
+### ADR-177 內層 window 逾時後補回上限，避免拆掉仍在飛行的外層搜尋
 
 **白話**：兩個搜尋同時跑，其中一個逾時被中止時，會順手把兩個共用的「3 秒上限」一起清掉，讓另一個還在跑的搜尋變成完全沒有上限。
 

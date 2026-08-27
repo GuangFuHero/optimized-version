@@ -129,7 +129,7 @@ async def search_timeout(db, term: str | None):
                 # open on this session, and the outer one already ran its set_config —
                 # `is_outermost` is decided on entry, so it will not run it again. Without
                 # re-applying here, a sibling search that is still in flight would carry on
-                # with no bound at all (ADR-163). Suppressed rather than raised: this is
+                # with no bound at all (ADR-177). Suppressed rather than raised: this is
                 # already the error path, and a failure here must not replace the timeout
                 # the caller needs to see.
                 with suppress(DBAPIError):

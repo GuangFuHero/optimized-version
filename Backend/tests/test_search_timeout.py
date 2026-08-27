@@ -233,7 +233,7 @@ async def test_no_timeout_when_those_same_paths_are_not_searching():
 
 
 async def test_an_inner_timeout_leaves_an_outer_search_still_bounded(db, monkeypatch):
-    """ADR-163：內層 window 逾時後的 rollback 不得把外層搜尋的上限一起帶走。
+    """ADR-177：內層 window 逾時後的 rollback 不得把外層搜尋的上限一起帶走。
 
     上限是**交易層級**的單一值,由這個 session 上每一個開著的 window 共用
     (`set_config(..., is_local => true)`)。內層逾時後必須 rollback 才能讓交易脫離

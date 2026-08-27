@@ -140,7 +140,7 @@ async def test_permission_denied_is_not_masked(client):
 
 
 # ──────────────────────────────────────────────
-# 記錄等級 (ADR-160)
+# 記錄等級 (ADR-174)
 # ──────────────────────────────────────────────
 #
 # 遮蔽決定「client 看到什麼」,記錄等級決定「維運看到什麼」。兩者共用同一個
@@ -154,7 +154,7 @@ def _records_at(caplog, level: int) -> list:
 
 @pytest.mark.asyncio
 async def test_a_length_violation_is_not_logged_as_a_server_fault(client, caplog):
-    """ADR-160：長度違規是呼叫端輸入錯誤,不該以 ERROR + traceback 記錄。
+    """ADR-174：長度違規是呼叫端輸入錯誤,不該以 ERROR + traceback 記錄。
 
     `stations` 在 PUBLIC_PERMS,匿名可打且沒有 rate limiter,使用者逐字輸入必然頻繁
     跨越 2 字邊界。ADR-084 原本把這件事交給前端擋,但端點公開且可直接呼叫,前端

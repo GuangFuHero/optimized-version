@@ -91,7 +91,7 @@ class _Schema(strawberry.Schema):
     reaches that path with no authentication and no rate limiter, and a user typing into
     a search box crosses the two-character boundary on essentially every query. The
     result is a log filling with tracebacks that no one can act on, which is how real
-    faults get missed (ADR-160, superseding ADR-084).
+    faults get missed (ADR-174, superseding ADR-084).
 
     Bounding the database cost of a search (ADR-152) does not bound its log cost, and a
     front-end guard cannot: the endpoint is public and callable directly.

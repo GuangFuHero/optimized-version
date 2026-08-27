@@ -381,7 +381,7 @@ async def test_every_searchable_model_covers_its_table():
 
 @pytest.mark.parametrize("table", sorted(SEARCHABLE_MODELS))
 async def test_search_text_is_deferred_on_every_searchable_model(table):
-    """search_text 不得出現在 `select(Model)` 的預設欄位清單裡 (ADR-161).
+    """search_text 不得出現在 `select(Model)` 的預設欄位清單裡 (ADR-175).
 
     這個欄位只用來在 WHERE 子句裡比對,沒有任何 API 型別暴露它。少了 deferred,
     每一次列表查詢——包含完全沒帶 `q` 的地圖列表——都會把它傳回來並灌進 ORM 物件。
@@ -394,5 +394,5 @@ async def test_search_text_is_deferred_on_every_searchable_model(table):
     prop = inspect(model).mapper.attrs["search_text"]
     assert prop.deferred, (
         f"{model.__name__}.search_text is not deferred — every select({model.__name__}) "
-        f"will transfer it, including the list paths that never search (ADR-161)"
+        f"will transfer it, including the list paths that never search (ADR-175)"
     )

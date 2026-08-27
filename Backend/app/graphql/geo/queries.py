@@ -60,7 +60,7 @@ class GeoQuery:
         db = info.context["db"]
         scope = await check_permission(info, Perm.STATION_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Station)
-        # One ceiling for the whole request, not one per statement (ADR-162). count and
+        # One ceiling for the whole request, not one per statement (ADR-176). count and
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their
         # own set_config/RESET, so this costs two round-trips where it used to cost six.

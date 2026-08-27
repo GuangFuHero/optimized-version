@@ -11,7 +11,7 @@ positive list.** Before changing any generation expression, check
 `tests/test_search_schema.py` — PII (`contact_*`) and free-text note fields
 (`comment` / `progress_note` / `pole_note`) must never enter the index.
 
-**Every `search_text` column must be declared `deferred=True`** (ADR-161). Nothing in the
+**Every `search_text` column must be declared `deferred=True`** (ADR-175). Nothing in the
 API exposes it — it exists only to be matched against in a WHERE clause — so left in the
 default column list it is transferred and hydrated by every `select(Model)`, including
 the plain list paths that never search. Deferral does not affect the search itself: the
