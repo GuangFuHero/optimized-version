@@ -38,17 +38,22 @@ async def issue_token_pair(redis, request: Request, user_uuid: str) -> TokenPair
     )
 
 
+# An IP is well under this; the cap only stops a hostile header from becoming a huge Redis key.
+_MAX_CALLER_KEY_LEN = 64
+
+
 def resolve_client_ip(request: Request) -> str:
     """Resolve the caller's IP, preferring the proxy-supplied `X-Forwarded-For`.
 
     The backend is only reachable from the frontend container over the internal docker network, so
-    the forwarded header is written by our own BFF and can be trusted. If the backend is ever
-    exposed directly to the internet this header becomes spoofable and must be re-validated at the
-    edge before it is used as a rate-limit key.
+    this header is written by our own BFF — which sets it from `CF-Connecting-IP` only, never from
+    the browser's own `X-Forwarded-For`. If the backend is ever exposed directly, the header becomes
+    caller-controlled and the rate limit becomes bypassable by rotating it; it must then be
+    re-validated at the edge before being used as a key.
     """
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        return forwarded.split(",")[0].strip()[:_MAX_CALLER_KEY_LEN]
     return request.client.host if request.client else "unknown"
 
 

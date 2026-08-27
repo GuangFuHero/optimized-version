@@ -29,17 +29,19 @@ export function runWithClientIp<T>(
 /**
  * Pick the browser's IP out of an inbound request's headers.
  *
- * Cloudflare sets `CF-Connecting-IP` and prepends the origin to `X-Forwarded-For`, so the first
- * entry of that list is the browser.
+ * Only `CF-Connecting-IP` is trusted, because Cloudflare is the one hop that *overwrites* it.
+ *
+ * `X-Forwarded-For` deliberately is not. Cloudflare **appends** to it, and the browser controls
+ * whatever it already contained — so `xff.split(',')[0]` is a value the caller chose, and reading it
+ * would let anyone pick their own rate-limit bucket and rotate it per request. Returning nothing
+ * instead costs only per-caller accuracy: the backend falls back to the peer address, callers share
+ * one allowance, and the limit still holds.
+ *
+ * A deployment behind something other than Cloudflare has to add its own header here, set by a hop
+ * that overwrites rather than appends.
  */
 export function resolveClientIp(headers: {
   get(name: string): string | null | undefined;
 }) {
-  const cloudflareIp = headers.get('cf-connecting-ip');
-
-  if (cloudflareIp) {
-    return cloudflareIp;
-  }
-
-  return headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined;
+  return headers.get('cf-connecting-ip')?.trim() || undefined;
 }

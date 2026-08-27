@@ -103,3 +103,10 @@ def test_client_ip_falls_back_to_the_peer_address():
 def test_client_ip_survives_a_missing_peer():
     """A request with neither header nor peer must not blow up the limiter."""
     assert resolve_client_ip(_FakeRequest()) == "unknown"
+
+
+def test_client_ip_is_capped_so_a_hostile_header_cannot_bloat_the_key():
+    """The header is only as trustworthy as the hop that set it; the key must stay bounded."""
+    request = _FakeRequest(headers={"X-Forwarded-For": "9" * 5000})
+
+    assert len(resolve_client_ip(request)) == 64
