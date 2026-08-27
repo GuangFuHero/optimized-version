@@ -79,20 +79,28 @@ def test_no_auth_endpoint_constructs_a_bare_http_exception():
     A site regressing to `HTTPException` answers without a code, and no behavioural test would
     notice unless that exact endpoint happened to be covered.
 
-    This looks for the *construction*, not the `raise`. `session.py` builds its 401 once and raises
-    the same object twice, and an earlier version of this test that only walked `ast.Raise` nodes
-    let that pattern regress silently.
+    Checked two ways because each alone has a blind spot. Matching the *construction* rather than
+    the `raise` catches `session.py`, which builds its 401 once and raises the same object twice —
+    an earlier version walking only `ast.Raise` let that pattern regress silently. Matching the
+    import catches the same class of miss one level up: an aliased `HTTPException as HE` would sail
+    past a name comparison.
     """
     offenders = []
 
     for path in sorted(_AUTH_ENDPOINTS.glob("*.py")):
         for node in ast.walk(ast.parse(path.read_text())):
-            if not isinstance(node, ast.Call):
-                continue
-            if getattr(node.func, "id", getattr(node.func, "attr", None)) == "HTTPException":
-                offenders.append(f"{path.name}:{node.lineno}")
+            if isinstance(node, ast.ImportFrom):
+                offenders += [
+                    f"{path.name}:{node.lineno} imports HTTPException"
+                    for alias in node.names
+                    if alias.name == "HTTPException"
+                ]
+            elif isinstance(node, ast.Call) and (
+                getattr(node.func, "id", getattr(node.func, "attr", None)) == "HTTPException"
+            ):
+                offenders.append(f"{path.name}:{node.lineno} constructs HTTPException")
 
-    assert offenders == [], f"HTTPException without a code: {', '.join(offenders)}"
+    assert offenders == [], f"HTTPException carries no code: {', '.join(offenders)}"
 
 
 def test_every_error_code_value_is_unique():

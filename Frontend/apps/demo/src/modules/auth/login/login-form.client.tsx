@@ -39,6 +39,13 @@ function resolveAuthErrorMessage(errorCode: string | null) {
       return '第三方登入驗證失敗，請稍後再試。';
     case 'AccessDenied':
       return '第三方帳號未通過登入驗證。';
+    // next-auth used to answer these on its own error page, which `pages.error` now bypasses.
+    // `Configuration` in particular was a 500 saying to check the server logs — a deployment with
+    // no NEXTAUTH_SECRET must not read as an ordinary login failure.
+    case 'Configuration':
+      return '登入服務設定有誤，請聯絡管理員（伺服器 log 有詳細原因）。';
+    case 'Verification':
+      return '這個登入連結已失效或已被使用過，請重新登入。';
     case 'OAuthAccountNotLinked':
       return '這個帳號已綁定其他登入方式。';
     case 'SessionRequired':
