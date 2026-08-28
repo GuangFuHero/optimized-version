@@ -10,9 +10,17 @@ The pass-through cases matter as much as the masked ones: a mask that swallows e
 would satisfy the masked half of this file while turning every 400 into an opaque 500.
 """
 
+import logging
+
 import pytest
 
 from tests.test_graphql.conftest import auth_header
+
+STATIONS_SEARCH = """
+query($q: String) {
+    stations(q: $q) { pageInfo { totalCount } }
+}
+"""
 
 CREATE_STATION = """
 mutation($input: CreateStationInput!) {
@@ -129,3 +137,75 @@ async def test_permission_denied_is_not_masked(client):
     """The other allow-listed kind: HTTPException from the authz layer."""
     body = await _post(client, STATION_PROPERTY_CONFIGS, {"stationType": "shelter"})
     assert any("Permission Denied." in e["message"] for e in body.get("errors", [])), body
+
+
+# ──────────────────────────────────────────────
+# 記錄等級 (ADR-174)
+# ──────────────────────────────────────────────
+#
+# 遮蔽決定「client 看到什麼」,記錄等級決定「維運看到什麼」。兩者共用同一個
+# `_is_expected` 述詞,所以下面這幾條同時釘住「訊息是契約的錯誤不會被當成當機記錄」
+# 與「真的當機仍然帶完整 traceback」。
+
+
+def _records_at(caplog, level: int) -> list:
+    return [r for r in caplog.records if r.levelno == level]
+
+
+@pytest.mark.asyncio
+async def test_a_length_violation_is_not_logged_as_a_server_fault(client, caplog):
+    """ADR-174：長度違規是呼叫端輸入錯誤,不該以 ERROR + traceback 記錄。
+
+    `stations` 在 PUBLIC_PERMS,匿名可打且沒有 rate limiter,使用者逐字輸入必然頻繁
+    跨越 2 字邊界。ADR-084 原本把這件事交給前端擋,但端點公開且可直接呼叫,前端
+    guard 不能當邊界。
+    """
+    with caplog.at_level(logging.INFO):
+        body = await _post(client, STATIONS_SEARCH, {"q": "光"})
+
+    assert "搜尋關鍵字至少" in body["errors"][0]["message"], body
+    assert _records_at(caplog, logging.ERROR) == [], "a client input error must not log at ERROR"
+
+    info = _records_at(caplog, logging.INFO)
+    assert any("搜尋關鍵字至少" in r.getMessage() for r in info), "the message should still be logged"
+    assert all(r.exc_info is None for r in info), "an expected error must not carry a traceback"
+
+
+@pytest.mark.asyncio
+async def test_permission_denied_is_not_logged_as_a_server_fault(client, caplog):
+    """同一條規則的另一半:被允許通過遮蔽的 HTTPException 也不是伺服器故障。"""
+    with caplog.at_level(logging.INFO):
+        body = await _post(client, STATION_PROPERTY_CONFIGS, {"stationType": "shelter"})
+
+    assert any("Permission Denied." in e["message"] for e in body.get("errors", [])), body
+    assert _records_at(caplog, logging.ERROR) == []
+
+
+@pytest.mark.asyncio
+async def test_an_unexpected_error_still_logs_at_error_with_its_traceback(
+    client, coordinator_auth, monkeypatch, caplog
+):
+    """降級只適用於 allow-list 內的錯誤——真正的當機必須完全照舊。
+
+    這是上面兩條的必要配對:一個把所有東西都降成 INFO 的實作會通過那兩條,卻讓每一個
+    500 悄悄消失。
+    """
+    from app.repositories import geo_repository
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("simulated internal fault")
+
+    monkeypatch.setattr(geo_repository.station_repository, "count_active", boom)
+
+    with caplog.at_level(logging.INFO):
+        body = await _post(client, STATIONS_SEARCH, {"q": "光復"})
+
+    assert body["errors"][0]["message"] == "Unexpected error.", body
+
+    errors = _records_at(caplog, logging.ERROR)
+    assert len(errors) == 1, caplog.records
+    assert errors[0].exc_info is not None, "a genuine fault must keep its traceback"
+    assert errors[0].exc_info[0] is RuntimeError
+    assert "simulated internal fault" in str(errors[0].getMessage()), (
+        "the log must keep the original message even though the client sees the mask"
+    )

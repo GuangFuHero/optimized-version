@@ -1,8 +1,9 @@
 """Repositories for tickets, ticket tasks, and task properties."""
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.search import like_pattern, matches, normalize_query, search_timeout
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
@@ -15,6 +16,92 @@ class TicketRepository(GenericRepository[Tickets]):
         """Initialize with Tickets as the managed model."""
         super().__init__(Tickets)
 
+    def _search_condition(self, term: str):
+        """Match the ticket itself, its tasks, or those tasks' properties.
+
+        EXISTS rather than JOIN throughout (ADR-080) — a ticket with three matching task
+        properties would otherwise be returned three times, inflating totalCount and
+        skipping rows when paging. The task branch nests a second EXISTS so a ticket is
+        reachable through a property of one of its tasks.
+
+        A ticket's address (secondary_locations) is deliberately NOT searchable, unlike a
+        station's — see ADR-146. The same table means "shelter location" under a station
+        and "the requester's home" under a ticket, and ticket.view is public, so searching
+        it would let an anonymous caller confirm a street address the API never returns.
+        """
+        pattern = like_pattern(term)
+        return or_(
+            matches(self.model.search_text, pattern),
+            exists(
+                select(1).where(
+                    TicketTask.ticket_uuid == self.model.uuid,
+                    TicketTask.delete_at.is_(None),
+                    or_(
+                        matches(TicketTask.search_text, pattern),
+                        exists(
+                            select(1).where(
+                                TaskProperty.task_uuid == TicketTask.uuid,
+                                TaskProperty.delete_at.is_(None),
+                                matches(TaskProperty.search_text, pattern),
+                            )
+                        ),
+                    ),
+                )
+            ),
+        )
+
+    def _active_conditions(
+        self,
+        *,
+        bounds=None,
+        status: str | None = None,
+        priority: str | None = None,
+        q: str | None = None,
+        extra_filters=(),
+    ) -> list:
+        """The single source of truth for "which tickets match this request".
+
+        Both list_active() and count_active() MUST build their WHERE clause from this and
+        nothing else. A condition present in one but not the other makes totalCount
+        disagree with the rows actually returned, which silently breaks pagination — and
+        no existing test would go red.
+        """
+        conditions = [self.model.delete_at.is_(None), *extra_filters]
+        if bounds:
+            conditions.append(
+                func.ST_Intersects(
+                    self.model.geometry,
+                    func.ST_MakeEnvelope(
+                        bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
+                    ),
+                )
+            )
+        if status:
+            conditions.append(self.model.status == status)
+        if priority:
+            conditions.append(self.model.priority == priority)
+        term = normalize_query(q)
+        if term is not None:
+            conditions.append(self._search_condition(term))
+        return conditions
+
+    def _order_by(self, term: str | None) -> list:
+        """Relevance first when searching, otherwise newest first (ADR-083/147/153).
+
+        Same three-key shape as StationRepository._order_by — "the ticket's own text
+        matched" as a boolean first, then similarity() to grade within each group, then
+        the standing order. See that docstring for why similarity() alone cannot express
+        this for CJK, and for why the standing order ends in `uuid`.
+        """
+        standing = [self.model.created_at.desc(), self.model.uuid.desc()]
+        if term is None:
+            return standing
+        return [
+            matches(self.model.search_text, like_pattern(term)).desc(),
+            func.similarity(self.model.search_text, term).desc(),
+            *standing,
+        ]
+
     async def list_active(
         self,
         db: AsyncSession,
@@ -22,20 +109,22 @@ class TicketRepository(GenericRepository[Tickets]):
         bounds=None,
         status: str | None = None,
         priority: str | None = None,
+        q: str | None = None,
         skip: int = 0,
         limit: int = 50,
         extra_filters=(),
     ) -> list[Tickets]:
-        """List active tickets with optional bbox/status/priority filter and RBAC scope_filter conditions."""
-        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
-        if bounds:
-            bbox = func.ST_MakeEnvelope(bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326)
-            query = query.where(func.ST_Intersects(self.model.geometry, bbox))
-        if status:
-            query = query.where(self.model.status == status)
-        if priority:
-            query = query.where(self.model.priority == priority)
-        result = await db.execute(query.order_by(self.model.created_at.desc()).offset(skip).limit(limit))
+        """List active tickets with optional bbox/status/priority/keyword filter and RBAC scope."""
+        term = normalize_query(q)
+        conditions = self._active_conditions(
+            bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters
+        )
+        async with search_timeout(db, term):
+            result = await db.execute(
+                select(self.model).where(*conditions)
+                .order_by(*self._order_by(term))
+                .offset(skip).limit(limit)
+            )
         return result.scalars().all()
 
     async def count_active(
@@ -45,18 +134,17 @@ class TicketRepository(GenericRepository[Tickets]):
         bounds=None,
         status: str | None = None,
         priority: str | None = None,
+        q: str | None = None,
         extra_filters=(),
     ) -> int:
-        """Count active tickets with optional bbox/status/priority filter and RBAC scope_filter conditions."""
-        query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
-        if bounds:
-            bbox = func.ST_MakeEnvelope(bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326)
-            query = query.where(func.ST_Intersects(self.model.geometry, bbox))
-        if status:
-            query = query.where(self.model.status == status)
-        if priority:
-            query = query.where(self.model.priority == priority)
-        return await db.scalar(select(func.count()).select_from(query.subquery()))
+        """Count active tickets — MUST use the same conditions as list_active()."""
+        conditions = self._active_conditions(
+            bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters
+        )
+        async with search_timeout(db, normalize_query(q)):
+            return await db.scalar(
+                select(func.count()).select_from(select(self.model).where(*conditions).subquery())
+            )
 
 
 class TicketTaskRepository(GenericRepository[TicketTask]):
@@ -72,17 +160,49 @@ class TicketTaskRepository(GenericRepository[TicketTask]):
         ticket_uuid: str,
         *,
         status: str | None = None,
+        q: str | None = None,
         skip: int = 0,
         limit: int = 50,
     ) -> list[TicketTask]:
-        """List active tasks for a ticket with optional status filter."""
+        """List active tasks for a ticket with optional status and keyword filters."""
         query = select(self.model).where(
             self.model.ticket_uuid == ticket_uuid,
             self.model.delete_at.is_(None),
         )
         if status:
             query = query.where(self.model.status == status)
-        result = await db.execute(query.order_by(self.model.created_at.desc()).offset(skip).limit(limit))
+        term = normalize_query(q)
+        if term is not None:
+            pattern = like_pattern(term)
+            # A task matches on its own name/description or on any of its properties,
+            # mirroring how a ticket reaches into its tasks (ADR-080).
+            query = query.where(
+                or_(
+                    matches(self.model.search_text, pattern),
+                    exists(
+                        select(1).where(
+                            TaskProperty.task_uuid == self.model.uuid,
+                            TaskProperty.delete_at.is_(None),
+                            matches(TaskProperty.search_text, pattern),
+                        )
+                    ),
+                )
+            )
+        # Same total-order rule as the two list_active() paths (ADR-153): created_at comes
+        # from server_default=func.now(), which is transaction-scoped, so a batch of tasks
+        # created for one ticket in one transaction all share a timestamp. Without the
+        # primary key underneath, OFFSET/LIMIT pages over that batch can repeat a row and
+        # never return another.
+        #
+        # search_timeout() for the same reason list_active() has it (ADR-152): when `q` is
+        # set this runs a trigram ILIKE plus a correlated EXISTS, and ticket.view is in
+        # PUBLIC_PERMS — an anonymous Guest reaches it on an endpoint with no rate limiter.
+        # It is a no-op when `term` is None, so the plain list path is unchanged.
+        async with search_timeout(db, term):
+            result = await db.execute(
+                query.order_by(self.model.created_at.desc(), self.model.uuid.desc())
+                .offset(skip).limit(limit)
+            )
         return result.scalars().all()
 
 

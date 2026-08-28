@@ -75,6 +75,10 @@ async def _ensure_test_database():
     eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
     async with eng.connect() as conn:
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
+        # pg_trgm supplies the gin_trgm_ops operator class used by the search_text indexes.
+        # Base.metadata.create_all builds those indexes, so without this every schema
+        # creation below fails — not one test, the whole suite.
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     await eng.dispose()
 
 
@@ -86,6 +90,10 @@ async def db():
         await conn.execute(text("DROP SCHEMA public CASCADE;"))
         await conn.execute(text("CREATE SCHEMA public;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+        # DROP SCHEMA public CASCADE above takes pg_trgm with it (it installs into public),
+        # so it must be re-created here too — Base.metadata.create_all builds the
+        # search_text GIN indexes, which need gin_trgm_ops.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
@@ -101,6 +109,10 @@ async def db_session():
         await conn.execute(text("DROP SCHEMA public CASCADE;"))
         await conn.execute(text("CREATE SCHEMA public;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+        # DROP SCHEMA public CASCADE above takes pg_trgm with it (it installs into public),
+        # so it must be re-created here too — Base.metadata.create_all builds the
+        # search_text GIN indexes, which need gin_trgm_ops.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
