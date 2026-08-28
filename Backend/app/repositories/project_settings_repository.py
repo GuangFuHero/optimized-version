@@ -31,7 +31,7 @@ class ProjectSettingsRepository(GenericRepository[ProjectSettings]):
         return result.scalar_one_or_none() or []
 
     async def upsert(
-        self, db: AsyncSession, *, values: dict
+        self, db: AsyncSession, *, values: dict, current: ProjectSettings | None = None
     ) -> ProjectSettings:
         """Update the single row, creating it if the table is still empty.
 
@@ -40,13 +40,18 @@ class ProjectSettingsRepository(GenericRepository[ProjectSettings]):
         in so they match the config side, which is normalized the same way — the comparison
         is exact string equality, and a near-miss hides fields instead of erroring.
 
+        `current` is the row the caller has already read, passed in so one PATCH costs one
+        read: the service reads it to decide whether `name` is required, and this method used
+        to read it again to decide insert-vs-update. Omit it and the row is read here instead.
+
         Creation requires `name` (the column is NOT NULL); the caller validates that before
         getting here. If two first-time callers race, the singleton index rejects the loser,
         which then re-reads and updates the winner instead of surfacing a 500.
         """
         if "disaster_types" in values:
             values = {**values, "disaster_types": normalize_disaster_types(values["disaster_types"])}
-        current = await self.get_singleton(db)
+        if current is None:
+            current = await self.get_singleton(db)
         if current is not None:
             return await self.update(db, db_obj=current, obj_in=values)
         try:

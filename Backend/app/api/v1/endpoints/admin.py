@@ -98,15 +98,19 @@ async def _session_counts(redis, user_uuids: list[str]) -> dict[str, int | None]
         for _index, sid in owners:
             pipe.exists(SessionRepository.SESSION + sid)
         alive_flags = await pipe.execute()
-
-        counts = [0] * len(user_uuids)
-        for (index, _sid), alive in zip(owners, alive_flags, strict=True):
-            if alive:
-                counts[index] += 1
-        return dict(zip(user_uuids, counts, strict=True))
     except Exception:  # noqa: BLE001 — any Redis failure degrades, never fails the listing
         logger.warning("Redis unavailable; omitting active_session_count", exc_info=True)
         return dict.fromkeys(user_uuids, None)
+
+    # Deliberately outside the `except` above: the `strict=True` zips below raise ValueError
+    # on a length mismatch, which is a bug in this function, not an outage. Swallowed here it
+    # would degrade every user's count to `null` and file the bug under "Redis unavailable",
+    # pointing whoever investigates at a subsystem that is working fine.
+    counts = [0] * len(user_uuids)
+    for (index, _sid), alive in zip(owners, alive_flags, strict=True):
+        if alive:
+            counts[index] += 1
+    return dict(zip(user_uuids, counts, strict=True))
 
 
 @router.get(
@@ -140,13 +144,16 @@ async def list_users(
     ]
 
 
-def _project_settings_response(settings) -> ProjectSettingsResponse:
+def _project_settings_response(
+    settings, warnings: tuple[str, ...] = ()
+) -> ProjectSettingsResponse:
     """Render the settings row, or the empty shape while the deployment is unconfigured."""
     if settings is None:
         return ProjectSettingsResponse()
     return ProjectSettingsResponse(
         uuid=settings.uuid, name=settings.name,
         disaster_types=list(settings.disaster_types or []), started_at=settings.started_at,
+        warnings=list(warnings),
     )
 
 
@@ -187,14 +194,14 @@ async def update_project_settings(
         if values.get(not_nullable) is None:
             values.pop(not_nullable, None)
     try:
-        settings = await project_settings_service.update_project_settings(
+        result = await project_settings_service.update_project_settings(
             db, actor=current_user, values=values
         )
     except ProjectSettingsValidationError as err:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)
         ) from err
-    return _project_settings_response(settings)
+    return _project_settings_response(result.settings, result.warnings)
 
 
 @router.post("/users/{user_uuid}/role", response_model=AssignRoleResponse)

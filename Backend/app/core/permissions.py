@@ -31,6 +31,7 @@ class Perm(StrEnum):
 
     # Resource Station
     STATION_VIEW = "station.view"
+    STATION_VIEW_PII = "station.view_pii"
     STATION_ADD = "station.add"
     STATION_EDIT = "station.edit"
     STATION_DELETE = "station.delete"
