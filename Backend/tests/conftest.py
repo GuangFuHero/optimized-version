@@ -133,10 +133,14 @@ async def token_for(redis, user_uuid, role=None, team=None) -> str:
     from app.core.identity import encode_act
     from app.repositories.session_repository import SessionRepository
 
-    sid, _ = await SessionRepository(redis).create_session(str(user_uuid), "test")
     act = None
     if role is not None:
         act = encode_act(str(role.uuid), str(team.uuid) if team is not None else None)
+    # The session records the identity too (ADR-188), so a refresh that does not name one
+    # carries it forward. Passing it here keeps a test token the same shape as a real one;
+    # without it the session would remember nothing and a refresh in a test would silently
+    # fall back to the platform default.
+    sid, _ = await SessionRepository(redis).create_session(str(user_uuid), "test", act=act)
     return create_access_token(data={"sub": str(user_uuid)}, sid=sid, act=act)
 
 
