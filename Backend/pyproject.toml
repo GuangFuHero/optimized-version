@@ -73,7 +73,7 @@ ignore = [
 # Classify app/tests as first-party regardless of cwd, so import grouping is identical
 # whether ruff runs from Backend/ (local) or repo root (CI). Without this, I001 import
 # errors appear only from the repo root. Do not remove.
-known-first-party = ["app", "tests"]
+known-first-party = ["app", "tests", "scripts"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
