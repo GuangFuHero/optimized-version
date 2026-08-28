@@ -106,7 +106,7 @@ refresh 不帶 access token，走的是 `rotate()`，本來就會查 session。
 
 `Spec/010` 的 spec.md §7 明列「一般 access token 的撤銷（登出／**踢人**）由 `Spec/014` 提供」，所以踢人在本票範圍內。
 
-- **權限**：`Perm.USER_EDIT`，checkpoint 1 only（ADR-103——初版寫「沿用既有 scope 判定」，實作時更正）。
+- **權限**：`Perm.USER_EDIT`，checkpoint 1 only，且**範圍必須是 `Scope.ALL`**（ADR-103 定權限、ADR-181 補範圍條件——初版寫「沿用既有 scope 判定」，實作時更正為 checkpoint 1 only，2026-08-25 review 再補上 `ALL` 的要求）。
 - **回應**：204，並回報撤掉幾個 session 於 log。不回報數量給呼叫端——那會洩漏該使用者有幾台裝置在線。
 - **冪等**：對沒有任何 session 的使用者回 204，不是 404。
 
@@ -117,13 +117,15 @@ refresh 不帶 access token，走的是 `rotate()`，本來就會查 session。
 | 檔案 | 改動 |
 |---|---|
 | `app/repositories/session_repository.py` | 新增 `session_is_live(sid) -> dict \| None`；連線失敗不吞，讓例外往上 |
-| `app/core/security.py` | `get_current_user` 增加 redis 參數與 session 檢查；Redis 故障的 log |
+| `app/core/security.py` | `get_current_user` 增加 redis 參數與 session 檢查；Redis 故障的 log。`get_current_session` 同樣加上（ADR-180，2026-08-25） |
 | `app/graphql/context.py` | 取得 redis 並傳入 `get_current_user` |
 | `app/api/v1/endpoints/admin.py` | 新增 `POST /users/{uuid}/revoke-sessions` |
 | `app/services/admin.py` | 踢人的 use-case 函式 |
 | `tests/conftest.py` | `token_for` 改為同時在 Redis 建立對應 session；`client` fixture 設 `app.state.redis` |
 
 **不改**：`session_repository` 的撤銷函式、`logout` / `logout-all` / `change-password` / `reset-password` 四個端點——它們刪 session 的行為已經正確，本票只是讓那個行為開始被看見。
+
+> **2026-08-25 更正**：`logout` / `logout-all` 的**函式本體**確實沒改，但它們依賴的 `get_current_session` 加上了檢查（ADR-180）——原本那兩個端點是撤銷後唯一還打得動的路徑。docstring 一併更正。
 
 ---
 
@@ -152,6 +154,9 @@ refresh 不帶 access token，走的是 `rotate()`，本來就會查 session。
 | 功能 | session 的 Redis key 過期後 → 401 |
 | 功能 | 踢一個沒有 session 的使用者 → 204（冪等） |
 | 權限 | 無 `USER_EDIT` 者呼叫踢人 → 403 |
+| 權限 | 持 `USER_EDIT` 但範圍非 `all`（own/team/gov/ngo/zone）呼叫踢人 → 403（ADR-181） |
+| 安全 | 已撤銷的 token 呼叫 `logout` / `logout-all` → 401（ADR-180） |
+| 安全 | 沒有 `sid` 的 token 呼叫 `logout` → 401（不再是 no-op，ADR-180） |
 | 迴歸 | `/auth/refresh` 行為不變（含重用偵測） |
 | 迴歸 | 全套件——**預期需要大量修改既有測試**，見 `plan.md` |
 

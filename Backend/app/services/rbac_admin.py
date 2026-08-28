@@ -12,6 +12,7 @@ from app.core.permissions import GOV_TEAM_ONLY_PERMS, PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
 from app.models.auth import User
 from app.models.rbac import UserRoleAssign
+from app.models.team import Team
 from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import (
     permission_repository,
@@ -100,7 +101,7 @@ async def get_role(db: AsyncSession, role_uuid: str) -> RoleGrants:
 async def get_user_permissions_detail(db: AsyncSession, user_uuid: str) -> UserPermissionsResponse:
     """A user's identities, each with its own effective permissions, plus their direct grants.
 
-    One identity, one answer (ADR-098). Resolving each separately costs one pair of queries
+    One identity, one answer (ADR-178). Resolving each separately costs one pair of queries
     per identity, which is what the admin view is for; nobody holds enough identities for
     that to matter.
     """
@@ -191,6 +192,21 @@ async def revoke_role_permission(
     )
 
 
+async def _require_team(db: AsyncSession, team_uuid: str | None) -> None:
+    """404 when `team_uuid` names a team that does not exist (ADR-186).
+
+    The value arrives as a query parameter on an admin endpoint and goes straight into a
+    FK column, so without this an unknown UUID surfaces as an unhandled
+    ForeignKeyViolationError — a 500 for what is a caller mistake. Same bug class the `act`
+    claim's uuid validation closed; this is the entry point that was missed. Matches how the
+    user and capability lookups on the same endpoints already behave.
+    """
+    if team_uuid is None:
+        return
+    if await db.get(Team, team_uuid) is None:
+        raise RbacNotFoundError("Team not found")
+
+
 async def set_user_permission(
     db: AsyncSession,
     *,
@@ -208,6 +224,7 @@ async def set_user_permission(
     user = await user_repository.get_by_uuid(db, user_uuid)
     if user is None:
         raise RbacNotFoundError("User not found")
+    await _require_team(db, team_uuid)
     permission = await permission_repository.ensure_by_key(db, cap.value)
     await user_repository.upsert_grant(
         db,
@@ -301,11 +318,29 @@ async def unassign_user_role(
 
     Guard: refuses to drop the last super_admin (ADR-032/056). 404 if the user, the role,
     or the assignment itself does not exist.
+
+    **A platform role cannot be unassigned at all** (ADR-185). A user holds at most one —
+    every platform grant replaces the previous one (`admin_service.assign_role`, and
+    `user_repository.assign_role` since ADR-184) — so removing it always leaves the account
+    with no platform identity, which resolves to zero grants even while they still hold team
+    roles. Spec/010 §7's "回去原有登入狀態" is reached by logging back in onto the platform
+    identity, so an account without one cannot get there.
+
+    Demotion is an `assign_role` to the lesser role, which replaces in one step. That is what
+    the error points the caller at. Revoking a *team* identity is unaffected: it names its
+    team, and losing it leaves the platform identity intact.
     """
     await require_scope(actor, Perm.RBAC_ASSIGN, db)
     role = await role_repository.get_by_uuid(db, role_uuid)
     if role is None:
         raise RbacNotFoundError("Role not found")
+
+    if team_uuid is None and role.kind == "platform":
+        raise RbacConflictError(
+            "A platform role cannot be removed, only replaced — assign the role you want the "
+            "user to have instead (same-kind replacement). Removing it would leave the "
+            "account with no platform identity and therefore no permissions at all."
+        )
 
     assignment = (
         await db.execute(

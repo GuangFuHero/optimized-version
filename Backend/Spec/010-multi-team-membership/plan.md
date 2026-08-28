@@ -13,7 +13,7 @@
 **狀態（2026-08-19）：Task 1~9 全部完成。** 全套件 501 passed / 0 failed；`ruff check` 全綠
 （含清掉本分支繼承的 7 個既有錯誤，見 Global Constraints）。Docker 驗收全數通過，測試資料已清除。**尚未開 PR。**
 
-落地時多出的決策：**ADR-098**（管理端 `GET /admin/rbac/users/{uuid}/permissions` 改成逐身分回報）——
+落地時多出的決策：**ADR-178**（管理端 `GET /admin/rbac/users/{uuid}/permissions` 改成逐身分回報）——
 plan 沒預見這個端點在多身分下會回空 dict，屬破壞性 API 變更，前端後台頁面要跟著改。
 
 **本票不含、需另開票的**：前端契約（refresh 帶 identity、401 走登出、切換器 UI、記住上次身分）——
@@ -404,7 +404,7 @@ direct_grants = ... .where(
 - `login` 不帶 identity → 預設 platform 身分
 - `login` 帶有效 identity → 該身分生效
 - **`login` 帶失效 identity → 退回預設，回 200 不報錯**（ADR-069）
-- `switch-identity` 切到自己持有的身分 → 200 + 新 TokenPair
+- `switch-identity` 切到自己持有的身分 → 200 + 新 access token（回應不含 refresh token）
 - `switch-identity` 切到非自己的身分 → **403**
 - **`switch-identity` 不綁 capability**：降到最低權限身分後仍能切回
 - `refresh` 帶失效 identity → **401**
@@ -413,10 +413,10 @@ direct_grants = ... .where(
 - [x] **Step 2: 實作**
 
 ```
-POST /auth/switch-identity { role_uuid, team_uuid? }  → TokenPair
+POST /auth/switch-identity { role_uuid, team_uuid? }  → AccessTokenResponse
   1. resolve_identity 驗證屬於呼叫者 → 否則 403
   2. 以新 act 簽發 access token
-  3. 回傳 TokenPair（refresh token 原樣帶回，不輪替）
+  3. 只回傳 access token（refresh token 不輪替；伺服器只存雜湊，沒有明文可回吐）
 ```
 
 **此端點只依賴 `get_current_user`，不得掛任何 `has_permission`。**

@@ -114,7 +114,20 @@ class UserRepository(GenericRepository[User]):
         there is no team to attach (feature 010, ADR-073). The conflict target is the partial
         index on platform grants, since the plain unique key includes team_uuid and Postgres
         does not treat two NULLs as equal.
+
+        **Replaces whatever platform role the user already held**, the same way
+        `admin_service.assign_role` does (ADR-019). Adding alongside would leave the account
+        with two platform identities, and `default_for_user` would then pick between them by
+        whatever order the index returned — a bootstrapped super_admin could log in as a
+        plain `user` (ADR-184).
         """
+        await db.execute(
+            delete(UserRoleAssign).where(
+                UserRoleAssign.user_uuid == user_uuid,
+                UserRoleAssign.team_uuid.is_(None),
+                UserRoleAssign.role_uuid != role_uuid,
+            )
+        )
         stmt = insert(UserRoleAssign).values(
             user_uuid=user_uuid,
             role_uuid=role_uuid,

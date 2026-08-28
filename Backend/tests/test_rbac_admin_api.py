@@ -801,3 +801,131 @@ async def test_rename_role_name_race_maps_to_409(client, db_session, redis, monk
         headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409, resp.text
+
+
+async def _role_named(db, name: str, kind: str) -> Role:
+    """Fetch the named role, creating it if it is not already there.
+
+    `roles.name` is unique and the suite shares one database, so a plain insert of a
+    well-known role name collides with whatever created it first.
+    """
+    role = (await db.execute(select(Role).where(Role.name == name))).scalar_one_or_none()
+    if role is None:
+        role = Role(name=name, kind=kind)
+        db.add(role)
+        await db.flush()
+    return role
+
+
+async def _make_rbac_assigner(db) -> str:
+    """super_admin holding rbac.assign — the capability the write surface needs."""
+    role = Role(name="super_admin", kind="platform")
+    db.add(role)
+    await db.flush()
+    cache: dict = {}
+    await _grant(db, role, cache, Perm.RBAC_ASSIGN, "all")
+    await _grant(db, role, cache, Perm.RBAC_VIEW, "all")
+    user = User(name="RBAC Assigner")
+    db.add(user)
+    await db.flush()
+    user_uuid = str(user.uuid)
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    await db.commit()
+    return user_uuid
+
+
+@pytest.mark.asyncio
+async def test_direct_grant_for_an_unknown_team_is_404_not_500(client, db_session, redis):
+    """`team_uuid` is a query param that lands in a FK column, so it has to be checked.
+
+    Unchecked, an unknown UUID reached the insert and surfaced as an unhandled
+    ForeignKeyViolationError — a 500 for what is a caller mistake (ADR-186). The user and
+    capability lookups on this same endpoint already 404, so this matches them.
+    """
+    admin_uuid = await _make_rbac_assigner(db_session)
+    target_uuid = await _make_plain_user(db_session)
+
+    resp = await client.put(
+        f"/api/v1/admin/users/{target_uuid}/permissions/{Perm.STATION_VIEW.value}",
+        params={"team_uuid": str(uuid4())},
+        json={"scope": "team"},
+        headers=await _auth_header(redis, admin_uuid),
+    )
+
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["detail"] == "Team not found"
+
+
+@pytest.mark.asyncio
+async def test_a_platform_role_cannot_be_unassigned(client, db_session, redis):
+    """Removing a platform role always leaves the account with no platform identity.
+
+    A user holds at most one — every platform grant replaces the previous — so "remove it"
+    means "have none", and an account with none resolves to zero grants even while it still
+    holds team roles. Demotion is an assign to the lesser role, which replaces in one step
+    (ADR-185). The error says so, because otherwise the caller is just blocked.
+    """
+    admin_uuid = await _make_rbac_assigner(db_session)
+    target = User(name="Demote Me")
+    db_session.add(target)
+    await db_session.flush()
+    plain = await _role_named(db_session, "user", "platform")
+    db_session.add(UserRoleAssign(user_uuid=target.uuid, role_uuid=plain.uuid))
+    target_uuid, role_uuid = str(target.uuid), str(plain.uuid)
+    await db_session.commit()
+
+    resp = await client.delete(
+        f"/api/v1/admin/users/{target_uuid}/role/{role_uuid}",
+        headers=await _auth_header(redis, admin_uuid),
+    )
+
+    assert resp.status_code == 409, resp.text
+    assert "only replaced" in resp.json()["detail"]
+    still_held = (
+        await db_session.execute(
+            select(UserRoleAssign).where(
+                UserRoleAssign.user_uuid == target_uuid,
+                UserRoleAssign.team_uuid.is_(None),
+            )
+        )
+    ).scalars().all()
+    assert len(still_held) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_team_identity_can_still_be_unassigned(client, db_session, redis):
+    """The guard is about platform roles only — revoking a team identity is unaffected.
+
+    It names its team, and losing it leaves the platform identity intact, so the account is
+    never left with nothing.
+    """
+    admin_uuid = await _make_rbac_assigner(db_session)
+    target = User(name="Team Member")
+    db_session.add(target)
+    await db_session.flush()
+    plain = await _role_named(db_session, "user", "platform")
+    team_role = await _role_named(db_session, "member", "team")
+    team = Team(name="TeamZ", type="ngo", status="active")
+    db_session.add(team)
+    await db_session.flush()
+    db_session.add_all([
+        UserRoleAssign(user_uuid=target.uuid, role_uuid=plain.uuid),
+        UserRoleAssign(user_uuid=target.uuid, role_uuid=team_role.uuid, team_uuid=team.uuid),
+    ])
+    target_uuid, team_role_uuid, team_uuid = str(target.uuid), str(team_role.uuid), str(team.uuid)
+    await db_session.commit()
+
+    resp = await client.delete(
+        f"/api/v1/admin/users/{target_uuid}/role/{team_role_uuid}",
+        params={"team_uuid": team_uuid},
+        headers=await _auth_header(redis, admin_uuid),
+    )
+
+    assert resp.status_code == 204, resp.text
+    remaining = (
+        await db_session.execute(
+            select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid)
+        )
+    ).scalars().all()
+    assert len(remaining) == 1  # the platform identity survives
+    assert remaining[0].team_uuid is None

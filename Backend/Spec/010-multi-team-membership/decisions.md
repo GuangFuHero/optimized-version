@@ -1,4 +1,4 @@
-# Multi-Team Membership — ADR 全集（ADR-068~076、096、097）
+# Multi-Team Membership — ADR 全集（ADR-068~076、096~097、178~179、183~188）
 
 **Date**: 2026-08-16（初版）／**2026-08-19 重大改版**
 **Feature**: 010-multi-team-membership
@@ -73,7 +73,8 @@
 
 1. **per-session**，簽進 access token 的 `act` claim。
 2. **`act` 的內容是 `(role_uuid, team_uuid)`**，不是 `user_role_assign.uuid`。兩者資訊等價（唯一鍵含 team 後），但前者在「刪掉再重加同一筆授予」時不會誤觸登出，且能跨 `rename_role`（`app/services/rbac_admin.py`）存活。
-3. **session 不存 `act`**。JWT 是唯一真相；`POST /auth/refresh` 由前端帶上當前 identity，伺服器驗證後簽進新 token。
+3. ~~**session 不存 `act`**。JWT 是唯一真相；`POST /auth/refresh` 由前端帶上當前 identity，伺服器驗證後簽進新 token。~~
+   **已被 ADR-188 推翻**：前端沒帶 identity 時，伺服器會退回 platform 預設——失效方向是往上而不是往下，切換的降權效果每 15 分鐘被靜默還原一次。session 現在也記錄 `act`，未指定時沿用。
 4. **預設身分 = 該使用者的 platform 身分**。每人恰有一個（同 kind 取代保證），所以這個預設永遠存在、唯一、無歧義，且與現行「platform 角色恆生效」的行為最接近。
 5. **「記住上次的身分」由前端保存**，存在 NextAuth 的 session cookie 裡。
 
@@ -81,7 +82,7 @@
 
 **為何 `act` 放 JWT 而非 session**：曾考慮把 `act` 存在 Redis session（`Spec/014` 本來就會為每個請求讀一次 session，增量成本為零，且切換可即時生效、無並存視窗）。否決理由是**前端負擔**：
 
-- 前端已有現成的 TokenPair 處理管線（`applyTokenPairToBackendAuthToken`），切換回傳 TokenPair 幾乎零新邏輯；存 session 則要新寫一套身分狀態管理。
+- 前端已有現成的 token 處理管線（`applyTokenPairToBackendAuthToken`），切換只要把新的 access token 併進去即可，幾乎零新邏輯；存 session 則要新寫一套身分狀態管理。（注意：**不能整包丟給該 helper**——它會把 refresh token 覆蓋成 `undefined`，見 ADR-070 的回應格式。）
 - 前端可直接解 JWT payload 讀 `act`，永遠知道當前身分，不必額外呼叫 API。
 - 同一瀏覽器的多個分頁共用 session，存 session 會讓「分頁 A 切換身分」**默默改變分頁 B 的行為**而 B 的畫面毫無所覺。
 
@@ -107,7 +108,7 @@
 POST /auth/switch-identity { role_uuid, team_uuid? }
   1. 驗該身分屬於呼叫者（user_role_assign 有對應列，且 team 未被軟刪除）→ 否則 403
   2. 以新的 act 簽發 access token
-  3. 回傳 TokenPair（refresh token 不輪替 —— 切換不該燒掉它）
+  3. 回傳 AccessTokenResponse（只有 access token —— refresh token 不輪替、也不回傳）
 ```
 
 **不動 session、不撤舊 session、不輪替 refresh token。**
@@ -330,7 +331,7 @@ ADR-068 改版正是採用了括號裡被否決的那條路。缺陷消失，**a
 
 ---
 
-### ADR-098 管理端的 `GET /admin/rbac/users/{uuid}/permissions` 改成逐身分回報
+### ADR-178 管理端的 `GET /admin/rbac/users/{uuid}/permissions` 改成逐身分回報
 
 **白話**：一個人有三個身分，「他有什麼權限」這句話就不再有唯一答案。後台要嘛騙人，要嘛把三組都列出來。
 
@@ -352,3 +353,208 @@ ADR-068 改版正是採用了括號裡被否決的那條路。缺陷消失，**a
 ➕ 後台看到的權限與請求時真正生效的權限是同一個東西。
 ➕ 「為什麼他做不了 X」有了直接答案：他持有 X 的那個身分不是現在這個。
 ➖ 破壞性 API 變更，前端後台頁面要跟著改；本票只改後端，需與前端對齊。
+
+---
+
+### ADR-179 Alembic revision ID 一律由 alembic 產生,不再手寫
+
+**白話**：手編的 revision ID 會撞號，而 alembic 撞號時**不會報錯**，只發一個警告然後靜默丟掉其中一個 migration。
+
+**範圍**：這是**跨功能的工程慣例**，不只適用於 010。寫在這裡是因為修正的執行點在本分支。
+
+**Context**：本功能的 `a1b2c3d4e5f6_identity_switching.py` 與 PR #32
+(`feature/bi-implement`) 的 `a1b2c3d4e5f6_station_operational_status_and_task_completed_at.py`
+是**兩個完全不同的 migration，卻共用同一個 revision ID**，parent 也不同
+（`e1f2a3b4c5d6` vs `b8f4d2a6e1c3`）。
+
+把兩個檔案同時放進 `alembic/versions/` 實測：
+
+```
+UserWarning: Revision a1b2c3d4e5f6 is present more than once
+8ebfc3903041 (head)
+b7e4c1a90d52 (head)
+a1b2c3d4e5f6 (head)
+a1b2c3d4e5f6 (head)
+
+ScriptDirectory.get_revision('a1b2c3d4e5f6')
+  -> station operational status and task completed_at/canceled_at
+```
+
+**只是 `UserWarning`，不是 error。** 部署不會停，另一個 migration 被靜默丟棄、永遠不會執行，
+schema 少了一半而沒有任何訊號。這比 multiple-head 危險：multiple-head 會讓
+`alembic upgrade head` 大聲失敗，撞號不會。
+
+根因是 revision ID 用**人編的序列**——`a1b2c3d4e5f6`、`e1f2a3b4c5d6`、`c3f2a1b4d5e6`、
+`b8f4d2a6e1c3` 一望即知不是隨機值。在同時開著 9 個 PR、其中 7 個帶 migration 的情況下，
+人編序列撞號是遲早的事，不是意外。
+
+**Decision**：
+
+1. **revision ID 一律用 `alembic revision` 產生**（`uuid4().hex[-12:]`），不再手寫。
+   即使 migration 本身是手寫的（computed column、operator class 這類 autogenerate
+   偵測不到的東西），ID 也要由工具產生。
+2. 本次把 `a1b2c3d4e5f6` 換成 `90c93167fa66`，在 #37 / #38 / #39 三個分支同步套用
+   —— 這三個分支上該檔案是同一個 blob，只改其中一個會讓三者分裂。
+   PR #32 是他人的分支，不需要因為我們的命名疏失而改動。
+3. **「merge 前重指 `down_revision`」視為機械步驟**，不是流程缺失。Alembic 的
+   migration 是單向鏈結串列，parent 硬寫在檔案裡，git rebase 不會改寫它。
+   只要有平行分支，誰先 merge 誰贏，後者一定要重指。接受它是例行動作即可。
+4. 重指優先於加 merge revision。merge revision 會**永久**留在版本樹裡
+   （main 已累積 `c7d8e9f0a1b2`、`8ebfc3903041` 兩個），而且解決不了下一次分岔
+   —— 你的 merge revision 和 main 的下一個 migration 依然是兩個 head。
+
+**Consequences**：
+➕ 消除撞號這類**靜默**失敗；剩下的 multiple-head 至少會大聲失敗。
+➕ 重指 `down_revision` 的成本明確且有界（一個字串），不再被誤當成流程問題來爭論。
+➖ 手寫 migration 時多一個步驟：先跑 `alembic revision` 拿 ID，再把內容填進去。
+➖ 本次改名要同步三個分支；三者未來若各自 rebase，需確認 ID 仍一致。
+⚠️ **本 ADR 不會自動被執行**。CI（`.github/workflows/`）目前只有 `ruff-check.yml`，
+   不跑測試、不檢查 migration。要讓撞號與 multiple-head 在 PR 階段被擋下來，
+   需要另外加一個 workflow 跑 `alembic heads` 並把 `present more than once`
+   視為失敗——**尚未實作，留待後續決定**。
+
+---
+
+### ADR-183 `switch-identity` 必須確認 session 還活著，並比照 refresh 限速
+
+**白話**：切換身分會簽出一張**全新到期時間**的 access token。原本它只檢查「你持有一張還沒過期的 token」，沒檢查那個 session 是否還存在——於是登出之後，只要在每次過期前呼叫一次切換，就能無限期續命。
+
+**Context**：實測（PR #37 review）：
+
+```
+logout-all                  → 204
+refresh 帶舊 refresh token   → 401   ← 正確擋下
+switch-identity             → 200   ← 沒擋，而且新 token 打 /users/me 也是 200
+```
+
+`logout` / `logout-all` 的目的是終結 session。少了這個檢查，它們只終結了 refresh 這條路。ADR-070 說「切換不是憑證事件、不動 session」——那是對的，但「不動 session」不等於「不必確認 session 還在」。
+
+**Options**：
+- **甲：載入 `session:{sid}`，不存在就 401**（採用）。
+- 乙：切換時一併輪替 refresh token。推翻 ADR-070，且讓切換變成憑證事件，代價遠大於問題。
+
+**Decision**：新增 `SessionRepository.get_session(sid)`（唯讀、不續 TTL），切換前確認記錄存在，否則 401。同時補上 `get_rate_limiter(10, 60)`——它會簽出憑證，而 `login` 與 `refresh` 都有限速，這個端點是三者中唯一沒有的。
+
+**Consequences**：
+➕ 登出真的終結 session，所有路徑一致。
+➕ 限速讓「反覆呼叫以續命」即使將來出現別的破口也昂貴。
+➖ 每次切換多一次 Redis 讀取。切換是低頻操作，可接受。
+➖ 這個檢查與 `Spec/014` 的 per-request session 檢查重複；014 合併後這裡的檢查會變成多餘的第二道。刻意保留：014 尚未合併，而這是 Blocking 等級的洞，不應該等。
+
+---
+
+### ADR-184 platform 授予一律「取代」，且預設身分查詢必須有確定性排序
+
+**白話**：`bootstrap_admin.py` 加 `super_admin` 時沒有移除既有的 `user`，所以被 bootstrap 過的帳號有**兩個** platform 角色。而 `default_for_user` 沒有 `ORDER BY`，於是「預設身分」變成看索引先回哪一筆——一個被 bootstrap 成超管的人，可能以一般 `user` 身分登入。
+
+**Context**：ADR-069 第 4 點宣稱「每人恰有一個 platform 身分（同 kind 取代保證）」。`admin_service.assign_role` 確實取代，但 `user_repository.assign_role`（bootstrap 專用）是 `ON CONFLICT DO NOTHING` 的單純插入，不取代。唯一索引是 *(user, role) WHERE team_uuid IS NULL*，管的是「同一個角色不重複」，不是「只有一個 platform 角色」。
+
+**Decision**：兩件事一起做，因為它們分別對應不變式的兩半。
+
+1. **`user_repository.assign_role` 先刪除該使用者其他 platform 授予再插入**，與 `admin_service.assign_role` 對齊。這是讓「至多一個」真正成立的那一步。
+2. **`default_for_user` 加上 `ORDER BY Role.name, role_uuid`**。這是縱深防禦：即使資料庫裡已經有雙 platform 角色的舊資料，結果至少是穩定且可預測的，不是每次讀都可能不同。
+
+**Consequences**：
+➕ ADR-069 依賴的前提第一次真正被執行，而不是靠慣例。
+➕ 排序讓「同一份資料兩次讀出不同身分」不可能發生。
+➖ bootstrap 現在會靜默移除既有 platform 角色。這正是預期行為（升級成超管本來就該取代），但腳本輸出沒有說明被取代掉了什麼。
+
+---
+
+### ADR-185 platform 角色只能「取代」，不能「撤除」
+
+**白話**：撤掉一個人的 platform 角色，一定會讓他變成「沒有任何 platform 身分」——因為他本來就只有一個。這種帳號即使還在團隊裡，也會解析出**零權限**。降級的正確做法是 assign 到較小的角色，一步取代。
+
+**Context**：ADR-184 之後，每人至多一個 platform 角色。所以 `unassign_user_role` 用在 platform 角色上，結果恆為「一個都不剩」。實測：只持有 team 角色的帳號登入後 `active_identity` 是 `null`、`get_user_permissions` 回 `{}`。
+
+而 `Spec/010/spec.md` §7 對「移除後台權限，回去原有登入狀態」定義的終點是：**身分失效 → 登出 → 重新登入後預設即 platform 身分**。那個終點預設了這個人「還有一個 platform 身分」。撤除操作恰好拿掉它，使 spec 宣稱的狀態無法抵達。
+
+最自然的觸發路徑就是「把某人從 super_admin 降下來」：升級時 `user` 已被取代，再撤掉 `super_admin` 就什麼都不剩。而那正是這個需求本身在做的事。
+
+**Options**：
+- 甲：`default_for_user` 找不到 platform 時 fallback 到第一個 team 身分。**否決**——這就是 ADR-096 已經否決過的「靜默降權」的變形，而且更難察覺（落在某個團隊身分）；對不屬於任何團隊的人也無效。
+- 乙：只擋「最後一個」platform 角色。可行，但既然至多只有一個，「最後一個」恆等於「那一個」，條件判斷是多餘的。
+- **丙：platform 角色一律不可撤除**（採用）。
+
+**Decision**：`unassign_user_role` 在 `team_uuid is None` 且 `role.kind == "platform"` 時拋 `RbacConflictError`（409），訊息明講替代路徑是 assign 到目標角色。撤除 **team** 身分完全不受影響——它指名團隊，撤掉後 platform 身分仍在。
+
+**Consequences**：
+➕ 「零 platform 身分」的帳號無法再透過 API 產生。
+➕ 降級被導向 `assign_role`，那條路徑一步完成且結果正確。
+➖ 管理端少一個操作。若日後需要「保留帳號但收回所有平台權限」，那是新的需求，應該有自己的表達方式（例如停用帳號），而不是複用撤角色。
+➖ 已經處在零身分狀態的帳號救不回來（需手動 assign）。目前無正式使用者，實際影響為零。
+
+---
+
+### ADR-186 `team_uuid` query 參數要驗證存在，未知即 404
+
+**白話**：直接授予端點的 `team_uuid` 沒驗證就進到 FK 欄位，未知的 UUID 會變成未處理的 `ForeignKeyViolationError`，對外是 500。
+
+**Context**：實測 `PUT /admin/users/{uuid}/permissions/station.view?team_uuid=<不存在>` → 500。同一個端點的 user 與 capability 查詢都已經 404，只有這個新參數漏了。這與 `decode_act` 那次修的是同一類問題（未驗證的外部輸入直達 driver），新加的 query 參數沒跟上。
+
+**Decision**：抽出 `_require_team()`，在 `set_user_permission` 寫入前檢查，未知則 `RbacNotFoundError` → 404。`revoke_user_permission` 不加：它是 DELETE，未知 team 只是刪不到東西，本來就宣告 idempotent。
+
+**Consequences**：
+➕ 呼叫端錯誤回 404，與同端點其他查詢一致。
+➖ 每次授予多一次 `db.get(Team, ...)`。低頻管理端點。
+
+---
+
+### ADR-187 離開團隊要一併撤除該團隊的直接授予
+
+**白話**：`remove_team_member` 只刪 `user_role_assign`，`user_permission_assign` 上綁同一個 team 的直接授予會留下來。把人移出團隊再加回去，舊的授權就悄悄復活了。
+
+**Context**：實測：授予某人 `team.member.manage@TeamA`（可管理 TeamA 成員）→ 移出 TeamA → 以一般 `member` 身分加回 → **他又能管理成員了**，沒有人重新授權過。
+
+程式碼註解本來就寫著「離開團隊是撤銷每一個綁在該團隊的授予」（ADR-072），但實作只做了 role 那一半。所以這不是設計改變，是實作沒有兌現已經寫下的設計。
+
+**Options**：**甲：一併刪除**（採用）／ 乙：改註解措辭，承認只清 role。乙保留了「重新加入即復活」這個實際的安全問題，只是不再宣稱它不存在。
+
+**Decision**：同一個交易裡一併 `DELETE FROM user_permission_assign WHERE user_uuid = ? AND team_uuid = ?`。platform 授予不受影響——它的 `team_uuid` 是 NULL，永遠不匹配這個條件（已測）。
+
+**Consequences**：
+➕ 「移出團隊」現在真的等於撤銷該團隊的全部權限。
+➖ 重新加入的人要重新取得他原本的直接授予。這是正確的：直接授予本來就是個別給的，不該隨成員身分自動回來。
+
+---
+
+### ADR-188 session 記住當前身分；refresh 未指定時沿用，不回到 platform 預設
+
+**推翻 ADR-069 第 3 點**（「session 不存 `act`；JWT 是唯一真相」）。
+
+**白話**：切換成較小的身分之後，只要 access token 過期、前端照一般方式 refresh（body 沒帶 `identity`），伺服器就把人放回 platform 身分——對 super_admin 來說那是他最大的身分。降權在使用者毫無察覺的情況下被還原，而 access token 只有 15 分鐘，所以這件事大約每 15 分鐘發生一次。
+
+**Context**：實測（PR #37 review 的 HIGH）：
+
+```
+[A] act after login            : <super_admin>:              ← 預設 platform
+[B] act after switch-identity  : <member>:<team>             ← 切成團隊身分
+[C] act after PLAIN refresh    : <super_admin>:              ← 又變回去了
+    station.delete scope        : all                        ← 能力真的回來了
+```
+
+`station.delete` 完全沒有授予 team `member`，只掛在 `super_admin` 上。refresh 之後它是 `all`。
+
+ADR-069 第 3 點是刻意的設計：身分的記憶交給前端，`refresh` 由前端帶上。問題是**前端一旦沒帶，後端的行為是「回到最大的身分」而不是「維持現狀」**——失效方向是往上而不是往下。而 `Spec/010/spec.md` §7 的前端契約第 1 點（NextAuth JWT 存 `activeIdentity`）目前也還沒實作。
+
+這與 ADR-084 → ADR-174 是同一個形狀：把邊界交給前端，然後發現後端的預設行為在前端缺席時並不安全。
+
+**Options**：
+- **甲：session record 存 `act`，refresh 未指定時沿用**（採用）。
+- 乙：維持現狀，只在 token 回應裡回報當前身分，讓前端看得見自己被還原。**否決**——把「看得見」當成修法，等於要求每個客戶端都正確處理才安全，而這正是失效的來源。
+- 丙：切換時輪替 refresh token，把身分綁進憑證鏈。推翻 ADR-070（切換不是憑證事件），代價過大。
+
+**Decision**：
+
+1. **`session:{sid}` 增加 `act` 欄位**。`create_session` 在登入時寫入，`switch-identity` 用新的 `set_identity()` 更新。
+2. **`refresh` 的身分來源改為 `body.identity or session["act"]`**。呼叫端明確指定時仍然優先——追蹤身分的前端繼續自己決定；沒指定時沿用 session 記得的那個，而不是 `default_for_user`。
+3. **`refresh` 明確指定身分時也寫回 session**，否則下一次未指定的 refresh 會退回更早的記憶。
+4. **`set_identity()` 保留原有 TTL**，不重設。切換不是憑證事件（ADR-070），不該延長 session 壽命。session 已不存在時直接返回，不重建——那會讓已撤銷的 session 復活。
+5. 舊 session（沒有 `act` 欄位）讀到 `None`，行為與修正前相同（fallback 到 platform 預設），不需要遷移。
+
+**Consequences**：
+➕ 降權切換在整個 session 生命週期有效，而不是一張 token 的壽命。
+➕ 不追蹤身分的客戶端也安全；前端契約第 1 點從「安全所必需」降級為「最佳化」。
+➖ **推翻了 ADR-069 第 3 點**。「JWT 是唯一真相」不再成立——session 也是一份記錄，兩者可能不同步（例如舊 token 配新 session 記錄）。實際上無害：`act` 每次都要對 DB 解析驗證（ADR-096），session 那份只決定「沒指定時用哪個」。
+➖ 每次 refresh 多一次 Redis 讀取（`get_session`），切換多一次讀寫。
+➖ 身分現在是 per-session 而非 per-token 的狀態。ADR-069 選 per-session 正是為了「同一人在兩台裝置上互不干擾」——這一點不受影響，記錄仍在各自的 session 裡。

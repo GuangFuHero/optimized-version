@@ -68,6 +68,14 @@ mutation($input: CreateTicketInput!) {
 }
 """
 
+# Selects the contact fields off the *mutation* response, which the shared CREATE_TICKET
+# above does not — that combination is what the expire_on_commit=False fix made work.
+CREATE_TICKET_WITH_CONTACT = """
+mutation($input: CreateTicketInput!) {
+    createTicket(input: $input) { uuid contactName contactEmail contactPhone }
+}
+"""
+
 UPDATE_TICKET = """
 mutation($uuid: UUID!, $input: UpdateTicketInput!) {
     updateTicket(uuid: $uuid, input: $input) { uuid status }
@@ -726,6 +734,118 @@ async def test_create_ticket_rejects_non_point_geometry(client, coordinator_auth
     body = resp.json()
     errors = body.get("errors", [])
     assert any("must be a Point" in e["message"] for e in errors), body
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("contactName", "A" * 300),   # tickets.contact_name is String(100)
+        ("contactEmail", "b" * 300),  # String(100)
+        ("contactPhone", "9" * 300),  # String(50)
+    ],
+)
+async def test_create_ticket_rejects_over_long_contact(client, coordinator_auth, field, value):
+    """A ticket's contact columns are as short as a station's, and leak the same way.
+
+    tickets.contact_* and stations.contact_* are independent columns of identical width, so
+    both go through normalize_contact_fields. Without it asyncpg's truncation error quotes the
+    whole INSERT, handing the tickets table layout to any authenticated caller.
+    """
+    _, token = coordinator_auth
+    variables = {
+        "input": {
+            "title": "Need medics",
+            "geometry": POINT_TAIPEI,
+            "contactName": "Alice",
+            "priority": "high",
+        }
+    }
+    variables["input"][field] = value
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": CREATE_TICKET, "variables": variables},
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    assert "errors" in body, body
+    message = body["errors"][0]["message"]
+    # Positive assertion first: since the schema installs MaskErrors, the negative
+    # assertions below would also pass with the service validator deleted. This one is
+    # what keeps the check in the service load-bearing rather than the mask.
+    assert "must be at most" in message, message
+    assert "SQL:" not in message, message
+    assert "INSERT" not in message.upper(), message
+    assert "tickets" not in message, message
+
+
+@pytest.mark.asyncio
+async def test_create_ticket_stores_contact_stripped(client, coordinator_auth):
+    """A ticket's contact values are stored stripped, matching what the length check measured.
+
+    Same bypass as the station path (PR #40 review round 3): the check measures
+    `val.strip()`, so a leading-padded value that only fits after stripping used to pass the
+    check and then leak the whole INSERT from asyncpg. `tickets.contact_*` shares the widths
+    and the validator with `stations.contact_*`, so it needs the case pinned here too.
+    """
+    _, token = coordinator_auth
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET_WITH_CONTACT,
+            "variables": {
+                "input": {
+                    "title": "Stripped contact",
+                    "geometry": POINT_TAIPEI,
+                    "contactName": " " * 10 + "A" * 95,  # 105 raw into varchar(100)
+                    "contactPhone": "  0912345678  ",
+                    "priority": "high",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    ticket = body["data"]["createTicket"]
+    # The creator is in ticket.view_pii=own scope, so these come back unmasked.
+    assert ticket["contactName"] == "A" * 95
+    assert ticket["contactPhone"] == "0912345678"
+
+
+@pytest.mark.asyncio
+async def test_create_ticket_rejects_blank_contact_name(client, coordinator_auth):
+    """tickets.contact_name is NOT NULL, so blank is refused instead of normalized to NULL.
+
+    The station columns of the same name are nullable and take the opposite path (see
+    test_create_station_blank_contact_stores_null). Collapsing the two would send NULL into a
+    NOT NULL column: an IntegrityError, which is a 500 shape — and now an opaque
+    "Unexpected error." — for what is really a bad request.
+    """
+    _, token = coordinator_auth
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET,
+            "variables": {
+                "input": {
+                    "title": "Blank contact",
+                    "geometry": POINT_TAIPEI,
+                    "contactName": "   ",
+                    "priority": "high",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    assert "errors" in body, body
+    message = body["errors"][0]["message"]
+    assert "contact_name is required" in message, message
+    # It has to stay a domain error: MaskErrors turns anything that is not a ValueError into
+    # "Unexpected error.", which would hide a plain bad request behind a server-fault message.
+    assert "SQL:" not in message, message
 
 
 @pytest.mark.asyncio

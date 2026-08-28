@@ -92,11 +92,21 @@ async def refresh(
     token the moment it runs, so refusing afterwards would leave the caller holding a dead
     token with no replacement — and their retry would read as a replay and revoke the whole
     session. Reading the record first is side-effect free.
+
+    **The identity comes from the session when the caller does not name one** (ADR-188).
+    `body.identity` still wins, so a client that tracks it keeps deciding; but a client that
+    does not — or forgets on one request — no longer gets silently returned to its platform
+    identity, which for a super_admin acting as a team member was a silent re-escalation
+    every time an access token expired.
     """
     repo = SessionRepository(redis)
     record = await repo.get_refresh(SessionRepository._hash(body.refresh_token))
-    if body.identity is not None and record is not None:
-        identity = await active_identity_repository.resolve(db, record["user_uuid"], body.identity)
+    session = await repo.get_session(record["sid"]) if record else None
+    # What the caller asked for, else what this session was already acting as. None means a
+    # session predating ADR-188, which falls back to the platform default as it used to.
+    wanted = body.identity or (session or {}).get("act")
+    if wanted is not None and record is not None:
+        identity = await active_identity_repository.resolve(db, record["user_uuid"], wanted)
         if identity is None:
             # The identity this client was acting as is gone. Refuse here as well as on the
             # request path, so a revoked identity means signed out, not silently downgraded.
@@ -112,8 +122,15 @@ async def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from err
-    identity = await active_identity_repository.resolve(db, user_uuid, body.identity) if body.identity \
+    identity = (
+        await active_identity_repository.resolve(db, user_uuid, wanted) if wanted
         else await active_identity_repository.default_for_user(db, user_uuid)
+    )
+    # Rotation preserves the session record, so a `wanted` that came from it is already
+    # stored; one the caller named has to be written back, or the next refresh without an
+    # identity would revert to whatever the session remembered before.
+    if identity is not None:
+        await repo.set_identity(sid, identity.to_claim())
     access_token = security.create_access_token(
         data={"sub": user_uuid}, sid=sid, act=identity.to_claim() if identity else None
     )
@@ -123,12 +140,14 @@ async def refresh(
     )
 
 
-@router.post("/switch-identity", response_model=AccessTokenResponse)
+@router.post("/switch-identity", response_model=AccessTokenResponse,
+             dependencies=[Depends(get_rate_limiter(10, 60))])
 async def switch_identity(
         body: SwitchIdentityRequest,
         session=Depends(security.get_current_session),
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
 ):
     """Act as a different identity you already hold; returns a re-signed access token.
 
@@ -138,6 +157,13 @@ async def switch_identity(
 
     Only re-signs the access token — the session is untouched and the refresh token is not
     rotated, because switching is not a credential event.
+
+    **The session it re-signs from has to still exist** (ADR-183). This mints a fresh
+    access token with a fresh expiry, so without that check the endpoint is a token
+    refresher gated on nothing but holding an unexpired token: after `logout` or
+    `logout-all`, `/auth/refresh` correctly refuses, but calling this before each expiry
+    would keep a revoked session alive indefinitely. Rate limited for the same reason —
+    it mints credentials, and `login` and `refresh` both are.
     """
     identity = await active_identity_repository.resolve(
         db, str(current_user.uuid),
@@ -149,6 +175,16 @@ async def switch_identity(
             status_code=status.HTTP_403_FORBIDDEN, detail="You do not hold that identity"
         )
     _user_uuid, sid = session
+    if sid is None or await SessionRepository(redis).get_session(sid) is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session is no longer active",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # The switch has to outlive the token it returns (ADR-188): without this the session
+    # still remembers the identity it was created with, and the next refresh that does not
+    # name one would undo the switch.
+    await SessionRepository(redis).set_identity(sid, identity.to_claim())
     access_token = security.create_access_token(
         data={"sub": str(current_user.uuid)}, sid=sid, act=identity.to_claim()
     )
@@ -164,7 +200,9 @@ async def logout(
 ):
     """Log out the CURRENT device only: revoke this session (its refresh token).
 
-    Use /auth/logout-all to sign out every device. (A token minted without a sid is a no-op.)
+    Use /auth/logout-all to sign out every device. A token whose session is already gone is
+    refused with 401 by `get_current_session` before reaching here (ADR-180), so `sid` is
+    only ever falsy for a token that never had one — which is refused by the same check.
     """
     _user_uuid, sid = session
     if sid:

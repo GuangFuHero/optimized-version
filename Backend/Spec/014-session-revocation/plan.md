@@ -164,6 +164,7 @@ except RedisError:
 ## Task 7: 全套件 + Docker 驗收
 
 - [x] `uv run pytest -q` → **516 passed / 0 failed**（baseline 501 + 本票 15）
+- [x] code review 修補後（2026-08-25）：**524 passed / 0 failed**（再 +8，見 Task 8）
 - [x] `uv run ruff check` 對本票改動的 7 個檔案全綠
 - [x] **Docker 完整驗證通過**（2026-08-20，實跑；細節見下）
 - [ ] 回報使用者，由使用者決定是否發 PR（PR 需等 #37 先合）
@@ -222,3 +223,37 @@ docker exec backend-db-1 psql -U postgres -c "DROP DATABASE IF EXISTS disaster_r
 **4. `test_db` 被 pytest 當成測試收集。** `tests/test_graphql/conftest.py` 的 `test_db` 是個 async context manager，但名字以 `test_` 開頭——直接 import 進測試檔，pytest 就會把它收成一個什麼都不做的「測試」。本票的 GraphQL 測試檔改用 `as _test_db` 別名避開。**`test_queries.py` / `test_work_zone.py` / `test_zone_scope.py` 三個既有檔案仍有這個問題**（各多算一個空測試），屬既有噪音，不在本票順手改。
 
 計畫沒預料到、但確實踩到的一處：**`tests/test_security.py` 有自己的 `client` fixture**（`:32`），沒有 `get_redis` override。認證一旦要讀 Redis，那個 fixture 底下的每個已認證路由都 500。已補上與共用 fixture 相同的接線。這正是 Task 2 要排在 Task 3 之前的理由——它是在加了檢查之後才紅的，而那時全套件其餘部分是綠的，所以一眼就能定位。
+
+---
+
+## Task 8: PR #38 code review 修補（2026-08-25）
+
+review 報告見 scratchpad `PR38-review.md`；每一項都以實跑測試取證。本任務只處理其中兩項安全問題，其餘（稽核、lint、計數、測試缺口）未動。
+
+### 8-1 `get_current_session` 補上 live-session 檢查（ADR-180）
+
+- [x] 先寫紅燈測試：`tests/test_session_revocation.py` 的 `test_logout_all_is_refused_once_the_session_is_gone` / `test_logout_is_refused_once_the_session_is_gone` / `test_logout_refuses_a_token_with_no_sid`
+- [x] `app/core/security.py:313` — `get_current_session` 多收 `redis=Depends(get_redis)`，呼叫 `_require_live_session`
+- [x] `app/api/v1/endpoints/auth/session.py:163` — logout 的 docstring 更正（sid-less token 不再是 no-op）
+- [x] 三個端點（logout / logout-all / switch-identity）都不用改
+
+### 8-2 踢人端點明確要求 `Scope.ALL`（ADR-181）
+
+- [x] 先寫紅燈測試：`test_kicking_needs_user_edit_at_scope_all`，parametrize `own/team/gov/ngo/zone`
+- [x] `app/services/admin.py:218-225` — `require_scope` 的回傳值拿來比對 `Scope.ALL`，否則 403
+- [x] `gov` / `ngo` 兩個 scope 在修補前就已經 403（平台角色無 team，`resolve_scope` 回 NONE），實際紅的是 `own` / `team` / `zone` 三個
+
+### 驗收
+
+- [x] 紅燈確認：修補前 6 failed / 15 passed
+- [x] 綠燈確認：修補後 `tests/test_session_revocation.py` 21 passed
+- [x] 全套件 `uv run pytest -q` → **524 passed / 0 failed**（2026-08-25 實跑，無回歸）
+- [x] `uv run ruff check` 對本次改動的 4 個檔案全綠
+- [ ] Docker 完整驗證（未跑；本次為純邏輯修補，全套件已涵蓋兩個行為）
+
+### 未處理（review 有提、本次刻意不動）
+
+- 踢人動作沒有稽核紀錄，log 也沒有 actor uuid
+- 本 PR 引入的 2 個 ruff 錯誤（`test_loaders.py` I001、`test_zone_scope.py` E501）
+- `revoke_user_sessions` 越層讀 repo 內部、`smembers` 讀兩次、撤銷數會多算過期 sid
+- 測試缺口：「踢人不會踢到自己」無斷言；Redis 斷線的 fail-closed 只驗了 REST（GraphQL 走 `app.state.redis`，dependency override 打不到）

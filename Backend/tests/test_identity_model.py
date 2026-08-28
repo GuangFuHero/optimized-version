@@ -196,3 +196,32 @@ async def test_a_platform_direct_grant_cannot_be_duplicated(db):
     ])
     with pytest.raises(IntegrityError):
         await db.commit()
+
+
+async def test_the_default_identity_is_stable_across_reads(db):
+    """`default_for_user` must not depend on index order (ADR-184).
+
+    An account should only ever hold one platform grant, but the partial unique index is on
+    *(user, role)* rather than *user*, so the schema permits several. Without an ORDER BY,
+    "the platform identity" was whichever role_uuid the index happened to return — an
+    arbitrary UUID draw that could differ between reads.
+    """
+    from app.repositories.active_identity_repository import active_identity_repository
+
+    user = User(name="Two Hats")
+    alpha = Role(name="aaa_role", kind="platform")
+    omega = Role(name="zzz_role", kind="platform")
+    db.add_all([user, alpha, omega])
+    await db.flush()
+    db.add_all([
+        UserRoleAssign(user_uuid=user.uuid, role_uuid=omega.uuid),
+        UserRoleAssign(user_uuid=user.uuid, role_uuid=alpha.uuid),
+    ])
+    user_uuid = str(user.uuid)
+    await db.commit()
+
+    seen = {
+        (await active_identity_repository.default_for_user(db, user_uuid)).role_name
+        for _ in range(5)
+    }
+    assert seen == {"aaa_role"}, f"unstable or unordered default: {seen}"

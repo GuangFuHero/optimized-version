@@ -7,18 +7,20 @@ instead of a blanket 400 (ADR-032).
 
 from types import SimpleNamespace
 
+from fastapi import HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, scope_filter
 from app.models.auth import User
-from app.models.rbac import Role, UserRoleAssign
+from app.models.rbac import Role, UserPermissionAssign, UserRoleAssign
 from app.models.team import Team
 from app.repositories.auth_repository import role_repository, user_repository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.team_repository import team_repository
 from app.services.authz import require_scope
+from app.services.notification_service import NotificationService
 
 SUPER_ADMIN_ROLE_NAME = "super_admin"
 # Joining a team means being granted a role in it (ADR-072); `member` is the least-privileged
@@ -158,7 +160,30 @@ async def add_team_member(
         user_uuid=target.uuid, role_uuid=role.uuid, team_uuid=team.uuid, role_kind="team"
     ))
 
+    # Read every attribute we still need BEFORE committing: the session runs with
+    # expire_on_commit=True (app/db/session.py), so `team` and `actor` are expired the
+    # moment we commit, and touching them afterwards raises MissingGreenlet in async.
+    team_name = team.name
+    team_id = team.uuid
+    actor_uid = actor.uuid
+
     await db.commit()
+    await db.refresh(target)
+    target_id = target.uuid
+
+    # 觸發 team_member_added 通知 (High)
+    await NotificationService.dispatch(
+        db,
+        event_type="team_member_added",
+        title=f"歡迎加入團隊：{team_name}",
+        body=f"您已成功加入團隊「{team_name}」{f'，擔任 {team_role_name}' if team_role_name else ''}。",
+        priority="high",
+        actor_uuid=actor_uid,
+        ref_type="team",
+        ref_uuid=team_id,
+        explicit_recipients=[str(target_id)],
+    )
+    # dispatch() commits, which expires `target` again — refresh so the caller can read it.
     await db.refresh(target)
     return target
 
@@ -191,11 +216,23 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
         raise AdminNotFoundError("User is not a member of this team")
 
     # Leaving a team is revoking every grant scoped to it — that IS the membership now
-    # (ADR-072). Grants in the user's other teams are untouched.
+    # (ADR-072). Grants in the user's other teams, and their platform grant, are untouched:
+    # platform rows carry a NULL team_uuid, which never matches this predicate.
+    #
+    # Both grant tables, not just the roles (ADR-187). A direct grant bound to this team is
+    # as much a permission in it as a role is, and leaving it behind meant re-adding the
+    # person silently restored it — someone removed from a team and later re-added as a plain
+    # member got their old team.member.manage back, with no one re-granting anything.
     await db.execute(
         delete(UserRoleAssign).where(
             UserRoleAssign.user_uuid == target.uuid,
             UserRoleAssign.team_uuid == team.uuid,
+        )
+    )
+    await db.execute(
+        delete(UserPermissionAssign).where(
+            UserPermissionAssign.user_uuid == target.uuid,
+            UserPermissionAssign.team_uuid == team.uuid,
         )
     )
     await db.commit()
@@ -204,17 +241,26 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
 
 
 async def revoke_user_sessions(db: AsyncSession, redis, *, actor: User, user_uuid: str) -> int:
-    """End every session the target holds; returns how many were revoked (ADR-103).
+    """End every session the target holds; returns how many were revoked (ADR-103/107).
 
-    Checkpoint 1 only, on `user.edit`. There is no meaningful checkpoint 2 here: since
-    feature 010 a user has no single team (membership is whichever teams their grants name),
-    so there is no team on the target to scope against. In the current seed `user.edit`
-    belongs to `super_admin` alone, which matches how `assign_role` treats `rbac.assign`.
+    Checkpoint 1 only, on `user.edit` at `Scope.ALL`. There is no meaningful checkpoint 2
+    here: since feature 010 a user has no single team (membership is whichever teams their
+    grants name), so there is no team on the target to scope against — which is exactly why
+    the scope has to be checked here instead. Without it every narrower grant would behave
+    as `all`, and the RBAC matrix is editable at runtime, so today's seed (`user.edit` on
+    `super_admin` alone) is not a property this function can lean on (ADR-181).
 
     Idempotent by design — a target with nothing live still succeeds, because the caller is
     asking for the end state "this person has no live sessions", not for an event.
     """
-    await require_scope(actor, Perm.USER_EDIT, db)
+    scope = await require_scope(actor, Perm.USER_EDIT, db)
+    if scope != Scope.ALL:
+        # Without a checkpoint 2 to narrow it, any grant would reach every user on the
+        # platform — a `user.edit=own` role meant for "edit your own profile" would silently
+        # also mean "sign anyone out" (ADR-181). The RBAC matrix is editable at runtime, so
+        # the seed giving `user.edit` to super_admin alone is not something this endpoint
+        # can rely on.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
 
     target = await user_repository.get_by_uuid(db, user_uuid)
     if target is None:

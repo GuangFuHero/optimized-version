@@ -115,6 +115,41 @@ async def test_login_falls_back_when_the_remembered_identity_is_gone(client, db_
     assert decode_act(_act_of(tokens["access_token"])) == (str(platform_role.uuid), None)
 
 
+# --- a malformed act claim ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "act",
+    ["garbage:", "garbage:also-garbage", "00000000-0000-4000-8000-000000000001:not-a-uuid", ":", "x"],
+)
+async def test_decode_act_rejects_anything_that_is_not_a_uuid_pair(act):
+    """Both halves are validated here, not just split apart.
+
+    `resolve()` binds them straight into `uuid` columns; an unvalidated value would reach the
+    driver and surface as a 500 rather than the None this function exists to return.
+    """
+    assert decode_act(act) is None
+
+
+async def test_login_with_a_malformed_remembered_identity_falls_back(client, db_session):
+    """`scope` is free-form text from an unauthenticated client — garbage must not 500."""
+    _, platform_role, _, _ = await _account_with_two_identities(db_session)
+    tokens = await _login(client, scope="garbage:")
+    assert decode_act(_act_of(tokens["access_token"])) == (str(platform_role.uuid), None)
+
+
+async def test_refresh_with_a_malformed_identity_is_401(client, db_session):
+    """`identity` is free-form too; a value that parses to nothing is treated as vanished."""
+    await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    resp = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": tokens["refresh_token"], "identity": "garbage:"},
+    )
+    assert resp.status_code == 401
+
+
 # --- switching ---------------------------------------------------------------------------
 
 
@@ -132,6 +167,26 @@ async def test_switch_to_an_identity_you_hold(client, db_session):
     assert decode_act(_act_of(resp.json()["access_token"])) == (
         str(team_role.uuid), str(team.uuid)
     )
+
+
+async def test_switch_returns_the_access_token_alone(client, db_session):
+    """No `refresh_token` in the response — the client keeps the one it already has (ADR-070).
+
+    The server stores only that token's hash, so there is nothing to echo back. The frontend
+    must therefore merge the access token into its stored pair rather than replacing the pair
+    wholesale, or it would overwrite its refresh token with `undefined` and be signed out at
+    the next refresh.
+    """
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    resp = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert set(resp.json()) == {"access_token", "token_type", "expires_in"}
 
 
 async def test_switch_to_an_identity_you_do_not_hold_is_403(client, db_session):
@@ -268,3 +323,143 @@ async def test_users_me_lists_every_identity_and_the_active_one(client, db_sessi
     assert {(i["role"], i["team"]) for i in body["identities"]} == {("user", None), ("member", "慈濟")}
     assert body["active_identity"]["role"] == "member"
     assert body["active_identity"]["team"] == "慈濟"
+
+
+# --- switching cannot outlive the session it re-signs from (ADR-183) ----------------------
+
+
+async def test_switch_identity_refuses_once_the_session_is_revoked(client, db_session):
+    """Signing out has to bound switching too, or it becomes an unbounded token refresher.
+
+    `switch-identity` mints a fresh access token with a fresh expiry from the `sid` in the
+    caller's current one. Without checking that `session:{sid}` still exists, a caller could
+    keep a revoked session alive indefinitely by calling this before each expiry — `logout`
+    and `logout-all` would stop `/auth/refresh` and stop nothing else.
+    """
+    _uid, _platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    body = {"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)}
+
+    assert (await client.post("/api/v1/auth/switch-identity", json=body, headers=headers)).status_code == 200
+
+    assert (await client.post("/api/v1/auth/logout-all", headers=headers)).status_code == 204
+
+    resp = await client.post("/api/v1/auth/switch-identity", json=body, headers=headers)
+    assert resp.status_code == 401, resp.text
+    # The status is the contract; the message depends on which layer refuses first. On this
+    # branch Spec/014's per-request session check in `get_current_user` gets there before the
+    # endpoint's own check and says "Could not validate credentials"; on feature 010 alone the
+    # endpoint answers with "Session is no longer active". ADR-183 records that overlap as
+    # deliberate — the endpoint check went in while #38 was still unmerged.
+    assert resp.json()["detail"] in {"Session is no longer active", "Could not validate credentials"}
+
+
+async def test_switch_identity_is_rate_limited(client, db_session):
+    """It mints credentials, so it gets the same limiter login and refresh have."""
+    from app.api.v1.endpoints.auth import session as session_module
+
+    route = next(
+        r for r in session_module.router.routes
+        if getattr(r, "path", None) == "/switch-identity"
+    )
+    assert route.dependencies, "switch-identity has no dependencies at all"
+
+
+# --- the session remembers which identity it is acting as (ADR-188) ----------------------
+
+
+async def test_a_plain_refresh_keeps_the_identity_the_caller_switched_to(client, db_session):
+    """A refresh that names no identity must not undo a deliberate downgrade.
+
+    The client's memory of the active identity used to be the only copy: `act` lived in the
+    access token and nowhere else, so a refresh without `identity` fell back to
+    `default_for_user` — the platform identity. For a super_admin acting as a team member
+    that was a silent re-escalation roughly every 15 minutes, with nothing in the response
+    saying it had happened.
+    """
+    _uid, platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    assert decode_act(_act_of(tokens["access_token"])) == (str(platform_role.uuid), None)
+
+    switched = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert switched.status_code == 200, switched.text
+
+    # exactly what a client that does not track identity sends
+    refreshed = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    assert decode_act(_act_of(refreshed.json()["access_token"])) == (
+        str(team_role.uuid), str(team.uuid)
+    )
+
+
+async def test_an_explicit_identity_on_refresh_still_wins(client, db_session):
+    """The session is the fallback, not an override: a client that tracks identity decides."""
+    _uid, platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    switched = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert switched.status_code == 200, switched.text
+
+    refreshed = await client.post(
+        "/api/v1/auth/refresh",
+        json={
+            "refresh_token": tokens["refresh_token"],
+            "identity": encode_act(str(platform_role.uuid), None),
+        },
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    assert decode_act(_act_of(refreshed.json()["access_token"])) == (str(platform_role.uuid), None)
+
+
+async def test_refreshing_twice_keeps_the_switched_identity(client, db_session):
+    """Rotation preserves the record, so the identity survives more than one hop."""
+    _uid, _platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+
+    refresh_token = tokens["refresh_token"]
+    for _ in range(2):
+        resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+        assert resp.status_code == 200, resp.text
+        refresh_token = resp.json()["refresh_token"]
+
+    assert decode_act(_act_of(resp.json()["access_token"])) == (
+        str(team_role.uuid), str(team.uuid)
+    )
+
+
+async def test_an_explicit_identity_on_refresh_is_remembered_too(client, db_session):
+    """Naming an identity on refresh updates the session, or the next plain one reverts it."""
+    _uid, _platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    named = await client.post(
+        "/api/v1/auth/refresh",
+        json={
+            "refresh_token": tokens["refresh_token"],
+            "identity": encode_act(str(team_role.uuid), str(team.uuid)),
+        },
+    )
+    assert named.status_code == 200, named.text
+
+    plain = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": named.json()["refresh_token"]}
+    )
+    assert plain.status_code == 200, plain.text
+    assert decode_act(_act_of(plain.json()["access_token"])) == (
+        str(team_role.uuid), str(team.uuid)
+    )
