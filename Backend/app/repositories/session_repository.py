@@ -59,6 +59,14 @@ class SessionRepository:
         await self.redis.expire(self.USER_SESSIONS + user_uuid, self.ttl)
         return sid, raw
 
+    async def get_session(self, sid: str) -> dict | None:
+        """The live session record for `sid`, or None once it has been revoked or expired.
+
+        Read-only, and does not touch the TTL: callers use it to ask "is this session still
+        alive" without keeping it alive by asking.
+        """
+        return self._load(await self.redis.get(self.SESSION + sid))
+
     async def get_refresh(self, rt_hash: str) -> dict | None:
         """Fetch a refresh-token record by hash."""
         return self._load(await self.redis.get(self.REFRESH + rt_hash))

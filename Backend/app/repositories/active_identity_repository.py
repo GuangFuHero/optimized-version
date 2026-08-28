@@ -82,16 +82,26 @@ class ActiveIdentityRepository:
     async def default_for_user(self, db: AsyncSession, user_uuid: str) -> ActiveIdentity | None:
         """The identity a fresh login lands on: the user's platform identity (ADR-069).
 
-        Every account has exactly one, so this is always well defined — except for the
-        documented degenerate case of an account created before the seed ran, which holds no
-        role at all and gets None (and therefore no grants).
+        Every account is meant to have exactly one — registration grants `user`, and every
+        later platform grant *replaces* it rather than adding (`admin_service.assign_role`,
+        and `user_repository.assign_role` since ADR-184). `ORDER BY` is defence in depth for
+        any row that predates that guarantee: without it "the platform identity" would be
+        whichever `role_uuid` happened to sort first in the partial unique index, which is an
+        arbitrary UUID draw and not stable between reads.
+
+        Returns None only for an account holding no platform grant at all. ADR-185 makes that
+        unreachable through the API by refusing to unassign a platform role; this stays
+        fail-closed rather than falling back to a team identity, because landing someone on a
+        team identity they did not choose is the silent downgrade ADR-096 rejected.
         """
         row = (
             await db.execute(
-                _select_identities().where(
+                _select_identities()
+                .where(
                     UserRoleAssign.user_uuid == user_uuid,
                     UserRoleAssign.team_uuid.is_(None),
                 )
+                .order_by(Role.name, UserRoleAssign.role_uuid)
             )
         ).first()
         return _to_identity(row) if row else None

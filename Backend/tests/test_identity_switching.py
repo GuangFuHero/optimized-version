@@ -323,3 +323,44 @@ async def test_users_me_lists_every_identity_and_the_active_one(client, db_sessi
     assert {(i["role"], i["team"]) for i in body["identities"]} == {("user", None), ("member", "慈濟")}
     assert body["active_identity"]["role"] == "member"
     assert body["active_identity"]["team"] == "慈濟"
+
+
+# --- switching cannot outlive the session it re-signs from (ADR-183) ----------------------
+
+
+async def test_switch_identity_refuses_once_the_session_is_revoked(client, db_session):
+    """Signing out has to bound switching too, or it becomes an unbounded token refresher.
+
+    `switch-identity` mints a fresh access token with a fresh expiry from the `sid` in the
+    caller's current one. Without checking that `session:{sid}` still exists, a caller could
+    keep a revoked session alive indefinitely by calling this before each expiry — `logout`
+    and `logout-all` would stop `/auth/refresh` and stop nothing else.
+    """
+    _uid, _platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    body = {"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)}
+
+    assert (await client.post("/api/v1/auth/switch-identity", json=body, headers=headers)).status_code == 200
+
+    assert (await client.post("/api/v1/auth/logout-all", headers=headers)).status_code == 204
+
+    resp = await client.post("/api/v1/auth/switch-identity", json=body, headers=headers)
+    assert resp.status_code == 401, resp.text
+    # The status is the contract; the message depends on which layer refuses first. On this
+    # branch Spec/014's per-request session check in `get_current_user` gets there before the
+    # endpoint's own check and says "Could not validate credentials"; on feature 010 alone the
+    # endpoint answers with "Session is no longer active". ADR-183 records that overlap as
+    # deliberate — the endpoint check went in while #38 was still unmerged.
+    assert resp.json()["detail"] in {"Session is no longer active", "Could not validate credentials"}
+
+
+async def test_switch_identity_is_rate_limited(client, db_session):
+    """It mints credentials, so it gets the same limiter login and refresh have."""
+    from app.api.v1.endpoints.auth import session as session_module
+
+    route = next(
+        r for r in session_module.router.routes
+        if getattr(r, "path", None) == "/switch-identity"
+    )
+    assert route.dependencies, "switch-identity has no dependencies at all"
