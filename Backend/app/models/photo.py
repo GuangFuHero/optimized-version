@@ -11,6 +11,6 @@ class Photo(Base, UUIDPKMixin, TimestampMixin):
 
     __tablename__ = "photos"
     ref_uuid: Mapped[str] = mapped_column(UUID(as_uuid=True))
-    ref_type: Mapped[str] = mapped_column(String(50))  # ticket/pole
+    ref_type: Mapped[str] = mapped_column(String(50))  # geometry/pole
     url: Mapped[str] = mapped_column(String(500))
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))

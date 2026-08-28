@@ -26,10 +26,10 @@ class StationRepository(GenericRepository[Station]):
 
     async def list_active(
         self, db: AsyncSession, *,
-        bounds=None, station_type: str | None = None,
+        bounds=None, station_type: str | None = None, operational_status: str | None = None,
         skip: int = 0, limit: int = 50, extra_filters=(),
     ) -> list[Station]:
-        """List active stations with optional bbox/type filter and RBAC scope_filter conditions."""
+        """List active stations, filtered by optional bbox/type/operational_status and RBAC scope_filter."""
         query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
             bbox = func.ST_MakeEnvelope(
@@ -38,6 +38,8 @@ class StationRepository(GenericRepository[Station]):
             query = query.where(func.ST_Intersects(self.model.geometry, bbox))
         if station_type:
             query = query.where(self.model.type == station_type)
+        if operational_status:
+            query = query.where(self.model.operational_status == operational_status)
         result = await db.execute(
             query.order_by(
                 self.model.priority_score.desc().nulls_last(), self.model.created_at.desc()
@@ -46,9 +48,11 @@ class StationRepository(GenericRepository[Station]):
         return result.scalars().all()
 
     async def count_active(
-        self, db: AsyncSession, *, bounds=None, station_type: str | None = None, extra_filters=()
+        self, db: AsyncSession, *,
+        bounds=None, station_type: str | None = None, operational_status: str | None = None,
+        extra_filters=(),
     ) -> int:
-        """Count active stations with optional bbox/type filter and RBAC scope_filter conditions."""
+        """Count active stations, filtered by optional bbox/type/operational_status and RBAC scope_filter."""
         query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
             bbox = func.ST_MakeEnvelope(
@@ -57,6 +61,8 @@ class StationRepository(GenericRepository[Station]):
             query = query.where(func.ST_Intersects(self.model.geometry, bbox))
         if station_type:
             query = query.where(self.model.type == station_type)
+        if operational_status:
+            query = query.where(self.model.operational_status == operational_status)
         return await db.scalar(select(func.count()).select_from(query.subquery()))
 
     async def get_high_level_stations(self, db: AsyncSession, min_level: int) -> list[Station]:

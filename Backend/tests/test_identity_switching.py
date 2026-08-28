@@ -115,6 +115,41 @@ async def test_login_falls_back_when_the_remembered_identity_is_gone(client, db_
     assert decode_act(_act_of(tokens["access_token"])) == (str(platform_role.uuid), None)
 
 
+# --- a malformed act claim ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "act",
+    ["garbage:", "garbage:also-garbage", "00000000-0000-4000-8000-000000000001:not-a-uuid", ":", "x"],
+)
+async def test_decode_act_rejects_anything_that_is_not_a_uuid_pair(act):
+    """Both halves are validated here, not just split apart.
+
+    `resolve()` binds them straight into `uuid` columns; an unvalidated value would reach the
+    driver and surface as a 500 rather than the None this function exists to return.
+    """
+    assert decode_act(act) is None
+
+
+async def test_login_with_a_malformed_remembered_identity_falls_back(client, db_session):
+    """`scope` is free-form text from an unauthenticated client — garbage must not 500."""
+    _, platform_role, _, _ = await _account_with_two_identities(db_session)
+    tokens = await _login(client, scope="garbage:")
+    assert decode_act(_act_of(tokens["access_token"])) == (str(platform_role.uuid), None)
+
+
+async def test_refresh_with_a_malformed_identity_is_401(client, db_session):
+    """`identity` is free-form too; a value that parses to nothing is treated as vanished."""
+    await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    resp = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": tokens["refresh_token"], "identity": "garbage:"},
+    )
+    assert resp.status_code == 401
+
+
 # --- switching ---------------------------------------------------------------------------
 
 
@@ -132,6 +167,26 @@ async def test_switch_to_an_identity_you_hold(client, db_session):
     assert decode_act(_act_of(resp.json()["access_token"])) == (
         str(team_role.uuid), str(team.uuid)
     )
+
+
+async def test_switch_returns_the_access_token_alone(client, db_session):
+    """No `refresh_token` in the response — the client keeps the one it already has (ADR-070).
+
+    The server stores only that token's hash, so there is nothing to echo back. The frontend
+    must therefore merge the access token into its stored pair rather than replacing the pair
+    wholesale, or it would overwrite its refresh token with `undefined` and be signed out at
+    the next refresh.
+    """
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    resp = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert set(resp.json()) == {"access_token", "token_type", "expires_in"}
 
 
 async def test_switch_to_an_identity_you_do_not_hold_is_403(client, db_session):

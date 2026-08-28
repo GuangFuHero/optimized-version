@@ -11,6 +11,7 @@ grant being deleted and re-added, and survives `rename_role`.
 """
 
 from dataclasses import dataclass
+from uuid import UUID
 
 
 @dataclass(frozen=True)
@@ -51,15 +52,37 @@ def encode_act(role_uuid: str, team_uuid: str | None) -> str:
     return f"{role_uuid}:{team_uuid or ''}"
 
 
+def _parse_uuid(value: str) -> str | None:
+    """Canonical uuid string, or None when `value` is not a uuid at all."""
+    try:
+        return str(UUID(value))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 def decode_act(act: str | None) -> tuple[str, str | None] | None:
     """Parse an `act` claim into (role_uuid, team_uuid), or None if it is unusable.
 
     Malformed input returns None rather than raising: a token is attacker-influenced data,
     and the caller treats "cannot parse" the same as "identity no longer exists" (401).
+
+    Both halves are validated as uuids here, not just split apart. The caller binds them
+    straight into `uuid` columns, and `POST /auth/login` (`scope`) and `POST /auth/refresh`
+    (`identity`) both accept a free-form string from an unauthenticated client — an
+    unvalidated "garbage:" would reach the driver and surface as a 500 instead of the
+    fallback-to-default / 401 this function exists to produce.
     """
     if not act or not isinstance(act, str):
         return None
-    role_uuid, separator, team_uuid = act.partition(":")
-    if not separator or not role_uuid:
+    role_part, separator, team_part = act.partition(":")
+    if not separator:
         return None
-    return role_uuid, (team_uuid or None)
+    role_uuid = _parse_uuid(role_part)
+    if role_uuid is None:
+        return None
+    if not team_part:
+        return role_uuid, None
+    team_uuid = _parse_uuid(team_part)
+    if team_uuid is None:
+        return None
+    return role_uuid, team_uuid

@@ -21,8 +21,18 @@ the new one forbids. Those rows are deleted rather than repaired — there is no
 repair them to, and the project is pre-production with mock data only.
 
 Revision ID: 90c93167fa66
-Revises: e1f2a3b4c5d6
+Revises: a1b2c3d4e5f6
 Create Date: 2026-08-19
+
+Chained after main's current head rather than after `e1f2a3b4c5d6`, which this feature
+branched from. Leaving it on the old parent makes it a sibling of whatever main has added
+since, and `alembic upgrade head` refuses to run with more than one head.
+
+The parent has moved twice while this branch was open — `8ebfc3903041` when notifications
+and station photos merged, and now `a1b2c3d4e5f6` (PR #32, analytics columns). That is the
+standing cost of a single-line migration history with several branches open at once: this
+revision is pinned to whatever main's head is at merge time, and has to be re-pointed each
+time main moves.
 
 """
 from collections.abc import Sequence
@@ -34,7 +44,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '90c93167fa66'
-down_revision: str | Sequence[str] | None = 'e1f2a3b4c5d6'
+down_revision: str | Sequence[str] | None = 'a1b2c3d4e5f6'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

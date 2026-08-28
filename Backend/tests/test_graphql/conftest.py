@@ -76,6 +76,7 @@ async def _ensure_db():
         # ticket.view = all, not own (ADR-030): viewing is public (ADR-027), logging in
         # must never narrow that. Only ticket.view_pii and edit/delete stay own-scoped.
         await _grant(db, login_role, perm_cache, Perm.STATION_VIEW, "all")
+        await _grant(db, login_role, perm_cache, Perm.STATION_VIEW_PII, "own")
         await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW, "all")
         await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW_PII, "own")
         await _grant(db, login_role, perm_cache, Perm.TICKET_ADD, "all")
@@ -86,6 +87,7 @@ async def _ensure_db():
         # Mirrors the old "FieldCoordinator_Map"/"FieldCoordinator_Request" policies
         # (all-scoped everywhere) using the new capability keys.
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_VIEW, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.STATION_VIEW_PII, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_ADD, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_DELETE, "all")
