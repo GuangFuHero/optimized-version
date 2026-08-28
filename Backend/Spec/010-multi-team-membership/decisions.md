@@ -1,4 +1,4 @@
-# Multi-Team Membership — ADR 全集（ADR-068~076、096~097、178~179、183~187）
+# Multi-Team Membership — ADR 全集（ADR-068~076、096~097、178~179、183~188）
 
 **Date**: 2026-08-16（初版）／**2026-08-19 重大改版**
 **Feature**: 010-multi-team-membership
@@ -73,7 +73,8 @@
 
 1. **per-session**，簽進 access token 的 `act` claim。
 2. **`act` 的內容是 `(role_uuid, team_uuid)`**，不是 `user_role_assign.uuid`。兩者資訊等價（唯一鍵含 team 後），但前者在「刪掉再重加同一筆授予」時不會誤觸登出，且能跨 `rename_role`（`app/services/rbac_admin.py`）存活。
-3. **session 不存 `act`**。JWT 是唯一真相；`POST /auth/refresh` 由前端帶上當前 identity，伺服器驗證後簽進新 token。
+3. ~~**session 不存 `act`**。JWT 是唯一真相；`POST /auth/refresh` 由前端帶上當前 identity，伺服器驗證後簽進新 token。~~
+   **已被 ADR-188 推翻**：前端沒帶 identity 時，伺服器會退回 platform 預設——失效方向是往上而不是往下，切換的降權效果每 15 分鐘被靜默還原一次。session 現在也記錄 `act`，未指定時沿用。
 4. **預設身分 = 該使用者的 platform 身分**。每人恰有一個（同 kind 取代保證），所以這個預設永遠存在、唯一、無歧義，且與現行「platform 角色恆生效」的行為最接近。
 5. **「記住上次的身分」由前端保存**，存在 NextAuth 的 session cookie 裡。
 
@@ -514,3 +515,46 @@ switch-identity             → 200   ← 沒擋，而且新 token 打 /users/me
 **Consequences**：
 ➕ 「移出團隊」現在真的等於撤銷該團隊的全部權限。
 ➖ 重新加入的人要重新取得他原本的直接授予。這是正確的：直接授予本來就是個別給的，不該隨成員身分自動回來。
+
+---
+
+### ADR-188 session 記住當前身分；refresh 未指定時沿用，不回到 platform 預設
+
+**推翻 ADR-069 第 3 點**（「session 不存 `act`；JWT 是唯一真相」）。
+
+**白話**：切換成較小的身分之後，只要 access token 過期、前端照一般方式 refresh（body 沒帶 `identity`），伺服器就把人放回 platform 身分——對 super_admin 來說那是他最大的身分。降權在使用者毫無察覺的情況下被還原，而 access token 只有 15 分鐘，所以這件事大約每 15 分鐘發生一次。
+
+**Context**：實測（PR #37 review 的 HIGH）：
+
+```
+[A] act after login            : <super_admin>:              ← 預設 platform
+[B] act after switch-identity  : <member>:<team>             ← 切成團隊身分
+[C] act after PLAIN refresh    : <super_admin>:              ← 又變回去了
+    station.delete scope        : all                        ← 能力真的回來了
+```
+
+`station.delete` 完全沒有授予 team `member`，只掛在 `super_admin` 上。refresh 之後它是 `all`。
+
+ADR-069 第 3 點是刻意的設計：身分的記憶交給前端，`refresh` 由前端帶上。問題是**前端一旦沒帶，後端的行為是「回到最大的身分」而不是「維持現狀」**——失效方向是往上而不是往下。而 `Spec/010/spec.md` §7 的前端契約第 1 點（NextAuth JWT 存 `activeIdentity`）目前也還沒實作。
+
+這與 ADR-084 → ADR-174 是同一個形狀：把邊界交給前端，然後發現後端的預設行為在前端缺席時並不安全。
+
+**Options**：
+- **甲：session record 存 `act`，refresh 未指定時沿用**（採用）。
+- 乙：維持現狀，只在 token 回應裡回報當前身分，讓前端看得見自己被還原。**否決**——把「看得見」當成修法，等於要求每個客戶端都正確處理才安全，而這正是失效的來源。
+- 丙：切換時輪替 refresh token，把身分綁進憑證鏈。推翻 ADR-070（切換不是憑證事件），代價過大。
+
+**Decision**：
+
+1. **`session:{sid}` 增加 `act` 欄位**。`create_session` 在登入時寫入，`switch-identity` 用新的 `set_identity()` 更新。
+2. **`refresh` 的身分來源改為 `body.identity or session["act"]`**。呼叫端明確指定時仍然優先——追蹤身分的前端繼續自己決定；沒指定時沿用 session 記得的那個，而不是 `default_for_user`。
+3. **`refresh` 明確指定身分時也寫回 session**，否則下一次未指定的 refresh 會退回更早的記憶。
+4. **`set_identity()` 保留原有 TTL**，不重設。切換不是憑證事件（ADR-070），不該延長 session 壽命。session 已不存在時直接返回，不重建——那會讓已撤銷的 session 復活。
+5. 舊 session（沒有 `act` 欄位）讀到 `None`，行為與修正前相同（fallback 到 platform 預設），不需要遷移。
+
+**Consequences**：
+➕ 降權切換在整個 session 生命週期有效，而不是一張 token 的壽命。
+➕ 不追蹤身分的客戶端也安全；前端契約第 1 點從「安全所必需」降級為「最佳化」。
+➖ **推翻了 ADR-069 第 3 點**。「JWT 是唯一真相」不再成立——session 也是一份記錄，兩者可能不同步（例如舊 token 配新 session 記錄）。實際上無害：`act` 每次都要對 DB 解析驗證（ADR-096），session 那份只決定「沒指定時用哪個」。
+➖ 每次 refresh 多一次 Redis 讀取（`get_session`），切換多一次讀寫。
+➖ 身分現在是 per-session 而非 per-token 的狀態。ADR-069 選 per-session 正是為了「同一人在兩台裝置上互不干擾」——這一點不受影響，記錄仍在各自的 session 裡。

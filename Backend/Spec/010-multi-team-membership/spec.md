@@ -204,6 +204,9 @@ POST /auth/switch-identity { role_uuid, team_uuid? }
 ### 前端契約（必須對齊）
 
 1. **NextAuth JWT 多存 `activeIdentity`**，login / refresh 時帶上。
+   **不再是安全所必需（ADR-188）**：session 本身記錄當前身分，refresh 沒帶 identity 時沿用它，
+   而不是退回 platform 預設。前端帶上仍然有用（明確指定優先，且可跨裝置各自記憶），但忘了帶
+   不會再讓降權切換被靜默還原。
 2. **收到 401 要走登出流程。** 目前 `Frontend/apps/demo/src/lib/server-backend-auth.ts:71-77` 只依過期時間決定要不要 refresh，整個 auth lib 沒有 401 處理也沒有 signOut——不補的話，身分被撤時使用者會卡在「畫面壞掉但沒被登出」的狀態。
 3. **切換器 UI** 消費 `GET /users/me` 的身分清單。
 4. **切換只回傳 access token**（`AccessTokenResponse`：`access_token` / `token_type` / `expires_in`），**不可**整包餵給 `applyTokenPairToBackendAuthToken`——該 helper 會無條件寫 `refreshToken: tokenPair.refresh_token`（`Frontend/apps/demo/src/lib/server-backend-auth.ts:56-68`），把既有的 refresh token 蓋成 `undefined`，下一次 refresh 就會 `RefreshAccessTokenError` 把使用者登出。前端必須只 merge access token 與到期時間，refresh token 沿用現有的那一個。後端存的是 refresh token 的雜湊，本來就沒有明文可以回吐（ADR-070）。

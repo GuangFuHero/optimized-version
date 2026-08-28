@@ -359,3 +359,102 @@ async def test_switch_identity_is_rate_limited(client, db_session):
         if getattr(r, "path", None) == "/switch-identity"
     )
     assert route.dependencies, "switch-identity has no dependencies at all"
+
+
+# --- the session remembers which identity it is acting as (ADR-188) ----------------------
+
+
+async def test_a_plain_refresh_keeps_the_identity_the_caller_switched_to(client, db_session):
+    """A refresh that names no identity must not undo a deliberate downgrade.
+
+    The client's memory of the active identity used to be the only copy: `act` lived in the
+    access token and nowhere else, so a refresh without `identity` fell back to
+    `default_for_user` — the platform identity. For a super_admin acting as a team member
+    that was a silent re-escalation roughly every 15 minutes, with nothing in the response
+    saying it had happened.
+    """
+    _uid, platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    assert decode_act(_act_of(tokens["access_token"])) == (str(platform_role.uuid), None)
+
+    switched = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert switched.status_code == 200, switched.text
+
+    # exactly what a client that does not track identity sends
+    refreshed = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    assert decode_act(_act_of(refreshed.json()["access_token"])) == (
+        str(team_role.uuid), str(team.uuid)
+    )
+
+
+async def test_an_explicit_identity_on_refresh_still_wins(client, db_session):
+    """The session is the fallback, not an override: a client that tracks identity decides."""
+    _uid, platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    switched = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+    assert switched.status_code == 200, switched.text
+
+    refreshed = await client.post(
+        "/api/v1/auth/refresh",
+        json={
+            "refresh_token": tokens["refresh_token"],
+            "identity": encode_act(str(platform_role.uuid), None),
+        },
+    )
+    assert refreshed.status_code == 200, refreshed.text
+    assert decode_act(_act_of(refreshed.json()["access_token"])) == (str(platform_role.uuid), None)
+
+
+async def test_refreshing_twice_keeps_the_switched_identity(client, db_session):
+    """Rotation preserves the record, so the identity survives more than one hop."""
+    _uid, _platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+
+    refresh_token = tokens["refresh_token"]
+    for _ in range(2):
+        resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+        assert resp.status_code == 200, resp.text
+        refresh_token = resp.json()["refresh_token"]
+
+    assert decode_act(_act_of(resp.json()["access_token"])) == (
+        str(team_role.uuid), str(team.uuid)
+    )
+
+
+async def test_an_explicit_identity_on_refresh_is_remembered_too(client, db_session):
+    """Naming an identity on refresh updates the session, or the next plain one reverts it."""
+    _uid, _platform_role, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    named = await client.post(
+        "/api/v1/auth/refresh",
+        json={
+            "refresh_token": tokens["refresh_token"],
+            "identity": encode_act(str(team_role.uuid), str(team.uuid)),
+        },
+    )
+    assert named.status_code == 200, named.text
+
+    plain = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": named.json()["refresh_token"]}
+    )
+    assert plain.status_code == 200, plain.text
+    assert decode_act(_act_of(plain.json()["access_token"])) == (
+        str(team_role.uuid), str(team.uuid)
+    )

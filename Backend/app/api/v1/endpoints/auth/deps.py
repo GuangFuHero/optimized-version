@@ -26,7 +26,9 @@ async def issue_token_pair(
     `act` is the identity the token acts as (ADR-069); device comes from the UA header.
     """
     device = request.headers.get("user-agent", "unknown")
-    sid, refresh_token = await SessionRepository(redis).create_session(user_uuid, device)
+    # The session records the identity too (ADR-188), so a later refresh that does not name
+    # one can carry it forward rather than resetting to the platform default.
+    sid, refresh_token = await SessionRepository(redis).create_session(user_uuid, device, act=act)
     access_token = security.create_access_token(data={"sub": user_uuid}, sid=sid, act=act)
     return TokenPair(
         access_token=access_token, refresh_token=refresh_token,
