@@ -37,10 +37,11 @@ import csv
 import io
 import json
 import logging
+import resource
 import sys
 import tempfile
 import zipfile
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -137,39 +138,81 @@ async def _current_version(engine, name: str) -> str | None:
 # --------------------------------------------------------------------------- loading helpers
 
 
-async def _copy_csv(conn, table: str, columns: list[str], rows: Iterator[tuple]) -> int:
-    """Replace `table`'s contents with `rows`, via a staging table and one short swap.
+# How much CSV to hold before handing a chunk to COPY. Bytes rather than a row count on purpose:
+# an OSM address row is ~100 B while a 村里 row carries a multi-KB MULTIPOLYGON, so any row-based
+# threshold is wrong for one of them. This is the only thing that bounds this script's memory.
+#
+# 1 MB rather than something chunkier because `io.StringIO` holds text as UCS-4 — its buffer costs
+# four bytes per character, so the real cost of a chunk is ~6x this number, not 1x. Measured at
+# 8 MB the peak was 61 MB; at 1 MB it is under 10, and COPY throughput is unchanged.
+_CHUNK_BYTES = 1 << 20
+
+
+async def _csv_chunks(rows: Iterable[tuple]) -> AsyncIterator[bytes]:
+    """Encode `rows` as CSV in bounded chunks, so no dataset is ever materialised whole.
+
+    asyncpg's COPY accepts an async iterable of bytes as its source, which is what lets a 9.2M-row
+    dataset stream through a single COPY statement in single-digit MB. The buffer is reused
+    (`seek(0)` + `truncate`) rather than reallocated, and `rows` is consumed lazily — pass a
+    generator, never a list, or the caller reintroduces the problem this exists to solve.
+    """
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    for row in rows:
+        writer.writerow(["" if v is None else v for v in row])
+        if buf.tell() >= _CHUNK_BYTES:
+            yield buf.getvalue().encode()
+            buf.seek(0)
+            buf.truncate(0)
+    if buf.tell():
+        yield buf.getvalue().encode()
+
+
+async def _copy_csv(
+    conn, table: str, columns: list[str], rows: Iterable[tuple], *, pre_swap_sql: str | None = None
+) -> int:
+    """Replace `table`'s contents with `rows`, via a staging table and one swap.
 
     COPY runs into an UNLOGGED staging table so the (slow) load never holds a lock on the live
-    table. Only the final TRUNCATE + INSERT does, and that is measured in seconds — important
-    because `normalizeAddress` reads these tables while an import is running.
+    table — important because `normalizeAddress` reads these tables while an import is running.
+    Only the final TRUNCATE + INSERT takes ACCESS EXCLUSIVE on `table`.
 
     CSV rather than asyncpg's binary `copy_records_to_table`: geometry values are EWKT strings
     and asyncpg has no codec for PostGIS types, so text COPY (which goes through the column's
     own input function) is what makes one code path work for all three datasets.
+
+    `pre_swap_sql` derives columns COPY did not write (see `_OSM_ADMIN_SQL`), with `{staging}`
+    substituted for the staging table's name. It runs BEFORE the TRUNCATE deliberately: everything
+    after that point is under ACCESS EXCLUSIVE.
+
+    KNOWN LIMITATION. TRUNCATE holds ACCESS EXCLUSIVE until commit, so the lock spans the whole
+    refill, not just the TRUNCATE. Measured on the real 9.2M-row extract: ~5 minutes, because the
+    INSERT builds a GiST and a four-column btree entry per row. `pre_swap_sql` keeps the ~6-minute
+    spatial join out of that window, but the result is still minutes, not seconds, and reads block
+    outright for the duration (verified: a SELECT during the swap hits statement_timeout rather
+    than returning stale rows). Getting to seconds needs a rename-based swap — build a fully
+    indexed staging table, then ALTER TABLE ... RENAME — at the cost of reproducing the migration's
+    index names here and keeping them in sync with it.
     """
     staging = f"{table}_staging"
     await conn.exec_driver_sql(f"DROP TABLE IF EXISTS {staging}")
     await conn.exec_driver_sql(f"CREATE UNLOGGED TABLE {staging} (LIKE {table})")
 
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    count = 0
-    for row in rows:
-        writer.writerow(["" if v is None else v for v in row])
-        count += 1
-    payload = buf.getvalue().encode()
-
     raw = await conn.get_raw_connection()
     await raw.driver_connection.copy_to_table(
-        staging, source=io.BytesIO(payload), columns=columns, format="csv", null=""
+        staging, source=_csv_chunks(rows), columns=columns, format="csv", null=""
     )
+    if pre_swap_sql:
+        await conn.exec_driver_sql(pre_swap_sql.format(staging=staging))
+
     await conn.exec_driver_sql(f"TRUNCATE {table}")
-    await conn.exec_driver_sql(
-        f"INSERT INTO {table} ({', '.join(columns)}) SELECT {', '.join(columns)} FROM {staging}"
-    )
+    # SELECT * is safe (and necessary): staging was created LIKE `table`, so the column order
+    # matches exactly, and this picks up whatever pre_swap_sql derived as well as what COPY wrote.
+    # rowcount rather than a counter kept while writing the CSV, because this is the number that
+    # actually landed in the live table — which is what `reference_datasets.row_count` reports.
+    result = await conn.exec_driver_sql(f"INSERT INTO {table} SELECT * FROM {staging}")
     await conn.exec_driver_sql(f"DROP TABLE {staging}")
-    return count
+    return result.rowcount
 
 
 async def _resource_url(client: Fetcher, dataset_id: str, *, latest_year: bool) -> tuple[str, str]:
@@ -220,7 +263,7 @@ async def import_roads(engine, client: Fetcher) -> int:
         rows.append(key)
 
     async with engine.begin() as conn:
-        count = await _copy_csv(conn, "ref_roads", ["county", "town", "road"], iter(rows))
+        count = await _copy_csv(conn, "ref_roads", ["county", "town", "road"], rows)
     return count
 
 
@@ -288,10 +331,12 @@ async def import_villages(engine, client: Fetcher) -> int:
     resp = await client.get(url)
 
     await _set_status(engine, "ref_villages", "importing", source_version=version)
-    rows = [r for r in _read_village_shapefile(resp.content) if r[0] and r[1]]
+    # A generator, not a list: each row carries a full MULTIPOLYGON WKT, and holding all ~8k of
+    # them at once costs ~100 MB for no reason. `_copy_csv` consumes this lazily.
+    rows = (r for r in _read_village_shapefile(resp.content) if r[0] and r[1])
     async with engine.begin() as conn:
         count = await _copy_csv(
-            conn, "ref_villages", ["villcode", "county", "town", "village", "geom"], iter(rows)
+            conn, "ref_villages", ["villcode", "county", "town", "village", "geom"], rows
         )
     return count
 
@@ -302,57 +347,66 @@ async def import_villages(engine, client: Fetcher) -> int:
 def _osm_rows(pbf_path: Path) -> Iterator[tuple]:
     """Yield (id, EWKT, road, section, lane, alley, no) for OSM nodes carrying a house number.
 
+    A generator, and it must stay one: the nationwide extract yields ~9.2M rows, which is ~4.8 GB
+    if collected into a list — more than the staging VM has. `osmium.FileProcessor` iterates the
+    file lazily, so peak memory here is one node at a time regardless of the extract's size.
+
     Nodes only. Taiwanese addresses in OSM are predominantly standalone `place=house` nodes, and
     including building ways would require osmium's node-location index — hundreds of MB of RAM on
     a VM with 2 GB of swap, for a minority of the data.
 
-    Admin columns are left NULL here; `_fill_admin_from_villages` sets them from the government
-    polygons afterwards, which is more reliable than OSM's inconsistent addr:* tagging.
+    Admin columns are left NULL here; `_OSM_ADMIN_SQL` fills them from the government polygons
+    before the swap, which is more reliable than OSM's inconsistent addr:* tagging.
     """
     import osmium
 
-    class _Handler(osmium.SimpleHandler):
-        def __init__(self):
-            super().__init__()
-            self.rows: list[tuple] = []
-
-        def node(self, n):
-            number = n.tags.get("addr:housenumber")
-            street = n.tags.get("addr:street")
-            if not number:
-                return
-            # Reuse the production parser so stored values are identical in form to what a query
-            # produces — including 段/巷/弄 split out of a street string like "文化路二段".
-            try:
-                parts = parse_tw_address(f"{street or ''}{number}")
-            except ValueError:
-                return
-            if not parts.no:
-                return
-            self.rows.append(
-                (
-                    n.id,
-                    f"SRID=4326;POINT({n.location.lon} {n.location.lat})",
-                    parts.road,
-                    parts.section,
-                    parts.lane,
-                    parts.alley,
-                    parts.no,
-                )
-            )
-
-    handler = _Handler()
-    handler.apply_file(str(pbf_path))
-    return iter(handler.rows)
-
-
-async def _fill_admin_from_villages(conn) -> None:
-    """Stamp 縣市/鄉鎮市區/村里 onto every address point from the government polygons."""
-    await conn.exec_driver_sql(
-        "UPDATE osm_address_points p "
-        "SET county = v.county, town = v.town, village = v.village "
-        "FROM ref_villages v WHERE ST_Contains(v.geom, p.geom)"
+    # Both filters run in C++, so tags are never decoded into Python for the overwhelming
+    # majority of objects in the extract that carry no house number.
+    processor = osmium.FileProcessor(str(pbf_path), osmium.osm.NODE).with_filter(
+        osmium.filter.KeyFilter("addr:housenumber")
     )
+    for node in processor:
+        # pyosmium reuses its read buffer, so `node` is only valid during this iteration step.
+        # Every value below is extracted immediately; never stash the object itself.
+        if not node.location.valid():
+            continue  # accessing .lon on an invalid location raises
+        number = node.tags.get("addr:housenumber")
+        street = node.tags.get("addr:street")
+        # Reuse the production parser so stored values are identical in form to what a query
+        # produces — including 段/巷/弄 split out of a street string like "文化路二段".
+        try:
+            parts = parse_tw_address(f"{street or ''}{number}")
+        except ValueError:
+            continue
+        if not parts.no:
+            continue
+        yield (
+            node.id,
+            f"SRID=4326;POINT({node.location.lon} {node.location.lat})",
+            parts.road,
+            parts.section,
+            parts.lane,
+            parts.alley,
+            parts.no,
+        )
+
+
+# Stamps 縣市/鄉鎮市區/村里 onto every address point from the government polygons. Runs against the
+# staging table, never the live one: this join probes ref_villages' GiST index once per point and
+# measured ~6 minutes on the real 9.2M-point extract — time the live table would otherwise spend
+# locked, on top of the refill it is already locked for.
+#
+# An UPDATE rather than a join folded into the INSERT, and not only for the lock. 村里 polygons
+# overlap at their margins, and a join emits one row per match — two rows for one point, breaking
+# the primary key. UPDATE assigns each target row once from an arbitrary match, so overlaps are
+# harmless. Points matching nothing keep NULL admin columns, which is correct: offshore islets and
+# boundary gaps exist, and `normalizeAddress` treats a miss as unverified, not as invalid.
+_OSM_ADMIN_SQL = """
+UPDATE {staging} s
+SET county = v.county, town = v.town, village = v.village
+FROM ref_villages v
+WHERE ST_Contains(v.geom, s.geom)
+"""
 
 
 async def import_osm(engine, client: Fetcher) -> int:
@@ -378,15 +432,14 @@ async def import_osm(engine, client: Fetcher) -> int:
                     fh.write(chunk)
 
         await _set_status(engine, "osm_address_points", "importing", source_version=version)
-        rows = _osm_rows(pbf)
         async with engine.begin() as conn:
             count = await _copy_csv(
                 conn,
                 "osm_address_points",
                 ["id", "geom", "road", "section", "lane", "alley", "no"],
-                rows,
+                _osm_rows(pbf),
+                pre_swap_sql=_OSM_ADMIN_SQL,
             )
-            await _fill_admin_from_villages(conn)
     return count
 
 
@@ -442,7 +495,12 @@ async def run(names: list[str], *, force: bool) -> int:
                         finished_at=datetime.now(UTC),
                         error=None,
                     )
-                    log.info("%s ready: %d rows", name, count)
+                    # Peak RSS is logged because memory is this job's failure mode — an OOM here
+                    # took the whole staging VM down once. It must stay flat across datasets;
+                    # a number that tracks row_count means something has started buffering again.
+                    # ru_maxrss is KiB on Linux (which is where this runs) and bytes on macOS.
+                    peak_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+                    log.info("%s ready: %d rows (peak RSS %.0f MB)", name, count, peak_mb)
             finally:
                 await client.aclose()
     finally:
