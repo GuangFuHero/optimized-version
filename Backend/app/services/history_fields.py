@@ -113,6 +113,15 @@ _TICKET_FIELDS = {
 
 _STATION_FIELDS = {
     "type": _public(),
+    # Added to `stations` by b8f4d2a6e1c3, independently of the tickets columns of the same
+    # name. PII on this side too — `station.view_pii` exists precisely because a station
+    # carries a real person's contact details (RBAC_RESOURCE_ROLE_MATRIX.md).
+    "contact_name": _pii(mask_name),
+    "contact_email": _pii(mask_email),
+    "contact_phone": _pii(mask_phone),
+    # a1b2c3d4e5f6: active / temporarily_closed / permanently_closed. Public — the map shows
+    # it, and "when did this shelter close" is the question a timeline exists to answer.
+    "operational_status": _public(),
     "name": _public(),
     "description": _public(),
     "op_hour": _public(),
@@ -207,6 +216,10 @@ _SCORE = (
     "dedup/scoring column with no writer anywhere in the codebase (ADR-113/143) — "
     "whitelisting it would add a field that can never fire"
 )
+_DERIVED_STAMP = (
+    "stamped by the service when another field changes, so the timeline already reports both "
+    "the change and its time — see the entry for the column it tracks"
+)
 _DISCRIMINATOR = (
     "the polymorphic discriminator ('request'/'station'); fixed for the lifetime of the "
     "row, so it can never appear as a change"
@@ -233,6 +246,7 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
     ("ticket", "tickets"): {"uuid": _ID},
     ("station", "stations"): {
         "uuid": _ID,
+        "status_changed_at": _DERIVED_STAMP,
         "child_station_uuid": _FK,
         "updated_by": _FK,
         "confidence_score": _SCORE,
@@ -242,6 +256,9 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
     },
     ("ticket", "ticket_tasks"): {
         "uuid": _ID,
+        # a1b2c3d4e5f6, both stamped by the status transition that sets them.
+        "completed_at": _DERIVED_STAMP,
+        "canceled_at": _DERIVED_STAMP,
         "ticket_uuid": _FK,
         "route_uuid": _FK,
         "created_by": _FK,

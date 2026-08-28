@@ -95,17 +95,30 @@ class TaskPropertyConfigType:
 class UpsertPropertyConfigInput:
     """Input for creating or updating a property config entry.
 
-    Omitting a presentation field leaves it as it is (or at its column default on insert) —
-    a caller that only wants to change `data_type` never resets a field's ordering.
+    Omitting a field leaves it as it is (or at its column default on insert) — a caller that
+    only wants to change `data_type` never resets a field's ordering, and one that only wants
+    to set a `label` never blanks an Enum's options (ADR-166). Clearing `enumOptions` is
+    therefore spelled `enumOptions: []`, not `null`.
+
+    `dataType` obeys that rule too (ADR-168): retiring a field is `{propertyName, isActive:
+    false}`, with no need to restate what the field is. Creating one still requires it — the
+    column is NOT NULL — and omitting it there is a client error, not a 500.
     """
 
     property_name: str = strawberry.field(description="The property key to create or update")
-    data_type: str = strawberry.field(
-        description="Expected data type: 'string', 'integer', 'float', or 'enum'"
+    data_type: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Expected data type: 'string', 'integer', 'float', or 'enum'. Required when the "
+            "field is being created; omit to leave an existing field's type untouched"
+        ),
     )
     enum_options: list[str] | None = strawberry.field(
         default=None,
-        description="Allowed enum values — required when data_type is 'enum', null otherwise",
+        description=(
+            "Allowed enum values when data_type is 'enum'; omit to leave the stored options "
+            "untouched, pass [] to clear them"
+        ),
     )
     disaster_types: list[str] | None = strawberry.field(
         default=None,

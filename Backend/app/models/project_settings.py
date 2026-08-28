@@ -33,6 +33,9 @@ class ProjectSettings(Base, UUIDPKMixin):
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, comment="災害起始時間"
     )
+    # TimestampMixin is deliberately not inherited: it also brings `delete_at`, and this row
+    # is the deployment's single settings record — it is updated, never soft-deleted (ADR-090,
+    # enforced by the single-row unique index above).
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), comment="建立時間"
     )

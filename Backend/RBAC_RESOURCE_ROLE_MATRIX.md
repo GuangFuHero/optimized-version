@@ -53,14 +53,24 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | station.view | all（公開） | all | all | all | all | all |
+| **station.view_pii** | —（遮罩） | own | all | all | zone | zone |
 | **station.view_history** | — | own | all | all | zone | zone |
 | station.add | — | all | — | all | all | all |
+| **station.contribute** | — | all | — | all | — | — |
 | station.edit | — | own | — | all | zone | zone |
 | station.delete | — | own | — | all | zone | own |
 | station.review | — | — | — | all | zone | — |
 | station.contribute | — | all | — | all | all | all |
 | station.export | — | — | all | all | zone | — |
 | station.import | — | — | — | all | all | — |
+
+> **⚠️ `station.contribute` 的空格不代表沒權限。** 本表每一欄是「該角色自己的 grant」，不是
+> **有效權限**。team 角色疊加在 platform 角色之上（指派 team 角色只替換同 kind 的舊角色，見
+> `app/services/admin.py`），所以 team `admin`/`member` 仍持有註冊時的預設 platform 角色
+> `user`，而 `station.contribute=all` 就掛在 `user` 上——聯集後 team admin 的有效 scope 是
+> `all`（ADR-018/019；`app/repositories/auth_repository.py:get_user_permissions` 取 widest）。
+> 這正是 ADR-063 [5]「群眾貢獻刻意開放」的設計：grant 掛在人人都有的 `user` 上就夠了。
+> **讀本表任何空格前，先確認你要的是 grant 還是有效權限**；要有效權限請查 `GET /admin/rbac/matrix`。
 
 ### 求助單 Ticket
 
@@ -122,6 +132,9 @@
 | dynamic_field.add | — | — | — | all | — | — |
 | dynamic_field.edit | — | — | — | all | — | — |
 | dynamic_field.delete | — | — | — | all | — | — |
+
+> 查詢的 `includeInactive: true`（管理端才看得到已停用欄位）在 `dynamic_field.view` 之外**額外**要求
+> `dynamic_field.edit`（ADR-164）：看得到誰把欄位退役，屬於「有權退役」的一環，而不是「有權填表單」。
 
 ### 專案設定 Project Settings
 

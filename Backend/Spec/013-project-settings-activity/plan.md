@@ -256,7 +256,7 @@ SQLALCHEMY_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/al
 ```sql
 AND (disaster_types = '{}' OR disaster_types && :current_types)
 AND is_active = true
-ORDER BY sort_order, property_name
+ORDER BY sort_order, property_name, uuid
 ```
 
 `&&` 是 PostgreSQL 陣列交集運算子——混合災害由單一條件處理，不需迴圈或多次查詢。

@@ -70,7 +70,11 @@ class AnnouncementMutation:
         Requires announcement.edit. Returns the updated AnnouncementType.
         """
         await check_permission(info, Perm.ANN_EDIT)
-        a = await announcement_repository.set_active(info.context["db"], uuid=uuid, active=active)
+        user = info.context.get("user")
+        actor_uuid = str(user.uuid) if user else None
+        a = await announcement_repository.set_active(
+            info.context["db"], uuid=uuid, active=active, actor_uuid=actor_uuid
+        )
         if a is None:
             raise ValueError("Announcement not found")
         return AnnouncementType.from_model(a)

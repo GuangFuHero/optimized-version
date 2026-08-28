@@ -1,4 +1,4 @@
-# Project Settings & Account Activity — ADR 全集（ADR-090~095）
+# Project Settings & Account Activity — ADR 全集（ADR-090~095、164~173）
 
 **Date**: 2026-08-16
 **Feature**: 013-project-settings-activity
@@ -211,3 +211,193 @@ app/services/ticket.py:207-231    create_task_property
 ➖ 前端要處理 `label` 為 `NULL` 的回退邏輯。
 
 **刻意未加的欄位**（等前端提出實際需求再補，屆時仍是純加欄位）：`required`、`unit`、`hint`、`default_value`、`min` / `max`、`group`。`project_settings` 同理未加 `ended_at`、`status`、`default_bounds`、`contact_info`。
+
+---
+
+## PR #36 code review 後補的決策（ADR-164~099）
+
+以下四項是 PR #36 review 實測後拍板的修正，全部有對應測試。
+
+### ADR-164 停用欄位需要一條看得到的路：`includeInactive`（需 `dynamic_field.edit`）
+
+**白話**：欄位一旦停用就完全消失在 API 上，等於救不回來。加一個查詢參數讓有編輯權的人看得到已停用欄位。
+
+**Context**：ADR-095 把 `is_active` 定位成「退役但保留資料」，但 `list_by_type` 是全 codebase 唯一的讀取路徑（`app/graphql/config/queries.py:40`、`:58` 是僅有的兩個呼叫端），而它一律追加 `is_active = true` 與災害類型條件。實測：把欄位設為 `is_active=false` 後 `stationPropertyConfigs` 回傳 `[]`，DB 列仍在但沒有任何 API 列得出來。要復原只能靠人記得完整的 `property_name` 並重打 `data_type` / `enum_options`——「退役」實際上等同「遺失」。
+
+**Decision**：`list_by_type` 增加 `include_inactive: bool = False`；GraphQL 兩個 query 增加 `includeInactive` 參數，為 true 時**額外**要求 `dynamic_field.edit`。表單路徑（不傳參數）行為完全不變。
+
+災害類型過濾**不受** `include_inactive` 影響：那是「這次災害要不要收集」，不是「這個欄位還存不存在」，兩者語意不同。
+
+**Consequences**：
+➕ 停用欄位可被列出、可用同一個 `upsert` 重新啟用。
+➕ 一般使用者的表單路徑一個字都沒變。
+➖ 多一個參數要在前端管理介面接。
+➖ 災害類型過濾掉的欄位仍然列不出來（需要先改 project settings 才看得到）——本次不處理。
+
+### ADR-165 station 查詢的排序必須以 `uuid` 收尾
+
+**白話**：`('all', X)` 和 `('shelter', X)` 兩列排序鍵完全一樣，順序還是會跳。
+
+**Context**：ADR-095 加了 `ORDER BY sort_order, property_name`，但 station 查詢會把該類型自己的列和 `'all'` 桶 union 起來，唯一鍵是 `(station_type, property_name)`——`('all','crowd_level')` 與 `('shelter','crowd_level')` 兩個排序鍵全部打平。實測：建立這組打平的列後查一次，接著只對其中一列做一次不改值的 `UPDATE`（tuple 移到 heap 尾端），查詢與資料皆未變而回傳順序翻轉，連跑三次結果一致。
+
+**Decision**：`ORDER BY sort_order, property_name, uuid`。task 側的排序其實已是全序（無 `'all'` 桶且 `(task_type, property_name)` 唯一），仍一併加上，讓兩個查詢讀起來一致。
+
+**Consequences**：
+➕ 排序成為全序，同一份資料的回傳順序可重現。
+➖ 打平時的相對順序由 `uuid` 決定，也就是任意但穩定；真要指定順序請用 `sort_order`。
+
+### ADR-166 `enum_options` 比照其他欄位：省略=不動，`[]`=清空
+
+**白話**：只想改個顯示名稱，卻會把 Enum 的選項整組清掉。
+
+**Context**：`update_values` 無條件帶入 `enum_options`，而輸入型別的 `enum_options` 預設是 `None`（`app/graphql/config/types.py`）。ADR-095 之後 `upsert` 成了設定 `label` / `sort_order` / `is_active` 的手段，於是 `{propertyName, dataType:"Enum", label:"人潮"}` 這種自然呼叫會讓該列變成 `data_type='Enum'` 但 `enum_options = NULL`。實測確認：回傳與 DB 皆為 `None`，而同一次呼叫的 `sort_order` / `label` 都被完整保留——是這一欄的處理與 `_optional_config_fields` 不一致。
+
+**Decision**：`enum_options` 併入 `_optional_config_fields`，套用同一套 `None` 代表「未提供」的規則。清空選項改用 `enum_options: []`（空陣列是「有提供」，會通過過濾）。
+
+**Consequences**：
+➕ 部分更新的語意在所有欄位上一致。
+➕ 改 label 不再破壞表單選項。
+➖ 明確傳 `null` 會被當成「不動」而非「清空」；清空必須傳 `[]`。這是為了跟旁邊四個欄位共用同一套規則，而不是替單一欄位引入 `UNSET` 機制。
+
+### ADR-167 feature 013 的 migration 改掛在 feature 012 之後
+
+> **掛載點已由 ADR-173 更正**：本 ADR 寫的 `f2b7c9d4e0a3` 是當時 feature 012 的 head，PR #35 之後又加了 `b7e4c1a90d52`。掛在舊 head 上會重現本 ADR 要避免的兩個 head，已改掛 012 的現行 head。
+
+**白話**：兩個 feature 的 migration 都掛在同一個 parent，一起合進 main 就變成雙 head，部署會斷。
+
+**Context**：`07ac630e0009`（feature 013）與 `f2b7c9d4e0a3`（feature 012 搜尋索引）的 `down_revision` 都是 `e1f2a3b4c5d6`。各自單獨看都是單 head，但兩邊都進 main 後 `alembic heads` 會列出兩個 head，`alembic upgrade head` 直接中止（實測輸出：`FAILED: Multiple head revisions are present`）。
+
+**Decision**：feature 012 先合併；`07ac630e0009.down_revision` 改為 `f2b7c9d4e0a3`，鏈成單線。
+
+**Consequences**：
+➕ 合併後 `alembic upgrade head` 單 head 可正常跑完。
+➖ 在 feature 012 進 main 之前，本分支單獨 checkout 跑 alembic 會找不到 parent revision。這是刻意接受的相依性——PR 合併順序因此固定。
+
+---
+
+### ADR-168 `data_type` 比照其他欄位：省略=不動；只有新增時必填
+
+**白話**：停用一個動態欄位不該需要重新說明「這個欄位是什麼型別」。原本 `data_type` 是 upsert 唯一必填的非鍵欄位，而且每次都會被無條件寫入，於是想停用欄位的呼叫端被迫附帶一個 `dataType`——猜錯就順手把欄位定義改掉了。
+
+**Context**：ADR-095 加上 `is_active` 讓欄位可以退役，ADR-166 把「省略=不動」定為 upsert 的通則。但 `data_type` 沒有跟上：`config_repository` 的 `update_values = {"data_type": data_type, **optional}` 讓它繞過了 `_optional_config_fields()` 的過濾。實測（PR #36 review）：對一個 `data_type='integer'` 的既有欄位送 `{property_name, data_type: 'string', is_active: false}`，欄位確實停用了，型別也一併被改寫成 `string`，沒有任何警告。
+
+**Options**：
+- **甲：`data_type` 併入選填集合**（採用）。與 ADR-166 同一條規則，呼叫端 `{propertyName, isActive: false}` 即可退役。
+- 乙：另開 `retireStationPropertyConfig` / `retireTaskPropertyConfig` mutation。語意最明確，但多兩個 mutation、兩組權限與測試，而且沒有解決「一般編輯也會誤改型別」這半邊。
+
+**Decision**：`data_type` 改為 `str | None = None` 並交給 `_optional_config_fields()`。欄位是 NOT NULL，所以**新增**時仍必填——這個檢查放在 `_upsert_with_conflict_retry()` 裡，因為那裡才是真正決定 insert 或 update 的地方；缺少時拋 `PropertyConfigValidationError`（繼承 `ValueError`，訊息才能穿過 GraphQL 的 `MaskErrors`），是 client error 而不是 500。
+
+**Consequences**：
+➕ 退役欄位不再需要複述欄位定義，也就不會誤改它。
+➕ upsert 的所有非鍵欄位語意終於一致，`_optional_config_fields()` 成為唯一的規則所在地。
+➖ GraphQL schema 上 `dataType` 由必填變選填，是一個放寬性的 breaking change：既有呼叫端不受影響，但「漏傳 dataType」從 schema 層的錯誤變成執行期的 422。由 `test_creating_a_field_still_requires_a_data_type` 釘住。
+
+---
+
+### ADR-169 `disaster_types` 對不到任何欄位時回傳 warning，不擋下寫入
+
+**白話**：災害型別打錯字（`floods` 之於 `flood`）目前完全沒有回饋——回 200、存進去、然後所有該型別的動態欄位從表單上消失。運維沒有任何辦法分辨「打錯字」和「這個型別本來就還沒設欄位」。
+
+**Context**：ADR-091 明確接受「這裡沒有封閉字彙」——真正的災害型別清單屬於 PM-Scure 的規格，不屬於本 repo，在這裡發明一個 enum 等於猜測那份文件擁有的命名。那部分不變。問題在於寫入路徑上**沒有任何形式的回饋**。實測（PR #36 review）：`PATCH {"disaster_types": ["floods"]}` 回 200，`warnings` 不存在，log 一片空白，而掛在 `flood` 下的欄位當場從表單消失。
+
+**Options**：
+- **甲：回應帶 `warnings` + WARNING log**（採用）。
+- 乙：對不到欄位就 422 拒絕。保護最強，但會強制「先設動態欄位、後設災害型別」的順序，首次部署時會擋住完全合法的操作。
+- 丙：只寫 log。改動最小，但操作者在 console 上看不到，得有人去翻 log 才會發現——等於把發現時機推遲到「表單少了欄位」之後，正是這條要解決的問題。
+
+**Decision**：`update_project_settings()` 在寫入前比對送進來的標籤與 `disaster_types_in_use()`（所有 config 列實際用到的標籤集合）。對不到的標籤變成 `ProjectSettingsUpdateResult.warnings`，由 `ProjectSettingsResponse.warnings` 回給呼叫端，同時寫一筆 WARNING log。**永遠不拒絕**：先設定災害、後設定欄位是合法的工作順序。
+
+`disaster_types` 為空的 config 列是「所有型別通用」，不貢獻標籤——它們無論如何都會啟用，所以不可能是打錯的標籤原本想指向的對象。
+
+**Consequences**：
+➕ 打錯字在存檔當下就看得到，而不是等某張救援表單少了欄位才發現。
+➕ 回應與 log 兩邊都有：前者給當下在 console 的人，後者給幾天後追查「為什麼淹水欄位不見了」的人。
+➖ 每次 PATCH 多兩個 `SELECT DISTINCT unnest(...)`，僅在 `disaster_types` 有被送出時發生；這是低流量的後台端點。
+➖ 這是啟發式的，不是驗證：一個「已經有欄位在用」的錯字仍然無法被偵測。等 PM-Scure 的字彙落地，這裡應該換成真正的 enum 驗證（ADR-091 已載明該接口）。
+
+---
+
+### ADR-170 `/auth/login`、`/auth/refresh`、SSO callback 的 `users` 寫入要指名 actor
+
+**白話**：這幾條路徑都會更新 `users`（`last_login_at` / `last_activity_at`），而 `users` 是被稽核的表，所以每次都會寫一筆 `audit_logs`。但它們身上沒有 access token——使用者正在「證明」自己是誰，而不是「主張」——所以稽核觸發器讀到的 actor 是空的，每一筆都寫成 `user_uuid = NULL`。
+
+**Context**：稽核觸發器從 `app.current_user_id` 這個 Postgres session 變數讀 actor，該變數由 `AuditContextMiddleware` 從 access token 解出、再由 `set_audit_session_variables`（`after_begin`）套用。這三條路徑的 middleware 解不到 token，ContextVar 全程是空的。實測（PR #36 review）：一次 refresh 後 `audit_logs` 得到 `action=UPDATE user_uuid=None row_id=<該使用者>`；login 那筆也是 NULL。PR 的測試計畫宣稱稽核列「帶 actor」，對本 feature 新增的這些列並不成立。
+
+**Options**：
+- **甲：補上 actor**（採用）。三條路徑寫入時，身分都剛剛被確立——password 驗證通過、refresh token 被 `rotate()` 接受、或 provider 的 ID token 驗證通過。
+- 乙：接受 NULL actor，改成在 ADR-093 寫明「靠 `row_id` 追溯」。不改行為，但等於承認稽核表對「帳號自己的活動」這一類寫入是失憶的。
+
+**Decision**：`app/db/session.py` 新增 `attribute_writes_to(db, user_uuid)`，在該次寫入前指名 actor。**只設 ContextVar 是不夠的**：這三條路徑都先讀過資料庫，交易早已開啟，`after_begin` 已經過去了——所以同時做兩件事，對已開啟的交易直接下 `set_config`，並設 ContextVar 讓同一請求後續（含 rollback 後新開的）交易也被歸屬。
+
+範圍超出 review 提出的 refresh 一處：SSO 的兩處 `last_login_at` 是同一個缺陷的同一個形狀，只修 refresh 會讓本 ADR 當場自相矛盾。
+
+**Consequences**：
+➕ 「這個帳號最近做了什麼」在稽核表裡從 `row_id` 反查升級為 actor 直接可查。
+➕ 唯一的 helper，之後任何「先驗證身分、再寫入」的路徑照抄即可。
+➖ 每條路徑多一次 `SELECT set_config(...)` 的往返。
+➖ actor 是這幾條路徑「自己宣告」的，不像一般請求那樣由 middleware 從已簽章的 token 解出。這在此處是安全的——三者都在身分驗證通過之後才呼叫——但這是個必須維持的前提，不是憑空的保證。
+
+---
+
+### ADR-171 `strict=True` 的 zip 移出 `except`：程式錯誤不得偽裝成 Redis 故障
+
+**白話**：`_session_counts()` 的 `except Exception` 原本連 `strict=True` zip 拋的 `ValueError` 一起吃掉。那是這個函式自己的 bug，卻會被記成「Redis unavailable」，把查問題的人指向一個運作正常的子系統。
+
+**Context**：ADR-094 決定 Redis 掛掉時每個 count 降級為 `null` 而不是讓整份使用者清單失敗，這部分是對的。PR 說明把 `strict=True` 辯護為「長度不符是程式錯誤，不是基礎設施故障」——但它就寫在 `try` 裡面，所以那個程式錯誤永遠不會浮出來。實測（PR #36 review）：讓第二次 pipeline 少回一個 flag，函式回傳 `{uuid: None}`、log 印出 `"Redis unavailable; omitting active_session_count"`，底層例外實際上是 `ValueError`。
+
+**Options**：
+- **甲：把兩個 zip 移到 `try` 之外**（採用）。`try` 只包住真正的 Redis 往返。
+- 乙：把 `except` 收窄成 `redis.RedisError` / `ConnectionError` 等。Redis 客戶端的錯誤型別分散，漏掉一種就會讓整份使用者清單 500——把 ADR-094 的降級保證換成一份需要持續維護的型別清單。
+
+**Decision**：兩次 `pipe.execute()` 留在 `try` 內，後續的計數與兩個 `strict=True` zip 移到其後。降級行為完全不變（由 `test_redis_being_down_still_degrades_quietly` 釘住），而長度不符現在會照實往外拋。
+
+**Consequences**：
+➕ 「Redis unavailable」這行 log 現在只代表 Redis 真的有問題。
+➖ 這類 bug 從「靜默降級」變成 500。這是刻意的：一個會讓每個使用者的 count 都變成 `null` 的 bug，本來就該吵。
+
+---
+
+### ADR-172 `project_settings` 不繼承 `TimestampMixin`，理由寫在欄位上方
+
+**白話**：`created_at` / `updated_at` 是逐字從 `TimestampMixin` 抄過來的，但沒有任何一行說明為什麼不直接繼承，讀起來像是無意的偏移。
+
+**Context**：`TimestampMixin` 同時帶進 `delete_at`。本表是單列的部署設定（ADR-090），只會被更新、不會被軟刪除——一個沒有任何程式碼知道怎麼讀的軟刪除旗標，比重複兩個欄位更糟。理由成立，但檔案裡沒寫。
+
+**Options**：甲：改用 mixin（會帶進不該存在的 `delete_at`）。**乙：留下兩個欄位，把理由寫成註解**（採用）。
+
+**Decision**：在兩個欄位上方加註解說明 mixin 是刻意不繼承的，並補 `test_the_settings_row_is_never_soft_deleted` 釘住「沒有 `delete_at`、有那兩個時間欄位」。註解說明原因，測試防止有人「順手統一」時把 `delete_at` 帶回來。
+
+**Consequences**：
+➕ 下一個讀到這裡的人不會把它當成待清理的漂移。
+➖ 兩個欄位定義仍然重複；若日後出現第二張「只更新不刪除」的表，值得抽一個 `UpdatedTimestampMixin`。
+
+---
+
+### ADR-173 掛載點改為 feature 012 的 head `b7e4c1a90d52`，不是 `f2b7c9d4e0a3`
+
+**白話**：ADR-167 把本 feature 的 migration 掛在 feature 012 的 `f2b7c9d4e0a3` 之下，用意是避免兩個 head。但那是「當時」012 的 head——PR #35 後來又在其上加了 `b7e4c1a90d52`，於是掛在舊 head 上反而會重現 ADR-167 想避免的那個故障。
+
+**Context**：把 main 併進本分支之後實測（乾淨資料庫、docker）：本分支單獨併 main 時 `alembic heads` 直接 `KeyError: 'f2b7c9d4e0a3'`——那是預期中的相依，feature 012 還沒進 main。但把 feature 012 也併進來之後：
+
+```
+alembic heads
+07ac630e0009 (head)
+b7e4c1a90d52 (head)
+
+alembic upgrade head
+FAILED: Multiple head revisions are present for given argument 'head'
+```
+
+兩者都掛在 `f2b7c9d4e0a3` 之下。這正是 PR #35 review 第一條描述的同一個故障，只是換了一組 revision。ADR-167 的推理沒有錯，它依據的事實過期了：`f2b7c9d4e0a3` 不再是 feature 012 的 head。
+
+**Options**：
+- **甲：改掛 `b7e4c1a90d52`**（採用）。feature 012 目前真正的 head，鏈回單線。
+- 乙：加一個 merge revision 把兩個 head 接起來。可行，但這裡沒有真正的分叉需要保留——兩個 feature 本來就是先後關係，多一個 merge revision 只是把線性歷史寫成分叉再收斂。
+- 丙：維持現狀，等合併時再處理。等於刻意讓 main 在合併當下壞掉。
+
+**Decision**：`07ac630e0009.down_revision` 改為 `b7e4c1a90d52`，migration 的 docstring 記下「掛的是 feature 012 的 **head**，而不是某個特定 revision」以及這次為何改號。實測結果：`alembic heads` 單一 head，`alembic upgrade head` 從 `e1f2a3b4c5d6` 一路跑到 `07ac630e0009` 完成。
+
+**Consequences**：
+➕ 兩個 feature 都進 main 之後，`alembic upgrade head` 仍是單 head。
+➖ 合併順序的相依性不變且更強：feature 012 必須先合併，而且本 revision 綁定的是 012 的 head——PR #35 若在合併前再加 migration，這裡要跟著改。
+➖ 這類「掛在別的 PR 的 head 上」的寫法本質上是脆弱的。真正的解法是兩個 feature 合併後由 main 產生 merge revision，但那需要先確定合併順序；在目前一次一個 PR 的節奏下，維持這個相依比較單純。

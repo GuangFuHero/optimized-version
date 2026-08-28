@@ -102,7 +102,7 @@ WHERE (station_type = :station_type OR station_type = 'all')
 
 `&&` 是 PostgreSQL 的陣列交集運算子——混合災害天然支援，不需要迴圈或多次查詢。
 
-停用的欄位不回傳：查詢一律追加 `AND is_active = true`。排序改為 `ORDER BY sort_order, property_name`——目前完全沒有 `ORDER BY`（`app/repositories/config_repository.py:17-26`），前端拿到的順序不保證穩定。
+停用的欄位不回傳：查詢預設追加 `AND is_active = true`，管理端可用 `includeInactive: true` 取回已停用欄位（需 `dynamic_field.edit`，ADR-164）。排序改為 `ORDER BY sort_order, property_name, uuid`（以 `uuid` 收尾才是全序，ADR-165）——目前完全沒有 `ORDER BY`（`app/repositories/config_repository.py:17-26`），前端拿到的順序不保證穩定。
 
 當前災害型別集合從 `project_settings.disaster_types` 讀取，每次請求查一次（單列表，可快取於 request scope）。
 
@@ -193,3 +193,10 @@ app/services/ticket.py:207-231    create_task_property      → 同上
 | 功能 | `AdminUserListItem` 回傳三個新欄位；`active_session_count` 反映實際 Redis session 數 |
 | 迴歸 | 動態欄位寫入行為不變——`data_type="enum"` 時任意字串仍可寫入（明確驗證未誤加驗證） |
 | 稽核 | `project_settings` 變更會寫入 `audit_logs` |
+| 功能 | 對不到任何欄位的 `disaster_types` 回傳 `warnings` 且寫 WARNING log，但仍寫入成功（ADR-169） |
+| 功能 | 對得到欄位的 `disaster_types` 不產生 `warnings`（警告必須安靜，否則就是雜訊） |
+| 功能 | 停用欄位只需 `isActive: false`，不必重送 `dataType`，且既有定義不被改寫（ADR-168） |
+| 功能 | 新增欄位仍必須提供 `dataType`，缺少時為 422 而非 500 |
+| 稽核 | `/auth/login`、`/auth/refresh`、SSO callback 寫入 `users` 時，`audit_logs.user_uuid` 為該使用者而非 NULL（ADR-170） |
+| 迴歸 | Redis 不可用時 `active_session_count` 仍降級為 `null`；但函式自身的長度不符 bug 不再被記成 Redis 故障（ADR-171） |
+| 迴歸 | 一次 `PATCH /admin/project-settings` 只讀一次設定列 |

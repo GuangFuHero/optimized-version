@@ -5,11 +5,14 @@ and nowhere else, and `GET /admin/users` surfaces last login, last activity and 
 Redis session count.
 """
 
+import logging
+
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core.permissions import Perm
 from app.core.security import create_access_token, generate_salt, get_password_hash
+from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.auth import User, UserContact, UserIdentity
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 
@@ -153,3 +156,106 @@ async def test_session_count_degrades_to_null_when_redis_is_unavailable(client, 
 
     assert resp.status_code == 200, resp.text
     assert all(row["active_session_count"] is None for row in resp.json())
+
+
+# ──────────────────────────────────────────────
+# PR #36 review findings (ADR-170)
+# ──────────────────────────────────────────────
+
+
+async def test_the_refresh_activity_write_names_an_actor(client, db_session):
+    """`users` is audited, and /auth/refresh carries no access token (ADR-170).
+
+    The audit trigger reads the actor from `app.current_user_id`, which the middleware fills
+    from the caller's access token. This request has none — it is presenting a refresh token —
+    so without naming the actor explicitly, every refresh appends an `audit_logs` row with
+    `user_uuid = NULL`, and the PR's claim that audit rows land "with an actor" is untrue for
+    exactly the rows this feature adds.
+    """
+    await db_session.execute(text(AUDIT_TRIGGER_FUNC_SQL))
+    await db_session.execute(text(get_audit_trigger_sql("users")))
+    await db_session.commit()
+    user_uuid = await _make_login_user(db_session)
+    tokens = await _login(client)
+
+    resp = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
+    )
+    assert resp.status_code == 200, resp.text
+
+    actor = await db_session.scalar(text(
+        "SELECT user_uuid FROM audit_logs WHERE table_name = 'users' AND action = 'UPDATE' "
+        "ORDER BY created_at DESC LIMIT 1"
+    ))
+    assert actor is not None, "the refresh audit row has no actor"
+    assert str(actor) == user_uuid
+
+
+async def test_the_login_write_names_an_actor_too(client, db_session):
+    """Same gap on the password path: /auth/login stamps last_login_at with no token either."""
+    await db_session.execute(text(AUDIT_TRIGGER_FUNC_SQL))
+    await db_session.execute(text(get_audit_trigger_sql("users")))
+    await db_session.commit()
+    user_uuid = await _make_login_user(db_session)
+
+    await _login(client)
+
+    actor = await db_session.scalar(text(
+        "SELECT user_uuid FROM audit_logs WHERE table_name = 'users' AND action = 'UPDATE' "
+        "ORDER BY created_at DESC LIMIT 1"
+    ))
+    assert actor is not None, "the login audit row has no actor"
+    assert str(actor) == user_uuid
+
+
+async def test_a_session_count_bug_is_not_reported_as_a_redis_outage(caplog):
+    """A `strict=True` length mismatch is a bug here, not an outage (ADR-171).
+
+    Inside the `except`, such a bug degraded every user's count to `null` and logged it as
+    "Redis unavailable", sending whoever investigated at a subsystem that was working.
+    """
+    from app.api.v1.endpoints.admin import _session_counts
+
+    class _ShortPipeline:
+        def __init__(self, owner):
+            self._owner = owner
+
+        def smembers(self, key):
+            pass
+
+        def exists(self, key):
+            pass
+
+        async def execute(self):
+            self._owner.round += 1
+            if self._owner.round == 1:
+                return [{b"sid-1", b"sid-2"}]
+            return [1]  # two sids went in, one flag comes back
+
+    class _FakeRedis:
+        round = 0
+
+        def pipeline(self):
+            return _ShortPipeline(self)
+
+    with caplog.at_level(logging.WARNING), pytest.raises(ValueError):
+        await _session_counts(_FakeRedis(), ["11111111-1111-1111-1111-111111111111"])
+
+    assert not [
+        r for r in caplog.records if "Redis unavailable" in r.message
+    ], "a programming error was filed as a Redis outage"
+
+
+async def test_redis_being_down_still_degrades_quietly(caplog):
+    """The behaviour the `except` exists for has to survive narrowing its scope."""
+    from app.api.v1.endpoints.admin import _session_counts
+
+    class _DeadRedis:
+        def pipeline(self):
+            raise ConnectionError("redis is down")
+
+    with caplog.at_level(logging.WARNING):
+        counts = await _session_counts(_DeadRedis(), ["11111111-1111-1111-1111-111111111111"])
+
+    assert counts == {"11111111-1111-1111-1111-111111111111": None}
+    assert any("Redis unavailable" in r.message for r in caplog.records)

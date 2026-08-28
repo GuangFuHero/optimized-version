@@ -26,6 +26,7 @@ dependencies = [
     "fastapi-limiter>=0.2.0",
     "pyrate-limiter>=4.1.0",
     "openpyxl>=3.1.5",
+    "plotly>=6.9.0",
 ]
 
 [dependency-groups]

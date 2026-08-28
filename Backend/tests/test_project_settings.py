@@ -3,6 +3,8 @@
 Feature 013 (Spec/013-project-settings-activity/decisions.md ADR-090/091/095).
 """
 
+import logging
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -14,7 +16,11 @@ from app.models.auth import User
 from app.models.project_settings import ProjectSettings
 from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
-from app.repositories.config_repository import station_property_config_repository
+from app.repositories.config_repository import (
+    PropertyConfigValidationError,
+    station_property_config_repository,
+    task_property_config_repository,
+)
 from app.repositories.project_settings_repository import project_settings_repository
 
 pytestmark = pytest.mark.asyncio
@@ -254,3 +260,146 @@ async def test_empty_disaster_types_survives_normalization(db):
     )
 
     assert cfg.disaster_types == []
+
+
+# ──────────────────────────────────────────────
+# PR #36 review findings (ADR-168/100/101)
+# ──────────────────────────────────────────────
+
+
+async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_session, caplog):
+    """A typo is accepted, stores cleanly, and empties the forms — say so at write time.
+
+    `"floods"` for `"flood"` is exact-equality-different, so every flood-scoped field drops
+    out of the station and task forms. There is no vocabulary to reject the label against
+    (ADR-091), so the write still succeeds; what must not happen is it succeeding *silently*
+    (ADR-169).
+    """
+    admin_uuid = await _make_project_admin(db_session)
+    db_session.add(StationPropertyConfig(
+        station_type="shelter", property_name="淹水深度", data_type="integer",
+        disaster_types=["flood"],
+    ))
+    await db_session.commit()
+
+    with caplog.at_level(logging.WARNING):
+        resp = await client.patch(
+            SETTINGS_URL, headers=_auth_header(admin_uuid),
+            json={"name": "花蓮 0816", "disaster_types": ["floods"]},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["disaster_types"] == ["floods"]  # still saved — this is advice, not a veto
+    assert any("floods" in w for w in resp.json()["warnings"]), resp.json()
+    assert any("floods" in r.getMessage() for r in caplog.records), "nothing logged"
+
+
+async def test_a_disaster_type_a_field_uses_warns_about_nothing(client, db_session):
+    """The warning has to stay quiet when the label is right, or it is noise."""
+    admin_uuid = await _make_project_admin(db_session)
+    db_session.add(StationPropertyConfig(
+        station_type="shelter", property_name="淹水深度", data_type="integer",
+        disaster_types=["flood"],
+    ))
+    await db_session.commit()
+
+    resp = await client.patch(
+        SETTINGS_URL, headers=_auth_header(admin_uuid),
+        json={"name": "花蓮 0816", "disaster_types": ["flood"]},
+    )
+
+    assert resp.json()["warnings"] == []
+
+
+async def test_configuring_the_disaster_before_its_fields_is_not_an_error(client, db_session):
+    """Warned about, never rejected: setting the disaster up first is a legitimate order."""
+    admin_uuid = await _make_project_admin(db_session)
+
+    resp = await client.patch(
+        SETTINGS_URL, headers=_auth_header(admin_uuid),
+        json={"name": "花蓮 0816", "disaster_types": ["landslide"]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["warnings"]  # advisory
+    assert await project_settings_repository.get_current_disaster_types(db_session) == ["landslide"]
+
+
+async def test_one_patch_reads_the_settings_row_once(client, db_session, monkeypatch):
+    """The service already read the row to validate `name`; upsert must not read it again."""
+    admin_uuid = await _make_project_admin(db_session)
+    db_session.add(ProjectSettings(name="花蓮 0816"))
+    await db_session.commit()
+    calls = []
+    original = project_settings_repository.get_singleton
+
+    async def counting(db):
+        calls.append(1)
+        return await original(db)
+
+    monkeypatch.setattr(project_settings_repository, "get_singleton", counting)
+
+    resp = await client.patch(
+        SETTINGS_URL, headers=_auth_header(admin_uuid), json={"started_at": None}
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert len(calls) == 1
+
+
+async def test_retiring_a_field_does_not_require_restating_its_type(db):
+    """`is_active=False` alone must retire a field, leaving its definition alone (ADR-168).
+
+    While `data_type` was mandatory, retiring meant resending it, and a stale or guessed
+    value silently redefined the field at the same time.
+    """
+    await station_property_config_repository.upsert(
+        db, station_type="shelter", property_name="收容人數", data_type="integer",
+        enum_options=["a", "b"], label="收容人數", sort_order=3,
+    )
+
+    retired = await station_property_config_repository.upsert(
+        db, station_type="shelter", property_name="收容人數", is_active=False,
+    )
+
+    assert retired.is_active is False
+    assert retired.data_type == "integer"  # untouched
+    assert retired.enum_options == ["a", "b"]
+    assert retired.label == "收容人數"
+    assert retired.sort_order == 3
+
+
+async def test_creating_a_field_still_requires_a_data_type(db):
+    """The column is NOT NULL — omitting it on creation is a client error, not a 500."""
+    with pytest.raises(PropertyConfigValidationError):
+        await station_property_config_repository.upsert(
+            db, station_type="shelter", property_name="全新欄位", label="沒有型別",
+        )
+
+
+async def test_retiring_a_task_field_behaves_the_same(db):
+    """The task side shares the code path; pin it so the two cannot drift."""
+    await task_property_config_repository.upsert(
+        db, task_type="rescue", property_name="樓層", data_type="integer",
+    )
+
+    retired = await task_property_config_repository.upsert(
+        db, task_type="rescue", property_name="樓層", is_active=False,
+    )
+
+    assert retired.is_active is False
+    assert retired.data_type == "integer"
+
+
+async def test_the_settings_row_is_never_soft_deleted(db):
+    """ADR-090: the singleton is updated, never deleted — which is why TimestampMixin is out.
+
+    The mixin brings `delete_at` along with the two timestamp columns, and a soft-delete flag
+    on a row that can only ever be updated is a state nothing knows how to read. Pinning the
+    absence keeps the hand-written columns from reading as accidental drift.
+    """
+    from app.models.base import TimestampMixin
+
+    assert TimestampMixin not in ProjectSettings.__mro__
+    assert not hasattr(ProjectSettings, "delete_at")
+    assert hasattr(ProjectSettings, "created_at") and hasattr(ProjectSettings, "updated_at")

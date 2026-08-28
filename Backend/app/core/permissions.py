@@ -37,6 +37,7 @@ class Perm(StrEnum):
 
     # Resource Station
     STATION_VIEW = "station.view"
+    STATION_VIEW_PII = "station.view_pii"
     # Feature 016 (ADR-127/128): same reasoning as ticket.view_history, and deliberately the
     # same scope tiering — a station's timeline names the people who edited it.
     STATION_VIEW_HISTORY = "station.view_history"

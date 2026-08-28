@@ -46,3 +46,6 @@ optimized-version-dockerized-deployment-setup/
 CODE_REVIEW_rbac_v1.md
 DIFF_INTENT_REVIEW.md
 Universal_Disaster_Platform_Manager_End_RBAC_v1.0_Dashboard.md
+
+.pi/
+.DS_Store

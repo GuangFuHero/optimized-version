@@ -30,6 +30,11 @@ class ProjectSettingsResponse(BaseModel):
     name: str | None = None
     disaster_types: list[str] = Field(default_factory=list)
     started_at: datetime | None = None
+    # Advisory only, and only on write: a saved disaster type that no configured dynamic
+    # field is scoped to (ADR-169). The write succeeded either way — this is what tells an
+    # operator a typo emptied the forms instead of leaving them to find out from a rescue
+    # form that came back missing its fields.
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ProjectSettingsUpdate(BaseModel):
