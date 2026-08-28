@@ -6,10 +6,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies.
+# libexpat1: osmium's C extension links against it and python:3.13-slim does not ship it, so
+# `import osmium` — and therefore the whole osm_address_points import — fails at runtime without it.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files first for caching

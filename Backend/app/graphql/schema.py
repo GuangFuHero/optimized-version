@@ -4,6 +4,7 @@ import strawberry
 from fastapi import HTTPException
 from strawberry.extensions import MaskErrors
 
+from app.graphql.address.queries import AddressQuery
 from app.graphql.announcements.mutations import AnnouncementMutation
 from app.graphql.announcements.queries import AnnouncementQuery
 from app.graphql.config.mutations import PropertyConfigMutation
@@ -23,12 +24,30 @@ from graphql import GraphQLError
 
 
 @strawberry.type
-class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, SuggestionQuery, WorkZoneQuery):  # noqa: E501
+class Query(
+    AddressQuery,
+    GeoQuery,
+    RequestQuery,
+    TicketTaskQuery,
+    PropertyConfigQuery,
+    AnnouncementQuery,
+    SuggestionQuery,
+    WorkZoneQuery,
+):  # noqa: E501
     """Root query type composing all domain query mixins."""
 
 
 @strawberry.type
-class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, SuggestionMutation, WorkZoneMutation):  # noqa: E501
+class Mutation(
+    GeoMutation,
+    StationPropertyMutation,
+    RequestMutation,
+    TicketTaskMutation,
+    PropertyConfigMutation,
+    AnnouncementMutation,
+    SuggestionMutation,
+    WorkZoneMutation,
+):  # noqa: E501
     """Root mutation type composing all domain mutation mixins."""
 
 
