@@ -39,6 +39,11 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     visibility: Mapped[str] = mapped_column(String(50), default="public")
     review_note: Mapped[str | None] = mapped_column(String)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
+    # Set when `status` becomes 'fulfilled'/'canceled', cleared if it leaves again (see
+    # services/ticket.py::update_ticket_task). Analytics needs the moment a task left the
+    # queue; `updated_at` can't say, since it moves on every edit.
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Keyword-search column (ADR-079/081). progress_note and review_note are excluded:
     # operational notes accumulate contact details and ad-hoc coordination text.

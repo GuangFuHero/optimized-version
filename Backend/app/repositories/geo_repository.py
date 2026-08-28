@@ -52,7 +52,7 @@ class StationRepository(GenericRepository[Station]):
 
     def _active_conditions(
         self, *, bounds=None, station_type: str | None = None,
-        q: str | None = None, extra_filters=(),
+        operational_status: str | None = None, q: str | None = None, extra_filters=(),
     ) -> list:
         """The single source of truth for "which stations match this request".
 
@@ -73,6 +73,8 @@ class StationRepository(GenericRepository[Station]):
             )
         if station_type:
             conditions.append(self.model.type == station_type)
+        if operational_status:
+            conditions.append(self.model.operational_status == operational_status)
         term = normalize_query(q)
         if term is not None:
             conditions.append(self._search_condition(term))
@@ -115,13 +117,14 @@ class StationRepository(GenericRepository[Station]):
 
     async def list_active(
         self, db: AsyncSession, *,
-        bounds=None, station_type: str | None = None, q: str | None = None,
-        skip: int = 0, limit: int = 50, extra_filters=(),
+        bounds=None, station_type: str | None = None, operational_status: str | None = None,
+        q: str | None = None, skip: int = 0, limit: int = 50, extra_filters=(),
     ) -> list[Station]:
-        """List active stations with optional bbox/type/keyword filter and RBAC scope conditions."""
+        """List active stations filtered by bbox/type/operational_status/keyword and RBAC scope."""
         term = normalize_query(q)
         conditions = self._active_conditions(
-            bounds=bounds, station_type=station_type, q=q, extra_filters=extra_filters
+            bounds=bounds, station_type=station_type, operational_status=operational_status,
+            q=q, extra_filters=extra_filters,
         )
         async with search_timeout(db, term):
             result = await db.execute(
@@ -133,11 +136,13 @@ class StationRepository(GenericRepository[Station]):
 
     async def count_active(
         self, db: AsyncSession, *,
-        bounds=None, station_type: str | None = None, q: str | None = None, extra_filters=(),
+        bounds=None, station_type: str | None = None, operational_status: str | None = None,
+        q: str | None = None, extra_filters=(),
     ) -> int:
         """Count active stations — MUST use the same conditions as list_active()."""
         conditions = self._active_conditions(
-            bounds=bounds, station_type=station_type, q=q, extra_filters=extra_filters
+            bounds=bounds, station_type=station_type, operational_status=operational_status,
+            q=q, extra_filters=extra_filters,
         )
         async with search_timeout(db, normalize_query(q)):
             return await db.scalar(

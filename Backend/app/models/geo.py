@@ -67,6 +67,8 @@ class Station(BaseGeometry):
     contact_name: Mapped[str | None] = mapped_column(String(100))
     contact_email: Mapped[str | None] = mapped_column(String(100))
     contact_phone: Mapped[str | None] = mapped_column(String(50))
+    operational_status: Mapped[str] = mapped_column(String(20), server_default="active")
+    status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Keyword-search column, maintained by PostgreSQL (ADR-079/081). The field list here
     # IS the positive list — see app/models/search.py before changing it.

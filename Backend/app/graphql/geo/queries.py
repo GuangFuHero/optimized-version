@@ -19,6 +19,7 @@ from app.graphql.geo.types import (
     ClosureAreaConnection,
     ClosureAreaType,
     StationConnection,
+    StationOperationalStatus,
     StationType,
 )
 from app.graphql.shared import PageInfo
@@ -35,6 +36,7 @@ class GeoQuery:
         self, info: strawberry.types.Info,
         bounds: BoundsInput | None = None,
         station_type: str | None = None,
+        operational_status: StationOperationalStatus | None = None,
         q: str | None = None,
         skip: int = 0, limit: int = 50,
     ) -> StationConnection:
@@ -47,6 +49,9 @@ class GeoQuery:
             info: Strawberry resolver context providing the database session.
             bounds: Optional lat/lng bbox to spatially filter results via ST_Intersects.
             station_type: Optional type filter (e.g. 'shelter', 'supply', 'medical').
+            operational_status: Optional filter, one of the StationOperationalStatus
+                enum values. An enum rather than a str so a typo is a GraphQL validation
+                error instead of a silently-empty result set.
             q: Optional keyword filter over the station's own name and description, its
                 properties, and its address — including the full secondary-location
                 address and pole_id (ADR-077/079/080). 2–50 characters; outside that range
@@ -58,6 +63,7 @@ class GeoQuery:
             StationConnection with items and total count / pagination metadata.
         """
         db = info.context["db"]
+        status_value = operational_status.value if operational_status is not None else None
         scope = await check_permission(info, Perm.STATION_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Station)
         # One ceiling for the whole request, not one per statement (ADR-176). count and
@@ -66,10 +72,12 @@ class GeoQuery:
         # own set_config/RESET, so this costs two round-trips where it used to cost six.
         async with search_timeout(db, normalize_query(q)):
             total = await station_repository.count_active(
-                db, bounds=bounds, station_type=station_type, q=q, extra_filters=extra_filters
+                db, bounds=bounds, station_type=station_type, q=q,
+                operational_status=status_value, extra_filters=extra_filters,
             )
             items = await station_repository.list_active(
-                db, bounds=bounds, station_type=station_type, q=q, skip=skip, limit=limit,
+                db, bounds=bounds, station_type=station_type, q=q,
+                operational_status=status_value, skip=skip, limit=limit,
                 extra_filters=extra_filters,
             )
         return StationConnection(

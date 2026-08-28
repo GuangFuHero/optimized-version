@@ -38,6 +38,10 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
     Returns a dict keyed by loader name so resolvers can do
     ``info.context["loaders"]["photos_by_ticket"].load(uuid)``.
     """
+    # Photos are keyed by base_geometries.uuid regardless of subtype, so the ticket and
+    # station loaders run the identical query. Share ONE instance under both names —
+    # two would mean two caches, and the same rows fetched twice per request.
+    photos_by_geometry = DataLoader(load_fn=_make_photos_by_geometry_loader(db))
     return {
         "secondary_location_by_geometry": DataLoader(
             load_fn=_make_one_to_one_loader(
@@ -54,8 +58,8 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
                 db, CrowdSourcing, "item_uuid", CrowdSourcingType
             )
         ),
-        "photos_by_ticket": DataLoader(load_fn=_make_photos_by_geometry_loader(db)),
-        "photos_by_station": DataLoader(load_fn=_make_photos_by_geometry_loader(db)),
+        "photos_by_ticket": photos_by_geometry,
+        "photos_by_station": photos_by_geometry,
         "tasks_by_ticket": DataLoader(
             load_fn=_make_one_to_many_loader(
                 db, TicketTask, "ticket_uuid", TicketTaskType, soft_delete=True

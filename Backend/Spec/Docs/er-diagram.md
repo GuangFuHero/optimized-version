@@ -10,6 +10,9 @@
 > `stations` gained its own `contact_name`/`contact_email`/`contact_phone` columns and
 > `photos.ref_type='ticket'` was renamed to `'geometry'` (now covers both tickets and
 > stations via `base_geometries.uuid`) on 2026-08-06.
+> `stations` gained `operational_status`/`status_changed_at` and `ticket_tasks` gained
+> `completed_at`, backing the analytics dashboard's station freshness-trend and ticket
+> time-to-completion metrics, on 2026-08-07.
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -290,6 +293,8 @@ stations {
     string contact_name "nullable, String(100), independent of tickets.contact_name"
     string contact_email "nullable, String(100)"
     string contact_phone "nullable, String(50)"
+    string operational_status "active/temporarily_closed/permanently_closed, String(20), default active, CHECK ck_stations_operational_status"
+    timestamp status_changed_at "nullable, stamped only when operational_status actually changes value"
     string search_text "GENERATED ALWAYS AS left(name, 500) + left(description, 500), STORED"
 }
 %% INDEX: ix_stations_search_text_trgm USING gin (search_text gin_trgm_ops)
@@ -455,6 +460,7 @@ ticket_tasks {
     string visibility "public/restricted/internal"
     string review_note "nullable"
     uuid created_by FK
+    timestamp completed_at "nullable, stamped when status transitions to fulfilled; backfilled from updated_at for pre-existing fulfilled rows"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at
