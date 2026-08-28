@@ -1,4 +1,4 @@
-# Multi-Team Membership — ADR 全集（ADR-068~076、096~097、178~179）
+# Multi-Team Membership — ADR 全集（ADR-068~076、096~097、178~179、183~187）
 
 **Date**: 2026-08-16（初版）／**2026-08-19 重大改版**
 **Feature**: 010-multi-team-membership
@@ -411,3 +411,106 @@ schema 少了一半而沒有任何訊號。這比 multiple-head 危險：multipl
    不跑測試、不檢查 migration。要讓撞號與 multiple-head 在 PR 階段被擋下來，
    需要另外加一個 workflow 跑 `alembic heads` 並把 `present more than once`
    視為失敗——**尚未實作，留待後續決定**。
+
+---
+
+### ADR-183 `switch-identity` 必須確認 session 還活著，並比照 refresh 限速
+
+**白話**：切換身分會簽出一張**全新到期時間**的 access token。原本它只檢查「你持有一張還沒過期的 token」，沒檢查那個 session 是否還存在——於是登出之後，只要在每次過期前呼叫一次切換，就能無限期續命。
+
+**Context**：實測（PR #37 review）：
+
+```
+logout-all                  → 204
+refresh 帶舊 refresh token   → 401   ← 正確擋下
+switch-identity             → 200   ← 沒擋，而且新 token 打 /users/me 也是 200
+```
+
+`logout` / `logout-all` 的目的是終結 session。少了這個檢查，它們只終結了 refresh 這條路。ADR-070 說「切換不是憑證事件、不動 session」——那是對的，但「不動 session」不等於「不必確認 session 還在」。
+
+**Options**：
+- **甲：載入 `session:{sid}`，不存在就 401**（採用）。
+- 乙：切換時一併輪替 refresh token。推翻 ADR-070，且讓切換變成憑證事件，代價遠大於問題。
+
+**Decision**：新增 `SessionRepository.get_session(sid)`（唯讀、不續 TTL），切換前確認記錄存在，否則 401。同時補上 `get_rate_limiter(10, 60)`——它會簽出憑證，而 `login` 與 `refresh` 都有限速，這個端點是三者中唯一沒有的。
+
+**Consequences**：
+➕ 登出真的終結 session，所有路徑一致。
+➕ 限速讓「反覆呼叫以續命」即使將來出現別的破口也昂貴。
+➖ 每次切換多一次 Redis 讀取。切換是低頻操作，可接受。
+➖ 這個檢查與 `Spec/014` 的 per-request session 檢查重複；014 合併後這裡的檢查會變成多餘的第二道。刻意保留：014 尚未合併，而這是 Blocking 等級的洞，不應該等。
+
+---
+
+### ADR-184 platform 授予一律「取代」，且預設身分查詢必須有確定性排序
+
+**白話**：`bootstrap_admin.py` 加 `super_admin` 時沒有移除既有的 `user`，所以被 bootstrap 過的帳號有**兩個** platform 角色。而 `default_for_user` 沒有 `ORDER BY`，於是「預設身分」變成看索引先回哪一筆——一個被 bootstrap 成超管的人，可能以一般 `user` 身分登入。
+
+**Context**：ADR-069 第 4 點宣稱「每人恰有一個 platform 身分（同 kind 取代保證）」。`admin_service.assign_role` 確實取代，但 `user_repository.assign_role`（bootstrap 專用）是 `ON CONFLICT DO NOTHING` 的單純插入，不取代。唯一索引是 *(user, role) WHERE team_uuid IS NULL*，管的是「同一個角色不重複」，不是「只有一個 platform 角色」。
+
+**Decision**：兩件事一起做，因為它們分別對應不變式的兩半。
+
+1. **`user_repository.assign_role` 先刪除該使用者其他 platform 授予再插入**，與 `admin_service.assign_role` 對齊。這是讓「至多一個」真正成立的那一步。
+2. **`default_for_user` 加上 `ORDER BY Role.name, role_uuid`**。這是縱深防禦：即使資料庫裡已經有雙 platform 角色的舊資料，結果至少是穩定且可預測的，不是每次讀都可能不同。
+
+**Consequences**：
+➕ ADR-069 依賴的前提第一次真正被執行，而不是靠慣例。
+➕ 排序讓「同一份資料兩次讀出不同身分」不可能發生。
+➖ bootstrap 現在會靜默移除既有 platform 角色。這正是預期行為（升級成超管本來就該取代），但腳本輸出沒有說明被取代掉了什麼。
+
+---
+
+### ADR-185 platform 角色只能「取代」，不能「撤除」
+
+**白話**：撤掉一個人的 platform 角色，一定會讓他變成「沒有任何 platform 身分」——因為他本來就只有一個。這種帳號即使還在團隊裡，也會解析出**零權限**。降級的正確做法是 assign 到較小的角色，一步取代。
+
+**Context**：ADR-184 之後，每人至多一個 platform 角色。所以 `unassign_user_role` 用在 platform 角色上，結果恆為「一個都不剩」。實測：只持有 team 角色的帳號登入後 `active_identity` 是 `null`、`get_user_permissions` 回 `{}`。
+
+而 `Spec/010/spec.md` §7 對「移除後台權限，回去原有登入狀態」定義的終點是：**身分失效 → 登出 → 重新登入後預設即 platform 身分**。那個終點預設了這個人「還有一個 platform 身分」。撤除操作恰好拿掉它，使 spec 宣稱的狀態無法抵達。
+
+最自然的觸發路徑就是「把某人從 super_admin 降下來」：升級時 `user` 已被取代，再撤掉 `super_admin` 就什麼都不剩。而那正是這個需求本身在做的事。
+
+**Options**：
+- 甲：`default_for_user` 找不到 platform 時 fallback 到第一個 team 身分。**否決**——這就是 ADR-096 已經否決過的「靜默降權」的變形，而且更難察覺（落在某個團隊身分）；對不屬於任何團隊的人也無效。
+- 乙：只擋「最後一個」platform 角色。可行，但既然至多只有一個，「最後一個」恆等於「那一個」，條件判斷是多餘的。
+- **丙：platform 角色一律不可撤除**（採用）。
+
+**Decision**：`unassign_user_role` 在 `team_uuid is None` 且 `role.kind == "platform"` 時拋 `RbacConflictError`（409），訊息明講替代路徑是 assign 到目標角色。撤除 **team** 身分完全不受影響——它指名團隊，撤掉後 platform 身分仍在。
+
+**Consequences**：
+➕ 「零 platform 身分」的帳號無法再透過 API 產生。
+➕ 降級被導向 `assign_role`，那條路徑一步完成且結果正確。
+➖ 管理端少一個操作。若日後需要「保留帳號但收回所有平台權限」，那是新的需求，應該有自己的表達方式（例如停用帳號），而不是複用撤角色。
+➖ 已經處在零身分狀態的帳號救不回來（需手動 assign）。目前無正式使用者，實際影響為零。
+
+---
+
+### ADR-186 `team_uuid` query 參數要驗證存在，未知即 404
+
+**白話**：直接授予端點的 `team_uuid` 沒驗證就進到 FK 欄位，未知的 UUID 會變成未處理的 `ForeignKeyViolationError`，對外是 500。
+
+**Context**：實測 `PUT /admin/users/{uuid}/permissions/station.view?team_uuid=<不存在>` → 500。同一個端點的 user 與 capability 查詢都已經 404，只有這個新參數漏了。這與 `decode_act` 那次修的是同一類問題（未驗證的外部輸入直達 driver），新加的 query 參數沒跟上。
+
+**Decision**：抽出 `_require_team()`，在 `set_user_permission` 寫入前檢查，未知則 `RbacNotFoundError` → 404。`revoke_user_permission` 不加：它是 DELETE，未知 team 只是刪不到東西，本來就宣告 idempotent。
+
+**Consequences**：
+➕ 呼叫端錯誤回 404，與同端點其他查詢一致。
+➖ 每次授予多一次 `db.get(Team, ...)`。低頻管理端點。
+
+---
+
+### ADR-187 離開團隊要一併撤除該團隊的直接授予
+
+**白話**：`remove_team_member` 只刪 `user_role_assign`，`user_permission_assign` 上綁同一個 team 的直接授予會留下來。把人移出團隊再加回去，舊的授權就悄悄復活了。
+
+**Context**：實測：授予某人 `team.member.manage@TeamA`（可管理 TeamA 成員）→ 移出 TeamA → 以一般 `member` 身分加回 → **他又能管理成員了**，沒有人重新授權過。
+
+程式碼註解本來就寫著「離開團隊是撤銷每一個綁在該團隊的授予」（ADR-072），但實作只做了 role 那一半。所以這不是設計改變，是實作沒有兌現已經寫下的設計。
+
+**Options**：**甲：一併刪除**（採用）／ 乙：改註解措辭，承認只清 role。乙保留了「重新加入即復活」這個實際的安全問題，只是不再宣稱它不存在。
+
+**Decision**：同一個交易裡一併 `DELETE FROM user_permission_assign WHERE user_uuid = ? AND team_uuid = ?`。platform 授予不受影響——它的 `team_uuid` 是 NULL，永遠不匹配這個條件（已測）。
+
+**Consequences**：
+➕ 「移出團隊」現在真的等於撤銷該團隊的全部權限。
+➖ 重新加入的人要重新取得他原本的直接授予。這是正確的：直接授予本來就是個別給的，不該隨成員身分自動回來。

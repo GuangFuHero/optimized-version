@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, scope_filter
 from app.models.auth import User
-from app.models.rbac import Role, UserRoleAssign
+from app.models.rbac import Role, UserPermissionAssign, UserRoleAssign
 from app.models.team import Team
 from app.repositories.auth_repository import role_repository, user_repository
 from app.repositories.team_repository import team_repository
@@ -214,11 +214,23 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
         raise AdminNotFoundError("User is not a member of this team")
 
     # Leaving a team is revoking every grant scoped to it — that IS the membership now
-    # (ADR-072). Grants in the user's other teams are untouched.
+    # (ADR-072). Grants in the user's other teams, and their platform grant, are untouched:
+    # platform rows carry a NULL team_uuid, which never matches this predicate.
+    #
+    # Both grant tables, not just the roles (ADR-187). A direct grant bound to this team is
+    # as much a permission in it as a role is, and leaving it behind meant re-adding the
+    # person silently restored it — someone removed from a team and later re-added as a plain
+    # member got their old team.member.manage back, with no one re-granting anything.
     await db.execute(
         delete(UserRoleAssign).where(
             UserRoleAssign.user_uuid == target.uuid,
             UserRoleAssign.team_uuid == team.uuid,
+        )
+    )
+    await db.execute(
+        delete(UserPermissionAssign).where(
+            UserPermissionAssign.user_uuid == target.uuid,
+            UserPermissionAssign.team_uuid == team.uuid,
         )
     )
     await db.commit()

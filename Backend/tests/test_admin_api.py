@@ -19,7 +19,13 @@ from sqlalchemy import select
 
 from app.core.security import create_access_token
 from app.models.auth import User
-from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+from app.models.rbac import (
+    Permission,
+    Role,
+    RolePermissionAssign,
+    UserPermissionAssign,
+    UserRoleAssign,
+)
 from app.models.team import Team
 from tests.conftest import auth_headers_for
 
@@ -103,9 +109,15 @@ async def _make_team_admin(db, team_uuid: str) -> tuple[str, dict]:
 
 
 async def _make_role(db, *, name: str, kind: str) -> str:
-    """Create a bare role (no grants) and return its uuid as a plain str."""
-    role = Role(name=name, kind=kind)
-    db.add(role)
+    """Create a bare role (no grants) and return its uuid as a plain str.
+
+    Get-or-create: `roles.name` is unique and the suite shares one database, so well-known
+    names like `user` or `member` may already have been created by another test.
+    """
+    role = (await db.execute(select(Role).where(Role.name == name))).scalar_one_or_none()
+    if role is None:
+        role = Role(name=name, kind=kind)
+        db.add(role)
     await db.flush()
     role_uuid = str(role.uuid)
     await db.commit()
@@ -331,6 +343,82 @@ async def test_remove_team_member_revokes_every_grant_scoped_to_that_team(client
         await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid))
     ).scalars().all()
     assert remaining == []
+
+
+@pytest.mark.asyncio
+async def test_remove_team_member_also_revokes_direct_grants_bound_to_that_team(client, db_session):
+    """A direct grant naming the team is a permission in it, so leaving has to take it too.
+
+    It used to survive, because the delete only touched `user_role_assign`. Re-adding the
+    person then silently restored it: removed from a team, added back as a plain `member`,
+    and they had their old `team.member.manage` again with no one re-granting anything
+    (ADR-187).
+    """
+    from app.core.permissions import Perm
+
+    admin_uuid = await _make_super_admin(db_session)
+    team_uuid = await _make_team(db_session, name="Team B", type_="ngo")
+    team_role_uuid = await _make_role(db_session, name="member", kind="team")
+    target_uuid = await _make_plain_user(db_session, name="Returning")
+    # `_make_super_admin` already created this row and `permissions.key` is unique
+    permission = (
+        await db_session.execute(
+            select(Permission).where(Permission.key == Perm.TEAM_MEMBER_MANAGE.value)
+        )
+    ).scalar_one()
+    db_session.add_all([
+        UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_uuid),
+        UserPermissionAssign(
+            user_uuid=target_uuid, permission_uuid=permission.uuid,
+            scope="team", team_uuid=team_uuid,
+        ),
+    ])
+    await db_session.commit()
+
+    resp = await client.delete(
+        f"/api/v1/admin/teams/{team_uuid}/members/{target_uuid}",
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 200, resp.json()
+
+    left = (
+        await db_session.execute(
+            select(UserPermissionAssign).where(
+                UserPermissionAssign.user_uuid == target_uuid,
+                UserPermissionAssign.team_uuid == team_uuid,
+            )
+        )
+    ).scalars().all()
+    assert left == []
+
+
+@pytest.mark.asyncio
+async def test_remove_team_member_leaves_other_teams_and_the_platform_grant_alone(client, db_session):
+    """The delete keys on this team only — platform rows carry a NULL team and never match."""
+    admin_uuid = await _make_super_admin(db_session)
+    team_a = await _make_team(db_session, name="Team C", type_="ngo")
+    team_b = await _make_team(db_session, name="Team D", type_="ngo")
+    team_role_uuid = await _make_role(db_session, name="member", kind="team")
+    platform_role_uuid = await _make_role(db_session, name="user", kind="platform")
+    target_uuid = await _make_plain_user(db_session, name="Multi Hat")
+    db_session.add_all([
+        UserRoleAssign(user_uuid=target_uuid, role_uuid=platform_role_uuid),
+        UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_a),
+        UserRoleAssign(user_uuid=target_uuid, role_uuid=team_role_uuid, team_uuid=team_b),
+    ])
+    await db_session.commit()
+
+    resp = await client.delete(
+        f"/api/v1/admin/teams/{team_a}/members/{target_uuid}",
+        headers=_auth_header(admin_uuid),
+    )
+    assert resp.status_code == 200, resp.json()
+
+    remaining = (
+        await db_session.execute(select(UserRoleAssign).where(UserRoleAssign.user_uuid == target_uuid))
+    ).scalars().all()
+    teams_left = {str(r.team_uuid) if r.team_uuid else None for r in remaining}
+    assert teams_left == {None, str(team_b)}  # platform grant + the other team
 
 
 @pytest.mark.asyncio

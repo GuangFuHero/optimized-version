@@ -123,12 +123,14 @@ async def refresh(
     )
 
 
-@router.post("/switch-identity", response_model=AccessTokenResponse)
+@router.post("/switch-identity", response_model=AccessTokenResponse,
+             dependencies=[Depends(get_rate_limiter(10, 60))])
 async def switch_identity(
         body: SwitchIdentityRequest,
         session=Depends(security.get_current_session),
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
 ):
     """Act as a different identity you already hold; returns a re-signed access token.
 
@@ -138,6 +140,13 @@ async def switch_identity(
 
     Only re-signs the access token — the session is untouched and the refresh token is not
     rotated, because switching is not a credential event.
+
+    **The session it re-signs from has to still exist** (ADR-183). This mints a fresh
+    access token with a fresh expiry, so without that check the endpoint is a token
+    refresher gated on nothing but holding an unexpired token: after `logout` or
+    `logout-all`, `/auth/refresh` correctly refuses, but calling this before each expiry
+    would keep a revoked session alive indefinitely. Rate limited for the same reason —
+    it mints credentials, and `login` and `refresh` both are.
     """
     identity = await active_identity_repository.resolve(
         db, str(current_user.uuid),
@@ -149,6 +158,12 @@ async def switch_identity(
             status_code=status.HTTP_403_FORBIDDEN, detail="You do not hold that identity"
         )
     _user_uuid, sid = session
+    if sid is None or await SessionRepository(redis).get_session(sid) is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session is no longer active",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     access_token = security.create_access_token(
         data={"sub": str(current_user.uuid)}, sid=sid, act=identity.to_claim()
     )
