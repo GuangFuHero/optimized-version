@@ -315,7 +315,7 @@ reviewer 在 PR #38 上留了 7 條 inline comment，**全部屬實、全部處�
 - [x] `tests/test_session_revocation.py` 28 passed、`tests/test_identity_switching.py` 26 passed
 - [x] 全套件 `uv run pytest -q -p no:randomly` → **680 passed / 0 failed**
 - [x] `uv run ruff check` 對本次改動的 9 個檔案全綠
-- [ ] Docker 完整驗證（未跑；本次除 `docker-compose.yml` 的 Redis 設定外皆為邏輯修補，全套件已涵蓋）
+- [x] Docker 完整驗證（2026-08-30 補跑，見 Task 10）
 
 **跑測試前先 DROP test DB。** 本次實際踩到兩次：第一次 116 failed、第二次 4 failed + 136 errors
 （`Field Coordinator` 角色查不到、大量 `KeyError: 'data'`），DROP 之後同一份程式碼 680 passed。
@@ -329,3 +329,77 @@ docker exec backend-db-1 psql -U postgres -c "DROP DATABASE IF EXISTS disaster_r
 
 - `revoke_user_sessions` 越層讀 `repo.redis` / `repo.USER_SESSIONS`，且撤銷數會把已過期的 sid 算進去（只影響 log 與稽核列裡的數字）
 - Redis 斷線的 fail-closed 只驗了 REST；GraphQL 讀 `app.state.redis`，dependency override 打不到
+
+---
+
+## Task 10: ADR-192 的 docker 實測（2026-08-30）
+
+Task 9 把 docker 驗證留成未勾選（「本次除 `docker-compose.yml` 的 Redis 設定外皆為邏輯修補」）。
+這裡把那一項補上——真的起容器、真的登入、真的殺 Redis。
+
+**環境**：獨立 project name `pr38verify`（不動使用者現有的 `backend-*` 容器），backend 開在 8001，
+db/redis 不對外開 port。`alembic upgrade head` + `scripts/seed_rbac.py`（要帶 `PYTHONPATH=/app`）。
+
+### 10-1 設定確實生效
+
+| 檢查 | 結果 |
+|---|---|
+| `CONFIG GET appendonly` | `yes` |
+| `CONFIG GET maxmemory-policy` | `noeviction` |
+| `CONFIG GET maxmemory` | `536870912`（512mb）|
+| `/data` 內容 | `appendonlydir/` 存在，bind 到 `Backend/.redis` |
+
+### 10-2 session 撐不撐得過 Redis 消失（新舊設定對照）
+
+同一個帳號、同一把 access token，唯一變數是 Redis 的設定。
+
+| 情境 | 舊設定（`allkeys-lru`，無 volume） | 新設定（`appendonly` + bind mount） |
+|---|---|---|
+| `docker restart`（graceful） | **活著**（SIGTERM 觸發 RDB 存檔） | 活著 |
+| `docker kill` 後 start（crash / OOM） | **死了——該 token 永久 401** | **活著**（200） |
+| 容器重建（改設定 / 換 image / `down` 後 up） | **死了**（匿名 volume 被換掉） | **活著**（200） |
+
+> **ADR-192 原文的措辭已更正。** 原本寫「容器重啟 = 一次登出所有人」（reviewer 原話也是如此），
+> 實測不成立：graceful restart 會存 RDB。真正會掉的是 crash 與容器重建兩種，風險成立但觸發條件較窄。
+
+### 10-3 `noeviction` 對 session key 的保護（決定性對照）
+
+同一份填充壓力（20000 次 200 bytes 寫入，`maxmemory 3mb`）：
+
+| 設定 | `evicted_keys` | session key | 寫入 |
+|---|---|---|---|
+| `allkeys-lru` | **13635** | **EXISTS → 0（被淘汰，該使用者當場登出）** | 20000 次全成功 |
+| `noeviction` | **0** | EXISTS → 1（完好） | 14198 次回 `OOM command not allowed` |
+
+OOM 期間既有 session 的**讀取**仍然 200——認證不受影響，只有寫入被擋。這正是想要的取捨。
+
+### 10-4 實測發現的殘留問題（ADR-192 沒解決，另開票）
+
+**Redis 每次重啟後，連線池裡每一條殘留連線的第一個請求都會回一次 401。**
+
+舊連線讀到 `redis.exceptions.ConnectionError: Connection closed by server`，`_require_live_session`
+依 ADR-100 fail-closed，log 留下 `refusing the request: Redis (the session store) is unreachable`。
+
+實測（先用 30 個並發請求把連線池撐開，再重啟 Redis）：
+
+| 批次 | 結果 |
+|---|---|
+| 重啟前 30 並發 | 30× 200 |
+| 重啟後第一批 30 並發 | **24× 200 / 6× 401** |
+| 緊接著第二批 30 並發 | 29× 200 / **1× 401** |
+| 之後 | 全 200 |
+
+新舊設定都會發生，跟 ADR-192 無關。根因：`app/main.py:42` 的 `aioredis.from_url()` 沒有設
+`health_check_interval`，也沒有 `retry_on_error`，所以殘留連線要等到被用到、炸掉、換掉才恢復。
+
+對使用者而言這是**假登出**，而且依 ADR-100 的設計，它跟真正的撤銷長得一模一樣。修法很短
+（`from_url(..., health_check_interval=30, retry_on_error=[ConnectionError])`），但那是新的行為決策、
+要自己的 ADR，**不混進本輪 review 修補**。
+
+### 驗收
+
+- [x] Redis 設定實測生效（10-1）
+- [x] 新舊設定對照，三種情境（10-2）
+- [x] `noeviction` 對 session key 的保護，決定性對照（10-3）
+- [x] 驗證環境已完全清除（`docker compose -p pr38verify down -v`），使用者原有的 `backend-*` 容器未受影響
+- [ ] 連線池殘留連線造成的假 401 —— **未修，已記錄，需另開票**

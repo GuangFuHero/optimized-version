@@ -341,7 +341,14 @@ await repo.revoke_all_for_user(user_uuid)
 
 **Date**: 2026-08-30
 
-**Context**：`docker-compose.yml:20` 跑 `--maxmemory-policy allkeys-lru` 且沒有 volume。ADR-099 之前 `session:{sid}` 只在 `/auth/refresh` 讀，掉了頂多要求重新登入一次；之後它是**每個已認證請求都會讀的認證狀態**。於是：LRU 淘汰掉一把 session key = 當場登出那些人；容器重啟 = 一次登出所有人。
+**Context**：`docker-compose.yml:20` 跑 `--maxmemory-policy allkeys-lru` 且沒有 volume。ADR-099 之前 `session:{sid}` 只在 `/auth/refresh` 讀，掉了頂多要求重新登入一次；之後它是**每個已認證請求都會讀的認證狀態**。於是：LRU 淘汰掉一把 session key = 當場登出那些人；Redis 掉資料 = 那批人一次被登出。
+
+> **2026-08-30 docker 實測後更正措辭。** 原文寫「容器重啟 = 一次登出所有人」，**過度誇張**，reviewer 的原話也是這樣說的。實測：舊設定下 `docker restart` 其實**活得下來**——Redis 收到 SIGTERM 會做一次 RDB 存檔，重開再載回來。舊設定真正會掉資料的是這兩種：
+>
+> - **crash / kill / OOM**（沒有 graceful shutdown，最後一次 save point 之後的 session 全沒）——實測：登入後立刻 `docker kill`，那個 session 回不來，該 token 永久 401。
+> - **容器重建**（改設定、換 image、`compose down` 後 up）——舊設定沒有 volume，`/data` 是 image 宣告的匿名 volume，重建就換一個新的。
+>
+> 也就是說 reviewer 指出的風險成立，只是觸發條件比「重啟」窄。新設定（appendonly + bind mount）**兩種情境都活得下來**，實測見 `plan.md` Task 10。
 
 而 fail-closed 的 401 依 ADR-100 是**刻意與無效 token 無法區分**的，所以這種 401 從外面看不出跟真正的撤銷有什麼差別。
 
@@ -350,8 +357,10 @@ await repo.revoke_all_for_user(user_uuid)
 **Decision**：dev 對齊 staging：`--appendonly yes --maxmemory 512mb --maxmemory-policy noeviction`，並掛 `./.redis:/data`（比照同檔 db service 的 bind mount 風格，不引入 named volume）。`.gitignore` 補 `.redis/`。
 
 **Consequences**：
-➕ 開發環境重啟不再把所有人登出，省掉一整類「查不出原因的 401」。
+➕ 開發環境的 Redis crash 或容器重建不再把所有人登出，省掉一整類「查不出原因的 401」。
+➕ `noeviction` 實測有效：同一份填充壓力下，`allkeys-lru` 淘汰了 13635 個 key、session key **被淘汰掉**（該使用者當場登出）；`noeviction` 下 `evicted_keys=0`、session key 完好，改為 14198 次寫入回 OOM 錯誤。既有 session 的**讀取**在 OOM 期間照常 200——這正是要的取捨。
 ➖ 記憶體壓力下 Redis 會回錯誤而不是默默丟資料。這是要的：認證 key 被默默丟掉，比寫入失敗更難查。
+➖ **本 ADR 沒有解決的殘留問題（2026-08-30 實測發現）**：Redis 重啟後，backend 連線池裡每一條殘留連線的**第一個請求都會回一次 401**——舊連線讀到 `ConnectionError: Connection closed by server`，依 ADR-100 fail-closed。實測 30 個並發請求中 6 個 401，下一輪還有 1 個，之後全綠（連線換掉就自癒）。`app/main.py:42` 的 `aioredis.from_url()` 沒有設 `health_check_interval` 也沒有 `retry_on_error`。這是使用者看得到的假登出，**修法另開一張票**（一行設定 + 一個 ADR），不混進本輪 review 修補。
 
 ---
 
