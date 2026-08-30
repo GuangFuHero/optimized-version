@@ -274,18 +274,22 @@ async def test_kicking_requires_user_edit(client, db_session, redis):
 
 
 # --------------------------------------------------------------------------------------
-# The same check on the logout endpoints (ADR-180)
+# The logout endpoints: idempotent, but a dead token still revokes nothing (ADR-180/190)
 # --------------------------------------------------------------------------------------
 
 
-async def test_logout_all_is_refused_once_the_session_is_gone(client, db_session, redis):
+async def test_logout_all_from_a_revoked_token_revokes_nothing(client, db_session, redis):
     """A revoked token must not be able to sign the user out of a session it never held.
 
-    `get_current_session` decodes the token without looking at the session, so before
-    ADR-180 a token that had already been revoked could still reach this endpoint. That is
-    not the harmless no-op it looks like: an intruder holding a token the victim just
-    revoked could keep calling it, kicking the victim out of every session they created
-    afterwards until the stolen token expired.
+    `get_current_session` decodes the token without looking at the session, so a token that
+    had already been revoked could still reach this endpoint. That is not the harmless no-op
+    it looks like: an intruder holding a token the victim just revoked could keep calling it,
+    kicking the victim out of every session they create afterwards until the stolen token
+    expires.
+
+    The answer is 204 rather than 401 (ADR-190) — the caller asked for "every device signed
+    out" and this token's device already is — but nothing is revoked, which is the half that
+    closes the attack.
     """
     user_uuid = await _user(db_session, email="dos@x.com")
     stolen = await auth_headers_for(redis, user_uuid)
@@ -293,27 +297,65 @@ async def test_logout_all_is_refused_once_the_session_is_gone(client, db_session
 
     fresh = await auth_headers_for(redis, user_uuid)  # the user signs back in
 
-    assert (await client.post("/api/v1/auth/logout-all", headers=stolen)).status_code == 401
+    assert (await client.post("/api/v1/auth/logout-all", headers=stolen)).status_code == 204
     assert (await client.get(ME, headers=fresh)).status_code == 200  # still signed in
 
 
-async def test_logout_is_refused_once_the_session_is_gone(client, db_session, redis):
-    """Same hole on the single-device endpoint."""
+async def test_logout_is_idempotent(client, db_session, redis):
+    """"This device is signed out" is already true on the second call (ADR-190).
+
+    Returning 401 there reported a failure that had not happened, and collided with the
+    ordinary client pattern of calling logout from a 401 interceptor: 401 → logout → 401.
+    """
     user_uuid = await _user(db_session, email="dos2@x.com")
     headers = await auth_headers_for(redis, user_uuid)
     assert (await client.post("/api/v1/auth/logout", headers=headers)).status_code == 204
 
-    assert (await client.post("/api/v1/auth/logout", headers=headers)).status_code == 401
+    assert (await client.post("/api/v1/auth/logout", headers=headers)).status_code == 204
+    assert (await client.post("/api/v1/auth/logout-all", headers=headers)).status_code == 204
 
 
-async def test_logout_refuses_a_token_with_no_sid(client, db_session, redis):
-    """`logout` used to treat a sid-less token as a no-op; it is now refused like anywhere else."""
+async def test_logout_accepts_a_token_with_no_sid(client, db_session, redis):
+    """Nothing to revoke is not a failure — the end state the caller asked for holds."""
     user_uuid = await _user(db_session, email="nosid@x.com")
     token = create_access_token(data={"sub": user_uuid})  # no sid
 
     res = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"})
 
-    assert res.status_code == 401
+    assert res.status_code == 204
+
+
+async def test_a_sid_less_token_cannot_sign_anyone_out_of_anything(client, db_session, redis):
+    """The sid-less case must stay a no-op on logout-all too, not a global kick.
+
+    `get_current_session` returns `sub` from the token alone, so without the liveness check
+    in `logout_all` a hand-minted token would be a way to sign a user out of every device.
+    """
+    user_uuid = await _user(db_session, email="nosid2@x.com")
+    live = await auth_headers_for(redis, user_uuid)
+    token = create_access_token(data={"sub": user_uuid})  # no sid
+
+    res = await client.post(
+        "/api/v1/auth/logout-all", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert res.status_code == 204
+    assert (await client.get(ME, headers=live)).status_code == 200  # untouched
+
+
+async def test_logout_reports_a_redis_outage_rather_than_claiming_success(
+    client, db_session, redis
+):
+    """204 would tell the caller they are signed out when the store never heard the request."""
+    user_uuid = await _user(db_session, email="logout-outage@x.com")
+    headers = await auth_headers_for(redis, user_uuid)
+    app.dependency_overrides[get_redis] = lambda: _DeadRedis()
+    try:
+        res = await client.post("/api/v1/auth/logout", headers=headers)
+    finally:
+        app.dependency_overrides[get_redis] = lambda: redis
+
+    assert res.status_code == 503
 
 
 # --------------------------------------------------------------------------------------
@@ -361,3 +403,144 @@ async def test_kicking_needs_user_edit_at_scope_all(client, db_session, redis, s
 
     assert res.status_code == 403, res.text
     assert (await client.get(ME, headers=target_headers)).status_code == 200  # still signed in
+
+
+# --------------------------------------------------------------------------------------
+# change-password signs the CALLER out too (ADR-189)
+# --------------------------------------------------------------------------------------
+
+
+async def test_change_password_signs_the_changing_device_out_as_well(client, db_session, redis):
+    """The intended flow is "change your password, then sign back in" (ADR-189).
+
+    `change-password` calls `revoke_all_for_user`, which includes the session making the
+    request — the caller's access token is dead on their very next request, and the refresh
+    token that went with it was deleted too, so there is no path back except a fresh login.
+    Before feature 014 the access token stayed usable for up to 15 minutes, which hid this.
+
+    Pinned here because it is the one revocation path where the person who triggered it is
+    also a victim of it, and it is invisible from the endpoint's own 204.
+    """
+    user_uuid = await _user(db_session, email="selfchange@x.com", password="oldpw1")
+    changing_device = await auth_headers_for(redis, user_uuid)
+
+    res = await client.post(
+        "/api/v1/auth/change-password", headers=changing_device,
+        json={"old_password": "oldpw1", "new_password": "newpw1", "salt_frontend": "deadbeef"},
+    )
+    assert res.status_code == 204, res.text
+
+    assert (await client.get(ME, headers=changing_device)).status_code == 401
+
+
+# --------------------------------------------------------------------------------------
+# The kick leaves a trail, and cannot be aimed anywhere (ADR-191/194)
+# --------------------------------------------------------------------------------------
+
+
+async def test_a_kick_writes_an_audit_row_naming_the_actor(client, db_session, redis):
+    """The only admin action that touches no table, so nothing else would record it.
+
+    Without the explicit row there is no record anywhere of WHO signed a user out — the log
+    line named the target alone, and log files do not survive a container restart.
+    """
+    from sqlalchemy import select
+
+    from app.models.audit import AuditLog
+
+    admin_uuid, admin_headers = await _admin_who_can_kick(db_session, redis)
+    target_uuid = await _user(db_session, email="audited@x.com")
+    await auth_headers_for(redis, target_uuid)
+
+    assert (await client.post(_kick(target_uuid), headers=admin_headers)).status_code == 204
+
+    row = (
+        await db_session.execute(
+            select(AuditLog).where(
+                AuditLog.row_id == target_uuid, AuditLog.action == "REVOKE_SESSIONS"
+            )
+        )
+    ).scalar_one()
+    assert str(row.user_uuid) == admin_uuid
+    assert row.table_name == "users"
+    assert row.new_values == {"revoked_sessions": 1}
+
+
+async def test_you_cannot_kick_yourself(client, db_session, redis):
+    """Signing yourself out is what /auth/logout-all is for.
+
+    Routing it through an admin capability only makes the trail read as an administrative
+    action against someone else's account (ADR-191).
+    """
+    admin_uuid, admin_headers = await _admin_who_can_kick(db_session, redis)
+
+    res = await client.post(_kick(admin_uuid), headers=admin_headers)
+
+    assert res.status_code == 409, res.text
+    assert (await client.get(ME, headers=admin_headers)).status_code == 200  # still signed in
+
+
+async def test_you_cannot_kick_a_super_admin(client, db_session, redis):
+    """The platform's highest role must not be lockable out of its own console.
+
+    `user.edit` at `all` would otherwise be enough to hold a super_admin out indefinitely,
+    one kick per login (ADR-191).
+    """
+    from app.models.auth import User
+    from app.models.rbac import Role, UserRoleAssign
+    from app.services.admin import SUPER_ADMIN_ROLE_NAME
+
+    _, admin_headers = await _admin_who_can_kick(db_session, redis)
+    role = Role(name=SUPER_ADMIN_ROLE_NAME, kind="platform")
+    victim = User(name="Owner")
+    db_session.add_all([role, victim])
+    await db_session.flush()
+    db_session.add(UserRoleAssign(user_uuid=victim.uuid, role_uuid=role.uuid))
+    victim_uuid = str(victim.uuid)
+    await db_session.commit()
+    victim_headers = await auth_headers_for(redis, victim_uuid)
+
+    res = await client.post(_kick(victim_uuid), headers=admin_headers)
+
+    assert res.status_code == 403, res.text
+    assert (await client.get(ME, headers=victim_headers)).status_code == 200
+
+
+async def test_a_kick_during_a_redis_outage_is_503_not_500(client, db_session, redis):
+    """Every other Redis touch this feature adds fails closed with a handled response.
+
+    This one raised `RedisError` out of the endpoint as a 500 with a traceback, which tells
+    the caller nothing and leaves it ambiguous whether any sessions were revoked (ADR-194).
+    """
+    _, admin_headers = await _admin_who_can_kick(db_session, redis)
+    target_uuid = await _user(db_session, email="outage-target@x.com")
+
+    real_redis = redis
+
+    class _DeadForTheServiceOnly:
+        """Live for authentication, dead the moment the kick reaches the session set.
+
+        The kick's own request has to authenticate first, and authentication reads Redis —
+        overriding `get_redis` outright would 401 before the code under test ran.
+        """
+
+        def __init__(self):
+            self.reads = 0
+
+        def __getattr__(self, name):
+            attr = getattr(real_redis, name)
+            if name != "smembers":
+                return attr
+
+            async def _boom(*_args, **_kwargs):
+                raise RedisConnectionError("redis is down")
+
+            return _boom
+
+    app.dependency_overrides[get_redis] = _DeadForTheServiceOnly
+    try:
+        res = await client.post(_kick(target_uuid), headers=admin_headers)
+    finally:
+        app.dependency_overrides[get_redis] = lambda: redis
+
+    assert res.status_code == 503, res.text

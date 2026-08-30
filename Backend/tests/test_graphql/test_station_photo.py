@@ -131,10 +131,12 @@ async def _make_user_with_grants(redis, grants: dict[Perm, str], *, team_uuid: s
                 )
             )
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
-        sid, _ = await SessionRepository(redis).create_session(str(user.uuid), "test")
+        # Session and token must name the SAME identity (ADR-195): the session record is the
+        # source of truth, and a token that disagrees reads as one a switch has replaced.
+        act = encode_act(str(role.uuid), str(team_uuid) if team_uuid is not None else None)
+        sid, _ = await SessionRepository(redis).create_session(str(user.uuid), "test", act=act)
         return str(user.uuid), create_access_token(
-            data={"sub": str(user.uuid)}, sid=sid,
-            act=encode_act(str(role.uuid), str(team_uuid) if team_uuid is not None else None),
+            data={"sub": str(user.uuid)}, sid=sid, act=act,
         )
 
 

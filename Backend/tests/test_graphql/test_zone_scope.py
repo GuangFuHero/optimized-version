@@ -122,7 +122,9 @@ async def _make_ticket_at(point: Point) -> str:
 
 
 @pytest.mark.asyncio
-async def test_zone_scope_grants_edit_on_a_ticket_inside_the_assigned_zone(client, redis, team_assigned_to_zone):
+async def test_zone_scope_grants_edit_on_a_ticket_inside_the_assigned_zone(
+    client, redis, team_assigned_to_zone
+):
     """A `ticket.edit=zone` grant lets the team's member edit a ticket inside its assigned zone."""
     _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone)
     ticket_uuid = await _make_ticket_at(INSIDE_ZONE_POINT)

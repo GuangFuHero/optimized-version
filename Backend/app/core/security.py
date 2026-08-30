@@ -236,7 +236,7 @@ async def _require_live_session(redis, payload: dict) -> None:
     if not sid:
         raise _credentials_exception()
     try:
-        session = await SessionRepository(redis).session_is_live(sid)
+        session = await SessionRepository(redis).get_session(sid)
     except RedisError:
         # Fail closed (ADR-100): with Redis unreachable we cannot tell a live session from a
         # revoked one, and guessing "live" would hand anyone who can disrupt Redis a way to
@@ -249,6 +249,14 @@ async def _require_live_session(redis, payload: dict) -> None:
     # today — both claims are signed — but pinning it here keeps sid/sub paired as an
     # invariant a future path cannot quietly break (ADR-101).
     if session is None or session.get("user_uuid") != payload["sub"]:
+        raise _credentials_exception()
+    # The identity is pinned to the session too (ADR-195). `/auth/switch-identity` writes the
+    # new `act` into the session record, but the access token it replaced carries the same
+    # sid/sub and would otherwise stay usable for the rest of its 15 minutes — replaying it
+    # undoes a deliberate downgrade, and attributes whatever it does to the pre-switch
+    # identity in the audit trail. The session record is the single source of truth for which
+    # identity a session is acting as; a token that disagrees with it is stale.
+    if session.get("act") != payload.get("act"):
         raise _credentials_exception()
 
 
@@ -310,21 +318,21 @@ async def _publish_identity_for_auditing(db: AsyncSession, identity) -> None:
                      {"identity": snapshot})
 
 
-async def get_current_session(
-        token: str = Depends(oauth2_scheme),
-        redis=Depends(get_redis),
-) -> tuple[str, str | None]:
-    """Resolve (user_uuid, sid) from the access token without a DB hit.
+async def get_current_session(token: str = Depends(oauth2_scheme)) -> tuple[str, str | None]:
+    """Resolve (user_uuid, sid) from the access token without a DB hit or a Redis read.
 
-    Runs the same live-session check `get_current_user` does (ADR-180). This is the second
-    door onto the authenticated path, and leaving it unchecked left the logout endpoints
-    reachable by a token that had already been revoked — which is not the harmless no-op it
-    looks like: an intruder holding a revoked token could keep calling `/auth/logout-all`,
-    kicking the victim out of every session they created afterwards until the stolen token
-    expired. The check is free here, still without a database round trip.
+    Deliberately does NOT check that the session is still live (ADR-190, superseding
+    ADR-180). Its only callers are the logout endpoints and `/auth/switch-identity`, and
+    "the session is gone" means something different at each: switch-identity checks it
+    itself and refuses, while logout has already got what it was asking for and answers 204.
+    Raising 401 from here made `/auth/logout` non-idempotent, which breaks the ordinary
+    client pattern of calling logout from a 401 interceptor.
+
+    The attack ADR-180 closed — an intruder replaying a revoked token against
+    `/auth/logout-all` to keep kicking the victim out — is closed in `logout_all` instead,
+    which refuses to revoke anything on behalf of a session that is already gone.
     """
     payload = _decode_access_payload(token)
-    await _require_live_session(redis, payload)
     return payload["sub"], payload.get("sid")
 
 

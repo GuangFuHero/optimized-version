@@ -257,3 +257,206 @@ review 報告見 scratchpad `PR38-review.md`；每一項都以實跑測試取證
 - 本 PR 引入的 2 個 ruff 錯誤（`test_loaders.py` I001、`test_zone_scope.py` E501）
 - `revoke_user_sessions` 越層讀 repo 內部、`smembers` 讀兩次、撤銷數會多算過期 sid
 - 測試缺口：「踢人不會踢到自己」無斷言；Redis 斷線的 fail-closed 只驗了 REST（GraphQL 走 `app.state.redis`，dependency override 打不到）
+
+---
+
+## Task 9: PR #38 第二輪 review 修補（2026-08-30）
+
+reviewer 在 PR #38 上留了 7 條 inline comment，**全部屬實、全部處理**。裁定寫成 ADR-189~195
+（`decisions.md`）。其中 ADR-190 推翻 ADR-180 的實作位置，ADR-193 收掉 Task 8 之前留下的重複方法。
+
+### 9-1 change-password 也登出呼叫者：釘住行為（ADR-189）
+
+- [x] 使用者裁定：「改密碼成功後登出」就是預期流程，行為不變
+- [x] `tests/test_session_revocation.py` — `test_change_password_signs_the_changing_device_out_as_well`
+- [x] ADR-189 記錄呼叫者在撤銷範圍內，以及被否決的「保留當前 session」方案
+
+### 9-2 logout 回復冪等（ADR-190，推翻 ADR-180 的位置）
+
+- [x] `app/core/security.py` — `get_current_session` 回到只解 token；連 `redis` 參數一併移除（三個呼叫端各自有）
+- [x] `app/api/v1/endpoints/auth/session.py` — `logout` 對已消失的 session no-op 回 204；`logout_all` 先確認呼叫者自己的 session 還活著，否則什麼都不撤
+- [x] 三個舊測試改寫成新行為，另加 `test_a_sid_less_token_cannot_sign_anyone_out_of_anything` 釘住 ADR-180 要擋的攻擊仍被擋住
+
+### 9-3 踢人：稽核 + actor + 目標限制（ADR-191）
+
+- [x] `app/services/admin.py` — `_record_session_revocation()` 手寫 `AuditLog`（`action="REVOKE_SESSIONS"`）
+- [x] `app/services/admin.py` — `_holds_super_admin()`；踢自己 409、踢 super_admin 403
+- [x] `app/api/v1/endpoints/admin.py` — log 行補 actor；`AdminConflictError` → 409；**actor uuid 在呼叫服務前先讀出來**（服務會 commit，`expire_on_commit` 之後在 logging 裡碰 `.uuid` 會 `MissingGreenlet`——實際踩到）
+- [x] 三個測試：稽核列內容、踢自己、踢 super_admin
+
+### 9-4 dev Redis 設定對齊 staging（ADR-192）
+
+- [x] `docker-compose.yml` — `--appendonly yes --maxmemory-policy noeviction` + `./.redis:/data`
+- [x] `.gitignore` — 補 `.redis/`
+
+### 9-5 `session_is_live` 併回 `get_session`（ADR-193）
+
+- [x] `app/repositories/session_repository.py` — 刪掉重複方法，docstring 的兩段契約併進 `get_session`
+- [x] `app/core/security.py` — `_require_live_session` 改呼叫 `get_session`
+
+### 9-6 Redis 故障回 503（ADR-194）
+
+- [x] `app/services/admin.py` — 踢人路徑接住 `RedisError` → 503
+- [x] `app/api/v1/endpoints/auth/session.py` — `logout` / `logout-all` 同樣處理（ADR-190 之後它們自己讀 Redis 了）
+- [x] `test_a_kick_during_a_redis_outage_is_503_not_500`、`test_logout_reports_a_redis_outage_rather_than_claiming_success`
+
+### 9-7 `sid` 也 pin 到 `act`（ADR-195）
+
+- [x] `app/core/security.py` — `_require_live_session` 比對 `session["act"] == payload["act"]`
+- [x] `tests/test_identity_switching.py` — `test_the_pre_switch_token_stops_working`
+- [x] **兩個測試 helper 的 session/token `act` 不一致，已修**：`tests/test_graphql/conftest.py:160`、`tests/test_graphql/test_station_photo.py:134` 建 session 時沒帶 `act`，token 卻帶了。這是 ADR-105 想避免的漂移，不加這道檢查看不出來。
+
+### 本分支自己引入的 lint
+
+- [x] `tests/test_graphql/test_zone_scope.py` E501（PR 描述與 Task 8「未處理」清單裡都列過的那一條）；`test_loaders.py` 的 I001 已不復存在
+
+### 驗收（2026-08-30 實跑）
+
+- [x] `tests/test_session_revocation.py` 28 passed、`tests/test_identity_switching.py` 26 passed
+- [x] 全套件 `uv run pytest -q -p no:randomly` → **680 passed / 0 failed**
+- [x] `uv run ruff check` 對本次改動的 9 個檔案全綠
+- [x] Docker 完整驗證（2026-08-30 補跑，見 Task 10）
+
+**跑測試前先 DROP test DB。** 本次實際踩到兩次：第一次 116 failed、第二次 4 failed + 136 errors
+（`Field Coordinator` 角色查不到、大量 `KeyError: 'data'`），DROP 之後同一份程式碼 680 passed。
+與「開工前先確認」第 2 點是同一個現象，**在同一個 session 內連跑兩次全套件就會出現**。
+
+```bash
+docker exec backend-db-1 psql -U postgres -c "DROP DATABASE IF EXISTS disaster_rescue_test WITH (FORCE);"
+```
+
+### 仍未處理（review 提過，這次也沒動）
+
+- `revoke_user_sessions` 越層讀 `repo.redis` / `repo.USER_SESSIONS`，且撤銷數會把已過期的 sid 算進去（只影響 log 與稽核列裡的數字）
+- Redis 斷線的 fail-closed 只驗了 REST；GraphQL 讀 `app.state.redis`，dependency override 打不到
+
+---
+
+## Task 10: ADR-192 的 docker 實測（2026-08-30）
+
+Task 9 把 docker 驗證留成未勾選（「本次除 `docker-compose.yml` 的 Redis 設定外皆為邏輯修補」）。
+這裡把那一項補上——真的起容器、真的登入、真的殺 Redis。
+
+**環境**：獨立 project name `pr38verify`（不動使用者現有的 `backend-*` 容器），backend 開在 8001，
+db/redis 不對外開 port。`alembic upgrade head` + `scripts/seed_rbac.py`（要帶 `PYTHONPATH=/app`）。
+
+### 10-1 設定確實生效
+
+| 檢查 | 結果 |
+|---|---|
+| `CONFIG GET appendonly` | `yes` |
+| `CONFIG GET maxmemory-policy` | `noeviction` |
+| `CONFIG GET maxmemory` | `536870912`（512mb）|
+| `/data` 內容 | `appendonlydir/` 存在，bind 到 `Backend/.redis` |
+
+### 10-2 session 撐不撐得過 Redis 消失（新舊設定對照）
+
+同一個帳號、同一把 access token，唯一變數是 Redis 的設定。
+
+| 情境 | 舊設定（`allkeys-lru`，無 volume） | 新設定（`appendonly` + bind mount） |
+|---|---|---|
+| `docker restart`（graceful） | **活著**（SIGTERM 觸發 RDB 存檔） | 活著 |
+| `docker kill` 後 start（crash / OOM） | **死了——該 token 永久 401** | **活著**（200） |
+| 容器重建（改設定 / 換 image / `down` 後 up） | **死了**（匿名 volume 被換掉） | **活著**（200） |
+
+> **ADR-192 原文的措辭已更正。** 原本寫「容器重啟 = 一次登出所有人」（reviewer 原話也是如此），
+> 實測不成立：graceful restart 會存 RDB。真正會掉的是 crash 與容器重建兩種，風險成立但觸發條件較窄。
+
+### 10-3 `noeviction` 對 session key 的保護（決定性對照）
+
+同一份填充壓力（20000 次 200 bytes 寫入，`maxmemory 3mb`）：
+
+| 設定 | `evicted_keys` | session key | 寫入 |
+|---|---|---|---|
+| `allkeys-lru` | **13635** | **EXISTS → 0（被淘汰，該使用者當場登出）** | 20000 次全成功 |
+| `noeviction` | **0** | EXISTS → 1（完好） | 14198 次回 `OOM command not allowed` |
+
+OOM 期間既有 session 的**讀取**仍然 200——認證不受影響，只有寫入被擋。這正是想要的取捨。
+
+### 10-4 實測發現的殘留問題（ADR-192 沒解決，另開票）
+
+**Redis 每次重啟後，連線池裡每一條殘留連線的第一個請求都會回一次 401。**
+
+舊連線讀到 `redis.exceptions.ConnectionError: Connection closed by server`，`_require_live_session`
+依 ADR-100 fail-closed，log 留下 `refusing the request: Redis (the session store) is unreachable`。
+
+實測（先用 30 個並發請求把連線池撐開，再重啟 Redis）：
+
+| 批次 | 結果 |
+|---|---|
+| 重啟前 30 並發 | 30× 200 |
+| 重啟後第一批 30 並發 | **24× 200 / 6× 401** |
+| 緊接著第二批 30 並發 | 29× 200 / **1× 401** |
+| 之後 | 全 200 |
+
+新舊設定都會發生，跟 ADR-192 無關。根因：`app/main.py:42` 的 `aioredis.from_url()` 沒有設
+`health_check_interval`，也沒有 `retry_on_error`，所以殘留連線要等到被用到、炸掉、換掉才恢復。
+
+對使用者而言這是**假登出**，而且依 ADR-100 的設計，它跟真正的撤銷長得一模一樣。
+
+> **2026-08-30 已修，見 Task 11 / ADR-196。** 這裡原本寫的修法
+> （`health_check_interval=30, retry_on_error=[ConnectionError]`）**只有後半是對的**：實測
+> `health_check_interval` 對這個情境完全無效（health check 的 PING 本身就送在死掉的 socket 上），
+> 真正有效的是 `retry_on_error` + `Retry`。
+
+### 驗收
+
+- [x] Redis 設定實測生效（10-1）
+- [x] 新舊設定對照，三種情境（10-2）
+- [x] `noeviction` 對 session key 的保護，決定性對照（10-3）
+- [x] 驗證環境已完全清除（`docker compose -p pr38verify down -v`），使用者原有的 `backend-*` 容器未受影響
+- [x] 連線池殘留連線造成的假 401 —— **已於 Task 11 / ADR-196 修掉**
+
+---
+
+## Task 11: 修掉連線池造成的假 401（ADR-196，2026-08-30）
+
+Task 10 量到的殘留問題。使用者裁定「修掉，另開一張 ADR」，並選了「全域 retry + 修掉 rotate 那個」。
+
+### 11-1 先量，不要猜
+
+Task 10 順手寫的修法（`health_check_interval=30`）**是錯的**。用拋棄式 Redis 直接量五種設定
+（撐開 30 條連線 → 重啟 Redis → 30 並發）：
+
+| 設定 | 重啟後第一批 | 第二批 |
+|---|---|---|
+| 現況 `from_url(...)` | **30× ConnectionError** | 30 OK |
+| `health_check_interval=30` | **30× ConnectionError** | 30 OK |
+| `health_check_interval=1` | **30× ConnectionError** | 30 OK |
+| **`retry_on_error` + `Retry(3)`** | **30 OK** | 30 OK |
+| 兩者都設 | 30 OK | 30 OK |
+
+health check 的 PING 本身就送在死掉的 socket 上，一樣炸。另外實測確認：
+`redis.asyncio.Redis.__init__` 的 `retry` 雖有預設值，但 **`from_url` 建出來的 client `retry` 是 `None`**。
+
+### 11-2 實作
+
+- [x] 新增 `app/core/redis.py:create_redis_client()`——client 建構集中一處，設 `Retry(ExponentialBackoff(cap=0.2, base=0.01), 3)` + `retry_on_error=[ConnectionError, TimeoutError]`；**刻意不設 `health_check_interval`**，註解寫明原因
+- [x] `app/main.py` 改用它
+- [x] `app/repositories/session_repository.py` 新增 `_claim(rt_hash, nonce)`：NX 的 value 改成每次嘗試的 nonce，NX 失敗時 GET 回來比對
+- [x] `rotate()` 改用 `_claim`
+
+**為什麼一定要動 `_claim`**：retry 會重送指令，`SET NX` 不是冪等的。伺服器執行了但回應掉了的話，
+重送那次會看到 key 已存在——常數值寫法下分不出「別人重放」和「自己的寫入」，會判為重放並
+`revoke_session` 把整個 session 撕掉。只加 retry 等於把假 401 換成更嚴重的假重放。
+
+### 11-3 測試
+
+- [x] `test_claim_succeeds_on_a_free_token`
+- [x] `test_reclaiming_with_our_own_nonce_succeeds`
+- [x] `test_claiming_a_token_someone_else_holds_fails`（真重放仍要被擋）
+- [x] `test_rotate_survives_the_claim_being_retried`——模擬「伺服器執行了、回應掉了、client 重送同一個 `SET NX`」
+- [x] **紅燈確認**：把 `_claim` 還原成常數值，上述測試 **2 failed**；修好後 10 passed
+
+> 第一版測試寫錯過：原本用「呼叫兩次 `rotate()`」來模擬重試——那是**新的一次嘗試、新的 nonce**，
+> 被判為重放是**正確**行為。真正的重試發生在 client 內部、重送的是**同一個** `set`。測試已改成忠實模擬。
+
+### 11-4 驗收（docker 實測）
+
+- [x] 全套件 `uv run pytest -q -p no:randomly` → **684 passed / 0 failed**
+- [x] `uv run ruff check` 對改動的 4 個檔案全綠
+- [x] **假 401 消失**：連續重啟 Redis 三次、每次兩批 30 並發，共 180 個請求**全部 200**（修補前 6/30 → 1/30）
+- [x] **fail-closed 沒被蓋掉**：Redis 完全停掉時仍 401，`refusing the request: Redis (the session store) is unreachable` 照樣進 log（3 次請求 3 行）
+- [x] **真正的撤銷仍然生效**：logout 後同一把 token → 401
+- [x] **延遲可忽略**：Redis 全掉時 ~0.18s 回 401（3 次重試、backoff 上限 200ms）
+- [x] 驗證環境已清除，使用者原有的 `backend-*` 容器未受影響

@@ -5,7 +5,6 @@ import os
 import sys
 from contextlib import asynccontextmanager
 
-import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pyrate_limiter import Duration, Limiter, Rate
@@ -16,7 +15,7 @@ from app.api.v1.api import api_router
 from app.core import security
 from app.core.config import settings
 from app.core.context import AuditContextMiddleware
-from app.core.redis import get_redis
+from app.core.redis import create_redis_client, get_redis
 from app.graphql.router import graphql_router
 
 # Route the app's loggers (e.g. the app.email / app.sms console senders) to stdout at INFO so dev
@@ -39,7 +38,7 @@ async def lifespan(app: FastAPI):
     env = os.getenv("ENV", "development")
     rate_val = 100 if env != "testing" else 999999
     app.state.limiter = Limiter(Rate(rate_val, Duration.MINUTE))
-    app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=False)
+    app.state.redis = create_redis_client(settings.REDIS_URL)
     yield
     # --- shutdown (previously @app.on_event("shutdown")) ---
     if hasattr(app.state, "redis"):
