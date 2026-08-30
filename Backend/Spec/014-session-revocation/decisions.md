@@ -1,4 +1,4 @@
-# Session Revocation — ADR 全集（ADR-099~105、180~181、189~195）
+# Session Revocation — ADR 全集（ADR-099~105、180~181、189~196）
 
 **Date**: 2026-08-20
 **Feature**: 014-session-revocation
@@ -360,7 +360,7 @@ await repo.revoke_all_for_user(user_uuid)
 ➕ 開發環境的 Redis crash 或容器重建不再把所有人登出，省掉一整類「查不出原因的 401」。
 ➕ `noeviction` 實測有效：同一份填充壓力下，`allkeys-lru` 淘汰了 13635 個 key、session key **被淘汰掉**（該使用者當場登出）；`noeviction` 下 `evicted_keys=0`、session key 完好，改為 14198 次寫入回 OOM 錯誤。既有 session 的**讀取**在 OOM 期間照常 200——這正是要的取捨。
 ➖ 記憶體壓力下 Redis 會回錯誤而不是默默丟資料。這是要的：認證 key 被默默丟掉，比寫入失敗更難查。
-➖ **本 ADR 沒有解決的殘留問題（2026-08-30 實測發現）**：Redis 重啟後，backend 連線池裡每一條殘留連線的**第一個請求都會回一次 401**——舊連線讀到 `ConnectionError: Connection closed by server`，依 ADR-100 fail-closed。實測 30 個並發請求中 6 個 401，下一輪還有 1 個，之後全綠（連線換掉就自癒）。`app/main.py:42` 的 `aioredis.from_url()` 沒有設 `health_check_interval` 也沒有 `retry_on_error`。這是使用者看得到的假登出，**修法另開一張票**（一行設定 + 一個 ADR），不混進本輪 review 修補。
+➖ **本 ADR 沒有解決、後續由 ADR-196 修掉的殘留問題**：Redis 重啟後，backend 連線池裡每一條殘留連線的**第一個請求都會回一次 401**——舊連線讀到 `ConnectionError: Connection closed by server`，依 ADR-100 fail-closed。實測 30 個並發請求中 6 個 401，下一輪還有 1 個，之後全綠（連線換掉就自癒）。這是使用者看得到的假登出。**已於 ADR-196 修掉**（`retry_on_error` + `Retry`；當時猜的 `health_check_interval` 一行修法實測無效，見該 ADR 的對照表）。
 
 ---
 
@@ -424,3 +424,59 @@ if session.get("act") != payload.get("act"):
 ➕ 稽核不會再把切換後的行為記在切換前的身分上。
 ➖ **所有發 token 的路徑都必須讓 session 與 token 的 `act` 一致**。production 路徑本來就一致（`issue_token_pair` 一次寫兩邊、`refresh` 寫回 session、`switch-identity` 兩邊都更新），但 review 時抓到**兩個測試 helper 不一致**：`tests/test_graphql/conftest.py` 與 `tests/test_graphql/test_station_photo.py` 建 session 時沒帶 `act`，token 卻帶了。兩處都已修正——這正是 ADR-105（測試 token 要跟 production 同形，不要讓測試繞過檢查）想避免的漂移。
 ➖ 前端若同時持有切換前後兩張 token（例如兩個分頁），舊的那張會 401。正確的處理是把 access token 併進已存的 pair（ADR-070 已經寫過這件事）。
+
+---
+
+### ADR-196 Redis client 加上 command retry，並讓 refresh token 的 claim 可以被安全重試
+
+**白話**：Redis 每重啟一次，就有一批使用者莫名其妙被登出一次。原因是 backend 連線池裡的舊連線已經死了，但要等到有人用到才發現。加上重試就沒事了——但重試會讓「換 refresh token」那段變得危險，所以同時要修。
+
+**Date**: 2026-08-30
+**Status**: 定案、已實作、已 docker 實測
+
+**Context**：ADR-192 的 docker 驗證（`plan.md` Task 10）量到一個 ADR-192 沒解決的問題：
+
+> **Redis 每次重啟後，連線池裡每一條殘留連線的第一個請求都會回一次 401。**
+
+實測（先用 30 個並發請求撐開連線池，再重啟 Redis）：第一批 30 個請求 **6 個 401**，第二批還有 1 個，之後全綠。舊連線讀到 `ConnectionError: Connection closed by server`，`_require_live_session` 依 ADR-100 fail-closed 成 401。
+
+對使用者而言這是**假登出**，而且依 ADR-100 的設計它跟真正的撤銷**長得一模一樣**——正是 reviewer 那條 comment（`app/core/security.py:239`）擔心的「查不出原因的 401」，只是成因不是 eviction 而是連線池。
+
+**Task 10 當時寫的修法是錯的，本 ADR 一併更正。** 那裡寫「一行 `health_check_interval=30`」——實測**完全無效**：
+
+| 設定 | 重啟後第一批 30 並發 | 第二批 |
+|---|---|---|
+| 現況（`from_url` 什麼都不設）| **30 個 ConnectionError** | 30 OK |
+| `health_check_interval=30` | **30 個 ConnectionError** | 30 OK |
+| `health_check_interval=1` | **30 個 ConnectionError** | 30 OK |
+| **`retry_on_error` + `Retry(3)`** | **30 OK** | 30 OK |
+| 兩者都設 | 30 OK | 30 OK |
+
+原因很直接：health check 的那個 PING **本身就是送在死掉的 socket 上**，一樣炸，而且沒有東西接。真正讓它重連的是 retry。順帶一提，`redis.asyncio.Redis.__init__` 的 `retry` 有預設值，但**走 `from_url` 建出來的 client `retry` 是 `None`**（實測），所以現況等於沒有任何重試。
+
+**Decision**：
+
+1. **client 建構集中到 `app/core/redis.py:create_redis_client()`**，設定 `retry=Retry(ExponentialBackoff(cap=0.2, base=0.01), 3)` 與 `retry_on_error=[ConnectionError, TimeoutError]`。**不設 `health_check_interval`**，並在該處註解寫明它對這個情境無效，免得有人日後「補上」它並以為解決了什麼。
+
+2. **`SessionRepository._claim()`：NX 的 value 從常數 `b"1"` 改成每次嘗試的 nonce。** 這是為了讓上面那個 retry 是安全的。
+
+**為什麼第 2 點是必要的、不是加碼**：retry 會重送指令，而 `SET NX` **不是冪等的**。如果伺服器執行了但回應在半路掉了，重送的那次會發現 key 已經存在——而在常數值的寫法下，呼叫端**無法分辨「別人重放了這個 token」和「我看到的是自己剛剛的寫入」**。它會判為重放，然後 `revoke_session` 把**整個 session 撕掉**：使用者被從所有裝置登出，還被告知他的 refresh token 遭竊。也就是說，只加 retry 會把一個「假 401」換成一個更嚴重的「假重放」。
+
+把 value 改成 nonce 之後，NX 失敗時 GET 回來比對即可分辨：值不是自己的 → 真重放；是自己的 → 我贏了，只是回應掉了。GET 只在 NX 失敗那條路上跑，正常換發仍然是一次往返。
+
+**已知取捨（接受，不修）**：`verification_repository.py:55` 的 `INCR :attempts` 同樣非冪等，重試會多扣一次 OTP 嘗試次數。後果是使用者少一次輸入機會，且只在「連線正好死在這個指令中間」的窄窗發生。與現況每次 Redis 重啟就有一批人被假登出相比，這個代價小得多。真要修的正解是把計數改成帶 nonce 的集合基數而不是 `INCR`——那會動到 OTP 驗證路徑，另開票。
+
+**否決的替代方案**：
+- **只設 `health_check_interval`**：實測無效（見上表）。
+- **只給認證讀取路徑另建一個帶 retry 的 client**：寫入語意完全不動，但 `logout` / `refresh` 在 Redis 重啟後仍然會噴錯，等於只修一半，而且多一個 client 要維護。
+- **只加 retry、兩個非冪等指令的風險都接受**：改動最小，但保留「連線死在 `SET NX` 中間 → 使用者被踢出所有裝置並被告知 token 遭竊」這個窗口。假 401 換成假重放，不划算。
+
+**Consequences**：
+➕ 假 401 消失。實測連續重啟 Redis 三次、每次兩批 30 並發，共 180 個請求 **全部 200**（修補前是 6/30、1/30）。
+➕ **fail-closed 沒有被 retry 蓋掉**：Redis 真的停掉時仍然 401，且 `refusing the request: Redis (the session store) is unreachable` 照樣進 log（實測 3 次請求 3 行 log）。ADR-100 完整保留。
+➕ 重試預算對延遲的影響可忽略：Redis 全掉時的請求 **~0.18s** 回 401（三次重試、backoff 上限 200ms）。
+➕ client 建構只有一個地方，之後要調 retry 參數不必到處找。
+➖ `_claim` 在重放路徑上多一次 GET。只發生在真的重放或重試，正常換發不受影響。
+➖ `INCR :attempts` 的重複計數如上，已接受並記錄。
+
+**與 ADR-100 的關係**：ADR-100 說「分不出 session 死了還是 Redis 掛了就一律 401」，這條完全不變。本 ADR 改的是**在什麼情況下才算「Redis 掛了」**——一條死掉的池化連線不算，它只是需要重連。

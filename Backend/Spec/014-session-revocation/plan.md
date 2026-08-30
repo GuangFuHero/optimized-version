@@ -392,9 +392,12 @@ OOM 期間既有 session 的**讀取**仍然 200——認證不受影響，只�
 新舊設定都會發生，跟 ADR-192 無關。根因：`app/main.py:42` 的 `aioredis.from_url()` 沒有設
 `health_check_interval`，也沒有 `retry_on_error`，所以殘留連線要等到被用到、炸掉、換掉才恢復。
 
-對使用者而言這是**假登出**，而且依 ADR-100 的設計，它跟真正的撤銷長得一模一樣。修法很短
-（`from_url(..., health_check_interval=30, retry_on_error=[ConnectionError])`），但那是新的行為決策、
-要自己的 ADR，**不混進本輪 review 修補**。
+對使用者而言這是**假登出**，而且依 ADR-100 的設計，它跟真正的撤銷長得一模一樣。
+
+> **2026-08-30 已修，見 Task 11 / ADR-196。** 這裡原本寫的修法
+> （`health_check_interval=30, retry_on_error=[ConnectionError]`）**只有後半是對的**：實測
+> `health_check_interval` 對這個情境完全無效（health check 的 PING 本身就送在死掉的 socket 上），
+> 真正有效的是 `retry_on_error` + `Retry`。
 
 ### 驗收
 
@@ -402,4 +405,63 @@ OOM 期間既有 session 的**讀取**仍然 200——認證不受影響，只�
 - [x] 新舊設定對照，三種情境（10-2）
 - [x] `noeviction` 對 session key 的保護，決定性對照（10-3）
 - [x] 驗證環境已完全清除（`docker compose -p pr38verify down -v`），使用者原有的 `backend-*` 容器未受影響
-- [ ] 連線池殘留連線造成的假 401 —— **未修，已記錄，需另開票**
+- [x] 連線池殘留連線造成的假 401 —— **已於 Task 11 / ADR-196 修掉**
+
+---
+
+## Task 11: 修掉連線池造成的假 401（ADR-196，2026-08-30）
+
+Task 10 量到的殘留問題。使用者裁定「修掉，另開一張 ADR」，並選了「全域 retry + 修掉 rotate 那個」。
+
+### 11-1 先量，不要猜
+
+Task 10 順手寫的修法（`health_check_interval=30`）**是錯的**。用拋棄式 Redis 直接量五種設定
+（撐開 30 條連線 → 重啟 Redis → 30 並發）：
+
+| 設定 | 重啟後第一批 | 第二批 |
+|---|---|---|
+| 現況 `from_url(...)` | **30× ConnectionError** | 30 OK |
+| `health_check_interval=30` | **30× ConnectionError** | 30 OK |
+| `health_check_interval=1` | **30× ConnectionError** | 30 OK |
+| **`retry_on_error` + `Retry(3)`** | **30 OK** | 30 OK |
+| 兩者都設 | 30 OK | 30 OK |
+
+health check 的 PING 本身就送在死掉的 socket 上，一樣炸。另外實測確認：
+`redis.asyncio.Redis.__init__` 的 `retry` 雖有預設值，但 **`from_url` 建出來的 client `retry` 是 `None`**。
+
+### 11-2 實作
+
+- [x] 新增 `app/core/redis.py:create_redis_client()`——client 建構集中一處，設 `Retry(ExponentialBackoff(cap=0.2, base=0.01), 3)` + `retry_on_error=[ConnectionError, TimeoutError]`；**刻意不設 `health_check_interval`**，註解寫明原因
+- [x] `app/main.py` 改用它
+- [x] `app/repositories/session_repository.py` 新增 `_claim(rt_hash, nonce)`：NX 的 value 改成每次嘗試的 nonce，NX 失敗時 GET 回來比對
+- [x] `rotate()` 改用 `_claim`
+
+**為什麼一定要動 `_claim`**：retry 會重送指令，`SET NX` 不是冪等的。伺服器執行了但回應掉了的話，
+重送那次會看到 key 已存在——常數值寫法下分不出「別人重放」和「自己的寫入」，會判為重放並
+`revoke_session` 把整個 session 撕掉。只加 retry 等於把假 401 換成更嚴重的假重放。
+
+### 11-3 測試
+
+- [x] `test_claim_succeeds_on_a_free_token`
+- [x] `test_reclaiming_with_our_own_nonce_succeeds`
+- [x] `test_claiming_a_token_someone_else_holds_fails`（真重放仍要被擋）
+- [x] `test_rotate_survives_the_claim_being_retried`——模擬「伺服器執行了、回應掉了、client 重送同一個 `SET NX`」
+- [x] **紅燈確認**：把 `_claim` 還原成常數值，上述測試 **2 failed**；修好後 10 passed
+
+> 第一版測試寫錯過：原本用「呼叫兩次 `rotate()`」來模擬重試——那是**新的一次嘗試、新的 nonce**，
+> 被判為重放是**正確**行為。真正的重試發生在 client 內部、重送的是**同一個** `set`。測試已改成忠實模擬。
+
+### 11-4 驗收（docker 實測）
+
+- [x] 全套件 `uv run pytest -q -p no:randomly` → **684 passed / 0 failed**
+- [x] `uv run ruff check` 對改動的 4 個檔案全綠
+- [x] **假 401 消失**：連續重啟 Redis 三次、每次兩批 30 並發，共 180 個請求**全部 200**（修補前 6/30 → 1/30）
+- [x] **fail-closed 沒被蓋掉**：Redis 完全停掉時仍 401，`refusing the request: Redis (the session store) is unreachable` 照樣進 log（3 次請求 3 行）
+- [x] **真正的撤銷仍然生效**：logout 後同一把 token → 401
+- [x] **延遲可忽略**：Redis 全掉時 ~0.18s 回 401（3 次重試、backoff 上限 200ms）
+- [x] 驗證環境已清除，使用者原有的 `backend-*` 容器未受影響
+
+### 已知取捨（接受，未修）
+
+`verification_repository.py:55` 的 `INCR :attempts` 同樣非冪等，重試會多扣一次 OTP 嘗試次數。
+窄窗、後果小（少一次輸入機會），正解是改成帶 nonce 的集合基數，會動到 OTP 驗證路徑，另開票。

@@ -109,6 +109,27 @@ class SessionRepository:
         """Fetch a refresh-token record by hash."""
         return self._load(await self.redis.get(self.REFRESH + rt_hash))
 
+    async def _claim(self, rt_hash: str, nonce: bytes) -> bool:
+        """Claim `rt_hash` for this rotation attempt. True if it is ours, False if replayed.
+
+        The value written is a per-attempt `nonce` rather than a constant, so that the claim
+        can be safely retried (ADR-196). The shared Redis client retries a command whose
+        connection died underneath it, and a `SET NX` is not idempotent: if the server ran it
+        but the reply was lost, the retry finds the key already set and — with a constant
+        value — the caller could not tell "someone replayed this token" from "I am seeing my
+        own write". It would conclude replay and revoke the whole session, signing the user
+        out of every device and telling them their token was stolen.
+
+        Reading the value back settles it. A mismatch is a genuine replay; our own nonce means
+        we won the claim and only the reply went missing.
+
+        The GET only runs on the NX-failed path, so the ordinary rotation is still one
+        round trip.
+        """
+        if await self.redis.set(self.USED + rt_hash, nonce, nx=True, ex=self.ttl):
+            return True
+        return await self.redis.get(self.USED + rt_hash) == nonce
+
     async def rotate(self, raw_token: str) -> tuple[str, str, str]:
         """Validate + rotate a refresh token. Returns (sid, user_uuid, new_raw_token).
 
@@ -123,8 +144,7 @@ class SessionRepository:
         user_uuid = rec["user_uuid"]
         # atomically claim this token: only the first rotation sets the NX flag and proceeds.
         # any later (or concurrent-losing) rotation finds it already set -> replay -> revoke session.
-        claimed = await self.redis.set(self.USED + rt_hash, b"1", nx=True, ex=self.ttl)
-        if not claimed:
+        if not await self._claim(rt_hash, uuid.uuid4().hex.encode()):
             await self.revoke_session(sid)
             raise RefreshTokenReuse
         # NOTE: the claim is atomic, but mint-new-token + update-pointer below are not transactional with it.
