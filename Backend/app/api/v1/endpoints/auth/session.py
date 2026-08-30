@@ -69,13 +69,17 @@ async def login(
     if form_data.scopes:
         # OAuth2PasswordRequestForm carries `scope`; the client passes the identity it
         # remembers from last time here (ADR-069). An identity it no longer holds falls back
-        # to the default rather than erroring: a stale client-side memory is not a failure.
+        # to the default rather than erroring: a stale client-side memory is not a failure —
+        # and the response now says which identity it landed on, so that is observable
+        # (ADR-205).
+        #
+        # `scope` is OAuth2's authorization-scope list and this is not one; the trade-off is
+        # recorded in ADR-207 rather than left as an intent comment. Only `scopes[0]` is
+        # read, by definition: this field carries one identity, not a list.
         identity = await active_identity_repository.resolve(db, str(user.uuid), form_data.scopes[0])
     if identity is None:
         identity = await active_identity_repository.default_for_user(db, str(user.uuid))
-    return await issue_token_pair(
-        redis, request, str(user.uuid), act=identity.to_claim() if identity else None
-    )
+    return await issue_token_pair(redis, request, str(user.uuid), identity=identity)
 
 
 @router.post("/refresh",
@@ -105,6 +109,11 @@ async def refresh(
     # What the caller asked for, else what this session was already acting as. None means a
     # session predating ADR-188, which falls back to the platform default as it used to.
     wanted = body.identity or (session or {}).get("act")
+    # Resolved once, before rotation, and reused afterwards (ADR-206). `rotate()` returns the
+    # same session's owner and `wanted` cannot change in between, so resolving a second time
+    # asked the database an identical question — on every refresh, from every logged-in
+    # client, roughly every 15 minutes.
+    identity = None
     if wanted is not None and record is not None:
         identity = await active_identity_repository.resolve(db, record["user_uuid"], wanted)
         if identity is None:
@@ -122,10 +131,9 @@ async def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from err
-    identity = (
-        await active_identity_repository.resolve(db, user_uuid, wanted) if wanted
-        else await active_identity_repository.default_for_user(db, user_uuid)
-    )
+    # Only the no-identity path still needs a query here: `wanted` was already resolved above.
+    if not wanted:
+        identity = await active_identity_repository.default_for_user(db, user_uuid)
     # Rotation preserves the session record, so a `wanted` that came from it is already
     # stored; one the caller named has to be written back, or the next refresh without an
     # identity would revert to whatever the session remembered before.
@@ -137,6 +145,7 @@ async def refresh(
     return TokenPair(
         access_token=access_token, refresh_token=new_refresh,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        identity=identity.to_view() if identity else None,
     )
 
 
@@ -189,7 +198,8 @@ async def switch_identity(
         data={"sub": str(current_user.uuid)}, sid=sid, act=identity.to_claim()
     )
     return AccessTokenResponse(
-        access_token=access_token, expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        access_token=access_token, expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        identity=identity.to_view(),
     )
 
 

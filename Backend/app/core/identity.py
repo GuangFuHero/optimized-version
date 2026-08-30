@@ -32,6 +32,18 @@ class ActiveIdentity:
         """Serialize for the access token's `act` claim."""
         return encode_act(self.role_uuid, self.team_uuid)
 
+    def to_view(self) -> dict:
+        """The shape returned to clients on a token response (ADR-205).
+
+        Deliberately not `to_audit_context()`: that one is nested under an `identity` key and
+        keyed for the audit trail's own reader. Same four values, different envelope, and
+        letting one drift into the other would tie the API's shape to the audit format.
+        """
+        return {
+            "role_uuid": self.role_uuid, "role": self.role_name,
+            "team_uuid": self.team_uuid, "team": self.team_name,
+        }
+
     def to_audit_context(self) -> dict:
         """The snapshot written to `audit_logs.context` (ADR-076).
 

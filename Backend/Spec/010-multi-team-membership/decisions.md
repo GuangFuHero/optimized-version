@@ -558,3 +558,89 @@ ADR-069 第 3 點是刻意的設計：身分的記憶交給前端，`refresh` �
 ➖ **推翻了 ADR-069 第 3 點**。「JWT 是唯一真相」不再成立——session 也是一份記錄，兩者可能不同步（例如舊 token 配新 session 記錄）。實際上無害：`act` 每次都要對 DB 解析驗證（ADR-096），session 那份只決定「沒指定時用哪個」。
 ➖ 每次 refresh 多一次 Redis 讀取（`get_session`），切換多一次讀寫。
 ➖ 身分現在是 per-session 而非 per-token 的狀態。ADR-069 選 per-session 正是為了「同一人在兩台裝置上互不干擾」——這一點不受影響，記錄仍在各自的 session 裡。
+
+---
+
+## PR #37 code review 後補（2026-08-30，ADR-205~207）
+
+reviewer 留了三條，全部屬實。
+
+---
+
+### ADR-205 token 回應載明它帶的是哪個身分
+
+**白話**：登入／換發／切換身分回來的那個回應，現在會直接告訴你「這張 token 是用哪個身分」，不必自己去解 JWT。
+
+**Date**: 2026-08-30
+
+**Context**：`TokenPair`（login / refresh）與 `AccessTokenResponse`（switch-identity）都沒說回傳的 token 實際帶了哪個身分。身分只活在 JWT 的 `act` claim 裡，client 要嘛自己解 token，要嘛再打一次 `GET /users/me`。
+
+問題不在不方便，在於**回應裡的身分不一定是 client 要的那一個，而 client 沒有辦法察覺**：
+
+- `login` 帶一個使用者已經不再持有的 `scope`，會退回平台身分並**仍然回 200**（ADR-069 的刻意設計——過期的 client 端記憶不算失敗），但那與成功完全無法區分。
+- `refresh` 不帶 `identity` 時改從 session 紀錄取（ADR-188），正確，但 client 無從確認自己落在哪個身分。
+- 兩者在什麼都解析不出來時都會退到 `default_for_user`。
+
+這幾條**正是** super_admin 曾經在 refresh 時被默默重新提權的那些路徑。bug 修掉了，但它周圍的沉默沒有。
+
+**Decision**：兩個回應都加一個可為 null 的 `identity: IdentityView`，內容是 `{role_uuid, role, team_uuid, team}`。
+
+- **名稱與 uuid 一起回**，理由與 `audit_logs.context` 快照名稱相同：role 可被改名或硬刪，而要顯示「目前身分：花蓮縣府／管理員」的 client 不該為此再解析兩個 uuid。
+- **`ActiveIdentity.to_view()` 是新的方法，不重用 `to_audit_context()`**。後者外面包了一層 `identity` 鍵、是為稽核讀者設計的；同樣四個值、不同信封，讓其中一個漂移成另一個會把 API 形狀綁死在稽核格式上。
+- **`issue_token_pair` 改收 `ActiveIdentity` 物件而非 `act` 字串**，這樣回應能報告身分而不必再解析一次。
+
+**否決的替代方案**：只回 `act` 字串。改動最小，但 client 拿到的仍是兩個 uuid，要顯示名稱還是得再查一次——沒有真正解決「不必第二次往返」這件事。
+
+**Consequences**：
+➕ client 讀回應就知道自己在哪個身分，`login` 的靜默退回變成看得見。
+➕ 切換身分之後不必解 token 就能確認切成功。
+➖ 回應多一個欄位。純新增、可為 null，現有 client 不受影響。
+➖ `register` 與 SSO 登入回傳 `identity: null`——它們本來就不帶身分（沿用既有行為，本 ADR 不改）。
+
+---
+
+### ADR-206 `refresh` 只解析一次身分
+
+**白話**：換發 token 時同一個身分被查了兩次資料庫，同樣的輸入、同樣的答案。
+
+**Date**: 2026-08-30
+
+**Context**：`wanted` 有值時，`refresh` 對資料庫解析同一個身分兩次：rotation 之前解一次以決定要不要 401，rotation 之後再解一次來簽 token。`record["user_uuid"]` 與 `user_uuid` 是同一個人（`rotate()` 回傳的就是這個 session 的擁有者），`wanted` 中間也不會變。等於**每一次 refresh 都多一次資料庫往返**——而每個登入中的 client 大約每 15 分鐘就做一次。
+
+**Decision**：第一次解析的結果留著重用；rotation 之後只有「完全沒有 `wanted`」那條路還需要查 `default_for_user`。
+
+**明確不改的部分**：**檢查的順序維持原樣**。`rotate()` 會燒掉舊的 refresh token，所以在它之後才拒絕，會讓呼叫端手上拿著一張死 token 又沒有替代品，而他的重試會被判成 replay。這一點 reviewer 也特別點名了，ADR 記在這裡以免日後有人「順手優化」時把順序一起動掉。
+
+**Consequences**：
+➕ 每次 refresh 少一次資料庫往返。
+➖ `identity` 變成跨 rotation 的區域變數，讀的人要意識到它是在上面被賦值的。已在該處註解寫明。
+➖ 同一條路徑仍然讀三次 Redis（`get_refresh`、`get_session`、`rotate`）。reviewer 一併提到，本 ADR **不處理**：那三次讀的是不同的 key，要合併得改 `rotate()` 的介面，收益小於風險。
+
+---
+
+### ADR-207 `login` 繼續用 OAuth2 的 `scope` 欄位攜帶身分
+
+**白話**：登入時「我要用哪個身分」是塞在 OAuth2 的 `scope` 欄位裡。那個欄位照規格不是這個用途，但我們維持現狀，把理由記下來。
+
+**Date**: 2026-08-30
+
+**Context**：`login` 從 `OAuth2PasswordRequestForm.scope` 讀出 `role_uuid:team_uuid`。而 `scope` 在 OAuth2 裡有明確定義——空白分隔的授權範圍清單。
+
+reviewer 指出三個後果，都屬實：
+
+1. **只讀 `scopes[0]`**。client 送兩個空白分隔的值，第二個會被無聲丟掉，不報錯。
+2. 任何照規格解讀 `scope` 的 client／proxy／gateway 會看到一個格式錯誤的 scope 清單。
+3. `switch-identity` 表達同一個概念用的是專屬 body（`SwitchIdentityRequest`：`role_uuid` + `team_uuid`）。「我是哪個身分」的兩個入口形狀不同、驗證也不同。
+
+**Decision**：維持現狀，記錄取捨（reviewer 明白把「寫一條 ADR」列為可接受的出口）。
+
+理由：`OAuth2PasswordRequestForm` 是 FastAPI 的標準相依，`/auth/login` 整個表單解析都靠它。要加一個專屬欄位就得自己拆 form，或在標準表單旁邊再收一個欄位——兩者都會讓這個端點偏離框架慣例，而換來的是一個**只在登入時、只由自家前端使用**的欄位語意純度。前端已經在用這個形狀。
+
+**明確記錄的限制**：**只有 `scopes[0]` 會被讀**。這不是 bug，是這個欄位在此處的定義——它攜帶一個身分，不是一個清單。
+
+**否決的替代方案**：改成 `role_uuid` / `team_uuid` 專屬欄位，與 `switch-identity` 一致。語意最乾淨，但那是**登入請求的破壞性變更**，得同步改前端。真的要做，正確時機是前端串接身分切換 UI 的時候，一次改完——那時這個決定不會擋路。
+
+**Consequences**：
+➕ 端點維持 FastAPI 的標準 OAuth2 表單形狀。
+➖ `scope` 帶著一個非 OAuth2 語意的值。已在 `login` 的 docstring 與本 ADR 記明，不再只是一句意圖註解。
+➖ 「我是哪個身分」仍有兩種形狀（login 用 `scope`、switch-identity 用 body）。
