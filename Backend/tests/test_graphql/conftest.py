@@ -163,10 +163,14 @@ async def _create_user_with_role(redis, role_name: str) -> tuple[str, str]:
         # The token must name the identity it acts as (feature 010): get_current_user refuses
         # a token whose identity it cannot resolve, and a token with none resolves to zero
         # grants. Every role in this fixture set is platform-kind, hence no team.
-        sid, _ = await SessionRepository(redis).create_session(str(user.uuid), "test")
-        token = create_access_token(
-            data={"sub": str(user.uuid)}, sid=sid, act=encode_act(str(role.uuid), None)
-        )
+        #
+        # The SESSION has to name the same identity (ADR-195). The session record is the
+        # source of truth for what a session acts as, and a token that disagrees with it is
+        # treated as one a switch has replaced — which is what a session created without the
+        # `act` looks like.
+        act = encode_act(str(role.uuid), None)
+        sid, _ = await SessionRepository(redis).create_session(str(user.uuid), "test", act=act)
+        token = create_access_token(data={"sub": str(user.uuid)}, sid=sid, act=act)
         return str(user.uuid), token
 
 

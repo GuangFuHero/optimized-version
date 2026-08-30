@@ -1,8 +1,8 @@
-# Session Revocation — ADR 全集（ADR-099~105、180~181）
+# Session Revocation — ADR 全集（ADR-099~105、180~181、189~195）
 
 **Date**: 2026-08-20
 **Feature**: 014-session-revocation
-**Status**: 定案，**已實作**（2026-08-20；ADR-180/181 為 2026-08-25 code review 後補）
+**Status**: 定案，**已實作**（2026-08-20；ADR-180/181 為 2026-08-25 code review 後補；ADR-189~195 為 2026-08-30 PR #38 第二輪 review 後補，其中 ADR-190 推翻 ADR-180 的實作位置）
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/012-account-profile/decisions.md` 的 ADR-098。
 
 **前情**：本票源自 `Spec/010` 的 ADR-071（access token 撤銷 / fail-closed）。該 ADR 在 010 的改版中撤回並拆出，理由是它修的是一個與多 team 無關的既有安全洞。這裡是它的完整版本。
@@ -200,6 +200,12 @@ review 時以測試實證：撤銷 → `/users/me` 回 401（token 確實死了�
 ➖ **行為變更**：沒有 `sid` 的 token 呼叫 `/auth/logout` 從「204 no-op」變成 401。這是刻意的，理由與 ADR-101 相同——如果「不帶 sid」能繞過檢查，那檢查就不成立。`app/api/v1/endpoints/auth/session.py:163` 的 docstring 已同步更正。
 ➖ `/auth/switch-identity` 現在一個請求讀兩次 Redis（`get_current_session` 一次、`get_current_user` 一次）。兩次都是同一個 key 的 GET，可忽略；真要消除得引進 request-scoped 快取，成本高於收益（YAGNI）。
 
+> **⚠️ 實作位置已被 ADR-190 推翻（2026-08-30）。** 本 ADR 對威脅的判斷成立，但把檢查放進
+> `get_current_session` 讓 `/auth/logout` 變成非冪等（第二次呼叫 401），撞上前端在 401
+> 攔截器裡呼叫 logout 的常見寫法。檢查已移到 `logout_all`，攻擊被擋得更徹底（不是回 401，
+> 而是根本不執行 revoke）；上面那條「沒有 sid 的 token 呼叫 logout 回 401」的 ⚠️ 也一併撤回。
+> **實作以 ADR-190 為準。**
+
 ---
 
 ### ADR-181 踢人端點明確要求 `Scope.ALL`
@@ -233,3 +239,179 @@ if scope != Scope.ALL:
 ➖ 這是 ADR-103 的收斂而非推翻：權限沿用 `USER_EDIT` 的決定不變，只是補上範圍條件。
 
 **與 ADR-103 的關係**：ADR-103 仍然有效，本 ADR 只補上它遺漏的範圍條件。依專案慣例（後續 ADR 勝），實作以本 ADR 為準。
+
+---
+
+## PR #38 第二輪 code review 後補（2026-08-30，ADR-189~195）
+
+reviewer 在 PR #38 上留了 7 條，全部屬實。以下七條 ADR 是逐條的裁定，其中 ADR-190 明確**推翻 ADR-180 的實作位置**（依專案慣例：後續 ADR 勝）。
+
+---
+
+### ADR-189 change-password 一併登出「改密碼的那台裝置」，這是預期流程
+
+**白話**：改完密碼你自己也會被登出，要重新登入。這是刻意的，不是 bug。
+
+**Date**: 2026-08-30
+
+**Context**：`change-password` 呼叫 `revoke_all_for_user`（`app/api/v1/endpoints/auth/password.py:57`），revoke 的範圍包含**發出這個請求的那個 session**。ADR-099 之後，呼叫者的 access token 在下一個請求就死了；`revoke_session` 同時刪掉 `refresh:{current_rt_hash}`，所以 refresh token 也沒了——除了重新登入沒有別的路。
+
+本功能之前 access token 還能撐 15 分鐘，把這件事蓋住了。`decisions.md` 只寫了 change-password「自動變成即時生效」，沒有任何一句說明呼叫者也在範圍內，測試也只斷言**別台裝置**拿到 401。
+
+**Decision**：行為維持不變（全部登出，含呼叫者），並且**明文記錄 + 用測試釘住**。使用者裁定：「更改密碼，輸入舊密碼跟新密碼，成功後登出」就是預期流程。
+
+**否決的替代方案**：保留呼叫者的 session（revoke 除了當前 `sid` 以外的全部）。這是多數產品的做法，體感較好，但它把「改密碼」從一個乾淨的「所有既有憑證失效」事件變成有例外的事件——而改密碼最重要的使用情境正是「我懷疑帳號被盜」，此時保留任何一條既有憑證都需要額外論證「那條一定是本人的」。不做。
+
+**Consequences**：
+➕ 「改密碼 = 所有既有憑證失效」沒有例外，這條規則不需要附註。
+➕ 測試 `test_change_password_signs_the_changing_device_out_as_well` 釘住呼叫者拿 401，這件事不會再靠讀程式碼才知道。
+➖ **前端相依**：`Frontend/apps/demo/src/lib/` 目前沒有 401 handling 也沒有 `signOut`，所以今天改完密碼會停在一個壞掉的畫面。這與 PR #38 描述裡「移除後台權限」的前端缺口是**同一張票**，不是新的一張。
+
+---
+
+### ADR-190 live-session 檢查移出 `get_current_session`，改由 `logout_all` 承擔
+
+**白話**：連續按兩次登出，第二次不該回錯誤。但「已經被撤銷的 token」還是不准去踢別人的 session。
+
+**Date**: 2026-08-30
+
+**Context**：ADR-180 把 `_require_live_session` 放進 `get_current_session`，讓 `/auth/logout` 與 `/auth/logout-all` 都擋掉已撤銷的 token。它擋住的攻擊是真的（見 ADR-180），但**位置選錯了**，代價是 `/auth/logout` 變成非冪等：第一次 204，之後每次 401。
+
+`POST /auth/logout` 要的是**終局狀態**「這台裝置已登出」。第二次呼叫時那個狀態已經成立，回 401 是在報告一個沒有發生的失敗。它同時撞上前端最常見的寫法——在 401 攔截器裡呼叫 logout——變成 `401 → logout → 401`。ADR-180 的 ⚠️ 只提了「沒有 sid 的 token」那一種，而這一種影響的是**前端真的持有的 token**。
+
+**Decision**：`get_current_session` 回到「只解 token，不讀 Redis」。改由端點各自決定「session 不在」是什麼意思：
+
+- `logout`：什麼都不做，回 204（`revoke_session` 本來就對不存在的 session 無動作）。
+- `logout-all`：**先確認呼叫者自己的 session 還活著**，不活著就什麼都不 revoke，一樣回 204。
+- `switch-identity`：本來就自己檢查並回 401（ADR-183），不動。
+
+ADR-180 要擋的攻擊由 `logout_all` 的那個檢查擋下來，而且擋得更徹底——不是「回 401 所以攻擊者知道失敗了」，而是**根本不執行 revoke**。
+
+```python
+user_uuid, sid = session
+repo = SessionRepository(redis)
+if sid is None or await repo.get_session(sid) is None:
+    return          # 204，什麼都沒撤
+await repo.revoke_all_for_user(user_uuid)
+```
+
+**否決的替代方案**：維持 401、把「重複 logout 會 401」寫進文件讓前端自己防。這是把一個伺服器端的語意錯誤外包給每一個 client；而且 401 攔截器呼叫 logout 是預設寫法，不是特例。
+
+**Consequences**：
+➕ `/auth/logout`、`/auth/logout-all` 都變成冪等，`401 → logout` 的攔截器寫法可用。
+➕ ADR-180 的 ⚠️「沒有 sid 的 token 呼叫 logout 回 401」**撤回**——現在回 204 no-op。這是往回收斂，不會有 client 受影響。
+➕ 新測試 `test_a_sid_less_token_cannot_sign_anyone_out_of_anything` 釘住另一半：沒有 sid 的手工 token 也不能透過 `logout-all` 把別人踢下線。
+➖ 「未來新端點用了 `get_current_session` 就自動被保護」這個 ADR-180 的好處沒了。代價可接受：這個 dependency 明確只回「token 說它是誰」，需要「而且這個 session 還活著」的端點請用 `get_current_user`——docstring 已寫明。
+
+**與 ADR-180 的關係**：ADR-180 對威脅的判斷完全成立，本 ADR 只搬動實作位置並修掉它造成的冪等性回歸。**實作以本 ADR 為準。**
+
+---
+
+### ADR-191 踢人要留稽核，而且不能踢自己或踢 super_admin
+
+**白話**：管理員把人踢下線這件事，現在會寫進稽核表（誰踢了誰、踢掉幾個）。另外不能踢自己，也不能踢 super_admin。
+
+**Date**: 2026-08-30
+
+**Context**：`POST /admin/users/{uuid}/revoke-sessions` 是整個 admin router 上**唯一不碰任何資料表**的動作（session 在 Redis），所以 audit trigger 不會觸發，稽核表裡一列都沒有。唯一的紀錄是一行 log，而那行 log 只寫了目標、沒寫操作者。結果是：**沒有任何地方記得是誰把人踢下線的**，而且 log 檔活不過一次容器重啟。
+
+這正好是 ADR-181 論證過的情境——RBAC 矩陣執行期可改，所以「改了授權再踢人」這個序列必須事後可重建，而現在不行。
+
+另外沒有任何限制擋住踢自己、踢同儕 admin、踢 super_admin。
+
+**Decision**：三件事一起做。
+
+1. **手寫一列 `AuditLog`**，形狀比照 trigger 寫出來的列：`table_name="users"`、`row_id` = 目標、`user_uuid` = 操作者、`new_values={"revoked_sessions": n}`，`client_ip` / `context` 取自 trigger 讀的同一組 contextvar。`action` 用 **`REVOKE_SESSIONS`** 而非三個 DML 動詞之一——它不是 DML 事件，不該被當成 DML 統計。用 `table_name="users"` + `row_id`= 目標，是為了讓「這個使用者身上發生過什麼」維持一次查詢。
+2. **log 行補上操作者**，作為稽核列的維運回聲。
+3. **拒絕兩種目標**：踢自己 → 409（那是 `/auth/logout-all`；走 admin capability 只會讓稽核讀起來像是對別人帳號的管理行為）；目標持有 `super_admin` → 403（否則 `user.edit=all` 就足以一次登入踢一次，把平台最高權限永久關在門外）。
+
+**否決的替代方案**：只補 log 不寫 DB。log 檔不是稽核來源，且與本專案「每個 admin 動作都有持久化軌跡」的既有性質不一致。
+
+**Consequences**：
+➕ 踢人成為唯一一個「手寫稽核列」的動作，且與 trigger 列同形、同歸因來源。
+➕ 踢自己 / 踢 super_admin 由測試釘住。
+➖ 服務層現在會 `commit()`（要寫稽核列）。端點必須在呼叫**之前**把 `current_user.uuid` 讀出來——session 是 `expire_on_commit`，commit 之後在 logging 呼叫裡碰 `.uuid` 會觸發 lazy reload 而 `MissingGreenlet`。這個坑已在端點註解裡寫明（與 015 grill 記錄的同一類陷阱）。
+➖ `action` 多了一個非 DML 值。任何假設 `action IN ('INSERT','UPDATE','DELETE')` 的查詢會漏掉它——這是刻意的，把它算進 DML 統計才是錯的。
+
+---
+
+### ADR-192 dev 的 Redis 設定對齊 staging（`appendonly` + `noeviction`）
+
+**白話**：開發用的 Redis 之前設成「記憶體不夠就丟掉舊資料、重開就全清空」。功能 014 之後那等於「隨機把使用者登出」。
+
+**Date**: 2026-08-30
+
+**Context**：`docker-compose.yml:20` 跑 `--maxmemory-policy allkeys-lru` 且沒有 volume。ADR-099 之前 `session:{sid}` 只在 `/auth/refresh` 讀，掉了頂多要求重新登入一次；之後它是**每個已認證請求都會讀的認證狀態**。於是：LRU 淘汰掉一把 session key = 當場登出那些人；容器重啟 = 一次登出所有人。
+
+而 fail-closed 的 401 依 ADR-100 是**刻意與無效 token 無法區分**的，所以這種 401 從外面看不出跟真正的撤銷有什麼差別。
+
+`docker-compose.staging.yml:33` 早就是 `--appendonly yes --maxmemory-policy noeviction`，註解寫的正是這個理由；dev 檔沒跟上。
+
+**Decision**：dev 對齊 staging：`--appendonly yes --maxmemory 512mb --maxmemory-policy noeviction`，並掛 `./.redis:/data`（比照同檔 db service 的 bind mount 風格，不引入 named volume）。`.gitignore` 補 `.redis/`。
+
+**Consequences**：
+➕ 開發環境重啟不再把所有人登出，省掉一整類「查不出原因的 401」。
+➖ 記憶體壓力下 Redis 會回錯誤而不是默默丟資料。這是要的：認證 key 被默默丟掉，比寫入失敗更難查。
+
+---
+
+### ADR-193 `session_is_live` 併回 `get_session`
+
+**白話**：兩個方法內容一模一樣，只留一個。
+
+**Date**: 2026-08-30
+
+**Context**：`session_is_live`（`app/repositories/session_repository.py:144`）的函式體與 `get_session`（同檔 :70）完全相同：`return self._load(await self.redis.get(self.SESSION + sid))`。它 docstring 裡那句用來區分兩者的「Deliberately does NOT catch connection errors」，對 `get_session` 也一樣成立——它也沒有 catch。而 `switch_identity`（`app/api/v1/endpoints/auth/session.py:178`）本來就是用 `get_session` 在問同一個問題。
+
+**Decision**：刪掉 `session_is_live`，`_require_live_session` 改呼叫 `get_session`；`session_is_live` docstring 裡有價值的那兩段（ADR-099 的請求路徑語意、ADR-100 不吞連線錯誤的契約）併進 `get_session`。
+
+**Consequences**：
+➕ 一個行為一個名字。兩個同體不同契約的方法遲早會漂移，而改了其中一個不會傳達到另一個的呼叫端。
+➕ ADR-190 之後 `get_session` 的呼叫端變多（`logout_all` 也用），單一入口更重要。
+
+---
+
+### ADR-194 踢人路徑的 Redis 故障回 503，不要炸成 500
+
+**白話**：Redis 掛掉時踢人，回一個講得清楚的 503，而不是丟 traceback 的 500。
+
+**Date**: 2026-08-30
+
+**Context**：`app/services/admin.py` 的 `smembers` 與其後的 `revoke_all_for_user` 都沒有保護，Redis 故障時 `RedisError` 直接穿出端點成為未處理的 500。本功能加的**其他每一處** Redis 觸點都是 fail-closed 且有處理的：`_require_live_session` 接住 `RedisError`、回 401、把原因寫進 log（ADR-100）。只有這條沒有。
+
+**Decision**：接住 `RedisError`，記 log，回 **503** 並附 `"no sessions were revoked"`。
+
+選 503 而非 401/500：401 會謊稱是呼叫者的憑證有問題；500 什麼都沒說，且留下「到底撤掉了沒」的歧義。503 說的是事實——什麼都沒撤、值得重試。
+
+**Consequences**：
+➕ 這個功能對「Redis 不可用」的回應在所有路徑上一致。
+➕ `logout` / `logout-all` 也一併補上同樣的處理（ADR-190 讓它們自己讀 Redis 了）：那裡回 204 等於告訴使用者「你登出了」，而 session store 根本沒收到請求——那是登出端點唯一不能說的謊。
+
+---
+
+### ADR-195 `sid` 也要 pin 到 `act`，不只 pin 到 `sub`
+
+**白話**：切換身分之後，切換前的那張舊 token 立刻失效，不能再用剩下的 15 分鐘切回去。
+
+**Date**: 2026-08-30
+
+**Context**：ADR-101 把 `sid` 釘到 `sub`，但沒釘到 `act`——也就是這張 token 宣稱正在扮演的身分。
+
+`/auth/switch-identity` 用新的 `act` 重新簽一張 access token，並把 `act` 寫進 session 紀錄（ADR-188）。但**被它取代的那張舊 token 帶著同一組 `sid` / `sub`**，所以在請求路徑上照樣通過，直到它自己過期為止（最多 15 分鐘）。
+
+後果有兩個。一是**刻意的降權在檢查點上沒有被執行**：super_admin 切到 team 身分之後，重放舊 token 就把平台權限撿回來了。二是**稽核歸因錯誤**：那段期間做的事會被記在切換前的身分底下。
+
+這不是權限提升——切換本來就只能在使用者已持有的身分之間移動，這也是它在 switch 本身的 review 裡活下來的原因。但 ADR-188 已經表明「切換必須活得比它發出的那張 token 久」（session 存 `act` 正是為了讓後續 refresh 不能默默取消它）；在請求路徑上它卻可以被取消。
+
+**Decision**：`_require_live_session` 多比一行——**session 紀錄是「這個 session 正在扮演哪個身分」的唯一真值來源**，token 與它不符就是過期的 token，回 401。
+
+```python
+if session.get("act") != payload.get("act"):
+    raise _credentials_exception()
+```
+
+**Consequences**：
+➕ 切換在「發放」與「檢查」兩端一致。ADR-188 的保證從「refresh 不能取消」擴大到「重放也不能取消」。
+➕ 稽核不會再把切換後的行為記在切換前的身分上。
+➖ **所有發 token 的路徑都必須讓 session 與 token 的 `act` 一致**。production 路徑本來就一致（`issue_token_pair` 一次寫兩邊、`refresh` 寫回 session、`switch-identity` 兩邊都更新），但 review 時抓到**兩個測試 helper 不一致**：`tests/test_graphql/conftest.py` 與 `tests/test_graphql/test_station_photo.py` 建 session 時沒帶 `act`，token 卻帶了。兩處都已修正——這正是 ADR-105（測試 token 要跟 production 同形，不要讓測試繞過檢查）想避免的漂移。
+➖ 前端若同時持有切換前後兩張 token（例如兩個分頁），舊的那張會 401。正確的處理是把 access token 併進已存的 pair（ADR-070 已經寫過這件事）。

@@ -71,7 +71,15 @@ class SessionRepository:
         """The live session record for `sid`, or None once it has been revoked or expired.
 
         Read-only, and does not touch the TTL: callers use it to ask "is this session still
-        alive" without keeping it alive by asking.
+        alive" without keeping it alive by asking. That question is what makes revocation
+        take effect on the request path — `revoke_session` already deletes `session:{sid}`,
+        so a caller that checks here sees the revocation on its very next request instead of
+        up to 15 minutes later (ADR-099).
+
+        Deliberately does NOT catch connection errors. A Redis outage and a revoked session
+        are different things and the caller has to tell them apart — swallowing the error
+        into None would disguise an outage as "this session was revoked" and leave the
+        fail-closed 401 with no cause to log (ADR-100).
         """
         return self._load(await self.redis.get(self.SESSION + sid))
 
@@ -140,20 +148,6 @@ class SessionRepository:
         await self.redis.set(self.SESSION + sid, json.dumps(session), ex=self.ttl)
         await self.redis.expire(self.USER_SESSIONS + user_uuid, self.ttl)
         return sid, user_uuid, new_raw
-
-    async def session_is_live(self, sid: str) -> dict | None:
-        """Return the session record if it is still live, else None.
-
-        This is what makes revocation take effect on the request path: `revoke_session`
-        already deletes `session:{sid}`, so a caller that checks here sees the revocation
-        on its very next request instead of up to 15 minutes later (ADR-099).
-
-        Deliberately does NOT catch connection errors. A Redis outage and a revoked session
-        are different things and the caller has to tell them apart — swallowing the error
-        into None would disguise an outage as "this session was revoked" and leave the
-        fail-closed 401 with no cause to log (ADR-100).
-        """
-        return self._load(await self.redis.get(self.SESSION + sid))
 
     async def revoke_session(self, sid: str) -> None:
         """Delete a single session and its current refresh token."""

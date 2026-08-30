@@ -257,3 +257,75 @@ review 報告見 scratchpad `PR38-review.md`；每一項都以實跑測試取證
 - 本 PR 引入的 2 個 ruff 錯誤（`test_loaders.py` I001、`test_zone_scope.py` E501）
 - `revoke_user_sessions` 越層讀 repo 內部、`smembers` 讀兩次、撤銷數會多算過期 sid
 - 測試缺口：「踢人不會踢到自己」無斷言；Redis 斷線的 fail-closed 只驗了 REST（GraphQL 走 `app.state.redis`，dependency override 打不到）
+
+---
+
+## Task 9: PR #38 第二輪 review 修補（2026-08-30）
+
+reviewer 在 PR #38 上留了 7 條 inline comment，**全部屬實、全部處理**。裁定寫成 ADR-189~195
+（`decisions.md`）。其中 ADR-190 推翻 ADR-180 的實作位置，ADR-193 收掉 Task 8 之前留下的重複方法。
+
+### 9-1 change-password 也登出呼叫者：釘住行為（ADR-189）
+
+- [x] 使用者裁定：「改密碼成功後登出」就是預期流程，行為不變
+- [x] `tests/test_session_revocation.py` — `test_change_password_signs_the_changing_device_out_as_well`
+- [x] ADR-189 記錄呼叫者在撤銷範圍內，以及被否決的「保留當前 session」方案
+
+### 9-2 logout 回復冪等（ADR-190，推翻 ADR-180 的位置）
+
+- [x] `app/core/security.py` — `get_current_session` 回到只解 token；連 `redis` 參數一併移除（三個呼叫端各自有）
+- [x] `app/api/v1/endpoints/auth/session.py` — `logout` 對已消失的 session no-op 回 204；`logout_all` 先確認呼叫者自己的 session 還活著，否則什麼都不撤
+- [x] 三個舊測試改寫成新行為，另加 `test_a_sid_less_token_cannot_sign_anyone_out_of_anything` 釘住 ADR-180 要擋的攻擊仍被擋住
+
+### 9-3 踢人：稽核 + actor + 目標限制（ADR-191）
+
+- [x] `app/services/admin.py` — `_record_session_revocation()` 手寫 `AuditLog`（`action="REVOKE_SESSIONS"`）
+- [x] `app/services/admin.py` — `_holds_super_admin()`；踢自己 409、踢 super_admin 403
+- [x] `app/api/v1/endpoints/admin.py` — log 行補 actor；`AdminConflictError` → 409；**actor uuid 在呼叫服務前先讀出來**（服務會 commit，`expire_on_commit` 之後在 logging 裡碰 `.uuid` 會 `MissingGreenlet`——實際踩到）
+- [x] 三個測試：稽核列內容、踢自己、踢 super_admin
+
+### 9-4 dev Redis 設定對齊 staging（ADR-192）
+
+- [x] `docker-compose.yml` — `--appendonly yes --maxmemory-policy noeviction` + `./.redis:/data`
+- [x] `.gitignore` — 補 `.redis/`
+
+### 9-5 `session_is_live` 併回 `get_session`（ADR-193）
+
+- [x] `app/repositories/session_repository.py` — 刪掉重複方法，docstring 的兩段契約併進 `get_session`
+- [x] `app/core/security.py` — `_require_live_session` 改呼叫 `get_session`
+
+### 9-6 Redis 故障回 503（ADR-194）
+
+- [x] `app/services/admin.py` — 踢人路徑接住 `RedisError` → 503
+- [x] `app/api/v1/endpoints/auth/session.py` — `logout` / `logout-all` 同樣處理（ADR-190 之後它們自己讀 Redis 了）
+- [x] `test_a_kick_during_a_redis_outage_is_503_not_500`、`test_logout_reports_a_redis_outage_rather_than_claiming_success`
+
+### 9-7 `sid` 也 pin 到 `act`（ADR-195）
+
+- [x] `app/core/security.py` — `_require_live_session` 比對 `session["act"] == payload["act"]`
+- [x] `tests/test_identity_switching.py` — `test_the_pre_switch_token_stops_working`
+- [x] **兩個測試 helper 的 session/token `act` 不一致，已修**：`tests/test_graphql/conftest.py:160`、`tests/test_graphql/test_station_photo.py:134` 建 session 時沒帶 `act`，token 卻帶了。這是 ADR-105 想避免的漂移，不加這道檢查看不出來。
+
+### 順手修掉的既有 lint
+
+- [x] `tests/test_zone_scope.py` E501（Task 8「未處理」清單裡的一項）；`test_loaders.py` 的 I001 已不復存在
+
+### 驗收（2026-08-30 實跑）
+
+- [x] `tests/test_session_revocation.py` 28 passed、`tests/test_identity_switching.py` 26 passed
+- [x] 全套件 `uv run pytest -q -p no:randomly` → **680 passed / 0 failed**
+- [x] `uv run ruff check` 對本次改動的 9 個檔案全綠
+- [ ] Docker 完整驗證（未跑；本次除 `docker-compose.yml` 的 Redis 設定外皆為邏輯修補，全套件已涵蓋）
+
+**跑測試前先 DROP test DB。** 本次實際踩到兩次：第一次 116 failed、第二次 4 failed + 136 errors
+（`Field Coordinator` 角色查不到、大量 `KeyError: 'data'`），DROP 之後同一份程式碼 680 passed。
+與「開工前先確認」第 2 點是同一個現象，**在同一個 session 內連跑兩次全套件就會出現**。
+
+```bash
+docker exec backend-db-1 psql -U postgres -c "DROP DATABASE IF EXISTS disaster_rescue_test WITH (FORCE);"
+```
+
+### 仍未處理（review 提過，這次也沒動）
+
+- `revoke_user_sessions` 越層讀 `repo.redis` / `repo.USER_SESSIONS`，且撤銷數會把已過期的 sid 算進去（只影響 log 與稽核列裡的數字）
+- Redis 斷線的 fail-closed 只驗了 REST；GraphQL 讀 `app.state.redis`，dependency override 打不到

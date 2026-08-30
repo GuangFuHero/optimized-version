@@ -463,3 +463,36 @@ async def test_an_explicit_identity_on_refresh_is_remembered_too(client, db_sess
     assert decode_act(_act_of(plain.json()["access_token"])) == (
         str(team_role.uuid), str(team.uuid)
     )
+
+
+# --- the token a switch replaced stops working (ADR-195) ----------------------------------
+
+
+async def test_the_pre_switch_token_stops_working(client, db_session):
+    """A switch has to be enforced where it is checked, not just where it is minted.
+
+    `/auth/switch-identity` writes the new identity into the session record, but the access
+    token it replaced carries the same `sid` and `sub` and would otherwise pass the request
+    path for the rest of its 15 minutes. Replaying it undoes a deliberate downgrade — a
+    super_admin who dropped to a team identity could pick their platform powers back up — and
+    attributes whatever it does to the pre-switch identity in the audit trail.
+
+    Not privilege escalation (switching only moves between identities already held), which is
+    why it survived review of the switch itself; the session record is the single source of
+    truth for which identity a session acts as, and a token that disagrees is stale.
+    """
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    old = {"Authorization": f"Bearer {tokens['access_token']}"}
+    assert (await client.get("/api/v1/users/me", headers=old)).status_code == 200
+
+    resp = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers=old,
+    )
+    assert resp.status_code == 200, resp.text
+    new = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    assert (await client.get("/api/v1/users/me", headers=old)).status_code == 401
+    assert (await client.get("/api/v1/users/me", headers=new)).status_code == 200

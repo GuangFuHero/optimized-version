@@ -17,7 +17,16 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    # Matches docker-compose.staging.yml, and for the same reason (ADR-192). Since feature
+    # 014 `session:{sid}` is read on EVERY authenticated request, not just on /auth/refresh:
+    # an evicted or lost session key is now an immediate sign-out. Under allkeys-lru with no
+    # volume, memory pressure would silently sign users out and a container restart would
+    # sign out everyone at once — and because the fail-closed 401 is deliberately identical
+    # to an invalid token, those are indistinguishable from a real revocation.
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
+    volumes:
+      # Bind mount, matching the db service above rather than introducing a named volume.
+      - ./.redis:/data
     ports:
       - "6379:6379"
     networks:

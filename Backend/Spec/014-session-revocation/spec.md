@@ -57,6 +57,7 @@ token 解碼成功
   → redis 讀 session:{sid}
       ├─ 讀不到                        → 401（已撤銷、或已過 14 天 TTL）
       ├─ 讀得到但 user_uuid ≠ token.sub → 401（防禦深度，見 ADR-101）
+      ├─ 讀得到但 act ≠ token.act        → 401（切換身分前的舊 token，見 ADR-195）
       └─ 讀得到且相符                  → 繼續既有流程（撈 user、解析 act）
   → redis 連不上                       → 401（ADR-100）
 ```
@@ -84,6 +85,10 @@ token 解碼成功
 `create_access_token` 的 `sid` 參數可為 `None`（`app/core/security.py:169`），而 `issue_token_pair` 一定會帶（`app/api/v1/endpoints/auth/deps.py:28-30`）。所以正式流程簽出的 token 必有 `sid`；沒有 `sid` 的只可能是測試自己造的、或某條沒走 `issue_token_pair` 的路徑。
 
 **一律 401**（ADR-101）。放行等於留下一個「不帶 sid 就跳過檢查」的繞道。
+
+> **例外：`logout` / `logout-all`（ADR-190）。** 這兩個端點問的是終局狀態「已登出」，沒有 `sid`
+> 就是沒有東西可撤，回 204 而非 401。它們不會因此變成繞道：`logout-all` 在真的撤銷之前，
+> 仍要求呼叫者自己的 session 活著，所以手工造的 token 一樣踢不動任何人。
 
 ### 4.2 GraphQL 路徑必須一起改
 
@@ -116,7 +121,7 @@ refresh 不帶 access token，走的是 `rotate()`，本來就會查 session。
 
 | 檔案 | 改動 |
 |---|---|
-| `app/repositories/session_repository.py` | 新增 `session_is_live(sid) -> dict \| None`；連線失敗不吞，讓例外往上 |
+| `app/repositories/session_repository.py` | 沿用既有的 `get_session(sid) -> dict \| None`；連線失敗不吞，讓例外往上（原本新增的 `session_is_live` 與它同體，已於 ADR-193 併回）|
 | `app/core/security.py` | `get_current_user` 增加 redis 參數與 session 檢查；Redis 故障的 log。`get_current_session` 同樣加上（ADR-180，2026-08-25） |
 | `app/graphql/context.py` | 取得 redis 並傳入 `get_current_user` |
 | `app/api/v1/endpoints/admin.py` | 新增 `POST /users/{uuid}/revoke-sessions` |
@@ -126,6 +131,11 @@ refresh 不帶 access token，走的是 `rotate()`，本來就會查 session。
 **不改**：`session_repository` 的撤銷函式、`logout` / `logout-all` / `change-password` / `reset-password` 四個端點——它們刪 session 的行為已經正確，本票只是讓那個行為開始被看見。
 
 > **2026-08-25 更正**：`logout` / `logout-all` 的**函式本體**確實沒改，但它們依賴的 `get_current_session` 加上了檢查（ADR-180）——原本那兩個端點是撤銷後唯一還打得動的路徑。docstring 一併更正。
+
+> **2026-08-30 再更正**：檢查已從 `get_current_session` 移出（ADR-190）。`logout` 對已消失的
+> session 回 204 no-op（冪等），`logout-all` 則先確認呼叫者自己的 session 還活著，否則什麼都不撤。
+> ADR-180 要擋的攻擊仍被擋住，而且擋得更徹底——不是回 401，是根本不執行 revoke。
+> 這兩個端點的**函式本體這次真的改了**。
 
 ---
 
@@ -146,11 +156,17 @@ refresh 不帶 access token，走的是 `rotate()`，本來就會查 session。
 | 安全 | `change-password` 後，舊 access token 立刻 401 |
 | 安全 | `reset-password` 後，舊 access token 立刻 401 |
 | 安全 | 管理員踢人後，被踢者的 access token 立刻 401 |
-| 安全 | 沒有 `sid` 的 token → 401 |
+| 安全 | 沒有 `sid` 的 token → 401（`logout` / `logout-all` 除外：204 no-op，ADR-190）|
 | 安全 | `sid` 存在但 session 的 `user_uuid` 與 token 的 `sub` 不符 → 401 |
 | 安全 | Redis 不可用 → 401（不是 200），且留下 error log |
 | 安全 | **GraphQL 路徑同樣受檢**：logout 後的 token 打 GraphQL 也 401 |
 | 功能 | 未撤銷的 session 正常通過，且不因多一次查詢而改變任何既有行為 |
+| 安全 | 切換身分後，**切換前的那把 access token** 立刻 401（ADR-195）|
+| 安全 | 已撤銷的 token 打 `logout-all` → **204 但什麼都不撤**，使用者新開的 session 不受影響（ADR-190）|
+| 安全 | 管理員踢自己 → 409；踢 super_admin → 403（ADR-191）|
+| 安全 | 踢人留下一列 `AuditLog`（`action=REVOKE_SESSIONS`，含 actor）（ADR-191）|
+| 功能 | 連續兩次 `logout` → 204 / 204（冪等，ADR-190）|
+| 功能 | Redis 不可用時的 `logout` / 踢人 → 503（不是 204、不是 500）（ADR-194）|
 | 功能 | session 的 Redis key 過期後 → 401 |
 | 功能 | 踢一個沒有 session 的使用者 → 204（冪等） |
 | 權限 | 無 `USER_EDIT` 者呼叫踢人 → 403 |

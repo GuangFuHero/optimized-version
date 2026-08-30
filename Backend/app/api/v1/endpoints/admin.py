@@ -121,7 +121,12 @@ async def assign_role(
     "/users/{user_uuid}/revoke-sessions",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="強制登出使用者的所有 session",
-    responses={403: {"description": "Permission Denied"}, 404: {"description": "User not found"}},
+    responses={
+        403: {"description": "Permission Denied / target is a super_admin"},
+        404: {"description": "User not found"},
+        409: {"description": "Cannot revoke your own sessions"},
+        503: {"description": "Session store is unavailable"},
+    },
 )
 async def revoke_user_sessions(
     user_uuid: UUID,
@@ -134,14 +139,23 @@ async def revoke_user_sessions(
     Returns 204 with no body on purpose. How many sessions were ended tells the caller how
     many devices the target has online, which is not theirs to know and not something they
     need — it goes to the log instead (ADR-103).
+
+    The persisted trail is the audit row the service writes (ADR-191); this log line is an
+    operational echo of it, and names the actor for the same reason the row does.
     """
+    # Read off the actor BEFORE the call: the service commits (it writes the audit row), and
+    # the session is expire_on_commit, so touching `current_user.uuid` afterwards would
+    # trigger a lazy reload from inside a sync logging call and raise MissingGreenlet.
+    actor_uuid = str(current_user.uuid)
     try:
         revoked = await admin_service.revoke_user_sessions(
             db, redis, actor=current_user, user_uuid=str(user_uuid)
         )
     except AdminNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
-    logger.info("revoked %d session(s) for user %s", revoked, user_uuid)
+    except AdminConflictError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
+    logger.info("user %s revoked %d session(s) for user %s", actor_uuid, revoked, user_uuid)
 
 
 @router.post(
