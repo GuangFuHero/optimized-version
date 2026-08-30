@@ -124,6 +124,18 @@
 | dynamic_field.edit | — | — | — | all | — | — |
 | dynamic_field.delete | — | — | — | all | — | — |
 
+> 查詢的 `includeInactive: true`（管理端才看得到已停用欄位）在 `dynamic_field.view` 之外**額外**要求
+> `dynamic_field.edit`（ADR-164）：看得到誰把欄位退役，屬於「有權退役」的一環，而不是「有權填表單」。
+
+### 專案設定 Project Settings
+
+一個部署 = 一場（混合型）災害的全域設定（ADR-090）。獨立於 `dynamic_field.*`：改災害型別會**連動整批動態欄位的可見性**，比改單一欄位定義重得多。
+
+| capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
+|---|---|---|---|---|---|---|
+| project.view | — | — | — | all | — | — |
+| project.edit | — | — | — | all | — | — |
+
 ### 緊急公告 Announcement
 
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |

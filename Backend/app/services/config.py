@@ -22,10 +22,19 @@ async def upsert_station_property_config(
     actor: User,
     station_type: str,
     property_name: str,
-    data_type: str,
-    enum_options: list[str] | None,
+    data_type: str | None = None,
+    enum_options: list[str] | None = None,
+    disaster_types: list[str] | None = None,
+    label: str | None = None,
+    sort_order: int | None = None,
+    is_active: bool | None = None,
 ) -> StationPropertyConfig:
-    """Create or update a station property config entry (checkpoint 1 only)."""
+    """Create or update a station property config entry (checkpoint 1 only).
+
+    Every field except the key is optional and omitting one leaves it unchanged (ADR-166/099),
+    so retiring a field is `is_active=False` alone. `data_type` is required only when the
+    entry does not exist yet.
+    """
     await require_scope(actor, Perm.FIELD_EDIT, db)
     return await station_property_config_repository.upsert(
         db,
@@ -33,6 +42,10 @@ async def upsert_station_property_config(
         property_name=property_name,
         data_type=data_type,
         enum_options=enum_options,
+        disaster_types=disaster_types,
+        label=label,
+        sort_order=sort_order,
+        is_active=is_active,
     )
 
 
@@ -42,10 +55,17 @@ async def upsert_task_property_config(
     actor: User,
     task_type: str,
     property_name: str,
-    data_type: str,
-    enum_options: list[str] | None,
+    data_type: str | None = None,
+    enum_options: list[str] | None = None,
+    disaster_types: list[str] | None = None,
+    label: str | None = None,
+    sort_order: int | None = None,
+    is_active: bool | None = None,
 ) -> TaskPropertyConfig:
-    """Create or update a task property config entry (checkpoint 1 only)."""
+    """Create or update a task property config entry (checkpoint 1 only).
+
+    Same partial-update semantics as the station side (ADR-166/099).
+    """
     await require_scope(actor, Perm.FIELD_EDIT, db)
     return await task_property_config_repository.upsert(
         db,
@@ -53,4 +73,8 @@ async def upsert_task_property_config(
         property_name=property_name,
         data_type=data_type,
         enum_options=enum_options,
+        disaster_types=disaster_types,
+        label=label,
+        sort_order=sort_order,
+        is_active=is_active,
     )

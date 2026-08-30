@@ -26,6 +26,29 @@ SessionLocal = async_sessionmaker(
 )
 
 
+async def attribute_writes_to(db, user_uuid: str) -> None:
+    """Name `user_uuid` as the actor for the writes that follow, on an open transaction.
+
+    `set_audit_session_variables` below covers the ordinary case: the middleware resolves the
+    caller from their access token before anything runs, and the variable is applied when the
+    transaction begins. Two write paths are not covered by it, both in `auth/`:
+    `POST /auth/login` and `POST /auth/refresh` carry no access token — the caller is proving
+    who they are, not asserting it — so the ContextVar is empty for the whole request and the
+    `users` UPDATE each of them performs lands in `audit_logs` with `user_uuid = NULL`
+    (ADR-170). By the time either one writes, it has *just* established the identity.
+
+    Setting the ContextVar alone is not enough there: the transaction is already open by then
+    (both paths read from the database first), so `after_begin` has been and gone. Hence both
+    — `set_config` for the transaction already running, and the ContextVar so that any later
+    one in the same request is attributed too, including one opened after a rollback.
+    """
+    request_user_uuid.set(str(user_uuid))
+    await db.execute(
+        text("SELECT set_config('app.current_user_id', :user_uuid, true)"),
+        {"user_uuid": str(user_uuid)},
+    )
+
+
 @event.listens_for(Session, "after_begin")
 def set_audit_session_variables(session, transaction, connection):
     """Set transaction-scoped PostgreSQL variables for user attribution during writes."""

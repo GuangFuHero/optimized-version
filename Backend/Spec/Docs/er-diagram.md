@@ -11,6 +11,9 @@
 > `stations` gained `operational_status`/`status_changed_at` and `ticket_tasks` gained
 > `completed_at`, backing the analytics dashboard's station freshness-trend and ticket
 > time-to-completion metrics, on 2026-08-07.
+> Project settings + disaster-scoped dynamic fields + account activity added by feature 013
+> (ADR-090~095, ER doc synced 2026-08-20). `project_settings` lives in the Identity diagram:
+> it is a deployment-wide settings row, not a geospatial or ticket entity.
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -47,6 +50,7 @@ users {
     string name "display nickname, not the login id, not unique"
     float credibility_score
     timestamp last_login_at "nullable"
+    timestamp last_activity_at "nullable, written on refresh-token rotation (ADR-093)"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at
@@ -205,6 +209,25 @@ announcements {
     timestamp delete_at
 }
 users ||--o{ announcements : "authors"
+
+%% ==========================
+%% 4. Project Settings (the deployment's single global settings row, ADR-090)
+%% ==========================
+%% One deployment = one (possibly mixed-type) disaster. There is NO project /
+%% disaster_event entity and no event FK on tickets/stations/ticket_tasks, so RBAC scope,
+%% search and map queries are untouched. Audited: project_settings joins AUDITED_TABLES.
+%% No relationship arrows: disaster_types is matched against the config tables in the other
+%% two diagrams by string equality, not by FK (ADR-091).
+project_settings {
+    uuid uuid PK
+    string name "disaster name, e.g. 花蓮 0816"
+    string_array disaster_types "default '{}' — e.g. {landslide,flood}; drives which config rows apply"
+    timestamp started_at "nullable"
+    timestamp created_at
+    timestamp updated_at
+}
+%% UNIQUE INDEX uq_project_settings_singleton ON project_settings ((true))
+%% -- single-row invariant on a constant expression: no magic UUID needed
 ```
 
 ## 2. Geospatial & Stations
@@ -325,7 +348,14 @@ station_property_config {
     string property_name
     string data_type
     json enum_options "nullable"
+    string_array disaster_types "default '{}' — enabled for these disaster types; empty = all (ADR-091)"
+    string label "nullable, display text; frontend falls back to property_name"
+    int sort_order "default 0, form field ordering"
+    boolean is_active "default true, disable switch"
 }
+%% UNIQUE(station_type, property_name) -- uq_station_property_config_key
+%% A row is shown when disaster_types is empty or intersects project_settings.disaster_types
+%% (project_settings lives in the Identity diagram).
 
 %% ==========================
 %% Crowd Sourcing relationship
@@ -477,7 +507,14 @@ task_property_config {
     string property_name
     string data_type
     json enum_options "nullable"
+    string_array disaster_types "default '{}' — enabled for these disaster types; empty = all (ADR-091)"
+    string label "nullable, display text; frontend falls back to property_name"
+    int sort_order "default 0, form field ordering"
+    boolean is_active "default true, disable switch"
 }
+%% UNIQUE(task_type, property_name) -- uq_task_property_config_key
+%% A row is shown when disaster_types is empty or intersects project_settings.disaster_types
+%% (project_settings lives in the Identity diagram).
 
 %% Task Assignments (who is working on each sub-task)
 task_assignments {
