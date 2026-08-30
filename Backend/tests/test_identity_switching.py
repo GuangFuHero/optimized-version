@@ -186,7 +186,9 @@ async def test_switch_returns_the_access_token_alone(client, db_session):
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
     assert resp.status_code == 200, resp.text
-    assert set(resp.json()) == {"access_token", "token_type", "expires_in"}
+    # The invariant is the ABSENCE of refresh_token, not an exact key set: pinning the set
+    # made ADR-205's additive `identity` field read as a regression.
+    assert "refresh_token" not in resp.json()
 
 
 async def test_switch_to_an_identity_you_do_not_hold_is_403(client, db_session):
@@ -462,6 +464,78 @@ async def test_an_explicit_identity_on_refresh_is_remembered_too(client, db_sess
     assert plain.status_code == 200, plain.text
     assert decode_act(_act_of(plain.json()["access_token"])) == (
         str(team_role.uuid), str(team.uuid)
+    )
+
+
+# --- the response says which identity the token carries (ADR-205) -------------------------
+
+
+async def test_login_reports_the_identity_it_landed_on(client, db_session):
+    """Otherwise the client has to decode the JWT to find out."""
+    _, platform_role, _, _ = await _account_with_two_identities(db_session)
+
+    tokens = await _login(client)
+
+    assert tokens["identity"]["role_uuid"] == str(platform_role.uuid)
+    assert tokens["identity"]["role"] == platform_role.name
+    assert tokens["identity"]["team_uuid"] is None
+
+
+async def test_login_makes_a_silent_fallback_observable(client, db_session):
+    """The case this field exists for (ADR-205).
+
+    A `scope` naming an identity the user no longer holds falls back to the platform identity
+    and still returns 200 — deliberate (ADR-069), but until now indistinguishable from having
+    been given what was asked for.
+    """
+    from uuid import uuid4
+
+    _, platform_role, _, _ = await _account_with_two_identities(db_session)
+
+    tokens = await _login(client, scope=encode_act(str(uuid4()), None))
+
+    assert tokens["identity"]["role_uuid"] == str(platform_role.uuid)
+
+
+async def test_switch_identity_reports_what_it_switched_to(client, db_session):
+    """A client can confirm the switch landed without decoding the token."""
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+
+    resp = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers={"Authorization": f"Bearer {tokens['access_token']}"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()["identity"]
+    assert body["role_uuid"] == str(team_role.uuid) and body["role"] == team_role.name
+    assert body["team_uuid"] == str(team.uuid) and body["team"] == team.name
+
+
+async def test_refresh_reports_the_identity_it_carried_forward(client, db_session):
+    """`refresh` without `identity` resolves from the session (ADR-188); say which one."""
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client, scope=encode_act(str(team_role.uuid), str(team.uuid)))
+
+    resp = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()["identity"]
+    assert body["role_uuid"] == str(team_role.uuid) and body["team_uuid"] == str(team.uuid)
+
+
+async def test_the_reported_identity_matches_the_act_claim(client, db_session):
+    """The field must not be able to disagree with the token it describes."""
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+
+    tokens = await _login(client, scope=encode_act(str(team_role.uuid), str(team.uuid)))
+
+    assert decode_act(_act_of(tokens["access_token"])) == (
+        tokens["identity"]["role_uuid"], tokens["identity"]["team_uuid"]
     )
 
 
