@@ -11,6 +11,8 @@
 > `stations` gained `operational_status`/`status_changed_at` and `ticket_tasks` gained
 > `completed_at`, backing the analytics dashboard's station freshness-trend and ticket
 > time-to-completion metrics, on 2026-08-07.
+> Identity switching (feature 010, ADR-068/073/076) moved the team from the user onto the
+> grant row: `users.team_uuid` is gone (ER doc synced 2026-08-20).
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -43,7 +45,6 @@ erDiagram
 %% ==========================
 users {
     uuid uuid PK
-    uuid team_uuid FK "nullable, FK to teams — a user belongs to at most one team (ADR-019)"
     string name "display nickname, not the login id, not unique"
     float credibility_score
     timestamp last_login_at "nullable"
@@ -83,12 +84,15 @@ users ||--o{ user_contacts : "reachable at"
 %% decoupled from DB tables (ADR-012); grants are additive/union with no deny (ADR-018).
 %% ==========================
 
-%% Functional role. kind = platform (one per user) or team (at most one per user, ADR-019).
+%% Functional role. kind = platform or team. A user holds exactly one platform identity
+%% and any number of team identities — one row of user_role_assign each (ADR-068/073).
 roles {
     uuid uuid PK
     string name "UNIQUE, String(50)"
     string kind "platform/team, String(10)"
 }
+%% UNIQUE(uuid, kind) -- uq_roles_uuid_kind: exists only as the target of the composite FK
+%% from the grant tables, which keeps their redundant role_kind honest (ADR-073).
 
 %% Capability catalog — one row per capability key (e.g. ticket.view, work_zone.assign).
 permissions {
@@ -108,32 +112,48 @@ role_permission_assign {
 roles ||--o{ role_permission_assign : "grants"
 permissions ||--o{ role_permission_assign : "granted via"
 
-%% User → role assignment (a person's platform/team role membership).
+%% One identity: a role granted to a user, for a team when the role is team-kind. Exactly
+%% one identity is active per request, named by the access token's `act` claim (ADR-068/069).
 user_role_assign {
     uuid uuid PK
     uuid user_uuid FK "FK to users, indexed"
     uuid role_uuid FK "FK to roles, indexed"
+    uuid team_uuid FK "nullable, FK to teams, indexed — NULL for platform grants (ADR-073)"
+    string role_kind "platform/team, String(10) — copied from roles.kind so CHECK can see it"
 }
-%% UNIQUE(user_uuid, role_uuid) -- uq_user_role
-users ||--o{ user_role_assign : "holds role"
+%% UNIQUE(user_uuid, role_uuid, team_uuid) -- uq_user_role. Includes team: holding the same
+%% role in two teams is two identities, which the old (user, role) key would have rejected.
+%% UNIQUE(user_uuid, role_uuid) WHERE team_uuid IS NULL -- uq_user_role_platform. Postgres
+%% does not compare NULLs in a UNIQUE, so this partial index is what stops duplicate
+%% platform grants.
+%% FOREIGN KEY(role_uuid, role_kind) → roles(uuid, kind) -- fk_ura_role_kind
+%% CHECK -- ck_ura_role_team_kind: platform grants carry no team, team grants must carry one.
+users ||--o{ user_role_assign : "holds identity"
 roles ||--o{ user_role_assign : "assigned to"
+teams ||--o{ user_role_assign : "scopes the identity"
 
 %% User → permission direct grant (per-user override, additive/union with roles, ADR-018).
 user_permission_assign {
     uuid uuid PK
     uuid user_uuid FK "FK to users, indexed"
     uuid permission_uuid FK "FK to permissions, indexed"
+    uuid team_uuid FK "nullable, FK to teams, indexed — the identity this grant applies to"
     string scope "none/own/team/gov/ngo/zone/all, String(10), default none"
 }
-%% UNIQUE(user_uuid, permission_uuid) -- uq_user_perm (ADR-058, feature 009 P3 / #27):
-%% one direct grant per (user, permission); dedup keeps the widest scope.
+%% UNIQUE(user_uuid, permission_uuid, team_uuid) -- uq_user_perm (ADR-058 widened by
+%% feature 010): one direct grant per (user, permission, identity); dedup keeps the widest
+%% scope. UNIQUE(user_uuid, permission_uuid) WHERE team_uuid IS NULL -- uq_user_perm_platform
+%% closes the same NULL hole as on user_role_assign.
 users ||--o{ user_permission_assign : "directly granted"
 permissions ||--o{ user_permission_assign : "granted to user"
+teams ||--o{ user_permission_assign : "scopes the grant"
 
 %% --------------------------
-%% 2a. Teams & Work Zones (ADR-019/021)
+%% 2a. Teams & Work Zones (ADR-021/049; ADR-019's one-team-per-user rule superseded by ADR-073)
 %% --------------------------
-%% Organisation the user belongs to (gov/ngo). users.team_uuid points here (at most one).
+%% Organisation (gov/ngo). Membership is NOT a column on users any more — a person belongs
+%% to a team by holding a team-kind grant naming it, so one person can be in several
+%% teams and hold a different role in each (ADR-073).
 teams {
     uuid uuid PK
     string name "String(100)"
@@ -144,7 +164,6 @@ teams {
     timestamp updated_at
     timestamp delete_at "nullable"
 }
-teams ||--o{ users : "has members (users.team_uuid)"
 
 %% Geographic jurisdiction polygon; gov draws them and assigns to teams (ADR-021/049).
 work_zones {
@@ -187,8 +206,12 @@ audit_logs {
     jsonb new_values "nullable"
     uuid user_uuid "nullable, logical ref to users (no DB FK)"
     string client_ip "nullable"
+    jsonb context "nullable, snapshot of the identity the change was made under (ADR-076)"
     timestamp created_at
 }
+%% context stores role/team NAMES, not just uuids: a role can be renamed or hard-deleted,
+%% so a uuid alone may no longer resolve when the trail is read months later. Written by
+%% the audit trigger itself, which is replaced in the same migration that adds the column.
 %% Dashed = non-identifying logical reference; user_uuid is a plain UUID column, not an
 %% enforced FK. table_name/row_id can point at any table in any of the domain diagrams —
 %% audit_logs is a generic mutation trail, not modeled with per-table FKs.

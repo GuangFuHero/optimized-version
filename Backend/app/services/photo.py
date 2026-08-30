@@ -134,7 +134,7 @@ async def detach_station_photo(db: AsyncSession, *, actor: User, uuid: str) -> N
         # Self-removal, capability-only — the mirror of attach, which is capability-only too.
         # This check has to sit AFTER the active-station guard above, or a ticket photo's
         # uploader would delete it through a station mutation and reopen the boundary that
-        # guard exists to close (ADR-068 [5]).
+        # guard exists to close (ADR-182 [5]).
         await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
     else:
         await require_scope(

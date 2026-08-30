@@ -27,10 +27,17 @@ from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.services.station import update_station
+from tests.conftest import acting_as
 
 
 async def _grant(db, user: User, perm: Perm, scope: str, role_name: str) -> None:
-    """Create a role granting `perm` at `scope` and assign it to `user`."""
+    """Create a role granting `perm` at `scope`, assign it, and act as that identity.
+
+    The `acting_as` call is what feature 010 added: grants resolve through the identity the
+    caller is acting as, and a `User` built directly in a test never went through
+    `get_current_user`, so nothing attaches one. Without it the actor resolves to zero
+    grants — correct fail-closed behaviour, but it would 403 every test in this file.
+    """
     permission = (
         await db.execute(select(Permission).where(Permission.key == perm.value))
     ).scalar_one_or_none()
@@ -44,6 +51,7 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str) -> None
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     await db.flush()
+    acting_as(user, role)
 
 
 # --- M3: status_changed_at only moves on a real transition ---

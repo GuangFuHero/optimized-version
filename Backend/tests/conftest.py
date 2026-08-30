@@ -35,6 +35,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 from app.core import security  # noqa: E402
 from app.core.redis import get_redis  # noqa: E402
+from app.core.security import create_access_token  # noqa: E402
 from app.main import app  # noqa: E402
 from app.messaging.email import get_email_sender  # noqa: E402
 from app.messaging.sms import get_sms_sender  # noqa: E402
@@ -108,6 +109,47 @@ async def db_session():
         await session.commit()
         yield session
     await engine.dispose()
+
+
+def token_for(user_uuid, role, team=None) -> str:
+    """Mint an access token that acts as a given identity (feature 010).
+
+    Production tokens carry an `act` claim naming the identity the session is acting as, and
+    `get_current_user` refuses a token whose identity it cannot resolve. A bare
+    `create_access_token(data={"sub": ...})` therefore authenticates but holds no identity,
+    which resolves to zero grants — correct fail-closed behaviour, but not what a test
+    exercising permissions wants. Use this instead.
+    """
+    from app.core.identity import encode_act
+
+    act = encode_act(str(role.uuid), str(team.uuid) if team is not None else None)
+    return create_access_token(data={"sub": str(user_uuid)}, act=act)
+
+
+def auth_headers_for(user_uuid, role, team=None) -> dict:
+    """Bearer headers for a token acting as the given identity."""
+    return {"Authorization": f"Bearer {token_for(user_uuid, role, team)}"}
+
+
+def acting_as(user, role, team=None):
+    """Attach the identity a real request would have resolved from the token (feature 010).
+
+    Tests that build a `User` directly never go through `get_current_user`, so nothing sets
+    `active_identity` — and without one the actor resolves to zero grants, which is the
+    intended fail-closed behaviour but not what most tests are trying to exercise. Call this
+    to say which identity the actor is acting as.
+
+    `role` is a Role instance, `team` an optional Team; returns the user for chaining.
+    """
+    from app.core.identity import ActiveIdentity
+
+    user.active_identity = ActiveIdentity(
+        role_uuid=str(role.uuid),
+        team_uuid=str(team.uuid) if team is not None else None,
+        role_name=role.name,
+        team_name=team.name if team is not None else None,
+    )
+    return user
 
 
 class _Capturer:

@@ -42,18 +42,20 @@ async def test_resolve_team_admin_real_db(db: AsyncSession):
     db.add_all([admin_role, member_role])
     await db.flush()
 
-    alice_admin = User(name="Alice 隊長", team_uuid=team_id)
-    bob_member = User(name="Bob 隊員", team_uuid=team_id)
+    alice_admin = User(name="Alice 隊長")
+    bob_member = User(name="Bob 隊員")
     db.add_all([alice_admin, bob_member])
     await db.flush()
 
     alice_id = alice_admin.uuid
     bob_id = bob_member.uuid
 
+    # Membership is the grant, not a column on users (ADR-072/073): the team lives on the
+    # UserRoleAssign row. `role_kind` is derived by the before_flush hook in models/rbac.py.
     db.add_all(
         [
-            UserRoleAssign(user_uuid=alice_id, role_uuid=admin_role.uuid),
-            UserRoleAssign(user_uuid=bob_id, role_uuid=member_role.uuid),
+            UserRoleAssign(user_uuid=alice_id, role_uuid=admin_role.uuid, team_uuid=team_id),
+            UserRoleAssign(user_uuid=bob_id, role_uuid=member_role.uuid, team_uuid=team_id),
         ]
     )
     await db.commit()
@@ -74,18 +76,24 @@ async def test_resolve_gov_and_zone_ngo_with_postgis(db: AsyncSession):
     ngo_team_id = ngo_team.uuid
 
     admin_role = Role(name="admin", kind="team")
-    db.add(admin_role)
+    member_role = Role(name="member", kind="team")
+    db.add_all([admin_role, member_role])
     await db.flush()
 
-    gov_user = User(name="Charlie 政府專員", team_uuid=gov_team_id)
-    ngo_admin = User(name="Alice NGO隊長", team_uuid=ngo_team_id)
+    gov_user = User(name="Charlie 政府專員")
+    ngo_admin = User(name="Alice NGO隊長")
     db.add_all([gov_user, ngo_admin])
     await db.flush()
 
     gov_uid = gov_user.uuid
     ngo_admin_uid = ngo_admin.uuid
 
-    db.add(UserRoleAssign(user_uuid=ngo_admin_uid, role_uuid=admin_role.uuid))
+    # Membership is the grant (ADR-072/073). The gov user needs one too: resolve_gov_and_zone_ngo
+    # now reaches Team through user_role_assign, so a user with no grant belongs to no team.
+    db.add_all([
+        UserRoleAssign(user_uuid=gov_uid, role_uuid=member_role.uuid, team_uuid=gov_team_id),
+        UserRoleAssign(user_uuid=ngo_admin_uid, role_uuid=admin_role.uuid, team_uuid=ngo_team_id),
+    ])
     await db.flush()
 
     # 建立一個包含 (121.6, 23.99) 的多邊形工作分區
@@ -120,8 +128,10 @@ async def test_resolve_gov_and_zone_ngo_with_postgis(db: AsyncSession):
 async def test_resolve_permission_scope_filtering(db: AsyncSession):
     """Verify resolve_permission only returns users with non-none scopes."""
     perm = Permission(key=Perm.AI_DUP_REVIEW.value, description="AI 重複審核")
-    role_valid = Role(name="admin", kind="team")
-    role_none = Role(name="guest", kind="team")
+    # Platform-kind: this test is about scope filtering, not teams, and the grants below name
+    # no team — which ck_ura_role_team_kind rejects for a team-kind role (ADR-073).
+    role_valid = Role(name="admin", kind="platform")
+    role_none = Role(name="guest", kind="platform")
     db.add_all([perm, role_valid, role_none])
     await db.flush()
 
@@ -242,9 +252,24 @@ async def test_add_team_member_returns_usable_object_after_dispatch(db: AsyncSes
             team_role_name="member",
         )
 
-    # Exactly what app/api/v1/endpoints/admin.py does with the return value.
+    # Exactly what app/api/v1/endpoints/admin.py does with the return value — it reads the
+    # uuid and takes the team from the path, so that is what the regression guard covers.
     assert returned.uuid == target_id
-    assert str(returned.team_uuid) == str(team_id)
+    # A non-PK read as well: expire_on_commit means any attribute can trigger the reload
+    # that used to raise MissingGreenlet, and the PK alone is the weakest possible probe.
+    assert returned.name == "新志工小明"
+
+    # Membership is the grant now (ADR-072/073), not a column on the user, so that is where
+    # "did they actually join" is asserted.
+    membership = (
+        await db.execute(
+            select(UserRoleAssign).where(
+                UserRoleAssign.user_uuid == target_id,
+                UserRoleAssign.team_uuid == team_id,
+            )
+        )
+    ).scalar_one()
+    assert membership.role_kind == "team"
 
     # And the notification itself landed.
     rows = (
@@ -274,11 +299,18 @@ async def _gov_recipient_and_shelter(db: AsyncSession) -> tuple[uuid.UUID, uuid.
     db.add(gov_team)
     await db.flush()
 
-    gov_user = User(name="Gov 情資專員", team_uuid=gov_team.uuid)
+    gov_member_role = Role(name="member", kind="team")
+    db.add(gov_member_role)
+    await db.flush()
+
+    gov_user = User(name="Gov 情資專員")
     reporter = User(name="回報志工")
     db.add_all([gov_user, reporter])
     await db.flush()
     gov_uid, reporter_uid = gov_user.uuid, reporter.uuid
+    # Belonging to the gov team is holding a team role in it (ADR-072/073).
+    db.add(UserRoleAssign(user_uuid=gov_uid, role_uuid=gov_member_role.uuid, team_uuid=gov_team.uuid))
+    await db.flush()
 
     station = Station(
         name="大進國小收容中心",

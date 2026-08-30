@@ -19,10 +19,15 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(100))  # display nickname; no longer the login id, not unique
     credibility_score: Mapped[float] = mapped_column(Float, default=50.0)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # A user has at most one team (ADR-019). Sole source of truth for "which team" — a
-    # team-kind Role grant (app/models/rbac.py:Role) always resolves against this column,
-    # never a copy stored elsewhere.
-    team_uuid: Mapped[str | None] = mapped_column(ForeignKey("teams.uuid"), nullable=True, index=True)
+
+    # Transient, never persisted: the identity this request is acting as, set by
+    # `get_current_user` from the access token's `act` claim (ADR-069). Declared without a
+    # `Mapped[...]` annotation so SQLAlchemy leaves it alone.
+    #
+    # A User loaded outside a request keeps the class default of None, which resolves every
+    # team and zone scope to false() — the safe direction. "Which team am I in" is no longer
+    # a column: it is whichever team the active identity's grant row points at (ADR-072/073).
+    active_identity = None
 
     # 關聯
     identities: Mapped[list["UserIdentity"]] = relationship(back_populates="user")

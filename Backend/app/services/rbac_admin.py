@@ -12,6 +12,8 @@ from app.core.permissions import GOV_TEAM_ONLY_PERMS, PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
 from app.models.auth import User
 from app.models.rbac import UserRoleAssign
+from app.models.team import Team
+from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import (
     permission_repository,
     role_repository,
@@ -20,9 +22,10 @@ from app.repositories.auth_repository import (
 from app.schemas.rbac_admin import (
     CapabilityCatalogResponse,
     CapabilityInfo,
+    DirectGrant,
+    IdentityPermissions,
     MatrixResponse,
     RoleGrants,
-    RoleRef,
     UserPermissionsResponse,
 )
 from app.services.admin import SUPER_ADMIN_ROLE_NAME, _remaining_super_admins
@@ -96,18 +99,39 @@ async def get_role(db: AsyncSession, role_uuid: str) -> RoleGrants:
 
 
 async def get_user_permissions_detail(db: AsyncSession, user_uuid: str) -> UserPermissionsResponse:
-    """A user's roles, direct grants, and resolved effective permissions."""
+    """A user's identities, each with its own effective permissions, plus their direct grants.
+
+    One identity, one answer (ADR-178). Resolving each separately costs one pair of queries
+    per identity, which is what the admin view is for; nobody holds enough identities for
+    that to matter.
+    """
     user = await user_repository.get_by_uuid(db, user_uuid)
     if user is None:
         raise RbacNotFoundError("User not found")
-    roles = await user_repository.get_role_refs(db, user_uuid)
+    identities = await active_identity_repository.list_for_user(db, user_uuid)
+    roles_by_uuid = {str(role.uuid): role for role in await user_repository.get_role_refs(db, user_uuid)}
     direct = await user_repository.get_direct_grants(db, user_uuid)
-    effective = await user_repository.get_user_permissions(db, user_uuid)
+
+    reported = []
+    for identity in identities:
+        effective = await user_repository.get_user_permissions(db, user_uuid, identity=identity)
+        role = roles_by_uuid.get(identity.role_uuid)
+        reported.append(
+            IdentityPermissions(
+                role_uuid=identity.role_uuid,
+                role=identity.role_name,
+                kind=role.kind if role else ("platform" if identity.is_platform else "team"),
+                team_uuid=identity.team_uuid,
+                team=identity.team_name,
+                effective={key: scope.value for key, scope in effective.items()},
+            )
+        )
     return UserPermissionsResponse(
         user_uuid=user.uuid,
-        roles=[RoleRef(uuid=role.uuid, name=role.name, kind=role.kind) for role in roles],
-        direct_grants=dict(direct),
-        effective={key: scope.value for key, scope in effective.items()},
+        identities=reported,
+        direct_grants=[
+            DirectGrant(capability=key, scope=scope, team_uuid=team) for key, scope, team in direct
+        ],
     )
 
 
@@ -168,8 +192,29 @@ async def revoke_role_permission(
     )
 
 
+async def _require_team(db: AsyncSession, team_uuid: str | None) -> None:
+    """404 when `team_uuid` names a team that does not exist (ADR-186).
+
+    The value arrives as a query parameter on an admin endpoint and goes straight into a
+    FK column, so without this an unknown UUID surfaces as an unhandled
+    ForeignKeyViolationError — a 500 for what is a caller mistake. Same bug class the `act`
+    claim's uuid validation closed; this is the entry point that was missed. Matches how the
+    user and capability lookups on the same endpoints already behave.
+    """
+    if team_uuid is None:
+        return
+    if await db.get(Team, team_uuid) is None:
+        raise RbacNotFoundError("Team not found")
+
+
 async def set_user_permission(
-    db: AsyncSession, *, actor: User, user_uuid: str, cap: Perm, scope: Scope
+    db: AsyncSession,
+    *,
+    actor: User,
+    user_uuid: str,
+    cap: Perm,
+    scope: Scope,
+    team_uuid: str | None = None,
 ) -> UserPermissionsResponse:
     """Add/update one per-user additive grant. Checkpoint 1: rbac.assign, super_admin only."""
     await require_scope(actor, Perm.RBAC_ASSIGN, db)
@@ -179,15 +224,20 @@ async def set_user_permission(
     user = await user_repository.get_by_uuid(db, user_uuid)
     if user is None:
         raise RbacNotFoundError("User not found")
+    await _require_team(db, team_uuid)
     permission = await permission_repository.ensure_by_key(db, cap.value)
     await user_repository.upsert_grant(
-        db, user_uuid=user_uuid, permission_uuid=str(permission.uuid), scope=scope.value
+        db,
+        user_uuid=user_uuid,
+        permission_uuid=str(permission.uuid),
+        scope=scope.value,
+        team_uuid=team_uuid,
     )
     return await get_user_permissions_detail(db, user_uuid)
 
 
 async def revoke_user_permission(
-    db: AsyncSession, *, actor: User, user_uuid: str, cap: Perm
+    db: AsyncSession, *, actor: User, user_uuid: str, cap: Perm, team_uuid: str | None = None
 ) -> None:
     """Remove one per-user grant. Checkpoint 1: rbac.assign. Idempotent."""
     await require_scope(actor, Perm.RBAC_ASSIGN, db)
@@ -198,7 +248,7 @@ async def revoke_user_permission(
     if permission is None:
         return
     await user_repository.delete_grant(
-        db, user_uuid=user_uuid, permission_uuid=str(permission.uuid)
+        db, user_uuid=user_uuid, permission_uuid=str(permission.uuid), team_uuid=team_uuid
     )
 
 
@@ -258,23 +308,46 @@ async def delete_role(db: AsyncSession, *, actor: User, role_uuid: str) -> None:
 
 
 async def unassign_user_role(
-    db: AsyncSession, *, actor: User, user_uuid: str, role_uuid: str
+    db: AsyncSession, *, actor: User, user_uuid: str, role_uuid: str, team_uuid: str | None = None
 ) -> None:
-    """Remove a role from a user. Checkpoint 1: rbac.assign.
+    """Remove one identity (role, optionally in a team) from a user. Checkpoint 1: rbac.assign.
+
+    `team_uuid` names which identity to revoke: the same role held in two teams is two
+    identities (ADR-073), and revoking has to say which. Omitting it means the platform
+    identity, matching the old single-identity behaviour.
 
     Guard: refuses to drop the last super_admin (ADR-032/056). 404 if the user, the role,
     or the assignment itself does not exist.
+
+    **A platform role cannot be unassigned at all** (ADR-185). A user holds at most one —
+    every platform grant replaces the previous one (`admin_service.assign_role`, and
+    `user_repository.assign_role` since ADR-184) — so removing it always leaves the account
+    with no platform identity, which resolves to zero grants even while they still hold team
+    roles. Spec/010 §7's "回去原有登入狀態" is reached by logging back in onto the platform
+    identity, so an account without one cannot get there.
+
+    Demotion is an `assign_role` to the lesser role, which replaces in one step. That is what
+    the error points the caller at. Revoking a *team* identity is unaffected: it names its
+    team, and losing it leaves the platform identity intact.
     """
     await require_scope(actor, Perm.RBAC_ASSIGN, db)
     role = await role_repository.get_by_uuid(db, role_uuid)
     if role is None:
         raise RbacNotFoundError("Role not found")
 
+    if team_uuid is None and role.kind == "platform":
+        raise RbacConflictError(
+            "A platform role cannot be removed, only replaced — assign the role you want the "
+            "user to have instead (same-kind replacement). Removing it would leave the "
+            "account with no platform identity and therefore no permissions at all."
+        )
+
     assignment = (
         await db.execute(
             select(UserRoleAssign).where(
                 UserRoleAssign.user_uuid == user_uuid,
                 UserRoleAssign.role_uuid == role_uuid,
+                UserRoleAssign.team_uuid.is_not_distinct_from(team_uuid),
             )
         )
     ).scalars().first()
@@ -286,4 +359,6 @@ async def unassign_user_role(
         if remaining == 0:
             raise RbacConflictError("Cannot remove the last super_admin")
 
-    await user_repository.unassign_role(db, user_uuid=user_uuid, role_uuid=role_uuid)
+    await user_repository.unassign_role(
+        db, user_uuid=user_uuid, role_uuid=role_uuid, team_uuid=team_uuid
+    )

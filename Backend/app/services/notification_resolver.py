@@ -41,7 +41,10 @@ class NotificationRecipientResolver:
     ) -> list[str]:
         """Resolve admins of a specific team (Team admins have Role.name == 'admin').
 
-        Filters strictly by User.team_uuid == team_uuid and Role.name == 'admin'.
+        Membership is the grant: a user belongs to a team by holding a team-kind role in it
+        (ADR-072), so the team predicate sits on `user_role_assign`, not on `users` — the
+        `users.team_uuid` column this used to read no longer exists. A user who admins two
+        teams is resolved for each of them independently, which is the point of the feature.
         """
         team_uid_str = _to_uuid_str(team_uuid)
         if not team_uid_str:
@@ -53,7 +56,7 @@ class NotificationRecipientResolver:
             .join(Role, Role.uuid == UserRoleAssign.role_uuid)
             .where(
                 User.delete_at.is_(None),
-                User.team_uuid == team_uid_str,
+                UserRoleAssign.team_uuid == team_uid_str,
                 Role.name == "admin",
             )
         )
@@ -65,14 +68,24 @@ class NotificationRecipientResolver:
         db: AsyncSession,
         team_uuid: str | _uuid.UUID,
     ) -> list[str]:
-        """Resolve all active members belonging to a specific team."""
+        """Resolve all active members belonging to a specific team.
+
+        Membership is the grant (ADR-072). `distinct` because a user could hold more than one
+        role in the same team over time; without it the same recipient would be dispatched to
+        twice.
+        """
         team_uid_str = _to_uuid_str(team_uuid)
         if not team_uid_str:
             return []
 
-        stmt = select(User.uuid).where(
-            User.delete_at.is_(None),
-            User.team_uuid == team_uid_str,
+        stmt = (
+            select(User.uuid)
+            .join(UserRoleAssign, UserRoleAssign.user_uuid == User.uuid)
+            .where(
+                User.delete_at.is_(None),
+                UserRoleAssign.team_uuid == team_uid_str,
+            )
+            .distinct()
         )
         result = await db.execute(stmt)
         return [str(uid) for uid in result.scalars().all()]
@@ -88,12 +101,14 @@ class NotificationRecipientResolver:
         # 1. 查詢所有 Gov 團隊成員 (Team.type == 'gov')
         gov_stmt = (
             select(User.uuid)
-            .join(Team, Team.uuid == User.team_uuid)
+            .join(UserRoleAssign, UserRoleAssign.user_uuid == User.uuid)
+            .join(Team, Team.uuid == UserRoleAssign.team_uuid)
             .where(
                 User.delete_at.is_(None),
                 Team.delete_at.is_(None),
                 Team.type == "gov",
             )
+            .distinct()
         )
         gov_res = await db.execute(gov_stmt)
         recipients.update(str(uid) for uid in gov_res.scalars().all())
@@ -105,7 +120,7 @@ class NotificationRecipientResolver:
                 select(User.uuid)
                 .join(UserRoleAssign, UserRoleAssign.user_uuid == User.uuid)
                 .join(Role, Role.uuid == UserRoleAssign.role_uuid)
-                .join(Team, Team.uuid == User.team_uuid)
+                .join(Team, Team.uuid == UserRoleAssign.team_uuid)
                 .join(TeamZoneAssign, TeamZoneAssign.team_uuid == Team.uuid)
                 .join(WorkZone, WorkZone.uuid == TeamZoneAssign.zone_uuid)
                 .join(Station, Station.uuid == station_uid_str)
