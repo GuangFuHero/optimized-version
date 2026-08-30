@@ -261,6 +261,9 @@ app/services/ticket.py:207-231    create_task_property
 
 ### ADR-167 feature 013 的 migration 改掛在 feature 012 之後
 
+> **⚠️ 事實更正（ADR-204，2026-08-30）**：本 ADR 通篇說的「feature 012」其實是 **feature 011（resource-search，PR #35）**。`f2b7c9d4e0a3` 是 `search_text_and_trgm_indexes`、`b7e4c1a90d52` 是 `index_search_fk_columns`，兩個都是 011 的 migration。012 是 account-profile，與這條鏈無關。**決策本身不變**，只有名字寫錯。
+
+
 > **掛載點已由 ADR-173 更正**：本 ADR 寫的 `f2b7c9d4e0a3` 是當時 feature 012 的 head，PR #35 之後又加了 `b7e4c1a90d52`。掛在舊 head 上會重現本 ADR 要避免的兩個 head，已改掛 012 的現行 head。
 
 **白話**：兩個 feature 的 migration 都掛在同一個 parent，一起合進 main 就變成雙 head，部署會斷。
@@ -375,6 +378,9 @@ app/services/ticket.py:207-231    create_task_property
 
 ### ADR-173 掛載點改為 feature 012 的 head `b7e4c1a90d52`，不是 `f2b7c9d4e0a3`
 
+> **⚠️ 事實更正（ADR-204，2026-08-30）**：本 ADR 通篇說的「feature 012」其實是 **feature 011（resource-search，PR #35）**。`f2b7c9d4e0a3` 是 `search_text_and_trgm_indexes`、`b7e4c1a90d52` 是 `index_search_fk_columns`，兩個都是 011 的 migration。012 是 account-profile，與這條鏈無關。**決策本身不變**，只有名字寫錯。
+
+
 **白話**：ADR-167 把本 feature 的 migration 掛在 feature 012 的 `f2b7c9d4e0a3` 之下，用意是避免兩個 head。但那是「當時」012 的 head——PR #35 後來又在其上加了 `b7e4c1a90d52`，於是掛在舊 head 上反而會重現 ADR-167 想避免的那個故障。
 
 **Context**：把 main 併進本分支之後實測（乾淨資料庫、docker）：本分支單獨併 main 時 `alembic heads` 直接 `KeyError: 'f2b7c9d4e0a3'`——那是預期中的相依，feature 012 還沒進 main。但把 feature 012 也併進來之後：
@@ -401,3 +407,52 @@ FAILED: Multiple head revisions are present for given argument 'head'
 ➕ 兩個 feature 都進 main 之後，`alembic upgrade head` 仍是單 head。
 ➖ 合併順序的相依性不變且更強：feature 012 必須先合併，而且本 revision 綁定的是 012 的 head——PR #35 若在合併前再加 migration，這裡要跟著改。
 ➖ 這類「掛在別的 PR 的 head 上」的寫法本質上是脆弱的。真正的解法是兩個 feature 合併後由 main 產生 merge revision，但那需要先確定合併順序；在目前一次一個 PR 的節奏下，維持這個相依比較單純。
+
+---
+
+### ADR-204 掛載點維持不變；更正 ADR-167/173 把 feature 011 寫成 012 的錯誤
+
+**白話**：migration 掛在哪裡不改。但前兩條 ADR 把「搜尋」那個 feature 的編號寫錯了，而且沒把代價講清楚——這兩件事修掉。
+
+**Date**: 2026-08-30（PR #43 review 期間查 migration 鏈時發現）
+
+**Context**：驗 PR #43 的 migration 時，在乾淨資料庫上跑 `alembic upgrade head` 得到：
+
+```
+KeyError: 'b7e4c1a90d52'
+```
+
+`feat/project-settings-backend`(#36)、`feat/bulk-import-export-backend`(#42)、
+`feat/resource-history-backend`(#43) 三個分支都是這個結果；`main` 沒有這個問題。
+
+查證後確認**這不是缺陷，是 ADR-167/173 明白接受的相依**：`07ac630e0009` 掛在 PR #35 的
+`b7e4c1a90d52` 之下，而那個 revision 不在這三個分支上。ADR-167 的 Consequences 已經寫過
+「在那個 feature 進 main 之前，本分支單獨 checkout 跑 alembic 會找不到 parent revision」。
+
+但查證過程中發現兩個問題：
+
+1. **編號寫錯，而且錯得一致**：ADR-167、ADR-173 與 migration 的 docstring 通篇稱那個 feature 為
+   「feature 012」。實際上 `f2b7c9d4e0a3`（`search_text_and_trgm_indexes`）與
+   `b7e4c1a90d52`（`index_search_fk_columns`）**都是 feature 011（resource-search，PR #35）** 的。
+   012 是 account-profile，它的分支上根本沒有這兩個 revision。這個錯誤會讓下一個讀的人去追錯的 PR。
+2. **代價的範圍被低估**：ADR-167 說的是「本分支」跑不動，但實際上**每一個疊在它上面的分支**都跑不動——
+   #42 與 #43 都繼承了同一條斷鏈。這表示第二條 stack 整條無法做 docker 驗證，而不只是 #36。
+
+**Decision**：**掛載點不動**（`07ac630e0009` → `b7e4c1a90d52` 保持原樣），只做兩件更正：
+
+- ADR-167 與 ADR-173 各加一則更正註記，並在 migration docstring 寫明兩個 revision 都屬於 feature 011。
+- 在 migration docstring 明確寫出代價的完整範圍：**PR #35 合併之前，本分支與所有疊在其上的分支
+  （#42、#43）都無法 `alembic upgrade head`**。
+
+**否決的替代方案**：改掛 `main` 的 head `a1b2c3d4e5f6`。三張 PR 立刻能單獨跑 migration、能做 docker 驗證，
+但 #35 與 #36 都進 main 之後會重現 two heads——那正是 ADR-167 存在的理由。使用者裁定維持現狀
+（2026-08-30）：合併順序本來就固定（#35 先），為了驗證的便利去換一個已知會在 main 上爆的狀態不划算。
+
+**Consequences**：
+➕ 「為什麼跑不動」有一個查得到的答案，而不是每次都要重新追一遍 `KeyError`。
+➕ 追查的人不會被「feature 012」帶去看錯的 PR。
+➖ 合併順序仍然是硬性的：**#35 必須先於 #36**，而 #42、#43 又必須在 #36 之後。
+➖ 這條 stack 的 migration 若要在 #35 合併前驗證，只能在本機暫時把 `down_revision` 改指到
+   `a1b2c3d4e5f6` 跑完再還原（#43 的 review 就是這樣驗的），**那個暫時修改不可提交**。
+
+**與 ADR-167/173 的關係**：兩者的決策都維持有效，本 ADR 只更正它們的事實敘述並補上代價的完整範圍。

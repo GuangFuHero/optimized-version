@@ -31,16 +31,26 @@ Revision ID: 07ac630e0009
 Revises: b7e4c1a90d52
 Create Date: 2026-08-16
 
-Chained after feature 012's *head* (PR #35) rather than after `e1f2a3b4c5d6`, which both
-features branched from. Two revisions sharing one parent is two alembic heads the moment
-both land on main, and `alembic upgrade head` refuses to run with more than one head.
-Feature 012 merges first; until it does, this branch on its own cannot resolve its parent.
+Chained after **feature 011**'s *head* (resource-search, PR #35) rather than after
+`a1b2c3d4e5f6`, main's head, which both features branched from. Two revisions sharing one
+parent is two alembic heads the moment both land on main, and `alembic upgrade head` refuses
+to run with more than one head.
+
+**PR #35 merges first. Until it does, this branch cannot resolve its parent at all** —
+`alembic upgrade head` fails here with `KeyError: 'b7e4c1a90d52'`, and so does every branch
+stacked on this one (#42, #43). That is the accepted cost of the decision, not a defect: see
+ADR-173, and ADR-204 for why it was re-examined and kept.
 
 The parent is `b7e4c1a90d52`, not `f2b7c9d4e0a3`. It was `f2b7c9d4e0a3` when ADR-167 was
-written, because that was feature 012's head at the time; PR #35 then added `b7e4c1a90d52`
+written, because that was feature 011's head at the time; PR #35 then added `b7e4c1a90d52`
 (FK indexes for the search subqueries) on top of it. Chaining onto the old head would have
 reproduced the exact two-head failure this revision exists to avoid — verified against a
 real database (ADR-173).
+
+**Both of those revisions belong to feature 011** (`f2b7c9d4e0a3` =
+`search_text_and_trgm_indexes`, `b7e4c1a90d52` = `index_search_fk_columns`). ADR-167/173 and
+an earlier version of this docstring called it "feature 012"; that is wrong — 012 is
+account-profile and has nothing to do with this chain (ADR-204).
 
 """
 from collections.abc import Sequence
