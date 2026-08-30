@@ -461,3 +461,160 @@ def test_every_column_is_classified():
 2. **`source` 的值域真值來源** — GraphQL description 與 Spec 文件互相矛盾，DB 零約束。可與 ADR-126 的 `priority` enum 票合併（ADR-137）。
 3. **`secondary_location` resolver 的 PII 閘門** — 詳細住址目前對所有能看該單的人明文（ADR-142）。
 4. **`crowd_sourcing` / `station_update_suggestions` / `photos` 的 audit trigger** — 這三張表不在 `AUDITED_TABLES`，民眾評價、站點修改建議、照片上傳永遠不會出現在時間軸。補 trigger 只對之後的異動生效，舊資料無回溯。
+
+---
+
+## PR #43 code review 後補（2026-08-30，ADR-197~203）
+
+reviewer 留了 8 條，全部屬實。以下七條 ADR 是逐條裁定（第 8 條是 `history_fields.py` 的排除理由寫錯欄位，改一個常數即可，不另立 ADR，見 ADR-143 的規則本身）。
+
+---
+
+### ADR-197 PII 層用「被讀的那個 entity 自己的」`view_pii`
+
+**白話**：看站點的歷史要用「站點的 PII 權限」，之前用的是「求助單的 PII 權限」。
+
+**Context**：`resolve_visibility` 對兩種 entity 都解析 `Perm.TICKET_VIEW_PII`，所以**站點**時間軸的 PII 層是由 `ticket.view_pii` 決定的。`station.view_pii` 全 codebase 沒有任何地方讀（`grep` 只剩 `permissions.py`、`app/graphql/geo/types.py`，以及 `history_fields.py` 的一句註解）。
+
+這與分層白名單自己給的理由直接矛盾：`history_fields.py:117` 把 `stations.contact_name` / `contact_email` / `contact_phone` 歸為 PII，理由寫的是「`station.view_pii` 正是為了站點帶著真人的聯絡資訊而存在」；而 `app/graphql/geo/types.py:200` 對同樣那三個欄位就是用 `STATION_VIEW_PII` 擋的。**同樣三個欄位，單筆讀取與時間軸用不同的鑰匙。**
+
+seed 剛好蓋住了這件事——四個角色對這兩個 key 的 scope 完全相同——但 scope 在執行期可依角色、也可依使用者調整（`rbac_admin.py:68,109`），所以 seed 不是保證。
+
+**Decision**：`pii_perm = Perm.STATION_VIEW_PII if entity == "station" else Perm.TICKET_VIEW_PII`，checkpoint 2 照舊。
+
+**Consequences**：
+➕ 時間軸與單筆讀取對同一個欄位用同一把鑰匙。
+➕ 「持有 `station.view_pii=all` 但沒有 `ticket.view_pii` 的人看得到站點聯絡資訊」這件事現在成立——之前是相反的。
+➖ 兩個 capability 都要有測試覆蓋；原本 `test_history_permissions.py` 的每個案例都用 ticket 資源、只斷言 `TICKET_VIEW_PII`。
+
+---
+
+### ADR-198 AUDIT / RAW 層明確要求 `audit.view` 為 `Scope.ALL`
+
+**白話**：`audit.view` 給成 `zone` 或 `own` 的人，之前跟給 `all` 的人看到一模一樣的東西。
+
+**Context**：AUDIT 與 RAW 層原本的解鎖條件是 `resolve_scope(...) != Scope.NONE`——**任何** scope 都算，且不對資源跑 checkpoint 2。相對地，同一個函式三行之上的 PII 層在 scope 比 `all` 窄時會跑 `in_scope()`。結果是持有 `audit.view=own` 或 `=zone` 的人，在**每一個**打得開的時間軸上都看得到 `review_note`、`moderation_status` 與完整的 raw 稽核內容——包含那個 scope 之外的資源。
+
+原本 docstring 的理由是「`audit.view` 不是 `all` 就是沒有」。以 seed 而言屬實，`test_audit_view_is_no_longer_an_unwired_shell` 也釘住了持有它的兩個角色。但 `SetGrantRequest.scope` 的型別就是裸的 `Scope` enum（`app/schemas/rbac_admin.py:16`），`PUT /admin/rbac/roles/{uuid}/permissions/audit.view` 送 `{"scope": "zone"}` 會被接受，per-user 的授權端點也接受。**沒有任何東西在維持這個 docstring 依賴的不變量。**
+
+**Decision**：`audit = await resolve_scope(...) == Scope.ALL`。把註解裡的假設變成程式裡的強制。
+
+這與 Spec/014 的 ADR-181 是同一個做法與同一個理由：沒有 checkpoint 2 可以收窄時，範圍條件必須寫在 checkpoint 1 上，否則窄的授權等同最寬的。
+
+**否決的替代方案**：像 PII 一樣跑 `in_scope()`。稽核層的語意不是「這個資源在你管的範圍內」，而是「你是平台層級的稽核者」——對單一資源跑 checkpoint 2 會讓 `audit.view=zone` 變成一種「區域稽核員」，那是一個還沒有人要的新角色概念。真的需要時再設計，這個決定不會擋路。
+
+**Consequences**：
+➕ 窄的授權真的看得比較少。
+➕ 對現行 seed 零影響：持有者本來就是 `all`。
+➖ 未來真要開放「區域稽核員」時會在這一行撞到，被迫先回答「稽核範圍怎麼定義」。這是刻意的。
+
+---
+
+### ADR-199 指派列的 UPDATE 是「更新」，不是「取消指派」
+
+**白話**：志工把自己的任務標成完成，時間軸之前會說他「取消了指派」。
+
+**Context**：`_event_type` 對 `task_assignments` 的判斷是 `ASSIGNED if action == "INSERT" else UNASSIGNED`——`UPDATE` 也落進 `UNASSIGNED`。而更新路徑確實存在：`updateTaskAssignment`（`app/graphql/tickets/mutations.py:221` → `app/services/ticket.py:407`）就地改 `status` / `role`，`tests/test_graphql/test_mutations.py:1312` 有覆蓋。
+
+結果是一個事件寫著 `event_type: "UNASSIGNED"`，`changes` 卻是 `[{"field": "status", "before": "accepted", "after": "completed"}]`——**型別說他放棄了，內容說他完成了**。
+
+`_ASSIGNMENT_FIELDS` 白名單裡就有 `role` 與 `status`（`history_fields.py:163-164`），所以這條路本來就預期會觸發。
+
+**Decision**：`INSERT → ASSIGNED`、`DELETE → UNASSIGNED`、其餘 → `UPDATED`。只有 `unassign_task_actor` 的硬刪代表「有人放掉了這個任務」——那正是 ADR-132 與整條第二存取路徑存在的理由。
+
+**Consequences**：
+➕ 事件型別與它的 changes 不再互相矛盾。
+➖ `UPDATED` 現在也會出現在指派列上；前端若假設「指派相關事件只有 ASSIGNED / UNASSIGNED」需要跟著調整。
+
+---
+
+### ADR-200 `entity` 是每個事件自己的，不是整條時間軸的
+
+**白話**：一張求助單底下三個任務各被改了一次，之前三個事件長得一模一樣，看不出改的是任務還是求助單本身。
+
+**Context**：`render_events` 對每個事件都填頂層資源，而 `Change.table`（`history.py:206`）算出來之後就被丟掉。於是：
+
+```json
+{"event_type": "UPDATED", "entity": "ticket",
+ "changes": [{"field": "status", "before": "pending", "after": "in_progress"}]}
+```
+
+沒有任何東西告訴呼叫端這個 `status` 是求助單的、是某個任務的、是任務屬性的、還是指派的。
+
+而**同一個 PR 寫的** `Spec/016/spec.md:172` 記載的是相反的行為——UNASSIGNED 的範例寫著 `"entity": "task_assignment"`。實作與 spec 在同一次提交裡互相矛盾。
+
+**Decision**：以事件實際碰到的那些表推導 entity（`_TABLE_ENTITY` + `_event_entity`）。資源自己的表（`base_geometries` + `tickets`/`stations`）映射回資源本身——一次儲存寫兩張表是**一件事**，不是兩件；子表則各自具名。
+
+一個事件的 changes 若跨了兩個不同的子實體，退回資源本身：指名其中任一個都是錯的，而資源是它們的共同點。
+
+**否決的替代方案**：改 spec 去符合實作（把 `entity` 定義成「這條時間軸屬於哪個資源」）。那個欄位就會變成每個事件都一樣的常數，等於沒有資訊，而 caller 分不出改動發生在哪一層的問題仍然存在。
+
+**Consequences**：
+➕ 回應能區分「求助單的 status」與「某個任務的 status」。
+➕ spec 與實作一致，spec 的範例不必改。
+➖ **回應格式變更**：`entity` 的值域從 `ticket` / `station` 擴大到含 `task` / `task_property` / `task_assignment` / `station_property` / `secondary_location`。
+➖ 仍然不指出是**哪一個**任務（沒有回傳子列的 uuid）。指出來需要多一個欄位，spec 沒有規定，本票不加。
+
+---
+
+### ADR-201 移除從未被賦值也從未被讀取的 `Change.changed_only`
+
+**白話**：有個欄位的註解說它負責某個決策，但它其實什麼都沒做。
+
+**Context**：`Change.changed_only` 從來沒有被指定過非預設值，也從來沒有被讀過。`build_events` 建每一個 `Change` 都不帶它（312-317 行），模組內與測試都沒有任何地方引用。而 `Change` 的 docstring 說它承載 ADR-141 的「只講有變、不講值」——那個行為實際上是由 `_render_change` 裡兩個 dict literal（449、455 行）產生的，兩者從不參照這個欄位。
+
+危險在於：有人要改 ADR-141 的行為時會去改 `changed_only`，然後發現回應毫無變化。
+
+**Decision**：移除欄位，並把 docstring 改成指向真正決定這件事的地方（欄位的 tier + caller 的 visibility，在 render 時決定）。
+
+**否決的替代方案**：把它接起來，讓 `_render_change` 讀它。那會讓同一個答案有兩個來源——tier 與旗標——遲早漂移。tier 已經是唯一真值來源。
+
+**Consequences**：
+➕ 文件說的和程式做的一致。
+➖ `Change` 的建構子少一個參數（本來就沒人傳）。
+
+---
+
+### ADR-202 移除 `ix_audit_logs_table_created_at`
+
+**白話**：這個索引沒有任何查詢用得到，卻要 39 張表的每一次寫入都為它付錢。
+
+**Context**：ADR-133 加了三個索引。review 指出第二個的註解理由是假的——它寫「時間軸用 `table_name` 過濾以決定怎麼解讀一列」，但那個判斷是在 Python 做的（`_event_type` 與 `_render_change` 在列已經載入之後才分支）。
+
+實際查證：全 codebase 只有**一處** `table_name` 進到 SQL（`history.py:175`），而它同時帶 `_payload_task_uuid().in_(...)`，`scripts/verify/history_timeline.py:241` 斷言那條走的是 **`ix_audit_logs_assign_task`**（partial，~2.1 MB），不是這一個。
+
+原因是資料形狀：`audit_logs.row_id` 存的是**被改的那一列**的主鍵，不是「這筆改動屬於哪個資源」。所以時間軸必須**先**把資源展開成一組 `row_id`（`resolve_scope_ids`），**才**去查 `audit_logs`。那組 id 本來就只屬於這個資源，再加 `table_name` 過濾一列都不會少撈。
+
+這個索引唯一能服務的查詢形狀是「給我某張表的所有異動」——那是 audit console 的形狀，不在本票內，也還沒有票。
+
+**Decision**：移除。`audit_logs` 是 append-only、39 個寫入者的總帳，這是**永久的寫入成本換零讀取效益**。
+
+**否決的替代方案**：留著並把理由改成「為未來的 audit console 預建」。reviewer 明白說這也可以接受，且省下未來在大表上重建（會再碰一次 ADR-203 的鎖表問題）。否決的理由是：那個 console 沒有票、沒有查詢形狀，所以連「該不該做成 partial、WHERE 寫什麼」都無從決定；帶著真實查詢再建，量得出來也決定得了。
+
+**Consequences**：
+➕ 每一次 audit 寫入少維護一個索引；空間少 7.2 MB（原本 48 MB 中的一份）。
+➕ 留下的兩個索引都有對應查詢，且都被 verify script 斷言走到——「這個索引是不是還有人用」不必靠讀程式碼推理。
+➖ 未來做 audit console 時要在（屆時更大的）表上建索引，會付一次 ADR-203 的阻塞成本。
+
+**與 ADR-133 的關係**：ADR-133 說「前兩個索引不管本票範圍如何都該加，這是既有缺陷」。對 `row_id` 成立，對 `table_name` **不成立**——它沒有讀者，所以不是「缺陷」而是「預備」。本 ADR 收斂 ADR-133 這一半；依專案慣例（後續 ADR 勝），實作以本 ADR 為準。
+
+---
+
+### ADR-203 index 建置維持阻塞鎖，把代價寫成部署說明
+
+**白話**：這個 migration 跑的時候會卡住全站寫入。現在表還小，幾乎沒感覺；但這件事要寫清楚，不要讓下一個人在大表上才發現。
+
+**Context**：兩個索引都是普通的 `CREATE INDEX`，會對 `audit_logs` 取 SHARE 鎖，建置期間阻塞 `INSERT`。而 39 張被稽核的表全都透過 trigger 往 `audit_logs` 寫，所以**建置期間全站寫入都會等**：開求助單、指派任務、登入。
+
+PR 描述量的 996k 列 / 1.5 GB 正是「這件事不再是瞬間完成」的規模。測試計畫只在**乾淨資料庫**上驗過 up / down / up，那裡鎖沒有成本。
+
+**Decision**：不改用 `CONCURRENTLY`，改為在 migration docstring 與 spec §7 寫明阻塞行為與建議的執行時機。
+
+`CONCURRENTLY` 被否決的理由：它不能在 alembic 的交易內執行（要 `op.get_context().autocommit_block()`）、失敗會留下 invalid index 而 downgrade 必須處理、且要跑兩趟掃描。換來的是「未來某一次部署不阻塞」，而本專案目前的 `audit_logs` 小到鎖不花時間——那 996k 列是效能實測時另外造出來的資料量，不是現況。
+
+reviewer 明確表示這不是正確性問題，「說明阻塞多久」與「不要拿阻塞鎖」兩者皆可接受。
+
+**Consequences**：
+➕ migration 保持簡單、可原子回滾。
+➖ 表長大之後這個 migration 必須排在低峰執行。已寫進 docstring 與 spec，不是口耳相傳。
+➖ 若之後真的要在大表上加索引（例如 ADR-202 提到的 audit console），屆時應該重新評估 `CONCURRENTLY`。

@@ -32,9 +32,12 @@ from app.services.history import (
     STATION,
     TICKET,
     UNASSIGNED,
+    UPDATED,
+    Visibility,
     build_events,
     entity_exists,
     fetch_audit_rows,
+    render_events,
     resolve_scope_ids,
 )
 
@@ -423,3 +426,77 @@ def test_an_unrecognised_source_does_not_invent_a_kind():
     ])
 
     assert events[0].actor_kind == "system"
+
+
+# --- an assignment UPDATE is an update (ADR-199) ---------------------------------------
+
+
+def test_editing_an_assignment_is_an_update_not_a_removal():
+    """`updateTaskAssignment` edits status/role in place; only a hard delete is a removal.
+
+    Reported as UNASSIGNED, the event type said the volunteer dropped the task while its own
+    `changes` said they had finished it.
+    """
+    payload = {"task_uuid": str(uuidlib.uuid4())}
+
+    events = build_events([
+        _audit("task_assignments", "UPDATE", uuidlib.uuid4(),
+               old={**payload, "status": "accepted"},
+               new={**payload, "status": "completed"}),
+    ])
+
+    assert events[0].event_type == UPDATED
+
+
+def test_only_a_hard_delete_reads_as_unassigned():
+    """The case ADR-132 and the second access path exist to preserve."""
+    payload = {"task_uuid": str(uuidlib.uuid4())}
+
+    events = build_events([
+        _audit("task_assignments", "DELETE", uuidlib.uuid4(), old=payload),
+    ])
+
+    assert events[0].event_type == UNASSIGNED
+
+
+# --- entity is per event (ADR-200) -----------------------------------------------------
+
+
+def _rendered(rows, *, entity=TICKET):
+    events = build_events(rows)
+    return render_events(events, entity=entity, names={}, visibility=Visibility())
+
+
+def test_a_child_events_entity_names_the_child_not_the_resource():
+    """Otherwise a task edit and a ticket edit are byte-identical on the wire."""
+    rows = [_audit("ticket_tasks", "UPDATE", uuidlib.uuid4(),
+                   old={"status": "pending"}, new={"status": "in_progress"})]
+
+    assert _rendered(rows)[0]["entity"] == "task"
+
+
+def test_an_assignment_event_says_task_assignment():
+    """The shape `Spec/016/spec.md` documents for the UNASSIGNED example."""
+    payload = {"task_uuid": str(uuidlib.uuid4()), "actor_uuid": str(uuidlib.uuid4())}
+    rows = [_audit("task_assignments", "DELETE", uuidlib.uuid4(), old=payload)]
+
+    assert _rendered(rows)[0]["entity"] == "task_assignment"
+
+
+def test_the_resources_own_tables_still_report_the_resource():
+    """One save writing base_geometries + tickets is one event about the ticket."""
+    row_id, at = uuidlib.uuid4(), _at()
+    rows = [
+        _audit("base_geometries", "UPDATE", row_id, old={"name": "a"}, new={"name": "b"}, at=at),
+        _audit("tickets", "UPDATE", row_id, old={"title": "x"}, new={"title": "y"}, at=at),
+    ]
+
+    assert _rendered(rows)[0]["entity"] == "ticket"
+
+
+def test_a_station_child_names_itself_too():
+    """The station side of the same rule."""
+    rows = [_audit("station_properties", "UPDATE", uuidlib.uuid4(),
+                   old={"quantity": 1}, new={"quantity": 2})]
+
+    assert _rendered(rows, entity=STATION)[0]["entity"] == "station_property"

@@ -277,7 +277,7 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
         "task_uuid": _FK,
         "created_at": _STAMP,
         "updated_at": _STAMP,
-        "delete_at": _STAMP,
+        "delete_at": _SOFT_DELETE,
     },
     ("ticket", "task_assignments"): {
         "uuid": _ID,
@@ -291,7 +291,7 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
         "created_by": _FK,
         "created_at": _STAMP,
         "updated_at": _STAMP,
-        "delete_at": _STAMP,
+        "delete_at": _SOFT_DELETE,
         "weightings": _SCORE,
     },
     ("ticket", "secondary_locations"): _ADDRESS_EXCLUSIONS,

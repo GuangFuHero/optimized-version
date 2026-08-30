@@ -198,16 +198,45 @@ UNASSIGNED = "UNASSIGNED"
 _GEOMETRIES = "base_geometries"
 _SYSTEM_SOURCES = frozenset({"crawler", "gov", "ngo"})
 
+# Which entity each audited table speaks for (ADR-200). The resource's own tables map to the
+# resource itself — a save that writes base_geometries + stations is one event about the
+# station, not two about different things — and the child tables name themselves, which is
+# what tells a caller whether a `status` change belongs to the ticket or to one of its tasks.
+_TABLE_ENTITY = {
+    "ticket_tasks": "task",
+    "task_properties": "task_property",
+    "task_assignments": "task_assignment",
+    "station_properties": "station_property",
+    "secondary_locations": "secondary_location",
+}
+
+
+def _event_entity(changes, *, entity: str) -> str:
+    """The entity one event is about, or the resource itself when its changes disagree.
+
+    Falling back to the resource is the honest answer for a transaction that touched two
+    different children at once: naming either one would be wrong, and the resource is what
+    they have in common.
+    """
+    named = {_TABLE_ENTITY.get(c.table, entity) for c in changes}
+    return named.pop() if len(named) == 1 else entity
+
 
 @dataclass(frozen=True)
 class Change:
-    """One field that moved. `changed_only` carries the fact without the values (ADR-141)."""
+    """One field that moved, and the table it moved on.
+
+    ADR-141's "the fact without the values" is decided at render time by `_render_change`,
+    from the field's tier and the caller's visibility — not carried on this record. It used
+    to also declare a `changed_only` flag that nothing ever set or read (ADR-201); it is gone
+    rather than wired up, because the tier is what actually decides and a second source for
+    the same answer would only drift.
+    """
 
     field: str
     table: str
     before: object = None
     after: object = None
-    changed_only: bool = False
 
 
 @dataclass
@@ -248,7 +277,15 @@ def _event_type(rows: list[AuditLog]) -> str:
     """
     for row in rows:
         if row.table_name == _ASSIGNMENTS:
-            return ASSIGNED if row.action == "INSERT" else UNASSIGNED
+            # Only the hard delete in `unassign_task_actor` means somebody dropped the task
+            # (ADR-199). `updateTaskAssignment` edits status/role in place, and reporting
+            # that as UNASSIGNED told the caller a volunteer had left while the change said
+            # they had finished.
+            if row.action == "INSERT":
+                return ASSIGNED
+            if row.action == "DELETE":
+                return UNASSIGNED
+            return UPDATED
 
         if row.table_name == _GEOMETRIES and row.action == "UPDATE":
             before = (row.old_values or {}).get("delete_at")
@@ -398,24 +435,30 @@ class Visibility:
 
 
 async def resolve_visibility(
-    db: AsyncSession, *, actor, resource, cache: dict | None = None
+    db: AsyncSession, *, actor, resource, entity: str, cache: dict | None = None
 ) -> Visibility:
-    """Which tiers this caller unlocks on this resource (ADR-130).
+    """Which tiers this caller unlocks on this resource (ADR-130/167/168).
 
-    PII reuses `ticket.view_pii` and runs checkpoint 2 against the resource, so it means the
-    same thing here as it does on the single-row query. AUDIT needs only the capability:
-    `audit.view` is granted `all` or not at all, and it is oversight over the whole platform
-    by definition.
+    PII uses the view_pii capability **of the entity being read** and runs checkpoint 2
+    against the resource, so it means the same thing here as it does on the single-row query
+    (ADR-197). Resolving `ticket.view_pii` for a station would gate a station's contact
+    columns on a ticket capability — and `app/graphql/geo/types.py` gates those same columns
+    on `station.view_pii`, so the timeline would disagree with the single-row read.
+
+    AUDIT requires `audit.view` at `Scope.ALL` (ADR-198). There is no checkpoint 2 to narrow
+    it against — the tier is oversight over the whole platform, not over this resource — so
+    without the range condition every narrower grant would behave as `all`.
     """
     if actor is None:
         return Visibility()
 
-    pii_scope = await resolve_scope(actor, Perm.TICKET_VIEW_PII, db, cache=cache)
+    pii_perm = Perm.STATION_VIEW_PII if entity == "station" else Perm.TICKET_VIEW_PII
+    pii_scope = await resolve_scope(actor, pii_perm, db, cache=cache)
     pii = pii_scope == Scope.ALL or (
         pii_scope != Scope.NONE
         and await in_scope(pii_scope, actor=actor, resource=resource, db=db)
     )
-    audit = await resolve_scope(actor, Perm.AUDIT_VIEW, db, cache=cache) != Scope.NONE
+    audit = await resolve_scope(actor, Perm.AUDIT_VIEW, db, cache=cache) == Scope.ALL
     return Visibility(pii=pii, audit=audit)
 
 
@@ -492,7 +535,10 @@ def render_events(
         payload = {
             "event_type": event.event_type,
             "at": event.at,
-            "entity": entity,
+            # Per event, not per timeline (ADR-200): `entity` is what this event is about.
+            # Reporting the resource on every event left three task edits on one ticket
+            # indistinguishable from three edits to the ticket itself.
+            "entity": _event_entity(event.changes, entity=entity),
             "actor": {
                 "uuid": str(actor.uuid) if actor.uuid else None,
                 "name": actor.name,
@@ -546,7 +592,9 @@ async def load_timeline(
 
     page = events[offset : offset + limit]
     names = await resolve_actors(db, page)
-    visibility = await resolve_visibility(db, actor=actor, resource=resource, cache=cache)
+    visibility = await resolve_visibility(
+        db, actor=actor, resource=resource, entity=entity, cache=cache
+    )
 
     return Timeline(
         events=render_events(page, entity=entity, names=names, visibility=visibility),

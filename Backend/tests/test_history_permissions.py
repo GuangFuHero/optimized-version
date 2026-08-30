@@ -200,6 +200,7 @@ from datetime import UTC, datetime  # noqa: E402
 from app.models.audit import AuditLog  # noqa: E402
 from app.models.request import Tickets  # noqa: E402
 from app.services.history import (  # noqa: E402
+    STATION,
     TICKET,
     Visibility,
     build_events,
@@ -408,8 +409,8 @@ async def test_a_requester_unlocks_pii_on_their_own_ticket_only(db):
     await _assign_seed_role(db, stranger, "user")
     ticket = await _ticket_owned_by(db, owner)
 
-    mine = await resolve_visibility(db, actor=owner, resource=ticket)
-    theirs = await resolve_visibility(db, actor=stranger, resource=ticket)
+    mine = await resolve_visibility(db, actor=owner, resource=ticket, entity=TICKET)
+    theirs = await resolve_visibility(db, actor=stranger, resource=ticket, entity=TICKET)
 
     assert mine.pii is True and mine.audit is False
     assert theirs.pii is False and theirs.audit is False
@@ -427,7 +428,7 @@ async def test_an_auditor_unlocks_both_pii_and_audit(db):
     await db.flush()
     ticket = await _ticket_owned_by(db, owner)
 
-    visibility = await resolve_visibility(db, actor=auditor, resource=ticket)
+    visibility = await resolve_visibility(db, actor=auditor, resource=ticket, entity=TICKET)
 
     assert visibility.pii is True and visibility.audit is True
 
@@ -440,7 +441,7 @@ async def test_an_anonymous_caller_unlocks_nothing(db):
     await db.flush()
     ticket = await _ticket_owned_by(db, owner)
 
-    visibility = await resolve_visibility(db, actor=None, resource=ticket)
+    visibility = await resolve_visibility(db, actor=None, resource=ticket, entity=TICKET)
 
     assert visibility == Visibility(pii=False, audit=False)
 
@@ -477,3 +478,109 @@ async def test_a_removed_user_keeps_their_name_and_gains_a_flag(db):
     assert rendered[0]["actor"] == {
         "uuid": str(gone.uuid), "name": "離職者", "kind": "user", "is_removed": True,
     }
+
+
+# --- PII uses the entity's own capability (ADR-197) -------------------------------------
+
+
+async def _station_owned_by(db, owner):
+    from app.models.geo import Station
+
+    station = Station(
+        uuid=uuidlib.uuid4(), property_name="station", created_by=str(owner.uuid),
+        name="光復國小避難所", type="shelter", contact_name="王小姐",
+    )
+    db.add(station)
+    await db.flush()
+    return station
+
+
+async def _grant(db, user: User, perm: Perm, scope: str) -> None:
+    """Give `user` exactly one capability at one scope, and nothing else."""
+    role = Role(name=f"only_{perm.value}_{scope}_{uuidlib.uuid4().hex[:6]}", kind="platform")
+    permission = (
+        await db.execute(select(Permission).where(Permission.key == perm.value))
+    ).scalars().first() or Permission(key=perm.value)
+    db.add_all([role, permission])
+    await db.flush()
+    db.add(RolePermissionAssign(
+        role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
+    ))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    await db.flush()
+
+
+@pytest.mark.asyncio
+async def test_a_stations_pii_is_gated_on_station_view_pii(db):
+    """Not on `ticket.view_pii` (ADR-197).
+
+    `app/graphql/geo/types.py` gates a station's contact columns on STATION_VIEW_PII, and
+    `history_fields.py` classifies them PII citing that same capability. Resolving the ticket
+    key here made the timeline disagree with the single-row read on the same three columns.
+    """
+    holder = User(name="Station PII holder")
+    db.add(holder)
+    await db.flush()
+    await _grant(db, holder, Perm.STATION_VIEW_PII, "all")
+    station = await _station_owned_by(db, holder)
+
+    visibility = await resolve_visibility(db, actor=holder, resource=station, entity=STATION)
+
+    assert visibility.pii is True
+
+
+@pytest.mark.asyncio
+async def test_ticket_view_pii_does_not_unlock_a_stations_pii(db):
+    """The other direction of the same swap — today both got the opposite."""
+    holder = User(name="Ticket PII holder")
+    db.add(holder)
+    await db.flush()
+    await _grant(db, holder, Perm.TICKET_VIEW_PII, "all")
+    station = await _station_owned_by(db, holder)
+
+    visibility = await resolve_visibility(db, actor=holder, resource=station, entity=STATION)
+
+    assert visibility.pii is False
+
+
+# --- the audit tier is Scope.ALL only (ADR-198) -----------------------------------------
+
+
+@pytest.mark.parametrize("scope", ["own", "team", "gov", "ngo", "zone"])
+@pytest.mark.asyncio
+async def test_a_narrower_audit_view_does_not_unlock_the_audit_tier(db, scope):
+    """`audit.view=zone` must not be identical to `audit.view=all` (ADR-198).
+
+    There is no checkpoint 2 to narrow the tier against, so without the range condition every
+    grant behaved as `all`. The seed only grants it at `all`, but `SetGrantRequest.scope`
+    takes the bare enum, so the seed is not the guarantee.
+    """
+    holder = User(name=f"Auditor {scope}")
+    db.add(holder)
+    await db.flush()
+    await _grant(db, holder, Perm.AUDIT_VIEW, scope)
+    owner = User(name="Owner")
+    db.add(owner)
+    await db.flush()
+    ticket = await _ticket_owned_by(db, owner)
+
+    visibility = await resolve_visibility(db, actor=holder, resource=ticket, entity=TICKET)
+
+    assert visibility.audit is False
+
+
+@pytest.mark.asyncio
+async def test_audit_view_at_all_still_unlocks_the_audit_tier(db):
+    """The check must not break the case it sits in front of."""
+    holder = User(name="Auditor all")
+    db.add(holder)
+    await db.flush()
+    await _grant(db, holder, Perm.AUDIT_VIEW, "all")
+    owner = User(name="Owner")
+    db.add(owner)
+    await db.flush()
+    ticket = await _ticket_owned_by(db, owner)
+
+    visibility = await resolve_visibility(db, actor=holder, resource=ticket, entity=TICKET)
+
+    assert visibility.audit is True

@@ -181,7 +181,7 @@ STATION_VIEW_HISTORY = "station.view_history"
 `actor.kind`：`user` / `system` / `crawler` / `gov` / `ngo`
 （後三者**只在 INSERT 事件**且 `user_uuid IS NULL` 時，由 `new_values->>'source'` 細分——ADR-137）
 
-持有 `audit.view` 時每個事件另帶 `raw: { old_values, new_values }`。
+持有 `audit.view`（**必須是 `Scope.ALL`**，ADR-198）時每個事件另帶 `raw: [ { old_values, new_values }, … ]`——**一筆 audit 列一個元素**，因為一個事件是一次交易折疊出來的，可能橫跨多張表（ADR-134）。
 
 後端不做中文化（ADR-145）。
 
@@ -193,11 +193,17 @@ STATION_VIEW_HISTORY = "station.view_history"
 
 ```sql
 CREATE INDEX ix_audit_logs_row_id_created_at ON audit_logs (row_id, created_at DESC);
-CREATE INDEX ix_audit_logs_table_created_at  ON audit_logs (table_name, created_at DESC);
 CREATE INDEX ix_audit_logs_assign_task ON audit_logs
   ((COALESCE(new_values->>'task_uuid', old_values->>'task_uuid')))
   WHERE table_name = 'task_assignments';
 ```
+
+原本還有第三個 `ix_audit_logs_table_created_at`，**review 後移除**（ADR-202）：本功能沒有任何查詢用得到它。
+時間軸是先把資源展開成一組 `row_id` 才去查 `audit_logs`，所以過濾鍵是 `row_id`；`table_name` 進到 SQL
+只有上面那個 partial 條件，其餘用途是撈出列**之後**在 Python 裡判斷「這列怎麼解讀」。
+
+**部署注意**：`CREATE INDEX` 會對 `audit_logs` 取 SHARE 鎖，而 39 張表的 trigger 都在寫它——建置期間
+全站寫入（含登入）阻塞。表小的時候是毫秒等級，長大之後要排低峰執行（ADR-203）。
 
 實測（996k 列 / 1.5 GB）：聚合查詢 737 ms → **4.9 ms**，JSONB 反查 415 ms → **0.95 ms**。寫入每列多約 15 µs，空間 +3.2%（ADR-133）。
 
