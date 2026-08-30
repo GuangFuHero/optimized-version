@@ -37,7 +37,7 @@ async def test_create_session_returns_sid_and_raw_token(repo):
 async def test_rotate_issues_new_token_and_invalidates_old(repo):
     """Rotate issues a fresh token; replaying the old token raises RefreshTokenReuse."""
     _, raw = await repo.create_session("user-1", device="UA")
-    _sid, _user, new_raw = await repo.rotate(raw)
+    sid, _user, new_raw = await repo.rotate(raw)
     assert new_raw != raw
     with pytest.raises(RefreshTokenReuse):
         await repo.rotate(raw)
@@ -68,7 +68,7 @@ async def test_concurrent_rotate_same_token_one_wins(repo):
     Uses an asyncio.Barrier to deterministically force the race window: both coroutines read the
     refresh record before either mutates, which is exactly the interleave the fix must survive.
     """
-    _sid, raw = await repo.create_session("u-1", "dev")
+    sid, raw = await repo.create_session("u-1", "dev")
     gate = asyncio.Barrier(2)
     orig_get = repo.get_refresh
 

@@ -306,9 +306,9 @@ reviewer 在 PR #38 上留了 7 條 inline comment，**全部屬實、全部處�
 - [x] `tests/test_identity_switching.py` — `test_the_pre_switch_token_stops_working`
 - [x] **兩個測試 helper 的 session/token `act` 不一致，已修**：`tests/test_graphql/conftest.py:160`、`tests/test_graphql/test_station_photo.py:134` 建 session 時沒帶 `act`，token 卻帶了。這是 ADR-105 想避免的漂移，不加這道檢查看不出來。
 
-### 順手修掉的既有 lint
+### 本分支自己引入的 lint
 
-- [x] `tests/test_zone_scope.py` E501（Task 8「未處理」清單裡的一項）；`test_loaders.py` 的 I001 已不復存在
+- [x] `tests/test_graphql/test_zone_scope.py` E501（PR 描述與 Task 8「未處理」清單裡都列過的那一條）；`test_loaders.py` 的 I001 已不復存在
 
 ### 驗收（2026-08-30 實跑）
 
@@ -460,8 +460,3 @@ health check 的 PING 本身就送在死掉的 socket 上，一樣炸。另外�
 - [x] **真正的撤銷仍然生效**：logout 後同一把 token → 401
 - [x] **延遲可忽略**：Redis 全掉時 ~0.18s 回 401（3 次重試、backoff 上限 200ms）
 - [x] 驗證環境已清除，使用者原有的 `backend-*` 容器未受影響
-
-### 已知取捨（接受，未修）
-
-`verification_repository.py:55` 的 `INCR :attempts` 同樣非冪等，重試會多扣一次 OTP 嘗試次數。
-窄窗、後果小（少一次輸入機會），正解是改成帶 nonce 的集合基數，會動到 OTP 驗證路徑，另開票。
