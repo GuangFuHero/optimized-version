@@ -16,7 +16,12 @@ PENDING_REG = "pending_reg:"
 PENDING_CONTACT = "pending_contact:"
 PENDING_PWRESET = "pending_pwreset:"
 PENDING_STEPUP = "stepup_old_channel:"
+STEPUP_SENDS = "stepup_sends:"
 MAX_OTP_ATTEMPTS = 5
+# How many step-up codes one account may have delivered to a given channel per OTP window.
+# The endpoint's own rate limit is keyed by client IP, so it bounds the source, not the
+# target — this is the bound that protects the person receiving the messages (ADR-165).
+MAX_STEPUP_SENDS_PER_WINDOW = 3
 
 
 def _gen_code() -> str:
@@ -111,18 +116,52 @@ class VerificationRepository:
     # --- step-up on the OLD channel, for SSO-only accounts replacing a contact (ADR-085) ---
     # Its own key prefix, not the contact-verification one: the two are live at the same time
     # during a replacement (one code to the old address, one to the new) and must not collide.
-    async def issue_old_channel_step_up(self, *, user_uuid: str, type_: str, value: str) -> str:
-        """Send-a-code-to-the-address-being-replaced; return the code to deliver."""
-        return await self._issue(
-            f"{PENDING_STEPUP}{user_uuid}:{type_}:{value}",
-            {"user_uuid": user_uuid, "type": type_, "value": value},
-        )
+    #
+    # The key carries the action and its target as well as the address (ADR-164), so a code
+    # only ever authorizes the one operation it was described as authorizing in the message.
+    @staticmethod
+    def _stepup_key(user_uuid: str, type_: str, value: str, action: str, target: str) -> str:
+        """Key one step-up code to (account, channel, action, target)."""
+        return f"{PENDING_STEPUP}{user_uuid}:{type_}:{value}:{action}:{target}"
+
+    async def issue_old_channel_step_up(
+        self, *, user_uuid: str, type_: str, value: str, action: str, target: str = ""
+    ) -> tuple[str | None, str]:
+        """Mint a step-up code for one specific `action` on this channel.
+
+        Returns `(code, "issued")` when there is something to deliver, and `(None, reason)`
+        when there is not — `"pending"` if a code for this exact action is already live and
+        should be reused rather than silently invalidated, `"throttled"` once the account has
+        had `MAX_STEPUP_SENDS_PER_WINDOW` codes sent to this channel in one OTP window.
+
+        Both no-send cases exist because the caller of this flow is not necessarily the owner
+        of the address it delivers to: the request is *expected* to fail with 422, so nothing
+        stops it being repeated, and every repeat used to reach the owner's inbox or phone
+        (ADR-165).
+        """
+        key = self._stepup_key(user_uuid, type_, value, action, target)
+        if await self.redis.get(key) is not None:
+            return None, "pending"
+        sends_key = f"{STEPUP_SENDS}{user_uuid}:{type_}"
+        sends = await self.redis.incr(sends_key)
+        if sends == 1:
+            await self.redis.expire(sends_key, self.ttl)
+        if sends > MAX_STEPUP_SENDS_PER_WINDOW:
+            return None, "throttled"
+        payload = {"user_uuid": user_uuid, "type": type_, "value": value,
+                   "action": action, "target": target}
+        return await self._issue(key, payload), "issued"
 
     async def consume_old_channel_step_up(
-        self, *, user_uuid: str, type_: str, value: str, code: str
+        self, *, user_uuid: str, type_: str, value: str, action: str, target: str = "", code: str
     ) -> dict | None:
-        """Verify an old-channel step-up code; on success returns the pending payload."""
-        return await self._consume(f"{PENDING_STEPUP}{user_uuid}:{type_}:{value}", code)
+        """Verify a step-up code for exactly this action; on success returns the payload.
+
+        A code issued for a different action or a different target hashes to a different key,
+        so it is simply not found here — and, because it is not found, it is not burned
+        either. The user keeps the code they were actually sent.
+        """
+        return await self._consume(self._stepup_key(user_uuid, type_, value, action, target), code)
 
     # --- password reset (verify-then-reset), logged-out, keyed by identifier ---
     async def issue_password_reset(self, *, user_uuid: str, type_: str, value: str) -> str:

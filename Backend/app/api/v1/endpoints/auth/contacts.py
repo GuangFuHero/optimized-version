@@ -5,7 +5,7 @@ HTTP status codes. The branch-dense security logic (step-up, login-channel guard
 the service so it can be tested without going through HTTP.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,7 @@ from app.messaging.sms import build_verification_sms, get_sms_sender
 from app.models.auth import User
 from app.repositories.auth_repository import contact_repository
 from app.repositories.verification_repository import VerificationRepository
-from app.schemas.auth import AddContactRequest, VerifyContactRequest
+from app.schemas.auth import AddContactRequest, DeleteContactRequest, VerifyContactRequest
 from app.services import auth_contact as contact_service
 from app.services.auth_contact import (
     ContactConflict,
@@ -85,13 +85,19 @@ async def add_contact(
 @router.post("/contacts/verify", dependencies=[Depends(get_rate_limiter(10, 60))])
 async def verify_contact(
         body: VerifyContactRequest,
+        background_tasks: BackgroundTasks,
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
         email_sender=Depends(get_email_sender),
         sms_sender=Depends(get_sms_sender),
 ):
-    """Verify a 6-digit code and attach — or atomically swap in — the verified contact."""
+    """Verify a 6-digit code and attach — or atomically swap in — the verified contact.
+
+    The change notification to the old channel is dispatched via BackgroundTasks (ADR-162):
+    the swap has already committed by then, so a provider failure must not unwind the request
+    — nor sit in front of the response while it times out.
+    """
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
@@ -100,6 +106,7 @@ async def verify_contact(
         replaced = await contact_service.commit_contact_change(
             db, redis, actor=current_user, type_=body.type, value=ident, code=body.code,
             email_sender=email_sender, sms_sender=sms_sender,
+            dispatch=background_tasks.add_task,
         )
     except ContactConflict as err:
         raise _as_http(err) from err
@@ -115,15 +122,30 @@ async def verify_contact(
                dependencies=[Depends(get_rate_limiter(5, 60))])
 async def delete_contact(
         type: str,
+        background_tasks: BackgroundTasks,
+        body: DeleteContactRequest | None = None,
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+        email_sender=Depends(get_email_sender),
+        sms_sender=Depends(get_sms_sender),
 ):
-    """Remove one of the caller's contacts, refusing to leave the account unreachable."""
+    """Remove one of the caller's contacts, refusing to leave the account unreachable.
+
+    Removing a login channel needs the same step-up as replacing one (ADR-159), so this
+    takes an optional body carrying the proof. A stripped or absent body simply means no
+    proof was supplied and answers 422 — the failure mode is closed, not open (ADR-161).
+    """
     if type not in ("email", "phone"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid contact type")
     try:
-        await contact_service.delete_contact(db, actor=current_user, type_=type)
-    except (ContactNotFound, LastLoginChannel) as err:
+        await contact_service.delete_contact(
+            db, redis, actor=current_user, type_=type,
+            step_up=body.step_up if body else None,
+            email_sender=email_sender, sms_sender=sms_sender,
+            dispatch=background_tasks.add_task,
+        )
+    except (ContactNotFound, LastLoginChannel, StepUpRequired, StepUpFailed) as err:
         raise _as_http(err) from err
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

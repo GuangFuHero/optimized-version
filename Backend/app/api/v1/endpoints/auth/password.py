@@ -63,8 +63,18 @@ async def set_password(
         body: SetPasswordRequest,
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
 ):
-    """Create a first password identity for an SSO-only account (no old-password check)."""
+    """Create a first password identity for an SSO-only account, then revoke every session.
+
+    There is no old password to check here, so a session is the only thing standing between
+    a caller and a brand-new credential. Revoking afterwards (ADR-160) is what stops that
+    credential from being usable as proof of identity by whoever minted it: a stolen session
+    can still set a password, but it dies in the same request, so the attacker cannot turn
+    around and spend it on the contact step-up (`app/services/auth_contact.py:93`).
+
+    This also aligns with `/auth/change-password`, which has always revoked.
+    """
     user_uuid = str(current_user.uuid)
     if await identity_repository.get_password_identity(db, user_uuid) is not None:
         raise HTTPException(status.HTTP_409_CONFLICT,
@@ -77,6 +87,7 @@ async def set_password(
     except IntegrityError as err:
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Password already set") from err
+    await SessionRepository(redis).revoke_all_for_user(user_uuid)
 
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED,

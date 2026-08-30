@@ -57,3 +57,35 @@ def build_contact_changed_sms(masked_new_value: str) -> str:
     return (f"【{_BRAND_ZH}】您的聯絡方式已變更為 {masked_new_value}。若非本人操作請立即聯繫我們。 "
             f"Your contact was changed to {masked_new_value}. "
             "If this was not you, contact us immediately.")
+
+
+def build_contact_removed_sms(removed_type: str, masked_value: str) -> str:
+    """Return the bilingual SMS telling the surviving channels that a contact was removed.
+
+    Same reasoning as the replacement notice (ADR-159): removal takes away a way back into
+    the account, so it must not happen silently. The removed value arrives masked.
+    """
+    label = "電子信箱" if removed_type == "email" else "手機號碼"
+    return (f"【{_BRAND_ZH}】您的{label} {masked_value} 已從帳號移除。若非本人操作請立即聯繫我們。 "
+            f"The {removed_type} {masked_value} was removed from your account. "
+            "If this was not you, contact us immediately.")
+
+
+def build_step_up_code_sms(
+    action: str, contact_type: str, code: str, masked_target: str | None = None
+) -> str:
+    """Return the bilingual SMS carrying a step-up code, naming what the code authorizes.
+
+    Same reasoning as the email version (ADR-164): a code whose message describes the
+    opposite action gives a session-theft victim no signal, and reads exactly like the
+    "read us the code we just sent you" phone script.
+    """
+    label = "電子信箱" if contact_type == "email" else "手機號碼"
+    if action == "replace":
+        zh_what = f"將此{label}更換為 {masked_target}"
+        en_what = f"change this {contact_type} to {masked_target}"
+    else:
+        zh_what, en_what = f"將此{label}從帳號移除", f"remove this {contact_type} from the account"
+    return (f"【{_BRAND_ZH}】有人正在要求{zh_what}。驗證碼 {code}，10 分鐘內有效，僅能用於這項操作。"
+            f"若非本人請勿提供給任何人。 Someone is asking to {en_what}. Code {code}, valid 10 minutes "
+            "for this action only. If this was not you, do not share it.")

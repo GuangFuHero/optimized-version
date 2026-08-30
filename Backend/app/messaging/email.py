@@ -254,3 +254,89 @@ def build_contact_changed_email(masked_new_value: str) -> tuple[str, str, str]:
         "若非本人操作，請立即聯繫我們。\n"
     )
     return subject, html, text
+
+
+def build_contact_removed_email(removed_type: str, masked_value: str) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the surviving channels that a contact was removed.
+
+    Removal is as sensitive as replacement — it drops a way back into the account — so it is
+    announced the same way (ADR-159). The removed value is masked for the same reason the
+    replacement notice masks the new one.
+    """
+    label = "電子信箱 email" if removed_type == "email" else "手機號碼 phone"
+    subject = f"【{_BRAND_ZH}】聯絡方式已移除 Contact removed"
+    html = _render_email(
+        h1="聯絡方式已移除 Contact removed",
+        notices=[
+            f"您帳號的{label} {masked_value} 已從帳號移除。",
+            ('<span style="' + _S_NOTICE_EN + '">The '
+             f'{removed_type} {masked_value} was removed from your account.</span>'),
+        ],
+        footer_lines=[
+            "若非本人操作，請立即聯繫我們。 If this was not you, contact us immediately.",
+            _FOOTER_BRAND,
+        ],
+    )
+    text = (
+        f"您帳號的{label} {masked_value} 已從帳號移除。\n"
+        f"The {removed_type} {masked_value} was removed from your account.\n"
+        "若非本人操作，請立即聯繫我們。\n"
+    )
+    return subject, html, text
+
+
+_STEP_UP_ACTION_ZH = {"replace": "更換", "remove": "移除"}
+_STEP_UP_ACTION_EN = {"replace": "change", "remove": "remove"}
+
+
+def build_step_up_code_email(
+    action: str, contact_type: str, code: str, masked_target: str | None = None
+) -> tuple[str, str, str]:
+    """Return (subject, html, text) for a step-up code sent to the address being changed.
+
+    Distinct from `build_contact_verification_email` on purpose (ADR-164). That one says
+    "enter this to verify this email address", which describes the opposite of what this code
+    authorizes — the recipient is being asked to approve *losing* this address. For a session
+    -theft victim this message is the one moment where a warning prevents the takeover instead
+    of reporting it afterwards, so it names the action and, for a replacement, the value the
+    address would be replaced with.
+    """
+    label = "電子信箱 email" if contact_type == "email" else "手機號碼 phone"
+    zh_action, en_action = _STEP_UP_ACTION_ZH[action], _STEP_UP_ACTION_EN[action]
+    if action == "replace":
+        zh_what = f"將此{label}{zh_action}為 {masked_target}"
+        en_what = f"{en_action} this {contact_type} to {masked_target}"
+    else:
+        zh_what = f"將此{label}從帳號{zh_action}"
+        en_what = f"{en_action} this {contact_type} from the account"
+    subject = f"【{_BRAND_ZH}】請確認聯絡方式變更 Confirm a contact change"
+    html = _render_email(
+        h1="請確認聯絡方式變更 Confirm a contact change",
+        intro=(f"有人正在要求{zh_what}。若這是您本人，請使用以下驗證碼：",
+               f"Someone is asking to {en_what}. If this is you, use this code:"),
+        code=code,
+        notices=[
+            _notice(f"此驗證碼 <strong>10 分鐘</strong>內有效，且僅能用於{zh_what}。",
+                    "This code is valid for <strong>10 minutes</strong> and authorizes "
+                    f"only one thing: to {en_what}."),
+            _notice("<strong>若這不是您本人的操作，請勿提供此驗證碼給任何人</strong>——"
+                    "有人可能已經取得您帳號的登入狀態，請立即變更密碼並聯繫我們。",
+                    "<strong>If this was not you, do not share this code with anyone.</strong> "
+                    "Someone may already be signed in to your account — change your password "
+                    "and contact us immediately."),
+        ],
+        footer_lines=[
+            "未提供驗證碼，這項變更就不會發生。 Without this code, the change does not happen.",
+            _FOOTER_BRAND,
+        ],
+    )
+    text = (
+        f"有人正在要求{zh_what}。\n"
+        f"若這是您本人，您的驗證碼是 {code}（10 分鐘內有效，僅能用於這項操作）。\n"
+        "若這不是您本人的操作，請勿提供此驗證碼給任何人，並立即變更密碼並聯繫我們。\n\n"
+        f"Someone is asking to {en_what}.\n"
+        f"If this is you, your code is {code} (valid 10 minutes, for this one action only).\n"
+        "If this was not you, do not share this code with anyone — change your password and "
+        "contact us immediately."
+    )
+    return subject, html, text

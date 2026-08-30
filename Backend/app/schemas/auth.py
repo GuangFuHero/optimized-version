@@ -204,15 +204,32 @@ class ResendVerificationRequest(BaseModel):
 
 
 class StepUp(BaseModel):
-    """Extra proof required to REPLACE an existing contact of the same type (ADR-086).
+    """Extra proof required to REPLACE or DELETE a contact (ADR-086/159).
 
     Which field is required is decided by the backend, never by the client: an account with
     a password must send `password`; an SSO-only account must send `old_channel_code`, the
-    code delivered to the contact being replaced.
+    code delivered to the contact being changed.
+
+    `password` is **already frontend-hashed**, exactly like every other password field on
+    this API, and carries the same `min_length=6` (ADR-166). `_require_step_up` feeds it to
+    `verify_password` against a hash derived from the frontend hash, so a plaintext value
+    can only ever come back as "wrong password".
     """
 
-    password: str | None = Field(None, min_length=1, max_length=255)
+    password: str | None = Field(None, min_length=6, max_length=255)  # already frontend-hashed
     old_channel_code: str | None = Field(None, min_length=4, max_length=8)
+
+
+class DeleteContactRequest(BaseModel):
+    """Body for `DELETE /auth/contacts/{type}` — carries the step-up proof (ADR-159/161).
+
+    Its own model rather than a reuse of `AddContactRequest`: delete takes its type from the
+    path and has no `value`, so sharing the schema would advertise two fields the endpoint
+    ignores. The body is optional — the first call is expected to arrive without one, which
+    is what makes the backend name the proof it wants.
+    """
+
+    step_up: StepUp | None = None
 
 
 class AddContactRequest(BaseModel):

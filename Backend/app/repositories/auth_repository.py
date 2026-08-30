@@ -416,6 +416,21 @@ class ContactRepository(GenericRepository[UserContact]):
         await db.refresh(contact)
         return contact
 
+    async def lock_owner(self, db: AsyncSession, user_uuid: str) -> None:
+        """Take a row lock on the owning user, serializing contact mutations for that account.
+
+        The "at least one login channel remains" rule (ADR-087) is a read-then-write: count
+        the contacts, then delete one. Without a lock two concurrent DELETEs for different
+        types both read count=2, both compute remaining=1, and both proceed — the account
+        ends with zero contacts and no way back in (ADR-163).
+
+        Locking the `users` row rather than the contact rows is deliberate: the invariant is
+        about the *set* of contacts, and the row being inserted or removed cannot be locked
+        before it is chosen. The lock is held until the transaction commits, so callers should
+        take it after any slow work (code delivery) and immediately before the re-check.
+        """
+        await db.execute(select(User.uuid).where(User.uuid == user_uuid).with_for_update())
+
     async def delete_contact(self, db: AsyncSession, *, contact: UserContact) -> None:
         """Hard-delete a contact row; audit_logs keeps the history (ADR-087)."""
         await db.delete(contact)

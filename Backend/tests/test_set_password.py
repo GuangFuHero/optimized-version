@@ -42,9 +42,12 @@ async def test_salt_switches_fake_to_real(client, db_session, redis):
 @pytest.mark.asyncio
 async def test_set_password_twice_409(client, db_session, redis):
     """Setting a password a second time is rejected with 409."""
-    _, headers = await _google_user(db_session, redis)
+    user, headers = await _google_user(db_session, redis)
+    user_uuid = str(user.uuid)  # capture before set-password commits and expires the instance
     await client.post("/api/v1/auth/set-password", headers=headers,
                       json={"password": "hashedpw", "salt_frontend": SALT})
+    # set-password revokes every session (ADR-160), so the second call needs a fresh one
+    headers = await auth_headers_for(redis, user_uuid)
     res = await client.post("/api/v1/auth/set-password", headers=headers,
                             json={"password": "otherpw", "salt_frontend": SALT})  # >=6 chars (min_length)
     assert res.status_code == 409
