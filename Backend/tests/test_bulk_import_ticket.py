@@ -351,3 +351,44 @@ async def test_re_importing_an_export_adds_no_rows(db):
     assert await _count(db, Tickets) == 1
     assert await _count(db, TicketTask) == 1
     assert await _count(db, TaskProperty) == 1
+
+
+# --- a row that attaches to an earlier row of the same file (ADR-211) ---
+
+
+@pytest.mark.asyncio
+async def test_a_second_line_is_planned_as_a_create_when_the_first_one_fails_validation(db):
+    """`seen_keys` used to mark the follower as an update whether or not the leader landed.
+
+    Planning it as an update drops every create-only column (title, contact fields,
+    coordinates), and the writer then takes the create branch anyway — `create_ticket` gets
+    `geometry=None` and shapely raises `AttributeError`, which `_write_all` does not catch.
+    """
+    await _configs(db)
+    actor = await _importer(db)
+    follower = _row("斷水求助", task_name="送電")
+    follower["latitude"] = follower["longitude"] = ""  # a follower line leaves them to line 2
+    raw, filename = _file([_row("斷水求助", people="abc"), follower])  # line 2 fails its Integer
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+
+    assert (outcome.created, outcome.failed) == (0, 2)
+    assert any("latitude" in error.column for error in outcome.errors)
+    assert await _ticket_titled(db, "斷水求助") is None
+
+
+@pytest.mark.asyncio
+async def test_a_second_line_fails_cleanly_when_the_first_one_fails_at_write_time(db):
+    """Validation cannot see this one coming: the leader passes and then is refused."""
+    await _configs(db)
+    actor = User(name="NoAddImporter")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, (Perm.TICKET_IMPORT, "all"), (Perm.TICKET_EDIT, "all"))
+    raw, filename = _file([_row("倒塌受困"), _row("倒塌受困", task_name="送電")])
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+
+    assert (outcome.created, outcome.updated, outcome.failed) == (0, 0, 2)
+    assert await _ticket_titled(db, "倒塌受困") is None
+    assert "沒有匯入成功" in outcome.errors[1].message

@@ -248,6 +248,7 @@ async def test_csv_and_xlsx_carry_the_same_content(db):
 @pytest.mark.asyncio
 async def test_an_unsupported_format_is_refused(db):
     """ADR-115 ships CSV and XLSX only."""
+    await _configs(db)  # ADR-214: the type has to exist before the format is looked at
     actor = User(name="Admin")
     db.add(actor)
     await db.flush()

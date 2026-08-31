@@ -24,7 +24,7 @@ from app.repositories.geo_repository import station_property_repository
 from app.repositories.tickets_repository import task_property_repository, ticket_repository
 from app.services import station as station_service
 from app.services import ticket as ticket_service
-from app.services.authz import require_scope, stable_actor
+from app.services.authz import refresh_actor, require_scope, stable_actor
 from app.services.bulk_columns import (
     ColumnSpec,
     dynamic_columns_skipped_for_station,
@@ -100,13 +100,23 @@ class ImportOutcome:
 # --- shared plumbing ---
 
 
-def _check_limits(raw: bytes, table: Table) -> None:
+def _check_size(raw: bytes) -> None:
+    """Refuse an oversized upload before it is parsed (ADR-209)."""
     if len(raw) > MAX_BYTES:
         raise BulkImportError(
             f"檔案超過 {MAX_BYTES // 1024 // 1024} MB 上限，請分批匯入"
         )
+
+
+def _check_rows(table: Table) -> None:
+    """Refuse a file with more rows than one synchronous request will take (ADR-116).
+
+    `read_table` stops one row past `MAX_ROWS`, so the count is "more than the limit" rather
+    than the file's real length — the exact number would cost the parse this check exists to
+    avoid (ADR-209).
+    """
     if len(table.rows) > MAX_ROWS:
-        raise BulkImportError(f"一次最多 {MAX_ROWS} 列，這份檔有 {len(table.rows)} 列，請分批匯入")
+        raise BulkImportError(f"一次最多 {MAX_ROWS} 列，這份檔超過上限，請分批匯入")
 
 
 def _apply_mapping(row: dict[str, str], mapping: dict[str, str]) -> dict[str, str]:
@@ -153,6 +163,18 @@ def _as_report(table: Table, failures: dict[int, list[RowError]], *, filename: s
     )
 
 
+@dataclass
+class RowProgress:
+    """Whether this row already committed something when it failed (ADR-212).
+
+    Deliberately mutable, and deliberately not part of `RowPlan`: the writer is the only
+    thing that knows how far a row got, and `_write_all` needs that answer on the exception
+    path, where a return value cannot reach it.
+    """
+
+    parent_written: bool = False
+
+
 @dataclass(frozen=True)
 class RowPlan:
     """What one row turned out to be: an update, a creation, or a failure."""
@@ -180,9 +202,14 @@ def _collision_error(line: int, others: tuple[int, ...], column: str) -> RowErro
 
 
 def _ambiguous_error(line: int, candidates: tuple[str, ...], column: str) -> RowError:
+    """Report that the row matched several rows, without naming them (ADR-210).
+
+    `preview` is gated on `*.import` only, and the index it matches against covers the whole
+    table — so the uuids here would tell a caller with no read capability that those rows
+    exist. The count is what the user needs to act on; the identifiers are not.
+    """
     return _error(
-        line, column,
-        f"比對到 {len(candidates)} 筆現有資料（{'、'.join(candidates)}），請先人工處理再匯入",
+        line, column, f"比對到 {len(candidates)} 筆現有資料，請先人工處理再匯入"
     )
 
 
@@ -276,7 +303,10 @@ async def _write_station_properties(
             )
 
 
-async def _write_station(db: AsyncSession, *, actor: User, plan: RowPlan, columns, station_type: str) -> str:
+async def _write_station(
+    db: AsyncSession, *, actor: User, plan: RowPlan, columns, station_type: str,
+    progress: RowProgress,
+) -> str:
     values = writable_values(columns, plan.row, is_update=plan.is_update)
     fixed, dynamic = _split_dynamic(columns, values)
     geometry = _point_of(plan.row)
@@ -285,6 +315,7 @@ async def _write_station(db: AsyncSession, *, actor: User, plan: RowPlan, column
         await station_service.update_station(
             db, actor=actor, uuid=plan.match_uuid, geometry=geometry, changes=fixed
         )
+        progress.parent_written = True
         station_uuid = plan.match_uuid
     else:
         address = {key: fixed.pop(key) for key in
@@ -302,6 +333,7 @@ async def _write_station(db: AsyncSession, *, actor: User, plan: RowPlan, column
             visibility=fixed.get("visibility") or "public",
             secondary_location={"location_type": "address", **address} if address else None,
         )
+        progress.parent_written = True
         station_uuid = str(station.uuid)
 
     await _write_station_properties(db, actor=actor, station_uuid=station_uuid, dynamic=dynamic)
@@ -342,9 +374,13 @@ async def _plan_tickets(
         # (ADR-120) — not a duplicate. The first line creates it; the rest attach to it, and
         # the writer resolves the uuid once it exists.
         is_update = match.kind == MATCHED or key in seen_keys
-        seen_keys.add(key)
-
         errors += validate_row(columns, row, index=position, is_update=is_update)
+
+        # Only a row that will actually be written can be the line a later row attaches to.
+        # Planning a follower as an update when its leader failed validation drops every
+        # create-only column from it and then writes it as a create anyway (ADR-211).
+        if not errors:
+            seen_keys.add(key)
         plans.append(
             RowPlan(
                 index=position, row=row,
@@ -378,13 +414,21 @@ async def _write_task_properties(
 
 
 async def _write_ticket(
-    db: AsyncSession, *, actor: User, plan: RowPlan, columns, task_type: str, index
+    db: AsyncSession, *, actor: User, plan: RowPlan, columns, task_type: str, index,
+    progress: RowProgress,
 ) -> str:
     # Resolved against the LIVE index, not the plan: a row can become an update mid-file by
     # attaching to a ticket an earlier row of this same import created (ADR-120).
     key = ticket_key(plan.row.get("title"), plan.row.get("contact_phone"))
     resolved = index.look_up(key)
     is_update = resolved.kind == MATCHED
+
+    # The plan said "attach to the ticket an earlier line creates"; by the time this row runs
+    # that ticket does not exist, because that line failed at write time. Its create-only
+    # columns were already dropped as an update's would be, so creating it here would write a
+    # ticket with no title and no coordinates. Fail the row instead (ADR-211).
+    if plan.is_update and not is_update:
+        raise ValueError("同一份檔案中建立這張單的那一列沒有匯入成功，這一列一併不匯入")
 
     values = writable_values(columns, plan.row, is_update=is_update)
     fixed, dynamic = _split_dynamic(columns, values)
@@ -404,6 +448,7 @@ async def _write_ticket(
             await ticket_service.update_ticket(
                 db, actor=actor, uuid=ticket_uuid, status=status, changes=fixed
             )
+            progress.parent_written = True
     else:
         fixed.pop("status", None)  # `create_ticket` always writes "pending"
         ticket = await ticket_service.create_ticket(
@@ -418,6 +463,7 @@ async def _write_ticket(
             visibility=fixed.get("visibility") or "public",
             disaster_type=fixed.get("disaster_type"),
         )
+        progress.parent_written = True
         ticket_uuid = str(ticket.uuid)
         index.register(key, ticket_uuid)
 
@@ -427,6 +473,7 @@ async def _write_ticket(
         task_name=task_name, task_fields=task_fields,
     )
     if task_uuid:
+        progress.parent_written = True
         await _write_task_properties(db, actor=actor, task_uuid=task_uuid, dynamic=dynamic)
     return ticket_uuid
 
@@ -459,8 +506,10 @@ async def _write_task(
 async def _read(
     raw: bytes, filename: str, mapping: dict[str, str] | None
 ) -> tuple[Table, list[dict[str, str]]]:
-    table = read_table(raw, filename)
-    _check_limits(raw, table)
+    """Parse the upload, with both limits bounding the work rather than only its result."""
+    _check_size(raw)
+    table = read_table(raw, filename, max_rows=MAX_ROWS)
+    _check_rows(table)
     return table, [_apply_mapping(row, mapping or {}) for row in table.rows]
 
 
@@ -517,7 +566,7 @@ async def preview_tickets(
 
 
 async def _commit(
-    db: AsyncSession, *, table: Table, plans: list[RowPlan], write, filename: str
+    db: AsyncSession, *, actor: User, table: Table, plans: list[RowPlan], write, filename: str
 ) -> ImportOutcome:
     """Write every writable row, collecting failures instead of stopping at the first.
 
@@ -529,10 +578,8 @@ async def _commit(
     failures: dict[int, list[RowError]] = {
         plan.index: list(plan.errors) for plan in plans if not plan.ok
     }
-    created = updated = 0
-    partial: list[int] = []
 
-    created, updated, partial = await _write_all(db, plans, write, failures)
+    created, updated, partial = await _write_all(db, actor, plans, write, failures)
 
     errors = tuple(error for _, row_errors in sorted(failures.items()) for error in row_errors)
     return ImportOutcome(
@@ -546,29 +593,45 @@ async def _commit(
     )
 
 
-async def _write_all(db, plans, write, failures) -> tuple[int, int, list[int]]:
-    """Run every writable row, recording a failure instead of stopping at the first."""
+async def _write_all(db, actor, plans, write, failures) -> tuple[int, int, list[int]]:
+    """Run every writable row, recording a failure instead of stopping at the first.
+
+    A row is reported as partial when it failed *after* committing something, whichever
+    exception carried it there — a permission refusal on the row's very first call leaves
+    nothing behind, and a `ValueError` raised by a dependent write leaves plenty (ADR-212).
+    """
     created = updated = 0
     partial: list[int] = []
     for plan in plans:
         if not plan.ok:
             continue
+        progress = RowProgress()
         try:
-            await write(plan)
-        except HTTPException as exc:
-            await db.rollback()
-            failures[plan.index] = [_error(plan.line, "-", f"權限不足：{exc.detail}")]
-            partial.append(plan.line)
-            continue
-        except ValueError as exc:
-            await db.rollback()
-            failures[plan.index] = [_error(plan.line, "-", str(exc))]
+            await write(plan, progress)
+        except (HTTPException, ValueError) as exc:
+            await _recover(db, actor)
+            detail = f"權限不足：{exc.detail}" if isinstance(exc, HTTPException) else str(exc)
+            failures[plan.index] = [_error(plan.line, "-", detail)]
+            if progress.parent_written:
+                partial.append(plan.line)
             continue
         if plan.is_update:
             updated += 1
         else:
             created += 1
     return created, updated, partial
+
+
+async def _recover(db: AsyncSession, actor: User) -> None:
+    """Roll the failed row back and put the actor back in a usable state (ADR-213).
+
+    `rollback` expires every loaded object regardless of `expire_on_commit`, which is the
+    only thing `stable_actor` suspends. Without this the next row's `require_scope` would
+    lazily reload `actor` and raise MissingGreenlet, turning one bad row into a 500 for the
+    whole file.
+    """
+    await db.rollback()
+    await refresh_actor(db, actor)
 
 
 async def commit_stations(
@@ -582,12 +645,15 @@ async def commit_stations(
         columns = await station_columns(db, station_type)
         plans = await _plan_stations(db, station_type=station_type, rows=rows, columns=columns)
 
-        async def write(plan: RowPlan) -> None:
+        async def write(plan: RowPlan, progress: RowProgress) -> None:
             await _write_station(
-                db, actor=actor, plan=plan, columns=columns, station_type=station_type
+                db, actor=actor, plan=plan, columns=columns, station_type=station_type,
+                progress=progress,
             )
 
-        return await _commit(db, table=table, plans=plans, write=write, filename=filename)
+        return await _commit(
+            db, actor=actor, table=table, plans=plans, write=write, filename=filename
+        )
 
 
 async def commit_tickets(
@@ -601,9 +667,12 @@ async def commit_tickets(
         columns = await ticket_columns(db, task_type)
         plans, index = await _plan_tickets(db, task_type=task_type, rows=rows, columns=columns)
 
-        async def write(plan: RowPlan) -> None:
+        async def write(plan: RowPlan, progress: RowProgress) -> None:
             await _write_ticket(
-                db, actor=actor, plan=plan, columns=columns, task_type=task_type, index=index
+                db, actor=actor, plan=plan, columns=columns, task_type=task_type, index=index,
+                progress=progress,
             )
 
-        return await _commit(db, table=table, plans=plans, write=write, filename=filename)
+        return await _commit(
+            db, actor=actor, table=table, plans=plans, write=write, filename=filename
+        )

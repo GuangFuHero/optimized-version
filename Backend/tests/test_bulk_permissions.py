@@ -12,6 +12,7 @@ os.environ["ENV"] = "testing"
 
 import pytest
 from fastapi import HTTPException
+from scripts.seed_rbac import ROLES_DATA
 from sqlalchemy import select
 
 from app.core.permissions import PUBLIC_PERMS, Perm
@@ -20,7 +21,6 @@ from app.core.security import resolve_scope
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.services.authz import require_scope
-from scripts.seed_rbac import ROLES_DATA
 
 BULK_PERMS = (Perm.STATION_EXPORT, Perm.STATION_IMPORT, Perm.TICKET_EXPORT, Perm.TICKET_IMPORT)
 
