@@ -26,7 +26,8 @@ class Perm(StrEnum):
     TICKET_DELETE = "ticket.delete"
     TICKET_ASSIGN = "ticket.assign"
     TICKET_REVIEW = "ticket.review"
-    TICKET_EXPORT = "ticket.export"
+    TICKET_EXPORT = "ticket.export"  # registered since RBAC v1; first enforced by feature 015
+    TICKET_IMPORT = "ticket.import"  # see the bulk note under Resource Station below
 
     # Resource Station
     STATION_VIEW = "station.view"
@@ -38,6 +39,13 @@ class Perm(StrEnum):
     # Open crowd-sourcing: attach a property or submit a rating to ANY station (no ownership
     # check — deliberately capability-only, not scoped like station.edit=own). See station.py.
     STATION_CONTRIBUTE = "station.contribute"
+    # Bulk export/import (feature 015, ADR-110). Import is deliberately NOT a reuse of
+    # add/edit: one file can rewrite hundreds of rows, so the batch capability is separable
+    # from the single-row one. It is not a replacement either — every imported row still
+    # runs the *.add / *.edit checkpoints it would have run had it been typed in by hand,
+    # so import alone is a dead grant (asserted in tests/test_bulk_permissions.py).
+    STATION_EXPORT = "station.export"
+    STATION_IMPORT = "station.import"
 
     # Interactive Map (tiles, closure areas — the map *overlay*, distinct from the Station entity)
     MAP_VIEW = "map.view"

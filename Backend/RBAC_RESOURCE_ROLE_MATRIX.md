@@ -59,6 +59,9 @@
 | station.edit | — | own | — | all | zone | zone |
 | station.delete | — | own | — | all | zone | own |
 | station.review | — | — | — | all | zone | — |
+| station.contribute | — | all | — | all | all | all |
+| station.export | — | — | all | all | zone | — |
+| station.import | — | — | — | all | all | — |
 
 > **⚠️ `station.contribute` 的空格不代表沒權限。** 本表每一欄是「該角色自己的 grant」，不是
 > **有效權限**。team 角色疊加在 platform 角色之上（指派 team 角色只替換同 kind 的舊角色，見
@@ -79,6 +82,10 @@
 | ticket.delete | — | own | — | all | zone | own |
 | ticket.assign | — | own | — | all | zone | own |
 | ticket.review | — | — | — | all | zone | — |
+| ticket.export | — | — | all | all | zone | — |
+| ticket.import | — | — | — | all | all | — |
+
+> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
 
 ### 使用者 User
 

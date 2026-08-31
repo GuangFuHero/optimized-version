@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     admin,
     analytics,
     auth,
+    bulk,
     map,
     notifications,
     rbac_admin,
@@ -46,6 +47,9 @@ def rbac_test_enabled(env: str) -> bool:
 # 註冊 RBAC 測試路由（僅限 dev/test 環境，ADR-033）
 if rbac_test_enabled(settings.ENV):
     api_router.include_router(rbac_test.router, prefix="/rbac-test", tags=["RBAC 測試"])
+
+# 註冊批量匯入匯出路由（feature 015；檔案上傳/下載走 REST，不走 GraphQL）
+api_router.include_router(bulk.router, prefix="/bulk", tags=["批量匯入匯出"])
 
 # 註冊地圖圖磚路由
 api_router.include_router(map.router, prefix="/map", tags=["地圖圖磚"])
