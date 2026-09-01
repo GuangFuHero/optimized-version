@@ -152,6 +152,23 @@ class VerificationRepository:
                    "action": action, "target": target}
         return await self._issue(key, payload), "issued"
 
+    async def discard_old_channel_step_up(
+        self, *, user_uuid: str, type_: str, value: str, action: str, target: str = ""
+    ) -> None:
+        """Drop a step-up code that was minted but never delivered (ADR-216).
+
+        `issue_old_channel_step_up` writes the key before the send, so a provider failure
+        would otherwise leave a live "pending" code the owner never received — and ADR-165's
+        do-not-reissue rule would then refuse to mint another for the rest of the OTP window.
+        A code nobody received is not pending.
+
+        The send counter is deliberately NOT rolled back: it bounds how many messages this
+        account can have aimed at one channel, and a provider that fails on every attempt
+        must not become an unmetered retry loop.
+        """
+        key = self._stepup_key(user_uuid, type_, value, action, target)
+        await self.redis.delete(key, key + ":attempts")
+
     async def consume_old_channel_step_up(
         self, *, user_uuid: str, type_: str, value: str, action: str, target: str = "", code: str
     ) -> dict | None:

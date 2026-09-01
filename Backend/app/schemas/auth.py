@@ -208,28 +208,6 @@ class IdTokenRequest(BaseModel):
     id_token: str = Field(..., min_length=1)
 
 
-class SetPasswordRequest(BaseModel):
-    """Body for SSO-only users to set a first password (no old password)."""
-
-    password: str = Field(..., min_length=6, max_length=255)  # already frontend-hashed
-    salt_frontend: str = Field(..., description="Frontend salt (hex)")
-
-
-class VerifyRequest(BaseModel):
-    """Body for unified verification: identifier + 6-digit code."""
-
-    type: Literal["email", "phone"] = "email"
-    value: str = Field(..., min_length=1, max_length=320)
-    code: str = Field(..., min_length=4, max_length=8)
-
-
-class ResendVerificationRequest(BaseModel):
-    """Request to resend a verification message for a pending registration."""
-
-    type: Literal["email", "phone"] = "email"
-    value: str = Field(..., min_length=1, max_length=320)
-
-
 class StepUp(BaseModel):
     """Extra proof required to REPLACE or DELETE a contact (ADR-086/159).
 
@@ -245,6 +223,35 @@ class StepUp(BaseModel):
 
     password: str | None = Field(None, min_length=6, max_length=255)  # already frontend-hashed
     old_channel_code: str | None = Field(None, min_length=4, max_length=8)
+
+
+class SetPasswordRequest(BaseModel):
+    """Body for SSO-only users to set a first password (no old password).
+
+    `step_up` carries the code delivered to the account's own contact (ADR-215). It is
+    optional in the schema because the first call is expected to arrive without one — that
+    call is what sends the code and answers 422 asking for it back, the same shape
+    `DeleteContactRequest` uses.
+    """
+
+    password: str = Field(..., min_length=6, max_length=255)  # already frontend-hashed
+    salt_frontend: str = Field(..., description="Frontend salt (hex)")
+    step_up: StepUp | None = None
+
+
+class VerifyRequest(BaseModel):
+    """Body for unified verification: identifier + 6-digit code."""
+
+    type: Literal["email", "phone"] = "email"
+    value: str = Field(..., min_length=1, max_length=320)
+    code: str = Field(..., min_length=4, max_length=8)
+
+
+class ResendVerificationRequest(BaseModel):
+    """Request to resend a verification message for a pending registration."""
+
+    type: Literal["email", "phone"] = "email"
+    value: str = Field(..., min_length=1, max_length=320)
 
 
 class DeleteContactRequest(BaseModel):

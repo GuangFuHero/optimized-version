@@ -19,11 +19,13 @@ from app.messaging.email import (
     build_contact_changed_email,
     build_contact_removed_email,
     build_contact_verification_email,
+    build_password_set_email,
     build_step_up_code_email,
 )
 from app.messaging.sms import (
     build_contact_changed_sms,
     build_contact_removed_sms,
+    build_password_set_sms,
     build_step_up_code_sms,
     build_verification_sms,
 )
@@ -81,10 +83,11 @@ async def _deliver_step_up_code(
     type_: str, to: str, code: str, *, action: str, masked_target: str | None,
     email_sender, sms_sender,
 ) -> None:
-    """Send a step-up code to the address being changed, in a message that names the change.
+    """Send a step-up code to the account's own channel, in a message that names the action.
 
     Its own builder rather than `_deliver_code`'s (ADR-164): this code authorizes losing the
-    address it is sent to, and the recipient may be the victim rather than the requester.
+    address it is sent to — or, for `set_password`, minting a credential on the account it
+    belongs to — and the recipient may be the victim rather than the requester.
     Delivery stays inline and unguarded — if it fails, the caller must NOT be told to enter a
     code that was never sent, so the request should fail.
     """
@@ -137,11 +140,11 @@ async def _require_step_up(
     email_sender,
     sms_sender,
 ) -> None:
-    """Prove the caller may `action` (`replace`/`remove`) `existing`, or raise.
+    """Prove the caller may `action` (`replace`/`remove`/`set_password`) `existing`, or raise.
 
     Which proof is demanded is decided here, from the account's own shape — never from what
     the client chose to send. An account with a password proves it knows the password; an
-    SSO-only account proves it still holds the channel being changed.
+    SSO-only account proves it still holds the channel the code is sent to.
 
     This is the check that stops a stolen session from becoming permanent account takeover:
     swap the recovery channel, sign out, then "forgot password" into the account. Removal
@@ -171,16 +174,89 @@ async def _require_step_up(
         if outcome == "throttled":
             raise StepUpRequired("驗證碼寄送次數已達上限，請稍後再試")
         masked_target = _mask(existing.type, target) if action == "replace" else None
-        await _deliver_step_up_code(
-            existing.type, existing.value, code, action=action, masked_target=masked_target,
-            email_sender=email_sender, sms_sender=sms_sender,
-        )
+        try:
+            await _deliver_step_up_code(
+                existing.type, existing.value, code, action=action, masked_target=masked_target,
+                email_sender=email_sender, sms_sender=sms_sender,
+            )
+        except Exception:
+            # A code that was never delivered must not count as pending, or ADR-165's
+            # do-not-reissue rule turns one provider blip into a 10-minute lockout on
+            # changing or removing a contact (ADR-216). The request still fails.
+            await verification.discard_old_channel_step_up(**key)
+            raise
         raise StepUpRequired("已將驗證碼寄至原聯絡方式，請填入 step_up.old_channel_code")
     payload = await verification.consume_old_channel_step_up(
         **key, code=step_up.old_channel_code
     )
     if payload is None:
         raise StepUpFailed("原聯絡方式的驗證碼錯誤或已過期")
+
+
+async def require_step_up_for_first_password(
+    db: AsyncSession,
+    redis,
+    *,
+    actor: User,
+    step_up=None,
+    email_sender,
+    sms_sender,
+) -> None:
+    """Prove the caller holds one of the account's contacts before a first password is minted.
+
+    `/auth/set-password` has no old password to check, so before ADR-215 a session was the
+    only thing between a caller and a brand-new permanent credential. Revoking sessions
+    afterwards (ADR-160) does not close that: the password outlives the session, and whoever
+    minted it can simply sign in again. The proof therefore has to happen *before* the
+    credential exists.
+
+    The account is SSO-only by definition here — `set_password` 409s when a password identity
+    already exists — so `_require_step_up` takes its SSO branch and delivers a code to the
+    contact. The action is its own value, so a code issued for a contact change can never be
+    spent here and vice versa (ADR-164).
+    """
+    existing = await _proof_contact(db, str(actor.uuid))
+    await _require_step_up(
+        db, redis, actor=actor, existing=existing, step_up=step_up, action="set_password",
+        email_sender=email_sender, sms_sender=sms_sender,
+    )
+
+
+async def notify_password_set(
+    db: AsyncSession, *, user_uuid: str, email_sender, sms_sender, dispatch=None,
+) -> None:
+    """Tell every contact on the account that it now has a password (ADR-215).
+
+    A first password on an SSO-only account is a new permanent way in, so it must not appear
+    silently — the step-up code proved consent at the time, but this is what the owner sees
+    if that code was ever read out to someone. Routed through `_notify` and the `_or_log`
+    senders like every other post-commit notification (ADR-162): the identity is already
+    written, so a provider outage must not turn a successful request into a 500.
+    """
+    for contact in await contact_repository.list_by_user(db, user_uuid):
+        masked = _mask(contact.type, contact.value)
+        if contact.type == "email":
+            subject, html, text = build_password_set_email(masked)
+            await _notify(dispatch, _send_email_or_log,
+                          email_sender, contact.value, subject, html, text)
+        else:
+            await _notify(dispatch, _send_sms_or_log,
+                          sms_sender, contact.value, build_password_set_sms(masked))
+
+
+async def _proof_contact(db: AsyncSession, user_uuid: str) -> UserContact:
+    """The contact a first-password step-up is sent to: the email, else the phone.
+
+    Deterministic rather than caller-chosen, for the same reason `_require_step_up` decides
+    the proof type itself — letting the client name the channel would let a caller pick the
+    one they control.
+    """
+    contacts = await contact_repository.list_by_user(db, user_uuid)
+    for type_ in ("email", "phone"):
+        for contact in contacts:
+            if contact.type == type_:
+                return contact
+    raise ContactNotFound("此帳號沒有可驗證的聯絡方式，請先新增聯絡方式再設定密碼")
 
 
 async def start_contact_change(

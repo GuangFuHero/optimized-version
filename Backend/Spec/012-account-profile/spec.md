@@ -227,6 +227,9 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 ## 10. 實作對照（2026-08-20 回填，2026-08-27 依 ADR-159~161 更新）
 
 本節在實作完成後補上，讓 reviewer 能逐條驗證「設計說要做的」與「程式碼實際做的」是否一致。
+
+> **落點一律指函式名，不指行號**（2026-08-31 改）。PR #39 的兩輪 review 各讓 `auth_contact.py` 長了一截，
+> 行號在同一輪 review 之內就漂掉過一次，指錯地方比不指還糟。
 分支 `feat/account-profile-backend`，兩個 commit：`5ab9a3569`（spec + ADR）、`cd70b0795`（實作）。
 
 ### 10.1 設計 → 程式碼落點
@@ -234,13 +237,13 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | 設計條目 | ADR | 落點 |
 |---|---|---|
 | verify-then-replace，同交易原子取代 | 098 | `app/repositories/auth_repository.py:309` `replace_verified()` |
-| step-up 判定完全在後端，依帳號形狀決定驗哪一種 | 085/086 | `app/services/auth_contact.py:61` `_require_step_up()` |
-| 有 password identity → 驗密碼 | 085 | `app/services/auth_contact.py:80-86` |
-| SSO-only → 發碼到舊管道並驗證 | 085 | `app/services/auth_contact.py:88-102`；碼的存取為獨立 key prefix，`app/repositories/verification_repository.py:114` / `:121` |
-| 首次新增不設門檻 | 086 | `app/services/auth_contact.py:127`（`existing is None` 直接跳過 step-up） |
-| 更換成功後通知舊管道，新值部分遮蔽 | 085 | `app/services/auth_contact.py:177-183`；builder 在 `app/messaging/email.py:231` / `app/messaging/sms.py:51` |
+| step-up 判定完全在後端，依帳號形狀決定驗哪一種 | 085/086 | `app/services/auth_contact.py` `_require_step_up()` |
+| 有 password identity → 驗密碼 | 085 | `_require_step_up()` 的第一個分支 |
+| SSO-only → 發碼到舊管道並驗證 | 085 | `_require_step_up()` 的 SSO 分支；碼的存取為獨立 key prefix，`verification_repository.py` `issue_old_channel_step_up()` / `consume_old_channel_step_up()` |
+| 首次新增不設門檻 | 086 | `start_contact_change()`（`existing is None` 直接跳過 step-up） |
+| 更換成功後通知舊管道，新值部分遮蔽 | 085 | `commit_contact_change()`；builder 為 `build_contact_changed_email()` / `build_contact_changed_sms()` |
 | 不撤銷 session | 085 | 反向證據：`auth_contact.py` 全檔無 `SessionRepository` 引用 |
-| 刪除守門：不得失去最後一個登入管道 | 087 | `app/services/auth_contact.py:187` `delete_contact()`；計數與 SSO 判定在 `auth_repository.py:304` / `:379` |
+| 刪除守門：不得失去最後一個登入管道 | 087 | `app/services/auth_contact.py` `delete_contact()`；計數與 SSO 判定在 `auth_repository.py` `list_by_user()` / `has_sso_identity()` |
 | 舊列硬刪除，歷史交給 `audit_logs` | 087 | `app/repositories/auth_repository.py:332` `delete_contact()` |
 | 邏輯抽到 service，endpoint 只留 parse 與狀態碼對應 | 088 | `app/services/auth_contact.py`（新檔）；`app/api/v1/endpoints/auth/contacts.py:33` 的 `_STATUS_BY_ERROR` 是唯一的映射點 |
 | `GET /users/me` 回 `contacts[]` / `login_methods[]`，不回 `provider_subject` | 089 | `app/api/v1/endpoints/users.py` 的 `_profile()`（與 010 的身分清單同住一個函式）；schema 為 `ContactOut` / `LoginMethodOut` |
@@ -248,7 +251,10 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | `step_up` 條件必填 | 086 | `app/schemas/auth.py:167` `StepUp`、`:179` `AddContactRequest` |
 | **刪除與更換適用同一道 step-up；順序 404 → 409 → step-up** | **159** | `app/services/auth_contact.py` 的 `delete_contact()`（`_require_step_up()` 在最後管道守門之後呼叫） |
 | **刪除成功後通知存活管道，無存活者則通知被刪的管道** | **159** | `app/services/auth_contact.py` 的 `_notify_contact_removed()`；builder 在 `app/messaging/email.py` `build_contact_removed_email()` / `app/messaging/sms.py` `build_contact_removed_sms()` |
-| **`set-password` 完成後撤銷所有 session** | **160** | `app/api/v1/endpoints/auth/password.py` `set_password()` 末行 `revoke_all_for_user` |
+| **`set-password` 完成後撤銷所有 session** | **160** | `app/api/v1/endpoints/auth/password.py` `set_password()` 的 `revoke_all_for_user` |
+| **`set-password` 建立憑證「之前」要 step-up** | **215** | `set_password()` 呼叫 `auth_contact.require_step_up_for_first_password()`；寄送目標由 `_proof_contact()` 決定（email 優先） |
+| **設定密碼後通知帳號上每個聯絡方式** | **215** | `auth_contact.notify_password_set()`；builder 為 `build_password_set_email()` / `build_password_set_sms()` |
+| **寄送失敗的 step-up 碼要撤掉，寄送次數不退** | **216** | `_require_step_up()` 的 try/except → `verification_repository.discard_old_channel_step_up()` |
 | **DELETE 的 step-up 憑證走 optional request body** | **161** | `app/schemas/auth.py` `DeleteContactRequest`；`app/api/v1/endpoints/auth/contacts.py` `delete_contact()` 的 `body: DeleteContactRequest | None = None` |
 
 ### 10.2 §9 測試計畫 → 測試函式
@@ -282,8 +288,8 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | 刪除後存活管道收到遮蔽通知 | `test_deleting_notifies_the_remaining_channel` |
 | 最後管道守門排在 step-up 之前 | `test_the_last_channel_guard_runs_before_step_up` |
 | **「先刪再加」不再能繞過 step-up** | `test_delete_then_add_still_requires_step_up` |
-| `set-password` 撤銷所有 session | `test_set_password_revokes_every_session` |
-| **自造的密碼不能當 step-up** | `test_a_self_minted_password_cannot_be_used_as_step_up` |
+| `set-password` 撤銷所有 session | `test_set_password_with_the_code_revokes_every_session_and_notifies`（2026-08-31 依 ADR-215 改寫） |
+| **自造的密碼不能當 step-up** | ~~`test_a_self_minted_password_cannot_be_used_as_step_up`~~ **這支測試當時是靠錯誤的理由通過的**——它斷言的 401 來自 `get_current_user`（前一行剛被 ADR-160 撤銷 session），密碼根本沒被當成 step-up 材料評估過。2026-08-31 改寫為 `test_the_full_takeover_chain_stops_at_the_mint`，中間補上重新登入那一步 |
 
 既有測試連帶更新三支（改為攜帶 step-up 憑證，斷言意圖不變）：
 `test_deleting_the_last_contact_is_allowed_with_an_sso_identity`、
@@ -299,3 +305,24 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 **§9 的「模擬 INSERT 失敗時舊列仍在」沒有對應測試。** `test_replacement_swaps_the_row_atomically` 只驗成功路徑（舊列消失、新列出現），沒有注入失敗來證明交易會整個回捲。
 
 不補的理由：`replace_verified()` 的 DELETE + INSERT 走同一個 `AsyncSession`，回捲由 SQLAlchemy 的交易邊界保證，測它等於測 SQLAlchemy。真正該擋的失效模式——「先刪後加，中間空窗」——在 ADR-098 就被設計否決了，程式碼裡不存在那條路徑。**記在這裡而非默默略過**，因為它是 §9 明列卻沒交付的一條。
+
+
+### 10.5 2026-08-31 第二輪 review 後的變更（ADR-215/216）
+
+| 案例 | 測試（`tests/test_account_profile.py`，除非另註） |
+|---|---|
+| 只有 session 設不了第一組密碼，碼寄到帳號自己的聯絡方式 | `test_setting_a_first_password_needs_the_old_channel_code` |
+| 帶碼設定 → 204、撤銷所有 session、通知寄出 | `test_set_password_with_the_code_revokes_every_session_and_notifies` |
+| **完整接管鏈在鑄造那一步就斷掉**（含重新登入） | `test_the_full_takeover_chain_stops_at_the_mint` |
+| 沒有任何聯絡方式的帳號 → 422 要求先新增 | `test_an_account_with_no_contact_is_told_to_add_one_first` |
+| 沒寄出去的碼不算 pending，可以馬上重試 | `test_a_code_that_was_never_delivered_does_not_count_as_pending` |
+| 寄送失敗仍消耗寄送額度 | `test_a_failed_delivery_still_spends_its_send_allowance` |
+| **ADR-163 的併發競態**（兩條真連線 + `asyncio.Barrier`） | `test_two_concurrent_deletes_cannot_strand_the_account` |
+| set-password 全流程改為兩次呼叫 | `tests/test_set_password.py` 四支全部改用 `_set_password()` helper |
+
+每一條都先確認舊碼會紅：關掉 `lock_owner` → 競態測試零拒絕、帳號被清空；還原「先發後寄」→ 重試拿到
+「請使用先前收到的那一組」；移除 step-up → 接管鏈重現。
+
+**§10.3 的已知缺口清單新增一項**（ADR-215 記錄，不在本輪修）：帳號缺某一型別的聯絡方式時，
+`start_contact_change` 對該型別的第一個不設門檻（ADR-086），攻擊者可以先無門檻加一個自己的 email，
+再讓 step-up 碼寄到那裡。這條路徑早於本輪存在，且同樣打穿換／刪聯絡方式的 step-up，應另開票。

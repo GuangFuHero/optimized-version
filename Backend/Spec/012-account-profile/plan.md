@@ -172,3 +172,29 @@ tests/test_add_contact.py             三條斷言從「第二個 email → 409�
 **「新地址收到 0 封信」是本票最重要的一條**——它證明 step-up 擋在發碼之前，持有 session 的攻擊者從頭到尾拿不到寄到自己地址的碼。
 
 驗證用一次性資料庫，驗完 drop，沒有動到 dev DB。
+
+## PR #39 第二輪 review 修正（2026-08-31）
+
+五條 review comment，兩個新決策（ADR-215/216）。每一條都先確認舊碼會紅再修。
+
+- [x] **ADR-215** `set_password` 在建立 password identity **之前**呼叫
+      `auth_contact.require_step_up_for_first_password`，寄碼到帳號自己的聯絡方式（email 優先，
+      由 `_proof_contact` 決定，不由客戶端指定）；成功後保留 ADR-160 的撤銷，並以
+      `notify_password_set` 通知每一個聯絡方式
+      → 舊碼：撤銷 session 之後，攻擊者用自造的密碼 `POST /auth/login` 就拿回永久存取
+- [x] **ADR-216** `_deliver_step_up_code` 失敗時呼叫 `discard_old_channel_step_up` 撤掉那組碼再拋
+      （寄送次數刻意不退）
+      → 舊碼：一次 SMTP 失敗把使用者鎖在「請使用先前收到的那一組」十分鐘
+- [x] 改寫 `test_a_self_minted_password_cannot_be_used_as_step_up`：它當時的 401 來自
+      `get_current_user`，密碼從未被當成 step-up 材料評估。新的
+      `test_the_full_takeover_chain_stops_at_the_mint` 補上重新登入那一步
+- [x] 補 ADR-163 的競態回歸測試：兩次 `create_async_engine` + `asyncio.Barrier(2)`，
+      `asyncio.gather` 兩個 `delete_contact`。並更正 ADR-163 裡「現行 fixture 寫不出回歸測試」的說法
+- [x] `password.py` 的過期交叉引用（指向 `auth_contact.py:93`）改為指名函式；`spec.md` §10.1
+      的落點欄一併從行號改成函式名
+- [x] `tests/test_set_password.py` 四支改用兩次呼叫的 `_set_password()` helper
+- [x] **721 passed**；`ruff check` 全綠
+
+**新增但不在本輪修的缺口**（ADR-215 記錄）：`start_contact_change` 對「該型別的第一個聯絡方式」
+不設門檻（ADR-086），所以缺某一型別的帳號仍可被無門檻加入攻擊者控制的管道。早於本輪存在，
+應另開票。

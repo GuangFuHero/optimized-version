@@ -365,36 +365,93 @@ async def test_delete_then_add_still_requires_step_up(
 
 
 # ──────────────────────────────────────────────
-# A password the caller just minted is not proof (ADR-160)
+# A session alone cannot mint a password (ADR-160/215)
 # ──────────────────────────────────────────────
 
-async def test_set_password_revokes_every_session(client, db_session, redis):
-    """Aligns set-password with change-password, which has always revoked (ADR-160)."""
+async def _login(client, username: str, password: str):
+    return await client.post("/api/v1/auth/login",
+                             data={"username": username, "password": password})
+
+
+async def test_setting_a_first_password_needs_the_old_channel_code(
+    client, db_session, redis, capture_email
+):
+    """A session is not enough to mint a permanent credential (ADR-215)."""
     _, headers = await _sso_only_user(db_session, redis)
 
     res = await client.post("/api/v1/auth/set-password", headers=headers,
                             json={"password": "brandnew", "salt_frontend": "s"})
 
+    assert res.status_code == 422, res.text
+    # the code went to the account's own contact, which the session holder need not control
+    assert capture_email.messages[-1][0] == "sso@x.com"
+    assert (await _login(client, "sso@x.com", "brandnew")).status_code == 401
+
+
+async def test_set_password_with_the_code_revokes_every_session_and_notifies(
+    client, db_session, redis, capture_email
+):
+    """The owner's path: read the code, set the password, get signed out and told (ADR-160/215)."""
+    _, headers = await _sso_only_user(db_session, redis)
+    await client.post("/api/v1/auth/set-password", headers=headers,
+                      json={"password": "brandnew", "salt_frontend": "s"})
+    code = capture_email.last_code
+
+    res = await client.post("/api/v1/auth/set-password", headers=headers, json={
+        "password": "brandnew", "salt_frontend": "s",
+        "step_up": {"old_channel_code": code},
+    })
+
     assert res.status_code == 204, res.text
-    after = await client.get("/api/v1/users/me", headers=headers)
-    assert after.status_code == 401
+    assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
+    assert "已設定密碼" in capture_email.messages[-1][1]
 
 
-async def test_a_self_minted_password_cannot_be_used_as_step_up(client, db_session, redis, capture_email):
-    """The C2 chain: mint a password with a stolen session, then use it to swap the channel."""
+async def test_the_full_takeover_chain_stops_at_the_mint(
+    client, db_session, redis, capture_email
+):
+    """The C2 chain end-to-end, with the re-authentication step the old test skipped.
+
+    The previous version asserted 401 on the step-up call, but that 401 came from
+    `get_current_user` — ADR-160 had revoked the session on the line before — so the minted
+    password was never evaluated as step-up material at all. Logging back in first is what
+    makes the assertion mean what its name says.
+    """
     user_uuid, headers = await _sso_only_user(db_session, redis)
 
     minted = await client.post("/api/v1/auth/set-password", headers=headers,
                                json={"password": "attackerpw", "salt_frontend": "s"})
-    assert minted.status_code == 204, minted.text
+    assert minted.status_code == 422, minted.text
+
+    # the attacker cannot sign in, so there is no fresh session to spend on the step-up
+    relogin = await _login(client, "sso@x.com", "attackerpw")
+    assert relogin.status_code == 401, relogin.text
 
     res = await client.post(CONTACTS_URL, headers=headers, json={
         "type": "email", "value": "attacker@evil.com",
         "step_up": {"password": "attackerpw"},
     })
 
-    assert res.status_code == 401, res.text
+    assert res.status_code in (401, 422), res.text
     assert await _contacts_of(db_session, user_uuid) == ["sso@x.com"]
+
+
+async def test_an_account_with_no_contact_is_told_to_add_one_first(
+    client, db_session, redis, capture_email
+):
+    """There is no channel to prove, so there is nothing to mint a password against."""
+    user_uuid, headers = await _sso_only_user(db_session, redis)
+    contact = (await db_session.scalars(
+        select(UserContact).where(UserContact.user_uuid == user_uuid)
+    )).one()
+    await db_session.delete(contact)
+    await db_session.commit()
+
+    res = await client.post("/api/v1/auth/set-password", headers=headers,
+                            json={"password": "brandnew", "salt_frontend": "s"})
+
+    assert res.status_code == 422, res.text
+    assert "聯絡方式" in res.json()["detail"]
 
 
 # ──────────────────────────────────────────────
@@ -459,6 +516,61 @@ async def test_a_pending_step_up_code_is_not_reissued(client, db_session, redis,
     assert res.status_code == 204, res.text
 
 
+async def test_a_code_that_was_never_delivered_does_not_count_as_pending(
+    client, db_session, redis, capture_email, monkeypatch
+):
+    """A provider blip must not lock the account out of step-up for the whole OTP window.
+
+    `issue_old_channel_step_up` writes the key before the send, so a failed delivery used to
+    leave a live "pending" code the owner never received — and ADR-165's do-not-reissue rule
+    then refused to mint another for ten minutes (ADR-216).
+    """
+    _, headers = await _sso_only_user(db_session, redis)
+
+    async def explode(*args, **kwargs):
+        raise RuntimeError("SMTP is down")
+
+    monkeypatch.setattr(capture_email, "send", explode)
+    with pytest.raises(RuntimeError):
+        await _delete(client, headers, "email")
+
+    monkeypatch.undo()
+    retry = await _delete(client, headers, "email")
+
+    assert retry.status_code == 422, retry.text
+    assert "已將驗證碼寄至原聯絡方式" in retry.json()["detail"]  # a fresh code, not "use the old one"
+    res = await _delete(client, headers, "email", {"old_channel_code": capture_email.last_code})
+    assert res.status_code == 204, res.text
+
+
+async def test_a_failed_delivery_still_spends_its_send_allowance(
+    client, db_session, redis, capture_email, monkeypatch
+):
+    """The cap bounds messages aimed at the owner, so a failing provider is not a free loop.
+
+    Deliberately asymmetric with the code itself (ADR-216): the code is discarded because
+    nobody received it, the counter is kept because a provider that fails every time must
+    not become an unmetered retry channel.
+    """
+    from app.repositories.verification_repository import MAX_STEPUP_SENDS_PER_WINDOW
+
+    _, headers = await _sso_only_user(db_session, redis)
+
+    async def explode(*args, **kwargs):
+        raise RuntimeError("SMTP is down")
+
+    monkeypatch.setattr(capture_email, "send", explode)
+    for _ in range(MAX_STEPUP_SENDS_PER_WINDOW):
+        with pytest.raises(RuntimeError):
+            await _delete(client, headers, "email")
+
+    monkeypatch.undo()
+    over = await _delete(client, headers, "email")
+
+    assert over.status_code == 422, over.text
+    assert "寄送次數已達上限" in over.json()["detail"]
+
+
 async def test_step_up_sends_are_capped_per_account(client, db_session, redis, capture_email):
     """A caller holding only a session cannot drive unbounded mail/SMS to the owner.
 
@@ -488,3 +600,78 @@ async def test_step_up_sends_are_capped_per_account(client, db_session, redis, c
     assert over.status_code == 422, over.text
     assert len(capture_email.messages) == MAX_STEPUP_SENDS_PER_WINDOW, "the cap did not hold"
     assert await _contacts_of(db_session, user_uuid) == ["sso@x.com"]
+
+
+# --------------------------------------------------------------------------------------
+# The row lock holds under real concurrency (ADR-163)
+# --------------------------------------------------------------------------------------
+
+
+class _NullSender:
+    """A sender that succeeds and records nothing — the race test is not about delivery."""
+
+    async def send(self, *args, **kwargs):
+        return None
+
+
+async def test_two_concurrent_deletes_cannot_strand_the_account(db, redis, monkeypatch):
+    """Two DELETEs racing on one account must not leave it with zero login channels.
+
+    ADR-163 originally recorded this as untestable without a real uvicorn, because
+    `conftest.py` overrides `get_db` with one shared `AsyncSession` and serializes every
+    request through `client`. That is true of the HTTP path only: the service is callable
+    directly, and two `create_async_engine` calls give two real connections in one event
+    loop. Step-up is stubbed with a barrier so both tasks arrive at the lock together.
+    """
+    import asyncio
+
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models.auth import User
+    from app.services import auth_contact as contact_service
+    from tests.conftest import TEST_DB_URL
+
+    user = await create_account(
+        db, contact_type="email", value="owner@x.com",
+        password_hash=get_password_hash(_PASSWORD, generate_salt()), name="Racer",
+    )
+    user_uuid = str(user.uuid)
+    db.add(UserContact(user_uuid=user.uuid, type="phone", value="+886912345678", verified=True))
+    await db.commit()
+
+    barrier = asyncio.Barrier(2)
+
+    async def arrive_together(*args, **kwargs):
+        """Stand in for step-up, releasing both tasks into the lock at the same moment."""
+        await barrier.wait()
+
+    monkeypatch.setattr(contact_service, "_require_step_up", arrive_together)
+
+    engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
+    sessions = [
+        sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)()
+        for engine in engines
+    ]
+    try:
+        async def delete(session, type_):
+            actor = await session.get(User, user_uuid)
+            return await contact_service.delete_contact(
+                session, redis, actor=actor, type_=type_,
+                email_sender=_NullSender(), sms_sender=_NullSender(),
+            )
+
+        outcomes = await asyncio.gather(
+            delete(sessions[0], "email"), delete(sessions[1], "phone"),
+            return_exceptions=True,
+        )
+    finally:
+        for session in sessions:
+            await session.close()
+        for engine in engines:
+            await engine.dispose()
+
+    refused = [o for o in outcomes if isinstance(o, contact_service.LastLoginChannel)]
+    assert len(refused) == 1, f"expected exactly one refusal, got {outcomes}"
+    remaining = await db.scalars(select(UserContact).where(UserContact.user_uuid == user_uuid))
+    assert len(list(remaining)) == 1, "the account was left with no way to sign in"

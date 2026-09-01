@@ -287,6 +287,9 @@ def build_contact_removed_email(removed_type: str, masked_value: str) -> tuple[s
 
 _STEP_UP_ACTION_ZH = {"replace": "更換", "remove": "移除"}
 _STEP_UP_ACTION_EN = {"replace": "change", "remove": "remove"}
+# `set_password` is not a change to the contact it is sent to — it authorizes minting a
+# permanent credential on the account that contact belongs to (ADR-215).
+SET_PASSWORD_ACTION = "set_password"
 
 
 def build_step_up_code_email(
@@ -302,16 +305,21 @@ def build_step_up_code_email(
     address would be replaced with.
     """
     label = "電子信箱 email" if contact_type == "email" else "手機號碼 phone"
-    zh_action, en_action = _STEP_UP_ACTION_ZH[action], _STEP_UP_ACTION_EN[action]
-    if action == "replace":
-        zh_what = f"將此{label}{zh_action}為 {masked_target}"
-        en_what = f"{en_action} this {contact_type} to {masked_target}"
+    if action == SET_PASSWORD_ACTION:
+        zh_what = "為此帳號設定登入密碼"
+        en_what = "set a sign-in password on this account"
+        heading = "請確認密碼設定 Confirm a password setup"
+    elif action == "replace":
+        zh_what = f"將此{label}{_STEP_UP_ACTION_ZH[action]}為 {masked_target}"
+        en_what = f"{_STEP_UP_ACTION_EN[action]} this {contact_type} to {masked_target}"
+        heading = "請確認聯絡方式變更 Confirm a contact change"
     else:
-        zh_what = f"將此{label}從帳號{zh_action}"
-        en_what = f"{en_action} this {contact_type} from the account"
-    subject = f"【{_BRAND_ZH}】請確認聯絡方式變更 Confirm a contact change"
+        zh_what = f"將此{label}從帳號{_STEP_UP_ACTION_ZH[action]}"
+        en_what = f"{_STEP_UP_ACTION_EN[action]} this {contact_type} from the account"
+        heading = "請確認聯絡方式變更 Confirm a contact change"
+    subject = f"【{_BRAND_ZH}】{heading}"
     html = _render_email(
-        h1="請確認聯絡方式變更 Confirm a contact change",
+        h1=heading,
         intro=(f"有人正在要求{zh_what}。若這是您本人，請使用以下驗證碼：",
                f"Someone is asking to {en_what}. If this is you, use this code:"),
         code=code,
@@ -338,5 +346,37 @@ def build_step_up_code_email(
         f"If this is you, your code is {code} (valid 10 minutes, for this one action only).\n"
         "If this was not you, do not share this code with anyone — change your password and "
         "contact us immediately."
+    )
+    return subject, html, text
+
+
+def build_password_set_email(masked_value: str) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the account a first password was set (ADR-215).
+
+    Setting a first password on an SSO-only account creates a permanent credential where
+    there was none. The step-up code already required the owner's consent, but this is the
+    record: if a code was ever read out to someone, this message is where the owner sees
+    what it bought.
+    """
+    subject = f"【{_BRAND_ZH}】您的帳號已設定密碼 Password set"
+    html = _render_email(
+        h1="您的帳號已設定密碼 Password set",
+        notices=[
+            _notice(f"您的帳號（{masked_value}）已設定登入密碼，所有裝置都已登出。",
+                    f"A sign-in password was set on your account ({masked_value}), and every "
+                    "session was signed out."),
+            _notice("<strong>若非本人操作，請立即使用第三方登入進入帳號並變更密碼</strong>，"
+                    "並聯繫我們。",
+                    "<strong>If this was not you, sign in with your third-party provider, "
+                    "change the password immediately</strong> and contact us."),
+        ],
+        footer_lines=[_FOOTER_BRAND],
+    )
+    text = (
+        f"您的帳號（{masked_value}）已設定登入密碼，所有裝置都已登出。\n"
+        "若非本人操作，請立即使用第三方登入進入帳號並變更密碼，並聯繫我們。\n\n"
+        f"A sign-in password was set on your account ({masked_value}), and every session was "
+        "signed out.\nIf this was not you, sign in with your third-party provider, change the "
+        "password immediately and contact us.\n"
     )
     return subject, html, text

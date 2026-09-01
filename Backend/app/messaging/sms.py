@@ -81,7 +81,10 @@ def build_step_up_code_sms(
     "read us the code we just sent you" phone script.
     """
     label = "電子信箱" if contact_type == "email" else "手機號碼"
-    if action == "replace":
+    if action == "set_password":
+        # Not a change to this contact — it authorizes a permanent credential (ADR-215).
+        zh_what, en_what = "為此帳號設定登入密碼", "set a sign-in password on this account"
+    elif action == "replace":
         zh_what = f"將此{label}更換為 {masked_target}"
         en_what = f"change this {contact_type} to {masked_target}"
     else:
@@ -89,3 +92,11 @@ def build_step_up_code_sms(
     return (f"【{_BRAND_ZH}】有人正在要求{zh_what}。驗證碼 {code}，10 分鐘內有效，僅能用於這項操作。"
             f"若非本人請勿提供給任何人。 Someone is asking to {en_what}. Code {code}, valid 10 minutes "
             "for this action only. If this was not you, do not share it.")
+
+
+def build_password_set_sms(masked_value: str) -> str:
+    """Return the bilingual SMS telling the account a first password was set (ADR-215)."""
+    return (f"【{_BRAND_ZH}】您的帳號（{masked_value}）已設定登入密碼，所有裝置都已登出。"
+            "若非本人操作，請立即以第三方登入進入帳號並變更密碼。 "
+            f"A sign-in password was set on your account ({masked_value}); all sessions were "
+            "signed out. If this was not you, sign in with your provider and change it now.")

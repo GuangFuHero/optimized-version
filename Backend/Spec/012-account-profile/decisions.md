@@ -229,7 +229,9 @@ POST   /auth/forgot-password                -> 重設碼寄到 attacker@evil.com
 
 ### ADR-160 `/auth/set-password` 完成後撤銷所有 session
 
-**白話**：SSO 使用者第一次設密碼之後，所有裝置都要重新登入——包括剛剛設密碼的那台。
+> ⚠️ **本條的「足夠性」宣稱已被 ADR-215 推翻**（2026-08-31）。撤銷 session 本身保留、仍然有效，
+> 但它**擋不住**這裡描述的接管——密碼比 session 活得久，攻擊者重新登入就繞過去了。
+> 下面 Consequences 第一項「自造的密碼在同一個 request 內就失效」**不成立**，請讀 ADR-215。
 
 **Context**：ADR-085 的 step-up 用「帳號有沒有 password identity」決定要驗密碼還是發碼到舊管道，並把「知道密碼」當成身分證明。但 `/auth/set-password` 對 SSO-only 帳號**只要有 session 就能建立第一組密碼，不檢查任何舊憑證**（這是它存在的意義——SSO 使用者本來就沒有舊密碼可驗）。
 
@@ -252,7 +254,8 @@ POST /auth/contacts      step_up.password = "attackerpw"    -> 202
 **Decision**：採 A（2026-08-27 使用者拍板）。`set_password` 取得 `redis` 依賴，在 identity 建立成功後呼叫 `SessionRepository.revoke_all_for_user`。
 
 **Consequences**：
-➕ 自造的密碼在同一個 request 內就失效——攻擊者的 session 跟著死，拿不到後續 step-up 的機會。實測第二步直接 401（`Could not validate credentials`），根本走不到步驟判定。
+➕ ~~自造的密碼在同一個 request 內就失效——攻擊者的 session 跟著死，拿不到後續 step-up 的機會。實測第二步直接 401（`Could not validate credentials`），根本走不到步驟判定。~~
+   **這一項是錯的（ADR-215 更正）**：失效的只有 session。密碼留著，攻擊者 `POST /auth/login` 就拿到新的 session。當時的實測之所以看起來成立，是因為測試沒有重新登入——同一個盲點也寫進了測試裡（見 ADR-215）。
 ➕ 與 `/auth/change-password` 對齊。後者一直都撤銷（ADR-085 的 Context 就引用了這個慣例），`set-password` 不撤本身就是不對稱，只是先前沒有人把它當成安全決策。
 ➕ 修在憑證產生端，而不是在每一個消費「有沒有密碼」的地方各補一次判斷。日後新增的敏感操作自動受惠。
 ➖ 正常使用者設完密碼會被登出，前端要處理重新登入。這與 change-password 的既有體驗一致。
@@ -261,6 +264,7 @@ POST /auth/contacts      step_up.password = "attackerpw"    -> 202
 **否決 B 的理由**：要把 session 建立時間傳進 service，多一層時間比較與時鐘假設，而且它只補了「contact step-up」這一個消費點——`set-password` 本身「設完不撤 session」的不對稱仍在，下一個把「有密碼」當證明的功能會再踩一次。
 
 **否決 C 的理由**：SSO 使用者事後正常設了密碼，之後每次換 contact 仍被迫收驗證碼，體驗較差，且與 ADR-085「有 password identity 就驗密碼」的表述直接矛盾——那需要改寫 085 而非補充它。
+（2026-08-31 補充：C 在第二輪 review 被重新提出，仍然否決，但理由換了——見 ADR-215。C 治的是症狀：它擋住「自造密碼當 step-up」，卻擋不住「自造密碼直接登入」。）
 
 ---
 
@@ -361,7 +365,13 @@ review 在本分支實測：讓 email sender 拋例外，DB 裡的 contact 已�
 ➕ ADR-087 的規則在併發下成立，不再只是循序下成立。
 ➕ 鎖的持有時間就是交易本身，且不含任何外部 I/O。
 ➖ 同一帳號的 contact 異動被序列化。使用者自己的操作本來就不會併發，這個代價只在攻擊或重複送出時付。
-➖ **這個 bug 用現行的測試 fixture 寫不出回歸測試**（單一共用 session）。已在 ADR 記錄，要真的測得寫成跑真 uvicorn 的整合測試，另開票。
+➖ ~~**這個 bug 用現行的測試 fixture 寫不出回歸測試**（單一共用 session）。已在 ADR 記錄，要真的測得寫成跑真 uvicorn 的整合測試，另開票。~~
+   **這一項是錯的（2026-08-31 更正，PR #39 第二輪 review 指出）**。單一共用 session 只是 `client` 那條 HTTP 路徑的限制；service 本身可以直接呼叫，兩次 `create_async_engine` 就有兩條真連線在同一個 event loop 裡。回歸測試已補上——
+   `tests/test_account_profile.py::test_two_concurrent_deletes_cannot_strand_the_account`：
+   用 `asyncio.Barrier(2)` 把 `_require_step_up` 換成「兩邊一起抵達鎖」，再 `asyncio.gather` 兩個
+   `delete_contact`（一個刪 email、一個刪 phone），各自跑在自己的 session 上。
+   把 `lock_owner` 改成 no-op 之後這個測試會紅（零個拒絕、帳號被清空），有鎖時是「剛好一個拒絕、剩一個 contact」。
+   **教訓**：「測不出來」在寫進 ADR 之前要先確認那是被測的東西的性質，還是只是某條測試路徑的性質。
 
 ---
 
@@ -443,3 +453,97 @@ API 上每一個同類欄位都寫明了、且下限是 6：`ChangePasswordReque
 ➕ 讀 schema 的人不必反推 `_require_step_up` 才知道要送什麼。
 ➖ **行為變更**：`step_up.password` 少於 6 字元從 401 變成 422。真實的前端雜湊值遠長於 6，所以只有手刻的呼叫會遇到。
 ➖ 兩個既有測試用 `"wrong"`（5 字元）當「錯誤密碼」的哨兵值，會變成 422 而不是 401。哨兵值已改成 `"wrongpw"`——否則那兩個測試證明的是長度檢查，不是密碼比對。
+
+---
+
+### ADR-215 `/auth/set-password` 本身要 step-up；ADR-160 的撤銷不足以擋帳號接管
+
+**白話**：只拿到一個 session 的人，不可以自己造一把「session 死了還在用」的鑰匙。
+
+**Date**: 2026-08-31（PR #39 第二輪 review 後補）
+
+**Context**：ADR-160 挑了選項 A（設完密碼撤銷所有 session），並宣稱「自造的密碼在同一個 request 內就失效」。**那句話不成立**——失效的是 session，密碼是永久憑證。review 實測（SSO-only 帳號）：
+
+```
+GET  /users/me                                    -> 讀到 sso@x.com
+POST /auth/set-password {"password":"attackerpw"} -> 204（session 全撤）
+GET  /users/me           (舊 token)               -> 401   <- ADR-160 如設計般運作
+POST /auth/login  sso@x.com / attackerpw          -> 200   <- 而且被直接繞過
+POST /auth/contacts step_up.password=attackerpw   -> 202
+POST /auth/contacts/verify                        -> 200   聯絡方式已變成 attacker@evil.com
+```
+
+ADR-160 的判斷錯在**把憑證的生命週期跟 session 的生命週期當成同一件事**。撤銷 session 只拿掉了「已經在手上的那把鑰匙」，沒有拿掉「剛剛新配的那把」。
+
+**Decision**（2026-08-31 使用者拍板）：把證明移到**憑證產生之前**。`set_password` 先呼叫
+`auth_contact.require_step_up_for_first_password`，寄一組 step-up 碼到帳號自己的聯絡方式，
+第一次呼叫回 422 要碼，帶碼的第二次才真的建立 password identity。三件事同時成立：
+
+1. **證明在前**：沒有信箱／手機的人造不出密碼，`login` 那一步就走不到。
+2. **撤銷保留**（ADR-160 的 A 不撤回，只是不再被當成足夠）：與 `/auth/change-password` 對齊，
+   而且看著密碼被設定的那個 session 不會靠它繼續活著。
+3. **事後通知**：`notify_password_set` 告訴帳號上的每個聯絡方式。SSO-only 帳號多一把永久鑰匙
+   這件事不可以無聲發生——如果那組碼曾經被唸給誰聽，這封信是擁有者唯一會看到的痕跡。
+
+驗證碼的 `action` 是獨立值 `set_password`（ADR-164 的金鑰綁定），所以換聯絡方式的碼不能拿來設密碼，
+反之亦然；文案也各自成篇（「請確認密碼設定」而不是「請確認聯絡方式變更」）。
+
+**寄到哪一個聯絡方式**：email 優先，其次 phone，由後端決定而不是由呼叫端指定——理由與
+`_require_step_up` 自己決定證明種類相同：讓客戶端挑管道，等於讓攻擊者挑他控制的那個。
+
+**Consequences**：
+➕ reviewer 的驗收標準真的成立了：只有 session 的呼叫端造不出比 session 活得久的憑證。
+➕ 修在憑證產生端，ADR-160 想要的那個性質（不用在每個「有沒有密碼」的消費點各補一次）仍然保留。
+➖ SSO 使用者第一次設密碼多一步：先收碼再送出。與換聯絡方式的體驗一致。
+➖ **一個聯絡方式都沒有的帳號設不了密碼**，回 422 要求先新增聯絡方式。這種帳號存在（ADR-087 允許
+   在有 SSO 身分時刪掉最後一個 contact），沒有可證明的管道就沒有可證明的東西。
+
+**已知殘留缺口（不在本條範圍）**：帳號缺某一型別的聯絡方式時，`start_contact_change` 對「該型別的
+第一個」不設門檻（ADR-086）——所以只有 phone 的帳號，攻擊者可以先無門檻加一個自己的 email，
+再讓 step-up 碼寄到那裡。這條路在本 ADR 之前就存在，且與 set-password 無關（它同樣打穿換／刪聯絡
+方式的 step-up）。**應該另開一張票**：ADR-086 的「第一個不設門檻」在帳號已有其他型別聯絡方式時，
+需要重新檢視。
+
+**否決「只加通知」的理由**：那是 reviewer 寫的最低要求，讓擁有者事後知道，但漏洞照樣成立——
+攻擊者仍然拿到永久存取，通知只是把接管從無聲變成有聲。
+
+**否決 ADR-160 當初的 C（有 SSO identity 就一律走舊管道碼）的理由**：它只擋住「自造密碼當 step-up」
+這一條消費路徑，攻擊者仍然可以用自造的密碼登入取得永久存取。它治的是症狀不是病灶，而病灶是
+「一個 session 就能鑄造憑證」。
+
+---
+
+### ADR-216 沒寄出去的 step-up 碼不算 pending；但寄送次數照扣
+
+**白話**：簡訊寄失敗，不該讓使用者接下來十分鐘都不能改聯絡方式。
+
+**Date**: 2026-08-31（PR #39 第二輪 review 後補）
+
+**Context**：`issue_old_channel_step_up` 先寫 Redis key，之後才在 `_deliver_step_up_code` 寄送。
+寄送失敗時 request 500，但 key 留著。接下來十分鐘每一次重試都走進 ADR-165 的 `"pending"` 分支，
+告訴使用者「請使用先前收到的那一組」——而那一組從來沒寄出去。實測：
+
+```
+DELETE /auth/contacts/email   (SMTP raise)  -> 500，什麼都沒寄出
+DELETE /auth/contacts/email   (重試)        -> 422「驗證碼已寄至原聯絡方式，請使用先前收到的那一組」
+```
+
+使用者既前進不了也重來不了。ADR-165 的「不重發」本身是對的，是**先發後寄**這個順序把
+provider 的一次抖動變成十分鐘硬鎖。
+
+**Decision**：`_deliver_step_up_code` 包 try/except，失敗時呼叫新的
+`VerificationRepository.discard_old_channel_step_up` 刪掉那組碼，再把例外原樣拋出去（request 仍然失敗
+——ADR-164 說得對，不能叫使用者去填一組沒寄出的碼）。
+
+**寄送次數不退回**（2026-08-31 使用者裁定）：`STEPUP_SENDS` 的計數是保護**收訊的那個人**的
+（ADR-165），不是保護呼叫端的。一個每次都失敗的 provider 如果連計數都退，就變成無上限的重試迴圈。
+所以刻意不對稱：**碼刪掉，因為沒人收到；計數保留，因為嘗試確實發生過**。
+
+**Consequences**：
+➕ 一次寄送失敗之後，使用者馬上可以重試並拿到一組真的寄出去的碼。
+➕ ADR-165 的兩個保護都還在：不重發活著的碼、每帳號每管道有寄送上限。
+➖ provider 連續失敗 `MAX_STEPUP_SENDS_PER_WINDOW` 次之後，使用者要等一個 OTP 視窗。這是刻意的——
+   那個上限保護的是收訊者，不因為寄送失敗而放寬。
+
+**否決「寄送成功才寫 key」的理由**：沒有補償邏輯看起來更乾淨，但寄送成功、寫 key 失敗時，
+使用者手上那組碼會驗不過——把失敗窗口從「沒收到碼」換成「收到了卻沒用」，後者更難理解。
