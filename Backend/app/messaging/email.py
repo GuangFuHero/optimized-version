@@ -290,6 +290,11 @@ _STEP_UP_ACTION_EN = {"replace": "change", "remove": "remove"}
 # `set_password` is not a change to the contact it is sent to — it authorizes minting a
 # permanent credential on the account that contact belongs to (ADR-215).
 SET_PASSWORD_ACTION = "set_password"
+# Linking an SSO provider adds a permanent way in that no password change can revoke, so it
+# carries its own copy rather than borrowing the contact-change wording (ADR-217).
+LINK_ACTION = "link_identity"
+UNLINK_ACTION = "unlink_identity"
+_PROVIDER_LABEL = {"google": "Google", "line": "LINE", "password": "密碼 password"}
 
 
 def build_step_up_code_email(
@@ -309,6 +314,13 @@ def build_step_up_code_email(
         zh_what = "為此帳號設定登入密碼"
         en_what = "set a sign-in password on this account"
         heading = "請確認密碼設定 Confirm a password setup"
+    elif action in (LINK_ACTION, UNLINK_ACTION):
+        verb_zh = "新增" if action == LINK_ACTION else "移除"
+        verb_en = "add" if action == LINK_ACTION else "remove"
+        provider = _PROVIDER_LABEL.get(masked_target or "", masked_target or "")
+        zh_what = f"為此帳號{verb_zh} {provider} 登入方式"
+        en_what = f"{verb_en} {provider} as a sign-in method on this account"
+        heading = "請確認登入方式變更 Confirm a sign-in method change"
     elif action == "replace":
         zh_what = f"將此{label}{_STEP_UP_ACTION_ZH[action]}為 {masked_target}"
         en_what = f"{_STEP_UP_ACTION_EN[action]} this {contact_type} to {masked_target}"
@@ -350,20 +362,22 @@ def build_step_up_code_email(
     return subject, html, text
 
 
-def build_password_set_email(masked_value: str) -> tuple[str, str, str]:
-    """Return (subject, html, text) telling the account a first password was set (ADR-215).
+def build_password_set_email(masked_value: str, *, changed: bool = False) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the account its password was set or changed.
 
     Setting a first password on an SSO-only account creates a permanent credential where
-    there was none. The step-up code already required the owner's consent, but this is the
-    record: if a code was ever read out to someone, this message is where the owner sees
-    what it bought.
+    there was none (ADR-215); changing one replaces it (ADR-218). The step-up or the old
+    password already required consent, but this is the record: if either was ever handed to
+    someone, this message is where the owner sees what it bought.
     """
-    subject = f"【{_BRAND_ZH}】您的帳號已設定密碼 Password set"
+    zh_verb, en_verb = ("已變更", "was changed on") if changed else ("已設定", "was set on")
+    heading = f"您的帳號密碼{zh_verb} Password {'changed' if changed else 'set'}"
+    subject = f"【{_BRAND_ZH}】{heading}"
     html = _render_email(
-        h1="您的帳號已設定密碼 Password set",
+        h1=heading,
         notices=[
-            _notice(f"您的帳號（{masked_value}）已設定登入密碼，所有裝置都已登出。",
-                    f"A sign-in password was set on your account ({masked_value}), and every "
+            _notice(f"您的帳號（{masked_value}）的登入密碼{zh_verb}，所有裝置都已登出。",
+                    f"The sign-in password {en_verb} your account ({masked_value}), and every "
                     "session was signed out."),
             _notice("<strong>若非本人操作，請立即使用第三方登入進入帳號並變更密碼</strong>，"
                     "並聯繫我們。",
@@ -373,10 +387,42 @@ def build_password_set_email(masked_value: str) -> tuple[str, str, str]:
         footer_lines=[_FOOTER_BRAND],
     )
     text = (
-        f"您的帳號（{masked_value}）已設定登入密碼，所有裝置都已登出。\n"
+        f"您的帳號（{masked_value}）的登入密碼{zh_verb}，所有裝置都已登出。\n"
         "若非本人操作，請立即使用第三方登入進入帳號並變更密碼，並聯繫我們。\n\n"
-        f"A sign-in password was set on your account ({masked_value}), and every session was "
+        f"The sign-in password {en_verb} your account ({masked_value}), and every session was "
         "signed out.\nIf this was not you, sign in with your third-party provider, change the "
         "password immediately and contact us.\n"
+    )
+    return subject, html, text
+
+
+def build_login_method_changed_email(added: bool, provider: str) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the account a sign-in method changed (ADR-218).
+
+    A linked provider is the one credential no password change and no session revocation can
+    take away, and until ADR-217 it could be attached in silence. The owner is told on every
+    channel the account holds, because this notice is what turns a silent takeover into a
+    visible one.
+    """
+    label = _PROVIDER_LABEL.get(provider, provider)
+    verb_zh, verb_en = ("已新增", "was added to") if added else ("已移除", "was removed from")
+    heading = f"登入方式{verb_zh} Sign-in method {'added' if added else 'removed'}"
+    subject = f"【{_BRAND_ZH}】{heading}"
+    html = _render_email(
+        h1=heading,
+        notices=[
+            _notice(f"您的帳號{verb_zh} <strong>{label}</strong> 登入方式。",
+                    f"<strong>{label}</strong> {verb_en} your account as a sign-in method."),
+            _notice("<strong>若非本人操作，請立即移除該登入方式並變更密碼</strong>，並聯繫我們。",
+                    "<strong>If this was not you, remove that sign-in method and change your "
+                    "password immediately</strong>, then contact us."),
+        ],
+        footer_lines=[_FOOTER_BRAND],
+    )
+    text = (
+        f"您的帳號{verb_zh} {label} 登入方式。\n"
+        "若非本人操作，請立即移除該登入方式並變更密碼，並聯繫我們。\n\n"
+        f"{label} {verb_en} your account as a sign-in method.\n"
+        "If this was not you, remove it and change your password immediately.\n"
     )
     return subject, html, text

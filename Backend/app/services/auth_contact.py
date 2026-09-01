@@ -10,6 +10,7 @@ with the flat-service convention (ADR-013/047) is deliberately out of scope here
 """
 
 import logging
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -156,7 +157,7 @@ async def _require_step_up(
     identity = await identity_repository.get_password_identity(db, str(actor.uuid))
     if identity is not None and identity.password_hash:
         if not (step_up and step_up.password):
-            raise StepUpRequired("更換聯絡方式需要輸入密碼")
+            raise StepUpRequired(f"{_ACTION_ZH.get(action, '這項操作')}需要輸入密碼")
         if not verify_password(step_up.password, identity.password_hash):
             raise StepUpFailed("密碼錯誤")
         return
@@ -193,6 +194,52 @@ async def _require_step_up(
         raise StepUpFailed("原聯絡方式的驗證碼錯誤或已過期")
 
 
+# Every action a step-up code can authorize. The value is part of the Redis key (ADR-164),
+# so a code minted for one of these can never be spent on another.
+ACTION_REPLACE = "replace"
+ACTION_REMOVE = "remove"
+ACTION_SET_PASSWORD = "set_password"
+ACTION_LINK = "link_identity"
+ACTION_UNLINK = "unlink_identity"
+
+_ACTION_ZH = {
+    ACTION_REPLACE: "更換聯絡方式",
+    ACTION_REMOVE: "移除聯絡方式",
+    ACTION_SET_PASSWORD: "設定密碼",
+    ACTION_LINK: "新增登入方式",
+    ACTION_UNLINK: "移除登入方式",
+}
+
+# A contact added moments ago is not evidence of anything: the caller holding the session may
+# be the one who added it. Mirrors the industry pattern — Google holds a changed recovery
+# address for up to 7 days before it takes effect (ADR-219).
+PROOF_COOLDOWN = timedelta(days=7)
+
+
+async def require_channel_proof(
+    db: AsyncSession,
+    redis,
+    *,
+    actor: User,
+    step_up,
+    action: str,
+    target: str = "",
+    email_sender,
+    sms_sender,
+) -> None:
+    """Prove the caller holds the account, before it gains a new way in (ADR-215/217).
+
+    The one gate every "add a permanent way into this account" path goes through: a first
+    password, and linking an SSO provider. An account with a password proves it knows the
+    password; otherwise a code goes to a contact the account already held.
+    """
+    existing = await _proof_contact(db, str(actor.uuid))
+    await _require_step_up(
+        db, redis, actor=actor, existing=existing, step_up=step_up, action=action,
+        target=target, email_sender=email_sender, sms_sender=sms_sender,
+    )
+
+
 async def require_step_up_for_first_password(
     db: AsyncSession,
     redis,
@@ -215,17 +262,17 @@ async def require_step_up_for_first_password(
     contact. The action is its own value, so a code issued for a contact change can never be
     spent here and vice versa (ADR-164).
     """
-    existing = await _proof_contact(db, str(actor.uuid))
-    await _require_step_up(
-        db, redis, actor=actor, existing=existing, step_up=step_up, action="set_password",
+    await require_channel_proof(
+        db, redis, actor=actor, step_up=step_up, action=ACTION_SET_PASSWORD,
         email_sender=email_sender, sms_sender=sms_sender,
     )
 
 
 async def notify_password_set(
     db: AsyncSession, *, user_uuid: str, email_sender, sms_sender, dispatch=None,
+    changed: bool = False,
 ) -> None:
-    """Tell every contact on the account that it now has a password (ADR-215).
+    """Tell every contact on the account that its password was set or changed (ADR-215/218).
 
     A first password on an SSO-only account is a new permanent way in, so it must not appear
     silently — the step-up code proved consent at the time, but this is what the owner sees
@@ -236,27 +283,41 @@ async def notify_password_set(
     for contact in await contact_repository.list_by_user(db, user_uuid):
         masked = _mask(contact.type, contact.value)
         if contact.type == "email":
-            subject, html, text = build_password_set_email(masked)
+            subject, html, text = build_password_set_email(masked, changed=changed)
             await _notify(dispatch, _send_email_or_log,
                           email_sender, contact.value, subject, html, text)
         else:
             await _notify(dispatch, _send_sms_or_log,
-                          sms_sender, contact.value, build_password_set_sms(masked))
+                          sms_sender, contact.value, build_password_set_sms(masked, changed=changed))
+
+
+def _settled(contacts: list[UserContact], now: datetime) -> list[UserContact]:
+    """The contacts old enough to prove anything (ADR-219)."""
+    return [c for c in contacts if c.created_at and now - c.created_at >= PROOF_COOLDOWN]
 
 
 async def _proof_contact(db: AsyncSession, user_uuid: str) -> UserContact:
-    """The contact a first-password step-up is sent to: the email, else the phone.
+    """The contact a step-up code is sent to: settled first, email before phone.
 
     Deterministic rather than caller-chosen, for the same reason `_require_step_up` decides
     the proof type itself — letting the client name the channel would let a caller pick the
-    one they control.
+    one they control. `ADR-086` sets no gate on the *first* contact of a type, so a session
+    holder can attach one they own; the cooldown is what stops that one from immediately
+    becoming the thing the account proves itself with (ADR-219).
+
+    When nothing has settled yet — a genuinely new account — the oldest contact is used. That
+    keeps a legitimate first week working, and still prefers whatever the account had before
+    the caller showed up.
     """
     contacts = await contact_repository.list_by_user(db, user_uuid)
+    if not contacts:
+        raise ContactNotFound("此帳號沒有可驗證的聯絡方式，請先新增聯絡方式")
+    pool = _settled(contacts, datetime.now(UTC)) or [min(contacts, key=lambda c: c.created_at)]
     for type_ in ("email", "phone"):
-        for contact in contacts:
+        for contact in pool:
             if contact.type == type_:
                 return contact
-    raise ContactNotFound("此帳號沒有可驗證的聯絡方式，請先新增聯絡方式再設定密碼")
+    return pool[0]
 
 
 async def start_contact_change(

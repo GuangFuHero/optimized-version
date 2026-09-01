@@ -404,7 +404,7 @@ async def test_set_password_with_the_code_revokes_every_session_and_notifies(
 
     assert res.status_code == 204, res.text
     assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
-    assert "已設定密碼" in capture_email.messages[-1][1]
+    assert "Password set" in capture_email.messages[-1][1]  # not "Password changed"
 
 
 async def test_the_full_takeover_chain_stops_at_the_mint(

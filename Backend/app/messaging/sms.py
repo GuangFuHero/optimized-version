@@ -71,6 +71,9 @@ def build_contact_removed_sms(removed_type: str, masked_value: str) -> str:
             "If this was not you, contact us immediately.")
 
 
+_PROVIDER_LABEL = {"google": "Google", "line": "LINE", "password": "密碼"}
+
+
 def build_step_up_code_sms(
     action: str, contact_type: str, code: str, masked_target: str | None = None
 ) -> str:
@@ -84,6 +87,12 @@ def build_step_up_code_sms(
     if action == "set_password":
         # Not a change to this contact — it authorizes a permanent credential (ADR-215).
         zh_what, en_what = "為此帳號設定登入密碼", "set a sign-in password on this account"
+    elif action in ("link_identity", "unlink_identity"):
+        verb_zh = "新增" if action == "link_identity" else "移除"
+        verb_en = "add" if action == "link_identity" else "remove"
+        provider = _PROVIDER_LABEL.get(masked_target or "", masked_target or "")
+        zh_what = f"為此帳號{verb_zh} {provider} 登入方式"
+        en_what = f"{verb_en} {provider} as a sign-in method on this account"
     elif action == "replace":
         zh_what = f"將此{label}更換為 {masked_target}"
         en_what = f"change this {contact_type} to {masked_target}"
@@ -94,9 +103,19 @@ def build_step_up_code_sms(
             "for this action only. If this was not you, do not share it.")
 
 
-def build_password_set_sms(masked_value: str) -> str:
-    """Return the bilingual SMS telling the account a first password was set (ADR-215)."""
-    return (f"【{_BRAND_ZH}】您的帳號（{masked_value}）已設定登入密碼，所有裝置都已登出。"
+def build_password_set_sms(masked_value: str, *, changed: bool = False) -> str:
+    """Return the bilingual SMS telling the account its password was set or changed."""
+    zh_verb, en_verb = ("已變更", "was changed on") if changed else ("已設定", "was set on")
+    return (f"【{_BRAND_ZH}】您的帳號（{masked_value}）的登入密碼{zh_verb}，所有裝置都已登出。"
             "若非本人操作，請立即以第三方登入進入帳號並變更密碼。 "
-            f"A sign-in password was set on your account ({masked_value}); all sessions were "
+            f"The sign-in password {en_verb} your account ({masked_value}); all sessions were "
             "signed out. If this was not you, sign in with your provider and change it now.")
+
+
+def build_login_method_changed_sms(added: bool, provider: str) -> str:
+    """Return the bilingual SMS telling the account a sign-in method changed (ADR-218)."""
+    label = _PROVIDER_LABEL.get(provider, provider)
+    verb_zh, verb_en = ("已新增", "was added to") if added else ("已移除", "was removed from")
+    return (f"【{_BRAND_ZH}】您的帳號{verb_zh} {label} 登入方式。若非本人操作請立即移除並變更密碼。 "
+            f"{label} {verb_en} your account as a sign-in method. "
+            "If this was not you, remove it and change your password now.")

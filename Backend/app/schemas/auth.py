@@ -190,24 +190,6 @@ class RegisterRequest(BaseModel):
         return stripped
 
 
-class GoogleSsoRequest(BaseModel):
-    """Body carrying a Google id_token for SSO login / first-login create."""
-
-    id_token: str = Field(..., min_length=1)
-
-
-class LinkGoogleRequest(BaseModel):
-    """Body carrying a Google id_token to link to the current account."""
-
-    id_token: str = Field(..., min_length=1)
-
-
-class IdTokenRequest(BaseModel):
-    """Body carrying a provider id_token (LINE SSO / link)."""
-
-    id_token: str = Field(..., min_length=1)
-
-
 class StepUp(BaseModel):
     """Extra proof required to REPLACE or DELETE a contact (ADR-086/159).
 
@@ -223,6 +205,45 @@ class StepUp(BaseModel):
 
     password: str | None = Field(None, min_length=6, max_length=255)  # already frontend-hashed
     old_channel_code: str | None = Field(None, min_length=4, max_length=8)
+
+
+class GoogleSsoRequest(BaseModel):
+    """Body carrying a Google id_token for SSO login / first-login create."""
+
+    id_token: str = Field(..., min_length=1)
+
+
+class LinkGoogleRequest(BaseModel):
+    """Body carrying a Google id_token to link to the current account, plus its proof.
+
+    The id_token proves the caller holds *that Google account*; it says nothing about the
+    account being linked to. `step_up` is the other half (ADR-217), and is optional in the
+    schema for the same reason `DeleteContactRequest`'s is: the first call is what delivers
+    the code and answers 422 asking for it back.
+    """
+
+    id_token: str = Field(..., min_length=1)
+    step_up: StepUp | None = None
+
+
+class IdTokenRequest(BaseModel):
+    """Body carrying a provider id_token (LINE SSO / link).
+
+    `step_up` is ignored on the SSO login path and required on the link path (ADR-217).
+    """
+
+    id_token: str = Field(..., min_length=1)
+    step_up: StepUp | None = None
+
+
+class UnlinkIdentityRequest(BaseModel):
+    """Body for `DELETE /auth/link/{provider}` — carries the step-up proof (ADR-161/218).
+
+    Same shape and same reasoning as `DeleteContactRequest`: the proof rides in an optional
+    body rather than the URL, and the first call is expected to arrive without one.
+    """
+
+    step_up: StepUp | None = None
 
 
 class SetPasswordRequest(BaseModel):

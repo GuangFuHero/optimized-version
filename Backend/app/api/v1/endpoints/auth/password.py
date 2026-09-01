@@ -42,11 +42,20 @@ router = APIRouter()
              dependencies=[Depends(get_rate_limiter(5, 60))])
 async def change_password(
         body: ChangePasswordRequest,
+        background_tasks: BackgroundTasks,
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
+        email_sender=Depends(get_email_sender),
+        sms_sender=Depends(get_sms_sender),
 ):
-    """Verify old password against the password identity, write the new hash, revoke all sessions."""
+    """Verify the old password, write the new hash, revoke every session, tell the owner.
+
+    The notification is ADR-218's rule applied here too: every change to how this account can
+    be signed into reaches the owner's own channels. `change-password` is the one path where
+    knowing the current password is already required, so it is the least likely to be an
+    attacker — but "least likely" is not a reason for the owner to hear nothing.
+    """
     user_uuid = str(current_user.uuid)
     identity = await identity_repository.get_password_identity(db, user_uuid)
     if identity is None:
@@ -57,6 +66,10 @@ async def change_password(
     new_hash = security.get_password_hash(body.new_password, body.salt_frontend)
     await identity_repository.update(db, db_obj=identity, obj_in={"password_hash": new_hash})
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
+    await contact_service.notify_password_set(
+        db, user_uuid=user_uuid, email_sender=email_sender, sms_sender=sms_sender,
+        dispatch=background_tasks.add_task, changed=True,
+    )
 
 
 @router.post("/set-password", status_code=status.HTTP_204_NO_CONTENT,
