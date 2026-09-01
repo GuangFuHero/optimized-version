@@ -460,3 +460,24 @@ health check 的 PING 本身就送在死掉的 socket 上，一樣炸。另外�
 - [x] **真正的撤銷仍然生效**：logout 後同一把 token → 401
 - [x] **延遲可忽略**：Redis 全掉時 ~0.18s 回 401（3 次重試、backoff 上限 200ms）
 - [x] 驗證環境已清除，使用者原有的 `backend-*` 容器未受影響
+
+## PR #38 第二輪 review 剩下的四條（2026-09-01）
+
+前七條在 2026-08-30 修完並 resolve；這四條是同一輪裡沒被涵蓋到的，補完。
+三個新決策（ADR-221~223）加一條 ADR-192 的部署註記。
+
+- [x] **ADR-221** `revoke_all_for_user` 回傳 `len(members)`；`revoke_sessions_for_user` 刪掉
+      自己那次 `smembers`（兩次讀可能不一致 → audit row 少報）
+- [x] **ADR-222** 503 訊息不再宣稱 `"no sessions were revoked"`；改為
+      `"the sign-out may be incomplete — retry"`（逐筆刪除，中途掛掉時前面幾筆已經沒了）
+      → 新增 `test_a_kick_that_dies_mid_loop_does_not_claim_nothing_was_revoked`，
+      走的是真正的迴圈失敗路徑（原測試只讓 `smembers` 拋錯）
+- [x] **ADR-223** `logout-all` 改用 `live["user_uuid"]`——ADR-190 把它移出
+      `_require_live_session` 之後，它成了唯一沒釘住 sid/sub 配對的撤銷路徑
+- [x] **ADR-192 補部署註記**：帶著 ADR-195 的第一次部署會登出所有還握著 pre-`act` session 的人，
+      且與真正的撤銷無法區分（ADR-100）。不寫 session 遷移腳本——短期資料，自然過期比較便宜
+- [x] 新增 4 支測試；**RED 驗證**：還原三處實作 → 3 支紅（含兩個 503 訊息與 uuid 釘定）
+- [x] **693 passed**；`ruff check` 全綠
+
+**沒做、已記在 ADR-222**：撤銷中途失敗時不寫 audit row，所以「部分撤銷但無紀錄」的狀態仍在。
+要完全精確得讓 repository 回報「掛掉前撤到第幾筆」，需要一個帶進度的例外型別，本輪判斷不值得。

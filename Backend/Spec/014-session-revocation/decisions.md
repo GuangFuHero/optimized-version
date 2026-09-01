@@ -360,6 +360,15 @@ await repo.revoke_all_for_user(user_uuid)
 ➕ 開發環境的 Redis crash 或容器重建不再把所有人登出，省掉一整類「查不出原因的 401」。
 ➕ `noeviction` 實測有效：同一份填充壓力下，`allkeys-lru` 淘汰了 13635 個 key、session key **被淘汰掉**（該使用者當場登出）；`noeviction` 下 `evicted_keys=0`、session key 完好，改為 14198 次寫入回 OOM 錯誤。既有 session 的**讀取**在 OOM 期間照常 200——這正是要的取捨。
 ➖ 記憶體壓力下 Redis 會回錯誤而不是默默丟資料。這是要的：認證 key 被默默丟掉，比寫入失敗更難查。
+
+**部署後果（2026-09-01 補，PR #38 review 指出）**：ADR-195 讓 `get_current_user` 比對
+`session["act"]` 與 token 的 `act`。**在 `act` 開始被寫進 session 記錄之前建立的 session，
+記錄裡沒有這個鍵**，`session.get("act")` 回 `None`，於是任何帶 `act` claim 的 token 都對不上而 401
+——並且會持續整個 session 的 14 天 TTL，使用者無法把它跟真正的撤銷區分開（ADR-100 刻意讓兩者
+長得一樣）。所以**帶著 ADR-195 的第一次部署，會一次登出所有還握著 pre-`act` session 的人**。
+實務上很窄（本分支的 base 已經在寫 `act` 了），但這與本 ADR 記錄的其他「無法解釋的登出」是同一類，
+所以記在同一個地方。**沒有 session 遷移腳本**：session 是短期資料，讓它自然過期比寫一支只跑一次的
+腳本便宜。
 ➖ **本 ADR 沒有解決、後續由 ADR-196 修掉的殘留問題**：Redis 重啟後，backend 連線池裡每一條殘留連線的**第一個請求都會回一次 401**——舊連線讀到 `ConnectionError: Connection closed by server`，依 ADR-100 fail-closed。實測 30 個並發請求中 6 個 401，下一輪還有 1 個，之後全綠（連線換掉就自癒）。這是使用者看得到的假登出。**已於 ADR-196 修掉**（`retry_on_error` + `Retry`；當時猜的 `health_check_interval` 一行修法實測無效，見該 ADR 的對照表）。
 
 ---
@@ -477,3 +486,88 @@ if session.get("act") != payload.get("act"):
 ➖ `_claim` 在重放路徑上多一次 GET。只發生在真的重放或重試，正常換發不受影響。
 
 **與 ADR-100 的關係**：ADR-100 說「分不出 session 死了還是 Redis 掛了就一律 401」，這條完全不變。本 ADR 改的是**在什麼情況下才算「Redis 掛了」**——一條死掉的池化連線不算，它只是需要重連。
+
+
+---
+
+### ADR-221 `revoke_all_for_user` 自己回報撤銷了幾筆
+
+**白話**：要知道撤銷了幾個 session，就問做撤銷的那個人，不要自己再數一次。
+
+**Date**: 2026-09-01（PR #38 review 後補）
+
+**Context**：`revoke_sessions_for_user` 原本先 `smembers` 讀一次 session set 拿數量，再呼叫
+`revoke_all_for_user`——而那個函式內部又 `smembers` 一次。除了多一次 round trip，**兩次讀可能不一致**：
+在兩次之間建立的 session 會被撤銷但不被計數，於是 audit row 的 `revoked_sessions` 少報。
+
+audit row 是這個端點唯一的紀錄（ADR-181 的重點），少報等於紀錄說謊。
+
+**Decision**：`revoke_all_for_user` 回傳 `len(members)`——集合本來就在它手上。呼叫端刪掉自己那次
+`smembers`，直接用回傳值。
+
+**Consequences**：
+➕ 數字與實際撤銷的是同一次讀取，audit row 不會少報。
+➕ 少一次 Redis round trip。
+➖ 回傳型別從 `None` 變成 `int`，另外三個呼叫端（`change-password`、`reset-password`、`logout-all`）
+   忽略它，那是對的——它們不需要數量。
+
+---
+
+### ADR-222 撤銷失敗的 503 不宣稱「什麼都沒撤銷」
+
+**白話**：Redis 中途掛掉時，有些 session 已經被刪掉了，訊息不能說得好像一個都沒動。
+
+**Date**: 2026-09-01（PR #38 review 後補）
+
+**Context**：ADR-194 把這個端點的 Redis 失敗從 500 改成 503，理由是 500「讓呼叫端無從判斷是否有
+session 被撤銷」。但它給的訊息是 `"no sessions were revoked"`——而
+`revoke_all_for_user` 是**逐筆刪除**的（`session_repository.py` 的迴圈），Redis 在中途掛掉時
+前面幾筆已經沒了。**那是同一個模糊性，只是換成語氣肯定地說出來**，而且更糟：操作者會據此
+以為是乾淨的重來。
+
+原本的測試 `test_a_kick_during_a_redis_outage_is_503_not_500` 只讓 `smembers` 拋錯，
+所以迴圈的失敗路徑從來沒被走到過。
+
+**Decision**：訊息改成兩種情況都成立的說法：
+`"Session store is unavailable; the sign-out may be incomplete — retry"`。
+撤銷是冪等的，所以「誠實」與「可行動」在這裡剛好是同一句話。
+
+新增 `test_a_kick_that_dies_mid_loop_does_not_claim_nothing_was_revoked`：讓第二次 `delete`
+拋錯，走的是真正的迴圈失敗路徑。
+
+**Consequences**：
+➕ 503 的內容現在在兩種失敗形狀下都是真的。
+➕ 迴圈失敗路徑有測試了。
+➖ 失敗時**不寫 audit row**（`_record_session_revocation` 在 try 之後）。所以「部分撤銷但沒有紀錄」
+   這個狀態仍然存在——重試成功後會補上一筆，數字是那次重試真正撤銷的數量。要完全精確得讓
+   repository 回報「掛掉前撤到第幾筆」，那需要一個帶進度的例外型別；本輪判斷不值得。
+
+**否決「拆開 try，讓計數與撤銷各自回報」的理由**：ADR-221 之後已經沒有獨立的計數讀取了，
+拆無可拆。
+
+---
+
+### ADR-223 `logout-all` 用 session 記錄裡的 `user_uuid`，不用 token 的 `sub`
+
+**白話**：這個端點會撤銷某個人的**每一個** session，那就不該用「token 自己說它是誰」來決定是誰。
+
+**Date**: 2026-09-01（PR #38 review 後補）
+
+**Context**：`user_uuid` 來自 `get_current_session`，那是 decode-only 的。函式在前一行才剛用
+`get_session(sid)` 取到 session 記錄——記錄裡就有自己的 `user_uuid`——然後把它丟掉。
+
+ADR-101 把「session 的 `user_uuid` 等於 token 的 `sub`」列為值得釘住的 invariant，
+`_require_live_session` 也確實釘住了（`security.py`）。但 **ADR-190 把這個端點移出那道檢查**，
+於是 `logout-all` 成了唯一沒有釘住這個配對的撤銷路徑。
+
+**今天沒有任何路徑會鑄造出不一致的配對**（兩個 claim 都有簽章），所以這是縱深防禦而不是現行 bug。
+但這是撤銷範圍最大的端點，是最不該把 uuid 當可信輸入的地方，而正確的值**就在手上**。
+
+**Decision**：`await repo.revoke_all_for_user(live["user_uuid"])`，其中 `live` 是剛取到的 session 記錄。
+
+**Consequences**：
+➕ ADR-190 移出檢查造成的缺口補回來了，而且沒有把端點放回 `_require_live_session` 底下
+   （那會撤銷 ADR-190 本身的決定）。
+➕ 零額外成本：記錄本來就已經讀出來了。
+➖ 若真的出現不一致的配對，行為是「撤銷記錄所指的那個人」。那是對的——session 記錄是伺服器端狀態，
+   token 是客戶端拿著的東西。
