@@ -12,7 +12,6 @@ import pytest_asyncio
 from sqlalchemy import select
 
 from app.core.permissions import Perm
-from app.core.security import create_access_token
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.team import Team, TeamZoneAssign
@@ -89,7 +88,7 @@ async def _grant(db, role: Role, perm_cache: dict, perm: Perm, scope: str) -> No
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
 
 
-async def _make_gov_user() -> str:
+async def _make_gov_user(redis) -> str:
     """Create a user holding a role granting the full work_zone.* set at 'all'."""
     async with test_db() as db:
         role = Role(name=f"gov-{uuid_mod.uuid4().hex[:8]}", kind="platform")
@@ -107,19 +106,19 @@ async def _make_gov_user() -> str:
         await db.flush()
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
 
-        return create_access_token(data={"sub": str(user.uuid)})
+        return await token_for(redis, user.uuid)
 
 
-async def _make_plain_user() -> str:
+async def _make_plain_user(redis) -> str:
     """Create a user with no permissions at all."""
     async with test_db() as db:
         user = User(name=f"plain_{uuid_mod.uuid4().hex[:8]}")
         db.add(user)
         await db.flush()
-        return create_access_token(data={"sub": str(user.uuid)})
+        return await token_for(redis, user.uuid)
 
 
-async def _make_team_user(team_type: str) -> str:
+async def _make_team_user(redis, team_type: str) -> str:
     """Create a user holding the full work_zone.* set, acting as a role in a `team_type` team.
 
     Mirrors `_make_gov_user()`, but the token acts as a TEAM identity instead of a platform
@@ -147,7 +146,7 @@ async def _make_team_user(team_type: str) -> str:
         await db.flush()
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid))
 
-        return token_for(user.uuid, role, team)
+        return await token_for(redis, user.uuid, role, team)
 
 
 @pytest_asyncio.fixture
@@ -161,9 +160,9 @@ async def team_uuid() -> str:
 
 
 @pytest.mark.asyncio
-async def test_gov_can_create_and_update_a_work_zone(client):
+async def test_gov_can_create_and_update_a_work_zone(client, redis):
     """A gov-role user can draw a zone, then rename it via updateWorkZone."""
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
 
     create_resp = await client.post(
         "/graphql",
@@ -186,9 +185,9 @@ async def test_gov_can_create_and_update_a_work_zone(client):
 
 
 @pytest.mark.asyncio
-async def test_create_work_zone_rejects_a_point_geometry(client):
+async def test_create_work_zone_rejects_a_point_geometry(client, redis):
     """A Point geometry is rejected with a work-zone-specific message, not the closure_area one."""
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
     point = {"type": "Point", "coordinates": [121.5, 24.5]}
 
     resp = await client.post(
@@ -210,9 +209,9 @@ async def test_anonymous_cannot_view_work_zones(client):
 
 
 @pytest.mark.asyncio
-async def test_plain_login_user_cannot_create_a_work_zone(client):
+async def test_plain_login_user_cannot_create_a_work_zone(client, redis):
     """A logged-in user with no work_zone.add grant is denied (default-deny, ADR-025)."""
-    plain_token = await _make_plain_user()
+    plain_token = await _make_plain_user(redis)
 
     resp = await client.post(
         "/graphql",
@@ -224,9 +223,9 @@ async def test_plain_login_user_cannot_create_a_work_zone(client):
 
 
 @pytest.mark.asyncio
-async def test_assign_zone_to_team_is_idempotent(client, team_uuid):
+async def test_assign_zone_to_team_is_idempotent(client, redis, team_uuid):
     """Assigning the same zone to the same team twice doesn't create a duplicate row."""
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
     create_resp = await client.post(
         "/graphql",
         json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone C", "geometry": ZONE_POLYGON}}},
@@ -259,9 +258,9 @@ async def test_assign_zone_to_team_is_idempotent(client, team_uuid):
 
 
 @pytest.mark.asyncio
-async def test_remove_zone_from_team_clears_the_assignment(client, team_uuid):
+async def test_remove_zone_from_team_clears_the_assignment(client, redis, team_uuid):
     """Removing a zone<->team link deletes the row; removing again surfaces a clean error."""
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
     create_resp = await client.post(
         "/graphql",
         json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone D", "geometry": ZONE_POLYGON}}},
@@ -305,9 +304,9 @@ async def test_remove_zone_from_team_clears_the_assignment(client, team_uuid):
 
 
 @pytest.mark.asyncio
-async def test_assign_rejects_an_inactive_team(client):
+async def test_assign_rejects_an_inactive_team(client, redis):
     """A zone cannot be delegated to a team whose status is not active."""
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
     async with test_db() as db:
         team = Team(name=f"Inactive {uuid_mod.uuid4().hex[:8]}", type="ngo", status="suspended")
         db.add(team)
@@ -334,9 +333,9 @@ async def test_assign_rejects_an_inactive_team(client):
 
 
 @pytest.mark.asyncio
-async def test_assign_records_the_assigning_user(client, team_uuid):
+async def test_assign_records_the_assigning_user(client, redis, team_uuid):
     """The assignment row records which user performed the delegation."""
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
     create_resp = await client.post(
         "/graphql",
         json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone F", "geometry": ZONE_POLYGON}}},
@@ -364,9 +363,9 @@ async def test_assign_records_the_assigning_user(client, team_uuid):
 
 
 @pytest.mark.asyncio
-async def test_gov_can_soft_delete_a_zone_and_it_leaves_the_listing(client):
+async def test_gov_can_soft_delete_a_zone_and_it_leaves_the_listing(client, redis):
     """A deleted zone disappears from workZones and can no longer be updated or re-deleted."""
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
     create_resp = await client.post(
         "/graphql",
         json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone G", "geometry": ZONE_POLYGON}}},
@@ -414,10 +413,10 @@ async def test_gov_can_soft_delete_a_zone_and_it_leaves_the_listing(client):
 
 
 @pytest.mark.asyncio
-async def test_plain_login_user_cannot_delete_a_work_zone(client):
+async def test_plain_login_user_cannot_delete_a_work_zone(client, redis):
     """Deleting requires work_zone.delete — a user without it is denied (default-deny)."""
-    gov_token = await _make_gov_user()
-    plain_token = await _make_plain_user()
+    gov_token = await _make_gov_user(redis)
+    plain_token = await _make_plain_user(redis)
     create_resp = await client.post(
         "/graphql",
         json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone H", "geometry": ZONE_POLYGON}}},
@@ -434,13 +433,13 @@ async def test_plain_login_user_cannot_delete_a_work_zone(client):
 
 
 @pytest.mark.asyncio
-async def test_ngo_team_admin_cannot_create_a_work_zone(client):
+async def test_ngo_team_admin_cannot_create_a_work_zone(client, redis):
     """An NGO team's admin holds the full work_zone.* grant but is fenced out by team type.
 
     Closes the escalation `_require_gov_zone_authority`'s docstring describes: an NGO admin
     drawing a zone anywhere and self-assigning it to reach raw victim PII.
     """
-    ngo_token = await _make_team_user("ngo")
+    ngo_token = await _make_team_user(redis, "ngo")
 
     resp = await client.post(
         "/graphql",
@@ -453,12 +452,12 @@ async def test_ngo_team_admin_cannot_create_a_work_zone(client):
 
 
 @pytest.mark.asyncio
-async def test_gov_team_admin_can_create_a_work_zone(client):
+async def test_gov_team_admin_can_create_a_work_zone(client, redis):
     """The positive counterpart: a gov-type team's admin is allowed through the same gate.
 
     Proves the guard discriminates on team type, not on some unrelated failure.
     """
-    gov_token = await _make_team_user("gov")
+    gov_token = await _make_team_user(redis, "gov")
 
     resp = await client.post(
         "/graphql",
@@ -471,10 +470,10 @@ async def test_gov_team_admin_can_create_a_work_zone(client):
 
 
 @pytest.mark.asyncio
-async def test_ngo_team_admin_cannot_delete_a_work_zone(client):
+async def test_ngo_team_admin_cannot_delete_a_work_zone(client, redis):
     """An NGO team's admin holding work_zone.delete is still fenced out by team type."""
-    gov_token = await _make_gov_user()
-    ngo_token = await _make_team_user("ngo")
+    gov_token = await _make_gov_user(redis)
+    ngo_token = await _make_team_user(redis, "ngo")
 
     create_resp = await client.post(
         "/graphql",
@@ -494,9 +493,9 @@ async def test_ngo_team_admin_cannot_delete_a_work_zone(client):
 
 
 @pytest.mark.asyncio
-async def test_gov_team_admin_can_delete_a_work_zone(client):
+async def test_gov_team_admin_can_delete_a_work_zone(client, redis):
     """The positive counterpart: a gov-type team's admin can delete through the same gate."""
-    gov_token = await _make_team_user("gov")
+    gov_token = await _make_team_user(redis, "gov")
 
     create_resp = await client.post(
         "/graphql",
@@ -516,9 +515,9 @@ async def test_gov_team_admin_can_delete_a_work_zone(client):
 
 
 @pytest.mark.asyncio
-async def test_assign_returns_the_assignment_record(client, team_uuid):
+async def test_assign_returns_the_assignment_record(client, redis, team_uuid):
     """AssignZoneToTeam returns the assignment, including who assigned it and when."""
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
     create_resp = await client.post(
         "/graphql",
         json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone I", "geometry": ZONE_POLYGON}}},
@@ -544,9 +543,9 @@ async def test_assign_returns_the_assignment_record(client, team_uuid):
 
 
 @pytest.mark.asyncio
-async def test_zones_by_team_lists_only_that_teams_live_zones(client, team_uuid):
+async def test_zones_by_team_lists_only_that_teams_live_zones(client, redis, team_uuid):
     """Verify that zonesByTeam returns the team's assignments and drops soft-deleted zones."""
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
     zone_uuids = []
     for name in ("Zone J", "Zone K"):
         create_resp = await client.post(
@@ -598,9 +597,9 @@ async def test_zones_by_team_lists_only_that_teams_live_zones(client, team_uuid)
 
 
 @pytest.mark.asyncio
-async def test_work_zone_exposes_its_assigned_teams(client, team_uuid):
+async def test_work_zone_exposes_its_assigned_teams(client, redis, team_uuid):
     """A zone reports the teams it has been delegated to."""
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
     create_resp = await client.post(
         "/graphql",
         json={"query": CREATE_ZONE, "variables": {"input": {"name": "Zone L", "geometry": ZONE_POLYGON}}},
@@ -627,13 +626,13 @@ async def test_work_zone_exposes_its_assigned_teams(client, team_uuid):
 
 
 @pytest.mark.asyncio
-async def test_soft_deleted_team_drops_out_of_assigned_teams(client, team_uuid):
+async def test_soft_deleted_team_drops_out_of_assigned_teams(client, redis, team_uuid):
     """A soft-deleted team disappears from a zone's assignedTeams; a live one still appears.
 
     Design §4.1 requires `teams_by_zones` to filter `Team.delete_at.is_(None)` so delegation
     listings don't surface teams that no longer exist as an org.
     """
-    gov_token = await _make_gov_user()
+    gov_token = await _make_gov_user(redis)
 
     async with test_db() as db:
         doomed_team = Team(name=f"Team {uuid_mod.uuid4().hex[:8]}", type="ngo")

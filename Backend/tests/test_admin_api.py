@@ -17,7 +17,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from app.core.security import create_access_token
 from app.models.auth import User
 from app.models.rbac import (
     Permission,
@@ -30,9 +29,8 @@ from app.models.team import Team
 from tests.conftest import auth_headers_for
 
 
-def _auth_header(user_uuid: str) -> dict:
-    token = create_access_token(data={"sub": str(user_uuid)})
-    return {"Authorization": f"Bearer {token}"}
+async def _auth_header(redis, user_uuid: str) -> dict:
+    return await auth_headers_for(redis, user_uuid)
 
 
 async def _grant(db, role: Role, perm_cache: dict, perm, scope: str) -> None:
@@ -82,7 +80,7 @@ async def _make_plain_user(db, *, name: str = "Plain User") -> str:
     return user_uuid
 
 
-async def _make_team_admin(db, team_uuid: str) -> tuple[str, dict]:
+async def _make_team_admin(db, redis, team_uuid: str) -> tuple[str, dict]:
     """Create a user holding team.view=team IN team_uuid; return (uuid, auth headers).
 
     The headers matter: the grant only takes effect while the caller is acting as that
@@ -103,7 +101,7 @@ async def _make_team_admin(db, team_uuid: str) -> tuple[str, dict]:
     await db.flush()
     user_uuid = str(user.uuid)
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
-    headers = auth_headers_for(user_uuid, role, team)
+    headers = await auth_headers_for(redis, user_uuid, role, team)
     await db.commit()
     return user_uuid, headers
 
@@ -135,18 +133,18 @@ async def _make_team(db, *, name: str, type_: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_list_users_requires_permission(client, db_session):
+async def test_list_users_requires_permission(client, db_session, redis):
     """A caller without user.view is denied — checkpoint 1 only, but still enforced."""
     plain_uuid = await _make_plain_user(db_session)
-    resp = await client.get("/api/v1/admin/users", headers=_auth_header(plain_uuid))
+    resp = await client.get("/api/v1/admin/users", headers=await _auth_header(redis, plain_uuid))
     assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_list_users_returns_role_info(client, db_session):
+async def test_list_users_returns_role_info(client, db_session, redis):
     """super_admin sees every user with their current platform/team role names."""
     admin_uuid = await _make_super_admin(db_session)
-    resp = await client.get("/api/v1/admin/users", headers=_auth_header(admin_uuid))
+    resp = await client.get("/api/v1/admin/users", headers=await _auth_header(redis, admin_uuid))
     assert resp.status_code == 200
     rows = {row["uuid"]: row for row in resp.json()}
     assert admin_uuid in rows
@@ -154,7 +152,7 @@ async def test_list_users_returns_role_info(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_assign_role_replaces_existing_platform_role(client, db_session):
+async def test_assign_role_replaces_existing_platform_role(client, db_session, redis):
     """Assigning a new platform role removes the user's prior platform-kind assignment."""
     admin_uuid = await _make_super_admin(db_session)
     other_role_uuid = await _make_role(db_session, name="data_auditor", kind="platform")
@@ -163,7 +161,7 @@ async def test_assign_role_replaces_existing_platform_role(client, db_session):
     resp = await client.post(
         f"/api/v1/admin/users/{target_uuid}/role",
         json={"role_name": "data_auditor"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
 
@@ -175,7 +173,7 @@ async def test_assign_role_replaces_existing_platform_role(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_assign_role_rejects_removing_the_last_super_admin(client, db_session):
+async def test_assign_role_rejects_removing_the_last_super_admin(client, db_session, redis):
     """Demoting the only super_admin to another role is refused (ADR-032)."""
     admin_uuid = await _make_super_admin(db_session)
     await _make_role(db_session, name="data_auditor", kind="platform")
@@ -183,13 +181,13 @@ async def test_assign_role_rejects_removing_the_last_super_admin(client, db_sess
     resp = await client.post(
         f"/api/v1/admin/users/{admin_uuid}/role",
         json={"role_name": "data_auditor"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_assign_role_allows_demotion_when_another_super_admin_exists(client, db_session):
+async def test_assign_role_allows_demotion_when_another_super_admin_exists(client, db_session, redis):
     """Demoting one super_admin is fine as long as another still holds the role."""
     admin_uuid = await _make_super_admin(db_session)
     super_admin_role = (await db_session.execute(select(Role).where(Role.name == "super_admin"))).scalar_one()
@@ -204,13 +202,13 @@ async def test_assign_role_allows_demotion_when_another_super_admin_exists(clien
     resp = await client.post(
         f"/api/v1/admin/users/{admin_uuid}/role",
         json={"role_name": "data_auditor"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
 
 
 @pytest.mark.asyncio
-async def test_assign_team_role_through_the_platform_endpoint_is_refused(client, db_session):
+async def test_assign_team_role_through_the_platform_endpoint_is_refused(client, db_session, redis):
     """A team role cannot be granted here — it has no team to belong to (ADR-072).
 
     Granting a team role IS joining that team, so the grant has to name one; this endpoint
@@ -223,13 +221,13 @@ async def test_assign_team_role_through_the_platform_endpoint_is_refused(client,
     resp = await client.post(
         f"/api/v1/admin/users/{target_uuid}/role",
         json={"role_name": "member"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_add_team_member_grants_the_requested_role_in_that_team(client, db_session):
+async def test_add_team_member_grants_the_requested_role_in_that_team(client, db_session, redis):
     """Adding a member grants the requested team-kind role, bound to that team."""
     admin_uuid = await _make_super_admin(db_session)
     team_uuid = await _make_team(db_session, name="Team A", type_="gov")
@@ -239,14 +237,14 @@ async def test_add_team_member_grants_the_requested_role_in_that_team(client, db
     resp = await client.post(
         f"/api/v1/admin/teams/{team_uuid}/members",
         json={"user_uuid": target_uuid, "team_role_name": "member"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
     assert resp.json()["team_uuid"] == team_uuid
 
 
 @pytest.mark.asyncio
-async def test_add_team_member_lets_a_user_belong_to_two_teams(client, db_session):
+async def test_add_team_member_lets_a_user_belong_to_two_teams(client, db_session, redis):
     """Being on team B is no bar to joining team A — holding both is the point (ADR-068).
 
     This used to 409. The old model allowed one team per user, so the second add could only
@@ -262,7 +260,7 @@ async def test_add_team_member_lets_a_user_belong_to_two_teams(client, db_sessio
         resp = await client.post(
             f"/api/v1/admin/teams/{team_uuid}/members",
             json={"user_uuid": target_uuid},
-            headers=_auth_header(admin_uuid),
+            headers=await _auth_header(redis, admin_uuid),
         )
         assert resp.status_code == 200, resp.json()
 
@@ -275,7 +273,7 @@ async def test_add_team_member_lets_a_user_belong_to_two_teams(client, db_sessio
 
 
 @pytest.mark.asyncio
-async def test_team_admin_cannot_manage_a_different_teams_members(client, db_session):
+async def test_team_admin_cannot_manage_a_different_teams_members(client, db_session, redis):
     """A team-scoped team.member.manage grant 404s across a team boundary (ADR-023)."""
     from app.core.permissions import Perm
 
@@ -304,7 +302,7 @@ async def test_team_admin_cannot_manage_a_different_teams_members(client, db_ses
             team_uuid=own_team_uuid,
         )
     )
-    team_admin_headers = auth_headers_for(team_admin_user_uuid, team_admin_role, own_team)
+    team_admin_headers = await auth_headers_for(redis, team_admin_user_uuid, team_admin_role, own_team)
 
     target = User(name="Outsider")
     db_session.add(target)
@@ -321,7 +319,7 @@ async def test_team_admin_cannot_manage_a_different_teams_members(client, db_ses
 
 
 @pytest.mark.asyncio
-async def test_remove_team_member_revokes_every_grant_scoped_to_that_team(client, db_session):
+async def test_remove_team_member_revokes_every_grant_scoped_to_that_team(client, db_session, redis):
     """Removing a member revokes the roles they held in that team — that IS the membership."""
     admin_uuid = await _make_super_admin(db_session)
     team_uuid = await _make_team(db_session, name="Team A", type_="gov")
@@ -334,7 +332,7 @@ async def test_remove_team_member_revokes_every_grant_scoped_to_that_team(client
 
     resp = await client.delete(
         f"/api/v1/admin/teams/{team_uuid}/members/{target_uuid}",
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
     assert resp.json()["team_uuid"] is None
@@ -346,7 +344,7 @@ async def test_remove_team_member_revokes_every_grant_scoped_to_that_team(client
 
 
 @pytest.mark.asyncio
-async def test_remove_team_member_also_revokes_direct_grants_bound_to_that_team(client, db_session):
+async def test_remove_team_member_also_revokes_direct_grants_bound_to_that_team(client, db_session, redis):
     """A direct grant naming the team is a permission in it, so leaving has to take it too.
 
     It used to survive, because the delete only touched `user_role_assign`. Re-adding the
@@ -377,7 +375,7 @@ async def test_remove_team_member_also_revokes_direct_grants_bound_to_that_team(
 
     resp = await client.delete(
         f"/api/v1/admin/teams/{team_uuid}/members/{target_uuid}",
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
 
@@ -393,7 +391,9 @@ async def test_remove_team_member_also_revokes_direct_grants_bound_to_that_team(
 
 
 @pytest.mark.asyncio
-async def test_remove_team_member_leaves_other_teams_and_the_platform_grant_alone(client, db_session):
+async def test_remove_team_member_leaves_other_teams_and_the_platform_grant_alone(
+    client, db_session, redis
+):
     """The delete keys on this team only — platform rows carry a NULL team and never match."""
     admin_uuid = await _make_super_admin(db_session)
     team_a = await _make_team(db_session, name="Team C", type_="ngo")
@@ -410,7 +410,7 @@ async def test_remove_team_member_leaves_other_teams_and_the_platform_grant_alon
 
     resp = await client.delete(
         f"/api/v1/admin/teams/{team_a}/members/{target_uuid}",
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
 
@@ -422,13 +422,13 @@ async def test_remove_team_member_leaves_other_teams_and_the_platform_grant_alon
 
 
 @pytest.mark.asyncio
-async def test_create_team_as_super_admin(client, db_session):
+async def test_create_team_as_super_admin(client, db_session, redis):
     """super_admin creates a gov team (with a valid 統一編號) and gets 201 with the row."""
     admin_uuid = await _make_super_admin(db_session)
     resp = await client.post(
         "/api/v1/admin/teams",
         json={"name": "Taipei Gov", "type": "gov", "tax_id": "04595257"},  # Z=40, /5 ok
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 201, resp.json()
     body = resp.json()
@@ -440,84 +440,84 @@ async def test_create_team_as_super_admin(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_create_team_without_tax_id_is_null(client, db_session):
+async def test_create_team_without_tax_id_is_null(client, db_session, redis):
     """tax_id is optional (可空): omitting it persists and returns null."""
     admin_uuid = await _make_super_admin(db_session)
     resp = await client.post(
         "/api/v1/admin/teams",
         json={"name": "No UBN Org", "type": "ngo"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 201, resp.json()
     assert resp.json()["tax_id"] is None
 
 
 @pytest.mark.asyncio
-async def test_create_team_rejects_overlong_tax_id(client, db_session):
+async def test_create_team_rejects_overlong_tax_id(client, db_session, redis):
     """tax_id that is not exactly 8 digits is rejected by the schema (422)."""
     admin_uuid = await _make_super_admin(db_session)
     resp = await client.post(
         "/api/v1/admin/teams",
         json={"name": "X", "type": "gov", "tax_id": "123456789"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_create_team_rejects_bad_ubn_checksum(client, db_session):
+async def test_create_team_rejects_bad_ubn_checksum(client, db_session, redis):
     """8 digits but the /5 checksum fails → rejected (422). 12345678 gives Z=42."""
     admin_uuid = await _make_super_admin(db_session)
     resp = await client.post(
         "/api/v1/admin/teams",
         json={"name": "X", "type": "gov", "tax_id": "12345678"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_create_team_denied_without_team_edit(client, db_session):
+async def test_create_team_denied_without_team_edit(client, db_session, redis):
     """A caller without team.edit is denied (403)."""
     plain_uuid = await _make_plain_user(db_session)
     resp = await client.post(
         "/api/v1/admin/teams",
         json={"name": "Rogue", "type": "ngo"},
-        headers=_auth_header(plain_uuid),
+        headers=await _auth_header(redis, plain_uuid),
     )
     assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_create_team_rejects_bad_type(client, db_session):
+async def test_create_team_rejects_bad_type(client, db_session, redis):
     """A type outside {gov, ngo} is rejected by the request schema (422)."""
     admin_uuid = await _make_super_admin(db_session)
     resp = await client.post(
         "/api/v1/admin/teams",
         json={"name": "X", "type": "military"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_list_teams_super_admin_sees_all(client, db_session):
+async def test_list_teams_super_admin_sees_all(client, db_session, redis):
     """team.view=all returns every team."""
     admin_uuid = await _make_super_admin(db_session)
     await _make_team(db_session, name="Gov A", type_="gov")
     await _make_team(db_session, name="NGO B", type_="ngo")
-    resp = await client.get("/api/v1/admin/teams", headers=_auth_header(admin_uuid))
+    resp = await client.get("/api/v1/admin/teams", headers=await _auth_header(redis, admin_uuid))
     assert resp.status_code == 200, resp.json()
     names = {t["name"] for t in resp.json()}
     assert {"Gov A", "NGO B"} <= names
 
 
 @pytest.mark.asyncio
-async def test_list_teams_team_admin_sees_only_own(client, db_session):
+async def test_list_teams_team_admin_sees_only_own(client, db_session, redis):
     """team.view=team returns only the caller's own team (ADR-053 boundary)."""
     my_team = await _make_team(db_session, name="My Team", type_="ngo")
     await _make_team(db_session, name="Other Team", type_="gov")
-    _, viewer_headers = await _make_team_admin(db_session, my_team)
+    _, viewer_headers = await _make_team_admin(db_session, redis, my_team)
     resp = await client.get("/api/v1/admin/teams", headers=viewer_headers)
     assert resp.status_code == 200, resp.json()
     names = {t["name"] for t in resp.json()}
@@ -525,8 +525,8 @@ async def test_list_teams_team_admin_sees_only_own(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_list_teams_denied_without_team_view(client, db_session):
+async def test_list_teams_denied_without_team_view(client, db_session, redis):
     """A caller without team.view is denied (403)."""
     plain_uuid = await _make_plain_user(db_session)
-    resp = await client.get("/api/v1/admin/teams", headers=_auth_header(plain_uuid))
+    resp = await client.get("/api/v1/admin/teams", headers=await _auth_header(redis, plain_uuid))
     assert resp.status_code == 403

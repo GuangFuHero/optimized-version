@@ -6,15 +6,14 @@ import pytest
 from sqlalchemy import select
 
 from app.core.permissions import GOV_TEAM_ONLY_PERMS, Perm
-from app.core.security import create_access_token
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserPermissionAssign, UserRoleAssign
 from app.models.team import Team
+from tests.conftest import auth_headers_for
 
 
-def _auth_header(user_uuid: str) -> dict:
-    token = create_access_token(data={"sub": str(user_uuid)})
-    return {"Authorization": f"Bearer {token}"}
+async def _auth_header(redis, user_uuid: str) -> dict:
+    return await auth_headers_for(redis, user_uuid)
 
 
 async def _grant(db, role: Role, perm_cache: dict, perm: Perm, scope: str) -> None:
@@ -52,11 +51,11 @@ async def _make_plain_user(db) -> str:
 
 
 @pytest.mark.asyncio
-async def test_capabilities_lists_catalog_for_super_admin(client, db_session):
+async def test_capabilities_lists_catalog_for_super_admin(client, db_session, redis):
     """A super_admin holding only rbac.view sees the full capability catalog + scopes."""
     admin_uuid = await _make_rbac_admin(db_session)
     resp = await client.get(
-        "/api/v1/admin/rbac/capabilities", headers=_auth_header(admin_uuid)
+        "/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 200, resp.json()
     body = resp.json()
@@ -70,7 +69,7 @@ async def test_capabilities_lists_catalog_for_super_admin(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_session):
+async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_session, redis):
     """ZONE_* caps are marked team_gov_only so the catalog matches the gov gate, both ways.
 
     ADR-064: work_zone.py's `_require_gov_zone_authority` gates these; non-zone caps stay False.
@@ -81,7 +80,7 @@ async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_sess
     """
     admin_uuid = await _make_rbac_admin(db_session)
     resp = await client.get(
-        "/api/v1/admin/rbac/capabilities", headers=_auth_header(admin_uuid)
+        "/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 200, resp.json()
     by_key = {c["key"]: c for c in resp.json()["capabilities"]}
@@ -97,20 +96,20 @@ async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_sess
 
 
 @pytest.mark.asyncio
-async def test_capabilities_denied_without_rbac_view(client, db_session):
+async def test_capabilities_denied_without_rbac_view(client, db_session, redis):
     """A caller without rbac.view is denied — checkpoint 1 only, but still enforced."""
     plain_uuid = await _make_plain_user(db_session)
     resp = await client.get(
-        "/api/v1/admin/rbac/capabilities", headers=_auth_header(plain_uuid)
+        "/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, plain_uuid)
     )
     assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_matrix_returns_roles_with_grants(client, db_session):
+async def test_matrix_returns_roles_with_grants(client, db_session, redis):
     """Matrix endpoint lists all roles with their capability->scope grants."""
     admin_uuid = await _make_rbac_admin(db_session)
-    resp = await client.get("/api/v1/admin/rbac/matrix", headers=_auth_header(admin_uuid))
+    resp = await client.get("/api/v1/admin/rbac/matrix", headers=await _auth_header(redis, admin_uuid))
     assert resp.status_code == 200, resp.json()
     roles = resp.json()["roles"]
     super_admin = next(r for r in roles if r["name"] == "super_admin")
@@ -119,36 +118,36 @@ async def test_matrix_returns_roles_with_grants(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_role_detail_returns_grants(client, db_session):
+async def test_role_detail_returns_grants(client, db_session, redis):
     """Role detail endpoint returns one role's capability->scope grants."""
     admin_uuid = await _make_rbac_admin(db_session)
     matrix = (
-        await client.get("/api/v1/admin/rbac/matrix", headers=_auth_header(admin_uuid))
+        await client.get("/api/v1/admin/rbac/matrix", headers=await _auth_header(redis, admin_uuid))
     ).json()
     role_uuid = next(r["uuid"] for r in matrix["roles"] if r["name"] == "super_admin")
     resp = await client.get(
-        f"/api/v1/admin/rbac/roles/{role_uuid}", headers=_auth_header(admin_uuid)
+        f"/api/v1/admin/rbac/roles/{role_uuid}", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 200, resp.json()
     assert resp.json()["grants"]["rbac.view"] == "all"
 
 
 @pytest.mark.asyncio
-async def test_role_detail_404_when_missing(client, db_session):
+async def test_role_detail_404_when_missing(client, db_session, redis):
     """Role detail endpoint returns 404 for missing role."""
     admin_uuid = await _make_rbac_admin(db_session)
     resp = await client.get(
-        f"/api/v1/admin/rbac/roles/{uuid4()}", headers=_auth_header(admin_uuid)
+        f"/api/v1/admin/rbac/roles/{uuid4()}", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_user_permissions_returns_roles_and_effective(client, db_session):
+async def test_user_permissions_returns_roles_and_effective(client, db_session, redis):
     """User permissions endpoint returns roles, direct grants, and effective permissions."""
     admin_uuid = await _make_rbac_admin(db_session)
     resp = await client.get(
-        f"/api/v1/admin/users/{admin_uuid}/permissions", headers=_auth_header(admin_uuid)
+        f"/api/v1/admin/users/{admin_uuid}/permissions", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 200, resp.json()
     body = resp.json()
@@ -159,17 +158,17 @@ async def test_user_permissions_returns_roles_and_effective(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_user_permissions_404_when_user_missing(client, db_session):
+async def test_user_permissions_404_when_user_missing(client, db_session, redis):
     """User permissions endpoint returns 404 for missing user."""
     admin_uuid = await _make_rbac_admin(db_session)
     resp = await client.get(
-        f"/api/v1/admin/users/{uuid4()}/permissions", headers=_auth_header(admin_uuid)
+        f"/api/v1/admin/users/{uuid4()}/permissions", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_user_permissions_merges_role_and_direct_widest_wins(client, db_session):
+async def test_user_permissions_merges_role_and_direct_widest_wins(client, db_session, redis):
     """Direct and role grants merge, widest scope wins."""
     admin_uuid = await _make_rbac_admin(db_session)
     role = Role(name="viewer", kind="platform")
@@ -189,7 +188,7 @@ async def test_user_permissions_merges_role_and_direct_widest_wins(client, db_se
     await db_session.commit()
 
     resp = await client.get(
-        f"/api/v1/admin/users/{target_uuid}/permissions", headers=_auth_header(admin_uuid)
+        f"/api/v1/admin/users/{target_uuid}/permissions", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 200, resp.json()
     body = resp.json()
@@ -232,7 +231,7 @@ async def _make_editable_role(db, name: str = "member") -> str:
 
 
 @pytest.mark.asyncio
-async def test_put_grant_sets_new_cell(client, db_session):
+async def test_put_grant_sets_new_cell(client, db_session, redis):
     """super_admin can add a role×capability grant; the response reflects the new scope."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session)
@@ -240,18 +239,18 @@ async def test_put_grant_sets_new_cell(client, db_session):
     resp = await client.put(
         f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
         json={"scope": "own"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
     assert resp.json()["grants"]["ticket.edit"] == "own"
 
 
 @pytest.mark.asyncio
-async def test_put_grant_updates_existing_cell_without_duplicating(client, db_session):
+async def test_put_grant_updates_existing_cell_without_duplicating(client, db_session, redis):
     """A second PUT to the same cell updates the scope in place (uq_role_perm upsert), not a 2nd row."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session)
-    hdr = _auth_header(admin_uuid)
+    hdr = await _auth_header(redis, admin_uuid)
     url = f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit"
 
     await client.put(url, json={"scope": "own"}, headers=hdr)
@@ -270,74 +269,74 @@ async def test_put_grant_updates_existing_cell_without_duplicating(client, db_se
 
 
 @pytest.mark.asyncio
-async def test_put_grant_rejects_bad_scope(client, db_session):
+async def test_put_grant_rejects_bad_scope(client, db_session, redis):
     """An out-of-enum scope is rejected by the schema with 422 (ADR-057 fixed scope set)."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session)
     resp = await client.put(
         f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
         json={"scope": "galaxy"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_put_grant_rejects_unknown_capability(client, db_session):
+async def test_put_grant_rejects_unknown_capability(client, db_session, redis):
     """An unknown capability key in the path is rejected with 422 (cap ∈ Perm, ADR-057)."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session)
     resp = await client.put(
         f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.telepathy",
         json={"scope": "own"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_put_grant_denied_for_non_super_admin(client, db_session):
+async def test_put_grant_denied_for_non_super_admin(client, db_session, redis):
     """A caller without rbac.edit is denied with 403 (checkpoint 1, super_admin only)."""
     plain_uuid = await _make_plain_user(db_session)
     role_uuid = await _make_editable_role(db_session)
     resp = await client.put(
         f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
         json={"scope": "own"},
-        headers=_auth_header(plain_uuid),
+        headers=await _auth_header(redis, plain_uuid),
     )
     assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_put_grant_unknown_role_404(client, db_session):
+async def test_put_grant_unknown_role_404(client, db_session, redis):
     """Setting a grant on a non-existent role returns 404."""
     admin_uuid, _ = await _make_super_admin(db_session)
     resp = await client.put(
         f"/api/v1/admin/rbac/roles/{uuid4()}/permissions/ticket.edit",
         json={"scope": "own"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_put_cannot_none_out_super_admin_rbac_edit(client, db_session):
+async def test_put_cannot_none_out_super_admin_rbac_edit(client, db_session, redis):
     """Scoping super_admin's rbac.edit down to none is refused with 409 (self-lock guard, ADR-056)."""
     admin_uuid, super_role_uuid = await _make_super_admin(db_session)
     resp = await client.put(
         f"/api/v1/admin/rbac/roles/{super_role_uuid}/permissions/rbac.edit",
         json={"scope": "none"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_delete_grant_revokes_cell(client, db_session):
+async def test_delete_grant_revokes_cell(client, db_session, redis):
     """DELETE removes a role's grant; a follow-up read no longer lists that capability."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session)
-    hdr = _auth_header(admin_uuid)
+    hdr = await _auth_header(redis, admin_uuid)
     url = f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit"
 
     await client.put(url, json={"scope": "own"}, headers=hdr)
@@ -349,36 +348,36 @@ async def test_delete_grant_revokes_cell(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_delete_absent_grant_is_idempotent(client, db_session):
+async def test_delete_absent_grant_is_idempotent(client, db_session, redis):
     """Deleting a grant that was never set is a no-op 204, not a 404."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session)
     resp = await client.delete(
         f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 204, resp.text
 
 
 @pytest.mark.asyncio
-async def test_delete_cannot_revoke_super_admin_rbac_edit(client, db_session):
+async def test_delete_cannot_revoke_super_admin_rbac_edit(client, db_session, redis):
     """Revoking super_admin's rbac.edit is refused with 409 (self-lock guard, ADR-056)."""
     admin_uuid, super_role_uuid = await _make_super_admin(db_session)
     resp = await client.delete(
         f"/api/v1/admin/rbac/roles/{super_role_uuid}/permissions/rbac.edit",
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_delete_grant_denied_for_non_super_admin(client, db_session):
+async def test_delete_grant_denied_for_non_super_admin(client, db_session, redis):
     """A caller without rbac.edit is denied with 403 (checkpoint 1, super_admin only)."""
     plain_uuid = await _make_plain_user(db_session)
     role_uuid = await _make_editable_role(db_session)
     resp = await client.delete(
         f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
-        headers=_auth_header(plain_uuid),
+        headers=await _auth_header(redis, plain_uuid),
     )
     assert resp.status_code == 403
 
@@ -404,14 +403,14 @@ async def _make_target_user(db, name: str = "Target") -> str:
 
 
 @pytest.mark.asyncio
-async def test_put_user_grant_adds_direct_grant(client, db_session):
+async def test_put_user_grant_adds_direct_grant(client, db_session, redis):
     """A per-user grant shows up in direct_grants and effective."""
     admin_uuid, _ = await _make_super_admin(db_session)
     target = await _make_target_user(db_session)
     resp = await client.put(
         f"/api/v1/admin/users/{target}/permissions/ticket.export",
         json={"scope": "all"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
     body = resp.json()
@@ -424,11 +423,11 @@ async def test_put_user_grant_adds_direct_grant(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_put_user_grant_upserts_not_duplicates(client, db_session):
+async def test_put_user_grant_upserts_not_duplicates(client, db_session, redis):
     """A second PUT for the same (user, cap) updates the one row (uq_user_perm)."""
     admin_uuid, _ = await _make_super_admin(db_session)
     target = await _make_target_user(db_session)
-    hdr = _auth_header(admin_uuid)
+    hdr = await _auth_header(redis, admin_uuid)
     url = f"/api/v1/admin/users/{target}/permissions/ticket.export"
     await client.put(url, json={"scope": "own"}, headers=hdr)
     resp = await client.put(url, json={"scope": "all"}, headers=hdr)
@@ -448,36 +447,36 @@ async def test_put_user_grant_upserts_not_duplicates(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_put_user_grant_unknown_user_404(client, db_session):
+async def test_put_user_grant_unknown_user_404(client, db_session, redis):
     """Granting to a non-existent user returns 404."""
     admin_uuid, _ = await _make_super_admin(db_session)
     resp = await client.put(
         f"/api/v1/admin/users/{uuid4()}/permissions/ticket.export",
         json={"scope": "all"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_put_user_grant_denied_for_non_super_admin(client, db_session):
+async def test_put_user_grant_denied_for_non_super_admin(client, db_session, redis):
     """A caller without rbac.assign is denied with 403."""
     plain_uuid = await _make_plain_user(db_session)
     target = await _make_target_user(db_session)
     resp = await client.put(
         f"/api/v1/admin/users/{target}/permissions/ticket.export",
         json={"scope": "all"},
-        headers=_auth_header(plain_uuid),
+        headers=await _auth_header(redis, plain_uuid),
     )
     assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_delete_user_grant_is_idempotent(client, db_session):
+async def test_delete_user_grant_is_idempotent(client, db_session, redis):
     """DELETE removes the direct grant and is a 204 even when it was never set."""
     admin_uuid, _ = await _make_super_admin(db_session)
     target = await _make_target_user(db_session)
-    hdr = _auth_header(admin_uuid)
+    hdr = await _auth_header(redis, admin_uuid)
     url = f"/api/v1/admin/users/{target}/permissions/ticket.export"
     await client.put(url, json={"scope": "all"}, headers=hdr)
 
@@ -492,90 +491,90 @@ async def test_delete_user_grant_is_idempotent(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_create_role(client, db_session):
+async def test_create_role(client, db_session, redis):
     """super_admin creates a new empty role (201, no grants yet)."""
     admin_uuid, _ = await _make_super_admin(db_session)
     resp = await client.post(
         "/api/v1/admin/rbac/roles",
         json={"name": "dispatcher", "kind": "team"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 201, resp.json()
     assert resp.json()["name"] == "dispatcher" and resp.json()["grants"] == {}
 
 
 @pytest.mark.asyncio
-async def test_create_role_duplicate_name_409(client, db_session):
+async def test_create_role_duplicate_name_409(client, db_session, redis):
     """Creating a role whose name already exists is a 409."""
     admin_uuid, _ = await _make_super_admin(db_session)
     await _make_editable_role(db_session, name="dispatcher")
     resp = await client.post(
         "/api/v1/admin/rbac/roles",
         json={"name": "dispatcher", "kind": "team"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_create_role_reserved_name_409(client, db_session):
+async def test_create_role_reserved_name_409(client, db_session, redis):
     """Creating a role named 'user' (a code-referenced name) is refused (ADR-059)."""
     admin_uuid, _ = await _make_super_admin(db_session)
     resp = await client.post(
         "/api/v1/admin/rbac/roles",
         json={"name": "user", "kind": "platform"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_create_role_bad_kind_422(client, db_session):
+async def test_create_role_bad_kind_422(client, db_session, redis):
     """Kind must be platform or team."""
     admin_uuid, _ = await _make_super_admin(db_session)
     resp = await client.post(
         "/api/v1/admin/rbac/roles",
         json={"name": "x", "kind": "wizard"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_rename_role(client, db_session):
+async def test_rename_role(client, db_session, redis):
     """Renaming a plain role updates its name."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session, name="oldname")
     resp = await client.patch(
         f"/api/v1/admin/rbac/roles/{role_uuid}",
         json={"name": "newname"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
     assert resp.json()["name"] == "newname"
 
 
 @pytest.mark.asyncio
-async def test_rename_protected_role_409(client, db_session):
+async def test_rename_protected_role_409(client, db_session, redis):
     """The super_admin role cannot be renamed (ADR-059)."""
     admin_uuid, super_role_uuid = await _make_super_admin(db_session)
     resp = await client.patch(
         f"/api/v1/admin/rbac/roles/{super_role_uuid}",
         json={"name": "root"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_rename_role_denied_for_non_super_admin(client, db_session):
+async def test_rename_role_denied_for_non_super_admin(client, db_session, redis):
     """A caller without rbac.edit is denied with 403."""
     plain_uuid = await _make_plain_user(db_session)
     role_uuid = await _make_editable_role(db_session, name="oldname")
     resp = await client.patch(
         f"/api/v1/admin/rbac/roles/{role_uuid}",
         json={"name": "newname"},
-        headers=_auth_header(plain_uuid),
+        headers=await _auth_header(redis, plain_uuid),
     )
     assert resp.status_code == 403
 
@@ -584,11 +583,11 @@ async def test_rename_role_denied_for_non_super_admin(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_delete_role_with_grants_succeeds(client, db_session):
+async def test_delete_role_with_grants_succeeds(client, db_session, redis):
     """Deleting an unassigned role removes it and its permission grants (204)."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session, name="temp")
-    hdr = _auth_header(admin_uuid)
+    hdr = await _auth_header(redis, admin_uuid)
     await client.put(
         f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/ticket.edit",
         json={"scope": "own"}, headers=hdr,
@@ -599,7 +598,7 @@ async def test_delete_role_with_grants_succeeds(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_delete_role_with_assignment_409(client, db_session):
+async def test_delete_role_with_assignment_409(client, db_session, redis):
     """A role still assigned to a user cannot be deleted (must reassign first)."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session, name="temp")
@@ -609,27 +608,27 @@ async def test_delete_role_with_assignment_409(client, db_session):
     await _assign(db_session, str(user.uuid), role_uuid)
 
     resp = await client.delete(
-        f"/api/v1/admin/rbac/roles/{role_uuid}", headers=_auth_header(admin_uuid)
+        f"/api/v1/admin/rbac/roles/{role_uuid}", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_delete_protected_role_409(client, db_session):
+async def test_delete_protected_role_409(client, db_session, redis):
     """The super_admin role cannot be deleted (ADR-059)."""
     admin_uuid, super_role_uuid = await _make_super_admin(db_session)
     resp = await client.delete(
-        f"/api/v1/admin/rbac/roles/{super_role_uuid}", headers=_auth_header(admin_uuid)
+        f"/api/v1/admin/rbac/roles/{super_role_uuid}", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_delete_role_unknown_404(client, db_session):
+async def test_delete_role_unknown_404(client, db_session, redis):
     """Deleting a non-existent role returns 404."""
     admin_uuid, _ = await _make_super_admin(db_session)
     resp = await client.delete(
-        f"/api/v1/admin/rbac/roles/{uuid4()}", headers=_auth_header(admin_uuid)
+        f"/api/v1/admin/rbac/roles/{uuid4()}", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 404
 
@@ -656,13 +655,13 @@ async def _assign(db, user_uuid: str, role_uuid: str) -> str | None:
 
 
 @pytest.mark.asyncio
-async def test_unassign_role(client, db_session):
+async def test_unassign_role(client, db_session, redis):
     """Removing a role the user holds succeeds (204) and drops it from their roles."""
     admin_uuid, _ = await _make_super_admin(db_session)
     target = await _make_target_user(db_session)
     role_uuid = await _make_editable_role(db_session, name="helper")
     team_uuid = await _assign(db_session, target, role_uuid)
-    hdr = _auth_header(admin_uuid)
+    hdr = await _auth_header(redis, admin_uuid)
 
     resp = await client.delete(
         f"/api/v1/admin/users/{target}/role/{role_uuid}?team_uuid={team_uuid}", headers=hdr
@@ -673,37 +672,37 @@ async def test_unassign_role(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_unassign_role_user_lacks_it_404(client, db_session):
+async def test_unassign_role_user_lacks_it_404(client, db_session, redis):
     """Unassigning a role the user does not hold returns 404."""
     admin_uuid, _ = await _make_super_admin(db_session)
     target = await _make_target_user(db_session)
     role_uuid = await _make_editable_role(db_session, name="helper")
     resp = await client.delete(
-        f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=_auth_header(admin_uuid)
+        f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=await _auth_header(redis, admin_uuid)
     )
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_unassign_last_super_admin_409(client, db_session):
+async def test_unassign_last_super_admin_409(client, db_session, redis):
     """Removing the only super_admin's super_admin role is refused (409)."""
     admin_uuid, super_role_uuid = await _make_super_admin(db_session)
     resp = await client.delete(
         f"/api/v1/admin/users/{admin_uuid}/role/{super_role_uuid}",
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_unassign_role_denied_for_non_super_admin(client, db_session):
+async def test_unassign_role_denied_for_non_super_admin(client, db_session, redis):
     """A caller without rbac.assign is denied with 403."""
     plain_uuid = await _make_plain_user(db_session)
     target = await _make_target_user(db_session)
     role_uuid = await _make_editable_role(db_session, name="helper")
     await _assign(db_session, target, role_uuid)
     resp = await client.delete(
-        f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=_auth_header(plain_uuid)
+        f"/api/v1/admin/users/{target}/role/{role_uuid}", headers=await _auth_header(redis, plain_uuid)
     )
     assert resp.status_code == 403
 
@@ -712,53 +711,53 @@ async def test_unassign_role_denied_for_non_super_admin(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_cannot_grant_rbac_edit_to_non_super_admin_role(client, db_session):
+async def test_cannot_grant_rbac_edit_to_non_super_admin_role(client, db_session, redis):
     """Granting rbac.edit to a non-super_admin role is refused (409) — no delegated editing."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session, name="member")
     resp = await client.put(
         f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/rbac.edit",
         json={"scope": "all"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_cannot_grant_rbac_view_to_non_super_admin_role(client, db_session):
+async def test_cannot_grant_rbac_view_to_non_super_admin_role(client, db_session, redis):
     """rbac.view is also blocked from runtime delegation; widening it stays a seed decision."""
     admin_uuid, _ = await _make_super_admin(db_session)
     role_uuid = await _make_editable_role(db_session, name="member")
     resp = await client.put(
         f"/api/v1/admin/rbac/roles/{role_uuid}/permissions/rbac.view",
         json={"scope": "all"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_can_still_set_rbac_edit_on_super_admin_role(client, db_session):
+async def test_can_still_set_rbac_edit_on_super_admin_role(client, db_session, redis):
     """Setting rbac.edit on the super_admin role itself stays allowed (idempotent)."""
     admin_uuid, super_role_uuid = await _make_super_admin(db_session)
     resp = await client.put(
         f"/api/v1/admin/rbac/roles/{super_role_uuid}/permissions/rbac.edit",
         json={"scope": "all"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
     assert resp.json()["grants"]["rbac.edit"] == "all"
 
 
 @pytest.mark.asyncio
-async def test_cannot_grant_rbac_as_per_user_grant(client, db_session):
+async def test_cannot_grant_rbac_as_per_user_grant(client, db_session, redis):
     """rbac.* is a role-bound governance capability; it cannot be a per-user grant (409)."""
     admin_uuid, _ = await _make_super_admin(db_session)
     target = await _make_target_user(db_session)
     resp = await client.put(
         f"/api/v1/admin/users/{target}/permissions/rbac.assign",
         json={"scope": "all"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409
 
@@ -772,7 +771,7 @@ async def _pretend_name_absent(*args, **kwargs):
 
 
 @pytest.mark.asyncio
-async def test_create_role_name_race_maps_to_409(client, db_session, monkeypatch):
+async def test_create_role_name_race_maps_to_409(client, db_session, redis, monkeypatch):
     """Create that races past the name pre-check hits uq roles.name → 409, not 500 (ADR-060)."""
     from app.repositories.auth_repository import role_repository
 
@@ -782,13 +781,13 @@ async def test_create_role_name_race_maps_to_409(client, db_session, monkeypatch
     resp = await client.post(
         "/api/v1/admin/rbac/roles",
         json={"name": "dispatcher", "kind": "team"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409, resp.text
 
 
 @pytest.mark.asyncio
-async def test_rename_role_name_race_maps_to_409(client, db_session, monkeypatch):
+async def test_rename_role_name_race_maps_to_409(client, db_session, redis, monkeypatch):
     """Rename whose target name is taken under a race hits uq roles.name → 409, not 500 (ADR-060)."""
     from app.repositories.auth_repository import role_repository
 
@@ -799,7 +798,7 @@ async def test_rename_role_name_race_maps_to_409(client, db_session, monkeypatch
     resp = await client.patch(
         f"/api/v1/admin/rbac/roles/{role_uuid}",
         json={"name": "taken"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 409, resp.text
 
@@ -836,7 +835,7 @@ async def _make_rbac_assigner(db) -> str:
 
 
 @pytest.mark.asyncio
-async def test_direct_grant_for_an_unknown_team_is_404_not_500(client, db_session):
+async def test_direct_grant_for_an_unknown_team_is_404_not_500(client, db_session, redis):
     """`team_uuid` is a query param that lands in a FK column, so it has to be checked.
 
     Unchecked, an unknown UUID reached the insert and surfaced as an unhandled
@@ -850,7 +849,7 @@ async def test_direct_grant_for_an_unknown_team_is_404_not_500(client, db_sessio
         f"/api/v1/admin/users/{target_uuid}/permissions/{Perm.STATION_VIEW.value}",
         params={"team_uuid": str(uuid4())},
         json={"scope": "team"},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
 
     assert resp.status_code == 404, resp.text
@@ -858,7 +857,7 @@ async def test_direct_grant_for_an_unknown_team_is_404_not_500(client, db_sessio
 
 
 @pytest.mark.asyncio
-async def test_a_platform_role_cannot_be_unassigned(client, db_session):
+async def test_a_platform_role_cannot_be_unassigned(client, db_session, redis):
     """Removing a platform role always leaves the account with no platform identity.
 
     A user holds at most one — every platform grant replaces the previous — so "remove it"
@@ -877,7 +876,7 @@ async def test_a_platform_role_cannot_be_unassigned(client, db_session):
 
     resp = await client.delete(
         f"/api/v1/admin/users/{target_uuid}/role/{role_uuid}",
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
 
     assert resp.status_code == 409, resp.text
@@ -894,7 +893,7 @@ async def test_a_platform_role_cannot_be_unassigned(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_a_team_identity_can_still_be_unassigned(client, db_session):
+async def test_a_team_identity_can_still_be_unassigned(client, db_session, redis):
     """The guard is about platform roles only — revoking a team identity is unaffected.
 
     It names its team, and losing it leaves the platform identity intact, so the account is
@@ -919,7 +918,7 @@ async def test_a_team_identity_can_still_be_unassigned(client, db_session):
     resp = await client.delete(
         f"/api/v1/admin/users/{target_uuid}/role/{team_role_uuid}",
         params={"team_uuid": team_uuid},
-        headers=_auth_header(admin_uuid),
+        headers=await _auth_header(redis, admin_uuid),
     )
 
     assert resp.status_code == 204, resp.text

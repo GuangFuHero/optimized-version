@@ -1,9 +1,11 @@
 """Session endpoints: password login, refresh-token rotation, and logout."""
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
@@ -31,6 +33,8 @@ from app.schemas.auth import (
 )
 
 from .deps import get_rate_limiter, issue_token_pair
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -210,11 +214,28 @@ async def logout(
 ):
     """Log out the CURRENT device only: revoke this session (its refresh token).
 
-    Use /auth/logout-all to sign out every device. (A token minted without a sid is a no-op.)
+    Idempotent (ADR-190): this endpoint asks for the end state "this device is signed out",
+    and a token whose session is already gone — a second logout, or one issued from a 401
+    interceptor — is asking for a state that already holds. `revoke_session` no-ops on a
+    session that is not there, so both cases answer 204. A token that never carried a `sid`
+    is the same case: there is nothing to revoke and nothing to report.
+
+    Use /auth/logout-all to sign out every device.
     """
     _user_uuid, sid = session
-    if sid:
+    if not sid:
+        return
+    try:
         await SessionRepository(redis).revoke_session(sid)
+    except RedisError as err:
+        # Fail closed and say so. Answering 204 here would tell the caller they are signed
+        # out when the session store never heard the request, which is the one lie a logout
+        # endpoint must not tell.
+        logger.exception("logout could not reach Redis (the session store)")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Session store is unavailable; you are not signed out",
+        ) from err
 
 
 @router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
@@ -222,6 +243,33 @@ async def logout_all(
         session=Depends(security.get_current_session),
         redis=Depends(get_redis),
 ):
-    """Log out EVERY device: revoke all of the user's sessions."""
-    user_uuid, _sid = session
-    await SessionRepository(redis).revoke_all_for_user(user_uuid)
+    """Log out EVERY device: revoke all of the user's sessions.
+
+    Idempotent for the same reason `logout` is, but it cannot simply revoke and let the
+    no-op handle it: unlike `logout`, this acts on sessions OTHER than the caller's. A token
+    whose own session has already been revoked must not reach them (ADR-180) — otherwise an
+    intruder holding a stolen-then-revoked token can keep calling this to kick the victim out
+    of every session they create afterwards, for the rest of the token's 15 minutes. So the
+    caller's own session has to be live for this to revoke anything; when it is not, the
+    answer is still 204, because "every device is signed out" is what the caller asked for
+    and this token's own device already is (ADR-190).
+    """
+    _, sid = session
+    repo = SessionRepository(redis)
+    try:
+        live = await repo.get_session(sid) if sid is not None else None
+        if live is None:
+            return
+        # The session record's own `user_uuid`, not the token's `sub` (ADR-223). Both claims
+        # are signed, so no path mints a mismatched pair today — but this is the endpoint
+        # that revokes EVERY session a uuid owns, which is the worst place to take the uuid
+        # on trust, and `_require_live_session` pins exactly this pairing for every other
+        # authenticated route (`security.py`). ADR-190 moved this endpoint out from under
+        # that check; taking the uuid from the record puts the invariant back.
+        await repo.revoke_all_for_user(live["user_uuid"])
+    except RedisError as err:
+        logger.exception("logout-all could not reach Redis (the session store)")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Session store is unavailable; you are not signed out",
+        ) from err

@@ -291,12 +291,12 @@ async def test_update_station(client, coordinator_auth, sample_station):
 
 
 @pytest.mark.asyncio
-async def test_update_station_all_scope(client, coordinator_auth):
+async def test_update_station_all_scope(client, redis, coordinator_auth):
     """Coordinator with edit=all can edit another coordinator's station."""
     # Create a station as a second coordinator
     from tests.test_graphql.conftest import _create_user_with_role
 
-    other_uuid, other_token = await _create_user_with_role("Field Coordinator")
+    other_uuid, other_token = await _create_user_with_role(redis, "Field Coordinator")
 
     # Create station as the other coordinator
     resp = await client.post(
@@ -1187,13 +1187,14 @@ async def test_self_signup_creates_assignment(
 @pytest.mark.asyncio
 async def test_coordinator_assigns_other_user(
     client,
+    redis,
     coordinator_auth,
     sample_ticket_task,
 ):
     """A coordinator (request:edit=all) can assign another user to a task."""
     from tests.test_graphql.conftest import _create_user_with_role
 
-    other_uuid, _ = await _create_user_with_role("Login User")
+    other_uuid, _ = await _create_user_with_role(redis, "Login User")
 
     _, token = coordinator_auth
     body = await _assign(client, token, sample_ticket_task, actor_uuid=other_uuid, role="lead")
@@ -1205,13 +1206,14 @@ async def test_coordinator_assigns_other_user(
 @pytest.mark.asyncio
 async def test_login_user_cannot_assign_other(
     client,
+    redis,
     login_user_auth,
     sample_ticket_task,
 ):
     """A login user (request:edit=own) cannot assign someone else to a task they don't own."""
     from tests.test_graphql.conftest import _create_user_with_role
 
-    other_uuid, _ = await _create_user_with_role("Login User")
+    other_uuid, _ = await _create_user_with_role(redis, "Login User")
 
     _, token = login_user_auth
     body = await _assign(client, token, sample_ticket_task, actor_uuid=other_uuid)
@@ -1234,6 +1236,7 @@ async def test_duplicate_assignment_rejected(
 @pytest.mark.asyncio
 async def test_over_subscription_allowed(
     client,
+    redis,
     coordinator_auth,
     sample_ticket_task,
 ):
@@ -1242,7 +1245,7 @@ async def test_over_subscription_allowed(
 
     _, token = coordinator_auth
     for _ in range(4):
-        actor_uuid, _ignore = await _create_user_with_role("Login User")
+        actor_uuid, _ignore = await _create_user_with_role(redis, "Login User")
         body = await _assign(client, token, sample_ticket_task, actor_uuid=actor_uuid)
         assert "errors" not in body, body
 
@@ -1250,6 +1253,7 @@ async def test_over_subscription_allowed(
 @pytest.mark.asyncio
 async def test_progress_reflects_completed(
     client,
+    redis,
     coordinator_auth,
     sample_ticket,
     sample_ticket_task,
@@ -1261,7 +1265,7 @@ async def test_progress_reflects_completed(
 
     assignment_uuids = []
     for _ in range(3):  # task quantity is 3
-        actor_uuid, _ignore = await _create_user_with_role("Login User")
+        actor_uuid, _ignore = await _create_user_with_role(redis, "Login User")
         body = await _assign(client, token, sample_ticket_task, actor_uuid=actor_uuid)
         assignment_uuids.append(body["data"]["assignTaskActor"]["uuid"])
 
@@ -1315,13 +1319,14 @@ async def test_assignee_updates_own_status(
 @pytest.mark.asyncio
 async def test_non_owner_cannot_update_assignment(
     client,
+    redis,
     login_user_auth,
     sample_ticket_task,
 ):
     """A login user cannot update another person's assignment."""
     from tests.test_graphql.conftest import _create_user_with_role
 
-    owner_uuid, owner_token = await _create_user_with_role("Login User")
+    owner_uuid, owner_token = await _create_user_with_role(redis, "Login User")
     body = await _assign(client, owner_token, sample_ticket_task)
     a_uuid = body["data"]["assignTaskActor"]["uuid"]
 

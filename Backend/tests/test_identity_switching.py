@@ -245,12 +245,12 @@ async def test_switching_does_not_rotate_the_refresh_token(client, db_session):
 # --- an identity that has since vanished (ADR-096) ----------------------------------------
 
 
-async def test_a_revoked_identity_401s_on_the_request_path(client, db_session):
+async def test_a_revoked_identity_401s_on_the_request_path(client, db_session, redis):
     """Revoking the grant a token acts as signs that session out, rather than downgrading it."""
     from sqlalchemy import delete
 
     user_uuid, _, team_role, team = await _account_with_two_identities(db_session)
-    headers = auth_headers_for(user_uuid, team_role, team)
+    headers = await auth_headers_for(redis, user_uuid, team_role, team)
     assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 200
 
     await db_session.execute(
@@ -261,14 +261,14 @@ async def test_a_revoked_identity_401s_on_the_request_path(client, db_session):
     assert (await client.get("/api/v1/users/me", headers=headers)).status_code == 401
 
 
-async def test_a_soft_deleted_team_takes_its_identity_with_it(client, db_session):
+async def test_a_soft_deleted_team_takes_its_identity_with_it(client, db_session, redis):
     """Soft-deleting the team invalidates the identity bound to it (ADR-096)."""
     from datetime import UTC, datetime
 
     from sqlalchemy import update
 
     user_uuid, _, team_role, team = await _account_with_two_identities(db_session)
-    headers = auth_headers_for(user_uuid, team_role, team)
+    headers = await auth_headers_for(redis, user_uuid, team_role, team)
 
     await db_session.execute(
         update(Team).where(Team.uuid == team.uuid).values(delete_at=datetime.now(UTC))
@@ -314,11 +314,11 @@ async def test_refresh_refuses_a_vanished_identity_without_burning_the_token(cli
     assert accepted.status_code == 200, accepted.text
 
 
-async def test_users_me_lists_every_identity_and_the_active_one(client, db_session):
+async def test_users_me_lists_every_identity_and_the_active_one(client, db_session, redis):
     """The switcher UI needs the full list plus which one is in effect."""
     user_uuid, _, team_role, team = await _account_with_two_identities(db_session)
     resp = await client.get(
-        "/api/v1/users/me", headers=auth_headers_for(user_uuid, team_role, team)
+        "/api/v1/users/me", headers=await auth_headers_for(redis, user_uuid, team_role, team)
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -349,7 +349,12 @@ async def test_switch_identity_refuses_once_the_session_is_revoked(client, db_se
 
     resp = await client.post("/api/v1/auth/switch-identity", json=body, headers=headers)
     assert resp.status_code == 401, resp.text
-    assert "no longer active" in resp.json()["detail"]
+    # The status is the contract; the message depends on which layer refuses first. On this
+    # branch Spec/014's per-request session check in `get_current_user` gets there before the
+    # endpoint's own check and says "Could not validate credentials"; on feature 010 alone the
+    # endpoint answers with "Session is no longer active". ADR-183 records that overlap as
+    # deliberate — the endpoint check went in while #38 was still unmerged.
+    assert resp.json()["detail"] in {"Session is no longer active", "Could not validate credentials"}
 
 
 async def test_switch_identity_is_rate_limited(client, db_session):
@@ -532,3 +537,36 @@ async def test_the_reported_identity_matches_the_act_claim(client, db_session):
     assert decode_act(_act_of(tokens["access_token"])) == (
         tokens["identity"]["role_uuid"], tokens["identity"]["team_uuid"]
     )
+
+
+# --- the token a switch replaced stops working (ADR-195) ----------------------------------
+
+
+async def test_the_pre_switch_token_stops_working(client, db_session):
+    """A switch has to be enforced where it is checked, not just where it is minted.
+
+    `/auth/switch-identity` writes the new identity into the session record, but the access
+    token it replaced carries the same `sid` and `sub` and would otherwise pass the request
+    path for the rest of its 15 minutes. Replaying it undoes a deliberate downgrade — a
+    super_admin who dropped to a team identity could pick their platform powers back up — and
+    attributes whatever it does to the pre-switch identity in the audit trail.
+
+    Not privilege escalation (switching only moves between identities already held), which is
+    why it survived review of the switch itself; the session record is the single source of
+    truth for which identity a session acts as, and a token that disagrees is stale.
+    """
+    _, _, team_role, team = await _account_with_two_identities(db_session)
+    tokens = await _login(client)
+    old = {"Authorization": f"Bearer {tokens['access_token']}"}
+    assert (await client.get("/api/v1/users/me", headers=old)).status_code == 200
+
+    resp = await client.post(
+        "/api/v1/auth/switch-identity",
+        json={"role_uuid": str(team_role.uuid), "team_uuid": str(team.uuid)},
+        headers=old,
+    )
+    assert resp.status_code == 200, resp.text
+    new = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    assert (await client.get("/api/v1/users/me", headers=old)).status_code == 401
+    assert (await client.get("/api/v1/users/me", headers=new)).status_code == 200
