@@ -544,3 +544,130 @@ async def test_a_kick_during_a_redis_outage_is_503_not_500(client, db_session, r
         app.dependency_overrides[get_redis] = lambda: redis
 
     assert res.status_code == 503, res.text
+    # The message must not claim a clean slate — see the loop-failure test below (ADR-222).
+    assert "no sessions were revoked" not in res.json()["detail"]
+
+
+async def test_a_kick_that_dies_mid_loop_does_not_claim_nothing_was_revoked(
+    client, db_session, redis
+):
+    """The set read succeeds and the deletion fails partway, leaving some sessions gone.
+
+    `revoke_all_for_user` deletes one session at a time, so this is the realistic outage
+    shape, and it is the one the original test never reached — it only made `smembers`
+    raise. A 503 that says "nothing was revoked" is the same ambiguity ADR-194 set out to
+    remove, just stated confidently (ADR-222).
+    """
+    _, admin_headers = await _admin_who_can_kick(db_session, redis)
+    target_uuid = await _user(db_session, email="midloop-target@x.com")
+    for _ in range(3):
+        await auth_headers_for(redis, target_uuid)  # three live sessions to walk through
+
+    real_redis = redis
+
+    class _DiesOnTheSecondDelete:
+        """Live until the revocation loop is under way, then gone."""
+
+        def __init__(self):
+            self.deletes = 0
+
+        def __getattr__(self, name):
+            attr = getattr(real_redis, name)
+            if name != "delete":
+                return attr
+
+            async def _maybe_boom(*args, **kwargs):
+                self.deletes += 1
+                if self.deletes > 1:
+                    raise RedisConnectionError("redis went away mid-revocation")
+                return await attr(*args, **kwargs)
+
+            return _maybe_boom
+
+    app.dependency_overrides[get_redis] = _DiesOnTheSecondDelete
+    try:
+        res = await client.post(_kick(target_uuid), headers=admin_headers)
+    finally:
+        app.dependency_overrides[get_redis] = lambda: redis
+
+    assert res.status_code == 503, res.text
+    assert "no sessions were revoked" not in res.json()["detail"]
+    assert "retry" in res.json()["detail"]
+
+
+# ──────────────────────────────────────────────
+# PR #38 review round: the count, and whose sessions logout-all reaches
+# ──────────────────────────────────────────────
+
+
+async def test_the_audit_count_comes_from_the_read_that_did_the_revoking(
+    client, db_session, redis
+):
+    """One `smembers`, not two (ADR-221).
+
+    The service used to read the session set for the count and then call
+    `revoke_all_for_user`, which read it again. A session created between the two reads is
+    revoked but not counted, so the audit row under-reports what the kick actually did.
+    """
+    from sqlalchemy import select
+
+    from app.models.audit import AuditLog
+
+    _, admin_headers = await _admin_who_can_kick(db_session, redis)
+    target_uuid = await _user(db_session, email="counted@x.com")
+    for _ in range(3):
+        await auth_headers_for(redis, target_uuid)
+
+    res = await client.post(_kick(target_uuid), headers=admin_headers)
+
+    assert res.status_code == 204, res.text
+    row = (await db_session.execute(
+        select(AuditLog).where(
+            AuditLog.row_id == target_uuid, AuditLog.action == "REVOKE_SESSIONS"
+        )
+    )).scalar_one()
+    assert row.new_values == {"revoked_sessions": 3}
+    assert await SessionRepository(redis).redis.smembers(
+        SessionRepository(redis).USER_SESSIONS + target_uuid) == set()
+
+
+async def test_revoke_all_for_user_reports_what_it_revoked(redis):
+    """The repository hands the count back rather than making callers read it again."""
+    repo = SessionRepository(redis)
+    user_uuid = "11111111-1111-1111-1111-111111111111"
+    for _ in range(2):
+        await auth_headers_for(redis, user_uuid)
+
+    assert await repo.revoke_all_for_user(user_uuid) == 2
+    assert await repo.revoke_all_for_user(user_uuid) == 0  # idempotent, and honest about it
+
+
+async def test_logout_all_follows_the_session_record_not_the_token_claim(
+    client, db_session, redis
+):
+    """`logout-all` revokes every session a uuid owns, so it must not take the uuid on trust.
+
+    Both claims are signed, so no path mints a mismatched pair today. But this endpoint was
+    moved out from under `_require_live_session` (ADR-190), which is where that pairing is
+    pinned for every other authenticated route, so it pinned nothing (ADR-223).
+    """
+    import json
+
+    owner_uuid = await _user(db_session, email="record-owner@x.com")
+    other_uuid = await _user(db_session, email="token-claim@x.com")
+    headers = await auth_headers_for(redis, owner_uuid)
+    await auth_headers_for(redis, other_uuid)
+
+    # rewrite the caller's session record to name a different user than its token does
+    repo = SessionRepository(redis)
+    sid = await _sid_of(redis, owner_uuid)
+    record = json.loads(await redis.get(repo.SESSION + sid))
+    record["user_uuid"] = other_uuid
+    await redis.set(repo.SESSION + sid, json.dumps(record))
+
+    res = await client.post("/api/v1/auth/logout-all", headers=headers)
+
+    assert res.status_code == 204, res.text
+    # the record's owner is the one signed out; the token's `sub` is untouched
+    assert await redis.smembers(repo.USER_SESSIONS + other_uuid) == set()
+    assert await redis.smembers(repo.USER_SESSIONS + owner_uuid) != set()

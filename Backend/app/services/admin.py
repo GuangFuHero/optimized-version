@@ -335,20 +335,24 @@ async def revoke_user_sessions(db: AsyncSession, redis, *, actor: User, user_uui
 
     repo = SessionRepository(redis)
     try:
-        members = await repo.redis.smembers(repo.USER_SESSIONS + str(target.uuid))
-        await repo.revoke_all_for_user(str(target.uuid))
+        revoked = await repo.revoke_all_for_user(str(target.uuid))
     except RedisError as err:
         # Every other Redis touch this feature adds fails closed with a handled response;
         # this one used to raise out of the endpoint as a 500 with a traceback, which tells
         # the caller nothing and leaves it ambiguous whether any sessions were revoked
-        # (ADR-194). 503 says what is true: nothing was revoked, and it is worth retrying.
+        # (ADR-194).
+        #
+        # The message does not claim nothing was revoked (ADR-222): `revoke_all_for_user`
+        # deletes the sessions one at a time, so a store that goes away partway through
+        # leaves some of them already gone. Saying "none" would be the same ambiguity ADR-194
+        # set out to remove, just stated confidently. Revocation is idempotent, so the honest
+        # answer is also the actionable one: retry.
         logger.exception("could not revoke sessions for user %s: Redis is unreachable", user_uuid)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Session store is unavailable; no sessions were revoked",
+            detail="Session store is unavailable; the sign-out may be incomplete — retry",
         ) from err
 
-    revoked = len(members)
     _record_session_revocation(db, actor=actor, target=target, revoked=revoked)
     await db.commit()
     return revoked
