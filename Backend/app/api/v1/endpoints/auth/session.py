@@ -254,12 +254,19 @@ async def logout_all(
     answer is still 204, because "every device is signed out" is what the caller asked for
     and this token's own device already is (ADR-190).
     """
-    user_uuid, sid = session
+    _, sid = session
     repo = SessionRepository(redis)
     try:
-        if sid is None or await repo.get_session(sid) is None:
+        live = await repo.get_session(sid) if sid is not None else None
+        if live is None:
             return
-        await repo.revoke_all_for_user(user_uuid)
+        # The session record's own `user_uuid`, not the token's `sub` (ADR-223). Both claims
+        # are signed, so no path mints a mismatched pair today — but this is the endpoint
+        # that revokes EVERY session a uuid owns, which is the worst place to take the uuid
+        # on trust, and `_require_live_session` pins exactly this pairing for every other
+        # authenticated route (`security.py`). ADR-190 moved this endpoint out from under
+        # that check; taking the uuid from the record puts the invariant back.
+        await repo.revoke_all_for_user(live["user_uuid"])
     except RedisError as err:
         logger.exception("logout-all could not reach Redis (the session store)")
         raise HTTPException(

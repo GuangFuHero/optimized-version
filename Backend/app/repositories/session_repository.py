@@ -177,9 +177,17 @@ class SessionRepository:
             await self.redis.srem(self.USER_SESSIONS + session["user_uuid"], sid)
         await self.redis.delete(self.SESSION + sid)
 
-    async def revoke_all_for_user(self, user_uuid: str) -> None:
-        """Delete every session belonging to the user (global logout)."""
+    async def revoke_all_for_user(self, user_uuid: str) -> int:
+        """Delete every session belonging to the user (global logout); return how many.
+
+        The count is returned rather than left to the caller to read for itself (ADR-221):
+        the set is already in hand here, and a caller doing its own `smembers` first both
+        pays for a second round trip and can disagree with this one — a session created
+        between the two reads is revoked but not counted, so an audit row built from that
+        number under-reports what happened.
+        """
         members = await self.redis.smembers(self.USER_SESSIONS + user_uuid)
         for m in members:
             await self.revoke_session(m.decode() if isinstance(m, bytes) else m)
         await self.redis.delete(self.USER_SESSIONS + user_uuid)
+        return len(members)
