@@ -3,7 +3,7 @@
 import logging
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -370,6 +370,72 @@ class ContactRepository(GenericRepository[UserContact]):
         await db.refresh(contact)
         return contact
 
+    async def get_by_user_and_type(
+        self, db: AsyncSession, *, user_uuid: str, type_: str
+    ) -> UserContact | None:
+        """Return the user's contact row of that type, or None."""
+        q = select(UserContact).where(
+            UserContact.user_uuid == user_uuid, UserContact.type == type_
+        )
+        return (await db.execute(q)).scalar_one_or_none()
+
+    async def list_by_user(self, db: AsyncSession, user_uuid: str) -> list[UserContact]:
+        """Every contact the user owns, oldest first."""
+        q = (
+            select(UserContact)
+            .where(UserContact.user_uuid == user_uuid)
+            .order_by(UserContact.created_at)
+        )
+        return list((await db.execute(q)).scalars().all())
+
+    async def count_by_user(self, db: AsyncSession, user_uuid: str) -> int:
+        """How many contacts the user owns — the login-channel guard counts these (ADR-087)."""
+        q = select(func.count()).select_from(UserContact).where(UserContact.user_uuid == user_uuid)
+        return (await db.execute(q)).scalar() or 0
+
+    async def replace_verified(
+        self, db: AsyncSession, *, existing: UserContact, value: str
+    ) -> UserContact:
+        """Swap a contact's value in ONE transaction (ADR-098).
+
+        Delete-then-insert rather than an in-place UPDATE so the row identity changes and the
+        audit trail shows a DELETE plus an INSERT — `user_contacts` is in AUDITED_TABLES and
+        `UserContact` has no soft-delete column, so audit_logs is where the old value lives on.
+
+        Both statements share one commit: the account is never momentarily left with no
+        contact, which would be a permanent lockout if the transaction then failed.
+        """
+        user_uuid, type_ = existing.user_uuid, existing.type
+        await db.delete(existing)
+        await db.flush()
+        contact = UserContact(
+            user_uuid=user_uuid, type=type_, value=value, verified=True, verified_at=datetime.now(UTC)
+        )
+        db.add(contact)
+        await db.commit()
+        await db.refresh(contact)
+        return contact
+
+    async def lock_owner(self, db: AsyncSession, user_uuid: str) -> None:
+        """Take a row lock on the owning user, serializing contact mutations for that account.
+
+        The "at least one login channel remains" rule (ADR-087) is a read-then-write: count
+        the contacts, then delete one. Without a lock two concurrent DELETEs for different
+        types both read count=2, both compute remaining=1, and both proceed — the account
+        ends with zero contacts and no way back in (ADR-163).
+
+        Locking the `users` row rather than the contact rows is deliberate: the invariant is
+        about the *set* of contacts, and the row being inserted or removed cannot be locked
+        before it is chosen. The lock is held until the transaction commits, so callers should
+        take it after any slow work (code delivery) and immediately before the re-check.
+        """
+        await db.execute(select(User.uuid).where(User.uuid == user_uuid).with_for_update())
+
+    async def delete_contact(self, db: AsyncSession, *, contact: UserContact) -> None:
+        """Hard-delete a contact row; audit_logs keeps the history (ADR-087)."""
+        await db.delete(contact)
+        await db.commit()
+
 
 class IdentityRepository(GenericRepository[UserIdentity]):
     """Queries over auth methods."""
@@ -402,6 +468,22 @@ class IdentityRepository(GenericRepository[UserIdentity]):
             UserIdentity.user_uuid == user_uuid, UserIdentity.provider == provider
         )
         return (await db.execute(q)).scalar_one_or_none()
+
+    async def list_by_user(self, db: AsyncSession, user_uuid: str) -> list[UserIdentity]:
+        """Every login method the user holds, oldest first."""
+        q = (
+            select(UserIdentity)
+            .where(UserIdentity.user_uuid == user_uuid)
+            .order_by(UserIdentity.created_at)
+        )
+        return list((await db.execute(q)).scalars().all())
+
+    async def has_sso_identity(self, db: AsyncSession, user_uuid: str) -> bool:
+        """True if any non-password login method exists — a way back in without a contact."""
+        q = select(UserIdentity.uuid).where(
+            UserIdentity.user_uuid == user_uuid, UserIdentity.provider != "password"
+        )
+        return (await db.execute(q)).first() is not None
 
 
 user_repository = UserRepository()

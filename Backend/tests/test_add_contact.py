@@ -87,19 +87,22 @@ async def test_resend_no_pending_404(client, db_session, redis):
 
 
 @pytest.mark.asyncio
-async def test_add_second_email_blocked_409(client, db_session, redis):
-    """A user who already has an email cannot add a SECOND, different email → 409."""
+async def test_add_second_email_requires_step_up(client, db_session, redis, capture_email):
+    """Feature 012 turned "second email → 409" into a REPLACEMENT gated by step-up (ADR-085).
+
+    The account still cannot end up with two emails, but the refusal is now 422-asking-for-
+    proof rather than a flat 409 — and crucially no code reaches the new address.
+    """
     _, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
     res = await client.post("/api/v1/auth/contacts", headers=headers,
                             json={"type": "email", "value": "second@x.com"})
-    assert res.status_code == 409
-    # pin the 409 to the per-type limit (not the cross-account is_value_taken path)
-    assert "already has" in res.json()["detail"]
+    assert res.status_code == 422
+    assert capture_email.last_code is None
 
 
 @pytest.mark.asyncio
-async def test_add_second_phone_blocked_409(client, db_session, redis, capture_sms):
-    """A user who already has a phone cannot add a SECOND, different phone → 409."""
+async def test_add_second_phone_requires_step_up(client, db_session, redis, capture_sms):
+    """Same replacement gate on the phone side (ADR-085)."""
     user = await create_account(
         db_session, contact_type="phone", value="0912345678",
         password_hash=get_password_hash("secret", generate_salt()), name="Tester",
@@ -107,8 +110,8 @@ async def test_add_second_phone_blocked_409(client, db_session, redis, capture_s
     headers = await auth_headers_for(redis, user.uuid)
     res = await client.post("/api/v1/auth/contacts", headers=headers,
                             json={"type": "phone", "value": "0911222333"})
-    assert res.status_code == 409
-    assert "already has" in res.json()["detail"]
+    assert res.status_code == 422
+    assert capture_sms.last_code is None
 
 
 @pytest.mark.asyncio
@@ -126,48 +129,68 @@ async def test_email_user_can_add_phone(client, db_session, redis, capture_sms):
 
 
 @pytest.mark.asyncio
-async def test_verify_second_email_blocked_even_if_add_bypassed(client, db_session, redis):
-    """The authoritative check is at verify: a pending second email still 409s on verify.
+async def test_a_code_is_never_issued_to_a_new_address_without_step_up(
+    client, db_session, redis, capture_email
+):
+    """Where the replacement gate actually lives (ADR-085).
 
-    We seed the pending code straight into redis (bypassing add_contact) to prove verify_contact
-    itself rejects a second contact of an already-owned type.
+    Feature 012 puts step-up at issue-time, not at verify, so this is the invariant that
+    protects the account: an attacker holding only a session never gets a code delivered to
+    an address they control, and verify is unreachable without one. (The previous version of
+    this test seeded a code straight into redis to prove verify re-checked — that bypass
+    cannot occur in practice, because issuing the code is itself the gated step.)
     """
-    user, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
-    code = await VerificationRepository(redis).issue_contact_verification(
-        user_uuid=str(user.uuid), type_="email", value="second@x.com")
-    v = await client.post("/api/v1/auth/contacts/verify", headers=headers,
-                          json={"type": "email", "value": "second@x.com", "code": code})
-    assert v.status_code == 409
-    assert "already has" in v.json()["detail"]
+    _, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
+
+    res = await client.post("/api/v1/auth/contacts", headers=headers,
+                            json={"type": "email", "value": "attacker@evil.com"})
+
+    assert res.status_code == 422
+    assert capture_email.messages == []
 
 
 @pytest.mark.asyncio
-async def test_verify_second_email_409_does_not_consume_code(client, db_session, redis):
-    """A 409 on verify_contact (already-owned type) must NOT burn the pending code.
+async def test_verify_409_does_not_consume_code(client, db_session, redis):
+    """A 409 on verify must NOT burn the pending code.
 
-    The conflict checks run BEFORE consume_contact_verification, so the redis pending key survives the
-    409 and the user can retry once the conflict clears.
+    The conflict check runs BEFORE consume_contact_verification, so the redis pending key
+    survives and the user can retry once the conflict clears. Feature 012 made same-type
+    adds a legal replacement, so the surviving 409 path is the cross-account one: the value
+    is already verified by somebody else.
     """
     user, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
+    # captured before the next commit: db_session is expire_on_commit=True, so creating the
+    # second account below would expire user.uuid and re-reading it raises MissingGreenlet
+    user_uuid = str(user.uuid)
+    await create_account(
+        db_session, contact_type="email", value="taken@x.com",
+        password_hash=get_password_hash("secret", generate_salt()), name="Other",
+    )
     repo = VerificationRepository(redis)
     code = await repo.issue_contact_verification(
-        user_uuid=str(user.uuid), type_="email", value="second@x.com")
-    key = f"pending_contact:{user.uuid}:email:second@x.com"
+        user_uuid=user_uuid, type_="email", value="taken@x.com")
+    key = f"pending_contact:{user_uuid}:email:taken@x.com"
     assert await redis.exists(key)
 
     v = await client.post("/api/v1/auth/contacts/verify", headers=headers,
-                          json={"type": "email", "value": "second@x.com", "code": code})
+                          json={"type": "email", "value": "taken@x.com", "code": code})
     assert v.status_code == 409
-    assert "already has" in v.json()["detail"]
     # the pending code was NOT consumed by the 409 path
     assert await redis.exists(key)
 
 
 @pytest.mark.asyncio
-async def test_resend_second_type_blocked_409(client, db_session, redis):
-    """Resend for an already-owned type is also blocked → 409 (symmetric with add/verify)."""
-    _, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
+async def test_resend_for_a_value_owned_by_someone_else_is_409(client, db_session, redis):
+    """Resend still refuses a value another account has verified.
+
+    It no longer refuses merely because the caller owns that contact type — under feature
+    012 that is a replacement in progress, and resend has to work for it.
+    """
+    _, headers = await _logged_in_email_user(db_session, redis)
+    await create_account(
+        db_session, contact_type="email", value="taken@x.com",
+        password_hash=get_password_hash("secret", generate_salt()), name="Other",
+    )
     res = await client.post("/api/v1/auth/contacts/resend", headers=headers,
-                            json={"type": "email", "value": "second@x.com"})
+                            json={"type": "email", "value": "taken@x.com"})
     assert res.status_code == 409
-    assert "already has" in res.json()["detail"]
