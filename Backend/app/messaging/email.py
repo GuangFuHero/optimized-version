@@ -292,6 +292,7 @@ _STEP_UP_ACTION_EN = {"replace": "change", "remove": "remove"}
 SET_PASSWORD_ACTION = "set_password"
 # Linking an SSO provider adds a permanent way in that no password change can revoke, so it
 # carries its own copy rather than borrowing the contact-change wording (ADR-217).
+ADD_CONTACT_ACTION = "add_contact"
 LINK_ACTION = "link_identity"
 UNLINK_ACTION = "unlink_identity"
 _PROVIDER_LABEL = {"google": "Google", "line": "LINE", "password": "密碼 password"}
@@ -314,6 +315,10 @@ def build_step_up_code_email(
         zh_what = "為此帳號設定登入密碼"
         en_what = "set a sign-in password on this account"
         heading = "請確認密碼設定 Confirm a password setup"
+    elif action == ADD_CONTACT_ACTION:
+        zh_what = f"為此帳號新增 {masked_target} 為聯絡方式"
+        en_what = f"add {masked_target} to this account as a contact"
+        heading = "請確認聯絡方式變更 Confirm a contact change"
     elif action in (LINK_ACTION, UNLINK_ACTION):
         verb_zh = "新增" if action == LINK_ACTION else "移除"
         verb_en = "add" if action == LINK_ACTION else "remove"

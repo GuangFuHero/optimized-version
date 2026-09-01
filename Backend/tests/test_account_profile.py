@@ -87,12 +87,23 @@ async def test_replacing_with_a_wrong_password_is_refused_and_burns_no_code(
     assert capture_email.last_code is None
 
 
-async def test_first_contact_of_a_type_needs_no_step_up(client, db_session, redis, capture_sms):
-    """Adding a phone to an email-only account is not a replacement — no extra gate."""
+async def test_first_contact_of_a_type_is_gated_too(client, db_session, redis, capture_sms):
+    """ADR-220 overturns ADR-086's "adding needs no gate".
+
+    A contact is a recovery destination the moment it is verified, so attaching one is as
+    sensitive as swapping one — see `tests/test_login_method_hardening.py` for the chain this
+    closes.
+    """
     _, headers = await _password_user(db_session, redis)
 
-    res = await client.post(CONTACTS_URL, headers=headers,
-                            json={"type": "phone", "value": "0912345678"})
+    refused = await client.post(CONTACTS_URL, headers=headers,
+                                json={"type": "phone", "value": "0912345678"})
+    assert refused.status_code == 422, refused.text
+    assert capture_sms.messages == []  # nothing reached the number being added
+
+    res = await client.post(CONTACTS_URL, headers=headers, json={
+        "type": "phone", "value": "0912345678", "step_up": {"password": _PASSWORD},
+    })
 
     assert res.status_code == 202, res.text
     assert capture_sms.last_code
@@ -229,7 +240,10 @@ async def test_deleting_one_of_two_contacts_is_allowed(
 ):
     """A second channel remains, so the guard does not apply."""
     user_uuid, headers = await _password_user(db_session, redis)
-    await client.post(CONTACTS_URL, headers=headers, json={"type": "phone", "value": "0912345678"})
+    # ADR-220 gates the add too, and this account has a password to prove it with
+    await client.post(CONTACTS_URL, headers=headers, json={
+        "type": "phone", "value": "0912345678", "step_up": {"password": _PASSWORD},
+    })
     await client.post(f"{CONTACTS_URL}/verify", headers=headers, json={
         "type": "phone", "value": "0912345678", "code": capture_sms.last_code,
     })
@@ -264,7 +278,10 @@ async def _delete(client, headers, type_="email", step_up=None):
 async def _with_phone(client, db, redis, capture_sms):
     """A password account holding BOTH an email and a phone."""
     user_uuid, headers = await _password_user(db, redis)
-    await client.post(CONTACTS_URL, headers=headers, json={"type": "phone", "value": "0912345678"})
+    # ADR-220 gates the add too, and this account has a password to prove it with
+    await client.post(CONTACTS_URL, headers=headers, json={
+        "type": "phone", "value": "0912345678", "step_up": {"password": _PASSWORD},
+    })
     await client.post(f"{CONTACTS_URL}/verify", headers=headers, json={
         "type": "phone", "value": "0912345678", "code": capture_sms.last_code,
     })
@@ -351,7 +368,13 @@ async def test_the_last_channel_guard_runs_before_step_up(client, db_session, re
 async def test_delete_then_add_still_requires_step_up(
     client, db_session, redis, capture_sms, capture_email
 ):
-    """The bypass ADR-159 closes: deleting must not reset the replacement gate."""
+    """The bypass ADR-159 closes: deleting must not reset the replacement gate.
+
+    ADR-159 closed the first half — deleting takes the same proof as replacing, so a session
+    holder could not delete their way past the gate. ADR-220 closes the second half: the
+    re-add is now gated too, so the sequence is refused at both ends rather than only the
+    first.
+    """
     user_uuid, headers = await _with_phone(client, db_session, redis, capture_sms)
     removed = await _delete(client, headers, "email", {"password": _PASSWORD})
     assert removed.status_code == 204, removed.text
@@ -359,8 +382,8 @@ async def test_delete_then_add_still_requires_step_up(
     res = await client.post(CONTACTS_URL, headers=headers,
                             json={"type": "email", "value": "attacker@evil.com"})
 
-    # the attacker never held the password, so they never reached the delete either
-    assert res.status_code == 202, res.text
+    assert res.status_code == 422, res.text
+    assert all(to != "attacker@evil.com" for to, *_ in capture_email.messages)
     assert await _contacts_of(db_session, user_uuid) == []
 
 

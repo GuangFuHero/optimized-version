@@ -2,7 +2,7 @@
 
 **Status**: 已實作
 **Branch**: `feat/login-method-hardening`，base 指向 `feat/account-profile-backend`（#39）
-**ADR**: 217~219（寫在本資料夾的 `decisions.md`）
+**ADR**: 217~220（寫在本資料夾的 `decisions.md`）
 
 ---
 
@@ -30,6 +30,21 @@ POST /auth/sso/line   {"sub":"attacker-line"} -> 200  ← 以受害者身分登�
 更糟的是原本**完全沒有 unlink 端點**——受害者在 `/users/me` 看得到攻擊者掛上去的 LINE，卻拿它沒辦法。
 
 受害者已有 google 時 `link/google` 回 409，但 LINE 是另一個 provider，照樣通得過。
+
+### 攻擊路徑 C：用自帶的聯絡方式走密碼重設
+
+受害者是密碼帳號、只有手機沒有 email：
+
+```
+POST /auth/contacts email=attacker@evil.com  -> 202  ← ADR-086：該型別第一個不設門檻
+POST /auth/contacts/verify                   -> 200
+POST /auth/forgot-password attacker@evil.com -> 202  ← 重設碼寄到 attacker@evil.com
+POST /auth/reset-password                    -> 204
+POST /auth/login attacker@evil.com/attackerpw -> 200  ← 接管
+```
+
+冷卻期（ADR-219）擋不到它，因為 `forgot-password` / `reset-password` 不經過 `_proof_contact`。
+這條只需要用 session 一次，之後隨時可重設，不受 session 撤銷影響。
 
 ### 攻擊路徑 B：自帶管道 —— ADR-215 自己記錄的殘留缺口
 
@@ -64,8 +79,8 @@ ADR-085/086 當初把門檻綁在「已存在同型別的東西」上，而接�
 |---|---|
 | `link/google`、`link/line` 走 step-up（ADR-217） | session 的 recent-auth / sudo window（另開票，見 §6） |
 | 新增 `DELETE /auth/link/{provider}`（ADR-218） | Microsoft 式的 pending + undo 窗口（見 §6 否決） |
-| link / unlink / change-password 通知所有聯絡方式（ADR-218） | 風險引擎、裝置指紋 |
-| 證明管道加 7 天冷卻期（ADR-219） | 改寫 ADR-086 的「第一個不設門檻」本身（見 §6） |
+| 證明管道加 7 天冷卻期（ADR-219） | Microsoft 式的 pending + undo 窗口（見 §6 否決） |
+| **新增聯絡方式也要證明，推翻 ADR-086（ADR-220）** | 風險引擎、裝置指紋 |
 
 ## 4. 端點
 
@@ -92,11 +107,8 @@ pool    = settled or [最舊的那一個]      # 全新帳號的第一週仍然�
 
 ## 6. 已知缺口與後續票
 
-- **ADR-086 的「該型別第一個不設門檻」本身沒有改**。本票用冷卻期讓那條路徑無法立即變成證明管道，
-  但攻擊者仍可以把自己的 email 掛在受害者帳號上（受害者會在 7 天後才看到它成為證明管道，
-  但**掛上去的當下就會收到聯絡方式相關通知**）。要根治得重新檢視 ADR-086，屬於 012 的範圍。
-- **零聯絡方式的帳號**：沒有任何可證明的管道，`link` 與 `set-password` 都會 422 要求先新增聯絡方式。
-  這種帳號的第一個聯絡方式仍然無門檻——與上一條同源。
+- **零聯絡方式、零密碼的帳號**：沒有任何可證明的東西，所以新增第一個聯絡方式不設門檻（ADR-220），
+  而 `link` 與 `set-password` 會 422 要求先新增聯絡方式。這種帳號也沒有密碼重設路徑可以被偷。
 - **session 沒有 recent-auth 概念**。`session["created_at"]` 已經存在且 refresh 不會更新它，所以
   sudo window 幾乎零儲存成本；但它是**補強**不是替代（它縮短被竊 session 的有效窗口，而寄碼到
   既有管道要求的是攻擊者根本沒有的東西）。另開一張票。

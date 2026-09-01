@@ -6,12 +6,16 @@ from app.repositories.verification_repository import VerificationRepository
 from app.services.auth_account import create_account
 from tests.conftest import auth_headers_for
 
+PASSWORD = "secret"
+# ADR-220: adding the first contact of a type is gated too, and this account has a password.
+STEP_UP = {"step_up": {"password": PASSWORD}}
+
 
 async def _logged_in_email_user(db_session, redis):
     """Create an email account and return (user, bearer_headers)."""
     user = await create_account(
         db_session, contact_type="email", value="owner@x.com",
-        password_hash=get_password_hash("secret", generate_salt()), name="Tester",
+        password_hash=get_password_hash(PASSWORD, generate_salt()), name="Tester",
     )
     headers = await auth_headers_for(redis, user.uuid)
     return user, headers
@@ -22,7 +26,7 @@ async def test_add_phone_then_verify_then_login(client, db_session, redis, captu
     """Email user adds a phone, verifies via SMS code, then logs in by phone."""
     _, headers = await _logged_in_email_user(db_session, redis)
     res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "phone", "value": "0912345678"})
+                            json={"type": "phone", "value": "0912345678", **STEP_UP})
     assert res.status_code == 202
     code = capture_sms.last_code
     assert code
@@ -48,8 +52,9 @@ async def test_add_contact_collision_409(client, db_session, redis):
     await create_account(db_session, contact_type="phone", value="+886912345678", password_hash="h",
                          name="Tester")
     _, headers = await _logged_in_email_user(db_session, redis)
+    # 0912345678 normalizes to +886912345678, which the other account already owns
     res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "phone", "value": "0912345678"})  # normalizes to +886912345678
+                            json={"type": "phone", "value": "0912345678", **STEP_UP})
     assert res.status_code == 409
 
 
@@ -57,7 +62,8 @@ async def test_add_contact_collision_409(client, db_session, redis):
 async def test_verify_wrong_code_400(client, db_session, redis, capture_sms):
     """Wrong code on verify → 400."""
     _, headers = await _logged_in_email_user(db_session, redis)
-    await client.post("/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0912345678"})
+    await client.post("/api/v1/auth/contacts", headers=headers,
+                      json={"type": "phone", "value": "0912345678", **STEP_UP})
     v = await client.post("/api/v1/auth/contacts/verify", headers=headers,
                           json={"type": "phone", "value": "0912345678", "code": "000000"})
     assert v.status_code == 400
@@ -67,7 +73,8 @@ async def test_verify_wrong_code_400(client, db_session, redis, capture_sms):
 async def test_resend_then_old_code_dead(client, db_session, redis, capture_sms):
     """Resend issues a new code; the old one no longer verifies."""
     _, headers = await _logged_in_email_user(db_session, redis)
-    await client.post("/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0912345678"})
+    await client.post("/api/v1/auth/contacts", headers=headers,
+                      json={"type": "phone", "value": "0912345678", **STEP_UP})
     old = capture_sms.last_code
     r = await client.post("/api/v1/auth/contacts/resend", headers=headers,
                           json={"type": "phone", "value": "0912345678"})
@@ -105,7 +112,7 @@ async def test_add_second_phone_requires_step_up(client, db_session, redis, capt
     """Same replacement gate on the phone side (ADR-085)."""
     user = await create_account(
         db_session, contact_type="phone", value="0912345678",
-        password_hash=get_password_hash("secret", generate_salt()), name="Tester",
+        password_hash=get_password_hash(PASSWORD, generate_salt()), name="Tester",
     )
     headers = await auth_headers_for(redis, user.uuid)
     res = await client.post("/api/v1/auth/contacts", headers=headers,
@@ -119,7 +126,7 @@ async def test_email_user_can_add_phone(client, db_session, redis, capture_sms):
     """Cross-type is allowed: an email user can add AND verify a phone (200)."""
     _, headers = await _logged_in_email_user(db_session, redis)  # owns an email, no phone
     res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "phone", "value": "0912345678"})
+                            json={"type": "phone", "value": "0912345678", **STEP_UP})
     assert res.status_code == 202
     code = capture_sms.last_code
     assert code

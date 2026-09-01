@@ -66,6 +66,11 @@ class LastLoginChannel(ContactError):
     """Deleting this would leave the account with no way to sign in (409)."""
 
 
+def _type_of_value(value: str) -> str:
+    """Guess a contact type from the value, for masking a target that carries no type."""
+    return "email" if "@" in value else "phone"
+
+
 def _mask(type_: str, value: str) -> str:
     """Mask a contact value for the change notification (ADR-085)."""
     return mask_email(value) if type_ == "email" else mask_phone(value)
@@ -129,40 +134,32 @@ async def _notify(dispatch, fn, *args) -> None:
         dispatch(fn, *args)
 
 
-async def _require_step_up(
-    db: AsyncSession,
-    redis,
-    *,
-    actor: User,
-    existing: UserContact,
-    step_up,
-    action: str,
-    target: str = "",
-    email_sender,
-    sms_sender,
-) -> None:
-    """Prove the caller may `action` (`replace`/`remove`/`set_password`) `existing`, or raise.
+async def _password_proof(db: AsyncSession, *, actor: User, step_up, action: str) -> bool:
+    """Check the password proof, or report that this account has no password to check.
 
-    Which proof is demanded is decided here, from the account's own shape — never from what
-    the client chose to send. An account with a password proves it knows the password; an
-    SSO-only account proves it still holds the channel the code is sent to.
-
-    This is the check that stops a stolen session from becoming permanent account takeover:
-    swap the recovery channel, sign out, then "forgot password" into the account. Removal
-    goes through the same gate (ADR-159) — otherwise deleting first walks straight past it.
-
-    The code an SSO-only account receives is bound to this exact `action` and `target`
-    (ADR-164), so approving one change never authorizes a different one.
+    Returns True when the account proved itself, False when it has no password identity and
+    the caller should fall back to the old-channel code. Never returns False after a failed
+    attempt — a wrong password raises rather than quietly downgrading to the other proof.
     """
     identity = await identity_repository.get_password_identity(db, str(actor.uuid))
-    if identity is not None and identity.password_hash:
-        if not (step_up and step_up.password):
-            raise StepUpRequired(f"{_ACTION_ZH.get(action, '這項操作')}需要輸入密碼")
-        if not verify_password(step_up.password, identity.password_hash):
-            raise StepUpFailed("密碼錯誤")
-        return
+    if identity is None or not identity.password_hash:
+        return False
+    if not (step_up and step_up.password):
+        raise StepUpRequired(f"{_ACTION_ZH.get(action, '這項操作')}需要輸入密碼")
+    if not verify_password(step_up.password, identity.password_hash):
+        raise StepUpFailed("密碼錯誤")
+    return True
 
-    # SSO-only: no password to check, so fall back to holding the old channel.
+
+async def _old_channel_proof(
+    db: AsyncSession, redis, *, actor: User, existing: UserContact, step_up,
+    action: str, target: str, email_sender, sms_sender,
+) -> None:
+    """Prove the account by a code delivered to `existing`, or raise asking for one.
+
+    The code is bound to this exact `action` and `target` (ADR-164), so approving one change
+    never authorizes a different one.
+    """
     verification = VerificationRepository(redis)
     key = {"user_uuid": str(actor.uuid), "type_": existing.type, "value": existing.value,
            "action": action, "target": target}
@@ -174,7 +171,11 @@ async def _require_step_up(
             raise StepUpRequired("驗證碼已寄至原聯絡方式，請使用先前收到的那一組")
         if outcome == "throttled":
             raise StepUpRequired("驗證碼寄送次數已達上限，請稍後再試")
-        masked_target = _mask(existing.type, target) if action == "replace" else None
+        masked_target = (
+            _mask(_type_of_value(target), target)
+            if action in (ACTION_REPLACE, ACTION_ADD) and target
+            else target or None
+        )
         try:
             await _deliver_step_up_code(
                 existing.type, existing.value, code, action=action, masked_target=masked_target,
@@ -187,15 +188,43 @@ async def _require_step_up(
             await verification.discard_old_channel_step_up(**key)
             raise
         raise StepUpRequired("已將驗證碼寄至原聯絡方式，請填入 step_up.old_channel_code")
-    payload = await verification.consume_old_channel_step_up(
-        **key, code=step_up.old_channel_code
-    )
-    if payload is None:
+    if await verification.consume_old_channel_step_up(**key, code=step_up.old_channel_code) is None:
         raise StepUpFailed("原聯絡方式的驗證碼錯誤或已過期")
+
+
+async def _require_step_up(
+    db: AsyncSession,
+    redis,
+    *,
+    actor: User,
+    existing: UserContact,
+    step_up,
+    action: str,
+    target: str = "",
+    email_sender,
+    sms_sender,
+) -> None:
+    """Prove the caller may act on `existing` — the contact being changed — or raise.
+
+    Which proof is demanded is decided here, from the account's own shape — never from what
+    the client chose to send. An account with a password proves it knows the password; an
+    SSO-only account proves it still holds the channel being changed.
+
+    This is the check that stops a stolen session from becoming permanent account takeover:
+    swap the recovery channel, sign out, then "forgot password" into the account. Removal
+    goes through the same gate (ADR-159) — otherwise deleting first walks straight past it.
+    """
+    if await _password_proof(db, actor=actor, step_up=step_up, action=action):
+        return
+    await _old_channel_proof(
+        db, redis, actor=actor, existing=existing, step_up=step_up, action=action,
+        target=target, email_sender=email_sender, sms_sender=sms_sender,
+    )
 
 
 # Every action a step-up code can authorize. The value is part of the Redis key (ADR-164),
 # so a code minted for one of these can never be spent on another.
+ACTION_ADD = "add_contact"
 ACTION_REPLACE = "replace"
 ACTION_REMOVE = "remove"
 ACTION_SET_PASSWORD = "set_password"
@@ -203,6 +232,7 @@ ACTION_LINK = "link_identity"
 ACTION_UNLINK = "unlink_identity"
 
 _ACTION_ZH = {
+    ACTION_ADD: "新增聯絡方式",
     ACTION_REPLACE: "更換聯絡方式",
     ACTION_REMOVE: "移除聯絡方式",
     ACTION_SET_PASSWORD: "設定密碼",
@@ -233,8 +263,10 @@ async def require_channel_proof(
     password, and linking an SSO provider. An account with a password proves it knows the
     password; otherwise a code goes to a contact the account already held.
     """
+    if await _password_proof(db, actor=actor, step_up=step_up, action=action):
+        return
     existing = await _proof_contact(db, str(actor.uuid))
-    await _require_step_up(
+    await _old_channel_proof(
         db, redis, actor=actor, existing=existing, step_up=step_up, action=action,
         target=target, email_sender=email_sender, sms_sender=sms_sender,
     )
@@ -320,6 +352,14 @@ async def _proof_contact(db: AsyncSession, user_uuid: str) -> UserContact:
     return pool[0]
 
 
+async def _has_something_to_prove_with(db: AsyncSession, user_uuid: str) -> bool:
+    """True when this account holds anything a caller could be asked to prove (ADR-220)."""
+    identity = await identity_repository.get_password_identity(db, user_uuid)
+    if identity is not None and identity.password_hash:
+        return True
+    return bool(await contact_repository.list_by_user(db, user_uuid))
+
+
 async def start_contact_change(
     db: AsyncSession,
     redis,
@@ -333,8 +373,15 @@ async def start_contact_change(
 ) -> None:
     """Begin adding — or replacing — a contact: send a code to the NEW value.
 
-    Adding a first contact of a type is not a replacement and carries no extra gate; only
-    replacing one does (ADR-086).
+    Both directions are gated (ADR-220). ADR-086 originally gated only replacement, on the
+    reasoning that adding takes nothing away — but a contact IS a recovery destination the
+    moment it is verified, so an account holding only a phone could have an attacker's email
+    attached with a bare session, and `forgot-password` on that address then reset the
+    password. Adding the first contact of a type is therefore gated too, whenever the account
+    has anything to prove itself with.
+
+    An account with nothing — no password and no contact — is still ungated: there is nothing
+    to prove against, and such an account has no recovery path to steal in the first place.
     """
     if await contact_repository.is_value_taken(db, type_=type_, value=value):
         raise ContactConflict(f"{type_.capitalize()} already in use")
@@ -347,7 +394,12 @@ async def start_contact_change(
             raise ContactConflict("新的聯絡方式與現有的相同")
         await _require_step_up(
             db, redis, actor=actor, existing=existing, step_up=step_up,
-            action="replace", target=value,
+            action=ACTION_REPLACE, target=value,
+            email_sender=email_sender, sms_sender=sms_sender,
+        )
+    elif await _has_something_to_prove_with(db, str(actor.uuid)):
+        await require_channel_proof(
+            db, redis, actor=actor, step_up=step_up, action=ACTION_ADD, target=value,
             email_sender=email_sender, sms_sender=sms_sender,
         )
 

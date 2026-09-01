@@ -87,6 +87,9 @@ def build_step_up_code_sms(
     if action == "set_password":
         # Not a change to this contact — it authorizes a permanent credential (ADR-215).
         zh_what, en_what = "為此帳號設定登入密碼", "set a sign-in password on this account"
+    elif action == "add_contact":
+        zh_what = f"為此帳號新增 {masked_target} 為聯絡方式"
+        en_what = f"add {masked_target} to this account as a contact"
     elif action in ("link_identity", "unlink_identity"):
         verb_zh = "新增" if action == "link_identity" else "移除"
         verb_en = "add" if action == "link_identity" else "remove"

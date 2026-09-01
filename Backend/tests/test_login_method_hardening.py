@@ -145,10 +145,12 @@ async def test_a_conflict_is_answered_before_any_proof_is_demanded(
 async def test_a_freshly_added_contact_is_not_used_as_the_proof_channel(
     client, db_session, redis, capture_email, capture_sms
 ):
-    """ADR-086 sets no gate on the first contact of a type, so the caller can attach one.
+    """Defence in depth behind ADR-220: even a legitimately added channel is not proof yet.
 
-    Before ADR-219 the proof channel was "email first", so the attacker's brand-new email won
-    the choice and the step-up code was delivered straight to them. Verified end to end.
+    ADR-220 now blocks the front door — a session alone cannot attach the contact at all — so
+    this attaches it the way the owner would, with the proof, and then checks the cooldown.
+    Before ADR-219 the proof channel was "email first", so a brand-new email won the choice
+    and the next step-up code went there.
     """
     user = await create_account(db_session, name="V2", provider="google",
                                 provider_subject="victim2-google",
@@ -163,15 +165,20 @@ async def test_a_freshly_added_contact_is_not_used_as_the_proof_channel(
     await db_session.commit()
 
     await client.post("/api/v1/auth/contacts", headers=headers,
-                      json={"type": "email", "value": "attacker@evil.com"})
+                      json={"type": "email", "value": "second@x.com"})
+    added = await client.post("/api/v1/auth/contacts", headers=headers, json={
+        "type": "email", "value": "second@x.com",
+        "step_up": {"old_channel_code": capture_sms.last_code},
+    })
+    assert added.status_code == 202, added.text
     attached = await client.post("/api/v1/auth/contacts/verify", headers=headers, json={
-        "type": "email", "value": "attacker@evil.com", "code": capture_email.last_code,
+        "type": "email", "value": "second@x.com", "code": capture_email.last_code,
     })
     assert attached.status_code == 200, attached.text
 
     before = len(capture_email.messages)
     res = await client.post("/api/v1/auth/set-password", headers=headers,
-                            json={"password": "attackerpw", "salt_frontend": "s"})
+                            json={"password": "brandnew", "salt_frontend": "s"})
 
     assert res.status_code == 422, res.text
     assert len(capture_email.messages) == before, "the code went to the freshly added email"
@@ -265,3 +272,86 @@ async def test_changing_a_password_notifies_the_account(client, db_session, redi
 
     assert res.status_code == 204, res.text
     assert "已變更" in capture_email.messages[-1][1]
+
+
+# ──────────────────────────────────────────────
+# Attack chain C: an attached contact is a recovery destination (ADR-220)
+# ──────────────────────────────────────────────
+
+
+async def test_a_session_cannot_attach_a_contact_and_reset_the_password_through_it(
+    client, db_session, redis, capture_email, capture_sms
+):
+    """The chain the cooldown could not reach, because reset never consults the proof channel.
+
+    A contact IS a recovery destination the moment it is verified. ADR-086 gated only
+    replacement, so an account holding just a phone could have the attacker's email attached
+    with a bare session; `forgot-password` on that address then delivered a reset code to
+    them. Verified end to end before ADR-220.
+    """
+    user = await create_account(
+        db_session, name="V3", contact_type="phone", value="+886922222222",
+        password_hash=get_password_hash(_PASSWORD, generate_salt()),
+    )
+    headers = await auth_headers_for(redis, user.uuid)
+
+    attach = await client.post("/api/v1/auth/contacts", headers=headers,
+                               json={"type": "email", "value": "attacker@evil.com"})
+
+    assert attach.status_code == 422, attach.text
+    assert "密碼" in attach.json()["detail"]  # the account has one, so that is the proof
+    assert capture_email.messages == []  # nothing was sent to the attacker's address
+
+    # and the address never became a recovery destination
+    await client.post("/api/v1/auth/forgot-password",
+                      json={"type": "email", "value": "attacker@evil.com"})
+    assert capture_email.messages == []
+
+
+async def test_the_owner_can_still_add_a_second_contact_type(
+    client, db_session, redis, capture_email, capture_sms
+):
+    """Gating the add must not make a legitimate second channel unreachable."""
+    _, headers = await _password_user(db_session, redis)
+
+    res = await client.post("/api/v1/auth/contacts", headers=headers, json={
+        "type": "phone", "value": "0933333333", "step_up": {"password": _PASSWORD},
+    })
+
+    assert res.status_code == 202, res.text
+    assert capture_sms.last_code  # the verification code went to the new number
+
+
+async def test_an_sso_only_account_proves_the_add_on_its_existing_channel(
+    client, db_session, redis, capture_email, capture_sms
+):
+    """No password to check, so the code goes to the contact the account already had."""
+    _, headers = await _sso_only_user(db_session, redis)
+
+    asked = await client.post("/api/v1/auth/contacts", headers=headers,
+                              json={"type": "phone", "value": "0944444444"})
+
+    assert asked.status_code == 422, asked.text
+    assert capture_email.messages[-1][0] == "victim@x.com"
+    assert capture_sms.messages == []  # nothing reached the number being added
+
+    res = await client.post("/api/v1/auth/contacts", headers=headers, json={
+        "type": "phone", "value": "0944444444",
+        "step_up": {"old_channel_code": capture_email.last_code},
+    })
+    assert res.status_code == 202, res.text
+
+
+async def test_an_account_with_nothing_to_prove_with_can_add_its_first_contact(
+    client, db_session, redis, capture_email
+):
+    """Ungated only when there is genuinely nothing to prove against (ADR-220)."""
+    user = await create_account(db_session, name="Bare", provider="line",
+                                provider_subject="bare-line-sub")
+    headers = await auth_headers_for(redis, user.uuid)
+
+    res = await client.post("/api/v1/auth/contacts", headers=headers,
+                            json={"type": "email", "value": "owner@x.com"})
+
+    assert res.status_code == 202, res.text
+    assert capture_email.last_code
