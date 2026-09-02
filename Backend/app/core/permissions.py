@@ -21,6 +21,12 @@ class Perm(StrEnum):
     # Ticket (PII split from the ticket itself: view != view_pii)
     TICKET_VIEW = "ticket.view"
     TICKET_VIEW_PII = "ticket.view_pii"
+    # Feature 016 (ADR-127): the change timeline is its own capability, not a reuse of
+    # audit.view — that key is auditor-only, while the requirement is that a requester can
+    # follow their own ticket. Not a reuse of ticket.view either: that one is in
+    # PUBLIC_PERMS, so sharing it would put staff names and review timings in front of
+    # anonymous visitors. Scoped like view_pii, since it exposes the same order of detail.
+    TICKET_VIEW_HISTORY = "ticket.view_history"
     TICKET_ADD = "ticket.add"
     TICKET_EDIT = "ticket.edit"
     TICKET_DELETE = "ticket.delete"
@@ -32,6 +38,9 @@ class Perm(StrEnum):
     # Resource Station
     STATION_VIEW = "station.view"
     STATION_VIEW_PII = "station.view_pii"
+    # Feature 016 (ADR-127/128): same reasoning as ticket.view_history, and deliberately the
+    # same scope tiering — a station's timeline names the people who edited it.
+    STATION_VIEW_HISTORY = "station.view_history"
     STATION_ADD = "station.add"
     STATION_EDIT = "station.edit"
     STATION_DELETE = "station.delete"
