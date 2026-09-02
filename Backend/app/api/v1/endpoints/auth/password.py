@@ -30,6 +30,8 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     SetPasswordRequest,
 )
+from app.services import auth_contact as contact_service
+from app.services.auth_contact import ContactNotFound, StepUpFailed, StepUpRequired
 
 from .deps import _normalize_identifier, get_rate_limiter
 
@@ -40,11 +42,20 @@ router = APIRouter()
              dependencies=[Depends(get_rate_limiter(5, 60))])
 async def change_password(
         body: ChangePasswordRequest,
+        background_tasks: BackgroundTasks,
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
+        email_sender=Depends(get_email_sender),
+        sms_sender=Depends(get_sms_sender),
 ):
-    """Verify old password against the password identity, write the new hash, revoke all sessions."""
+    """Verify the old password, write the new hash, revoke every session, tell the owner.
+
+    The notification is ADR-218's rule applied here too: every change to how this account can
+    be signed into reaches the owner's own channels. `change-password` is the one path where
+    knowing the current password is already required, so it is the least likely to be an
+    attacker — but "least likely" is not a reason for the owner to hear nothing.
+    """
     user_uuid = str(current_user.uuid)
     identity = await identity_repository.get_password_identity(db, user_uuid)
     if identity is None:
@@ -55,20 +66,51 @@ async def change_password(
     new_hash = security.get_password_hash(body.new_password, body.salt_frontend)
     await identity_repository.update(db, db_obj=identity, obj_in={"password_hash": new_hash})
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
+    await contact_service.notify_password_set(
+        db, user_uuid=user_uuid, email_sender=email_sender, sms_sender=sms_sender,
+        dispatch=background_tasks.add_task, changed=True,
+    )
 
 
 @router.post("/set-password", status_code=status.HTTP_204_NO_CONTENT,
              dependencies=[Depends(get_rate_limiter(5, 60))])
 async def set_password(
         body: SetPasswordRequest,
+        background_tasks: BackgroundTasks,
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
+        redis=Depends(get_redis),
+        email_sender=Depends(get_email_sender),
+        sms_sender=Depends(get_sms_sender),
 ):
-    """Create a first password identity for an SSO-only account (no old-password check)."""
+    """Create a first password identity for an SSO-only account, proof first.
+
+    There is no old password to check here, so before ADR-215 a session was the only thing
+    between a caller and a brand-new credential. Revoking every session afterwards (ADR-160)
+    does not close that on its own: the password outlives the session, and whoever minted it
+    signs straight back in with it. So the proof happens *before* the credential exists —
+    `require_step_up_for_first_password` delivers a code to the account's own contact, and
+    the first call answers 422 asking for it back.
+
+    The revocation stays (ADR-160): it aligns with `/auth/change-password`, which has always
+    revoked, and it means a session that watched a password being set does not keep running
+    on the strength of it. The owner is told afterwards, because a first password on an
+    SSO-only account is a new permanent way in and must not appear silently.
+    """
     user_uuid = str(current_user.uuid)
     if await identity_repository.get_password_identity(db, user_uuid) is not None:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             detail="Password already set; use /auth/change-password")
+    try:
+        await contact_service.require_step_up_for_first_password(
+            db, redis, actor=current_user, step_up=body.step_up,
+            email_sender=email_sender, sms_sender=sms_sender,
+        )
+    except StepUpFailed as err:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=str(err)) from err
+    except (StepUpRequired, ContactNotFound) as err:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)) from err
+
     password_hash = security.get_password_hash(body.password, body.salt_frontend)
     try:
         await identity_repository.create(db, obj_in={
@@ -77,6 +119,11 @@ async def set_password(
     except IntegrityError as err:
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Password already set") from err
+    await SessionRepository(redis).revoke_all_for_user(user_uuid)
+    await contact_service.notify_password_set(
+        db, user_uuid=user_uuid, email_sender=email_sender, sms_sender=sms_sender,
+        dispatch=background_tasks.add_task,
+    )
 
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED,

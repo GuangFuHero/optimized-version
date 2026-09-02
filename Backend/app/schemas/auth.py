@@ -28,13 +28,52 @@ class UserBase(BaseModel):
     credibility_score: float
 
 
+class ContactOut(BaseModel):
+    """One of the caller's own contact methods. Not masked — this is your own profile."""
+
+    type: str
+    value: str
+    verified: bool
+    created_at: datetime
+
+    class Config:
+        """Pydantic config: allow reading from ORM model attributes."""
+
+        from_attributes = True
+
+
+class LoginMethodOut(BaseModel):
+    """One of the caller's login methods.
+
+    Deliberately only `provider`: `provider_subject` is the SSO provider's internal
+    identifier and the frontend has no use for it (ADR-089).
+    """
+
+    provider: str
+
+    class Config:
+        """Pydantic config: allow reading from ORM model attributes."""
+
+        from_attributes = True
+
+
 class UserResponse(UserBase):
-    """Full user profile response, including which identity is in effect (ADR-068)."""
+    """Full user profile response, including which identity is in effect (ADR-068).
+
+    Two different things live here and the names have to keep them apart:
+    `identities` / `active_identity` are the RBAC identities the user can act as — role plus
+    optional team (feature 010) — while `login_methods` is how they authenticate, one entry
+    per password/google/line credential (feature 012, ADR-089). The latter also tells the
+    frontend whether the account is SSO-only, which decides which step-up it must collect
+    before replacing a contact.
+    """
 
     uuid: UUID
     created_at: datetime
     identities: list["IdentityOption"] = Field(default_factory=list)
     active_identity: "IdentityOption | None" = None
+    contacts: list[ContactOut] = Field(default_factory=list)
+    login_methods: list[LoginMethodOut] = Field(default_factory=list)
 
     class Config:
         """Pydantic config: allow reading from ORM model attributes."""
@@ -151,6 +190,23 @@ class RegisterRequest(BaseModel):
         return stripped
 
 
+class StepUp(BaseModel):
+    """Extra proof required to REPLACE or DELETE a contact (ADR-086/159).
+
+    Which field is required is decided by the backend, never by the client: an account with
+    a password must send `password`; an SSO-only account must send `old_channel_code`, the
+    code delivered to the contact being changed.
+
+    `password` is **already frontend-hashed**, exactly like every other password field on
+    this API, and carries the same `min_length=6` (ADR-166). `_require_step_up` feeds it to
+    `verify_password` against a hash derived from the frontend hash, so a plaintext value
+    can only ever come back as "wrong password".
+    """
+
+    password: str | None = Field(None, min_length=6, max_length=255)  # already frontend-hashed
+    old_channel_code: str | None = Field(None, min_length=4, max_length=8)
+
+
 class GoogleSsoRequest(BaseModel):
     """Body carrying a Google id_token for SSO login / first-login create."""
 
@@ -158,22 +214,50 @@ class GoogleSsoRequest(BaseModel):
 
 
 class LinkGoogleRequest(BaseModel):
-    """Body carrying a Google id_token to link to the current account."""
+    """Body carrying a Google id_token to link to the current account, plus its proof.
+
+    The id_token proves the caller holds *that Google account*; it says nothing about the
+    account being linked to. `step_up` is the other half (ADR-217), and is optional in the
+    schema for the same reason `DeleteContactRequest`'s is: the first call is what delivers
+    the code and answers 422 asking for it back.
+    """
 
     id_token: str = Field(..., min_length=1)
+    step_up: StepUp | None = None
 
 
 class IdTokenRequest(BaseModel):
-    """Body carrying a provider id_token (LINE SSO / link)."""
+    """Body carrying a provider id_token (LINE SSO / link).
+
+    `step_up` is ignored on the SSO login path and required on the link path (ADR-217).
+    """
 
     id_token: str = Field(..., min_length=1)
+    step_up: StepUp | None = None
+
+
+class UnlinkIdentityRequest(BaseModel):
+    """Body for `DELETE /auth/link/{provider}` — carries the step-up proof (ADR-161/218).
+
+    Same shape and same reasoning as `DeleteContactRequest`: the proof rides in an optional
+    body rather than the URL, and the first call is expected to arrive without one.
+    """
+
+    step_up: StepUp | None = None
 
 
 class SetPasswordRequest(BaseModel):
-    """Body for SSO-only users to set a first password (no old password)."""
+    """Body for SSO-only users to set a first password (no old password).
+
+    `step_up` carries the code delivered to the account's own contact (ADR-215). It is
+    optional in the schema because the first call is expected to arrive without one — that
+    call is what sends the code and answers 422 asking for it back, the same shape
+    `DeleteContactRequest` uses.
+    """
 
     password: str = Field(..., min_length=6, max_length=255)  # already frontend-hashed
     salt_frontend: str = Field(..., description="Frontend salt (hex)")
+    step_up: StepUp | None = None
 
 
 class VerifyRequest(BaseModel):
@@ -191,11 +275,24 @@ class ResendVerificationRequest(BaseModel):
     value: str = Field(..., min_length=1, max_length=320)
 
 
+class DeleteContactRequest(BaseModel):
+    """Body for `DELETE /auth/contacts/{type}` — carries the step-up proof (ADR-159/161).
+
+    Its own model rather than a reuse of `AddContactRequest`: delete takes its type from the
+    path and has no `value`, so sharing the schema would advertise two fields the endpoint
+    ignores. The body is optional — the first call is expected to arrive without one, which
+    is what makes the backend name the proof it wants.
+    """
+
+    step_up: StepUp | None = None
+
+
 class AddContactRequest(BaseModel):
-    """Body to start adding a contact (email/phone) to the current account."""
+    """Body to start adding — or replacing — a contact (email/phone) on the current account."""
 
     type: Literal["email", "phone"] = "email"
     value: str = Field(..., min_length=1, max_length=320)
+    step_up: StepUp | None = None
 
 
 class VerifyContactRequest(BaseModel):

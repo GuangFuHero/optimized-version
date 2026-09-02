@@ -12,10 +12,14 @@ def _tok(sub="g-link-1", email="x@x.com", name="X"):
     return json.dumps({"sub": sub, "email": email, "email_verified": True, "name": name})
 
 
+PASSWORD = "secret"
+STEP_UP = {"step_up": {"password": PASSWORD}}  # ADR-217: linking needs proof of the account
+
+
 async def _password_user(db_session, redis, email="owner@x.com"):
     user = await create_account(
         db_session, name="Owner", contact_type="email", value=email,
-        password_hash=get_password_hash("secret", generate_salt()))
+        password_hash=get_password_hash(PASSWORD, generate_salt()))
     headers = await auth_headers_for(redis, user.uuid)
     return user, headers
 
@@ -31,7 +35,7 @@ async def test_link_requires_auth(client):
 async def test_link_attaches_google_identity(client, db_session, redis):
     """A logged-in user can link a fresh Google identity."""
     _, headers = await _password_user(db_session, redis)
-    res = await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok()})
+    res = await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok(), **STEP_UP})
     assert res.status_code == 200
 
 
@@ -43,7 +47,7 @@ async def test_link_adds_identity_but_no_contact(client, db_session, redis):
     from app.models.auth import UserContact, UserIdentity
     user, headers = await _password_user(db_session, redis)
     user_uuid = user.uuid  # capture before the request commits db_session and expires `user`
-    res = await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok()})
+    res = await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok(), **STEP_UP})
     assert res.status_code == 200
     google = (await db_session.execute(
         select(UserIdentity).where(UserIdentity.user_uuid == user_uuid,
@@ -63,7 +67,7 @@ async def test_link_sub_already_bound_elsewhere_409(client, db_session, redis):
     await create_account(db_session, name="Other", provider="google", provider_subject="g-link-1",
                          contact_type="email", value="other@x.com")
     _, headers = await _password_user(db_session, redis)
-    res = await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok()})
+    res = await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok(), **STEP_UP})
     assert res.status_code == 409
 
 
@@ -71,7 +75,7 @@ async def test_link_sub_already_bound_elsewhere_409(client, db_session, redis):
 async def test_link_twice_409(client, db_session, redis):
     """A user who already has a Google identity cannot link a second one."""
     _, headers = await _password_user(db_session, redis)
-    await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok()})
+    await client.post("/api/v1/auth/link/google", headers=headers, json={"id_token": _tok(), **STEP_UP})
     res = await client.post("/api/v1/auth/link/google", headers=headers,
-                            json={"id_token": _tok(sub="g-link-2")})
+                            json={"id_token": _tok(sub="g-link-2"), **STEP_UP})
     assert res.status_code == 409  # current user already has a google identity

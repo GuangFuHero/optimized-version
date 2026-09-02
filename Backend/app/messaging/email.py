@@ -226,3 +226,208 @@ def get_email_sender() -> EmailSender:
         from app.messaging.smtp2go import Smtp2goEmailSender  # noqa: PLC0415 — optional adapter
         return Smtp2goEmailSender()
     return ConsoleEmailSender()
+
+
+def build_contact_changed_email(masked_new_value: str) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the OLD address that the contact was replaced.
+
+    Sent to the address being replaced, not the new one — this is the only mechanism that
+    lets a victim of session theft notice the takeover attempt (ADR-085). The new value is
+    masked so a forwarded copy does not leak it in full.
+    """
+    subject = f"【{_BRAND_ZH}】聯絡方式已變更 Contact changed"
+    html = _render_email(
+        h1="聯絡方式已變更 Contact changed",
+        notices=[
+            f"您帳號的聯絡方式已變更為 {masked_new_value}。",
+            ('<span style="' + _S_NOTICE_EN + '">Your account contact was changed to '
+             f'{masked_new_value}.</span>'),
+        ],
+        footer_lines=[
+            "若非本人操作，請立即聯繫我們。 If this was not you, contact us immediately.",
+            _FOOTER_BRAND,
+        ],
+    )
+    text = (
+        f"您帳號的聯絡方式已變更為 {masked_new_value}。\n"
+        f"Your account contact was changed to {masked_new_value}.\n"
+        "若非本人操作，請立即聯繫我們。\n"
+    )
+    return subject, html, text
+
+
+def build_contact_removed_email(removed_type: str, masked_value: str) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the surviving channels that a contact was removed.
+
+    Removal is as sensitive as replacement — it drops a way back into the account — so it is
+    announced the same way (ADR-159). The removed value is masked for the same reason the
+    replacement notice masks the new one.
+    """
+    label = "電子信箱 email" if removed_type == "email" else "手機號碼 phone"
+    subject = f"【{_BRAND_ZH}】聯絡方式已移除 Contact removed"
+    html = _render_email(
+        h1="聯絡方式已移除 Contact removed",
+        notices=[
+            f"您帳號的{label} {masked_value} 已從帳號移除。",
+            ('<span style="' + _S_NOTICE_EN + '">The '
+             f'{removed_type} {masked_value} was removed from your account.</span>'),
+        ],
+        footer_lines=[
+            "若非本人操作，請立即聯繫我們。 If this was not you, contact us immediately.",
+            _FOOTER_BRAND,
+        ],
+    )
+    text = (
+        f"您帳號的{label} {masked_value} 已從帳號移除。\n"
+        f"The {removed_type} {masked_value} was removed from your account.\n"
+        "若非本人操作，請立即聯繫我們。\n"
+    )
+    return subject, html, text
+
+
+_STEP_UP_ACTION_ZH = {"replace": "更換", "remove": "移除"}
+_STEP_UP_ACTION_EN = {"replace": "change", "remove": "remove"}
+# `set_password` is not a change to the contact it is sent to — it authorizes minting a
+# permanent credential on the account that contact belongs to (ADR-215).
+SET_PASSWORD_ACTION = "set_password"
+# Linking an SSO provider adds a permanent way in that no password change can revoke, so it
+# carries its own copy rather than borrowing the contact-change wording (ADR-217).
+ADD_CONTACT_ACTION = "add_contact"
+LINK_ACTION = "link_identity"
+UNLINK_ACTION = "unlink_identity"
+_PROVIDER_LABEL = {"google": "Google", "line": "LINE", "password": "密碼 password"}
+
+
+def build_step_up_code_email(
+    action: str, contact_type: str, code: str, masked_target: str | None = None
+) -> tuple[str, str, str]:
+    """Return (subject, html, text) for a step-up code sent to the address being changed.
+
+    Distinct from `build_contact_verification_email` on purpose (ADR-164). That one says
+    "enter this to verify this email address", which describes the opposite of what this code
+    authorizes — the recipient is being asked to approve *losing* this address. For a session
+    -theft victim this message is the one moment where a warning prevents the takeover instead
+    of reporting it afterwards, so it names the action and, for a replacement, the value the
+    address would be replaced with.
+    """
+    label = "電子信箱 email" if contact_type == "email" else "手機號碼 phone"
+    if action == SET_PASSWORD_ACTION:
+        zh_what = "為此帳號設定登入密碼"
+        en_what = "set a sign-in password on this account"
+        heading = "請確認密碼設定 Confirm a password setup"
+    elif action == ADD_CONTACT_ACTION:
+        zh_what = f"為此帳號新增 {masked_target} 為聯絡方式"
+        en_what = f"add {masked_target} to this account as a contact"
+        heading = "請確認聯絡方式變更 Confirm a contact change"
+    elif action in (LINK_ACTION, UNLINK_ACTION):
+        verb_zh = "新增" if action == LINK_ACTION else "移除"
+        verb_en = "add" if action == LINK_ACTION else "remove"
+        provider = _PROVIDER_LABEL.get(masked_target or "", masked_target or "")
+        zh_what = f"為此帳號{verb_zh} {provider} 登入方式"
+        en_what = f"{verb_en} {provider} as a sign-in method on this account"
+        heading = "請確認登入方式變更 Confirm a sign-in method change"
+    elif action == "replace":
+        zh_what = f"將此{label}{_STEP_UP_ACTION_ZH[action]}為 {masked_target}"
+        en_what = f"{_STEP_UP_ACTION_EN[action]} this {contact_type} to {masked_target}"
+        heading = "請確認聯絡方式變更 Confirm a contact change"
+    else:
+        zh_what = f"將此{label}從帳號{_STEP_UP_ACTION_ZH[action]}"
+        en_what = f"{_STEP_UP_ACTION_EN[action]} this {contact_type} from the account"
+        heading = "請確認聯絡方式變更 Confirm a contact change"
+    subject = f"【{_BRAND_ZH}】{heading}"
+    html = _render_email(
+        h1=heading,
+        intro=(f"有人正在要求{zh_what}。若這是您本人，請使用以下驗證碼：",
+               f"Someone is asking to {en_what}. If this is you, use this code:"),
+        code=code,
+        notices=[
+            _notice(f"此驗證碼 <strong>10 分鐘</strong>內有效，且僅能用於{zh_what}。",
+                    "This code is valid for <strong>10 minutes</strong> and authorizes "
+                    f"only one thing: to {en_what}."),
+            _notice("<strong>若這不是您本人的操作，請勿提供此驗證碼給任何人</strong>——"
+                    "有人可能已經取得您帳號的登入狀態，請立即變更密碼並聯繫我們。",
+                    "<strong>If this was not you, do not share this code with anyone.</strong> "
+                    "Someone may already be signed in to your account — change your password "
+                    "and contact us immediately."),
+        ],
+        footer_lines=[
+            "未提供驗證碼，這項變更就不會發生。 Without this code, the change does not happen.",
+            _FOOTER_BRAND,
+        ],
+    )
+    text = (
+        f"有人正在要求{zh_what}。\n"
+        f"若這是您本人，您的驗證碼是 {code}（10 分鐘內有效，僅能用於這項操作）。\n"
+        "若這不是您本人的操作，請勿提供此驗證碼給任何人，並立即變更密碼並聯繫我們。\n\n"
+        f"Someone is asking to {en_what}.\n"
+        f"If this is you, your code is {code} (valid 10 minutes, for this one action only).\n"
+        "If this was not you, do not share this code with anyone — change your password and "
+        "contact us immediately."
+    )
+    return subject, html, text
+
+
+def build_password_set_email(masked_value: str, *, changed: bool = False) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the account its password was set or changed.
+
+    Setting a first password on an SSO-only account creates a permanent credential where
+    there was none (ADR-215); changing one replaces it (ADR-218). The step-up or the old
+    password already required consent, but this is the record: if either was ever handed to
+    someone, this message is where the owner sees what it bought.
+    """
+    zh_verb, en_verb = ("已變更", "was changed on") if changed else ("已設定", "was set on")
+    heading = f"您的帳號密碼{zh_verb} Password {'changed' if changed else 'set'}"
+    subject = f"【{_BRAND_ZH}】{heading}"
+    html = _render_email(
+        h1=heading,
+        notices=[
+            _notice(f"您的帳號（{masked_value}）的登入密碼{zh_verb}，所有裝置都已登出。",
+                    f"The sign-in password {en_verb} your account ({masked_value}), and every "
+                    "session was signed out."),
+            _notice("<strong>若非本人操作，請立即使用第三方登入進入帳號並變更密碼</strong>，"
+                    "並聯繫我們。",
+                    "<strong>If this was not you, sign in with your third-party provider, "
+                    "change the password immediately</strong> and contact us."),
+        ],
+        footer_lines=[_FOOTER_BRAND],
+    )
+    text = (
+        f"您的帳號（{masked_value}）的登入密碼{zh_verb}，所有裝置都已登出。\n"
+        "若非本人操作，請立即使用第三方登入進入帳號並變更密碼，並聯繫我們。\n\n"
+        f"The sign-in password {en_verb} your account ({masked_value}), and every session was "
+        "signed out.\nIf this was not you, sign in with your third-party provider, change the "
+        "password immediately and contact us.\n"
+    )
+    return subject, html, text
+
+
+def build_login_method_changed_email(added: bool, provider: str) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the account a sign-in method changed (ADR-218).
+
+    A linked provider is the one credential no password change and no session revocation can
+    take away, and until ADR-217 it could be attached in silence. The owner is told on every
+    channel the account holds, because this notice is what turns a silent takeover into a
+    visible one.
+    """
+    label = _PROVIDER_LABEL.get(provider, provider)
+    verb_zh, verb_en = ("已新增", "was added to") if added else ("已移除", "was removed from")
+    heading = f"登入方式{verb_zh} Sign-in method {'added' if added else 'removed'}"
+    subject = f"【{_BRAND_ZH}】{heading}"
+    html = _render_email(
+        h1=heading,
+        notices=[
+            _notice(f"您的帳號{verb_zh} <strong>{label}</strong> 登入方式。",
+                    f"<strong>{label}</strong> {verb_en} your account as a sign-in method."),
+            _notice("<strong>若非本人操作，請立即移除該登入方式並變更密碼</strong>，並聯繫我們。",
+                    "<strong>If this was not you, remove that sign-in method and change your "
+                    "password immediately</strong>, then contact us."),
+        ],
+        footer_lines=[_FOOTER_BRAND],
+    )
+    text = (
+        f"您的帳號{verb_zh} {label} 登入方式。\n"
+        "若非本人操作，請立即移除該登入方式並變更密碼，並聯繫我們。\n\n"
+        f"{label} {verb_en} your account as a sign-in method.\n"
+        "If this was not you, remove it and change your password immediately.\n"
+    )
+    return subject, html, text
