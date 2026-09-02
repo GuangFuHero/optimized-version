@@ -165,3 +165,83 @@ def test_unsupported_extensions_are_refused(filename):
     """ADR-115 ships CSV and XLSX only; .md and .json were explicitly declined."""
     with pytest.raises(TableFormatError, match="csv|xlsx"):
         read_table(b"anything", filename)
+
+
+# --- formula injection (ADR-208) ---
+
+
+PAYLOAD = "=cmd|'/c calc.exe'!A1"
+
+
+@pytest.mark.parametrize("payload", [PAYLOAD, "+1+1", "@SUM(A1)", "-cmd", "\tx", "\rx"])
+def test_csv_neutralizes_a_value_a_spreadsheet_would_execute(payload):
+    """A CSV cell carries no type, so the leading apostrophe is the only way to say "text"."""
+    content = write_csv(("name",), [{"name": payload}]).decode("utf-8-sig")
+
+    assert content.splitlines()[1].lstrip('"').startswith("'")
+
+
+@pytest.mark.parametrize("value", ["-121.5", "+886912345678", "-0", "-1e5"])
+def test_a_negative_number_is_left_alone(value):
+    """`longitude` is routinely negative; guarding it would break its own type check."""
+    table = read_table(write_csv(("longitude",), [{"longitude": value}]), "s.csv")
+
+    assert table.rows[0]["longitude"] == value
+
+
+def test_xlsx_writes_a_formula_as_text_without_changing_it():
+    """The cell is typed when the value is assigned, so `number_format` is set too late."""
+    content = write_xlsx(("name",), [{"name": PAYLOAD}])
+
+    cell = load_workbook(io.BytesIO(content)).active.cell(row=2, column=1)
+    assert cell.data_type == "s"  # not "f"
+    assert cell.value == PAYLOAD
+
+
+def test_xlsx_round_trips_a_formula_looking_value_unchanged():
+    """The export is also the import template (ADR-119), so the match key must survive."""
+    table = read_table(write_xlsx(("name",), [{"name": PAYLOAD}]), "stations.xlsx")
+
+    assert table.rows[0]["name"] == PAYLOAD
+
+
+def test_a_header_from_an_uploaded_file_is_neutralized_too():
+    """The error report echoes the file's own headers back (`_as_report`)."""
+    content = write_csv(("=HYPERLINK(\"http://x\")",), []).decode("utf-8-sig")
+
+    assert content.splitlines()[0].lstrip('"').startswith("'")
+
+
+# --- resource limits (ADR-209) ---
+
+
+def test_an_xlsx_that_expands_far_beyond_its_upload_size_is_refused(monkeypatch):
+    """The zip directory answers this before a single byte is decompressed.
+
+    Reproduces the shape of the reported case — a 1.4 MB upload inside the 2 MB cap that
+    expands to hundreds of MB of sheet XML — with the cap lowered so the fixture stays small.
+    """
+    monkeypatch.setattr("app.core.tabular.MAX_UNCOMPRESSED_BYTES", 16 * 1024)
+    raw = _xlsx_bytes([["name"], *[["x" * 500] for _ in range(200)]])
+
+    assert len(raw) < 16 * 1024  # it compresses well; that is the whole problem
+    with pytest.raises(TableFormatError, match="解壓後超過"):
+        read_table(raw, "stations.xlsx")
+
+
+def test_reading_stops_one_row_past_the_caller_s_limit():
+    """`max_rows` is what makes an over-limit file cheap to reject, not just rejected."""
+    rows = [{"name": f"站 {n}"} for n in range(50)]
+
+    table = read_table(write_csv(("name",), rows), "stations.csv", max_rows=10)
+
+    assert len(table.rows) == 11
+
+
+def test_trailing_blank_rows_do_not_consume_the_row_allowance():
+    """Spreadsheets write thousands of empty rows below the data."""
+    raw = _xlsx_bytes([["name"], ["光復國小"], [None], [None], [None], ["中山堂"]])
+
+    table = read_table(raw, "stations.xlsx", max_rows=2)
+
+    assert [row["name"] for row in table.rows] == ["光復國小", "中山堂"]

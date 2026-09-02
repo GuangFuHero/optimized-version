@@ -487,3 +487,134 @@ async def test_an_exported_file_previews_clean(db):
 
     assert result.errors == ()
     assert (result.to_create, result.to_update) == (0, 1)
+
+
+# --- one bad row must not take the file down with it (ADR-213) ---
+
+
+async def _importer_without_edit(db) -> User:
+    """Everything a station import needs except `station.edit` (ADR-110/111)."""
+    actor = User(name="NoEditImporter")
+    db.add(actor)
+    await db.flush()
+    await _grant(
+        db, actor,
+        (Perm.STATION_IMPORT, "all"),
+        (Perm.STATION_ADD, "all"),
+        (Perm.STATION_CONTRIBUTE, "all"),
+    )
+    return actor
+
+
+@pytest.mark.asyncio
+async def test_a_row_refused_mid_file_does_not_take_the_rest_of_the_file_with_it(db):
+    """`rollback` expires the actor, and async SQLAlchemy cannot reload one lazily.
+
+    Row 1 is an update the caller has no `station.edit` for; rows 2 and 3 are ordinary
+    creates. Without `_recover` the next `require_scope` reads an expired `actor.uuid` and
+    raises MissingGreenlet, so one refused row 500s the whole request (ADR-213).
+    """
+    await _configs(db)
+    existing = Station(
+        geometry=from_shape(IN_ZONE, srid=4326), type="shelter", name="既有站",
+        level=0, visibility="public",
+    )
+    db.add(existing)
+    await db.flush()
+    db.add(SecondaryLocation(
+        geometry_uuid=str(existing.uuid), location_type="address", county="花蓮縣", city="光復鄉"
+    ))
+    await db.commit()
+
+    actor = await _importer_without_edit(db)
+    raw, filename = _file([_row("既有站", comment="改不動"), _row("新站一"), _row("新站二")])
+
+    outcome = await commit_stations(
+        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
+    )
+
+    assert (outcome.created, outcome.updated, outcome.failed) == (2, 0, 1)
+    assert await _station_named(db, "新站一") is not None
+    assert await _station_named(db, "新站二") is not None
+    assert outcome.error_report is not None
+
+
+@pytest.mark.asyncio
+async def test_a_row_refused_before_it_wrote_anything_is_not_reported_as_partial(db):
+    """`partial_rows` means "half of this row landed" — an early refusal leaves nothing."""
+    await _configs(db)
+    actor = await _importer_without_edit(db)
+    existing = Station(
+        geometry=from_shape(IN_ZONE, srid=4326), type="shelter", name="既有站",
+        level=0, visibility="public",
+    )
+    db.add(existing)
+    await db.flush()
+    db.add(SecondaryLocation(
+        geometry_uuid=str(existing.uuid), location_type="address", county="花蓮縣", city="光復鄉"
+    ))
+    await db.commit()
+
+    raw, filename = _file([_row("既有站", comment="改不動")])
+    outcome = await commit_stations(
+        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
+    )
+
+    assert outcome.failed == 1
+    assert outcome.partial_rows == ()
+
+
+@pytest.mark.asyncio
+async def test_a_row_that_failed_after_writing_its_station_is_reported_as_partial(db, monkeypatch):
+    """The station landed and its dynamic value did not — whichever exception said so.
+
+    `partial.append` used to live in the `HTTPException` branch alone, so a `ValueError` from
+    a dependent write left a half-written row that `partial_rows` never named (ADR-212).
+    """
+    await _configs(db)
+    actor = await _importer(db)
+
+    async def refuse(*args, **kwargs):
+        raise ValueError("這個值存不進去")
+
+    monkeypatch.setattr(
+        "app.services.station.create_station_property", refuse
+    )
+    raw, filename = _file([_row("半進站", capacity="120")])
+
+    outcome = await commit_stations(
+        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
+    )
+
+    assert outcome.failed == 1
+    assert outcome.partial_rows == (2,)
+    assert await _station_named(db, "半進站") is not None
+
+
+@pytest.mark.asyncio
+async def test_an_ambiguous_match_does_not_name_the_rows_it_matched(db):
+    """`preview` is gated on `station.import` alone, so uuids here would leak (ADR-210)."""
+    await _configs(db)
+    for _ in range(2):
+        station = Station(
+            geometry=from_shape(IN_ZONE, srid=4326), type="shelter", name="同名站",
+            level=0, visibility="public",
+        )
+        db.add(station)
+        await db.flush()
+        db.add(SecondaryLocation(
+            geometry_uuid=str(station.uuid), location_type="address",
+            county="花蓮縣", city="光復鄉",
+        ))
+    await db.commit()
+
+    actor = await _importer(db)
+    raw, filename = _file([_row("同名站")])
+
+    result = await preview_stations(
+        db, actor=actor, raw=raw, filename=filename, station_type="shelter"
+    )
+
+    message = result.errors[0].message
+    assert "2 筆" in message
+    assert "-" not in message  # no uuid, which is the only thing here that carries one

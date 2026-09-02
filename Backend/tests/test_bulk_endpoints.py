@@ -19,7 +19,7 @@ from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.core.tabular import write_csv
 from app.models.auth import User
-from app.models.property_config import StationPropertyConfig
+from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.services.bulk_import import MAX_ROWS
 
@@ -90,7 +90,9 @@ async def test_export_streams_a_named_csv_attachment(client, db_session):
     resp = await client.get(f"{BASE}/stations/export?station_type=shelter", headers=_auth(uuid))
 
     assert resp.status_code == 200
-    assert resp.headers["content-disposition"] == 'attachment; filename="stations-shelter.csv"'
+    assert resp.headers["content-disposition"] == (
+        "attachment; filename=\"stations-shelter.csv\"; filename*=UTF-8''stations-shelter.csv"
+    )
     assert resp.headers["content-type"].startswith("text/csv")
     assert resp.content.startswith(b"\xef\xbb\xbf")
 
@@ -135,12 +137,50 @@ async def test_export_without_the_capability_is_403(client, db_session):
 @pytest.mark.asyncio
 async def test_ticket_export_is_wired_up_too(client, db_session):
     """Both entity types are reachable, with their own filename."""
+    db_session.add(TaskPropertyConfig(
+        task_type="rescue", property_name="people_count", data_type="Integer", enum_options=None,
+    ))  # ADR-214: the type has to be one the project knows about
     uuid = await _user_with(db_session, "TicketExporter", Perm.TICKET_EXPORT)
 
     resp = await client.get(f"{BASE}/tickets/export?task_type=rescue", headers=_auth(uuid))
 
     assert resp.status_code == 200
-    assert resp.headers["content-disposition"].endswith('tickets-rescue.csv"')
+    assert 'filename="tickets-rescue.csv"' in resp.headers["content-disposition"]
+
+
+# --- the type in the file name (ADR-214) ---
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_station_type_is_a_400(client, db_session):
+    """The type is interpolated into a response header, so it is checked before it gets there."""
+    uuid = await _importer(db_session)
+
+    resp = await client.get(
+        f'{BASE}/stations/export?station_type=x"; filename="evil.html', headers=_auth(uuid)
+    )
+
+    assert resp.status_code == 400
+    assert "filename" not in resp.headers.get("content-disposition", "")
+
+
+@pytest.mark.asyncio
+async def test_a_cjk_type_downloads_instead_of_500ing(client, db_session):
+    """Starlette encodes headers as latin-1; a raw CJK name there is a 500, not a download."""
+    db_session.add(StationPropertyConfig(
+        station_type="避難所", property_name="capacity_total",
+        data_type="Integer", enum_options=None,
+    ))
+    uuid = await _importer(db_session)
+
+    resp = await client.get(
+        f"{BASE}/stations/export?station_type=避難所", headers=_auth(uuid)
+    )
+
+    assert resp.status_code == 200
+    disposition = resp.headers["content-disposition"]
+    assert "filename*=UTF-8''stations-%E9%81%BF%E9%9B%A3%E6%89%80.csv" in disposition
+    assert disposition.count("filename=") == 1  # exactly one plain filename, no second value
 
 
 # --- preview ---

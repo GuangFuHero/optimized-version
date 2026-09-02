@@ -42,6 +42,17 @@ async def require_scope(
     return scope
 
 
+async def refresh_actor(db: AsyncSession, actor: User) -> None:
+    """Reload `actor` if a commit or rollback expired it.
+
+    Async SQLAlchemy cannot lazily reload an expired attribute, so an expired actor is a
+    MissingGreenlet waiting for the next `require_scope`. Both callers are operations that
+    authorize per row: `stable_actor` on the way in, and the rollback path of a bulk import.
+    """
+    if inspect(actor).expired:
+        await db.refresh(actor)
+
+
 @asynccontextmanager
 async def stable_actor(db: AsyncSession, actor: User):
     """Keep `actor` usable for authorization across an operation that commits many times.
@@ -55,8 +66,7 @@ async def stable_actor(db: AsyncSession, actor: User):
     commit already expired. Callers must not re-read a row they wrote inside the block, which
     is the only thing the suspension would hide.
     """
-    if inspect(actor).expired:
-        await db.refresh(actor)
+    await refresh_actor(db, actor)
     sync_session = db.sync_session
     was_expiring = sync_session.expire_on_commit
     sync_session.expire_on_commit = False

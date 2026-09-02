@@ -18,6 +18,7 @@ Create Date: 2026-08-22
 from collections.abc import Sequence
 
 from alembic import op
+
 from app.db.triggers import get_audit_trigger_sql
 
 # revision identifiers, used by Alembic.

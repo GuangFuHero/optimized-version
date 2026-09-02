@@ -146,11 +146,11 @@
 **純格式層，零業務邏輯**——它只認識「一列 = dict[str, str]」。
 
 - [x] `uv add openpyxl`
-- [x] `read_table(raw: bytes, filename: str) -> Table`，依副檔名分派（大小寫不敏感）
+- [x] `read_table(raw: bytes, filename: str, *, max_rows=None) -> Table`，依副檔名分派（大小寫不敏感）；`max_rows` 讀到上限 +1 列就停手（ADR-209）
 - [x] 空表頭 / 重複表頭 / 空檔 / 不支援的副檔名 → `TableFormatError`
 - [x] 非 UTF-8 的 CSV → 專屬錯誤訊息（本地 Big5 匯出很常見）
-- [x] `write_csv(headers, rows) -> bytes`：**帶 UTF-8 BOM**
-- [x] `write_xlsx(headers, rows, *, text_columns) -> bytes`：`text_columns` 內的欄位寫成文字格式儲存格
+- [x] `write_csv(headers, rows) -> bytes`：**帶 UTF-8 BOM**；公式開頭的值前綴 `'`（ADR-208）
+- [x] `write_xlsx(headers, rows, *, text_columns) -> bytes`：`text_columns` 內的欄位寫成文字格式儲存格；每個非空儲存格強制字串型別（ADR-208）
 - [x] 讀取時的資料清理：整數不帶小數尾巴、空白格變空字串、全空的列丟掉
 
 ```python
@@ -224,7 +224,7 @@ TEXT_COLUMNS = frozenset(
 **Files:** Modify `app/api/v1/endpoints/bulk.py`；Create `app/schemas/bulk.py`
 
 - [x] `POST /api/v1/bulk/{stations|tickets}/import/preview`（multipart）：檢 `*.import`（**探測防護**）
-- [x] 上限在最前面：> 500 列或 > 2 MB → 400（ADR-116）
+- [x] 上限在最前面，而且在**解析之前**：> 2 MB、xlsx 解壓宣告 > 32 MB、> 500 列 → 400（ADR-116 / ADR-209）
 - [x] 回傳偵測欄位、建議映射、配不到的欄位、前 20 列、**所有**錯誤、被略過的動態欄位
 - [x] 測試：preview 零寫入、403、一次回三個錯、映射建議、略過欄位說明、超量拒絕
 
@@ -318,3 +318,32 @@ TOTAL                             96%
 - [x] `member` 與 `user` 對四個端點全部 403
 - [x] `station_properties` / `task_properties` 的變更會出現在 `audit_logs` 裡
 - [x] 全套件綠燈（**662 passed**），新模組覆蓋率 **96%**
+
+
+## Task 15: PR #42 第一輪 review 修正（2026-08-31）✅
+
+**Files:** Modify `app/core/tabular.py`, `app/services/bulk_import.py`, `app/services/bulk_export.py`,
+`app/services/authz.py`, `app/api/v1/endpoints/bulk.py`, `tests/test_tabular.py`,
+`tests/test_bulk_import_station.py`, `tests/test_bulk_import_ticket.py`, `tests/test_bulk_endpoints.py`,
+`tests/test_bulk_export.py`, `tests/test_bulk_permissions.py`,
+`alembic/versions/b3f1c07d2a95_audit_dynamic_field_tables.py`
+
+八條 review comment，七個決策（ADR-208~214）。每一條都先確認舊碼會紅再修。
+
+- [x] **ADR-213** `_recover` = `rollback` + `refresh_actor`；`refresh_actor` 從 `stable_actor` 抽出共用
+      → 舊碼：一列權限失敗後整份檔 `MissingGreenlet` 500
+- [x] **ADR-211** 領頭列驗證過才進 `seen_keys`；寫入時解析不到就丟 `ValueError`
+      → 舊碼：`create_ticket(geometry=None)` → shapely `AttributeError` → 500
+- [x] **ADR-208** xlsx 強制字串型別、csv 前綴 `'`、表頭同樣處理
+- [x] **ADR-209** 大小前置、xlsx zip 目錄擋 32 MB、`max_rows` 提早停手
+- [x] **ADR-210** `_ambiguous_error` 不再列 uuid
+- [x] **ADR-214** 匯出 type 對照既有詞彙（不存在 400）+ `Content-Disposition` 走 RFC 6266
+      → 舊碼：中文 type `UnicodeEncodeError` 500、引號 type 產生兩個 `filename`
+- [x] **ADR-212** `RowProgress` 追蹤父層是否已寫入，`partial_rows` 依事實判定
+- [x] `ruff check --fix` 修 `tests/test_bulk_permissions.py` 與 migration 的 `I001`
+- [x] 新增 15 個回歸測試；**830 passed**（全套）
+
+**三個既有測試因 ADR-214 調整**：匯出前要先有該 type 的欄位設定，否則 400。
+
+**明確不在本票範圍**（ADR-209 已記）：request body size middleware、`app/main.py:41` 未掛載的
+`pyrate_limiter`。兩者影響每一個端點，各自該有自己的票。

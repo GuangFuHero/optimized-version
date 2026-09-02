@@ -25,6 +25,7 @@ from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import geom_to_geojson
 from app.models.auth import User
 from app.models.geo import Station
+from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import StationProperty
@@ -46,6 +47,14 @@ _MEDIA_TYPES = {
 MAX_EXPORT_ROWS = 10_000
 
 
+# `station_type` / `task_type` are free-text columns (`String(50)`), so there is no enum to
+# check against — the vocabulary is what the data and the field config actually use. The
+# config half matters: a configured type with no rows yet must still export, because a
+# header-only file is the import template (ADR-119). `'all'` is the config's wildcard bucket,
+# never a type of its own.
+_CONFIG_WILDCARD = "all"
+
+
 class BulkExportError(ValueError):
     """The export cannot be produced as asked (mapped to 400 by the endpoint)."""
 
@@ -57,6 +66,23 @@ class ExportFile:
     content: bytes
     filename: str
     media_type: str
+
+
+async def _known_types(db: AsyncSession, *, data_column, config_column) -> set[str]:
+    """The type vocabulary: every value in use, plus every value the field config names."""
+    values = set()
+    for column in (data_column, config_column):
+        values.update(
+            value for (value,) in (await db.execute(select(column).distinct())).all() if value
+        )
+    return values - {_CONFIG_WILDCARD}
+
+
+async def _require_known_type(db: AsyncSession, value: str, *, data_column, config_column) -> None:
+    """Refuse a type nobody uses, before it reaches the query or the file name (ADR-214)."""
+    known = await _known_types(db, data_column=data_column, config_column=config_column)
+    if value not in known:
+        raise BulkExportError(f"沒有「{value}」這個型別；目前可用的是：{'、'.join(sorted(known))}")
 
 
 def _text(value) -> str:
@@ -162,6 +188,10 @@ async def export_stations(
     """
     async with stable_actor(db, actor):
         scope = await require_scope(actor, Perm.STATION_EXPORT, db)
+        await _require_known_type(
+            db, station_type,
+            data_column=Station.type, config_column=StationPropertyConfig.station_type,
+        )
         columns = await station_columns(db, station_type)
 
         stations = list(
@@ -238,6 +268,10 @@ async def export_tickets(
     """Render one row per (ticket, task) pair of `task_type` the caller may see (ADR-120)."""
     async with stable_actor(db, actor):
         scope = await require_scope(actor, Perm.TICKET_EXPORT, db)
+        await _require_known_type(
+            db, task_type,
+            data_column=TicketTask.task_type, config_column=TaskPropertyConfig.task_type,
+        )
         columns = await ticket_columns(db, task_type)
         may_see_pii = await _pii_decider(db, actor)
 

@@ -10,6 +10,7 @@ between the two calls gets validation errors, not a bypass.
 """
 
 import json
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
@@ -26,12 +27,25 @@ from app.services.bulk_import import BulkImportError
 router = APIRouter()
 
 
+def _content_disposition(filename: str) -> str:
+    """Name the download in a header that survives a non-ASCII type (RFC 6266, ADR-214).
+
+    Starlette encodes headers as latin-1, so a CJK `station_type` interpolated raw here is a
+    500 rather than a download. `filename*` carries the real name percent-encoded; the plain
+    `filename` is the ASCII fallback, with everything a header cannot safely carry — quotes,
+    separators, control characters — reduced to `_`.
+    """
+    ascii_name = "".join(c if c.isascii() and (c.isalnum() or c in "-_.") else "_" for c in filename)
+    encoded = quote(filename, safe="")
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8\'\'{encoded}"
+
+
 def _as_response(exported: bulk_export.ExportFile) -> Response:
     """Stream the rendered file back as an attachment."""
     return Response(
         content=exported.content,
         media_type=exported.media_type,
-        headers={"Content-Disposition": f'attachment; filename="{exported.filename}"'},
+        headers={"Content-Disposition": _content_disposition(exported.filename)},
     )
 
 

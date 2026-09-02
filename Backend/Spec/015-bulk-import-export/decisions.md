@@ -455,3 +455,143 @@
 **否決「本票直接定義四個值並驗」的理由**：那是產品決策偽裝成實作細節。定下來之後，任何既有資料裡不在這四個值裡的 `priority` 都會在下一次匯入時整列失敗——而那些資料是怎麼進去的、該不該存在，本票沒有立場回答。
 
 **要修的話該怎麼修**：先在 `app/graphql/tickets` 建一個 `Priority` enum 當單一真值來源，讓 `create_ticket` / `update_ticket` 一起驗，`bulk_columns` 再接上去。那是一張獨立的小票，不是這裡的側寫。
+
+---
+
+### ADR-208 匯出的每一格都不可被試算表當公式執行；xlsx 用型別、csv 用前綴
+
+**白話**：別人取的站點名稱，不可以在你打開匯出檔的瞬間變成一條會跑的公式。
+
+**Context**：PR #42 review 實測，`write_csv` / `write_xlsx` 都把值原封不動寫進去。名稱叫 `=cmd|'/c calc.exe'!A1` 的站點在 xlsx 裡被 openpyxl 判成公式（`cell.data_type == 'f'`），在 csv 裡則由 Excel 自己判。`TEXT_COLUMNS` 的 `number_format = "@"` 擋不住——openpyxl 是在**指定值的當下**決定型別的，格式設在那之後。
+
+這條路徑真的通：`station.contribute` 是刻意開放的群眾投稿（ADR-111），而 `name` 會匯出給每個持有 `station.export` 的人，包含 `all` scope 的 `data_auditor`。寫 payload 的人和打開檔案的人不是同一個人。
+
+**Decision**：
+- **xlsx**：每個非空儲存格在 append 之後強制 `cell.data_type = "s"`（寫出 `t="inlineStr"`）。值一個字元都不改。
+- **csv**：以 `=` `+` `-` `@` `\t` `\r` 開頭且**不是合法數字**的值，前綴一個 `'`。
+- 表頭同樣處理——錯誤報告會把使用者上傳的表頭原樣寫回去（`_as_report`）。
+
+**Consequences**：
+➕ xlsx 這一半完全無損：匯出→匯入 round-trip 值相等，比對鍵（ADR-107）不受影響。
+➕ `longitude = -121.5` 這種負數不會被加前綴——先試 `float()` 就是為了它，否則會把座標欄自己的型別檢查弄壞。
+➖ **csv 這一半的 round-trip 會變**：以 `=` 開頭的站名匯出成 `'=...`，再匯回來就是新的名稱、比對不到原本那筆。讀檔時不剝除，是因為 csv 的 `'` 不是格式逃逸字元而是真實字元——剝掉會把使用者手打的 `'開頭` 值也一起吃掉。csv 本來就是「Excel 存檔時會自己重猜型別」的格式（ADR-115 已記），這條落差留在同一個地方。
+
+**否決「兩種格式都前綴、讀檔時一律剝除」的理由**：對稱好看，但代價是每個真的以 `'` 開頭的值都被改掉，而 xlsx 明明有辦法完全不動值。
+
+---
+
+### ADR-209 上限要在解析**之前**生效，不是解析之後
+
+**白話**：會被拒絕的檔案，拒絕它應該幾乎不花錢。
+
+**Context**：`_check_limits` 原本跑在 `read_table` **之後**，所以 `MAX_BYTES` / `MAX_ROWS` 限制的是「匯進來多少」，不是「處理了多少」。review 實測：一個 **1.41 MB** 的 xlsx（通過 2 MB 上限）解壓成 364 MB 的 sheet XML，在 `read_table` 裡燒掉 **220 秒 CPU、928 MB RAM**，然後才被 `MAX_ROWS=500` 擋下來。
+
+**Decision**：三道關卡，由便宜到貴：
+1. `_check_size(raw)` 在 `read_table` 之前跑。
+2. `_check_uncompressed_size`：xlsx 是 zip，讀 central directory 的宣告大小總和，超過 `MAX_UNCOMPRESSED_BYTES = 32 MB` 直接拒絕——**一個位元組都還沒解壓**。
+3. `read_table(..., max_rows=MAX_ROWS)`：讀到上限 **+1 列就停手**，剩下的不解析。空白列不計入額度（試算表慣性會在資料下面寫幾千個空列）。
+
+**Consequences**：
+➕ 上述那個檔現在在毫秒級被拒絕。
+➖ 超量的錯誤訊息不再報出實際列數（原本是「這份檔有 N 列」）——要知道 N 就得付出這條 ADR 想省掉的那次完整解析。改成「超過上限」。
+➖ 32 MB 是拍的數字：對 500 列 × 40 欄綽綽有餘，對真正的 zip bomb 又遠遠擋得住。宣告值本身可以被偽造，但偽造成「小」的檔案解壓時會對不上而失敗，偽造成「大」的只是被提早拒絕。
+
+**不在本票範圍**：review 另外點名了兩件事——沒有 request body size middleware、`app/main.py:41` 建的 `pyrate_limiter` 沒掛到任何 route。兩者都是全站基礎設施、影響每一個端點，不是 015 的東西，各自該有自己的票。
+
+---
+
+### ADR-210 比對到多筆時只回報「幾筆」，不回報是哪幾筆
+
+**白話**：預覽不該變成「用匯入權限去問資料庫裡有什麼」的工具。
+
+**Context**：`_ambiguous_error` 原本把配到的 uuid 全列進訊息。而 `preview` 只驗 `*.import`（ADR-110 刻意如此，否則沒權限的人可以用它探測），比對用的 index 又是**全表**（`build_station_index` 沒有 `scope_filter`）。review 實測：只持有 `station.import`、沒有 `station.view` 也沒有 `station.edit` 的使用者，送一列 preview 就拿到兩筆現有站點的 uuid。
+
+**Decision**：訊息只留筆數：「比對到 2 筆現有資料，請先人工處理再匯入」。index 維持全表。
+
+**Consequences**：
+➕ 使用者要採取的行動沒有變——他要做的是去人工處理同名資料，uuid 幫不上忙。
+➕ 比對仍然對全表做，所以「看不到的既有資料」不會被誤判成新資料而重複建立。
+➖ `to_update` 的統計數字仍間接透露「有幾列配到了現有資料」。這是比對本身的資訊量，要拿掉就得改成下面被否決的那條。
+
+**否決「index 依 caller 的 view scope 過濾」的理由**（2026-08-31 使用者裁定）：那會讓看不到的既有資料被判成「新建」，匯入時建出重複列或撞上資料庫既有列——把一個回報層的洩漏，換成一個寫入層的資料正確性問題。
+
+---
+
+### ADR-211 檔內同鍵的後續列，只在領頭列真的會寫入時才算「更新」
+
+**白話**：第二行說「我掛在第一行那張單底下」，前提是第一行真的進得去。
+
+**Context**：ADR-120 讓一張 ticket 可以佔好幾列（一列一個 task），靠 `seen_keys` 認出後續列。原本**每一列都無條件寫進 `seen_keys`**，於是領頭列失敗時後續列的兩半會互相矛盾：
+- 規劃端當它是更新 → `validate_row(is_update=True)` 跳過所有 `required_on_create`，`writable_values` 丟掉所有 create-only 欄位（title、contact_*、經緯度、task 欄位）。
+- `_write_ticket` 對**即時** index 重新解析、找不到、走 **create** 分支——而那些值已經被丟掉了。
+
+review 實測（本票已重現成測試）：領頭列驗證失敗、後續列不帶座標 → `create_ticket(geometry=None)` → shapely 丟 `AttributeError`，而 `_write_all` 只接 `HTTPException` 與 `ValueError` → **500**。
+
+**Decision**：兩道，各補一個時間點：
+1. **規劃時**：`if not errors: seen_keys.add(key)`。領頭列沒過驗證就不是領頭列，後續列照 create 規劃、照 create 驗證。
+2. **寫入時**：`plan.is_update` 但即時 index 解析不到 → 丟 `ValueError`（「同一份檔案中建立這張單的那一列沒有匯入成功，這一列一併不匯入」）。這條擋的是**驗證看不到的那種失敗**——領頭列驗證過了、寫的時候才被權限擋掉。
+
+**Consequences**：
+➕ 任何輸入檔都不會再產生未接住的例外，這正是 ADR-112「壞列變成報告、不是 500」原本要給的保證。
+➕ 後續列的 `required_on_create` 真的被檢查了。
+➖ 領頭列失敗時，同鍵的後續列一律跟著失敗。這是對的：它們要掛的那張單不存在。
+
+---
+
+### ADR-212 `partial_rows` 依「這列有沒有已經寫進去的東西」判定，不依例外的型別
+
+**白話**：「這列進了一半」是事實問題，不是它是哪種錯誤的問題。
+
+**Context**：`partial.append(plan.line)` 原本只寫在 `HTTPException` 那一支。兩邊都錯：
+- 一列在**第一個** service 呼叫就被權限擋掉，什麼都沒寫，卻被標成 partial。
+- 父層 station/ticket 已經 commit、之後的相依寫入丟 `ValueError`，真的留下半筆資料，`partial_rows` 反而不提。
+
+**Decision**：新增 `RowProgress`（可變、每列一個），寫入端在**每一次成功 commit 之後**把 `parent_written` 設為 True；`_write_all` 兩種例外合成同一支，只看 `progress.parent_written` 決定要不要列進 `partial_rows`。
+
+**Consequences**：
+➕ `partial_rows` 現在的意思是它字面上的意思，使用者不必自己去核對。
+➖ `RowProgress` 是刻意可變的物件，違反本專案的不可變預設。理由寫在 docstring：只有寫入端知道這一列走到哪，而 `_write_all` 需要在**例外路徑**上拿到這個答案，回傳值到不了那裡。
+
+---
+
+### ADR-213 rollback 之後要把 actor 救回來，否則一列壞掉會拖垮整份檔
+
+**白話**：一列失敗只該失敗那一列。
+
+**Context**：ADR-112 的逐列失敗會呼叫 `db.rollback()`。而 `rollback` 會 expire identity map 裡的**每一個**物件，`actor` 也在裡面——而且**不管 `expire_on_commit`**，那正是 `stable_actor` 唯一有能力暫停的東西。下一列的 `create_station` → `require_scope` → `resolve_scope` 讀 `actor.uuid` 時觸發 lazy reload，async SQLAlchemy 做不到，丟 `MissingGreenlet`，`_write_all` 沒接 → 整個請求 **500**。
+
+review 實測（已成測試）：3 列的站點檔、第 1 列是 caller 沒有 `station.edit` 的更新、第 2~3 列是正常新增 → 500、0 列寫入、沒有錯誤報告。這正是 `_commit` docstring 自己寫的「最實際的失敗原因」。
+
+**Decision**：`_recover(db, actor)` = `rollback()` + `refresh_actor(db, actor)`。`refresh_actor` 從 `stable_actor` 裡抽出來成為 `app/services/authz.py` 的公開函式，兩邊共用同一份判斷（`inspect(actor).expired` 才 refresh）。
+
+**Consequences**：
+➕ `stable_actor` 的 docstring 講的那個陷阱，現在在 commit 與 rollback 兩條路上都被處理，而不是只有 commit。
+➕ 015 grill 記過的 `expire_on_commit` 陷阱多了一個實例；測試 fixture 是 `expire_on_commit=True`，所以這個 bug 在測試裡真的重現得出來（而不是被 fixture 藏起來）。
+➖ 每個失敗列多一次 `SELECT users`。只發生在失敗列上。
+
+---
+
+### ADR-214 匯出的 type 先對照既有詞彙，檔名再照 RFC 6266 編碼
+
+**白話**：網址上打一個不存在的型別要回 400，而中文型別要能正常下載。
+
+**Context**：`station_type` / `task_type` 是未經驗證的 query 參數，一路流進 `stem`，再進 `Content-Disposition`。review 實測：
+- `?station_type=避難所` → Starlette 以 latin-1 編 header → `UnicodeEncodeError` → **500**。
+- `?station_type=x"; filename="evil.html` → 200，header 出現**兩個** `filename`。
+- CRLF 被 h11 擋掉，所以沒有 response splitting，但會變成連線層錯誤。
+
+麻煩的是這兩欄是自由字串（`Station.type` 是 `String(50)`），沒有 enum、沒有 CHECK、沒有詞彙表可以對照。
+
+**Decision**（2026-08-31 使用者裁定）：兩件事都做。
+1. **詞彙**：`_require_known_type` 對照「資料裡出現過的 type」∪「欄位設定表宣告的 type」，扣掉 config 的萬用值 `'all'`。不在裡面就 `BulkExportError` → 400。取聯集是為了保住 ADR-119：一個已設定但還沒有資料的型別，匯出的空白模板正是拿來起頭用的。
+2. **檔名**：`filename*=UTF-8''<percent-encoded>` 帶真名，`filename="..."` 留 ASCII 退路（非英數與 `-_.` 一律換成 `_`）。
+
+**Consequences**：
+➕ 中文型別會下載，不會 500。
+➕ 引號、分隔符、控制字元都到不了 header——先被詞彙檢查擋下，就算擋不下也在編碼時被處理掉。
+➖ **完全空的資料庫（沒資料也沒欄位設定）匯不出任何模板**。使用者已知並接受；實務上 seed 會建 config 列。有三個既有測試因此要先建 config 才能匯出，已一併調整。
+➖ 每次匯出多兩個 `SELECT DISTINCT`。
+
+**否決「只做檔名編碼、不驗詞彙」的理由**：那樣 `?station_type=不存在的東西` 會回一份沒有列的檔案，看起來像「這個型別沒有資料」，其實是打錯字。使用者裁定要 400。
+
+**否決「只允許英數白名單」的理由**：直接砍掉中文型別的匯出能力，而中文型別是這個專案的常態。
