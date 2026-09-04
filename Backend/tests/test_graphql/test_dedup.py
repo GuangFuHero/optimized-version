@@ -265,3 +265,105 @@ async def test_recording_an_outcome_for_a_missing_ticket_errors(client, login_us
         headers=auth_header(token),
     )
     assert res.json()["errors"][0]["message"] == "Ticket not found"
+
+
+@pytest.mark.asyncio
+async def test_only_the_submitter_may_record_their_own_outcome(
+    client, login_user_auth, coordinator_auth
+):
+    """ticket.add alone must not let a caller card an arbitrary pair of other people's tickets."""
+    owner_uuid, _owner_token = coordinator_auth
+    _other_uuid, other_token = login_user_auth
+    original = await _seed_ticket(owner_uuid)
+    submitted = await _seed_ticket(owner_uuid, age_min=0.0)
+
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": RECORD_OUTCOME,
+            "variables": {"input": {
+                "candidateTicketUuid": original,
+                "submittedTicketUuid": submitted,
+                "outcome": "submitted_anyway",
+            }},
+        },
+        headers=auth_header(other_token),
+    )
+    body = res.json()
+    assert body["data"] is None
+    assert "Permission Denied" in body["errors"][0]["message"]
+    async with test_db() as db:
+        assert (await db.execute(select(TicketDuplicatePair))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_an_unsettled_card_is_moved_to_dup_ignored_in_place(client, login_user_auth):
+    """A `suggested` card the submitter then ignored flips to dup_ignored on the same row."""
+    user_uuid, token = login_user_auth
+    original = await _seed_ticket(user_uuid)
+    submitted = await _seed_ticket(user_uuid, age_min=0.0)
+    low, high = sorted((original, submitted))
+    async with test_db() as db:
+        db.add(TicketDuplicatePair(
+            ticket_low_id=low, ticket_high_id=high,
+            method="fast_rule", source_layer="fast", status="suggested",
+        ))
+
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": RECORD_OUTCOME,
+            "variables": {"input": {
+                "candidateTicketUuid": original,
+                "submittedTicketUuid": submitted,
+                "outcome": "submitted_anyway",
+            }},
+        },
+        headers=auth_header(token),
+    )
+    pair_uuid = res.json()["data"]["recordDedupHintOutcome"]["pairUuid"]
+    async with test_db() as db:
+        rows = (await db.execute(select(TicketDuplicatePair))).scalars().all()
+        assert len(rows) == 1  # updated in place, not a second card
+        assert str(rows[0].uuid) == pair_uuid
+        assert rows[0].status == "dup_ignored"
+        assert rows[0].rescan_needed is True
+        assert rows[0].hint_outcome == "ignored_hint"
+
+
+@pytest.mark.asyncio
+async def test_a_settled_card_keeps_its_admin_verdict(client, login_user_auth):
+    """A confirmed card records the hint outcome but is never pushed back to dup_ignored.
+
+    Contract §1.1: overturning a settled verdict is soft-delete + a new row, so a
+    user-triggered write must not erase an admin's decision in place.
+    """
+    user_uuid, token = login_user_auth
+    original = await _seed_ticket(user_uuid)
+    submitted = await _seed_ticket(user_uuid, age_min=0.0)
+    low, high = sorted((original, submitted))
+    async with test_db() as db:
+        db.add(TicketDuplicatePair(
+            ticket_low_id=low, ticket_high_id=high,
+            method="fast_rule", source_layer="slow", status="confirmed",
+        ))
+
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": RECORD_OUTCOME,
+            "variables": {"input": {
+                "candidateTicketUuid": original,
+                "submittedTicketUuid": submitted,
+                "outcome": "submitted_anyway",
+            }},
+        },
+        headers=auth_header(token),
+    )
+    assert res.json()["data"]["recordDedupHintOutcome"]["hintOutcome"] == "ignored_hint"
+    async with test_db() as db:
+        rows = (await db.execute(select(TicketDuplicatePair))).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].status == "confirmed"       # untouched
+        assert rows[0].rescan_needed is False      # untouched
+        assert rows[0].hint_outcome == "ignored_hint"  # still measured

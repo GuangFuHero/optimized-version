@@ -16,6 +16,7 @@ import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -53,6 +54,9 @@ HINT_OUTCOME_CHOICES = (
 )
 # Everything except "submitted anyway" means the hint did its job.
 ACCEPTED_HINT_CHOICES = frozenset(HINT_OUTCOME_CHOICES[:3])
+# Card states the fast layer may still move. `confirmed` / `rejected` carry an admin
+# decision, and contract §1.1 reserves overturning those for soft-delete + a new row.
+UNSETTLED_PAIR_STATUSES = frozenset({"suggested", "dup_ignored"})
 
 
 async def find_duplicate_hints(
@@ -118,10 +122,17 @@ async def record_hint_outcome(
     a ticket that was never inserted (both sides are FKs). The audit event always lands, so
     an accepted hint is still counted.
 
+    Only the submitter may report on their own submission: `ticket.add` alone would let any
+    logged-in caller card an arbitrary pair of tickets, poisoning both the slow layer's
+    re-scan queue and the measurement this table exists for. The capability check passes
+    `resource=submitted` so checkpoint 2 engages if the seed ever narrows `ticket.add` below
+    `all`, but that is future-proofing, not the guard — today every holder has it at `all`,
+    so the explicit creator check below is what actually closes the hole.
+
     Raises:
-        ValueError: unknown outcome, or either ticket not found.
+        ValueError: unknown outcome, either ticket not found, or a ticket paired with itself.
+        HTTPException: 403 when the caller did not create the submitted ticket.
     """
-    await require_scope(actor, Perm.TICKET_ADD, db)
     if outcome not in HINT_OUTCOME_CHOICES:
         raise ValueError(f"Unknown dedup hint outcome: {outcome}")
 
@@ -132,10 +143,17 @@ async def record_hint_outcome(
     accepted = outcome in ACCEPTED_HINT_CHOICES
     pair = None
     score = None
-    if submitted_ticket_uuid:
+    if not submitted_ticket_uuid:
+        await require_scope(actor, Perm.TICKET_ADD, db)
+    else:
         submitted = await ticket_repository.get_by_uuid_active(db, submitted_ticket_uuid)
         if not submitted:
             raise ValueError("Ticket not found")
+        await require_scope(actor, Perm.TICKET_ADD, db, resource=submitted)
+        if str(submitted.created_by) != str(actor.uuid):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied."
+            )
         if str(submitted.uuid) == str(candidate.uuid):
             raise ValueError("A ticket cannot be a duplicate of itself")
         score = await _rescore_pair(db, submitted=submitted, candidate=candidate, parameters=parameters)
@@ -228,9 +246,15 @@ async def _upsert_fast_pair(
     """Create or update the live fast-layer card for this ticket pair.
 
     Ordering the two uuids satisfies the table's `ticket_low_id < ticket_high_id` CHECK, so
-    the same two tickets always land on one row whichever was submitted second. An existing
-    live card is updated in place — the normal lifecycle per the contract; overturning a
-    settled verdict (soft-delete + insert) belongs to the slow layer, not here.
+    the same two tickets always land on one row whichever was submitted second.
+
+    An existing live card is updated in place, but `status` is only touched while the card is
+    still unsettled (`suggested` / `dup_ignored`). Contract §1.1 is explicit that overturning
+    a settled verdict is soft-delete + insert a new row, never an in-place UPDATE, so
+    stamping `dup_ignored` over an admin's `confirmed`/`rejected` would erase a human
+    decision with a user-triggered write. `hint_outcome` is still recorded either way: it
+    describes what the submitter did, not what the verdict is, so it cannot overturn
+    anything — and dropping it would lose the measurement this whole path exists for.
     """
     ticket_low_id, ticket_high_id = sorted((submitted_uuid, candidate_uuid))
     hint_outcome = "accepted_hint" if accepted else "ignored_hint"
@@ -242,7 +266,12 @@ async def _upsert_fast_pair(
     )
     if existing:
         existing.hint_outcome = hint_outcome
-        if not accepted:
+        if existing.status not in UNSETTLED_PAIR_STATUSES:
+            logger.info(
+                "dedup pair %s is already %s; recording hint_outcome only (contract §1.1)",
+                existing.uuid, existing.status,
+            )
+        elif not accepted:
             # 使用者不聽勸：the card becomes the slow layer's to re-scan (design §三).
             existing.status = "dup_ignored"
             existing.rescan_needed = True
