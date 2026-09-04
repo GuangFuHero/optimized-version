@@ -223,6 +223,7 @@ type Mutation {
   updateTaskProperty(uuid: UUID!, input: UpdateTaskPropertyInput!): TaskPropertyType!
   upsertStationPropertyConfig(stationType: String!, input: UpsertPropertyConfigInput!): StationPropertyConfigType!
   upsertTaskPropertyConfig(taskType: String!, input: UpsertPropertyConfigInput!): TaskPropertyConfigType!
+  recordDedupHintOutcome(input: RecordDedupHintOutcomeInput!): RecordDedupHintOutcomeResult!
 }
 
 type PageInfo {
@@ -264,6 +265,7 @@ type Query {
   taskProperties(taskUuid: String!): [TaskPropertyType!]!
   stationPropertyConfigs(stationType: String!): [StationPropertyConfigType!]!
   taskPropertyConfigs(taskType: String!): [TaskPropertyConfigType!]!
+  ticketDedupCandidates(input: TicketDedupCheckInput!): [TicketDedupHint!]!
 }
 
 input SecondaryLocationInput {
@@ -676,4 +678,70 @@ input UpsertPropertyConfigInput {
   Allowed enum values — required when data_type is 'enum', null otherwise
   """
   enumOptions: [String!] = null
+}
+
+enum DedupHintOutcome {
+  commented_on_original
+  suggested_edit_to_original
+  updated_own_ticket
+  submitted_anyway
+}
+
+type DedupScoreComponent {
+  """成分名稱：'distance' / 'time' / 'task_type' / 'text'；慢層升級後可能新增"""
+  name: String!
+
+  """此成分的得分，0–1 正規化"""
+  score: Float!
+
+  """此成分在總分中的權重（隨規則版本走）"""
+  weight: Float!
+
+  """過線布林：得分 >= 該成分參考線即 true —— 成分燈號直接畫這顆"""
+  passed: Boolean!
+}
+
+type TicketDedupHint {
+  """疑似重複的既有單 uuid"""
+  relatedTicketUuid: String!
+
+  """加權總分 0–1（各成分得分 × 權重加總）"""
+  similarity: Float!
+
+  """分數拆帳：每個訊號的得分、權重與過線燈號"""
+  scoreComponents: [DedupScoreComponent!]!
+}
+
+input TicketDedupCheckInput {
+  """
+  GeoJSON Point for the location help is needed at — [longitude, latitude]
+  """
+  geometry: GeoJSON!
+  title: String!
+  description: String = null
+
+  """Type of help: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String = null
+}
+
+input RecordDedupHintOutcomeInput {
+  """提示指向的既有單 uuid"""
+  candidateTicketUuid: String!
+
+  """使用者對提示的選擇"""
+  outcome: DedupHintOutcome!
+
+  """照樣送出時新建的單 uuid；接受提示而沒有建單時省略（不會產生配對卡）"""
+  submittedTicketUuid: String = null
+}
+
+type RecordDedupHintOutcomeResult {
+  """寫入的去重稽核事件 uuid"""
+  auditEventUuid: String!
+
+  """配對卡上的收斂值：'accepted_hint' 或 'ignored_hint'"""
+  hintOutcome: String!
+
+  """配對卡 uuid；接受提示而沒有建立新單時為 null（沒有第二張單可以配對）"""
+  pairUuid: String
 }

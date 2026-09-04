@@ -177,6 +177,26 @@ export type CrowdSourcingType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export const DedupHintOutcome = {
+  CommentedOnOriginal: 'commented_on_original',
+  SubmittedAnyway: 'submitted_anyway',
+  SuggestedEditToOriginal: 'suggested_edit_to_original',
+  UpdatedOwnTicket: 'updated_own_ticket'
+} as const;
+
+export type DedupHintOutcome = typeof DedupHintOutcome[keyof typeof DedupHintOutcome];
+export type DedupScoreComponent = {
+  __typename?: 'DedupScoreComponent';
+  /** 成分名稱：'distance' / 'time' / 'task_type' / 'text'；慢層升級後可能新增 */
+  name: Scalars['String']['output'];
+  /** 過線布林：得分 >= 該成分參考線即 true —— 成分燈號直接畫這顆 */
+  passed: Scalars['Boolean']['output'];
+  /** 此成分的得分，0–1 正規化 */
+  score: Scalars['Float']['output'];
+  /** 此成分在總分中的權重（隨規則版本走） */
+  weight: Scalars['Float']['output'];
+};
+
 export type Mutation = {
   __typename?: 'Mutation';
   createClosureArea: ClosureAreaType;
@@ -187,6 +207,7 @@ export type Mutation = {
   createTicket: TicketType;
   createTicketTask: TicketTaskType;
   deleteStation: Scalars['Boolean']['output'];
+  recordDedupHintOutcome: RecordDedupHintOutcomeResult;
   updateClosureArea: ClosureAreaType;
   updateStation: StationType;
   updateStationProperty: StationPropertyType;
@@ -235,6 +256,11 @@ export type MutationCreateTicketTaskArgs = {
 
 export type MutationDeleteStationArgs = {
   uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationRecordDedupHintOutcomeArgs = {
+  input: RecordDedupHintOutcomeInput;
 };
 
 
@@ -319,6 +345,7 @@ export type Query = {
   taskProperties: Array<TaskPropertyType>;
   taskPropertyConfigs: Array<TaskPropertyConfigType>;
   ticket?: Maybe<TicketType>;
+  ticketDedupCandidates: Array<TicketDedupHint>;
   ticketTasks: Array<TicketTaskType>;
   tickets: TicketConnection;
 };
@@ -369,6 +396,11 @@ export type QueryTicketArgs = {
 };
 
 
+export type QueryTicketDedupCandidatesArgs = {
+  input: TicketDedupCheckInput;
+};
+
+
 export type QueryTicketTasksArgs = {
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
@@ -383,6 +415,25 @@ export type QueryTicketsArgs = {
   priority?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
   status?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type RecordDedupHintOutcomeInput = {
+  /** 提示指向的既有單 uuid */
+  candidateTicketUuid: Scalars['String']['input'];
+  /** 使用者對提示的選擇 */
+  outcome: DedupHintOutcome;
+  /** 照樣送出時新建的單 uuid；接受提示而沒有建單時省略（不會產生配對卡） */
+  submittedTicketUuid?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type RecordDedupHintOutcomeResult = {
+  __typename?: 'RecordDedupHintOutcomeResult';
+  /** 寫入的去重稽核事件 uuid */
+  auditEventUuid: Scalars['String']['output'];
+  /** 配對卡上的收斂值：'accepted_hint' 或 'ignored_hint' */
+  hintOutcome: Scalars['String']['output'];
+  /** 配對卡 uuid；接受提示而沒有建立新單時為 null（沒有第二張單可以配對） */
+  pairUuid?: Maybe<Scalars['String']['output']>;
 };
 
 export type SecondaryLocationInput = {
@@ -554,6 +605,25 @@ export type TicketConnection = {
   __typename?: 'TicketConnection';
   items: Array<TicketType>;
   pageInfo: PageInfo;
+};
+
+export type TicketDedupCheckInput = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** GeoJSON Point for the location help is needed at — [longitude, latitude] */
+  geometry: Scalars['GeoJSON']['input'];
+  /** Type of help: 'rescue', 'supply', 'medical', or 'hr' */
+  taskType?: InputMaybe<Scalars['String']['input']>;
+  title: Scalars['String']['input'];
+};
+
+export type TicketDedupHint = {
+  __typename?: 'TicketDedupHint';
+  /** 疑似重複的既有單 uuid */
+  relatedTicketUuid: Scalars['String']['output'];
+  /** 分數拆帳：每個訊號的得分、權重與過線燈號 */
+  scoreComponents: Array<DedupScoreComponent>;
+  /** 加權總分 0–1（各成分得分 × 權重加總） */
+  similarity: Scalars['Float']['output'];
 };
 
 export type TicketTaskType = {
