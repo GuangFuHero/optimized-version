@@ -8,7 +8,7 @@ export const TICKET_STATUS_OPTIONS = [
 export type TicketStatusFilterValue =
   (typeof TICKET_STATUS_OPTIONS)[number]['value'];
 
-const TICKET_STATUS_LABELS: Record<string, string> = {
+export const TICKET_STATUS_LABELS: Record<string, string> = {
   open: '待處理',
   pending: '待處理',
   assigned: '已指派',
