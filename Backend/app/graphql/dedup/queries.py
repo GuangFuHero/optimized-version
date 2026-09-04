@@ -32,22 +32,21 @@ class DedupQuery:
 
         Fail-open by design: if the check itself errors, this returns an empty list rather
         than an error, so a broken dedup layer can never stop someone reporting a disaster
-        (design §四 — 座標缺失或系統出錯一律 fail-open、照常建單). Permission failures are
-        raised *before* that safety net and still surface as a 403.
+        (design §四 — 座標缺失或系統出錯一律 fail-open、照常建單). Geometry is parsed inside
+        that safety net, in the service, so a caller who sends a string, a null, or a Point
+        with no coordinates gets an empty list rather than a 500. Permission failures are
+        raised *before* the safety net and still surface as a 403.
+
+        The time signal is measured against the server's clock. There is deliberately no
+        `submittedAt` input: it is the one scoring input a caller could otherwise set freely,
+        and "when did this request arrive" is not something the client should get to assert.
         """
         await check_permission(info, Perm.TICKET_ADD)
-        coordinates = (input.geometry or {}).get("coordinates") or []
-        if len(coordinates) < 2:
-            # A malformed point is a fail-open case too, not an error: create_ticket's own
-            # validate_point is the gate that rejects bad geometry, and it runs next.
-            return []
         scores = await dedup_service.find_duplicate_hints(
             info.context["db"],
-            longitude=coordinates[0],
-            latitude=coordinates[1],
+            geometry=input.geometry,
             title=input.title,
             description=input.description,
             task_type=input.task_type,
-            submitted_at=input.submitted_at,
         )
         return [TicketDedupHint.from_score(s) for s in scores]

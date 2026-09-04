@@ -12,6 +12,7 @@ Two entry points:
   layer can only ever count its failures (see `TicketDedupAuditEvent`).
 """
 
+import contextlib
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -23,6 +24,7 @@ from app.core.permissions import Perm
 from app.graphql.scalars import geom_to_geojson
 from app.models.auth import User
 from app.models.dedup import TicketDuplicatePair
+from app.models.request import Tickets
 from app.repositories.dedup_repository import (
     DEFAULT_CANDIDATE_LIMIT,
     DEFAULT_CANDIDATE_RADIUS_M,
@@ -39,6 +41,7 @@ from app.services.dedup_scoring import (
     score_candidate,
     top_hint,
 )
+from app.services.geo_validation import validate_point
 
 logger = logging.getLogger("app.dedup")
 
@@ -58,12 +61,22 @@ ACCEPTED_HINT_CHOICES = frozenset(HINT_OUTCOME_CHOICES[:3])
 # decision, and contract §1.1 reserves overturning those for soft-delete + a new row.
 UNSETTLED_PAIR_STATUSES = frozenset({"suggested", "dup_ignored"})
 
+# Bounds on the text handed to pg_trgm. `similarity()` builds a trigram set per call, so an
+# unbounded description turns one advisory lookup into real work — and trigram overlap
+# saturates long before this anyway, so the tail contributes nothing to the signal.
+# TITLE_MAX_CHARS is the width of `tickets.title` (models/request.py), so truncating there
+# discards only text the INSERT would reject. DESCRIPTION_MAX_CHARS has no column to match
+# — `tickets.description` is unbounded TEXT — so 2000 is this PR's number, listed for the
+# team. Over-long input is truncated rather than refused: the check is advisory, and
+# refusing would silently drop the hint for exactly the wordiest reports.
+TITLE_MAX_CHARS = 200
+DESCRIPTION_MAX_CHARS = 2000
+
 
 async def find_duplicate_hints(
     db: AsyncSession,
     *,
-    longitude: float,
-    latitude: float,
+    geometry: dict,
     title: str,
     description: str | None = None,
     task_type: str | None = None,
@@ -78,14 +91,20 @@ async def find_duplicate_hints(
     A list rather than an optional single value so returning top-N later is additive rather
     than a breaking schema change.
 
-    **Never raises.** Retrieval or scoring blowing up (pg_trgm missing, PostGIS error, a
-    settings object with every weight zeroed) is logged and answered with an empty list:
-    the fast layer is an advisory prompt, and an advisory prompt that can 500 a submission
-    is worse than no prompt at all. Authorization is *not* handled here — the caller checks
-    it before entering, so a permission failure still surfaces as a 403 instead of being
-    swallowed by the fail-open.
+    **Never raises.** Everything from parsing the caller's geometry to scoring the candidates
+    runs inside one try: a malformed point, a missing pg_trgm, a PostGIS error, or a settings
+    object with every weight zeroed all end the same way — logged, empty list. The fast layer
+    is an advisory prompt, and an advisory prompt that can 500 a disaster report is worse than
+    no prompt at all. Bad geometry is deliberately not an error here either: `create_ticket`
+    runs its own `validate_point` moments later and is the gate that refuses the submission —
+    this one only needs to know whether it can score anything.
+
+    Authorization is *not* handled here — the caller checks it before entering, so a
+    permission failure still surfaces as a 403 instead of being swallowed by the fail-open.
     """
     try:
+        validate_point(geometry, entity="Ticket")
+        longitude, latitude = geometry["coordinates"][:2]
         candidates = await dedup_candidate_repository.list_nearby_open(
             db,
             longitude=longitude,
@@ -98,6 +117,12 @@ async def find_duplicate_hints(
         best = top_hint(candidates, query_task_type=task_type, parameters=parameters)
     except Exception:
         logger.exception("fast-layer dedup check failed; returning no hint (fail-open)")
+        # A failed statement leaves the session's transaction aborted, and that session is
+        # shared with every sibling resolver in the same GraphQL request — without this they
+        # would all fail on "current transaction is aborted". Suppressed in turn, because the
+        # rollback must not be what finally raises out of a path whose contract is "never".
+        with contextlib.suppress(Exception):
+            await db.rollback()
         return []
     return [best] if best else []
 
@@ -185,8 +210,9 @@ async def record_hint_outcome(
 
 
 def _query_text(title: str, description: str | None) -> str:
-    """Join the text fields the pg_trgm signal compares (title + description)."""
-    return " ".join(part for part in (title, description) if part).strip()
+    """Join and bound the text fields the pg_trgm signal compares (title + description)."""
+    parts = ((title or "")[:TITLE_MAX_CHARS], (description or "")[:DESCRIPTION_MAX_CHARS])
+    return " ".join(part for part in parts if part).strip()
 
 
 def _evidence(score: CandidateScore | None) -> dict:
@@ -210,7 +236,11 @@ def _components_json(score: CandidateScore) -> list[dict]:
 
 
 async def _rescore_pair(
-    db: AsyncSession, *, submitted, candidate, parameters: FastLayerParameters
+    db: AsyncSession,
+    *,
+    submitted: Tickets,
+    candidate: Tickets,
+    parameters: FastLayerParameters,
 ) -> CandidateScore | None:
     """Re-derive the pair's score server-side rather than trusting a client-supplied one.
 

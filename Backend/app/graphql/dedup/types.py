@@ -15,7 +15,6 @@ this slice.
 """
 
 import enum
-from datetime import datetime
 
 import strawberry
 
@@ -82,8 +81,13 @@ class TicketDedupCheckInput:
     """The about-to-be-submitted ticket's key fields — CreateTicketInput's scoring subset.
 
     Only the fields the four signals read are asked for, and nothing is persisted by the
-    check. `submittedAt` defaults to the server's clock; it is accepted so a replay or a test
-    can pin the time signal to a fixed instant.
+    check. There is no `submittedAt`: the time signal is measured against the server's clock,
+    which is the one scoring input a caller must not be able to set for themselves. Replays
+    and tests pin it through the service's `submitted_at` argument instead.
+
+    `title` and `description` are bounded before they reach pg_trgm (see
+    app/services/dedup.py) — over-long text is truncated, not refused, because the check is
+    advisory and refusing would drop the hint for exactly the wordiest reports.
     """
 
     geometry: GeoJSON = strawberry.field(
@@ -93,9 +97,6 @@ class TicketDedupCheckInput:
     description: str | None = None
     task_type: str | None = strawberry.field(
         default=None, description="Type of help: 'rescue', 'supply', 'medical', or 'hr'"
-    )
-    submitted_at: datetime | None = strawberry.field(
-        default=None, description="送單時間，預設為伺服器現在時間（時間訊號的基準點）"
     )
 
 

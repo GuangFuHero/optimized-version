@@ -163,8 +163,21 @@ async def test_anonymous_caller_is_denied(client, login_user_auth):
 
 
 @pytest.mark.asyncio
-async def test_malformed_geometry_returns_no_hint_instead_of_an_error(client, login_user_auth):
-    """Fail-open: a point the check cannot read yields an empty list, never a blocked submission."""
+@pytest.mark.parametrize("bad_geometry", [
+    "POINT(121.5601 23.6701)",                       # a string where a mapping is expected
+    {"type": "Point"},                               # no coordinates key at all
+    {"type": "Point", "coordinates": []},
+    {"type": "Point", "coordinates": [999.0, 25.0]},  # off the planet
+])
+async def test_malformed_geometry_returns_no_hint_instead_of_an_error(
+    client, login_user_auth, bad_geometry
+):
+    """Fail-open: a point the check cannot read yields an empty list, never a 500.
+
+    The GeoJSON scalar passes values through untouched, so anything the client sends reaches
+    the service — including a bare string, which used to raise AttributeError outside the
+    try and 500 in front of a disaster report.
+    """
     user_uuid, token = login_user_auth
     await _seed_ticket(user_uuid)
 
@@ -172,7 +185,7 @@ async def test_malformed_geometry_returns_no_hint_instead_of_an_error(client, lo
         "/graphql",
         json={
             "query": DEDUP_CANDIDATES,
-            "variables": {"input": _check_input(geometry={"type": "Point", "coordinates": []})},
+            "variables": {"input": _check_input(geometry=bad_geometry)},
         },
         headers=auth_header(token),
     )
