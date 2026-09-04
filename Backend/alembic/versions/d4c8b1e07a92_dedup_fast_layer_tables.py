@@ -118,7 +118,10 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False, comment="建立時間"),  # noqa: E501
         sa.CheckConstraint(
             "event_type IN ('suggested', 'hint_accepted', 'ignored_by_submitter', 'rejected', "
-            "'confirmed', 'merged', 'unmerged', 'manual_note')",
+            "'confirmed', 'merged', 'unmerged', 'manual_note', "
+            # Slow-layer values the fast layer never writes; included so the group welding and
+            # detach flows land without having to rewrite this constraint (contract §1.5).
+            "'group_welded', 'weld_kept', 'member_detached')",
             name="ck_ticket_dedup_audit_events_type",
         ),
         sa.CheckConstraint(
@@ -136,9 +139,21 @@ def upgrade() -> None:
         "ix_ticket_dedup_audit_events_group", "ticket_dedup_audit_events", ["duplicate_group_uuid"]
     )
 
+    # Candidate retrieval filters on ST_DWithin(geometry::geography, ..., metres). The GIST
+    # index geoalchemy2 already builds is on the *geometry* column and cannot serve a
+    # geography operand — different operator class — so without this the submit path
+    # sequentially scans every geometry row in the database. `::geography` here and
+    # SQLAlchemy's `CAST(... AS geography)` in the repository parse to the same expression,
+    # so the planner matches them.
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_base_geometries_geography "
+        "ON base_geometries USING GIST ((geometry::geography))"
+    )
+
 
 def downgrade() -> None:
     """Drop both dedup tables. pg_trgm is left installed — other work may already rely on it."""
+    op.execute("DROP INDEX IF EXISTS ix_base_geometries_geography")
     op.drop_index("ix_ticket_dedup_audit_events_group", table_name="ticket_dedup_audit_events")
     op.drop_index("ix_ticket_dedup_audit_events_pair", table_name="ticket_dedup_audit_events")
     op.drop_table("ticket_dedup_audit_events")

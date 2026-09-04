@@ -48,6 +48,13 @@ AUDIT_EVENT_TYPES = (
     "merged",
     "unmerged",
     "manual_note",
+    # Contract §1.5's three additions. The fast layer never writes them — they belong to the
+    # slow layer's group welding and detach flows — but the value domain is part of the
+    # frozen contract, and a CHECK that omits them would have to be rewritten later to let
+    # those flows land. Cheaper to be complete now than to migrate a constraint.
+    "group_welded",
+    "weld_kept",
+    "member_detached",
 )
 
 
