@@ -140,6 +140,9 @@ export function DedupHintDialog({
       aria-describedby={descriptionId}
       aria-busy={busy}
       data-testid="dedup-hint-dialog"
+      // 留在 Drawer 的 DOM 樹內：MUI ModalManager 會把 body 底下的其他 modal root 標成 aria-hidden，
+      // portal 出去會被外層 Drawer 蓋成 aria-hidden，導致輔助技術與 role 查詢都找不到這個 dialog。
+      disablePortal
       transitionDuration={reduceMotion ? 0 : undefined}
       slotProps={{
         backdrop: {

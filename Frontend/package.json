@@ -14,7 +14,9 @@
     "affected:lint": "nx affected -t lint",
     "graph": "nx graph",
     "reset": "nx reset",
-    "codegen": "graphql-codegen --config libs/data-access/src/graphql/codegen.ts"
+    "codegen": "graphql-codegen --config libs/data-access/src/graphql/codegen.ts",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:install": "playwright install chromium"
   },
   "private": true,
   "devDependencies": {
@@ -32,6 +34,7 @@
     "@nx/react": "^22.6.5",
     "@nx/web": "22.6.5",
     "@nx/workspace": "22.6.5",
+    "@playwright/test": "1.62.1",
     "@swc-node/register": "~1.11.1",
     "@swc/cli": "~0.8.0",
     "@swc/core": "~1.15.5",
