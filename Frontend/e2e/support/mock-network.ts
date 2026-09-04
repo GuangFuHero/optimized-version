@@ -224,7 +224,7 @@ function dispatchGraphql(
     };
   }
 
-  if (operationName === 'GetTicket') {
+  if (operationName === 'GetTicket' || operationName === 'GetTicketSummary') {
     const uuid =
       typeof variables.uuid === 'string'
         ? variables.uuid
