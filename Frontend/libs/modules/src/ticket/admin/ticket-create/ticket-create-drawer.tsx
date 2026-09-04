@@ -39,6 +39,7 @@ import {
   useDedupSubmitFlow,
   type DedupFlowActions,
 } from './dedup';
+import { TicketCreatedButTasksFailedError } from './dedup/errors';
 import {
   TICKET_TYPE_OPTIONS,
   mapTaskTypeLabel,
@@ -341,6 +342,7 @@ export function TicketCreateDrawer({
   const [, createTicketTask] = useMutation(CreateTicketTaskDocument);
   const { status: authStatus } = useSession();
   const reverseGeocodeRequestKeyRef = useRef<string | null>(null);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
   const createTicketFromDraftRef = useRef<() => Promise<{ uuid: string }>>(
     async () => {
       throw new Error('createTicketFromDraft is not ready');
@@ -454,12 +456,25 @@ export function TicketCreateDrawer({
     onClose();
   };
 
+  useEffect(() => {
+    if (flowState.phase === 'done') {
+      closeDrawer();
+    }
+  }, [flowState.phase]);
+
   const handleClose = () => {
-    if (isCreating) {
+    // 提示開著時不關抽屜：關掉會把草稿清掉，使用者應該在 dialog 內做選擇。
+    if (isCreating || isChecking || flowState.phase === 'hint') {
       return;
     }
 
     closeDrawer();
+  };
+
+  const handleHintDialogExited = () => {
+    if (flowState.phase === 'idle' || flowState.phase === 'error') {
+      createButtonRef.current?.focus();
+    }
   };
 
   const updateForm = <K extends keyof TicketCreateFormState>(
@@ -638,8 +653,9 @@ export function TicketCreateDrawer({
       const taskResult = await createTicketTask({ input: taskInput });
 
       if (taskResult.error) {
-        setSubmitError(taskResult.error.message);
-        throw new Error(taskResult.error.message);
+        const message = taskResult.error.message;
+        setSubmitError(message);
+        throw new TicketCreatedButTasksFailedError(createdTicket.uuid, message);
       }
     }
 
@@ -675,7 +691,6 @@ export function TicketCreateDrawer({
       }),
     );
 
-    closeDrawer();
     return { uuid: createdTicket.uuid };
   };
 
@@ -799,12 +814,13 @@ export function TicketCreateDrawer({
             <Button
               variant="outlined"
               onClick={handleClose}
-              disabled={isCreating}
+              disabled={isCreating || isChecking}
               sx={{ flex: 1, borderRadius: '999px' }}
             >
               取消
             </Button>
             <Button
+              ref={createButtonRef}
               variant="contained"
               onClick={handleSubmit}
               disabled={isChecking || isCreating || flowState.phase === 'hint'}
@@ -1327,6 +1343,7 @@ export function TicketCreateDrawer({
           void flow.proceedAnyway();
         }}
         onBack={flow.dismissHint}
+        onExited={handleHintDialogExited}
         palette={ticketCreatePalette}
       />
     </Drawer>

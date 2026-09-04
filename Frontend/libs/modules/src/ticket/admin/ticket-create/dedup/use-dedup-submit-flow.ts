@@ -8,6 +8,7 @@ import {
   type DedupCheckInput,
   type DedupHint,
 } from './dedup-check';
+import { TicketCreatedButTasksFailedError } from './errors';
 import { recordSubmittedAnyway } from './record-outcome';
 
 export type DedupFlowState =
@@ -82,6 +83,21 @@ export function useDedupSubmitFlow(opts: {
         setState({ phase: 'done', createdTicketUuid: created.uuid });
       }
     } catch (error) {
+      if (
+        error instanceof TicketCreatedButTasksFailedError &&
+        hint &&
+        recordedTicketRef.current !== error.uuid
+      ) {
+        recordedTicketRef.current = error.uuid;
+        const recorded = await recordSubmittedAnyway(clientRef.current, {
+          candidateTicketUuid: hint.relatedTicketUuid,
+          submittedTicketUuid: error.uuid,
+        });
+        if (!recorded.ok) {
+          console.warn('recordSubmittedAnyway failed:', recorded.reason);
+        }
+      }
+
       if (isCurrent(generation)) {
         setState({
           phase: 'error',

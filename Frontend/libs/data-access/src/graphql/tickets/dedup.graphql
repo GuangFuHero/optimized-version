@@ -20,3 +20,18 @@ mutation RecordDedupHintOutcome($input: RecordDedupHintOutcomeInput!) {
     pairUuid
   }
 }
+
+fragment TicketSummaryFields on TicketType {
+  uuid
+  title
+  status
+  taskType
+  createdAt
+  geometry
+}
+
+query GetTicketSummary($uuid: UUID!) {
+  ticket(uuid: $uuid) {
+    ...TicketSummaryFields
+  }
+}

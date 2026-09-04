@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useMemo, type MouseEvent } from 'react';
+import { useId, type KeyboardEvent, type MouseEvent } from 'react';
 
 import {
   Box,
@@ -18,12 +18,12 @@ import { useTheme } from '@mui/material/styles';
 import { useQuery } from 'urql';
 
 import {
-  GetTicketDocument,
-  TicketFieldsFragmentDoc,
+  GetTicketSummaryDocument,
+  TicketSummaryFieldsFragmentDoc,
   useFragment,
 } from '@rescue-frontend/data-access';
 
-import { TICKET_STATUS_LABELS } from '../../../status';
+import { formatTicketStatusLabel } from '../../../status';
 import { mapTaskTypeLabel } from '../task-type';
 import { buildCandidateMapHref } from './candidate-link';
 import type { DedupHint } from './dedup-check';
@@ -48,11 +48,6 @@ function formatCandidateCreatedAt(value: unknown): string | null {
   return `${year}/${month}/${day} ${hour}:${minute} 建立`;
 }
 
-function statusLabelOf(status: string): string {
-  const key = status.trim().toLowerCase();
-  return TICKET_STATUS_LABELS[key] ?? status;
-}
-
 export type DedupHintDialogProps = {
   open: boolean;
   hint: DedupHint | null;
@@ -60,6 +55,7 @@ export type DedupHintDialogProps = {
   onViewCandidate: () => void;
   onProceedAnyway: () => void;
   onBack: () => void;
+  onExited?: () => void;
   palette: typeof ticketCreatePalette;
 };
 
@@ -70,6 +66,7 @@ export function DedupHintDialog({
   onViewCandidate,
   onProceedAnyway,
   onBack,
+  onExited,
   palette,
 }: DedupHintDialogProps) {
   const theme = useTheme();
@@ -81,18 +78,15 @@ export function DedupHintDialog({
   const uuid = hint?.relatedTicketUuid ?? '';
 
   const [{ data, fetching, error }] = useQuery({
-    query: GetTicketDocument,
+    query: GetTicketSummaryDocument,
     variables: { uuid },
     pause: !open || !hint,
   });
 
-  const ticket = useMemo(() => {
-    if (!data?.ticket) {
-      return null;
-    }
-
-    return useFragment(TicketFieldsFragmentDoc, data.ticket);
-  }, [data?.ticket]);
+  const ticket = useFragment(
+    TicketSummaryFieldsFragmentDoc,
+    data?.ticket ?? null,
+  );
 
   const candidateHref = buildCandidateMapHref({
     uuid,
@@ -113,6 +107,17 @@ export function DedupHintDialog({
     onBack();
   };
 
+  // disablePortal 之下 dialog 在 Drawer 的 DOM 樹內，Escape 會一路冒泡到外層 Drawer 的
+  // Modal，把整個抽屜關掉、草稿清空。這裡自己處理 Escape 並停止冒泡。
+  const handleDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape') {
+      return;
+    }
+
+    event.stopPropagation();
+    handleDialogClose();
+  };
+
   const handleViewCandidate = (event: MouseEvent<HTMLAnchorElement>) => {
     if (busy) {
       event.preventDefault();
@@ -120,19 +125,13 @@ export function DedupHintDialog({
     }
 
     onViewCandidate();
-
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-      return;
-    }
-
-    event.preventDefault();
-    window.open(candidateHref, '_blank', 'noopener,noreferrer');
   };
 
   return (
     <Dialog
       open={open}
       onClose={handleDialogClose}
+      onKeyDown={handleDialogKeyDown}
       fullScreen={isMobile}
       fullWidth
       maxWidth="sm"
@@ -159,7 +158,16 @@ export function DedupHintDialog({
             boxShadow: isMobile
               ? 'none'
               : '0 18px 48px rgba(15, 63, 117, 0.16)',
+            ...(isMobile
+              ? {}
+              : {
+                  m: 2,
+                  width: 'calc(100% - 32px)',
+                }),
           },
+        },
+        transition: {
+          onExited,
         },
       }}
     >
@@ -260,7 +268,7 @@ export function DedupHintDialog({
                   {ticket?.status ? (
                     <Chip
                       size="small"
-                      label={statusLabelOf(ticket.status)}
+                      label={formatTicketStatusLabel(ticket.status)}
                       sx={{
                         height: 24,
                         fontWeight: 700,
@@ -305,13 +313,7 @@ export function DedupHintDialog({
           pb: 2.5,
         }}
       >
-        <Stack
-          direction={{ mobile: 'column', tablet: 'row' }}
-          spacing={1}
-          sx={{
-            alignItems: { mobile: 'stretch', tablet: 'flex-start' },
-          }}
-        >
+        <Stack direction="column" spacing={1}>
           <Button
             component="a"
             href={candidateHref}
@@ -319,10 +321,11 @@ export function DedupHintDialog({
             rel="noopener noreferrer"
             variant="contained"
             autoFocus
+            fullWidth
             disabled={busy}
+            aria-label="去看看這張求助單（開新分頁）"
             onClick={handleViewCandidate}
             sx={{
-              flex: { tablet: '0 0 auto' },
               borderRadius: '999px',
               bgcolor: palette.primary,
               color: palette.primaryText,
@@ -339,9 +342,10 @@ export function DedupHintDialog({
             去看看這張求助單
           </Button>
 
-          <Stack spacing={0.5} sx={{ flex: { tablet: '0 1 auto' } }}>
+          <Stack spacing={0.5}>
             <Button
               variant="outlined"
+              fullWidth
               disabled={busy}
               aria-describedby={proceedHelperId}
               onClick={onProceedAnyway}
@@ -373,10 +377,10 @@ export function DedupHintDialog({
 
           <Button
             variant="text"
+            fullWidth
             disabled={busy}
             onClick={onBack}
             sx={{
-              flex: { tablet: '0 0 auto' },
               borderRadius: '999px',
               fontWeight: 800,
               color: palette.secondaryText,
