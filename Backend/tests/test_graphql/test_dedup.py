@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from app.models.dedup import TicketDedupAuditEvent, TicketDuplicatePair
 from app.models.request import Tickets
+from app.repositories.dedup_repository import DEFAULT_CANDIDATE_LIMIT
 from tests.test_graphql.conftest import auth_header, test_db
 
 DEDUP_CANDIDATES = """
@@ -380,3 +381,81 @@ async def test_a_settled_card_keeps_its_admin_verdict(client, login_user_auth):
         assert rows[0].status == "confirmed"       # untouched
         assert rows[0].rescan_needed is False      # untouched
         assert rows[0].hint_outcome == "ignored_hint"  # still measured
+
+
+@pytest.mark.asyncio
+async def test_a_blank_candidate_drops_the_text_signal(client, login_user_auth):
+    """A candidate with no title or description is scored on the other three signals only."""
+    user_uuid, token = login_user_auth
+    await _seed_ticket(user_uuid, title="", description=None)
+
+    res = await client.post(
+        "/graphql",
+        json={"query": DEDUP_CANDIDATES, "variables": {"input": _check_input()}},
+        headers=auth_header(token),
+    )
+    hints = res.json()["data"]["ticketDedupCandidates"]
+    assert len(hints) == 1
+    assert {c["name"] for c in hints[0]["scoreComponents"]} == {"distance", "time", "task_type"}
+
+
+@pytest.mark.asyncio
+async def test_a_blank_submission_drops_the_text_signal(client, login_user_auth):
+    """The submission having no text is just as unusable as the candidate having none.
+
+    Without this the text score would be 0.0 for every candidate and drag each total down by
+    the text weight, quietly turning "the submitter typed nothing yet" into "nothing matches".
+    """
+    user_uuid, token = login_user_auth
+    await _seed_ticket(user_uuid)
+
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": DEDUP_CANDIDATES,
+            "variables": {"input": _check_input(title="", description=None)},
+        },
+        headers=auth_header(token),
+    )
+    hints = res.json()["data"]["ticketDedupCandidates"]
+    assert len(hints) == 1
+    assert {c["name"] for c in hints[0]["scoreComponents"]} == {"distance", "time", "task_type"}
+
+
+@pytest.mark.asyncio
+async def test_nearer_noise_can_crowd_the_real_twin_out_of_retrieval(client, login_user_auth):
+    """The retrieval limit is a work bound, and it cuts by distance — nothing else.
+
+    Fifty unrelated tickets packed within 50 m fill the candidate list, so the real twin at
+    ~92 m never gets scored and no hint is shown. This is the current, deliberate behaviour
+    (cheapest possible bound), and it is the open question the PR raises for dense disaster
+    zones: a candidate that is further away but a much better textual and temporal match is
+    cut before the formula ever sees it.
+    """
+    user_uuid, token = login_user_auth
+    for i in range(DEFAULT_CANDIDATE_LIMIT):
+        await _seed_ticket(
+            user_uuid, offset_deg=0.000005 * (i + 1), age_min=3000.0,
+            title="需要志工幫忙搬物資", description="倉庫缺人手", task_type="hr",
+        )
+    twin = await _seed_ticket(user_uuid, offset_deg=0.0009)
+
+    res = await client.post(
+        "/graphql",
+        json={"query": DEDUP_CANDIDATES, "variables": {"input": _check_input()}},
+        headers=auth_header(token),
+    )
+    assert res.json()["data"]["ticketDedupCandidates"] == []
+
+    # Same twin, same query, without the crowd: it clears the threshold comfortably.
+    async with test_db() as db:
+        for row in (await db.execute(select(Tickets))).scalars().all():
+            if str(row.uuid) != twin:
+                await db.delete(row)
+    res = await client.post(
+        "/graphql",
+        json={"query": DEDUP_CANDIDATES, "variables": {"input": _check_input()}},
+        headers=auth_header(token),
+    )
+    hints = res.json()["data"]["ticketDedupCandidates"]
+    assert [h["relatedTicketUuid"] for h in hints] == [twin]

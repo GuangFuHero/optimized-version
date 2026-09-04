@@ -140,3 +140,34 @@ def test_top_hint_returns_only_a_candidate_over_the_threshold():
 def test_top_hint_on_no_candidates_is_none():
     """Nothing nearby means no hint, not an error."""
     assert top_hint([], query_task_type="supply") is None
+
+
+def test_a_score_exactly_on_the_threshold_still_hints():
+    """`hint_threshold` is inclusive — a candidate landing exactly on 0.8 is shown."""
+    params = FastLayerParameters(hint_threshold=0.8)
+    # Only the text signal is available, so the weighted average is the text score itself.
+    exact = DedupCandidate("exact", distance_m=0.0, age_min=0.0, text_similarity=0.8)
+    text_only = FastLayerParameters(
+        hint_threshold=0.8, distance_weight=0.0, time_weight=0.0, text_weight=1.0
+    )
+    score = score_candidate(exact, query_task_type=None, parameters=text_only)
+    assert score.similarity == pytest.approx(0.8)
+    assert top_hint([exact], query_task_type=None, parameters=text_only) is not None
+
+    # And a hair under it is not.
+    under = DedupCandidate("under", distance_m=0.0, age_min=0.0, text_similarity=0.7999)
+    assert top_hint([under], query_task_type=None, parameters=text_only) is None
+    assert params.hint_threshold == 0.8
+
+
+@pytest.mark.parametrize("query_type,candidate_type", [
+    ("supply", None),   # the candidate never filled it in
+    (None, "supply"),   # the submission has not filled it in
+])
+def test_a_one_sided_task_type_drops_the_signal(query_type, candidate_type):
+    """One side missing is as unusable as both — the signal leaves the average entirely."""
+    score = score_candidate(
+        _candidate(task_type=candidate_type), query_task_type=query_type, parameters=THREE_SIGNAL
+    )
+    assert [c.name for c in score.components] == ["distance", "time"]
+    assert score.similarity == pytest.approx(0.7438651685773059, abs=1e-12)

@@ -45,20 +45,32 @@ class DedupCandidateRepository:
         ).label("text_similarity")
         return point, distance, text_similarity
 
-    def _to_candidate(self, ticket: Tickets, distance_m: float, text_similarity, now: datetime):
+    def _to_candidate(
+        self,
+        ticket: Tickets,
+        distance_m: float,
+        text_similarity,
+        now: datetime,
+        *,
+        query_has_text: bool,
+    ) -> DedupCandidate:
         """Turn one result row into the scoring layer's DedupCandidate.
 
-        `text_similarity` is dropped (left None, i.e. "signal unavailable") when the candidate
-        carries no text at all — scoring it 0.0 would penalise a ticket for a field nobody
-        filled in, which is the same rule the task-type signal already follows.
+        `text_similarity` is dropped (left None, i.e. "signal unavailable") whenever *either*
+        side has no text — the candidate's title and description are both empty, or the
+        submission being checked is. Scoring it 0.0 instead would penalise a ticket for a
+        field nobody filled in, and a blank query would drag every candidate's total down by
+        the text weight, which is the same failure the task-type signal already avoids by
+        leaving the average rather than scoring zero.
         """
         age_min = max(0.0, (now - ticket.created_at).total_seconds() / 60)
+        has_text = query_has_text and bool(_text_of(ticket))
         return DedupCandidate(
             ticket_uuid=str(ticket.uuid),
             distance_m=float(distance_m),
             age_min=age_min,
             task_type=ticket.task_type,
-            text_similarity=None if not _text_of(ticket) else float(text_similarity),
+            text_similarity=float(text_similarity) if has_text else None,
         )
 
     async def list_nearby_open(
@@ -88,7 +100,13 @@ class DedupCandidateRepository:
             .order_by(distance)
             .limit(limit)
         )
-        return [self._to_candidate(row[0], row.distance_m, row.text_similarity, now) for row in result]
+        return [
+            self._to_candidate(
+                row[0], row.distance_m, row.text_similarity, now,
+                query_has_text=bool(query_text.strip()),
+            )
+            for row in result
+        ]
 
     async def get_candidate_features(
         self,
@@ -117,7 +135,10 @@ class DedupCandidateRepository:
         row = result.first()
         if row is None:
             return None
-        return self._to_candidate(row[0], row.distance_m, row.text_similarity, now)
+        return self._to_candidate(
+            row[0], row.distance_m, row.text_similarity, now,
+            query_has_text=bool(query_text.strip()),
+        )
 
 
 class TicketDuplicatePairRepository(GenericRepository[TicketDuplicatePair]):
