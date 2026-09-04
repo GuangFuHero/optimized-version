@@ -1,0 +1,22 @@
+# ─── Dedup (pre-submit soft hint) ─────────────────────────────
+
+query TicketDedupCandidates($input: TicketDedupCheckInput!) {
+  ticketDedupCandidates(input: $input) {
+    relatedTicketUuid
+    similarity
+    scoreComponents {
+      name
+      score
+      weight
+      passed
+    }
+  }
+}
+
+mutation RecordDedupHintOutcome($input: RecordDedupHintOutcomeInput!) {
+  recordDedupHintOutcome(input: $input) {
+    auditEventUuid
+    hintOutcome
+    pairUuid
+  }
+}
