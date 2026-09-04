@@ -6,12 +6,15 @@ the same inputs at the same parameters. If this file starts failing, the port ha
 from the harness and offline tuning no longer predicts live behaviour.
 """
 
+import math
+
 import pytest
 
 from app.services.dedup_scoring import (
     FAST_LAYER_PARAMETERS,
     DedupCandidate,
     FastLayerParameters,
+    max_hint_distance_m,
     rank_candidates,
     score_candidate,
     top_hint,
@@ -171,3 +174,57 @@ def test_a_one_sided_task_type_drops_the_signal(query_type, candidate_type):
     )
     assert [c.name for c in score.components] == ["distance", "time"]
     assert score.similarity == pytest.approx(0.7438651685773059, abs=1e-12)
+
+
+def test_the_hint_boundary_is_where_a_perfect_candidate_scores_exactly_the_threshold():
+    """`max_hint_distance_m` really is the inverse of the formula, not an approximation of it.
+
+    A candidate sitting exactly on the boundary, perfect on every other signal, must land on
+    `hint_threshold` — that is what makes the derived radius safe to retrieve with.
+    """
+    boundary = max_hint_distance_m()
+    assert boundary == pytest.approx(147.3931188332412, abs=1e-9)
+
+    perfect = DedupCandidate(
+        "boundary", distance_m=boundary, age_min=0.0, task_type="supply", text_similarity=1.0
+    )
+    score = score_candidate(perfect, query_task_type="supply")
+    assert score.similarity == pytest.approx(FAST_LAYER_PARAMETERS.hint_threshold)
+    assert top_hint([perfect], query_task_type="supply") is not None
+
+    # A metre further out and the same candidate no longer qualifies.
+    beyond = DedupCandidate(
+        "beyond", distance_m=boundary + 1, age_min=0.0, task_type="supply", text_similarity=1.0
+    )
+    assert top_hint([beyond], query_task_type="supply") is None
+
+
+def test_the_boundary_is_widest_when_every_signal_is_available():
+    """Fewer signals means a *tighter* boundary, so the all-four radius covers every ticket.
+
+    A missing signal leaves the weighted average, shrinking the denominator, which forces the
+    distance signal to carry more of the threshold on its own.
+    """
+    all_four = max_hint_distance_m()
+    assert max_hint_distance_m(FastLayerParameters(text_weight=0.0)) < all_four
+    assert max_hint_distance_m(FastLayerParameters(task_type_weight=0.0)) < all_four
+
+
+@pytest.mark.parametrize("parameters,expected", [
+    # Distance carries no weight, so it can never rule a candidate out.
+    (FastLayerParameters(distance_weight=0.0), math.inf),
+    # The other three signals alone already reach 0.5, so again distance rules nothing out.
+    (FastLayerParameters(hint_threshold=0.5), math.inf),
+    # Nothing short of a perfect score qualifies, and only distance 0 is perfect.
+    (FastLayerParameters(hint_threshold=1.0), 0.0),
+])
+def test_degenerate_parameters_give_a_degenerate_boundary(parameters, expected):
+    """The two edges are answered honestly rather than with a made-up number."""
+    assert max_hint_distance_m(parameters) == expected
+
+
+def test_the_boundary_scales_with_the_distance_half_life():
+    """Doubling `distance_half_m` doubles the reach — the radius tracks the parameters."""
+    assert max_hint_distance_m(FastLayerParameters(distance_half_m=400.0)) == pytest.approx(
+        2 * max_hint_distance_m()
+    )

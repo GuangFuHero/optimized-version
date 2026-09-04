@@ -19,6 +19,7 @@ deliberate: a ticket with no `task_type` should not be pushed below the hint thr
 a field it was never asked to fill in.
 """
 
+import math
 from dataclasses import dataclass, field
 
 
@@ -183,3 +184,46 @@ def top_hint(
         return None
     best = scored[0]
     return best if best.similarity >= parameters.hint_threshold else None
+
+
+def max_hint_distance_m(parameters: FastLayerParameters = FAST_LAYER_PARAMETERS) -> float:
+    """The distance beyond which no candidate can clear `hint_threshold`, whatever else it is.
+
+    The inverse of the scoring formula, solved for distance with every other signal at its
+    maximum. Retrieval uses it as the candidate boundary so that the only thing ever excluded
+    is what is *arithmetically* incapable of producing a hint — never a guess about how much
+    work the database should do. Change any parameter and the boundary moves with it.
+
+        similarity = (d_signal·w_d + Σ other signals·their weights) / Σ weights
+
+    At the boundary every other signal is 1.0, so with W = Σ weights::
+
+        threshold = (d_signal·w_d + (W − w_d)) / W
+        d_signal  = 1 + W·(threshold − 1) / w_d
+        distance  = −distance_half_m · log2(d_signal)
+
+    W is taken over *all four* signals, which is the widest the boundary ever gets: a signal
+    that turns out to be unavailable leaves the average, shrinking W, and a smaller W makes
+    the required distance signal larger, not smaller (`threshold − 1` is negative). So a
+    radius computed this way covers every candidate no matter which of its fields are filled
+    in — for the shipped parameters, 147.4 m.
+
+    Returns `math.inf` when distance can never rule a candidate out on its own (no distance
+    weight, or a threshold so low the other signals alone clear it), and 0.0 when even a
+    candidate at the same coordinates cannot clear the threshold. Callers are expected to
+    clamp the infinite case — see `_retrieval_radius_m` in services/dedup.py.
+    """
+    total_weight = (
+        parameters.distance_weight
+        + parameters.time_weight
+        + parameters.task_type_weight
+        + parameters.text_weight
+    )
+    if parameters.distance_weight <= 0 or total_weight <= 0:
+        return math.inf
+    required_signal = 1 + total_weight * (parameters.hint_threshold - 1) / parameters.distance_weight
+    if required_signal <= 0:
+        return math.inf
+    if required_signal >= 1:
+        return 0.0
+    return -parameters.distance_half_m * math.log2(required_signal)

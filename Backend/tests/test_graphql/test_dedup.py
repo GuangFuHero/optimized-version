@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from app.models.dedup import TicketDedupAuditEvent, TicketDuplicatePair
 from app.models.request import Tickets
-from app.repositories.dedup_repository import DEFAULT_CANDIDATE_LIMIT
+from app.services.dedup_scoring import max_hint_distance_m
 from tests.test_graphql.conftest import auth_header, test_db
 
 DEDUP_CANDIDATES = """
@@ -423,35 +423,23 @@ async def test_a_blank_submission_drops_the_text_signal(client, login_user_auth)
 
 
 @pytest.mark.asyncio
-async def test_nearer_noise_can_crowd_the_real_twin_out_of_retrieval(client, login_user_auth):
-    """The retrieval limit is a work bound, and it cuts by distance — nothing else.
+async def test_nearer_noise_does_not_crowd_out_the_real_twin(client, login_user_auth):
+    """Fifty unrelated tickets packed nearer than the twin must not cost the submitter the hint.
 
-    Fifty unrelated tickets packed within 50 m fill the candidate list, so the real twin at
-    ~92 m never gets scored and no hint is shown. This is the current, deliberate behaviour
-    (cheapest possible bound), and it is the open question the PR raises for dense disaster
-    zones: a candidate that is further away but a much better textual and temporal match is
-    cut before the formula ever sees it.
+    Retrieval has no row limit: its only boundary is `max_hint_distance_m`, the distance past
+    which no candidate can clear the threshold whatever else it scores. So the twin at ~92 m
+    is still retrieved, still ranked first, and still hinted — where a `LIMIT 50` ordered by
+    distance would have cut it for a reason the formula never asked for. This is the dense
+    disaster zone case: the nearest tickets are not the most similar ones.
     """
     user_uuid, token = login_user_auth
-    for i in range(DEFAULT_CANDIDATE_LIMIT):
+    for i in range(50):
         await _seed_ticket(
             user_uuid, offset_deg=0.000005 * (i + 1), age_min=3000.0,
             title="需要志工幫忙搬物資", description="倉庫缺人手", task_type="hr",
         )
-    twin = await _seed_ticket(user_uuid, offset_deg=0.0009)
+    twin = await _seed_ticket(user_uuid, offset_deg=0.0009)  # ~92 m, inside the boundary
 
-    res = await client.post(
-        "/graphql",
-        json={"query": DEDUP_CANDIDATES, "variables": {"input": _check_input()}},
-        headers=auth_header(token),
-    )
-    assert res.json()["data"]["ticketDedupCandidates"] == []
-
-    # Same twin, same query, without the crowd: it clears the threshold comfortably.
-    async with test_db() as db:
-        for row in (await db.execute(select(Tickets))).scalars().all():
-            if str(row.uuid) != twin:
-                await db.delete(row)
     res = await client.post(
         "/graphql",
         json={"query": DEDUP_CANDIDATES, "variables": {"input": _check_input()}},
@@ -459,3 +447,24 @@ async def test_nearer_noise_can_crowd_the_real_twin_out_of_retrieval(client, log
     )
     hints = res.json()["data"]["ticketDedupCandidates"]
     assert [h["relatedTicketUuid"] for h in hints] == [twin]
+
+
+@pytest.mark.asyncio
+async def test_a_candidate_past_the_hint_boundary_is_never_retrieved(client, login_user_auth):
+    """The one thing retrieval does cut is what could not have hinted anyway.
+
+    An otherwise perfect twin — same words, same task type, seconds old — sitting beyond
+    `max_hint_distance_m` cannot reach the threshold on any weighting of the other three
+    signals, so leaving it out of the query costs nothing.
+    """
+    user_uuid, token = login_user_auth
+    # ~245 m east: past the ~147 m boundary even with the 1.1 rounding margin.
+    assert max_hint_distance_m() < 147.5
+    await _seed_ticket(user_uuid, offset_deg=0.0024, age_min=0.0)
+
+    res = await client.post(
+        "/graphql",
+        json={"query": DEDUP_CANDIDATES, "variables": {"input": _check_input()}},
+        headers=auth_header(token),
+    )
+    assert res.json()["data"]["ticketDedupCandidates"] == []

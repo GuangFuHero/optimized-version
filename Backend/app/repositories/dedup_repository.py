@@ -15,13 +15,6 @@ from app.services.dedup_scoring import DedupCandidate
 # whose two sinks are exactly these.
 CLOSED_TICKET_STATUSES = ("completed", "cancelled")
 
-# Candidate retrieval boundary, not a similarity threshold: it only bounds how much work the
-# query does. Deliberately generous relative to the scoring parameters — at
-# distance_half_m=200 a candidate needs to be within ~147 m to clear hint_threshold=0.8 even
-# with every other signal perfect, so nothing scoreable is cut off by this radius.
-DEFAULT_CANDIDATE_RADIUS_M = 500.0
-DEFAULT_CANDIDATE_LIMIT = 50
-
 
 def _text_of(ticket: Tickets) -> str:
     """Concatenate a ticket's title and description the same way the SQL side does."""
@@ -80,11 +73,18 @@ class DedupCandidateRepository:
         longitude: float,
         latitude: float,
         query_text: str,
+        radius_m: float,
         now: datetime | None = None,
-        radius_m: float = DEFAULT_CANDIDATE_RADIUS_M,
-        limit: int = DEFAULT_CANDIDATE_LIMIT,
     ) -> list[DedupCandidate]:
-        """Fetch the nearest still-open tickets around a point, closest first."""
+        """Fetch every still-open ticket within `radius_m` of a point.
+
+        No row limit and no ordering. `radius_m` is derived from the scoring parameters (see
+        `dedup_scoring.max_hint_distance_m`), so it already excludes exactly the candidates
+        that cannot clear the hint threshold and nothing else; adding a `LIMIT` on top would
+        drop candidates for a reason that has nothing to do with the formula — in a dense
+        disaster zone, the nearest fifty are not necessarily the fifty most similar. Ranking
+        is the scoring layer's job and it sorts deterministically, so ordering here is waste.
+        """
         now = now or datetime.now(UTC)
         point, distance, text_similarity = self._feature_columns(
             longitude=longitude, latitude=latitude, query_text=query_text
@@ -97,8 +97,6 @@ class DedupCandidateRepository:
                 Tickets.status.notin_(CLOSED_TICKET_STATUSES),
                 func.ST_DWithin(cast(Tickets.geometry, Geography), point, radius_m),
             )
-            .order_by(distance)
-            .limit(limit)
         )
         return [
             self._to_candidate(

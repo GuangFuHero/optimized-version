@@ -26,8 +26,6 @@ from app.models.auth import User
 from app.models.dedup import TicketDuplicatePair
 from app.models.request import Tickets
 from app.repositories.dedup_repository import (
-    DEFAULT_CANDIDATE_LIMIT,
-    DEFAULT_CANDIDATE_RADIUS_M,
     dedup_candidate_repository,
     ticket_dedup_audit_event_repository,
     ticket_duplicate_pair_repository,
@@ -38,6 +36,7 @@ from app.services.dedup_scoring import (
     FAST_LAYER_PARAMETERS,
     CandidateScore,
     FastLayerParameters,
+    max_hint_distance_m,
     score_candidate,
     top_hint,
 )
@@ -72,6 +71,18 @@ UNSETTLED_PAIR_STATUSES = frozenset({"suggested", "dup_ignored"})
 TITLE_MAX_CHARS = 200
 DESCRIPTION_MAX_CHARS = 2000
 
+# Slack on the derived retrieval radius. Not a modelling choice — the radius and the distance
+# signal are computed from the same PostGIS measurement, so they agree — just enough margin
+# that floating-point rounding at the boundary cannot drop a candidate scoring exactly on the
+# threshold, which `top_hint` would otherwise have shown (the comparison is `>=`).
+RETRIEVAL_RADIUS_SAFETY_FACTOR = 1.1
+# Backstop, not a tuning knob. The derived radius is unbounded when the parameters make
+# distance incapable of ruling anything out (no distance weight, or a threshold the other
+# three signals clear on their own), and "scan the planet" is not a sane answer to a
+# misconfiguration. Crossing it is logged, because it means the parameters, not the data,
+# need looking at.
+MAX_CANDIDATE_RADIUS_M = 1000.0
+
 
 async def find_duplicate_hints(
     db: AsyncSession,
@@ -81,8 +92,6 @@ async def find_duplicate_hints(
     description: str | None = None,
     task_type: str | None = None,
     submitted_at: datetime | None = None,
-    radius_m: float = DEFAULT_CANDIDATE_RADIUS_M,
-    limit: int = DEFAULT_CANDIDATE_LIMIT,
     parameters: FastLayerParameters = FAST_LAYER_PARAMETERS,
 ) -> list[CandidateScore]:
     """Find the one nearby open ticket worth warning the submitter about, if any.
@@ -111,8 +120,7 @@ async def find_duplicate_hints(
             latitude=latitude,
             query_text=_query_text(title, description),
             now=submitted_at or datetime.now(UTC),
-            radius_m=radius_m,
-            limit=limit,
+            radius_m=_retrieval_radius_m(parameters),
         )
         best = top_hint(candidates, query_task_type=task_type, parameters=parameters)
     except Exception:
@@ -207,6 +215,26 @@ async def record_hint_outcome(
     )
     await db.commit()
     return pair, str(event.uuid)
+
+
+def _retrieval_radius_m(parameters: FastLayerParameters) -> float:
+    """How far out to look for candidates, derived from the scoring parameters themselves.
+
+    Everything past `max_hint_distance_m` is arithmetically incapable of clearing the hint
+    threshold, so that — plus a rounding margin — is the only justified boundary. Tune any
+    parameter and the radius follows: raise `distance_half_m` or lower `hint_threshold` and
+    the search widens on its own, with no second number to remember to change.
+    """
+    radius = max_hint_distance_m(parameters) * RETRIEVAL_RADIUS_SAFETY_FACTOR
+    if radius > MAX_CANDIDATE_RADIUS_M:
+        logger.warning(
+            "dedup parameters put the hint boundary at %.1f m; clamping retrieval to %.1f m. "
+            "Distance cannot rule any candidate out at these weights — check the settings, "
+            "not the data.",
+            radius, MAX_CANDIDATE_RADIUS_M,
+        )
+        return MAX_CANDIDATE_RADIUS_M
+    return radius
 
 
 def _query_text(title: str, description: str | None) -> str:

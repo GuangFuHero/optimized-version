@@ -83,7 +83,26 @@ similarity       = Σ(signal × weight) / Σ(可用訊號的 weight)
 稽核報告原話：13 個手編 fixture、沒有真實送單情境、沒有人工正解；recall 100% 時最低 false hint
 rate 仍有 66.7%。**不是參數調不好，是資料不夠。** 收到真實資料後用同一支腳本重跑再調。
 
-候選檢索半徑固定 500 m、上限 50 筆，只是工作量邊界：在上表參數下，距離要 ≲147 m 才可能過門檻。
+**候選半徑由參數推導，沒有筆數上限。** 唯一該被排除的候選，是「數學上不可能過門檻」的那些；
+筆數截斷來自對 DB 工作量的猜測，跟公式無關 —— 密集災區裡最近的 50 張並不等於最像的 50 張。
+
+把計分公式對距離反解，其他三個訊號全部給滿分（W = 四個權重的總和）：
+
+```
+threshold = (d_signal × w_d + (W − w_d)) / W
+d_signal  = 1 + W × (threshold − 1) / w_d
+distance  = −distance_half_m × log2(d_signal)
+```
+
+W 取「四個訊號全部可用」的情況，因為那是邊界最寬的時候：訊號不可用會退出平均、W 變小，
+而 `threshold − 1` 是負的，W 越小反而要求 `d_signal` 越大、半徑越短。所以用全滿算出來的半徑，
+對任何欄位填寫組合都夠用。上表參數代進去＝ **147.4 m**，再乘 1.1 的浮點餘裕（避免剛好落在門檻上
+的候選被進位誤差刷掉）。
+
+**參數一動，半徑跟著動**：`distance_half_m` 加倍半徑就加倍，`hint_threshold` 調低半徑就變寬，
+沒有第二個數字要記得改。兩個退化情況誠實回答：距離權重為 0、或門檻低到其他三訊號自己就過得了時，
+距離永遠排除不掉任何人（回 `inf`，由 service 夾到 `MAX_CANDIDATE_RADIUS_M = 1000 m` 並記
+warning —— 那代表參數要看，不是資料要看）；門檻為 1.0 時只有同座標才可能過（回 0）。
 
 ---
 
@@ -138,9 +157,10 @@ uv run pytest tests/test_dedup_scoring.py tests/test_dedup_service.py tests/test
 1. 四個選項的 enum 值命名（合約只凍結了 `accepted_hint`／`ignored_hint` 兩值收斂）。
 2. 送單前的回傳型別要不要就叫 `TicketDedupRelation`、把 `pairUuid`／`pairStatus` 放寬成 nullable。
 3. 「接受提示」沒有第二張單時要不要仍造一張卡（現在不造，只留 event）。
-4. 候選半徑 500 m／上限 50 筆是否合理。**注意 `limit=50` 是取「最近的 50 筆」**：密集災區裡，
-   一張距離稍遠但文字／時間都更像的單，會在進入公式之前就被切掉（`test_graphql/test_dedup.py`
-   有一支測試把這個行為釘住）。
+4. 候選半徑改為**由參數推導**（`max_hint_distance_m`，公式見 §3），不再有筆數上限：現行參數
+   ＝147.4 m × 1.1。要拍板的是 `MAX_CANDIDATE_RADIUS_M = 1000 m` 這個 backstop 值，以及
+   1.1 這個浮點餘裕是否夠。`test_graphql/test_dedup.py` 有兩支測試釘住行為：50 張更近的雜訊單
+   不會擠掉 92 m 外的真雙胞胎；超出邊界的候選則根本不進查詢。
 5. 文字權重 1.0 與 `component_baseline` 0.5 都沒跑過 grid。
 6. 評估腳本要補 `text_weight` 與 fixture 的文字欄位（在設計工作區，不在本 repo）。
 7. `CLOSED_TICKET_STATUSES = ("completed", "cancelled")` 是本 PR 定的「未結案」口徑，

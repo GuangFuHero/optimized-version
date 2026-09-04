@@ -10,7 +10,12 @@ import pytest
 
 from app.repositories import dedup_repository
 from app.services import dedup as dedup_service
-from app.services.dedup_scoring import FAST_LAYER_PARAMETERS, DedupCandidate
+from app.services.dedup_scoring import (
+    FAST_LAYER_PARAMETERS,
+    DedupCandidate,
+    FastLayerParameters,
+    max_hint_distance_m,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -144,3 +149,45 @@ async def test_scoring_failure_fails_open(stub_candidates, db, monkeypatch):
 
     monkeypatch.setattr(dedup_service, "top_hint", _boom)
     assert await _check(db) == []
+
+
+@pytest.fixture
+def capture_retrieval(monkeypatch):
+    """Record the keyword arguments retrieval is called with."""
+    seen = {}
+
+    async def _fake(_db, **kwargs):
+        seen.update(kwargs)
+        return []
+
+    monkeypatch.setattr(dedup_repository.dedup_candidate_repository, "list_nearby_open", _fake)
+    return seen
+
+
+async def test_the_search_radius_is_derived_from_the_scoring_parameters(db, capture_retrieval):
+    """The only boundary retrieval gets is the distance past which a hint is impossible."""
+    await _check(db)
+    expected = max_hint_distance_m() * dedup_service.RETRIEVAL_RADIUS_SAFETY_FACTOR
+    assert capture_retrieval["radius_m"] == pytest.approx(expected)
+    # No row cap: a `LIMIT` would drop candidates for a reason the formula never asked for.
+    assert "limit" not in capture_retrieval
+
+
+async def test_tuning_a_parameter_moves_the_radius_with_it(db, capture_retrieval):
+    """Doubling the distance half-life doubles the search radius — one number, not two."""
+    await _check(db, parameters=FastLayerParameters(distance_half_m=400.0))
+    assert capture_retrieval["radius_m"] == pytest.approx(
+        2 * max_hint_distance_m() * dedup_service.RETRIEVAL_RADIUS_SAFETY_FACTOR
+    )
+
+
+async def test_an_unbounded_radius_is_clamped_and_reported(db, capture_retrieval, caplog):
+    """Parameters where distance rules nothing out are a misconfiguration, not a licence to scan.
+
+    At a 0.5 threshold the other three signals already clear it on their own, so the derived
+    boundary is infinite. Retrieval clamps, and says so — the settings need looking at, not
+    the data.
+    """
+    await _check(db, parameters=FastLayerParameters(hint_threshold=0.5))
+    assert capture_retrieval["radius_m"] == dedup_service.MAX_CANDIDATE_RADIUS_M
+    assert "clamping retrieval" in caplog.text
