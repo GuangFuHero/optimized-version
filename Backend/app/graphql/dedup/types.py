@@ -12,6 +12,12 @@ are meaningful at that moment — `relatedTicketUuid`, `similarity`, `scoreCompo
 the same names, and drops the two that cannot exist yet. The frozen relation shape is
 untouched and still applies to the ticket read path (`TicketDedupInfo`), which is not in
 this slice.
+
+Do not "fix" the departure by making `pairUuid`/`pairStatus` nullable on the relation: a hint
+and a relation are different things (no card exists yet vs. a card exists). When
+`TicketDedupRelation` lands in code, hoist the three shared fields into a GraphQL interface
+(e.g. `DedupMatch`) and have both types implement it — one implementer today is too early
+for that abstraction.
 """
 
 import enum
@@ -58,7 +64,9 @@ class TicketDedupHint:
     """A pre-submit duplicate warning: one existing ticket that looks like the one being filed."""
 
     related_ticket_uuid: str = strawberry.field(description="疑似重複的既有單 uuid")
-    similarity: float = strawberry.field(description="加權總分 0–1（各成分得分 × 權重加總）")
+    similarity: float = strawberry.field(
+        description="加權總分 0–1（各成分得分 × 權重加總，再除以可用成分的權重和）"
+    )
     score_components: list[DedupScoreComponent] = strawberry.field(
         description="分數拆帳：每個訊號的得分、權重與過線燈號"
     )
