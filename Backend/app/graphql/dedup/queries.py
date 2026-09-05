@@ -1,11 +1,15 @@
 """GraphQL query for the dedup fast layer — the pre-submit duplicate check.
 
 Gated on `ticket.add`, not `ticket.view`: the question this answers is "am I about to file a
-duplicate?", so the caller is by definition someone who may file one. That also gives the
-right anonymous behaviour for free — `ticket.add` is not in PUBLIC_PERMS, so a Guest gets a
-403 rather than a probe into what has been reported near an arbitrary coordinate, while
-every logged-in role in the seed matrix (user / admin / member / super_admin) holds it at
-`all`. Checkpoint 1 only: there is no loaded resource to scope-check against yet.
+duplicate?", so the caller is by definition someone who may file one. This is *not* a privacy
+gate — tickets are public (`ticket.view` is in PUBLIC_PERMS, so a Guest can already read them
+and the map). The gate exists so that (1) a PostGIS + pg_trgm scoring pass is only spent on
+callers who can actually go on to create a ticket, and (2) a Guest is not shown a hint for a
+submit they cannot complete anyway. `ticket.add` is not in PUBLIC_PERMS, so a Guest gets a
+403 (the frontend fails open on it), while every logged-in role in the seed matrix (user /
+admin / member / super_admin) holds it at `all`. Whether `ticket.add` is the right gate is on
+the team's to-decide list. Checkpoint 1 only: there is no loaded resource to scope-check
+against yet.
 """
 
 import strawberry
