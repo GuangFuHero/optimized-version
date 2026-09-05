@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -13,6 +13,20 @@ class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
     """Base polymorphic ORM model for geospatial geometry entities."""
 
     __tablename__ = "base_geometries"
+    # geoalchemy2 already builds a GIST index on `geometry` itself, but that one cannot serve
+    # `ST_DWithin(geometry::geography, ..., metres)` — a geography operand is a different
+    # operator class, so the planner falls back to a sequential scan over every geometry row.
+    # The dedup fast layer's candidate retrieval is exactly that query (see
+    # repositories/dedup_repository.py), and it runs on the submit path, so it needs the
+    # matching functional index. Declared here as well as in the migration so a
+    # `create_all` schema (which is how the tests build one) matches production.
+    __table_args__ = (
+        Index(
+            "ix_base_geometries_geography",
+            text("(geometry::geography)"),
+            postgresql_using="gist",
+        ),
+    )
     property_name: Mapped[str] = mapped_column(String(50))
     geometry = mapped_column(Geometry("GEOMETRY", srid=4326))
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"))

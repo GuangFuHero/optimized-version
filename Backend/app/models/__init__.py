@@ -7,6 +7,7 @@ from app.models.auth import (  # noqa: F401
     UserContact,
     UserIdentity,
 )
+from app.models.dedup import TicketDedupAuditEvent, TicketDuplicatePair  # noqa: F401
 from app.models.geo import BaseGeometry, ClosureArea, Station  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.photo import Photo  # noqa: F401
