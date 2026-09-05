@@ -1,3 +1,50 @@
+type AddressSuggestionType {
+  formatted: String!
+  county: String
+  town: String
+  village: String
+  road: String
+  section: String
+  lane: String
+  alley: String
+  no: String
+
+  """Metres from the supplied coordinate"""
+  distanceM: Float
+}
+
+enum AnnouncementFilter {
+  ACTIVE
+  ALL
+}
+
+enum AnnouncementMoveDirection {
+  UP
+  DOWN
+}
+
+type AnnouncementType {
+  uuid: UUID!
+  content: String!
+  active: Boolean!
+
+  """
+  Display position (1 = top) among active announcements; null when inactive
+  """
+  order: Int
+
+  """UUID of the user who created this announcement"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type AssignedTeamType {
+  uuid: UUID!
+  name: String!
+  type: String!
+}
+
 input BoundsInput {
   """South boundary latitude"""
   minLat: Float!
@@ -39,6 +86,11 @@ type ClosureAreaType {
   comment: String
   createdAt: DateTime
   updatedAt: DateTime
+}
+
+input CreateAnnouncementInput {
+  """The announcement body text"""
+  content: String!
 }
 
 input CreateClosureAreaInput {
@@ -88,8 +140,17 @@ input CreateStationInput {
   """Data origin: 'user' (default) or 'official'"""
   source: String! = "user"
 
-  """Visibility: 'public' (default) or 'restricted'"""
-  visibility: String! = "public"
+  """Visibility: 'public' (default), 'restricted', or 'internal'"""
+  visibility: Visibility! = public
+
+  """Optional station contact name"""
+  contactName: String = null
+
+  """Optional station contact email"""
+  contactEmail: String = null
+
+  """Optional station contact phone"""
+  contactPhone: String = null
 
   """Optional secondary address or pole location to attach to this station"""
   secondaryLocation: SecondaryLocationInput = null
@@ -108,6 +169,23 @@ input CreateStationPropertyInput {
 
   """Initial credibility weight [0.0–2.0], default 1.0"""
   weightings: Float! = 1
+}
+
+input CreateStationSuggestionInput {
+  """'station' or 'station_property'"""
+  targetType: String!
+
+  """UUID of the station/property to change"""
+  targetUuid: UUID!
+
+  """Which field to change (see suggestableFields)"""
+  fieldName: String!
+
+  """Proposed new value as text"""
+  newValue: String!
+
+  """Why the change is suggested"""
+  comment: String = null
 }
 
 input CreateTaskPropertyInput {
@@ -150,7 +228,15 @@ input CreateTicketInput {
   taskType: String = null
 
   """Visibility: 'public' (default), 'restricted', or 'internal'"""
-  visibility: String! = "public"
+  visibility: Visibility! = public
+
+  """Type of disaster, e.g. 'earthquake', 'flood'"""
+  disasterType: String = null
+
+  """
+  Optional street address for the request, normalized and validated on write. Needs no table of its own: secondary_locations keys on base_geometries.uuid, and a ticket IS a base_geometry.
+  """
+  secondaryLocation: SecondaryLocationInput = null
 }
 
 input CreateTicketTaskInput {
@@ -169,10 +255,17 @@ input CreateTicketTaskInput {
   source: String! = "user"
 
   """Visibility: 'public' (default), 'restricted', or 'internal'"""
-  visibility: String! = "public"
+  visibility: Visibility! = public
 
   """Optional UUID of an associated route"""
   routeUuid: String = null
+}
+
+input CreateWorkZoneInput {
+  name: String!
+
+  """GeoJSON Polygon or MultiPolygon — must not be a Point"""
+  geometry: GeoJSON!
 }
 
 type CrowdSourcingType {
@@ -208,21 +301,103 @@ scalar GeoJSON
 
 type Mutation {
   createStation(input: CreateStationInput!): StationType!
+  attachStationPhoto(stationUuid: UUID!, url: String!): PhotoType!
+  detachStationPhoto(uuid: UUID!): Boolean!
   updateStation(uuid: UUID!, input: UpdateStationInput!): StationType!
   deleteStation(uuid: UUID!): Boolean!
   createClosureArea(input: CreateClosureAreaInput!): ClosureAreaType!
   updateClosureArea(uuid: UUID!, input: UpdateClosureAreaInput!): ClosureAreaType!
+  deleteClosureArea(uuid: UUID!): Boolean!
   createStationProperty(input: CreateStationPropertyInput!): StationPropertyType!
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
   createTicket(input: CreateTicketInput!): TicketType!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
+  reviewTicket(uuid: UUID!, verificationStatus: String!, reviewNote: String = null): TicketType!
+  deleteTicket(uuid: UUID!): Boolean!
   createTicketTask(input: CreateTicketTaskInput!): TicketTaskType!
   updateTicketTask(uuid: UUID!, input: UpdateTicketTaskInput!): TicketTaskType!
   createTaskProperty(input: CreateTaskPropertyInput!): TaskPropertyType!
   updateTaskProperty(uuid: UUID!, input: UpdateTaskPropertyInput!): TaskPropertyType!
+  assignTaskActor(taskUuid: UUID!, actorUuid: UUID = null, role: String = null): TaskAssignmentType!
+  updateTaskAssignment(uuid: UUID!, input: UpdateTaskAssignmentInput!): TaskAssignmentType!
+  unassignTaskActor(uuid: UUID!): Boolean!
   upsertStationPropertyConfig(stationType: String!, input: UpsertPropertyConfigInput!): StationPropertyConfigType!
   upsertTaskPropertyConfig(taskType: String!, input: UpsertPropertyConfigInput!): TaskPropertyConfigType!
+  createAnnouncement(input: CreateAnnouncementInput!): AnnouncementType!
+  updateAnnouncement(uuid: UUID!, input: UpdateAnnouncementInput!): AnnouncementType!
+  moveAnnouncement(uuid: UUID!, direction: AnnouncementMoveDirection!): AnnouncementType!
+  setAnnouncementActive(uuid: UUID!, active: Boolean!): AnnouncementType!
+  deleteAnnouncement(uuid: UUID!): Boolean!
+  createStationSuggestion(input: CreateStationSuggestionInput!): StationSuggestionType!
+  reviewStationSuggestion(uuid: UUID!, approve: Boolean!, reviewNote: String = null): StationSuggestionType!
+  createWorkZone(input: CreateWorkZoneInput!): WorkZoneType!
+  updateWorkZone(uuid: UUID!, input: UpdateWorkZoneInput!): WorkZoneType!
+  assignZoneToTeam(input: ZoneTeamAssignmentInput!): ZoneAssignmentType!
+  removeZoneFromTeam(input: ZoneTeamAssignmentInput!): Boolean!
+  deleteWorkZone(uuid: UUID!): Boolean!
+}
+
+input NormalizeAddressInput {
+  """Full address as typed, e.g. '花蓮縣光復鄉中興路10號'"""
+  raw: String = null
+
+  """Latitude (WGS84)"""
+  lat: Float = null
+
+  """Longitude (WGS84)"""
+  lng: Float = null
+
+  """Max suggestions when resolving from a coordinate (clamped to 1–50)"""
+  limit: Int! = 5
+}
+
+type NormalizedAddressType {
+  """
+  False when the input could not be resolved at all — NOT an error; read `issues`
+  """
+  normalizable: Boolean!
+
+  """'verified' | 'corrected' | 'unverified' | 'pin_mismatch'"""
+  status: String!
+
+  """Canonical single-line address, e.g. '花蓮縣光復鄉大全村中興路10號'"""
+  formatted: String
+  county: String
+
+  """鄉鎮市區"""
+  town: String
+
+  """村里"""
+  village: String
+  road: String
+
+  """段"""
+  section: String
+
+  """巷"""
+  lane: String
+
+  """弄"""
+  alley: String
+
+  """號"""
+  no: String
+
+  """樓"""
+  floor: String
+
+  """室"""
+  room: String
+  lat: Float
+  lng: Float
+
+  """Metres between the supplied pin and the matched address point"""
+  distanceM: Float
+
+  """Human-readable reasons the status is not 'verified'; empty when it is"""
+  issues: [String!]!
+  suggestions: [AddressSuggestionType!]!
 }
 
 type PageInfo {
@@ -242,7 +417,9 @@ type PhotoType {
   """UUID of the parent entity this photo is attached to"""
   refUuid: String!
 
-  """Type of the parent entity: 'station' or 'ticket'"""
+  """
+  'geometry' (attached to a ticket or station) or 'pole' (attached to a secondary_location)
+  """
   refType: String!
 
   """Public URL of the uploaded photo"""
@@ -254,6 +431,8 @@ type PhotoType {
 }
 
 type Query {
+  normalizeAddress(input: NormalizeAddressInput!): NormalizedAddressType!
+  referenceData: [ReferenceDatasetType!]!
   stations(bounds: BoundsInput = null, stationType: String = null, skip: Int! = 0, limit: Int! = 50): StationConnection!
   station(uuid: UUID!): StationType
   closureAreas(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): ClosureAreaConnection!
@@ -264,13 +443,47 @@ type Query {
   taskProperties(taskUuid: String!): [TaskPropertyType!]!
   stationPropertyConfigs(stationType: String!): [StationPropertyConfigType!]!
   taskPropertyConfigs(taskType: String!): [TaskPropertyConfigType!]!
+  announcements(filter: AnnouncementFilter! = ACTIVE): [AnnouncementType!]!
+  announcement(uuid: UUID!): AnnouncementType
+  suggestableFields(targetType: String!): [SuggestableFieldType!]!
+  stationSuggestions(status: String = null, targetUuid: String = null, skip: Int! = 0, limit: Int! = 50): [StationSuggestionType!]!
+  workZones(skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
+  workZone(uuid: UUID!): WorkZoneType
+  zonesByTeam(teamUuid: UUID!, skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
+}
+
+type ReferenceDatasetType {
+  """'ref_roads' | 'ref_villages' | 'osm_address_points'"""
+  name: String!
+
+  """'pending' | 'downloading' | 'importing' | 'ready' | 'failed'"""
+  status: String!
+  sourceVersion: String
+  rowCount: Int
+  startedAt: DateTime
+  finishedAt: DateTime
+  error: String
 }
 
 input SecondaryLocationInput {
   """Type of secondary location: 'address' (default) or 'pole'"""
   locationType: String! = "address"
+
+  """
+  Full address as typed, e.g. '花蓮縣光復鄉中興路10號'. Wins over the fields below.
+  """
+  raw: String = null
   county: String = null
-  city: String = null
+
+  """鄉鎮市區"""
+  town: String = null
+
+  """村里"""
+  village: String = null
+  road: String = null
+
+  """段"""
+  section: String = null
   lane: String = null
   alley: String = null
   no: String = null
@@ -290,12 +503,31 @@ type SecondaryLocationType {
   """Type of secondary location: 'address' or 'pole'"""
   locationType: String!
   county: String
-  city: String
+
+  """鄉鎮市區 (replaced the old `city`)"""
+  town: String
+
+  """村里"""
+  village: String
+  road: String
+
+  """段"""
+  section: String
   lane: String
   alley: String
   no: String
   floor: String
   room: String
+
+  """
+  Canonical single-line address, masked from 巷 onward without the parent's view_pii
+  """
+  formatted: String
+
+  """
+  How far validation got: 'verified' | 'corrected' | 'unverified' | 'pin_mismatch'
+  """
+  normalizationStatus: String
 
   """Utility pole identifier (only set when location_type is 'pole')"""
   poleId: String
@@ -364,6 +596,37 @@ type StationPropertyType {
   crowdSourcings: [CrowdSourcingType!]!
 }
 
+type StationSuggestionType {
+  uuid: UUID!
+
+  """What the suggestion targets: 'station' or 'station_property'"""
+  targetType: String!
+
+  """UUID of the targeted station/property"""
+  targetUuid: String!
+  fieldName: String!
+
+  """Proposed value, stored as text"""
+  newValue: String!
+
+  """Why the user suggests this change"""
+  comment: String
+
+  """'pending', 'approved', or 'rejected'"""
+  status: String!
+
+  """Admin's note recorded when approving/rejecting"""
+  reviewNote: String
+
+  """UUID of the admin who decided"""
+  reviewedBy: String
+
+  """UUID of the user who made the suggestion"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
 type StationType {
   uuid: UUID!
 
@@ -419,8 +682,44 @@ type StationType {
   priorityScore: Float
   createdAt: DateTime
   updatedAt: DateTime
+
+  """
+  Station contact name — masked unless the caller holds station.view_pii here
+  """
+  contactName: String
+
+  """
+  Station contact email — masked unless the caller holds station.view_pii here
+  """
+  contactEmail: String
+
+  """
+  Station contact phone — masked unless the caller holds station.view_pii here
+  """
+  contactPhone: String
+  photos: [PhotoType!]!
+
+  """
+  Address or pole location — the address is masked without station.view_pii here
+  """
   secondaryLocation: SecondaryLocationType
   properties: [StationPropertyType!]!
+}
+
+type SuggestableFieldType {
+  fieldName: String!
+
+  """Input widget hint: 'string', 'integer', or 'enum'"""
+  dataType: String!
+
+  """Allowed values when data_type is 'enum', else null"""
+  enumOptions: [String!]
+}
+
+enum TaskAssignmentStatus {
+  accepted
+  en_route
+  completed
 }
 
 type TaskAssignmentType {
@@ -435,8 +734,14 @@ type TaskAssignmentType {
   """Role in the task, e.g. 'lead', 'support'"""
   role: String
 
+  """Work-completion state: 'accepted', 'en_route', or 'completed'"""
+  status: String!
+
   """Timestamp when the assignment was created"""
   assignedAt: DateTime
+
+  """Timestamp when the status was last changed"""
+  updatedAt: DateTime
 }
 
 type TaskPropertyConfigType {
@@ -453,6 +758,11 @@ type TaskPropertyConfigType {
 
   """Allowed values when data_type is 'enum'"""
   enumOptions: [String!]
+}
+
+enum TaskPropertyStatus {
+  pending
+  fulfilled
 }
 
 type TaskPropertyType {
@@ -475,9 +785,6 @@ type TaskPropertyType {
 
   """Optional notes about this property"""
   comment: String
-
-  """UUID of the user who added this property"""
-  createdBy: String
   createdAt: DateTime
 }
 
@@ -521,10 +828,16 @@ type TicketTaskType {
 
   """Moderator's notes explaining the review decision"""
   reviewNote: String
+
+  """UUID of the user who created this task"""
+  createdBy: String
   createdAt: DateTime
   updatedAt: DateTime
   properties: [TaskPropertyType!]!
   assignments: [TaskAssignmentType!]!
+  assignedCount: Int!
+  completedCount: Int!
+  progress: Float
 }
 
 type TicketType {
@@ -539,15 +852,6 @@ type TicketType {
   """Short subject line describing the request"""
   title: String!
   description: String
-
-  """Full name of the person who submitted this request"""
-  contactName: String!
-
-  """Email address for follow-up communication"""
-  contactEmail: String
-
-  """Phone number for follow-up communication"""
-  contactPhone: String
 
   """Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled'"""
   status: String!
@@ -569,15 +873,39 @@ type TicketType {
   """Moderator's notes about the verification decision"""
   reviewNote: String
 
+  """Type of disaster, e.g. 'earthquake', 'flood'"""
+  disasterType: String
+
   """UUID of the user who submitted this ticket"""
   createdBy: String
   createdAt: DateTime
   updatedAt: DateTime
+
+  """
+  Requester full name — masked unless the caller holds ticket.view_pii here
+  """
+  contactName: String
+
+  """Follow-up email — masked unless the caller holds ticket.view_pii here"""
+  contactEmail: String
+
+  """Follow-up phone — masked unless the caller holds ticket.view_pii here"""
+  contactPhone: String
+
+  """
+  Address of the request — masked unless the caller holds ticket.view_pii here
+  """
+  secondaryLocation: SecondaryLocationType
   photos: [PhotoType!]!
   tasks: [TicketTaskType!]!
 }
 
 scalar UUID
+
+input UpdateAnnouncementInput {
+  """The new announcement body text"""
+  content: String!
+}
 
 input UpdateClosureAreaInput {
   geometry: GeoJSON = null
@@ -598,8 +926,14 @@ input UpdateStationInput {
   level: Int = null
   comment: String
 
-  """Updated visibility: 'public' or 'restricted'"""
-  visibility: String = null
+  """Updated visibility: 'public', 'restricted', or 'internal'"""
+  visibility: Visibility = null
+  contactName: String
+  contactEmail: String
+  contactPhone: String
+
+  """Replaces the station's address wholesale; omit to leave it unchanged"""
+  secondaryLocation: SecondaryLocationInput
 }
 
 input UpdateStationPropertyInput {
@@ -612,6 +946,14 @@ input UpdateStationPropertyInput {
   weightings: Float = null
 }
 
+input UpdateTaskAssignmentInput {
+  """New work-completion state"""
+  status: TaskAssignmentStatus = null
+
+  """Updated role, e.g. 'lead' or 'support' — pass null to clear"""
+  role: String
+}
+
 input UpdateTaskPropertyInput {
   """Updated attribute value"""
   propertyValue: String = null
@@ -619,8 +961,8 @@ input UpdateTaskPropertyInput {
   """Updated number of units — pass null to clear"""
   quantity: Int
 
-  """Updated fulfillment state: 'pending' or 'fulfilled'"""
-  status: String = null
+  """Updated fulfillment state"""
+  status: TaskPropertyStatus = null
 
   """Updated notes — pass null to clear"""
   comment: String
@@ -644,6 +986,9 @@ input UpdateTicketInput {
   Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'
   """
   verificationStatus: String = null
+
+  """Type of disaster — pass null to clear"""
+  disasterType: String
 }
 
 input UpdateTicketTaskInput {
@@ -662,7 +1007,12 @@ input UpdateTicketTaskInput {
   moderationStatus: String = null
 
   """Updated visibility: 'public', 'restricted', or 'internal'"""
-  visibility: String = null
+  visibility: Visibility = null
+}
+
+input UpdateWorkZoneInput {
+  name: String
+  geometry: GeoJSON = null
 }
 
 input UpsertPropertyConfigInput {
@@ -676,4 +1026,43 @@ input UpsertPropertyConfigInput {
   Allowed enum values — required when data_type is 'enum', null otherwise
   """
   enumOptions: [String!] = null
+}
+
+enum Visibility {
+  public
+  restricted
+  internal
+}
+
+type WorkZoneConnection {
+  items: [WorkZoneType!]!
+  pageInfo: PageInfo!
+}
+
+type WorkZoneType {
+  uuid: UUID!
+  name: String!
+
+  """GeoJSON Polygon or MultiPolygon marking the zone boundary"""
+  geometry: GeoJSON
+
+  """UUID of the gov user who drew this zone"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """Teams this zone has been delegated to"""
+  assignedTeams: [AssignedTeamType!]!
+}
+
+type ZoneAssignmentType {
+  zoneUuid: UUID!
+  teamUuid: UUID!
+  assignedAt: DateTime
+  assignedBy: String
+}
+
+input ZoneTeamAssignmentInput {
+  zoneUuid: UUID!
+  teamUuid: UUID!
 }

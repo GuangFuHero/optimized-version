@@ -37,12 +37,19 @@ class RequestMutation:
         Requires ticket.add permission. Returns the created TicketType.
         """
         ticket = await ticket_service.create_ticket(
-            info.context["db"], actor=require_authenticated(info),
-            geometry=input.geometry, title=input.title, description=input.description,
-            contact_name=input.contact_name, contact_email=input.contact_email,
-            contact_phone=input.contact_phone, priority=input.priority,
-            task_type=input.task_type, visibility=input.visibility.value,
+            info.context["db"],
+            actor=require_authenticated(info),
+            geometry=input.geometry,
+            title=input.title,
+            description=input.description,
+            contact_name=input.contact_name,
+            contact_email=input.contact_email,
+            contact_phone=input.contact_phone,
+            priority=input.priority,
+            task_type=input.task_type,
+            visibility=input.visibility.value,
             disaster_type=input.disaster_type,
+            secondary_location=(input.secondary_location.to_dict() if input.secondary_location else None),
         )
         return TicketType.from_model(ticket)
 
@@ -69,8 +76,11 @@ class RequestMutation:
                 changes[field] = val
 
         ticket = await ticket_service.update_ticket(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), status=input.status, changes=changes,
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
+            status=input.status,
+            changes=changes,
         )
         return TicketType.from_model(ticket)
 
@@ -88,8 +98,11 @@ class RequestMutation:
         Returns the updated TicketType.
         """
         ticket = await ticket_service.review_ticket(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), verification_status=verification_status, review_note=review_note,
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
+            verification_status=verification_status,
+            review_note=review_note,
         )
         return TicketType.from_model(ticket)
 
@@ -120,10 +133,16 @@ class TicketTaskMutation:
         Returns the created TicketTaskType.
         """
         task = await ticket_service.create_ticket_task(
-            info.context["db"], actor=require_authenticated(info),
-            ticket_uuid=input.ticket_uuid, task_type=input.task_type, task_name=input.task_name,
-            task_description=input.task_description, quantity=input.quantity,
-            source=input.source, visibility=input.visibility.value, route_uuid=input.route_uuid,
+            info.context["db"],
+            actor=require_authenticated(info),
+            ticket_uuid=input.ticket_uuid,
+            task_type=input.task_type,
+            task_name=input.task_name,
+            task_description=input.task_description,
+            quantity=input.quantity,
+            source=input.source,
+            visibility=input.visibility.value,
+            route_uuid=input.route_uuid,
         )
         return TicketTaskType.from_model(task)
 
@@ -162,9 +181,13 @@ class TicketTaskMutation:
         only — matches prior behavior). Returns the created TaskPropertyType.
         """
         prop = await ticket_service.create_task_property(
-            info.context["db"], actor=require_authenticated(info),
-            task_uuid=input.task_uuid, property_name=input.property_name,
-            property_value=input.property_value, quantity=input.quantity, comment=input.comment,
+            info.context["db"],
+            actor=require_authenticated(info),
+            task_uuid=input.task_uuid,
+            property_name=input.property_name,
+            property_value=input.property_value,
+            quantity=input.quantity,
+            comment=input.comment,
         )
         return TaskPropertyType.from_model(prop)
 
@@ -210,7 +233,8 @@ class TicketTaskMutation:
         the same actor cannot be linked to the same task twice. Returns the new assignment.
         """
         assignment = await ticket_service.assign_task_actor(
-            info.context["db"], actor=require_authenticated(info),
+            info.context["db"],
+            actor=require_authenticated(info),
             task_uuid=str(task_uuid),
             actor_uuid=str(actor_uuid) if actor_uuid else None,
             role=role,

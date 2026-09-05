@@ -11,6 +11,10 @@
 > `stations` gained `operational_status`/`status_changed_at` and `ticket_tasks` gained
 > `completed_at`, backing the analytics dashboard's station freshness-trend and ticket
 > time-to-completion metrics, on 2026-08-07.
+> Address normalization added `ref_roads`, `ref_villages`, `osm_address_points` and
+> `reference_datasets` to the Geospatial diagram, and reshaped `secondary_locations` —
+> `city` was *replaced* by `town`, plus new `village`/`road`/`section`/`formatted`/
+> `normalization_status` columns (migration `c4e7b91d3a02`, 2026-08-26).
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -210,8 +214,9 @@ users ||--o{ announcements : "authors"
 ## 2. Geospatial & Stations
 
 Base geometries, secondary locations, closure areas, stations, station properties,
-and crowd-sourced ratings. `users` appears below as a PK-only stub for
-`created_by`/`user_uuid` references — full definition in the Identity diagram above.
+crowd-sourced ratings, and the imported address reference data. `users` appears below as
+a PK-only stub for `created_by`/`user_uuid` references — full definition in the Identity
+diagram above.
 
 ```mermaid
 erDiagram
@@ -242,18 +247,26 @@ secondary_locations {
     uuid uuid PK
     uuid geometry_uuid FK "FK to base_geometries"
     string location_type "address/pole"
-    string county "nullable, address only"
-    string city "nullable, address only"
-    string lane "nullable, address only"
-    string alley "nullable, address only"
-    string no "nullable, address only"
-    string floor "nullable, address only"
-    string room "nullable, address only"
+    string county "nullable, address only, 縣市"
+    string town "nullable, address only, 鄉鎮市區 -- REPLACED the old ambiguous city column"
+    string village "nullable, address only, 村里"
+    string road "nullable, address only, 路/街"
+    string section "nullable, address only, 段"
+    string lane "nullable, address only, 巷"
+    string alley "nullable, address only, 弄"
+    string no "nullable, address only, 號"
+    string floor "nullable, address only, 樓"
+    string room "nullable, address only, 室"
+    string formatted "nullable, address only, canonical single-line rendering as normalized at submission"
+    string normalization_status "nullable, address only, verified/corrected/unverified/pin_mismatch"
     string pole_id "nullable, pole only"
     string pole_type "nullable, pole only"
     uuid pole_photo_uuid FK "nullable, pole only, FK to photos (see Tickets diagram), ON DELETE SET NULL"
     string pole_note "nullable, pole only"
 }
+%% Every address column above is stored FOLDED (app.core.address.fold: NFKC, trimmed,
+%% 臺 -> 台) so it matches the reference tables below. normalization_status records how far up
+%% the L1-L3 validation ladder the address got; it is never a rejection.
 base_geometries ||--|| secondary_locations : "has secondary location"
 
 %% Inheritance: Closure Area inherits from base_geometries
@@ -351,6 +364,67 @@ stations ||--o{ crowd_sourcing : "receives general/specific ratings"
 %% The rating MAY belong to a property (0 or 1 property per rating)
 %% |o on the left indicates the relationship is optional for the child (nullable FK)
 station_properties |o--o{ crowd_sourcing : "receives specific ratings (optional)"
+
+%% ==========================
+%% Address Reference Data (read-only, imported)
+%% ==========================
+%% NOT application data and deliberately unrelated to everything above: no uuid PK, no
+%% created_by, no owning team, no soft delete, and no FK in either direction. Populated only by
+%% scripts/import_reference_data.py from published open data, wiped and reloaded whole, so they
+%% carry no RBAC scope. secondary_locations' address columns are VALIDATED against these tables
+%% at write time but never reference them, which is why no arrow is drawn.
+%% Every text column is stored folded (app.core.address.fold), same as secondary_locations.
+ref_roads {
+    string county PK "50, 縣市"
+    string town PK "50, 鄉鎮市區"
+    string road PK "100, 路名"
+}
+%% INDEX: ix_ref_roads_road_trgm GIN (road gin_trgm_ops) -- fuzzy fallback that turns a typo
+%% into a "corrected" status; needs the pg_trgm extension (created by the migration).
+%% SOURCE: 內政部戶政司 全國路名資料 (data.gov.tw 35321) -- authoritative and complete (~35.8k rows).
+
+ref_villages {
+    string villcode PK "16, 村里代碼"
+    string county "50, 縣市"
+    string town "50, 鄉鎮市區"
+    string village "nullable, 50 -- 連江縣南竿鄉 publishes a polygon with an empty VILLNAME"
+    blob geom "MULTIPOLYGON, srid 4326"
+}
+%% INDEX: ix_ref_villages_geom GIST (geom); ix_ref_villages_town (county, town)
+%% SOURCE: 內政部 村里界圖 TWD97經緯度 (data.gov.tw 7438) -- 100% positional coverage, which is
+%% what guarantees a pin always resolves to at least 縣市/鄉鎮市區/村里.
+
+osm_address_points {
+    bigint id PK "OSM node id, NOT a surrogate (autoincrement off) -- re-import replaces the node"
+    blob geom "POINT, srid 4326"
+    string county "nullable, 50"
+    string town "nullable, 50"
+    string village "nullable, 50"
+    string road "nullable, 100"
+    string section "nullable, 10"
+    string lane "nullable, 20"
+    string alley "nullable, 20"
+    string no "nullable, 20, 門牌號"
+}
+%% INDEX: ix_osm_address_points_geom GIST (geom) -- KNN reverse lookup (geom <-> :point),
+%% bounded to SEARCH_RADIUS_M = 500 m (app/repositories/address_repository.py);
+%% ix_osm_address_points_addr (county, town, road, no) -- exact "does this 號 exist" lookup.
+%% SOURCE: Geofabrik Taiwan OSM extract. NOT authoritative and NOT complete: a miss means
+%% "unverified", never "does not exist". ~half the nodes are duplicate addresses (entrances,
+%% floors, units), so callers listing suggestions must deduplicate.
+
+reference_datasets {
+    string name PK "32, ref_roads/ref_villages/osm_address_points"
+    string status "16, pending/downloading/importing/ready/failed, default pending"
+    string source_version "nullable, 64 -- upstream Last-Modified or resource id; makes a re-run a no-op"
+    int row_count "nullable"
+    timestamp started_at "nullable"
+    timestamp finished_at "nullable"
+    text error "nullable"
+}
+%% The import is a detached container that outlives the deploy that launched it (DEPLOY.md
+%% step 8), so its progress lives here rather than in the deploy log. This is the state behind
+%% the referenceData query -- read it before offering address suggestions.
 ```
 
 ## 3. Tickets, Tasks & Routes

@@ -4,6 +4,7 @@ import asyncio
 import enum
 from datetime import datetime
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 import strawberry
@@ -14,6 +15,9 @@ from app.core.security import resolve_scope
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import PageInfo, Visibility
+
+if TYPE_CHECKING:  # circular at runtime: geo.types imports PhotoType from this module
+    from app.graphql.geo.types import SecondaryLocationInput, SecondaryLocationType
 
 
 @strawberry.enum
@@ -41,8 +45,7 @@ class PhotoType:
     ref_uuid: str = strawberry.field(description="UUID of the parent entity this photo is attached to")
     ref_type: str = strawberry.field(
         description=(
-            "'geometry' (attached to a ticket or station) "
-            "or 'pole' (attached to a secondary_location)"
+            "'geometry' (attached to a ticket or station) or 'pole' (attached to a secondary_location)"
         )
     )
     url: str = strawberry.field(description="Public URL of the uploaded photo")
@@ -418,6 +421,26 @@ class TicketType:
             return self._contact_phone_raw
         return mask_phone(self._contact_phone_raw)
 
+    @strawberry.field(
+        description="Address of the request — masked unless the caller holds ticket.view_pii here"
+    )
+    async def secondary_location(
+        self, info: strawberry.types.Info
+    ) -> Annotated["SecondaryLocationType", strawberry.lazy("app.graphql.geo.types")] | None:
+        """Resolve this ticket's address, masking it when the caller is out of scope.
+
+        A victim's home address is at least as sensitive as their phone number, and `ticket.view`
+        is in PUBLIC_PERMS — without this gate an unauthenticated Guest could read the full 門牌
+        off the public request board. Same `_pii_visible` check as the contact fields above.
+
+        The type is imported lazily: app/graphql/geo/types.py already imports PhotoType from this
+        module, so a direct import would be a cycle.
+        """
+        sl = await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
+        if sl is None or await self._pii_visible(info):
+            return sl
+        return sl.masked()
+
     @strawberry.field
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
         """Resolve photos attached to this ticket."""
@@ -489,6 +512,16 @@ class CreateTicketInput:
     )
     disaster_type: str | None = strawberry.field(
         default=None, description="Type of disaster, e.g. 'earthquake', 'flood'"
+    )
+    secondary_location: (
+        Annotated["SecondaryLocationInput", strawberry.lazy("app.graphql.geo.types")] | None
+    ) = strawberry.field(
+        default=None,
+        description=(
+            "Optional street address for the request, normalized and validated on write. "
+            "Needs no table of its own: secondary_locations keys on base_geometries.uuid, "
+            "and a ticket IS a base_geometry."
+        ),
     )
 
 

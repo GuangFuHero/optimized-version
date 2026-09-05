@@ -79,16 +79,46 @@ gcloud secrets versions access latest --secret=app-postgres-password
                 active gcloud identity; git working tree clean
 2. baseline     record current HEAD; tag the RUNNING container's image as disaster-backend:prev
                 (this is the image rollback target — taken from reality, not from tags)
-3. checkout     git fetch + checkout of the target ref (default origin/main)
+3. checkout     git fetch + checkout of the target ref (default origin/main), then RE-EXEC the
+                checked-out deploy.sh once (see "Why step 3 re-execs" below)
 4. .env         generated from Secret Manager + scripts/deploy-config.staging.env (mode 0600);
                 regenerated on EVERY deploy — never edit .env by hand on the VM
 5. build        docker compose build backend
 6. infra up     start db + redis, wait until healthy
 7. backup       pg_dump | gzip | upload to GCS — if the backup fails, migration is NOT attempted
 8. migrate+seed alembic upgrade head → seed_rbac.py (idempotent) → mock seed (only if SEED_MOCK=true)
+8b. reference   launch scripts/import_reference_data.py DETACHED (address reference data). It does
+                NOT gate the deploy: the OSM extract is 326 MB and the import runs for tens of
+                minutes, which would blow step 9's 60s budget and roll back a healthy release for
+                a job unrelated to its health. Skips any dataset already at the same upstream
+                version, so a re-run costs one HTTP HEAD. Progress: the `referenceData` GraphQL
+                query, or `docker logs` on the container it prints. Until it finishes,
+                `normalizeAddress` degrades by naming the missing dataset rather than failing.
 9. restart+gate start the new backend + frontend + tunnel + retention → curl /readyz,
                 retried 12 × 5s (60s budget) — only a passing readiness check counts as a
                 successful deploy (the retention loop is not part of the readiness gate)
+```
+
+### Why step 3 re-execs
+
+bash parses the whole `main()` body into memory before executing any of it, so the `git checkout`
+at step 3 cannot change the code that is already running: a deploy that ships a new `deploy.sh`
+would run the OLD one to completion and silently skip whatever that ref added. This is not
+theoretical — it is why the `retention` service added by #33 never started (compose defined six
+services and only five came up), and it would have swallowed step 8b on the deploy introducing it.
+
+So step 3 `exec`s the freshly checked-out script once, guarded by `DEPLOY_REEXECED`. `OLD_SHA`
+travels across in `DEPLOY_OLD_SHA` — HEAD is the new ref by then, and re-deriving the baseline
+would make the target its own rollback point. `disaster-backend:prev` was already tagged on the
+first pass, so step 2 only logs on the second. Steps 1-3 repeat and are all idempotent, so the
+log legitimately shows them twice; `re-exec: running the checked-out scripts/deploy.sh` marks the
+handover.
+
+One-time consequence: the script currently on the VM predates this change, so on the *next*
+deploy the old body still runs. Launch the reference import by hand once afterwards:
+
+```bash
+docker compose run --rm -e PYTHONPATH=/app backend python scripts/import_reference_data.py
 ```
 
 Design rules baked into the script:
