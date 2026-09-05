@@ -75,6 +75,11 @@ async def roads_in_town(db: AsyncSession, *, county: str, town: str) -> list[str
 # rural 村; past it, callers fall back to the 村里 polygon.
 SEARCH_RADIUS_M = 500.0
 
+# Planar half-width of the bbox pre-filter, in degrees. ~0.006° is ~660 m of latitude and ~610 m
+# of longitude at Taiwan's latitude, so the box strictly contains the 500 m circle everywhere in
+# the country and can never clip a row ST_DWithin would have kept.
+_BBOX_DEG = 0.006
+
 
 async def nearest_address_points(
     db: AsyncSession, *, lat: float, lng: float, limit: int = 5
@@ -82,9 +87,15 @@ async def nearest_address_points(
     """Return OSM address points within `SEARCH_RADIUS_M` as (row, metres), nearest first.
 
     `ORDER BY geom <-> point` is the GiST KNN operator — it walks the index rather than scoring
-    every row, so this stays cheap as the table grows. ST_DWithin on geography is index-assisted
-    too, so bounding the search costs nothing and stops a pin outside Taiwan from being answered
-    with the closest address on the island.
+    every row, so this stays cheap as the table grows. The bound has to reach the index too: on
+    its own, ST_DWithin over `geom::geography` is only a Filter here, because the table's index
+    is `gist(geom)` and not `gist(geom::geography)`. The KNN scan then walks the whole index
+    looking for a LIMIT that a pin with nothing nearby never fills — measured at 132 s and
+    9.2M rows removed by filter for a coordinate in the 中央山脈 (PR #44 review).
+
+    So the metric bound is paired with a planar bbox that the index does serve, which turns it
+    into an Index Cond and stops a pin outside Taiwan from being answered with the closest
+    address on the island.
     """
     pt = _point(lat, lng)
     distance = func.ST_DistanceSphere(OsmAddressPoint.geom, pt).cast(Float)
@@ -92,6 +103,9 @@ async def nearest_address_points(
         select(OsmAddressPoint, distance)
         .where(
             OsmAddressPoint.geom.isnot(None),
+            # Index Cond — a strict superset of the circle below, see `_BBOX_DEG`.
+            OsmAddressPoint.geom.op("&&")(func.ST_Expand(pt, _BBOX_DEG)),
+            # Exact metric bound, applied to the handful of rows the bbox let through.
             func.ST_DWithin(
                 func.cast(OsmAddressPoint.geom, Geography),
                 func.cast(pt, Geography),
@@ -105,18 +119,47 @@ async def nearest_address_points(
 
 
 async def address_point_for(
-    db: AsyncSession, *, county: str | None, town: str | None, road: str, no: str
+    db: AsyncSession,
+    *,
+    county: str | None,
+    town: str | None,
+    road: str,
+    no: str,
+    section: str | None = None,
+    lane: str | None = None,
+    alley: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
 ) -> OsmAddressPoint | None:
-    """Return the OSM point for an exact 路 + 號, or None when OSM has not mapped it.
+    """Return the OSM point for an exact 路 + 段/巷/弄 + 號, or None when OSM has not mapped it.
 
     A miss means "unverified", never "does not exist" — OSM is dense in Taiwan (~9.2M address
     nodes) but is neither authoritative nor guaranteed complete.
+
+    The tail (段/巷/弄) is matched strictly, NULLs included, and the administrative prefix is not.
+    That asymmetry is deliberate. Both sides of the tail comparison were produced by the same
+    `parse_tw_address`, so a NULL there means "absent" rather than "unknown" — matching it loosely
+    is what let 中興路10號 answer with 中興路212巷1弄10號 and grade `verified` (PR #44 review).
+    `county`/`town` come from the polygon join instead, so an absent one means the caller did not
+    say; requiring NULL would restrict a prefix-less query to the ~96 rows outside every 村里.
+
+    `lat`/`lng` break the remaining ties. Roughly 0.085% of 縣市+鄉鎮+路+段+巷+弄+號 keys still
+    match several nodes more than 20 m apart, and an arbitrary `LIMIT 1` among them produced
+    "matched address is 1273 m from the supplied pin" for an address sitting 42.87 m away.
     """
     stmt = select(OsmAddressPoint).where(OsmAddressPoint.road == road, OsmAddressPoint.no == no)
     if county:
         stmt = stmt.where(OsmAddressPoint.county == county)
     if town:
         stmt = stmt.where(OsmAddressPoint.town == town)
+    for column, value in (
+        (OsmAddressPoint.section, section),
+        (OsmAddressPoint.lane, lane),
+        (OsmAddressPoint.alley, alley),
+    ):
+        stmt = stmt.where(column == value if value else column.is_(None))
+    if lat is not None and lng is not None:
+        stmt = stmt.order_by(OsmAddressPoint.geom.op("<->")(_point(lat, lng)))
     return (await db.execute(stmt.limit(1))).scalars().first()
 
 

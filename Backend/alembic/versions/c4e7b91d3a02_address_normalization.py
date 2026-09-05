@@ -63,7 +63,9 @@ def upgrade() -> None:
         sa.Column("town", sa.String(50), nullable=False),
         # Nullable: 連江縣南竿鄉 publishes a polygon with an empty VILLNAME (real data).
         sa.Column("village", sa.String(50), nullable=True),
-        sa.Column("geom", Geometry("MULTIPOLYGON", srid=4326), nullable=True),
+        # spatial_index=False: GeoAlchemy2 would otherwise emit its own idx_* GiST index
+        # alongside the explicit ix_* one below, and downgrade() only drops the latter.
+        sa.Column("geom", Geometry("MULTIPOLYGON", srid=4326, spatial_index=False), nullable=True),
     )
     op.create_index("ix_ref_villages_geom", "ref_villages", ["geom"], postgresql_using="gist")
     op.create_index("ix_ref_villages_town", "ref_villages", ["county", "town"])
@@ -72,7 +74,7 @@ def upgrade() -> None:
         "osm_address_points",
         # OSM's own node id, not a surrogate: re-importing the same node must replace it.
         sa.Column("id", sa.BigInteger, primary_key=True, autoincrement=False),
-        sa.Column("geom", Geometry("POINT", srid=4326), nullable=True),
+        sa.Column("geom", Geometry("POINT", srid=4326, spatial_index=False), nullable=True),
         sa.Column("county", sa.String(50), nullable=True),
         sa.Column("town", sa.String(50), nullable=True),
         sa.Column("village", sa.String(50), nullable=True),

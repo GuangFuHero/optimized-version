@@ -11,7 +11,16 @@ from app.models.base import Base as Base  # noqa: F401 — re-export single sour
 # 從設定檔獲取連線字串
 SQLALCHEMY_DATABASE_URL = settings.SQLALCHEMY_DATABASE_URL
 
-engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=False)
+# statement_timeout bounds how long one query can hold a backend. Nothing serving a request has
+# a legitimate reason to run for 30 s, and until this was set a single coordinate could pin a
+# connection for minutes (PR #44 review). Scoped to this engine deliberately: alembic/env.py and
+# scripts/import_reference_data.py each build their own from the same URL, so migrations and the
+# reference import — whose 村里 spatial join alone runs ~19 minutes — are unaffected.
+engine = create_async_engine(
+    SQLALCHEMY_DATABASE_URL,
+    echo=False,
+    connect_args={"server_settings": {"statement_timeout": "30000"}},
+)
 # expire_on_commit=False is required here, not a preference. With SQLAlchemy's default
 # (True), commit() marks every loaded object's attributes as stale, and the next read of one
 # silently re-queries the database. Under asyncio there is no await point in that reload, so

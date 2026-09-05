@@ -57,9 +57,13 @@ class RefVillage(Base):
     # Nullable: 連江縣南竿鄉 publishes a village polygon with an empty VILLNAME, and dropping
     # it would put a hole in the one dataset whose job is complete positional coverage.
     village: Mapped[str | None] = mapped_column(String(50))
-    geom = mapped_column(Geometry("MULTIPOLYGON", srid=4326))
+    geom = mapped_column(Geometry("MULTIPOLYGON", srid=4326, spatial_index=False))
 
     __table_args__ = (
+        # `spatial_index=False` above is required, not stylistic: GeoAlchemy2 defaults it to True
+        # and creates its own `idx_<table>_<column>` GiST index, so leaving the default here gives
+        # every geometry column two identical indexes — 385 MB duplicated on osm_address_points,
+        # both maintained row by row during the import's swap (PR #44 review).
         Index("ix_ref_villages_geom", "geom", postgresql_using="gist"),
         Index("ix_ref_villages_town", "county", "town"),
     )
@@ -80,7 +84,7 @@ class OsmAddressPoint(Base):
 
     __tablename__ = "osm_address_points"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
-    geom = mapped_column(Geometry("POINT", srid=4326))
+    geom = mapped_column(Geometry("POINT", srid=4326, spatial_index=False))
     county: Mapped[str | None] = mapped_column(String(50))
     town: Mapped[str | None] = mapped_column(String(50))
     village: Mapped[str | None] = mapped_column(String(50))

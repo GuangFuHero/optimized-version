@@ -126,6 +126,33 @@ async def _set_status(engine, name: str, status: str, **fields) -> None:
         )
 
 
+# Statuses a row can only hold while an import is actually running.
+_IN_FLIGHT = ("pending", "downloading", "importing")
+
+
+async def _clear_interrupted(conn) -> int:
+    """Settle rows left mid-run by a process that died, and return how many. Needs the lock held.
+
+    Only Python exceptions reach the `failed` write in `run()`, so a SIGKILL — the OOM killer, a
+    `docker kill`, a VM restart — leaves a row claiming to be importing forever (three days, once,
+    on staging). Holding the advisory lock proves nothing else is importing, so anything still
+    in flight here is residue and no heartbeat is needed to tell the difference.
+
+    `failed` beats leaving it: `referenceData` is the field clients read to decide whether to
+    offer address suggestions, and a phantom import in progress reads as "wait a bit", not as
+    "something went wrong and nobody was told".
+    """
+    result = await conn.execute(
+        text(
+            "UPDATE reference_datasets SET status = 'failed', finished_at = now(), "
+            "error = 'interrupted: the previous import died without recording a failure' "
+            "WHERE status = ANY(:in_flight)"
+        ),
+        {"in_flight": list(_IN_FLIGHT)},
+    )
+    return result.rowcount
+
+
 async def _current_version(engine, name: str) -> str | None:
     """Return the source_version of a dataset that is already `ready`, else None."""
     async with engine.connect() as conn:
@@ -464,6 +491,12 @@ async def run(names: list[str], *, force: bool) -> int:
             if not await lock_conn.scalar(text("SELECT pg_try_advisory_lock(:k)"), {"k": _ADVISORY_LOCK_KEY}):
                 log.error("another import is already running; exiting")
                 return 1
+
+            # Now that the lock is ours, anything still marked in-flight is crash residue.
+            async with engine.begin() as conn:
+                stale = await _clear_interrupted(conn)
+            if stale:
+                log.warning("cleared %d dataset(s) left in-flight by an interrupted run", stale)
 
             client = Fetcher()
             try:

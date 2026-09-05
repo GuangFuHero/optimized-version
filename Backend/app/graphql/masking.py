@@ -51,7 +51,10 @@ def mask_email(email: str | None) -> str | None:
 
 
 # First digit-led 巷/弄/號 group, or a 樓/室 — where the public pin stops and PII starts.
-_ADDRESS_PRIVATE_RE = re.compile(r"\d+(?:巷|弄|號)|\d+樓|[0-9A-Za-z]{1,8}室")
+# The optional `[-之]` sub-number is load-bearing: 號 may carry one (core/address.py parses
+# `7之1號` and stores it as `7-1`), and without it the pattern only matched the `1號` half and
+# handed back the primary number — 松智路1段7-1號3樓 masked to 松智路1段7-◯◯◯ (PR #44 review).
+_ADDRESS_PRIVATE_RE = re.compile(r"\d+(?:[-之]\d+)?(?:巷|弄|號)|\d+樓|[0-9A-Za-z]{1,8}室")
 
 
 def mask_address(formatted: str | None) -> str | None:

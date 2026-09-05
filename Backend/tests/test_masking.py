@@ -79,6 +79,17 @@ def test_mask_address_cuts_at_the_house_number():
     assert mask_address("花蓮縣光復鄉大全村中興路10號3樓") == "花蓮縣光復鄉大全村中興路◯◯◯"
 
 
+def test_mask_address_cuts_at_a_hyphenated_house_number():
+    """A 號 with a sub-number is masked whole — the primary number is the identifying half.
+
+    core/address.py parses `7之1` and stores it as `7-1`, so both forms reach this function.
+    Matching only the digits nearest 號 left the primary number in the clear (PR #44 review).
+    """
+    assert mask_address("台北市信義區松智路1段7-1號3樓") == "台北市信義區松智路1段◯◯◯"
+    assert mask_address("高雄市苓雅區中正一路12-34號5樓") == "高雄市苓雅區中正一路◯◯◯"
+    assert mask_address("台北市信義區松智路1段7之1號") == "台北市信義區松智路1段◯◯◯"
+
+
 def test_mask_address_cuts_at_the_lane():
     """巷/弄 are as identifying as the 號 itself, so the cut is made at whichever comes first."""
     assert mask_address("新北市板橋區文化路2段182巷3弄5號") == "新北市板橋區文化路2段◯◯◯"

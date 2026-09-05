@@ -132,6 +132,8 @@ main() {
     local target_ref="${1:-origin/main}" start_ts
     start_ts=$(date +%s)
 
+    # Re-acquired rather than inherited on the re-execed pass (step 3): `exec 9>` drops the old
+    # descriptor and takes the lock again, which is correct even if fd inheritance ever changed.
     exec 9>"$LOCK_FILE"
     flock -n 9 || die "another deploy is already in progress"
 
@@ -146,17 +148,25 @@ main() {
     [ -z "$(git status --porcelain)" ] || die "git working tree not clean"
 
     log "[2/9] recording rollback baseline (from the RUNNING container, not tags)"
-    OLD_SHA=$(git rev-parse HEAD)
-    local running_ctr running_img
-    # Prefer the RUNNING container; fall back to stopped ones (crashed backend still has the right image).
-    running_ctr=$(compose ps -q backend | head -n1 || true)
-    [ -n "$running_ctr" ] || running_ctr=$(compose ps -aq backend | head -n1 || true)
-    if [ -n "$running_ctr" ]; then
-        running_img=$(docker inspect --format '{{.Image}}' "$running_ctr")
-        docker tag "$running_img" "$IMAGE:prev"
-        log "baseline: sha=$OLD_SHA image=$running_img"
+    if [ -n "${DEPLOY_OLD_SHA:-}" ]; then
+        # Re-execed pass (see step 3). HEAD is already the NEW ref, so re-deriving the baseline
+        # here would record the target as its own rollback point and destroy it. The image was
+        # tagged :prev on the first pass and is still there.
+        OLD_SHA="$DEPLOY_OLD_SHA"
+        log "baseline: sha=$OLD_SHA (carried across re-exec; $IMAGE:prev already tagged)"
     else
-        log "WARNING: no existing backend container (first deploy?) — image rollback unavailable"
+        OLD_SHA=$(git rev-parse HEAD)
+        local running_ctr running_img
+        # Prefer the RUNNING container; fall back to stopped ones (crashed backend still has the right image).
+        running_ctr=$(compose ps -q backend | head -n1 || true)
+        [ -n "$running_ctr" ] || running_ctr=$(compose ps -aq backend | head -n1 || true)
+        if [ -n "$running_ctr" ]; then
+            running_img=$(docker inspect --format '{{.Image}}' "$running_ctr")
+            docker tag "$running_img" "$IMAGE:prev"
+            log "baseline: sha=$OLD_SHA image=$running_img"
+        else
+            log "WARNING: no existing backend container (first deploy?) — image rollback unavailable"
+        fi
     fi
 
     log "[3/9] checking out ${target_ref}"
@@ -165,6 +175,21 @@ main() {
     STAGE=worktree                      # from here, any failure restores the worktree
     git checkout --detach "$target_ref"
     log "deploying $(git rev-parse --short HEAD): $(git log -1 --format=%s)"
+
+    # This script may itself differ in the ref just checked out — but bash parsed the OLD main()
+    # into memory before running a line of it, so steps added by the new ref would silently never
+    # run. That is not hypothetical: it is why the `retention` service added by #33 has never
+    # started, and why step 8b below would not have run on the deploy that introduces it.
+    # Re-exec once, from the checked-out script, carrying the rollback baseline in the
+    # environment. Steps 1-3 repeat on the second pass; all three are idempotent (preflight
+    # re-checks, the tree is still clean, and checking out the same ref is a no-op), and the
+    # duplicated log lines are an honest record that a re-exec happened.
+    if [ -z "${DEPLOY_REEXECED:-}" ]; then
+        log "re-exec: running the checked-out scripts/deploy.sh so its own changes take effect"
+        export DEPLOY_REEXECED=1 DEPLOY_OLD_SHA="$OLD_SHA"
+        trap - ERR                      # the new process installs its own
+        exec "$BACKEND_DIR/scripts/deploy.sh" "$target_ref"
+    fi
 
     log "[4/9] generating .env (after checkout, so new refs can add variables)"   # S2
     gen_env

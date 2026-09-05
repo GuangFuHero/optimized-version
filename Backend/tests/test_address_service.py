@@ -84,6 +84,57 @@ async def refdata(db):
     return db
 
 
+@pytest_asyncio.fixture
+async def lane_refdata(refdata):
+    """`refdata` plus the 中華路 points the L3 house-number key is tested against.
+
+    Kept out of the shared fixture on purpose: every one of these sits inside the KNN radius of
+    `IN_DAQUAN`, so adding them there would silently change what the reverse-lookup tests expect
+    to be the nearest address and how many suggestions come back.
+    """
+    refdata.add_all(
+        [
+            # A 10號 that exists only underneath a 巷/弄 — the shape that used to let a plain
+            # 中華路10號 match it and grade `verified` (PR #44 review).
+            OsmAddressPoint(
+                id=3,
+                geom=_point(*IN_DAQUAN),
+                county="花蓮縣",
+                town="光復鄉",
+                village="大全村",
+                road="中華路",
+                lane="212",
+                alley="1",
+                no="10",
+            ),
+            # Two nodes sharing one whole address key, ~667 m apart: the 0.085% of keys that stay
+            # ambiguous after the full-key filter, and what the pin tie-break has to settle. The
+            # far one is inserted first deliberately — an unordered LIMIT 1 follows physical
+            # order, so this is the arrangement in which the old code picks the wrong node.
+            OsmAddressPoint(
+                id=4,
+                geom=_point(23.6660, 121.42),
+                county="花蓮縣",
+                town="光復鄉",
+                village="大全村",
+                road="中華路",
+                no="99",
+            ),
+            OsmAddressPoint(
+                id=5,
+                geom=_point(*IN_DAQUAN),
+                county="花蓮縣",
+                town="光復鄉",
+                village="大全村",
+                road="中華路",
+                no="99",
+            ),
+        ]
+    )
+    await refdata.commit()
+    return refdata
+
+
 # --------------------------------------------------------------------------- request errors
 
 
@@ -146,6 +197,41 @@ async def test_named_lane_road_is_reattached(refdata):
     result = await normalize_address(refdata, raw="宜蘭縣三星鄉竹田1巷5號")
     assert result.parts.road == "竹田1巷"
     assert result.parts.lane is None
+
+
+@pytest.mark.asyncio
+async def test_house_number_under_a_lane_does_not_verify_a_plain_one(lane_refdata):
+    """段/巷/弄 are part of the key: 中華路10號 is not 中華路212巷1弄10號.
+
+    Matching on 路+號 alone made an address OSM does not contain come back `verified` with no
+    issues at all — an upgrade L1–L3 are never allowed to make (PR #44 review).
+    """
+    result = await normalize_address(lane_refdata, raw="花蓮縣光復鄉中華路10號")
+    assert result.status == STATUS_UNVERIFIED
+    assert any("OpenStreetMap" in issue for issue in result.issues)
+
+
+@pytest.mark.asyncio
+async def test_full_key_still_verifies_the_address_that_does_exist(lane_refdata):
+    """The other half of the above: spell the 巷/弄 out and it grades verified again."""
+    result = await normalize_address(lane_refdata, raw="花蓮縣光復鄉中華路212巷1弄10號")
+    assert result.status == STATUS_VERIFIED
+    assert result.formatted == "花蓮縣光復鄉中華路212巷1弄10號"
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_key_resolves_to_the_node_nearest_the_pin(lane_refdata):
+    """With several nodes on one key, the pin picks; an arbitrary pick invented a distance warning.
+
+    Both 中華路99號 nodes match the full key. Taking either one produced "matched address is
+    667 m from the supplied pin" half the time, for an address standing on the pin itself.
+    """
+    result = await normalize_address(
+        lane_refdata, raw="花蓮縣光復鄉中華路99號", lat=IN_DAQUAN[0], lng=IN_DAQUAN[1]
+    )
+    assert result.status == STATUS_VERIFIED
+    assert result.distance_m == pytest.approx(0, abs=1)
+    assert not any("from the supplied pin" in issue for issue in result.issues)
 
 
 @pytest.mark.asyncio

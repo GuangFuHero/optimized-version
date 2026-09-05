@@ -192,8 +192,20 @@ async def _confirm_house_number(
         issues.append("no house number to confirm")
         return STATUS_UNVERIFIED, None
 
+    # The full key, not just 路+號: without 段/巷/弄 this matched any same-numbered house on a
+    # different 巷 and graded it `verified`, which L1–L3 are never allowed to do. The pin, when
+    # there is one, picks the nearest of the few keys that are still genuinely ambiguous.
     point = await ref.address_point_for(
-        db, county=parts.county, town=parts.town, road=parts.road, no=parts.no
+        db,
+        county=parts.county,
+        town=parts.town,
+        road=parts.road,
+        no=parts.no,
+        section=parts.section,
+        lane=parts.lane,
+        alley=parts.alley,
+        lat=lat,
+        lng=lng,
     )
     if point is None:
         issues.append("house number not present in OpenStreetMap (not necessarily wrong)")

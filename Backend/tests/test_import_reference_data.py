@@ -18,6 +18,7 @@ from sqlalchemy import text
 from scripts.import_reference_data import (
     _CHUNK_BYTES,
     _OSM_ADMIN_SQL,
+    _clear_interrupted,
     _copy_csv,
     _csv_chunks,
     _osm_rows,
@@ -211,3 +212,52 @@ async def test_osm_admin_sql_fills_admin_columns_once_per_point(db):
         await conn.execute(text("SELECT county, road FROM osm_address_points WHERE id = 2"))
     ).one()
     assert outside == (None, "中山路")
+
+
+# --------------------------------------------------------------------------- _clear_interrupted
+
+
+@pytest.mark.asyncio
+async def test_clear_interrupted_settles_only_in_flight_rows(db):
+    """Crash residue becomes `failed`; anything already settled is left exactly as it was.
+
+    A killed import never raises, so nothing else would ever move these rows off `importing` —
+    and `referenceData` reporting a phantom import in progress reads as "wait", not as a failure
+    (PR #44 review).
+    """
+    conn = await db.connection()
+    await conn.execute(
+        text(
+            "INSERT INTO reference_datasets (name, status, row_count, error) VALUES "
+            "('ref_roads', 'importing', NULL, NULL), "
+            "('ref_villages', 'downloading', NULL, NULL), "
+            "('osm_address_points', 'ready', 42, NULL)"
+        )
+    )
+
+    cleared = await _clear_interrupted(conn)
+
+    assert cleared == 2
+    rows = dict((await conn.execute(text("SELECT name, status FROM reference_datasets"))).all())
+    assert rows == {
+        "ref_roads": "failed",
+        "ref_villages": "failed",
+        "osm_address_points": "ready",
+    }
+    error = await conn.scalar(text("SELECT error FROM reference_datasets WHERE name = 'ref_roads'"))
+    assert "interrupted" in error
+    # A settled row keeps its own record — the sweep must not blank a real import's row_count.
+    assert (
+        await conn.scalar(text("SELECT row_count FROM reference_datasets WHERE name = 'osm_address_points'"))
+        == 42
+    )
+
+
+@pytest.mark.asyncio
+async def test_clear_interrupted_is_a_no_op_on_a_clean_table(db):
+    """The normal case — every previous run settled itself, so nothing is touched."""
+    conn = await db.connection()
+    await conn.execute(text("INSERT INTO reference_datasets (name, status) VALUES ('ref_roads', 'ready')"))
+
+    assert await _clear_interrupted(conn) == 0
+    assert await conn.scalar(text("SELECT status FROM reference_datasets")) == "ready"
