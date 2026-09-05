@@ -152,13 +152,13 @@ uv run pytest tests/test_dedup_scoring.py tests/test_dedup_service.py tests/test
 
 ---
 
-## 6. 待團隊拍板
+## 6. 待團隊決定
 
 1. 四個選項的 enum 值命名（合約只凍結了 `accepted_hint`／`ignored_hint` 兩值收斂）。
 2. 送單前的回傳型別要不要就叫 `TicketDedupRelation`、把 `pairUuid`／`pairStatus` 放寬成 nullable。
 3. 「接受提示」沒有第二張單時要不要仍造一張卡（現在不造，只留 event）。
 4. 候選半徑改為**由參數推導**（`max_hint_distance_m`，公式見 §3），不再有筆數上限：現行參數
-   ＝147.4 m × 1.1。要拍板的是 `MAX_CANDIDATE_RADIUS_M = 1000 m` 這個 backstop 值，以及
+   ＝147.4 m × 1.1。要決定的是 `MAX_CANDIDATE_RADIUS_M = 1000 m` 這個 backstop 值，以及
    1.1 這個浮點餘裕是否夠。`test_graphql/test_dedup.py` 有兩支測試釘住行為：50 張更近的雜訊單
    不會擠掉 92 m 外的真雙胞胎；超出邊界的候選則根本不進查詢。
 5. 文字權重 1.0 與 `component_baseline` 0.5 都沒跑過 grid。
