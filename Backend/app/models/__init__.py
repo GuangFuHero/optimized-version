@@ -11,6 +11,7 @@ from app.models.briefing import Briefing, BriefingTemplate  # noqa: F401
 from app.models.geo import BaseGeometry, ClosureArea, Station  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.photo import Photo  # noqa: F401
+from app.models.project_settings import ProjectSettings  # noqa: F401
 from app.models.property_config import StationPropertyConfig, TaskPropertyConfig  # noqa: F401
 from app.models.rbac import (  # noqa: F401
     Permission,
