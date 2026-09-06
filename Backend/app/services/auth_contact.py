@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import verify_password
 from app.graphql.masking import mask_email, mask_phone
 from app.messaging.email import (
+    build_contact_added_email,
     build_contact_changed_email,
     build_contact_removed_email,
     build_contact_verification_email,
@@ -24,6 +25,7 @@ from app.messaging.email import (
     build_step_up_code_email,
 )
 from app.messaging.sms import (
+    build_contact_added_sms,
     build_contact_changed_sms,
     build_contact_removed_sms,
     build_password_set_sms,
@@ -439,8 +441,16 @@ async def commit_contact_change(
         raise ContactNotFound("Invalid or expired code")
 
     if existing is None:
+        # Read the survivors BEFORE the insert commits: they are who gets told, and the new
+        # row must not be among them.
+        others = [(c.type, c.value) for c in await contact_repository.list_by_user(
+            db, str(actor.uuid))]
         await contact_repository.create_verified(
             db, user_uuid=actor.uuid, type_=type_, value=value
+        )
+        await _notify_contact_added(
+            (type_, value), others, email_sender=email_sender, sms_sender=sms_sender,
+            dispatch=dispatch,
         )
         return False
 
@@ -457,6 +467,35 @@ async def commit_contact_change(
         await _notify(dispatch, _send_sms_or_log, sms_sender,
                       old_value, build_contact_changed_sms(masked))
     return True
+
+
+async def _notify_contact_added(
+    added: tuple[str, str], targets: list[tuple[str, str]], *,
+    email_sender, sms_sender, dispatch=None,
+) -> None:
+    """Tell the channels the account already held that it gained another one (ADR-224).
+
+    Replacement has always announced itself to the old channel (ADR-085); adding the first
+    contact of a type returned in silence, even though the added value is a login identifier
+    and a `forgot-password` destination. Only the pre-existing channels are told — the new
+    value has just proved it can receive mail, and telling it says nothing to the owner.
+
+    An account whose first contact this is has nobody to tell, and nothing to protect yet.
+
+    Plain `(type, value)` pairs rather than ORM rows for the same reason
+    `_notify_contact_removed` takes them: the caller reads them off before the INSERT commits,
+    and the session is `expire_on_commit=True`.
+    """
+    added_type, added_value = added
+    masked = _mask(added_type, added_value)
+    for target_type, target_value in targets:
+        if target_type == "email":
+            subject, html, text = build_contact_added_email(added_type, masked)
+            await _notify(dispatch, _send_email_or_log,
+                          email_sender, target_value, subject, html, text)
+        else:
+            await _notify(dispatch, _send_sms_or_log, sms_sender,
+                          target_value, build_contact_added_sms(added_type, masked))
 
 
 async def _notify_contact_removed(

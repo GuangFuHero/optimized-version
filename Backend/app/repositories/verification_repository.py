@@ -144,8 +144,16 @@ class VerificationRepository:
             return None, "pending"
         sends_key = f"{STEPUP_SENDS}{user_uuid}:{type_}"
         sends = await self.redis.incr(sends_key)
-        if sends == 1:
-            await self.redis.expire(sends_key, self.ttl)
+        # Every call, not just the first (ADR-225). `INCR` creates the key with no expiry, so
+        # setting the TTL only when `sends == 1` leaves a window — a dropped connection or a
+        # dead worker between the two round trips — where the counter survives for ever. It
+        # is never deleted or reset anywhere (`discard_old_channel_step_up` deliberately
+        # leaves it alone), so the account would be throttled permanently: unable to replace
+        # or remove that contact type, and since ADR-215 unable to set a first password
+        # either. `nx=True` means a live window is never extended by a later send, so this
+        # stays the fixed window ADR-165 specified rather than becoming a sliding one; and
+        # because it runs unconditionally, the very next call repairs a key that lost its TTL.
+        await self.redis.expire(sends_key, self.ttl, nx=True)
         if sends > MAX_STEPUP_SENDS_PER_WINDOW:
             return None, "throttled"
         payload = {"user_uuid": user_uuid, "type": type_, "value": value,

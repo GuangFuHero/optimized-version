@@ -256,6 +256,40 @@ def build_contact_changed_email(masked_new_value: str) -> tuple[str, str, str]:
     return subject, html, text
 
 
+def build_contact_added_email(added_type: str, masked_value: str) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the existing channels a contact was added.
+
+    Replacing a contact has always announced itself to the old channel (ADR-085, the only
+    mechanism that lets a victim notice); adding the first contact of a type returned in
+    silence. But the added value is a login identifier and a `forgot-password` destination,
+    so the set of ways into the account changed just as much (ADR-224).
+    """
+    label = "電子信箱 email" if added_type == "email" else "手機號碼 phone"
+    subject = f"【{_BRAND_ZH}】帳號新增了聯絡方式 Contact added"
+    html = _render_email(
+        h1="帳號新增了聯絡方式 Contact added",
+        notices=[
+            f"您的帳號新增了{label} {masked_value}，它可以用來登入與重設密碼。",
+            ('<span style="' + _S_NOTICE_EN + '">The '
+             f'{added_type} {masked_value} was added to your account, and can be used to '
+             'sign in and to reset the password.</span>'),
+        ],
+        footer_lines=[
+            "若非本人操作，請立即移除它並變更密碼。 If this was not you, remove it and change "
+            "your password immediately.",
+            _FOOTER_BRAND,
+        ],
+    )
+    text = (
+        f"您的帳號新增了{label} {masked_value}，它可以用來登入與重設密碼。\n"
+        "若非本人操作，請立即移除它並變更密碼。\n"
+        f"The {added_type} {masked_value} was added to your account and can be used to sign in "
+        "and to reset the password.\nIf this was not you, remove it and change your password "
+        "immediately.\n"
+    )
+    return subject, html, text
+
+
 def build_contact_removed_email(removed_type: str, masked_value: str) -> tuple[str, str, str]:
     """Return (subject, html, text) telling the surviving channels that a contact was removed.
 
