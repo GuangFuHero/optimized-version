@@ -3,10 +3,11 @@
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String
+from sqlalchemy import Boolean, Computed, DateTime, Float, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
+from app.models.search import search_text_expression, search_text_index, truncated
 
 
 class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
@@ -69,8 +70,21 @@ class Station(BaseGeometry):
     operational_status: Mapped[str] = mapped_column(String(20), server_default="active")
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Keyword-search column, maintained by PostgreSQL (ADR-079/081). The field list here
+    # IS the positive list — see app/models/search.py before changing it.
+    # `name` is truncated, not plain(): it is an unbounded String with no length
+    # validation on CreateStationInput, so a single pasted document would put one trigram
+    # entry per character into the GIN index (ADR-151).
+    search_text: Mapped[str] = mapped_column(
+        String,
+        Computed(search_text_expression(truncated("name"), truncated("description")), persisted=True),
+        deferred=True,
+    )
+
     __mapper_args__ = {
         "polymorphic_identity": "station",
     }
+
+    __table_args__ = (search_text_index("stations"),)
 
     properties: Mapped[list["StationProperty"]] = relationship(back_populates="station")  # noqa: F821
