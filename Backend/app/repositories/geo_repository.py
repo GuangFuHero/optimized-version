@@ -103,7 +103,6 @@ class StationRepository(GenericRepository[Station]):
         # `created_at` defaults to func.now(), which is transaction-scoped, so a bulk
         # insert leaves a whole block sharing one timestamp.
         standing = [
-            self.model.priority_score.desc().nulls_last(),
             self.model.created_at.desc(),
             self.model.uuid.desc(),
         ]

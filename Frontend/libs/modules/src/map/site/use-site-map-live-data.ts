@@ -109,12 +109,7 @@ function mapMarkersForDataType({
   return dedupeMarkersById(
     stationItems
       .map((station) => mapStationToMarker(station))
-      .filter((marker): marker is RescueMapMarkerItem => Boolean(marker))
-      .sort(
-        (left, right) =>
-          (right.stationMeta?.priorityScore ?? 0) -
-          (left.stationMeta?.priorityScore ?? 0),
-      ),
+      .filter((marker): marker is RescueMapMarkerItem => Boolean(marker)),
   );
 }
 
