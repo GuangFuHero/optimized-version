@@ -31,6 +31,8 @@ class PropertyConfigMutation:
             info.context["db"], actor=require_authenticated(info),
             station_type=station_type, property_name=input.property_name,
             data_type=input.data_type, enum_options=input.enum_options,
+            disaster_types=input.disaster_types, label=input.label,
+            sort_order=input.sort_order, is_active=input.is_active,
         )
         return StationPropertyConfigType.from_model(cfg)
 
@@ -46,5 +48,7 @@ class PropertyConfigMutation:
             info.context["db"], actor=require_authenticated(info),
             task_type=task_type, property_name=input.property_name,
             data_type=input.data_type, enum_options=input.enum_options,
+            disaster_types=input.disaster_types, label=input.label,
+            sort_order=input.sort_order, is_active=input.is_active,
         )
         return TaskPropertyConfigType.from_model(cfg)

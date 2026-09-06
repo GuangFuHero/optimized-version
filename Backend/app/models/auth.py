@@ -19,6 +19,12 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(100))  # display nickname; no longer the login id, not unique
     credibility_score: Mapped[float] = mapped_column(Float, default=50.0)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Written only when a refresh token is rotated (ADR-093), so the value is at most one
+    # access-token TTL (15 min) stale. Deliberately NOT written per request: `users` is in
+    # AUDITED_TABLES, so a per-request UPDATE would add one audit_logs row per request.
+    last_activity_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="最後活動時間（refresh token 輪替時寫入）"
+    )
     # A user has at most one team (ADR-019). Sole source of truth for "which team" — a
     # team-kind Role grant (app/models/rbac.py:Role) always resolves against this column,
     # never a copy stored elsewhere.
