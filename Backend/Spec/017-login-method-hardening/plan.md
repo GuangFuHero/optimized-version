@@ -117,3 +117,15 @@ Modify `tests/test_link_google.py`, `tests/test_link_line.py`, `tests/test_accou
 ADR-165 的「不重發活著的碼」也在實測中出現（第二次要碼回「請使用先前收到的那一組」）。
 
 **冷卻期（ADR-219）沒有在 docker 驗**：它需要跨 7 天，單元測試用直接改 `created_at` 覆蓋。
+
+
+## 合併 #39 第三輪 review 之後的整合調整（2026-09-06）
+
+#39 的 ADR-224（新增聯絡方式要通知既有管道）合上來之後，與本票的 ADR-220（新增也要證明）互相影響：
+那支通知測試原本不帶 step-up 送出，在本分支上會被 ADR-220 擋成 422。
+
+- [x] `test_adding_a_contact_tells_the_channels_the_account_already_had` 補上
+      `step_up.password`——它測的是「放行之後會通知誰」，不是閘門本身
+- [x] **745 passed**
+
+兩條 ADR 是互補的：220 決定**誰可以**新增，224 決定新增之後**誰會知道**。

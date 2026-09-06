@@ -715,8 +715,10 @@ async def test_adding_a_contact_tells_the_channels_the_account_already_had(
     """
     _, headers = await _password_user(db_session, redis)
 
-    res = await client.post(CONTACTS_URL, headers=headers,
-                            json={"type": "phone", "value": "0912345678"})
+    # ADR-220 gates the add; this test is about what happens once it is allowed through
+    res = await client.post(CONTACTS_URL, headers=headers, json={
+        "type": "phone", "value": "0912345678", "step_up": {"password": _PASSWORD},
+    })
     assert res.status_code == 202, res.text
     verified = await client.post(f"{CONTACTS_URL}/verify", headers=headers, json={
         "type": "phone", "value": "0912345678", "code": capture_sms.last_code,
