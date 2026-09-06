@@ -17,11 +17,9 @@ fragment StationFields on StationType {
   source
   visibility
   verificationStatus
-  confidenceScore
   isDuplicate
   isTemporary
   isOfficial
-  priorityScore
   createdBy
   createdAt
   updatedAt

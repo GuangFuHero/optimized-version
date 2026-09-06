@@ -401,9 +401,6 @@ type StationType {
   """Review state: 'unverified', 'ai_verified', or 'human_verified'"""
   verificationStatus: String
 
-  """Aggregate credibility score based on crowd-sourced ratings [0.0–1.0]"""
-  confidenceScore: Float
-
   """True if this station has been flagged as a duplicate entry"""
   isDuplicate: Boolean!
 
@@ -412,11 +409,6 @@ type StationType {
 
   """True if this station is operated by a government or official body"""
   isOfficial: Boolean!
-
-  """
-  Computed urgency score used for display ordering — higher is more urgent
-  """
-  priorityScore: Float
   createdAt: DateTime
   updatedAt: DateTime
   secondaryLocation: SecondaryLocationType

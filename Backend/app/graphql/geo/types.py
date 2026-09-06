@@ -137,10 +137,6 @@ class StationType:
     verification_status: str | None = strawberry.field(
         default=None, description="Review state: 'unverified', 'ai_verified', or 'human_verified'"
     )
-    confidence_score: float | None = strawberry.field(
-        default=None,
-        description="Aggregate credibility score based on crowd-sourced ratings [0.0–1.0]",
-    )
     is_duplicate: bool = strawberry.field(
         default=False,
         description="True if this station has been flagged as a duplicate entry",
@@ -152,10 +148,6 @@ class StationType:
     is_official: bool = strawberry.field(
         default=False,
         description="True if this station is operated by a government or official body",
-    )
-    priority_score: float | None = strawberry.field(
-        default=None,
-        description="Computed urgency score used for display ordering — higher is more urgent",
     )
     operational_status: str = strawberry.field(
         default="active",
@@ -258,9 +250,8 @@ class StationType:
             op_hour=m.op_hour, level=m.level, comment=m.comment,
             source=m.source, visibility=m.visibility,
             verification_status=m.verification_status,
-            confidence_score=m.confidence_score,
             is_duplicate=m.is_duplicate, is_temporary=m.is_temporary,
-            is_official=m.is_official, priority_score=m.priority_score,
+            is_official=m.is_official,
             operational_status=m.operational_status, status_changed_at=m.status_changed_at,
             created_at=m.created_at, updated_at=m.updated_at,
             _contact_name_raw=m.contact_name,
