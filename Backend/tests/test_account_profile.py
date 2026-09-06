@@ -675,3 +675,91 @@ async def test_two_concurrent_deletes_cannot_strand_the_account(db, redis, monke
     assert len(refused) == 1, f"expected exactly one refusal, got {outcomes}"
     remaining = await db.scalars(select(UserContact).where(UserContact.user_uuid == user_uuid))
     assert len(list(remaining)) == 1, "the account was left with no way to sign in"
+
+
+# --------------------------------------------------------------------------------------
+# Adding a contact is visible, and the send counter cannot outlive its window
+# --------------------------------------------------------------------------------------
+
+
+async def test_adding_a_contact_tells_the_channels_the_account_already_had(
+    client, db_session, redis, capture_email, capture_sms
+):
+    """Replacing has always announced itself; adding returned in silence (ADR-224).
+
+    The added value is a login identifier and a `forgot-password` destination, so the set of
+    ways into the account changed just as much as a replacement changes it.
+    """
+    _, headers = await _password_user(db_session, redis)
+
+    res = await client.post(CONTACTS_URL, headers=headers,
+                            json={"type": "phone", "value": "0912345678"})
+    assert res.status_code == 202, res.text
+    verified = await client.post(f"{CONTACTS_URL}/verify", headers=headers, json={
+        "type": "phone", "value": "0912345678", "code": capture_sms.last_code,
+    })
+
+    assert verified.status_code == 200, verified.text
+    # the account's existing email is told; the number that was just added is not
+    assert capture_email.messages[-1][0] == "owner@x.com"
+    assert "新增了聯絡方式" in capture_email.messages[-1][1]
+    assert all("已新增" not in body for _, body in capture_sms.messages)
+
+
+async def test_the_first_contact_of_all_notifies_nobody(client, db_session, redis, capture_email):
+    """An account whose first contact this is has nobody to tell, and nothing to protect."""
+    user = await create_account(db_session, name="Bare", provider="line",
+                                provider_subject="bare-sub-224")
+    headers = await auth_headers_for(redis, user.uuid)
+
+    await client.post(CONTACTS_URL, headers=headers,
+                      json={"type": "email", "value": "first@x.com"})
+    res = await client.post(f"{CONTACTS_URL}/verify", headers=headers, json={
+        "type": "email", "value": "first@x.com", "code": capture_email.last_code,
+    })
+
+    assert res.status_code == 200, res.text
+    assert all("新增了聯絡方式" not in body for _, _, _, body in
+               [(t, s, h, b) for t, s, h, b in capture_email.messages])
+
+
+async def test_the_step_up_send_counter_always_carries_a_ttl(redis):
+    """`INCR` creates the key with no expiry (ADR-225).
+
+    Setting the TTL only on the first send leaves a window — a dropped connection between the
+    two round trips — where the counter survives for ever. Nothing resets it, so the account
+    would be throttled permanently: unable to replace or remove that contact type, and since
+    ADR-215 unable to set a first password either.
+    """
+    from app.repositories.verification_repository import STEPUP_SENDS, VerificationRepository
+
+    repo = VerificationRepository(redis)
+    key = {"user_uuid": "u-225", "type_": "email", "value": "o@x.com", "action": "remove"}
+    sends_key = f"{STEPUP_SENDS}u-225:email"
+
+    await repo.issue_old_channel_step_up(**key)
+    assert await redis.ttl(sends_key) > 0
+
+    # simulate the lost round trip: the counter exists with no expiry at all
+    await redis.persist(sends_key)
+    assert await redis.ttl(sends_key) == -1
+
+    await repo.issue_old_channel_step_up(**{**key, "action": "replace"})
+
+    assert await redis.ttl(sends_key) > 0, "a counter that lost its TTL is never repaired"
+
+
+async def test_a_live_send_window_is_not_extended_by_a_later_send(redis):
+    """`nx=True` keeps ADR-165's fixed window fixed, rather than making it sliding."""
+    from app.repositories.verification_repository import STEPUP_SENDS, VerificationRepository
+
+    repo = VerificationRepository(redis)
+    key = {"user_uuid": "u-225b", "type_": "email", "value": "o@x.com", "action": "remove"}
+    sends_key = f"{STEPUP_SENDS}u-225b:email"
+
+    await repo.issue_old_channel_step_up(**key)
+    await redis.expire(sends_key, 5)  # pretend the window is nearly over
+
+    await repo.issue_old_channel_step_up(**{**key, "action": "replace"})
+
+    assert await redis.ttl(sends_key) <= 5, "the window was extended by a later send"

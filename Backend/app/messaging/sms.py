@@ -59,6 +59,15 @@ def build_contact_changed_sms(masked_new_value: str) -> str:
             "If this was not you, contact us immediately.")
 
 
+def build_contact_added_sms(added_type: str, masked_value: str) -> str:
+    """Return the bilingual SMS telling the existing channels a contact was added (ADR-224)."""
+    label = "電子信箱" if added_type == "email" else "手機號碼"
+    return (f"【{_BRAND_ZH}】您的帳號新增了{label} {masked_value}，可用於登入與重設密碼。"
+            "若非本人操作請立即移除並變更密碼。 "
+            f"The {added_type} {masked_value} was added to your account and can sign in and "
+            "reset the password. If this was not you, remove it and change your password.")
+
+
 def build_contact_removed_sms(removed_type: str, masked_value: str) -> str:
     """Return the bilingual SMS telling the surviving channels that a contact was removed.
 

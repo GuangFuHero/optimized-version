@@ -198,3 +198,16 @@ tests/test_add_contact.py             三條斷言從「第二個 email → 409�
 **新增但不在本輪修的缺口**（ADR-215 記錄）：`start_contact_change` 對「該型別的第一個聯絡方式」
 不設門檻（ADR-086），所以缺某一型別的帳號仍可被無門檻加入攻擊者控制的管道。早於本輪存在，
 應另開票。
+
+
+## PR #39 第三輪 review（2026-09-06）
+
+三條，其中一條已經在 #45 修掉。兩個新決策（ADR-224/225）。
+
+- [x] **ADR-224** `_notify_contact_added`：新增該型別第一個聯絡方式時，通知帳號**原本就有的**管道
+      → 舊碼：取代會通知、新增靜默，而新增進來的值同樣是登入識別碼與 `forgot-password` 目的地
+- [x] **ADR-225** `expire(sends_key, ttl, nx=True)` 無條件每次跑
+      → 舊碼：`INCR` 建的 key 沒有 TTL，只在 `sends == 1` 時補；中間斷線就永久 throttle 該帳號
+- [x] 新增 4 支測試；**RED 驗證**：還原兩處 → 2 支紅
+- [x] **`auth_contact.py:284` 的 first-of-type 閘門不在本 PR**——它是 #45 的 ADR-220，
+      而 #45 帶著本 PR 一起合（見兩張 PR 的描述）。合併時該 invariant 成立。
