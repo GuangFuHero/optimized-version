@@ -226,7 +226,7 @@ async def test_task_configs_are_filtered_the_same_way(client, coordinator_auth):
 
 
 # --------------------------------------------------------------------------------------
-# The management view: retired fields have to stay reachable by someone (ADR-164)
+# The management view: retired fields have to stay reachable by someone (ADR-226)
 # --------------------------------------------------------------------------------------
 
 STATION_CONFIGS_INCLUDING_INACTIVE = """
@@ -335,7 +335,7 @@ async def test_include_inactive_requires_edit_permission(client):
 
 
 # --------------------------------------------------------------------------------------
-# enum_options survives an edit that does not mention it (ADR-166)
+# enum_options survives an edit that does not mention it (ADR-228)
 # --------------------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -386,7 +386,7 @@ async def test_an_empty_list_is_how_enum_options_are_cleared(client, coordinator
 
 
 # --------------------------------------------------------------------------------------
-# The order is total, including across the 'all' bucket (ADR-165)
+# The order is total, including across the 'all' bucket (ADR-227)
 # --------------------------------------------------------------------------------------
 
 @pytest.mark.asyncio

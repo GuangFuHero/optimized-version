@@ -214,11 +214,17 @@ app/services/ticket.py:207-231    create_task_property
 
 ---
 
-## PR #36 code review 後補的決策（ADR-164~099）
+## PR #36 code review 後補的決策（ADR-226~099）
 
 以下四項是 PR #36 review 實測後拍板的修正，全部有對應測試。
 
-### ADR-164 停用欄位需要一條看得到的路：`includeInactive`（需 `dynamic_field.edit`）
+> **號碼異動（2026-09-06）**：這三條原本是 ADR-096/097/098，2026-08-27 的修撞號把它們搬到
+> 164~166——但那次沒有注意到 Spec/012 的 159~166 也涵蓋這個區間，於是**修撞號本身製造了新的撞號**。
+> 012 與 013 分屬兩條 stack、兩邊的 PR 都開著，所以是活的衝突。
+> 2026-09-06 掃描 205 個號碼時抓到，依「非歸屬方改號、引用少的一方改」的原則，把 013 這三條
+> 移到 **226~228**（013 側 21 處引用，012 側 31 處）。**教訓：改號之後要重掃一次，不能只看被改的那幾號。**
+
+### ADR-226 停用欄位需要一條看得到的路：`includeInactive`（需 `dynamic_field.edit`）
 
 **白話**：欄位一旦停用就完全消失在 API 上，等於救不回來。加一個查詢參數讓有編輯權的人看得到已停用欄位。
 
@@ -234,7 +240,7 @@ app/services/ticket.py:207-231    create_task_property
 ➖ 多一個參數要在前端管理介面接。
 ➖ 災害類型過濾掉的欄位仍然列不出來（需要先改 project settings 才看得到）——本次不處理。
 
-### ADR-165 station 查詢的排序必須以 `uuid` 收尾
+### ADR-227 station 查詢的排序必須以 `uuid` 收尾
 
 **白話**：`('all', X)` 和 `('shelter', X)` 兩列排序鍵完全一樣，順序還是會跳。
 
@@ -246,7 +252,7 @@ app/services/ticket.py:207-231    create_task_property
 ➕ 排序成為全序，同一份資料的回傳順序可重現。
 ➖ 打平時的相對順序由 `uuid` 決定，也就是任意但穩定；真要指定順序請用 `sort_order`。
 
-### ADR-166 `enum_options` 比照其他欄位：省略=不動，`[]`=清空
+### ADR-228 `enum_options` 比照其他欄位：省略=不動，`[]`=清空
 
 **白話**：只想改個顯示名稱，卻會把 Enum 的選項整組清掉。
 
@@ -282,10 +288,10 @@ app/services/ticket.py:207-231    create_task_property
 
 **白話**：停用一個動態欄位不該需要重新說明「這個欄位是什麼型別」。原本 `data_type` 是 upsert 唯一必填的非鍵欄位，而且每次都會被無條件寫入，於是想停用欄位的呼叫端被迫附帶一個 `dataType`——猜錯就順手把欄位定義改掉了。
 
-**Context**：ADR-095 加上 `is_active` 讓欄位可以退役，ADR-166 把「省略=不動」定為 upsert 的通則。但 `data_type` 沒有跟上：`config_repository` 的 `update_values = {"data_type": data_type, **optional}` 讓它繞過了 `_optional_config_fields()` 的過濾。實測（PR #36 review）：對一個 `data_type='integer'` 的既有欄位送 `{property_name, data_type: 'string', is_active: false}`，欄位確實停用了，型別也一併被改寫成 `string`，沒有任何警告。
+**Context**：ADR-095 加上 `is_active` 讓欄位可以退役，ADR-228 把「省略=不動」定為 upsert 的通則。但 `data_type` 沒有跟上：`config_repository` 的 `update_values = {"data_type": data_type, **optional}` 讓它繞過了 `_optional_config_fields()` 的過濾。實測（PR #36 review）：對一個 `data_type='integer'` 的既有欄位送 `{property_name, data_type: 'string', is_active: false}`，欄位確實停用了，型別也一併被改寫成 `string`，沒有任何警告。
 
 **Options**：
-- **甲：`data_type` 併入選填集合**（採用）。與 ADR-166 同一條規則，呼叫端 `{propertyName, isActive: false}` 即可退役。
+- **甲：`data_type` 併入選填集合**（採用）。與 ADR-228 同一條規則，呼叫端 `{propertyName, isActive: false}` 即可退役。
 - 乙：另開 `retireStationPropertyConfig` / `retireTaskPropertyConfig` mutation。語意最明確，但多兩個 mutation、兩組權限與測試，而且沒有解決「一般編輯也會誤改型別」這半邊。
 
 **Decision**：`data_type` 改為 `str | None = None` 並交給 `_optional_config_fields()`。欄位是 NOT NULL，所以**新增**時仍必填——這個檢查放在 `_upsert_with_conflict_retry()` 裡，因為那裡才是真正決定 insert 或 update 的地方；缺少時拋 `PropertyConfigValidationError`（繼承 `ValueError`，訊息才能穿過 GraphQL 的 `MaskErrors`），是 client error 而不是 500。
