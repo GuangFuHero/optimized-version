@@ -79,10 +79,14 @@ class Perm(StrEnum):
     ANN_EDIT = "announcement.edit"
     ANN_DELETE = "announcement.delete"
 
-    # Pre-Departure Notice
+    # Pre-Departure Notice (行前通知) — briefing templates + generated briefings.
+    # PREDEP_DELETE was added when the feature landed; the other three predate it as
+    # ahead-of-feature placeholders (ADR-026 era). Shape mirrors ANN_* deliberately: both
+    # are admin-authored content with a public read.
     PREDEP_VIEW = "pre_departure.view"
     PREDEP_PUBLISH = "pre_departure.publish"
     PREDEP_EDIT = "pre_departure.edit"
+    PREDEP_DELETE = "pre_departure.delete"
 
     # Audit Log
     AUDIT_VIEW = "audit.view"
@@ -97,8 +101,12 @@ class Perm(StrEnum):
 # program-level view (no DB row); anything not in this set is a 403 for an anonymous
 # caller. station.view/ticket.view are public (disaster map + help-request board don't
 # require login); ticket.view_pii is deliberately never in this set — PII always requires
-# a real actor, checked separately per-field (ADR-029).
-PUBLIC_PERMS = frozenset({Perm.MAP_VIEW, Perm.ANN_VIEW, Perm.STATION_VIEW, Perm.TICKET_VIEW})
+# a real actor, checked separately per-field (ADR-029). pre_departure.view joins them for
+# the same reason announcement.view did: a volunteer reads the 行前通知 to decide whether to
+# show up at all, so requiring an account first defeats the point.
+PUBLIC_PERMS = frozenset(
+    {Perm.MAP_VIEW, Perm.ANN_VIEW, Perm.STATION_VIEW, Perm.TICKET_VIEW, Perm.PREDEP_VIEW}
+)
 
 # ADR-064: capabilities that, for a team-kind holder, only take effect when the actor's team
 # is gov-type. Checkpoint 1 (holding the grant) is not enough — work_zone.py's

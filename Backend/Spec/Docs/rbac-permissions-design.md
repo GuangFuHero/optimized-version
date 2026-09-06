@@ -55,13 +55,16 @@
 | **Team（團隊管理）** | `team.view`、`team.edit`、`team.member.manage` |
 | **Work Zone（責任區）** | `work_zone.view`、`work_zone.add`、`work_zone.edit`、`work_zone.assign`、`work_zone.delete` |
 | **Dynamic Field（動態欄位設定）** | `dynamic_field.view`、`dynamic_field.add`、`dynamic_field.edit`、`dynamic_field.delete` |
-| **Pre-Departure（出勤前須知）** | `pre_departure.view`、`pre_departure.publish`、`pre_departure.edit` |
+| **Pre-Departure（出勤前須知／行前通知）** | `pre_departure.view`、`pre_departure.publish`、`pre_departure.edit`、`pre_departure.delete` |
 | **Audit（稽核日誌）** | `audit.view` |
 | **RBAC 自管（僅 Super Admin）** | `rbac.assign`、`rbac.edit` |
 
 > `PII` 與檢視分離（ADR-012）：`ticket.view`（看得到單）≠ `ticket.view_pii`（看得到聯絡資訊）。
 > Dashboard 是衍生視圖（ADR-049），可見性繼承自來源模組，**刻意沒有自己的 permission key**。
-> 部分鍵（`ticket.export`、`ai_duplicate.*`、`pre_departure.*`）已註冊進 catalog，但**目前 seed 尚未授予任何角色**——先讓 key 存在，待對應功能落地再 wire（見 `seed_rbac.py` 開頭）。
+> 部分鍵（`ticket.export`、`ai_duplicate.*`）已註冊進 catalog，但**目前 seed 尚未授予任何角色**——先讓 key 存在，待對應功能落地再 wire（見 `seed_rbac.py` 開頭）。
+> `pre_departure.*` 原本也在此列，功能落地後（briefing templates + briefings）已接上 enforcement 並授予 `super_admin`；
+> 同時補上原本沒有的 `pre_departure.delete`，與 `announcement.*` 的四鍵形狀對齊。
+> `pre_departure.view` 列入 `PUBLIC_PERMS`：志工要先讀得到行前通知才能決定是否出勤，與 `announcement.view` 同理。
 
 ---
 
