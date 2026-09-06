@@ -16,6 +16,8 @@
 > `ticket_tasks.canceled_at` (the backlog-drain counterpart to `completed_at`), and two
 > constraints that existed only in migrations — `uq_crowd_sourcing_user_item` and the
 > `ix_work_zones_geometry` GIST index.
+> `briefing_templates` / `briefings` (行前通知, migration `c3f0a1b2d4e6`) drawn in §3a of the
+> Identity diagram on 2026-09-05, alongside the feature landing.
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -37,8 +39,9 @@ drawn as a relationship to every domain.
 ## 1. Identity, Auth & RBAC
 
 Users, login/contact methods, capability-based RBAC (roles/permissions/teams/work
-zones), the audit trail, announcements, and the in-app notification feed. Self-contained
-— no cross-domain stubs needed (nothing here depends on Geospatial or Tickets).
+zones), the audit trail, announcements, the in-app notification feed, and pre-departure
+notices (行前通知). Self-contained — no cross-domain stubs needed (nothing here depends on
+Geospatial or Tickets).
 
 ```mermaid
 erDiagram
@@ -183,7 +186,7 @@ work_zones ||--o{ team_zone_assign : "assigned to teams"
 users ||--o{ team_zone_assign : "assigned by"
 
 %% ==========================
-%% 3. Audit Log, Announcements & Notifications
+%% 3. Audit Log, Announcements, Notifications & Pre-Departure Notices
 %% ==========================
 audit_logs {
     uuid uuid PK
@@ -241,6 +244,46 @@ notifications {
 %% INDEX: ix_notifications_recipient_created ON (recipient_uuid, created_at)      -- feed pagination
 users ||--o{ notifications : "receives"
 users ||--o{ notifications : "triggered (actor)"
+
+%% --------------------------
+%% 3a. Pre-Departure Notices (行前通知) — briefing templates and generated briefings
+%% --------------------------
+%% Admin-authored volunteer guidance, shaped like announcements: created_by, soft delete,
+%% and a public read (pre_departure.view is in PUBLIC_PERMS — a volunteer reads this to
+%% decide whether to show up, so it can't require an account).
+%% `state` is the deployment-lifecycle phase the material targets.
+briefing_templates {
+    uuid uuid PK
+    text content
+    jsonb tags "string array, server_default '[]'; free-form categorization (psychological/supply/disaster-type)"
+    string state "briefing 行前 / in_field 現場 / debrief 回程後, String(50), default briefing"
+    uuid created_by FK "FK to users, indexed"
+    timestamp created_at
+    timestamp updated_at
+    timestamp delete_at
+}
+users ||--o{ briefing_templates : "authors"
+
+%% A briefing generated from a template, or authored ad-hoc.
+briefings {
+    uuid uuid PK
+    uuid template_uuid FK "nullable, FK to briefing_templates, indexed"
+    text content
+    jsonb tags "string array, server_default '[]'"
+    string state "briefing/in_field/debrief, String(50), default briefing"
+    uuid created_by FK "FK to users, indexed"
+    timestamp created_at
+    timestamp updated_at
+    timestamp delete_at
+}
+%% template_uuid is nullable for two reasons, not one: an ad-hoc briefing never had a
+%% template, and content/tags/state are COPIED at generation time rather than joined — so
+%% soft-deleting a template leaves existing briefings whole, and later edits to a template
+%% deliberately do not rewrite briefings already sent out.
+%% `tags` is queried with JSONB containment (`tags @> '["x"]'`), not a join table: the tag
+%% vocabulary is meant to grow without a migration.
+briefing_templates ||--o{ briefings : "generated from"
+users ||--o{ briefings : "authors"
 ```
 
 ## 2. Geospatial & Stations
