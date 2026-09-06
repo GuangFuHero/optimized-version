@@ -11,6 +11,11 @@
 > `stations` gained `operational_status`/`status_changed_at` and `ticket_tasks` gained
 > `completed_at`, backing the analytics dashboard's station freshness-trend and ticket
 > time-to-completion metrics, on 2026-08-07.
+> Synced against `app/models/` and `alembic/versions/` on 2026-09-05: added the two tables
+> that had shipped without ever being drawn (`notifications`, `station_update_suggestions`),
+> `ticket_tasks.canceled_at` (the backlog-drain counterpart to `completed_at`), and two
+> constraints that existed only in migrations — `uq_crowd_sourcing_user_item` and the
+> `ix_work_zones_geometry` GIST index.
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -32,8 +37,8 @@ drawn as a relationship to every domain.
 ## 1. Identity, Auth & RBAC
 
 Users, login/contact methods, capability-based RBAC (roles/permissions/teams/work
-zones), the audit trail, and announcements. Self-contained — no cross-domain stubs
-needed (nothing here depends on Geospatial or Tickets).
+zones), the audit trail, announcements, and the in-app notification feed. Self-contained
+— no cross-domain stubs needed (nothing here depends on Geospatial or Tickets).
 
 ```mermaid
 erDiagram
@@ -156,6 +161,8 @@ work_zones {
     timestamp updated_at
     timestamp delete_at "nullable"
 }
+%% INDEX: ix_work_zones_geometry ON work_zones USING GIST (geometry) -- every `zone` scope check
+%% is an ST_Contains against this column, so it must not sequentially scan.
 users ||--o{ work_zones : "draws"
 
 %% Team ↔ work zone assignment. A team's `zone` scope = resources whose geometry falls
@@ -176,7 +183,7 @@ work_zones ||--o{ team_zone_assign : "assigned to teams"
 users ||--o{ team_zone_assign : "assigned by"
 
 %% ==========================
-%% 3. Audit Log & Announcements
+%% 3. Audit Log, Announcements & Notifications
 %% ==========================
 audit_logs {
     uuid uuid PK
@@ -205,13 +212,43 @@ announcements {
     timestamp delete_at
 }
 users ||--o{ announcements : "authors"
+
+%% In-app notification feed — one row per (recipient, event), not one per event.
+%% NotificationService.dispatch() fans an event out over a resolved recipient list and
+%% always drops the actor from it, so nobody is notified of their own action.
+%% type values: announcement_published, zone_assigned, zone_unassigned, team_member_added,
+%%   ticket_task_status_update, ticket_task_moderation_update, task_assignment_created,
+%%   resource_station_updated, dedup_flag_ticket, dedup_flag_station
+notifications {
+    uuid uuid PK
+    uuid recipient_uuid FK "FK to users, ON DELETE CASCADE"
+    uuid actor_uuid FK "nullable, FK to users, ON DELETE SET NULL; NULL = system-triggered"
+    string type "String(50), see the value list above"
+    string priority "urgent/high/medium/info, String(20), default medium"
+    string ref_type "nullable, String(50): announcement/work_zone/team/ticket_task/station"
+    uuid ref_uuid "nullable, uuid of the ref_type row — no DB FK, same polymorphic pattern as photos"
+    string title "String(200)"
+    text body
+    boolean read "default false"
+    timestamp read_at "nullable"
+    timestamp created_at
+    timestamp updated_at
+    timestamp delete_at
+}
+%% ref_type/ref_uuid keep the frontend URL out of the row: the client resolves the target
+%% itself, so a route change doesn't invalidate stored notifications.
+%% INDEX: ix_notifications_recipient_unread  ON (recipient_uuid, read, delete_at) -- unread badge count
+%% INDEX: ix_notifications_recipient_created ON (recipient_uuid, created_at)      -- feed pagination
+users ||--o{ notifications : "receives"
+users ||--o{ notifications : "triggered (actor)"
 ```
 
 ## 2. Geospatial & Stations
 
 Base geometries, secondary locations, closure areas, stations, station properties,
-and crowd-sourced ratings. `users` appears below as a PK-only stub for
-`created_by`/`user_uuid` references — full definition in the Identity diagram above.
+crowd-sourced ratings, and the user-suggestion → admin-review queue for station edits.
+`users` appears below as a PK-only stub for `created_by`/`user_uuid` references — full
+definition in the Identity diagram above.
 
 ```mermaid
 erDiagram
@@ -328,6 +365,35 @@ station_property_config {
 }
 
 %% ==========================
+%% Station Update Suggestions (user proposal → admin review)
+%% ==========================
+%% One row per proposed change to a single field. target_type/target_uuid address the row
+%% polymorphically (no DB FK, same mechanism as photos.ref_type/ref_uuid), so one queue
+%% covers both stations and their properties. Approving writes new_value through to the
+%% target after coercing it to that field's data type; rejecting leaves the target untouched.
+%% Either way the suggestion row is kept, so the review decision stays auditable.
+station_update_suggestions {
+    uuid uuid PK
+    string target_type "station/station_property, String(20)"
+    string target_uuid "uuid of the target row — no DB FK, polymorphic"
+    string field_name "String(100), the single field being changed"
+    string new_value "stored as text; coerced to the field's data type on approval"
+    string comment "nullable, submitter's rationale"
+    string status "pending/approved/rejected, String(20), default pending"
+    string review_note "nullable, reviewer's rationale"
+    uuid reviewed_by FK "nullable, FK to users; NULL until reviewed"
+    uuid created_by FK "FK to users"
+    timestamp created_at
+    timestamp updated_at
+    timestamp delete_at
+}
+users ||--o{ station_update_suggestions : "suggests"
+users ||--o{ station_update_suggestions : "reviews"
+%% Dashed = logical reference; target_uuid is a plain column selected by target_type.
+stations ||..o{ station_update_suggestions : "target when target_type='station'"
+station_properties ||..o{ station_update_suggestions : "target when target_type='station_property'"
+
+%% ==========================
 %% Crowd Sourcing relationship
 %% ==========================
 crowd_sourcing {
@@ -343,6 +409,11 @@ crowd_sourcing {
     int n_updates
     float distance_from_geometry
 }
+%% UNIQUE(user_uuid, item_uuid) -- uq_crowd_sourcing_user_item: one rating per person per
+%% property; re-rating updates the row and bumps n_updates rather than inserting a second.
+%% Because item_uuid is nullable and Postgres treats NULLs as distinct, this does NOT
+%% constrain station-level (item_uuid IS NULL) ratings — those are deduped only by
+%% CrowdSourcingRepository.upsert, which matches on (user_uuid, item_uuid) in the app.
 users ||--o{ crowd_sourcing : "submits"
 
 %% The rating must belong to a station
@@ -399,7 +470,7 @@ photos {
     uuid uuid PK
     uuid ref_uuid FK "FK to base_geometries or secondary_locations"
     string ref_type "geometry/pole"
-    string url
+    string url "String(500); app-validated http(s) + host only (services/photo.py), no DB constraint"
     timestamp created_at
     uuid created_by FK
     timestamp updated_at
@@ -446,11 +517,17 @@ ticket_tasks {
     string visibility "public/restricted/internal"
     string review_note "nullable"
     uuid created_by FK
-    timestamp completed_at "nullable, stamped when status transitions to fulfilled; backfilled from updated_at for pre-existing fulfilled rows"
+    timestamp completed_at "nullable, set when status enters 'fulfilled' and cleared when it leaves"
+    timestamp canceled_at "nullable, set when status enters 'canceled' and cleared when it leaves"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at
 }
+%% completed_at/canceled_at are maintained by services/ticket.py::update_ticket_task, not by
+%% callers. Analytics plots a task on the day its timestamp gives, so each is CLEARED on the
+%% way out of the state — a re-opened task keeping a stale completed_at would still read as
+%% finished. `updated_at` can't stand in: it moves on every edit, not just status changes.
+%% Rows that reached these states before the columns existed were backfilled from updated_at.
 tickets ||--o{ ticket_tasks : "contains sub-tasks"
 routes |o--o{ ticket_tasks : "follows route (optional)"
 users ||--o{ ticket_tasks : "creates"
