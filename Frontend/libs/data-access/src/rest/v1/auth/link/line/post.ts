@@ -1,8 +1,8 @@
 import API_ENDPOINTS from '../../../../endpoints';
 import { requestJsonAsync } from '../../../../request-async';
-import type { IIdTokenPayload } from '../../../../types';
+import type { ILinkIdTokenPayload } from '../../../../types';
 
-async function linkLineAsync(accessToken: string, payload: IIdTokenPayload) {
+async function linkLineAsync(accessToken: string, payload: ILinkIdTokenPayload) {
   return requestJsonAsync<void>(API_ENDPOINTS.auth.link.line, {
     method: 'POST',
     accessToken,

@@ -178,3 +178,57 @@ ADR-215 的 step-up 碼、還能在 7 天後成為證明管道；每多一個消
 **否決「新增後給該管道一段不可用於救援的冷卻期」的理由**：那是 ADR-219 的機制延伸到重設路徑，
 確實可行，但它讓「攻擊者的管道已經掛在受害者帳號上」這個事實留著——擁有者會在 `/users/me`
 看到一個不是自己的信箱，而系統當初讓它進來時什麼都沒問。
+
+---
+
+### ADR-233 這個 stack 把前端打壞了四條路徑，所以前端在這裡一起補齊
+
+**白話**：後端把「設定密碼」和「新增聯絡方式」改成兩段式，但前端的表單沒有欄位可以填第二段——按鈕直接壞掉。
+
+**Date**: 2026-09-07（PR #39 第四輪 review 後補）
+
+**Context**：reviewer 在 PR #39 指出 `/auth/set-password` 有活的前端使用者，ADR-215 之後它一律回 422。
+往下追之後發現**同一類問題在這個 stack 裡有四條**，不只一條：
+
+| 端點 | 閘門 | 前端呼叫處 | 送出的 payload |
+|---|---|---|---|
+| `POST /auth/set-password` | ADR-215（#39） | `account-security.client.tsx` | `ISetPasswordPayload` 無 `step_up` |
+| `POST /auth/contacts`（首次新增某型別） | **ADR-220** | `account-security.client.tsx` | `IAuthIdentifierPayload` 無 `step_up` |
+| `POST /auth/link/google` | **ADR-217** | 只有 data-access 與 BFF，**沒有 UI** | `IIdTokenPayload` 無 `step_up` |
+| `POST /auth/link/line` | **ADR-217** | 同上 | `IIdTokenPayload` 無 `step_up` |
+
+`POST /auth/contacts` 那條的受眾比 set-password 大得多：ADR-220 的條件是
+`_has_something_to_prove_with()`——帳號**有密碼或有任何既有 contact** 就要證明——所以
+「已有 email 的人要加手機」也會 422。真正不受影響的只有零 contact 零密碼的全新帳號。
+
+**Decision**：前端在**本 PR** 一次補齊，而不是留 ticket 或替四個端點各做一個相容旗標。
+
+兩張 PR 是 stacked、一起合併的，所以前端會同時吃到四個 422；而相容旗標的做法要四組雙路徑、
+八組測試、散在兩張 PR 裡，比直接把前端改對還貴。
+
+三層改動：
+
+1. **型別**：`IStepUp`，掛到 `ISetPasswordPayload`、新的 `IAddContactPayload`、
+   新的 `ILinkIdTokenPayload`。link 的兩條沒有 UI，所以只補型別與轉發，不做表單。
+2. **狀態要傳得到前端**。原本 `parse-json-response-async.ts` 丟的是 `new Error(detail)`——
+   **狀態碼在這裡就掉了**；BFF 的 catch 又把每一種失敗都寫成 `400`。兩層加起來，瀏覽器
+   永遠看不到 422。改成 `RequestError` / `FrontendRequestError` 帶 `status`，BFF 的 catch
+   用上游的狀態。**沒有這一步，兩段式流程只能靠比對錯誤訊息字串來判斷，那是會碎的。**
+3. **表單**：422 顯示 `severity="info"` 的提示（用後端原本的訊息）加上證明欄位，填完再按一次同一顆按鈕。
+
+**`set-password` 一個欄位、`contacts` 兩個欄位**，理由不同而非不一致：
+`set-password` 的帳號依定義是 SSO-only（已有密碼會 409），所以證明**必定**是管道驗證碼；
+`contacts` 的帳號可能有密碼也可能沒有，而**決定要哪一種證明的是後端不是 client**，
+所以兩個欄位都給，填了哪個就送哪個，後端訊息會說是哪一個。密碼欄位一樣先做前端雜湊，
+與 change-password 的 `old_password` 同一條路。
+
+**Consequences**：
+➕ 合併之後前端不會壞，也不需要一個「暫時關掉保護」的旗標。
+➕ 狀態碼傳得到前端，之後任何需要分辨 401/409/422 的流程都不必再猜訊息字串。
+➖ 本 PR 從純 Backend 變成跨前後端。這是刻意的：閘門是這個 stack 加的，破壞也是。
+➖ `contacts` 的兩欄位對使用者稍微囉嗦。後端訊息會指明要哪一個；用 client 猜的版本會在
+   猜錯時給出更糟的體驗。
+
+**否決「四個端點各加相容旗標、預設走舊的單段流程」的理由**：能讓前端不壞，但那等於在合併之後
+把 ADR-215/217/220 全部關掉——接管鏈重新打開，而且是在四個入口。旗標要有人記得打開，
+前端改對則不需要。

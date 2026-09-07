@@ -1,6 +1,7 @@
 'use client';
 
 import type {
+  IAddContactPayload,
   IAuthIdentifierPayload,
   IChangePasswordPayload,
   IIdTokenPayload,
@@ -96,7 +97,7 @@ export function setPasswordAsync(payload: ISetPasswordPayload) {
   });
 }
 
-export function addContactAsync(payload: IAuthIdentifierPayload) {
+export function addContactAsync(payload: IAddContactPayload) {
   return requestFrontendJsonAsync<void>(`${AUTH_API_BASE_PATH}/contacts`, {
     method: 'POST',
     body: JSON.stringify(payload),

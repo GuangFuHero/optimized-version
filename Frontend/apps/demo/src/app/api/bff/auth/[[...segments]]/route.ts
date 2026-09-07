@@ -12,6 +12,7 @@ import {
   registerAsync,
   resendContactAsync,
   resendVerificationAsync,
+  RequestError,
   resetPasswordAsync,
   setPasswordAsync,
   verifyAsync,
@@ -26,6 +27,17 @@ import {
 
 function resolveErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '請求失敗';
+}
+
+/**
+ * The status the backend answered with, or 400 when there is nothing better to say.
+ *
+ * Collapsing every failure to 400 hid the one status the step-up flows are built on: a 422
+ * from `/auth/set-password` or `/auth/contacts` is not an error the user made, it means the
+ * backend just delivered a code and wants the same call again carrying it.
+ */
+function resolveErrorStatus(error: unknown) {
+  return error instanceof RequestError ? error.status : 400;
 }
 
 function jsonResponse(data: unknown, status = 200) {
@@ -90,7 +102,10 @@ export async function GET(
 
     return jsonResponse({ detail: `Unsupported auth GET route: ${pathKey}` }, 404);
   } catch (error) {
-    return jsonResponse({ detail: resolveErrorMessage(error) }, 400);
+    return jsonResponse(
+      { detail: resolveErrorMessage(error) },
+      resolveErrorStatus(error),
+    );
   }
 }
 
@@ -282,6 +297,9 @@ export async function POST(
         );
     }
   } catch (error) {
-    return jsonResponse({ detail: resolveErrorMessage(error) }, 400);
+    return jsonResponse(
+      { detail: resolveErrorMessage(error) },
+      resolveErrorStatus(error),
+    );
   }
 }

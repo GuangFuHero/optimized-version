@@ -26,6 +26,7 @@ import {
   setPasswordAsync,
   verifyContactAsync,
 } from '../api/client';
+import { isStepUpRequired } from '../api/request-async';
 import {
   createHashedCredentialAsync,
   resolveHashedCredentialAsync,
@@ -88,6 +89,12 @@ export default function AccountSecurityClient({
   const [setPasswordSuccessMessage, setSetPasswordSuccessMessage] =
     useState<string>();
   const [isSettingPassword, setIsSettingPassword] = useState(false);
+  // The backend gates a first password behind a code sent to a contact the account already
+  // holds (ADR-215). It never asks for a password here — `set-password` 409s once one exists
+  // — so one field is enough, and the notice below is the backend's own wording.
+  const [setPasswordStepUpCode, setSetPasswordStepUpCode] = useState('');
+  const [setPasswordStepUpNotice, setSetPasswordStepUpNotice] =
+    useState<string>();
 
   const [contactType, setContactType] = useState<AuthIdentityType>('email');
   const [contactValue, setContactValue] = useState('');
@@ -98,6 +105,13 @@ export default function AccountSecurityClient({
   const [contactError, setContactError] = useState<string>();
   const [contactSuccess, setContactSuccess] = useState<string>();
   const [isAddingContact, setIsAddingContact] = useState(false);
+  // Adding a contact is gated too, once the account holds anything to prove with (ADR-220).
+  // Unlike `set-password`, this account may or may not have a password, and the backend —
+  // not the client — decides which proof it wants. So both fields are offered and whichever
+  // is filled is sent; the notice says which one was asked for.
+  const [contactStepUpCode, setContactStepUpCode] = useState('');
+  const [contactStepUpPassword, setContactStepUpPassword] = useState('');
+  const [contactStepUpNotice, setContactStepUpNotice] = useState<string>();
   const [isVerifyingContact, setIsVerifyingContact] = useState(false);
   const [isResendingContact, setIsResendingContact] = useState(false);
   const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
@@ -161,6 +175,8 @@ export default function AccountSecurityClient({
     setSetPasswordErrorMessage(undefined);
     setSetPasswordSuccessMessage(undefined);
 
+    const code = setPasswordStepUpCode.trim();
+
     try {
       const createdPassword = await createHashedCredentialAsync(
         setPasswordValue,
@@ -169,18 +185,57 @@ export default function AccountSecurityClient({
       await setPasswordAsync({
         password: createdPassword.hashedPassword,
         salt_frontend: createdPassword.saltFrontend,
+        ...(code ? { step_up: { old_channel_code: code } } : {}),
       });
 
       setSetPasswordSuccessMessage('已建立登入密碼。');
       setSetPasswordValue('');
       setSetPasswordConfirm('');
+      setSetPasswordStepUpCode('');
+      setSetPasswordStepUpNotice(undefined);
     } catch (error) {
+      // A 422 is not a mistake the user made: the backend has just sent a code and wants the
+      // same call again carrying it. Surfacing it as an error would tell them to stop.
+      if (isStepUpRequired(error)) {
+        setSetPasswordStepUpNotice(
+          error instanceof Error ? error.message : '請輸入驗證碼後再試一次',
+        );
+        return;
+      }
+
       setSetPasswordErrorMessage(
         error instanceof Error ? error.message : '建立密碼失敗，請稍後再試',
       );
     } finally {
       setIsSettingPassword(false);
     }
+  }
+
+  /**
+   * The step-up proof for adding a contact, or undefined when the user has filled neither.
+   *
+   * Both are offered because the backend picks the proof from the account's own shape — a
+   * password identity means "prove the password", no password means "prove the channel" —
+   * and the client is deliberately not the one deciding. The password is frontend-hashed
+   * first, exactly like `old_password` on the change-password path.
+   */
+  async function buildContactStepUpAsync() {
+    const code = contactStepUpCode.trim();
+    const password = contactStepUpPassword.trim();
+
+    if (!code && !password) {
+      return undefined;
+    }
+
+    const hashed =
+      password && currentIdentity
+        ? await resolveHashedCredentialAsync(currentIdentity, password)
+        : undefined;
+
+    return {
+      ...(code ? { old_channel_code: code } : {}),
+      ...(hashed ? { password: hashed.hashedPassword } : {}),
+    };
   }
 
   async function handleAddContactAsync() {
@@ -197,10 +252,12 @@ export default function AccountSecurityClient({
 
     try {
       const normalizedIdentity = normalizeIdentityValue(contactType, contactValue);
+      const stepUp = await buildContactStepUpAsync();
 
       await addContactAsync({
         type: contactType,
         value: normalizedIdentity,
+        ...(stepUp ? { step_up: stepUp } : {}),
       });
 
       setPendingContact({
@@ -208,7 +265,17 @@ export default function AccountSecurityClient({
         normalizedIdentity,
       });
       setContactSuccess('驗證碼已發送，請輸入後完成綁定。');
+      setContactStepUpCode('');
+      setContactStepUpPassword('');
+      setContactStepUpNotice(undefined);
     } catch (error) {
+      if (isStepUpRequired(error)) {
+        setContactStepUpNotice(
+          error instanceof Error ? error.message : '請先完成驗證再試一次',
+        );
+        return;
+      }
+
       setContactError(
         error instanceof Error ? error.message : '新增聯絡方式失敗',
       );
@@ -364,6 +431,20 @@ export default function AccountSecurityClient({
             onChange={(event) => setSetPasswordConfirm(event.target.value)}
           />
 
+          {setPasswordStepUpNotice ? (
+            <Stack spacing={2}>
+              <Alert severity="info">{setPasswordStepUpNotice}</Alert>
+              <TextField
+                label="驗證碼"
+                value={setPasswordStepUpCode}
+                onChange={(event) =>
+                  setSetPasswordStepUpCode(event.target.value)
+                }
+                helperText="驗證碼已寄到你帳號現有的聯絡方式，填入後再按一次「建立密碼」。"
+              />
+            </Stack>
+          ) : null}
+
           {setPasswordErrorMessage ? (
             <Alert severity="error">{setPasswordErrorMessage}</Alert>
           ) : null}
@@ -410,6 +491,28 @@ export default function AccountSecurityClient({
             value={contactValue}
             onChange={(event) => setContactValue(event.target.value)}
           />
+
+          {contactStepUpNotice ? (
+            <Stack spacing={2}>
+              <Alert severity="info">{contactStepUpNotice}</Alert>
+              <TextField
+                label="目前密碼"
+                type="password"
+                value={contactStepUpPassword}
+                onChange={(event) =>
+                  setContactStepUpPassword(event.target.value)
+                }
+              />
+              <TextField
+                label="原聯絡方式收到的驗證碼"
+                value={contactStepUpCode}
+                onChange={(event) => setContactStepUpCode(event.target.value)}
+              />
+              <Typography sx={{ fontSize: 13, color: '#6A5F5B' }}>
+                上方訊息會說明你的帳號需要哪一項；填好之後再按一次「發送驗證碼」。
+              </Typography>
+            </Stack>
+          ) : null}
 
           <Button
             variant="contained"

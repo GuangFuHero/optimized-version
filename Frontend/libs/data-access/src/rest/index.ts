@@ -45,15 +45,20 @@ import patchCurrentUserAsync from './v1/users/me/patch';
 
 export { getCurrentUserAsync, patchCurrentUserAsync };
 
+export { RequestError } from './parse-json-response-async';
+
 export type {
   AuthIdentityType,
+  IAddContactPayload,
   IAuthIdentifierPayload,
   IChangePasswordPayload,
   IIdTokenPayload,
+  ILinkIdTokenPayload,
   IPasswordResetPayload,
   IRefreshPayload,
   IRegisterPayload,
   ISetPasswordPayload,
+  IStepUp,
   ITokenPair,
   IUser,
   IUserUpdatePayload,

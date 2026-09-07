@@ -1,10 +1,10 @@
 import API_ENDPOINTS from '../../../endpoints';
 import { requestJsonAsync } from '../../../request-async';
-import type { IAuthIdentifierPayload } from '../../../types';
+import type { IAddContactPayload } from '../../../types';
 
 async function addContactAsync(
   accessToken: string,
-  payload: IAuthIdentifierPayload,
+  payload: IAddContactPayload,
 ) {
   return requestJsonAsync<void>(API_ENDPOINTS.auth.contacts, {
     method: 'POST',
