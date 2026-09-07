@@ -22,18 +22,25 @@ from app.models.auth import User
 from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
 from app.repositories.auth_repository import user_repository
+from app.repositories.session_repository import SessionRepository
 from app.schemas.admin import (
     AdminUserListItem,
     AssignRoleRequest,
     AssignRoleResponse,
     CreateTeamRequest,
     IdentitySummary,
+    ProjectSettingsResponse,
+    ProjectSettingsUpdate,
     TeamMemberRequest,
     TeamMemberResponse,
     TeamResponse,
 )
 from app.services import admin as admin_service
+from app.services import project_settings as project_settings_service
 from app.services.admin import AdminConflictError, AdminNotFoundError
+from app.services.project_settings import ProjectSettingsValidationError
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +75,59 @@ async def _identities_by_user(
     return result
 
 
+def _decode(value) -> str:
+    """Redis runs in bytes mode (decode_responses=False); normalize a member to str."""
+    return value.decode() if isinstance(value, bytes) else value
+
+
+async def _session_counts(redis, user_uuids: list[str]) -> dict[str, int | None]:
+    """Map each user_uuid to their live Redis session count (ADR-094).
+
+    Two pipelined round trips for the whole page, not one per user — the default page is 100.
+
+    The `user_sessions:<uuid>` set is NOT self-cleaning: members are only removed by an
+    explicit logout (`session_repository.py:110`), while a session that simply reached its
+    TTL leaves its sid behind — and every login/rotation pushes the *set's* TTL forward, so
+    the stale sid never ages out either. Counting set members alone would report phantom
+    devices, and ADR-094 reads a high count as a credential-leak signal, so that would be a
+    false alarm. Hence the second pass: only sids whose `session:<sid>` key still exists
+    count.
+
+    Redis being down must not take the user list down with it, so every count degrades to
+    `None` (distinct from 0, which would read as "signed out everywhere").
+    """
+    if not user_uuids:
+        return {}
+    try:
+        pipe = redis.pipeline()
+        for user_uuid in user_uuids:
+            pipe.smembers(SessionRepository.USER_SESSIONS + user_uuid)
+        member_sets = await pipe.execute()
+
+        owners = [
+            (index, _decode(sid))
+            for index, members in enumerate(member_sets)
+            for sid in members
+        ]
+        pipe = redis.pipeline()
+        for _index, sid in owners:
+            pipe.exists(SessionRepository.SESSION + sid)
+        alive_flags = await pipe.execute()
+    except Exception:  # noqa: BLE001 — any Redis failure degrades, never fails the listing
+        logger.warning("Redis unavailable; omitting active_session_count", exc_info=True)
+        return dict.fromkeys(user_uuids, None)
+
+    # Deliberately outside the `except` above: the `strict=True` zips below raise ValueError
+    # on a length mismatch, which is a bug in this function, not an outage. Swallowed here it
+    # would degrade every user's count to `null` and file the bug under "Redis unavailable",
+    # pointing whoever investigates at a subsystem that is working fine.
+    counts = [0] * len(user_uuids)
+    for (index, _sid), alive in zip(owners, alive_flags, strict=True):
+        if alive:
+            counts[index] += 1
+    return dict(zip(user_uuids, counts, strict=True))
+
+
 @router.get(
     "/users",
     response_model=list[AdminUserListItem],
@@ -77,10 +137,18 @@ async def list_users(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
 ):
-    """List users with every identity they hold (checkpoint 1 only)."""
+    """List users with every identity they hold, plus last login/activity and live sessions.
+
+    Feature 010 replaced the single platform/team role pair with the full identity list
+    (ADR-073); feature 013 added the activity columns and the session count (ADR-093/094).
+    Both land in the same row.
+    """
     users = await user_repository.get_multi(db, skip=skip, limit=limit)
-    identities = await _identities_by_user(db, [str(u.uuid) for u in users])
+    user_uuids = [str(u.uuid) for u in users]
+    identities = await _identities_by_user(db, user_uuids)
+    sessions_by_user = await _session_counts(redis, user_uuids)
     return [
         AdminUserListItem(
             uuid=u.uuid,
@@ -89,9 +157,72 @@ async def list_users(
                 (i.role for i in identities.get(str(u.uuid), []) if i.team_uuid is None), None
             ),
             identities=identities.get(str(u.uuid), []),
+            last_login_at=u.last_login_at,
+            last_activity_at=u.last_activity_at,
+            active_session_count=sessions_by_user.get(str(u.uuid)),
         )
         for u in users
     ]
+
+
+def _project_settings_response(
+    settings, warnings: tuple[str, ...] = ()
+) -> ProjectSettingsResponse:
+    """Render the settings row, or the empty shape while the deployment is unconfigured."""
+    if settings is None:
+        return ProjectSettingsResponse()
+    return ProjectSettingsResponse(
+        uuid=settings.uuid, name=settings.name,
+        disaster_types=list(settings.disaster_types or []), started_at=settings.started_at,
+        warnings=list(warnings),
+    )
+
+
+@router.get(
+    "/project-settings",
+    response_model=ProjectSettingsResponse,
+    summary="讀取專案（災害）設定",
+    responses={403: {"description": "Permission Denied"}},
+)
+async def get_project_settings(
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Return what disaster this deployment is responding to (ADR-090)."""
+    settings = await project_settings_service.get_project_settings(db, actor=current_user)
+    return _project_settings_response(settings)
+
+
+@router.patch(
+    "/project-settings",
+    response_model=ProjectSettingsResponse,
+    summary="更新專案（災害）設定",
+    responses={403: {"description": "Permission Denied"}},
+)
+async def update_project_settings(
+    body: ProjectSettingsUpdate,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Upsert the single settings row; changing disaster_types re-scopes the dynamic fields.
+
+    `exclude_unset` gives real PATCH semantics: an omitted field keeps its stored value,
+    while an explicit `"started_at": null` clears it. `name` / `disaster_types` are NOT NULL
+    columns, so an explicit null there is dropped rather than written.
+    """
+    values = body.model_dump(exclude_unset=True)
+    for not_nullable in ("name", "disaster_types"):
+        if values.get(not_nullable) is None:
+            values.pop(not_nullable, None)
+    try:
+        result = await project_settings_service.update_project_settings(
+            db, actor=current_user, values=values
+        )
+    except ProjectSettingsValidationError as err:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)
+        ) from err
+    return _project_settings_response(result.settings, result.warnings)
 
 
 @router.post("/users/{user_uuid}/role", response_model=AssignRoleResponse)
