@@ -147,7 +147,14 @@ async def token_for(redis, user_uuid, role=None, team=None) -> str:
 
     act = None
     if role is not None:
-        act = encode_act(str(role.uuid), str(team.uuid) if team is not None else None)
+        # Accepts a Role/Team instance or a plain uuid. Tests that create the role, then let
+        # the request under test commit, would otherwise hand over an expired instance: the
+        # session is expire_on_commit=True, so reading `.uuid` afterwards is a lazy reload
+        # that AsyncSession cannot service. Passing the uuid captured up front sidesteps it.
+        act = encode_act(
+            str(getattr(role, "uuid", role)),
+            str(getattr(team, "uuid", team)) if team is not None else None,
+        )
     # The session records the identity too (ADR-188), so a refresh that does not name one
     # carries it forward. Passing it here keeps a test token the same shape as a real one;
     # without it the session would remember nothing and a refresh in a test would silently

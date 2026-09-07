@@ -11,22 +11,33 @@ import pytest
 from sqlalchemy import select, text
 
 from app.core.permissions import Perm
-from app.core.security import create_access_token, generate_salt, get_password_hash
+from app.core.security import generate_salt, get_password_hash
 from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.auth import User, UserContact, UserIdentity
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+from tests.conftest import auth_headers_for
 
 pytestmark = pytest.mark.asyncio
 
 _PASSWORD = "correct-horse-battery-staple"
 
 
-def _auth_header(user_uuid: str) -> dict:
-    return {"Authorization": f"Bearer {create_access_token(data={'sub': str(user_uuid)})}"}
+async def _auth_header(redis, user_uuid: str, role_uuid=None) -> dict:
+    """Bearer headers backed by a live session, the way production mints them.
+
+    A bare `create_access_token` carries no session (014) and no identity (010): it 401s
+    before the assertion runs, and would resolve to zero grants if it got past that.
+    """
+    return await auth_headers_for(redis, user_uuid, role_uuid)
 
 
-async def _make_admin(db) -> str:
-    """Create a user holding user.view and return their uuid as a plain str."""
+async def _make_admin(db):
+    """Create a user holding user.view; return (uuid, role_uuid) as plain strings.
+
+    The role's uuid is needed because the token has to name the identity it acts as, and it
+    is captured before the commit: later commits expire the instance (expire_on_commit=True)
+    and reading `.uuid` afterwards is a lazy reload AsyncSession cannot service.
+    """
     role = Role(name="super_admin", kind="platform")
     permission = Permission(key=Perm.USER_VIEW.value)
     db.add_all([role, permission])
@@ -37,10 +48,10 @@ async def _make_admin(db) -> str:
     user = User(name="Super Admin")
     db.add(user)
     await db.flush()
-    user_uuid = str(user.uuid)
+    user_uuid, role_uuid = str(user.uuid), str(role.uuid)
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     await db.commit()
-    return user_uuid
+    return user_uuid, role_uuid
 
 
 async def _make_login_user(db, email: str = "activity@example.com") -> str:
@@ -96,61 +107,78 @@ async def test_refresh_updates_last_activity(client, db_session):
     assert await _last_activity(db_session, user_uuid) is not None
 
 
-async def test_an_ordinary_authenticated_request_does_not_update_last_activity(client, db_session):
+async def test_an_ordinary_authenticated_request_does_not_update_last_activity(client, db_session, redis):
     """Per-request updates are the thing ADR-093 rejects — `users` is an audited table."""
-    admin_uuid = await _make_admin(db_session)
+    admin_uuid, role_uuid = await _make_admin(db_session)
     user_uuid = await _make_login_user(db_session)
     await _login(client)
 
-    resp = await client.get("/api/v1/admin/users", headers=_auth_header(admin_uuid))
+    resp = await client.get("/api/v1/admin/users", headers=await _auth_header(redis, admin_uuid, role_uuid))
 
     assert resp.status_code == 200, resp.text
     assert await _last_activity(db_session, user_uuid) is None
 
 
-async def test_user_list_exposes_login_activity_and_session_count(client, db_session):
+async def test_user_list_exposes_login_activity_and_session_count(client, db_session, redis):
     """The admin list carries all three new columns (ADR-094)."""
-    admin_uuid = await _make_admin(db_session)
+    admin_uuid, role_uuid = await _make_admin(db_session)
     user_uuid = await _make_login_user(db_session)
     await _login(client)
 
-    resp = await client.get("/api/v1/admin/users", headers=_auth_header(admin_uuid))
+    resp = await client.get("/api/v1/admin/users", headers=await _auth_header(redis, admin_uuid, role_uuid))
 
     rows = {r["uuid"]: r for r in resp.json()}
     assert rows[user_uuid]["last_login_at"] is not None
     assert rows[user_uuid]["last_activity_at"] is None  # not refreshed yet
     assert rows[user_uuid]["active_session_count"] == 1
-    # The admin authenticated with a bare token, never through /auth/login — no session.
-    assert rows[admin_uuid]["active_session_count"] == 0
+    # The admin holds one too: since feature 014 every authenticated token is backed by a
+    # real session, so the test's own headers create one. It used to be 0 here because a bare
+    # token authenticated without a session at all — which no longer authenticates anything.
+    assert rows[admin_uuid]["active_session_count"] == 1
 
 
-async def test_active_session_count_tracks_each_device(client, db_session):
+async def test_active_session_count_tracks_each_device(client, db_session, redis):
     """Two logins = two sessions; an unusually high count is a credential-leak signal."""
-    admin_uuid = await _make_admin(db_session)
+    admin_uuid, role_uuid = await _make_admin(db_session)
     user_uuid = await _make_login_user(db_session)
     await _login(client)
     await _login(client)
 
-    resp = await client.get("/api/v1/admin/users", headers=_auth_header(admin_uuid))
+    resp = await client.get("/api/v1/admin/users", headers=await _auth_header(redis, admin_uuid, role_uuid))
 
     rows = {r["uuid"]: r for r in resp.json()}
     assert rows[user_uuid]["active_session_count"] == 2
 
 
-async def test_session_count_degrades_to_null_when_redis_is_unavailable(client, db_session):
+async def test_session_count_degrades_to_null_when_redis_is_unavailable(client, db_session, redis):
     """Redis being down must not take the whole user list down with it (ADR-094)."""
     from app.core.redis import get_redis
     from app.main import app
 
     class _BrokenRedis:
+        """Breaks only the session-count read, not authentication.
+
+        Since feature 014 the auth path reads Redis on every request, so a double that
+        refuses everything makes the request 401 before it reaches the code under test.
+        This one delegates, and fails exactly where ADR-094's degradation is supposed to
+        happen.
+        """
+
+        def __init__(self, real):
+            self._real = real
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
         def pipeline(self):
             raise ConnectionError("redis is down")
 
-    admin_uuid = await _make_admin(db_session)
+    admin_uuid, role_uuid = await _make_admin(db_session)
+    headers = await _auth_header(redis, admin_uuid, role_uuid)
     previous = app.dependency_overrides[get_redis]
-    app.dependency_overrides[get_redis] = lambda: _BrokenRedis()
+    app.dependency_overrides[get_redis] = lambda: _BrokenRedis(redis)
     try:
-        resp = await client.get("/api/v1/admin/users", headers=_auth_header(admin_uuid))
+        resp = await client.get("/api/v1/admin/users", headers=headers)
     finally:
         app.dependency_overrides[get_redis] = previous
 
