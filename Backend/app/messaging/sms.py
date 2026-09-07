@@ -80,6 +80,20 @@ def build_contact_removed_sms(removed_type: str, masked_value: str) -> str:
             "If this was not you, contact us immediately.")
 
 
+def build_contact_replaced_sms(replaced_type: str, masked_new_value: str) -> str:
+    """Return the bilingual SMS telling the SURVIVING channels that a contact was replaced.
+
+    The old channel gets `build_contact_changed_sms`; this is what the account's *other*
+    contact hears (ADR-229), and it names the type because the reader is not on the channel
+    that changed.
+    """
+    label = "電子信箱" if replaced_type == "email" else "手機號碼"
+    return (f"【{_BRAND_ZH}】您帳號的{label}已變更為 {masked_new_value}，可用於登入與重設密碼。"
+            "若非本人操作請立即聯繫我們。 "
+            f"Your account's {replaced_type} was changed to {masked_new_value}, which can sign "
+            "in and reset the password. If this was not you, contact us immediately.")
+
+
 def build_step_up_code_sms(
     action: str, contact_type: str, code: str, masked_target: str | None = None
 ) -> str:

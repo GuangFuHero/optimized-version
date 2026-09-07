@@ -525,7 +525,7 @@ ADR-160 的判斷錯在**把憑證的生命週期跟 session 的生命週期當�
 
 ```
 DELETE /auth/contacts/email   (SMTP raise)  -> 500，什麼都沒寄出
-DELETE /auth/contacts/email   (重試)        -> 422「驗證碼已寄至原聯絡方式，請使用先前收到的那一組」
+DELETE /auth/contacts/email   (重試)        -> 422「移除聯絡方式的驗證碼已寄至原聯絡方式，請使用先前收到的那一組」（文案自 ADR-230 起指名動作）
 ```
 
 使用者既前進不了也重來不了。ADR-165 的「不重發」本身是對的，是**先發後寄**這個順序把
@@ -608,3 +608,131 @@ provider 的一次抖動變成十分鐘硬鎖。
 **否決「用 MULTI/EXEC 把 INCR 與 EXPIRE 包成原子操作」的理由**：確實更嚴謹，但 ADR-196 為連線層
 加了 `retry_on_error`，而重送一個含 `INCR` 的交易會重複計數——把一個不會自癒的問題換成一個會誤判的
 問題。`nx=True` 的版本在重送時是冪等的。
+
+---
+
+### ADR-229 取代聯絡方式也要通知帳號其他倖存的管道
+
+**白話**：通知只寄給正在被換掉的那個信箱——而那正是攻擊者馬上要接管的地方。使用者還握在手上的手機什麼都沒收到。
+
+**Date**: 2026-09-07（PR #39 第四輪 review 後補）
+
+**Context**：`commit_contact_change` 的取代分支只通知 `old_value`（ADR-085）。ADR-224 剛替新增
+採用了相反的規則——**通知帳號原本就有的每一個管道**——而 `_notify_contact_removed` 從一開始就通知
+所有倖存者。三個動作裡，取代是最後一個還在只寄給單一位址的。
+
+而它偏偏是最需要廣播的那一個。具體情境：帳號有 `owner@x.com`、一支手機、一組密碼。密碼外洩，
+攻擊者取代 email。通知寄到 `owner@x.com`——**那個即將被攻擊者控制的位址**——使用者還握著的手機
+毫無所覺。ADR-224 自己寫下的目標是「任何改變『誰能進入這個帳號』的動作都會被看見」，取代沒有做到。
+
+**Decision**：抽出 `_notify_contact_replaced()`，通知**舊管道 + 每一個倖存的聯絡方式**，
+與 `_notify_contact_added` / `_notify_contact_removed` 讀的是同一組對象。
+
+兩種文案，刻意分開：
+
+- **舊管道**收到的仍是 `build_contact_changed_*`，文案一字未改（ADR-085）。它不需要被告知型別——
+  收信人就坐在那個改變的管道上。
+- **倖存者**收到新的 `build_contact_replaced_*`，**會指名型別**。有人在手機上讀這則通知時，
+  「你的電子信箱被改了」和「你的手機被改了」是兩件不同的事。
+
+倖存者名單在 `replace_verified()` **之前**讀出來成 `(type, value)` tuple——與 `_survivors_of`
+同樣的理由，session 是 `expire_on_commit=True`。
+
+**Consequences**：
+➕ 三個動作（新增／取代／移除）現在通知的是同一組對象，規則一致。
+➕ 密碼外洩情境下，使用者仍持有的管道會收到警訊——那是唯一還會到達本人的通道。
+➖ 一次取代最多多寄一則訊息。低頻的安全事件。
+➖ 送出時機在交易 commit 之後，寄送失敗只記 log（ADR-162），與其他通知一致。
+
+**否決「改 `build_contact_changed_*` 加上型別參數、兩邊共用一則文案」的理由**：少一組 builder，
+但會動到舊管道那則已經定案的文案，也會讓「收信人就在改變的管道上」這個省略型別的理由消失。
+
+---
+
+### ADR-230 step-up 的 API 錯誤文案要跟著 action 走
+
+**白話**：你要「移除」聯絡方式，系統卻回你「更換聯絡方式需要輸入密碼」。
+
+**Date**: 2026-09-07（PR #39 第四輪 review 後補）
+
+**Context**：`_require_step_up` 同時服務 `replace`、`remove`、`set_password` 三種 action，
+但三段 422/401 文字是寫死的取代語氣：
+
+- `"更換聯絡方式需要輸入密碼"` —— 刪除時也是這一句
+- `"驗證碼已寄至原聯絡方式，請使用先前收到的那一組"`
+- `"已將驗證碼寄至原聯絡方式，請填入 step_up.old_channel_code"`
+
+**ADR-164 修的正是同一個錯配**——一則證明提示描述了錯的動作——只是修在寄出的 email 與 SMS 上
+（`build_step_up_code_email` / `_sms` 依 `action` 分支）。API 的錯誤字串沒有跟上，而 `action`
+本來就是這個函式的參數。
+
+**Decision**：`_STEP_UP_COPY` 對照表，把 action 映到 (做什麼, 碼寄到哪)：
+
+| action | 做什麼 | 碼寄到哪 |
+|---|---|---|
+| `replace` | 更換聯絡方式 | 原聯絡方式 |
+| `remove` | 移除聯絡方式 | 原聯絡方式 |
+| `set_password` | 設定登入密碼 | 您帳號的聯絡方式 |
+
+`set_password` 的第二欄不是「原聯絡方式」——它沒有在改任何聯絡方式，碼是寄到帳號**現有**的某個
+聯絡方式（`_proof_contact`），用「原」是錯的名詞。
+
+**刻意不跟著 action 走的**：`"驗證碼寄送次數已達上限"`。那個計數器 key 是 `{user_uuid}:{type}`
+（ADR-165/225），移除與取代共用同一個額度，指名其中一個會誤述被打到的是哪一個上限。
+
+**Consequences**：
+➕ 錯誤訊息與寄出的信件現在描述同一件事（ADR-164 的規則延伸到 API 層）。
+➖ 引用這些字串的文件與測試要跟著改（`decisions.md`、`plan.md`、`test_account_profile.py`）。
+➖ 文案變成 f-string，之後要做 i18n 時是三個模板而不是三個常數。目前全系統都還沒有 i18n 層。
+
+---
+
+### ADR-231 測試的名字必須描述它真正驗證的東西
+
+**白話**：`test_delete_then_add_still_requires_step_up` 斷言的是 `202`——它把漏洞鎖成了預期行為。
+
+**Date**: 2026-09-07（PR #39 第四輪 review 後補）
+
+**Context**：這個測試的名字說「刪除之後再新增仍然需要 step-up」，斷言卻是
+`assert res.status_code == 202`（放行）。名字描述的是一個它從來沒有驗證過的保護。
+
+這與第二輪的 `test_a_self_minted_password_cannot_be_used_as_step_up` 是同一種毛病，而且更嚴重：
+那一個只是斷言的理由不對，這一個**主動把 `start_contact_change` 首次新增某型別不設閘門的缺口
+記錄成正確行為**。任何人讀到綠燈的 202，都會以為那是有人決定過的。
+
+**Decision**：改名為 `test_delete_then_add_is_not_gated_yet`，斷言維持 `202`，
+docstring 寫明閘門是 **ADR-220、在 `feat/login-method-hardening`（PR #45）**，
+以及這兩棵樹合起來之後這行斷言會翻成 422。
+
+**否決「把 ADR-220 的閘門搬進本 PR、斷言改 422」的理由**：那是 PR #45 的範圍。兩張 PR 是
+stacked、一起合併的，同一份實作出現在兩邊只會製造衝突。本 PR 只放本票的東西。
+
+**Consequences**：
+➕ 讀測試的人不會再把 202 當成決策。
+➕ 缺口在樹裡有指名的出處，不是靠 review 對話記著。
+➖ 這棵樹單獨看仍然是有洞的。這是事實，寫進名字裡比藏在一個誤導的名字後面好。
+
+---
+
+### ADR-232 移除沒有呼叫者的 `count_by_user()` 與 `user_has_contact_type()`
+
+**白話**：文件說刪除守門靠 `count_by_user()` 去數，實際上程式碼根本沒在呼叫它。
+
+**Date**: 2026-09-07（PR #39 第四輪 review 後補）
+
+**Context**：`count_by_user()` 是本 PR 新增的，但整個 Backend（`app/`、`tests/`、`alembic/`）
+都沒有呼叫者——ADR-087 的登入管道守門讀的是 `_survivors_of()` / `list_by_user()`。
+`user_has_contact_type()` 則是被本 PR 弄成孤兒的：`auth/contacts.py` 是它唯一的呼叫處，
+兩個呼叫點都換成了 `get_by_user_and_type()`。
+
+而 `spec.md:200` 與 `plan.md:69` 仍然把沒被呼叫的那個描述成機制本身
+（`contact_repository.count_by_user()` — 刪除守門要數）。
+
+**Decision**：兩個方法都刪掉，`spec.md` / `plan.md` 改指 `list_by_user()`，
+`auth_repository.py` 順手拿掉因此不再使用的 `func` import。
+
+**Consequences**：
+➕ 文件描述的是實際跑的那條路。
+➕ 少兩個會被誤認為現行機制的方法。
+➖ 之後若真的需要「只要數量」的查詢，要重寫一個。`list_by_user()` 已經夠用，
+   而且守門本來就需要知道**剩下哪些**，不只是剩幾個。

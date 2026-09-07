@@ -49,12 +49,12 @@ tests/test_account_profile.py         16 個案例，覆蓋 spec §9
 app/api/v1/endpoints/auth/contacts.py 瘦身為 parse + 狀態碼；新增 DELETE
 app/api/v1/endpoints/users.py         read_user_me 載入 contacts / identities
 app/schemas/auth.py                   ContactOut / IdentityOut / StepUp；UserResponse 擴充
-app/repositories/auth_repository.py   contact: get_by_user_and_type / list_by_user / count_by_user /
+app/repositories/auth_repository.py   contact: get_by_user_and_type / list_by_user /
                                       replace_verified / delete_contact；identity: list_by_user /
                                       has_sso_identity
 app/repositories/verification_repository.py  舊管道 step-up 的 issue / consume（獨立 key prefix）
-app/messaging/email.py                build_contact_changed_email
-app/messaging/sms.py                  build_contact_changed_sms
+app/messaging/email.py                build_contact_changed_email / build_contact_replaced_email
+app/messaging/sms.py                  build_contact_changed_sms / build_contact_replaced_sms
 tests/test_add_contact.py             三條斷言從「第二個 email → 409」改寫為「422 要求 step-up」
 ```
 
@@ -66,7 +66,7 @@ tests/test_add_contact.py             三條斷言從「第二個 email → 409�
 
 - [x] `contact_repository.get_by_user_and_type()` — step-up 判定與取代都要先知道「現在這型別有沒有東西」
 - [x] `contact_repository.replace_verified()` — 同一個 session 內完成換值，**不是先 DELETE 再 INSERT 兩次呼叫**
-- [x] `contact_repository.count_by_user()` / `delete_contact()` — 刪除守門要數
+- [x] `contact_repository.list_by_user()` / `delete_contact()` — 刪除守門要知道**剩下哪些**，不只剩幾個（ADR-232）
 - [x] `identity_repository.has_sso_identity()` / `list_by_user()`
 - [x] `VerificationRepository.issue_old_channel_step_up()` / `consume_old_channel_step_up()`
 

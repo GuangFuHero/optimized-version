@@ -319,6 +319,41 @@ def build_contact_removed_email(removed_type: str, masked_value: str) -> tuple[s
     return subject, html, text
 
 
+def build_contact_replaced_email(replaced_type: str, masked_new_value: str) -> tuple[str, str, str]:
+    """Return (subject, html, text) telling the SURVIVING channels that a contact was replaced.
+
+    Distinct from `build_contact_changed_email`, which goes to the address being replaced.
+    That notice has always existed (ADR-085), but it is delivered to the one channel the
+    attacker is about to control — so an owner who still holds a phone hears nothing about
+    their email being taken (ADR-229). This is the copy the survivors get.
+
+    It names the type, which the old-channel notice does not need to: someone reading this on
+    their phone has to be told it was the *email* that changed.
+    """
+    label = "電子信箱 email" if replaced_type == "email" else "手機號碼 phone"
+    subject = f"【{_BRAND_ZH}】帳號的聯絡方式已變更 Contact changed"
+    html = _render_email(
+        h1="帳號的聯絡方式已變更 Contact changed",
+        notices=[
+            f"您帳號的{label}已變更為 {masked_new_value}，新的值可以用來登入與重設密碼。",
+            ('<span style="' + _S_NOTICE_EN + '">Your account\'s '
+             f'{replaced_type} was changed to {masked_new_value}, which can now be used to '
+             'sign in and to reset the password.</span>'),
+        ],
+        footer_lines=[
+            "若非本人操作，請立即聯繫我們。 If this was not you, contact us immediately.",
+            _FOOTER_BRAND,
+        ],
+    )
+    text = (
+        f"您帳號的{label}已變更為 {masked_new_value}，新的值可以用來登入與重設密碼。\n"
+        f"Your account's {replaced_type} was changed to {masked_new_value}, which can now be "
+        "used to sign in and to reset the password.\n"
+        "若非本人操作，請立即聯繫我們。\n"
+    )
+    return subject, html, text
+
+
 _STEP_UP_ACTION_ZH = {"replace": "更換", "remove": "移除"}
 _STEP_UP_ACTION_EN = {"replace": "change", "remove": "remove"}
 # `set_password` is not a change to the contact it is sent to — it authorizes minting a

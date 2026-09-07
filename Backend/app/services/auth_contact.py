@@ -19,6 +19,7 @@ from app.messaging.email import (
     build_contact_added_email,
     build_contact_changed_email,
     build_contact_removed_email,
+    build_contact_replaced_email,
     build_contact_verification_email,
     build_password_set_email,
     build_step_up_code_email,
@@ -27,6 +28,7 @@ from app.messaging.sms import (
     build_contact_added_sms,
     build_contact_changed_sms,
     build_contact_removed_sms,
+    build_contact_replaced_sms,
     build_password_set_sms,
     build_step_up_code_sms,
     build_verification_sms,
@@ -56,7 +58,11 @@ class ContactNotFound(ContactError):
 
 
 class StepUpRequired(ContactError):
-    """Replacing a contact needs extra proof that was not supplied (422)."""
+    """The action needs extra proof that was not supplied (422).
+
+    Raised for replacing and removing a contact and for minting a first password; the
+    message names which of them, since the caller sees only this string (ADR-230).
+    """
 
 
 class StepUpFailed(ContactError):
@@ -130,6 +136,19 @@ async def _notify(dispatch, fn, *args) -> None:
         dispatch(fn, *args)
 
 
+# What each step-up proves, and where its code is delivered — so the 422/401 copy names the
+# action being authorized rather than always saying "更換聯絡方式" (ADR-230). ADR-164 made the
+# delivered email and SMS do this; the API errors said "change your contact" even on a
+# removal or a first-password mint, which is the same mismatch one layer up.
+_STEP_UP_COPY = {
+    "replace": ("更換聯絡方式", "原聯絡方式"),
+    "remove": ("移除聯絡方式", "原聯絡方式"),
+    # `set_password` changes no contact: the code goes to whichever contact the account
+    # already holds (`_proof_contact`), so "原聯絡方式" would be the wrong noun here.
+    "set_password": ("設定登入密碼", "您帳號的聯絡方式"),
+}
+
+
 async def _require_step_up(
     db: AsyncSession,
     redis,
@@ -155,10 +174,11 @@ async def _require_step_up(
     The code an SSO-only account receives is bound to this exact `action` and `target`
     (ADR-164), so approving one change never authorizes a different one.
     """
+    what, channel = _STEP_UP_COPY[action]
     identity = await identity_repository.get_password_identity(db, str(actor.uuid))
     if identity is not None and identity.password_hash:
         if not (step_up and step_up.password):
-            raise StepUpRequired("更換聯絡方式需要輸入密碼")
+            raise StepUpRequired(f"{what}需要輸入密碼")
         if not verify_password(step_up.password, identity.password_hash):
             raise StepUpFailed("密碼錯誤")
         return
@@ -172,8 +192,11 @@ async def _require_step_up(
         if outcome == "pending":
             # Do not mint a second code: it would silently invalidate the one the owner is
             # holding, and every repeat delivers another message to them (ADR-165).
-            raise StepUpRequired("驗證碼已寄至原聯絡方式，請使用先前收到的那一組")
+            raise StepUpRequired(f"{what}的驗證碼已寄至{channel}，請使用先前收到的那一組")
         if outcome == "throttled":
+            # Deliberately not named after `action`: the counter is keyed on
+            # `{user_uuid}:{type}` (ADR-165/225), so it is spent by removals and replacements
+            # alike and blaming one of them would misdescribe the limit that was hit.
             raise StepUpRequired("驗證碼寄送次數已達上限，請稍後再試")
         masked_target = _mask(existing.type, target) if action == "replace" else None
         try:
@@ -187,7 +210,7 @@ async def _require_step_up(
             # changing or removing a contact (ADR-216). The request still fails.
             await verification.discard_old_channel_step_up(**key)
             raise
-        raise StepUpRequired("已將驗證碼寄至原聯絡方式，請填入 step_up.old_channel_code")
+        raise StepUpRequired(f"已將{what}的驗證碼寄至{channel}，請填入 step_up.old_channel_code")
     payload = await verification.consume_old_channel_step_up(
         **key, code=step_up.old_channel_code
     )
@@ -342,18 +365,52 @@ async def commit_contact_change(
         return False
 
     old_type, old_value = existing.type, existing.value
+    # Read the survivors BEFORE the swap commits, for the same reason `_survivors_of` hands
+    # back plain tuples: the session is `expire_on_commit=True`.
+    survivors = await _survivors_of(db, str(actor.uuid), existing)
     await contact_repository.replace_verified(db, existing=existing, value=value)
-    # Tell the OLD channel, masked — the only way a victim finds out (ADR-085). The swap is
-    # already committed at this point, so the send neither blocks the response nor takes the
-    # request down with it if the provider is having a bad day (ADR-162).
-    masked = _mask(type_, value)
-    if old_type == "email":
+    await _notify_contact_replaced(
+        (old_type, old_value), value, survivors,
+        email_sender=email_sender, sms_sender=sms_sender, dispatch=dispatch,
+    )
+    return True
+
+
+async def _notify_contact_replaced(
+    replaced: tuple[str, str], new_value: str, survivors: list[tuple[str, str]], *,
+    email_sender, sms_sender, dispatch=None,
+) -> None:
+    """Announce a replacement to the old channel AND to every contact that survives it.
+
+    The old channel has always been told (ADR-085) — the only mechanism that lets a victim of
+    session theft notice a takeover. But it is also the channel the attacker is about to
+    control, so telling only it leaves the owner's *other* contact, which they still hold,
+    hearing nothing. ADR-224 adopted "tell the channels the account already had" for adding
+    and `_notify_contact_removed` has always done it for removal; replace was the last of the
+    three still writing to a single address (ADR-229).
+
+    Two messages on purpose. The old channel does not need the type named — it is reading the
+    notice on the channel that changed — and its copy is unchanged. A survivor does.
+
+    The swap is already committed here, so a provider outage must not unwind it (ADR-162).
+    """
+    replaced_type, replaced_value = replaced
+    masked = _mask(replaced_type, new_value)
+    if replaced_type == "email":
         subject, html, text = build_contact_changed_email(masked)
-        await _notify(dispatch, _send_email_or_log, email_sender, old_value, subject, html, text)
+        await _notify(dispatch, _send_email_or_log, email_sender, replaced_value,
+                      subject, html, text)
     else:
         await _notify(dispatch, _send_sms_or_log, sms_sender,
-                      old_value, build_contact_changed_sms(masked))
-    return True
+                      replaced_value, build_contact_changed_sms(masked))
+    for target_type, target_value in survivors:
+        if target_type == "email":
+            subject, html, text = build_contact_replaced_email(replaced_type, masked)
+            await _notify(dispatch, _send_email_or_log, email_sender, target_value,
+                          subject, html, text)
+        else:
+            await _notify(dispatch, _send_sms_or_log, sms_sender, target_value,
+                          build_contact_replaced_sms(replaced_type, masked))
 
 
 async def _notify_contact_added(
