@@ -3,12 +3,13 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.identity import encode_act
 from app.core.normalize import normalize_email, normalize_phone
@@ -77,8 +78,10 @@ async def login(
         redis=Depends(get_redis),
 ):
     """Email/phone + password login: contact → user → password identity → verify."""
-    cred_exc = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password",
+    cred_exc = ApiError(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        code=ErrorCode.CREDENTIALS_INVALID,
+        detail="Incorrect email or password",
         headers={"WWW-Authenticate": "Bearer"},
     )
     raw = form_data.username
@@ -169,16 +172,19 @@ async def refresh(
         if identity is None:
             # The identity this client was acting as is gone. Refuse here as well as on the
             # request path, so a revoked identity means signed out, not silently downgraded.
-            raise HTTPException(
+            raise ApiError(
                 status_code=status.HTTP_401_UNAUTHORIZED,
+                code=ErrorCode.IDENTITY_REVOKED,
                 detail="This identity no longer exists",
                 headers={"WWW-Authenticate": "Bearer"},
             )
     try:
         sid, user_uuid, new_refresh = await repo.rotate(body.refresh_token)
     except (InvalidRefreshToken, RefreshTokenReuse) as err:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked refresh token",
+        raise ApiError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code=ErrorCode.REFRESH_TOKEN_INVALID,
+            detail="Invalid or revoked refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from err
     # Only the no-identity path still needs a query here: `wanted` was already resolved above.
@@ -231,13 +237,16 @@ async def switch_identity(
     )
     if identity is None:
         # Switching may only move between identities already held; it never grants one.
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="You do not hold that identity"
+        raise ApiError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code=ErrorCode.IDENTITY_NOT_HELD,
+            detail="You do not hold that identity",
         )
     _user_uuid, sid = session
     if sid is None or await SessionRepository(redis).get_session(sid) is None:
-        raise HTTPException(
+        raise ApiError(
             status_code=status.HTTP_401_UNAUTHORIZED,
+            code=ErrorCode.SESSION_EXPIRED,
             detail="Session is no longer active",
             headers={"WWW-Authenticate": "Bearer"},
         )
@@ -279,8 +288,9 @@ async def logout(
         # out when the session store never heard the request, which is the one lie a logout
         # endpoint must not tell.
         logger.exception("logout could not reach Redis (the session store)")
-        raise HTTPException(
+        raise ApiError(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code=ErrorCode.SESSION_STORE_UNAVAILABLE,
             detail="Session store is unavailable; you are not signed out",
         ) from err
 
@@ -316,7 +326,8 @@ async def logout_all(
         await repo.revoke_all_for_user(live["user_uuid"])
     except RedisError as err:
         logger.exception("logout-all could not reach Redis (the session store)")
-        raise HTTPException(
+        raise ApiError(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code=ErrorCode.SESSION_STORE_UNAVAILABLE,
             detail="Session store is unavailable; you are not signed out",
         ) from err

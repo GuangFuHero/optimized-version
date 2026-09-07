@@ -26,6 +26,7 @@ import {
   setPasswordAsync,
   verifyContactAsync,
 } from '../api/client';
+import { resolveAuthErrorMessage } from '../api/error-messages';
 import {
   createHashedCredentialAsync,
   resolveHashedCredentialAsync,
@@ -139,7 +140,7 @@ export default function AccountSecurityClient({
       await signOut({ callbackUrl: '/login' });
     } catch (error) {
       setPasswordError(
-        error instanceof Error ? error.message : '變更密碼失敗，請稍後再試',
+        resolveAuthErrorMessage(error, '變更密碼失敗，請稍後再試。'),
       );
     } finally {
       setIsChangingPassword(false);
@@ -176,7 +177,7 @@ export default function AccountSecurityClient({
       setSetPasswordConfirm('');
     } catch (error) {
       setSetPasswordErrorMessage(
-        error instanceof Error ? error.message : '建立密碼失敗，請稍後再試',
+        resolveAuthErrorMessage(error, '建立密碼失敗，請稍後再試。'),
       );
     } finally {
       setIsSettingPassword(false);
@@ -210,7 +211,7 @@ export default function AccountSecurityClient({
       setContactSuccess('驗證碼已發送，請輸入後完成綁定。');
     } catch (error) {
       setContactError(
-        error instanceof Error ? error.message : '新增聯絡方式失敗',
+        resolveAuthErrorMessage(error, '新增聯絡方式失敗，請稍後再試。'),
       );
     } finally {
       setIsAddingContact(false);
@@ -244,7 +245,7 @@ export default function AccountSecurityClient({
       setContactSuccess('聯絡方式已完成驗證與綁定。');
     } catch (error) {
       setContactError(
-        error instanceof Error ? error.message : '驗證聯絡方式失敗',
+        resolveAuthErrorMessage(error, '驗證聯絡方式失敗，請稍後再試。'),
       );
     } finally {
       setIsVerifyingContact(false);
@@ -268,7 +269,7 @@ export default function AccountSecurityClient({
       setContactSuccess('驗證碼已重新發送。');
     } catch (error) {
       setContactError(
-        error instanceof Error ? error.message : '重新發送驗證碼失敗',
+        resolveAuthErrorMessage(error, '重新發送驗證碼失敗，請稍後再試。'),
       );
     } finally {
       setIsResendingContact(false);

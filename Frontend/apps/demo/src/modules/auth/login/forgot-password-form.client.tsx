@@ -10,6 +10,7 @@ import {
   type AuthIdentityType,
 } from '@rescue-frontend/modules';
 import { forgotPasswordAsync } from '../api/client';
+import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
 
 export default function ForgotPasswordFormClient() {
@@ -47,7 +48,7 @@ export default function ForgotPasswordFormClient() {
       setSuccessMessage('驗證碼已送出，請前往下一步重設密碼。');
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : '無法送出重設密碼請求',
+        resolveAuthErrorMessage(error, '無法送出重設密碼請求，請稍後再試。'),
       );
     } finally {
       setIsSubmitting(false);

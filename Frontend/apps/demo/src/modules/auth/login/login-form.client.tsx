@@ -5,13 +5,33 @@ import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition } from 'react';
 
-import { LoginForm } from '@rescue-frontend/modules';
+import { AuthFormError, LoginForm } from '@rescue-frontend/modules';
+import { messageForCode } from '../api/error-messages';
 import { resolveHashedCredentialAsync } from './credentials';
 
+const LOGIN_FALLBACK_MESSAGE = '登入失敗，請確認帳號或密碼。';
+
+/**
+ * Resolve the `?error=` next-auth redirected with.
+ *
+ * Two vocabularies arrive on this one parameter: next-auth's own codes, and — since `authorize` and
+ * the `signIn` callback now throw instead of returning null — our backend's. Backend codes are tried
+ * first so a classified failure keeps its meaning; a 429 used to land here as `CredentialsSignin`
+ * and be reported as a wrong password.
+ */
 function resolveAuthErrorMessage(errorCode: string | null) {
+  const backendMessage = errorCode ? messageForCode(errorCode) : undefined;
+
+  if (backendMessage) {
+    return backendMessage;
+  }
+
   switch (errorCode) {
+    // `login_failed` is what `authorize` throws when the failure carried no code of its own
+    // (network, gateway, a token-less 200). Same generic copy as next-auth's own fixed code.
+    case 'login_failed':
     case 'CredentialsSignin':
-      return '登入失敗，請確認帳號或密碼。';
+      return LOGIN_FALLBACK_MESSAGE;
     case 'OAuthSignin':
       return '無法啟動第三方登入流程，請稍後再試。';
     case 'OAuthCallback':
@@ -19,6 +39,13 @@ function resolveAuthErrorMessage(errorCode: string | null) {
       return '第三方登入驗證失敗，請稍後再試。';
     case 'AccessDenied':
       return '第三方帳號未通過登入驗證。';
+    // next-auth used to answer these on its own error page, which `pages.error` now bypasses.
+    // `Configuration` in particular was a 500 saying to check the server logs — a deployment with
+    // no NEXTAUTH_SECRET must not read as an ordinary login failure.
+    case 'Configuration':
+      return '登入服務設定有誤，請聯絡管理員（伺服器 log 有詳細原因）。';
+    case 'Verification':
+      return '這個登入連結已失效或已被使用過，請重新登入。';
     case 'OAuthAccountNotLinked':
       return '這個帳號已綁定其他登入方式。';
     case 'SessionRequired':
@@ -74,7 +101,9 @@ export default function () {
           });
 
           if (result?.error) {
-            throw new Error(result.error);
+            throw new AuthFormError(
+              resolveAuthErrorMessage(result.error) ?? LOGIN_FALLBACK_MESSAGE,
+            );
           }
 
           startTransition(() => {

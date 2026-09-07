@@ -17,6 +17,7 @@ os.environ["ENV"] = "testing"
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
 
+from app.core.api_errors import ErrorCode
 from app.core.redis import get_redis
 from app.core.security import create_access_token, generate_salt, get_password_hash
 from app.main import app
@@ -356,6 +357,7 @@ async def test_logout_reports_a_redis_outage_rather_than_claiming_success(
         app.dependency_overrides[get_redis] = lambda: redis
 
     assert res.status_code == 503
+    assert res.json()["code"] == ErrorCode.SESSION_STORE_UNAVAILABLE
 
 
 # --------------------------------------------------------------------------------------
