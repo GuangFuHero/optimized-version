@@ -232,3 +232,149 @@ ADR-215 的 step-up 碼、還能在 7 天後成為證明管道；每多一個消
 **否決「四個端點各加相容旗標、預設走舊的單段流程」的理由**：能讓前端不壞，但那等於在合併之後
 把 ADR-215/217/220 全部關掉——接管鏈重新打開，而且是在四個入口。旗標要有人記得打開，
 前端改對則不需要。
+
+---
+
+### ADR-234 綁定的第三方登入本身就是「可以拿來證明的東西」
+
+**白話**：ADR-220 說「什麼都沒有的帳號不設閘門」，但它沒把已連結的 provider 算成「有東西」——而 provider 是這個系統發出最強的憑證。
+
+**Date**: 2026-09-07（PR #45 第一輪 review 後補）
+
+**Context**：`_has_something_to_prove_with()` 只數密碼與 contact，不數 SSO 身分。而「有 provider、沒密碼、沒 contact」這個形狀**是到得了的**：LINE 首次登入在 provider 沒回傳 email、或該 email 已被占用時，`auth/sso.py:171-179` 就不會附上任何 contact。
+
+那個豁免不是中性的，因為它放進來的 contact **馬上就變成其他所有操作的證明管道**。實測完整重現（攻擊者只持有一個被竊的 session）：
+
+```
+[shape] line identity only — no contact, no password
+[1] POST /auth/contacts {email: attacker@evil}  -> 202  無閘門
+[2] POST /auth/contacts/verify                  -> 200  _notify_contact_added 沒有既有管道可通知
+[2] mail recipients so far: ['attacker@evil.com']
+[3] POST /auth/set-password                     -> 422，而 step-up 碼寄到 attacker@evil.com
+[3] POST /auth/set-password (帶碼)               -> 204   密碼鑄成、owner sessions 撤銷
+[3] POST /auth/login as attacker@evil.com       -> 200
+[4] DELETE /auth/link/line                      -> 204   owner 唯一的登入方式被移除
+[final] contacts=[('email','attacker@evil.com')]  login_methods=['password']
+[final] every mail this run sent went to: ['attacker@evil.com']
+```
+
+**而且救不回來。**受害者拿自己真正的 LINE 登入：
+
+```
+[D] owner signs in with their real LINE -> 200
+[D] ...lands on uuid=5e3979d4-…  (原本是 ef137b08-…)   ← 一個全新的空帳號
+```
+
+機制定位到兩個地方：
+
+```
+[A] _has_something_to_prove_with(line-only) = False   ← 只數 password + contacts
+[B] _settled(...) = []                                ← ADR-219 的冷卻期,沒有 contact 通過
+[B] _proof_contact(...) = 'attacker@evil.com'         ← `or [min(…, key=created_at)]` 蓋過冷卻
+```
+
+對照組確認閘門本身沒壞：有 contact 的帳號、有密碼的帳號，同一個呼叫都是 422。**問題在豁免條件，不在閘門。**
+
+**Decision**：兩件事。
+
+1. **`_has_something_to_prove_with` 把 SSO 身分算進去。**
+2. **新增第三種證明 `_sso_proof`**：出示一個 **subject 已經在這個帳號上** 的新 id_token。`StepUp` 加 `id_token` 欄位。
+
+`require_channel_proof` 因此變成三段，順序就是重點：
+
+| 順序 | 證明 | 何時輪到 |
+|---|---|---|
+| 1 | 密碼 | 帳號有密碼 |
+| 2 | 已定著的 contact 收驗證碼 | `_proof_contact` 找得到 |
+| 3 | 帳號自己的 provider | 帳號一個 contact 都沒有 |
+
+verifier 用一個 `get_sso_verifiers` 依賴帶進四個端點（contacts / set-password / link / unlink）。它由既有的 per-provider 依賴組成，所以測試注入 fake 用的 `dependency_overrides` 原樣可用。
+
+**「token 驗得過」不等於「token 屬於這個帳號」**——那正是 ADR-217 修過的錯誤，只是往上一層。所以 `_sso_proof` 比對的是 `provider_subject` 是否已在此帳號上，攻擊者用自己那個合法的 LINE token 會拿到 401。
+
+**試過並推翻的做法：連 `_proof_contact` 的 unsettled fallback 一起拿掉。**
+第一版這樣寫，**12 個測試變紅**。原因不是測試寫壞：每個 contact 在頭 7 天都是 unsettled，拿掉 fallback 等於把管道證明從**每一個新帳號**手上收走——正是 ADR-219 當初加那個 fallback 要保護的情境。那是真實的使用者傷害，不是測試債。
+
+所以 fallback 保留。它之所以危險，是因為攻擊者能**製造**它會挑中的那一列；SSO 身分算進閘門之後，新增 contact 本身就要證明，那一列不可能是攻擊者的。`_proof_contact` 唯一的行為改變是：**完全沒有 contact 時回 None 而不是 raise**，好讓呼叫者往下掉到 provider 證明——它原本在這裡 raise，正是為什麼零 contact 這個形狀當初必須被整個豁免掉。
+
+**Consequences**：
+➕ 上面那條鏈在第 1 步就斷，後面三步不存在。實測 422，且一封信都沒寄出。
+➕ 合法的 LINE 使用者不必等——用他本來就有的 provider 重新驗證一次即可，體驗上比等 email 驗證碼還直接。
+➖ `StepUp` 多一個欄位，前端四條路徑之一（`contacts`）之後可能要處理第三種證明。目前 `set-password` 表單只給驗證碼欄位（ADR-233），因為那個帳號依定義沒有 provider 以外的東西——**這點在本 ADR 之後不再成立**，`set-password` 的表單需要能填 id_token，記在下面的待辦。
+➖ 「什麼都沒有」的 `ContactNotFound` 分支變成幾乎到不了的 backstop。它用 service 層的測試釘住，不透過 HTTP——`create_account` 會寫一列 hash 為 NULL 的 `provider="password"`，所以 `/set-password` 會先回 409，用那條路由斷言會變成「測試因為它名字沒提到的理由而通過」，也就是 ADR-231 講的那個陷阱。
+
+**推翻的既有測試**：`test_an_account_with_nothing_to_prove_with_can_add_its_first_contact` 斷言 202，**把這條接管路徑釘成了預期行為**——與 ADR-231 同一種毛病。改寫成四支：閘門擋下、owner 自己的 token 通過、攻擊者自己的合法 token 被 401、`set-password` 那一步也擋。
+
+---
+
+### ADR-235 unlink 的守門要拿鎖，而且不能用會 `scalar_one()` 的通用刪除
+
+**白話**：兩個 unlink 同時進來，兩個都看到「還剩一個登入方式」，兩個都放行——帳號剩零個，而且救不回來。
+
+**Date**: 2026-09-07（PR #45 第一輪 review 後補）
+
+**Context**：`unlink_identity` 的 docstring 寫著它 mirrors ADR-087 的 contact 守門，但**只抄了守門，沒抄鎖**。這個 invariant 是 read-then-write，形狀跟 ADR-163 修掉的完全一樣：
+
+```
+帳號有 google + line、沒有密碼
+req A: DELETE /auth/link/google  -> remaining = [line]    -> 放行
+req B: DELETE /auth/link/line    -> remaining = [google]  -> 放行
+兩個都完成 -> 零個登入方式
+```
+
+而這個帳號**永久救不回來**：`reset_password` 在沒有 password identity 時拒絕（`auth/password.py:196`），所以 `forgot-password` → `reset-password` 也鑄不出密碼，而且沒有任何登入方式可以用。
+
+另外 `identity_repository.remove` 是通用的 `GenericRepository.remove`，結尾是 `RETURNING` 那一列的 `scalar_one()`——競態中輸的那一方拿到的是 500，不是守門想給的 409。
+
+**Decision**：順序完全照 `delete_contact`：
+
+```python
+await require_channel_proof(...)               # 慢的事情先做完,不在鎖裡寄信
+
+await contact_repository.lock_owner(db, user_uuid)   # 鎖 users 那一列
+if not await _remaining_login_methods(db, user_uuid, identity):
+    await db.rollback()                              # 主動釋放,不留給 request teardown
+    raise LastLoginMethod("帳號至少需保留一個登入方式")
+await identity_repository.delete_identity(db, identity=identity)
+```
+
+- **重用 `contact_repository.lock_owner`，不另做一個。**它鎖的是 `users` 那一列，兩個守門要保護的是同一個帳號，順帶讓 unlink 與 delete_contact 互相序列化。我試著構造跨守門的漏洞但**沒有構造出來**，所以這是便宜的保險，不宣稱是第二個 bug。
+- **鎖之前那次檢查保留**，理由與 ADR-163 相同：便宜的那次決定要不要麻煩使用者出示證明，拿著鎖的那次才是真正成立的。
+- **新增 `identity_repository.delete_identity()`** 用 `db.delete()`，比照 `contact_repository.delete_contact`。**不動共用的 `GenericRepository.remove`**——其他呼叫者依賴它的回傳值。
+
+**Consequences**：
+➕ 併發 unlink 不可能把帳號清空。
+➕ 輸的那一方拿到 409，不是 500。
+➖ unlink 多一次 `SELECT … FOR UPDATE` 與一次重讀。相對於它前面剛做完的證明可以忽略。
+
+**回歸測試**：`test_two_concurrent_unlinks_cannot_strand_the_account`，recipe 與 ADR-163 那條相同——兩個 `create_async_engine` 連線在同一個 event loop，證明用 `asyncio.Barrier(2)` stub 掉讓兩個 task 同時抵達鎖。**把 `lock_owner` 那行拿掉會紅**：`expected exactly one refusal, got [None, None]`。
+
+---
+
+### ADR-236 移除登入方式要撤銷所有 session
+
+**白話**：受害者把攻擊者掛上去的 provider 拔掉了，但攻擊者透過那個 provider 拿到的 session 還在跑。
+
+**Date**: 2026-09-07（PR #45 第一輪 review 後補）
+
+**Context**：`change-password` 與 `set-password` 在認證素材改變時都會 `revoke_all_for_user`，unlink 不會。
+
+而這個端點存在的理由**就是**「provider 是攻擊者掛上去的」——ADR-218 的原話是「受害者能在 `/users/me` 看到攻擊者的 provider 卻什麼都不能做」。拔掉之後對方的 session 繼續有效到自然過期，期間仍能操作帳號，等於這個端點只做了一半。
+
+**Decision**：刪除 identity 之後 `await SessionRepository(redis).revoke_all_for_user(user_uuid)`，與密碼那兩條路一致。
+
+**Consequences**：
+➕ 「移除一個登入方式」現在真的移除了透過它取得的存取權。
+➖ 呼叫者自己的 session 也會斷，與 `change-password` 一致。unlink 目前沒有前端 UI（ADR-233 查證過），所以不影響任何既有畫面。
+
+**已考慮、暫不做：per-identity 撤銷。**只撤掉「由被移除的那個 provider 鑄出來的 session」更精準，但 session 沒有記錄自己是被哪個 identity 鑄出來的。加那個欄位是 session 模型的改動，屬於另一張票。整帳號撤銷是既有的先例，先取一致。
+
+**`link_identity` 不加撤銷**：連結是多一把鑰匙，沒有讓既有的失效，而且 ADR-218 的通知已經涵蓋。
+
+**回歸測試**：`test_unlinking_revokes_every_session`。**把撤銷那行拿掉會紅**：`assert 200 == 401`。
+
+---
+
+## 待辦（本 PR 不做）
+
+- **`set-password` 的前端表單要能填 `id_token`。**ADR-233 給它單一驗證碼欄位，理由是「set-password 的帳號依定義是 SSO-only，證明必定是管道驗證碼」。ADR-234 之後這句話不再成立：零 contact 的 SSO 帳號要出示 provider token。`contacts` 的表單同理。這是 ADR-233 前端工作的延伸，需要一張自己的票。

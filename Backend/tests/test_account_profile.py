@@ -12,11 +12,14 @@ inside a request under test — expires every loaded attribute, and re-reading `
 then attempts a lazy reload that is invalid under AsyncSession (MissingGreenlet).
 """
 
+import json
+
 import pytest
 from sqlalchemy import select
 
 from app.core.security import generate_salt, get_password_hash
 from app.models.auth import UserContact
+from app.services import auth_contact
 from app.services.auth_account import create_account
 from tests.conftest import auth_headers_for
 
@@ -505,10 +508,15 @@ async def test_the_full_takeover_chain_stops_at_the_mint(
     assert await _contacts_of(db_session, user_uuid) == ["sso@x.com"]
 
 
-async def test_an_account_with_no_contact_is_told_to_add_one_first(
+async def test_an_account_with_no_contact_proves_itself_with_its_provider(
     client, db_session, redis, capture_email
 ):
-    """There is no channel to prove, so there is nothing to mint a password against."""
+    """No channel to send a code to, but a linked provider is still a credential (ADR-234).
+
+    This used to answer "add a contact first", because `_proof_contact` raised as soon as the
+    account held none. That framing was wrong: the account has something to prove with, and
+    treating it as having nothing is what left the shape ungated in the first place.
+    """
     user_uuid, headers = await _sso_only_user(db_session, redis)
     contact = (await db_session.scalars(
         select(UserContact).where(UserContact.user_uuid == user_uuid)
@@ -520,7 +528,30 @@ async def test_an_account_with_no_contact_is_told_to_add_one_first(
                             json={"password": "brandnew", "salt_frontend": "s"})
 
     assert res.status_code == 422, res.text
-    assert "聯絡方式" in res.json()["detail"]
+    assert "step_up.id_token" in res.json()["detail"]
+    assert capture_email.last_code is None   # no code goes anywhere
+
+
+async def test_an_account_with_genuinely_nothing_is_told_to_add_a_contact(
+    db_session, redis, capture_email, capture_sms
+):
+    """The backstop that survives ADR-234: no usable password, no provider, no contact.
+
+    Driven at the service seam on purpose. Through HTTP this shape is unreachable —
+    `create_account` writes a `provider="password"` row with a NULL hash, so `/set-password`
+    answers 409 before the proof runs. Asserting it through that route would be a test passing
+    for a reason its name does not mention, which is the trap ADR-231 was written about.
+    """
+    user = await create_account(db_session, name="Nothing")
+
+    with pytest.raises(auth_contact.ContactNotFound) as err:
+        await auth_contact.require_channel_proof(
+            db_session, redis, actor=user, step_up=None,
+            action=auth_contact.ACTION_LINK, email_sender=capture_email,
+            sms_sender=capture_sms, verifiers={},
+        )
+
+    assert "聯絡方式" in str(err.value)
 
 
 # ──────────────────────────────────────────────
@@ -784,8 +815,11 @@ async def test_the_first_contact_of_all_notifies_nobody(client, db_session, redi
                                 provider_subject="bare-sub-224")
     headers = await auth_headers_for(redis, user.uuid)
 
-    await client.post(CONTACTS_URL, headers=headers,
-                      json={"type": "email", "value": "first@x.com"})
+    # Adding it is gated now (ADR-234) — the account proves itself with the provider it holds.
+    await client.post(CONTACTS_URL, headers=headers, json={
+        "type": "email", "value": "first@x.com",
+        "step_up": {"id_token": json.dumps({"sub": "bare-sub-224"})},
+    })
     res = await client.post(f"{CONTACTS_URL}/verify", headers=headers, json={
         "type": "email", "value": "first@x.com", "code": capture_email.last_code,
     })

@@ -25,6 +25,7 @@ from app.services.auth_contact import (
     StepUpFailed,
     StepUpRequired,
 )
+from app.sso import get_sso_verifiers
 
 from .deps import _normalize_identifier, get_rate_limiter
 
@@ -64,6 +65,7 @@ async def add_contact(
         redis=Depends(get_redis),
         email_sender=Depends(get_email_sender),
         sms_sender=Depends(get_sms_sender),
+        verifiers=Depends(get_sso_verifiers),
 ):
     """Start adding or replacing a contact: send a 6-digit code to the new value.
 
@@ -76,6 +78,7 @@ async def add_contact(
         await contact_service.start_contact_change(
             db, redis, actor=current_user, type_=body.type, value=ident,
             step_up=body.step_up, email_sender=email_sender, sms_sender=sms_sender,
+            verifiers=verifiers,
         )
     except (ContactConflict, StepUpRequired, StepUpFailed) as err:
         raise _as_http(err) from err

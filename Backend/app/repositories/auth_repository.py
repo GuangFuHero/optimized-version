@@ -457,6 +457,17 @@ class IdentityRepository(GenericRepository[UserIdentity]):
         )
         return list((await db.execute(q)).scalars().all())
 
+    async def delete_identity(self, db: AsyncSession, *, identity: UserIdentity) -> None:
+        """Hard-delete one identity row; audit_logs keeps the history (ADR-234).
+
+        Deliberately not `GenericRepository.remove`, which ends in `scalar_one()` on the
+        `RETURNING` row: two callers racing for the same row leave the loser with a 500 rather
+        than the 409 the guard means to give. Mirrors `contact_repository.delete_contact`,
+        which is the same operation on the other half of "ways back in".
+        """
+        await db.delete(identity)
+        await db.commit()
+
     async def has_sso_identity(self, db: AsyncSession, user_uuid: str) -> bool:
         """True if any non-password login method exists — a way back in without a contact."""
         q = select(UserIdentity.uuid).where(

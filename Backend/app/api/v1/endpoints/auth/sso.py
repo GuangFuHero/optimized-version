@@ -35,7 +35,8 @@ from app.schemas.auth import (
 )
 from app.services import auth_identity
 from app.services.auth_account import create_account
-from app.services.auth_contact import ContactNotFound, StepUpFailed, StepUpRequired
+from app.services.auth_contact import SSO_PROVIDERS, ContactNotFound, StepUpFailed, StepUpRequired
+from app.sso import get_sso_verifiers
 from app.sso.google import (
     GoogleTokenVerificationError,
     GoogleTokenVerifier,
@@ -132,6 +133,7 @@ async def link_google(
         verifier: GoogleTokenVerifier = Depends(get_google_verifier),
         email_sender=Depends(get_email_sender),
         sms_sender=Depends(get_sms_sender),
+        verifiers=Depends(get_sso_verifiers),
 ):
     """Attach a verified Google identity to the current account, proof first (ADR-217).
 
@@ -148,7 +150,7 @@ async def link_google(
         await auth_identity.link_identity(
             db, redis, actor=current_user, provider="google", subject=gid.sub,
             step_up=body.step_up, email_sender=email_sender, sms_sender=sms_sender,
-            dispatch=background_tasks.add_task,
+            dispatch=background_tasks.add_task, verifiers=verifiers,
         )
     except tuple(_STATUS_BY_ERROR) as err:
         raise _as_http(err) from err
@@ -215,6 +217,7 @@ async def link_line(
         verifier: LineTokenVerifier = Depends(get_line_verifier),
         email_sender=Depends(get_email_sender),
         sms_sender=Depends(get_sms_sender),
+        verifiers=Depends(get_sso_verifiers),
 ):
     """Attach a verified LINE identity to the current account. Same contract as `link_google`."""
     try:
@@ -225,7 +228,7 @@ async def link_line(
         await auth_identity.link_identity(
             db, redis, actor=current_user, provider="line", subject=lid.sub,
             step_up=body.step_up, email_sender=email_sender, sms_sender=sms_sender,
-            dispatch=background_tasks.add_task,
+            dispatch=background_tasks.add_task, verifiers=verifiers,
         )
     except tuple(_STATUS_BY_ERROR) as err:
         raise _as_http(err) from err
@@ -243,20 +246,21 @@ async def unlink_identity(
         redis=Depends(get_redis),
         email_sender=Depends(get_email_sender),
         sms_sender=Depends(get_sms_sender),
+        verifiers=Depends(get_sso_verifiers),
 ):
     """Remove one SSO login method from the current account (ADR-218).
 
     The half that was missing: `/users/me` has always listed the account's login methods, but
     nothing could take one off, so a provider attached by someone else was permanent.
     """
-    if provider not in auth_identity.SSO_PROVIDERS:
+    if provider not in SSO_PROVIDERS:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Unknown provider")
     try:
         await auth_identity.unlink_identity(
             db, redis, actor=current_user, provider=provider,
             step_up=body.step_up if body else None,
             email_sender=email_sender, sms_sender=sms_sender,
-            dispatch=background_tasks.add_task,
+            dispatch=background_tasks.add_task, verifiers=verifiers,
         )
     except tuple(_STATUS_BY_ERROR) as err:
         raise _as_http(err) from err

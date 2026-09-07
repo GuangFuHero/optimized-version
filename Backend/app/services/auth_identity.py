@@ -19,6 +19,7 @@ from app.messaging.email import build_login_method_changed_email
 from app.messaging.sms import build_login_method_changed_sms
 from app.models.auth import User
 from app.repositories.auth_repository import contact_repository, identity_repository
+from app.repositories.session_repository import SessionRepository
 from app.services.auth_contact import (
     ACTION_LINK,
     ACTION_UNLINK,
@@ -31,7 +32,6 @@ from app.services.auth_contact import (
 
 logger = logging.getLogger(__name__)
 
-SSO_PROVIDERS = ("google", "line")
 
 
 class IdentityConflict(ContactError):
@@ -77,6 +77,7 @@ async def link_identity(
     email_sender,
     sms_sender,
     dispatch=None,
+    verifiers=None,
 ) -> None:
     """Attach a verified SSO identity to the current account, proof first (ADR-217).
 
@@ -100,7 +101,7 @@ async def link_identity(
 
     await require_channel_proof(
         db, redis, actor=actor, step_up=step_up, action=ACTION_LINK, target=provider,
-        email_sender=email_sender, sms_sender=sms_sender,
+        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
     )
 
     try:
@@ -127,6 +128,7 @@ async def unlink_identity(
     email_sender,
     sms_sender,
     dispatch=None,
+    verifiers=None,
 ) -> None:
     """Remove one SSO login method, refusing to strand the account (ADR-218).
 
@@ -137,26 +139,62 @@ async def unlink_identity(
 
     Removal takes the same step-up as linking (ADR-159's reasoning): without it, a session
     holder could strip the owner's real provider and leave only their own.
+
+    The guard runs twice, and the second time under a row lock (ADR-235). ADR-087's contact
+    guard was mirrored here but its *lock* was not, and the invariant has the same read-then-
+    write shape: two concurrent unlinks on a `google` + `line` account both read one method
+    remaining and both proceed, leaving zero. That account is then unrecoverable —
+    `reset_password` refuses without a password identity, so `forgot-password` cannot mint one
+    and nothing remains to sign in with.
+
+    The order matches `delete_contact` exactly: the cheap check decides whether to ask the
+    owner for proof at all, the proof is delivered before any lock is taken so none is held
+    across a mail or SMS send, and the check that actually holds runs last.
+
+    Every session is revoked afterwards (ADR-236). This endpoint exists for the case where the
+    provider being removed is the *attacker's*, and a session they obtained by signing in
+    through it would otherwise outlive the removal.
     """
     user_uuid = str(actor.uuid)
     identity = await identity_repository.get_user_identity(db, user_uuid, provider)
     if identity is None:
         raise IdentityNotFound(f"This account has no {provider} login method")
 
-    remaining = [
-        i for i in await identity_repository.list_by_user(db, user_uuid)
-        if str(i.uuid) != str(identity.uuid) and (i.provider != "password" or i.password_hash)
-    ]
-    if not remaining:
+    if not await _remaining_login_methods(db, user_uuid, identity):
         raise LastLoginMethod("帳號至少需保留一個登入方式")
 
     await require_channel_proof(
         db, redis, actor=actor, step_up=step_up, action=ACTION_UNLINK, target=provider,
-        email_sender=email_sender, sms_sender=sms_sender,
+        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
     )
 
-    await identity_repository.remove(db, uuid=identity.uuid)
+    # The `users` row, not the identity rows: the invariant is about the *set* of login
+    # methods, so it is the owner that has to be serialized (the same lock `delete_contact`
+    # takes, which serializes the two guards against each other as well).
+    await contact_repository.lock_owner(db, user_uuid)
+    if not await _remaining_login_methods(db, user_uuid, identity):
+        # Nothing changed, but the lock is held to the end of this transaction — release it
+        # here rather than leaving every other writer for this account queued behind a refusal.
+        await db.rollback()
+        raise LastLoginMethod("帳號至少需保留一個登入方式")
+
+    await identity_repository.delete_identity(db, identity=identity)
+    await SessionRepository(redis).revoke_all_for_user(user_uuid)
     await _notify_login_method_changed(
         db, user_uuid, added=False, provider=provider,
         email_sender=email_sender, sms_sender=sms_sender, dispatch=dispatch,
     )
+
+
+async def _remaining_login_methods(
+    db: AsyncSession, user_uuid: str, doomed
+) -> list:
+    """The login methods that would survive removing `doomed`.
+
+    A password identity counts only when it actually carries a hash: `create_account` writes a
+    `provider="password"` row with a NULL hash for accounts that have never set one.
+    """
+    return [
+        i for i in await identity_repository.list_by_user(db, user_uuid)
+        if str(i.uuid) != str(doomed.uuid) and (i.provider != "password" or i.password_hash)
+    ]

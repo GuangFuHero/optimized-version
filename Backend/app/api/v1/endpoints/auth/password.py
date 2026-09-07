@@ -32,6 +32,7 @@ from app.schemas.auth import (
 )
 from app.services import auth_contact as contact_service
 from app.services.auth_contact import ContactNotFound, StepUpFailed, StepUpRequired
+from app.sso import get_sso_verifiers
 
 from .deps import _normalize_identifier, get_rate_limiter
 
@@ -80,6 +81,7 @@ async def set_password(
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
+        verifiers=Depends(get_sso_verifiers),
         email_sender=Depends(get_email_sender),
         sms_sender=Depends(get_sms_sender),
 ):
@@ -104,7 +106,7 @@ async def set_password(
     try:
         await contact_service.require_step_up_for_first_password(
             db, redis, actor=current_user, step_up=body.step_up,
-            email_sender=email_sender, sms_sender=sms_sender,
+            email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
         )
     except StepUpFailed as err:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=str(err)) from err

@@ -268,6 +268,10 @@ _DEFAULT_STEP_UP_CHANNEL_ZH = "您帳號的聯絡方式"
 # address for up to 7 days before it takes effect (ADR-219).
 PROOF_COOLDOWN = timedelta(days=7)
 
+# Defined here rather than in `auth_identity`, which already imports from this module — the
+# proof needs to know which identities are providers, and the reverse import would be a cycle.
+SSO_PROVIDERS = ("google", "line")
+
 
 async def require_channel_proof(
     db: AsyncSession,
@@ -279,20 +283,37 @@ async def require_channel_proof(
     target: str = "",
     email_sender,
     sms_sender,
+    verifiers=None,
 ) -> None:
-    """Prove the caller holds the account, before it gains a new way in (ADR-215/217).
+    """Prove the caller holds the account, before it gains a new way in (ADR-215/217/234).
 
     The one gate every "add a permanent way into this account" path goes through: a first
-    password, and linking an SSO provider. An account with a password proves it knows the
-    password; otherwise a code goes to a contact the account already held.
+    password, a first contact of a type, and linking or unlinking an SSO provider.
+
+    Three proofs, tried in this order, and the order is the point:
+
+    1. **password** — the account has one, so the caller knows it or does not.
+    2. **a settled contact** — a code to a channel the account held before this caller showed
+       up. `_proof_contact` returns None when nothing has passed the ADR-219 cooldown.
+    3. **the account's own provider** — a fresh id_token whose subject is already an identity
+       here (ADR-234).
+
+    Falling from 2 to 3 rather than reusing an unsettled contact is what closes the chain in
+    PR #45's review: the contact that would have been reused is the one the caller just
+    attached.
     """
     if await _password_proof(db, actor=actor, step_up=step_up, action=action):
         return
     existing = await _proof_contact(db, str(actor.uuid))
-    await _old_channel_proof(
-        db, redis, actor=actor, existing=existing, step_up=step_up, action=action,
-        target=target, email_sender=email_sender, sms_sender=sms_sender,
-    )
+    if existing is not None:
+        await _old_channel_proof(
+            db, redis, actor=actor, existing=existing, step_up=step_up, action=action,
+            target=target, email_sender=email_sender, sms_sender=sms_sender,
+        )
+        return
+    if await _sso_proof(db, actor=actor, step_up=step_up, action=action, verifiers=verifiers):
+        return
+    raise ContactNotFound("此帳號沒有可驗證的聯絡方式，請先新增聯絡方式")
 
 
 async def require_step_up_for_first_password(
@@ -303,6 +324,7 @@ async def require_step_up_for_first_password(
     step_up=None,
     email_sender,
     sms_sender,
+    verifiers=None,
 ) -> None:
     """Prove the caller holds one of the account's contacts before a first password is minted.
 
@@ -319,7 +341,7 @@ async def require_step_up_for_first_password(
     """
     await require_channel_proof(
         db, redis, actor=actor, step_up=step_up, action=ACTION_SET_PASSWORD,
-        email_sender=email_sender, sms_sender=sms_sender,
+        email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
     )
 
 
@@ -351,22 +373,28 @@ def _settled(contacts: list[UserContact], now: datetime) -> list[UserContact]:
     return [c for c in contacts if c.created_at and now - c.created_at >= PROOF_COOLDOWN]
 
 
-async def _proof_contact(db: AsyncSession, user_uuid: str) -> UserContact:
-    """The contact a step-up code is sent to: settled first, email before phone.
+async def _proof_contact(db: AsyncSession, user_uuid: str) -> UserContact | None:
+    """The contact a step-up code is sent to — settled first, email before phone — or None.
 
-    Deterministic rather than caller-chosen, for the same reason `_require_step_up` decides
-    the proof type itself — letting the client name the channel would let a caller pick the
-    one they control. `ADR-086` sets no gate on the *first* contact of a type, so a session
-    holder can attach one they own; the cooldown is what stops that one from immediately
+    Deterministic rather than caller-chosen, for the same reason `_password_proof` decides the
+    proof type itself: letting the client name the channel would let a caller pick the one
+    they control. The cooldown is what stops a contact attached moments ago from immediately
     becoming the thing the account proves itself with (ADR-219).
 
-    When nothing has settled yet — a genuinely new account — the oldest contact is used. That
-    keeps a legitimate first week working, and still prefers whatever the account had before
-    the caller showed up.
+    **Returns None when the account has no contact at all** (ADR-234), instead of raising, so
+    `require_channel_proof` can fall through to the account's provider. It used to raise here,
+    which is why the zero-contact shape had to be exempted from the gate entirely.
+
+    The "nothing settled yet, use the oldest" fallback stays. Removing it was tried and
+    rejected: every contact is unsettled for its first week, so dropping it would take the
+    channel proof away from every genuinely new account — the exact case ADR-219 added the
+    fallback for. What made that fallback dangerous was that an attacker could *create* the
+    row it selects; `_has_something_to_prove_with` now counts SSO identities, so attaching a
+    contact is itself gated and the row can no longer be theirs.
     """
     contacts = await contact_repository.list_by_user(db, user_uuid)
     if not contacts:
-        raise ContactNotFound("此帳號沒有可驗證的聯絡方式，請先新增聯絡方式")
+        return None
     pool = _settled(contacts, datetime.now(UTC)) or [min(contacts, key=lambda c: c.created_at)]
     for type_ in ("email", "phone"):
         for contact in pool:
@@ -375,10 +403,59 @@ async def _proof_contact(db: AsyncSession, user_uuid: str) -> UserContact:
     return pool[0]
 
 
+async def _sso_proof(db: AsyncSession, *, actor: User, step_up, action: str, verifiers) -> bool:
+    """Prove the account by a fresh token for a provider it ALREADY holds, or raise (ADR-234).
+
+    The third proof, for the shape the other two cannot serve: no password to check, and no
+    contact settled long enough to be trusted with a code. Before this, such an account was
+    simply ungated — and a linked provider is a credential, so "nothing to prove with" was
+    never true of it.
+
+    The token must resolve to a `provider_subject` **already on this account**. A token for
+    the attacker's own provider account verifies fine and proves nothing about this account,
+    which is the same mistake ADR-217 fixed on the link path.
+
+    Returns False when the account holds no SSO identity at all, so the caller can fall
+    through to its own answer for that case.
+    """
+    identities = [
+        i for i in await identity_repository.list_by_user(db, str(actor.uuid))
+        if i.provider in SSO_PROVIDERS and i.provider_subject
+    ]
+    if not identities:
+        return False
+
+    what = _ACTION_ZH.get(action, "這項操作")
+    if not (step_up and step_up.id_token):
+        raise StepUpRequired(
+            f"{what}需要以此帳號既有的第三方登入方式重新驗證，請填入 step_up.id_token"
+        )
+
+    for identity in identities:
+        verifier = (verifiers or {}).get(identity.provider)
+        if verifier is None:
+            continue
+        try:
+            verified = await verifier.verify(step_up.id_token)
+        except Exception:  # noqa: BLE001 — a token for another provider is a miss, not a fault
+            continue
+        if str(verified.sub) == str(identity.provider_subject):
+            return True
+    raise StepUpFailed("第三方登入驗證失敗，請使用此帳號原本的登入方式")
+
+
 async def _has_something_to_prove_with(db: AsyncSession, user_uuid: str) -> bool:
-    """True when this account holds anything a caller could be asked to prove (ADR-220)."""
-    identity = await identity_repository.get_password_identity(db, user_uuid)
-    if identity is not None and identity.password_hash:
+    """True when this account holds anything a caller could be asked to prove (ADR-220/234).
+
+    A linked SSO provider counts (ADR-234). It was left out originally, and that exemption was
+    not neutral: a LINE first login attaches no contact when the provider returns no email or
+    that email is taken (`auth/sso.py:171-179`), so the ungated shape is reachable — and the
+    contact it let through immediately became the proof channel for everything else.
+    """
+    identities = await identity_repository.list_by_user(db, user_uuid)
+    if any(i.provider == "password" and i.password_hash for i in identities):
+        return True
+    if any(i.provider in SSO_PROVIDERS and i.provider_subject for i in identities):
         return True
     return bool(await contact_repository.list_by_user(db, user_uuid))
 
@@ -393,6 +470,7 @@ async def start_contact_change(
     step_up=None,
     email_sender,
     sms_sender,
+    verifiers=None,
 ) -> None:
     """Begin adding — or replacing — a contact: send a code to the NEW value.
 
@@ -423,7 +501,7 @@ async def start_contact_change(
     elif await _has_something_to_prove_with(db, str(actor.uuid)):
         await require_channel_proof(
             db, redis, actor=actor, step_up=step_up, action=ACTION_ADD, target=value,
-            email_sender=email_sender, sms_sender=sms_sender,
+            email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
         )
 
     code = await VerificationRepository(redis).issue_contact_verification(

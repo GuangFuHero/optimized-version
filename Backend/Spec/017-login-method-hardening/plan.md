@@ -21,6 +21,8 @@
 
 - [x] `PROOF_COOLDOWN = 7 天`（取自 Google 的公開行為，見 ADR-219）
 - [x] `_settled()` + `_proof_contact()` 改為 settled 優先、全部未滿則退回最舊的
+- [x] （ADR-234）`_proof_contact()` 在**完全沒有 contact** 時回 `None` 而非 raise，讓呼叫者往下掉到 provider 證明；
+      「未滿則退回最舊的」保留——拿掉會讓每個新帳號在頭 7 天都拿不到管道證明
 - [x] 測試：新加的管道拿不到碼、全新帳號仍然可用
 
 ## Task 3: link / unlink 的 use-case 層（ADR-217/218）✅
@@ -61,6 +63,7 @@
 - [x] `_require_step_up` 拆成 `_password_proof` + `_old_channel_proof`，兩個入口共用
       （原本 `require_channel_proof` 會先要 contact，導致「有密碼但零 contact」的帳號誤判 422）
 - [x] `_has_something_to_prove_with()`：有密碼 or 有任何 contact
+      **or 有任何 SSO 身分（ADR-234 補上，原本漏掉這一項是一條完整的接管鏈）**
 - [x] `start_contact_change` 的 `existing is None` 分支接上 `require_channel_proof`
 - [x] `ACTION_ADD` 的 step-up 文案（含目標值遮蔽）
 
@@ -129,3 +132,12 @@ ADR-165 的「不重發活著的碼」也在實測中出現（第二次要碼回
 - [x] **745 passed**
 
 兩條 ADR 是互補的：220 決定**誰可以**新增，224 決定新增之後**誰會知道**。
+
+## Task 6: PR #45 第一輪 review 的三條（ADR-234/235/236）✅
+
+- [x] `_has_something_to_prove_with()` 算入 SSO 身分；新增 `_sso_proof()`；`StepUp` 加 `id_token`
+- [x] `get_sso_verifiers` 依賴，接進 contacts / set-password / link / unlink 四個端點
+- [x] `unlink_identity` 拿 `lock_owner` 並在鎖下重讀守門；新增 `identity_repository.delete_identity()`
+- [x] `unlink_identity` 撤銷所有 session
+- [x] 測試：接管鏈四支、併發 unlink 一支、撤銷一支；後兩支都確認過拿掉修正會紅
+- [ ] **前端**：`set-password` / `contacts` 表單要能填 `id_token`（ADR-233 的延伸，另開票）

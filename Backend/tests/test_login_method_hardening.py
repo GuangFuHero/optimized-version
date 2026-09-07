@@ -10,6 +10,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import select
 
 from app.core.security import generate_salt, get_password_hash
 from app.models.auth import UserContact
@@ -342,16 +343,191 @@ async def test_an_sso_only_account_proves_the_add_on_its_existing_channel(
     assert res.status_code == 202, res.text
 
 
-async def test_an_account_with_nothing_to_prove_with_can_add_its_first_contact(
+# ──────────────────────────────────────────────
+# Attack chain D: a linked provider IS something to prove with (ADR-234)
+# ──────────────────────────────────────────────
+
+
+async def test_a_provider_only_account_cannot_have_a_contact_attached_by_a_session(
     client, db_session, redis, capture_email
 ):
-    """Ungated only when there is genuinely nothing to prove against (ADR-220)."""
+    """The chain PR #45's review found, reproduced and then closed.
+
+    Replaces `test_an_account_with_nothing_to_prove_with_can_add_its_first_contact`, which
+    asserted 202 here — it pinned this takeover path as intended behaviour. ADR-220 exempted
+    accounts with "nothing to prove with", but `_has_something_to_prove_with` did not count
+    SSO identities, and a LINE first login attaches no contact when the provider returns no
+    email or that email is taken (`auth/sso.py:171-179`), so the shape is reachable.
+
+    Verified before the fix, in full: attach the attacker's email (202, ungated, and
+    `_notify_contact_added` had nobody to tell), `set-password` delivered its step-up code to
+    that same address because `_proof_contact` fell back to the only contact there was, then
+    `DELETE /auth/link/line` removed the owner's only login method. Every message in the run
+    went to the attacker, and the owner signing in with their real LINE landed on a brand-new
+    empty account — the original was gone for good.
+    """
     user = await create_account(db_session, name="Bare", provider="line",
                                 provider_subject="bare-line-sub")
     headers = await auth_headers_for(redis, user.uuid)
 
     res = await client.post("/api/v1/auth/contacts", headers=headers,
-                            json={"type": "email", "value": "owner@x.com"})
+                            json={"type": "email", "value": "attacker@evil.com"})
+
+    assert res.status_code == 422, res.text
+    assert "step_up.id_token" in res.json()["detail"]
+    assert capture_email.last_code is None    # step 1 sends nothing, so step 2 never exists
+
+
+async def test_the_owners_own_provider_token_lets_the_add_through(
+    client, db_session, redis, capture_email
+):
+    """The gate is proof, not a wall: the owner re-authenticates with the LINE they hold."""
+    user = await create_account(db_session, name="Bare", provider="line",
+                                provider_subject="bare-line-sub")
+    headers = await auth_headers_for(redis, user.uuid)
+
+    res = await client.post("/api/v1/auth/contacts", headers=headers, json={
+        "type": "email", "value": "owner@x.com",
+        "step_up": {"id_token": _token("bare-line-sub")},
+    })
 
     assert res.status_code == 202, res.text
     assert capture_email.last_code
+
+
+async def test_the_attackers_own_provider_token_does_not_prove_this_account(
+    client, db_session, redis, capture_email
+):
+    """A token that verifies is not a token for THIS account — the ADR-217 mistake, one layer on.
+
+    The attacker holds a real LINE account and can present a perfectly valid token for it.
+    What it proves is that they control `attacker-line-sub`, which is not on this account.
+    """
+    user = await create_account(db_session, name="Bare", provider="line",
+                                provider_subject="bare-line-sub")
+    headers = await auth_headers_for(redis, user.uuid)
+
+    res = await client.post("/api/v1/auth/contacts", headers=headers, json={
+        "type": "email", "value": "attacker@evil.com",
+        "step_up": {"id_token": _token("attacker-line-sub")},
+    })
+
+    assert res.status_code == 401, res.text
+    assert capture_email.last_code is None
+
+
+async def test_a_provider_only_account_cannot_mint_a_password_from_a_session(
+    client, db_session, redis, capture_email
+):
+    """Step 3 of the chain, gated on its own account of the proof it needs."""
+    user = await create_account(db_session, name="Bare", provider="line",
+                                provider_subject="bare-line-sub")
+    headers = await auth_headers_for(redis, user.uuid)
+
+    res = await client.post("/api/v1/auth/set-password", headers=headers,
+                            json={"password": "attackerpw", "salt_frontend": "aa"})
+
+    assert res.status_code == 422, res.text
+    assert "step_up.id_token" in res.json()["detail"]
+
+
+# ──────────────────────────────────────────────
+# Unlink: the lock the contact guard already had (ADR-235), and revocation (ADR-236)
+# ──────────────────────────────────────────────
+
+
+class _NullSender:
+    """A sender that succeeds and records nothing — the race test is not about delivery."""
+
+    async def send(self, *args, **kwargs):
+        return None
+
+
+async def test_two_concurrent_unlinks_cannot_strand_the_account(db, redis, monkeypatch):
+    """Two unlinks racing on a google+line account must not leave it with zero login methods.
+
+    ADR-087's contact guard was mirrored here but its lock was not, so both requests read
+    "one method remains" and both proceeded. The account is then unrecoverable:
+    `reset_password` refuses without a password identity, so `forgot-password` cannot mint one
+    and nothing is left to sign in with.
+
+    Same recipe as `test_two_concurrent_deletes_cannot_strand_the_account`: two real
+    connections in one event loop, the proof stubbed with a barrier so both tasks reach the
+    lock together.
+    """
+    import asyncio
+
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models.auth import User, UserIdentity
+    from app.services import auth_identity
+    from tests.conftest import TEST_DB_URL
+
+    user = await create_account(db, name="Racer", provider="google",
+                                provider_subject="racer-google")
+    user_uuid = str(user.uuid)
+    db.add(UserIdentity(user_uuid=user.uuid, provider="line", provider_subject="racer-line"))
+    await db.commit()
+
+    barrier = asyncio.Barrier(2)
+
+    async def arrive_together(*args, **kwargs):
+        """Stand in for the proof, releasing both tasks into the lock at the same moment."""
+        await barrier.wait()
+
+    monkeypatch.setattr(auth_identity, "require_channel_proof", arrive_together)
+
+    engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
+    sessions = [
+        sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)()
+        for engine in engines
+    ]
+    try:
+        async def unlink(session, provider):
+            actor = await session.get(User, user_uuid)
+            return await auth_identity.unlink_identity(
+                session, redis, actor=actor, provider=provider,
+                email_sender=_NullSender(), sms_sender=_NullSender(),
+            )
+
+        outcomes = await asyncio.gather(
+            unlink(sessions[0], "google"), unlink(sessions[1], "line"),
+            return_exceptions=True,
+        )
+    finally:
+        for session in sessions:
+            await session.close()
+        for engine in engines:
+            await engine.dispose()
+
+    refused = [o for o in outcomes if isinstance(o, auth_identity.LastLoginMethod)]
+    assert len(refused) == 1, f"expected exactly one refusal, got {outcomes}"
+    left = list(await db.scalars(
+        select(UserIdentity).where(UserIdentity.user_uuid == user_uuid)))
+    assert len(left) == 1, "the account was left with no way to sign in"
+
+
+async def test_unlinking_revokes_every_session(client, db_session, redis, capture_email):
+    """The attacker's session, obtained through the provider being removed, must not survive.
+
+    `change-password` and `set-password` both revoke when authentication material changes;
+    unlink did not — and this endpoint exists precisely for the case where the provider is
+    the attacker's (ADR-236).
+    """
+    from app.models.auth import UserIdentity
+
+    user_uuid, headers = await _password_user(db_session, redis)
+    db_session.add(UserIdentity(user_uuid=user_uuid, provider="line",
+                                provider_subject="attacker-line"))
+    await db_session.commit()
+
+    still_valid = await client.get("/api/v1/users/me", headers=headers)
+    assert still_valid.status_code == 200, still_valid.text
+
+    res = await client.request("DELETE", LINK_LINE, headers=headers,
+                               json={"step_up": {"password": _PASSWORD}})
+    assert res.status_code == 204, res.text
+
+    after = await client.get("/api/v1/users/me", headers=headers)
+    assert after.status_code == 401, after.text

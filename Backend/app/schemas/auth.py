@@ -205,6 +205,10 @@ class StepUp(BaseModel):
 
     password: str | None = Field(None, min_length=6, max_length=255)  # already frontend-hashed
     old_channel_code: str | None = Field(None, min_length=4, max_length=8)
+    # An account whose only credential is a linked provider has no password to check and no
+    # settled contact to send a code to. It proves itself by presenting a fresh token for a
+    # provider it already holds (ADR-234).
+    id_token: str | None = Field(None, min_length=1)
 
 
 class GoogleSsoRequest(BaseModel):
