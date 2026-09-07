@@ -103,6 +103,54 @@ def test_no_auth_endpoint_constructs_a_bare_http_exception():
     assert offenders == [], f"HTTPException carries no code: {', '.join(offenders)}"
 
 
+def test_every_api_error_call_passes_an_error_code_member():
+    """The constructor cannot tell a code from a detail — at runtime both are just strings.
+
+    `ApiError(409, "identifer_taken", "Already in use")` constructs fine and ships the typo as the
+    contract, so the client silently falls back to generic copy. A runtime `isinstance` assert would
+    surface that as a 500 to the user, so the check lives here instead: every call site must spell
+    the code as `ErrorCode.X` with `X` a real member, and any other shape — a string literal, a
+    variable, a misspelt member — fails in CI.
+
+    Calls are matched under the class name or any import alias, for the same reason the guard above
+    matches aliased imports. And the test refuses to pass having seen no calls at all — a renamed
+    endpoints directory must not turn the guard green.
+    """
+    offenders = []
+    calls_checked = 0
+
+    for path in sorted(_AUTH_ENDPOINTS.glob("*.py")):
+        tree = ast.parse(path.read_text())
+        call_names = {"ApiError"} | {
+            alias.asname
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+            if alias.name == "ApiError" and alias.asname
+        }
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and getattr(node.func, "id", getattr(node.func, "attr", None)) in call_names
+            ):
+                continue
+            calls_checked += 1
+            code_arg = next(
+                (kw.value for kw in node.keywords if kw.arg == "code"),
+                node.args[1] if len(node.args) > 1 else None,
+            )
+            if not (
+                isinstance(code_arg, ast.Attribute)
+                and isinstance(code_arg.value, ast.Name)
+                and code_arg.value.id == "ErrorCode"
+                and code_arg.attr in ErrorCode.__members__
+            ):
+                offenders.append(f"{path.name}:{node.lineno}")
+
+    assert offenders == [], f"ApiError without an ErrorCode member as `code`: {', '.join(offenders)}"
+    assert calls_checked, "no ApiError calls found — the scan is looking at the wrong directory"
+
+
 def test_every_error_code_value_is_unique():
     """Two members sharing a value would make one of them unmatchable on the client."""
     values = [member.value for member in ErrorCode]
