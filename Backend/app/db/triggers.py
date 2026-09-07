@@ -31,6 +31,10 @@ AUDITED_TABLES = [
     "role_permission_assign",
     "user_role_assign",
     "user_permission_assign",
+
+    # Feature 013: the deployment's single global project settings row (ADR-090) — changing
+    # the disaster types flips a whole batch of dynamic fields, so it is audited.
+    "project_settings",
 ]
 
 # PL/pgSQL function that serializes row mutations into JSONB, redacting password_hash

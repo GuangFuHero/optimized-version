@@ -29,10 +29,16 @@ branched from. Leaving it on the old parent makes it a sibling of whatever main 
 since, and `alembic upgrade head` refuses to run with more than one head.
 
 The parent has moved twice while this branch was open — `8ebfc3903041` when notifications
-and station photos merged, and now `a1b2c3d4e5f6` (PR #32, analytics columns). That is the
-standing cost of a single-line migration history with several branches open at once: this
+and station photos merged, then `a1b2c3d4e5f6` (PR #32, analytics columns), and now
+`07ac630e0009` — feature 013's project settings, merged as PR #36 ahead of this one. That is
+the standing cost of a single-line migration history with several branches open at once: this
 revision is pinned to whatever main's head is at merge time, and has to be re-pointed each
 time main moves.
+
+Re-pointed rather than merged (2026-09-06): a merge revision would leave every *other* open
+branch's first migration still hanging off `07ac630e0009`, forking again and needing a merge
+of its own. Re-pointing keeps one head at every step. Safe here because none of these have
+been applied outside development.
 
 """
 from collections.abc import Sequence
@@ -44,7 +50,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '90c93167fa66'
-down_revision: str | Sequence[str] | None = 'a1b2c3d4e5f6'
+down_revision: str | Sequence[str] | None = '07ac630e0009'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
