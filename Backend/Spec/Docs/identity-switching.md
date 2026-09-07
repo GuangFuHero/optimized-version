@@ -188,6 +188,6 @@ UserRoleAssign.team_uuid.is_not_distinct_from(identity.team_uuid)
 | 身分解析與預設身分 | `app/repositories/active_identity_repository.py` |
 | scope 定義與「最寬者勝」 | `app/core/rbac_scopes.py` |
 
-## 已知的文件缺陷
+## 修掉的文件缺陷
 
-`app/models/team.py` 對 `type` 欄位的註解仍寫著 `# "gov" | "ngo" — drives gov/ngo scope`。那是舊設計的殘留字句，與現行的 scope 定義不符，且正是「scope 有四個值」這個誤解的來源。**建議修掉。**
+`app/models/team.py` 對 `type` 欄位的註解原本寫著 `# "gov" | "ngo" — drives gov/ngo scope`——舊設計的殘留字句，與現行 scope 定義不符，正是「scope 有四個值」這個誤解的來源。已於本次一併更正為「這是組織種類，不是 scope；兩種都走 `team` scope」。

@@ -20,7 +20,10 @@ class Team(Base, UUIDPKMixin, TimestampMixin):
     # ADR-053: team-scope resources filter on this column; Team's boundary is its own uuid.
     __team_scope_attr__ = "uuid"
     name: Mapped[str] = mapped_column(String(100))
-    type: Mapped[str] = mapped_column(String(10))  # "gov" | "ngo" — drives gov/ngo scope
+    # "gov" | "ngo". Organizational kind, NOT a scope: the Scope enum is
+    # none/own/team/zone/all (app/core/rbac_scopes.py) and has never carried a gov or ngo
+    # value. Both kinds resolve through `team` scope, keyed on this row's own uuid above.
+    type: Mapped[str] = mapped_column(String(10))
     tax_id: Mapped[str | None] = mapped_column(String(8), nullable=True)  # 統一編號 (UBN), 8 碼
     status: Mapped[str] = mapped_column(String(20), default="active")
 
