@@ -19,6 +19,12 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(100))  # display nickname; no longer the login id, not unique
     credibility_score: Mapped[float] = mapped_column(Float, default=50.0)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Written only when a refresh token is rotated (ADR-093), so the value is at most one
+    # access-token TTL (15 min) stale. Deliberately NOT written per request: `users` is in
+    # AUDITED_TABLES, so a per-request UPDATE would add one audit_logs row per request.
+    last_activity_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="最後活動時間（refresh token 輪替時寫入）"
+    )
 
     # Transient, never persisted: the identity this request is acting as, set by
     # `get_current_user` from the access token's `act` claim (ADR-069). Declared without a
@@ -26,7 +32,8 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     #
     # A User loaded outside a request keeps the class default of None, which resolves every
     # team and zone scope to false() — the safe direction. "Which team am I in" is no longer
-    # a column: it is whichever team the active identity's grant row points at (ADR-072/073).
+    # a column: it is whichever team the active identity's grant row points at (ADR-072/073),
+    # which is why feature 010 dropped `team_uuid` from this model and from `users`.
     active_identity = None
 
     # 關聯

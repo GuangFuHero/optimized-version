@@ -76,6 +76,10 @@ async def _ensure_test_database():
     eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
     async with eng.connect() as conn:
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
+        # pg_trgm supplies the gin_trgm_ops operator class used by the search_text indexes.
+        # Base.metadata.create_all builds those indexes, so without this every schema
+        # creation below fails — not one test, the whole suite.
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     await eng.dispose()
 
 
@@ -87,6 +91,10 @@ async def db():
         await conn.execute(text("DROP SCHEMA public CASCADE;"))
         await conn.execute(text("CREATE SCHEMA public;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+        # DROP SCHEMA public CASCADE above takes pg_trgm with it (it installs into public),
+        # so it must be re-created here too — Base.metadata.create_all builds the
+        # search_text GIN indexes, which need gin_trgm_ops.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
@@ -102,6 +110,10 @@ async def db_session():
         await conn.execute(text("DROP SCHEMA public CASCADE;"))
         await conn.execute(text("CREATE SCHEMA public;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+        # DROP SCHEMA public CASCADE above takes pg_trgm with it (it installs into public),
+        # so it must be re-created here too — Base.metadata.create_all builds the
+        # search_text GIN indexes, which need gin_trgm_ops.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
@@ -135,7 +147,14 @@ async def token_for(redis, user_uuid, role=None, team=None) -> str:
 
     act = None
     if role is not None:
-        act = encode_act(str(role.uuid), str(team.uuid) if team is not None else None)
+        # Accepts a Role/Team instance or a plain uuid. Tests that create the role, then let
+        # the request under test commit, would otherwise hand over an expired instance: the
+        # session is expire_on_commit=True, so reading `.uuid` afterwards is a lazy reload
+        # that AsyncSession cannot service. Passing the uuid captured up front sidesteps it.
+        act = encode_act(
+            str(getattr(role, "uuid", role)),
+            str(getattr(team, "uuid", team)) if team is not None else None,
+        )
     # The session records the identity too (ADR-188), so a refresh that does not name one
     # carries it forward. Passing it here keeps a test token the same shape as a real one;
     # without it the session would remember nothing and a refresh in a test would silently
