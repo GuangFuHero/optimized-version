@@ -197,9 +197,9 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | `app/services/auth_contact.py` | **新檔**：`add_or_replace_contact()` / `verify_and_commit_contact()` / `delete_contact()`，含 step-up 判定與登入管道守門 |
 | `app/api/v1/endpoints/auth/contacts.py` | 瘦身為 input parse + 狀態碼對應；新增 `DELETE /contacts/{type}` |
 | `app/schemas/auth.py` | `AddContactRequest` 加 `step_up`；`UserResponse` 加 `contacts[]` / `login_methods[]`；新增 `ContactOut` / `LoginMethodOut` |
-| `app/repositories/auth_repository.py` | `contact_repository` 加 `get_by_user_and_type()`、`replace_verified()`（同交易 DELETE+INSERT）、`count_by_user()`；`identity_repository` 加 `list_by_user()` |
-| `app/messaging/email.py` | 新增 `build_contact_changed_email()` |
-| `app/messaging/sms.py` | 新增 `build_contact_changed_sms()` |
+| `app/repositories/auth_repository.py` | `contact_repository` 加 `get_by_user_and_type()`、`replace_verified()`（同交易 DELETE+INSERT）；刪除守門讀 `list_by_user()`（ADR-232）；`identity_repository` 加 `list_by_user()` |
+| `app/messaging/email.py` | 新增 `build_contact_changed_email()`（舊管道）、`build_contact_replaced_email()`（倖存管道，ADR-229）、`build_contact_added_email()`、`build_contact_removed_email()`、`build_step_up_code_email()`、`build_password_set_email()` |
+| `app/messaging/sms.py` | 同一組的 SMS 版本 |
 | `app/api/v1/endpoints/users.py` | `read_user_me` 改為載入 contacts / login_methods |
 
 ---
@@ -241,7 +241,8 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | 有 password identity → 驗密碼 | 085 | `_require_step_up()` 的第一個分支 |
 | SSO-only → 發碼到舊管道並驗證 | 085 | `_require_step_up()` 的 SSO 分支；碼的存取為獨立 key prefix，`verification_repository.py` `issue_old_channel_step_up()` / `consume_old_channel_step_up()` |
 | 首次新增不設門檻 | 086 | `start_contact_change()`（`existing is None` 直接跳過 step-up） |
-| 更換成功後通知舊管道，新值部分遮蔽 | 085 | `commit_contact_change()`；builder 為 `build_contact_changed_email()` / `build_contact_changed_sms()` |
+| 更換成功後通知舊管道，新值部分遮蔽 | 085 | `_notify_contact_replaced()`；builder 為 `build_contact_changed_email()` / `build_contact_changed_sms()` |
+| **更換成功後也通知帳號其他倖存的管道** | **229** | `_notify_contact_replaced()`；builder 為 `build_contact_replaced_email()` / `build_contact_replaced_sms()`（會指名型別） |
 | 不撤銷 session | 085 | 反向證據：`auth_contact.py` 全檔無 `SessionRepository` 引用 |
 | 刪除守門：不得失去最後一個登入管道 | 087 | `app/services/auth_contact.py` `delete_contact()`；計數與 SSO 判定在 `auth_repository.py` `list_by_user()` / `has_sso_identity()` |
 | 舊列硬刪除，歷史交給 `audit_logs` | 087 | `app/repositories/auth_repository.py:332` `delete_contact()` |

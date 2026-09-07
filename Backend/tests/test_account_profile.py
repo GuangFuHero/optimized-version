@@ -70,6 +70,7 @@ async def test_replacing_a_contact_without_step_up_is_refused(client, db_session
                             json={"type": "email", "value": "attacker@evil.com"})
 
     assert res.status_code == 422, res.text
+    assert res.json()["detail"] == "更換聯絡方式需要輸入密碼"
     assert await _contacts_of(db_session, user_uuid) == ["owner@x.com"]
 
 
@@ -193,6 +194,48 @@ async def test_replacement_notifies_the_old_channel_with_a_masked_value(
     assert "n***@***.com" in text
 
 
+async def test_replacement_also_notifies_the_surviving_channel(
+    client, db_session, redis, capture_sms, capture_email
+):
+    """The old channel is not the only one told — every surviving contact hears it (ADR-229).
+
+    The old channel is the address the attacker is about to control, so a notice sent only
+    there is a notice sent to them. The phone the owner still holds is the one that reaches
+    a person. Adding (ADR-224) and removing (ADR-159) already work this way; replacing was
+    the last of the three writing to a single address.
+    """
+    _, headers = await _with_phone(client, db_session, redis, capture_sms)
+    before = len(capture_sms.messages)
+    code = await _start_replacement(client, headers, "new@x.com", capture_email)
+
+    res = await client.post(f"{CONTACTS_URL}/verify", headers=headers,
+                            json={"type": "email", "value": "new@x.com", "code": code})
+
+    assert res.status_code == 200, res.text
+    assert capture_email.messages[-1][0] == "owner@x.com"   # the old channel, as always
+    assert len(capture_sms.messages) == before + 1          # and now the survivor too
+    to, text = capture_sms.messages[-1]
+    assert to == "+886912345678"
+    assert "new@x.com" not in text        # masked, like every other notice
+    assert "n***@***.com" in text
+    assert "電子信箱" in text              # the survivor is told WHICH type changed
+
+
+async def test_replacement_tells_a_lone_old_channel_exactly_once(
+    client, db_session, redis, capture_email
+):
+    """An account with nothing but the replaced contact still gets one notice, not two."""
+    _, headers = await _password_user(db_session, redis)
+    before = len(capture_email.messages)
+    code = await _start_replacement(client, headers, "new@x.com", capture_email)
+    sent_by_the_start = len(capture_email.messages) - before
+
+    await client.post(f"{CONTACTS_URL}/verify", headers=headers,
+                      json={"type": "email", "value": "new@x.com", "code": code})
+
+    assert len(capture_email.messages) == before + sent_by_the_start + 1
+
+
 async def test_replacement_does_not_revoke_other_sessions(client, db_session, redis, capture_email):
     """Changing a phone number is not a credential leak (ADR-085) — sessions survive."""
     _, headers = await _password_user(db_session, redis)
@@ -297,6 +340,9 @@ async def test_deleting_a_contact_without_step_up_is_refused(
     res = await _delete(client, headers, "email")
 
     assert res.status_code == 422, res.text
+    # The copy names the action being proved, not always "更換" (ADR-230) — the same mismatch
+    # ADR-164 fixed in the delivered email and SMS.
+    assert res.json()["detail"] == "移除聯絡方式需要輸入密碼"
     assert await _contacts_of(db_session, user_uuid) == ["owner@x.com"]
 
 
@@ -561,7 +607,8 @@ async def test_a_code_that_was_never_delivered_does_not_count_as_pending(
     retry = await _delete(client, headers, "email")
 
     assert retry.status_code == 422, retry.text
-    assert "已將驗證碼寄至原聯絡方式" in retry.json()["detail"]  # a fresh code, not "use the old one"
+    # a fresh code, not "use the old one"; the copy names the action since ADR-230
+    assert "已將移除聯絡方式的驗證碼寄至原聯絡方式" in retry.json()["detail"]
     res = await _delete(client, headers, "email", {"old_channel_code": capture_email.last_code})
     assert res.status_code == 204, res.text
 
