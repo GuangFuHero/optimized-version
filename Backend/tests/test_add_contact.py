@@ -1,25 +1,26 @@
 """Integration tests for adding a verified contact to a logged-in account."""
 import pytest
 
-from app.core.security import create_access_token, generate_salt, get_password_hash
+from app.core.security import generate_salt, get_password_hash
 from app.repositories.verification_repository import VerificationRepository
 from app.services.auth_account import create_account
+from tests.conftest import auth_headers_for
 
 
-async def _logged_in_email_user(db_session):
+async def _logged_in_email_user(db_session, redis):
     """Create an email account and return (user, bearer_headers)."""
     user = await create_account(
         db_session, contact_type="email", value="owner@x.com",
         password_hash=get_password_hash("secret", generate_salt()), name="Tester",
     )
-    headers = {"Authorization": f"Bearer {create_access_token(data={'sub': str(user.uuid)})}"}
+    headers = await auth_headers_for(redis, user.uuid)
     return user, headers
 
 
 @pytest.mark.asyncio
-async def test_add_phone_then_verify_then_login(client, db_session, capture_sms):
+async def test_add_phone_then_verify_then_login(client, db_session, redis, capture_sms):
     """Email user adds a phone, verifies via SMS code, then logs in by phone."""
-    _, headers = await _logged_in_email_user(db_session)
+    _, headers = await _logged_in_email_user(db_session, redis)
     res = await client.post("/api/v1/auth/contacts", headers=headers,
                             json={"type": "phone", "value": "0912345678"})
     assert res.status_code == 202
@@ -41,21 +42,21 @@ async def test_add_contact_requires_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_add_contact_collision_409(client, db_session):
+async def test_add_contact_collision_409(client, db_session, redis):
     """Adding a value already verified by another account → 409."""
     # someone else already owns this phone
     await create_account(db_session, contact_type="phone", value="+886912345678", password_hash="h",
                          name="Tester")
-    _, headers = await _logged_in_email_user(db_session)
+    _, headers = await _logged_in_email_user(db_session, redis)
     res = await client.post("/api/v1/auth/contacts", headers=headers,
                             json={"type": "phone", "value": "0912345678"})  # normalizes to +886912345678
     assert res.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_verify_wrong_code_400(client, db_session, capture_sms):
+async def test_verify_wrong_code_400(client, db_session, redis, capture_sms):
     """Wrong code on verify → 400."""
-    _, headers = await _logged_in_email_user(db_session)
+    _, headers = await _logged_in_email_user(db_session, redis)
     await client.post("/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0912345678"})
     v = await client.post("/api/v1/auth/contacts/verify", headers=headers,
                           json={"type": "phone", "value": "0912345678", "code": "000000"})
@@ -63,9 +64,9 @@ async def test_verify_wrong_code_400(client, db_session, capture_sms):
 
 
 @pytest.mark.asyncio
-async def test_resend_then_old_code_dead(client, db_session, capture_sms):
+async def test_resend_then_old_code_dead(client, db_session, redis, capture_sms):
     """Resend issues a new code; the old one no longer verifies."""
-    _, headers = await _logged_in_email_user(db_session)
+    _, headers = await _logged_in_email_user(db_session, redis)
     await client.post("/api/v1/auth/contacts", headers=headers, json={"type": "phone", "value": "0912345678"})
     old = capture_sms.last_code
     r = await client.post("/api/v1/auth/contacts/resend", headers=headers,
@@ -77,18 +78,18 @@ async def test_resend_then_old_code_dead(client, db_session, capture_sms):
 
 
 @pytest.mark.asyncio
-async def test_resend_no_pending_404(client, db_session):
+async def test_resend_no_pending_404(client, db_session, redis):
     """Resend with no pending contact → 404."""
-    _, headers = await _logged_in_email_user(db_session)
+    _, headers = await _logged_in_email_user(db_session, redis)
     r = await client.post("/api/v1/auth/contacts/resend", headers=headers,
                           json={"type": "phone", "value": "0911222333"})
     assert r.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_add_second_email_blocked_409(client, db_session):
+async def test_add_second_email_blocked_409(client, db_session, redis):
     """A user who already has an email cannot add a SECOND, different email → 409."""
-    _, headers = await _logged_in_email_user(db_session)  # already owns owner@x.com
+    _, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
     res = await client.post("/api/v1/auth/contacts", headers=headers,
                             json={"type": "email", "value": "second@x.com"})
     assert res.status_code == 409
@@ -97,13 +98,13 @@ async def test_add_second_email_blocked_409(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_add_second_phone_blocked_409(client, db_session, capture_sms):
+async def test_add_second_phone_blocked_409(client, db_session, redis, capture_sms):
     """A user who already has a phone cannot add a SECOND, different phone → 409."""
     user = await create_account(
         db_session, contact_type="phone", value="0912345678",
         password_hash=get_password_hash("secret", generate_salt()), name="Tester",
     )
-    headers = {"Authorization": f"Bearer {create_access_token(data={'sub': str(user.uuid)})}"}
+    headers = await auth_headers_for(redis, user.uuid)
     res = await client.post("/api/v1/auth/contacts", headers=headers,
                             json={"type": "phone", "value": "0911222333"})
     assert res.status_code == 409
@@ -111,9 +112,9 @@ async def test_add_second_phone_blocked_409(client, db_session, capture_sms):
 
 
 @pytest.mark.asyncio
-async def test_email_user_can_add_phone(client, db_session, capture_sms):
+async def test_email_user_can_add_phone(client, db_session, redis, capture_sms):
     """Cross-type is allowed: an email user can add AND verify a phone (200)."""
-    _, headers = await _logged_in_email_user(db_session)  # owns an email, no phone
+    _, headers = await _logged_in_email_user(db_session, redis)  # owns an email, no phone
     res = await client.post("/api/v1/auth/contacts", headers=headers,
                             json={"type": "phone", "value": "0912345678"})
     assert res.status_code == 202
@@ -131,7 +132,7 @@ async def test_verify_second_email_blocked_even_if_add_bypassed(client, db_sessi
     We seed the pending code straight into redis (bypassing add_contact) to prove verify_contact
     itself rejects a second contact of an already-owned type.
     """
-    user, headers = await _logged_in_email_user(db_session)  # already owns owner@x.com
+    user, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
     code = await VerificationRepository(redis).issue_contact_verification(
         user_uuid=str(user.uuid), type_="email", value="second@x.com")
     v = await client.post("/api/v1/auth/contacts/verify", headers=headers,
@@ -147,7 +148,7 @@ async def test_verify_second_email_409_does_not_consume_code(client, db_session,
     The conflict checks run BEFORE consume_contact_verification, so the redis pending key survives the
     409 and the user can retry once the conflict clears.
     """
-    user, headers = await _logged_in_email_user(db_session)  # already owns owner@x.com
+    user, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
     repo = VerificationRepository(redis)
     code = await repo.issue_contact_verification(
         user_uuid=str(user.uuid), type_="email", value="second@x.com")
@@ -163,9 +164,9 @@ async def test_verify_second_email_409_does_not_consume_code(client, db_session,
 
 
 @pytest.mark.asyncio
-async def test_resend_second_type_blocked_409(client, db_session):
+async def test_resend_second_type_blocked_409(client, db_session, redis):
     """Resend for an already-owned type is also blocked → 409 (symmetric with add/verify)."""
-    _, headers = await _logged_in_email_user(db_session)  # already owns owner@x.com
+    _, headers = await _logged_in_email_user(db_session, redis)  # already owns owner@x.com
     res = await client.post("/api/v1/auth/contacts/resend", headers=headers,
                             json={"type": "email", "value": "second@x.com"})
     assert res.status_code == 409

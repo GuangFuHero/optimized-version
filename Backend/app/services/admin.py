@@ -5,20 +5,29 @@ Same flat-service style as station.py (T117). Raises AdminNotFoundError / AdminC
 instead of a blanket 400 (ADR-032).
 """
 
+import json
+import logging
 from types import SimpleNamespace
 
+from fastapi import HTTPException, status
+from redis.exceptions import RedisError
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.context import request_client_ip, request_identity
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, scope_filter
+from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.rbac import Role, UserPermissionAssign, UserRoleAssign
 from app.models.team import Team
 from app.repositories.auth_repository import role_repository, user_repository
+from app.repositories.session_repository import SessionRepository
 from app.repositories.team_repository import team_repository
 from app.services.authz import require_scope
 from app.services.notification_service import NotificationService
+
+logger = logging.getLogger(__name__)
 
 SUPER_ADMIN_ROLE_NAME = "super_admin"
 # Joining a team means being granted a role in it (ADR-072); `member` is the least-privileged
@@ -236,6 +245,117 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
     await db.commit()
     await db.refresh(target)
     return target
+
+
+async def _holds_super_admin(db: AsyncSession, user_uuid: str) -> bool:
+    """Whether `user_uuid` holds the super_admin role (in any team)."""
+    return (
+        await db.execute(
+            select(UserRoleAssign.user_uuid)
+            .join(Role, Role.uuid == UserRoleAssign.role_uuid)
+            .where(
+                UserRoleAssign.user_uuid == user_uuid,
+                Role.name == SUPER_ADMIN_ROLE_NAME,
+            )
+            .limit(1)
+        )
+    ).first() is not None
+
+
+def _record_session_revocation(db: AsyncSession, *, actor: User, target: User, revoked: int) -> None:
+    """Write the audit row for a kick (ADR-191).
+
+    Every other admin action leaves a trail because it mutates a table and the audit trigger
+    fires. This one touches no table — the sessions live in Redis — so the row has to be
+    written by hand or there is no record anywhere of WHO signed a user out. That is exactly
+    the action a reader needs to reconstruct: ADR-181 requires `Scope.ALL` because the RBAC
+    matrix is editable at runtime, and a grant change followed by a kick is the sequence that
+    has to be answerable afterwards.
+
+    Shaped like a trigger row on purpose (`table_name` = the table the target lives in,
+    `row_id` = the target) so "what happened to this user" is one query, not two. `action`
+    is REVOKE_SESSIONS rather than one of the three DML verbs because it is not a DML event
+    and must not be counted as one.
+
+    Actor, IP and identity snapshot come from the same request contextvars the trigger reads,
+    so an explicit row and a triggered row attribute the same way.
+    """
+    identity = request_identity.get()
+    db.add(
+        AuditLog(
+            table_name="users",
+            action="REVOKE_SESSIONS",
+            row_id=target.uuid,
+            new_values={"revoked_sessions": revoked},
+            user_uuid=actor.uuid,
+            client_ip=request_client_ip.get(),
+            context=json.loads(identity) if identity else None,
+        )
+    )
+
+
+async def revoke_user_sessions(db: AsyncSession, redis, *, actor: User, user_uuid: str) -> int:
+    """End every session the target holds; returns how many were revoked (ADR-103/181/191).
+
+    Checkpoint 1 only, on `user.edit` at `Scope.ALL`. There is no meaningful checkpoint 2
+    here: since feature 010 a user has no single team (membership is whichever teams their
+    grants name), so there is no team on the target to scope against — which is exactly why
+    the scope has to be checked here instead. Without it every narrower grant would behave
+    as `all`, and the RBAC matrix is editable at runtime, so today's seed (`user.edit` on
+    `super_admin` alone) is not a property this function can lean on (ADR-181).
+
+    Two targets are refused outright (ADR-191): yourself, because signing yourself out is
+    `/auth/logout-all` and routing it through an admin capability only makes the audit trail
+    read as an administrative action against another account; and a super_admin, because
+    holding `user.edit` at `all` would otherwise be enough to keep the platform's highest
+    role permanently locked out of its own console.
+
+    Idempotent by design — a target with nothing live still succeeds, because the caller is
+    asking for the end state "this person has no live sessions", not for an event.
+    """
+    scope = await require_scope(actor, Perm.USER_EDIT, db)
+    if scope != Scope.ALL:
+        # Without a checkpoint 2 to narrow it, any grant would reach every user on the
+        # platform — a `user.edit=own` role meant for "edit your own profile" would silently
+        # also mean "sign anyone out" (ADR-181). The RBAC matrix is editable at runtime, so
+        # the seed giving `user.edit` to super_admin alone is not something this endpoint
+        # can rely on.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
+
+    target = await user_repository.get_by_uuid(db, user_uuid)
+    if target is None:
+        raise AdminNotFoundError("User not found")
+    if str(target.uuid) == str(actor.uuid):
+        raise AdminConflictError("Use /auth/logout-all to sign yourself out")
+    if await _holds_super_admin(db, str(target.uuid)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot revoke a super_admin's sessions",
+        )
+
+    repo = SessionRepository(redis)
+    try:
+        revoked = await repo.revoke_all_for_user(str(target.uuid))
+    except RedisError as err:
+        # Every other Redis touch this feature adds fails closed with a handled response;
+        # this one used to raise out of the endpoint as a 500 with a traceback, which tells
+        # the caller nothing and leaves it ambiguous whether any sessions were revoked
+        # (ADR-194).
+        #
+        # The message does not claim nothing was revoked (ADR-222): `revoke_all_for_user`
+        # deletes the sessions one at a time, so a store that goes away partway through
+        # leaves some of them already gone. Saying "none" would be the same ambiguity ADR-194
+        # set out to remove, just stated confidently. Revocation is idempotent, so the honest
+        # answer is also the actionable one: retry.
+        logger.exception("could not revoke sessions for user %s: Redis is unreachable", user_uuid)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Session store is unavailable; the sign-out may be incomplete — retry",
+        ) from err
+
+    _record_session_revocation(db, actor=actor, target=target, revoked=revoked)
+    await db.commit()
+    return revoked
 
 
 async def create_team(

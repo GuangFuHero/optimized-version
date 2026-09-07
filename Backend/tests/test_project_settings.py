@@ -10,7 +10,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.core.permissions import Perm
-from app.core.security import create_access_token
 from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, AUDITED_TABLES, get_audit_trigger_sql
 from app.models.auth import User
 from app.models.project_settings import ProjectSettings
@@ -22,6 +21,7 @@ from app.repositories.config_repository import (
     task_property_config_repository,
 )
 from app.repositories.project_settings_repository import project_settings_repository
+from tests.conftest import auth_headers_for
 
 pytestmark = pytest.mark.asyncio
 
@@ -88,12 +88,22 @@ async def test_config_defaults(db):
 SETTINGS_URL = "/api/v1/admin/project-settings"
 
 
-def _auth_header(user_uuid: str) -> dict:
-    return {"Authorization": f"Bearer {create_access_token(data={'sub': str(user_uuid)})}"}
+async def _auth_header(redis, user_uuid: str, role_uuid=None) -> dict:
+    """Bearer headers backed by a live session, the way production mints them.
+
+    A bare `create_access_token` carries no session (014) and no identity (010): it 401s
+    before the assertion runs, and would resolve to zero grants if it got past that.
+    """
+    return await auth_headers_for(redis, user_uuid, role_uuid)
 
 
-async def _make_project_admin(db) -> str:
-    """Create a user holding project.view + project.edit; return their uuid as a str."""
+async def _make_project_admin(db):
+    """Create a user holding project.view + project.edit; return (uuid, role_uuid) as strs.
+
+    The role's uuid is needed because the token has to name the identity it acts as, and it
+    is captured before the commit: later commits expire the instance (expire_on_commit=True)
+    and reading `.uuid` afterwards is a lazy reload AsyncSession cannot service.
+    """
     role = Role(name="super_admin", kind="platform")
     db.add(role)
     await db.flush()
@@ -107,10 +117,10 @@ async def _make_project_admin(db) -> str:
     user = User(name="Super Admin")
     db.add(user)
     await db.flush()
-    user_uuid = str(user.uuid)
+    user_uuid, role_uuid = str(user.uuid), str(role.uuid)
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     await db.commit()
-    return user_uuid
+    return user_uuid, role_uuid
 
 
 async def _make_plain_user(db) -> str:
@@ -123,22 +133,22 @@ async def _make_plain_user(db) -> str:
     return user_uuid
 
 
-async def test_get_project_settings_is_empty_before_first_write(client, db_session):
+async def test_get_project_settings_is_empty_before_first_write(client, db_session, redis):
     """An unconfigured deployment answers with the empty shape, not a 404."""
-    admin_uuid = await _make_project_admin(db_session)
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
 
-    resp = await client.get(SETTINGS_URL, headers=_auth_header(admin_uuid))
+    resp = await client.get(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid))
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["disaster_types"] == []
     assert resp.json()["uuid"] is None
 
 
-async def test_patch_creates_the_row_when_the_table_is_empty(client, db_session):
+async def test_patch_creates_the_row_when_the_table_is_empty(client, db_session, redis):
     """PATCH is an upsert: the first call creates the deployment's one row."""
-    admin_uuid = await _make_project_admin(db_session)
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
 
-    resp = await client.patch(SETTINGS_URL, headers=_auth_header(admin_uuid), json={
+    resp = await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid), json={
         "name": "花蓮 0816", "disaster_types": ["landslide", "flood"],
     })
 
@@ -148,13 +158,13 @@ async def test_patch_creates_the_row_when_the_table_is_empty(client, db_session)
     assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 1
 
 
-async def test_repeated_patch_never_creates_a_second_row(client, db_session):
+async def test_repeated_patch_never_creates_a_second_row(client, db_session, redis):
     """The single-row invariant survives repeated writes (ADR-090)."""
-    admin_uuid = await _make_project_admin(db_session)
-    await client.patch(SETTINGS_URL, headers=_auth_header(admin_uuid),
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
+    await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
                        json={"name": "花蓮 0816", "disaster_types": ["landslide"]})
 
-    resp = await client.patch(SETTINGS_URL, headers=_auth_header(admin_uuid),
+    resp = await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
                               json={"disaster_types": ["fire"]})
 
     assert resp.status_code == 200, resp.text
@@ -164,36 +174,36 @@ async def test_repeated_patch_never_creates_a_second_row(client, db_session):
     assert resp.json()["disaster_types"] == ["fire"]
 
 
-async def test_reads_are_refused_without_project_view(client, db_session):
+async def test_reads_are_refused_without_project_view(client, db_session, redis):
     """Reading the settings requires project.view — not every logged-in user has it."""
     user_uuid = await _make_plain_user(db_session)
 
-    resp = await client.get(SETTINGS_URL, headers=_auth_header(user_uuid))
+    resp = await client.get(SETTINGS_URL, headers=await _auth_header(redis, user_uuid))
 
     assert resp.status_code == 403, resp.text
 
 
-async def test_writes_are_refused_without_project_edit(client, db_session):
+async def test_writes_are_refused_without_project_edit(client, db_session, redis):
     """Changing the disaster types requires project.edit (ADR-090)."""
     user_uuid = await _make_plain_user(db_session)
 
-    resp = await client.patch(SETTINGS_URL, headers=_auth_header(user_uuid),
+    resp = await client.patch(SETTINGS_URL, headers=await _auth_header(redis, user_uuid),
                               json={"name": "亂改", "disaster_types": ["fire"]})
 
     assert resp.status_code == 403, resp.text
     assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 0
 
 
-async def test_project_settings_changes_are_audited(client, db_session):
+async def test_project_settings_changes_are_audited(client, db_session, redis):
     """project_settings is in AUDITED_TABLES, so edits land in audit_logs (ADR-090)."""
     await db_session.execute(text(AUDIT_TRIGGER_FUNC_SQL))
     await db_session.execute(text(get_audit_trigger_sql("project_settings")))
     await db_session.commit()
-    admin_uuid = await _make_project_admin(db_session)
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
 
-    await client.patch(SETTINGS_URL, headers=_auth_header(admin_uuid),
+    await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
                        json={"name": "花蓮 0816", "disaster_types": ["landslide"]})
-    await client.patch(SETTINGS_URL, headers=_auth_header(admin_uuid),
+    await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
                        json={"disaster_types": ["fire"]})
 
     actions = list(await db_session.scalars(
@@ -211,11 +221,11 @@ async def test_project_settings_is_registered_as_audited():
 # Disaster-type label normalization (ADR-091 補充)
 # ──────────────────────────────────────────────
 
-async def test_settings_disaster_types_are_lowercased_on_write(client, db_session):
+async def test_settings_disaster_types_are_lowercased_on_write(client, db_session, redis):
     """Labels are matched by exact string equality, so casing must not be a mismatch source."""
-    admin_uuid = await _make_project_admin(db_session)
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
 
-    resp = await client.patch(SETTINGS_URL, headers=_auth_header(admin_uuid), json={
+    resp = await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid), json={
         "name": "花蓮 0816", "disaster_types": ["Flood", " LANDSLIDE ", "flood"],
     })
 
@@ -234,15 +244,15 @@ async def test_config_disaster_types_are_lowercased_on_write(db):
     assert cfg.disaster_types == ["flood", "landslide"]
 
 
-async def test_mixed_case_settings_still_match_config(client, db_session):
+async def test_mixed_case_settings_still_match_config(client, db_session, redis):
     """The whole point: a mis-cased setting must not silently blank out the field list."""
-    admin_uuid = await _make_project_admin(db_session)
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
     await station_property_config_repository.upsert(
         db_session, station_type="shelter", property_name="淹水深度", data_type="integer",
         enum_options=None, disaster_types=["flood"],
     )
 
-    await client.patch(SETTINGS_URL, headers=_auth_header(admin_uuid),
+    await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
                        json={"name": "花蓮 0816", "disaster_types": ["Flood"]})
 
     types = await project_settings_repository.get_current_disaster_types(db_session)
@@ -267,7 +277,7 @@ async def test_empty_disaster_types_survives_normalization(db):
 # ──────────────────────────────────────────────
 
 
-async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_session, caplog):
+async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_session, caplog, redis):
     """A typo is accepted, stores cleanly, and empties the forms — say so at write time.
 
     `"floods"` for `"flood"` is exact-equality-different, so every flood-scoped field drops
@@ -275,7 +285,7 @@ async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_
     (ADR-091), so the write still succeeds; what must not happen is it succeeding *silently*
     (ADR-169).
     """
-    admin_uuid = await _make_project_admin(db_session)
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
     db_session.add(StationPropertyConfig(
         station_type="shelter", property_name="淹水深度", data_type="integer",
         disaster_types=["flood"],
@@ -284,7 +294,7 @@ async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_
 
     with caplog.at_level(logging.WARNING):
         resp = await client.patch(
-            SETTINGS_URL, headers=_auth_header(admin_uuid),
+            SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
             json={"name": "花蓮 0816", "disaster_types": ["floods"]},
         )
 
@@ -294,9 +304,9 @@ async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_
     assert any("floods" in r.getMessage() for r in caplog.records), "nothing logged"
 
 
-async def test_a_disaster_type_a_field_uses_warns_about_nothing(client, db_session):
+async def test_a_disaster_type_a_field_uses_warns_about_nothing(client, db_session, redis):
     """The warning has to stay quiet when the label is right, or it is noise."""
-    admin_uuid = await _make_project_admin(db_session)
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
     db_session.add(StationPropertyConfig(
         station_type="shelter", property_name="淹水深度", data_type="integer",
         disaster_types=["flood"],
@@ -304,19 +314,19 @@ async def test_a_disaster_type_a_field_uses_warns_about_nothing(client, db_sessi
     await db_session.commit()
 
     resp = await client.patch(
-        SETTINGS_URL, headers=_auth_header(admin_uuid),
+        SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
         json={"name": "花蓮 0816", "disaster_types": ["flood"]},
     )
 
     assert resp.json()["warnings"] == []
 
 
-async def test_configuring_the_disaster_before_its_fields_is_not_an_error(client, db_session):
+async def test_configuring_the_disaster_before_its_fields_is_not_an_error(client, db_session, redis):
     """Warned about, never rejected: setting the disaster up first is a legitimate order."""
-    admin_uuid = await _make_project_admin(db_session)
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
 
     resp = await client.patch(
-        SETTINGS_URL, headers=_auth_header(admin_uuid),
+        SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
         json={"name": "花蓮 0816", "disaster_types": ["landslide"]},
     )
 
@@ -325,9 +335,9 @@ async def test_configuring_the_disaster_before_its_fields_is_not_an_error(client
     assert await project_settings_repository.get_current_disaster_types(db_session) == ["landslide"]
 
 
-async def test_one_patch_reads_the_settings_row_once(client, db_session, monkeypatch):
+async def test_one_patch_reads_the_settings_row_once(client, db_session, monkeypatch, redis):
     """The service already read the row to validate `name`; upsert must not read it again."""
-    admin_uuid = await _make_project_admin(db_session)
+    admin_uuid, role_uuid = await _make_project_admin(db_session)
     db_session.add(ProjectSettings(name="花蓮 0816"))
     await db_session.commit()
     calls = []
@@ -340,7 +350,7 @@ async def test_one_patch_reads_the_settings_row_once(client, db_session, monkeyp
     monkeypatch.setattr(project_settings_repository, "get_singleton", counting)
 
     resp = await client.patch(
-        SETTINGS_URL, headers=_auth_header(admin_uuid), json={"started_at": None}
+        SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid), json={"started_at": None}
     )
 
     assert resp.status_code == 200, resp.text

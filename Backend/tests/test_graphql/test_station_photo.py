@@ -33,6 +33,7 @@ from app.models.auth import User
 from app.models.photo import Photo
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.repositories.session_repository import SessionRepository
 from tests.test_graphql.conftest import auth_header, test_db
 
 CREATE_STATION = """
@@ -95,8 +96,11 @@ async def _detach(client, token: str, photo_uuid: str):
     return resp.json()
 
 
-async def _make_user_with_grants(grants: dict[Perm, str], *, team_uuid: str | None = None):
+async def _make_user_with_grants(redis, grants: dict[Perm, str], *, team_uuid: str | None = None):
     """Create a user holding a fresh role with exactly `grants`, and a token acting as it.
+
+    The token is backed by a live session (feature 014): `get_current_user` refuses one whose
+    `session:{sid}` it cannot find, so a token minted without it authenticates nothing.
 
     `team_uuid` used to be a column on the user. Since identity switching it is a property of
     the grant (ADR-072/073), so a caller who needs a team gets a team-kind role bound to it —
@@ -127,16 +131,20 @@ async def _make_user_with_grants(grants: dict[Perm, str], *, team_uuid: str | No
                 )
             )
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
+        # Session and token must name the SAME identity (ADR-195): the session record is the
+        # source of truth, and a token that disagrees reads as one a switch has replaced.
+        act = encode_act(str(role.uuid), str(team_uuid) if team_uuid is not None else None)
+        sid, _ = await SessionRepository(redis).create_session(str(user.uuid), "test", act=act)
         return str(user.uuid), create_access_token(
-            data={"sub": str(user.uuid)},
-            act=encode_act(str(role.uuid), str(team_uuid) if team_uuid is not None else None),
+            data={"sub": str(user.uuid)}, sid=sid, act=act,
         )
 
 
 @pytest_asyncio.fixture
-async def contributor_auth():
+async def contributor_auth(redis):
     """A user who can attach photos but holds no station.review — the plain-citizen shape."""
     return await _make_user_with_grants(
+        redis,
         {Perm.STATION_ADD: "all", Perm.STATION_CONTRIBUTE: "all", Perm.STATION_VIEW: "all"}
     )
 
@@ -257,7 +265,7 @@ async def test_detach_station_photo_removes_it(client, coordinator_auth, contrib
 
 
 @pytest.mark.asyncio
-async def test_detach_station_photo_denied_without_review(client, contributor_auth):
+async def test_detach_station_photo_denied_without_review(client, contributor_auth, redis):
     """Being able to add a photo does not imply being able to delete *someone else's*.
 
     Both accounts here hold the capability every registered account gets, which is enough to
@@ -268,6 +276,7 @@ async def test_detach_station_photo_denied_without_review(client, contributor_au
     """
     _, uploader_token = contributor_auth
     _, other_token = await _make_user_with_grants(
+        redis,
         {Perm.STATION_ADD: "all", Perm.STATION_CONTRIBUTE: "all", Perm.STATION_VIEW: "all"}
     )
     station_uuid = await _create_station(client, uploader_token)
@@ -312,7 +321,7 @@ async def test_detach_station_photo_uploader_removes_own(client, contributor_aut
 
 @pytest.mark.asyncio
 async def test_detach_station_photo_zone_scoped_reviewer_outside_zone(
-    client, coordinator_auth, team_assigned_to_zone
+    client, coordinator_auth, team_assigned_to_zone, redis
 ):
     """A moderator limited to their team's area can only remove photos inside it.
 
@@ -323,6 +332,7 @@ async def test_detach_station_photo_zone_scoped_reviewer_outside_zone(
     """
     _, coord_token = coordinator_auth
     _, reviewer_token = await _make_user_with_grants(
+        redis,
         {Perm.STATION_REVIEW: "zone", Perm.STATION_VIEW: "all"}, team_uuid=team_assigned_to_zone
     )
 

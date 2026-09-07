@@ -1,24 +1,24 @@
 """Endpoint tests for SSO-only users setting a first password."""
 import pytest
 
-from app.core.security import create_access_token
 from app.services.auth_account import create_account
+from tests.conftest import auth_headers_for
 
 SALT = "abc"
 
 
-async def _google_user(db_session):
+async def _google_user(db_session, redis):
     user = await create_account(
         db_session, name="G", provider="google", provider_subject="g-sp-1",
         contact_type="email", value="g@x.com")
-    headers = {"Authorization": f"Bearer {create_access_token(data={'sub': str(user.uuid)})}"}
+    headers = await auth_headers_for(redis, user.uuid)
     return user, headers
 
 
 @pytest.mark.asyncio
-async def test_set_password_then_login_works(client, db_session):
+async def test_set_password_then_login_works(client, db_session, redis):
     """An SSO-only user can set a first password and then log in with it."""
-    _, headers = await _google_user(db_session)
+    _, headers = await _google_user(db_session, redis)
     res = await client.post("/api/v1/auth/set-password", headers=headers,
                             json={"password": "hashedpw", "salt_frontend": SALT})
     assert res.status_code == 204
@@ -29,9 +29,9 @@ async def test_set_password_then_login_works(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_salt_switches_fake_to_real(client, db_session):
+async def test_salt_switches_fake_to_real(client, db_session, redis):
     """Setting a password switches the salt endpoint from the deterministic fake to the real salt."""
-    _, headers = await _google_user(db_session)
+    _, headers = await _google_user(db_session, redis)
     before = (await client.get("/api/v1/auth/salt/g@x.com")).json()["salt_frontend"]
     await client.post("/api/v1/auth/set-password", headers=headers,
                       json={"password": "hashedpw", "salt_frontend": SALT})
@@ -40,9 +40,9 @@ async def test_salt_switches_fake_to_real(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_set_password_twice_409(client, db_session):
+async def test_set_password_twice_409(client, db_session, redis):
     """Setting a password a second time is rejected with 409."""
-    _, headers = await _google_user(db_session)
+    _, headers = await _google_user(db_session, redis)
     await client.post("/api/v1/auth/set-password", headers=headers,
                       json={"password": "hashedpw", "salt_frontend": SALT})
     res = await client.post("/api/v1/auth/set-password", headers=headers,
