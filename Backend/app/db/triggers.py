@@ -47,6 +47,7 @@ DECLARE
     user_id UUID := NULL;
     ip_addr VARCHAR := NULL;
     r_id UUID := NULL;
+    ctx JSONB := NULL;
 BEGIN
     -- Resolve context variables
     BEGIN
@@ -59,6 +60,15 @@ BEGIN
         ip_addr := NULLIF(current_setting('app.client_ip', true), '');
     EXCEPTION WHEN OTHERS THEN
         ip_addr := NULL;
+    END;
+
+    -- The identity the actor was exercising (feature 010, ADR-076). Role and team NAMES are
+    -- snapshotted by the application before this runs, because a role can be renamed or hard
+    -- deleted and a uuid alone would not resolve when the trail is read later.
+    BEGIN
+        ctx := NULLIF(current_setting('app.active_identity', true), '')::JSONB;
+    EXCEPTION WHEN OTHERS THEN
+        ctx := NULL;
     END;
 
     -- Extract row identifier and states, redacting sensitive password_hash credentials
@@ -83,7 +93,8 @@ BEGIN
         old_values,
         new_values,
         user_uuid,
-        client_ip
+        client_ip,
+        context
     ) VALUES (
         gen_random_uuid(),
         TG_TABLE_NAME,
@@ -92,7 +103,8 @@ BEGIN
         old_val,
         new_val,
         user_id,
-        ip_addr
+        ip_addr,
+        ctx
     );
 
     IF TG_OP = 'DELETE' THEN

@@ -53,6 +53,19 @@ def widest(scopes) -> Scope:
     return result
 
 
+def active_team(actor) -> str | None:
+    """The team of the actor's active identity, or None (platform identity / no identity).
+
+    Replaces every former read of `users.team_uuid`, which no longer exists: which team an
+    actor speaks for is now a property of the identity they are currently acting as, not of
+    their account (ADR-072/074). `getattr` rather than attribute access because a `User`
+    loaded outside a request has no identity attached, and that must resolve to None (all
+    team and zone scopes false) rather than raise.
+    """
+    identity = getattr(actor, "active_identity", None)
+    return identity.team_uuid if identity else None
+
+
 async def in_scope(scope: Scope, *, actor: User, resource, db: AsyncSession) -> bool:
     """Checkpoint 2: does `resource` fall within `scope` for `actor`?
 
@@ -76,22 +89,20 @@ async def in_scope(scope: Scope, *, actor: User, resource, db: AsyncSession) -> 
 
     if scope == Scope.TEAM:
         team_uuid = getattr(resource, "team_uuid", None)
-        return (
-            team_uuid is not None
-            and actor.team_uuid is not None
-            and str(team_uuid) == str(actor.team_uuid)
-        )
+        mine = active_team(actor)
+        return team_uuid is not None and mine is not None and str(team_uuid) == str(mine)
 
     if scope == Scope.ZONE:
         geometry = getattr(resource, "geometry", None)
-        if geometry is None or actor.team_uuid is None:
+        mine = active_team(actor)
+        if geometry is None or mine is None:
             return False
         count = await db.scalar(
             select(func.count())
             .select_from(WorkZone)
             .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == WorkZone.uuid)
             .where(
-                TeamZoneAssign.team_uuid == actor.team_uuid,
+                TeamZoneAssign.team_uuid == mine,
                 WorkZone.delete_at.is_(None),
                 func.ST_Contains(WorkZone.geometry, geometry),
             )
@@ -121,22 +132,24 @@ def scope_filter(scope: Scope, *, actor: User, model) -> list:
     if scope == Scope.TEAM:
         # A model may declare its own team-scope boundary column (ADR-053); default is
         # team_uuid. Team declares "uuid" because a team IS its own boundary.
-        if not actor.team_uuid:
+        mine = active_team(actor)
+        if not mine:
             return [false()]
         attr = getattr(model, "__team_scope_attr__", "team_uuid")
         if not hasattr(model, attr):
             return [false()]
-        return [getattr(model, attr) == actor.team_uuid]
+        return [getattr(model, attr) == mine]
 
     if scope == Scope.ZONE:
         # Fall back to false() when the model has no geometry column (ADR-053), rather than
         # raising AttributeError — e.g. Team, which is non-geographic.
-        if not actor.team_uuid or not hasattr(model, "geometry"):
+        mine = active_team(actor)
+        if not mine or not hasattr(model, "geometry"):
             return [false()]
         my_zones = (
             select(WorkZone.uuid)
             .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == WorkZone.uuid)
-            .where(TeamZoneAssign.team_uuid == actor.team_uuid, WorkZone.delete_at.is_(None))
+            .where(TeamZoneAssign.team_uuid == mine, WorkZone.delete_at.is_(None))
         )
         return [
             exists(

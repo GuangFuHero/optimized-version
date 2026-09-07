@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, scope_filter
 from app.models.auth import User
-from app.models.rbac import Role, UserRoleAssign
+from app.models.rbac import Role, UserPermissionAssign, UserRoleAssign
 from app.models.team import Team
 from app.repositories.auth_repository import role_repository, user_repository
 from app.repositories.team_repository import team_repository
@@ -21,6 +21,9 @@ from app.services.authz import require_scope
 from app.services.notification_service import NotificationService
 
 SUPER_ADMIN_ROLE_NAME = "super_admin"
+# Joining a team means being granted a role in it (ADR-072); `member` is the least-privileged
+# one, so it is what an add-without-a-role means.
+DEFAULT_TEAM_ROLE = "member"
 
 
 class AdminNotFoundError(ValueError):
@@ -69,8 +72,13 @@ async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_nam
     if new_role is None:
         raise AdminNotFoundError(f"Role '{role_name}' not found")
 
-    if new_role.kind == "team" and not target.team_uuid:
-        raise AdminConflictError("User must belong to a team before receiving a team role")
+    # Team roles are granted through /teams/{uuid}/members, where the team is unambiguous:
+    # under feature 010 a team role IS the membership, so granting one without saying which
+    # team is meaningless (ADR-072).
+    if new_role.kind == "team":
+        raise AdminConflictError(
+            "Team roles are granted via POST /admin/teams/{team_uuid}/members"
+        )
 
     existing = (
         await db.execute(
@@ -99,7 +107,9 @@ async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_nam
         await db.delete(row)
     await db.flush()
 
-    assignment = UserRoleAssign(user_uuid=target.uuid, role_uuid=new_role.uuid)
+    assignment = UserRoleAssign(
+        user_uuid=target.uuid, role_uuid=new_role.uuid, team_uuid=None, role_kind=new_role.kind
+    )
     db.add(assignment)
     await db.commit()
     await db.refresh(assignment)
@@ -128,22 +138,25 @@ async def add_team_member(
     target = await user_repository.get_by_uuid(db, user_uuid)
     if target is None:
         raise AdminNotFoundError("User not found")
-    if target.team_uuid and str(target.team_uuid) != str(team.uuid):
-        raise AdminConflictError("User already belongs to a different team")
 
-    target.team_uuid = team.uuid
+    # Granting the team role IS joining the team (ADR-072): membership is no longer a
+    # separate fact, so there is nothing to check about which other teams they belong to —
+    # belonging to several is the point of the feature.
+    role = await role_repository.get_by_name(db, team_role_name or DEFAULT_TEAM_ROLE)
+    if role is None or role.kind != "team":
+        raise AdminNotFoundError(f"Team role '{team_role_name or DEFAULT_TEAM_ROLE}' not found")
 
-    if team_role_name:
-        role = await role_repository.get_by_name(db, team_role_name)
-        if role is None or role.kind != "team":
-            raise AdminNotFoundError(f"Team role '{team_role_name}' not found")
-        await db.execute(
-            delete(UserRoleAssign).where(
-                UserRoleAssign.user_uuid == target.uuid,
-                UserRoleAssign.role_uuid.in_(select(Role.uuid).where(Role.kind == "team")),
-            )
+    # One role per team per user: replace whatever team role they held IN THIS TEAM, leaving
+    # their roles in other teams alone.
+    await db.execute(
+        delete(UserRoleAssign).where(
+            UserRoleAssign.user_uuid == target.uuid,
+            UserRoleAssign.team_uuid == team.uuid,
         )
-        db.add(UserRoleAssign(user_uuid=target.uuid, role_uuid=role.uuid))
+    )
+    db.add(UserRoleAssign(
+        user_uuid=target.uuid, role_uuid=role.uuid, team_uuid=team.uuid, role_kind="team"
+    ))
 
     # Read every attribute we still need BEFORE committing: the session runs with
     # expire_on_commit=True (app/db/session.py), so `team` and `actor` are expired the
@@ -187,14 +200,37 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
     )
 
     target = await user_repository.get_by_uuid(db, user_uuid)
-    if target is None or str(target.team_uuid) != str(team.uuid):
+    if target is None:
+        raise AdminNotFoundError("User is not a member of this team")
+    held = (
+        await db.execute(
+            select(UserRoleAssign.uuid).where(
+                UserRoleAssign.user_uuid == target.uuid,
+                UserRoleAssign.team_uuid == team.uuid,
+            )
+        )
+    ).first()
+    if held is None:
         raise AdminNotFoundError("User is not a member of this team")
 
-    target.team_uuid = None
+    # Leaving a team is revoking every grant scoped to it — that IS the membership now
+    # (ADR-072). Grants in the user's other teams, and their platform grant, are untouched:
+    # platform rows carry a NULL team_uuid, which never matches this predicate.
+    #
+    # Both grant tables, not just the roles (ADR-187). A direct grant bound to this team is
+    # as much a permission in it as a role is, and leaving it behind meant re-adding the
+    # person silently restored it — someone removed from a team and later re-added as a plain
+    # member got their old team.member.manage back, with no one re-granting anything.
     await db.execute(
         delete(UserRoleAssign).where(
             UserRoleAssign.user_uuid == target.uuid,
-            UserRoleAssign.role_uuid.in_(select(Role.uuid).where(Role.kind == "team")),
+            UserRoleAssign.team_uuid == team.uuid,
+        )
+    )
+    await db.execute(
+        delete(UserPermissionAssign).where(
+            UserPermissionAssign.user_uuid == target.uuid,
+            UserPermissionAssign.team_uuid == team.uuid,
         )
     )
     await db.commit()

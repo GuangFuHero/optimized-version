@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
+from app.core.rbac_scopes import active_team
 from app.graphql.scalars import geojson_to_geom
 from app.models.auth import User
 from app.models.team import Team, TeamZoneAssign, WorkZone
@@ -31,9 +32,13 @@ async def _require_gov_zone_authority(db: AsyncSession, actor: User) -> None:
     blocked here — closing the "any NGO admin draws a zone over anywhere + self-assigns it to
     reach raw victim PII" escalation the seed's `zone` scope otherwise allows.
     """
-    if actor.team_uuid is None:
+    # No team on the active identity means a platform identity (super_admin), which the
+    # gov-only rule was never aimed at — same meaning the old `users.team_uuid is None`
+    # carried, now read off the identity instead (ADR-074).
+    mine = active_team(actor)
+    if mine is None:
         return
-    team = await db.scalar(select(Team).where(Team.uuid == actor.team_uuid, Team.delete_at.is_(None)))
+    team = await db.scalar(select(Team).where(Team.uuid == mine, Team.delete_at.is_(None)))
     if team is None or team.type != "gov":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

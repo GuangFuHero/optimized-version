@@ -24,6 +24,12 @@ class AuditLog(Base, UUIDPKMixin):
         UUID(as_uuid=True), nullable=True, comment="操作者使用者 UUID"
     )
     client_ip: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="操作者 IP 位址")
+    # The identity the change was made under, snapshotted at write time (feature 010,
+    # ADR-076). Names are stored, not just uuids: a role can be renamed or hard-deleted, so
+    # a uuid alone may no longer resolve when someone reads the trail months later.
+    context: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True, comment="操作當下的身分快照 (role / team)"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

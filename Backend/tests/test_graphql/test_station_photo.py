@@ -26,6 +26,7 @@ from geoalchemy2.shape import from_shape
 from shapely.geometry import Polygon
 from sqlalchemy import select
 
+from app.core.identity import encode_act
 from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.models.auth import User
@@ -95,10 +96,21 @@ async def _detach(client, token: str, photo_uuid: str):
 
 
 async def _make_user_with_grants(grants: dict[Perm, str], *, team_uuid: str | None = None):
-    """Create a user holding a fresh platform role with exactly `grants`."""
+    """Create a user holding a fresh role with exactly `grants`, and a token acting as it.
+
+    `team_uuid` used to be a column on the user. Since identity switching it is a property of
+    the grant (ADR-072/073), so a caller who needs a team gets a team-kind role bound to it —
+    the CHECK on user_role_assign rejects a platform role carrying a team, and a team role
+    carrying none. The token names that identity in its `act` claim, because grants resolve
+    through the active identity and a token naming none resolves to no grants at all
+    (ADR-068/074).
+    """
     async with test_db() as db:
-        user = User(name=f"photo_{uuid_mod.uuid4().hex[:8]}", team_uuid=team_uuid)
-        role = Role(name=f"photo-role-{uuid_mod.uuid4().hex[:8]}", kind="platform")
+        user = User(name=f"photo_{uuid_mod.uuid4().hex[:8]}")
+        role = Role(
+            name=f"photo-role-{uuid_mod.uuid4().hex[:8]}",
+            kind="team" if team_uuid is not None else "platform",
+        )
         db.add_all([user, role])
         await db.flush()
 
@@ -114,8 +126,11 @@ async def _make_user_with_grants(grants: dict[Perm, str], *, team_uuid: str | No
                     role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
                 )
             )
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
-        return str(user.uuid), create_access_token(data={"sub": str(user.uuid)})
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team_uuid))
+        return str(user.uuid), create_access_token(
+            data={"sub": str(user.uuid)},
+            act=encode_act(str(role.uuid), str(team_uuid) if team_uuid is not None else None),
+        )
 
 
 @pytest_asyncio.fixture
