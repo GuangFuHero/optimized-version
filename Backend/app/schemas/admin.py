@@ -1,19 +1,60 @@
 """Pydantic schemas for the minimal admin API (list users, assign role, manage team members)."""
 
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
 
+class IdentitySummary(BaseModel):
+    """One identity a user may act as: a role, and the team it applies to if team-kind."""
+
+    role_uuid: UUID
+    role: str
+    team_uuid: UUID | None = None
+    team: str | None = None
+
+
 class AdminUserListItem(BaseModel):
-    """One row of the admin user list: identity plus current role/team assignment."""
+    """One row of the admin user list.
+
+    `identities` replaces the old single-valued `team_uuid` / `team_role`: a user can now
+    hold a role in several teams at once, so one column cannot describe them (ADR-073).
+    """
 
     uuid: UUID
     name: str
-    team_uuid: UUID | None
     platform_role: str | None
-    team_role: str | None
+    identities: list[IdentitySummary] = Field(default_factory=list)
+    last_login_at: datetime | None = None
+    # Refreshed on refresh-token rotation, so up to one access-token TTL (15 min) stale (ADR-093).
+    last_activity_at: datetime | None = None
+    # Live count of Redis sessions. `None` means "could not be read" (Redis unavailable) —
+    # never 0, which would read as "signed out everywhere" (ADR-094).
+    active_session_count: int | None = None
+
+
+class ProjectSettingsResponse(BaseModel):
+    """The deployment's single project settings row, or its unset shape before first write."""
+
+    uuid: UUID | None = None
+    name: str | None = None
+    disaster_types: list[str] = Field(default_factory=list)
+    started_at: datetime | None = None
+    # Advisory only, and only on write: a saved disaster type that no configured dynamic
+    # field is scoped to (ADR-169). The write succeeded either way — this is what tells an
+    # operator a typo emptied the forms instead of leaving them to find out from a rescue
+    # form that came back missing its fields.
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ProjectSettingsUpdate(BaseModel):
+    """PATCH body: every field optional; omitted fields keep their stored value."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    disaster_types: list[str] | None = None
+    started_at: datetime | None = None
 
 
 class AssignRoleRequest(BaseModel):

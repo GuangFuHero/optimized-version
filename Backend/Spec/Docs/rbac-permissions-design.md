@@ -87,7 +87,7 @@
 ### 3.3 PII 遮罩（ADR-029/048/068）
 `ticket.view_pii` 不在 scope 內時，聯絡欄位回傳遮罩值（看起來像「沒填」），逐角色判定：`user`=own（只看自己的單原值）、team 角色=zone、`data_auditor`/`super_admin`=all、guest=一律遮罩。
 
-`stations` 也有自己的 `contact_name`/`contact_email`/`contact_phone`（**獨立欄位，與 `tickets` 的同名欄位無關**，ADR-068），由 `station.view_pii` 以完全相同的機制與逐角色 scope 遮罩——`app/graphql/geo/types.py:StationType` 的三個 field resolver 與 `TicketType` 對齊，共用 `app/graphql/masking.py`。判定表同上。
+`stations` 也有自己的 `contact_name`/`contact_email`/`contact_phone`（**獨立欄位，與 `tickets` 的同名欄位無關**，ADR-182），由 `station.view_pii` 以完全相同的機制與逐角色 scope 遮罩——`app/graphql/geo/types.py:StationType` 的三個 field resolver 與 `TicketType` 對齊，共用 `app/graphql/masking.py`。判定表同上。
 
 > 遮罩只擋讀取路徑。這些欄位仍會以明文進 `audit_logs`（`stations`/`tickets` 都是 audited table，trigger 只濾 `password_hash`）——見 PR #31 review LOW 7，待未來的 audit-log PII 政策統一處理。
 

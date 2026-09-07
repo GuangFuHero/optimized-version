@@ -44,7 +44,9 @@ async def create_account(
     # (same tradeoff the old Login-User-group assignment had) — documented, not fixed here.
     role = await role_repository.get_by_name(db, name=DEFAULT_PLATFORM_ROLE)
     if role:
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+        db.add(UserRoleAssign(
+            user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None, role_kind="platform"
+        ))
     await db.commit()
     await db.refresh(user)
     return user

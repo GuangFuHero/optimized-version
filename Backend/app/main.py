@@ -4,7 +4,6 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
-import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,7 +15,7 @@ from app.core import security
 from app.core.api_errors import ApiError
 from app.core.config import settings
 from app.core.context import AuditContextMiddleware
-from app.core.redis import get_redis
+from app.core.redis import create_redis_client, get_redis
 from app.graphql.router import graphql_router
 
 # Route the app's loggers (e.g. the app.email / app.sms console senders) to stdout at INFO so dev
@@ -36,7 +35,7 @@ if not _app_logger.handlers:
 async def lifespan(app: FastAPI):
     """Manage application startup and shutdown lifecycle."""
     # --- startup (previously @app.on_event("startup")) ---
-    app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=False)
+    app.state.redis = create_redis_client(settings.REDIS_URL)
     yield
     # --- shutdown (previously @app.on_event("shutdown")) ---
     if hasattr(app.state, "redis"):

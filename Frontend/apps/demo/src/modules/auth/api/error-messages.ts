@@ -29,6 +29,14 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   password_incorrect: '目前密碼不正確，請重新輸入。',
   credentials_invalid: '帳號或密碼不正確。',
   refresh_token_invalid: '登入已失效，請重新登入。',
+  session_expired: '登入已失效，請重新登入。',
+  // Says the user is still signed in — the generic fallback would let someone walk away from a
+  // shared machine believing the logout went through.
+  session_store_unavailable: '登出失敗，你目前仍在登入狀態，請稍後再試一次。',
+
+  // Identity switching
+  identity_revoked: '你目前使用的身分已被移除，請重新登入。',
+  identity_not_held: '此身分已不可用，請重新整理頁面後再試。',
 
   // Social login
   sso_token_invalid: '第三方登入驗證失敗，請重新試一次。',

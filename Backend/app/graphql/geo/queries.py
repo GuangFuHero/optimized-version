@@ -12,12 +12,14 @@ import strawberry
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
+from app.core.search import normalize_query, search_timeout
 from app.graphql.context import check_permission
 from app.graphql.geo.types import (
     BoundsInput,
     ClosureAreaConnection,
     ClosureAreaType,
     StationConnection,
+    StationOperationalStatus,
     StationType,
 )
 from app.graphql.shared import PageInfo
@@ -34,6 +36,8 @@ class GeoQuery:
         self, info: strawberry.types.Info,
         bounds: BoundsInput | None = None,
         station_type: str | None = None,
+        operational_status: StationOperationalStatus | None = None,
+        q: str | None = None,
         skip: int = 0, limit: int = 50,
     ) -> StationConnection:
         """List stations within an optional geographic bounding box.
@@ -45,6 +49,13 @@ class GeoQuery:
             info: Strawberry resolver context providing the database session.
             bounds: Optional lat/lng bbox to spatially filter results via ST_Intersects.
             station_type: Optional type filter (e.g. 'shelter', 'supply', 'medical').
+            operational_status: Optional filter, one of the StationOperationalStatus
+                enum values. An enum rather than a str so a typo is a GraphQL validation
+                error instead of a silently-empty result set.
+            q: Optional keyword filter over the station's own name and description, its
+                properties, and its address — including the full secondary-location
+                address and pole_id (ADR-077/079/080). 2–50 characters; outside that range
+                raises. Composes with every other filter rather than replacing them.
             skip: Pagination offset.
             limit: Max results per page (default 50).
 
@@ -52,15 +63,23 @@ class GeoQuery:
             StationConnection with items and total count / pagination metadata.
         """
         db = info.context["db"]
+        status_value = operational_status.value if operational_status is not None else None
         scope = await check_permission(info, Perm.STATION_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Station)
-        total = await station_repository.count_active(
-            db, bounds=bounds, station_type=station_type, extra_filters=extra_filters
-        )
-        items = await station_repository.list_active(
-            db, bounds=bounds, station_type=station_type, skip=skip, limit=limit,
-            extra_filters=extra_filters,
-        )
+        # One ceiling for the whole request, not one per statement (ADR-176). count and
+        # list are two halves of the same search, and search_timeout() is nesting-aware
+        # (ADR-157): the windows the repositories open inside see depth > 0 and skip their
+        # own set_config/RESET, so this costs two round-trips where it used to cost six.
+        async with search_timeout(db, normalize_query(q)):
+            total = await station_repository.count_active(
+                db, bounds=bounds, station_type=station_type, q=q,
+                operational_status=status_value, extra_filters=extra_filters,
+            )
+            items = await station_repository.list_active(
+                db, bounds=bounds, station_type=station_type, q=q,
+                operational_status=status_value, skip=skip, limit=limit,
+                extra_filters=extra_filters,
+            )
         return StationConnection(
             items=[StationType.from_model(m) for m in items],
             page_info=PageInfo(

@@ -34,6 +34,21 @@ class ErrorCode(StrEnum):
     PASSWORD_INCORRECT = "password_incorrect"
     CREDENTIALS_INVALID = "credentials_invalid"
     REFRESH_TOKEN_INVALID = "refresh_token_invalid"
+    # The session died out from under a live client (revoked elsewhere, or expired). Remedy:
+    # sign in again; everything will be as it was.
+    SESSION_EXPIRED = "session_expired"
+    # Logout could not reach the session store, so the caller is still signed in. Distinct from
+    # every other failure because the generic "something went wrong" copy would let a user walk
+    # away from a shared machine believing they signed out.
+    SESSION_STORE_UNAVAILABLE = "session_store_unavailable"
+
+    # Identity switching (multi-team membership)
+    # The acting identity was revoked while in use. Unlike SESSION_EXPIRED, signing in again
+    # lands the user somewhere different — their default identity, not the one they had.
+    IDENTITY_REVOKED = "identity_revoked"
+    # A switch may only move between identities already held; the client's list was stale.
+    # Remedy: refresh the identity list, not the sign-in.
+    IDENTITY_NOT_HELD = "identity_not_held"
 
     # Social login
     SSO_TOKEN_INVALID = "sso_token_invalid"
