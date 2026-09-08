@@ -56,6 +56,7 @@ async def test_add_contact_collision_409(client, db_session, redis):
     res = await client.post("/api/v1/auth/contacts", headers=headers,
                             json={"type": "phone", "value": "0912345678", **STEP_UP})
     assert res.status_code == 409
+    assert res.json()["code"] == "identifier_taken"
 
 
 @pytest.mark.asyncio

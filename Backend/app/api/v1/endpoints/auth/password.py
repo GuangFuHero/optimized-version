@@ -1,10 +1,11 @@
 """Password endpoints: change, first-set, forgot, and logged-out reset."""
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.api_errors import ApiError, ErrorCode
 from app.core.redis import get_redis
 from app.messaging.email import (
     build_password_reset_email,
@@ -60,10 +61,11 @@ async def change_password(
     user_uuid = str(current_user.uuid)
     identity = await identity_repository.get_password_identity(db, user_uuid)
     if identity is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail="No password set; use /auth/set-password")
+        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.PASSWORD_NOT_SET,
+                       detail="No password set; use /auth/set-password")
     if not security.verify_password(body.old_password, identity.password_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Incorrect current password")
+        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.PASSWORD_INCORRECT,
+                       detail="Incorrect current password")
     new_hash = security.get_password_hash(body.new_password, body.salt_frontend)
     await identity_repository.update(db, db_obj=identity, obj_in={"password_hash": new_hash})
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
@@ -101,17 +103,22 @@ async def set_password(
     """
     user_uuid = str(current_user.uuid)
     if await identity_repository.get_password_identity(db, user_uuid) is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT,
-                            detail="Password already set; use /auth/change-password")
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_ALREADY_SET,
+                       detail="Password already set; use /auth/change-password")
     try:
         await contact_service.require_step_up_for_first_password(
             db, redis, actor=current_user, step_up=body.step_up,
             email_sender=email_sender, sms_sender=sms_sender, verifiers=verifiers,
         )
     except StepUpFailed as err:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=str(err)) from err
-    except (StepUpRequired, ContactNotFound) as err:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)) from err
+        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.STEP_UP_INVALID,
+                       detail=str(err)) from err
+    except StepUpRequired as err:
+        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.STEP_UP_REQUIRED,
+                       detail=str(err)) from err
+    except ContactNotFound as err:
+        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.NO_PROOF_CHANNEL,
+                       detail=str(err)) from err
 
     password_hash = security.get_password_hash(body.password, body.salt_frontend)
     try:
@@ -120,7 +127,8 @@ async def set_password(
         })
     except IntegrityError as err:
         await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Password already set") from err
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_ALREADY_SET,
+                       detail="Password already set") from err
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
     await contact_service.notify_password_set(
         db, user_uuid=user_uuid, email_sender=email_sender, sms_sender=sms_sender,
@@ -152,7 +160,8 @@ async def forgot_password(
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid identifier") from err
+        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID,
+                       detail="Invalid identifier") from err
     user = await contact_repository.get_user_by_contact(db, type_=body.type, value=ident)
     if user is None:
         return generic
@@ -181,7 +190,8 @@ async def reset_password(
         redis=Depends(get_redis),
 ):
     """Complete a logged-out reset: consume the code, write the new password, revoke all sessions."""
-    bad = HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code")
+    bad = ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID,
+                   detail="Invalid or expired code")
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:

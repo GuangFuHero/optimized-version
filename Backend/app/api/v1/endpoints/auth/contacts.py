@@ -5,11 +5,12 @@ HTTP status codes. The branch-dense security logic (step-up, login-channel guard
 the service so it can be tested without going through HTTP.
 """
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.api_errors import ApiError, ErrorCode
 from app.core.redis import get_redis
 from app.messaging.email import build_contact_verification_email, get_email_sender
 from app.messaging.sms import build_verification_sms, get_sms_sender
@@ -31,19 +32,34 @@ from .deps import _normalize_identifier, get_rate_limiter
 
 router = APIRouter()
 
-# Each use-case error maps to exactly one status code (ADR-086/088).
-_STATUS_BY_ERROR = {
-    ContactConflict: status.HTTP_409_CONFLICT,
-    LastLoginChannel: status.HTTP_409_CONFLICT,
-    ContactNotFound: status.HTTP_404_NOT_FOUND,
-    StepUpRequired: status.HTTP_422_UNPROCESSABLE_ENTITY,
-    StepUpFailed: status.HTTP_401_UNAUTHORIZED,
+# Each use-case error maps to exactly one status code AND one machine-readable code
+# (ADR-086/088; the code half is PR #41's contract, adopted here in ADR-237).
+#
+# `StepUpRequired` earns its own code rather than sharing 422 with a malformed identifier: it
+# is not a mistake the caller made. The backend has just delivered a proof code and wants the
+# same call again carrying it, so a client that cannot tell the two apart shows an error where
+# it should show a field — which is the whole reason #41 stopped clients matching on prose.
+# Builders rather than (status, code) pairs on purpose: `tests/test_error_codes.py` checks
+# statically that every `ApiError(...)` names an `ErrorCode` member literally, which a lookup
+# through a variable defeats. The guard is right — a code assembled at runtime is exactly how a
+# typo ships as the contract — so the table holds calls it can read.
+_ERROR_MAP = {
+    ContactConflict: lambda d: ApiError(
+        status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN, detail=d),
+    LastLoginChannel: lambda d: ApiError(
+        status.HTTP_409_CONFLICT, ErrorCode.LAST_LOGIN_CHANNEL, detail=d),
+    ContactNotFound: lambda d: ApiError(
+        status.HTTP_404_NOT_FOUND, ErrorCode.NO_PROOF_CHANNEL, detail=d),
+    StepUpRequired: lambda d: ApiError(
+        status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.STEP_UP_REQUIRED, detail=d),
+    StepUpFailed: lambda d: ApiError(
+        status.HTTP_401_UNAUTHORIZED, ErrorCode.STEP_UP_INVALID, detail=d),
 }
 
 
-def _as_http(err: Exception) -> HTTPException:
-    """Translate a contact use-case error into its HTTP equivalent."""
-    return HTTPException(status_code=_STATUS_BY_ERROR[type(err)], detail=str(err))
+def _as_http(err: Exception) -> ApiError:
+    """Translate a contact use-case error into its HTTP equivalent, carrying its code."""
+    return _ERROR_MAP[type(err)](str(err))
 
 
 def _normalized_or_422(type_: str, value: str) -> str:
@@ -51,8 +67,9 @@ def _normalized_or_422(type_: str, value: str) -> str:
     try:
         return _normalize_identifier(type_, value)
     except ValueError as err:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid identifier"
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID,
+            detail="Invalid identifier",
         ) from err
 
 
@@ -104,7 +121,8 @@ async def verify_contact(
     try:
         ident = _normalize_identifier(body.type, body.value)
     except ValueError as err:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid or expired code") from err
+        raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID,
+                       detail="Invalid or expired code") from err
     try:
         replaced = await contact_service.commit_contact_change(
             db, redis, actor=current_user, type_=body.type, value=ident, code=body.code,
@@ -114,10 +132,12 @@ async def verify_contact(
     except ContactConflict as err:
         raise _as_http(err) from err
     except ContactNotFound as err:  # a bad/expired code reads as 400, not 404
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
+        raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.CODE_INVALID,
+                       detail=str(err)) from err
     except IntegrityError as err:  # rare race: value claimed between the check and the insert
         await db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use") from err
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN,
+                       detail="Already in use") from err
     return {"detail": "Contact replaced" if replaced else "Contact added"}
 
 
@@ -140,7 +160,8 @@ async def delete_contact(
     proof was supplied and answers 422 — the failure mode is closed, not open (ADR-161).
     """
     if type not in ("email", "phone"):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid contact type")
+        raise ApiError(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.IDENTIFIER_INVALID,
+                       detail="Invalid contact type")
     try:
         await contact_service.delete_contact(
             db, redis, actor=current_user, type_=type,
@@ -166,11 +187,13 @@ async def resend_contact(
     """Resend the contact-verification code for a still-pending add/replace (rate limited)."""
     ident = _normalized_or_422(body.type, body.value)
     if await contact_repository.is_value_taken(db, type_=body.type, value=ident):
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="Already in use")
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.IDENTIFIER_TAKEN,
+                       detail="Already in use")
     code = await VerificationRepository(redis).reissue_contact_verification(
         user_uuid=str(current_user.uuid), type_=body.type, value=ident)
     if code is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No pending contact verification")
+        raise ApiError(status.HTTP_404_NOT_FOUND, ErrorCode.NO_PENDING_CONTACT,
+                       detail="No pending contact verification")
     if body.type == "email":
         subject, html, text = build_contact_verification_email(code)
         await email_sender.send(ident, subject, html, text)

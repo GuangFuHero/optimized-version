@@ -1,7 +1,6 @@
 export * from './graphql';
-
-export { RequestError } from './rest';
 export {
+  ApiError,
   getUserSaltAsync,
   loginAsync,
   registerAsync,
@@ -26,16 +25,13 @@ export {
 } from './rest';
 export type {
   AuthIdentityType,
-  IAddContactPayload,
   IAuthIdentifierPayload,
   IChangePasswordPayload,
   IIdTokenPayload,
-  ILinkIdTokenPayload,
   IPasswordResetPayload,
   IRefreshPayload,
   IRegisterPayload,
   ISetPasswordPayload,
-  IStepUp,
   ITokenPair,
   IUser,
   IUserUpdatePayload,

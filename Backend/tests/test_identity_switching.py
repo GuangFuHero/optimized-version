@@ -12,6 +12,7 @@ os.environ["ENV"] = "testing"
 import pytest
 from jose import jwt
 
+from app.core.api_errors import ErrorCode
 from app.core.config import settings
 from app.core.identity import decode_act, encode_act
 from app.core.security import generate_salt, get_password_hash
@@ -148,6 +149,7 @@ async def test_refresh_with_a_malformed_identity_is_401(client, db_session):
         json={"refresh_token": tokens["refresh_token"], "identity": "garbage:"},
     )
     assert resp.status_code == 401
+    assert resp.json()["code"] == ErrorCode.IDENTITY_REVOKED
 
 
 # --- switching ---------------------------------------------------------------------------
@@ -207,6 +209,7 @@ async def test_switch_to_an_identity_you_do_not_hold_is_403(client, db_session):
         headers={"Authorization": f"Bearer {tokens['access_token']}"},
     )
     assert resp.status_code == 403
+    assert resp.json()["code"] == ErrorCode.IDENTITY_NOT_HELD
     assert user_uuid  # the account itself is untouched
 
 

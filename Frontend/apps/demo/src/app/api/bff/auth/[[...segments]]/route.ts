@@ -1,4 +1,5 @@
 import {
+  ApiError,
   addContactAsync,
   changePasswordAsync,
   forgotPasswordAsync,
@@ -12,7 +13,6 @@ import {
   registerAsync,
   resendContactAsync,
   resendVerificationAsync,
-  RequestError,
   resetPasswordAsync,
   setPasswordAsync,
   verifyAsync,
@@ -24,20 +24,21 @@ import {
   applyBackendAuthResponseCookies,
   resolveBackendAuthTokenAsync,
 } from '../../../../../lib/server-backend-auth';
+import { withClientIpAsync } from '../../../../../lib/client-ip';
 
 function resolveErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '請求失敗';
 }
 
 /**
- * The status the backend answered with, or 400 when there is nothing better to say.
- *
- * Collapsing every failure to 400 hid the one status the step-up flows are built on: a 422
- * from `/auth/set-password` or `/auth/contacts` is not an error the user made, it means the
- * backend just delivered a code and wants the same call again carrying it.
+ * Forward the backend's own status and error code so the browser can tell cases apart — a 409
+ * (identity already taken) from a genuine server fault. Anything without a status stays a 400.
  */
-function resolveErrorStatus(error: unknown) {
-  return error instanceof RequestError ? error.status : 400;
+function errorResponse(error: unknown) {
+  const status = error instanceof ApiError ? error.status : 400;
+  const code = error instanceof ApiError ? error.code : undefined;
+
+  return jsonResponse({ detail: resolveErrorMessage(error), code }, status);
 }
 
 function jsonResponse(data: unknown, status = 200) {
@@ -86,9 +87,19 @@ function getPathKey(segments: string[] | undefined) {
   return segments?.join('/') ?? '';
 }
 
-export async function GET(
+type RouteContext = { params: Promise<{ segments?: string[] }> };
+
+export async function GET(request: NextRequest, context: RouteContext) {
+  return withClientIpAsync(() => handleGetAsync(request, context));
+}
+
+export async function POST(request: NextRequest, context: RouteContext) {
+  return withClientIpAsync(() => handlePostAsync(request, context));
+}
+
+async function handleGetAsync(
   request: NextRequest,
-  { params }: { params: Promise<{ segments?: string[] }> },
+  { params }: RouteContext,
 ) {
   const { segments } = await params;
   const pathKey = getPathKey(segments);
@@ -102,16 +113,13 @@ export async function GET(
 
     return jsonResponse({ detail: `Unsupported auth GET route: ${pathKey}` }, 404);
   } catch (error) {
-    return jsonResponse(
-      { detail: resolveErrorMessage(error) },
-      resolveErrorStatus(error),
-    );
+    return errorResponse(error);
   }
 }
 
-export async function POST(
+async function handlePostAsync(
   request: NextRequest,
-  { params }: { params: Promise<{ segments?: string[] }> },
+  { params }: RouteContext,
 ) {
   const { segments } = await params;
   const pathKey = getPathKey(segments);
@@ -297,9 +305,6 @@ export async function POST(
         );
     }
   } catch (error) {
-    return jsonResponse(
-      { detail: resolveErrorMessage(error) },
-      resolveErrorStatus(error),
-    );
+    return errorResponse(error);
   }
 }

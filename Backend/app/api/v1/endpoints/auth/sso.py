@@ -6,7 +6,6 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    HTTPException,
     Request,
     Response,
     status,
@@ -15,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
+from app.core.api_errors import ApiError, ErrorCode
 from app.core.normalize import normalize_email
 from app.core.redis import get_redis
 from app.db.session import attribute_writes_to
@@ -53,19 +53,29 @@ from .deps import get_rate_limiter, issue_token_pair
 router = APIRouter()
 
 # One mapping for every link/unlink use-case error, mirroring the contacts endpoint (ADR-088).
-_STATUS_BY_ERROR = {
-    auth_identity.IdentityConflict: status.HTTP_409_CONFLICT,
-    auth_identity.LastLoginMethod: status.HTTP_409_CONFLICT,
-    auth_identity.IdentityNotFound: status.HTTP_404_NOT_FOUND,
-    StepUpRequired: status.HTTP_422_UNPROCESSABLE_ENTITY,
-    ContactNotFound: status.HTTP_422_UNPROCESSABLE_ENTITY,
-    StepUpFailed: status.HTTP_401_UNAUTHORIZED,
+# Each entry carries a machine-readable code as well as a status, which is PR #41's contract
+# (ADR-237): the status alone cannot separate "prove yourself first" from "your input is wrong",
+# and they need different UI.
+# Builders rather than (status, code) pairs — see the same table in `contacts.py`.
+_ERROR_MAP = {
+    auth_identity.IdentityConflict: lambda d: ApiError(
+        status.HTTP_409_CONFLICT, ErrorCode.SSO_ALREADY_LINKED, detail=d),
+    auth_identity.LastLoginMethod: lambda d: ApiError(
+        status.HTTP_409_CONFLICT, ErrorCode.LAST_LOGIN_METHOD, detail=d),
+    auth_identity.IdentityNotFound: lambda d: ApiError(
+        status.HTTP_404_NOT_FOUND, ErrorCode.SSO_NOT_LINKED, detail=d),
+    StepUpRequired: lambda d: ApiError(
+        status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.STEP_UP_REQUIRED, detail=d),
+    ContactNotFound: lambda d: ApiError(
+        status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.NO_PROOF_CHANNEL, detail=d),
+    StepUpFailed: lambda d: ApiError(
+        status.HTTP_401_UNAUTHORIZED, ErrorCode.STEP_UP_INVALID, detail=d),
 }
 
 
-def _as_http(err: Exception) -> HTTPException:
-    """Translate a link/unlink use-case error into its HTTP equivalent."""
-    return HTTPException(status_code=_STATUS_BY_ERROR[type(err)], detail=str(err))
+def _as_http(err: Exception) -> ApiError:
+    """Translate a link/unlink use-case error into its HTTP equivalent, carrying its code."""
+    return _ERROR_MAP[type(err)](str(err))
 
 
 @router.post("/sso/google", response_model=TokenPair,
@@ -81,19 +91,22 @@ async def sso_google(
     try:
         gid = await verifier.verify(body.id_token)
     except GoogleTokenVerificationError as err:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid Google token") from err
+        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID,
+                       detail="Invalid Google token") from err
 
     identity = await identity_repository.get_by_provider_subject(db, provider="google", subject=gid.sub)
     if identity is None:
         if not gid.email_verified:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Google email not verified")
+            raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.SSO_EMAIL_UNVERIFIED,
+                           detail="Google email not verified")
         try:
             email = normalize_email(gid.email)
         except ValueError as err:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Google email not verified") from err
+            raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.SSO_EMAIL_UNVERIFIED,
+                           detail="Google email not verified") from err
         if await contact_repository.is_value_taken(db, type_="email", value=email):
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
+            raise ApiError(
+                status.HTTP_409_CONFLICT, ErrorCode.SSO_EMAIL_TAKEN,
                 detail="Email already in use; log in and link Google in settings",
             )
         name = gid.name or email.split("@")[0]
@@ -107,8 +120,8 @@ async def sso_google(
             identity = await identity_repository.get_by_provider_subject(
                 db, provider="google", subject=gid.sub)
             if identity is None:
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT,
+                raise ApiError(
+                    status.HTTP_409_CONFLICT, ErrorCode.SSO_EMAIL_TAKEN,
                     detail="Email already in use; log in and link Google in settings",
                 ) from err
             user = await user_repository.get_by_uuid(db, identity.user_uuid)
@@ -145,14 +158,15 @@ async def link_google(
     try:
         gid = await verifier.verify(body.id_token)
     except GoogleTokenVerificationError as err:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid Google token") from err
+        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID,
+                       detail="Invalid Google token") from err
     try:
         await auth_identity.link_identity(
             db, redis, actor=current_user, provider="google", subject=gid.sub,
             step_up=body.step_up, email_sender=email_sender, sms_sender=sms_sender,
             dispatch=background_tasks.add_task, verifiers=verifiers,
         )
-    except tuple(_STATUS_BY_ERROR) as err:
+    except tuple(_ERROR_MAP) as err:
         raise _as_http(err) from err
     return {"detail": "Google account linked"}
 
@@ -170,7 +184,8 @@ async def sso_line(
     try:
         lid = await verifier.verify(body.id_token)
     except LineTokenVerificationError as err:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid LINE token") from err
+        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID,
+                       detail="Invalid LINE token") from err
 
     identity = await identity_repository.get_by_provider_subject(db, provider="line", subject=lid.sub)
     if identity is None:
@@ -194,7 +209,8 @@ async def sso_line(
             identity = await identity_repository.get_by_provider_subject(
                 db, provider="line", subject=lid.sub)
             if identity is None:
-                raise HTTPException(status.HTTP_409_CONFLICT, detail="LINE account conflict") from err
+                raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.SSO_SIGNIN_RACE,
+                               detail="LINE account conflict") from err
             user = await user_repository.get_by_uuid(db, identity.user_uuid)
     else:
         user = await user_repository.get_by_uuid(db, identity.user_uuid)
@@ -223,14 +239,15 @@ async def link_line(
     try:
         lid = await verifier.verify(body.id_token)
     except LineTokenVerificationError as err:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid LINE token") from err
+        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID,
+                       detail="Invalid LINE token") from err
     try:
         await auth_identity.link_identity(
             db, redis, actor=current_user, provider="line", subject=lid.sub,
             step_up=body.step_up, email_sender=email_sender, sms_sender=sms_sender,
             dispatch=background_tasks.add_task, verifiers=verifiers,
         )
-    except tuple(_STATUS_BY_ERROR) as err:
+    except tuple(_ERROR_MAP) as err:
         raise _as_http(err) from err
     return {"detail": "LINE account linked"}
 
@@ -254,7 +271,8 @@ async def unlink_identity(
     nothing could take one off, so a provider attached by someone else was permanent.
     """
     if provider not in SSO_PROVIDERS:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Unknown provider")
+        raise ApiError(status.HTTP_404_NOT_FOUND, ErrorCode.SSO_PROVIDER_UNKNOWN,
+                       detail="Unknown provider")
     try:
         await auth_identity.unlink_identity(
             db, redis, actor=current_user, provider=provider,
@@ -262,6 +280,6 @@ async def unlink_identity(
             email_sender=email_sender, sms_sender=sms_sender,
             dispatch=background_tasks.add_task, verifiers=verifiers,
         )
-    except tuple(_STATUS_BY_ERROR) as err:
+    except tuple(_ERROR_MAP) as err:
         raise _as_http(err) from err
     return Response(status_code=status.HTTP_204_NO_CONTENT)

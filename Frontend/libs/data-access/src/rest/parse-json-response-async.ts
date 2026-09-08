@@ -1,25 +1,15 @@
-/**
- * A failed backend call, carrying the status the backend actually answered with.
- *
- * A plain `Error` loses that, and the step-up flows need it: a 422 from `/auth/set-password`
- * or `/auth/contacts` means "here is your code, call again with it", which is a different
- * outcome from every other failure and cannot be told apart by message text alone.
- */
-export class RequestError extends Error {
-  readonly status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = 'RequestError';
-    this.status = status;
-  }
-}
+import ApiError from './api-error';
 
 async function parseJsonResponseAsync<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail = '請求失敗';
+    let code: string | undefined;
     try {
       const data = await response.json();
+
+      if (typeof data?.code === 'string') {
+        code = data.code;
+      }
 
       if (typeof data?.detail === 'string') {
         detail = data.detail;
@@ -34,7 +24,7 @@ async function parseJsonResponseAsync<T>(response: Response): Promise<T> {
     } catch {
       // Ignore JSON parse failures and keep fallback message.
     }
-    throw new RequestError(detail, response.status);
+    throw new ApiError(response.status, detail, code);
   }
 
   if (response.status === 204) {

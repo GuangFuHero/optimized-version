@@ -1,28 +1,26 @@
 /**
- * A failed BFF call, carrying the status the BFF answered with.
+ * Error carrying the BFF response status and the backend's stable error code.
  *
- * Mirrors `RequestError` in the data-access layer, and exists for the same reason: the
- * step-up flows turn on a 422 specifically ("code sent, call again with it"), which a plain
- * `Error` cannot express.
+ * Branch on `code`. The `message` is backend English prose — matching on it would couple this UI to
+ * backend copy. `code` is undefined when the failure never reached the backend (network, gateway).
  */
-export class FrontendRequestError extends Error {
+export class AuthRequestError extends Error {
   readonly status: number;
 
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = 'FrontendRequestError';
-    this.status = status;
-  }
-}
+  readonly code: string | undefined;
 
-/** True when the backend is asking for a step-up proof rather than reporting a mistake. */
-export function isStepUpRequired(error: unknown) {
-  return error instanceof FrontendRequestError && error.status === 422;
+  constructor(status: number, detail: string, code?: string) {
+    super(detail);
+    this.name = 'AuthRequestError';
+    this.status = status;
+    this.code = code;
+  }
 }
 
 async function parseFrontendResponseAsync<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail = '請求失敗';
+    let code: string | undefined;
 
     try {
       const data = await response.json();
@@ -30,11 +28,15 @@ async function parseFrontendResponseAsync<T>(response: Response): Promise<T> {
       if (typeof data?.detail === 'string') {
         detail = data.detail;
       }
+
+      if (typeof data?.code === 'string') {
+        code = data.code;
+      }
     } catch {
       // Ignore malformed JSON error payloads.
     }
 
-    throw new FrontendRequestError(detail, response.status);
+    throw new AuthRequestError(response.status, detail, code);
   }
 
   if (response.status === 204) {

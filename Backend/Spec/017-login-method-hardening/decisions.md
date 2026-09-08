@@ -181,7 +181,11 @@ ADR-215 的 step-up 碼、還能在 7 天後成為證明管道；每多一個消
 
 ---
 
-### ADR-233 這個 stack 把前端打壞了四條路徑，所以前端在這裡一起補齊
+### ~~ADR-233 這個 stack 把前端打壞了四條路徑，所以前端在這裡一起補齊~~（**已被 ADR-237 推翻**）
+
+> **2026-09-08：本 ADR 的「在這裡一起補齊」已推翻。**前端改動全部從本 PR 移除，理由見 ADR-237。
+> 下面的問題分析（四條路徑、哪個 payload 缺 `step_up`、`_has_something_to_prove_with` 的受眾）
+> 仍然成立且仍未解決——被推翻的是**解法的位置**，不是問題本身。
 
 **白話**：後端把「設定密碼」和「新增聯絡方式」改成兩段式，但前端的表單沒有欄位可以填第二段——按鈕直接壞掉。
 
@@ -378,3 +382,53 @@ await identity_repository.delete_identity(db, identity=identity)
 ## 待辦（本 PR 不做）
 
 - **`set-password` 的前端表單要能填 `id_token`。**ADR-233 給它單一驗證碼欄位，理由是「set-password 的帳號依定義是 SSO-only，證明必定是管道驗證碼」。ADR-234 之後這句話不再成立：零 contact 的 SSO 帳號要出示 provider token。`contacts` 的表單同理。這是 ADR-233 前端工作的延伸，需要一張自己的票。
+
+---
+
+### ADR-237 前端不進 zenuie 的 PR；#41 的錯誤碼合約取代自己造的狀態碼傳遞
+
+**白話**：ADR-233 花力氣讓前端看得到 HTTP 狀態碼，結果 PR #41 早就做了同一件事，而且做得更好——它傳的是錯誤碼，不是狀態碼。
+
+**Date**: 2026-09-08（PR #41 併入 `main` 之後）
+
+**Context**：#41（`feat/auth-error-codes`）帶著 19 個 commit 進 `main`，與本 PR 兩邊都改到 11 個檔案。
+讀完 #41 對那四個前端檔案的改動之後，**不是設計對撞，是我做了重複的工**：
+
+| 檔案 | ADR-233 做的 | #41 做的 | 判定 |
+|---|---|---|---|
+| `parse-json-response-async.ts` | `RequestError(message, status)` | `ApiError(status, detail, code)` | #41 全面涵蓋，多一個 `code` |
+| `modules/auth/api/request-async.ts` | `FrontendRequestError` + `isStepUpRequired()` | `AuthRequestError(status, detail, code)` | #41 全面涵蓋 |
+| BFF `route.ts` | `resolveErrorStatus()` | `errorResponse()`，轉發狀態**與** code | #41 全面涵蓋 |
+| `account-security.client.tsx` | step-up 面板 | 只換錯誤文案（6 行） | 兩邊改不同的東西 |
+
+而且 #41 的理由比我的好。`ApiError` 的檔頭寫著「Branch on `code`；`message` 是後端英文散文，
+比對它會讓 UI 耦合到後端文案，改字就會靜默失效」——**那正是 ADR-233 自己抱怨過的問題**
+（「只能靠比對錯誤訊息字串來判斷，那是會碎的」）。我用 status 解，#41 用 code 解，code 是對的答案。
+
+**Decision**：兩件事。
+
+1. **前端改動整批從本 PR 移除**，11 個檔案全部退回 `main` 的版本（不只衝突的那四個）。
+   使用者裁定：**zenuie 的 PR 不該包含前端。**
+2. **後端採用 #41 的 `ApiError` + `ErrorCode` 合約**，並為本 stack 的新失效態補上成員：
+   `STEP_UP_REQUIRED` / `STEP_UP_INVALID` / `STEP_UP_THROTTLED` / `NO_PROOF_CHANNEL` /
+   `LAST_LOGIN_CHANNEL` / `LAST_LOGIN_METHOD` / `SSO_NOT_LINKED` / `SSO_PROVIDER_UNKNOWN`。
+
+`STEP_UP_REQUIRED` 有自己的碼而不是跟「識別碼格式錯誤」共用 422，理由與 #41 的整個設計一致：
+它**不是呼叫者犯的錯**，是後端剛寄出證明碼、要求帶著它再打一次。分不出這兩者的 client
+會在該顯示欄位的地方顯示錯誤——正是 #41 要消滅的那類失效。
+
+`_as_http` 的對照表改成**存建構子而不是 (status, code) 配對**：`tests/test_error_codes.py`
+用 AST 靜態檢查每個 `ApiError(...)` 是否字面寫出 `ErrorCode` 成員，查表傳變數會繞過它。
+那個守衛是對的（runtime 組出來的碼正是打錯字會被當成合約出貨的路徑），所以配合它而不是繞過它。
+
+**`sms.py` 一併跟上 #41 的簡訊規範。**#41 拿掉 `_BRAND_ZH`、改成裸的 `_SENDER_IDENTITY_ZH` 前綴，
+並把內文改為**只有中文**——那是台灣簡訊實名制加上「70 字內每則 1 點」的實測成本決策。
+本 stack 新增的 7 個 builder 原本是雙語加 `【】`，全部改寫，順帶移除因此不再使用的英文分支變數。
+
+**Consequences**：
+➕ 少一套與 #41 重複的前端錯誤基礎建設；`code` 比 `status` 能表達的多。
+➕ 本 stack 的失效態現在也帶 code，前端不必比對中文散文就能分辨「要證明」與「輸入錯」。
+➖ **`建立登入密碼` 與 `新增聯絡方式` 兩顆按鈕在合併後是壞的**（一律 422，沒有欄位可填證明）。
+   這是 ADR-233 原本已經修好、現在刻意退回的狀態，記在 PR 的 Known gaps，需要一張前端票。
+   影響範圍已因 ADR-234 擴大：零 contact 的 SSO 帳號還需要 `id_token` 欄位。
+➖ 簡訊少了英文，非中文使用者收到的通知看不懂。這是 #41 已經替整個系統做過的取捨，本 stack 跟隨而非另立。
