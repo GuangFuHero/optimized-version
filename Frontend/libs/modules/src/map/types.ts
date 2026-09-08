@@ -127,11 +127,9 @@ export interface RescueMapMarkerItem {
     source?: string | null;
     visibility?: string | null;
     verificationStatus?: string | null;
-    confidenceScore?: number | null;
     isDuplicate?: boolean;
     isTemporary?: boolean;
     isOfficial?: boolean;
-    priorityScore?: number | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   };

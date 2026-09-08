@@ -9,9 +9,10 @@ identity is active per request, platform roles included. Every switchable, actio
 must therefore stand on its own — see ADR-097 and the station.contribute grants below.
 
 Only capabilities with a real enforcement point today (station/map/ticket/dynamic_field/
-user/team/work_zone/audit/rbac/announcement/project) are actually granted below; the rest of the Perm
-catalog (ticket.export/ai_duplicate/pre_departure) is registered as a Permission row so
-it exists ahead of the feature that will enforce it, but isn't wired into any role yet.
+user/team/work_zone/audit/rbac/announcement/pre_departure/project) are actually granted
+below; the rest of the Perm catalog (ticket.export/ai_duplicate) is registered as a
+Permission row so it exists ahead of the feature that will enforce it, but isn't wired
+into any role yet.
 """
 
 import asyncio
@@ -84,6 +85,7 @@ ROLES_DATA = [
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
                 Perm.FIELD_VIEW, Perm.FIELD_ADD, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
                 Perm.ANN_VIEW, Perm.ANN_PUBLISH, Perm.ANN_EDIT, Perm.ANN_DELETE,
+                Perm.PREDEP_VIEW, Perm.PREDEP_PUBLISH, Perm.PREDEP_EDIT, Perm.PREDEP_DELETE,
                 Perm.USER_VIEW, Perm.USER_ADD, Perm.USER_EDIT, Perm.USER_DELETE,
                 Perm.RBAC_VIEW, Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
                 Perm.TEAM_VIEW, Perm.TEAM_EDIT, Perm.TEAM_MEMBER_MANAGE,

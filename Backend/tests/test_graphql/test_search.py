@@ -600,9 +600,8 @@ async def test_paging_a_run_of_tied_rows_loses_no_row(client, coordinator_auth):
 
     Every row here ties on every key the sort had before the tiebreaker was added: none of
     the names contain the keyword (so the ILIKE boolean is false and similarity() is 0 —
-    ADR-147), priority_score is NULL for all six, and created_at comes from
-    `server_default=func.now()`, which is transaction-scoped, so one INSERT block gives
-    them an identical timestamp.
+    ADR-147), and created_at comes from `server_default=func.now()`, which is
+    transaction-scoped, so one INSERT block gives them an identical timestamp.
 
     Honest about its own limits: this passes with OR without the uuid tiebreaker, because
     PostgreSQL happens to sort six rows deterministically under one plan — the freedom to

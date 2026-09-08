@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Computed, DateTime, Float, ForeignKey, String
+from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -56,13 +56,11 @@ class Station(BaseGeometry):
     source: Mapped[str | None] = mapped_column(String(50))
     visibility: Mapped[str | None] = mapped_column(String(50))
     verification_status: Mapped[str | None] = mapped_column(String(50))
-    confidence_score: Mapped[float | None] = mapped_column(Float)
     is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False)
     dedup_group_id: Mapped[str | None] = mapped_column(String)
     is_temporary: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_official: Mapped[bool] = mapped_column(Boolean, default=False)
-    priority_score: Mapped[float | None] = mapped_column(Float)
     updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(100))
     contact_email: Mapped[str | None] = mapped_column(String(100))
