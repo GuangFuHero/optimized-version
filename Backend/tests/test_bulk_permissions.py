@@ -20,7 +20,9 @@ from app.core.rbac_scopes import Scope
 from app.core.security import resolve_scope
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+from app.models.team import Team
 from app.services.authz import require_scope
+from tests.conftest import acting_as
 
 BULK_PERMS = (Perm.STATION_EXPORT, Perm.STATION_IMPORT, Perm.TICKET_EXPORT, Perm.TICKET_IMPORT)
 
@@ -41,6 +43,7 @@ EXPECTED_GRANTS = {
 
 
 async def _assign_seed_role(db, user: User, role_name: str) -> None:
+    """Build `role_name` from ROLES_DATA and make it `user`'s active identity."""
     """Build `role_name` in the DB straight from ROLES_DATA and assign it to `user`.
 
     Deliberately seeds from the real matrix rather than hand-written grants: the point is to
@@ -63,7 +66,20 @@ async def _assign_seed_role(db, user: User, role_name: str) -> None:
                 role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
             )
         )
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    # A team-kind role must carry a team and a platform-kind one must not (ADR-073's CHECK),
+    # so the fixture follows the seed's own `kind` rather than assuming platform.
+    team = None
+    if spec["kind"] == "team":
+        team = Team(name=f"team-for-{role_name}", type="gov")
+        db.add(team)
+        await db.flush()
+    db.add(UserRoleAssign(
+        user_uuid=user.uuid, role_uuid=role.uuid,
+        team_uuid=team.uuid if team is not None else None, role_kind=spec["kind"],
+    ))
+    # Without an active identity `get_user_permissions` returns {} — the fail-closed default
+    # since feature 010, and not what these tests are exercising.
+    acting_as(user, role, team)
     await db.flush()
 
 

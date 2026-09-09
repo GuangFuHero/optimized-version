@@ -32,6 +32,7 @@ from app.services.bulk_import import (
     commit_stations,
     preview_stations,
 )
+from tests.conftest import acting_as
 
 IN_ZONE = Point(121.50, 25.00)
 OUT_OF_ZONE = Point(121.90, 25.40)
@@ -57,6 +58,16 @@ def _file(rows) -> tuple[bytes, str]:
 
 
 async def _grant(db, user: User, *perms_and_scopes) -> None:
+    """Give `user` one platform identity holding all of `perms_and_scopes`.
+
+    One role, not one per permission. Since feature 010 only the **active identity's** grants
+    count (`get_user_permissions` returns {} for `identity=None`), so a user wearing five
+    single-permission roles would resolve to whichever one is active and none of the rest.
+    `acting_as` then attaches the identity a real request would have resolved from its token.
+    """
+    role = Role(name=f"bulk-tests-{user.name}", kind="platform")
+    db.add(role)
+    await db.flush()
     for perm, scope in perms_and_scopes:
         permission = (
             await db.execute(select(Permission).where(Permission.key == perm.value))
@@ -65,13 +76,14 @@ async def _grant(db, user: User, *perms_and_scopes) -> None:
             permission = Permission(key=perm.value)
             db.add(permission)
             await db.flush()
-        role = Role(name=f"role-{perm.value}-{scope}-{user.name}", kind="platform")
-        db.add(role)
-        await db.flush()
         db.add(
             RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope)
         )
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid,
+                          team_uuid=None, role_kind="platform"))
+    # Before the commit: `expire_on_commit` is True on this fixture, so reading `role.uuid`
+    # afterwards would lazily reload it and raise MissingGreenlet under asyncio.
+    acting_as(user, role)
     await db.commit()
 
 

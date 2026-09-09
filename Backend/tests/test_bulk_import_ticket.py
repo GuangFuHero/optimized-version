@@ -26,6 +26,7 @@ from app.models.ticket_task import TaskProperty, TicketTask
 from app.services.bulk_columns import DYNAMIC_PREFIX
 from app.services.bulk_export import export_tickets
 from app.services.bulk_import import commit_tickets, preview_tickets
+from tests.conftest import acting_as
 
 IN_ZONE = Point(121.50, 25.00)
 OUT_OF_ZONE = Point(121.90, 25.40)
@@ -52,7 +53,22 @@ def _file(rows) -> tuple[bytes, str]:
     return write_csv(HEADERS, rows), "tickets.csv"
 
 
-async def _grant(db, user: User, *perms_and_scopes) -> None:
+async def _grant(db, user: User, *perms_and_scopes, team=None) -> None:
+    """Give `user` one platform identity holding all of `perms_and_scopes`.
+
+    One role, not one per permission. Since feature 010 only the **active identity's** grants
+    count (`get_user_permissions` returns {} for `identity=None`), so a user wearing five
+    single-permission roles would resolve to whichever one is active and none of the rest.
+    `acting_as` then attaches the identity a real request would have resolved from its token.
+    """
+    if team is not None:
+        # An earlier `_grant` in the same test commits, which expires this instance; reading
+        # its uuid/name for the identity would then lazily reload and raise MissingGreenlet.
+        await db.refresh(team)
+    kind = "team" if team is not None else "platform"
+    role = Role(name=f"bulk-tests-{user.name}", kind=kind)
+    db.add(role)
+    await db.flush()
     for perm, scope in perms_and_scopes:
         permission = (
             await db.execute(select(Permission).where(Permission.key == perm.value))
@@ -61,13 +77,14 @@ async def _grant(db, user: User, *perms_and_scopes) -> None:
             permission = Permission(key=perm.value)
             db.add(permission)
             await db.flush()
-        role = Role(name=f"role-{perm.value}-{scope}-{user.name}", kind="platform")
-        db.add(role)
-        await db.flush()
         db.add(
             RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope)
         )
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid,
+                          team_uuid=team.uuid if team is not None else None, role_kind=kind))
+    # Before the commit: `expire_on_commit` is True on this fixture, so reading `role.uuid`
+    # afterwards would lazily reload it and raise MissingGreenlet under asyncio.
+    acting_as(user, role, team)
     await db.commit()
 
 
@@ -286,8 +303,9 @@ async def test_a_zone_scoped_export_comes_back_half_writable(db):
     db.add(zone)
     await db.flush()
     db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))
-    team_uuid = team.uuid  # read before the commit expires it
-    await db.commit()
+    # flush, not commit: `_grant` below reads `team.uuid` and `team.name`, and a commit would
+    # expire them into a lazy reload that raises MissingGreenlet under asyncio.
+    await db.flush()
 
     author = await _importer(db)  # creates both tickets with full reach
     raw, filename = _file([
@@ -296,13 +314,16 @@ async def test_a_zone_scoped_export_comes_back_half_writable(db):
     ])
     await commit_tickets(db, actor=author, raw=raw, filename=filename, task_type="rescue")
 
-    zoned = User(name="Zoned", team_uuid=team_uuid)
+    # Since feature 010 a User carries no team; the grant does, so the zone reach comes from
+    # acting as a team identity rather than from a column on the user (ADR-072).
+    zoned = User(name="Zoned")
     db.add(zoned)
     await db.flush()
     await _grant(
         db, zoned,
         (Perm.TICKET_IMPORT, "all"), (Perm.TICKET_ADD, "all"),
         (Perm.TICKET_EDIT, "zone"), (Perm.TICKET_EXPORT, "all"), (Perm.TICKET_VIEW_PII, "zone"),
+        team=team,
     )
 
     exported = await export_tickets(db, actor=zoned, task_type="rescue")
