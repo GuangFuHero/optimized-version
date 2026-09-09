@@ -95,3 +95,66 @@ async def test_bootstrap_exits_when_contact_not_found(db):
 
     with pytest.raises(SystemExit):
         await bootstrap("email", "nobody@example.com", force=False)
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_replaces_the_existing_platform_role(db):
+    """The account must end up with one platform identity, not two.
+
+    Registration grants `user`, and this script used to add `super_admin` alongside it. A
+    user holding two platform grants has no well-defined default identity — `default_for_user`
+    picks whichever role_uuid the partial unique index returns first, so a bootstrapped
+    super_admin could log in as a plain `user`. Every other platform grant in the codebase
+    replaces (`admin_service.assign_role`); this one now does too (ADR-184).
+    """
+    sa_role_uuid = await _make_super_admin_role(db)
+    plain = Role(name="user", kind="platform")
+    db.add(plain)
+    await db.flush()
+    plain_uuid = str(plain.uuid)
+    user_uuid = await _make_verified_user(db, email="replace@example.com")
+    db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=plain_uuid, role_kind="platform"))
+    await db.commit()
+
+    await bootstrap("email", "replace@example.com", force=False)
+
+    held = (
+        await db.execute(
+            select(UserRoleAssign.role_uuid).where(
+                UserRoleAssign.user_uuid == user_uuid,
+                UserRoleAssign.team_uuid.is_(None),
+            )
+        )
+    ).scalars().all()
+    assert [str(r) for r in held] == [sa_role_uuid]
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_leaves_team_identities_alone(db):
+    """Only the platform grant is replaced — team membership is a different axis."""
+    from app.models.team import Team
+
+    sa_role_uuid = await _make_super_admin_role(db)
+    team_role = Role(name="member", kind="team")
+    team = Team(name="Bootstrap Team", type="ngo", status="active")
+    db.add_all([team_role, team])
+    await db.flush()
+    team_role_uuid, team_uuid = str(team_role.uuid), str(team.uuid)
+    user_uuid = await _make_verified_user(db, email="teamed@example.com")
+    db.add(
+        UserRoleAssign(
+            user_uuid=user_uuid, role_uuid=team_role_uuid,
+            team_uuid=team_uuid, role_kind="team",
+        )
+    )
+    await db.commit()
+
+    await bootstrap("email", "teamed@example.com", force=False)
+
+    rows = (
+        await db.execute(
+            select(UserRoleAssign).where(UserRoleAssign.user_uuid == user_uuid)
+        )
+    ).scalars().all()
+    by_team = {str(r.team_uuid) if r.team_uuid else None: str(r.role_uuid) for r in rows}
+    assert by_team == {None: sa_role_uuid, team_uuid: team_role_uuid}

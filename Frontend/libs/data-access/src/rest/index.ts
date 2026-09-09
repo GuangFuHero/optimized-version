@@ -40,6 +40,10 @@ export {
   resendContactAsync,
 };
 
+import ApiError from './api-error';
+
+export { ApiError };
+
 import getCurrentUserAsync from './v1/users/me/get';
 import patchCurrentUserAsync from './v1/users/me/patch';
 
