@@ -10,11 +10,13 @@ the good rows land, the bad ones come back as a report the user can fix and re-u
 """
 
 import base64
+import logging
 from dataclasses import dataclass, field
 from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -41,7 +43,7 @@ from app.services.bulk_match import (
     station_key,
     ticket_key,
 )
-from app.services.bulk_validate import RowError, validate_row, writable_values
+from app.services.bulk_validate import RowError, validate_row, values_for, writable_values
 
 # ADR-116. A row costs a match look-up plus a PostGIS point-in-polygon scope check, and this
 # runs inside one synchronous request — there is no background worker in this project.
@@ -55,6 +57,8 @@ PREVIEW_ROWS = 20
 _DEFAULT_PROPERTY_TYPE = "supply"
 _DEFAULT_WEIGHTING = 1.0
 
+
+logger = logging.getLogger(__name__)
 
 class BulkImportError(ValueError):
     """The upload cannot be processed at all (mapped to 400 by the endpoint)."""
@@ -138,17 +142,34 @@ def _error(line: int, column: str, message: str) -> RowError:
     return RowError(line=line, column=column, message=message)
 
 
+def _error_column_name(headers: tuple[str, ...]) -> str:
+    """A name for the report's error column that the uploaded file does not already use.
+
+    `error` is a plausible column name in a real roster, and `_clean_headers` refuses duplicate
+    headers on read (`app/core/tabular.py:92`). Appending it blindly produced a report that
+    could not be re-uploaded — 表頭有重複的欄位名稱：error — which breaks ADR-112's whole loop
+    of "fix what it says, re-upload, done" for exactly the files that need it.
+    """
+    if "error" not in headers:
+        return "error"
+    suffix = 1
+    while f"error_{suffix}" in headers:
+        suffix += 1
+    return f"error_{suffix}"
+
+
 def _as_report(table: Table, failures: dict[int, list[RowError]], *, filename: str) -> ReportFile | None:
-    """Render the failed rows plus an `error` column, in the format they were uploaded in.
+    """Render the failed rows plus an error column, in the format they were uploaded in.
 
     The report reflects *this* run: after a commit some rows exist that did not before, so
     re-deriving it later from the same file would not give the same answer.
     """
     if not failures:
         return None
-    headers = (*table.headers, "error")
+    error_column = _error_column_name(table.headers)
+    headers = (*table.headers, error_column)
     rows = [
-        {**table.rows[index], "error": "；".join(f"{e.column}: {e.message}" for e in errors)}
+        {**table.rows[index], error_column: "；".join(f"{e.column}: {e.message}" for e in errors)}
         for index, errors in sorted(failures.items())
     ]
     is_csv = filename.lower().endswith(".csv")
@@ -468,9 +489,15 @@ async def _write_ticket(
         index.register(key, ticket_uuid)
 
     task_name = task_fields.get("task_name") or (plan.row.get("task_name") or "").strip()
+    # "The ticket is an update" does not mean "the task is an update": a row attaching a NEW
+    # task to a matched ticket still takes the create branch, and by then `writable_values`
+    # has dropped every create-only column. `task_name` survived on the fallback above; its
+    # two siblings had none, so they were written as NULL and the row still reported success
+    # (ADR-240). Read them the same way, and let `_write_task` use them only when creating.
+    task_on_create = values_for(columns, plan.row, ("task_description", "task_quantity"))
     task_uuid = await _write_task(
         db, actor=actor, ticket_uuid=ticket_uuid, task_type=task_type,
-        task_name=task_name, task_fields=task_fields,
+        task_name=task_name, task_fields=task_fields, task_on_create=task_on_create,
     )
     if task_uuid:
         progress.parent_written = True
@@ -479,9 +506,15 @@ async def _write_ticket(
 
 
 async def _write_task(
-    db: AsyncSession, *, actor: User, ticket_uuid: str, task_type: str, task_name: str, task_fields: dict
+    db: AsyncSession, *, actor: User, ticket_uuid: str, task_type: str, task_name: str,
+    task_fields: dict, task_on_create: dict | None = None,
 ) -> str | None:
-    """Create or update the one task this row stands for (ADR-120)."""
+    """Create or update the one task this row stands for (ADR-120).
+
+    `task_on_create` carries the create-only task columns read straight off the row. It is
+    used only on the create branch, so a matched task keeps ADR-108's rule that create-only
+    columns are never written by an update (ADR-240).
+    """
     if not task_name:
         return None
     match = await match_task(db, ticket_uuid=ticket_uuid, task_type=task_type, task_name=task_name)
@@ -491,10 +524,11 @@ async def _write_task(
             await ticket_service.update_ticket_task(db, actor=actor, uuid=match.uuid, changes=changes)
         return match.uuid
 
+    creating = {**(task_on_create or {}), **task_fields}
     task = await ticket_service.create_ticket_task(
         db, actor=actor, ticket_uuid=ticket_uuid, task_type=task_type, task_name=task_name,
-        task_description=task_fields.get("task_description"),
-        quantity=task_fields.get("task_quantity"),
+        task_description=creating.get("task_description"),
+        quantity=creating.get("task_quantity"),
         source="import", visibility="public", route_uuid=None,
     )
     return str(task.uuid)
@@ -608,9 +642,21 @@ async def _write_all(db, actor, plans, write, failures) -> tuple[int, int, list[
         progress = RowProgress()
         try:
             await write(plan, progress)
-        except (HTTPException, ValueError) as exc:
+        except (HTTPException, ValueError, SQLAlchemyError) as exc:
+            # `SQLAlchemyError` is the backstop, not the plan: `coerce` now checks every
+            # bounded column's width and the int4 range, so a driver-level `DataError` should
+            # not get this far. But a per-row loop must not be able to abandon a half-written
+            # file whatever the driver raises — the failure shape ADR-211/213 removed, reached
+            # through a trigger they did not cover (ADR-241).
             await _recover(db, actor)
-            detail = f"權限不足：{exc.detail}" if isinstance(exc, HTTPException) else str(exc)
+            if isinstance(exc, HTTPException):
+                detail = f"權限不足：{exc.detail}"
+            elif isinstance(exc, SQLAlchemyError):
+                detail = "資料庫拒絕了這一列，請檢查欄位長度與格式"
+                logger.warning("bulk import row %s rejected by the database", plan.line,
+                               exc_info=exc)
+            else:
+                detail = str(exc)
             failures[plan.index] = [_error(plan.line, "-", detail)]
             if progress.parent_written:
                 partial.append(plan.line)

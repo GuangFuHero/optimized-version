@@ -46,11 +46,19 @@ def _line_of(index: int) -> int:
     return index + 2
 
 
+# PostgreSQL `integer` is int4. A Python int coerces happily and then overflows at the driver,
+# which raises `DataError` — not a `ValueError` — and escapes the per-row handler (ADR-241).
+_INT4_MIN, _INT4_MAX = -2_147_483_648, 2_147_483_647
+
+
 def _to_integer(value: str) -> int:
     try:
-        return int(value)
+        number = int(value)
     except ValueError as exc:
         raise ValueError(f"「{value}」不是整數") from exc
+    if not _INT4_MIN <= number <= _INT4_MAX:
+        raise ValueError(f"「{value}」超出可儲存的整數範圍（{_INT4_MIN} ~ {_INT4_MAX}）")
+    return number
 
 
 def _to_float(value: str) -> float:
@@ -80,6 +88,10 @@ def coerce(column: ColumnSpec, raw: str):
     value = (raw or "").strip()
     if not value:
         return None
+    if column.max_length is not None and len(value) > column.max_length:
+        raise ValueError(
+            f"長度 {len(value)} 超過上限 {column.max_length} 字，請縮短後再匯入"
+        )
     if column.data_type == INTEGER:
         return _to_integer(value)
     if column.data_type == FLOAT:
@@ -177,6 +189,25 @@ def validate_row(
             errors.append(RowError(line=line, column=header, message=str(exc)))
 
     return errors
+
+
+def values_for(
+    columns: tuple[ColumnSpec, ...], row: dict[str, str], fields: tuple[str, ...]
+) -> dict[str, object]:
+    """Typed values for the named columns, ignoring create/update writability (ADR-240).
+
+    `writable_values` answers "what may this row write to the **ticket**", and a row whose
+    ticket is an update drops every create-only column. But a task under a matched ticket can
+    still be a *create*, and its create-only columns are then exactly the ones it needs. This
+    asks the narrower question, through the same `coerce` so a bad cell fails identically.
+    """
+    wanted = {column.field: column for column in columns if column.field in fields}
+    values: dict[str, object] = {}
+    for field, column in wanted.items():
+        raw = (row.get(column.header) or "").strip()
+        if raw:
+            values[field] = coerce(column, raw)
+    return values
 
 
 def writable_values(

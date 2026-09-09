@@ -392,3 +392,105 @@ async def test_a_second_line_fails_cleanly_when_the_first_one_fails_at_write_tim
     assert (outcome.created, outcome.updated, outcome.failed) == (0, 0, 2)
     assert await _ticket_titled(db, "倒塌受困") is None
     assert "沒有匯入成功" in outcome.errors[1].message
+
+
+# --------------------------------------------------------------------------------------
+# PR #42 review round 2 (ADR-240/241)
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_new_task_under_a_matched_ticket_keeps_its_own_fields(db):
+    """A task being created carries the file's values even when its parent ticket is matched.
+
+    `task_description` and `task_quantity` are `_create_only` because `UpdateTicketTaskInput`
+    cannot carry them — but "the ticket is an update" does not mean "the task is an update".
+    A row attaching a NEW task to a matched ticket still took the create branch, by which
+    point `writable_values(is_update=True)` had dropped both. `task_name` survived on a
+    `plan.row` fallback; its two siblings had none, so they were written as NULL and the row
+    was still reported as a success (ADR-240).
+    """
+    await _configs(db)
+    actor = await _importer(db)
+
+    first, filename = _file([_row("求救", task_name="送水", description="第一次")])
+    await commit_tickets(db, actor=actor, raw=first, filename=filename, task_type="rescue")
+
+    # same title -> the ticket matches; a different task name -> the task is a create
+    second, filename = _file([_row("求救", task_name="清淤")])
+    outcome = await commit_tickets(db, actor=actor, raw=second, filename=filename,
+                                   task_type="rescue")
+
+    assert outcome.failed == 0, outcome.errors
+    assert await _count(db, Tickets) == 1
+    tasks = list((await db.execute(
+        select(TicketTask).where(TicketTask.task_name == "清淤"))).scalars())
+    assert len(tasks) == 1
+    assert tasks[0].quantity == 3, "the file said 3; a dropped create-only column writes NULL"
+
+
+@pytest.mark.asyncio
+async def test_an_over_length_cell_fails_its_own_row_and_the_rest_land(db):
+    """`tickets.title` is `String(200)`; 300 characters must not reach the driver (ADR-241).
+
+    Nothing checked width before, so PostgreSQL raised `StringDataRightTruncation` →
+    `sqlalchemy.exc.DataError`, which is not a `ValueError`. It escaped `_write_all`, escaped
+    the endpoint's handler and 500'd the request — with every earlier row already committed
+    by its own service call and no error report returned.
+    """
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([_row("正常的一列"), _row("長" * 300)])
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename,
+                                   task_type="rescue")
+
+    assert outcome.created == 1, "the good row still lands"
+    assert outcome.failed == 1
+    assert await _count(db, Tickets) == 1
+    message = " ".join(e.message for e in outcome.errors)
+    assert "200" in message and "長度" in message, message
+    assert outcome.error_report is not None, "a failed row must come back in the report"
+
+
+@pytest.mark.asyncio
+async def test_an_integer_beyond_int4_fails_its_own_row(db):
+    """A Python int coerces fine and overflows `int4` at the driver (ADR-241)."""
+    await _configs(db)
+    actor = await _importer(db)
+    row = {**_row("求救"), "task_quantity": "9999999999"}
+    raw, filename = _file([row])
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename,
+                                   task_type="rescue")
+
+    assert outcome.failed == 1
+    assert "整數範圍" in " ".join(e.message for e in outcome.errors)
+
+
+@pytest.mark.asyncio
+async def test_the_error_report_is_re_uploadable_when_the_file_has_an_error_column(db):
+    """A file already carrying an `error` header must still produce a readable report.
+
+    `_as_report` appended `error` unconditionally, and `_clean_headers` refuses duplicate
+    headers on read — so the report could not be re-uploaded, which is ADR-112's whole loop
+    ("fix what it says, re-upload, done") broken for exactly the files that need it.
+    """
+    from app.core.tabular import read_table
+
+    await _configs(db)
+    actor = await _importer(db)
+    headers = (*HEADERS, "error")
+    rows = [{**_row("長" * 300), "error": "上一輪的訊息"}]
+    raw, filename = write_csv(headers, rows), "tickets.csv"
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename,
+                                   task_type="rescue")
+
+    assert outcome.failed == 1
+    assert outcome.error_report is not None
+    import base64
+    report = read_table(base64.b64decode(outcome.error_report.content_base64),
+                        outcome.error_report.filename, max_rows=100)
+    assert "error" in report.headers and "error_1" in report.headers
+    assert report.rows[0]["error"] == "上一輪的訊息", "the file's own column is preserved"

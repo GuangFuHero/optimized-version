@@ -355,3 +355,84 @@ async def test_a_caller_without_view_pii_gets_every_contact_masked(db):
 
     assert row["contact_name"] == "王◯◯"
     assert row["contact_phone"] != "0912345678"
+
+
+# --------------------------------------------------------------------------------------
+# PR #42 review round 2 (ADR-238/239)
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_unsupported_format_is_refused_before_any_query_runs(db, monkeypatch):
+    """`?format=pdf` must not pay for a 10 000-row read first (ADR-238).
+
+    `_render` has always checked, but it runs after the row query, the address query and the
+    properties query. The check now happens before `require_scope`, so the guard is that
+    nothing reached the database at all — asserted by making `_station_rows` explode.
+    """
+    from app.services import bulk_export
+
+    await _configs(db)
+    actor = User(name="Admin")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "all", "exporter")
+    await _station(db, name="光復國小", point=IN_ZONE, creator=actor, quantity=120)
+
+    async def explode(*args, **kwargs):
+        raise AssertionError("the export queried the database before checking the format")
+
+    monkeypatch.setattr(bulk_export, "_station_rows", explode)
+
+    with pytest.raises(bulk_export.BulkExportError) as err:
+        await export_stations(db, actor=actor, station_type="shelter", file_format="pdf")
+
+    assert "pdf" in str(err.value)
+
+
+@pytest.mark.asyncio
+async def test_an_export_that_hits_the_cap_refuses_instead_of_truncating(db, monkeypatch):
+    """A partial file that looks whole is worse here than a refusal (ADR-239).
+
+    This file is also the import template (ADR-119): the user's next step is to edit and
+    re-upload it, and 10 000 of 12 000 rows reads exactly like all of them.
+
+    The cap is lowered rather than seeding 10 001 stations — the boundary is what matters,
+    and the assertion is on the refusal, not on the number.
+    """
+    from app.services import bulk_export
+
+    await _configs(db)
+    actor = User(name="Admin")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "all", "exporter")
+    for index in range(3):
+        await _station(db, name=f"站點{index}", point=IN_ZONE, creator=actor, quantity=1)
+
+    monkeypatch.setattr(bulk_export, "MAX_EXPORT_ROWS", 2)
+
+    with pytest.raises(bulk_export.BulkExportError) as err:
+        await export_stations(db, actor=actor, station_type="shelter")
+
+    assert "station_type" in str(err.value)
+
+
+@pytest.mark.asyncio
+async def test_an_export_exactly_at_the_cap_still_succeeds(db, monkeypatch):
+    """The boundary belongs to the caller: N rows under an N cap is a complete file."""
+    from app.services import bulk_export
+
+    await _configs(db)
+    actor = User(name="Admin")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "all", "exporter")
+    for index in range(2):
+        await _station(db, name=f"站點{index}", point=IN_ZONE, creator=actor, quantity=1)
+
+    monkeypatch.setattr(bulk_export, "MAX_EXPORT_ROWS", 2)
+
+    table = _parse(await export_stations(db, actor=actor, station_type="shelter"))
+
+    assert len(table.rows) == 2

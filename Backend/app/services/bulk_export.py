@@ -107,9 +107,35 @@ def _coordinates(geometry) -> tuple[str, str]:
     return _text(latitude), _text(longitude)
 
 
-def _render(columns, rows, *, stem: str, file_format: str) -> ExportFile:
+def _require_supported_format(file_format: str) -> None:
+    """Refuse an unknown format before anything is read (ADR-238).
+
+    `_render` also checks, but it runs after the row query, the address query and the
+    properties query — so `?format=pdf` used to pay for a 10 000-row read and then 400.
+    Ordering the cheap refusal first is what ADR-209 did for the import limits.
+    """
     if file_format not in SUPPORTED_FORMATS:
         raise BulkExportError(f"不支援的匯出格式「{file_format}」；請使用 {' 或 '.join(SUPPORTED_FORMATS)}")
+
+
+def _require_not_truncated(fetched: int, *, narrow_by: str) -> None:
+    """Refuse rather than hand back a partial file that looks complete (ADR-239).
+
+    The query asks for `MAX_EXPORT_ROWS + 1`; getting them all back means the real result is
+    larger than the cap. Silently slicing it is worse here than elsewhere because **this file
+    is also the import template** (ADR-119): the user's next step is to edit and re-upload it,
+    and a truncated export reads exactly like a complete one.
+    """
+    if fetched > MAX_EXPORT_ROWS:
+        raise BulkExportError(
+            f"符合條件的資料超過 {MAX_EXPORT_ROWS:,} 筆，超出單次匯出上限。"
+            f"這個檔案同時是匯入範本，給出截斷的版本會被當成完整的，因此不提供。"
+            f"請以更精確的 {narrow_by} 分次匯出。"
+        )
+
+
+def _render(columns, rows, *, stem: str, file_format: str) -> ExportFile:
+    _require_supported_format(file_format)
     headers = tuple(column.header for column in columns)
     content = (
         write_csv(headers, rows)
@@ -186,6 +212,7 @@ async def export_stations(
     An empty result still produces a file: a header-only export is the import template
     (ADR-119), and handing back a blank template is the intended way to start from nothing.
     """
+    _require_supported_format(file_format)
     async with stable_actor(db, actor):
         scope = await require_scope(actor, Perm.STATION_EXPORT, db)
         await _require_known_type(
@@ -204,10 +231,11 @@ async def export_stations(
                         *scope_filter(scope, actor=actor, model=Station),
                     )
                     .order_by(Station.created_at)
-                    .limit(MAX_EXPORT_ROWS)
+                    .limit(MAX_EXPORT_ROWS + 1)
                 )
             ).scalars()
         )
+        _require_not_truncated(len(stations), narrow_by="station_type")
         related = await _station_rows(db, stations)
         rows = [
             _station_row(
@@ -266,6 +294,7 @@ async def export_tickets(
     db: AsyncSession, *, actor: User, task_type: str, file_format: str = CSV_FORMAT
 ) -> ExportFile:
     """Render one row per (ticket, task) pair of `task_type` the caller may see (ADR-120)."""
+    _require_supported_format(file_format)
     async with stable_actor(db, actor):
         scope = await require_scope(actor, Perm.TICKET_EXPORT, db)
         await _require_known_type(
@@ -287,10 +316,12 @@ async def export_tickets(
                         *scope_filter(scope, actor=actor, model=Tickets),
                     )
                     .order_by(TicketTask.created_at)
-                    .limit(MAX_EXPORT_ROWS)
+                    .limit(MAX_EXPORT_ROWS + 1)
                 )
             ).all()
         )
+        # One row per (ticket, task) pair, so the cap is reached sooner here than on stations.
+        _require_not_truncated(len(pairs), narrow_by="task_type")
 
         task_uuids = [str(task.uuid) for task, _ in pairs]
         properties: dict[str, dict[str, TaskProperty]] = {}
