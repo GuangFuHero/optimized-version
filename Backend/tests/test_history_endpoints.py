@@ -14,21 +14,29 @@ import pytest
 from sqlalchemy import select
 
 from app.core.permissions import Perm
-from app.core.security import create_access_token
 from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
+from tests.conftest import auth_headers_for
 
 BASE = "/api/v1/history"
 
 
+# Headers minted alongside each user, looked up by uuid. A bare
+# `create_access_token(sub=...)` stopped working twice over: feature 010 wants an `act` claim
+# naming the identity (without one the caller resolves to zero grants) and feature 014 refuses
+# a token whose session it cannot find. Caching here rather than returning the headers keeps
+# `_user_with`'s uuid return value, which the ticket/station fixtures below take as an owner.
+_HEADERS: dict[str, dict] = {}
+
+
 def _auth(user_uuid: str) -> dict:
-    return {"Authorization": f"Bearer {create_access_token(data={'sub': str(user_uuid)})}"}
+    return _HEADERS[str(user_uuid)]
 
 
-async def _user_with(db, name: str, *perms, scope: str = "all") -> str:
+async def _user_with(db, redis, name: str, *perms, scope: str = "all") -> str:
     """Create a user holding `perms` at `scope`, and return its uuid as a string.
 
     A string rather than the object on purpose: the session commits with
@@ -39,23 +47,31 @@ async def _user_with(db, name: str, *perms, scope: str = "all") -> str:
     user = User(name=name)
     db.add(user)
     await db.flush()
-    for perm in perms:
-        permission = (
-            await db.execute(select(Permission).where(Permission.key == perm.value))
-        ).scalar_one_or_none()
-        if permission is None:
-            permission = Permission(key=perm.value)
-            db.add(permission)
-            await db.flush()
-        role = Role(name=f"{name}-{perm.value}", kind="platform")
+    # One role holding every permission, not one role each: only the active identity's grants
+    # count since feature 010, so a user wearing several single-permission roles would hold
+    # whichever the token names and none of the rest.
+    role = None
+    if perms:
+        role = Role(name=f"{name}-history-tests", kind="platform")
         db.add(role)
         await db.flush()
-        db.add(RolePermissionAssign(
-            role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-        ))
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+        for perm in perms:
+            permission = (
+                await db.execute(select(Permission).where(Permission.key == perm.value))
+            ).scalar_one_or_none()
+            if permission is None:
+                permission = Permission(key=perm.value)
+                db.add(permission)
+                await db.flush()
+            db.add(RolePermissionAssign(
+                role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
+            ))
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid,
+                              team_uuid=None, role_kind="platform"))
     await db.flush()
-    return str(user.uuid)
+    uuid = str(user.uuid)
+    _HEADERS[uuid] = await auth_headers_for(redis, uuid, role)
+    return uuid
 
 
 async def _ticket(db, owner_uuid: str, title="需要飲用水") -> str:
@@ -81,9 +97,9 @@ def _audit(row_id, *, table="tickets", action="UPDATE", old=None, new=None, minu
 
 
 @pytest.mark.asyncio
-async def test_a_ticket_timeline_comes_back_in_the_standard_envelope(client, db_session):
+async def test_a_ticket_timeline_comes_back_in_the_standard_envelope(client, db_session, redis):
     """Success / data / meta — the same shape as every other endpoint."""
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     db_session.add(_audit(ticket, old={"status": "pending"},
                           new={"status": "in_progress"}))
@@ -100,9 +116,9 @@ async def test_a_ticket_timeline_comes_back_in_the_standard_envelope(client, db_
 
 
 @pytest.mark.asyncio
-async def test_a_station_timeline_uses_its_own_capability(client, db_session):
+async def test_a_station_timeline_uses_its_own_capability(client, db_session, redis):
     """station.view_history, not ticket.view_history — holding one is not holding the other."""
-    owner = await _user_with(db_session, "Keeper", Perm.STATION_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Keeper", Perm.STATION_VIEW_HISTORY)
     station = Station(
         uuid=uuidlib.uuid4(), property_name="station", created_by=owner,
         name="光復國小避難所", type="shelter",
@@ -121,9 +137,9 @@ async def test_a_station_timeline_uses_its_own_capability(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_an_empty_timeline_is_not_an_error(client, db_session):
+async def test_an_empty_timeline_is_not_an_error(client, db_session, redis):
     """A resource created before the triggers existed simply has no history."""
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
 
@@ -138,10 +154,10 @@ async def test_an_empty_timeline_is_not_an_error(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_without_the_capability_it_is_a_403(client, db_session):
+async def test_without_the_capability_it_is_a_403(client, db_session, redis):
     """Checkpoint 1: no grant at all."""
-    nobody = await _user_with(db_session, "Nobody", Perm.TICKET_VIEW)
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    nobody = await _user_with(db_session, redis, "Nobody", Perm.TICKET_VIEW)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
 
@@ -151,11 +167,11 @@ async def test_without_the_capability_it_is_a_403(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_someone_elses_ticket_is_a_403_under_own_scope(client, db_session):
+async def test_someone_elses_ticket_is_a_403_under_own_scope(client, db_session, redis):
     """ADR-023: an ownership mismatch is a 403 — it leaks no boundary information."""
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     stranger = await _user_with(
-        db_session, "Stranger", Perm.TICKET_VIEW_HISTORY, scope="own"
+        db_session, redis, "Stranger", Perm.TICKET_VIEW_HISTORY, scope="own"
     )
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
@@ -166,14 +182,14 @@ async def test_someone_elses_ticket_is_a_403_under_own_scope(client, db_session)
 
 
 @pytest.mark.asyncio
-async def test_out_of_zone_is_a_404_not_a_403(client, db_session):
+async def test_out_of_zone_is_a_404_not_a_403(client, db_session, redis):
     """A team-boundary mismatch is a 404, not a 403.
 
     ADR-023: a 403 would confirm the resource exists on the other side of that boundary.
     """
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     outsider = await _user_with(
-        db_session, "Outsider", Perm.TICKET_VIEW_HISTORY, scope="zone"
+        db_session, redis, "Outsider", Perm.TICKET_VIEW_HISTORY, scope="zone"
     )
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
@@ -184,9 +200,9 @@ async def test_out_of_zone_is_a_404_not_a_403(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_an_unknown_uuid_is_a_404(client, db_session):
+async def test_an_unknown_uuid_is_a_404(client, db_session, redis):
     """A resource that never existed, as opposed to one hidden by scope."""
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     await db_session.commit()
 
     resp = await client.get(f"{BASE}/tickets/{uuidlib.uuid4()}", headers=_auth(owner))
@@ -195,10 +211,10 @@ async def test_an_unknown_uuid_is_a_404(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_a_ticket_uuid_is_not_a_station(client, db_session):
+async def test_a_ticket_uuid_is_not_a_station(client, db_session, redis):
     """Both live in base_geometries; asking for the wrong kind must not resolve."""
     owner = await _user_with(
-        db_session, "Owner", Perm.TICKET_VIEW_HISTORY, Perm.STATION_VIEW_HISTORY
+        db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY, Perm.STATION_VIEW_HISTORY
     )
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
@@ -209,9 +225,9 @@ async def test_a_ticket_uuid_is_not_a_station(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_anonymous_callers_are_rejected(client, db_session):
+async def test_anonymous_callers_are_rejected(client, db_session, redis):
     """Guest holds neither capability (ADR-127)."""
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
 
@@ -224,9 +240,9 @@ async def test_anonymous_callers_are_rejected(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_paging_slices_events_and_reports_the_full_total(client, db_session):
+async def test_paging_slices_events_and_reports_the_full_total(client, db_session, redis):
     """`total` counts merged events, not audit rows, so paging can be described honestly."""
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     for minute in range(5):
         db_session.add(_audit(ticket, old={"status": f"s{minute}"},
@@ -247,9 +263,9 @@ async def test_paging_slices_events_and_reports_the_full_total(client, db_sessio
 
 
 @pytest.mark.asyncio
-async def test_an_offset_past_the_end_is_an_empty_page(client, db_session):
+async def test_an_offset_past_the_end_is_an_empty_page(client, db_session, redis):
     """Running off the end is a valid request, not an error."""
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     db_session.add(_audit(ticket, new={"status": "a"}))
     await db_session.commit()
@@ -265,9 +281,9 @@ async def test_an_offset_past_the_end_is_an_empty_page(client, db_session):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("query", ["limit=0", "limit=201", "offset=-1"])
-async def test_out_of_range_paging_is_rejected(client, db_session, query):
+async def test_out_of_range_paging_is_rejected(client, db_session, redis, query):
     """Bounds are enforced by the route signature, so a 422 rather than a silent clamp."""
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     await db_session.commit()
 
@@ -282,9 +298,9 @@ async def test_out_of_range_paging_is_rejected(client, db_session, query):
 
 
 @pytest.mark.asyncio
-async def test_contact_details_arrive_masked_without_view_pii(client, db_session):
+async def test_contact_details_arrive_masked_without_view_pii(client, db_session, redis):
     """The tier logic is unit-tested; this proves it is actually wired into the endpoint."""
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     db_session.add(_audit(ticket, old={"contact_phone": "0912345678"},
                           new={"contact_phone": "0987654321"}))
@@ -297,9 +313,9 @@ async def test_contact_details_arrive_masked_without_view_pii(client, db_session
 
 
 @pytest.mark.asyncio
-async def test_the_raw_payload_is_absent_without_audit_view(client, db_session):
+async def test_the_raw_payload_is_absent_without_audit_view(client, db_session, redis):
     """The escape hatch is invisible to callers who did not earn it."""
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW_HISTORY)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW_HISTORY)
     ticket = await _ticket(db_session, owner)
     db_session.add(_audit(ticket, new={"status": "a"}))
     await db_session.commit()
@@ -310,13 +326,13 @@ async def test_the_raw_payload_is_absent_without_audit_view(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_an_auditor_receives_the_raw_payload(client, db_session):
+async def test_an_auditor_receives_the_raw_payload(client, db_session, redis):
     """RAW reaches unclassified columns like search_text; `changes` still does not."""
     auditor = await _user_with(
-        db_session, "Auditor", Perm.TICKET_VIEW_HISTORY, Perm.AUDIT_VIEW,
+        db_session, redis, "Auditor", Perm.TICKET_VIEW_HISTORY, Perm.AUDIT_VIEW,
         Perm.TICKET_VIEW_PII,
     )
-    owner = await _user_with(db_session, "Owner", Perm.TICKET_VIEW)
+    owner = await _user_with(db_session, redis, "Owner", Perm.TICKET_VIEW)
     ticket = await _ticket(db_session, owner)
     db_session.add(_audit(ticket, old={"status": "a", "search_text": "舊"},
                           new={"status": "b", "search_text": "新"}))

@@ -1,8 +1,15 @@
+import ApiError from './api-error';
+
 async function parseJsonResponseAsync<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail = '請求失敗';
+    let code: string | undefined;
     try {
       const data = await response.json();
+
+      if (typeof data?.code === 'string') {
+        code = data.code;
+      }
 
       if (typeof data?.detail === 'string') {
         detail = data.detail;
@@ -17,7 +24,7 @@ async function parseJsonResponseAsync<T>(response: Response): Promise<T> {
     } catch {
       // Ignore JSON parse failures and keep fallback message.
     }
-    throw new Error(detail);
+    throw new ApiError(response.status, detail, code);
   }
 
   if (response.status === 204) {

@@ -30,13 +30,21 @@ from app.models.team import Team, TeamZoneAssign, WorkZone
 from app.models.ticket_task import TaskProperty, TicketTask
 from app.services.bulk_columns import DYNAMIC_PREFIX
 from app.services.bulk_export import BulkExportError, export_stations, export_tickets
+from tests.conftest import acting_as
 
 IN_ZONE = Point(121.50, 25.00)
 OUT_OF_ZONE = Point(121.90, 25.40)
 ZONE_POLYGON = Polygon([(121.4, 24.9), (121.6, 24.9), (121.6, 25.1), (121.4, 25.1)])
 
 
-async def _grant(db, user: User, perm: Perm, scope: str, role_name: str) -> None:
+async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, *, team=None) -> None:
+    """Add one capability to `user`'s single identity, creating that identity on first call.
+
+    One role per user, not one per call. Since feature 010 only the **active identity's**
+    grants count, so two calls building two roles would leave whichever is active holding
+    half the capabilities. `role_name` is kept in the signature because the call sites read
+    as documentation, but the role is looked up by user.
+    """
     permission = (
         await db.execute(select(Permission).where(Permission.key == perm.value))
     ).scalar_one_or_none()
@@ -44,11 +52,24 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str) -> None
         permission = Permission(key=perm.value)
         db.add(permission)
         await db.flush()
-    role = Role(name=role_name, kind="platform")
-    db.add(role)
-    await db.flush()
+
+    if team is not None:
+        await db.refresh(team)
+    kind = "team" if team is not None else "platform"
+    identity_role = f"bulk-tests-{user.name}"
+    role = (
+        await db.execute(select(Role).where(Role.name == identity_role))
+    ).scalar_one_or_none()
+    if role is None:
+        role = Role(name=identity_role, kind=kind)
+        db.add(role)
+        await db.flush()
+        db.add(UserRoleAssign(
+            user_uuid=user.uuid, role_uuid=role.uuid,
+            team_uuid=team.uuid if team is not None else None, role_kind=kind,
+        ))
+        acting_as(user, role, team)
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     await db.flush()
 
 
@@ -188,11 +209,11 @@ async def test_zone_scoped_export_only_reaches_the_team_s_own_area(db):
     """A team admin's file must contain its responsibility area and nothing else (ADR-111)."""
     await _configs(db)
     team = await _zoned_team(db)
-    actor = User(name="TeamAdmin", team_uuid=team.uuid)
+    actor = User(name="TeamAdmin")
     author = User(name="Someone")
     db.add_all([actor, author])
     await db.flush()
-    await _grant(db, actor, Perm.STATION_EXPORT, "zone", "zoned-exporter")
+    await _grant(db, actor, Perm.STATION_EXPORT, "zone", "zoned-exporter", team=team)
     await _station(db, name="區內站", point=IN_ZONE, creator=author)
     await _station(db, name="區外站", point=OUT_OF_ZONE, creator=author)
 
@@ -324,12 +345,12 @@ async def test_pii_is_masked_per_row_inside_one_file(db):
     """The zone tier guards the export button too, row by row (ADR-109)."""
     await _configs(db)
     team = await _zoned_team(db)
-    actor = User(name="TeamAdmin", team_uuid=team.uuid)
+    actor = User(name="TeamAdmin")
     author = User(name="Someone")
     db.add_all([actor, author])
     await db.flush()
-    await _grant(db, actor, Perm.TICKET_EXPORT, "all", "exporter")
-    await _grant(db, actor, Perm.TICKET_VIEW_PII, "zone", "zoned-pii")
+    await _grant(db, actor, Perm.TICKET_EXPORT, "all", "exporter", team=team)
+    await _grant(db, actor, Perm.TICKET_VIEW_PII, "zone", "zoned-pii", team=team)
     await _ticket_with_task(db, title="區內", point=IN_ZONE, creator=author)
     await _ticket_with_task(db, title="區外", point=OUT_OF_ZONE, creator=author)
 
@@ -355,3 +376,84 @@ async def test_a_caller_without_view_pii_gets_every_contact_masked(db):
 
     assert row["contact_name"] == "王◯◯"
     assert row["contact_phone"] != "0912345678"
+
+
+# --------------------------------------------------------------------------------------
+# PR #42 review round 2 (ADR-238/239)
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_unsupported_format_is_refused_before_any_query_runs(db, monkeypatch):
+    """`?format=pdf` must not pay for a 10 000-row read first (ADR-238).
+
+    `_render` has always checked, but it runs after the row query, the address query and the
+    properties query. The check now happens before `require_scope`, so the guard is that
+    nothing reached the database at all — asserted by making `_station_rows` explode.
+    """
+    from app.services import bulk_export
+
+    await _configs(db)
+    actor = User(name="Admin")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "all", "exporter")
+    await _station(db, name="光復國小", point=IN_ZONE, creator=actor, quantity=120)
+
+    async def explode(*args, **kwargs):
+        raise AssertionError("the export queried the database before checking the format")
+
+    monkeypatch.setattr(bulk_export, "_station_rows", explode)
+
+    with pytest.raises(bulk_export.BulkExportError) as err:
+        await export_stations(db, actor=actor, station_type="shelter", file_format="pdf")
+
+    assert "pdf" in str(err.value)
+
+
+@pytest.mark.asyncio
+async def test_an_export_that_hits_the_cap_refuses_instead_of_truncating(db, monkeypatch):
+    """A partial file that looks whole is worse here than a refusal (ADR-239).
+
+    This file is also the import template (ADR-119): the user's next step is to edit and
+    re-upload it, and 10 000 of 12 000 rows reads exactly like all of them.
+
+    The cap is lowered rather than seeding 10 001 stations — the boundary is what matters,
+    and the assertion is on the refusal, not on the number.
+    """
+    from app.services import bulk_export
+
+    await _configs(db)
+    actor = User(name="Admin")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "all", "exporter")
+    for index in range(3):
+        await _station(db, name=f"站點{index}", point=IN_ZONE, creator=actor, quantity=1)
+
+    monkeypatch.setattr(bulk_export, "MAX_EXPORT_ROWS", 2)
+
+    with pytest.raises(bulk_export.BulkExportError) as err:
+        await export_stations(db, actor=actor, station_type="shelter")
+
+    assert "station_type" in str(err.value)
+
+
+@pytest.mark.asyncio
+async def test_an_export_exactly_at_the_cap_still_succeeds(db, monkeypatch):
+    """The boundary belongs to the caller: N rows under an N cap is a complete file."""
+    from app.services import bulk_export
+
+    await _configs(db)
+    actor = User(name="Admin")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "all", "exporter")
+    for index in range(2):
+        await _station(db, name=f"站點{index}", point=IN_ZONE, creator=actor, quantity=1)
+
+    monkeypatch.setattr(bulk_export, "MAX_EXPORT_ROWS", 2)
+
+    table = _parse(await export_stations(db, actor=actor, station_type="shelter"))
+
+    assert len(table.rows) == 2

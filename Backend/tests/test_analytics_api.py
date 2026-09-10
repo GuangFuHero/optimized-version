@@ -8,34 +8,35 @@ status codes a caller actually sees, not what a service function returns.
 
 import json
 import re
+from types import SimpleNamespace
 
 import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 
 from app.core.permissions import Perm
-from app.core.security import create_access_token
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.services import chart_render
+from tests.conftest import auth_headers_for
 
 TICKETS_URL = "/api/v1/analytics/tickets/chart"
 STATIONS_URL = "/api/v1/analytics/stations/chart"
 CATALOG_URL = "/api/v1/analytics/catalog"
 
 
-async def _user_with_perms(db, *perms: Perm, scope: str = "all") -> dict:
+async def _user_with_perms(db, redis, *perms: Perm, scope: str = "all") -> dict:
     """Create a user holding exactly `perms` and return its bearer auth header.
 
     Thin wrapper over `_seeded_user` for the majority of tests, which don't need the uuid.
     """
-    _, headers = await _seeded_user(db, *perms, scope=scope)
+    _, headers = await _seeded_user(db, redis, *perms, scope=scope)
     return headers
 
 
-async def _seeded_user(db, *perms: Perm, scope: str = "all") -> tuple[str, dict]:
+async def _seeded_user(db, redis, *perms: Perm, scope: str = "all") -> tuple[str, dict]:
     """Create a user holding exactly `perms`; return its uuid and bearer auth header.
 
     Direct model inserts, matching tests/test_admin_api.py — the default `user` role from
@@ -61,9 +62,17 @@ async def _seeded_user(db, *perms: Perm, scope: str = "all") -> tuple[str, dict]
     # so touching an attribute afterwards would trigger a lazy refresh outside the
     # greenlet and raise MissingGreenlet.
     user_uuid = str(user.uuid)
+    role_uuid = str(role.uuid)
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     await db.commit()
-    headers = {"Authorization": f"Bearer {create_access_token(data={'sub': user_uuid})}"}
+    # A bare create_access_token no longer authenticates: the token has to name the identity
+    # it acts as (feature 010) and be backed by a live session (feature 014). auth_headers_for
+    # mints the same shape production does.
+    #
+    # `role_uuid` is read before the commit and handed over as a stand-in, because
+    # expire_on_commit=True expires `role` and token_for only reads its uuid — touching the
+    # real object here would raise MissingGreenlet under async.
+    headers = await auth_headers_for(redis, user_uuid, SimpleNamespace(uuid=role_uuid))
     return user_uuid, headers
 
 
@@ -75,30 +84,30 @@ async def test_chart_requires_authentication(client):
 
 
 @pytest.mark.asyncio
-async def test_chart_requires_the_domain_permission(client, db_session):
+async def test_chart_requires_the_domain_permission(client, db_session, redis):
     """A user without ticket.view is refused, and station.view doesn't substitute."""
-    headers = await _user_with_perms(db_session, Perm.STATION_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
     res = await client.get(TICKETS_URL, params={"y": "total_tickets"}, headers=headers)
     assert res.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_ticket_chart_renders(client, db_session):
+async def test_ticket_chart_renders(client, db_session, redis):
     """Baseline: the default request returns a partial Plotly div."""
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(TICKETS_URL, params={"y": "total_tickets"}, headers=headers)
     assert res.status_code == 200
     assert res.json()["html"].startswith("<div")
 
 
 @pytest.mark.asyncio
-async def test_category_line_chart_renders_with_null_task_type(client, db_session):
+async def test_category_line_chart_renders_with_null_task_type(client, db_session, redis):
     """H1a over HTTP: this combination used to 500 whenever a ticket had a NULL task_type.
 
     No ticket rows are needed to prove the endpoint is wired safely, but the paired
     service-level test (test_ticket_analytics) covers the populated case.
     """
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
         params={"y": "total_tickets", "x": "category", "chart_type": "line"},
@@ -109,13 +118,13 @@ async def test_category_line_chart_renders_with_null_task_type(client, db_sessio
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("tz", ["", "/etc/passwd", "..", "Nope/Nope"])
-async def test_invalid_timezone_is_a_400(client, db_session, tz):
+async def test_invalid_timezone_is_a_400(client, db_session, tz, redis):
     """Every malformed or unknown timezone is a 400.
 
     H2: ZoneInfo raises ValueError for malformed keys and ZoneInfoNotFoundError for
     unknown ones. Only the latter was caught, so `?tz=` (an easy frontend accident) 500'd.
     """
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL, params={"y": "total_tickets", "tz": tz}, headers=headers
     )
@@ -124,9 +133,9 @@ async def test_invalid_timezone_is_a_400(client, db_session, tz):
 
 
 @pytest.mark.asyncio
-async def test_valid_timezone_is_accepted(client, db_session):
+async def test_valid_timezone_is_accepted(client, db_session, redis):
     """Control for the above — a real IANA name still works."""
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL, params={"y": "total_tickets", "tz": "Asia/Taipei"}, headers=headers
     )
@@ -134,9 +143,9 @@ async def test_valid_timezone_is_accepted(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_count_requires_a_date_range(client, db_session):
+async def test_duplicate_count_requires_a_date_range(client, db_session, redis):
     """H3: unbounded this is an O(n^2) self-join, so the dates are mandatory."""
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(TICKETS_URL, params={"y": "duplicate_count"}, headers=headers)
     assert res.status_code == 400
     assert "start_date" in res.json()["detail"]
@@ -150,9 +159,9 @@ async def test_duplicate_count_requires_a_date_range(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_unsupported_chart_type_is_rejected(client, db_session):
+async def test_unsupported_chart_type_is_rejected(client, db_session, redis):
     """chart_type stays strictly validated, unlike x."""
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
         params={"y": "net_backlog_change", "chart_type": "pie"},
@@ -162,9 +171,9 @@ async def test_unsupported_chart_type_is_rejected(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_inapplicable_x_is_ignored_not_rejected(client, db_session):
+async def test_inapplicable_x_is_ignored_not_rejected(client, db_session, redis):
     """The documented asymmetry: a meaningless `x` still renders."""
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
         params={"y": "task_completion_distribution", "x": "date"},
@@ -174,9 +183,9 @@ async def test_inapplicable_x_is_ignored_not_rejected(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_unparseable_layout_overrides_is_a_400(client, db_session):
+async def test_unparseable_layout_overrides_is_a_400(client, db_session, redis):
     """layout_overrides arrives as a JSON string, so undecodable text is a client error."""
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
         params={"y": "total_tickets", "layout_overrides": "not json"},
@@ -186,22 +195,22 @@ async def test_unparseable_layout_overrides_is_a_400(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_station_chart_renders(client, db_session):
+async def test_station_chart_renders(client, db_session, redis):
     """The station handler shares _render_domain, so cover its permission + happy path."""
-    headers = await _user_with_perms(db_session, Perm.STATION_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
     res = await client.get(STATIONS_URL, params={"y": "station_status_count"}, headers=headers)
     assert res.status_code == 200
     assert res.json()["html"].startswith("<div")
 
 
 @pytest.mark.asyncio
-async def test_catalog_needs_no_domain_permission(client, db_session):
+async def test_catalog_needs_no_domain_permission(client, db_session, redis):
     """The catalog is static API metadata, so a station-only role can read it.
 
     It used to be gated on ticket.view while returning both domains, which locked such a
     role out of the station dropdowns it is allowed to chart.
     """
-    headers = await _user_with_perms(db_session, Perm.STATION_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
     res = await client.get(CATALOG_URL, headers=headers)
     assert res.status_code == 200
 
@@ -236,13 +245,13 @@ async def test_catalog_still_requires_authentication(client):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_count_rejects_a_range_wider_than_the_cap(client, db_session):
+async def test_duplicate_count_rejects_a_range_wider_than_the_cap(client, db_session, redis):
     """Supplying the dates isn't enough — the span between them is what costs.
 
     This is a self-join, and no statement_timeout or rate limit is deployed, so the cap is
     all that stops one request holding a connection for as long as it likes.
     """
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
         params={"y": "duplicate_count", "start_date": "1900-01-01", "end_date": "2999-12-31"},
@@ -253,13 +262,13 @@ async def test_duplicate_count_rejects_a_range_wider_than_the_cap(client, db_ses
 
 
 @pytest.mark.asyncio
-async def test_station_status_count_always_groups_by_status(client, db_session):
+async def test_station_status_count_always_groups_by_status(client, db_session, redis):
     """This metric only means something grouped, so the catalog forces x=category.
 
     A bare request used to render a single "overall" slice repeating station_count — a 100%
     pie conveying nothing. It should be one slice per status despite naming no `x`.
     """
-    user_uuid, headers = await _seeded_user(db_session, Perm.STATION_VIEW)
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.STATION_VIEW)
     for operational_status in ("active", "temporarily_closed", "permanently_closed"):
         db_session.add(
             Station(
@@ -280,13 +289,13 @@ async def test_station_status_count_always_groups_by_status(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_ticket_chart_counts_only_tickets_in_the_callers_scope(client, db_session):
+async def test_ticket_chart_counts_only_tickets_in_the_callers_scope(client, db_session, redis):
     """An `own`-scoped ticket.view grant must narrow the aggregate, not just permit it.
 
     The permission check passes either way; what matters is whether the resolved scope
     reaches the query. Without it the numbers leak even though no ticket row does.
     """
-    user_uuid, headers = await _seeded_user(db_session, Perm.TICKET_VIEW, scope="own")
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW, scope="own")
     stranger = User(name="somebody else")
     db_session.add(stranger)
     await db_session.flush()
@@ -310,13 +319,13 @@ async def test_ticket_chart_counts_only_tickets_in_the_callers_scope(client, db_
 
 
 @pytest.mark.asyncio
-async def test_unknown_layout_overrides_key_is_a_400(client, db_session):
+async def test_unknown_layout_overrides_key_is_a_400(client, db_session, redis):
     """Valid JSON, but not a key Plotly accepts — still the caller's mistake, so still 400.
 
     Rejected by Plotly deep inside rendering rather than by our own parsing, which is why
     render_chart re-raises it as AnalyticsInputError.
     """
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
         params={"y": "total_tickets", "layout_overrides": '{"no_such_layout_key": 1}'},
@@ -327,7 +336,7 @@ async def test_unknown_layout_overrides_key_is_a_400(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_a_render_bug_is_not_reported_as_a_client_error(client, db_session, monkeypatch):
+async def test_a_render_bug_is_not_reported_as_a_client_error(client, db_session, monkeypatch, redis):
     """A fault in our own code must surface as a server error, not a 400.
 
     The handler used to wrap the whole query-and-render chain in `except ValueError`, so an
@@ -337,7 +346,7 @@ async def test_a_render_bug_is_not_reported_as_a_client_error(client, db_session
         raise ValueError("internal render bug")
 
     monkeypatch.setattr(chart_render, "render_chart", _boom)
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     # The test transport re-raises unhandled app exceptions, so the raise *is* the pass.
     with pytest.raises(ValueError, match="internal render bug"):
         await client.get(TICKETS_URL, params={"y": "total_tickets"}, headers=headers)
@@ -345,14 +354,14 @@ async def test_a_render_bug_is_not_reported_as_a_client_error(client, db_session
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("url", [TICKETS_URL, STATIONS_URL])
-async def test_out_of_range_end_date_is_a_400(client, db_session, url):
+async def test_out_of_range_end_date_is_a_400(client, db_session, url, redis):
     """`end_date=9999-12-31` used to 500 every metric in both domains.
 
     `local_bounds` builds its exclusive upper bound as `end_date + timedelta(days=1)`, which
     runs off the end of `datetime.date`. FastAPI binds the param as a bare date, so the
     OverflowError landed in a handler that catches only AnalyticsInputError.
     """
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW, Perm.STATION_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW, Perm.STATION_VIEW)
     y = "total_tickets" if url == TICKETS_URL else "station_count"
     res = await client.get(
         url, params={"y": y, "end_date": "9999-12-31"}, headers=headers
@@ -362,14 +371,14 @@ async def test_out_of_range_end_date_is_a_400(client, db_session, url):
 
 
 @pytest.mark.asyncio
-async def test_out_of_range_start_date_is_a_400(client, db_session):
+async def test_out_of_range_start_date_is_a_400(client, db_session, redis):
     """The same defect on the lower bound, which the review missed.
 
     `datetime.combine(date(1, 1, 1), time.min, tzinfo=+08:06)` builds fine, so nothing failed
     in our code — asyncpg encodes a timestamptz via `.astimezone(utc)`, and that underflows.
     Only reachable under a positive UTC offset, hence the explicit tz.
     """
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
         params={"y": "total_tickets", "start_date": "0001-01-01", "tz": "Asia/Taipei"},
@@ -380,13 +389,13 @@ async def test_out_of_range_start_date_is_a_400(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_boundary_dates_are_accepted(client, db_session):
+async def test_boundary_dates_are_accepted(client, db_session, redis):
     """Control for the two above — one day inside each limit still renders.
 
     Both bugs were off-by-one against the representable range, so a rejection test alone
     would pass just as well against a bound that is a day too tight.
     """
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
         params={
@@ -403,13 +412,13 @@ async def test_boundary_dates_are_accepted(client, db_session):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("param", ["width", "height"])
 @pytest.mark.parametrize("value", [-1, 0, 9])
-async def test_undersized_figure_is_rejected(client, db_session, param, value):
+async def test_undersized_figure_is_rejected(client, db_session, param, value, redis):
     """Plotly's layout width/height have a minimum of 10; below it update_layout raises.
 
     The try/except in chart_render wraps layout_overrides only, so these two params reached
     plotly unguarded and 500'd. Now bounded at the framework edge, like the enum params.
     """
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL, params={"y": "total_tickets", param: value}, headers=headers
     )
@@ -417,9 +426,9 @@ async def test_undersized_figure_is_rejected(client, db_session, param, value):
 
 
 @pytest.mark.asyncio
-async def test_minimum_figure_size_is_accepted(client, db_session):
+async def test_minimum_figure_size_is_accepted(client, db_session, redis):
     """Control for the above — plotly's actual minimum is not rejected."""
-    headers = await _user_with_perms(db_session, Perm.TICKET_VIEW)
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(
         TICKETS_URL,
         params={"y": "total_tickets", "width": 10, "height": 10},

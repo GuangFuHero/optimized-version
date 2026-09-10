@@ -35,6 +35,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 from app.core import security  # noqa: E402
 from app.core.redis import get_redis  # noqa: E402
+from app.core.security import create_access_token  # noqa: E402
 from app.main import app  # noqa: E402
 from app.messaging.email import get_email_sender  # noqa: E402
 from app.messaging.sms import get_sms_sender  # noqa: E402
@@ -75,6 +76,10 @@ async def _ensure_test_database():
     eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
     async with eng.connect() as conn:
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
+        # pg_trgm supplies the gin_trgm_ops operator class used by the search_text indexes.
+        # Base.metadata.create_all builds those indexes, so without this every schema
+        # creation below fails — not one test, the whole suite.
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
     await eng.dispose()
 
 
@@ -86,6 +91,10 @@ async def db():
         await conn.execute(text("DROP SCHEMA public CASCADE;"))
         await conn.execute(text("CREATE SCHEMA public;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+        # DROP SCHEMA public CASCADE above takes pg_trgm with it (it installs into public),
+        # so it must be re-created here too — Base.metadata.create_all builds the
+        # search_text GIN indexes, which need gin_trgm_ops.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
@@ -101,6 +110,10 @@ async def db_session():
         await conn.execute(text("DROP SCHEMA public CASCADE;"))
         await conn.execute(text("CREATE SCHEMA public;"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+        # DROP SCHEMA public CASCADE above takes pg_trgm with it (it installs into public),
+        # so it must be re-created here too — Base.metadata.create_all builds the
+        # search_text GIN indexes, which need gin_trgm_ops.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
@@ -108,6 +121,72 @@ async def db_session():
         await session.commit()
         yield session
     await engine.dispose()
+
+
+async def token_for(redis, user_uuid, role=None, team=None) -> str:
+    """Mint an access token backed by a real session (features 010 + 014).
+
+    Two things make a production token work, and a test token has to have both:
+
+    - an `act` claim naming the identity the session acts as (010). A bare
+      `create_access_token(data={"sub": ...})` authenticates but holds no identity, which
+      resolves to zero grants — correct fail-closed behaviour, but not what a test
+      exercising permissions wants. Pass `role` (and `team`) to get one.
+    - a live `session:{sid}` in Redis (014). `get_current_user` refuses a token whose
+      session it cannot find, so a token minted without one authenticates nothing.
+
+    Deliberately mints the same shape production does rather than letting tests bypass the
+    session check: the check IS the feature, and revocation tests need a real session to
+    revoke (ADR-105).
+
+    `role=None` mints an authenticated token with no identity — for tests that only need
+    "somebody is logged in" (linking an SSO account, setting a password, and so on).
+    """
+    from app.core.identity import encode_act
+    from app.repositories.session_repository import SessionRepository
+
+    act = None
+    if role is not None:
+        # Accepts a Role/Team instance or a plain uuid. Tests that create the role, then let
+        # the request under test commit, would otherwise hand over an expired instance: the
+        # session is expire_on_commit=True, so reading `.uuid` afterwards is a lazy reload
+        # that AsyncSession cannot service. Passing the uuid captured up front sidesteps it.
+        act = encode_act(
+            str(getattr(role, "uuid", role)),
+            str(getattr(team, "uuid", team)) if team is not None else None,
+        )
+    # The session records the identity too (ADR-188), so a refresh that does not name one
+    # carries it forward. Passing it here keeps a test token the same shape as a real one;
+    # without it the session would remember nothing and a refresh in a test would silently
+    # fall back to the platform default.
+    sid, _ = await SessionRepository(redis).create_session(str(user_uuid), "test", act=act)
+    return create_access_token(data={"sub": str(user_uuid)}, sid=sid, act=act)
+
+
+async def auth_headers_for(redis, user_uuid, role=None, team=None) -> dict:
+    """Bearer headers for a token acting as the given identity, backed by a live session."""
+    return {"Authorization": f"Bearer {await token_for(redis, user_uuid, role, team)}"}
+
+
+def acting_as(user, role, team=None):
+    """Attach the identity a real request would have resolved from the token (feature 010).
+
+    Tests that build a `User` directly never go through `get_current_user`, so nothing sets
+    `active_identity` — and without one the actor resolves to zero grants, which is the
+    intended fail-closed behaviour but not what most tests are trying to exercise. Call this
+    to say which identity the actor is acting as.
+
+    `role` is a Role instance, `team` an optional Team; returns the user for chaining.
+    """
+    from app.core.identity import ActiveIdentity
+
+    user.active_identity = ActiveIdentity(
+        role_uuid=str(role.uuid),
+        team_uuid=str(team.uuid) if team is not None else None,
+        role_name=role.name,
+        team_name=team.name if team is not None else None,
+    )
+    return user
 
 
 class _Capturer:
@@ -161,11 +240,17 @@ async def client(db_session, redis):
 
     app.dependency_overrides[security.get_db] = override_get_db
     app.dependency_overrides[get_redis] = lambda: redis
+    # The GraphQL context reads redis off app.state, not through the dependency, because it
+    # calls get_current_user directly rather than via FastAPI (ADR-102). Overriding only the
+    # dependency would leave that path pointing at whatever the lifespan left behind — and
+    # the lifespan does not run under ASGITransport, so it points at nothing.
+    app.state.redis = redis
     app.dependency_overrides[get_google_verifier] = lambda: FakeGoogleVerifier()
     app.dependency_overrides[get_line_verifier] = lambda: FakeLineVerifier()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+    del app.state.redis
 
 
 @pytest.fixture

@@ -23,7 +23,7 @@ from app.db.triggers import get_audit_trigger_sql
 
 # revision identifiers, used by Alembic.
 revision: str = "b3f1c07d2a95"
-down_revision: str | Sequence[str] | None = "07ac630e0009"
+down_revision: str | Sequence[str] | None = "90c93167fa66"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

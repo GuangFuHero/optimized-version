@@ -10,6 +10,7 @@ import os
 os.environ["ENV"] = "testing"
 
 import pytest
+from scripts.seed_rbac import ROLES_DATA
 from sqlalchemy import select
 
 from app.core.permissions import PUBLIC_PERMS, Perm
@@ -17,7 +18,8 @@ from app.core.rbac_scopes import Scope
 from app.core.security import resolve_scope
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
-from scripts.seed_rbac import ROLES_DATA
+from app.models.team import Team
+from tests.conftest import acting_as
 
 HISTORY_PERMS = (Perm.TICKET_VIEW_HISTORY, Perm.STATION_VIEW_HISTORY)
 
@@ -64,7 +66,19 @@ async def _assign_seed_role(db, user: User, role_name: str) -> None:
                 )
             )
 
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    # A team-kind role must carry a team and a platform-kind one must not (ADR-073's CHECK).
+    team = None
+    if spec["kind"] == "team":
+        team = Team(name=f"team-for-{role_name}", type="gov")
+        db.add(team)
+        await db.flush()
+    db.add(UserRoleAssign(
+        user_uuid=user.uuid, role_uuid=role.uuid,
+        team_uuid=team.uuid if team is not None else None, role_kind=spec["kind"],
+    ))
+    # Without an active identity `get_user_permissions` returns {} — the fail-closed default
+    # since feature 010, and not what these tests are exercising.
+    acting_as(user, role, team)
     await db.flush()
 
 
@@ -496,17 +510,31 @@ async def _station_owned_by(db, owner):
 
 
 async def _grant(db, user: User, perm: Perm, scope: str) -> None:
-    """Give `user` exactly one capability at one scope, and nothing else."""
-    role = Role(name=f"only_{perm.value}_{scope}_{uuidlib.uuid4().hex[:6]}", kind="platform")
+    """Add one capability at one scope to `user`'s single identity.
+
+    Reuses the identity when the caller grants a second capability: since feature 010 only
+    the active identity's grants count, so two roles would leave the actor holding whichever
+    one is active and none of the others.
+    """
+    identity_role = f"history-tests-{user.name}"
+    role = (
+        await db.execute(select(Role).where(Role.name == identity_role))
+    ).scalars().first()
     permission = (
         await db.execute(select(Permission).where(Permission.key == perm.value))
     ).scalars().first() or Permission(key=perm.value)
-    db.add_all([role, permission])
+    db.add(permission)
+    if role is None:
+        role = Role(name=identity_role, kind="platform")
+        db.add(role)
+        await db.flush()
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid,
+                              team_uuid=None, role_kind="platform"))
+        acting_as(user, role)
     await db.flush()
     db.add(RolePermissionAssign(
         role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
     ))
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     await db.flush()
 
 

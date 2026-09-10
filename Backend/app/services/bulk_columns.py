@@ -63,6 +63,11 @@ class ColumnSpec:
     writable_on_create: bool = True
     writable_on_update: bool = True
     required_on_create: bool = False
+    # The width of the column this value lands in. Checked in Python so an over-length cell
+    # fails its own row with a readable reason, instead of reaching the driver as a
+    # `StringDataRightTruncation` that no per-row handler catches (ADR-241). Mirrors the rule
+    # `normalize_contact_fields` already states: check the width here, not at the database.
+    max_length: int | None = None
 
 
 def _readonly(column: ColumnSpec) -> ColumnSpec:
@@ -91,24 +96,24 @@ _MATCH_KEY_NOTE = "match key — see ADR-108"
 STATION_COLUMNS: tuple[ColumnSpec, ...] = (
     _readonly(_c("uuid")),
     _create_only(_c("name", required_on_create=True)),  # _MATCH_KEY_NOTE
-    _c("type"),
+    _c("type", max_length=50),
     _c("description", TEXT),
-    _c("op_hour"),
+    _c("op_hour", max_length=100),
     _c("level", INTEGER),
     _c("comment", TEXT),
-    _create_only(_c("source")),  # not in UpdateStationInput
-    _c("visibility", ENUM, enum_options=_VISIBILITY_OPTIONS),
+    _create_only(_c("source", max_length=50)),  # not in UpdateStationInput
+    _c("visibility", ENUM, enum_options=_VISIBILITY_OPTIONS, max_length=50),
     _c("latitude", FLOAT, required_on_create=True),
     _c("longitude", FLOAT, required_on_create=True),
     # The address lives in `secondary_locations`, which `UpdateStationInput` cannot reach at
     # all; county/city are also part of the match key.
-    _create_only(_c("county")),
-    _create_only(_c("city")),
-    _create_only(_c("lane")),
-    _create_only(_c("alley")),
-    _create_only(_c("no")),
-    _create_only(_c("floor")),
-    _create_only(_c("room")),
+    _create_only(_c("county", max_length=50)),
+    _create_only(_c("city", max_length=50)),
+    _create_only(_c("lane", max_length=20)),
+    _create_only(_c("alley", max_length=20)),
+    _create_only(_c("no", max_length=20)),
+    _create_only(_c("floor", max_length=20)),
+    _create_only(_c("room", max_length=20)),
     _readonly(_c("verification_status")),
     _readonly(_c("is_official", BOOLEAN)),
     _readonly(_c("confidence_score", FLOAT)),
@@ -118,7 +123,7 @@ STATION_COLUMNS: tuple[ColumnSpec, ...] = (
 
 TICKET_COLUMNS: tuple[ColumnSpec, ...] = (
     _readonly(_c("uuid")),
-    _create_only(_c("title", required_on_create=True)),  # _MATCH_KEY_NOTE
+    _create_only(_c("title", required_on_create=True, max_length=200)),  # _MATCH_KEY_NOTE
     _c("description", TEXT),
     # `create_ticket` always writes "pending", so a status on a new row means nothing; on an
     # update it goes through VALID_TRANSITIONS like any other status change (ADR-122).
@@ -129,21 +134,21 @@ TICKET_COLUMNS: tuple[ColumnSpec, ...] = (
         enum_options=_TICKET_STATUS_OPTIONS,
         writable_on_create=False,
     ),
-    _c("priority"),
-    _c("disaster_type"),
+    _c("priority", max_length=20),
+    _c("disaster_type", max_length=50),
     # PII, and `UpdateTicketInput` carries no contact fields at all; contact_phone is also
     # part of the match key.
-    _create_only(_c("contact_name", required_on_create=True)),
-    _create_only(_c("contact_email")),
-    _create_only(_c("contact_phone")),
+    _create_only(_c("contact_name", required_on_create=True, max_length=100)),
+    _create_only(_c("contact_email", max_length=100)),
+    _create_only(_c("contact_phone", max_length=50)),
     # `UpdateTicketInput` has no geometry, so a ticket's location is fixed once created.
     _create_only(_c("latitude", FLOAT, required_on_create=True)),
     _create_only(_c("longitude", FLOAT, required_on_create=True)),
-    _create_only(_c("visibility", ENUM, enum_options=_VISIBILITY_OPTIONS)),
+    _create_only(_c("visibility", ENUM, enum_options=_VISIBILITY_OPTIONS, max_length=50)),
     # One row is one ticket plus one task (ADR-120). task_type + task_name are the task's
     # match key; task_description and task_quantity are absent from UpdateTicketTaskInput.
-    _create_only(_c("task_type")),
-    _create_only(_c("task_name", required_on_create=True)),
+    _create_only(_c("task_type", max_length=50)),
+    _create_only(_c("task_name", required_on_create=True, max_length=200)),
     _create_only(_c("task_description", TEXT)),
     _create_only(_c("task_quantity", INTEGER)),
     _readonly(_c("verification_status")),

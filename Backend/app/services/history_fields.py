@@ -229,6 +229,14 @@ _SOFT_DELETE = (
     "DELETED (ADR-135)"
 )
 
+_GENERATED = (
+    "a PostgreSQL generated column (feature 011), derived entirely from columns this table "
+    "already classifies — and derived ACROSS tiers: `tickets.search_text` concatenates "
+    "`title` and `description`, so showing it at any single tier would leak whichever of its "
+    "inputs sits above that tier. It also changes on every edit to those inputs, which the "
+    "timeline already reports (ADR-243)"
+)
+
 _GEOMETRY_EXCLUSIONS = {
     "uuid": _ID,
     "created_by": _FK,
@@ -238,14 +246,18 @@ _GEOMETRY_EXCLUSIONS = {
     "property_name": _DISCRIMINATOR,
 }
 
-_ADDRESS_EXCLUSIONS = {"uuid": _ID, "geometry_uuid": _FK, "pole_photo_uuid": _FK}
+_ADDRESS_EXCLUSIONS = {
+    "uuid": _ID, "geometry_uuid": _FK, "pole_photo_uuid": _FK,
+    "search_text": _GENERATED,
+}
 
 EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
     ("ticket", "base_geometries"): _GEOMETRY_EXCLUSIONS,
     ("station", "base_geometries"): _GEOMETRY_EXCLUSIONS,
-    ("ticket", "tickets"): {"uuid": _ID},
+    ("ticket", "tickets"): {"uuid": _ID, "search_text": _GENERATED},
     ("station", "stations"): {
         "uuid": _ID,
+        "search_text": _GENERATED,
         "status_changed_at": _DERIVED_STAMP,
         "child_station_uuid": _FK,
         "updated_by": _FK,
@@ -256,6 +268,7 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
     },
     ("ticket", "ticket_tasks"): {
         "uuid": _ID,
+        "search_text": _GENERATED,
         # a1b2c3d4e5f6, both stamped by the status transition that sets them.
         "completed_at": _DERIVED_STAMP,
         "canceled_at": _DERIVED_STAMP,
@@ -274,6 +287,7 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
     },
     ("ticket", "task_properties"): {
         "uuid": _ID,
+        "search_text": _GENERATED,
         "task_uuid": _FK,
         "created_at": _STAMP,
         "updated_at": _STAMP,
@@ -287,6 +301,7 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
     },
     ("station", "station_properties"): {
         "uuid": _ID,
+        "search_text": _GENERATED,
         "station_uuid": _FK,
         "created_by": _FK,
         "created_at": _STAMP,

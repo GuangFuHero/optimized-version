@@ -618,3 +618,40 @@ reviewer 明確表示這不是正確性問題，「說明阻塞多久」與「�
 ➕ migration 保持簡單、可原子回滾。
 ➖ 表長大之後這個 migration 必須排在低峰執行。已寫進 docstring 與 spec，不是口耳相傳。
 ➖ 若之後真的要在大表上加索引（例如 ADR-202 提到的 audit console），屆時應該重新評估 `CONCURRENTLY`。
+
+---
+
+### ADR-243 `search_text` 排除在時間軸之外，因為它跨層衍生
+
+**白話**：搜尋用的 `search_text` 欄位是資料庫自動算出來的，把它放進時間軸不只是雜訊——它會漏出比它自己更高層級的內容。
+
+**Date**: 2026-09-10（合併 `main` 之後）
+
+**Context**：`test_every_column_is_classified` 這個守衛紅了七次。它的 docstring 就是為了這件事寫的：
+
+> Feature 011 added `search_text` to tickets and it went straight into every audit payload;
+> nothing in the codebase would have flagged it. Now something does.
+
+換句話說，**守衛正在做它被設計來做的事**。合併 `main` 把功能 011 帶進這棵樹，而 011 加的
+`search_text` 比原本以為的多——不是 tickets 與 stations 兩張表，是**六張**：
+`tickets`、`stations`、`ticket_tasks`、`task_properties`、`station_properties`、
+`secondary_locations`。以 (entity, table) 配對算是七組。
+
+**Decision**：`search_text` 一律進 `EXCLUDED`，不給任何 tier。
+
+**理由不只是「衍生欄位很吵」**，雖然那也是真的（它在 `title` / `description` / `name` 任何一次
+編輯時都會變，而那些變更時間軸本來就會報）。決定性的理由是**它跨層衍生**：
+
+`tickets.search_text` 由 `title` 與 `description` 串接而成，而這兩欄在
+`_TICKET_FIELDS` 裡的層級並不相同。把 `search_text` 放在任何**單一**層級，都會讓層級低於它
+輸入欄位的讀者看到本來看不到的內容——等於在四層可見度模型（ADR-128）上開一個旁路。
+
+它是 PostgreSQL 的 `Computed(..., persisted=True)` 生成欄位，使用者沒有任何方式直接寫它，
+所以「這個欄位被誰改成什麼」對時間軸的讀者也沒有意義。
+
+**Consequences**：
+➕ 四層可見度沒有旁路。
+➕ 六張表一致，不需要逐表判斷。
+➖ 未來若有人想在時間軸上呈現「這筆資料的可搜尋內容變了」，要另外設計，不能靠這一欄。
+   目前沒有這個需求。
+➖ 又一個「加欄位就要來這裡分類」的項目。這正是這個守衛存在的理由，成本是刻意付的。

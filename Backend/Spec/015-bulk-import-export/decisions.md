@@ -595,3 +595,168 @@ review 實測（已成測試）：3 列的站點檔、第 1 列是 caller 沒有
 **否決「只做檔名編碼、不驗詞彙」的理由**：那樣 `?station_type=不存在的東西` 會回一份沒有列的檔案，看起來像「這個型別沒有資料」，其實是打錯字。使用者裁定要 400。
 
 **否決「只允許英數白名單」的理由**：直接砍掉中文型別的匯出能力，而中文型別是這個專案的常態。
+
+---
+
+### ADR-238 匯出格式在任何查詢之前就檢查
+
+**白話**：`?format=pdf` 會先讀一萬列、跑完三個查詢，然後才告訴你格式不支援。
+
+**Date**: 2026-09-09（PR #42 第二輪 review 後補）
+
+**Context**：`_render` 有檢查 `file_format`，但它在列查詢、地址查詢、屬性查詢**之後**才執行。
+一個打錯的格式參數因此要付出完整的讀取成本才換到一個 400。
+
+**Decision**：抽出 `_require_supported_format()`，在兩個匯出進入點的**第一行**呼叫——比
+`require_scope` 還早。`_render` 裡的檢查保留，它是 service 被直接呼叫時的防線。
+
+這與 ADR-209 對匯入上限做的是同一件事：先拒絕的成本比後拒絕低，而且拒絕的理由與資料無關。
+
+**Consequences**：
+➕ 錯誤格式現在是常數成本。
+➖ 檢查出現在兩個地方。後者是深度防禦，不是重複——`_render` 也可能被別的呼叫者用到。
+
+**回歸測試**：`test_an_unsupported_format_is_refused_before_any_query_runs`，把 `_station_rows`
+換成會拋 `AssertionError` 的 stub——如果任何查詢跑了，測試就會以「查詢先於檢查」失敗，
+而不是靠斷言錯誤訊息。
+
+---
+
+### ADR-239 匯出達到上限時拒絕，而不是給出看起來完整的半份檔案
+
+**白話**：一萬列的上限會靜默截斷，而這個檔案同時是匯入範本——使用者會拿被截斷的版本回傳。
+
+**Date**: 2026-09-09（PR #42 第二輪 review 後補）
+
+**Context**：`.limit(MAX_EXPORT_ROWS)` 截在一萬列，回應裡沒有任何地方說有截斷。
+求助單的匯出是「一列一個 (ticket, task) 配對」，所以上限比站點更容易碰到。
+
+關鍵在 ADR-119：**這個檔案同時是匯入範本**。使用者的下一步就是編輯後重新上傳，
+而被截斷的匯出讀起來與完整的一模一樣。
+
+**Decision**：查詢改成 `.limit(MAX_EXPORT_ROWS + 1)`，拿回超過上限的筆數就**拒絕**，
+訊息說明「這個檔案同時是匯入範本，給出截斷的版本會被當成完整的」並指出用哪個參數縮小範圍。
+
+**否決「回傳檔案但加註記」的理由**：reviewer 列的三個選項之一，但註記要放哪裡都不夠顯眼——
+回應是二進位檔案下載，body 塞不進註記，HTTP header 使用者看不到。唯一使用者一定看得到的是
+檔名，而把「truncated」寫進檔名之後，那個檔名又會跟著被重新上傳。
+
+**這是拿可用性換正確性，而且是真的有代價。**單一 type 超過一萬列的使用者現在完全匯不出來，
+而唯一能縮小範圍的參數就是 type 本身。真正的解法是分頁或更多篩選條件，那需要自己的票——
+記在這裡而不是假裝上限夠用。
+
+**Consequences**：
+➕ 不會再有人拿到看起來完整的半份檔案。
+➖ 資料量超過上限的使用者匯不出來，且沒有繞道。這是刻意的，理由如上。
+➖ 多讀一列。可忽略。
+
+**回歸測試**：`test_an_export_that_hits_the_cap_refuses_instead_of_truncating` 把上限
+monkeypatch 成 2 再放 3 筆——邊界才是重點，不需要真的建一萬零一筆。
+另有 `test_an_export_exactly_at_the_cap_still_succeeds` 釘住「剛好等於上限」屬於成功那一側。
+
+---
+
+### ADR-240 任務是新建就要帶檔案裡的值，即使它的求助單是更新
+
+**白話**：把新任務掛到既有求助單上時，`task_description` 和 `task_quantity` 被丟掉寫成 NULL，而且那一列還回報成功。
+
+**Date**: 2026-09-09（PR #42 第二輪 review 後補）
+
+**Context**：`task_description` / `task_quantity` 標成 `_create_only`，因為
+`UpdateTicketTaskInput` 帶不了它們（ADR-108）。但**「求助單是更新」不等於「任務是更新」**：
+一列把**新**任務掛到已比對到的求助單上，仍然會走 `_write_task` 的建立分支，
+而那時 `writable_values(is_update=True)` 早就把兩個欄位丟掉了。
+
+`task_name` 活下來只是因為呼叫端有一行 `or (plan.row.get("task_name") or "").strip()` 的
+後備；它的兩個手足沒有。於是任務被建立成 `task_description=None, quantity=None`，
+**而且那一列被回報為成功**，動態 `prop.*` 值也確實寫進去了，所以檔案看起來乾淨地套用了。
+
+reviewer 指出這個 PR 自己的 `test_two_tasks_under_one_ticket_stay_two_tasks` 就能重現——
+兩列都寫 `task_quantity="3"`，第一個任務拿到 3，第二個拿到 NULL，而測試只斷言任務數量、
+不斷言值。實測確認：`assert None == 3`。
+
+**Decision**：`bulk_validate` 新增 `values_for(columns, row, fields)`——**不看**建立/更新的
+可寫性規則，只針對指名的欄位跑同一套 `coerce`。`_write_ticket` 用它讀出任務的 create-only
+欄位，交給 `_write_task` 的 `task_on_create`，**只在建立分支使用**。
+
+只在建立分支使用是重點：比對到的任務仍然遵守 ADR-108「create-only 欄位永遠不被更新寫入」。
+
+**Consequences**：
+➕ 一個任務不論它的父求助單是新建或比對到，都帶著檔案裡的值。
+➕ `values_for` 走同一個 `coerce`，所以壞掉的儲存格失敗方式一致。
+➖ `_write_task` 多一個參數。以「更新求助單／建立任務」這個組合的存在來說是必要的。
+
+**回歸測試**：`test_a_new_task_under_a_matched_ticket_keeps_its_own_fields`。
+拿掉修正會紅在 `assert None == 3`。
+
+---
+
+### ADR-241 有寬度上限的欄位在 Python 就檢查，並替驅動層例外補一道防線
+
+**白話**：超長的儲存格會讓 PostgreSQL 丟出一個沒人接的例外，整份匯入 500——而前面的列已經各自寫進去了。
+
+**Date**: 2026-09-09（PR #42 第二輪 review 後補）
+
+**Context**：`bulk_validate` 完全沒有長度檢查，只有三個 `contact_*` 欄位在
+`normalize_contact_fields` 裡有（`geo_validation.py:41`）。其他全部直接送到驅動層：
+
+- `tickets.title` `String(200)`、`priority` `String(20)`、`disaster_type` `String(50)`
+- `stations.op_hour` `String(100)`、`type` / `source` / `visibility` `String(50)`
+- `secondary_locations.lane` / `alley` / `no` / `floor` / `room` `String(20)`、
+  `county` / `city` `String(50)`——**`lane` 實際上裝的是路名**，一份把完整地址放在同一欄的
+  名冊會例行性地爆掉它
+- `station_properties.quantity` 是 `Integer`：Python 的 int 轉得很順，到 `int4` 才溢位
+
+PostgreSQL 丟 `StringDataRightTruncation` → `sqlalchemy.exc.DataError`，**那不是
+`ValueError`**。它逃出 `_write_all`、逃出端點的 `except (BulkImportError, TableFormatError)`，
+整個請求 500——而前面每一列都已經被自己的 service 呼叫 commit 進去了，且**沒有錯誤報表**。
+實測確認：`asyncpg.exceptions.StringDataRightTruncationError: value too long for type character varying(200)`
+直接穿透整個迴圈。
+
+這與 ADR-211/213 剛移除的是同一種失效形狀，只是從一個它們沒涵蓋的觸發點進來。
+
+**Decision**：兩層。
+
+1. **`ColumnSpec` 加 `max_length`，`coerce` 檢查**。20 個有界欄位都標上實際寬度（值取自
+   model 定義，不是取自 review 報告）。`_to_integer` 也加上 int4 範圍檢查。
+   超長的儲存格因此**失敗在它自己那一列**，帶著可讀的理由進錯誤報表，其餘的列照樣寫入。
+   這正是 `normalize_contact_fields` 的 docstring 早就寫下的規則——在 Python 檢查寬度，
+   讓呼叫者拿到 400 形狀的訊息而不是驅動層的錯誤——只是從沒延伸到其他欄位。
+2. **`_write_all` 的 `except` 加上 `SQLAlchemyError`**，這是防線不是主計畫。
+   逐列的迴圈不該有辦法在驅動層拋出任何東西時就丟下一份寫到一半的檔案。
+
+**Consequences**：
+➕ 超長或超範圍的儲存格與其他驗證錯誤走同一條路：那一列失敗、進報表、其餘照常。
+➕ 任何未預期的資料庫錯誤最多毀掉一列。
+➖ 20 個欄位的寬度現在寫在兩個地方（model 與 `bulk_columns`）。model 改寬度而這裡沒跟上，
+   會表現成「早期拒絕了其實可以存的值」——保守的方向，但仍是要記住的重複。
+➖ `SQLAlchemyError` 的訊息是通用的，真正的原因只進 log。給使用者的訊息在猜不到具體欄位時
+   不該假裝知道。
+
+**回歸測試**：`test_an_over_length_cell_fails_its_own_row_and_the_rest_land`（斷言好的列
+仍然寫入、壞的列進報表）與 `test_an_integer_beyond_int4_fails_its_own_row`。
+
+---
+
+### ADR-242 錯誤報表的欄位名不能撞到檔案本來就有的欄位
+
+**白話**：上傳的檔案如果本來就有一欄叫 `error`，產生的報表會有兩欄 `error`，而那份報表傳不回來。
+
+**Date**: 2026-09-09（PR #42 第二輪 review 後補）
+
+**Context**：`_as_report` 無條件附加一欄 `error`。而 `_clean_headers`
+（`app/core/tabular.py:92`）在讀取時拒絕重複表頭。`error` 在真實名冊裡是個合理的欄位名，
+一旦撞到，報表就**無法重新上傳**：`表頭有重複的欄位名稱：error`。
+
+ADR-112 的整個循環是「照著它說的改、重新上傳、完成」，而這個 bug 恰好打在最需要那個循環的檔案上。
+
+**Decision**：`_error_column_name()`——`error` 沒被用就用 `error`，否則往下找 `error_1`、
+`error_2`⋯⋯直到不衝突。
+
+**Consequences**：
+➕ 報表永遠可以重新上傳。
+➖ 欄位名不再是固定的。任何解析報表的工具要看最後一欄，不能寫死名字。目前沒有這種工具。
+
+**回歸測試**：`test_the_error_report_is_re_uploadable_when_the_file_has_an_error_column`——
+把報表讀回來，斷言 `error` 與 `error_1` 都在，且檔案本來那一欄的值沒被覆寫。
+拿掉修正會紅在 `TableFormatError: 表頭有重複的欄位名稱：error`。
