@@ -633,9 +633,17 @@ INSERT INTO team_zone_assign (uuid, team_uuid, zone_uuid, assigned_by) VALUES
 -- 8. PR12-ready 條件區塊 — 欄位存在才寫(部署 PR#11/#12 後重跑即生效)
 DO $$
 BEGIN
+  -- 功能 018：disaster_type(單數,自由字串) 已改為 disaster_types(陣列,參照 disaster_types.key)。
+  -- 舊值 'mudslide' 不在六種正式代碼內,一律改用 'landslide'(土石流)。
   IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name='tickets' AND column_name='disaster_types') THEN
+    UPDATE tickets SET disaster_types=ARRAY['landslide']
+     WHERE uuid::text LIKE 'd0000000-%' AND right(uuid::text,12)::bigint <= 30;
+    UPDATE tickets SET disaster_types=ARRAY['flood']
+     WHERE uuid::text LIKE 'd0000000-%' AND right(uuid::text,12)::bigint > 30;
+  ELSIF EXISTS (SELECT 1 FROM information_schema.columns
              WHERE table_name='tickets' AND column_name='disaster_type') THEN
-    UPDATE tickets SET disaster_type='mudslide'
+    UPDATE tickets SET disaster_type='landslide'
      WHERE uuid::text LIKE 'd0000000-%' AND right(uuid::text,12)::bigint <= 30;
     UPDATE tickets SET disaster_type='flood'
      WHERE uuid::text LIKE 'd0000000-%' AND right(uuid::text,12)::bigint > 30;

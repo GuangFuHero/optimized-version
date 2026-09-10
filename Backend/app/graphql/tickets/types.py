@@ -13,7 +13,7 @@ from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
-from app.graphql.shared import PageInfo, Visibility
+from app.graphql.shared import PageInfo, SecondaryLocationInput, TriState, Visibility
 
 
 @strawberry.enum
@@ -344,8 +344,27 @@ class TicketType:
     review_note: str | None = strawberry.field(
         default=None, description="Moderator's notes about the verification decision"
     )
-    disaster_type: str | None = strawberry.field(
-        default=None, description="Type of disaster, e.g. 'earthquake', 'flood'"
+    disaster_types: list[str] = strawberry.field(
+        default_factory=list,
+        description=(
+            "Disaster type keys this ticket is filed under, e.g. ['flood', 'landslide']. "
+            "Plural because one incident is routinely two disasters at once. Drives which "
+            "fields `ticketPropertyConfigs` returns for it"
+        ),
+    )
+    person_trapped_reported: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown', or null if "
+            "never asked. What the person said, not a professional assessment"
+        ),
+    )
+    immediate_danger_reported: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown', or null if never "
+            "asked. Not a triage grade and not a risk classification"
+        ),
     )
     created_by: str | None = strawberry.field(
         default=None, description="UUID of the user who submitted this ticket"
@@ -428,6 +447,18 @@ class TicketType:
         """Resolve all active tasks under this ticket."""
         return await info.context["loaders"]["tasks_by_ticket"].load(str(self.uuid))
 
+    @strawberry.field
+    async def disaster_details(
+        self, info: strawberry.types.Info
+    ) -> list["TicketDisasterDetailType"]:
+        """Resolve this ticket's disaster-specific field values.
+
+        A `multi_select` field arrives as several rows sharing one `propertyName`; the caller
+        groups them. Pair with `ticketPropertyConfigs(disasterTypes: <this ticket's>)` to get
+        the labels, units and hints these bare keys and values belong to.
+        """
+        return await info.context["loaders"]["disaster_details_by_ticket"].load(str(self.uuid))
+
     @classmethod
     def from_model(cls, m) -> "TicketType":
         """Build from a SQLAlchemy model instance."""
@@ -443,7 +474,9 @@ class TicketType:
             visibility=m.visibility,
             verification_status=m.verification_status,
             review_note=m.review_note,
-            disaster_type=m.disaster_type,
+            disaster_types=list(m.disaster_types or []),
+            person_trapped_reported=m.person_trapped_reported,
+            immediate_danger_reported=m.immediate_danger_reported,
             created_by=m.created_by,
             created_at=m.created_at,
             updated_at=m.updated_at,
@@ -487,8 +520,27 @@ class CreateTicketInput:
         default=Visibility.public,
         description="Visibility: 'public' (default), 'restricted', or 'internal'",
     )
-    disaster_type: str | None = strawberry.field(
-        default=None, description="Type of disaster, e.g. 'earthquake', 'flood'"
+    disaster_types: list[str] | None = strawberry.field(
+        default=None,
+        description=(
+            "Disaster type keys, e.g. ['flood', 'landslide']. Each must be an active key from "
+            "`disasterTypes`; an unknown one is rejected rather than stored, because a ticket "
+            "filed under a disaster that does not exist would show the reporter an empty form"
+        ),
+    )
+    person_trapped_reported: TriState | None = strawberry.field(
+        default=None, description="災民受困／無法自行離開. Omit when nobody was asked"
+    )
+    immediate_danger_reported: TriState | None = strawberry.field(
+        default=None, description="立即生命危險. Omit when nobody was asked"
+    )
+    secondary_location: SecondaryLocationInput | None = strawberry.field(
+        default=None,
+        description=(
+            "Street address and space detail for where help is needed. New in feature 018 — "
+            "before it, only stations could carry one, so the record that most needs a door "
+            "number had nothing but a map pin"
+        ),
     )
 
 
@@ -512,6 +564,52 @@ class UpdateTicketInput:
         default=None,
         description="Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'",
     )
-    disaster_type: str | None = strawberry.field(
-        default=strawberry.UNSET, description="Type of disaster — pass null to clear"
+    disaster_types: list[str] | None = strawberry.field(
+        default=strawberry.UNSET,
+        description="Disaster type keys — pass [] or null to clear. Validated against `disasterTypes`",
+    )
+    person_trapped_reported: TriState | None = strawberry.field(
+        default=strawberry.UNSET, description="災民受困／無法自行離開 — pass null to unset"
+    )
+    immediate_danger_reported: TriState | None = strawberry.field(
+        default=strawberry.UNSET, description="立即生命危險 — pass null to unset"
+    )
+
+
+@strawberry.type
+class TicketDisasterDetailType:
+    """One disaster-specific field value recorded against a ticket.
+
+    Deliberately a bare `(propertyName, value)` pair with no label or type: those live in
+    `ticketPropertyConfigs` and would go stale the moment an operator renamed a label if they
+    were copied here. A `multi_select` answer is several of these sharing a `propertyName`.
+    """
+
+    uuid: UUID
+    property_name: str = strawberry.field(
+        description="The field key, matching a `ticketPropertyConfigs` entry"
+    )
+    value: str = strawberry.field(
+        description=(
+            "One selected value. Numbers arrive as strings — the config's dataType says "
+            "how to read it"
+        )
+    )
+
+    @classmethod
+    def from_model(cls, m) -> "TicketDisasterDetailType":
+        """Build from a SQLAlchemy model instance."""
+        return cls(uuid=m.uuid, property_name=m.property_name, value=m.value)
+
+
+@strawberry.input
+class TicketDisasterDetailInput:
+    """One field's answer: its key plus every value selected for it."""
+
+    property_name: str = strawberry.field(description="The field key from `ticketPropertyConfigs`")
+    values: list[str] = strawberry.field(
+        description=(
+            "Selected values. One entry for a single-valued field, several for multi_select, "
+            "[] to clear the field"
+        )
     )

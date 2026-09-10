@@ -22,12 +22,14 @@ from app.graphql.tickets.types import (
     PhotoType,
     TaskAssignmentType,
     TaskPropertyType,
+    TicketDisasterDetailType,
     TicketTaskType,
 )
 from app.graphql.work_zone.types import AssignedTeamType
 from app.models.photo import Photo
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import CrowdSourcing, StationProperty
+from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.repositories.team_repository import team_zone_assign_repository
 
@@ -60,6 +62,12 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         ),
         "photos_by_ticket": photos_by_geometry,
         "photos_by_station": photos_by_geometry,
+        "disaster_details_by_ticket": DataLoader(
+            load_fn=_make_one_to_many_loader(
+                db, TicketDisasterDetail, "ticket_uuid", TicketDisasterDetailType,
+                soft_delete=True,
+            )
+        ),
         "tasks_by_ticket": DataLoader(
             load_fn=_make_one_to_many_loader(
                 db, TicketTask, "ticket_uuid", TicketTaskType, soft_delete=True

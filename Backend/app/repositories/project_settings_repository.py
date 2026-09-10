@@ -1,4 +1,4 @@
-"""Repository for the single-row project settings table (ADR-090)."""
+"""Repositories for the deployment's project settings row (ADR-090) and its disaster vocabulary."""
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.disaster_types import normalize_disaster_types
 from app.infrastructure.repository.base import GenericRepository
+from app.models.disaster_type import DisasterType
 from app.models.project_settings import ProjectSettings
 
 
@@ -64,4 +65,67 @@ class ProjectSettingsRepository(GenericRepository[ProjectSettings]):
             return await self.update(db, db_obj=current, obj_in=values)
 
 
+class DisasterTypeRepository(GenericRepository[DisasterType]):
+    """Reads and upserts the deployment's disaster-type vocabulary (feature 018, ADR-244)."""
+
+    def __init__(self):
+        """Initialize with DisasterType as the managed model."""
+        super().__init__(DisasterType)
+
+    async def list_all(
+        self, db: AsyncSession, *, include_inactive: bool = False
+    ) -> list[DisasterType]:
+        """List the vocabulary, ordered by key so the picker never reshuffles.
+
+        Ordered on `key`, not `label`: the keys are ASCII and sort stably everywhere, whereas
+        Chinese labels sort by whatever collation the database happens to be running.
+        """
+        stmt = select(self.model)
+        if not include_inactive:
+            stmt = stmt.where(self.model.is_active.is_(True))
+        result = await db.execute(stmt.order_by(self.model.key))
+        return result.scalars().all()
+
+    async def upsert(
+        self, db: AsyncSession, *, key: str, label: str | None = None,
+        is_active: bool | None = None,
+    ) -> DisasterType:
+        """Create or update one disaster type, keyed on the normalized `key`.
+
+        `key` is normalized the same way every other disaster label in the system is, so an
+        operator typing `" Flood "` updates the existing `flood` rather than creating a
+        near-duplicate that would silently match nothing.
+
+        There is no rename: `tickets.disaster_types`, `project_settings.disaster_types` and
+        every `*_property_config.disaster_types` reference the key as a bare string with no
+        foreign key, so changing it would orphan all three at once. Editing `label` is how you
+        change what people see.
+        """
+        normalized = normalize_disaster_types([key])
+        if not normalized:
+            raise ValueError("災害型別代碼不可為空白")
+        key = normalized[0]
+
+        result = await db.execute(select(self.model).where(self.model.key == key))
+        existing = result.scalar_one_or_none()
+        values = {k: v for k, v in {"label": label, "is_active": is_active}.items() if v is not None}
+        if existing is not None:
+            return await self.update(db, db_obj=existing, obj_in=values)
+        if not label:
+            raise ValueError(f"新增災害型別「{key}」時必須提供顯示名稱 label")
+        try:
+            return await self.create(db, obj_in={"key": key, **values})
+        except IntegrityError:
+            # Two operators adding the same type at once: the unique key rejects the loser,
+            # which re-reads and updates the winner instead of surfacing a 500. Same
+            # convergence rule as the property-config upsert.
+            await db.rollback()
+            result = await db.execute(select(self.model).where(self.model.key == key))
+            existing = result.scalar_one_or_none()
+            if existing is None:
+                raise
+            return await self.update(db, db_obj=existing, obj_in=values)
+
+
 project_settings_repository = ProjectSettingsRepository()
+disaster_type_repository = DisasterTypeRepository()

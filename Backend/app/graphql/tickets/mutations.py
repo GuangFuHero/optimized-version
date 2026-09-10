@@ -10,12 +10,15 @@ from uuid import UUID
 import strawberry
 
 from app.graphql.context import require_authenticated
+from app.graphql.shared import secondary_location_to_dict
 from app.graphql.tickets.types import (
     CreateTaskPropertyInput,
     CreateTicketInput,
     CreateTicketTaskInput,
     TaskAssignmentType,
     TaskPropertyType,
+    TicketDisasterDetailInput,
+    TicketDisasterDetailType,
     TicketTaskType,
     TicketType,
     UpdateTaskAssignmentInput,
@@ -42,7 +45,18 @@ class RequestMutation:
             contact_name=input.contact_name, contact_email=input.contact_email,
             contact_phone=input.contact_phone, priority=input.priority,
             task_type=input.task_type, visibility=input.visibility.value,
-            disaster_type=input.disaster_type,
+            disaster_types=input.disaster_types,
+            person_trapped_reported=(
+                input.person_trapped_reported.value if input.person_trapped_reported else None
+            ),
+            immediate_danger_reported=(
+                input.immediate_danger_reported.value if input.immediate_danger_reported else None
+            ),
+            secondary_location=(
+                secondary_location_to_dict(input.secondary_location)
+                if input.secondary_location is not None
+                else None
+            ),
         )
         return TicketType.from_model(ticket)
 
@@ -63,16 +77,45 @@ class RequestMutation:
             changes["priority"] = input.priority
         if input.title is not None:
             changes["title"] = input.title
-        for field in ("description", "review_note", "disaster_type"):
+        for field in ("description", "review_note", "disaster_types"):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
                 changes[field] = val
+        # Enums have to be unwrapped to their string value before reaching the service, the
+        # same way `visibility` is on create. `GenericRepository.update` matches keys by
+        # `hasattr`, so an unwrapped enum would be stored as the member object rather than
+        # rejected — silently, which is why this is explicit rather than folded into the loop.
+        for field in ("person_trapped_reported", "immediate_danger_reported"):
+            val = getattr(input, field)
+            if val is not strawberry.UNSET:
+                changes[field] = val.value if val is not None else None
 
         ticket = await ticket_service.update_ticket(
             info.context["db"], actor=require_authenticated(info),
             uuid=str(uuid), status=input.status, changes=changes,
         )
         return TicketType.from_model(ticket)
+
+    @strawberry.mutation
+    async def set_ticket_disaster_details(
+        self,
+        info: strawberry.types.Info,
+        uuid: UUID,
+        details: list[TicketDisasterDetailInput],
+    ) -> list[TicketDisasterDetailType]:
+        """Replace a ticket's disaster-specific field answers.
+
+        A full replacement, not a patch: whatever is sent becomes the complete answer set, and
+        a field left out of `details` is cleared. That mirrors the form, which shows every
+        field at once — a merge would leave no way to un-answer a question.
+
+        Requires ticket.edit with scope check. Returns the stored values.
+        """
+        rows = await ticket_service.set_ticket_disaster_details(
+            info.context["db"], actor=require_authenticated(info), ticket_uuid=str(uuid),
+            details={d.property_name: d.values for d in details},
+        )
+        return [TicketDisasterDetailType.from_model(r) for r in rows]
 
     @strawberry.mutation
     async def review_ticket(

@@ -53,25 +53,25 @@ async def test_disaster_types_defaults_to_empty(db):
 
 async def test_station_config_unique_key_is_enforced_by_the_database(db):
     """Upsert has always keyed on (type, property_name); the DB never guaranteed it (ADR-091)."""
-    db.add(StationPropertyConfig(station_type="shelter", property_name="發電機", data_type="integer"))
+    db.add(StationPropertyConfig(station_type="shelter", property_name="發電機", data_type="number"))
     await db.commit()
-    db.add(StationPropertyConfig(station_type="shelter", property_name="發電機", data_type="string"))
+    db.add(StationPropertyConfig(station_type="shelter", property_name="發電機", data_type="text"))
     with pytest.raises(IntegrityError):
         await db.commit()
 
 
 async def test_task_config_unique_key_is_enforced_by_the_database(db):
     """The same (type, property_name) uniqueness holds for task configs."""
-    db.add(TaskPropertyConfig(task_type="rescue", property_name="樓層", data_type="integer"))
+    db.add(TaskPropertyConfig(task_type="rescue", property_name="樓層", data_type="number"))
     await db.commit()
-    db.add(TaskPropertyConfig(task_type="rescue", property_name="樓層", data_type="string"))
+    db.add(TaskPropertyConfig(task_type="rescue", property_name="樓層", data_type="text"))
     with pytest.raises(IntegrityError):
         await db.commit()
 
 
 async def test_config_defaults(db):
     """New rows are enabled, unordered and enabled for every disaster type (ADR-095)."""
-    cfg = StationPropertyConfig(station_type="shelter", property_name="發電機", data_type="integer")
+    cfg = StationPropertyConfig(station_type="shelter", property_name="發電機", data_type="number")
     db.add(cfg)
     await db.commit()
     await db.refresh(cfg)
@@ -144,7 +144,9 @@ async def test_patch_creates_the_row_when_the_table_is_empty(client, db_session)
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["name"] == "花蓮 0816"
-    assert resp.json()["disaster_types"] == ["landslide", "flood"]
+    # Sorted, not insertion order (ADR-246): the analytics duplicate join compares two
+    # tickets' disaster_types with `==`, and PostgreSQL array equality is order-sensitive.
+    assert resp.json()["disaster_types"] == ["flood", "landslide"]
     assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 1
 
 
@@ -227,7 +229,7 @@ async def test_settings_disaster_types_are_lowercased_on_write(client, db_sessio
 async def test_config_disaster_types_are_lowercased_on_write(db):
     """The config side is normalized the same way, or the two sides could never match."""
     cfg = await station_property_config_repository.upsert(
-        db, station_type="shelter", property_name="淹水深度", data_type="integer",
+        db, station_type="shelter", property_name="淹水深度", data_type="number",
         enum_options=None, disaster_types=["Flood", "flood ", "LANDSLIDE"],
     )
 
@@ -238,7 +240,7 @@ async def test_mixed_case_settings_still_match_config(client, db_session):
     """The whole point: a mis-cased setting must not silently blank out the field list."""
     admin_uuid = await _make_project_admin(db_session)
     await station_property_config_repository.upsert(
-        db_session, station_type="shelter", property_name="淹水深度", data_type="integer",
+        db_session, station_type="shelter", property_name="淹水深度", data_type="number",
         enum_options=None, disaster_types=["flood"],
     )
 
@@ -255,7 +257,7 @@ async def test_mixed_case_settings_still_match_config(client, db_session):
 async def test_empty_disaster_types_survives_normalization(db):
     """An empty list means "every disaster type" — it must not be confused with "not supplied"."""
     cfg = await station_property_config_repository.upsert(
-        db, station_type="shelter", property_name="收容人數", data_type="integer",
+        db, station_type="shelter", property_name="收容人數", data_type="number",
         enum_options=None, disaster_types=[],
     )
 
@@ -267,17 +269,35 @@ async def test_empty_disaster_types_survives_normalization(db):
 # ──────────────────────────────────────────────
 
 
-async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_session, caplog):
-    """A typo is accepted, stores cleanly, and empties the forms — say so at write time.
+async def test_a_typo_in_a_disaster_type_is_now_rejected(client, db_session):
+    """`"floods"` for `"flood"` is refused outright since feature 018 closed the vocabulary.
 
-    `"floods"` for `"flood"` is exact-equality-different, so every flood-scoped field drops
-    out of the station and task forms. There is no vocabulary to reject the label against
-    (ADR-091), so the write still succeeds; what must not happen is it succeeding *silently*
-    (ADR-169).
+    ADR-169 could only *warn* about this, because ADR-091 had left the vocabulary open and
+    there was nothing to check a label against. Now there is: the label has to be a key in
+    `disaster_types`. Rejecting beats warning here — a typo saved cleanly and then silently
+    emptied every flood-scoped field out of the station and task forms.
+    """
+    admin_uuid = await _make_project_admin(db_session)
+    resp = await client.patch(
+        SETTINGS_URL, headers=_auth_header(admin_uuid),
+        json={"name": "花蓮 0816", "disaster_types": ["floods"]},
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert "floods" in resp.text
+
+
+async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_session, caplog):
+    """A real type that no field is configured for is a warning, not an error (ADR-169).
+
+    This is what survives of ADR-169 now that the typo half is a hard rejection: `earthquake`
+    is a perfectly valid key, but if every configured field is scoped to `flood`, selecting it
+    empties the forms just as thoroughly. Configuring the disaster before its fields is a
+    legitimate order to work in, so it saves — it just must not save *silently*.
     """
     admin_uuid = await _make_project_admin(db_session)
     db_session.add(StationPropertyConfig(
-        station_type="shelter", property_name="淹水深度", data_type="integer",
+        station_type="shelter", property_name="淹水深度", data_type="number",
         disaster_types=["flood"],
     ))
     await db_session.commit()
@@ -285,20 +305,20 @@ async def test_a_disaster_type_no_field_uses_comes_back_as_a_warning(client, db_
     with caplog.at_level(logging.WARNING):
         resp = await client.patch(
             SETTINGS_URL, headers=_auth_header(admin_uuid),
-            json={"name": "花蓮 0816", "disaster_types": ["floods"]},
+            json={"name": "花蓮 0816", "disaster_types": ["earthquake"]},
         )
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["disaster_types"] == ["floods"]  # still saved — this is advice, not a veto
-    assert any("floods" in w for w in resp.json()["warnings"]), resp.json()
-    assert any("floods" in r.getMessage() for r in caplog.records), "nothing logged"
+    assert resp.json()["disaster_types"] == ["earthquake"]  # saved — this is advice, not a veto
+    assert any("earthquake" in w for w in resp.json()["warnings"]), resp.json()
+    assert any("earthquake" in r.getMessage() for r in caplog.records), "nothing logged"
 
 
 async def test_a_disaster_type_a_field_uses_warns_about_nothing(client, db_session):
     """The warning has to stay quiet when the label is right, or it is noise."""
     admin_uuid = await _make_project_admin(db_session)
     db_session.add(StationPropertyConfig(
-        station_type="shelter", property_name="淹水深度", data_type="integer",
+        station_type="shelter", property_name="淹水深度", data_type="number",
         disaster_types=["flood"],
     ))
     await db_session.commit()
@@ -354,7 +374,7 @@ async def test_retiring_a_field_does_not_require_restating_its_type(db):
     value silently redefined the field at the same time.
     """
     await station_property_config_repository.upsert(
-        db, station_type="shelter", property_name="收容人數", data_type="integer",
+        db, station_type="shelter", property_name="收容人數", data_type="number",
         enum_options=["a", "b"], label="收容人數", sort_order=3,
     )
 
@@ -363,7 +383,7 @@ async def test_retiring_a_field_does_not_require_restating_its_type(db):
     )
 
     assert retired.is_active is False
-    assert retired.data_type == "integer"  # untouched
+    assert retired.data_type == "number"  # untouched
     assert retired.enum_options == ["a", "b"]
     assert retired.label == "收容人數"
     assert retired.sort_order == 3
@@ -380,7 +400,7 @@ async def test_creating_a_field_still_requires_a_data_type(db):
 async def test_retiring_a_task_field_behaves_the_same(db):
     """The task side shares the code path; pin it so the two cannot drift."""
     await task_property_config_repository.upsert(
-        db, task_type="rescue", property_name="樓層", data_type="integer",
+        db, task_type="rescue", property_name="樓層", data_type="number",
     )
 
     retired = await task_property_config_repository.upsert(
@@ -388,7 +408,7 @@ async def test_retiring_a_task_field_behaves_the_same(db):
     )
 
     assert retired.is_active is False
-    assert retired.data_type == "integer"
+    assert retired.data_type == "number"
 
 
 async def test_the_settings_row_is_never_soft_deleted(db):

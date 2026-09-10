@@ -35,6 +35,20 @@ AUDITED_TABLES = [
     # Feature 013: the deployment's single global project settings row (ADR-090) — changing
     # the disaster types flips a whole batch of dynamic fields, so it is audited.
     "project_settings",
+
+    # Feature 018 (ADR-251). The disaster vocabulary and the field definitions keyed off it.
+    # `project_settings` was audited because "changing the disaster types flips a whole batch
+    # of dynamic fields" — these are where those fields are actually defined, so leaving them
+    # out was never coherent. `station_property_config` / `task_property_config` were the
+    # unrecorded half of that same gap and join here rather than staying unaudited.
+    "disaster_types",
+    "station_property_config",
+    "task_property_config",
+    "ticket_property_config",
+    # The per-ticket values. A reporter's answer changing from "no" to "yes" on
+    # `person_trapped_reported`-adjacent fields is exactly the kind of edit a timeline has to
+    # show, and the sibling EAV tables' missing trail (ADR-124) is the mistake not to repeat.
+    "ticket_disaster_details",
 ]
 
 # PL/pgSQL function that serializes row mutations into JSONB, redacting password_hash
