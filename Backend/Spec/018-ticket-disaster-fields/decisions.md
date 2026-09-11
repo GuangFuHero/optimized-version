@@ -1,4 +1,4 @@
-# 通報單災害動態欄位 — ADR 全集（ADR-244~253）
+# 通報單災害動態欄位 — ADR 全集（ADR-244~258）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/016-resource-history/decisions.md`（ADR-243 為目前全 repo 最大值）。
@@ -216,6 +216,106 @@ migration 掛上 trigger（凍結快照寫法）。
 ➖ 本分支上沒有 feature 010/014，所以測試 fixture 用的是舊的 token 產生方式（無 session、無 `act`）。
 等 #48 進 main、main 再併回來時，這些 fixture 會需要跟著 `_create_user_with_role` 的簽章調整。
 
-**兩個 head 的問題還在，只是不歸本 PR 處理**：等 #49/#48 進 main 之後，`c3f0a1b2d4e6` 與
+**兩個 head 的問題還在**：等 #49/#48 進 main 之後，`c3f0a1b2d4e6` 與
 `90c93167fa66` 就是共用 `07ac630e0009` 的兩個 head，需要一支空的合併 revision
 （前例：`8ebfc3903041`、`c7d8e9f0a1b2`）。那屬於後進的那個 PR。
+
+**PR #50 審查補正**：依本 ADR 自己訂的順序（#49 → #48 → 本 PR），後進的就是**本 PR**，
+所以那支合併 revision 是本 PR 的責任。但它**不能現在寫**：
+`90c93167fa66_identity_switching.py` 這個檔案在本分支上不存在，
+所以宣告 `down_revision = ("e7b249d0af31", "90c93167fa66")` 會讓**本分支自己的**
+`alembic upgrade head` 以 `Can't locate revision identified by '90c93167fa66'` 失敗。
+正確順序是：#49 → #48 進 main → 把 origin/main 併回本分支（此時兩個父節點才都解析得到）
+→ 才加合併 revision → 確認 `alembic heads` 只有一個 head → 合併本 PR。
+已實測：把 main 的 migration 檔放進本分支的 versions/ 後，`alembic heads` 確實回報兩個 head。
+
+---
+
+## PR #50 審查修正（ADR-254~258）
+
+以下五條來自 PR #50 的審查與端對端實測。前四條是缺陷修正，第五條是把既有的隱性約定寫成 schema。
+
+### ADR-254 兩個通報者檢傷欄位納入 `ticket.view_pii`
+
+**Context**：實測發現，**完全不帶 `Authorization` 標頭**的請求可以讀到
+`personTrappedReported: "yes"`，而同一筆資料的 `contactName` 卻被遮成 `王◯◯`。
+`ticket.view` 本來就是公開的（ADR-027），地圖上的座標也是公開的 —— 等於對全世界公告
+「這個座標有人受困」。ADR-249 明明因為 PII 疑慮而刻意不把 `secondaryLocation` 掛上
+`TicketType`，同一類判斷卻在這兩個欄位上得到相反的結果，而且看得出來不是想過之後的選擇。
+
+**Decision**：`person_trapped_reported` / `immediate_danger_reported` 改成 gated resolver，
+沿用 `TicketType._pii_visible`（與三個 `contact_*` 共用同一次 scope 檢查）。
+`disasterDetails` **維持公開** —— 水深、瓦斯味、明火是救災現場的情境資訊，不是個資。
+
+➕ 不必新增 capability：不用 seed `permissions` 列、不用改五個角色、不用動 RBAC 矩陣。
+➕ 拒絕一律回 `null`，不丟 GraphQL error —— 與 `contact_*` 的既有契約一致
+（`test_query_rbac.py` 對每個 PII 案例都斷言 `"errors" not in body`）。
+➖ 權限不足的呼叫端**分不出「沒人問過」與「你不能看」** —— 這正是這個欄位存在的
+null vs `unknown` 區別。接受：這個區別只對「能據以行動的人」有意義，而那種人依定義持有該 capability。
+◾ `ticket.view_pii` 的字面意思偏「識別身分」，這兩個欄位其實是情境資訊。沿用而非新增，
+是因為它們同樣是通報者對自身處境的私人陳述，屬於同一條信任邊界。
+
+### ADR-255 三張設定表一律驗證 `disaster_types`
+
+**Context**：ADR-244 只讓 `upsertTicketPropertyConfig` 驗證，station / task 兩張表照舊直接存。
+實測：`disasterTypes: ["totally_made_up"]` 在 station 表存得乾乾淨淨，然後那個欄位對誰都不顯示 ——
+正是 ADR-244 要關掉的沉默失敗，只是關了三分之一。更糟的是那個錯字會進
+`disaster_types_in_use()`，而 `_unmatched_disaster_types` 正是拿它來比對專案設定，
+所以兩邊打一樣的錯字反而會被當成「已設定」而不發警告。
+
+**Decision**：`upsert_station_property_config` / `upsert_task_property_config` 加上與
+ticket 側完全相同的兩行 `validate_disaster_types`。
+
+➕ 三張表的行為一致，不必記得哪張表會驗證。
+➖ 理論上舊資料列若帶著失效標籤，下次編輯會被擋。實際風險趨近於零：
+`_optional_config_fields` 會濾掉 `None`，所以只有**明確送出** `disasterTypes` 時才驗證 ——
+改個 label 不會重新驗證既有值。而且 migration 給 station/task 的種子資料一律是空陣列 `{}`。
+
+### ADR-256 每個 list DataLoader 都要帶全序 `ORDER BY`
+
+**Context**：`app/graphql/loaders.py` 從來沒有任何一個 loader 下過 `ORDER BY`。
+功能 018 新增的 `disaster_details_by_ticket` 讓它浮出水面：同一批資料，
+`setTicketDisasterDetails` 回 `crack_width_mm, exposed_wire, gas_odor, sparks`，
+`ticket { disasterDetails }` 回 `sparks, gas_odor, exposed_wire, crack_width_mm` ——
+因為 repository 有排序而 loader 沒有，而前端讀的是後者。
+
+**Decision**：`_make_one_to_many_loader` 新增 `order_by` 參數，六個呼叫端全部帶上；
+`photos_by_geometry` 與 `teams_by_zones`（在 repository 內）一併補。排序鍵一律以唯一欄位收尾，
+使順序為全序（ADR-227）—— 與 property-config 查詢同一條規則。
+
+➕ 修正範圍刻意大於本 PR 的 diff：這是既有缺口，新 loader 只是讓它可見。
+➕ 沒有任何既有測試斷言過 loader 的順序，所以是純增益。
+◾ `disaster_details_by_ticket` 刻意停在 `(property_name, value)` 而不補 `uuid`：
+與 `list_by_ticket` 逐字相同才是修正的重點，而 `uq_ticket_disaster_detail_value` 已使該組合唯一。
+
+### ADR-257 `setTicketDisasterDetails` 對重複的 `propertyName` 取聯集
+
+**Context**：mutation 用 dict comprehension 建對應表，所以同一個 `propertyName` 出現兩次時
+只留最後一筆。實測：送 `utility_hazards:[gas_odor]` 再送 `utility_hazards:[sparks, power_out]`，
+只存到後者。一個「每勾一個框就送一筆」的前端會靜默掉光除了最後一格以外的所有勾選。
+
+**Decision**：改用 `setdefault(...).extend(...)` 取聯集。
+
+➕ 聯集本來就是 `multi_select` 的語意，也正是逐框送出的前端在表達的東西。
+➕ service 層已用 `dict.fromkeys` 去重且保序，所以跨兩筆重複的值會塌成一列，
+不會撞 `uq_ticket_disaster_detail_value`。
+
+### ADR-258 `data_type` 以 CHECK 約束釘死在封閉詞彙上
+
+**Context**：ADR-245 的詞彙改寫是一次性的資料修正，沒有任何東西擋得住之後手寫的 INSERT
+再塞回舊 token。這不是美觀問題：`FieldDataType(m.data_type)` 會丟 `ValueError`，
+而 `MaskErrors` 的白名單會原樣放行，所以**一列壞資料就讓整個
+`stationPropertyConfigs` 查詢回 `data: null`** —— 不是那一列降級，是整個查詢死掉。
+
+**Decision**：在同一支 migration（`e7b249d0af31`）為三張設定表加
+`ck_<table>_data_type` CHECK。用 guarded `DO` 區塊，不用
+`ADD CONSTRAINT ... IF NOT EXISTS`（Postgres 的 table constraint 不支援該語法）。
+
+➕ 把不變式寫進 schema，寫入時就被拒，而不是讀取時才炸。
+➕ 若既有資料庫已有壞資料列，migration 會帶著表名大聲失敗 —— 部署時就知道，
+而不是等到有人打開表單。
+➖ `downgrade()` 必須**先**移除約束再跑 `_DATA_TYPE_MAP_INVERSE`，
+否則把 `Enum` / `Array` 寫回去會違反 CHECK。已驗證 up → down → up 往返。
+◾ `_FIELD_DATA_TYPES` 在 migration 內凍結一份，不讀 `FieldDataType`，
+理由與 `_FEATURE_018_AUDITED_TABLES` 相同：歷史 migration 不該追著後續功能擴充的 enum 跑。
+日後新增控制項是「新一支 revision 重建約束」，不是回頭改這裡。

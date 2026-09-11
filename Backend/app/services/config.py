@@ -41,8 +41,16 @@ async def upsert_station_property_config(
     Every field except the key is optional and omitting one leaves it unchanged (ADR-228/099),
     so retiring a field is `is_active=False` alone. `data_type` is required only when the
     entry does not exist yet.
+
+    `disaster_types` is validated against the vocabulary table, the same as the ticket side:
+    a field scoped to a disaster that does not exist stores cleanly and then shows up for
+    nobody, which is the silent failure ADR-244 closed. Only an explicit write is checked —
+    omitting the key leaves a stored value untouched, so an older row carrying a stale label
+    is not re-validated on an unrelated edit.
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
+    if disaster_types is not None:
+        disaster_types = await validate_disaster_types(db, disaster_types)
     return await station_property_config_repository.upsert(
         db,
         station_type=station_type,
@@ -73,9 +81,12 @@ async def upsert_task_property_config(
 ) -> TaskPropertyConfig:
     """Create or update a task property config entry (checkpoint 1 only).
 
-    Same partial-update semantics as the station side (ADR-228/099).
+    Same partial-update semantics as the station side (ADR-228/099), and the same
+    `disaster_types` validation against the vocabulary table.
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
+    if disaster_types is not None:
+        disaster_types = await validate_disaster_types(db, disaster_types)
     return await task_property_config_repository.upsert(
         db,
         task_type=task_type,

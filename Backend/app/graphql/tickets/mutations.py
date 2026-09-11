@@ -109,11 +109,20 @@ class RequestMutation:
         a field left out of `details` is cleared. That mirrors the form, which shows every
         field at once — a merge would leave no way to un-answer a question.
 
+        Two entries naming the same `propertyName` are unioned, not overwritten. A dict
+        comprehension here kept only the last, so a client that emits one entry per ticked
+        checkbox silently lost every box but the final one. Union is also what a multi_select
+        means. The service de-duplicates with `dict.fromkeys`, so a value repeated across
+        both entries collapses to one row rather than violating the unique constraint.
+
         Requires ticket.edit with scope check. Returns the stored values.
         """
+        merged: dict[str, list[str]] = {}
+        for detail in details:
+            merged.setdefault(detail.property_name, []).extend(detail.values)
         rows = await ticket_service.set_ticket_disaster_details(
             info.context["db"], actor=require_authenticated(info), ticket_uuid=str(uuid),
-            details={d.property_name: d.values for d in details},
+            details=merged,
         )
         return [TicketDisasterDetailType.from_model(r) for r in rows]
 

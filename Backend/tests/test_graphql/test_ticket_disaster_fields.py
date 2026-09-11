@@ -551,3 +551,244 @@ async def test_the_ticket_itself_still_records_its_disaster_types(client, coordi
         ))).first()
 
     assert row is not None and "landslide" in row.types
+
+
+# --------------------------------------------------------------------------------------
+# Who may read the reporter's triage answers (PR #50 review)
+# --------------------------------------------------------------------------------------
+
+READ_TICKET = """
+query ($uuid: UUID!) {
+  ticket(uuid: $uuid) {
+    contactName personTrappedReported immediateDangerReported
+    disasterDetails { propertyName value }
+  }
+}
+"""
+
+
+async def test_the_triage_flags_are_hidden_from_callers_without_pii_scope(
+    client, coordinator_auth
+):
+    """「有人受困」is gated on ticket.view_pii; the map pin beside it is public.
+
+    Anonymous read used to return `personTrappedReported: "yes"` next to a public coordinate
+    while masking the contact name — publishing "there is a trapped person here" to anyone.
+    Denial is a null value, never a GraphQL error, matching how the contact_* fields behave.
+    """
+    _, token = coordinator_auth
+    ticket = await _create_ticket(
+        client, token, personTrappedReported="yes", immediateDangerReported="unknown"
+    )
+
+    anon = await client.post("/graphql", json={
+        "query": READ_TICKET, "variables": {"uuid": ticket["uuid"]},
+    })
+    body = anon.json()
+
+    assert body.get("errors") is None, body
+    assert body["data"]["ticket"]["personTrappedReported"] is None
+    assert body["data"]["ticket"]["immediateDangerReported"] is None
+    # The ticket itself stays readable — ticket.view is public (ADR-027); only the answers hide.
+    assert body["data"]["ticket"]["contactName"] is not None
+
+    privileged = await client.post("/graphql", json={
+        "query": READ_TICKET, "variables": {"uuid": ticket["uuid"]},
+    }, headers=auth_header(token))
+    seen = privileged.json()["data"]["ticket"]
+
+    assert seen["personTrappedReported"] == "yes"
+    assert seen["immediateDangerReported"] == "unknown"
+
+
+# --------------------------------------------------------------------------------------
+# Writing the values: input shape and read-back order (PR #50 review)
+# --------------------------------------------------------------------------------------
+
+async def test_two_entries_for_one_field_are_merged_not_overwritten(
+    client, coordinator_auth
+):
+    """A client emitting one entry per ticked checkbox must not lose every box but the last.
+
+    The mutation used to build its mapping with a dict comprehension, so a repeated
+    `propertyName` silently kept only the final entry. Union is also what multi_select means.
+    """
+    _, token = coordinator_auth
+    ticket = await _create_ticket(client, token, disasterTypes=["earthquake"])
+
+    resp = await client.post("/graphql", json={
+        "query": SET_DETAILS, "variables": {"uuid": ticket["uuid"], "details": [
+            {"propertyName": "utility_hazards", "values": ["gas_odor"]},
+            {"propertyName": "utility_hazards", "values": ["power_out", "gas_odor"]},
+        ]},
+    }, headers=auth_header(token))
+
+    body = resp.json()
+    assert body.get("errors") is None, body
+    # Both boxes survive, and the value named twice collapses to one row rather than
+    # tripping uq_ticket_disaster_detail_value.
+    assert [r["value"] for r in body["data"]["setTicketDisasterDetails"]] == [
+        "gas_odor", "power_out",
+    ]
+
+
+async def test_the_query_and_the_mutation_agree_on_the_order_of_the_values(
+    client, coordinator_auth
+):
+    """`ticket.disasterDetails` is loaded through a DataLoader, which had no ORDER BY.
+
+    The repository sorted and the loader did not, so the same rows came back one way from
+    `setTicketDisasterDetails` and another from `ticket { disasterDetails }` — ADR-227 wants
+    a total order on both.
+    """
+    _, token = coordinator_auth
+    ticket = await _create_ticket(client, token, disasterTypes=["earthquake"])
+
+    written = await client.post("/graphql", json={
+        "query": SET_DETAILS, "variables": {"uuid": ticket["uuid"], "details": [
+            {"propertyName": "utility_hazards", "values": ["power_out", "gas_odor"]},
+            {"propertyName": "site_note", "values": ["三樓陽台"]},
+        ]},
+    }, headers=auth_header(token))
+    from_mutation = [
+        (r["propertyName"], r["value"])
+        for r in written.json()["data"]["setTicketDisasterDetails"]
+    ]
+
+    read = await client.post("/graphql", json={
+        "query": READ_TICKET, "variables": {"uuid": ticket["uuid"]},
+    }, headers=auth_header(token))
+    from_query = [
+        (r["propertyName"], r["value"])
+        for r in read.json()["data"]["ticket"]["disasterDetails"]
+    ]
+
+    assert from_mutation == from_query
+    assert from_query == [
+        ("site_note", "三樓陽台"),
+        ("utility_hazards", "gas_odor"),
+        ("utility_hazards", "power_out"),
+    ]
+
+
+# --------------------------------------------------------------------------------------
+# The ticket's address (ADR-249 / ADR-250)
+# --------------------------------------------------------------------------------------
+
+async def test_a_ticket_can_record_an_address_and_the_space_the_victim_is_in(
+    client, coordinator_auth
+):
+    """A ticket records its door number, its floor, and which room the victim is in.
+
+    Before feature 018 only stations could carry an address, so the record that most needs a
+    door number had nothing but a map pin.
+
+    The `accessStatus` assertion is the one that matters most: `GenericRepository.update`
+    matches keys by `hasattr`, so an un-unwrapped enum would be *stored as the member object*
+    rather than rejected. `secondary_location_to_dict` exists to stop that on all three call
+    sites at once — this is what holds it to that.
+    """
+    _, token = coordinator_auth
+    ticket = await _create_ticket(client, token, disasterTypes=["earthquake"], secondaryLocation={
+        "locationType": "address", "county": "花蓮縣", "city": "光復鄉",
+        "lane": "中正路", "alley": "12巷", "no": "5號",
+        "buildingSection": "A棟", "floor": "3F", "room": "302",
+        "spaceDescription": "三房兩廳", "victimSpace": "主臥衣櫃",
+        "accessStatus": "restricted", "landmarkNote": "廟旁邊，紅色鐵門",
+    })
+
+    async with test_db() as db:
+        row = (await db.execute(text(
+            "SELECT building_section, space_description, victim_space, access_status,"
+            "       landmark_note, no, floor, room"
+            "  FROM secondary_locations WHERE geometry_uuid = :g"
+        ), {"g": ticket["uuid"]})).first()
+
+    assert row is not None, "createTicket did not write a secondary_locations row"
+    assert row.building_section == "A棟"
+    assert row.space_description == "三房兩廳"
+    assert row.victim_space == "主臥衣櫃"
+    assert row.access_status == "restricted"  # the string, not AccessStatus.restricted
+    assert row.landmark_note == "廟旁邊，紅色鐵門"
+    # The pre-existing columns still arrive through the shared mapper.
+    assert (row.no, row.floor, row.room) == ("5號", "3F", "302")
+
+
+async def test_the_space_the_victim_is_in_never_reaches_search_text(
+    client, coordinator_auth
+):
+    """ADR-250: which room a trapped person is hiding in must not be findable by substring.
+
+    ADR-146 already keeps ticket addresses off the public search surface, so this is the
+    second lock rather than the only one — but `search_text` is a generated column, and a
+    column added to that expression by accident would be silently searchable forever.
+    """
+    _, token = coordinator_auth
+    ticket = await _create_ticket(client, token, secondaryLocation={
+        "locationType": "address", "county": "花蓮縣", "city": "光復鄉",
+        "buildingSection": "A棟", "spaceDescription": "三房兩廳",
+        "victimSpace": "主臥衣櫃", "accessStatus": "restricted",
+        "landmarkNote": "廟旁邊，紅色鐵門",
+    })
+
+    async with test_db() as db:
+        search_text = (await db.execute(text(
+            "SELECT search_text FROM secondary_locations WHERE geometry_uuid = :g"
+        ), {"g": ticket["uuid"]})).scalar_one()
+
+    for secret in ("A棟", "三房兩廳", "主臥衣櫃", "restricted", "廟旁邊"):
+        assert secret not in search_text, f"{secret} leaked into search_text"
+    # The ordinary address parts are still indexed, so this proves the column works at all.
+    assert "花蓮縣" in search_text
+
+
+async def test_all_three_config_tables_reject_an_unknown_disaster(client, field_admin_auth):
+    """The station and task tables used to store a bogus label silently (PR #50 review).
+
+    Only the ticket table validated, so a typo on the other two produced a field scoped to a
+    disaster that does not exist — defined, stored, and shown to nobody. Worse, that label
+    then entered `disaster_types_in_use()`, which is exactly what the project-settings
+    warning compares against, so a matching typo on both sides read as "configured".
+    """
+    _, token = field_admin_auth
+
+    mutations = {
+        "station": 'upsertStationPropertyConfig(stationType: "shelter", input: '
+                   '{propertyName: "p", dataType: boolean, disasterTypes: ["not_a_disaster"]})',
+        "task": 'upsertTaskPropertyConfig(taskType: "rescue", input: '
+                '{propertyName: "p", dataType: boolean, disasterTypes: ["not_a_disaster"]})',
+        "ticket": 'upsertTicketPropertyConfig(input: '
+                  '{propertyName: "p", dataType: boolean, disasterTypes: ["not_a_disaster"]})',
+    }
+
+    for target, call in mutations.items():
+        resp = await client.post("/graphql", json={
+            "query": f"mutation {{ {call} {{ propertyName }} }}",
+        }, headers=auth_header(token))
+        errors = resp.json().get("errors")
+        assert errors, f"{target} config accepted an unknown disaster type"
+        assert "not_a_disaster" in errors[0]["message"], (target, errors)
+
+
+async def test_a_known_disaster_is_still_accepted_on_every_config_table(
+    client, field_admin_auth
+):
+    """The guard above must not have made the ordinary path unusable."""
+    _, token = field_admin_auth
+
+    calls = [
+        'upsertStationPropertyConfig(stationType: "shelter", input: '
+        '{propertyName: "ok_station", dataType: boolean, disasterTypes: ["flood"]})',
+        'upsertTaskPropertyConfig(taskType: "rescue", input: '
+        '{propertyName: "ok_task", dataType: boolean, disasterTypes: ["flood"]})',
+        'upsertTicketPropertyConfig(input: '
+        '{propertyName: "ok_ticket", dataType: boolean, disasterTypes: ["flood"]})',
+    ]
+
+    for call in calls:
+        resp = await client.post("/graphql", json={
+            "query": f"mutation {{ {call} {{ propertyName disasterTypes }} }}",
+        }, headers=auth_header(token))
+        body = resp.json()
+        assert body.get("errors") is None, body
+        assert list(body["data"].values())[0]["disasterTypes"] == ["flood"]

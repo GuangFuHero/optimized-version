@@ -5,6 +5,13 @@ Each loader collapses an N+1 access pattern into a single
 Loaders are constructed fresh by :func:`build_loaders` for every GraphQL
 request via ``app.graphql.context.get_context``; they must NOT be cached
 across requests because DataLoaders memoise their own results.
+
+Every list loader passes an explicit ``order_by`` ending on a unique column, so the order is
+TOTAL (ADR-227) — the same rule the property-config queries follow. Without one, a batched
+``WHERE parent_uuid IN (...)`` returns rows in whatever order the plan produced, so the same
+field could come back differently twice running. That was live: ``ticket.disasterDetails``
+and the ``setTicketDisasterDetails`` mutation returned the same rows in two different orders,
+because the repository sorted and this file did not.
 """
 
 from collections import defaultdict
@@ -52,12 +59,21 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         ),
         "station_properties_by_station": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, StationProperty, "station_uuid", StationPropertyType
+                db, StationProperty, "station_uuid", StationPropertyType,
+                # Groups the form by facility/supply/service, then by name within each.
+                order_by=(
+                    StationProperty.property_type,
+                    StationProperty.property_name,
+                    StationProperty.uuid,
+                ),
             )
         ),
         "crowd_sourcings_by_property": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, CrowdSourcing, "item_uuid", CrowdSourcingType
+                db, CrowdSourcing, "item_uuid", CrowdSourcingType,
+                # A feed, not a form: newest rating first, matching the `created_at.desc()`
+                # idiom the list repositories already use.
+                order_by=(CrowdSourcing.created_at.desc(), CrowdSourcing.uuid),
             )
         ),
         "photos_by_ticket": photos_by_geometry,
@@ -66,21 +82,37 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
             load_fn=_make_one_to_many_loader(
                 db, TicketDisasterDetail, "ticket_uuid", TicketDisasterDetailType,
                 soft_delete=True,
+                # Deliberately identical to TicketDisasterDetailRepository.list_by_ticket:
+                # that is the mutation's return path and this is the query's, and the two
+                # disagreeing on the order of one multi_select field was the bug. Already
+                # total — uq_ticket_disaster_detail_value makes the pair unique per ticket.
+                order_by=(
+                    TicketDisasterDetail.property_name,
+                    TicketDisasterDetail.value,
+                ),
             )
         ),
         "tasks_by_ticket": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, TicketTask, "ticket_uuid", TicketTaskType, soft_delete=True
+                db, TicketTask, "ticket_uuid", TicketTaskType, soft_delete=True,
+                # A worklist reads chronologically, oldest first.
+                order_by=(TicketTask.created_at, TicketTask.uuid),
             )
         ),
         "task_properties_by_task": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, TaskProperty, "task_uuid", TaskPropertyType, soft_delete=True
+                db, TaskProperty, "task_uuid", TaskPropertyType, soft_delete=True,
+                # Mirrors task_property_config's own ordering, so the values line up with
+                # the field definitions the form renders them against.
+                order_by=(TaskProperty.property_name, TaskProperty.uuid),
             )
         ),
         "task_assignments_by_task": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, TaskAssignment, "task_uuid", TaskAssignmentType
+                db, TaskAssignment, "task_uuid", TaskAssignmentType,
+                # This model has no TimestampMixin — `assigned_at` is the column, not
+                # `created_at`.
+                order_by=(TaskAssignment.assigned_at, TaskAssignment.uuid),
             )
         ),
         "teams_by_zone": DataLoader(load_fn=_make_teams_by_zone_loader(db)),
@@ -88,13 +120,18 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
 
 
 def _make_one_to_many_loader(
-    db: AsyncSession, model, parent_column: str, gql_type, soft_delete: bool = False
+    db: AsyncSession, model, parent_column: str, gql_type,
+    soft_delete: bool = False, order_by=None,
 ):
     """Build a load function: ``list[parent_uuid] -> list[list[gql_type]]``.
 
     Issues one ``WHERE parent_column IN (:uuids)`` query, groups results by
     parent uuid, returns lists aligned to the input order (empty list when a
     parent has no children).
+
+    ``order_by`` is a tuple of columns applied to the batched query. It should end on a
+    unique column so the order is total (ADR-227); grouping below preserves whatever order
+    the rows arrive in, so this is the only place the per-parent order is decided.
     """
     column = getattr(model, parent_column)
 
@@ -102,6 +139,8 @@ def _make_one_to_many_loader(
         stmt = select(model).where(column.in_(parent_uuids))
         if soft_delete:
             stmt = stmt.where(model.delete_at.is_(None))
+        if order_by is not None:
+            stmt = stmt.order_by(*order_by)
         rows = (await db.execute(stmt)).scalars().all()
         grouped: dict[str, list] = defaultdict(list)
         for row in rows:
@@ -136,15 +175,17 @@ def _make_photos_by_geometry_loader(db: AsyncSession):
     """
 
     async def load_fn(geometry_uuids: list[str]) -> list[list[PhotoType]]:
-        rows = (
-            await db.execute(
-                select(Photo).where(
-                    Photo.ref_type == "geometry",
-                    Photo.ref_uuid.in_(geometry_uuids),
-                    Photo.delete_at.is_(None),
-                )
+        stmt = (
+            select(Photo)
+            .where(
+                Photo.ref_type == "geometry",
+                Photo.ref_uuid.in_(geometry_uuids),
+                Photo.delete_at.is_(None),
             )
-        ).scalars().all()
+            # Oldest first, so a gallery keeps its order between loads (ADR-227).
+            .order_by(Photo.created_at, Photo.uuid)
+        )
+        rows = (await db.execute(stmt)).scalars().all()
         grouped: dict[str, list[PhotoType]] = defaultdict(list)
         for row in rows:
             grouped[str(row.ref_uuid)].append(PhotoType.from_model(row))

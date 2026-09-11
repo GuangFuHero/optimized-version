@@ -95,11 +95,16 @@ class TeamZoneAssignRepository(GenericRepository[TeamZoneAssign]):
 
         Batched for the GraphQL DataLoader: one IN-query for every zone in a page, instead of
         one query per zone.
+
+        Ordered by team name, ending on `uuid` so the order is total (ADR-227) — the loader
+        groups rows in arrival order, so this is where `zone.assignedTeams` stops reshuffling
+        between reads.
         """
         query = (
             select(TeamZoneAssign.zone_uuid, Team)
             .join(Team, Team.uuid == TeamZoneAssign.team_uuid)
             .where(TeamZoneAssign.zone_uuid.in_(zone_uuids), Team.delete_at.is_(None))
+            .order_by(Team.name, Team.uuid)
         )
         return [(str(zone_uuid), team) for zone_uuid, team in (await db.execute(query)).all()]
 

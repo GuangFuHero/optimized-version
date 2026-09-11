@@ -352,20 +352,6 @@ class TicketType:
             "fields `ticketPropertyConfigs` returns for it"
         ),
     )
-    person_trapped_reported: str | None = strawberry.field(
-        default=None,
-        description=(
-            "Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown', or null if "
-            "never asked. What the person said, not a professional assessment"
-        ),
-    )
-    immediate_danger_reported: str | None = strawberry.field(
-        default=None,
-        description=(
-            "Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown', or null if never "
-            "asked. Not a triage grade and not a risk classification"
-        ),
-    )
     created_by: str | None = strawberry.field(
         default=None, description="UUID of the user who submitted this ticket"
     )
@@ -378,11 +364,17 @@ class TicketType:
     _contact_name_raw: strawberry.Private[str] = ""
     _contact_email_raw: strawberry.Private[str | None] = None
     _contact_phone_raw: strawberry.Private[str | None] = None
+    # The two reporter triage flags are gated on the same capability as the contact fields.
+    # They are not identifying, but "there is a trapped person at this address" is the most
+    # sensitive thing a ticket carries, and the map pin is public — so it rides the same
+    # trust boundary rather than being readable by anyone who can see the pin.
+    _person_trapped_reported_raw: strawberry.Private[str | None] = None
+    _immediate_danger_reported_raw: strawberry.Private[str | None] = None
     _geometry_raw: strawberry.Private[object | None] = None
     _pii_visible_task: strawberry.Private[object | None] = None
 
     def _pii_visible(self, info: strawberry.types.Info):
-        """Memoized PII-visibility check shared by the three contact_* resolvers.
+        """Memoized PII-visibility check shared by the contact_* and triage-flag resolvers.
 
         Cached as a single asyncio Task on this instance so that when GraphQL resolves
         contact_name/email/phone concurrently on the SAME TicketType, the underlying zone
@@ -437,6 +429,35 @@ class TicketType:
             return self._contact_phone_raw
         return mask_phone(self._contact_phone_raw)
 
+    @strawberry.field(
+        description=(
+            "Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody "
+            "was asked — and also null to a caller without ticket.view_pii here. What the "
+            "person said, not a professional assessment"
+        )
+    )
+    async def person_trapped_reported(self, info: strawberry.types.Info) -> str | None:
+        """Return the reporter's trapped answer, or null when the caller is out of PII scope.
+
+        Unlike the contact fields there is nothing to mask — a tri-state has no shape to
+        preserve — so a denial is null. That does mean an out-of-scope caller cannot tell
+        "nobody asked" from "you may not see it", which is a real loss of the null-vs-unknown
+        distinction this column exists to carry. Accepted: the distinction only matters to
+        someone who can act on the answer, and they hold the capability by definition.
+        """
+        return self._person_trapped_reported_raw if await self._pii_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was "
+            "asked — and also null to a caller without ticket.view_pii here. Not a triage "
+            "grade and not a risk classification"
+        )
+    )
+    async def immediate_danger_reported(self, info: strawberry.types.Info) -> str | None:
+        """Return the reporter's danger answer, or null when the caller is out of PII scope."""
+        return self._immediate_danger_reported_raw if await self._pii_visible(info) else None
+
     @strawberry.field
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
         """Resolve photos attached to this ticket."""
@@ -475,14 +496,14 @@ class TicketType:
             verification_status=m.verification_status,
             review_note=m.review_note,
             disaster_types=list(m.disaster_types or []),
-            person_trapped_reported=m.person_trapped_reported,
-            immediate_danger_reported=m.immediate_danger_reported,
             created_by=m.created_by,
             created_at=m.created_at,
             updated_at=m.updated_at,
             _contact_name_raw=m.contact_name,
             _contact_email_raw=m.contact_email,
             _contact_phone_raw=m.contact_phone,
+            _person_trapped_reported_raw=m.person_trapped_reported,
+            _immediate_danger_reported_raw=m.immediate_danger_reported,
             _geometry_raw=m.geometry,
         )
 

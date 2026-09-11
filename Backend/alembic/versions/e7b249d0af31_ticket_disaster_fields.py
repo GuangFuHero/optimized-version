@@ -11,7 +11,7 @@ Once #49/#48 reach main, `c3f0a1b2d4e6` and `90c93167fa66` are two heads sharing
 usual empty merge revision (precedent: `8ebfc3903041`, `c7d8e9f0a1b2`), which belongs to
 whichever PR lands second, not here.
 
-Feature 018 (Spec/014-ticket-disaster-fields/decisions.md ADR-244~251).
+Feature 018 (Spec/018-ticket-disaster-fields/decisions.md ADR-244~251).
 
 Six things, in dependency order:
 
@@ -22,7 +22,9 @@ Six things, in dependency order:
 2. `data_type` rewritten across ALL THREE config tables, from storage-type names to
    widget names (ADR-245). See the `_DATA_TYPE_MAP` below; `downgrade()` inverts it.
 3. `ticket_property_config` — the per-disaster field definitions, keyed on `property_name`
-   alone (ADR-247), seeded with the fourteen fields.
+   alone (ADR-247), seeded with the fourteen fields. All three config tables then get a CHECK
+   pinning `data_type` to the closed set, so the rewrite in (2) cannot be undone by a later
+   hand-written INSERT — see `_constrain_data_type`.
 4. `ticket_disaster_details` — the values.
 5. `tickets.disaster_type` → `disaster_types text[]` (ADR-246), plus the two reporter triage
    columns; `secondary_locations` gains five space columns (ADR-249).
@@ -48,9 +50,9 @@ import json
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from alembic import op
 from app.db.triggers import get_audit_trigger_sql
 
 # revision identifiers, used by Alembic.
@@ -92,6 +94,15 @@ _DATA_TYPE_MAP_INVERSE = {
     "single_select": "Enum",
     "multi_select": "Array",
 }
+
+# The closed set, mirroring app/graphql/shared.py::FieldDataType. Frozen here for the same
+# reason as _FEATURE_018_AUDITED_TABLES: a historical migration must not chase a Python enum
+# that later features extend, or a fresh `upgrade head` would write a constraint the rows of
+# its own era cannot satisfy. Adding a widget later means a new revision that drops and
+# re-adds these constraints, not an edit here.
+_FIELD_DATA_TYPES = ("text", "long_text", "number", "boolean", "single_select", "multi_select")
+
+_ALL_CONFIG_TABLES = (*_CONFIG_TABLES, "ticket_property_config")
 
 # The six types PM delivered. 土石流 is `landslide` — the slug `project_settings.disaster_types`
 # already gives as an example in its own column comment, and the one the constitution's Taiwan
@@ -154,6 +165,7 @@ def upgrade() -> None:
     _create_disaster_types()
     _rewrite_data_type_vocabulary()
     _create_ticket_property_config()
+    _constrain_data_type()
     _create_ticket_disaster_details()
     _reshape_tickets()
     _extend_secondary_locations()
@@ -247,6 +259,36 @@ def _create_ticket_property_config() -> None:
         )
 
 
+def _constrain_data_type() -> None:
+    """Pin `data_type` to the closed widget vocabulary on all three config tables.
+
+    `_rewrite_data_type_vocabulary` above is a one-time data fix; without a constraint nothing
+    stops a later hand-written INSERT from reintroducing an unmapped token. That is not a
+    cosmetic problem: `FieldDataType(m.data_type)` in the GraphQL `from_model` raises
+    `ValueError`, which the MaskErrors allow-list passes straight through, so ONE bad row makes
+    the WHOLE `stationPropertyConfigs` query return `data: null`. A CHECK turns that into a
+    rejected write, and turns any pre-existing stray row into a migration failure that names
+    its table — loud at deploy time instead of silent until someone opens a form.
+
+    Guarded DO block rather than `ADD CONSTRAINT ... IF NOT EXISTS`, which Postgres does not
+    support for table constraints; the guard is what makes a re-run idempotent.
+    """
+    allowed = ", ".join(f"'{token}'" for token in _FIELD_DATA_TYPES)
+    for table in _ALL_CONFIG_TABLES:
+        op.execute(
+            f"""
+            DO $$ BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'ck_{table}_data_type'
+              ) THEN
+                ALTER TABLE {table} ADD CONSTRAINT ck_{table}_data_type
+                  CHECK (data_type IN ({allowed}));
+              END IF;
+            END $$;
+            """
+        )
+
+
 def _create_ticket_disaster_details() -> None:
     op.create_table(
         "ticket_disaster_details",
@@ -328,6 +370,11 @@ def downgrade() -> None:
     """Reverse everything, in the mirror order."""
     for table in reversed(_FEATURE_018_AUDITED_TABLES):
         op.execute(f"DROP TRIGGER IF EXISTS audit_trigger_{table} ON {table};")
+
+    # Must come before the _DATA_TYPE_MAP_INVERSE rewrite below: restoring 'Enum' / 'Array'
+    # violates a CHECK that only allows the new tokens, so dropping it first is not tidiness.
+    for table in _ALL_CONFIG_TABLES:
+        op.execute(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS ck_{table}_data_type;")
 
     for column in (
         "landmark_note", "access_status", "victim_space", "space_description",
