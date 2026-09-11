@@ -7,11 +7,8 @@ request via ``app.graphql.context.get_context``; they must NOT be cached
 across requests because DataLoaders memoise their own results.
 
 Every list loader passes an explicit ``order_by`` ending on a unique column, so the order is
-TOTAL (ADR-227) — the same rule the property-config queries follow. Without one, a batched
-``WHERE parent_uuid IN (...)`` returns rows in whatever order the plan produced, so the same
-field could come back differently twice running. That was live: ``ticket.disasterDetails``
-and the ``setTicketDisasterDetails`` mutation returned the same rows in two different orders,
-because the repository sorted and this file did not.
+total. Without one, a batched ``WHERE parent_uuid IN (...)`` returns rows in whatever order
+the plan produced, and the same field can come back differently twice running.
 """
 
 from collections import defaultdict
@@ -71,8 +68,7 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         "crowd_sourcings_by_property": DataLoader(
             load_fn=_make_one_to_many_loader(
                 db, CrowdSourcing, "item_uuid", CrowdSourcingType,
-                # A feed, not a form: newest rating first, matching the `created_at.desc()`
-                # idiom the list repositories already use.
+                # A feed, not a form: newest rating first.
                 order_by=(CrowdSourcing.created_at.desc(), CrowdSourcing.uuid),
             )
         ),
@@ -82,10 +78,9 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
             load_fn=_make_one_to_many_loader(
                 db, TicketDisasterDetail, "ticket_uuid", TicketDisasterDetailType,
                 soft_delete=True,
-                # Deliberately identical to TicketDisasterDetailRepository.list_by_ticket:
-                # that is the mutation's return path and this is the query's, and the two
-                # disagreeing on the order of one multi_select field was the bug. Already
-                # total — uq_ticket_disaster_detail_value makes the pair unique per ticket.
+                # Must match the write path's ordering, or the same values come back one
+                # way from a write and another from a read. Already total: the unique
+                # constraint makes this pair unique per ticket.
                 order_by=(
                     TicketDisasterDetail.property_name,
                     TicketDisasterDetail.value,
@@ -102,16 +97,14 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         "task_properties_by_task": DataLoader(
             load_fn=_make_one_to_many_loader(
                 db, TaskProperty, "task_uuid", TaskPropertyType, soft_delete=True,
-                # Mirrors task_property_config's own ordering, so the values line up with
-                # the field definitions the form renders them against.
+                # By field name, so the values line up with the form's field order.
                 order_by=(TaskProperty.property_name, TaskProperty.uuid),
             )
         ),
         "task_assignments_by_task": DataLoader(
             load_fn=_make_one_to_many_loader(
                 db, TaskAssignment, "task_uuid", TaskAssignmentType,
-                # This model has no TimestampMixin — `assigned_at` is the column, not
-                # `created_at`.
+                # This table has no `created_at`; `assigned_at` is the timestamp.
                 order_by=(TaskAssignment.assigned_at, TaskAssignment.uuid),
             )
         ),
@@ -129,9 +122,9 @@ def _make_one_to_many_loader(
     parent uuid, returns lists aligned to the input order (empty list when a
     parent has no children).
 
-    ``order_by`` is a tuple of columns applied to the batched query. It should end on a
-    unique column so the order is total (ADR-227); grouping below preserves whatever order
-    the rows arrive in, so this is the only place the per-parent order is decided.
+    ``order_by`` is a tuple of columns applied to the batched query. End it on a unique
+    column so the order is total; rows are grouped below in arrival order, so this is the
+    only place the per-parent order is decided.
     """
     column = getattr(model, parent_column)
 
@@ -182,7 +175,7 @@ def _make_photos_by_geometry_loader(db: AsyncSession):
                 Photo.ref_uuid.in_(geometry_uuids),
                 Photo.delete_at.is_(None),
             )
-            # Oldest first, so a gallery keeps its order between loads (ADR-227).
+            # Oldest first, so a gallery keeps its order between loads.
             .order_by(Photo.created_at, Photo.uuid)
         )
         rows = (await db.execute(stmt)).scalars().all()

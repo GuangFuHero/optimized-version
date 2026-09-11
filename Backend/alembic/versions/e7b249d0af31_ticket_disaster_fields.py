@@ -23,8 +23,7 @@ Six things, in dependency order:
    widget names (ADR-245). See the `_DATA_TYPE_MAP` below; `downgrade()` inverts it.
 3. `ticket_property_config` — the per-disaster field definitions, keyed on `property_name`
    alone (ADR-247), seeded with the fourteen fields. All three config tables then get a CHECK
-   pinning `data_type` to the closed set, so the rewrite in (2) cannot be undone by a later
-   hand-written INSERT — see `_constrain_data_type`.
+   pinning `data_type` to the closed set, so the rewrite in (2) cannot be undone later.
 4. `ticket_disaster_details` — the values.
 5. `tickets.disaster_type` → `disaster_types text[]` (ADR-246), plus the two reporter triage
    columns; `secondary_locations` gains five space columns (ADR-249).
@@ -95,11 +94,10 @@ _DATA_TYPE_MAP_INVERSE = {
     "multi_select": "Array",
 }
 
-# The closed set, mirroring app/graphql/shared.py::FieldDataType. Frozen here for the same
-# reason as _FEATURE_018_AUDITED_TABLES: a historical migration must not chase a Python enum
-# that later features extend, or a fresh `upgrade head` would write a constraint the rows of
-# its own era cannot satisfy. Adding a widget later means a new revision that drops and
-# re-adds these constraints, not an edit here.
+# The closed set of widget names `data_type` may hold. Frozen here rather than imported: a
+# historical migration must not chase a list that later grows, or a fresh database would get
+# a constraint its own rows cannot satisfy. Adding a widget means a new revision that drops
+# and re-adds these constraints.
 _FIELD_DATA_TYPES = ("text", "long_text", "number", "boolean", "single_select", "multi_select")
 
 _ALL_CONFIG_TABLES = (*_CONFIG_TABLES, "ticket_property_config")
@@ -262,16 +260,12 @@ def _create_ticket_property_config() -> None:
 def _constrain_data_type() -> None:
     """Pin `data_type` to the closed widget vocabulary on all three config tables.
 
-    `_rewrite_data_type_vocabulary` above is a one-time data fix; without a constraint nothing
-    stops a later hand-written INSERT from reintroducing an unmapped token. That is not a
-    cosmetic problem: `FieldDataType(m.data_type)` in the GraphQL `from_model` raises
-    `ValueError`, which the MaskErrors allow-list passes straight through, so ONE bad row makes
-    the WHOLE `stationPropertyConfigs` query return `data: null`. A CHECK turns that into a
-    rejected write, and turns any pre-existing stray row into a migration failure that names
-    its table — loud at deploy time instead of silent until someone opens a form.
+    Renaming the old tokens was a one-time data fix; without a constraint a later INSERT can
+    put an unmapped one back. The API reads this column as an enum, so one bad row fails the
+    whole config query rather than degrading that row. A CHECK rejects the write instead, and
+    makes a stray row fail this migration loudly, naming its table.
 
-    Guarded DO block rather than `ADD CONSTRAINT ... IF NOT EXISTS`, which Postgres does not
-    support for table constraints; the guard is what makes a re-run idempotent.
+    Postgres has no `ADD CONSTRAINT ... IF NOT EXISTS` for table constraints, hence the guard.
     """
     allowed = ", ".join(f"'{token}'" for token in _FIELD_DATA_TYPES)
     for table in _ALL_CONFIG_TABLES:
@@ -371,8 +365,8 @@ def downgrade() -> None:
     for table in reversed(_FEATURE_018_AUDITED_TABLES):
         op.execute(f"DROP TRIGGER IF EXISTS audit_trigger_{table} ON {table};")
 
-    # Must come before the _DATA_TYPE_MAP_INVERSE rewrite below: restoring 'Enum' / 'Array'
-    # violates a CHECK that only allows the new tokens, so dropping it first is not tidiness.
+    # Drop before the rewrite below: restoring the old tokens would violate a CHECK that
+    # only allows the new ones.
     for table in _ALL_CONFIG_TABLES:
         op.execute(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS ck_{table}_data_type;")
 

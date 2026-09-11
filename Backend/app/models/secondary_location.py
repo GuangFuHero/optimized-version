@@ -64,7 +64,7 @@ class SecondaryLocation(Base, UUIDPKMixin):
     pole_note: Mapped[str | None] = mapped_column(String)
 
     # Keyword-search column (ADR-079/081). Every address part is short, so nothing is
-    # truncated. `pole_note` is excluded (free-text note), and so is the whole feature-018
+    # truncated. `pole_note` is excluded (free-text note), and so is the whole space-detail
     # set — `building_section` / `space_description` / `victim_space` / `access_status` /
     # `landmark_note` (ADR-250). Only stations are searchable through this column at all
     # (ADR-146), and describing which room a trapped person is hiding in is not something to

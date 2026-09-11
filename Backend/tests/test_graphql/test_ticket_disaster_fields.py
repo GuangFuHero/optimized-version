@@ -554,7 +554,7 @@ async def test_the_ticket_itself_still_records_its_disaster_types(client, coordi
 
 
 # --------------------------------------------------------------------------------------
-# Who may read the reporter's triage answers (PR #50 review)
+# Who may read the reporter's triage answers
 # --------------------------------------------------------------------------------------
 
 READ_TICKET = """
@@ -570,11 +570,11 @@ query ($uuid: UUID!) {
 async def test_the_triage_flags_are_hidden_from_callers_without_pii_scope(
     client, coordinator_auth
 ):
-    """「有人受困」is gated on ticket.view_pii; the map pin beside it is public.
+    """The triage answers need PII scope; the map pin beside them is public.
 
-    Anonymous read used to return `personTrappedReported: "yes"` next to a public coordinate
-    while masking the contact name — publishing "there is a trapped person here" to anyone.
-    Denial is a null value, never a GraphQL error, matching how the contact_* fields behave.
+    An anonymous read used to return "yes" next to a public coordinate while masking the
+    contact name — publishing "there is a trapped person here" to anyone. Denial is a null
+    value, never a GraphQL error.
     """
     _, token = coordinator_auth
     ticket = await _create_ticket(
@@ -589,7 +589,7 @@ async def test_the_triage_flags_are_hidden_from_callers_without_pii_scope(
     assert body.get("errors") is None, body
     assert body["data"]["ticket"]["personTrappedReported"] is None
     assert body["data"]["ticket"]["immediateDangerReported"] is None
-    # The ticket itself stays readable — ticket.view is public (ADR-027); only the answers hide.
+    # The ticket itself stays readable; only the answers hide.
     assert body["data"]["ticket"]["contactName"] is not None
 
     privileged = await client.post("/graphql", json={
@@ -602,7 +602,7 @@ async def test_the_triage_flags_are_hidden_from_callers_without_pii_scope(
 
 
 # --------------------------------------------------------------------------------------
-# Writing the values: input shape and read-back order (PR #50 review)
+# Writing the values: input shape and read-back order
 # --------------------------------------------------------------------------------------
 
 async def test_two_entries_for_one_field_are_merged_not_overwritten(
@@ -610,8 +610,8 @@ async def test_two_entries_for_one_field_are_merged_not_overwritten(
 ):
     """A client emitting one entry per ticked checkbox must not lose every box but the last.
 
-    The mutation used to build its mapping with a dict comprehension, so a repeated
-    `propertyName` silently kept only the final entry. Union is also what multi_select means.
+    A repeated `propertyName` used to keep only the final entry. Union is what a
+    multi-select means.
     """
     _, token = coordinator_auth
     ticket = await _create_ticket(client, token, disasterTypes=["earthquake"])
@@ -626,7 +626,7 @@ async def test_two_entries_for_one_field_are_merged_not_overwritten(
     body = resp.json()
     assert body.get("errors") is None, body
     # Both boxes survive, and the value named twice collapses to one row rather than
-    # tripping uq_ticket_disaster_detail_value.
+    # tripping the unique constraint.
     assert [r["value"] for r in body["data"]["setTicketDisasterDetails"]] == [
         "gas_odor", "power_out",
     ]
@@ -635,11 +635,10 @@ async def test_two_entries_for_one_field_are_merged_not_overwritten(
 async def test_the_query_and_the_mutation_agree_on_the_order_of_the_values(
     client, coordinator_auth
 ):
-    """`ticket.disasterDetails` is loaded through a DataLoader, which had no ORDER BY.
+    """Reading the values back must give the same order as writing them.
 
-    The repository sorted and the loader did not, so the same rows came back one way from
-    `setTicketDisasterDetails` and another from `ticket { disasterDetails }` — ADR-227 wants
-    a total order on both.
+    The write path sorted and the read path did not, so the same rows came back one way from
+    the mutation and another from the query.
     """
     _, token = coordinator_auth
     ticket = await _create_ticket(client, token, disasterTypes=["earthquake"])
@@ -672,7 +671,7 @@ async def test_the_query_and_the_mutation_agree_on_the_order_of_the_values(
 
 
 # --------------------------------------------------------------------------------------
-# The ticket's address (ADR-249 / ADR-250)
+# The ticket's address
 # --------------------------------------------------------------------------------------
 
 async def test_a_ticket_can_record_an_address_and_the_space_the_victim_is_in(
@@ -680,13 +679,9 @@ async def test_a_ticket_can_record_an_address_and_the_space_the_victim_is_in(
 ):
     """A ticket records its door number, its floor, and which room the victim is in.
 
-    Before feature 018 only stations could carry an address, so the record that most needs a
-    door number had nothing but a map pin.
-
-    The `accessStatus` assertion is the one that matters most: `GenericRepository.update`
-    matches keys by `hasattr`, so an un-unwrapped enum would be *stored as the member object*
-    rather than rejected. `secondary_location_to_dict` exists to stop that on all three call
-    sites at once — this is what holds it to that.
+    The `accessStatus` assertion is the one that matters most: the repository matches keys by
+    `hasattr`, so an enum that was never unwrapped would be stored as the member object rather
+    than rejected. This is what catches that.
     """
     _, token = coordinator_auth
     ticket = await _create_ticket(client, token, disasterTypes=["earthquake"], secondaryLocation={
@@ -708,20 +703,19 @@ async def test_a_ticket_can_record_an_address_and_the_space_the_victim_is_in(
     assert row.building_section == "A棟"
     assert row.space_description == "三房兩廳"
     assert row.victim_space == "主臥衣櫃"
-    assert row.access_status == "restricted"  # the string, not AccessStatus.restricted
+    assert row.access_status == "restricted"  # the string, not the enum member
     assert row.landmark_note == "廟旁邊，紅色鐵門"
-    # The pre-existing columns still arrive through the shared mapper.
+    # The older address columns still arrive through the same mapper.
     assert (row.no, row.floor, row.room) == ("5號", "3F", "302")
 
 
 async def test_the_space_the_victim_is_in_never_reaches_search_text(
     client, coordinator_auth
 ):
-    """ADR-250: which room a trapped person is hiding in must not be findable by substring.
+    """Which room a trapped person is hiding in must not be findable by substring.
 
-    ADR-146 already keeps ticket addresses off the public search surface, so this is the
-    second lock rather than the only one — but `search_text` is a generated column, and a
-    column added to that expression by accident would be silently searchable forever.
+    `search_text` is a generated column, so a field added to its expression by accident would
+    be silently searchable forever.
     """
     _, token = coordinator_auth
     ticket = await _create_ticket(client, token, secondaryLocation={
@@ -743,12 +737,10 @@ async def test_the_space_the_victim_is_in_never_reaches_search_text(
 
 
 async def test_all_three_config_tables_reject_an_unknown_disaster(client, field_admin_auth):
-    """The station and task tables used to store a bogus label silently (PR #50 review).
+    """A typo in a disaster label must be rejected, not stored.
 
-    Only the ticket table validated, so a typo on the other two produced a field scoped to a
-    disaster that does not exist — defined, stored, and shown to nobody. Worse, that label
-    then entered `disaster_types_in_use()`, which is exactly what the project-settings
-    warning compares against, so a matching typo on both sides read as "configured".
+    Only the ticket table used to validate, so a typo on the other two produced a field
+    scoped to a disaster that does not exist — defined, stored, and shown to nobody.
     """
     _, token = field_admin_auth
 

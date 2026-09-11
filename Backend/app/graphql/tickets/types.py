@@ -364,10 +364,9 @@ class TicketType:
     _contact_name_raw: strawberry.Private[str] = ""
     _contact_email_raw: strawberry.Private[str | None] = None
     _contact_phone_raw: strawberry.Private[str | None] = None
-    # The two reporter triage flags are gated on the same capability as the contact fields.
-    # They are not identifying, but "there is a trapped person at this address" is the most
-    # sensitive thing a ticket carries, and the map pin is public — so it rides the same
-    # trust boundary rather than being readable by anyone who can see the pin.
+    # Gated on the same capability as the contact fields above. Not identifying on their
+    # own, but "there is a trapped person at this address" is the most sensitive thing a
+    # ticket carries, and the coordinate beside it is public.
     _person_trapped_reported_raw: strawberry.Private[str | None] = None
     _immediate_danger_reported_raw: strawberry.Private[str | None] = None
     _geometry_raw: strawberry.Private[object | None] = None
@@ -437,13 +436,12 @@ class TicketType:
         )
     )
     async def person_trapped_reported(self, info: strawberry.types.Info) -> str | None:
-        """Return the reporter's trapped answer, or null when the caller is out of PII scope.
+        """Return the reporter's answer, or null when the caller is out of PII scope.
 
-        Unlike the contact fields there is nothing to mask — a tri-state has no shape to
-        preserve — so a denial is null. That does mean an out-of-scope caller cannot tell
-        "nobody asked" from "you may not see it", which is a real loss of the null-vs-unknown
-        distinction this column exists to carry. Accepted: the distinction only matters to
-        someone who can act on the answer, and they hold the capability by definition.
+        A tri-state has no shape to mask, so denial is null. An out-of-scope caller therefore
+        cannot tell "nobody asked" from "you may not see it" — accepted, since that
+        distinction only matters to someone who can act on the answer, who holds the
+        capability anyway.
         """
         return self._person_trapped_reported_raw if await self._pii_visible(info) else None
 
