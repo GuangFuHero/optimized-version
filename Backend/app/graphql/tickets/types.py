@@ -13,7 +13,7 @@ from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
-from app.graphql.shared import PageInfo, Visibility
+from app.graphql.shared import PageInfo, SecondaryLocationInput, TriState, Visibility
 
 
 @strawberry.enum
@@ -344,8 +344,13 @@ class TicketType:
     review_note: str | None = strawberry.field(
         default=None, description="Moderator's notes about the verification decision"
     )
-    disaster_type: str | None = strawberry.field(
-        default=None, description="Type of disaster, e.g. 'earthquake', 'flood'"
+    disaster_types: list[str] = strawberry.field(
+        default_factory=list,
+        description=(
+            "Disaster type keys this ticket is filed under, e.g. ['flood', 'landslide']. "
+            "Plural because one incident is routinely two disasters at once. Drives which "
+            "fields `ticketPropertyConfigs` returns for it"
+        ),
     )
     created_by: str | None = strawberry.field(
         default=None, description="UUID of the user who submitted this ticket"
@@ -359,11 +364,16 @@ class TicketType:
     _contact_name_raw: strawberry.Private[str] = ""
     _contact_email_raw: strawberry.Private[str | None] = None
     _contact_phone_raw: strawberry.Private[str | None] = None
+    # Gated on the same capability as the contact fields above. Not identifying on their
+    # own, but "there is a trapped person at this address" is the most sensitive thing a
+    # ticket carries, and the coordinate beside it is public.
+    _person_trapped_reported_raw: strawberry.Private[str | None] = None
+    _immediate_danger_reported_raw: strawberry.Private[str | None] = None
     _geometry_raw: strawberry.Private[object | None] = None
     _pii_visible_task: strawberry.Private[object | None] = None
 
     def _pii_visible(self, info: strawberry.types.Info):
-        """Memoized PII-visibility check shared by the three contact_* resolvers.
+        """Memoized PII-visibility check shared by the contact_* and triage-flag resolvers.
 
         Cached as a single asyncio Task on this instance so that when GraphQL resolves
         contact_name/email/phone concurrently on the SAME TicketType, the underlying zone
@@ -418,6 +428,34 @@ class TicketType:
             return self._contact_phone_raw
         return mask_phone(self._contact_phone_raw)
 
+    @strawberry.field(
+        description=(
+            "Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody "
+            "was asked — and also null to a caller without ticket.view_pii here. What the "
+            "person said, not a professional assessment"
+        )
+    )
+    async def person_trapped_reported(self, info: strawberry.types.Info) -> str | None:
+        """Return the reporter's answer, or null when the caller is out of PII scope.
+
+        A tri-state has no shape to mask, so denial is null. An out-of-scope caller therefore
+        cannot tell "nobody asked" from "you may not see it" — accepted, since that
+        distinction only matters to someone who can act on the answer, who holds the
+        capability anyway.
+        """
+        return self._person_trapped_reported_raw if await self._pii_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was "
+            "asked — and also null to a caller without ticket.view_pii here. Not a triage "
+            "grade and not a risk classification"
+        )
+    )
+    async def immediate_danger_reported(self, info: strawberry.types.Info) -> str | None:
+        """Return the reporter's danger answer, or null when the caller is out of PII scope."""
+        return self._immediate_danger_reported_raw if await self._pii_visible(info) else None
+
     @strawberry.field
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
         """Resolve photos attached to this ticket."""
@@ -427,6 +465,18 @@ class TicketType:
     async def tasks(self, info: strawberry.types.Info) -> list[TicketTaskType]:
         """Resolve all active tasks under this ticket."""
         return await info.context["loaders"]["tasks_by_ticket"].load(str(self.uuid))
+
+    @strawberry.field
+    async def disaster_details(
+        self, info: strawberry.types.Info
+    ) -> list["TicketDisasterDetailType"]:
+        """Resolve this ticket's disaster-specific field values.
+
+        A `multi_select` field arrives as several rows sharing one `propertyName`; the caller
+        groups them. Pair with `ticketPropertyConfigs(disasterTypes: <this ticket's>)` to get
+        the labels, units and hints these bare keys and values belong to.
+        """
+        return await info.context["loaders"]["disaster_details_by_ticket"].load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "TicketType":
@@ -443,13 +493,15 @@ class TicketType:
             visibility=m.visibility,
             verification_status=m.verification_status,
             review_note=m.review_note,
-            disaster_type=m.disaster_type,
+            disaster_types=list(m.disaster_types or []),
             created_by=m.created_by,
             created_at=m.created_at,
             updated_at=m.updated_at,
             _contact_name_raw=m.contact_name,
             _contact_email_raw=m.contact_email,
             _contact_phone_raw=m.contact_phone,
+            _person_trapped_reported_raw=m.person_trapped_reported,
+            _immediate_danger_reported_raw=m.immediate_danger_reported,
             _geometry_raw=m.geometry,
         )
 
@@ -487,8 +539,27 @@ class CreateTicketInput:
         default=Visibility.public,
         description="Visibility: 'public' (default), 'restricted', or 'internal'",
     )
-    disaster_type: str | None = strawberry.field(
-        default=None, description="Type of disaster, e.g. 'earthquake', 'flood'"
+    disaster_types: list[str] | None = strawberry.field(
+        default=None,
+        description=(
+            "Disaster type keys, e.g. ['flood', 'landslide']. Each must be an active key from "
+            "`disasterTypes`; an unknown one is rejected rather than stored, because a ticket "
+            "filed under a disaster that does not exist would show the reporter an empty form"
+        ),
+    )
+    person_trapped_reported: TriState | None = strawberry.field(
+        default=None, description="災民受困／無法自行離開. Omit when nobody was asked"
+    )
+    immediate_danger_reported: TriState | None = strawberry.field(
+        default=None, description="立即生命危險. Omit when nobody was asked"
+    )
+    secondary_location: SecondaryLocationInput | None = strawberry.field(
+        default=None,
+        description=(
+            "Street address and space detail for where help is needed. New in feature 018 — "
+            "before it, only stations could carry one, so the record that most needs a door "
+            "number had nothing but a map pin"
+        ),
     )
 
 
@@ -512,6 +583,52 @@ class UpdateTicketInput:
         default=None,
         description="Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'",
     )
-    disaster_type: str | None = strawberry.field(
-        default=strawberry.UNSET, description="Type of disaster — pass null to clear"
+    disaster_types: list[str] | None = strawberry.field(
+        default=strawberry.UNSET,
+        description="Disaster type keys — pass [] or null to clear. Validated against `disasterTypes`",
+    )
+    person_trapped_reported: TriState | None = strawberry.field(
+        default=strawberry.UNSET, description="災民受困／無法自行離開 — pass null to unset"
+    )
+    immediate_danger_reported: TriState | None = strawberry.field(
+        default=strawberry.UNSET, description="立即生命危險 — pass null to unset"
+    )
+
+
+@strawberry.type
+class TicketDisasterDetailType:
+    """One disaster-specific field value recorded against a ticket.
+
+    Deliberately a bare `(propertyName, value)` pair with no label or type: those live in
+    `ticketPropertyConfigs` and would go stale the moment an operator renamed a label if they
+    were copied here. A `multi_select` answer is several of these sharing a `propertyName`.
+    """
+
+    uuid: UUID
+    property_name: str = strawberry.field(
+        description="The field key, matching a `ticketPropertyConfigs` entry"
+    )
+    value: str = strawberry.field(
+        description=(
+            "One selected value. Numbers arrive as strings — the config's dataType says "
+            "how to read it"
+        )
+    )
+
+    @classmethod
+    def from_model(cls, m) -> "TicketDisasterDetailType":
+        """Build from a SQLAlchemy model instance."""
+        return cls(uuid=m.uuid, property_name=m.property_name, value=m.value)
+
+
+@strawberry.input
+class TicketDisasterDetailInput:
+    """One field's answer: its key plus every value selected for it."""
+
+    property_name: str = strawberry.field(description="The field key from `ticketPropertyConfigs`")
+    values: list[str] = strawberry.field(
+        description=(
+            "Selected values. One entry for a single-valued field, several for multi_select, "
+            "[] to clear the field"
+        )
     )

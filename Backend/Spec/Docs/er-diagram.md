@@ -26,6 +26,15 @@
 > `stations.confidence_score` / `stations.priority_score` / `ticket_tasks.confidence_score`
 > dropped on 2026-09-06 (PR #49): half-implemented columns no code path ever wrote, so
 > every row held NULL — see ADR-083's derived issue in Spec/011-resource-search.
+> Feature 018 (ADR-244~251, 2026-09-09) closed the disaster vocabulary and gave tickets
+> their own dynamic fields: new `disaster_types` master table (Identity diagram),
+> `ticket_property_config` + `ticket_disaster_details` (Tickets diagram),
+> `tickets.disaster_type` → `disaster_types text[]` plus two reporter triage columns, five
+> space columns on `secondary_locations`, and a `data_type` vocabulary shared by all three
+> config tables (`text`/`long_text`/`number`/`boolean`/`single_select`/`multi_select`).
+> `station_property_config` / `task_property_config` / the three new tables joined
+> AUDITED_TABLES at the same time — the two config tables had been unaudited since they
+> existed.
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -311,6 +320,25 @@ project_settings {
 }
 %% UNIQUE INDEX uq_project_settings_singleton ON project_settings ((true))
 %% -- single-row invariant on a constant expression: no magic UUID needed
+
+%% ==========================
+%% 5. Disaster Types (the vocabulary every disaster_types column is drawn from, ADR-244)
+%% ==========================
+%% Feature 013 deliberately left this open (ADR-091) because the real set came from PM's
+%% spec. Feature 018 closed it — as a TABLE, not an enum, so an operator can add a type
+%% through GraphQL when an unplanned disaster arrives without waiting for a deploy.
+%% No relationship arrows on purpose: `key` is referenced as a bare string by
+%% project_settings.disaster_types, tickets.disaster_types and all three *_property_config
+%% .disaster_types. Those are text[] columns, which cannot carry a FK — hence no rename
+%% endpoint, only `is_active` retirement (the same immutable-key rule as ADR-095).
+disaster_types {
+    uuid uuid PK
+    string key "UNIQUE, String(50), immutable lower-case code: flood/landslide/epidemic/radiation/fire/earthquake"
+    string label "String(50), display name, e.g. 水災"
+    boolean is_active "default true; false blocks new writes but keeps existing rows readable"
+}
+%% UNIQUE(key) -- uq_disaster_types_key
+%% Audited (ADR-251): changing the vocabulary re-scopes every dynamic field at once.
 ```
 
 ## 2. Geospatial & Stations
@@ -354,8 +382,13 @@ secondary_locations {
     string lane "nullable, address only — holds the ROAD/street name despite the name (COMMENT ON COLUMN)"
     string alley "nullable, address only — holds the 巷弄 despite the name (COMMENT ON COLUMN)"
     string no "nullable, address only"
-    string floor "nullable, address only"
-    string room "nullable, address only"
+    string building_section "nullable, 樓棟／區域 e.g. A棟／東翼 (feature 018)"
+    string floor "nullable, address only — free text: B1/1F/RF, never coerced to a number"
+    string room "nullable, address only — 房號／空間 e.g. 302, 樓梯間"
+    string space_description "nullable, 空間描述 e.g. 三房兩廳 (feature 018)"
+    string victim_space "nullable, 求救者所在空間 e.g. 主臥衣櫃 (feature 018)"
+    string access_status "nullable, accessible/restricted/inaccessible/unknown — a current observation, NOT a safety certification"
+    string landmark_note "nullable, 地標補充 — PII, masked like the rest of the address; EXCLUDED from search_text"
     string pole_id "nullable, pole only"
     string pole_type "nullable, pole only"
     uuid pole_photo_uuid FK "nullable, pole only, FK to photos (see Tickets diagram), ON DELETE SET NULL"
@@ -363,6 +396,10 @@ secondary_locations {
     string search_text "GENERATED ALWAYS AS county+city+lane+alley+no+floor+room+pole_id, STORED"
 }
 %% INDEX: ix_secondary_locations_search_text_trgm USING gin (search_text gin_trgm_ops)
+%% NOTE: the five feature-018 columns (building_section/space_description/victim_space/
+%% access_status/landmark_note) are deliberately NOT in search_text (ADR-250). Only stations
+%% are searchable through this table at all (ADR-146), and which room a trapped person is
+%% hiding in is not something to make findable by substring.
 base_geometries ||--|| secondary_locations : "has secondary location"
 
 %% Inheritance: Closure Area inherits from base_geometries
@@ -437,8 +474,9 @@ station_property_config {
     uuid uuid PK
     string station_type "matches stations.type"
     string property_name
-    string data_type
+    string data_type "text/long_text/number/boolean/single_select/multi_select (ADR-245)"
     json enum_options "nullable"
+    string unit "nullable, String(20), e.g. cm — number fields only"
     string_array disaster_types "default '{}' — enabled for these disaster types; empty = all (ADR-091)"
     string label "nullable, display text; frontend falls back to property_name"
     int sort_order "default 0, form field ordering"
@@ -545,13 +583,20 @@ tickets {
     string visibility "public/restricted/internal"
     string verification_status "unverified/ai_verified/human_verified/disputed"
     string review_note "nullable"
-    string disaster_type "nullable, free-form e.g. earthquake/flood"
+    string_array disaster_types "default '{}', references disaster_types.key by string; stored sorted+deduped (ADR-246)"
+    string person_trapped_reported "nullable, String(20), yes/no/unknown — reporter's answer, NOT a medical judgement"
+    string immediate_danger_reported "nullable, String(20), yes/no/unknown — NOT a triage grade"
     string search_text "GENERATED ALWAYS AS title + left(description, 500), STORED"
 }
 %% INDEX: ix_tickets_search_text_trgm USING gin (search_text gin_trgm_ops)
 %% NOTE: contact_name/contact_email/contact_phone are PII and never enter search_text (ADR-079)
 base_geometries ||--|| tickets : "inherits as general ticket"
 %% NOTE: polymorphic_identity = "request" (base_geometries.property_name stores "request" for ticket rows)
+%% NOTE: disaster_types is PLURAL (ADR-246) — one incident is routinely two disasters at once
+%% (a typhoon brings 水災 and 土石流 to the same house). Sorted on write because
+%% ticket_analytics compares two tickets' arrays with `=`, which is order-sensitive.
+%% NOTE: person_trapped_reported/immediate_danger_reported are NULL when nobody was asked;
+%% 'unknown' means they were asked and could not say. The two are different facts.
 
 photos {
     uuid uuid PK
@@ -644,8 +689,9 @@ task_property_config {
     uuid uuid PK
     string task_type "matches ticket_tasks.task_type"
     string property_name
-    string data_type
+    string data_type "text/long_text/number/boolean/single_select/multi_select (ADR-245)"
     json enum_options "nullable"
+    string unit "nullable, String(20), e.g. cm — number fields only"
     string_array disaster_types "default '{}' — enabled for these disaster types; empty = all (ADR-091)"
     string label "nullable, display text; frontend falls back to property_name"
     int sort_order "default 0, form field ordering"
@@ -654,6 +700,48 @@ task_property_config {
 %% UNIQUE(task_type, property_name) -- uq_task_property_config_key
 %% A row is shown when disaster_types is empty or intersects project_settings.disaster_types
 %% (project_settings lives in the Identity diagram).
+
+%% Disaster-specific ticket fields (feature 018). Same idea as the two tables above, one
+%% axis fewer: for a ticket the disaster type IS the only dimension, so property_name alone
+%% is unique. That keeps the ADR-091 guarantee at full strength — `access_blocked` (水災 +
+%% 土石流) and `entrance_blocked` (火災 + 地震) are ONE row each and cannot drift apart.
+%% No sort_order (ADR-248): ordering is (property_name, uuid).
+ticket_property_config {
+    uuid uuid PK
+    string property_name "UNIQUE, String(100), immutable key (ADR-095)"
+    string data_type "text/long_text/number/boolean/single_select/multi_select (ADR-245)"
+    json enum_options "nullable, the choices for single_select/multi_select"
+    string unit "nullable, String(20), e.g. cm/mm — number fields only"
+    string_array disaster_types "default '{}' — enabled for these disaster types; empty = all"
+    string label "nullable, display text; frontend falls back to property_name"
+    string hint "nullable, String(200), guidance + safety text, e.g. 「不可為了量測進入危險區」"
+    boolean is_active "default true, disable switch"
+}
+%% UNIQUE(property_name) -- uq_ticket_property_config_key
+%% Scoped by the TICKET's own disaster_types, NOT project_settings: a deployment configured
+%% for {flood,landslide} must still render the fire fields on the one fire ticket that
+%% arrives. An EMPTY set returns only the universal rows, never all of them.
+
+%% The values. One row per selected value, so a multi_select is simply N rows and nothing
+%% has to JSON-encode on write or parse on read (ADR-247).
+ticket_disaster_details {
+    uuid uuid PK
+    uuid ticket_uuid FK "FK to tickets"
+    string property_name "String(100), matches ticket_property_config.property_name — string join, no FK (ADR-095)"
+    string value "one selected value; numbers stored as text like task_properties.property_value"
+    timestamp created_at
+    timestamp updated_at
+    timestamp delete_at "nullable"
+}
+%% UNIQUE(ticket_uuid, property_name, value) -- uq_ticket_disaster_detail_value
+%% INDEX: ix_ticket_disaster_details_ticket_uuid
+%% NOTE: the uuid PK is a surrogate, NOT the natural composite — audit_trigger_func() does
+%% `r_id := NEW.uuid` unconditionally, so a table without a uuid column raises on every write.
+%% NOTE: values are NEVER validated against ticket_property_config (ADR-092). These rows
+%% record what the reporter said; a field retired mid-form still stores.
+%% NOTE: no search_text — the values are enum tokens and measurements, and ADR-146 keeps
+%% ticket detail off the public search surface anyway.
+tickets ||--o{ ticket_disaster_details : "has disaster field values"
 
 %% Task Assignments (who is working on each sub-task)
 task_assignments {

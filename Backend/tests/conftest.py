@@ -82,6 +82,24 @@ async def _ensure_test_database():
     await eng.dispose()
 
 
+
+# The six disaster keys migration e7b249d0af31 seeds. The test schema comes from
+# `Base.metadata.create_all`, which carries data from no migration, so any fixture whose test
+# writes a disaster type has to seed them — since feature 018 the vocabulary is validated
+# against this table and an unseeded one rejects every label.
+DISASTER_TYPES = [
+    ("flood", "水災"), ("landslide", "土石流"), ("epidemic", "疫情"),
+    ("radiation", "核／輻射"), ("fire", "火災"), ("earthquake", "地震"),
+]
+
+
+def seed_disaster_types(session) -> None:
+    """Add the six seeded disaster types to a session (caller commits)."""
+    from app.models.disaster_type import DisasterType
+
+    session.add_all(DisasterType(key=key, label=label) for key, label in DISASTER_TYPES)
+
+
 @pytest_asyncio.fixture
 async def db():
     """Fresh schema per test, UNSEEDED (for model/repo/service/gate unit tests). Wipes the test DB."""
@@ -117,6 +135,7 @@ async def db_session():
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
         session.add(Role(name="user", kind="platform"))
+        seed_disaster_types(session)
         await session.commit()
         yield session
     await engine.dispose()

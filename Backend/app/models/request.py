@@ -1,6 +1,6 @@
 """SQLAlchemy model for support tickets (disaster relief requests)."""
 
-from sqlalchemy import Computed, ForeignKey, String
+from sqlalchemy import ARRAY, Computed, ForeignKey, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.geo import BaseGeometry
@@ -23,7 +23,30 @@ class Tickets(BaseGeometry):
     visibility: Mapped[str | None] = mapped_column(String(50))
     verification_status: Mapped[str | None] = mapped_column(String(50))
     review_note: Mapped[str | None] = mapped_column(String)
-    disaster_type: Mapped[str | None] = mapped_column(String(50))
+    # Plural since feature 018 (ADR-246): one incident is routinely two disasters at once —
+    # a typhoon brings 水災 and 土石流 to the same house — and the dynamic-field query is an
+    # array intersection either way, so the singular column bought nothing.
+    #
+    # Values are keys from the `disaster_types` table, stored sorted and de-duplicated by
+    # `app/core/disaster_types.py::normalize_disaster_types`. Sorted is load-bearing, not
+    # tidiness: `ticket_analytics._duplicate_pair_condition` compares two tickets with `==`,
+    # and PostgreSQL array equality is order-sensitive, so {flood,fire} and {fire,flood}
+    # would otherwise read as different disasters.
+    disaster_types: Mapped[list[str]] = mapped_column(
+        ARRAY(String), server_default=text("'{}'"), default=list, nullable=False,
+        comment="災害型別集合，參照 disaster_types.key；已排序去重",
+    )
+    # Reporter-supplied triage flags (feature 018). Nullable with no default: "nobody has
+    # answered" and "the reporter said unknown" are different facts, and defaulting to
+    # 'unknown' would erase the first. Neither is a medical or professional assessment —
+    # they record what the person asking for help said, which is why they live on the ticket
+    # rather than in the disaster-specific config.
+    person_trapped_reported: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, comment="災民受困／無法自行離開：yes/no/unknown"
+    )
+    immediate_danger_reported: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, comment="立即生命危險：yes/no/unknown"
+    )
 
     # Keyword-search column (ADR-079/081). contact_name / contact_email / contact_phone are
     # deliberately absent: they are masked per-field in the API, and letting them feed the

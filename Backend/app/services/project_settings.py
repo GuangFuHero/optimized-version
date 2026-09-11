@@ -11,12 +11,16 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.disaster_types import normalize_disaster_types
+from app.core.disaster_types import normalize_disaster_types, validate_disaster_types
 from app.core.permissions import Perm
 from app.models.auth import User
+from app.models.disaster_type import DisasterType
 from app.models.project_settings import ProjectSettings
 from app.repositories.config_repository import disaster_types_in_use
-from app.repositories.project_settings_repository import project_settings_repository
+from app.repositories.project_settings_repository import (
+    disaster_type_repository,
+    project_settings_repository,
+)
 from app.services.authz import require_scope
 
 logger = logging.getLogger(__name__)
@@ -64,6 +68,20 @@ async def update_project_settings(
         raise ProjectSettingsValidationError(
             "第一次設定必須提供 name（災害名稱）"
         )
+    if "disaster_types" in values:
+        # Feature 018: the vocabulary is closed now, so a label that is not a known key is
+        # rejected outright rather than merely warned about. `_unmatched_disaster_types` below
+        # still earns its place — it catches the *other* failure, a real disaster type that no
+        # field has been configured for yet, which is legitimate and only worth a warning.
+        #
+        # Re-raised as ProjectSettingsValidationError because this path is REST, not GraphQL:
+        # the admin endpoint maps that to 422, whereas a bare ValueError escapes as a 500 and
+        # tells the operator nothing about which label was wrong.
+        try:
+            validated = await validate_disaster_types(db, values["disaster_types"])
+        except ValueError as err:
+            raise ProjectSettingsValidationError(str(err)) from err
+        values = {**values, "disaster_types": validated}
     warnings = await _unmatched_disaster_types(db, values)
     settings = await project_settings_repository.upsert(db, values=values, current=current)
     return ProjectSettingsUpdateResult(settings=settings, warnings=warnings)
@@ -73,12 +91,12 @@ async def _unmatched_disaster_types(db: AsyncSession, values: dict) -> tuple[str
     """Warn about saved disaster labels that no configured field is scoped to (ADR-169).
 
     Setting `disaster_types` re-scopes every dynamic field at once, and the match is exact
-    string equality — so `"floods"` for `"flood"` is accepted, stores cleanly, and silently
-    empties the station and task forms of every flood field. There is no vocabulary to
-    validate against (ADR-091), so the check is indirect: a label that matches nothing that
-    is configured is *probably* a typo, and possibly a disaster whose fields are not set up
-    yet. That is a warning, never a rejection — configuring the disaster before its fields is
-    a legitimate order to work in.
+    string equality. Feature 018 closed the vocabulary, so the typo half of what this used to
+    catch — `"floods"` for `"flood"` — is now a hard rejection upstream in
+    `validate_disaster_types`, and what is left here is the case that is *not* an error: a
+    perfectly real disaster type that nobody has configured any fields for yet. Still a
+    warning, never a rejection — configuring the disaster before its fields is a legitimate
+    order to work in.
 
     Logged as well as returned: the response tells whoever is at the console, the log tells
     whoever is looking into "why did the flood fields disappear" days later.
@@ -100,4 +118,40 @@ async def _unmatched_disaster_types(db: AsyncSession, values: dict) -> tuple[str
         f"災害型別「{label}」沒有對應到任何動態欄位，"
         "請確認拼字，或確認該型別的欄位尚未設定"
         for label in unmatched
+    )
+
+
+async def list_disaster_types(
+    db: AsyncSession, *, actor: User, include_inactive: bool = False
+) -> list[DisasterType]:
+    """List the deployment's disaster vocabulary (checkpoint 1 only).
+
+    Gated by `project.view` rather than `dynamic_field.view`: the vocabulary is what
+    `project_settings.disaster_types` is chosen from, so it belongs with the settings it
+    configures, not with the fields that happen to reference it.
+
+    `include_inactive` needs `project.edit` at the call site, on the same reasoning as
+    ADR-226: seeing what somebody retired belongs with the right to retire it.
+    """
+    await require_scope(actor, Perm.PROJECT_VIEW, db)
+    return await disaster_type_repository.list_all(db, include_inactive=include_inactive)
+
+
+async def upsert_disaster_type(
+    db: AsyncSession, *, actor: User, key: str, label: str | None = None,
+    is_active: bool | None = None,
+) -> DisasterType:
+    """Add a disaster type, or edit an existing one's label / active flag (checkpoint 1 only).
+
+    This is the reason the vocabulary is a table and not an enum (ADR-244): a disaster nobody
+    planned for should cost an operator one mutation, not a deploy.
+
+    Retiring is `is_active=False`, never a delete. Tickets already filed under a type keep
+    referencing its key by string, so removing the row would leave them pointing at nothing
+    and quietly drop their disaster-specific fields; deactivating stops new writes while
+    leaving the history readable.
+    """
+    await require_scope(actor, Perm.PROJECT_EDIT, db)
+    return await disaster_type_repository.upsert(
+        db, key=key, label=label, is_active=is_active
     )
