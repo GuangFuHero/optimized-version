@@ -12,6 +12,7 @@ import pytest
 
 from app.services.dedup_scoring import (
     FAST_LAYER_PARAMETERS,
+    STATION_FAST_LAYER_PARAMETERS,
     DedupCandidate,
     FastLayerParameters,
     max_hint_distance_m,
@@ -228,3 +229,49 @@ def test_the_boundary_scales_with_the_distance_half_life():
     assert max_hint_distance_m(FastLayerParameters(distance_half_m=400.0)) == pytest.approx(
         2 * max_hint_distance_m()
     )
+
+
+def test_station_parameters_reuse_the_ticket_weights_except_time():
+    """STATION_FAST_LAYER_PARAMETERS is the ticket group with only `time_weight` zeroed."""
+    p, ticket = STATION_FAST_LAYER_PARAMETERS, FAST_LAYER_PARAMETERS
+    assert p.time_weight == 0.0
+    assert (p.distance_half_m, p.distance_weight, p.task_type_weight, p.text_weight, p.hint_threshold) == (
+        ticket.distance_half_m, ticket.distance_weight, ticket.task_type_weight,
+        ticket.text_weight, ticket.hint_threshold,
+    )
+
+
+def test_station_parameters_drop_the_time_component_entirely():
+    """`time_weight = 0` removes the time signal from the breakdown, not just its weight.
+
+    A component sitting in the breakdown at weight 0 would be a fake signal — it would show
+    a `passed` light for something that never counted towards the score.
+    """
+    candidate = DedupCandidate("c", distance_m=0.0, age_min=1.0, task_type="shelter", text_similarity=0.9)
+    score = score_candidate(candidate, query_task_type="shelter", parameters=STATION_FAST_LAYER_PARAMETERS)
+    assert {c.name for c in score.components} == {"distance", "task_type", "text"}
+
+
+def test_station_parameters_drop_time_from_the_boundary_and_shrink_it():
+    """No time signal means a smaller W, so the station boundary is tighter than the ticket one.
+
+    And, crucially, a candidate sitting exactly on that (tighter) boundary still clears the
+    threshold *whatever its age* — proving the boundary and the score genuinely ignore time
+    rather than merely discounting it.
+    """
+    boundary = max_hint_distance_m(STATION_FAST_LAYER_PARAMETERS)
+    assert boundary < max_hint_distance_m(FAST_LAYER_PARAMETERS)
+
+    ancient = DedupCandidate(
+        "boundary", distance_m=boundary, age_min=10_000_000.0, task_type="shelter", text_similarity=1.0
+    )
+    score = score_candidate(ancient, query_task_type="shelter", parameters=STATION_FAST_LAYER_PARAMETERS)
+    assert score.similarity == pytest.approx(STATION_FAST_LAYER_PARAMETERS.hint_threshold)
+    hint = top_hint([ancient], query_task_type="shelter", parameters=STATION_FAST_LAYER_PARAMETERS)
+    assert hint is not None
+
+    # A metre further out and the same (still ancient) candidate no longer qualifies.
+    beyond = DedupCandidate(
+        "beyond", distance_m=boundary + 1, age_min=10_000_000.0, task_type="shelter", text_similarity=1.0
+    )
+    assert top_hint([beyond], query_task_type="shelter", parameters=STATION_FAST_LAYER_PARAMETERS) is None

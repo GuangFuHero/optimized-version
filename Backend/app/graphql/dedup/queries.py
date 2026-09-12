@@ -16,8 +16,14 @@ import strawberry
 
 from app.core.permissions import Perm
 from app.graphql.context import check_permission
-from app.graphql.dedup.types import TicketDedupCheckInput, TicketDedupHint
+from app.graphql.dedup.types import (
+    StationDedupCheckInput,
+    StationDedupHint,
+    TicketDedupCheckInput,
+    TicketDedupHint,
+)
 from app.services import dedup as dedup_service
+from app.services.dedup_scoring import STATION_FAST_LAYER_PARAMETERS
 
 
 @strawberry.type
@@ -54,3 +60,32 @@ class DedupQuery:
             task_type=input.task_type,
         )
         return [TicketDedupHint.from_score(s) for s in scores]
+
+    @strawberry.field
+    async def station_dedup_candidates(
+        self, info: strawberry.types.Info, input: StationDedupCheckInput
+    ) -> list[StationDedupHint]:
+        """Check a station that is about to be registered against nearby, still-open stations.
+
+        Same shape as `ticket_dedup_candidates`, scored with `STATION_FAST_LAYER_PARAMETERS`
+        (the ticket weights minus the time signal — see app/services/dedup_scoring.py) against
+        stations that are `active` or `temporarily_closed`, not soft-deleted, and — if
+        temporary — not past their `expiresAt`. `permanently_closed` stations are never
+        candidates.
+
+        Gated on `station.add`, the same permission `createStation` checks, for the same
+        reason `ticketDedupCandidates` is gated on `ticket.add`: the question this answers is
+        "am I about to register a duplicate station?", so the caller is by definition someone
+        who may register one.
+        """
+        await check_permission(info, Perm.STATION_ADD)
+        scores = await dedup_service.find_duplicate_hints(
+            info.context["db"],
+            geometry=input.geometry,
+            title=input.name or "",
+            description=input.description,
+            task_type=input.type,
+            entity_kind="station",
+            parameters=STATION_FAST_LAYER_PARAMETERS,
+        )
+        return [StationDedupHint.from_score(s) for s in scores]

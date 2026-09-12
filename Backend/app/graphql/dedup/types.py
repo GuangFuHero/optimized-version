@@ -40,6 +40,18 @@ class DedupHintOutcome(enum.Enum):
     ignored_hint = "ignored_hint"
 
 
+@strawberry.enum
+class DedupEntityKind(enum.Enum):
+    """Which kind of entity a dedup hint outcome is about — mirrors `duplicate_pairs.entity_kind`.
+
+    Only the two kinds the fast layer implements so far. `'ticket_task'` is in the model's
+    `ENTITY_KINDS` value domain for a later slice, not exposed here yet.
+    """
+
+    ticket = "ticket"
+    station = "station"
+
+
 @strawberry.type
 class DedupScoreComponent:
     """One signal's contribution to the total score — the contract's component shape."""
@@ -79,6 +91,36 @@ class TicketDedupHint:
         )
 
 
+@strawberry.type
+class StationDedupHint:
+    """A pre-registration duplicate warning: one existing station that looks like this one.
+
+    Same shape as `TicketDedupHint`, for the same reason: `duplicate_pairs` cannot hold a row
+    for a station nobody has inserted yet, so this carries only what is meaningful before
+    that — `relatedStationUuid`, `similarity`, `scoreComponents`.
+    """
+
+    related_station_uuid: str = strawberry.field(description="疑似重複的既有據點 uuid")
+    similarity: float = strawberry.field(
+        description="加權總分 0–1（各成分得分 × 權重加總，再除以可用成分的權重和）"
+    )
+    score_components: list[DedupScoreComponent] = strawberry.field(
+        description="分數拆帳：每個訊號的得分、權重與過線燈號（沒有時間訊號 —— 據點不比時間）"
+    )
+
+    @classmethod
+    def from_score(cls, score: CandidateScore) -> "StationDedupHint":
+        """Build from the scoring layer's CandidateScore."""
+        return cls(
+            related_station_uuid=score.candidate.entity_uuid,
+            similarity=score.similarity,
+            score_components=[
+                DedupScoreComponent(name=c.name, score=c.score, weight=c.weight, passed=c.passed)
+                for c in score.components
+            ],
+        )
+
+
 @strawberry.input
 class TicketDedupCheckInput:
     """The about-to-be-submitted ticket's key fields — CreateTicketInput's scoring subset.
@@ -101,6 +143,26 @@ class TicketDedupCheckInput:
     task_type: str | None = strawberry.field(
         default=None, description="Type of help: 'rescue', 'supply', 'medical', or 'hr'"
     )
+
+
+@strawberry.input
+class StationDedupCheckInput:
+    """The about-to-be-registered station's key fields — CreateStationInput's scoring subset.
+
+    Only the fields the fast layer's three station signals read (distance, `stations.type`,
+    `name` ‖ `description`) — there is no time signal for a station, so no `submittedAt`
+    either. `name` and `description` are bounded before they reach pg_trgm the same way
+    `title`/`description` are for a ticket (see app/services/dedup.py).
+    """
+
+    geometry: GeoJSON = strawberry.field(
+        description="GeoJSON Point for the location the station sits at — [longitude, latitude]"
+    )
+    type: str | None = strawberry.field(
+        default=None, description="Station category, e.g. 'shelter', 'supply', 'medical'"
+    )
+    name: str | None = None
+    description: str | None = None
 
 
 @strawberry.input

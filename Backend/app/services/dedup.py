@@ -24,16 +24,17 @@ from app.core.permissions import Perm
 from app.graphql.scalars import geom_to_geojson
 from app.models.auth import User
 from app.models.dedup import PAIR_HINT_OUTCOMES, DuplicatePair
-from app.models.request import Tickets
 from app.repositories.dedup_repository import (
     dedup_audit_event_repository,
     dedup_candidate_repository,
     duplicate_pair_repository,
 )
+from app.repositories.geo_repository import station_repository
 from app.repositories.tickets_repository import ticket_repository
 from app.services.authz import require_scope
 from app.services.dedup_scoring import (
     FAST_LAYER_PARAMETERS,
+    STATION_FAST_LAYER_PARAMETERS,
     CandidateScore,
     FastLayerParameters,
     max_hint_distance_m,
@@ -43,6 +44,43 @@ from app.services.dedup_scoring import (
 from app.services.geo_validation import validate_point
 
 logger = logging.getLogger("app.dedup")
+
+# Per-entity-kind wiring for the two service functions below. Only "ticket" and "station" are
+# supported here — "ticket_task" is in the model's ENTITY_KINDS value domain for a later slice
+# but this module does not implement it yet.
+_ENTITY_LABELS = {"ticket": "Ticket", "station": "Station"}
+_ENTITY_REPOSITORIES = {"ticket": ticket_repository, "station": station_repository}
+_ENTITY_ADD_PERMS = {"ticket": Perm.TICKET_ADD, "station": Perm.STATION_ADD}
+# The parameters a caller gets when it does not pass its own — the station default has
+# `time_weight = 0` (see dedup_scoring.py); picking it here, rather than leaving every caller
+# to remember it, is what keeps a caller that only passes `entity_kind="station"` correct.
+_ENTITY_DEFAULT_PARAMETERS: dict[str, FastLayerParameters] = {
+    "ticket": FAST_LAYER_PARAMETERS,
+    "station": STATION_FAST_LAYER_PARAMETERS,
+}
+
+
+def _require_supported_entity_kind(entity_kind: str) -> None:
+    """Raise for any `entity_kind` this slice does not implement."""
+    if entity_kind not in _ENTITY_REPOSITORIES:
+        raise ValueError(f"Unsupported dedup entity kind: {entity_kind}")
+
+
+def _default_parameters(entity_kind: str) -> FastLayerParameters:
+    """The parameters to score with when the caller did not supply its own."""
+    return _ENTITY_DEFAULT_PARAMETERS.get(entity_kind, FAST_LAYER_PARAMETERS)
+
+
+def _entity_text_fields(entity_kind: str, entity) -> tuple[str | None, str | None]:
+    """The two text fields pg_trgm compares, named differently on each entity."""
+    if entity_kind == "station":
+        return entity.name, entity.description
+    return entity.title, entity.description
+
+
+def _entity_type(entity_kind: str, entity) -> str | None:
+    """The "type" signal, `stations.type` for a station and `tickets.task_type` for a ticket."""
+    return entity.type if entity_kind == "station" else entity.task_type
 
 # Bounds on the text handed to pg_trgm. `similarity()` builds a trigram set per call, so an
 # unbounded description turns one advisory lookup into real work — and trigram overlap
@@ -76,9 +114,21 @@ async def find_duplicate_hints(
     description: str | None = None,
     task_type: str | None = None,
     submitted_at: datetime | None = None,
-    parameters: FastLayerParameters = FAST_LAYER_PARAMETERS,
+    parameters: FastLayerParameters | None = None,
+    entity_kind: str = "ticket",
 ) -> list[CandidateScore]:
-    """Find the one nearby open ticket worth warning the submitter about, if any.
+    """Find the one nearby open entity worth warning the submitter about, if any.
+
+    `entity_kind` is `"ticket"` (default, unchanged) or `"station"` — see
+    `app/repositories/dedup_repository.py`'s `_ENTITY_CONFIGS` for what differs between them.
+    For a station, `title` carries `stations.name` and `task_type` carries `stations.type`;
+    the parameter names are kept generic rather than duplicated per entity kind.
+
+    `parameters` defaults to `None`, which resolves to `FAST_LAYER_PARAMETERS` for a ticket
+    and `STATION_FAST_LAYER_PARAMETERS` for a station (`_default_parameters`) — so a caller
+    that only passes `entity_kind="station"` still gets the right (no-time-signal) formula
+    without also having to know which constant that implies. Passing `parameters` explicitly
+    (replays, tuning tests) always wins.
 
     Returns a list of at most one element — top-1 above `hint_threshold`, empty otherwise.
     A list rather than an optional single value so returning top-N later is additive rather
@@ -88,15 +138,16 @@ async def find_duplicate_hints(
     runs inside one try: a malformed point, a missing pg_trgm, a PostGIS error, or a settings
     object with every weight zeroed all end the same way — logged, empty list. The fast layer
     is an advisory prompt, and an advisory prompt that can 500 a disaster report is worse than
-    no prompt at all. Bad geometry is deliberately not an error here either: `create_ticket`
-    runs its own `validate_point` moments later and is the gate that refuses the submission —
-    this one only needs to know whether it can score anything.
+    no prompt at all. Bad geometry is deliberately not an error here either: `create_ticket` /
+    `create_station` run their own `validate_point` moments later and are the gate that
+    refuses the submission — this one only needs to know whether it can score anything.
 
     Authorization is *not* handled here — the caller checks it before entering, so a
     permission failure still surfaces as a 403 instead of being swallowed by the fail-open.
     """
+    parameters = parameters or _default_parameters(entity_kind)
     try:
-        validate_point(geometry, entity="Ticket")
+        validate_point(geometry, entity=_ENTITY_LABELS.get(entity_kind, "Ticket"))
         longitude, latitude = geometry["coordinates"][:2]
         candidates = await dedup_candidate_repository.list_nearby_open(
             db,
@@ -105,6 +156,7 @@ async def find_duplicate_hints(
             query_text=_query_text(title, description),
             now=submitted_at or datetime.now(UTC),
             radius_m=_retrieval_radius_m(parameters),
+            entity_kind=entity_kind,
         )
         best = top_hint(candidates, query_task_type=task_type, parameters=parameters)
     except Exception:
@@ -126,66 +178,88 @@ async def record_hint_outcome(
     candidate_ticket_uuid: str,
     outcome: str,
     submitted_ticket_uuid: str | None = None,
-    parameters: FastLayerParameters = FAST_LAYER_PARAMETERS,
+    parameters: FastLayerParameters | None = None,
+    entity_kind: str = "ticket",
 ) -> tuple[DuplicatePair | None, str]:
     """Record what the submitter did about a fast-layer hint. Returns (pair, event_uuid).
+
+    `entity_kind` is `"ticket"` (default, unchanged) or `"station"`. The argument names
+    (`candidate_ticket_uuid`, `submitted_ticket_uuid`) stay as-is for both — they are the
+    frozen GraphQL input's field names, not renamed per entity kind. `parameters` defaults to
+    `None`, which resolves per `entity_kind` the same way `find_duplicate_hints` does — the
+    re-score behind a station's card must use `STATION_FAST_LAYER_PARAMETERS`, or the
+    similarity snapshot it writes would silently include a time signal the check itself never
+    showed the caller.
 
     Deliberately **not** fail-open: this runs after the user has already acted, so an error
     here blocks nothing and swallowing it would corrupt the very measurement the table
     exists for.
 
-    A pair card is written only when a second ticket actually exists — accepting the hint
-    usually means no ticket was created, and `duplicate_pairs` cannot hold a row for a
-    ticket that was never inserted (both sides would be dangling). The audit event always
-    lands, so an accepted hint is still counted.
+    A pair card is written only when a second entity actually exists — accepting the hint
+    usually means nothing was created, and `duplicate_pairs` cannot hold a row for an entity
+    that was never inserted (both sides would be dangling). The audit event always lands, so
+    an accepted hint is still counted.
 
-    Only the submitter may report on their own submission: `ticket.add` alone would let any
-    logged-in caller card an arbitrary pair of tickets, poisoning both the slow layer's
+    Only the submitter may report on their own submission: `ticket.add`/`station.add` alone
+    would let any logged-in caller card an arbitrary pair, poisoning both the slow layer's
     re-scan queue and the measurement this table exists for. The capability check passes
-    `resource=submitted` so checkpoint 2 engages if the seed ever narrows `ticket.add` below
-    `all`, but that is future-proofing, not the guard — today every holder has it at `all`,
-    so the explicit creator check below is what actually closes the hole.
+    `resource=submitted` so checkpoint 2 engages if the seed ever narrows the add permission
+    below `all`, but that is future-proofing, not the guard — today every holder has it at
+    `all`, so the explicit creator check below is what actually closes the hole. Both `Tickets`
+    and `Station` carry `created_by` (the latter via `BaseGeometry`), so the same comparison
+    applies to either entity kind.
 
     Raises:
-        ValueError: unknown outcome, either ticket not found, or a ticket paired with itself.
-        HTTPException: 403 when the caller did not create the submitted ticket.
+        ValueError: unsupported entity kind, unknown outcome, either entity not found, or an
+            entity paired with itself.
+        HTTPException: 403 when the caller did not create the submitted entity.
     """
+    _require_supported_entity_kind(entity_kind)
     if outcome not in PAIR_HINT_OUTCOMES:
         raise ValueError(f"Unknown dedup hint outcome: {outcome}")
 
-    candidate = await ticket_repository.get_by_uuid_active(db, candidate_ticket_uuid)
+    parameters = parameters or _default_parameters(entity_kind)
+    repo = _ENTITY_REPOSITORIES[entity_kind]
+    add_perm = _ENTITY_ADD_PERMS[entity_kind]
+    label = _ENTITY_LABELS[entity_kind]
+
+    candidate = await repo.get_by_uuid_active(db, candidate_ticket_uuid)
     if not candidate:
-        raise ValueError("Ticket not found")
+        raise ValueError(f"{label} not found")
 
     accepted = outcome == "accepted_hint"
     pair = None
     score = None
     if not submitted_ticket_uuid:
-        await require_scope(actor, Perm.TICKET_ADD, db)
+        await require_scope(actor, add_perm, db)
     else:
-        submitted = await ticket_repository.get_by_uuid_active(db, submitted_ticket_uuid)
+        submitted = await repo.get_by_uuid_active(db, submitted_ticket_uuid)
         if not submitted:
-            raise ValueError("Ticket not found")
-        await require_scope(actor, Perm.TICKET_ADD, db, resource=submitted)
+            raise ValueError(f"{label} not found")
+        await require_scope(actor, add_perm, db, resource=submitted)
         if str(submitted.created_by) != str(actor.uuid):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied."
             )
         if str(submitted.uuid) == str(candidate.uuid):
-            raise ValueError("A ticket cannot be a duplicate of itself")
-        score = await _rescore_pair(db, submitted=submitted, candidate=candidate, parameters=parameters)
+            raise ValueError(f"A {entity_kind} cannot be a duplicate of itself")
+        score = await _rescore_pair(
+            db, submitted=submitted, candidate=candidate, parameters=parameters,
+            entity_kind=entity_kind,
+        )
         pair = await _upsert_fast_pair(
             db,
             submitted_uuid=str(submitted.uuid),
             candidate_uuid=str(candidate.uuid),
             accepted=accepted,
             score=score,
+            entity_kind=entity_kind,
         )
 
     event = await dedup_audit_event_repository.add(
         db,
         obj_in={
-            "entity_kind": "ticket",
+            "entity_kind": entity_kind,
             "event_type": "hint_accepted" if accepted else "ignored_by_submitter",
             "pair_uuid": str(pair.uuid) if pair else None,
             "primary_uuid": str(candidate.uuid),
@@ -249,13 +323,14 @@ def _components_json(score: CandidateScore) -> list[dict]:
 async def _rescore_pair(
     db: AsyncSession,
     *,
-    submitted: Tickets,
-    candidate: Tickets,
+    submitted,
+    candidate,
     parameters: FastLayerParameters,
+    entity_kind: str = "ticket",
 ) -> CandidateScore | None:
     """Re-derive the pair's score server-side rather than trusting a client-supplied one.
 
-    Both tickets exist by now and every signal is deterministic, so recomputing costs one
+    Both entities exist by now and every signal is deterministic, so recomputing costs one
     query and removes the client's ability to write whatever similarity it likes into an
     audit table.
     """
@@ -263,17 +338,21 @@ async def _rescore_pair(
     if not geojson or geojson.get("type") != "Point":
         return None
     longitude, latitude = geojson["coordinates"][0], geojson["coordinates"][1]
+    title, description = _entity_text_fields(entity_kind, submitted)
     features = await dedup_candidate_repository.get_candidate_features(
         db,
         longitude=longitude,
         latitude=latitude,
-        query_text=_query_text(submitted.title, submitted.description),
+        query_text=_query_text(title, description),
         candidate_uuid=str(candidate.uuid),
         now=submitted.created_at,
+        entity_kind=entity_kind,
     )
     if features is None:
         return None
-    return score_candidate(features, query_task_type=submitted.task_type, parameters=parameters)
+    return score_candidate(
+        features, query_task_type=_entity_type(entity_kind, submitted), parameters=parameters
+    )
 
 
 async def _upsert_fast_pair(
@@ -283,11 +362,12 @@ async def _upsert_fast_pair(
     candidate_uuid: str,
     accepted: bool,
     score: CandidateScore | None,
+    entity_kind: str = "ticket",
 ) -> DuplicatePair:
-    """Create or update the live fast-layer card for this ticket pair.
+    """Create or update the live fast-layer card for this pair.
 
     Ordering the two uuids satisfies the table's `low_uuid < high_uuid` CHECK, so the same
-    two tickets always land on one row whichever was submitted second.
+    two entities always land on one row whichever was submitted second.
 
     An existing live card is always updated in place: `hint_outcome` records what the
     submitter did, and `status`/`rescan_needed` flip to `dup_ignored` whenever the hint was
@@ -300,7 +380,7 @@ async def _upsert_fast_pair(
     components = None if score is None else _components_json(score)
 
     existing = await duplicate_pair_repository.get_active_by_entities(
-        db, entity_kind="ticket", low_uuid=low_uuid, high_uuid=high_uuid
+        db, entity_kind=entity_kind, low_uuid=low_uuid, high_uuid=high_uuid
     )
     if existing:
         existing.hint_outcome = hint_outcome
@@ -315,7 +395,7 @@ async def _upsert_fast_pair(
     return await duplicate_pair_repository.add(
         db,
         obj_in={
-            "entity_kind": "ticket",
+            "entity_kind": entity_kind,
             "low_uuid": low_uuid,
             "high_uuid": high_uuid,
             "similarity": similarity,

@@ -9,7 +9,7 @@ time, task type); `text` is new here and is computed upstream by Postgres `pg_tr
 Formula, unchanged from the harness:
 
     distance_signal = 2 ** (-distance_m / distance_half_m)
-    time_signal     = 2 ** (-age_min / time_half_min)
+    time_signal     = 2 ** (-age_min / time_half_min)              (skipped when time_weight <= 0)
     task_type_signal= 1.0 if the two task types match else 0.0 (skipped if either is unknown)
     text_signal     = pg_trgm similarity (skipped when either side has no text)
     similarity      = Σ(signal × weight) / Σ(weight over the *available* signals)
@@ -59,6 +59,15 @@ class FastLayerParameters:
 # `dedup_rule_versions` land (slow layer), this becomes the fallback for a scope with no
 # stored rule version rather than the only source.
 FAST_LAYER_PARAMETERS = FastLayerParameters()
+
+# Same knobs as FAST_LAYER_PARAMETERS, for registering a station instead of filing a ticket.
+# `time_weight = 0`: how long ago a station was registered says nothing about whether it is a
+# duplicate of one being registered now, unlike a ticket's age, which the harness treats as a
+# genuine tie-breaker. `score_candidate` drops the time component entirely whenever
+# `time_weight <= 0` rather than keeping a 0-score/0-weight entry that would just add a fake
+# "time" light to the breakdown, and `max_hint_distance_m`'s W already excludes it on its own
+# — a zero-weight term contributes nothing to either the numerator or Σweight.
+STATION_FAST_LAYER_PARAMETERS = FastLayerParameters(time_weight=0.0)
 
 
 @dataclass(frozen=True)
@@ -122,13 +131,16 @@ def score_candidate(
             parameters.distance_weight,
             parameters,
         ),
-        _component(
-            "time",
-            2 ** (-candidate.age_min / parameters.time_half_min),
-            parameters.time_weight,
-            parameters,
-        ),
     ]
+    if parameters.time_weight > 0:
+        components.append(
+            _component(
+                "time",
+                2 ** (-candidate.age_min / parameters.time_half_min),
+                parameters.time_weight,
+                parameters,
+            )
+        )
     if query_task_type is not None and candidate.task_type is not None:
         components.append(
             _component(

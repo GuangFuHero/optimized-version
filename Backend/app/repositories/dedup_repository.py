@@ -1,13 +1,16 @@
 """Repositories for the dedup fast layer: candidate retrieval, pair cards, audit events."""
 
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from geoalchemy2 import Geography
-from sqlalchemy import cast, func, select
+from sqlalchemy import ColumnElement, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
 from app.models.dedup import DedupAuditEvent, DuplicatePair
+from app.models.geo import Station
 from app.models.request import Tickets
 from app.services.dedup_scoring import DedupCandidate
 
@@ -15,32 +18,120 @@ from app.services.dedup_scoring import DedupCandidate
 # whose two sinks are exactly these.
 CLOSED_TICKET_STATUSES = ("completed", "cancelled")
 
+# Station operational statuses the fast layer compares against. `permanently_closed` is
+# excluded on purpose — a station that will never reopen cannot be the live duplicate of a
+# station someone is about to register.
+OPEN_STATION_OPERATIONAL_STATUSES = ("active", "temporarily_closed")
 
-def _text_of(ticket: Tickets) -> str:
-    """Concatenate a ticket's title and description the same way the SQL side does."""
-    return " ".join(part for part in (ticket.title, ticket.description) if part).strip()
+
+@dataclass(frozen=True)
+class _EntityDedupConfig:
+    """What differs between the ticket and station candidate queries.
+
+    Everything else — deriving `age_min` from `created_at`, the `DedupCandidate` shape, the
+    retrieval boundary — is shared, so only the per-entity-kind knobs live here: which model,
+    which two text columns feed pg_trgm, which column is the "type" signal, whether the
+    geometry needs `ST_Centroid` first (`stations.geometry` is a generic `GEOMETRY` column;
+    `ST_Centroid` is an identity on a Point, which is all either table ever stores, but
+    wrapping it costs nothing and is one less thing to get wrong if that ever changes), and
+    the "still worth comparing against" filter, which needs `now` for the station side.
+    """
+
+    model: type
+    text_field_1: str
+    text_field_2: str
+    type_field: str
+    wrap_centroid: bool
+    open_filters: Callable[[datetime], Sequence[ColumnElement]]
+
+
+def _ticket_open_filters(_now: datetime) -> Sequence[ColumnElement]:
+    """A ticket is comparable while it exists and is not yet closed."""
+    return (
+        Tickets.delete_at.is_(None),
+        Tickets.geometry.isnot(None),
+        Tickets.status.notin_(CLOSED_TICKET_STATUSES),
+    )
+
+
+def _station_open_filters(now: datetime) -> Sequence[ColumnElement]:
+    """A station is comparable while open.
+
+    That means it exists, is not permanently closed, and — if it is a temporary station with
+    an expiry — has not expired yet, whatever its `operational_status` still says.
+    """
+    return (
+        Station.delete_at.is_(None),
+        Station.geometry.isnot(None),
+        Station.operational_status.in_(OPEN_STATION_OPERATIONAL_STATUSES),
+        or_(
+            Station.is_temporary.is_(False),
+            Station.expires_at.is_(None),
+            Station.expires_at >= now,
+        ),
+    )
+
+
+_ENTITY_CONFIGS: dict[str, _EntityDedupConfig] = {
+    "ticket": _EntityDedupConfig(
+        model=Tickets,
+        text_field_1="title",
+        text_field_2="description",
+        type_field="task_type",
+        wrap_centroid=False,
+        open_filters=_ticket_open_filters,
+    ),
+    "station": _EntityDedupConfig(
+        model=Station,
+        text_field_1="name",
+        text_field_2="description",
+        type_field="type",
+        wrap_centroid=True,
+        open_filters=_station_open_filters,
+    ),
+}
+
+
+def _text_of(entity, config: _EntityDedupConfig) -> str:
+    """Concatenate an entity's two text fields the same way the SQL side does."""
+    parts = (getattr(entity, config.text_field_1), getattr(entity, config.text_field_2))
+    return " ".join(part for part in parts if part).strip()
+
+
+def _geometry_expr(config: _EntityDedupConfig):
+    """The geometry column to measure distance against, centroid-wrapped where declared."""
+    column = config.model.geometry
+    return func.ST_Centroid(column) if config.wrap_centroid else column
 
 
 class DedupCandidateRepository:
-    """Reads nearby, still-open tickets and measures them against a proposed submission.
+    """Reads nearby, still-open entities and measures them against a proposed submission.
 
     Distance (PostGIS, metres over the spheroid) and text similarity (pg_trgm) are computed
     in SQL because both need an index-backed operator to stay cheap; age is derived in Python
-    from `created_at`, which needs no database help.
+    from `created_at`, which needs no database help. Ticket and station share this one
+    implementation, parametrized by `_EntityDedupConfig` — see `entity_kind`.
     """
 
-    def _feature_columns(self, *, longitude: float, latitude: float, query_text: str):
+    def _feature_columns(
+        self, config: _EntityDedupConfig, *, longitude: float, latitude: float, query_text: str
+    ):
         """Build the (distance, text-similarity) expression pair shared by both queries."""
         point = cast(func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326), Geography)
-        distance = func.ST_Distance(cast(Tickets.geometry, Geography), point).label("distance_m")
+        distance = func.ST_Distance(
+            cast(_geometry_expr(config), Geography), point
+        ).label("distance_m")
+        text_col_1 = getattr(config.model, config.text_field_1)
+        text_col_2 = getattr(config.model, config.text_field_2)
         text_similarity = func.similarity(
-            func.concat_ws(" ", Tickets.title, Tickets.description), query_text
+            func.concat_ws(" ", text_col_1, text_col_2), query_text
         ).label("text_similarity")
         return point, distance, text_similarity
 
     def _to_candidate(
         self,
-        ticket: Tickets,
+        config: _EntityDedupConfig,
+        entity,
         distance_m: float,
         text_similarity,
         now: datetime,
@@ -50,19 +141,19 @@ class DedupCandidateRepository:
         """Turn one result row into the scoring layer's DedupCandidate.
 
         `text_similarity` is dropped (left None, i.e. "signal unavailable") whenever *either*
-        side has no text — the candidate's title and description are both empty, or the
-        submission being checked is. Scoring it 0.0 instead would penalise a ticket for a
-        field nobody filled in, and a blank query would drag every candidate's total down by
-        the text weight, which is the same failure the task-type signal already avoids by
-        leaving the average rather than scoring zero.
+        side has no text — the candidate's two text fields are both empty, or the submission
+        being checked is. Scoring it 0.0 instead would penalise an entity for a field nobody
+        filled in, and a blank query would drag every candidate's total down by the text
+        weight, which is the same failure the task-type/type signal already avoids by leaving
+        the average rather than scoring zero.
         """
-        age_min = max(0.0, (now - ticket.created_at).total_seconds() / 60)
-        has_text = query_has_text and bool(_text_of(ticket))
+        age_min = max(0.0, (now - entity.created_at).total_seconds() / 60)
+        has_text = query_has_text and bool(_text_of(entity, config))
         return DedupCandidate(
-            entity_uuid=str(ticket.uuid),
+            entity_uuid=str(entity.uuid),
             distance_m=float(distance_m),
             age_min=age_min,
-            task_type=ticket.task_type,
+            task_type=getattr(entity, config.type_field),
             text_similarity=float(text_similarity) if has_text else None,
         )
 
@@ -75,8 +166,9 @@ class DedupCandidateRepository:
         query_text: str,
         radius_m: float,
         now: datetime | None = None,
+        entity_kind: str = "ticket",
     ) -> list[DedupCandidate]:
-        """Fetch every still-open ticket within `radius_m` of a point.
+        """Fetch every still-open entity of `entity_kind` within `radius_m` of a point.
 
         No row limit and no ordering. `radius_m` is derived from the scoring parameters (see
         `dedup_scoring.max_hint_distance_m`), so it already excludes exactly the candidates
@@ -85,22 +177,21 @@ class DedupCandidateRepository:
         disaster zone, the nearest fifty are not necessarily the fifty most similar. Ranking
         is the scoring layer's job and it sorts deterministically, so ordering here is waste.
         """
+        config = _ENTITY_CONFIGS[entity_kind]
         now = now or datetime.now(UTC)
         point, distance, text_similarity = self._feature_columns(
-            longitude=longitude, latitude=latitude, query_text=query_text
+            config, longitude=longitude, latitude=latitude, query_text=query_text
         )
         result = await db.execute(
-            select(Tickets, distance, text_similarity)
+            select(config.model, distance, text_similarity)
             .where(
-                Tickets.delete_at.is_(None),
-                Tickets.geometry.isnot(None),
-                Tickets.status.notin_(CLOSED_TICKET_STATUSES),
-                func.ST_DWithin(cast(Tickets.geometry, Geography), point, radius_m),
+                *config.open_filters(now),
+                func.ST_DWithin(cast(_geometry_expr(config), Geography), point, radius_m),
             )
         )
         return [
             self._to_candidate(
-                row[0], row.distance_m, row.text_similarity, now,
+                config, row[0], row.distance_m, row.text_similarity, now,
                 query_has_text=bool(query_text.strip()),
             )
             for row in result
@@ -115,26 +206,28 @@ class DedupCandidateRepository:
         query_text: str,
         candidate_uuid: str,
         now: datetime | None = None,
+        entity_kind: str = "ticket",
     ) -> DedupCandidate | None:
-        """Measure one named ticket against a point + text, ignoring distance and status filters.
+        """Measure one named entity against a point + text, ignoring distance and status filters.
 
-        Used when re-scoring a pair after both tickets exist (the hint-outcome path): the
+        Used when re-scoring a pair after both entities exist (the hint-outcome path): the
         candidate is already known, so the retrieval boundary must not apply — otherwise a
         candidate that closed in the seconds between hint and submission would silently lose
         its score snapshot.
         """
+        config = _ENTITY_CONFIGS[entity_kind]
         now = now or datetime.now(UTC)
         _point, distance, text_similarity = self._feature_columns(
-            longitude=longitude, latitude=latitude, query_text=query_text
+            config, longitude=longitude, latitude=latitude, query_text=query_text
         )
         result = await db.execute(
-            select(Tickets, distance, text_similarity).where(Tickets.uuid == candidate_uuid)
+            select(config.model, distance, text_similarity).where(config.model.uuid == candidate_uuid)
         )
         row = result.first()
         if row is None:
             return None
         return self._to_candidate(
-            row[0], row.distance_m, row.text_similarity, now,
+            config, row[0], row.distance_m, row.text_similarity, now,
             query_has_text=bool(query_text.strip()),
         )
 

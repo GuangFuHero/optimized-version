@@ -164,7 +164,38 @@ uv run pytest tests/test_dedup_scoring.py tests/test_dedup_service.py tests/test
 
 ---
 
-## 6. 待團隊決定
+## 6. 據點
+
+登記據點前也走同一套快層：跟附近、還在對外服務的據點比一次，最像的一筆過門檻就提示，不硬擋、
+不自動合併，出錯一樣 fail-open、照常登記。
+
+據點有三種狀態：開著、暫時關閉、永久關閉。快層拿前兩種來比——永久關閉的據點不會再重複開張，
+比了也沒意義。已經設定「臨時據點＋到期時間」而且時間已經過期的，也不比，即使狀態欄位還沒被
+人手動改掉。
+
+據點只看三件事：離多遠、是不是同一類、名字和描述像不像。跟送單那組比起來少一件——時間不算，
+因為「這個據點多久前登記的」跟「現在是不是重複」沒有關係，一個月前登記的舊站不該因為久了就被
+判定成比較不像。距離、類型、文字三個訊號的算法、半衰／權重／門檻都沿用送單那組
+（`app/services/dedup_scoring.py::STATION_FAST_LAYER_PARAMETERS`，只把時間權重歸零）。時間權重
+歸零時，時間這個訊號整個從分數拆帳裡消失，不會留一個權重 0 的假訊號。
+
+```graphql
+"登記據點前查重複候選：回最像的一筆，過門檻才回，否則空陣列"
+stationDedupCandidates(input: StationDedupCheckInput!): [StationDedupHint!]!
+```
+
+- 權限跟建立據點的 mutation 用同一個（`station.add`）。
+- `StationDedupHint` 的欄位比照 `TicketDedupHint`：`relatedStationUuid`／`similarity`／
+  `scoreComponents`，一樣是送單前那張卡還不存在時的暫時形狀。
+- `recordDedupHintOutcome` 現在多收一個 `entityKind` 引數，預設 `ticket`；送 `station` 時
+  `duplicate_pairs`／`dedup_audit_events` 寫入的 `entity_kind` 一併變成 `'station'`。
+  `candidateTicketUuid`／`submittedTicketUuid` 這兩個欄位名不因為 entity kind 而改名，兩種據點
+  跟單都借用同一組名字。`ticketDedupCandidates`、以及沒有指定 `entityKind` 的舊呼叫方式，行為
+  不變。
+
+---
+
+## 7. 待團隊決定
 
 1. 送單前的回傳型別要不要就叫 `TicketDedupRelation`、把 `pairUuid`／`pairStatus` 放寬成 nullable。
 2. 「接受提示」沒有第二張單時要不要仍造一張卡（現在不造，只留 event）。
