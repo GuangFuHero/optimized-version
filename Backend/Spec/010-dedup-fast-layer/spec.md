@@ -15,7 +15,7 @@
 |---|---|
 | 送單前查重複的 GraphQL query | 慢層背景掃描、admin 審核介面 |
 | 四訊號加權平均演算法（距離／時間／任務類型／文字） | embedding、reranker、LLM 等語意方法 |
-| `ticket_duplicate_pairs`、`ticket_dedup_audit_events` 兩張表 | groups／members／settings／rule_versions／scan_runs 五張表 |
+| `duplicate_pairs`、`dedup_audit_events` 兩張表 | groups／members／settings／rule_versions／scan_runs 五張表 |
 | 提示結果回報 mutation | confirm／reject／merge／拆群 mutations |
 | | `tickets.is_duplicate`／`dedup_group_id`（合約 §1.3，要等 groups 表才有東西可指） |
 | | 合併與軟刪流程、task 層級去重 |
@@ -36,8 +36,8 @@ recordDedupHintOutcome(input: RecordDedupHintOutcomeInput!): RecordDedupHintOutc
 - `TicketDedupHint` 的 `relatedTicketUuid`／`similarity`／`scoreComponents` 沿用凍結合約
   `TicketDedupRelation`／`DedupScoreComponent` 的欄位名與語意。
 - **刻意偏離**：合約的 `pairUuid`／`pairStatus` 是 non-null，但送單前那張單還不存在，
-  `ticket_duplicate_pairs` 兩側都是 tickets 的 FK，配對卡當下寫不出來 —— 所以查詢回的是
-  `TicketDedupHint`（少那兩欄），合約凍結的 relation 形狀留給之後的 ticket 讀取路徑。
+  配對卡當下寫不出來 —— 所以查詢回的是 `TicketDedupHint`（少那兩欄），合約凍結的 relation
+  形狀留給之後的 ticket 讀取路徑。
 - **失敗一律回空**：從解析 geometry 到評分全部在同一個 try 裡，出錯就記 log、rollback、回 `[]`，
   不擋送單（設計文件 §四 fail-open）。座標是字串、null、少 coordinates、不是 Point、超出經緯度
   範圍，全部走同一個出口 —— `create_ticket` 自己的 `validate_point` 才是擋下送單的那道關。
@@ -110,7 +110,14 @@ warning —— 那代表參數要看，不是資料要看）；門檻為 1.0 時
 
 嚴格照合約 §1／§1.5 的欄位與 CHECK 值（`event_type` 含合約 §1.5 補的 `group_welded`／`weld_kept`／
 `member_detached` —— 快層不會寫，但值域是凍結合約的一部分，先寫進去省得慢層落地時還要改 constraint）。
-三處刻意差異：
+兩張表都是**不綁 ticket 的泛用配對表**：`duplicate_pairs`、`dedup_audit_events` 都多一欄
+`entity_kind text NOT NULL`（CHECK 值域 `'ticket'／'station'／'ticket_task'`），配對的兩個
+uuid（`duplicate_pairs.low_uuid`／`high_uuid`，`dedup_audit_events.primary_uuid`／`duplicate_uuid`）
+一律不設 FK —— 同一張表要服務不同的 entity kind，沒辦法固定指到某一張實體表的主鍵。快層目前只寫
+`entity_kind='ticket'`；`station`／`ticket_task` 先開在值域裡，留給之後的擴展。partial UNIQUE 索引
+（`uq_duplicate_pairs_entities`）也跟著改成 `(entity_kind, low_uuid, high_uuid) WHERE delete_at IS NULL`。
+
+刻意差異：
 
 1. `duplicate_group_uuid`／`rule_version_uuid` 建成無 FK 的 `uuid` —— 被指的兩張表屬慢層、本次不建。
 2. `CREATE EXTENSION IF NOT EXISTS pg_trgm` 補進 migration。測試環境已手動裝了 pg_trgm 1.6，
@@ -122,17 +129,22 @@ warning —— 那代表參數要看，不是資料要看）；門檻為 1.0 時
 
 寫入時機：
 
-| 使用者選擇 | `hint_outcome` | 配對卡 | audit event |
-|---|---|---|---|
-| 去原單留言 / 對原單建議修改 / 更新自己的舊單 | `accepted_hint` | 沒有新單就沒有卡 | `hint_accepted` |
-| 照樣送出 | `ignored_hint` | `status='dup_ignored'`＋`rescan_needed=true` | `ignored_by_submitter` |
+| API 收到的 `outcome` | 配對卡 | audit event |
+|---|---|---|
+| `accepted_hint` | 沒有新單就沒有卡 | `hint_accepted` |
+| `ignored_hint` | `status='dup_ignored'`＋`rescan_needed=true` | `ignored_by_submitter` |
 
-四選一的細節（是留言還是改自己的單）存在 audit event 的 `decision_reason`，兩值的 `hint_outcome` 存不下。
+**已決定變更**：API 現在直接收 `hint_outcome` 的兩個值（`accepted_hint`／`ignored_hint`），不再收
+四選一再由後端收斂——四選一是前端層面「留言／建議修改／更新自己的單／照樣送出」的細節，這版拿掉了，
+`decision_reason` 現在就等於 `outcome`，不再帶四選一那層額外資訊。前端（PR #47）目前送的是舊的
+`submitted_anyway` 等四值，需要跟著改送 `accepted_hint`／`ignored_hint`。
 配對卡的 `similarity`／`score_components` 由後端在兩張單都存在後**重算**，不收前端傳來的分數。
 
-已有現行卡時就地更新，但 `status`／`rescan_needed` 只在卡還是 `suggested`／`dup_ignored` 時才動：
-合約 §1.1 明講推翻定案是「舊卡軟刪＋插新列」，使用者觸發的寫入不該把 admin 的 `confirmed` 蓋掉。
-`hint_outcome` 兩種情況都照記 —— 它描述的是使用者做了什麼，不是判定結果，覆蓋不到任何人的決定。
+已有現行卡時就地更新：`hint_outcome` 兩種情況都照記 —— 它描述的是使用者做了什麼，不是判定結果。
+**已決定變更**：原本「卡片 status 已是 `confirmed`／`rejected` 時只更新 `hint_outcome`、不動
+`status`」的保護已經拿掉——收到 `ignored_hint` 時，不論卡片目前是什麼 status（包含 admin 已經
+`confirmed`／`rejected` 的定案卡），都會被改成 `dup_ignored`＋`rescan_needed=true`。合約 §1.1
+講的「推翻定案是舊卡軟刪＋插新列」在這支寫入路徑上目前不成立，是本次明確拿掉的行為，不是遺漏。
 
 ---
 
@@ -154,22 +166,21 @@ uv run pytest tests/test_dedup_scoring.py tests/test_dedup_service.py tests/test
 
 ## 6. 待團隊決定
 
-1. 四個選項的 enum 值命名（合約只凍結了 `accepted_hint`／`ignored_hint` 兩值收斂）。
-2. 送單前的回傳型別要不要就叫 `TicketDedupRelation`、把 `pairUuid`／`pairStatus` 放寬成 nullable。
-3. 「接受提示」沒有第二張單時要不要仍造一張卡（現在不造，只留 event）。
-4. 候選半徑改為**由參數推導**（`max_hint_distance_m`，公式見 §3），不再有筆數上限：現行參數
+1. 送單前的回傳型別要不要就叫 `TicketDedupRelation`、把 `pairUuid`／`pairStatus` 放寬成 nullable。
+2. 「接受提示」沒有第二張單時要不要仍造一張卡（現在不造，只留 event）。
+3. 候選半徑改為**由參數推導**（`max_hint_distance_m`，公式見 §3），不再有筆數上限：現行參數
    ＝147.4 m × 1.1。要決定的是 `MAX_CANDIDATE_RADIUS_M = 1000 m` 這個 backstop 值，以及
    1.1 這個浮點餘裕是否夠。`test_graphql/test_dedup.py` 有兩支測試釘住行為：50 張更近的雜訊單
    不會擠掉 92 m 外的真雙胞胎；超出邊界的候選則根本不進查詢。
-5. 文字權重 1.0 與 `component_baseline` 0.5 都沒跑過 grid。
-6. 評估腳本要補 `text_weight` 與 fixture 的文字欄位（在設計工作區，不在本 repo）。
-7. `CLOSED_TICKET_STATUSES = ("completed", "cancelled")` 是本 PR 定的「未結案」口徑，
+4. 文字權重 1.0 與 `component_baseline` 0.5 都沒跑過 grid。
+5. 評估腳本要補 `text_weight` 與 fixture 的文字欄位（在設計工作區，不在本 repo）。
+6. `CLOSED_TICKET_STATUSES = ("completed", "cancelled")` 是本 PR 定的「未結案」口徑，
    對齊 `services/ticket.py::VALID_TRANSITIONS` 的兩個終點，合約沒定義。
-8. `similarity` 這裡是**加權平均**（除以 Σweight），合約 §1.4 字面寫的是 `Σ(score × weight)`。
+7. `similarity` 這裡是**加權平均**（除以 Σweight），合約 §1.4 字面寫的是 `Σ(score × weight)`。
    除以 Σweight 才能讓「訊號不可用就退出平均」成立，也才保證落在 0–1（CHECK 要求）；
    但這跟合約字面不同，要確認。
-9. 重評配對卡時**忽略半徑與未結案過濾**（兩張單都已存在，候選是指定的），所以提示與送出之間原單
+8. 重評配對卡時**忽略半徑與未結案過濾**（兩張單都已存在，候選是指定的），所以提示與送出之間原單
    剛好結案，分數快照仍然算得出來。
-10. 「接受提示」而**已經有現行卡**時，只改 `hint_outcome`、不動 `status`。
-11. `DESCRIPTION_MAX_CHARS = 2000` 是本 PR 挑的（`tickets.description` 是無上限 TEXT，沒有欄寬可對）。
-12. `recordDedupHintOutcome` 目前只允許送單者本人回報，admin 不能代記。
+9. 「接受提示」而**已經有現行卡**時，只改 `hint_outcome`、不動 `status`。
+10. `DESCRIPTION_MAX_CHARS = 2000` 是本 PR 挑的（`tickets.description` 是無上限 TEXT，沒有欄寬可對）。
+11. `recordDedupHintOutcome` 目前只允許送單者本人回報，admin 不能代記。

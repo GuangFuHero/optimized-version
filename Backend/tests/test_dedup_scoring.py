@@ -28,7 +28,7 @@ def _candidate(uuid: str = "a", **overrides) -> DedupCandidate:
     """Build a candidate 100 m away and 60 minutes old, overridable per test."""
     fields = {"distance_m": 100.0, "age_min": 60.0, "task_type": "supply", "text_similarity": None}
     fields.update(overrides)
-    return DedupCandidate(ticket_uuid=uuid, **fields)
+    return DedupCandidate(entity_uuid=uuid, **fields)
 
 
 def test_defaults_are_the_grid_search_values():
@@ -126,7 +126,7 @@ def test_ranking_is_best_first_and_ties_break_on_uuid():
     far = _candidate("aaa", distance_m=400.0)
     tie = _candidate("bbb", distance_m=10.0)
     ranked = rank_candidates([far, near, tie], query_task_type="supply", parameters=THREE_SIGNAL)
-    assert [s.candidate.ticket_uuid for s in ranked] == ["bbb", "zzz", "aaa"]
+    assert [s.candidate.entity_uuid for s in ranked] == ["bbb", "zzz", "aaa"]
 
 
 def test_top_hint_returns_only_a_candidate_over_the_threshold():
@@ -137,7 +137,7 @@ def test_top_hint_returns_only_a_candidate_over_the_threshold():
     strong = _candidate("strong", distance_m=5.0, age_min=5.0)
     hint = top_hint([weak, strong], query_task_type="supply", parameters=THREE_SIGNAL)
     assert hint is not None
-    assert hint.candidate.ticket_uuid == "strong"
+    assert hint.candidate.entity_uuid == "strong"
 
 
 def test_top_hint_on_no_candidates_is_none():

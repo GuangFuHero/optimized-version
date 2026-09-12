@@ -14,7 +14,7 @@ from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 from sqlalchemy import select
 
-from app.models.dedup import TicketDedupAuditEvent, TicketDuplicatePair
+from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.request import Tickets
 from app.services.dedup_scoring import max_hint_distance_m
 from tests.test_graphql.conftest import auth_header, test_db
@@ -81,7 +81,7 @@ async def _seed_ticket(user_uuid: str, *, offset_deg=0.0, age_min=10.0, **overri
 async def _clean_tickets():
     """Start each test with no tickets, so one test's fixture is not another's candidate."""
     async with test_db() as db:
-        for model in (TicketDedupAuditEvent, TicketDuplicatePair):
+        for model in (DedupAuditEvent, DuplicatePair):
             for row in (await db.execute(select(model))).scalars().all():
                 await db.delete(row)
         for row in (await db.execute(select(Tickets))).scalars().all():
@@ -209,7 +209,7 @@ async def test_submitting_anyway_writes_a_dup_ignored_pair_and_an_event(client, 
             "variables": {"input": {
                 "candidateTicketUuid": original,
                 "submittedTicketUuid": submitted,
-                "outcome": "submitted_anyway",
+                "outcome": "ignored_hint",
             }},
         },
         headers=auth_header(token),
@@ -219,20 +219,20 @@ async def test_submitting_anyway_writes_a_dup_ignored_pair_and_an_event(client, 
     assert result["pairUuid"]
 
     async with test_db() as db:
-        pair = await db.get(TicketDuplicatePair, uuid_mod.UUID(result["pairUuid"]))
+        pair = await db.get(DuplicatePair, uuid_mod.UUID(result["pairUuid"]))
         assert (pair.status, pair.source_layer, pair.method) == ("dup_ignored", "fast", "fast_rule")
         assert pair.hint_outcome == "ignored_hint"
         assert pair.rescan_needed is True
-        assert str(pair.ticket_low_id) < str(pair.ticket_high_id)
+        assert str(pair.low_uuid) < str(pair.high_uuid)
         assert {c["name"] for c in pair.score_components} == {"distance", "time", "task_type", "text"}
         assert 0 <= float(pair.similarity) <= 1
 
-        event = await db.get(TicketDedupAuditEvent, uuid_mod.UUID(result["auditEventUuid"]))
+        event = await db.get(DedupAuditEvent, uuid_mod.UUID(result["auditEventUuid"]))
         assert event.event_type == "ignored_by_submitter"
         assert event.source_layer == "fast"
-        assert event.decision_reason == "submitted_anyway"
-        assert str(event.primary_ticket_uuid) == original
-        assert str(event.duplicate_ticket_uuid) == submitted
+        assert event.decision_reason == "ignored_hint"
+        assert str(event.primary_uuid) == original
+        assert str(event.duplicate_uuid) == submitted
 
 
 @pytest.mark.asyncio
@@ -247,7 +247,7 @@ async def test_accepting_the_hint_records_an_event_with_no_pair(client, login_us
             "query": RECORD_OUTCOME,
             "variables": {"input": {
                 "candidateTicketUuid": original,
-                "outcome": "commented_on_original",
+                "outcome": "accepted_hint",
             }},
         },
         headers=auth_header(token),
@@ -257,10 +257,10 @@ async def test_accepting_the_hint_records_an_event_with_no_pair(client, login_us
     assert result["pairUuid"] is None
 
     async with test_db() as db:
-        event = await db.get(TicketDedupAuditEvent, uuid_mod.UUID(result["auditEventUuid"]))
+        event = await db.get(DedupAuditEvent, uuid_mod.UUID(result["auditEventUuid"]))
         assert event.event_type == "hint_accepted"
-        assert event.decision_reason == "commented_on_original"
-        assert event.duplicate_ticket_uuid is None
+        assert event.decision_reason == "accepted_hint"
+        assert event.duplicate_uuid is None
 
 
 @pytest.mark.asyncio
@@ -273,7 +273,7 @@ async def test_recording_an_outcome_for_a_missing_ticket_errors(client, login_us
             "query": RECORD_OUTCOME,
             "variables": {"input": {
                 "candidateTicketUuid": str(uuid_mod.uuid4()),
-                "outcome": "submitted_anyway",
+                "outcome": "ignored_hint",
             }},
         },
         headers=auth_header(token),
@@ -298,7 +298,7 @@ async def test_only_the_submitter_may_record_their_own_outcome(
             "variables": {"input": {
                 "candidateTicketUuid": original,
                 "submittedTicketUuid": submitted,
-                "outcome": "submitted_anyway",
+                "outcome": "ignored_hint",
             }},
         },
         headers=auth_header(other_token),
@@ -307,7 +307,7 @@ async def test_only_the_submitter_may_record_their_own_outcome(
     assert body["data"] is None
     assert "Permission Denied" in body["errors"][0]["message"]
     async with test_db() as db:
-        assert (await db.execute(select(TicketDuplicatePair))).scalars().all() == []
+        assert (await db.execute(select(DuplicatePair))).scalars().all() == []
 
 
 @pytest.mark.asyncio
@@ -318,8 +318,8 @@ async def test_an_unsettled_card_is_moved_to_dup_ignored_in_place(client, login_
     submitted = await _seed_ticket(user_uuid, age_min=0.0)
     low, high = sorted((original, submitted))
     async with test_db() as db:
-        db.add(TicketDuplicatePair(
-            ticket_low_id=low, ticket_high_id=high,
+        db.add(DuplicatePair(
+            entity_kind="ticket", low_uuid=low, high_uuid=high,
             method="fast_rule", source_layer="fast", status="suggested",
         ))
 
@@ -330,14 +330,14 @@ async def test_an_unsettled_card_is_moved_to_dup_ignored_in_place(client, login_
             "variables": {"input": {
                 "candidateTicketUuid": original,
                 "submittedTicketUuid": submitted,
-                "outcome": "submitted_anyway",
+                "outcome": "ignored_hint",
             }},
         },
         headers=auth_header(token),
     )
     pair_uuid = res.json()["data"]["recordDedupHintOutcome"]["pairUuid"]
     async with test_db() as db:
-        rows = (await db.execute(select(TicketDuplicatePair))).scalars().all()
+        rows = (await db.execute(select(DuplicatePair))).scalars().all()
         assert len(rows) == 1  # updated in place, not a second card
         assert str(rows[0].uuid) == pair_uuid
         assert rows[0].status == "dup_ignored"
@@ -346,19 +346,21 @@ async def test_an_unsettled_card_is_moved_to_dup_ignored_in_place(client, login_
 
 
 @pytest.mark.asyncio
-async def test_a_settled_card_keeps_its_admin_verdict(client, login_user_auth):
-    """A confirmed card records the hint outcome but is never pushed back to dup_ignored.
+async def test_a_settled_card_is_still_flipped_to_dup_ignored(client, login_user_auth):
+    """A confirmed card is moved to dup_ignored too — the settled-card guard was removed.
 
-    Contract §1.1: overturning a settled verdict is soft-delete + a new row, so a
-    user-triggered write must not erase an admin's decision in place.
+    `record_hint_outcome` no longer special-cases a `confirmed`/`rejected` card: whatever the
+    current status, ignoring the hint again always flips it to `dup_ignored` with
+    `rescan_needed=True`. Overturning a settled verdict via soft-delete + a new row is a
+    slow-layer concern this write path does not implement.
     """
     user_uuid, token = login_user_auth
     original = await _seed_ticket(user_uuid)
     submitted = await _seed_ticket(user_uuid, age_min=0.0)
     low, high = sorted((original, submitted))
     async with test_db() as db:
-        db.add(TicketDuplicatePair(
-            ticket_low_id=low, ticket_high_id=high,
+        db.add(DuplicatePair(
+            entity_kind="ticket", low_uuid=low, high_uuid=high,
             method="fast_rule", source_layer="slow", status="confirmed",
         ))
 
@@ -369,18 +371,18 @@ async def test_a_settled_card_keeps_its_admin_verdict(client, login_user_auth):
             "variables": {"input": {
                 "candidateTicketUuid": original,
                 "submittedTicketUuid": submitted,
-                "outcome": "submitted_anyway",
+                "outcome": "ignored_hint",
             }},
         },
         headers=auth_header(token),
     )
     assert res.json()["data"]["recordDedupHintOutcome"]["hintOutcome"] == "ignored_hint"
     async with test_db() as db:
-        rows = (await db.execute(select(TicketDuplicatePair))).scalars().all()
+        rows = (await db.execute(select(DuplicatePair))).scalars().all()
         assert len(rows) == 1
-        assert rows[0].status == "confirmed"       # untouched
-        assert rows[0].rescan_needed is False      # untouched
-        assert rows[0].hint_outcome == "ignored_hint"  # still measured
+        assert rows[0].status == "dup_ignored"     # flipped, admin verdict not protected
+        assert rows[0].rescan_needed is True
+        assert rows[0].hint_outcome == "ignored_hint"
 
 
 @pytest.mark.asyncio

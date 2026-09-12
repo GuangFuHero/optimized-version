@@ -7,7 +7,7 @@ from sqlalchemy import cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
-from app.models.dedup import TicketDedupAuditEvent, TicketDuplicatePair
+from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.request import Tickets
 from app.services.dedup_scoring import DedupCandidate
 
@@ -59,7 +59,7 @@ class DedupCandidateRepository:
         age_min = max(0.0, (now - ticket.created_at).total_seconds() / 60)
         has_text = query_has_text and bool(_text_of(ticket))
         return DedupCandidate(
-            ticket_uuid=str(ticket.uuid),
+            entity_uuid=str(ticket.uuid),
             distance_m=float(distance_m),
             age_min=age_min,
             task_type=ticket.task_type,
@@ -139,39 +139,40 @@ class DedupCandidateRepository:
         )
 
 
-class TicketDuplicatePairRepository(GenericRepository[TicketDuplicatePair]):
+class DuplicatePairRepository(GenericRepository[DuplicatePair]):
     """Repository for duplicate pair cards."""
 
     def __init__(self):
-        """Initialize with TicketDuplicatePair as the managed model."""
-        super().__init__(TicketDuplicatePair)
+        """Initialize with DuplicatePair as the managed model."""
+        super().__init__(DuplicatePair)
 
-    async def get_active_by_tickets(
-        self, db: AsyncSession, *, ticket_low_id: str, ticket_high_id: str
-    ) -> TicketDuplicatePair | None:
-        """Fetch the one live card for an ordered ticket pair, if any.
+    async def get_active_by_entities(
+        self, db: AsyncSession, *, entity_kind: str, low_uuid: str, high_uuid: str
+    ) -> DuplicatePair | None:
+        """Fetch the one live card for an ordered entity pair, if any.
 
-        Mirrors `uq_ticket_duplicate_pairs_tickets`, the partial UNIQUE index that guarantees
-        at most one non-soft-deleted card exists per pair.
+        Mirrors `uq_duplicate_pairs_entities`, the partial UNIQUE index that guarantees at
+        most one non-soft-deleted card exists per (entity_kind, pair).
         """
         result = await db.execute(
             select(self.model).where(
-                self.model.ticket_low_id == ticket_low_id,
-                self.model.ticket_high_id == ticket_high_id,
+                self.model.entity_kind == entity_kind,
+                self.model.low_uuid == low_uuid,
+                self.model.high_uuid == high_uuid,
                 self.model.delete_at.is_(None),
             )
         )
         return result.scalar_one_or_none()
 
 
-class TicketDedupAuditEventRepository(GenericRepository[TicketDedupAuditEvent]):
+class DedupAuditEventRepository(GenericRepository[DedupAuditEvent]):
     """Repository for dedup decision events (append-only)."""
 
     def __init__(self):
-        """Initialize with TicketDedupAuditEvent as the managed model."""
-        super().__init__(TicketDedupAuditEvent)
+        """Initialize with DedupAuditEvent as the managed model."""
+        super().__init__(DedupAuditEvent)
 
 
 dedup_candidate_repository = DedupCandidateRepository()
-ticket_duplicate_pair_repository = TicketDuplicatePairRepository()
-ticket_dedup_audit_event_repository = TicketDedupAuditEventRepository()
+duplicate_pair_repository = DuplicatePairRepository()
+dedup_audit_event_repository = DedupAuditEventRepository()

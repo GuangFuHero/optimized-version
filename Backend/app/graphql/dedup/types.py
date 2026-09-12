@@ -6,8 +6,8 @@ Field names and value domains follow the frozen dedup contract (`DedupScoreCompo
 
 One deliberate departure from the frozen shape, flagged for the team: the contract's
 `TicketDedupRelation` requires a non-null `pairUuid`/`pairStatus`, but the pre-submit check
-runs *before* the ticket exists, and `ticket_duplicate_pairs` cannot hold a row whose FK
-points at a ticket nobody has inserted. `TicketDedupHint` therefore carries the fields that
+runs *before* the ticket exists, and `duplicate_pairs` cannot hold a row for a ticket nobody
+has inserted yet. `TicketDedupHint` therefore carries the fields that
 are meaningful at that moment — `relatedTicketUuid`, `similarity`, `scoreComponents` — with
 the same names, and drops the two that cannot exist yet. The frozen relation shape is
 untouched and still applies to the ticket read path (`TicketDedupInfo`), which is not in
@@ -30,19 +30,14 @@ from app.services.dedup_scoring import CandidateScore
 
 @strawberry.enum
 class DedupHintOutcome(enum.Enum):
-    """What the submitter did with a duplicate hint.
+    """What the submitter did with a duplicate hint — the contract's frozen two-value domain.
 
-    The first three are the "hint worked" branches and collapse to
-    `ticket_duplicate_pairs.hint_outcome = 'accepted_hint'`; `submitted_anyway` is
-    `'ignored_hint'`. The four-way distinction survives on the audit event's
-    `decision_reason`. **Names proposed by this PR — the contract only froze the two-valued
-    collapse, so they are on the list for the team to ratify.**
+    Mirrors `duplicate_pairs.hint_outcome` / `PAIR_HINT_OUTCOMES` exactly, so the value the
+    client sends is the value written to the pair card, with no server-side collapsing.
     """
 
-    commented_on_original = "commented_on_original"
-    suggested_edit_to_original = "suggested_edit_to_original"
-    updated_own_ticket = "updated_own_ticket"
-    submitted_anyway = "submitted_anyway"
+    accepted_hint = "accepted_hint"
+    ignored_hint = "ignored_hint"
 
 
 @strawberry.type
@@ -75,7 +70,7 @@ class TicketDedupHint:
     def from_score(cls, score: CandidateScore) -> "TicketDedupHint":
         """Build from the scoring layer's CandidateScore."""
         return cls(
-            related_ticket_uuid=score.candidate.ticket_uuid,
+            related_ticket_uuid=score.candidate.entity_uuid,
             similarity=score.similarity,
             score_components=[
                 DedupScoreComponent(name=c.name, score=c.score, weight=c.weight, passed=c.passed)

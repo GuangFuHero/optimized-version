@@ -72,7 +72,7 @@ async def test_hint_returned_when_the_best_candidate_clears_the_threshold(stub_c
     ])
     hints = await _check(db)
     assert len(hints) == 1
-    assert hints[0].candidate.ticket_uuid == "near"
+    assert hints[0].candidate.entity_uuid == "near"
     assert hints[0].similarity >= FAST_LAYER_PARAMETERS.hint_threshold
     assert {c.name for c in hints[0].components} == {"distance", "time", "task_type", "text"}
 
@@ -84,7 +84,7 @@ async def test_only_the_top_candidate_is_returned(stub_candidates, db):
         DedupCandidate("best", distance_m=2.0, age_min=2.0, task_type="rescue", text_similarity=0.95),
     ])
     hints = await _check(db)
-    assert [h.candidate.ticket_uuid for h in hints] == ["best"]
+    assert [h.candidate.entity_uuid for h in hints] == ["best"]
 
 
 async def test_no_hint_when_the_best_candidate_is_below_the_threshold(stub_candidates, db):

@@ -63,14 +63,14 @@ FAST_LAYER_PARAMETERS = FastLayerParameters()
 
 @dataclass(frozen=True)
 class DedupCandidate:
-    """One nearby, still-open ticket, with its features already measured against the query.
+    """One nearby, still-open entity, with its features already measured against the query.
 
-    `distance_m` / `age_min` / `text_similarity` are all *relative to the ticket being
+    `distance_m` / `age_min` / `text_similarity` are all *relative to the entity being
     submitted* and are computed in SQL (PostGIS + pg_trgm) by the repository, so this module
     stays free of DB concerns and is directly unit-testable.
     """
 
-    ticket_uuid: str
+    entity_uuid: str
     distance_m: float
     age_min: float
     task_type: str | None = None
@@ -158,13 +158,13 @@ def rank_candidates(
 ) -> list[CandidateScore]:
     """Score every candidate and sort best-first.
 
-    Ties break on `ticket_uuid` so a query is reproducible — same tie-break as the harness.
+    Ties break on `entity_uuid` so a query is reproducible — same tie-break as the harness.
     """
     scored = [
         score_candidate(c, query_task_type=query_task_type, parameters=parameters)
         for c in candidates
     ]
-    scored.sort(key=lambda s: (-s.similarity, s.candidate.ticket_uuid))
+    scored.sort(key=lambda s: (-s.similarity, s.candidate.entity_uuid))
     return scored
 
 

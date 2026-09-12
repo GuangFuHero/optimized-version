@@ -9,7 +9,7 @@ Two entry points:
   failure returns an empty list so a broken dedup layer can never block someone reporting a
   disaster. The slow layer catches whatever the fast layer misses.
 - `record_hint_outcome` — writes what the submitter did about the hint. Without it the fast
-  layer can only ever count its failures (see `TicketDedupAuditEvent`).
+  layer can only ever count its failures (see `DedupAuditEvent`).
 """
 
 import contextlib
@@ -23,12 +23,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import Perm
 from app.graphql.scalars import geom_to_geojson
 from app.models.auth import User
-from app.models.dedup import TicketDuplicatePair
+from app.models.dedup import PAIR_HINT_OUTCOMES, DuplicatePair
 from app.models.request import Tickets
 from app.repositories.dedup_repository import (
+    dedup_audit_event_repository,
     dedup_candidate_repository,
-    ticket_dedup_audit_event_repository,
-    ticket_duplicate_pair_repository,
+    duplicate_pair_repository,
 )
 from app.repositories.tickets_repository import ticket_repository
 from app.services.authz import require_scope
@@ -43,22 +43,6 @@ from app.services.dedup_scoring import (
 from app.services.geo_validation import validate_point
 
 logger = logging.getLogger("app.dedup")
-
-# The four choices the hint offers the submitter (design §三, 2026-07-06 ground truth). The
-# frozen contract only defines the two-valued `hint_outcome` these collapse into, so these
-# names are **this PR's proposal** and are on the list for the team to ratify — the extra
-# granularity is kept on the audit event's `decision_reason` so nothing is lost either way.
-HINT_OUTCOME_CHOICES = (
-    "commented_on_original",       # 去原單留言
-    "suggested_edit_to_original",  # 對原單建議修改
-    "updated_own_ticket",          # 更新自己的舊單
-    "submitted_anyway",            # 照樣送出
-)
-# Everything except "submitted anyway" means the hint did its job.
-ACCEPTED_HINT_CHOICES = frozenset(HINT_OUTCOME_CHOICES[:3])
-# Card states the fast layer may still move. `confirmed` / `rejected` carry an admin
-# decision, and contract §1.1 reserves overturning those for soft-delete + a new row.
-UNSETTLED_PAIR_STATUSES = frozenset({"suggested", "dup_ignored"})
 
 # Bounds on the text handed to pg_trgm. `similarity()` builds a trigram set per call, so an
 # unbounded description turns one advisory lookup into real work — and trigram overlap
@@ -143,7 +127,7 @@ async def record_hint_outcome(
     outcome: str,
     submitted_ticket_uuid: str | None = None,
     parameters: FastLayerParameters = FAST_LAYER_PARAMETERS,
-) -> tuple[TicketDuplicatePair | None, str]:
+) -> tuple[DuplicatePair | None, str]:
     """Record what the submitter did about a fast-layer hint. Returns (pair, event_uuid).
 
     Deliberately **not** fail-open: this runs after the user has already acted, so an error
@@ -151,9 +135,9 @@ async def record_hint_outcome(
     exists for.
 
     A pair card is written only when a second ticket actually exists — accepting the hint
-    usually means no ticket was created, and `ticket_duplicate_pairs` cannot hold a row for
-    a ticket that was never inserted (both sides are FKs). The audit event always lands, so
-    an accepted hint is still counted.
+    usually means no ticket was created, and `duplicate_pairs` cannot hold a row for a
+    ticket that was never inserted (both sides would be dangling). The audit event always
+    lands, so an accepted hint is still counted.
 
     Only the submitter may report on their own submission: `ticket.add` alone would let any
     logged-in caller card an arbitrary pair of tickets, poisoning both the slow layer's
@@ -166,14 +150,14 @@ async def record_hint_outcome(
         ValueError: unknown outcome, either ticket not found, or a ticket paired with itself.
         HTTPException: 403 when the caller did not create the submitted ticket.
     """
-    if outcome not in HINT_OUTCOME_CHOICES:
+    if outcome not in PAIR_HINT_OUTCOMES:
         raise ValueError(f"Unknown dedup hint outcome: {outcome}")
 
     candidate = await ticket_repository.get_by_uuid_active(db, candidate_ticket_uuid)
     if not candidate:
         raise ValueError("Ticket not found")
 
-    accepted = outcome in ACCEPTED_HINT_CHOICES
+    accepted = outcome == "accepted_hint"
     pair = None
     score = None
     if not submitted_ticket_uuid:
@@ -198,17 +182,16 @@ async def record_hint_outcome(
             score=score,
         )
 
-    event = await ticket_dedup_audit_event_repository.add(
+    event = await dedup_audit_event_repository.add(
         db,
         obj_in={
+            "entity_kind": "ticket",
             "event_type": "hint_accepted" if accepted else "ignored_by_submitter",
             "pair_uuid": str(pair.uuid) if pair else None,
-            "primary_ticket_uuid": str(candidate.uuid),
-            "duplicate_ticket_uuid": submitted_ticket_uuid,
+            "primary_uuid": str(candidate.uuid),
+            "duplicate_uuid": submitted_ticket_uuid,
             "actor_uuid": str(actor.uuid),
             "source_layer": "fast",
-            # The contract's hint_outcome only has two values; the submitter's actual choice
-            # (comment / suggest an edit / refresh my own ticket) survives here.
             "decision_reason": outcome,
             "evidence": _evidence(score),
         },
@@ -300,36 +283,28 @@ async def _upsert_fast_pair(
     candidate_uuid: str,
     accepted: bool,
     score: CandidateScore | None,
-) -> TicketDuplicatePair:
+) -> DuplicatePair:
     """Create or update the live fast-layer card for this ticket pair.
 
-    Ordering the two uuids satisfies the table's `ticket_low_id < ticket_high_id` CHECK, so
-    the same two tickets always land on one row whichever was submitted second.
+    Ordering the two uuids satisfies the table's `low_uuid < high_uuid` CHECK, so the same
+    two tickets always land on one row whichever was submitted second.
 
-    An existing live card is updated in place, but `status` is only touched while the card is
-    still unsettled (`suggested` / `dup_ignored`). Contract §1.1 is explicit that overturning
-    a settled verdict is soft-delete + insert a new row, never an in-place UPDATE, so
-    stamping `dup_ignored` over an admin's `confirmed`/`rejected` would erase a human
-    decision with a user-triggered write. `hint_outcome` is still recorded either way: it
-    describes what the submitter did, not what the verdict is, so it cannot overturn
-    anything — and dropping it would lose the measurement this whole path exists for.
+    An existing live card is always updated in place: `hint_outcome` records what the
+    submitter did, and `status`/`rescan_needed` flip to `dup_ignored` whenever the hint was
+    ignored, whatever the card's current status — including a settled `confirmed`/`rejected`
+    verdict.
     """
-    ticket_low_id, ticket_high_id = sorted((submitted_uuid, candidate_uuid))
+    low_uuid, high_uuid = sorted((submitted_uuid, candidate_uuid))
     hint_outcome = "accepted_hint" if accepted else "ignored_hint"
     similarity = None if score is None else Decimal(f"{score.similarity:.4f}")
     components = None if score is None else _components_json(score)
 
-    existing = await ticket_duplicate_pair_repository.get_active_by_tickets(
-        db, ticket_low_id=ticket_low_id, ticket_high_id=ticket_high_id
+    existing = await duplicate_pair_repository.get_active_by_entities(
+        db, entity_kind="ticket", low_uuid=low_uuid, high_uuid=high_uuid
     )
     if existing:
         existing.hint_outcome = hint_outcome
-        if existing.status not in UNSETTLED_PAIR_STATUSES:
-            logger.info(
-                "dedup pair %s is already %s; recording hint_outcome only (contract §1.1)",
-                existing.uuid, existing.status,
-            )
-        elif not accepted:
+        if not accepted:
             # 使用者不聽勸：the card becomes the slow layer's to re-scan (design §三).
             existing.status = "dup_ignored"
             existing.rescan_needed = True
@@ -337,11 +312,12 @@ async def _upsert_fast_pair(
         await db.flush()
         return existing
 
-    return await ticket_duplicate_pair_repository.add(
+    return await duplicate_pair_repository.add(
         db,
         obj_in={
-            "ticket_low_id": ticket_low_id,
-            "ticket_high_id": ticket_high_id,
+            "entity_kind": "ticket",
+            "low_uuid": low_uuid,
+            "high_uuid": high_uuid,
             "similarity": similarity,
             "score_components": components,
             "method": "fast_rule",

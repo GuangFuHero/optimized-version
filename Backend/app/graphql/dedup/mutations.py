@@ -21,9 +21,9 @@ class DedupMutation:
     ) -> RecordDedupHintOutcomeResult:
         """Record the submitter's response to a duplicate hint.
 
-        Writes `ticket_dedup_audit_events` always, and `ticket_duplicate_pairs.hint_outcome`
-        when a second ticket exists to pair with (i.e. the submitter filed anyway). Requires
-        ticket.add — the same capability that let them reach the hint.
+        Writes `dedup_audit_events` always, and `duplicate_pairs.hint_outcome` when a second
+        ticket exists to pair with (i.e. the submitter filed anyway). Requires ticket.add —
+        the same capability that let them reach the hint.
 
         Not fail-open, unlike the check itself: the user has already acted, so failing loudly
         costs them nothing and silently dropping the record would corrupt the only measure of
@@ -37,10 +37,6 @@ class DedupMutation:
         )
         return RecordDedupHintOutcomeResult(
             audit_event_uuid=event_uuid,
-            hint_outcome=(
-                "ignored_hint"
-                if input.outcome.value not in dedup_service.ACCEPTED_HINT_CHOICES
-                else "accepted_hint"
-            ),
+            hint_outcome=input.outcome.value,
             pair_uuid=str(pair.uuid) if pair else None,
         )
