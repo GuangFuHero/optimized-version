@@ -1,0 +1,182 @@
+/* ══════════════════════════════════════════════════════════════════════════
+ * 前台字級刻度（2026-09-11）
+ *
+ * 🔴 Sucre：「手機版本的字要加大，大多現場的人都看不清楚，年紀大。」
+ *
+ * 為什麼要開一組變數，而不是各處直接改數字：
+ *   前台的字級散在七支 jsx 的 inline style 裡（272 處）。inline style 的
+ *   優先度比 CSS 高，**媒體查詢覆蓋不到**，所以「手機放大」這件事沒有辦法
+ *   從外面補 —— 只能讓那些 inline style 去讀一組會隨螢幕變的變數。
+ *   現在調整字級是改這一張表，不是再掃一次 272 個地方。
+ *
+ * 🔒 手機是**整體往上位移**（小字 +4、大字 +2），不是只放大某幾處。
+ *    只放大「重要的字」會把層級壓平 —— 原本 11 與 14 的差別是「附註 vs 內容」，
+ *    若只把 11 拉到 14 就變成一樣重，讀者反而要重新學一次哪個是哪個。
+ *    整體位移則層級不變，只是每一階都看得見了。
+ *
+ * ⚠️ 這是**顯示層**的刻度，與 DS 的 typography token 是兩回事。
+ *    DS 自己的元件（Button / Input / Badge）走它自己的 CSS，見下方 media query。
+ * ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  --fs-10: 10px; --fs-11: 11px; --fs-12: 12px; --fs-13: 13px; --fs-14: 14px;
+  --fs-15: 15px; --fs-16: 16px; --fs-17: 17px; --fs-18: 18px; --fs-20: 20px; --fs-24: 24px;
+}
+/* 🔴 2026-09-11 第二次回報「字體沒有變大」。兩個可能都處理了：
+ *   (a) **這一段只在 768px 以下生效** —— 在桌機瀏覽器全寬看是不會變的。
+ *   (b) 第一版只加 +2px，在小字級上感覺不出來。
+ * 這一版把**小字端加到 +4**，大字端維持 +2 —— 最小的那幾級才是真正看不清楚的，
+ * 大標題本來就讀得到。刻度因此稍微壓縮（層級還在，但差距收窄），
+ * 這是刻意的取捨：現場讀得到，比排版的層次感重要。 */
+@media (max-width: 767px) {
+  :root {
+    --fs-10: 14px; --fs-11: 15px; --fs-12: 16px; --fs-13: 17px; --fs-14: 18px;
+    --fs-15: 19px; --fs-16: 20px; --fs-17: 21px; --fs-18: 22px; --fs-20: 23px; --fs-24: 26px;
+  }
+  /* DS 的 Input/Button 走它自己的 class，inline style 管不到，在這裡一起放大。
+     site.css 只被三支前台頁載入，所以可以用無前綴的選擇器。 */
+  input, textarea, select { font-size: 16px; }
+  button { font-size: inherit; }
+  /* 🔴 2026-09-11：漢堡選單（DS 的 SidebarItem）吃的是 DS 自己的
+     `--font-label-400`（0.875rem＝14px），**不在我們的 --fs 刻度裡**，
+     所以整站放大時它原地不動。這裡把 DS 的 label token 在手機上一起抬高。
+     ⚠️ 改的是 token 不是個別選擇器 —— SidebarItem 的高度 44px 是寫在
+        元件的 inline style 裡，我們覆寫不到，所以字級不能拉太多，
+        18px 是 44px 行高裡還舒服的上限。 */
+  :root { --font-label-400: 700 1.125rem/1.2 var(--font-latin); }
+}
+/* 🔒 手機的 input 一律 **16px 起跳**：iOS Safari 對小於 16px 的輸入框
+   會在聚焦時自動放大整個頁面，使用者得自己縮回來 —— 那比字小更難用。 */
+
+/* site.css — 前台 /map /list 共用基底（marker、leaflet 覆寫、動畫、focus）
+ * 所有值取自 Wan Guard DS token。 */
+
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--color-bg-neutral-subtle);
+  color: var(--color-fg-neutral-default);
+  font: 400 16px/1.5 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+#root { height: 100dvh; }
+
+a { color: var(--color-brand-secondary-subtle); text-decoration: none; }
+a:hover { color: var(--color-brand-primary-subtle); text-decoration: underline; }
+
+:focus-visible { outline: 3px solid var(--color-brand-secondary-default); outline-offset: 2px; }
+button { font-family: inherit; }
+
+/* ---- 地圖標記 ---------------------------------------------------------- */
+.wg-marker-wrapper { background: none; border: 0; }
+.wg-marker-stack { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.wg-marker {
+  width: 36px; height: 36px; border-radius: var(--radius-full); display: grid; place-items: center;
+  border: 2px solid var(--color-bg-neutral-default); box-shadow: var(--shadow-md);
+  transition: transform var(--transition-spring);
+}
+.wg-marker--ticket { background: var(--color-bg-primary); color: var(--color-fg-on-primary); }
+.wg-marker--station { background: var(--color-brand-secondary-default); color: var(--color-fg-on-secondary); }
+.wg-marker--active {
+  transform: scale(1.18); box-shadow: var(--shadow-lg);
+  outline: 3px solid var(--color-brand-secondary-default); outline-offset: 2px;
+}
+.wg-marker-wrapper:hover .wg-marker { transform: translateY(-2px) scale(1.06); }
+.wg-marker__label {
+  max-width: 168px; padding: 3px 10px; border-radius: var(--radius-full);
+  background: var(--color-bg-neutral-default); border: 1px solid var(--color-border-default);
+  /* 🔴 2026-09-11：這裡寫死 10px，整站放大時被漏掉 —— 地圖上的站點與任務單
+     名稱是現場最常盯著看的字之一。改吃 --fs 刻度（手機 14px）。
+     max-width 也跟著放寬，否則放大後每一個名稱都被截成「光復國小供…」。 */
+  font: 700 var(--fs-11)/1.35 var(--font-latin); color: var(--color-fg-neutral-default);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: var(--shadow-sm);
+}
+.wg-marker__label--ticket { border-color: var(--color-border-accent); }
+.wg-marker__label--station { border-color: var(--color-brand-secondary-default); }
+
+/* ---- 訪客模式的概略區塊標記 -------------------------------------------
+   遮罩後 ticket 全部落在格子中心（HC 2026-07-03），所以這裡刻意「不像圖釘」：
+   沒有尖端、沒有指向性，讓讀者看得出這是一塊範圍而不是一個地點。 */
+/* 2026-09-11：訪客格子只留六邊形一個形狀，數字直接落在它中央。
+   沒有容器、沒有邊框 —— 白色描邊負責在地圖上讀得到。
+   （原本這裡是一顆 52px 的圓形徽章，與六邊形是兩個形狀講同一件事。） */
+.wg-cell {
+  display: flex; align-items: baseline; justify-content: center; gap: 4px;
+  white-space: nowrap;
+  /* 🔴 2026-09-11 第二次回報：「加陰影超醜，我覺得要把特效拿掉，透明的部分更不透明。」
+     他是對的 —— 描邊＋陰影是在**補救底色不夠**，補救永遠比把底色做對醜。
+     現在：字上沒有任何特效（無描邊、無陰影），改由六邊形自己的填色
+     （見 site-map.jsx 的 fillOpacity）提供對比。
+     🔒 不要再把 text-stroke / text-shadow 加回來。真的讀不清楚時要調的是
+        **填色的不透明度**，不是往字上疊效果。 */
+  transition: transform var(--transition-spring);
+}
+.wg-cell__n { font: 800 var(--fs-24)/1 var(--font-data); color: var(--color-bg-primary); }
+.wg-cell__u { font: 800 var(--fs-14)/1 var(--font-body); color: var(--color-bg-primary); }
+.wg-cell--active .wg-cell__n, .wg-cell--active .wg-cell__u { color: var(--color-brand-secondary-default); }
+.wg-cell--active { transform: scale(1.12); }
+.wg-marker-wrapper:hover .wg-cell { transform: scale(1.06); }
+
+/* ---- Leaflet 覆寫（對齊 DS 圓角與字型） -------------------------------- */
+.leaflet-container { background: var(--color-bg-neutral-sunken); font-family: var(--font-body); }
+.leaflet-control-attribution {
+  font: 400 10px/1.4 var(--font-data) !important;
+  background: rgba(255, 255, 255, .84) !important;
+  border-radius: var(--radius-full); padding: 2px 10px !important;
+}
+.leaflet-control-attribution a { color: var(--color-brand-secondary-subtle); }
+.leaflet-bar { border: 0 !important; box-shadow: var(--shadow-md) !important; border-radius: var(--radius-full) !important; overflow: hidden; }
+.leaflet-bar a {
+  background: var(--color-bg-neutral-default) !important; color: var(--color-fg-neutral-default) !important;
+  border-bottom-color: var(--color-border-default) !important; width: 34px !important; height: 34px !important;
+  line-height: 34px !important;
+}
+.leaflet-bar a:hover { background: var(--color-bg-neutral-subtle) !important; }
+.leaflet-control-scale-line {
+  border-color: var(--color-border-default) !important; background: rgba(255, 255, 255, .84) !important;
+  font: 400 10px/1.4 var(--font-data) !important; color: var(--color-fg-neutral-subtle);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+.leaflet-tooltip {
+  border: 1px solid var(--color-border-default) !important; border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-md) !important; font: 400 12px/1.5 var(--font-body) !important;
+  color: var(--color-fg-neutral-default) !important;
+}
+
+/* ---- 動效（DS spring / entrance） -------------------------------------- */
+@keyframes wgSlideIn { from { transform: translateX(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes wgPop { from { transform: scale(.96); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes wgRise { from { transform: translateY(8px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes wgLoadBar { 0% { transform: translate3d(-110%, 0, 0) } 100% { transform: translate3d(320%, 0, 0) } }
+
+/* ---- 滾動條 ------------------------------------------------------------ */
+*::-webkit-scrollbar { width: 10px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--color-bg-neutral-sunken); border-radius: var(--radius-full); border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--color-border-default); background-clip: content-box; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, .wg-marker { animation: none !important; transition: none !important; }
+}
+
+/* LocationPicker（js/admin/ticket/tk-locpicker.jsx）用到的 chip 按鈕。
+   後台三頁定義在各自的 HTML <style> 裡；前台共用這支 CSS，所以收在這裡。
+   ⚠️ 兩處樣式要一致，改一邊記得改另一邊。 */
+.tk-chipbtn { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: var(--radius-full); border: 1px solid var(--color-border-default); background: var(--color-bg-neutral-default); cursor: pointer; font: var(--font-data-300); font-weight: 700; color: var(--color-fg-neutral-subtle); transition: background var(--transition-fast), border-color var(--transition-fast); }
+.tk-chipbtn:hover { background: var(--color-bg-neutral-subtle); border-color: var(--color-border-accent); }
+
+/* 手機 bottom sheet 的進場（ActionDrawer 在 <768px 時使用）。
+   從下緣推上來，與「拇指區」的心智模型一致。 */
+@keyframes wgSheetUp { from { transform: translateY(12%); opacity: .6 } to { transform: none; opacity: 1 } }
+
+/* ── 手機 bottom sheet ────────────────────────────────────────────────────
+   高度必須用 class 不能用 inline style：同一個屬性要寫兩次（vh 打底、dvh 覆蓋），
+   React 的 style 物件同一個 key 只能有一個值。
+   舊版 iOS Safari（< 15.4）不認 dvh，會整條丟掉 —— 沒有 vh 那行就變成沒有高度上限，
+   內容一長 footer 就被推出畫面外，送出鈕永遠按不到。 */
+.wg-sheet { max-height: 92vh; max-height: 92dvh; }
+
+/* 列表底部留白，避開手機的浮動主動作按鈕（FAB）。
+   沒有它的話最後一列永遠被蓋住一半。 */
+@media (max-width: 767px) {
+  /* 2026-09-11：字放大之後，最後一列會被浮動的「請求協助」壓到。
+     84 → 104（FAB 高 52 ＋ 下緣間距 16 ＋ 一列的呼吸 36）。 */
+  .wg-site-list-scroll { padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)) !important; }
+}
