@@ -3,8 +3,9 @@
 **Date**: 2026-08-23
 **Feature**: 016-resource-history
 **Status**: 已實作、已驗證
+**PRD**: `prd.md`（使用者故事、驗收條件、前端契約）
 **Notion**: 補齊功能 →「系統性 - Ticket/Resource Station History（版本歷史）」（backend-Popo，排 08-18~08-22）
-**Depends on**: `feat/bulk-import-export-backend`（PR #42）。時間軸要涵蓋 `station_properties` 與 `task_properties` 的異動，而這兩張表的 audit trigger 只在 015 的分支上（ADR-140）。
+**Depends on**: `feat/bulk-import-export-backend`（PR #42）。時間軸要涵蓋 `station_properties` 與 `task_properties` 的異動，而這兩張表的 audit trigger 只在 015 的分支上（ADR-140）。#42 合併進 `main` 之後，本 PR 改接 `main`。
 **ADR**: `decisions.md`，ADR-127~145
 
 ---
@@ -189,7 +190,7 @@ STATION_VIEW_HISTORY = "station.view_history"
 
 ## 7. Migration
 
-`audit_logs` 目前**只有主鍵一個索引**（`alembic/versions/71bd05e07df3_create_audit_system.py:51-62`），任何讀取都是全表掃描。本票補三個：
+`audit_logs` 目前**只有主鍵一個索引**（`alembic/versions/71bd05e07df3_create_audit_system.py:51-62`），任何讀取都是全表掃描。本票補兩個：
 
 ```sql
 CREATE INDEX ix_audit_logs_row_id_created_at ON audit_logs (row_id, created_at DESC);
@@ -219,8 +220,9 @@ CREATE INDEX ix_audit_logs_assign_task ON audit_logs
   app/services/history.py               聚合、合流、合併、事件推導
   app/schemas/history.py                回應 schema
   app/api/v1/endpoints/history.py       兩個 REST 端點
-  alembic/versions/xxxx_audit_indexes.py
+  alembic/versions/c4a91e77b0d3_audit_logs_read_indexes.py
   tests/test_history_fields.py          分類守衛
+  tests/test_history_endpoints.py       HTTP 層：信封格式、403/404、分頁、遮罩
   tests/test_history_service.py         聚合／合併／推導
   tests/test_history_permissions.py     四層可見度 × scope
 
