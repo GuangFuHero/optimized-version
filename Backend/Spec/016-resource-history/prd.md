@@ -1,6 +1,6 @@
 # PRD：求助單與站點的異動歷史（016 Resource History）
 
-**Feature**：016-resource-history　**PR**：#43（base 為 #42，已 approve）
+**Feature**：016-resource-history　**PR**：#43（2026-09-13 已合併進 #42 的分支，隨 #42 一起進 main）
 **Status**：後端已實作、已驗證；前端未做
 **Notion**：系統性 - Ticket/Resource Station History（版本歷史）
 **技術設計**：`spec.md`　**決策**：`decisions.md`（ADR-127~145、198、202~203）

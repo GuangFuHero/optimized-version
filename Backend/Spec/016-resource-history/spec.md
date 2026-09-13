@@ -5,7 +5,7 @@
 **Status**: 已實作、已驗證
 **PRD**: `prd.md`（使用者故事、驗收條件、前端契約）
 **Notion**: 補齊功能 →「系統性 - Ticket/Resource Station History（版本歷史）」（backend-Popo，排 08-18~08-22）
-**Depends on**: `feat/bulk-import-export-backend`（PR #42）。時間軸要涵蓋 `station_properties` 與 `task_properties` 的異動，而這兩張表的 audit trigger 只在 015 的分支上（ADR-140）。#42 合併進 `main` 之後，本 PR 改接 `main`。
+**Depends on**: `feat/bulk-import-export-backend`（PR #42）。時間軸要涵蓋 `station_properties` 與 `task_properties` 的異動，而這兩張表的 audit trigger 只在 015 的分支上（ADR-140）。PR #43 已於 2026-09-13 合併進 #42 的分支，隨 #42 一起進 `main`。
 **ADR**: `decisions.md`，ADR-127~145
 
 ---
