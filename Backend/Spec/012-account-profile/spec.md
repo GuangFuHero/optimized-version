@@ -3,8 +3,10 @@
 **Date**: 2026-08-16
 **Feature**: 012-account-profile
 **Status**: 已實作（見 §10 實作對照）；`plan.md` 為完工後回填
+**PRD**: `prd.md`（使用者故事、驗收條件、前端錯誤碼契約）
 **Notion**: 補齊功能 →「系統性 - Account Profile 設定（姓名/電話/信箱）+ 忘記密碼」（backend-Popo，08-13~08-17）
 **Depends on**: 既有 auth 流程（`app/api/v1/endpoints/auth/`）、verification code 基礎設施（`app/repositories/verification_repository.py`）、messaging（`app/messaging/email.py`、`sms.py`）
+**後續**: `Spec/017-login-method-hardening`——ADR-219/220/234 改寫了本票「新增聯絡方式」與「證明管道」的規則。本文中被推翻的段落都有標註，現行規則以 017 為準。
 
 ---
 
@@ -32,11 +34,13 @@
 | **姓名以外不能改** | `UserUpdate` 只有 `name`（`app/schemas/auth.py:43-46`） |
 | **無刪除 contact 的能力** | 全 codebase 無此端點 |
 
+> 上表的行號是 2026-08-16 設計當時的 `main`，用來說明「動工前的現況」，不指向本分支的程式碼。
+
 **鎖死風險**：contact **就是登入識別**——`/auth/login` 以 email/phone 查 `get_user_by_contact` 找人（`app/api/v1/endpoints/auth/session.py:45-51`）。失去最後一個 contact 且無 SSO identity 的帳號，將永久無法登入，連「忘記密碼」都沒有收件管道。
 
 ### 目標
 - 使用者能更換 email / 手機，過程中**不存在無 contact 的空窗**。
-- 更換恢復管道需通過 step-up 驗證，堵住「持有 session 即可接管帳號」的路徑。
+- 新增、更換、刪除恢復管道都需通過 step-up 驗證，堵住「持有 session 即可接管帳號」的路徑（新增的部分由 017 的 ADR-220 補上）。
 - 使用者能讀到自己目前的聯絡方式與登入方式。
 - 帳號永遠保有至少一個可用的登入管道。
 
@@ -54,15 +58,27 @@
 
 ### 2.1 判定樹
 
+> **2026-09-01 修訂（017 ADR-220 / ADR-234）**：本節原本寫「首次新增 → 不需 step-up」（ADR-086）。
+> 017 實測出三條只需被竊 session 的接管路徑，其中兩條正是「先無門檻加一個攻擊者的聯絡方式」。
+> 現在**首次新增也要證明**，只要帳號有任何可以拿來證明的東西：
+>
+> | 帳號狀態 | 新增第一個某型別 contact |
+> |---|---|
+> | 有密碼 | 驗密碼 |
+> | 無密碼、有其他 contact | 寄碼到既有管道（依 017 ADR-219 挑已過 7 天冷卻期的） |
+> | 無密碼、無 contact、有 SSO | 出示這個帳號自己的 SSO `id_token`（ADR-234） |
+> | 什麼都沒有 | 不設門檻 |
+
 ```
 POST /auth/contacts { type, value, step_up? }
 │
 ├─ 該帳號已有同型別 contact？
-│   ├─ 否（首次新增）→ 不需 step-up，走現有流程
+│   ├─ 否（首次新增）→ 帳號有可證明的東西就要 step-up（ADR-220/234），否則不需要
 │   └─ 是（取代）→ 需要 step-up：
 │        ├─ 帳號有 password identity → step_up.password 必填，驗證之
-│        └─ SSO-only（無 password identity）→ 發碼到「舊管道」，
-│             step_up.old_channel_code 必填，驗證之
+│        └─ SSO-only（無 password identity）→ 發碼到已過冷卻期的既有管道（ADR-219），
+│             step_up.old_channel_code 必填，驗證之；
+│             帳號沒有任何 contact 時改驗 step_up.id_token（ADR-234）
 │
 └─ 發 6 位數驗證碼到「新值」
 
@@ -74,17 +90,17 @@ POST /auth/contacts/verify { type, value, code }
      └─ 成功後通知「舊管道」：聯絡方式已變更為 a***@***.com
 ```
 
-**step-up 是後端硬性判定**：後端自行查詢「是否已有同型別 contact」與「是否有 password identity」，據此決定是否要求 step-up。前端不帶或帶錯即 422，不依賴前端自律。
+**step-up 是後端硬性判定**：後端自行查詢帳號狀態（是否已有同型別 contact、是否有 password identity、是否有其他 contact 或 SSO），據此決定是否要求 step-up、要哪一種。前端不帶或帶錯即 422，不依賴前端自律。
 
 ### 2.2 原子性
 
 取代必須在**同一個交易**內完成 DELETE + INSERT。中途不得出現該使用者沒有任何 contact 的狀態——那一瞬間若交易失敗，帳號就失去登入管道。
 
-`user_contacts` 有 DB unique 約束（`contacts.py:76-79` 的 `IntegrityError` 處理即為證據），競態由既有的 `IntegrityError → 409` 模式收斂。
+`user_contacts` 有 DB unique 約束（既有的 `IntegrityError` 處理即為證據），競態由既有的 `IntegrityError → 409` 模式收斂。
 
 ### 2.3 舊列處理
 
-**硬刪除**。`UserContact` 沒有 `TimestampMixin`（`app/models/auth.py:50`），無 `delete_at` 欄位；而 `user_contacts` 已在 `AUDITED_TABLES`（`app/db/triggers.py:9`），變更歷史由 `audit_logs` 完整保存。不為此新增軟刪除欄位。
+**硬刪除**。`UserContact` 沒有 `TimestampMixin`，無 `delete_at` 欄位；而 `user_contacts` 已在 `AUDITED_TABLES`（`app/db/triggers.py`），變更歷史由 `audit_logs` 完整保存。不為此新增軟刪除欄位。
 
 ---
 
@@ -93,6 +109,8 @@ POST /auth/contacts/verify { type, value, code }
 ### 3.1 要堵的攻擊路徑
 
 攻擊者取得有效 session（借用未鎖裝置、XSS 竊取 token）→ 若更換 contact 無需額外驗證，直接把恢復管道換成自己的 → 登出後走「忘記密碼」重設 → **帳號永久易主，原主人失去所有救回管道**。
+
+同一條鏈的「新增」版本（帳號缺某型別時直接加上攻擊者的管道）由 017 的 ADR-220 封住。
 
 ### 3.2 三項措施
 
@@ -108,6 +126,8 @@ POST /auth/contacts/verify { type, value, code }
 
 語意一致——有密碼的證明「你知道密碼」，SSO-only 的證明「你仍握有舊管道」。舊管道已失效的使用者本應走管理員途徑，不由自助流程處理。
 
+> **017 補充**：「舊管道」必須已加入滿 7 天，全部未滿時退回最舊的那個（ADR-219）；帳號沒有任何 contact 時，改以帳號自己的 SSO 重新驗證（ADR-234）。
+
 ### 3.4 通知內容
 
 新值**部分遮蔽**（`a***@***.com`、`09*****678`，即 `app/graphql/masking.py` 的 `mask_email` / `mask_phone` 實際輸出），足以讓本人辨識，不至於在信件被轉寄時完整外洩。
@@ -118,13 +138,15 @@ POST /auth/contacts/verify { type, value, code }
 
 新增 `DELETE /auth/contacts/{type}`。
 
-**守門條件**：刪除後若該使用者 `contacts == 0` **且** 無任何 SSO identity，回 409「帳號至少需保留一個登入管道」。
+**檢查順序**：404（沒有這個型別）→ 409（最後登入管道）→ step-up（ADR-159）。
+
+**守門條件**：刪除後若該使用者 `contacts == 0` **且** 無任何 SSO identity，回 409「帳號至少需保留一個登入管道」。守門通過後才要求 step-up，不為一個本來就不可能的操作要使用者先認證。
 
 | 情境 | 刪除後 | 結果 |
 |---|---|---|
-| 有 email + phone + 密碼 | 剩 1 個 contact | ✅ 允許 |
-| 只有 email + 密碼 | 0 個 contact，無 SSO | ❌ 409 |
-| 只有 email + Google SSO | 0 個 contact，有 SSO | ✅ 允許（仍可用 Google 登入） |
+| 有 email + phone + 密碼 | 剩 1 個 contact | ✅ 允許，需 step-up |
+| 只有 email + 密碼 | 0 個 contact，無 SSO | ❌ 409（不要求 step-up） |
+| 只有 email + Google SSO | 0 個 contact，有 SSO | ✅ 允許，需 step-up（仍可用 Google 登入） |
 
 ---
 
@@ -161,12 +183,14 @@ POST /auth/contacts/verify { type, value, code }
 
 | 端點 | 變更 | 限流 |
 |---|---|---|
-| `POST /auth/contacts` | 「已有同型別 → 409」改為 replace 語意；新增條件必填的 `step_up` | 3/60（沿用） |
+| `POST /auth/contacts` | 「已有同型別 → 409」改為 replace 語意；新增條件必填的 `step_up`（首次新增亦適用，017 ADR-220） | 3/60（沿用） |
 | `POST /auth/contacts/verify` | 取代時在同交易內 DELETE + INSERT；成功後通知舊管道 | 10/60（沿用） |
 | `POST /auth/contacts/resend` | 不變 | 2/60（沿用） |
-| `DELETE /auth/contacts/{type}` | **新增**，含登入管道守門 | 5/60 |
+| `DELETE /auth/contacts/{type}` | **新增**，含登入管道守門與 step-up | 5/60 |
 | `GET /users/me` | 回應加 `contacts[]` / `login_methods[]` | — |
 | `PATCH /users/me` | 不變（僅 `name`） | — |
+
+錯誤碼（PR #41 的 `code` 合約）與前端應對方式見 `prd.md` §5。
 
 ---
 
@@ -176,7 +200,7 @@ POST /auth/contacts/verify { type, value, code }
 
 **理由**：本票新增的正是分支密集的安全邏輯——新增/取代 × 有密碼/SSO-only 四種組合，每種失敗模式不同。這類邏輯需要能直接單元測試，不該只能透過 HTTP 驗證。
 
-**既有偏離（本票不處理，建議另開重構票）**：auth 整組 endpoint 未對齊 ADR-013/047 的 service 慣例——業務邏輯寫在 endpoint 裡直接呼叫 repository：
+**既有偏離（本票不處理，建議另開重構票）**：auth 整組 endpoint 未對齊 ADR-013/047 的 service 慣例——業務邏輯寫在 endpoint 裡直接呼叫 repository（2026-08-16 設計當時的統計）：
 
 ```
 app/api/v1/endpoints/auth/sso.py         196 行, 18 次 repository 直呼   ← 最嚴重
@@ -186,7 +210,7 @@ app/api/v1/endpoints/auth/contacts.py    115 行,  7 次   ← 本票抽出
 app/api/v1/endpoints/auth/session.py     107 行,  3 次
 ```
 
-`app/services/auth_account.py` 只有 `create_account` 一個函式，因為 register 與 SSO 兩條路都要用才被抽出（`register.py:25`、`sso.py:19`）。
+`app/services/auth_account.py` 只有 `create_account` 一個函式，因為 register 與 SSO 兩條路都要用才被抽出。
 
 ---
 
@@ -213,7 +237,7 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | 安全 | SSO-only 帳號未帶舊管道驗證碼 → 422 |
 | 安全 | 更換成功後**舊管道收到通知**，且通知中新值為部分遮蔽 |
 | 安全 | 更換成功後其他 session **仍有效**（明確驗證不撤銷） |
-| 功能 | 首次新增 contact **不需** step-up（不得誤加門檻） |
+| 功能 | ~~首次新增 contact **不需** step-up（不得誤加門檻）~~ **已被 017 ADR-220 推翻**：帳號有可證明的東西時，首次新增也要 step-up |
 | 功能 | 取代為原子操作：驗證碼正確時舊列消失、新列出現；模擬 INSERT 失敗時舊列仍在 |
 | 功能 | 取代後可用**新** email 登入、**舊** email 登入失敗 |
 | 功能 | 刪除最後一個 contact 且無 SSO → 409 |
@@ -224,57 +248,66 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 
 ---
 
-## 10. 實作對照（2026-08-20 回填，2026-08-27 依 ADR-159~161 更新）
+## 10. 實作對照（2026-08-20 回填，2026-08-27 依 ADR-159~161 更新，2026-09-13 依 017 校正）
 
 本節在實作完成後補上，讓 reviewer 能逐條驗證「設計說要做的」與「程式碼實際做的」是否一致。
 
 > **落點一律指函式名，不指行號**（2026-08-31 改）。PR #39 的兩輪 review 各讓 `auth_contact.py` 長了一截，
 > 行號在同一輪 review 之內就漂掉過一次，指錯地方比不指還糟。
-分支 `feat/account-profile-backend`，兩個 commit：`5ab9a3569`（spec + ADR）、`cd70b0795`（實作）。
+
+分支 `feat/account-profile-backend`，兩個 commit：`5ab9a3569`（spec + ADR）、`cd70b0795`（實作）。合併走 `feat/login-method-hardening`（PR #45），它包含本分支全部 commit。
 
 ### 10.1 設計 → 程式碼落點
 
 | 設計條目 | ADR | 落點 |
 |---|---|---|
-| verify-then-replace，同交易原子取代 | 098 | `app/repositories/auth_repository.py:309` `replace_verified()` |
+| verify-then-replace，同交易原子取代 | 098 | `app/repositories/auth_repository.py` `replace_verified()` |
 | step-up 判定完全在後端，依帳號形狀決定驗哪一種 | 085/086 | `app/services/auth_contact.py` `_require_step_up()` |
 | 有 password identity → 驗密碼 | 085 | `_require_step_up()` 的第一個分支 |
 | SSO-only → 發碼到舊管道並驗證 | 085 | `_require_step_up()` 的 SSO 分支；碼的存取為獨立 key prefix，`verification_repository.py` `issue_old_channel_step_up()` / `consume_old_channel_step_up()` |
-| 首次新增不設門檻 | 086 | `start_contact_change()`（`existing is None` 直接跳過 step-up） |
+| ~~首次新增不設門檻~~ → **首次新增依帳號狀態要求證明** | ~~086~~ → **220/234** | `start_contact_change()` → `_has_something_to_prove_with()` + `require_channel_proof()` |
 | 更換成功後通知舊管道，新值部分遮蔽 | 085 | `_notify_contact_replaced()`；builder 為 `build_contact_changed_email()` / `build_contact_changed_sms()` |
 | **更換成功後也通知帳號其他倖存的管道** | **229** | `_notify_contact_replaced()`；builder 為 `build_contact_replaced_email()` / `build_contact_replaced_sms()`（會指名型別） |
 | 不撤銷 session | 085 | 反向證據：`auth_contact.py` 全檔無 `SessionRepository` 引用 |
 | 刪除守門：不得失去最後一個登入管道 | 087 | `app/services/auth_contact.py` `delete_contact()`；計數與 SSO 判定在 `auth_repository.py` `list_by_user()` / `has_sso_identity()` |
-| 舊列硬刪除，歷史交給 `audit_logs` | 087 | `app/repositories/auth_repository.py:332` `delete_contact()` |
-| 邏輯抽到 service，endpoint 只留 parse 與狀態碼對應 | 088 | `app/services/auth_contact.py`（新檔）；`app/api/v1/endpoints/auth/contacts.py:33` 的 `_STATUS_BY_ERROR` 是唯一的映射點 |
+| 舊列硬刪除，歷史交給 `audit_logs` | 087 | `app/repositories/auth_repository.py` `delete_contact()` |
+| 邏輯抽到 service，endpoint 只留 parse 與狀態碼對應 | 088 | `app/services/auth_contact.py`（新檔）；`app/api/v1/endpoints/auth/contacts.py` 的 `_ERROR_MAP` 是唯一的映射點（PR #41 之後每個錯誤帶 `code`） |
 | `GET /users/me` 回 `contacts[]` / `login_methods[]`，不回 `provider_subject` | 089 | `app/api/v1/endpoints/users.py` 的 `_profile()`（與 010 的身分清單同住一個函式）；schema 為 `ContactOut` / `LoginMethodOut` |
-| `DELETE /auth/contacts/{type}` 新端點 | 087 | `app/api/v1/endpoints/auth/contacts.py:114` |
-| `step_up` 條件必填 | 086 | `app/schemas/auth.py:167` `StepUp`、`:179` `AddContactRequest` |
+| `DELETE /auth/contacts/{type}` 新端點 | 087 | `app/api/v1/endpoints/auth/contacts.py` `delete_contact()` |
+| `step_up` 條件必填 | 086 | `app/schemas/auth.py` `StepUp`、`AddContactRequest` |
 | **刪除與更換適用同一道 step-up；順序 404 → 409 → step-up** | **159** | `app/services/auth_contact.py` 的 `delete_contact()`（`_require_step_up()` 在最後管道守門之後呼叫） |
 | **刪除成功後通知存活管道，無存活者則通知被刪的管道** | **159** | `app/services/auth_contact.py` 的 `_notify_contact_removed()`；builder 在 `app/messaging/email.py` `build_contact_removed_email()` / `app/messaging/sms.py` `build_contact_removed_sms()` |
 | **`set-password` 完成後撤銷所有 session** | **160** | `app/api/v1/endpoints/auth/password.py` `set_password()` 的 `revoke_all_for_user` |
-| **`set-password` 建立憑證「之前」要 step-up** | **215** | `set_password()` 呼叫 `auth_contact.require_step_up_for_first_password()`；寄送目標由 `_proof_contact()` 決定（email 優先） |
+| **`set-password` 建立憑證「之前」要 step-up** | **215** | `set_password()` 呼叫 `auth_contact.require_step_up_for_first_password()`（017 之後是 `require_channel_proof()` 的一個 `action`）；寄送目標由 `_proof_contact()` 決定 |
 | **設定密碼後通知帳號上每個聯絡方式** | **215** | `auth_contact.notify_password_set()`；builder 為 `build_password_set_email()` / `build_password_set_sms()` |
 | **寄送失敗的 step-up 碼要撤掉，寄送次數不退** | **216** | `_require_step_up()` 的 try/except → `verification_repository.discard_old_channel_step_up()` |
 | **DELETE 的 step-up 憑證走 optional request body** | **161** | `app/schemas/auth.py` `DeleteContactRequest`；`app/api/v1/endpoints/auth/contacts.py` `delete_contact()` 的 `body: DeleteContactRequest | None = None` |
 
 ### 10.2 §9 測試計畫 → 測試函式
 
-| §9 案例 | 測試 |
+| §9 案例 | 測試（`tests/test_account_profile.py`，除非另註） |
 |---|---|
-| 持有 session 但提不出證明 → 無法更換 | `test_replacing_a_contact_without_step_up_is_refused`（`tests/test_account_profile.py:63`） |
-| step-up 密碼錯 → 401 且不消耗新管道的碼 | `test_replacing_with_a_wrong_password_is_refused_and_burns_no_code`（`:74`） |
-| SSO-only 未帶舊管道碼 → 422 | `test_sso_only_account_gets_a_code_on_the_old_channel`（`:99`） |
-| 更換成功後舊管道收到通知，新值遮蔽 | `test_replacement_notifies_the_old_channel_with_a_masked_value`（`:167`） |
-| 其他 session 仍有效 | `test_replacement_does_not_revoke_other_sessions`（`:183`） |
-| 首次新增不需 step-up | `test_first_contact_of_a_type_needs_no_step_up`（`:88`） |
-| 取代為原子操作 | `test_replacement_swaps_the_row_atomically`（`:137`）— **僅成功路徑，見 10.3** |
-| 取代後新值可登入、舊值不可 | `test_after_replacement_the_new_address_logs_in_and_the_old_does_not`（`:149`） |
-| 刪最後一個且無 SSO → 409 | `test_deleting_the_last_contact_without_sso_is_refused`（`:202`） |
-| 刪最後一個但有 SSO → 成功 | `test_deleting_the_last_contact_is_allowed_with_an_sso_identity`（`:212`） |
-| 刪其中一個（尚有另一型別）→ 成功 | `test_deleting_one_of_two_contacts_is_allowed`（`:222`） |
+| 持有 session 但提不出證明 → 無法更換 | `test_replacing_a_contact_without_step_up_is_refused` |
+| step-up 密碼錯 → 401 且不消耗新管道的碼 | `test_replacing_with_a_wrong_password_is_refused_and_burns_no_code` |
+| SSO-only 未帶舊管道碼 → 422 | `test_sso_only_account_gets_a_code_on_the_old_channel` |
+| 更換成功後舊管道收到通知，新值遮蔽 | `test_replacement_notifies_the_old_channel_with_a_masked_value` |
+| 其他 session 仍有效 | `test_replacement_does_not_revoke_other_sessions` |
+| ~~首次新增不需 step-up~~ | 原 `test_first_contact_of_a_type_needs_no_step_up`，依 ADR-220 改寫為 `test_first_contact_of_a_type_is_gated_too` |
+| 取代為原子操作 | `test_replacement_swaps_the_row_atomically`— **僅成功路徑，見 10.3** |
+| 取代後新值可登入、舊值不可 | `test_after_replacement_the_new_address_logs_in_and_the_old_does_not` |
+| 刪最後一個且無 SSO → 409 | `test_deleting_the_last_contact_without_sso_is_refused` |
+| 刪最後一個但有 SSO → 成功 | `test_deleting_the_last_contact_is_allowed_with_an_sso_identity` |
+| 刪其中一個（尚有另一型別）→ 成功 | `test_deleting_one_of_two_contacts_is_allowed` |
 | `/users/me` 回 contacts / login_methods，不含 `provider_subject` | `test_users_me_returns_contacts_and_login_methods`、`test_users_me_never_exposes_provider_subject` |
-| 忘記密碼流程行為不變 | `forgot-password` / `reset-password` / `change-password` 仍為零改動；**`set-password` 已於 2026-08-27 依 ADR-160 改動**（見下），故原先「`password.py` 全檔零改動」的宣稱作廢 |
+| 忘記密碼流程行為不變 | `forgot-password` / `reset-password` / `change-password` 仍為零改動；**`set-password` 已於 2026-08-27 依 ADR-160 改動**（見 10.4），故原先「`password.py` 全檔零改動」的宣稱作廢。另外 017 ADR-218 讓 `change-password` 成功後會通知帳號 |
+
+**超出 §9 的補充測試**：`test_sso_only_account_replaces_with_the_old_channel_code`（SSO-only 的成功路徑）、`test_deleting_a_contact_type_the_user_does_not_have`（404）、`test_users_me_does_not_mask_your_own_contacts`；以及 `tests/test_add_contact.py` 的改寫——原本斷言「第二個 email → 409」的案例，改為斷言「422 要求 step-up，且新地址收不到任何碼」（`test_add_second_email_requires_step_up`、`test_add_second_phone_requires_step_up`、`test_a_code_is_never_issued_to_a_new_address_without_step_up`）。
+
+### 10.3 已知缺口
+
+**§9 的「模擬 INSERT 失敗時舊列仍在」沒有對應測試。** `test_replacement_swaps_the_row_atomically` 只驗成功路徑（舊列消失、新列出現），沒有注入失敗來證明交易會整個回捲。
+
+不補的理由：`replace_verified()` 的 DELETE + INSERT 走同一個 `AsyncSession`，回捲由 SQLAlchemy 的交易邊界保證，測它等於測 SQLAlchemy。真正該擋的失效模式——「先刪後加，中間空窗」——在 ADR-098 就被設計否決了，程式碼裡不存在那條路徑。**記在這裡而非默默略過**，因為它是 §9 明列卻沒交付的一條。
 
 ### 10.4 2026-08-27 code review 後追加的迴歸測試（ADR-159/160/161）
 
@@ -299,15 +332,6 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 
 完整審查報告與重現腳本：`Backend/PR39_review.md`、`Backend/PR39_review_probe.py`。
 
-**超出 §9 的補充測試**：`test_sso_only_account_replaces_with_the_old_channel_code`（`:112`，SSO-only 的成功路徑）、`test_deleting_a_contact_type_the_user_does_not_have`（`:236`，404）、`test_users_me_does_not_mask_your_own_contacts`（`:271`）；以及 `tests/test_add_contact.py` 三條改寫——原本斷言「第二個 email → 409」的案例改為斷言「422 要求 step-up，且新地址收不到任何碼」（`:89`、`:104`、`:131`）。
-
-### 10.3 已知缺口
-
-**§9 的「模擬 INSERT 失敗時舊列仍在」沒有對應測試。** `test_replacement_swaps_the_row_atomically` 只驗成功路徑（舊列消失、新列出現），沒有注入失敗來證明交易會整個回捲。
-
-不補的理由：`replace_verified()` 的 DELETE + INSERT 走同一個 `AsyncSession`，回捲由 SQLAlchemy 的交易邊界保證，測它等於測 SQLAlchemy。真正該擋的失效模式——「先刪後加，中間空窗」——在 ADR-098 就被設計否決了，程式碼裡不存在那條路徑。**記在這裡而非默默略過**，因為它是 §9 明列卻沒交付的一條。
-
-
 ### 10.5 2026-08-31 第二輪 review 後的變更（ADR-215/216）
 
 | 案例 | 測試（`tests/test_account_profile.py`，除非另註） |
@@ -315,7 +339,7 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 | 只有 session 設不了第一組密碼，碼寄到帳號自己的聯絡方式 | `test_setting_a_first_password_needs_the_old_channel_code` |
 | 帶碼設定 → 204、撤銷所有 session、通知寄出 | `test_set_password_with_the_code_revokes_every_session_and_notifies` |
 | **完整接管鏈在鑄造那一步就斷掉**（含重新登入） | `test_the_full_takeover_chain_stops_at_the_mint` |
-| 沒有任何聯絡方式的帳號 → 422 要求先新增 | `test_an_account_with_no_contact_is_told_to_add_one_first` |
+| 沒有任何可證明東西的帳號 → 422 要求先新增 | 原 `test_an_account_with_no_contact_is_told_to_add_one_first`，依 017 ADR-234 改寫為 `test_an_account_with_genuinely_nothing_is_told_to_add_a_contact` |
 | 沒寄出去的碼不算 pending，可以馬上重試 | `test_a_code_that_was_never_delivered_does_not_count_as_pending` |
 | 寄送失敗仍消耗寄送額度 | `test_a_failed_delivery_still_spends_its_send_allowance` |
 | **ADR-163 的併發競態**（兩條真連線 + `asyncio.Barrier`） | `test_two_concurrent_deletes_cannot_strand_the_account` |
@@ -327,3 +351,4 @@ app/api/v1/endpoints/auth/session.py     107 行,  3 次
 **§10.3 的已知缺口清單新增一項**（ADR-215 記錄，不在本輪修）：帳號缺某一型別的聯絡方式時，
 `start_contact_change` 對該型別的第一個不設門檻（ADR-086），攻擊者可以先無門檻加一個自己的 email，
 再讓 step-up 碼寄到那裡。這條路徑早於本輪存在，且同樣打穿換／刪聯絡方式的 step-up，應另開票。
+→ **已由 017 的 ADR-219 / ADR-220 修正**（PR #45，`tests/test_login_method_hardening.py` 的 `test_a_session_cannot_attach_a_contact_and_reset_the_password_through_it`）。
