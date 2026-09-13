@@ -1,0 +1,155 @@
+/* ==========================================================================
+ * Wanguard — Primitive Design Tokens
+ * Generated from primitive.tokens.json
+ * These are raw, context-free values. Do NOT consume directly in components.
+ * Use semantic tokens instead.
+ * ========================================================================== */
+
+:root {
+  /* --------------------------------------------------------------------------
+   * Color — Orange
+   * ------------------------------------------------------------------------ */
+  --prim-color-orange-50:  #FDF3E9;
+  --prim-color-orange-100: #FAE0C3;
+  --prim-color-orange-200: #F5C08B;
+  --prim-color-orange-300: #EC9C50;
+  --prim-color-orange-400: #E3791E;
+  --prim-color-orange-500: #C46416;
+  --prim-color-orange-600: #9D4F11;
+  --prim-color-orange-700: #763B0D;
+  --prim-color-orange-800: #4F2708;
+  --prim-color-orange-900: #281403;
+
+  /* --------------------------------------------------------------------------
+   * Color — Blue
+   * ------------------------------------------------------------------------ */
+  --prim-color-blue-50:  #EEF7FB;
+  --prim-color-blue-100: #D0EBF5;
+  --prim-color-blue-200: #A1D6EA;
+  --prim-color-blue-300: #62BADA;
+  --prim-color-blue-400: #2592B9;
+  --prim-color-blue-500: #1E7A9D;
+  --prim-color-blue-600: #18627E;
+  --prim-color-blue-700: #124A5F;
+  --prim-color-blue-800: #0C3240;
+  --prim-color-blue-900: #061920;
+
+  /* --------------------------------------------------------------------------
+   * Color — Neutral
+   * ------------------------------------------------------------------------ */
+  --prim-color-neutral-50:    #F6FAFF;
+  --prim-color-neutral-100:   #EDF2F7;
+  --prim-color-neutral-200:   #E2E8F0;
+  --prim-color-neutral-300:   #CBD5E1;
+  --prim-color-neutral-400:   #94A3B8;
+  --prim-color-neutral-500:   #64748B;
+  --prim-color-neutral-600:   #475569;
+  --prim-color-neutral-700:   #334155;
+  --prim-color-neutral-800:   #1E293B;
+  --prim-color-neutral-900:   #0F172A;
+  --prim-color-neutral-white: #FFFFFF;
+  --prim-color-neutral-black: #111111;
+
+  /* --------------------------------------------------------------------------
+   * Color — Red
+   * ------------------------------------------------------------------------ */
+  --prim-color-red-50:  #FFEBEE;
+  --prim-color-red-500: #D32F2F;
+  --prim-color-red-700: #B71C1C;
+
+  /* --------------------------------------------------------------------------
+   * Color — Green
+   * ------------------------------------------------------------------------ */
+  --prim-color-green-50:  #E8F5E9;
+  --prim-color-green-500: #2E7D32;
+  --prim-color-green-700: #1B5E20;
+
+  /* --------------------------------------------------------------------------
+   * Color — Amber
+   * ------------------------------------------------------------------------ */
+  --prim-color-amber-50:  #FFF3E0;
+  --prim-color-amber-500: #F57C00;
+  --prim-color-amber-700: #E65100;
+
+  /* --------------------------------------------------------------------------
+   * Scale (raw numeric values, used as basis for spacing/radius/sizing)
+   * Values expressed in px.
+   * ------------------------------------------------------------------------ */
+  --prim-scale-4:    4px;
+  --prim-scale-6:    6px;
+  --prim-scale-8:    8px;
+  --prim-scale-12:   12px;
+  --prim-scale-16:   16px;
+  --prim-scale-20:   20px;
+  --prim-scale-24:   24px;
+  --prim-scale-32:   32px;
+  --prim-scale-48:   48px;
+  --prim-scale-64:   64px;
+  --prim-scale-80:   80px;
+  --prim-scale-96:   96px;
+  --prim-scale-9999: 9999px;
+
+  /* --------------------------------------------------------------------------
+   * Font Size
+   * ------------------------------------------------------------------------ */
+  --prim-font-size-xs:   12px;
+  --prim-font-size-sm:   14px;
+  --prim-font-size-base: 16px;
+  --prim-font-size-lg:   18px;
+  --prim-font-size-xl:   20px;
+  --prim-font-size-2xl:  24px;
+  --prim-font-size-3xl:  30px;
+  --prim-font-size-4xl:  36px;
+  --prim-font-size-5xl:  48px;
+
+  /* --------------------------------------------------------------------------
+   * Line Height (unitless multiplier)
+   * ------------------------------------------------------------------------ */
+  --prim-line-height-tight:   1.2;
+  --prim-line-height-snug:    1.4;
+  --prim-line-height-normal:  1.5;
+  --prim-line-height-relaxed: 1.75;
+
+  /* --------------------------------------------------------------------------
+   * Font Family
+   * ------------------------------------------------------------------------ */
+  --prim-font-family-chinese: "Noto Sans TC", sans-serif;
+  --prim-font-family-latin:   "Nunito", sans-serif;
+  --prim-font-family-data:    "Inter", sans-serif;
+  --prim-font-family-display: "Noto Sans TC", sans-serif;
+  --prim-font-family-body:    "Noto Sans TC", sans-serif;
+
+  /* --------------------------------------------------------------------------
+   * Font Weight
+   * Figma stores weight names; these map to numeric CSS font-weight values.
+   * ------------------------------------------------------------------------ */
+  --prim-font-weight-regular:  400;
+  --prim-font-weight-medium:   500;
+  --prim-font-weight-semibold: 600;
+  --prim-font-weight-bold:     700;
+
+  /* --------------------------------------------------------------------------
+   * Duration (transition / animation)
+   * ------------------------------------------------------------------------ */
+  --prim-duration-fast:   150ms; /* @kind other */
+  --prim-duration-base:   250ms; /* @kind other */
+  --prim-duration-slow:   400ms; /* @kind other */
+  --prim-duration-spring: 350ms; /* @kind other */
+
+  /* --------------------------------------------------------------------------
+   * Shadow
+   * Composite tokens expressed as box-shadow shorthand.
+   * Color includes per-level alpha from the source.
+   * ------------------------------------------------------------------------ */
+  --prim-shadow-sm: 0px 1px 4px 0px rgba(227, 121, 30, 0.10);
+  --prim-shadow-md: 0px 4px 16px 0px rgba(227, 121, 30, 0.15);
+  --prim-shadow-lg: 0px 8px 32px 0px rgba(227, 121, 30, 0.20);
+
+  /* --------------------------------------------------------------------------
+   * Grid
+   * ------------------------------------------------------------------------ */
+  --prim-grid-columns:           12;     /* @kind other */
+  --prim-grid-gap:               24px;   /* @kind spacing */
+  --prim-grid-container-max-w:   1200px; /* @kind other */
+  --prim-grid-container-padding: 24px;   /* @kind spacing */
+}

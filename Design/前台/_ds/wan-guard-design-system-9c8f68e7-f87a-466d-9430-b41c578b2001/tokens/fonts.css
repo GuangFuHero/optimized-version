@@ -1,0 +1,60 @@
+/* ==========================================================================
+ * Wan Guard 島嶼守望 — Fonts
+ * Chinese (Noto Sans TC) is self-hosted from /fonts. Latin/data faces
+ * (Nunito, Inter, Poppins) are delivered from Google Fonts CDN.
+ * ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&family=Poppins:wght@400;500;600&display=swap');
+
+/* ---- Noto Sans TC (self-hosted, traditional-Chinese primary) ------------- */
+@font-face {
+  font-family: "Noto Sans TC";
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+  src: url("../fonts/NotoSansTC-Thin.otf") format("opentype");
+}
+@font-face {
+  font-family: "Noto Sans TC";
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  src: url("../fonts/NotoSansTC-Light.otf") format("opentype");
+}
+@font-face {
+  font-family: "Noto Sans TC";
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url("../fonts/NotoSansTC-Regular.otf") format("opentype");
+}
+@font-face {
+  font-family: "Noto Sans TC";
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url("../fonts/NotoSansTC-Medium.otf") format("opentype");
+}
+@font-face {
+  font-family: "Noto Sans TC";
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url("../fonts/NotoSansTC-Bold.otf") format("opentype");
+}
+@font-face {
+  font-family: "Noto Sans TC";
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+  src: url("../fonts/NotoSansTC-Black.otf") format("opentype");
+}
+
+/* ---- Font-family role aliases -------------------------------------------- */
+:root {
+  --font-chinese: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --font-latin:   "Nunito", "Poppins", "Noto Sans TC", sans-serif;
+  --font-data:    "Inter", "Noto Sans TC", sans-serif;
+  --font-display: "Nunito", "Noto Sans TC", sans-serif;
+  --font-body:    "Noto Sans TC", "Nunito", sans-serif;
+}
