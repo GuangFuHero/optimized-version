@@ -2,9 +2,10 @@
 
 **Date**: 2026-08-21
 **Feature**: 015-bulk-import-export
-**Status**: 定案，待實作
+**Status**: 已實作；PR #42 兩輪 review 修正完成（ADR-208~214、238~242）。實作對照見 §13
+**PRD**: `prd.md`（使用者故事、驗收條件、前端契約）
 **Notion**: 補齊功能 →「後台 - Ticket/Resource Station 批量匯入匯出（欄位比對）」（backend-Popo，08-18~08-22）
-**Depends on**: `feat/project-settings-backend`（PR #36）。匯入驗證直接建在 013 的 `list_by_type` 上——它已經處理好 `is_active`、`disaster_types` 過濾、`'all'` bucket 與穩定排序（`app/repositories/config_repository.py:44`）。基於 `main` 會拿不到這些，且本票的 ADR-117 是明確推翻 013 的 ADR-092，接在它後面才講得通。
+**Depends on**: `feat/project-settings-backend`（PR #36，2026-09-06 已合併進 `main`；本 PR 已改接 `main`）。匯入驗證直接建在 013 的 `list_by_type` 上——它已經處理好 `is_active`、`disaster_types` 過濾、`'all'` bucket 與穩定排序（`app/repositories/config_repository.py:44`）。基於 `main` 會拿不到這些，且本票的 ADR-117 是明確推翻 013 的 ADR-092，接在它後面才講得通。
 
 ---
 
@@ -68,7 +69,7 @@ GET  /bulk/{stations|tickets}/export        POST /bulk/{...}/import/preview   (�
 
 - **恰好一筆** → 更新那一筆。
 - **零筆** → 新增；此時 `latitude` / `longitude` 必填（ADR-123）。
-- **兩筆以上** → 該列失敗，錯誤訊息列出配到的 uuid（ADR-113）。
+- **兩筆以上** → 該列失敗（ADR-113）。錯誤訊息只說比對到幾筆，**不列 uuid**（ADR-210 推翻了原本「列出配到的 uuid」的設計，理由見 §9）。
 
 檔案內部若有兩列同鍵，那幾列**全部**失敗（不是後蓋前）。
 
@@ -102,7 +103,17 @@ CSV 與 XLSX 雙向（ADR-115）。CSV 匯出帶 UTF-8 BOM，XLSX 把電話、�
 
 ### 上限
 
-單次 **500 列 / 2 MB**，而且**在解析之前**就擋（ADR-116 / ADR-209）。commit 端點加 rate limit（專案已有 `fastapi-limiter`）。
+單次 **500 列 / 2 MB**，而且**在解析之前**就擋（ADR-116 / ADR-209）。
+
+> **未實作（2026-09-13 核對）**：ADR-116 決定「commit 端點加 rate limit（專案已有 `fastapi-limiter`）」，
+> 但 `app/api/v1/endpoints/bulk.py` 的六個端點都沒有掛任何 limiter（#42、#43、`main` 皆同）。
+> 目前能逐 route 使用的是 auth 端點在用的 `get_rate_limiter(times, seconds)`（`app/api/v1/endpoints/auth/deps.py`）。
+> ADR-209 記錄的「`app/main.py` 建的 `pyrate_limiter` 沒掛到任何 route」是全站基礎設施問題，與此處不同。
+> 處理方式待決，見 `prd.md` §8。
+
+**匯出上限 10,000 列**（`bulk_export.py` 的 `MAX_EXPORT_ROWS`）。查詢取 `MAX_EXPORT_ROWS + 1` 列，超過就回 400 並說明要縮小範圍，**不給截斷的檔案**——這份檔同時是匯入範本，截斷的版本會被當成完整的匯回來（ADR-239）。剛好等於上限屬於成功。代價：單一型別超過一萬列就匯不出來，而型別是唯一的篩選條件；分頁或更多篩選需要另開票。
+
+**不支援的匯出格式**在任何查詢之前就回 400，比權限檢查還早（ADR-238）。
 
 理由是逐筆 upsert 不便宜：每一列要跑比對查詢 + `require_scope`，而 zone scope 是 PostGIS 的點在多邊形內查詢。同步端點撐不了幾千列。
 
@@ -233,6 +244,27 @@ grant 矩陣（ADR-111）：
 
 **檔內同鍵的後續列，只在領頭列真的會寫入時才算「更新」**（ADR-211）。ADR-120 讓一張 ticket 佔好幾列，靠檔內已見過的比對鍵認出後續列；若領頭列沒進去，後續列被當成更新規劃（丟掉所有僅新增欄位）卻被當成新增寫入，會產生沒有標題、沒有座標的 `create`。
 
+**「求助單是更新」不等於「任務是更新」**（ADR-240）。一列把**新**任務掛到已比對到的求助單上時，任務走建立分支，`task_description` / `task_quantity` 要帶檔案裡的值（`bulk_validate.values_for()`）；比對到的既有任務仍然不寫這兩個欄位（ADR-108）。
+
+**超長或超出範圍的儲存格只讓那一列失敗**（ADR-241）。20 個有寬度上限的欄位在 Python 端檢查長度，Integer 檢查 int4 範圍；逐列迴圈另外接住 `SQLAlchemyError` 當作防線，任何未預期的資料庫錯誤最多毀掉一列。
+
+### 錯誤報表格式
+
+preview 與 commit 的回應都帶逐列錯誤，commit 另外附上可以直接下載的報表：
+
+| 欄位 | 內容 |
+|---|---|
+| `errors[]` | `{ line, column, message }`。`line` 是試算表列號（表頭是第 1 列）；`column` 是出問題的欄位，`-` 代表整列層級的問題 |
+| `error_report` | `{ filename, media_type, content_base64 }`，沒有失敗列時為 `null`。內容是**失敗的原始列 + 最後一欄錯誤原因**，格式與上傳的檔相同 |
+| `partial_rows[]` | 主資料已寫入、後續步驟才失敗的列號（ADR-212） |
+| `batch_id` | 這次匯入的識別碼，只出現在回應裡（ADR-124） |
+
+報表內嵌在回應裡而不是給下載網址：端點是無狀態的（ADR-114），而且 commit 之後用同一份檔重算，得到的答案不會一樣。
+
+錯誤原因那一欄預設叫 `error`；原檔已經有 `error` 欄時改用 `error_1`、`error_2`⋯⋯，報表才能直接重新上傳（ADR-242）。解析報表的工具應該讀最後一欄，不要寫死欄名。
+
+Schema 在 `app/schemas/bulk.py` 的 `BulkPreviewResponse` / `BulkImportResponse` / `RowErrorResponse` / `ErrorReportResponse`。
+
 ---
 
 ## 10. 動態欄位驗證：本票在匯入路徑推翻 ADR-092
@@ -264,4 +296,55 @@ grant 矩陣（ADR-111）：
 
 - **station 的比對鍵依賴 `secondary_location`，而它是選填的**。既有 station 若沒填縣市區，匯入永遠比不中，只會不斷新增重複站點。上線前要確認既有資料的覆蓋率，或接受「舊資料只能人工補」。
 - **`contact_phone` 當比對鍵等於把 PII 放進主鍵路徑**。ADR-109 擋掉了外洩，代價是 zone scope 的人只能更新自己 zone 內的單子（見 §7）。
-- **station 動態欄位 32/37 不可用**（§6）。
+- **station 動態欄位 31/36 不可用**（§6：36 筆 config 中只有 5 筆是 Integer）。
+- **commit 端點沒有 rate limit**（§4 的「未實作」）。
+
+---
+
+## 13. 實作對照（2026-09-13 回填）
+
+落點指函式名，不指行號。
+
+### 13.1 設計 → 程式碼落點
+
+| 設計條目 | ADR | 落點 |
+|---|---|---|
+| 兩個 REST 匯出端點 + 四個匯入端點（preview / commit × station / ticket） | 114 | `app/api/v1/endpoints/bulk.py`；router 掛在 `app/api/v1/api.py` 的 `/bulk` |
+| 固定欄位、讀寫規則、動態欄位（station 只取 Integer） | 108、118、119 | `app/services/bulk_columns.py` `station_columns()` / `ticket_columns()` / `dynamic_columns_skipped_for_station()` |
+| CSV BOM、XLSX 文字格式、公式防護 | 115、208 | `app/core/tabular.py` `write_csv()` / `write_xlsx()` / `_csv_safe()` / `_looks_like_formula()` |
+| 上限在解析之前生效 | 116、209 | `bulk_import.py` `_check_size()` / `_check_rows()`；`tabular.py` `_check_uncompressed_size()` |
+| 匯出型別對照既有詞彙、檔名 RFC 6266 | 214 | `bulk_export.py` `_require_known_type()`；`bulk.py` `_content_disposition()` |
+| 匯出格式最先檢查 | 238 | `bulk_export.py` `_require_supported_format()` |
+| 匯出達上限時拒絕 | 239 | `bulk_export.py` `_require_not_truncated()` |
+| 比對鍵與正規化（全形、大小寫、電話格式） | 107 | `app/services/bulk_match.py` `station_key()` / `ticket_key()` / `task_key()` / `normalize_text()` / `normalize_phone_key()` |
+| 檔內同鍵全部失敗 | 113 | `bulk_match.py` `duplicate_key_rows()`；`bulk_import.py` `_collision_error()` |
+| 比對到多筆只報筆數 | 210 | `bulk_import.py` `_ambiguous_error()` |
+| 動態欄位依 config 驗證 | 117 | `app/services/bulk_validate.py` `coerce()` / `validate_row()` |
+| 遮蔽過的聯絡資料不能匯回 | 109 | `bulk_validate.py` `_check_masked_contact()` |
+| 匯出逐列 PII 遮蔽 | 109 | `bulk_export.py` `_pii_decider()` / `_contact_fields()` |
+| 更新列丟掉比對鍵與僅新增欄位 | 108 | `bulk_validate.py` `writable_values()` |
+| 新任務掛在既有求助單下仍帶檔案的值 | 240 | `bulk_validate.py` `values_for()`；`bulk_import.py` `_write_ticket()` → `_write_task()` |
+| 有寬度上限的欄位與 int4 範圍 | 241 | `bulk_validate.py` `coerce()` / `_to_integer()`；`bulk_import.py` `_write_all()` 的 `SQLAlchemyError` 防線 |
+| 一列失敗只失敗那一列 | 213 | `bulk_import.py` `_write_all()` / `_recover()` |
+| 領頭列真的會寫入才把後續列當更新 | 211 | `bulk_import.py` `_plan_tickets()` |
+| `partial_rows` 依事實判定 | 212 | `bulk_import.py` `_write_all()`（`RowProgress`） |
+| 錯誤報表內嵌、欄名不衝突 | 112、242 | `bulk_import.py` `_as_report()` / `_error_column_name()`；`app/schemas/bulk.py` |
+| 權限：`*.import` + `*.add` / `*.edit` | 110、111 | `*.import` 由 `bulk_import.py` 的 `preview_*` / `commit_*` 呼叫 `require_scope` 檢查；`*.add` / `*.edit` 與 own/zone 範圍由 `_write_station()` / `_write_ticket()` 呼叫的既有 station/ticket service 檢查（`test_importing_without_the_add_capability_fails_every_new_row`、`test_a_zone_scoped_importer_cannot_update_outside_its_area`）；grant 矩陣由 `test_seed_matrix_matches_adr_111` 釘住 |
+| 動態欄位表納入稽核 | 124 | `alembic/versions/b3f1c07d2a95_audit_dynamic_field_tables.py` |
+| commit 端點 rate limit | 116 | **未實作**（見 §4） |
+
+### 13.2 測試
+
+9 個檔案、142 支測試：
+
+| 檔案 | 涵蓋 |
+|---|---|
+| `tests/test_bulk_columns.py` | 欄位集合、讀寫規則、動態欄位篩選、欄位順序 |
+| `tests/test_bulk_match.py` | 比對鍵正規化、單筆/多筆/零筆比對、檔內同鍵 |
+| `tests/test_bulk_validate.py` | 型別轉換、Enum、座標、遮蔽聯絡資料、列號、更新列丟欄位 |
+| `tests/test_bulk_export.py` | 欄位配置、zone 範圍、空範本、CSV/XLSX 一致、PII 逐列遮蔽、格式先檢查、上限拒絕（ADR-238/239） |
+| `tests/test_bulk_import_station.py` | 預覽不寫入、全部錯誤一次回報、新增/更新、重複匯入不變、zone 限制、錯誤報表、單列失敗不拖垮整份、`partial_rows`、多筆比對不透露 uuid |
+| `tests/test_bulk_import_ticket.py` | 三層寫入、新單一律 pending、狀態機、同單多任務、遮蔽電話不能匯回、ADR-211 的兩種情境、ADR-240/241/242 |
+| `tests/test_bulk_endpoints.py` | HTTP 層：下載標頭、中文型別、400/403、mapping 解析、報表 base64 解碼 |
+| `tests/test_bulk_permissions.py` | capability 命名、grant 矩陣符合 ADR-111、import 必搭 add/edit |
+| `tests/test_bulk_audit.py` | 動態欄位表的 insert/update/delete 都有稽核，且每張稽核表都有 migration 掛 trigger |
