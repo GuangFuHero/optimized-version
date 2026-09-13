@@ -12,10 +12,14 @@ def _tok(sub="Ulink1", name="L"):
     return json.dumps({"sub": sub, "name": name})
 
 
+PASSWORD = "secret"
+STEP_UP = {"step_up": {"password": PASSWORD}}  # ADR-217: linking needs proof of the account
+
+
 async def _password_user(db_session, redis, email="owner@x.com"):
     user = await create_account(
         db_session, name="Owner", contact_type="email", value=email,
-        password_hash=get_password_hash("secret", generate_salt()))
+        password_hash=get_password_hash(PASSWORD, generate_salt()))
     headers = await auth_headers_for(redis, user.uuid)
     return user, headers
 
@@ -32,7 +36,7 @@ async def test_link_attaches_line_identity_no_contact(client, db_session, redis)
     """Linking attaches a LINE identity and adds no new contact."""
     user, headers = await _password_user(db_session, redis)
     user_uuid = user.uuid  # capture before the request commits db_session and expires `user`
-    res = await client.post("/api/v1/auth/link/line", headers=headers, json={"id_token": _tok()})
+    res = await client.post("/api/v1/auth/link/line", headers=headers, json={"id_token": _tok(), **STEP_UP})
     assert res.status_code == 200
     from sqlalchemy import func, select
 
@@ -58,7 +62,7 @@ async def test_link_sub_bound_elsewhere_409(client, db_session, redis):
     """Linking a LINE sub already bound to another account returns 409."""
     await create_account(db_session, name="Other", provider="line", provider_subject="Ulink1")
     _, headers = await _password_user(db_session, redis)
-    res = await client.post("/api/v1/auth/link/line", headers=headers, json={"id_token": _tok()})
+    res = await client.post("/api/v1/auth/link/line", headers=headers, json={"id_token": _tok(), **STEP_UP})
     assert res.status_code == 409
 
 
@@ -66,7 +70,7 @@ async def test_link_sub_bound_elsewhere_409(client, db_session, redis):
 async def test_link_twice_409(client, db_session, redis):
     """Linking a second LINE identity to an already-linked account returns 409."""
     _, headers = await _password_user(db_session, redis)
-    await client.post("/api/v1/auth/link/line", headers=headers, json={"id_token": _tok()})
+    await client.post("/api/v1/auth/link/line", headers=headers, json={"id_token": _tok(), **STEP_UP})
     res = await client.post("/api/v1/auth/link/line", headers=headers,
-                            json={"id_token": _tok(sub="Ulink2")})
+                            json={"id_token": _tok(sub="Ulink2"), **STEP_UP})
     assert res.status_code == 409

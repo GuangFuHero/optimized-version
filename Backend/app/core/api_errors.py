@@ -56,9 +56,31 @@ class ErrorCode(StrEnum):
     SSO_EMAIL_TAKEN = "sso_email_taken"
     SSO_ALREADY_LINKED = "sso_already_linked"
     SSO_LINKED_ELSEWHERE = "sso_linked_elsewhere"
+    # Unlink was asked for a provider this account does not hold, or one this API does not
+    # know. Separate from the "already linked" cases: the remedy is to re-read the account's
+    # login methods, not to pick a different account (ADR-237).
+    SSO_NOT_LINKED = "sso_not_linked"
+    SSO_PROVIDER_UNKNOWN = "sso_provider_unknown"
     # A first login that raced another and could not complete. Distinct from the "taken" cases
     # because the remedy is to retry, not to log in some other way.
     SSO_SIGNIN_RACE = "sso_signin_race"
+
+    # Step-up proof before authentication material changes (ADR-215/217/220/234).
+    # STEP_UP_REQUIRED is not a mistake the caller made: the backend has just delivered a code
+    # (or is asking for the account's password / provider token) and wants the same call again
+    # carrying it. A client that cannot tell it from a generic 422 shows the user an error where
+    # it should show them a field.
+    STEP_UP_REQUIRED = "step_up_required"
+    STEP_UP_INVALID = "step_up_invalid"
+    STEP_UP_THROTTLED = "step_up_throttled"
+    # No channel and no provider to prove against — the remedy is to add a contact, not to retry.
+    NO_PROOF_CHANNEL = "no_proof_channel"
+
+    # The "do not strand this account" guards (ADR-087/218). Both mean the same thing to a user
+    # — this is the last way back in — but they are separate because the remedy differs: add
+    # another contact, versus add another sign-in method.
+    LAST_LOGIN_CHANNEL = "last_login_channel"
+    LAST_LOGIN_METHOD = "last_login_method"
 
     # Throttling
     RATE_LIMITED = "rate_limited"
