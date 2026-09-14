@@ -35,6 +35,13 @@ AUDITED_TABLES = [
     # Feature 013: the deployment's single global project settings row (ADR-090) — changing
     # the disaster types flips a whole batch of dynamic fields, so it is audited.
     "project_settings",
+
+    # Feature 015 (ADR-124): the EAV value tables. They were the only mutable content tables
+    # left out, so a station's stock quantity, a crowd-sourced entry's review status, or a
+    # task's dynamic field could all be changed with no trail whatsoever. Bulk import writes
+    # them in batches, which turns that blind spot from theoretical into easy to hit.
+    "station_properties",
+    "task_properties",
 ]
 
 # PL/pgSQL function that serializes row mutations into JSONB, redacting password_hash
