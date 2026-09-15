@@ -482,7 +482,7 @@ async def _write_ticket(
             priority=fixed.get("priority") or "low",
             task_type=task_type,
             visibility=fixed.get("visibility") or "public",
-            disaster_type=fixed.get("disaster_type"),
+            disaster_types=fixed.get("disaster_types"),
         )
         progress.parent_written = True
         ticket_uuid = str(ticket.uuid)

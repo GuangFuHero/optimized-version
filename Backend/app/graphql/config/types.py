@@ -205,7 +205,8 @@ class UpsertTicketPropertyConfigInput:
 
     Omission semantics are identical to the siblings (ADR-228/168): leaving a field out keeps
     its stored value, so retiring a field is `{propertyName, isActive: false}` and nothing else.
-    Clearing the options is `enumOptions: []`, not null.
+    Null therefore means "unchanged" on every member — clearing one is `enumOptions: []` for
+    the list and `""` for a text member such as `label`, `unit` or `hint`.
     """
 
     property_name: str = strawberry.field(description="The field key to create or update")
@@ -224,7 +225,8 @@ class UpsertTicketPropertyConfigInput:
         ),
     )
     unit: str | None = strawberry.field(
-        default=None, description="Unit suffix for a number field, e.g. 'cm', 'mm'"
+        default=None,
+        description="Unit suffix for a number field, e.g. 'cm', 'mm'; pass \"\" to clear",
     )
     disaster_types: list[str] | None = strawberry.field(
         default=None,
@@ -233,9 +235,12 @@ class UpsertTicketPropertyConfigInput:
             "be an active key from `disasterTypes` — an unknown one is rejected, not stored"
         ),
     )
-    label: str | None = strawberry.field(default=None, description="Display text for the field")
+    label: str | None = strawberry.field(
+        default=None, description='Display text for the field; pass "" to clear'
+    )
     hint: str | None = strawberry.field(
-        default=None, description="Guidance and safety text shown under the field"
+        default=None,
+        description='Guidance and safety text shown under the field; pass "" to clear',
     )
     is_active: bool | None = strawberry.field(
         default=None, description="Set false to retire the field without deleting its values"

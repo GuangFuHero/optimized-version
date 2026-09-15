@@ -82,7 +82,7 @@ async def _user_with(db, redis, name: str, *perms) -> dict:
 async def _importer(db_session, redis) -> dict:
     db_session.add(StationPropertyConfig(
         station_type="shelter", property_name="capacity_total",
-        data_type="Integer", enum_options=None,
+        data_type="number", enum_options=None,
     ))
     return await _user_with(
         db_session, redis, "HttpImporter",
@@ -150,7 +150,7 @@ async def test_export_without_the_capability_is_403(client, db_session, redis):
 async def test_ticket_export_is_wired_up_too(client, db_session, redis):
     """Both entity types are reachable, with their own filename."""
     db_session.add(TaskPropertyConfig(
-        task_type="rescue", property_name="people_count", data_type="Integer", enum_options=None,
+        task_type="rescue", property_name="people_count", data_type="number", enum_options=None,
     ))  # ADR-214: the type has to be one the project knows about
     headers = await _user_with(db_session, redis, "TicketExporter", Perm.TICKET_EXPORT)
 
@@ -181,7 +181,7 @@ async def test_a_cjk_type_downloads_instead_of_500ing(client, db_session, redis)
     """Starlette encodes headers as latin-1; a raw CJK name there is a 500, not a download."""
     db_session.add(StationPropertyConfig(
         station_type="避難所", property_name="capacity_total",
-        data_type="Integer", enum_options=None,
+        data_type="number", enum_options=None,
     ))
     headers = await _importer(db_session, redis)
 

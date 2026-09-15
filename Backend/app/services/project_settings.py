@@ -69,16 +69,18 @@ async def update_project_settings(
             "第一次設定必須提供 name（災害名稱）"
         )
     if "disaster_types" in values:
-        # Feature 018: the vocabulary is closed now, so a label that is not a known key is
-        # rejected outright rather than merely warned about. `_unmatched_disaster_types` below
-        # still earns its place — it catches the *other* failure, a real disaster type that no
-        # field has been configured for yet, which is legitimate and only worth a warning.
+        # Feature 018 closed the vocabulary, so an unknown label is now rejected outright;
+        # `_unmatched_disaster_types` below still catches the other case, a real type no field
+        # is configured for yet. `keep` lets the already-saved labels through even once
+        # retired, so a PATCH resending the stored list is not refused (ADR-266).
         #
-        # Re-raised as ProjectSettingsValidationError because this path is REST, not GraphQL:
-        # the admin endpoint maps that to 422, whereas a bare ValueError escapes as a 500 and
-        # tells the operator nothing about which label was wrong.
+        # Re-raised as ProjectSettingsValidationError because this path is REST: the admin
+        # endpoint maps that to 422, while a bare ValueError escapes as an unexplained 500.
         try:
-            validated = await validate_disaster_types(db, values["disaster_types"])
+            validated = await validate_disaster_types(
+                db, values["disaster_types"],
+                keep=(current.disaster_types if current else []) or [],
+            )
         except ValueError as err:
             raise ProjectSettingsValidationError(str(err)) from err
         values = {**values, "disaster_types": validated}

@@ -46,27 +46,34 @@ def normalize_disaster_types(values: Iterable[str]) -> list[str]:
     return sorted(label for label in normalized if label)
 
 
-async def validate_disaster_types(db: AsyncSession, values: Iterable[str]) -> list[str]:
+async def validate_disaster_types(
+    db: AsyncSession, values: Iterable[str], *, keep: Iterable[str] = ()
+) -> list[str]:
     """Normalize, then reject any label that is not an active `disaster_types.key`.
 
     Raises `ValueError` — allow-listed by the `MaskErrors` extension in
     `app/graphql/schema.py`, so the caller is told which label was wrong instead of getting
     "Unexpected error."
 
-    Inactive types are refused for *writes* while staying readable, which is what `is_active`
-    is for: a type retired mid-response must not silently vanish from the tickets already
-    filed under it, but nothing new should be filed under it either.
+    `keep` is what the record already carries; those labels pass whatever their `is_active`,
+    so only labels genuinely being added are held to it (ADR-266). Without it, retiring a type
+    froze every record scoped to it — ADR-244 promised retirement stops *new* filings, but the
+    check ran over the whole submitted list.
     """
     labels = normalize_disaster_types(values)
     if not labels:
         return labels
+    already = set(normalize_disaster_types(keep))
+    to_check = [label for label in labels if label not in already]
+    if not to_check:
+        return labels
     result = await db.execute(
         select(DisasterType.key).where(
-            DisasterType.key.in_(labels), DisasterType.is_active.is_(True)
+            DisasterType.key.in_(to_check), DisasterType.is_active.is_(True)
         )
     )
     known = set(result.scalars().all())
-    unknown = [label for label in labels if label not in known]
+    unknown = [label for label in to_check if label not in known]
     if unknown:
         raise ValueError(
             f"未知或已停用的災害型別：{', '.join(unknown)}。"

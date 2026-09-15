@@ -64,10 +64,11 @@ class RequestMutation:
     async def update_ticket(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateTicketInput
     ) -> TicketType:
-        """Update a ticket's status, priority, title, or review notes.
+        """Update a ticket's status, priority, title, address, or review notes.
 
         Status changes are validated against VALID_TRANSITIONS (e.g. pending→in_progress).
-        Requires ticket.edit permission with scope check. Returns the updated TicketType.
+        `secondaryLocation` replaces the address wholesale and creates it when the ticket was
+        filed without one (ADR-268). Requires ticket.edit with scope check.
 
         Note: verification_status is NOT set here — that is a review decision, handled by
         review_ticket under ticket.review (ADR-049).
@@ -93,6 +94,11 @@ class RequestMutation:
         ticket = await ticket_service.update_ticket(
             info.context["db"], actor=require_authenticated(info),
             uuid=str(uuid), status=input.status, changes=changes,
+            secondary_location=(
+                secondary_location_to_dict(input.secondary_location)
+                if input.secondary_location is not None
+                else None
+            ),
         )
         return TicketType.from_model(ticket)
 

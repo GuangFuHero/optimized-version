@@ -1,14 +1,14 @@
 """Shared GraphQL types reused across domains.
 
-`SecondaryLocationInput` and its mapper live here rather than in `geo/types.py` because
-feature 018 gave tickets an address too, and `geo/types.py` already imports `PhotoType` from
-`tickets/types.py` — putting the input in either module makes the two import each other. Only
-the *input* moved: `SecondaryLocationType`, the output, is still geo-only, since a ticket's
-address is the reporter's home and exposing it needs a PII decision (ADR-146) that this
-feature did not take.
+`SecondaryLocationInput`, its output type and their mapper live here rather than in
+`geo/types.py` because feature 018 gave tickets an address too, and `geo/types.py` already
+imports `PhotoType` from `tickets/types.py` — leaving them in either module makes the two
+import each other. A station's address stays public; a ticket's is gated on `ticket.view_pii`
+at its own resolver (ADR-268).
 """
 
 import enum
+from uuid import UUID
 
 import strawberry
 
@@ -85,6 +85,74 @@ class AccessStatus(enum.Enum):
     restricted = "restricted"
     inaccessible = "inaccessible"
     unknown = "unknown"
+
+
+@strawberry.type
+class SecondaryLocationType:
+    """GraphQL type for secondary address or pole location details."""
+
+    uuid: UUID
+    geometry_uuid: str = strawberry.field(
+        description="UUID of the parent station or ticket this location belongs to"
+    )
+    location_type: str = strawberry.field(
+        description="Type of secondary location: 'address' or 'pole'"
+    )
+    county: str | None = None
+    city: str | None = None
+    lane: str | None = None
+    alley: str | None = None
+    no: str | None = None
+    building_section: str | None = strawberry.field(
+        default=None, description="樓棟／區域, e.g. 'A棟', '東翼'"
+    )
+    floor: str | None = strawberry.field(
+        default=None, description="Floor label as spoken: 'B1', '1F', 'RF' — never coerced to a number"
+    )
+    room: str | None = strawberry.field(
+        default=None, description="房號／空間, e.g. '302', '樓梯間'"
+    )
+    space_description: str | None = strawberry.field(
+        default=None, description="空間描述, e.g. '三房兩廳'"
+    )
+    victim_space: str | None = strawberry.field(
+        default=None, description="求救者所在空間, e.g. '主臥衣櫃'"
+    )
+    access_status: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Whether the space can be entered: 'accessible', 'restricted', 'inaccessible', "
+            "'unknown'. A current observation, not a safety certification"
+        ),
+    )
+    landmark_note: str | None = strawberry.field(
+        default=None,
+        description="地標補充 — how to find the entrance when coordinates are not enough",
+    )
+    pole_id: str | None = strawberry.field(
+        default=None,
+        description="Utility pole identifier (only set when location_type is 'pole')",
+    )
+    pole_type: str | None = strawberry.field(
+        default=None,
+        description="Type of utility pole, e.g. '電線桿' (electricity pole), '電話線桿' (telephone pole)",
+    )
+    pole_note: str | None = strawberry.field(
+        default=None, description="Additional notes about the pole location"
+    )
+
+    @classmethod
+    def from_model(cls, m) -> "SecondaryLocationType":
+        """Build from a SQLAlchemy model instance."""
+        return cls(
+            uuid=m.uuid, geometry_uuid=m.geometry_uuid,
+            location_type=m.location_type,
+            county=m.county, city=m.city, lane=m.lane, alley=m.alley,
+            no=m.no, building_section=m.building_section, floor=m.floor, room=m.room,
+            space_description=m.space_description, victim_space=m.victim_space,
+            access_status=m.access_status, landmark_note=m.landmark_note,
+            pole_id=m.pole_id, pole_type=m.pole_type, pole_note=m.pole_note,
+        )
 
 
 @strawberry.input

@@ -204,10 +204,14 @@ class TicketPropertyConfigRepository(GenericRepository[TicketPropertyConfig]):
         reporter has not said what kind of disaster this is, so only the universal rows (those
         whose own `disaster_types` is empty) apply.
 
+        The argument is normalized first (ADR-265): `&&` is exact string equality per
+        element, so an un-lowered `"Flood"` used to render an empty form rather than error.
+
         Ordering is `(property_name, uuid)`. There is no `sort_order` column on this table
         (ADR-248), but the order still has to be total or the same query can come back
         differently twice running (ADR-227).
         """
+        disaster_types = normalize_disaster_types(disaster_types)
         universal = func.cardinality(self.model.disaster_types) == 0
         if disaster_types:
             # `&&` is PostgreSQL's array-intersection operator: a two-disaster ticket is one
@@ -318,20 +322,19 @@ def _optional_config_fields(
 
 
 async def disaster_types_in_use(db: AsyncSession) -> set[str]:
-    """Every disaster label that at least one config row is scoped to.
+    """Every disaster label that at least one *station or task* config row is scoped to.
 
-    The vocabulary of real disaster types lives in PM-Scure's spec, not in this repository
-    (ADR-091), so there is nothing to validate a label against. What *is* knowable is which
-    labels the configured fields actually use, and that is enough to tell an operator that
-    the label they just saved matches none of them — the difference between a typo and a
-    disaster nobody has configured fields for yet (ADR-169).
+    Its one caller warns that a saved `project_settings.disaster_types` reaches no configured
+    field (ADR-169), and project settings only scope those two tables — ticket fields resolve
+    against each ticket's own types. Counting them here made the warning unreachable, since
+    the migration seeds ticket fields for all six types (ADR-264).
 
-    Rows with an empty `disaster_types` are universal ("every type") and contribute no label,
-    which is correct here: they stay enabled whatever the deployment is set to, so they can
-    never be the thing a mistyped label was meant to reach.
+    Rows with an empty `disaster_types` are universal ("every type") and contribute no label:
+    they stay enabled whatever the deployment is set to, so they can never be the thing a
+    mistyped label was meant to reach.
     """
     labels: set[str] = set()
-    for model in (StationPropertyConfig, TaskPropertyConfig, TicketPropertyConfig):
+    for model in (StationPropertyConfig, TaskPropertyConfig):
         result = await db.execute(select(func.unnest(model.disaster_types)).distinct())
         labels.update(result.scalars().all())
     return labels

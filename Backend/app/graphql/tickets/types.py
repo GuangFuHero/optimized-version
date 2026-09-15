@@ -13,7 +13,13 @@ from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
-from app.graphql.shared import PageInfo, SecondaryLocationInput, TriState, Visibility
+from app.graphql.shared import (
+    PageInfo,
+    SecondaryLocationInput,
+    SecondaryLocationType,
+    TriState,
+    Visibility,
+)
 
 
 @strawberry.enum
@@ -466,6 +472,27 @@ class TicketType:
         """Resolve all active tasks under this ticket."""
         return await info.context["loaders"]["tasks_by_ticket"].load(str(self.uuid))
 
+    @strawberry.field(
+        description=(
+            "Street address and space detail for where help is needed. Null to a caller "
+            "without ticket.view_pii here, and null when the ticket carries no address"
+        )
+    )
+    async def secondary_location(
+        self, info: strawberry.types.Info
+    ) -> SecondaryLocationType | None:
+        """Resolve the ticket's address, or null when the caller is out of PII scope.
+
+        Gated where the station's identical field is not (ADR-268): a shelter's address is
+        already on the public map, while a ticket's is the reporter's own home — the ADR-146
+        decision that kept this field off `TicketType` until now, taken rather than deferred.
+        """
+        if not await self._pii_visible(info):
+            return None
+        return await info.context["loaders"]["secondary_location_by_geometry"].load(
+            str(self.uuid)
+        )
+
     @strawberry.field
     async def disaster_details(
         self, info: strawberry.types.Info
@@ -592,6 +619,14 @@ class UpdateTicketInput:
     )
     immediate_danger_reported: TriState | None = strawberry.field(
         default=strawberry.UNSET, description="立即生命危險 — pass null to unset"
+    )
+    secondary_location: SecondaryLocationInput | None = strawberry.field(
+        default=None,
+        description=(
+            "Replace the ticket's street address and space detail, creating it if the ticket "
+            "was filed without one. A whole-input replacement, not a patch — omitted members "
+            "are written as null"
+        ),
     )
 
 

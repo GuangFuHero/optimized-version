@@ -13,10 +13,11 @@ from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
-from app.graphql.shared import (  # noqa: F401 -- AccessStatus/SecondaryLocationInput/
-    AccessStatus,  # secondary_location_to_dict are re-exported for existing geo callers
+from app.graphql.shared import (  # noqa: F401 -- the address types and their mapper are
+    AccessStatus,  # re-exported here for existing geo callers
     PageInfo,
     SecondaryLocationInput,
+    SecondaryLocationType,
     Visibility,
     secondary_location_to_dict,
 )
@@ -40,74 +41,6 @@ class BoundsInput:
     max_lat: float = strawberry.field(description="North boundary latitude")
     min_lng: float = strawberry.field(description="West boundary longitude")
     max_lng: float = strawberry.field(description="East boundary longitude")
-
-
-@strawberry.type
-class SecondaryLocationType:
-    """GraphQL type for secondary address or pole location details."""
-
-    uuid: UUID
-    geometry_uuid: str = strawberry.field(
-        description="UUID of the parent station this location belongs to"
-    )
-    location_type: str = strawberry.field(
-        description="Type of secondary location: 'address' or 'pole'"
-    )
-    county: str | None = None
-    city: str | None = None
-    lane: str | None = None
-    alley: str | None = None
-    no: str | None = None
-    building_section: str | None = strawberry.field(
-        default=None, description="樓棟／區域, e.g. 'A棟', '東翼'"
-    )
-    floor: str | None = strawberry.field(
-        default=None, description="Floor label as spoken: 'B1', '1F', 'RF' — never coerced to a number"
-    )
-    room: str | None = strawberry.field(
-        default=None, description="房號／空間, e.g. '302', '樓梯間'"
-    )
-    space_description: str | None = strawberry.field(
-        default=None, description="空間描述, e.g. '三房兩廳'"
-    )
-    victim_space: str | None = strawberry.field(
-        default=None, description="求救者所在空間, e.g. '主臥衣櫃'"
-    )
-    access_status: str | None = strawberry.field(
-        default=None,
-        description=(
-            "Whether the space can be entered: 'accessible', 'restricted', 'inaccessible', "
-            "'unknown'. A current observation, not a safety certification"
-        ),
-    )
-    landmark_note: str | None = strawberry.field(
-        default=None,
-        description="地標補充 — how to find the entrance when coordinates are not enough",
-    )
-    pole_id: str | None = strawberry.field(
-        default=None,
-        description="Utility pole identifier (only set when location_type is 'pole')",
-    )
-    pole_type: str | None = strawberry.field(
-        default=None,
-        description="Type of utility pole, e.g. '電線桿' (electricity pole), '電話線桿' (telephone pole)",
-    )
-    pole_note: str | None = strawberry.field(
-        default=None, description="Additional notes about the pole location"
-    )
-
-    @classmethod
-    def from_model(cls, m) -> "SecondaryLocationType":
-        """Build from a SQLAlchemy model instance."""
-        return cls(
-            uuid=m.uuid, geometry_uuid=m.geometry_uuid,
-            location_type=m.location_type,
-            county=m.county, city=m.city, lane=m.lane, alley=m.alley,
-            no=m.no, building_section=m.building_section, floor=m.floor, room=m.room,
-            space_description=m.space_description, victim_space=m.victim_space,
-            access_status=m.access_status, landmark_note=m.landmark_note,
-            pole_id=m.pole_id, pole_type=m.pole_type, pole_note=m.pole_note,
-        )
 
 
 @strawberry.type

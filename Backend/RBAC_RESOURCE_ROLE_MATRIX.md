@@ -144,6 +144,11 @@
 
 > 查詢的 `includeInactive: true`（管理端才看得到已停用欄位）在 `dynamic_field.view` 之外**額外**要求
 > `dynamic_field.edit`（ADR-226）：看得到誰把欄位退役，屬於「有權退役」的一環，而不是「有權填表單」。
+>
+> **例外：`ticketPropertyConfigs` 與 `disasterTypes` 改由公開的 `ticket.view` 把關（ADR-263）。**
+> 那是民眾填的通報單表單本身，而 `ticket.disasterTypes` / `disasterDetails` 本來就匿名可讀 ——
+> 擋住只會讓持有 `ticket.add` 的民眾送得出單、看不到題目。`includeInactive` 仍各自要
+> `dynamic_field.edit` / `project.edit`。
 
 ### 專案設定 Project Settings
 

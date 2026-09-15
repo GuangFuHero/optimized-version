@@ -94,6 +94,9 @@ HISTORY_MODELS = {
 _ADDRESS_COLUMNS = (
     "county", "city", "lane", "alley", "no", "floor", "room",
     "pole_id", "pole_type", "pole_note",
+    # Feature 018 (ADR-249) added these five to the same table, so they follow whatever tier
+    # the entity gives the rest of its address — PII on a ticket, public on a station.
+    "building_section", "space_description", "victim_space", "access_status", "landmark_note",
 )
 
 _TICKET_FIELDS = {
@@ -104,7 +107,12 @@ _TICKET_FIELDS = {
     "task_type": _public(),
     "visibility": _public(),
     "verification_status": _public(),
-    "disaster_type": _public(),
+    "disaster_types": _public(),
+    # Feature 018: the reporter's own triage answers, gated exactly like their phone number
+    # because `TicketType` withholds them without `ticket.view_pii` (ADR-254). No mask — a
+    # tri-state has no shape to redact, so the PII tier simply hides it.
+    "person_trapped_reported": _pii(),
+    "immediate_danger_reported": _pii(),
     "contact_name": _pii(mask_name),
     "contact_email": _pii(mask_email),
     "contact_phone": _pii(mask_phone),

@@ -411,7 +411,7 @@ secondary_locations {
     string space_description "nullable, 空間描述 e.g. 三房兩廳 (feature 018)"
     string victim_space "nullable, 求救者所在空間 e.g. 主臥衣櫃 (feature 018)"
     string access_status "nullable, accessible/restricted/inaccessible/unknown — a current observation, NOT a safety certification"
-    string landmark_note "nullable, 地標補充 — PII, masked like the rest of the address; EXCLUDED from search_text"
+    string landmark_note "nullable, 地標補充 — EXCLUDED from search_text"
     string pole_id "nullable, pole only"
     string pole_type "nullable, pole only"
     uuid pole_photo_uuid FK "nullable, pole only, FK to photos (see Tickets diagram), ON DELETE SET NULL"
@@ -423,6 +423,9 @@ secondary_locations {
 %% access_status/landmark_note) are deliberately NOT in search_text (ADR-250). Only stations
 %% are searchable through this table at all (ADR-146), and which room a trapped person is
 %% hiding in is not something to make findable by substring.
+%% NOTE: who may READ a row depends on the parent. A station's address is public (it is on the
+%% map already); a ticket's needs ticket.view_pii, and TicketType.secondaryLocation resolves to
+%% null without it (ADR-268).
 base_geometries ||--|| secondary_locations : "has secondary location"
 
 %% Inheritance: Closure Area inherits from base_geometries

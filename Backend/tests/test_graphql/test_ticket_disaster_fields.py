@@ -15,6 +15,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import delete, select, text
 
+from app.core.identity import encode_act
 from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
@@ -23,6 +24,7 @@ from app.models.disaster_type import DisasterType
 from app.models.property_config import TicketPropertyConfig
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.ticket_disaster_detail import TicketDisasterDetail
+from app.repositories.session_repository import SessionRepository
 from tests.test_graphql.conftest import auth_header, test_db
 
 _CONFIG_ROLE = "Disaster Field Admin (test)"
@@ -82,7 +84,7 @@ async def audit_triggers():
 
 
 @pytest_asyncio.fixture
-async def field_admin_auth():
+async def field_admin_auth(redis):
     """A token holding the four capabilities this feature's write paths need.
 
     `content_admin_auth` covers announcements, not dynamic fields, and no shared fixture
@@ -112,8 +114,13 @@ async def field_admin_auth():
         db.add(user)
         await db.flush()
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
-        # Same shape the shared fixtures mint (see conftest._create_user_with_role).
-        return str(user.uuid), create_access_token(data={"sub": str(user.uuid)})
+        role_uuid = str(role.uuid)
+        user_uuid = str(user.uuid)
+    # Same shape the shared fixtures mint: a token naming the identity it acts as, backed by
+    # a live session (features 010 + 014). A bare `create_access_token` resolves to no grants.
+    act = encode_act(role_uuid, None)
+    sid, _ = await SessionRepository(redis).create_session(user_uuid, "test", act=act)
+    return user_uuid, create_access_token(data={"sub": user_uuid}, sid=sid, act=act)
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -784,3 +791,220 @@ async def test_a_known_disaster_is_still_accepted_on_every_config_table(
         body = resp.json()
         assert body.get("errors") is None, body
         assert list(body["data"].values())[0]["disasterTypes"] == ["flood"]
+
+
+# --------------------------------------------------------------------------------------
+# PR #50 review round two (ADR-263~272)
+# --------------------------------------------------------------------------------------
+
+DISASTER_TYPES_QUERY = "query { disasterTypes { key label isActive } }"
+
+READ_ADDRESS = """
+query ($uuid: UUID!) {
+  ticket(uuid: $uuid) {
+    secondaryLocation { no floor room victimSpace landmarkNote accessStatus }
+  }
+}
+"""
+
+UPDATE_TICKET = """
+mutation ($uuid: UUID!, $input: UpdateTicketInput!) {
+  updateTicket(uuid: $uuid, input: $input) { uuid disasterTypes }
+}
+"""
+
+
+async def test_a_reporter_can_load_the_ticket_form_without_a_config_capability(client):
+    """The form's own schema is gated on `ticket.view`, which is public (ADR-263).
+
+    Gated on `dynamic_field.view` it was unreachable for every seeded role but `super_admin`,
+    so a citizen holding `ticket.add` could file a report but never see its questions.
+    """
+    await _seed_fields()
+
+    configs = await client.post("/graphql", json={
+        "query": TICKET_CONFIGS, "variables": {"disasterTypes": ["flood"]},
+    })
+    types = await client.post("/graphql", json={"query": DISASTER_TYPES_QUERY})
+
+    assert configs.json().get("errors") is None, configs.json()
+    assert configs.json()["data"]["ticketPropertyConfigs"], "anonymous got an empty form"
+    assert types.json().get("errors") is None, types.json()
+    assert {t["key"] for t in types.json()["data"]["disasterTypes"]} == {k for k, _ in _KEYS}
+
+
+async def test_seeing_retired_fields_still_needs_the_capability_to_retire_them(client):
+    """Public reading is the *form*, not the management view (ADR-226 survives ADR-263)."""
+    resp = await client.post("/graphql", json={
+        "query": "query { ticketPropertyConfigs(disasterTypes: [], includeInactive: true)"
+                 " { propertyName } }",
+    })
+
+    assert resp.json().get("errors"), "includeInactive leaked to an anonymous caller"
+
+
+async def test_a_capitalised_disaster_type_matches_the_same_fields_as_a_lower_case_one(
+    client, coordinator_auth
+):
+    """`&&` is exact per element, so an un-lowered argument used to match nothing (ADR-265)."""
+    await _seed_fields()
+    _, token = coordinator_auth
+
+    assert await _names(client, token, ["Flood"]) == await _names(client, token, ["flood"])
+
+
+async def test_a_reporter_can_drop_one_disaster_type_after_another_was_retired(
+    client, coordinator_auth
+):
+    """Retiring a type must stop new filings, not freeze the tickets already carrying it.
+
+    The check ran over the whole submitted list, so removing `flood` from a
+    {flood, landslide} ticket resent `landslide` and was refused (ADR-266).
+    """
+    _, token = coordinator_auth
+    ticket = await _create_ticket(client, token, disasterTypes=["flood", "landslide"])
+    async with test_db() as db:
+        await db.execute(text(
+            "UPDATE disaster_types SET is_active = false WHERE key = 'landslide'"
+        ))
+
+    resp = await client.post("/graphql", json={
+        "query": UPDATE_TICKET,
+        "variables": {"uuid": ticket["uuid"], "input": {"disasterTypes": ["landslide"]}},
+    }, headers=auth_header(token))
+    body = resp.json()
+
+    assert body.get("errors") is None, body
+    assert body["data"]["updateTicket"]["disasterTypes"] == ["landslide"]
+
+
+async def test_a_retired_type_still_cannot_be_added_to_a_ticket_that_lacks_it(
+    client, coordinator_auth
+):
+    """The other half of ADR-266: only labels the record already carries are grandfathered."""
+    _, token = coordinator_auth
+    ticket = await _create_ticket(client, token, disasterTypes=["flood"])
+    async with test_db() as db:
+        await db.execute(text(
+            "UPDATE disaster_types SET is_active = false WHERE key = 'landslide'"
+        ))
+
+    resp = await client.post("/graphql", json={
+        "query": UPDATE_TICKET,
+        "variables": {
+            "uuid": ticket["uuid"], "input": {"disasterTypes": ["flood", "landslide"]},
+        },
+    }, headers=auth_header(token))
+    errors = resp.json().get("errors")
+
+    assert errors, "a retired type was added to a ticket that did not have it"
+    assert "landslide" in errors[0]["message"]
+
+
+async def test_a_mistyped_door_number_can_be_corrected_after_filing(client, coordinator_auth):
+    """The address was create-only, so the one field a rescue team needs could not be fixed."""
+    _, token = coordinator_auth
+    ticket = await _create_ticket(client, token, secondaryLocation={
+        "locationType": "address", "county": "花蓮縣", "no": "5號", "floor": "3F",
+    })
+
+    resp = await client.post("/graphql", json={
+        "query": UPDATE_TICKET,
+        "variables": {
+            "uuid": ticket["uuid"],
+            "input": {"secondaryLocation": {
+                "locationType": "address", "county": "花蓮縣", "no": "15號", "floor": "3F",
+                "victimSpace": "主臥衣櫃",
+            }},
+        },
+    }, headers=auth_header(token))
+
+    assert resp.json().get("errors") is None, resp.json()
+    async with test_db() as db:
+        rows = (await db.execute(text(
+            "SELECT no, victim_space FROM secondary_locations WHERE geometry_uuid = :g"
+        ), {"g": ticket["uuid"]})).all()
+
+    assert len(rows) == 1, "the update added a second address instead of replacing it"
+    assert (rows[0].no, rows[0].victim_space) == ("15號", "主臥衣櫃")
+
+
+async def test_a_ticket_filed_without_an_address_can_be_given_one(client, coordinator_auth):
+    """Nothing to replace is still a write, or the reporter can never supply what they omitted."""
+    _, token = coordinator_auth
+    ticket = await _create_ticket(client, token)
+
+    resp = await client.post("/graphql", json={
+        "query": UPDATE_TICKET,
+        "variables": {
+            "uuid": ticket["uuid"],
+            "input": {"secondaryLocation": {"locationType": "address", "no": "5號"}},
+        },
+    }, headers=auth_header(token))
+
+    assert resp.json().get("errors") is None, resp.json()
+    async with test_db() as db:
+        stored = (await db.execute(text(
+            "SELECT no FROM secondary_locations WHERE geometry_uuid = :g"
+        ), {"g": ticket["uuid"]})).scalar_one()
+    assert stored == "5號"
+
+
+async def test_the_ticket_address_is_withheld_from_callers_without_pii_scope(
+    client, coordinator_auth
+):
+    """A ticket's address is the reporter's home — the ADR-146 decision, taken (ADR-268).
+
+    Denial is a null `secondaryLocation`, never an error, matching the triage flags above.
+    A station's identical field stays public; it is already on the map.
+    """
+    _, token = coordinator_auth
+    ticket = await _create_ticket(client, token, secondaryLocation={
+        "locationType": "address", "no": "5號", "victimSpace": "主臥衣櫃",
+        "landmarkNote": "廟旁邊，紅色鐵門",
+    })
+
+    anon = await client.post("/graphql", json={
+        "query": READ_ADDRESS, "variables": {"uuid": ticket["uuid"]},
+    })
+    body = anon.json()
+
+    assert body.get("errors") is None, body
+    assert body["data"]["ticket"]["secondaryLocation"] is None
+
+    privileged = await client.post("/graphql", json={
+        "query": READ_ADDRESS, "variables": {"uuid": ticket["uuid"]},
+    }, headers=auth_header(token))
+    seen = privileged.json()["data"]["ticket"]["secondaryLocation"]
+
+    assert seen["no"] == "5號"
+    assert seen["victimSpace"] == "主臥衣櫃"
+
+
+async def test_an_oversized_disaster_detail_write_is_refused_with_a_readable_message(
+    client, coordinator_auth
+):
+    """ADR-092 leaves the vocabulary unchecked; ADR-267 bounds the volume.
+
+    The values are readable without an account and copied into `audit_logs`, so an unbounded
+    write turned one ticket into a megabyte store. A too-long key used to reach the column and
+    come back as "Unexpected error." instead of naming itself.
+    """
+    _, token = coordinator_auth
+    ticket = await _create_ticket(client, token, disasterTypes=["flood"])
+
+    async def _set(details):
+        return (await client.post("/graphql", json={
+            "query": SET_DETAILS, "variables": {"uuid": ticket["uuid"], "details": details},
+        }, headers=auth_header(token))).json()
+
+    too_long_value = await _set([{"propertyName": "note", "values": ["x" * 501]}])
+    too_many_values = await _set([{"propertyName": "note", "values": [str(i) for i in range(51)]}])
+    too_long_key = await _set([{"propertyName": "k" * 101, "values": ["1"]}])
+
+    for body in (too_long_value, too_many_values, too_long_key):
+        assert body.get("errors"), body
+        assert "Unexpected error" not in body["errors"][0]["message"], body
+
+    within = await _set([{"propertyName": "note", "values": ["x" * 500, "ok"]}])
+    assert within.get("errors") is None, within

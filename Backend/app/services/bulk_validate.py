@@ -17,6 +17,7 @@ from app.services.bulk_columns import (
     ENUM,
     FLOAT,
     INTEGER,
+    LIST,
     ColumnSpec,
 )
 
@@ -77,6 +78,11 @@ def _to_boolean(value: str) -> bool:
     raise ValueError(f"「{value}」不是是/否值")
 
 
+def _to_list(value: str) -> list[str]:
+    """Split one cell into several values on a comma, ASCII or full-width."""
+    return [part.strip() for part in value.replace("，", ",").split(",") if part.strip()]
+
+
 def _to_enum(value: str, options: tuple[str, ...]) -> str:
     if value not in options:
         raise ValueError(f"「{value}」不是允許的值；可用：{'、'.join(options)}")
@@ -100,6 +106,8 @@ def coerce(column: ColumnSpec, raw: str):
         return _to_boolean(value)
     if column.data_type == ENUM:
         return _to_enum(value, column.enum_options or ())
+    if column.data_type == LIST:
+        return _to_list(value)
     return value
 
 

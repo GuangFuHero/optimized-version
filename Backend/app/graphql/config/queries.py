@@ -1,8 +1,9 @@
-"""GraphQL queries for station and task property configuration schemas.
+"""GraphQL queries for the station, task and ticket dynamic-field schemas.
 
-Read-checked per ADR-027: dynamic_field.view is NOT public (unlike station/ticket) — no
-existing behavior requires anonymous access to config schema metadata, so it stays
-login-gated. Checkpoint 1 only: these are global schema definitions, not user-owned rows.
+Checkpoint 1 only: these are global schema definitions, not user-owned rows. The station and
+task queries stay login-gated on `dynamic_field.view` (ADR-027); the two ticket-side queries
+are gated on the public `ticket.view` instead, because the data they describe is already
+public — see their docstrings (ADR-263).
 """
 
 import strawberry
@@ -102,10 +103,12 @@ class PropertyConfigQuery:
         A two-disaster ticket gets the union, each field once: `access_blocked` is a single
         row scoped to both 水災 and 土石流, so it cannot appear twice or disagree with itself.
 
-        Ordered by property_name then uuid. Requires dynamic_field.view;
-        `includeInactive: true` additionally requires dynamic_field.edit (ADR-226).
+        Ordered by property_name then uuid. Gated on the public `ticket.view` (ADR-263):
+        `dynamic_field.view` put the form's own questions out of reach of the citizen holding
+        `ticket.add`, and `disasterDetails` is public anyway — without these labels it reads
+        as bare keys. `includeInactive: true` still requires dynamic_field.edit (ADR-226).
         """
-        await check_permission(info, Perm.FIELD_VIEW)
+        await check_permission(info, Perm.TICKET_VIEW)
         if include_inactive:
             await check_permission(info, Perm.FIELD_EDIT)
         db = info.context["db"]
@@ -123,12 +126,13 @@ class PropertyConfigQuery:
         This is the picker behind `tickets.disasterTypes`, `projectSettings.disasterTypes` and
         every field config's `disasterTypes`. All four agree by exact string equality on `key`.
 
-        Gated by project.view rather than dynamic_field.view: the vocabulary is what the
-        project settings are chosen from, not a property of any one field.
+        Gated on the public `ticket.view` (ADR-263): every ticket already publishes its own
+        `disasterTypes`, so withholding the table that maps those keys to 水災／土石流 only
+        leaves the reporter's type picker empty.
         `includeInactive: true` needs project.edit, on the ADR-226 reasoning — seeing what
         somebody retired belongs with the right to retire it.
         """
-        await check_permission(info, Perm.PROJECT_VIEW)
+        await check_permission(info, Perm.TICKET_VIEW)
         if include_inactive:
             await check_permission(info, Perm.PROJECT_EDIT)
         items = await disaster_type_repository.list_all(

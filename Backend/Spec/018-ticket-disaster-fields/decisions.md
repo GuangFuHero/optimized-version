@@ -319,3 +319,142 @@ ticket 側完全相同的兩行 `validate_disaster_types`。
 ◾ `_FIELD_DATA_TYPES` 在 migration 內凍結一份，不讀 `FieldDataType`，
 理由與 `_FEATURE_018_AUDITED_TABLES` 相同：歷史 migration 不該追著後續功能擴充的 enum 跑。
 日後新增控制項是「新一支 revision 重建約束」，不是回頭改這裡。
+
+---
+
+## PR #50 審查修正第二輪（ADR-263~272）
+
+第二輪審查在真實 PostGIS 實例上端對端實測，並把 `origin/main` 併進來重跑全套測試。
+以下十條全部有可重現的失敗案例。
+
+### ADR-263 `ticketPropertyConfigs` 與 `disasterTypes` 改由 `ticket.view` 把關
+
+**Context**：兩支查詢分別要 `dynamic_field.view` 與 `project.view`，兩者都不在 `PUBLIC_PERMS`，
+而種子角色裡只有 `super_admin` 持有。`ticket.add` 卻是發給 `user` 的 ——
+**一般民眾可以送出通報單，卻拿不到那張表單的題目，也拿不到災害型別選單**。
+測試沒抓到，是因為 `coordinator_auth` 直接授予 `FIELD_VIEW`。
+
+**Decision**：兩支查詢改用公開的 `Perm.TICKET_VIEW`。`includeInactive` 仍各自要
+`dynamic_field.edit` / `project.edit`（ADR-226 不變）。
+
+➕ 這兩支描述的資料本來就是公開的：`ticket.disasterTypes` 與 `disasterDetails` 匿名可讀，
+少了這裡的 label / unit，`disasterDetails` 讀起來只是一串裸鍵。
+➕ 不動 `PUBLIC_PERMS`、不動角色矩陣，也一次修好匿名、`user` 與兩個團隊角色。
+◾ `stationPropertyConfigs` / `taskPropertyConfigs` 維持 `dynamic_field.view`：
+那是後台表單，不是民眾填的那一張。
+
+### ADR-264 `disaster_types_in_use()` 只看 station/task 兩張設定表
+
+**Context**：ADR-255 把 `TicketPropertyConfig` 加進這個函式，但它唯一的呼叫端是
+`_unmatched_disaster_types` —— 而 `project_settings.disaster_types` 只決定 station/task 表單，
+通報單的欄位是用「每張單自己的型別」解析的。migration 又替六種型別都種了通報單欄位，
+所以**這個警告從此永遠不會觸發**：station/task 對 `radiation` 一個欄位都沒有，PATCH 仍回 `warnings: []`。
+
+**Decision**：函式退回只掃 `StationPropertyConfig` 與 `TaskPropertyConfig`。
+
+➕ 警告要講的就是「這兩張表單會被清空」，計入不受 project settings 管的表只會讓它沉默。
+➖ 原本的測試是靠「測試資料庫沒有通報單設定列」才通過的；補一條明確種入通報單欄位仍要求警告出現的測試。
+
+### ADR-265 `list_for_disasters` 先正規化參數
+
+**Context**：`ticketPropertyConfigs(disasterTypes: ["Flood"])` 回 `[]`，`["flood"]` 回兩列。
+`&&` 是逐元素字串相等，大小寫沒被攤平就永遠對不上 —— 而且是靜默的空表單，不是錯誤。
+
+**Decision**：進查詢前跑 `normalize_disaster_types`。
+
+➕ 寫入端一直都會正規化，讀取端沒有是不對稱。
+
+### ADR-266 `validate_disaster_types` 新增 `keep`：紀錄已持有的 label 不受停用影響
+
+**Context**：ADR-244 說停用是「既有資料照樣可讀，只是不能再新開」，但檢查是對**整份送出的清單**跑的。
+實測：`{flood, landslide}` 的通報單、停用 `landslide` 之後，
+`updateTicket(disasterTypes: ["landslide"])`（通報者拿掉 flood）被擋；
+project settings 只改 `name` 可以過，同一個 PATCH 帶上沒變的 `disaster_types` 就 422。
+
+**Decision**：`validate_disaster_types(db, values, *, keep=())`，`keep` 內的 label 一律放行。
+`update_ticket` 傳入該單目前的型別，project settings 傳入目前存著的清單。
+
+➕ 只有「真的新增」的 label 才受 `is_active` 檢查，這正是 ADR-244 原本的意思。
+➕ 未知（不在表裡）的 label 仍然被拒 —— `keep` 放行的是既有事實，不是任意字串。
+◾ 三張設定表沒有接 `keep`：它們的更新本來就是部分更新，不送 `disaster_types` 就不會被檢查，
+為此多讀一次既有列不值得。
+
+### ADR-267 `setTicketDisasterDetails` 設上限
+
+**Context**：ADR-092 說不驗證值，但從來沒有人限制**量**。實測：以 `user` 角色對自己的單送出
+500 個 key、每個 10,000 字，全部存下；接著匿名讀 `ticket { disasterDetails }` 回
+**5,021,433 bytes**，而且每一列都寫進 `audit_logs`。
+
+**Decision**：在 service 層加四個上限 —— 100 個欄位、每欄 50 個值、單值 500 字、key 100 字。
+超過丟 `ValueError`（`MaskErrors` 白名單內，訊息會原樣傳給呼叫端）。
+
+➕ ADR-092 保護的是「不要因為設定變更弄丟受困者的答案」，那只需要不檢查**鍵**；量的上限不衝突。
+➕ key 的長度上限順手修掉另一個問題：101 字的 `propertyName` 原本會撞 `String(100)` 並回
+「Unexpected error.」，現在會指名哪個鍵太長。
+◾ 數字是對照種子表單訂的（14 個欄位，最大的 multi_select 有 4 個選項），寬鬆但仍是硬上限。
+
+### ADR-268 通報單的地址可以修改，且讀取由 `ticket.view_pii` 把關
+
+**Context**：spec 說「寫入面已完成，只有讀取面延後」，但其實**建立之後就再也改不了**：
+`UpdateTicketInput` 沒有 `secondaryLocation`，`TicketType` 也沒有。
+打錯的門牌永遠是錯的，當初沒填地址的單也永遠補不上 —— 而 `app/graphql/shared.py` 的註解
+還寫著 `updateTicket` 會轉送這個 input。
+
+**Decision**：`UpdateTicketInput` 加上 `secondaryLocation`（整份取代，沒有列就建立），
+並在 `TicketType` 開出 `secondaryLocation`，用既有的 `_pii_visible` 把關。
+
+➕ ADR-146 要的那個 PII 判斷就此做出，而不是繼續延後：拒絕時回 `null`，與 ADR-254 的兩個檢傷欄位一致。
+➕ 沒有新的能力、沒有新的檢查點 —— 重用 `TicketType._pii_visible`。
+➕ 車站那一側維持公開：避難所的地址本來就在地圖上。
+◾ `SecondaryLocationType` 跟著 input 搬進 `app/graphql/shared.py`，
+否則 `tickets/types.py` 與 `geo/types.py` 會互相 import。
+
+### ADR-269 不需要合併 revision
+
+**Context**：ADR-253 規劃了一支 `down_revision = ("e7b249d0af31", "90c93167fa66")` 的空合併 revision。
+但 main 上 `90c93167fa66` 已經不是 head（`b3f1c07d2a95` 接在它後面，head 是 `c4a91e77b0d3`），
+照那個父節點寫仍然是兩個 head。
+
+**Decision**：不寫合併 revision。PR #48 已經把 `origin/main` 併進去並把
+`c3f0a1b2d4e6` 重新接到 `c4a91e77b0d3` 之後，所以本分支併上 #48 之後鏈是線性的，
+`alembic heads` 只回報 `e7b249d0af31`。ADR-253 的 runbook 作廢。
+
+### ADR-270 `mudslide` 改名要涵蓋 settings 與兩張設定表
+
+**Context**：`_reshape_tickets` 只改 `tickets`。實測從 `c3f0a1b2d4e6` 升上來：
+通報單變成 `{landslide}`，但 `project_settings` 與 `station_property_config` 仍是 `{mudslide}` ——
+`mudslide` 圈定的欄位從此對不上任何一張單，而之後一次原樣送回 `mudslide` 的 settings 寫入會 422。
+
+**Decision**：新增 `_rename_legacy_disaster_labels()`，對 `project_settings` 與兩張既有設定表
+跑 `array_replace(disaster_types, 'mudslide', 'landslide')`。
+
+◾ `Typhoon` 這種不在六種之列的舊值不處理：沒有正確的對應可猜。有了 ADR-266，
+帶著它的紀錄至少不會因此被鎖死。
+
+### ADR-271 migration 的 `data_type` 對應改為不分大小寫
+
+**Context**：main 的 `stationPropertyConfigs` 文件把 `data_type` 寫成
+`'string', 'integer', 'float', or 'enum'`，欄位又是自由文字。只認首字大寫的對應表漏掉這些列，
+接著 ADR-258 的 CHECK 就讓升級整個失敗：
+`CheckViolationError: check constraint "ck_station_property_config_data_type" ... is violated by some row`。
+
+**Decision**：`WHERE lower(data_type) = lower(:old) AND data_type NOT IN (<新詞彙>)`。
+
+➕ `NOT IN (<新詞彙>)` 是關鍵：少了它，小寫的舊 `text` 會在 `String → text` 之後被
+`Text → long_text` 再改一次。
+➕ 真正無法對應的值仍然會撞 CHECK 並指名表格 —— 靜默塞成 `text` 等於改寫欄位的定義。
+◾ 新增 `tests/test_migration_legacy_disaster_data.py`：真的跑到 `c3f0a1b2d4e6`、寫入舊資料、再升到 head。
+
+### ADR-272 bulk 匯入的型別詞彙與設定表的詞彙分開
+
+**Context**：ADR-252 預告過 PR #42 的衝突，#42 已經進 main。`bulk_columns.py` 把舊 token
+寫死成模組常數，`bulk_import.py` 還在傳 `disaster_type=`（單數）。
+
+**Decision**：`bulk_columns` 保留自己的「怎麼轉型一個儲存格」詞彙（`Integer` / `Float` / …），
+另外用 `_WIDGET_COERCION` 把設定列的控制項名稱翻過來；CSV 欄位改名 `disaster_types`，
+以逗號分隔，匯出時 join、匯入時 split。
+
+➕ 兩者本來就是不同的問題：`FieldDataType` 只有一個 `number`，
+但 bulk 必須知道 `level` 是 int4 而 `latitude` 不是。
+➕ 逗號分隔讓兩種災害型別的通報單能原樣往返；沿用單數欄位會在匯入時靜默掉第二種。
+◾ `number` 對應到 `Integer`：兩張 EAV 值表也只能存到這個精度，小數會在自己那一列帶著可讀訊息失敗。

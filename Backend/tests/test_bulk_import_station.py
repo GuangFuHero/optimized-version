@@ -105,7 +105,7 @@ async def _importer(db, *, scope="all") -> User:
 
 async def _configs(db) -> None:
     db.add(StationPropertyConfig(
-        station_type="shelter", property_name="capacity_total", data_type="Integer", enum_options=None
+        station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
     ))
     await db.commit()
 
@@ -194,7 +194,7 @@ async def test_preview_explains_which_dynamic_fields_the_file_cannot_carry(db):
     """A file silently missing half a type's fields reads as data loss (ADR-118)."""
     await _configs(db)
     db.add(StationPropertyConfig(
-        station_type="shelter", property_name="pet_friendly", data_type="Boolean", enum_options=None
+        station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
     ))
     await db.commit()
     actor = await _importer(db)
@@ -205,7 +205,7 @@ async def test_preview_explains_which_dynamic_fields_the_file_cannot_carry(db):
     )
 
     assert [s["property_name"] for s in result.skipped_columns] == ["pet_friendly"]
-    assert "Boolean" in result.skipped_columns[0]["reason"]
+    assert "boolean" in result.skipped_columns[0]["reason"]
 
 
 @pytest.mark.asyncio

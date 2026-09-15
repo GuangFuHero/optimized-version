@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.graphql.shared import Visibility
+from app.graphql.shared import FieldDataType, Visibility
 from app.repositories.config_repository import (
     station_property_config_repository,
     task_property_config_repository,
@@ -25,23 +25,38 @@ from app.services.ticket import VALID_TRANSITIONS
 # collide with the fixed column of the same name.
 DYNAMIC_PREFIX = "prop."
 
-# The config vocabulary (see the seed in migration a2a8e4d8c51d), plus two types only fixed
-# columns use. `data_type` is a free-text column, so this is a description of what exists,
-# not a constraint the database enforces.
+# How to coerce a cell, which is bulk import's own concern and deliberately NOT the config
+# vocabulary: `FieldDataType` names the widget a form draws and has one `number`, while this
+# file has to know that `level` is int4 and `latitude` is not (ADR-272).
 INTEGER = "Integer"
 STRING = "String"
 TEXT = "Text"
 BOOLEAN = "Boolean"
 ENUM = "Enum"
-ARRAY = "Array"
 FLOAT = "Float"  # coordinates and scores; never produced by a config row
 TIMESTAMP = "Timestamp"  # export-only columns; never produced by a config row
+# One cell holding several values, comma-separated. Only `tickets.disaster_types` needs it —
+# a typhoon brings 水災 and 土石流 at once (feature 018, ADR-246), and a singular column would
+# silently drop every type but the first on the way back in.
+LIST = "List"
+
+# Config widget -> the coercion above. `number` becomes `Integer` because that is what both
+# EAV value columns can hold; a decimal in such a cell fails its own row with a readable
+# message, which is what ADR-117 asks for (feature 018, ADR-245 closed the vocabulary).
+_WIDGET_COERCION = {
+    FieldDataType.text.value: STRING,
+    FieldDataType.long_text.value: TEXT,
+    FieldDataType.number.value: INTEGER,
+    FieldDataType.boolean.value: BOOLEAN,
+    FieldDataType.single_select.value: ENUM,
+    FieldDataType.multi_select.value: ENUM,
+}
 
 # ADR-118: `station_properties` has no value column — only `quantity: int` — so a config row
 # of any other type has nowhere to put its value. Those fields are skipped rather than turned
 # into columns that would fail on the way back in. This is an existing schema gap, not one
 # this feature introduces; `task_properties` has a text `property_value` and needs no filter.
-STORABLE_STATION_DATA_TYPES = frozenset({INTEGER})
+STORABLE_STATION_DATA_TYPES = frozenset({FieldDataType.number.value})
 _UNSTORABLE_REASON = "station_properties 目前無法儲存 {data_type} 型別的值"
 
 
@@ -135,7 +150,7 @@ TICKET_COLUMNS: tuple[ColumnSpec, ...] = (
         writable_on_create=False,
     ),
     _c("priority", max_length=20),
-    _c("disaster_type", max_length=50),
+    _c("disaster_types", LIST, max_length=200),
     # PII, and `UpdateTicketInput` carries no contact fields at all; contact_phone is also
     # part of the match key.
     _create_only(_c("contact_name", required_on_create=True, max_length=100)),
@@ -167,11 +182,11 @@ class SkippedColumn:
 
 
 def _dynamic_column(config) -> ColumnSpec:
-    """Turn one property config row into a column."""
+    """Turn one property config row into a column, translating its widget to a coercion."""
     return ColumnSpec(
         header=f"{DYNAMIC_PREFIX}{config.property_name}",
         field=config.property_name,
-        data_type=config.data_type,
+        data_type=_WIDGET_COERCION.get(config.data_type, STRING),
         enum_options=tuple(config.enum_options) if config.enum_options else None,
         is_dynamic=True,
     )

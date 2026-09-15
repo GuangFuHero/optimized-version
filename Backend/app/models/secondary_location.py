@@ -36,9 +36,8 @@ class SecondaryLocation(Base, UUIDPKMixin):
     floor: Mapped[str | None] = mapped_column(String(20))
     room: Mapped[str | None] = mapped_column(String(20))
     # Feature 018 (ADR-249). Ticket-only in practice — a station has no trapped occupant —
-    # but they live here rather than on `tickets` because they describe a place, and the
-    # table already carries type-specific nullable columns (the `pole_*` set) on exactly
-    # this precedent.
+    # but they describe a place, so they live here rather than on `tickets`, on the same
+    # precedent as the type-specific `pole_*` set.
     space_description: Mapped[str | None] = mapped_column(
         String(100), nullable=True, comment="空間描述，例如「三房兩廳」"
     )
@@ -50,9 +49,9 @@ class SecondaryLocation(Base, UUIDPKMixin):
         String(20), nullable=True, comment="可否進入（當下觀察，非安全鑑定）"
     )
     # Free text describing the way in ("入口、地標、樓棟、道路側"), for when the coordinates
-    # alone are not enough to find the door. PII: this is the 門牌-grade detail a pin does not
-    # reveal, so it is masked like the rest of the address, not exposed under plain
-    # `ticket.view`. Excluded from search_text for the same reason (ADR-079/146).
+    # alone are not enough to find the door. On a ticket the whole row is PII and its resolver
+    # withholds it without `ticket.view_pii` (ADR-268); on a station the address is public, as
+    # it already is on the map. Excluded from search_text either way (ADR-079/146/250).
     landmark_note: Mapped[str | None] = mapped_column(
         String, nullable=True, comment="地標補充；座標不足時用來找到入口"
     )
