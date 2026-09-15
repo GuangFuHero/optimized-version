@@ -36,18 +36,20 @@ AUDITED_TABLES = [
     # the disaster types flips a whole batch of dynamic fields, so it is audited.
     "project_settings",
 
-    # Feature 018 (ADR-251). The disaster vocabulary and the field definitions keyed off it.
-    # `project_settings` was audited because "changing the disaster types flips a whole batch
-    # of dynamic fields" — these are where those fields are actually defined, so leaving them
-    # out was never coherent. `station_property_config` / `task_property_config` were the
-    # unrecorded half of that same gap and join here rather than staying unaudited.
+    # Feature 015 (ADR-124): the EAV value tables, the only mutable content tables left
+    # unaudited. Bulk import writes them in batches, which makes the blind spot easy to hit.
+    "station_properties",
+    "task_properties",
+
+    # Feature 018 (ADR-251): the disaster vocabulary and the three tables that define the
+    # dynamic fields keyed off it — `project_settings` is audited, so their definitions must be.
     "disaster_types",
     "station_property_config",
     "task_property_config",
     "ticket_property_config",
-    # The per-ticket values. A reporter's answer changing from "no" to "yes" on
-    # `person_trapped_reported`-adjacent fields is exactly the kind of edit a timeline has to
-    # show, and the sibling EAV tables' missing trail (ADR-124) is the mistake not to repeat.
+
+    # Feature 018: the per-ticket answers. An edit flipping "person trapped" from no to yes is
+    # exactly what a timeline has to show, and ADR-124's missing trail is the mistake not to repeat.
     "ticket_disaster_details",
 ]
 
@@ -61,6 +63,7 @@ DECLARE
     user_id UUID := NULL;
     ip_addr VARCHAR := NULL;
     r_id UUID := NULL;
+    ctx JSONB := NULL;
 BEGIN
     -- Resolve context variables
     BEGIN
@@ -73,6 +76,15 @@ BEGIN
         ip_addr := NULLIF(current_setting('app.client_ip', true), '');
     EXCEPTION WHEN OTHERS THEN
         ip_addr := NULL;
+    END;
+
+    -- The identity the actor was exercising (feature 010, ADR-076). Role and team NAMES are
+    -- snapshotted by the application before this runs, because a role can be renamed or hard
+    -- deleted and a uuid alone would not resolve when the trail is read later.
+    BEGIN
+        ctx := NULLIF(current_setting('app.active_identity', true), '')::JSONB;
+    EXCEPTION WHEN OTHERS THEN
+        ctx := NULL;
     END;
 
     -- Extract row identifier and states, redacting sensitive password_hash credentials
@@ -97,7 +109,8 @@ BEGIN
         old_values,
         new_values,
         user_uuid,
-        client_ip
+        client_ip,
+        context
     ) VALUES (
         gen_random_uuid(),
         TG_TABLE_NAME,
@@ -106,7 +119,8 @@ BEGIN
         old_val,
         new_val,
         user_id,
-        ip_addr
+        ip_addr,
+        ctx
     );
 
     IF TG_OP = 'DELETE' THEN

@@ -21,16 +21,26 @@ class Perm(StrEnum):
     # Ticket (PII split from the ticket itself: view != view_pii)
     TICKET_VIEW = "ticket.view"
     TICKET_VIEW_PII = "ticket.view_pii"
+    # Feature 016 (ADR-127): the change timeline is its own capability, not a reuse of
+    # audit.view — that key is auditor-only, while the requirement is that a requester can
+    # follow their own ticket. Not a reuse of ticket.view either: that one is in
+    # PUBLIC_PERMS, so sharing it would put staff names and review timings in front of
+    # anonymous visitors. Scoped like view_pii, since it exposes the same order of detail.
+    TICKET_VIEW_HISTORY = "ticket.view_history"
     TICKET_ADD = "ticket.add"
     TICKET_EDIT = "ticket.edit"
     TICKET_DELETE = "ticket.delete"
     TICKET_ASSIGN = "ticket.assign"
     TICKET_REVIEW = "ticket.review"
-    TICKET_EXPORT = "ticket.export"
+    TICKET_EXPORT = "ticket.export"  # registered since RBAC v1; first enforced by feature 015
+    TICKET_IMPORT = "ticket.import"  # see the bulk note under Resource Station below
 
     # Resource Station
     STATION_VIEW = "station.view"
     STATION_VIEW_PII = "station.view_pii"
+    # Feature 016 (ADR-127/128): same reasoning as ticket.view_history, and deliberately the
+    # same scope tiering — a station's timeline names the people who edited it.
+    STATION_VIEW_HISTORY = "station.view_history"
     STATION_ADD = "station.add"
     STATION_EDIT = "station.edit"
     STATION_DELETE = "station.delete"
@@ -38,6 +48,13 @@ class Perm(StrEnum):
     # Open crowd-sourcing: attach a property or submit a rating to ANY station (no ownership
     # check — deliberately capability-only, not scoped like station.edit=own). See station.py.
     STATION_CONTRIBUTE = "station.contribute"
+    # Bulk export/import (feature 015, ADR-110). Import is deliberately NOT a reuse of
+    # add/edit: one file can rewrite hundreds of rows, so the batch capability is separable
+    # from the single-row one. It is not a replacement either — every imported row still
+    # runs the *.add / *.edit checkpoints it would have run had it been typed in by hand,
+    # so import alone is a dead grant (asserted in tests/test_bulk_permissions.py).
+    STATION_EXPORT = "station.export"
+    STATION_IMPORT = "station.import"
 
     # Interactive Map (tiles, closure areas — the map *overlay*, distinct from the Station entity)
     MAP_VIEW = "map.view"
@@ -104,13 +121,10 @@ class Perm(StrEnum):
     RBAC_EDIT = "rbac.edit"
 
 
-# ADR-025/027: capabilities an unauthenticated Guest may use, read-only. Guest is a
-# program-level view (no DB row); anything not in this set is a 403 for an anonymous
-# caller. station.view/ticket.view are public (disaster map + help-request board don't
-# require login); ticket.view_pii is deliberately never in this set — PII always requires
-# a real actor, checked separately per-field (ADR-029). pre_departure.view joins them for
-# the same reason announcement.view did: a volunteer reads the 行前通知 to decide whether to
-# show up at all, so requiring an account first defeats the point.
+# ADR-025/027: read-only capabilities the whole world holds — `check_permission` resolves
+# these to Scope.ALL for every caller, authenticated or not, because the map, shelter list,
+# help-request board and 公告/行前通知 are all readable without an account. `ticket.view_pii`
+# is deliberately absent: PII always needs a real actor and is redacted per-field (ADR-029).
 PUBLIC_PERMS = frozenset(
     {Perm.MAP_VIEW, Perm.ANN_VIEW, Perm.STATION_VIEW, Perm.TICKET_VIEW, Perm.PREDEP_VIEW}
 )

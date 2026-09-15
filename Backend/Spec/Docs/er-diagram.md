@@ -16,6 +16,9 @@
 > Project settings + disaster-scoped dynamic fields + account activity added by feature 013
 > (ADR-090~095, ER doc synced 2026-08-20). `project_settings` lives in the Identity diagram:
 > it is a deployment-wide settings row, not a geospatial or ticket entity.
+>
+> Identity switching (feature 010, ADR-068/073/076) moved the team from the user onto the
+> grant row: `users.team_uuid` is gone (ER doc synced 2026-08-20).
 > Synced against `app/models/` and `alembic/versions/` on 2026-09-05: added the two tables
 > that had shipped without ever being drawn (`notifications`, `station_update_suggestions`),
 > `ticket_tasks.canceled_at` (the backlog-drain counterpart to `completed_at`), and two
@@ -68,7 +71,6 @@ erDiagram
 %% ==========================
 users {
     uuid uuid PK
-    uuid team_uuid FK "nullable, FK to teams — a user belongs to at most one team (ADR-019)"
     string name "display nickname, not the login id, not unique"
     float credibility_score
     timestamp last_login_at "nullable"
@@ -109,12 +111,15 @@ users ||--o{ user_contacts : "reachable at"
 %% decoupled from DB tables (ADR-012); grants are additive/union with no deny (ADR-018).
 %% ==========================
 
-%% Functional role. kind = platform (one per user) or team (at most one per user, ADR-019).
+%% Functional role. kind = platform or team. A user holds exactly one platform identity
+%% and any number of team identities — one row of user_role_assign each (ADR-068/073).
 roles {
     uuid uuid PK
     string name "UNIQUE, String(50)"
     string kind "platform/team, String(10)"
 }
+%% UNIQUE(uuid, kind) -- uq_roles_uuid_kind: exists only as the target of the composite FK
+%% from the grant tables, which keeps their redundant role_kind honest (ADR-073).
 
 %% Capability catalog — one row per capability key (e.g. ticket.view, work_zone.assign).
 permissions {
@@ -134,32 +139,48 @@ role_permission_assign {
 roles ||--o{ role_permission_assign : "grants"
 permissions ||--o{ role_permission_assign : "granted via"
 
-%% User → role assignment (a person's platform/team role membership).
+%% One identity: a role granted to a user, for a team when the role is team-kind. Exactly
+%% one identity is active per request, named by the access token's `act` claim (ADR-068/069).
 user_role_assign {
     uuid uuid PK
     uuid user_uuid FK "FK to users, indexed"
     uuid role_uuid FK "FK to roles, indexed"
+    uuid team_uuid FK "nullable, FK to teams, indexed — NULL for platform grants (ADR-073)"
+    string role_kind "platform/team, String(10) — copied from roles.kind so CHECK can see it"
 }
-%% UNIQUE(user_uuid, role_uuid) -- uq_user_role
-users ||--o{ user_role_assign : "holds role"
+%% UNIQUE(user_uuid, role_uuid, team_uuid) -- uq_user_role. Includes team: holding the same
+%% role in two teams is two identities, which the old (user, role) key would have rejected.
+%% UNIQUE(user_uuid, role_uuid) WHERE team_uuid IS NULL -- uq_user_role_platform. Postgres
+%% does not compare NULLs in a UNIQUE, so this partial index is what stops duplicate
+%% platform grants.
+%% FOREIGN KEY(role_uuid, role_kind) → roles(uuid, kind) -- fk_ura_role_kind
+%% CHECK -- ck_ura_role_team_kind: platform grants carry no team, team grants must carry one.
+users ||--o{ user_role_assign : "holds identity"
 roles ||--o{ user_role_assign : "assigned to"
+teams ||--o{ user_role_assign : "scopes the identity"
 
 %% User → permission direct grant (per-user override, additive/union with roles, ADR-018).
 user_permission_assign {
     uuid uuid PK
     uuid user_uuid FK "FK to users, indexed"
     uuid permission_uuid FK "FK to permissions, indexed"
+    uuid team_uuid FK "nullable, FK to teams, indexed — the identity this grant applies to"
     string scope "none/own/team/gov/ngo/zone/all, String(10), default none"
 }
-%% UNIQUE(user_uuid, permission_uuid) -- uq_user_perm (ADR-058, feature 009 P3 / #27):
-%% one direct grant per (user, permission); dedup keeps the widest scope.
+%% UNIQUE(user_uuid, permission_uuid, team_uuid) -- uq_user_perm (ADR-058 widened by
+%% feature 010): one direct grant per (user, permission, identity); dedup keeps the widest
+%% scope. UNIQUE(user_uuid, permission_uuid) WHERE team_uuid IS NULL -- uq_user_perm_platform
+%% closes the same NULL hole as on user_role_assign.
 users ||--o{ user_permission_assign : "directly granted"
 permissions ||--o{ user_permission_assign : "granted to user"
+teams ||--o{ user_permission_assign : "scopes the grant"
 
 %% --------------------------
-%% 2a. Teams & Work Zones (ADR-019/021)
+%% 2a. Teams & Work Zones (ADR-021/049; ADR-019's one-team-per-user rule superseded by ADR-073)
 %% --------------------------
-%% Organisation the user belongs to (gov/ngo). users.team_uuid points here (at most one).
+%% Organisation (gov/ngo). Membership is NOT a column on users any more — a person belongs
+%% to a team by holding a team-kind grant naming it, so one person can be in several
+%% teams and hold a different role in each (ADR-073).
 teams {
     uuid uuid PK
     string name "String(100)"
@@ -170,7 +191,6 @@ teams {
     timestamp updated_at
     timestamp delete_at "nullable"
 }
-teams ||--o{ users : "has members (users.team_uuid)"
 
 %% Geographic jurisdiction polygon; gov draws them and assigns to teams (ADR-021/049).
 work_zones {
@@ -215,8 +235,12 @@ audit_logs {
     jsonb new_values "nullable"
     uuid user_uuid "nullable, logical ref to users (no DB FK)"
     string client_ip "nullable"
+    jsonb context "nullable, snapshot of the identity the change was made under (ADR-076)"
     timestamp created_at
 }
+%% context stores role/team NAMES, not just uuids: a role can be renamed or hard-deleted,
+%% so a uuid alone may no longer resolve when the trail is read months later. Written by
+%% the audit trigger itself, which is replaced in the same migration that adds the column.
 %% Dashed = non-identifying logical reference; user_uuid is a plain UUID column, not an
 %% enforced FK. table_name/row_id can point at any table in any of the domain diagrams —
 %% audit_logs is a generic mutation trail, not modeled with per-table FKs.
@@ -294,12 +318,11 @@ briefings {
     timestamp updated_at
     timestamp delete_at
 }
-%% template_uuid is nullable for two reasons, not one: an ad-hoc briefing never had a
-%% template, and content/tags/state are COPIED at generation time rather than joined — so
-%% soft-deleting a template leaves existing briefings whole, and later edits to a template
-%% deliberately do not rewrite briefings already sent out.
-%% `tags` is queried with JSONB containment (`tags @> '["x"]'`), not a join table: the tag
-%% vocabulary is meant to grow without a migration.
+%% template_uuid is nullable because a briefing may be ad-hoc, and content/tags/state are
+%% COPIED at generation time rather than joined — so deleting or editing a template never
+%% rewrites briefings already sent out.
+%% `tags` is queried with JSONB containment (`tags @> '["x"]'`), not a join table, so the tag
+%% vocabulary grows without a migration.
 briefing_templates ||--o{ briefings : "generated from"
 users ||--o{ briefings : "authors"
 %% ==========================
@@ -489,11 +512,11 @@ station_property_config {
 %% ==========================
 %% Station Update Suggestions (user proposal → admin review)
 %% ==========================
-%% One row per proposed change to a single field. target_type/target_uuid address the row
-%% polymorphically (no DB FK, same mechanism as photos.ref_type/ref_uuid), so one queue
-%% covers both stations and their properties. Approving writes new_value through to the
-%% target after coercing it to that field's data type; rejecting leaves the target untouched.
-%% Either way the suggestion row is kept, so the review decision stays auditable.
+%% One row per proposed change to a single field, with target_type/target_uuid addressing the
+%% target polymorphically (no DB FK, same mechanism as photos.ref_type/ref_uuid) so one queue
+%% covers both stations and their properties. Approving coerces new_value to the field's type
+%% and writes it through, rejecting leaves the target untouched, and either way the row is kept
+%% for audit.
 station_update_suggestions {
     uuid uuid PK
     string target_type "station/station_property, String(20)"
@@ -602,7 +625,7 @@ photos {
     uuid uuid PK
     uuid ref_uuid FK "FK to base_geometries or secondary_locations"
     string ref_type "geometry/pole"
-    string url "String(500); app-validated http(s) + host only (services/photo.py), no DB constraint"
+    string url "String(500); app-validated https + host only (services/photo.py), no DB constraint"
     timestamp created_at
     uuid created_by FK
     timestamp updated_at
@@ -655,11 +678,11 @@ ticket_tasks {
     timestamp delete_at
     string search_text "GENERATED ALWAYS AS task_name + left(task_description, 500), STORED"
 }
-%% completed_at/canceled_at are maintained by services/ticket.py::update_ticket_task, not by
-%% callers. Analytics plots a task on the day its timestamp gives, so each is CLEARED on the
-%% way out of the state — a re-opened task keeping a stale completed_at would still read as
-%% finished. `updated_at` can't stand in: it moves on every edit, not just status changes.
-%% Rows that reached these states before the columns existed were backfilled from updated_at.
+%% completed_at/canceled_at are stamped and CLEARED by services/ticket.py::update_ticket_task as
+%% status enters and leaves the state, because analytics plots a task on the day its timestamp
+%% gives and a re-opened task holding a stale completed_at would still read as finished.
+%% `updated_at` can't stand in — it moves on every edit — though rows predating the columns
+%% were backfilled from it.
 %% INDEX: ix_ticket_tasks_search_text_trgm USING gin (search_text gin_trgm_ops)
 %% NOTE: `progress_note` is deliberately NOT in search_text (free-text note, ADR-079)
 tickets ||--o{ ticket_tasks : "contains sub-tasks"

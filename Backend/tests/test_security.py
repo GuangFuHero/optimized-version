@@ -30,13 +30,18 @@ async def db_session():
     await engine.dispose()
 
 @pytest_asyncio.fixture(scope="function")
-async def client(db_session):
+async def client(db_session, redis):
     """Configure test client with DB override and production rate-limit environment."""
+    from app.core.redis import get_redis
     from app.main import app
 
     async def override_get_db():
         yield db_session
     app.dependency_overrides[security.get_db] = override_get_db
+    # Authentication reads the token's session out of Redis (ADR-099), so this local client
+    # needs the same wiring the shared fixture has, or every authenticated route 500s here.
+    app.dependency_overrides[get_redis] = lambda: redis
+    app.state.redis = redis
 
     # 預設為 production 環境以便測試限制邏輯
     old_env = os.environ.get("ENV")
@@ -46,6 +51,7 @@ async def client(db_session):
         yield ac
 
     app.dependency_overrides.clear()
+    del app.state.redis
     if old_env:
         os.environ["ENV"] = old_env
 

@@ -1,0 +1,14 @@
+/* ==========================================================================
+ * Wan Guard 島嶼守望 — Elevation & layering
+ * Shadows carry a warm orange tint for soft, lively depth (defined in
+ * semantic.css). This file owns the z-index hierarchy.
+ * ========================================================================== */
+
+:root {
+  --z-base:    1;    /* @kind other */
+  --z-card:    10;   /* @kind other */ /* floating cards  → --shadow-md */
+  --z-nav:     100;  /* @kind other */ /* sticky nav      → --shadow-sm */
+  --z-drawer:  500;  /* @kind other */ /* drawers         → --shadow-lg */
+  --z-modal:   1000; /* @kind other */ /* dialogs / modal → --shadow-lg */
+  --z-toast:   2000; /* @kind other */ /* toasts          → --shadow-lg */
+}

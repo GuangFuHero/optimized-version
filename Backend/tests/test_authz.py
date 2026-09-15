@@ -20,30 +20,65 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope
 from app.models.auth import User
 from app.models.geo import Station
-from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+from app.models.rbac import (
+    Permission,
+    Role,
+    RolePermissionAssign,
+    UserPermissionAssign,
+    UserRoleAssign,
+)
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from app.services.authz import require_scope
+from tests.conftest import acting_as
 
 
-async def _grant(db, user: User, perm: Perm, scope: str, role_name: str) -> None:
-    """Create a one-off role granting `perm` at `scope` and assign it to `user`.
-
-    Reuses an existing Permission row for `perm` if one was already created earlier in
-    the same test (Permission.key is unique) — e.g. two roles granting the same
-    capability at different scopes, to exercise the union/widest merge.
-    """
+async def _permission(db, perm: Perm) -> Permission:
+    """Fetch or create the Permission row for `perm` (Permission.key is unique)."""
     result = await db.execute(select(Permission).where(Permission.key == perm.value))
     permission = result.scalar_one_or_none()
     if permission is None:
         permission = Permission(key=perm.value)
         db.add(permission)
         await db.flush()
+    return permission
 
-    role = Role(name=role_name, kind="platform")
+
+async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, team=None) -> Role:
+    """Create a one-off role granting `perm` at `scope`, assign it, and act as that identity.
+
+    Grants resolve through the active identity now (ADR-068/074), so a role that is assigned
+    but not being acted as contributes nothing. Every caller here wants the actor to actually
+    hold the capability, so assigning and activating are one step; the tests that care about
+    the difference set `active_identity` themselves.
+    """
+    permission = await _permission(db, perm)
+    role = Role(name=role_name, kind="team" if team is not None else "platform")
     db.add(role)
     await db.flush()
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    db.add(
+        UserRoleAssign(
+            user_uuid=user.uuid,
+            role_uuid=role.uuid,
+            team_uuid=team.uuid if team is not None else None,
+        )
+    )
+    await db.flush()
+    acting_as(user, role, team)
+    return role
+
+
+async def _grant_directly(db, user: User, perm: Perm, scope: str, team=None) -> None:
+    """Grant `perm` straight to the user, bound to `team` (NULL binds it to platform)."""
+    permission = await _permission(db, perm)
+    db.add(
+        UserPermissionAssign(
+            user_uuid=user.uuid,
+            permission_uuid=permission.uuid,
+            team_uuid=team.uuid if team is not None else None,
+            scope=scope,
+        )
+    )
     await db.flush()
 
 
@@ -119,12 +154,12 @@ async def test_require_scope_zone_mismatch_is_404_not_403(db):
     team = Team(name="T1", type="gov")
     db.add(team)
     await db.flush()
-    actor = User(name="Actor", team_uuid=team.uuid)
+    actor = User(name="Actor")
     other = User(name="Other")
     db.add_all([actor, other])
     await db.flush()
     await _assign_zone(db, team, _ZONE_POLY)
-    await _grant(db, actor, Perm.STATION_EDIT, "zone", "role-edit")
+    await _grant(db, actor, Perm.STATION_EDIT, "zone", "role-edit", team=team)
     # Station at (123.5, 24.5) is OUTSIDE the team's zone polygon.
     resource = Station(geometry=from_shape(Point(123.5, 24.5), srid=4326), created_by=str(other.uuid))
     with pytest.raises(HTTPException) as exc:
@@ -138,12 +173,12 @@ async def test_require_scope_zone_match_passes(db):
     team = Team(name="T1", type="gov")
     db.add(team)
     await db.flush()
-    actor = User(name="Actor", team_uuid=team.uuid)
+    actor = User(name="Actor")
     other = User(name="Other")
     db.add_all([actor, other])
     await db.flush()
     await _assign_zone(db, team, _ZONE_POLY)
-    await _grant(db, actor, Perm.STATION_EDIT, "zone", "role-edit")
+    await _grant(db, actor, Perm.STATION_EDIT, "zone", "role-edit", team=team)
     # Station at (121.5, 24.5) is INSIDE the team's zone polygon.
     resource = Station(geometry=from_shape(Point(121.5, 24.5), srid=4326), created_by=str(other.uuid))
     scope = await require_scope(actor, Perm.STATION_EDIT, db, resource=resource)
@@ -164,64 +199,96 @@ async def test_require_scope_all_scope_skips_checkpoint_2_entirely(db):
 
 
 @pytest.mark.asyncio
-async def test_require_scope_unions_grants_from_multiple_roles(db):
-    """Two roles granting the same capability at different scopes resolve to the widest.
+async def test_require_scope_unions_a_role_grant_with_a_direct_grant(db):
+    """Union survives, but within one identity: role grant `own` + direct grant `team` → `team`.
 
-    ADR-018: a platform role granting `own` plus a team role granting `team` on the same
-    capability resolves to `team`, not either alone.
+    ADR-018's union is unchanged; ADR-074 narrows what it ranges over. A user's two roles no
+    longer merge (see the test below) because only one of them is ever being acted as, so the
+    remaining way to hold two scopes on one capability is a role grant plus a direct grant on
+    the same identity.
     """
     team = Team(name="T1", type="gov")
     db.add(team)
     await db.flush()
-    actor = User(name="A", team_uuid=team.uuid)
+    actor = User(name="A")
     db.add(actor)
     await db.flush()
-    await _grant(db, actor, Perm.TICKET_VIEW, "own", "platform-role")
-    await _grant(db, actor, Perm.TICKET_VIEW, "team", "team-role")
+    await _grant(db, actor, Perm.TICKET_VIEW, "own", "team-role", team=team)
+    await _grant_directly(db, actor, Perm.TICKET_VIEW, "team", team=team)
 
     scope = await require_scope(actor, Perm.TICKET_VIEW, db)
     assert scope == Scope.TEAM
 
 
 @pytest.mark.asyncio
-async def test_team_role_inherits_platform_grant_for_station_contribute(db):
-    """A team role that omits a capability does not revoke it; the platform role still grants it.
+async def test_require_scope_ignores_the_roles_the_actor_is_not_acting_as(db):
+    """Only the active identity's grants count — the other role's are not merged in (ADR-068).
 
-    Every account keeps the default platform role it got at registration, because joining a
-    team only replaces a previous *team* role. Permissions from all of a user's roles are
-    added together and the widest scope wins, so a capability granted by the platform role
-    stays in force even though the team role says nothing about it.
+    This is the invariant the whole switching model rests on: acting as the narrower identity
+    has to be a real downgrade, otherwise a super_admin "switching" to a team member would keep
+    every platform capability and the switch would be cosmetic.
+    """
+    team = Team(name="T1", type="gov")
+    db.add(team)
+    await db.flush()
+    actor = User(name="A")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.TICKET_VIEW, "all", "platform-role")
+    # Granted second, so this is the identity the actor ends up acting as.
+    await _grant(db, actor, Perm.TICKET_VIEW, "own", "team-role", team=team)
 
-    This is worth a test because the seed file reads role-by-role, which invites the opposite
-    conclusion — that a team admin missing `station.contribute` from their own role would be
-    refused. They are not: the default role grants it at `all`. The second assertion is the
-    control, showing a capability the team role *does* narrow still applies at its own scope.
+    assert await require_scope(actor, Perm.TICKET_VIEW, db) == Scope.OWN
+
+
+@pytest.mark.asyncio
+async def test_require_scope_403s_for_an_actor_with_no_active_identity(db):
+    """No identity resolves to no grants at all — fail closed, never a 500 (ADR-074).
+
+    A `User` loaded outside a request never went through `get_current_user`, so it carries no
+    identity. Denying is the safe reading of that.
+    """
+    actor = User(name="A")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EDIT, "all", "role-edit")
+    actor.active_identity = None
+
+    with pytest.raises(HTTPException) as exc:
+        await require_scope(actor, Perm.STATION_EDIT, db)
+    assert exc.value.status_code == 403
+
+@pytest.mark.asyncio
+async def test_a_team_identity_does_not_inherit_the_platform_role_grant(db):
+    """Replaces main's `test_team_role_inherits_platform_grant_for_station_contribute`.
+
+    That test asserted the opposite — that a capability granted by the platform `user` role
+    stays in force while acting as a team role, because permissions from all of a user's roles
+    were added together. Identity switching removes exactly that (ADR-074): only the active
+    identity's grants resolve, so a team identity that says nothing about a capability does
+    not have it, no matter what the platform role grants.
+
+    The behaviour it protected — a field worker acting as their team can still contribute —
+    is preserved, but by granting `station.contribute` directly to the team roles in
+    `scripts/seed_rbac.py` rather than by leaking the platform grant across identities. This
+    test pins the mechanism; `test_every_actionable_role_covers_the_citizen_baseline`
+    (tests/test_seed_rbac.py) pins the seed side, and more broadly than this one capability.
     """
     team = Team(name="Gov Team", type="gov")
     db.add(team)
     await db.flush()
-    actor = User(name="team admin", team_uuid=team.uuid)
+    actor = User(name="team admin")
     db.add(actor)
     await db.flush()
 
-    # Platform role "user": the grant lives here (seed_rbac.py station.contribute = all).
+    # Platform role "user" grants station.contribute, exactly as the seed does.
     await _grant(db, actor, Perm.STATION_CONTRIBUTE, "all", "user")
+    # Team role "admin" narrows station.edit and says nothing about station.contribute.
+    await _grant(db, actor, Perm.STATION_EDIT, "zone", "admin", team=team)
 
-    # Team role "admin": operational grants, but nothing for station.contribute.
-    permission = Permission(key=Perm.STATION_EDIT.value)
-    db.add(permission)
-    await db.flush()
-    team_role = Role(name="admin", kind="team")
-    db.add(team_role)
-    await db.flush()
-    db.add(
-        RolePermissionAssign(
-            role_uuid=team_role.uuid, permission_uuid=permission.uuid, scope="zone"
-        )
-    )
-    db.add(UserRoleAssign(user_uuid=actor.uuid, role_uuid=team_role.uuid))
-    await db.flush()
-
-    assert await require_scope(actor, Perm.STATION_CONTRIBUTE, db) == Scope.ALL
+    # Acting as the team identity (granted last): the team role's own grant applies...
     assert await require_scope(actor, Perm.STATION_EDIT, db) == Scope.ZONE
-
+    # ...and the platform role's does not come with it.
+    with pytest.raises(HTTPException) as exc:
+        await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
+    assert exc.value.status_code == 403

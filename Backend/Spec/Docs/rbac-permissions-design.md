@@ -21,7 +21,7 @@
 2. **兩軸模型（ADR-019/049）**：授權 = **功能角色**（做什麼）×**組織 team**（在哪個區域）。一帳號 = 一 `platform` 角色 + 最多一 `team` 角色（`users.team_uuid`）。組織身分（gov/ngo）由 `team.type` 表達，**不進角色名、不進 scope**。
 3. **固定 scope、非通用 ABAC（ADR-020/021/049）**：資料邊界用固定 enum `none/own/team/zone/all`，不做 free-JSON condition 引擎。地理管轄靠 `zone`（point-in-polygon），不靠在資源上存 owning-org。
 4. **相加、無 deny（ADR-018）**：多來源 grant 取**聯集**、同一 capability 取**最寬** scope（`all > zone > team > own > none`）。收權靠移除角色/grant，**沒有 deny override**。
-5. **預設 deny + 公開白名單（ADR-025/027）**：未明列一律 deny；`PUBLIC_PERMS` 匿名可讀；`ticket.view_pii` 永不公開。
+5. **預設 deny + 公開白名單（ADR-025/027）**：未明列一律 deny；`PUBLIC_PERMS` 內的鍵對**所有**呼叫端（含已登入者）一律 `Scope.ALL`，不看 role grant——否則登入後讀到的會比匿名還少；`ticket.view_pii` 永不公開。
 
 ### 系統架構
 ```
@@ -42,7 +42,7 @@
 
 ## 2. 能力鍵目錄（`app/core/permissions.py:Perm`）
 
-命名規則：`<capability>.<action>`。★ = 屬 `PUBLIC_PERMS`，匿名唯讀可用（ADR-025/027）。
+命名規則：`<capability>.<action>`。★ = 屬 `PUBLIC_PERMS`，任何人唯讀可用、不需 grant（ADR-025/027）。
 
 | 模組 | 能力鍵 |
 | :--- | :--- |
@@ -55,7 +55,7 @@
 | **Team（團隊管理）** | `team.view`、`team.edit`、`team.member.manage` |
 | **Work Zone（責任區）** | `work_zone.view`、`work_zone.add`、`work_zone.edit`、`work_zone.assign`、`work_zone.delete` |
 | **Dynamic Field（動態欄位設定）** | `dynamic_field.view`、`dynamic_field.add`、`dynamic_field.edit`、`dynamic_field.delete` |
-| **Pre-Departure（出勤前須知／行前通知）** | `pre_departure.view`、`pre_departure.publish`、`pre_departure.edit`、`pre_departure.delete` |
+| **Pre-Departure（出勤前須知／行前通知）** | `pre_departure.view` ★、`pre_departure.publish`、`pre_departure.edit`、`pre_departure.delete` |
 | **Audit（稽核日誌）** | `audit.view` |
 | **RBAC 自管（僅 Super Admin）** | `rbac.assign`、`rbac.edit` |
 
@@ -65,6 +65,7 @@
 > `pre_departure.*` 原本也在此列，功能落地後（briefing templates + briefings）已接上 enforcement 並授予 `super_admin`；
 > 同時補上原本沒有的 `pre_departure.delete`，與 `announcement.*` 的四鍵形狀對齊。
 > `pre_departure.view` 列入 `PUBLIC_PERMS`：志工要先讀得到行前通知才能決定是否出勤，與 `announcement.view` 同理。
+> 但**只有 briefings 是公開的**：template 是編輯者挑選用的作業面，讀取要 `pre_departure.publish`。
 
 ---
 
@@ -90,7 +91,7 @@
 ### 3.3 PII 遮罩（ADR-029/048/068）
 `ticket.view_pii` 不在 scope 內時，聯絡欄位回傳遮罩值（看起來像「沒填」），逐角色判定：`user`=own（只看自己的單原值）、team 角色=zone、`data_auditor`/`super_admin`=all、guest=一律遮罩。
 
-`stations` 也有自己的 `contact_name`/`contact_email`/`contact_phone`（**獨立欄位，與 `tickets` 的同名欄位無關**，ADR-068），由 `station.view_pii` 以完全相同的機制與逐角色 scope 遮罩——`app/graphql/geo/types.py:StationType` 的三個 field resolver 與 `TicketType` 對齊，共用 `app/graphql/masking.py`。判定表同上。
+`stations` 也有自己的 `contact_name`/`contact_email`/`contact_phone`（**獨立欄位，與 `tickets` 的同名欄位無關**，ADR-182），由 `station.view_pii` 以完全相同的機制與逐角色 scope 遮罩——`app/graphql/geo/types.py:StationType` 的三個 field resolver 與 `TicketType` 對齊，共用 `app/graphql/masking.py`。判定表同上。
 
 > 遮罩只擋讀取路徑。這些欄位仍會以明文進 `audit_logs`（`stations`/`tickets` 都是 audited table，trigger 只濾 `password_hash`）——見 PR #31 review LOW 7，待未來的 audit-log PII 政策統一處理。
 

@@ -2,6 +2,8 @@
 
 import hashlib
 import hmac
+import json
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -9,13 +11,18 @@ from typing import Protocol
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from redis.exceptions import RedisError
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.context import request_identity
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope
+from app.core.redis import get_redis
 from app.db.session import SessionLocal
 from app.models.auth import User
+from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import user_repository
 
 # --- 密碼處理框架 ---
@@ -162,7 +169,8 @@ def hash_refresh_token(token: str) -> str:
 
 
 def create_access_token(
-        data: dict, expires_delta: timedelta | None = None, sid: str | None = None
+        data: dict, expires_delta: timedelta | None = None, sid: str | None = None,
+        act: str | None = None,
 ) -> str:
     """Create a signed JWT access token, tagging it with type/jti and optional session id."""
     to_encode = data.copy()
@@ -173,6 +181,9 @@ def create_access_token(
         "type": "access",
         "jti": secrets.token_hex(16),
         "sid": sid,
+        # The identity this token acts as (ADR-069). Absent means "no identity resolved",
+        # which yields no grants at all.
+        "act": act,
     })
     return jwt.encode(to_encode, settings.JWT_SIGNING_KEY, algorithm=settings.ALGORITHM)
 
@@ -181,6 +192,9 @@ async def get_db():
     """Async generator yielding a database session per request."""
     async with SessionLocal() as session:
         yield session
+
+
+logger = logging.getLogger(__name__)
 
 
 def _credentials_exception() -> HTTPException:
@@ -203,17 +217,121 @@ def _decode_access_payload(token: str) -> dict:
     return payload
 
 
-async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
-    """FastAPI dependency resolving the current authenticated user from JWT."""
+async def _require_live_session(redis, payload: dict) -> None:
+    """Refuse a token whose session is gone (ADR-099).
+
+    This is what makes every revocation path take effect at once: logout, logout-all,
+    change-password, reset-password and an admin kick all already delete `session:{sid}`,
+    they were simply never looked at on the request path. Checking here — before the user
+    lookup — also means a revoked token costs no database round trip.
+    """
+    # Imported here, not at module scope: session_repository imports this module for its
+    # token hashing, so a top-level import would close the cycle.
+    from app.repositories.session_repository import SessionRepository
+
+    sid = payload.get("sid")
+    # Only tokens that did not come from issue_token_pair lack a sid, and there is no live
+    # session to check them against. Letting them through would make "leave the sid out" a
+    # way around this check (ADR-101).
+    if not sid:
+        raise _credentials_exception()
+    try:
+        session = await SessionRepository(redis).get_session(sid)
+    except RedisError:
+        # Fail closed (ADR-100): with Redis unreachable we cannot tell a live session from a
+        # revoked one, and guessing "live" would hand anyone who can disrupt Redis a way to
+        # switch revocation off. The response is deliberately identical to an invalid token,
+        # so this log is the only thing that distinguishes "everyone was signed out" from
+        # "everyone's credentials broke".
+        logger.exception("refusing the request: Redis (the session store) is unreachable")
+        raise _credentials_exception() from None
+    # A session that names a different user than the token does is not a case that can arise
+    # today — both claims are signed — but pinning it here keeps sid/sub paired as an
+    # invariant a future path cannot quietly break (ADR-101).
+    if session is None or session.get("user_uuid") != payload["sub"]:
+        raise _credentials_exception()
+    # The identity is pinned to the session too (ADR-195). `/auth/switch-identity` writes the
+    # new `act` into the session record, but the access token it replaced carries the same
+    # sid/sub and would otherwise stay usable for the rest of its 15 minutes — replaying it
+    # undoes a deliberate downgrade, and attributes whatever it does to the pre-switch
+    # identity in the audit trail. The session record is the single source of truth for which
+    # identity a session is acting as; a token that disagrees with it is stale.
+    if session.get("act") != payload.get("act"):
+        raise _credentials_exception()
+
+
+async def get_current_user(
+        db: AsyncSession = Depends(get_db),
+        token: str = Depends(oauth2_scheme),
+        redis=Depends(get_redis),
+) -> User:
+    """Resolve the authenticated user AND the identity this token acts as (ADR-069/096).
+
+    An `act` claim that no longer names a grant the user holds — role revoked, role deleted,
+    team soft-deleted — is refused here rather than quietly downgraded. Silently dropping to
+    a lesser identity would leave the caller acting with permissions they cannot see they
+    lost; refusing makes it visible. `/auth/refresh` refuses the same case, so between them
+    the user is signed out and comes back on their platform identity.
+
+    `redis` is an ordinary parameter rather than something fetched from `app.state`, because
+    the GraphQL context calls this function directly instead of through FastAPI and has to
+    supply it itself (ADR-102).
+    """
     payload = _decode_access_payload(token)
+    await _require_live_session(redis, payload)
     user = await user_repository.get_by_uuid(db, payload["sub"])
     if user is None:
         raise _credentials_exception()
+    act = payload.get("act")
+    if act:
+        identity = await active_identity_repository.resolve(db, str(user.uuid), act)
+        if identity is None:
+            raise _credentials_exception()
+    else:
+        # No `act` at all is a different case from one that names a vanished identity: nothing
+        # was claimed, so fall back to the platform identity — the ADR-069 default, and what
+        # the caller holds anyway, so it grants nothing new. Keeps tokens minted before this
+        # feature (and any caller that does not track identity) working as they did.
+        identity = await active_identity_repository.default_for_user(db, str(user.uuid))
+    user.active_identity = identity
+    await _publish_identity_for_auditing(db, identity)
     return user
 
 
+async def _publish_identity_for_auditing(db: AsyncSession, identity) -> None:
+    """Make the active identity visible to the audit trigger (ADR-076).
+
+    Two writes, because they cover two different windows. The contextvar is what
+    `set_audit_session_variables` reads when a session opens a transaction, and covers every
+    session created later in this request. But THIS session's transaction already began —
+    resolving the identity needed a query — so its GUC has to be set directly, or every write
+    made through the session that authenticated the request would be logged without one.
+
+    `set_config(..., true)` is transaction-local, so nothing leaks into the next request
+    through a pooled connection.
+    """
+    if identity is None:
+        return
+    snapshot = json.dumps(identity.to_audit_context(), ensure_ascii=False)
+    request_identity.set(snapshot)
+    await db.execute(text("SELECT set_config('app.active_identity', :identity, true)"),
+                     {"identity": snapshot})
+
+
 async def get_current_session(token: str = Depends(oauth2_scheme)) -> tuple[str, str | None]:
-    """Resolve (user_uuid, sid) from the access token without a DB hit."""
+    """Resolve (user_uuid, sid) from the access token without a DB hit or a Redis read.
+
+    Deliberately does NOT check that the session is still live (ADR-190, superseding
+    ADR-180). Its only callers are the logout endpoints and `/auth/switch-identity`, and
+    "the session is gone" means something different at each: switch-identity checks it
+    itself and refuses, while logout has already got what it was asking for and answers 204.
+    Raising 401 from here made `/auth/logout` non-idempotent, which breaks the ordinary
+    client pattern of calling logout from a 401 interceptor.
+
+    The attack ADR-180 closed — an intruder replaying a revoked token against
+    `/auth/logout-all` to keep kicking the victim out — is closed in `logout_all` instead,
+    which refuses to revoke anything on behalf of a session that is already gone.
+    """
     payload = _decode_access_payload(token)
     return payload["sub"], payload.get("sid")
 
@@ -223,6 +341,8 @@ def _request_rbac_cache(request: Request) -> dict:
 
     Keyed by user uuid so one request's cache never leaks across users — relevant mainly
     for tests that swap `current_user` between calls within a single request lifecycle.
+    The identity does not need to be part of the key: it is fixed for the whole request,
+    having been resolved once from the token in `get_current_user`.
     """
     if not hasattr(request.state, "rbac_cache"):
         request.state.rbac_cache = {}
@@ -241,7 +361,9 @@ async def resolve_scope(
     if cache is not None and actor.uuid in cache:
         grants = cache[actor.uuid]
     else:
-        grants = await user_repository.get_user_permissions(db, actor.uuid)
+        grants = await user_repository.get_user_permissions(
+            db, actor.uuid, identity=getattr(actor, "active_identity", None)
+        )
         if cache is not None:
             cache[actor.uuid] = grants
     return grants.get(perm.value, Scope.NONE)

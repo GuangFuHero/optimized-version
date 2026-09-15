@@ -2,12 +2,13 @@
 
 import pytest
 
-from app.core.security import create_access_token, generate_salt, get_password_hash
+from app.core.security import generate_salt, get_password_hash
 from app.services.auth_account import create_account
+from tests.conftest import auth_headers_for
 
 
 @pytest.mark.asyncio
-async def test_change_password_updates_identity(client, db_session):
+async def test_change_password_updates_identity(client, db_session, redis):
     """Change-password updates the password identity; old fails and new logs in."""
     # 'user' platform role is already seeded by the db_session fixture (Task 9b) — do NOT re-add it
     # (a duplicate role makes role_repository.get_by_name raise MultipleResultsFound).
@@ -16,9 +17,9 @@ async def test_change_password_updates_identity(client, db_session):
         db_session, contact_type="email", value="a@x.com",
         password_hash=get_password_hash("oldpw1", salt), name="Tester",
     )
-    token = create_access_token(data={"sub": str(user.uuid)})
+    headers = await auth_headers_for(redis, user.uuid)
     res = await client.post("/api/v1/auth/change-password",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers,
         json={"old_password": "oldpw1", "new_password": "newpw1", "salt_frontend": "deadbeef"})
     assert res.status_code == 204
     # old password no longer works, new one does
@@ -29,15 +30,15 @@ async def test_change_password_updates_identity(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_change_password_wrong_old_password_401(client, db_session):
+async def test_change_password_wrong_old_password_401(client, db_session, redis):
     """Change-password with a wrong old password returns 401."""
     salt = generate_salt()
     user = await create_account(
         db_session, contact_type="email", value="a@x.com",
         password_hash=get_password_hash("oldpw1", salt), name="Tester",
     )
-    token = create_access_token(data={"sub": str(user.uuid)})
+    headers = await auth_headers_for(redis, user.uuid)
     res = await client.post("/api/v1/auth/change-password",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers,
         json={"old_password": "wrongpw", "new_password": "newpw1", "salt_frontend": "deadbeef"})
     assert res.status_code == 401

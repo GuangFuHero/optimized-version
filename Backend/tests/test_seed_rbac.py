@@ -58,3 +58,33 @@ async def test_ensure_role_grant_never_overwrites_existing(db_session):
         )
     ).scalar_one()
     assert grant.scope == "all"  # runtime edit preserved; seed did NOT overwrite
+
+
+# --- ADR-097: every actionable identity must stand on its own -----------------------------
+
+# Oversight-only by design: `data_auditor` holds no write capabilities at all, so it is a
+# documented exception rather than a gap. Recorded here so the exception has to be renewed
+# deliberately if the role ever changes.
+_OVERSIGHT_ONLY_ROLES = {"data_auditor"}
+
+
+def _grants_of(role_name: str) -> dict:
+    """The seeded capability->scope map for one role."""
+    from scripts.seed_rbac import ROLES_DATA
+
+    return next(role["permissions"] for role in ROLES_DATA if role["name"] == role_name)
+
+
+def test_every_actionable_role_covers_the_citizen_baseline():
+    """Switching to a team identity must not lose abilities every citizen already has.
+
+    Under the old union model, a team role inherited the platform `user` role's grants
+    because both were always active. Identity switching keeps only one alive, so any
+    capability a team role does not grant itself is one its holder silently loses on
+    switching — which is how station.contribute went missing (ADR-097).
+    """
+    baseline = set(_grants_of("user"))
+    for role_name in ("super_admin", "admin", "member"):
+        assert role_name not in _OVERSIGHT_ONLY_ROLES
+        missing = baseline - set(_grants_of(role_name))
+        assert not missing, f"{role_name} is missing citizen capabilities: {missing}"

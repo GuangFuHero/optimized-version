@@ -68,12 +68,17 @@ class BriefingRepository(GenericRepository[Briefing]):
     ) -> Briefing:
         """Create a briefing, optionally seeded from a template.
 
-        When ``content``/``tags``/``state`` are omitted and ``template_uuid`` refers to a live
-        template, those values are copied from it. Returns the refreshed Briefing.
+        When ``content``/``tags``/``state`` are omitted they are copied from the template;
+        omitting ``template_uuid`` too yields an ad-hoc briefing with empty content. Raises
+        ValueError if ``template_uuid`` names a template that is missing or soft-deleted —
+        otherwise the caller silently gets an empty briefing, or an FK violation surfacing
+        as "Unexpected error."
         """
         template: BriefingTemplate | None = None
         if template_uuid is not None:
             template = await briefing_template_repository.get_by_uuid_active(db, template_uuid)
+            if template is None:
+                raise ValueError("Briefing template not found")
 
         if content is None:
             content = template.content if template else ""

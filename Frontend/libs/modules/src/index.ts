@@ -1,6 +1,7 @@
 export {
   AuthBrandHeader,
   AuthFooterLinks,
+  AuthFormError,
   AuthShell,
   LoginForm,
   RegisterForm,

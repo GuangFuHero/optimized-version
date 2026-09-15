@@ -1,9 +1,12 @@
-"""create briefing templates and briefings; drop unused station/task score columns
+"""create briefing templates and briefings; drop unused columns
 
 Revision ID: c3f0a1b2d4e6
-Revises: 07ac630e0009
+Revises: c4a91e77b0d3
 Create Date: 2026-06-27 00:00:00.000000
 
+Chained onto main's head rather than the announcements revision this branch was written
+against: a sibling of what main added since would leave two heads, and `alembic upgrade
+head` refuses to run with more than one. Re-point this line whenever main moves under it.
 """
 from collections.abc import Sequence
 
@@ -13,7 +16,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'c3f0a1b2d4e6'
-down_revision: str | Sequence[str] | None = '07ac630e0009'
+down_revision: str | Sequence[str] | None = 'c4a91e77b0d3'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -66,9 +69,17 @@ def upgrade() -> None:
     op.execute("ALTER TABLE stations DROP COLUMN IF EXISTS priority_score")
     op.execute("ALTER TABLE ticket_tasks DROP COLUMN IF EXISTS confidence_score")
 
+    # The contract half of d19cda4d9871, which moved passwords to
+    # `user_identities.password_hash` and left `users.password` for a "P4" stage never written;
+    # nothing has read or written it since, so no backfill is needed. Until now a
+    # migration-built database had this column and a `Base.metadata.create_all` one (what the
+    # tests build) did not, so the two disagreed on the schema.
+    op.execute("ALTER TABLE users DROP COLUMN IF EXISTS password")
+
 
 def downgrade() -> None:
-    """Restore the score columns, then drop the briefings tables."""
+    """Restore the dropped columns, then drop the briefings tables."""
+    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password varchar(512)")
     op.execute("ALTER TABLE ticket_tasks ADD COLUMN IF NOT EXISTS confidence_score double precision")  # noqa: E501
     op.execute("ALTER TABLE stations ADD COLUMN IF NOT EXISTS priority_score double precision")
     op.execute("ALTER TABLE stations ADD COLUMN IF NOT EXISTS confidence_score double precision")

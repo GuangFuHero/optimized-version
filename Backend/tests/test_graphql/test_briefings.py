@@ -4,6 +4,8 @@ Tests drive the ASGI app in-process via httpx. They use the shared seeded test D
 test filters results to the UUIDs it created rather than assuming a clean table.
 """
 
+import uuid
+
 import pytest
 
 from tests.test_graphql.conftest import auth_header
@@ -138,8 +140,24 @@ async def test_list_filters_by_state_and_tag(client, briefing_admin_auth):
 
 
 @pytest.mark.asyncio
+async def test_generate_rejects_a_template_that_is_missing_or_deleted(
+    client, briefing_admin_auth
+):
+    """Both cases raise rather than silently producing an empty briefing / an FK violation."""
+    _, token = briefing_admin_auth
+
+    unknown = await _post(client, GENERATE, {"templateUuid": str(uuid.uuid4())}, token)
+    assert "Briefing template not found" in str(unknown.get("errors"))
+
+    t = await _create_template(client, token, "gone soon", [], "BRIEFING")
+    await _post(client, DELETE_TEMPLATE, {"uuid": t["uuid"]}, token)
+    deleted = await _post(client, GENERATE, {"templateUuid": t["uuid"]}, token)
+    assert "Briefing template not found" in str(deleted.get("errors"))
+
+
+@pytest.mark.asyncio
 async def test_mutations_require_briefing_permission(client, login_user_auth):
-    """A user without the briefing resource cannot create, generate, or read briefings."""
+    """A user without any pre_departure grant cannot create or generate."""
     _, token = login_user_auth
     created = await _post(
         client, CREATE_TEMPLATE, {"content": "nope", "tags": [], "state": "BRIEFING"}, token
@@ -149,5 +167,18 @@ async def test_mutations_require_briefing_permission(client, login_user_auth):
     generated = await _post(client, GENERATE, {"templateUuid": None}, token)
     assert generated.get("errors")
 
-    listed = await _post(client, LIST_TEMPLATES, {}, token)
-    assert listed.get("errors")
+
+@pytest.mark.asyncio
+async def test_briefings_are_public_but_templates_are_not(client, login_user_auth):
+    """pre_departure.view is a PUBLIC_PERM, so an account must not read *less* than a guest.
+
+    Templates are the authoring surface and need pre_departure.publish, so they stay closed
+    to both.
+    """
+    _, token = login_user_auth
+    for caller in (None, token):
+        listed = await _post(client, LIST_BRIEFINGS, {}, caller)
+        assert "errors" not in listed, listed
+
+        templates = await _post(client, LIST_TEMPLATES, {}, caller)
+        assert templates.get("errors"), templates
