@@ -10,10 +10,10 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select, text
 
-from app.core.security import create_access_token
 from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.audit import AuditLog
 from app.models.auth import User
+from tests.conftest import auth_headers_for
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -30,7 +30,7 @@ async def _install_audit_trigger_on_users(db_session):
 
 
 @pytest.mark.asyncio
-async def test_authenticated_request_attributes_audit_log_to_the_real_caller(client, db_session):
+async def test_authenticated_request_attributes_audit_log_to_the_real_caller(client, db_session, redis):
     """A PATCH /users/me under a real Bearer token attributes the resulting audit row to it."""
     actor = User(name="Audit Actor")
     db_session.add(actor)
@@ -44,11 +44,10 @@ async def test_authenticated_request_attributes_audit_log_to_the_real_caller(cli
     # attribute the write to no one, even though the app-level context is correct by the
     # time the write executes. Only a concern when a session survives across an await
     # boundary like this test's; get_db() hands every real request a brand new session.
-    token = create_access_token(data={"sub": actor_uuid})
     resp = await client.patch(
         "/api/v1/users/me",
         json={"name": "Renamed By Self"},
-        headers={"Authorization": f"Bearer {token}"},
+        headers=await auth_headers_for(redis, actor_uuid),
     )
     assert resp.status_code == 200, resp.json()
 

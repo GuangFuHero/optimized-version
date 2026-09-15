@@ -13,12 +13,14 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import delete, select, text
 
+from app.core.identity import encode_act
 from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.models.auth import User
 from app.models.project_settings import ProjectSettings
 from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+from app.repositories.session_repository import SessionRepository
 from tests.test_graphql.conftest import auth_header, test_db
 
 _VIEWER_ROLE = "Field Viewer (test)"
@@ -252,7 +254,7 @@ mutation ($stationType: String!, $input: UpsertPropertyConfigInput!) {
 """
 
 
-async def _field_viewer_token() -> str:
+async def _field_viewer_token(redis) -> str:
     """A user who may read configs but not edit them — the includeInactive gate's negative case."""
     async with test_db() as db:
         role = (await db.execute(select(Role).where(Role.name == _VIEWER_ROLE))).scalar_one_or_none()
@@ -272,7 +274,12 @@ async def _field_viewer_token() -> str:
         db.add(user)
         await db.flush()
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
-        return create_access_token(data={"sub": str(user.uuid)})
+        # Same shape the shared fixtures mint (see conftest._create_user_with_role): the token
+        # names the identity it acts as (010) and is backed by a live session whose record
+        # names the same one (014 / ADR-195). A bare token authenticates nothing.
+        act = encode_act(str(role.uuid), None)
+        sid, _ = await SessionRepository(redis).create_session(str(user.uuid), "test", act=act)
+        return create_access_token(data={"sub": str(user.uuid)}, sid=sid, act=act)
 
 
 @pytest.mark.asyncio
@@ -314,9 +321,9 @@ async def test_include_inactive_also_works_for_tasks(client, coordinator_auth):
 
 
 @pytest.mark.asyncio
-async def test_include_inactive_requires_edit_permission(client):
+async def test_include_inactive_requires_edit_permission(client, redis):
     """Seeing what someone retired goes with the right to retire it, not with form access."""
-    token = await _field_viewer_token()
+    token = await _field_viewer_token(redis)
     async with test_db() as db:
         db.add(StationPropertyConfig(
             station_type="shelter", property_name="已停用欄位",

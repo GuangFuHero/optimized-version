@@ -110,13 +110,23 @@ async def set_user_permission(
     user_uuid: UUID,
     cap: Perm,
     body: SetGrantRequest,
+    team_uuid: UUID | None = None,
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Add/update one per-user additive grant (super_admin only, via rbac.assign)."""
+    """Add/update one per-user additive grant (super_admin only, via rbac.assign).
+
+    `team_uuid` binds the grant to that team's identity; omitted, it binds to the platform
+    identity (ADR-073) — a grant scoped `team` or `zone` means nothing without one.
+    """
     try:
         return await rbac_admin_service.set_user_permission(
-            db, actor=current_user, user_uuid=str(user_uuid), cap=cap, scope=body.scope
+            db,
+            actor=current_user,
+            user_uuid=str(user_uuid),
+            cap=cap,
+            scope=body.scope,
+            team_uuid=str(team_uuid) if team_uuid else None,
         )
     except RbacNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -130,13 +140,18 @@ async def set_user_permission(
 async def revoke_user_permission(
     user_uuid: UUID,
     cap: Perm,
+    team_uuid: UUID | None = None,
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Remove one per-user grant (super_admin only, via rbac.assign)."""
+    """Remove one per-user grant from one identity (super_admin only, via rbac.assign)."""
     try:
         await rbac_admin_service.revoke_user_permission(
-            db, actor=current_user, user_uuid=str(user_uuid), cap=cap
+            db,
+            actor=current_user,
+            user_uuid=str(user_uuid),
+            cap=cap,
+            team_uuid=str(team_uuid) if team_uuid else None,
         )
     except RbacNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -196,13 +211,22 @@ async def delete_role(
 async def unassign_user_role(
     user_uuid: UUID,
     role_uuid: UUID,
+    team_uuid: UUID | None = None,
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Remove a role from a user (super_admin only, via rbac.assign)."""
+    """Remove one identity from a user (super_admin only, via rbac.assign).
+
+    `team_uuid` picks which identity when the role is held in several teams; omitted, it
+    means the platform identity (ADR-073).
+    """
     try:
         await rbac_admin_service.unassign_user_role(
-            db, actor=current_user, user_uuid=str(user_uuid), role_uuid=str(role_uuid)
+            db,
+            actor=current_user,
+            user_uuid=str(user_uuid),
+            role_uuid=str(role_uuid),
+            team_uuid=str(team_uuid) if team_uuid else None,
         )
     except RbacNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
