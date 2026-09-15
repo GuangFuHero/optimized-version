@@ -39,14 +39,22 @@ class SessionRepository:
         """Decode a JSON record stored in Redis, or return None if absent."""
         return json.loads(raw) if raw else None
 
-    async def create_session(self, user_uuid: str, device: str) -> tuple[str, str]:
-        """Create a new session; return (sid, raw_refresh_token)."""
+    async def create_session(
+        self, user_uuid: str, device: str, *, act: str | None = None
+    ) -> tuple[str, str]:
+        """Create a new session; return (sid, raw_refresh_token).
+
+        `act` is the identity this session is acting as (ADR-188). Stored here rather than
+        only in the access token so that a refresh which does not name one can carry the
+        session's identity forward instead of resetting to the platform default.
+        """
         sid = str(uuid.uuid4())
         raw = generate_refresh_token()
         rt_hash = self._hash(raw)
         now = datetime.now(UTC).isoformat()
         session = {
             "user_uuid": user_uuid, "current_rt_hash": rt_hash, "device": device,
+            "act": act,
             "created_at": now, "last_used_at": now,
         }
         await self.redis.set(self.SESSION + sid, json.dumps(session), ex=self.ttl)
@@ -59,9 +67,68 @@ class SessionRepository:
         await self.redis.expire(self.USER_SESSIONS + user_uuid, self.ttl)
         return sid, raw
 
+    async def get_session(self, sid: str) -> dict | None:
+        """The live session record for `sid`, or None once it has been revoked or expired.
+
+        Read-only, and does not touch the TTL: callers use it to ask "is this session still
+        alive" without keeping it alive by asking. That question is what makes revocation
+        take effect on the request path — `revoke_session` already deletes `session:{sid}`,
+        so a caller that checks here sees the revocation on its very next request instead of
+        up to 15 minutes later (ADR-099).
+
+        Deliberately does NOT catch connection errors. A Redis outage and a revoked session
+        are different things and the caller has to tell them apart — swallowing the error
+        into None would disguise an outage as "this session was revoked" and leave the
+        fail-closed 401 with no cause to log (ADR-100).
+        """
+        return self._load(await self.redis.get(self.SESSION + sid))
+
+    async def set_identity(self, sid: str, act: str | None) -> None:
+        """Record which identity this session is now acting as (ADR-188).
+
+        Called by `/auth/switch-identity`: without it the switch lives only in the access
+        token it returned, and the next refresh that does not name an identity would put the
+        caller back on their platform default — silently undoing a deliberate downgrade.
+
+        Preserves the record's TTL rather than resetting it: switching identity is not a
+        credential event (ADR-070) and must not extend the session's life. A session that
+        vanished between the caller's request and this write is left alone; the endpoint has
+        already checked it exists, and re-creating it here would resurrect a revoked session.
+        """
+        raw = await self.redis.get(self.SESSION + sid)
+        session = self._load(raw)
+        if session is None:
+            return
+        session["act"] = act
+        ttl = await self.redis.ttl(self.SESSION + sid)
+        await self.redis.set(
+            self.SESSION + sid, json.dumps(session), ex=ttl if ttl and ttl > 0 else self.ttl
+        )
+
     async def get_refresh(self, rt_hash: str) -> dict | None:
         """Fetch a refresh-token record by hash."""
         return self._load(await self.redis.get(self.REFRESH + rt_hash))
+
+    async def _claim(self, rt_hash: str, nonce: bytes) -> bool:
+        """Claim `rt_hash` for this rotation attempt. True if it is ours, False if replayed.
+
+        The value written is a per-attempt `nonce` rather than a constant, so that the claim
+        can be safely retried (ADR-196). The shared Redis client retries a command whose
+        connection died underneath it, and a `SET NX` is not idempotent: if the server ran it
+        but the reply was lost, the retry finds the key already set and — with a constant
+        value — the caller could not tell "someone replayed this token" from "I am seeing my
+        own write". It would conclude replay and revoke the whole session, signing the user
+        out of every device and telling them their token was stolen.
+
+        Reading the value back settles it. A mismatch is a genuine replay; our own nonce means
+        we won the claim and only the reply went missing.
+
+        The GET only runs on the NX-failed path, so the ordinary rotation is still one
+        round trip.
+        """
+        if await self.redis.set(self.USED + rt_hash, nonce, nx=True, ex=self.ttl):
+            return True
+        return await self.redis.get(self.USED + rt_hash) == nonce
 
     async def rotate(self, raw_token: str) -> tuple[str, str, str]:
         """Validate + rotate a refresh token. Returns (sid, user_uuid, new_raw_token).
@@ -77,8 +144,7 @@ class SessionRepository:
         user_uuid = rec["user_uuid"]
         # atomically claim this token: only the first rotation sets the NX flag and proceeds.
         # any later (or concurrent-losing) rotation finds it already set -> replay -> revoke session.
-        claimed = await self.redis.set(self.USED + rt_hash, b"1", nx=True, ex=self.ttl)
-        if not claimed:
+        if not await self._claim(rt_hash, uuid.uuid4().hex.encode()):
             await self.revoke_session(sid)
             raise RefreshTokenReuse
         # NOTE: the claim is atomic, but mint-new-token + update-pointer below are not transactional with it.
@@ -111,9 +177,17 @@ class SessionRepository:
             await self.redis.srem(self.USER_SESSIONS + session["user_uuid"], sid)
         await self.redis.delete(self.SESSION + sid)
 
-    async def revoke_all_for_user(self, user_uuid: str) -> None:
-        """Delete every session belonging to the user (global logout)."""
+    async def revoke_all_for_user(self, user_uuid: str) -> int:
+        """Delete every session belonging to the user (global logout); return how many.
+
+        The count is returned rather than left to the caller to read for itself (ADR-221):
+        the set is already in hand here, and a caller doing its own `smembers` first both
+        pays for a second round trip and can disagree with this one — a session created
+        between the two reads is revoked but not counted, so an audit row built from that
+        number under-reports what happened.
+        """
         members = await self.redis.smembers(self.USER_SESSIONS + user_uuid)
         for m in members:
             await self.revoke_session(m.decode() if isinstance(m, bytes) else m)
         await self.redis.delete(self.USER_SESSIONS + user_uuid)
+        return len(members)

@@ -9,7 +9,6 @@ from shapely.geometry import Point, Polygon
 from sqlalchemy import event, select
 
 from app.core.permissions import Perm
-from app.core.security import create_access_token
 from app.db.session import engine as app_engine
 from app.models.auth import User
 from app.models.geo import Station
@@ -17,6 +16,7 @@ from app.models.photo import Photo
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.team import Team, TeamZoneAssign, WorkZone
+from tests.conftest import token_for
 from tests.test_graphql.conftest import auth_header
 from tests.test_graphql.conftest import test_db as _test_db_ctx
 
@@ -128,7 +128,7 @@ async def test_stations_photos_uses_single_batched_query(client, coordinator_aut
     )
 
 
-async def _make_gov_viewer() -> str:
+async def _make_gov_viewer(redis) -> str:
     """Create a user holding a role granting work_zone.view at 'all', return its token.
 
     Mirrors ``test_work_zone.py``'s ``_make_gov_user``, trimmed to the single permission
@@ -155,11 +155,11 @@ async def _make_gov_viewer() -> str:
         await db.flush()
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
 
-        return create_access_token(data={"sub": str(user.uuid)})
+        return await token_for(redis, user.uuid)
 
 
 @pytest.mark.asyncio
-async def test_assigned_teams_uses_single_batched_query(client):
+async def test_assigned_teams_uses_single_batched_query(client, redis):
     """Asking for assignedTeams across N work zones must issue one SELECT against team_zone_assign.
 
     ``teams_by_zone`` (app/graphql/loaders.py) backs ``WorkZoneType.assignedTeams`` and is
@@ -168,7 +168,7 @@ async def test_assigned_teams_uses_single_batched_query(client):
     Counting SELECTs against ``team_zone_assign`` (rather than ``teams``) pins down the
     loader's own query specifically, since that table is only ever touched by this join.
     """
-    gov_token = await _make_gov_viewer()
+    gov_token = await _make_gov_viewer(redis)
 
     async with _test_db_ctx() as db:
         assigner = User(name=f"assigner_{uuid_mod.uuid4().hex[:8]}")

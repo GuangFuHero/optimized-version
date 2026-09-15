@@ -21,16 +21,26 @@ class Perm(StrEnum):
     # Ticket (PII split from the ticket itself: view != view_pii)
     TICKET_VIEW = "ticket.view"
     TICKET_VIEW_PII = "ticket.view_pii"
+    # Feature 016 (ADR-127): the change timeline is its own capability, not a reuse of
+    # audit.view — that key is auditor-only, while the requirement is that a requester can
+    # follow their own ticket. Not a reuse of ticket.view either: that one is in
+    # PUBLIC_PERMS, so sharing it would put staff names and review timings in front of
+    # anonymous visitors. Scoped like view_pii, since it exposes the same order of detail.
+    TICKET_VIEW_HISTORY = "ticket.view_history"
     TICKET_ADD = "ticket.add"
     TICKET_EDIT = "ticket.edit"
     TICKET_DELETE = "ticket.delete"
     TICKET_ASSIGN = "ticket.assign"
     TICKET_REVIEW = "ticket.review"
-    TICKET_EXPORT = "ticket.export"
+    TICKET_EXPORT = "ticket.export"  # registered since RBAC v1; first enforced by feature 015
+    TICKET_IMPORT = "ticket.import"  # see the bulk note under Resource Station below
 
     # Resource Station
     STATION_VIEW = "station.view"
     STATION_VIEW_PII = "station.view_pii"
+    # Feature 016 (ADR-127/128): same reasoning as ticket.view_history, and deliberately the
+    # same scope tiering — a station's timeline names the people who edited it.
+    STATION_VIEW_HISTORY = "station.view_history"
     STATION_ADD = "station.add"
     STATION_EDIT = "station.edit"
     STATION_DELETE = "station.delete"
@@ -38,6 +48,13 @@ class Perm(StrEnum):
     # Open crowd-sourcing: attach a property or submit a rating to ANY station (no ownership
     # check — deliberately capability-only, not scoped like station.edit=own). See station.py.
     STATION_CONTRIBUTE = "station.contribute"
+    # Bulk export/import (feature 015, ADR-110). Import is deliberately NOT a reuse of
+    # add/edit: one file can rewrite hundreds of rows, so the batch capability is separable
+    # from the single-row one. It is not a replacement either — every imported row still
+    # runs the *.add / *.edit checkpoints it would have run had it been typed in by hand,
+    # so import alone is a dead grant (asserted in tests/test_bulk_permissions.py).
+    STATION_EXPORT = "station.export"
+    STATION_IMPORT = "station.import"
 
     # Interactive Map (tiles, closure areas — the map *overlay*, distinct from the Station entity)
     MAP_VIEW = "map.view"

@@ -19,13 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.permissions import Perm
-from app.core.security import create_access_token, generate_salt, get_password_hash
+from app.core.security import generate_salt, get_password_hash
 from app.models.auth import User, UserContact, UserIdentity
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.repositories.auth_repository import user_repository
 from app.repositories.config_repository import station_property_config_repository
 from app.repositories.project_settings_repository import project_settings_repository
-from tests.conftest import TEST_DB_URL
+from tests.conftest import TEST_DB_URL, auth_headers_for
 
 pytestmark = pytest.mark.asyncio
 
@@ -33,12 +33,24 @@ _PASSWORD = "correct-horse-battery-staple"
 SETTINGS_URL = "/api/v1/admin/project-settings"
 
 
-def _auth_header(user_uuid: str) -> dict:
-    return {"Authorization": f"Bearer {create_access_token(data={'sub': str(user_uuid)})}"}
+async def _auth_header(redis, user_uuid: str, role=None) -> dict:
+    """Bearer headers backed by a live session, the way production mints them.
+
+    A bare `create_access_token` authenticates but carries no session (014) and no identity
+    (010), so it 401s before the test's own assertion runs, and would resolve to zero grants
+    if it got past that. `auth_headers_for` mints the shape production does.
+    """
+    return await auth_headers_for(redis, user_uuid, role)
 
 
-async def _make_admin(db, *perms: Perm) -> str:
-    """Create a user holding the given capabilities at scope 'all'."""
+async def _make_admin(db, *perms: Perm):
+    """Create a user holding the given capabilities at scope 'all'; return (uuid, role_uuid).
+
+    The role's uuid comes back because the token has to name it: since feature 010 an
+    identity is (role, team), and a token naming none resolves to no grants at all. It is
+    returned as a plain string, captured before the commit — later commits in the same test
+    would expire the instance and make `.uuid` a lazy reload.
+    """
     role = Role(name="super_admin", kind="platform")
     db.add(role)
     await db.flush()
@@ -52,10 +64,10 @@ async def _make_admin(db, *perms: Perm) -> str:
     user = User(name="Super Admin")
     db.add(user)
     await db.flush()
-    user_uuid = str(user.uuid)
+    user_uuid, role_uuid = str(user.uuid), str(role.uuid)
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     await db.commit()
-    return user_uuid
+    return user_uuid, role_uuid
 
 
 async def _make_login_user(db, email: str = "findings@example.com") -> str:
@@ -148,11 +160,11 @@ async def test_h1_the_session_survives_a_transient_db_outage(client, db_session,
 # M1 — the first PATCH must not create a nameless disaster
 # ──────────────────────────────────────────────
 
-async def test_m1_first_patch_without_a_name_is_rejected(client, db_session):
+async def test_m1_first_patch_without_a_name_is_rejected(client, db_session, redis):
     """`name` is NOT NULL and min_length=1, so creation without one should 422, not invent ""."""
-    admin_uuid = await _make_admin(db_session, Perm.PROJECT_VIEW, Perm.PROJECT_EDIT)
+    admin_uuid, role_uuid = await _make_admin(db_session, Perm.PROJECT_VIEW, Perm.PROJECT_EDIT)
 
-    resp = await client.patch(SETTINGS_URL, headers=_auth_header(admin_uuid),
+    resp = await client.patch(SETTINGS_URL, headers=await _auth_header(redis, admin_uuid, role_uuid),
                               json={"disaster_types": ["fire"]})
 
     assert resp.status_code == 422, (
@@ -220,7 +232,7 @@ async def test_m4_expired_session_is_not_counted(client, db_session, redis):
     ADR-094 reads a high count as a credential-leak signal, so a phantom device is a false
     alarm. Deleting the session key is exactly what Redis TTL expiry does.
     """
-    admin_uuid = await _make_admin(db_session, Perm.USER_VIEW)
+    admin_uuid, role_uuid = await _make_admin(db_session, Perm.USER_VIEW)
     user_uuid = await _make_login_user(db_session)
     await _login(client)
     await _login(client)
@@ -230,7 +242,7 @@ async def test_m4_expired_session_is_not_counted(client, db_session, redis):
     expired = sids[0].decode() if isinstance(sids[0], bytes) else sids[0]
     await redis.delete(f"session:{expired}")  # simulate TTL expiry of one device
 
-    resp = await client.get("/api/v1/admin/users", headers=_auth_header(admin_uuid))
+    resp = await client.get("/api/v1/admin/users", headers=await _auth_header(redis, admin_uuid, role_uuid))
     rows = {r["uuid"]: r for r in resp.json()}
 
     assert rows[user_uuid]["active_session_count"] == 1, (

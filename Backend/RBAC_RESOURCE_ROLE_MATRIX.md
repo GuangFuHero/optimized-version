@@ -6,10 +6,15 @@
 >
 > **⚠️ Live 事實來源（feature 009）**：runtime 的權威視圖是 `GET /admin/rbac/matrix`（角色×capability×scope 即時網格）+ `GET /admin/rbac/capabilities`（capability 目錄，含 `public` / `team_gov_only` 旗標）。此 `.md` 只是 2026-07-12 的靜態快照、且早於 PR #24 review 的收斂，個別 cell（例如下方 Work Zone 的 gov/ngo 註記）可能已落後——需要當下真值時查 API，不要以本檔為準。
 
-## 模型速記（ADR-019 / ADR-049）
+## 模型速記（ADR-019 / ADR-049，**身分部分已由 `Spec/010` 取代**）
 
-- **兩軸角色**：功能角色（`user_role_assign`）× 組織（`users.team_uuid → team.type ∈ {gov, ngo}`）。一人 = 一 platform 角色 + 最多一 team 角色。
-- **合併規則**：所有 grant 取聯集、**最寬勝**、無 deny（ADR-018/021）。
+- **身分（feature 010）**：一個身分 = `user_role_assign` 的一列（角色 + team 角色才有的 team）。
+  一人 = 一 platform 角色 + **任意多個** team 角色，每個 team 一個。
+  **任一時刻只有一個身分生效**，由 access token 的 `act` claim 指定（010/ADR-068/069）。
+  `users.team_uuid` 已刪除；組織歸屬讀的是當前身分的 team（`team.type ∈ {gov, ngo}`）。
+- **合併規則**：**當前身分內**的 grant 取聯集、**最寬勝**、無 deny（ADR-018/021 + 010/ADR-074）。
+  跨身分**不**聯集——`super_admin` 切到團隊身分時是真的降權，本表下方每一列都要理解成
+  「持有該角色**並且正以該角色行動**時」的權限。
 - **兩檢查點**：CP1＝有無 capability（load 前）；CP2＝這一筆屬不屬我/我 zone（load 後）。
 
 ### Scope 語意（`none / own / team / zone / all`）
@@ -17,12 +22,15 @@
 | scope | 意義 | 判定 |
 |---|---|---|
 | `all` | 全域 | 無條件 |
-| `zone` | 我 team 責任區內 | `ST_Contains(我 team 被指派的 WorkZone, resource.geometry)` |
-| `team` | 我自己的 team | `resource.<team 邊界欄位> == actor.team_uuid`（僅團隊成員管理用） |
+| `zone` | **當前身分**那個 team 的責任區內 | `ST_Contains(該 team 被指派的 WorkZone, resource.geometry)` |
+| `team` | **當前身分**那個 team | `resource.<team 邊界欄位> == active identity 的 team`（僅團隊成員管理用） |
 | `own` | 我建立的 | `resource.created_by == actor.uuid` |
 | `—` | 未授予 | CP1 直接 403 |
 
 最寬勝順序：`all > zone > team > own > none`。
+
+> 當前身分是 platform 身分（無 team）時，`team` 與 `zone` 一律不成立（`false()`）——不是「看得到全部」，
+> 是「看不到任何一筆」。同理，屬於多個 team 的人，`zone` 只涵蓋當前身分那一隊的責任區（010/ADR-074）。
 
 ## 角色一覽
 
@@ -54,19 +62,24 @@
 |---|---|---|---|---|---|---|
 | station.view | all（公開） | all | all | all | all | all |
 | **station.view_pii** | —（遮罩） | own | all | all | zone | zone |
+| **station.view_history** | — | own | all | all | zone | zone |
 | station.add | — | all | — | all | all | all |
-| **station.contribute** | — | all | — | all | — | — |
+| station.contribute | — | all | — | all | all | all |
 | station.edit | — | own | — | all | zone | zone |
 | station.delete | — | own | — | all | zone | own |
 | station.review | — | — | — | all | zone | — |
+| station.contribute | — | all | — | all | all | all |
+| station.export | — | — | all | all | zone | — |
+| station.import | — | — | — | all | all | — |
 
-> **⚠️ `station.contribute` 的空格不代表沒權限。** 本表每一欄是「該角色自己的 grant」，不是
-> **有效權限**。team 角色疊加在 platform 角色之上（指派 team 角色只替換同 kind 的舊角色，見
-> `app/services/admin.py`），所以 team `admin`/`member` 仍持有註冊時的預設 platform 角色
-> `user`，而 `station.contribute=all` 就掛在 `user` 上——聯集後 team admin 的有效 scope 是
-> `all`（ADR-018/019；`app/repositories/auth_repository.py:get_user_permissions` 取 widest）。
-> 這正是 ADR-063 [5]「群眾貢獻刻意開放」的設計：grant 掛在人人都有的 `user` 上就夠了。
-> **讀本表任何空格前，先確認你要的是 grant 還是有效權限**；要有效權限請查 `GET /admin/rbac/matrix`。
+> **⚠️ 本表每一欄是「該角色自己的 grant」。** 在 identity switching 之前，team 角色是疊加在
+> platform 角色之上的，所以空格不代表沒權限——聯集後仍可能有效。**那個讀法已經失效**：
+> 現在生效的只有「當前身分」那一個 identity 的 grant，platform 角色的授權不會帶進 team 身分
+> （ADR-074；`app/repositories/auth_repository.py:get_user_permissions`）。
+> 因此 `station.contribute` 這類原本靠 platform `user` 角色供應的能力，已改為直接授予 team
+> 角色（`scripts/seed_rbac.py`），否則現場人員切成團隊身分就會失去它。
+> 換句話說：對 team 角色而言，本表的空格現在**就是**沒有權限。要看某個人此刻的有效權限，
+> 仍請查 `GET /admin/rbac/matrix`——它解析的是該使用者當前的 identity。
 
 ### 求助單 Ticket
 
@@ -74,11 +87,16 @@
 |---|---|---|---|---|---|---|
 | ticket.view | all（公開） | all | all | all | all | all |
 | **ticket.view_pii** | —（遮罩） | own | all | all | zone | zone |
+| **ticket.view_history** | — | own | all | all | zone | zone |
 | ticket.add | — | all | — | all | all | all |
 | ticket.edit | — | own | — | all | zone | zone |
 | ticket.delete | — | own | — | all | zone | own |
 | ticket.assign | — | own | — | all | zone | own |
 | ticket.review | — | — | — | all | zone | — |
+| ticket.export | — | — | all | all | zone | — |
+| ticket.import | — | — | — | all | all | — |
+
+> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
 
 ### 使用者 User
 
@@ -164,9 +182,24 @@
 ### PII 遮罩（ADR-049）
 `ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩、user→own、team admin/member→zone、data_auditor/super_admin→all。
 
+### 異動時間軸的四層可見度（ADR-127~130，功能 016）
+`*.view_history` 是**進入時間軸的門票**，它決定看得到「哪些資源」的歷史；`audit.view` 決定看得到「多深」。同一個時間軸依 caller 權限分四層揭露：
+
+| 層級 | 內容 | 解鎖條件 |
+|---|---|---|
+| 一般 | 業務欄位（狀態、優先度、名稱、營業時間…） | `*.view_history` |
+| PII | `contact_*`、詳細地址、精確座標 | `ticket.view_pii` 且 in scope，否則遮罩／不給值 |
+| 稽核 | `review_note`、`moderation_status` | `audit.view` |
+| RAW | 整列原始 audit 負載 | `audit.view` |
+
+`data_auditor` 與 `super_admin` 同時持有 `audit.view=all` 與 `ticket.view_pii=all`，因此自動看得到四層全部，**沒有任何特例程式**。
+
+> **團隊角色是 `zone` 不是 `team`。** ADR-049 把 `team_uuid` 從 `base_geometries` 移除後，`in_scope()` 的 TEAM 分支對 ticket/station 永遠回 `False`（`app/core/rbac_scopes.py:77`）——對地理資源發 `team` 等於發一個不成立的授權。
+
 ### 「已定義、但目前無角色授予」的 capability（ahead-of-feature，ADR-050）
 下列 key 存在於目錄、但 seed 沒發給任何角色，等對應功能實作時才會接上 enforcement：
-`ticket.export`、`ai_duplicate.view`、`ai_duplicate.review`、`pre_departure.view/publish/edit`。
+`ai_duplicate.view`、`ai_duplicate.review`、`pre_departure.view/publish/edit`。
+（`ticket.export` 自功能 015 起已授予；`audit.view` 自功能 016 起首次真正被 enforcement 消費。）
 
 ### 相關 ADR
-ADR-018（union）、ADR-019（兩軸/一人一 team）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）。
+ADR-018（union）、ADR-019（兩軸/一人一 team，**身分部分被 010/ADR-068 取代**）、010/ADR-068·073·074（多 team 身分切換）、010/ADR-097（team 角色必須自給自足，`station.contribute`）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）。

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>救災列表 /list · 島嶼守望 Wan Guard</title>
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/primitives.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/semantic.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/typography.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/motion.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/base.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
+<link rel="stylesheet" href="js/site/site.css?v=20260913b">
+<style id="__om-edit-overrides"></style>
+</head>
+<body>
+<div id="root"></div>
+<template id="__bundler_thumbnail">
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg"><rect width="120" height="120" rx="24" fill="#2592B9"/><rect x="28" y="34" width="64" height="10" rx="5" fill="#fff"/><rect x="28" y="55" width="64" height="10" rx="5" fill="#fff"/><rect x="28" y="76" width="42" height="10" rx="5" fill="#fff"/></svg>
+</template>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
+<script src="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/_ds_bundle.js"></script>
+
+<!-- 前後台共用狀態橋接（2026-08-22）：民眾建立的任務單與接任務狀態，後台任務管理讀同一份 -->
+<!-- QR 產生器（vendored，不走 CDN）：分享面板的現場列印張貼用 -->
+<script src="js/vendor/qrcode.js?v=20260913b"></script>
+<script src="js/shared/wg-bridge.js?v=20260913b"></script>
+<script src="js/site/site-route.js?v=20260913b"></script>
+<script src="js/site/site-data.js?v=20260913b"></script>
+<script type="text/babel" src="js/site/site-controls.jsx?v=20260913b" data-presets="react"></script>
+<!-- 全站橫幅（EA-FEAT-001）：前台與後台共用同一支元件，realm 不同 -->
+<script src="js/admin/announce/an-data.js?v=20260913b"></script>
+<script type="text/babel" src="js/admin/announce/an-banner.jsx?v=20260913b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-shell.jsx?v=20260913b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-detail.jsx?v=20260913b" data-presets="react"></script>
+<!-- 地標選點：與後台建單共用同一支元件（2026-08-22）。必須排在 site-controls.jsx 之後 —— 它在載入當下就讀 window.WGIcon -->
+<script type="text/babel" src="js/admin/ticket/tk-locpicker.jsx?v=20260913b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-actions.jsx?v=20260913b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-notify.jsx?v=20260913b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-list.jsx?v=20260913b" data-presets="react"></script>
+
+<script type="text/babel" data-presets="react">
+/* /list — app route composition（對應 apps/demo/src/app/(site)/list/[[...segments]]/page.tsx）
+ * 與 /map 共用同一份外殼與路由狀態，只換主畫面。 */
+const { useState } = React;
+
+function SiteListPage() {
+  const route = useSiteRouteState('list');
+  // 身份改由 useSitePersona 提供（site-shell.jsx），不再 hardcode ——
+  // 三個 persona（建立者／志工／未登入訪客）的切換器在頂欄，兩支 HTML 共用同一份狀態。
+  const [session] = useSitePersona();
+  return (
+    <SiteShell module="list" state={route.state} search={route.state.search}
+      onSearchChange={(value) => route.replace({ ...route.state, search: value || undefined })}
+      isAuthenticated={session.isAuthenticated} platformRole={session.platformRole} userName={session.userName}
+      onSignIn={() => { /* 原型：登入由頂欄的身份切換器代表，見 SitePersonaSwitch */ }}
+      onSignOut={() => { /* 同上 */ }}>
+      <SiteListView session={session} route={route} />
+    </SiteShell>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<SiteListPage />);
+</script>
+</body>
+</html>

@@ -19,7 +19,10 @@
     "paths": {
       "@rescue-frontend/ui": ["./libs/ui/src/index.ts"],
       "@rescue-frontend/modules": ["./libs/modules/src/index.ts"],
-      "@rescue-frontend/data-access": ["./libs/data-access/src/index.ts"]
+      "@rescue-frontend/data-access": ["./libs/data-access/src/index.ts"],
+      "@rescue-frontend/data-access/server": [
+        "./libs/data-access/src/server.ts"
+      ]
     }
   },
   "exclude": ["node_modules", "tmp"]
