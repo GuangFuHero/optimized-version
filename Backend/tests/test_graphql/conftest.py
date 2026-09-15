@@ -205,9 +205,9 @@ async def content_admin_auth(redis):
 
 
 @pytest_asyncio.fixture
-async def briefing_admin_auth():
+async def briefing_admin_auth(redis):
     """Return (user_uuid, token) for a user with briefing management permissions."""
-    return await _create_user_with_role("Briefing Admin")
+    return await _create_user_with_role(redis, "Briefing Admin")
 
 
 def auth_header(token: str) -> dict:

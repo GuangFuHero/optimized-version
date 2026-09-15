@@ -1,9 +1,12 @@
 """create briefing templates and briefings; drop unused station/task score columns
 
 Revision ID: c3f0a1b2d4e6
-Revises: 07ac630e0009
+Revises: c4a91e77b0d3
 Create Date: 2026-06-27 00:00:00.000000
 
+Chained onto main's head rather than the announcements revision this branch was written
+against: a sibling of what main added since would leave two heads, and `alembic upgrade
+head` refuses to run with more than one. Re-point this line whenever main moves under it.
 """
 from collections.abc import Sequence
 
@@ -13,7 +16,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'c3f0a1b2d4e6'
-down_revision: str | Sequence[str] | None = '07ac630e0009'
+down_revision: str | Sequence[str] | None = 'c4a91e77b0d3'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

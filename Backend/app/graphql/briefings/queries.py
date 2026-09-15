@@ -26,9 +26,11 @@ class BriefingQuery:
     ) -> list[BriefingTemplateType]:
         """List non-deleted templates, optionally filtered by state and/or tag.
 
-        Requires pre_departure.view (public).
+        Requires pre_departure.publish, not the public pre_departure.view: a template is the
+        authoring surface an editor picks from, and only a generated briefing is the notice
+        volunteers read.
         """
-        await check_permission(info, Perm.PREDEP_VIEW)
+        await check_permission(info, Perm.PREDEP_PUBLISH)
         items = await briefing_template_repository.list_templates(
             info.context["db"], state=state.value if state else None, tag=tag
         )
@@ -38,8 +40,12 @@ class BriefingQuery:
     async def briefing_template(
         self, info: strawberry.types.Info, uuid: UUID
     ) -> BriefingTemplateType | None:
-        """Fetch a single non-deleted template by UUID. Requires pre_departure.view (public)."""
-        await check_permission(info, Perm.PREDEP_VIEW)
+        """Fetch a single non-deleted template by UUID.
+
+        Requires pre_departure.publish — see `briefing_templates` for why templates, unlike
+        the briefings generated from them, are not public.
+        """
+        await check_permission(info, Perm.PREDEP_PUBLISH)
         m = await briefing_template_repository.get_by_uuid_active(info.context["db"], uuid)
         return BriefingTemplateType.from_model(m) if m else None
 

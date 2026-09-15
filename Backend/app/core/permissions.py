@@ -121,13 +121,10 @@ class Perm(StrEnum):
     RBAC_EDIT = "rbac.edit"
 
 
-# ADR-025/027: capabilities an unauthenticated Guest may use, read-only. Guest is a
-# program-level view (no DB row); anything not in this set is a 403 for an anonymous
-# caller. station.view/ticket.view are public (disaster map + help-request board don't
-# require login); ticket.view_pii is deliberately never in this set — PII always requires
-# a real actor, checked separately per-field (ADR-029). pre_departure.view joins them for
-# the same reason announcement.view did: a volunteer reads the 行前通知 to decide whether to
-# show up at all, so requiring an account first defeats the point.
+# ADR-025/027: read-only capabilities the whole world holds — `check_permission` resolves
+# these to Scope.ALL for every caller, authenticated or not, because the map, shelter list,
+# help-request board and 公告/行前通知 are all readable without an account. `ticket.view_pii`
+# is deliberately absent: PII always needs a real actor and is redacted per-field (ADR-029).
 PUBLIC_PERMS = frozenset(
     {Perm.MAP_VIEW, Perm.ANN_VIEW, Perm.STATION_VIEW, Perm.TICKET_VIEW, Perm.PREDEP_VIEW}
 )
