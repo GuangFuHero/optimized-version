@@ -309,12 +309,11 @@ briefings {
     timestamp updated_at
     timestamp delete_at
 }
-%% template_uuid is nullable for two reasons, not one: an ad-hoc briefing never had a
-%% template, and content/tags/state are COPIED at generation time rather than joined — so
-%% soft-deleting a template leaves existing briefings whole, and later edits to a template
-%% deliberately do not rewrite briefings already sent out.
-%% `tags` is queried with JSONB containment (`tags @> '["x"]'`), not a join table: the tag
-%% vocabulary is meant to grow without a migration.
+%% template_uuid is nullable because a briefing may be ad-hoc, and content/tags/state are
+%% COPIED at generation time rather than joined — so deleting or editing a template never
+%% rewrites briefings already sent out.
+%% `tags` is queried with JSONB containment (`tags @> '["x"]'`), not a join table, so the tag
+%% vocabulary grows without a migration.
 briefing_templates ||--o{ briefings : "generated from"
 users ||--o{ briefings : "authors"
 %% ==========================
@@ -475,11 +474,11 @@ station_property_config {
 %% ==========================
 %% Station Update Suggestions (user proposal → admin review)
 %% ==========================
-%% One row per proposed change to a single field. target_type/target_uuid address the row
-%% polymorphically (no DB FK, same mechanism as photos.ref_type/ref_uuid), so one queue
-%% covers both stations and their properties. Approving writes new_value through to the
-%% target after coercing it to that field's data type; rejecting leaves the target untouched.
-%% Either way the suggestion row is kept, so the review decision stays auditable.
+%% One row per proposed change to a single field, with target_type/target_uuid addressing the
+%% target polymorphically (no DB FK, same mechanism as photos.ref_type/ref_uuid) so one queue
+%% covers both stations and their properties. Approving coerces new_value to the field's type
+%% and writes it through, rejecting leaves the target untouched, and either way the row is kept
+%% for audit.
 station_update_suggestions {
     uuid uuid PK
     string target_type "station/station_property, String(20)"
@@ -581,7 +580,7 @@ photos {
     uuid uuid PK
     uuid ref_uuid FK "FK to base_geometries or secondary_locations"
     string ref_type "geometry/pole"
-    string url "String(500); app-validated http(s) + host only (services/photo.py), no DB constraint"
+    string url "String(500); app-validated https + host only (services/photo.py), no DB constraint"
     timestamp created_at
     uuid created_by FK
     timestamp updated_at
@@ -634,11 +633,11 @@ ticket_tasks {
     timestamp delete_at
     string search_text "GENERATED ALWAYS AS task_name + left(task_description, 500), STORED"
 }
-%% completed_at/canceled_at are maintained by services/ticket.py::update_ticket_task, not by
-%% callers. Analytics plots a task on the day its timestamp gives, so each is CLEARED on the
-%% way out of the state — a re-opened task keeping a stale completed_at would still read as
-%% finished. `updated_at` can't stand in: it moves on every edit, not just status changes.
-%% Rows that reached these states before the columns existed were backfilled from updated_at.
+%% completed_at/canceled_at are stamped and CLEARED by services/ticket.py::update_ticket_task as
+%% status enters and leaves the state, because analytics plots a task on the day its timestamp
+%% gives and a re-opened task holding a stale completed_at would still read as finished.
+%% `updated_at` can't stand in — it moves on every edit — though rows predating the columns
+%% were backfilled from it.
 %% INDEX: ix_ticket_tasks_search_text_trgm USING gin (search_text gin_trgm_ops)
 %% NOTE: `progress_note` is deliberately NOT in search_text (free-text note, ADR-079)
 tickets ||--o{ ticket_tasks : "contains sub-tasks"
