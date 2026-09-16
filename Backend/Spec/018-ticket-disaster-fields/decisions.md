@@ -510,3 +510,20 @@ upsertStationPropertyConfig(... input:{propertyName:"probe_ls", label:"改標籤
 `"['gas_odor', 'power_out']"` 這種 Python repr 進資料庫。
 ◾ 目前還踩不到：`task_property_config` 只有 `number` / `single_select` / `text`，
 而 bulk 從不碰 `ticket_property_config`。要等某個操作員建出第一個 multi_select 任務欄位才會發生。
+
+### ADR-279 `disasterDetails` 的鍵不受設定表限制，而且是公開讀取
+
+**Context**：ADR-092 不驗證值，ADR-267 加上了量的上限，但「鍵可以是任何字串」與
+「匿名可讀」這個組合一直沒有被寫下來。實際行為是：任何通報者都能存下沒有任何設定列定義的
+`propertyName`，匿名呼叫端讀得回來。
+
+**Decision**：維持現狀，並在此記錄成決定而不是疏漏。不限制鍵的來源，`disasterDetails`
+維持公開讀取。
+
+➕ ADR-092 的理由沒有變：表單載入到送出之間欄位被retire，答案還是要存下來 ——
+以設定表當白名單就是把「弄丟受困者的答案」重新裝回去。
+➕ 量已經由 ADR-267 封住：單張通報單上限約 100 欄 × 50 值 × 500 字，不再是無上限的儲存空間。
+➕ 讀取面維持 ADR-254 的判斷：水深、瓦斯味是情境資訊，不是個人資訊；
+個人資訊在 `secondaryLocation` 與兩個檢傷欄位，那些都由 `ticket.view_pii` 把關。
+➖ 代價要講清楚：日後若有人用 `upsertTicketPropertyConfig` 建出一個自由文字欄位，
+它的內容預設就是公開的。要改的話該改的是那個欄位的分級，不是這裡的鍵檢查。
