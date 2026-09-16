@@ -1,9 +1,10 @@
-# 行前通知（briefings）— ADR 全集（ADR-259~262）
+# 行前通知（briefings）— ADR 全集（ADR-259~262、ADR-273）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號從 259 起跳，避開 `Spec/018-ticket-disaster-fields/decisions.md` 已佔用但尚未合併的 ADR-244~258。
 
-四條都源自 PR #49 的 review。
+ADR-259~262 源自 PR #49 第一輪 review；ADR-273 源自第二輪。
+273 起跳是避開 PR #50 已佔用的 ADR-263~272。
 
 ---
 
@@ -84,3 +85,43 @@
 
 ➕ 不新增只為接合而存在的空 revision。
 ➖ main 每次前進都要重新指一次；migration docstring 已寫明這點。
+
+---
+
+### ADR-273 公開能力的語意只寫在 `require_scope` 一處
+
+**白話**：「這個能力全世界都讀得到」這句話，兩個入口要講同一套。
+
+**Context**：ADR-259 把 `PUBLIC_PERMS` 的短路寫在 `app/graphql/context.py::check_permission`，
+但 use-case 層是直接呼叫 `app/services/authz.py::require_scope`，那裡仍然查 grant matrix。
+兩層因此對同一個公開能力給出不同答案。全庫唯一踩到的呼叫點是
+`app/services/suggestion.py:49`（`require_scope(actor, Perm.STATION_VIEW, db)`）——今天沒有
+行為差異，因為每個 seed 角色都持有 `station.view` 且 scope 是 `all`，但語意分歧是真的。
+
+同一輪 review 另外指出：`check_permission` 的短路發生在看 `resource` 之前，未來若有呼叫端
+對公開能力傳 `resource`，checkpoint 2 會被無聲跳過。實測全庫（`app/` 與 `tests/`）目前沒有
+任何呼叫端對 `check_permission` 傳 `resource`，所以那條路今天不可達。
+
+**Decision**：短路搬進 `require_scope`，`check_permission` 只留 Guest 分支（匿名沒有 `User`
+row，根本沒辦法往下傳）。同時在 `require_scope` 裡，公開能力配上 `resource` 直接 `ValueError`。
+
+```
+check_permission(info, perm, resource)          require_scope(actor, perm, db, resource)
+├── user is None                                ├── perm in PUBLIC_PERMS
+│   ├── perm in PUBLIC_PERMS → Scope.ALL        │   ├── resource is not None → ValueError
+│   └── 否則 → 403                              │   └── 否則 → Scope.ALL
+└── 否則 → require_scope(...)  ────────────▶    └── 否則 → 兩道 checkpoint 照走
+```
+
+➕ 兩個入口不可能再分歧——GraphQL 的答案就是 use-case 層的答案。
+➕ 「公開能力 + 物件範圍」是矛盾（全世界都持有，沒有東西可收窄），現在會炸，而不是靜靜跳過檢查。
+➕ `suggestion.py:49` 不用改也自動一致。
+◾ 對現況零行為差異：`suggestion.py` 那個呼叫點原本每個角色都過得去。
+➖ 公開能力的檢查不再經過 grant matrix，所以在 RBAC 後台把它收窄成 `own`/`zone` 不會有效果——
+  這正是 ADR-259 的決定，只是現在對所有入口都成立。
+
+**測試**：`tests/test_authz.py::test_require_scope_resolves_a_public_capability_without_the_grant_matrix`
+同時釘住兩件事（無 grant 也拿到 `Scope.ALL`、給 `resource` 會 raise）。
+`test_require_scope_unions_a_role_grant_with_a_direct_grant` 與
+`test_require_scope_ignores_the_roles_the_actor_is_not_acting_as` 原本借用 `ticket.view` 當載具，
+現在改用 `ticket.edit`——它們測的是身分與 union 機制，不是那個能力本身。

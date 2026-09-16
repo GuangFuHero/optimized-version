@@ -26,9 +26,9 @@ class SuggestionMutation:
     ) -> StationSuggestionType:
         """Propose a change to one field of a station or station property.
 
-        Open to any logged-in user (gated by station.view, which regular users have —
-        unlike station.review). Verifies the target exists and that the field/value are
-        valid for the target type. The suggestion starts in 'pending' until an admin reviews it.
+        Open to any logged-in user: the gate is `station.view`, which is public, unlike the
+        `station.review` needed to approve one. Verifies the target exists and that the
+        field/value are valid for the target type. Starts in 'pending' until an admin reviews it.
         """
         suggestion = await suggestion_service.create_station_suggestion(
             info.context["db"], actor=require_authenticated(info),
