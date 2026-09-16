@@ -1,9 +1,9 @@
-# 行前通知（briefings）— ADR 全集（ADR-259~262、ADR-273）
+# 行前通知（briefings）— ADR 全集（ADR-259~262、ADR-273~274）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號從 259 起跳，避開 `Spec/018-ticket-disaster-fields/decisions.md` 已佔用但尚未合併的 ADR-244~258。
 
-ADR-259~262 源自 PR #49 第一輪 review；ADR-273 源自第二輪。
+ADR-259~262 源自 PR #49 第一輪 review；ADR-273~274 源自第二輪。
 273 起跳是避開 PR #50 已佔用的 ADR-263~272。
 
 ---
@@ -125,3 +125,28 @@ check_permission(info, perm, resource)          require_scope(actor, perm, db, r
 `test_require_scope_unions_a_role_grant_with_a_direct_grant` 與
 `test_require_scope_ignores_the_roles_the_actor_is_not_acting_as` 原本借用 `ticket.view` 當載具，
 現在改用 `ticket.edit`——它們測的是身分與 union 機制，不是那個能力本身。
+
+---
+
+### ADR-274 PRD VB-FEAT-001 的形狀不在這個 PR 實作
+
+**白話**：PRD 想要的是另一張表，不是這張表少了幾個欄位。
+
+**Context**：Notion PRD VB-FEAT-001（最後編輯 2026-09-13）要的結構與已實作的
+`content` + `tags` + `state` 不同:
+
+| PRD 要求 | 現況 |
+|---|---|
+| 內容以災害類型（水災/震災/風災）分類，四個固定段落固定順序（VB-BR-101/102） | 單一 free-form `content` |
+| 每個類型各有草稿與已發布，存草稿不影響公開內容（VB-BR-131） | 沒有草稿概念(ADR-260:template 本身就是作業面) |
+| 全案場同時只有一則公開公告，發布 B 就下架 A（VB-BR-103a / AC-14） | `briefings` 把所有未軟刪的列都回給匿名呼叫端 |
+| 每次發布保留完整內容供事後查閱（AC-11 / VB-BR-171） | 沒有快照表 |
+
+**Decision**：不在本 PR 實作，記錄為延後。理由是 PRD 自己在開頭標了「年底範圍，不在本次實作範圍」；
+而且這四項不是補欄位，是重新設計兩張表、migration 與整個 GraphQL 介面，屬於另一個 feature。
+
+➕ 本 PR 的範圍維持在 review 已經驗證過的東西上。
+➕ 差異寫進 `spec.md` 的「Deliberately not built」，不會變成無人知道的漏洞。
+◾ 已實作的部分不會因此作廢:free-form 的 template/briefing 是 PRD 形狀的子集。
+➖ 在那個 feature 做之前，「同時只有一則公開公告」這條不變式沒有東西擋著。
+
