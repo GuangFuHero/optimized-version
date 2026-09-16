@@ -248,7 +248,7 @@ query ($taskType: String!) {
 UPSERT_STATION = """
 mutation ($stationType: String!, $input: UpsertPropertyConfigInput!) {
   upsertStationPropertyConfig(stationType: $stationType, input: $input) {
-    propertyName dataType enumOptions label sortOrder isActive
+    propertyName dataType enumOptions label unit sortOrder isActive
   }
 }
 """
@@ -373,23 +373,50 @@ async def test_editing_the_label_keeps_the_stored_enum_options(client, coordinat
 
 
 @pytest.mark.asyncio
-async def test_an_empty_list_is_how_enum_options_are_cleared(client, coordinator_auth):
-    """Omission means "leave it"; [] is the explicit "there are no options any more"."""
+async def test_null_leaves_a_member_alone_and_the_empty_value_is_how_it_is_cleared(
+    client, coordinator_auth
+):
+    """`null` never clears; the empty value does — `[]` for the list, `""` for text.
+
+    The rule has to hold on every member at once, because `{propertyName, isActive: false}`
+    is how a field is retired (ADR-228/168): if `null` meant "clear", that one call would
+    also blank the field's label, unit and options. ADR-280 states it and the schema
+    descriptions now say it on each member; this pins the behaviour they promise.
+    """
     _, token = coordinator_auth
     async with test_db() as db:
         db.add(StationPropertyConfig(
             station_type="all", property_name="crowd_level", data_type="single_select",
-            enum_options=["low", "high"],
+            enum_options=["low", "high"], label="人潮", unit="人",
         ))
 
-    resp = await client.post("/graphql", json={
-        "query": UPSERT_STATION, "variables": {
-            "stationType": "all",
-            "input": {"propertyName": "crowd_level", "dataType": "text", "enumOptions": []},
-        },
-    }, headers=auth_header(token))
+    async def _upsert(members: dict) -> dict:
+        resp = await client.post("/graphql", json={
+            "query": UPSERT_STATION, "variables": {
+                "stationType": "all", "input": {"propertyName": "crowd_level", **members},
+            },
+        }, headers=auth_header(token))
+        body = resp.json()
+        assert body.get("errors") is None, body
+        return body["data"]["upsertStationPropertyConfig"]
 
-    assert resp.json()["data"]["upsertStationPropertyConfig"]["enumOptions"] == []
+    # Explicit nulls on every member, plus the retire that motivates the rule.
+    kept = await _upsert(
+        {"dataType": None, "enumOptions": None, "label": None, "unit": None, "isActive": False}
+    )
+
+    assert kept["dataType"] == "single_select"
+    assert kept["enumOptions"] == ["low", "high"]
+    assert kept["label"] == "人潮"
+    assert kept["unit"] == "人"
+    assert kept["isActive"] is False
+
+    # The empty value is the explicit "there is none any more".
+    cleared = await _upsert({"dataType": "text", "enumOptions": [], "label": "", "unit": ""})
+
+    assert cleared["enumOptions"] == []
+    assert cleared["label"] == ""
+    assert cleared["unit"] == ""
 
 
 # --------------------------------------------------------------------------------------

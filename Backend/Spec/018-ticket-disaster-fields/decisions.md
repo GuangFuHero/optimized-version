@@ -531,3 +531,24 @@ upsertStationPropertyConfig(... input:{propertyName:"probe_ls", label:"改標籤
 把關（ADR-254/268）。危險狀況公開、個人身分不公開，是兩條分開的線。
 ➖ 代價要講清楚：日後若有人用 `upsertTicketPropertyConfig` 建出一個自由文字欄位，
 它的內容預設就是公開的。要改的話該改的是那個欄位的分級，不是這裡的鍵檢查。
+
+### ADR-280 `null` 一律是「不動」，清空用空值；三個 input 的說明都要講出來
+
+**Context**：審查指出 `hint` / `unit` 沒辦法用 `null` 清掉 —— 送 `null` 會保留原值，只有 `""`
+才會覆寫。這個行為是對的（見下），問題在**只有通報單那個 input 的欄位說明寫了**，
+`UpsertPropertyConfigInput`（站點／任務）的 `unit`、`label` 一個字都沒提，
+`enumOptions` 也只說「omit to leave untouched」，沒說 `null` 同樣是不動。
+等於同一條規則在三個 input 裡的可見度不一致，讀 schema 的人只能靠猜。
+
+**Decision**：規則維持不變 —— `null` 在這三個 input 的**每一個**成員上都代表「不動」，
+清空一律用空值（`enumOptions: []`、文字欄位 `""`）。同時把這條規則寫進兩個 input 的
+class docstring，並在 `unit` / `label` / `hint` / `enumOptions` 每一個欄位說明上
+逐一寫出「omit or pass null to leave untouched; pass "" (or []) to clear」。
+
+➕ 規則不能改：`null` 若改成「清空」，`{propertyName, isActive: false}` 這個 retire 寫法
+就會順手清掉 `label`、`unit`、`hint` 和 `enumOptions` —— 那正是 ADR-228 與 ADR-168 修掉的 bug。
+➕ 也不加 `clearHint: true` 這類旗標：一個成員配一個布林，四個成員就是四個，
+而且兩者同時送要定義誰贏。空值已經是 GraphQL 裡表達「空」的自然寫法。
+➕ `disasterTypes: []` 順便講清楚：它不是清空，空陣列本身就是「所有災害型別都啟用」這個值。
+◾ 可發現性是這次真正修的東西。行為零變化 —— 沒有任何 resolver 或 service 改動，
+只有 schema 說明文字，等於 GraphiQL / introspection 直接看得到。

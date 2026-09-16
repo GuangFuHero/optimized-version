@@ -107,12 +107,16 @@ class TaskPropertyConfigType:
 class UpsertPropertyConfigInput:
     """Input for creating or updating a property config entry.
 
-    Omitting a field leaves it as it is (or at its column default on insert) — a caller that
+    **`null` means "leave this alone" on every member, never "clear it"** (ADR-228/280).
+    Omitting a field leaves it as it is, or at its column default on insert — a caller that
     only wants to change `data_type` never resets a field's ordering, and one that only wants
-    to set a `label` never blanks an Enum's options (ADR-228). Clearing `enumOptions` is
-    therefore spelled `enumOptions: []`, not `null`.
+    to set a `label` never blanks an Enum's options.
 
-    `dataType` obeys that rule too (ADR-168): retiring a field is `{propertyName, isActive:
+    Clearing is therefore spelled with the empty value, not with null: `enumOptions: []` for
+    the list, `""` for a text member such as `label` or `unit`. `disasterTypes: []` is not a
+    clear at all — an empty list is the stored value meaning "enabled for every type".
+
+    `dataType` obeys the same rule (ADR-168): retiring a field is `{propertyName, isActive:
     false}`, with no need to restate what the field is. Creating one still requires it — the
     column is NOT NULL — and omitting it there is a client error, not a 500.
     """
@@ -128,18 +132,31 @@ class UpsertPropertyConfigInput:
     enum_options: list[str] | None = strawberry.field(
         default=None,
         description=(
-            "Allowed values for single_select / multi_select; omit to leave the stored "
-            "options untouched, pass [] to clear them"
+            "Allowed values for single_select / multi_select. Omit or pass null to leave "
+            "the stored options untouched; pass [] to clear them"
         ),
     )
     unit: str | None = strawberry.field(
-        default=None, description="Unit suffix for a number field, e.g. 'cm'"
+        default=None,
+        description=(
+            "Unit suffix for a number field, e.g. 'cm'. Omit or pass null to leave the "
+            'stored unit untouched; pass "" to clear it'
+        ),
     )
     disaster_types: list[str] | None = strawberry.field(
         default=None,
-        description="Disaster types this field is enabled for; empty list means every type",
+        description=(
+            "Disaster types this field is enabled for; an empty list means every type, so "
+            "[] sets that value rather than clearing the field. Omit to leave it untouched"
+        ),
     )
-    label: str | None = strawberry.field(default=None, description="Display text for the field")
+    label: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Display text for the field. Omit or pass null to leave the stored label "
+            'untouched; pass "" to clear it and fall back to the property name'
+        ),
+    )
     sort_order: int | None = strawberry.field(default=None, description="Field order in the form")
     is_active: bool | None = strawberry.field(
         default=None, description="Set false to retire the field without deleting its data"
@@ -203,10 +220,12 @@ class UpsertTicketPropertyConfigInput:
     `sortOrder`, and a `hint`. Sharing one input would have meant three fields that are silently
     ignored on one of the three targets.
 
-    Omission semantics are identical to the siblings (ADR-228/168): leaving a field out keeps
-    its stored value, so retiring a field is `{propertyName, isActive: false}` and nothing else.
-    Null therefore means "unchanged" on every member — clearing one is `enumOptions: []` for
-    the list and `""` for a text member such as `label`, `unit` or `hint`.
+    Omission semantics are identical to the siblings (ADR-228/168/280): leaving a field out
+    keeps its stored value, so retiring a field is `{propertyName, isActive: false}` and
+    nothing else. **`null` therefore means "unchanged" on every member, never "clear it"** —
+    clearing is `enumOptions: []` for the list and `""` for a text member such as `label`,
+    `unit` or `hint`. `disasterTypes: []` is not a clear either: an empty list is the stored
+    value meaning "enabled for every type".
     """
 
     property_name: str = strawberry.field(description="The field key to create or update")
@@ -220,13 +239,16 @@ class UpsertTicketPropertyConfigInput:
     enum_options: list[str] | None = strawberry.field(
         default=None,
         description=(
-            "Allowed values for single_select / multi_select; omit to leave them untouched, "
-            "pass [] to clear"
+            "Allowed values for single_select / multi_select. Omit or pass null to leave "
+            "them untouched; pass [] to clear"
         ),
     )
     unit: str | None = strawberry.field(
         default=None,
-        description="Unit suffix for a number field, e.g. 'cm', 'mm'; pass \"\" to clear",
+        description=(
+            "Unit suffix for a number field, e.g. 'cm', 'mm'. Omit or pass null to leave the "
+            'stored unit untouched; pass "" to clear it'
+        ),
     )
     disaster_types: list[str] | None = strawberry.field(
         default=None,
@@ -236,11 +258,18 @@ class UpsertTicketPropertyConfigInput:
         ),
     )
     label: str | None = strawberry.field(
-        default=None, description='Display text for the field; pass "" to clear'
+        default=None,
+        description=(
+            "Display text for the field. Omit or pass null to leave the stored label "
+            'untouched; pass "" to clear it and fall back to the property name'
+        ),
     )
     hint: str | None = strawberry.field(
         default=None,
-        description='Guidance and safety text shown under the field; pass "" to clear',
+        description=(
+            "Guidance and safety text shown under the field. Omit or pass null to leave the "
+            'stored hint untouched; pass "" to clear it'
+        ),
     )
     is_active: bool | None = strawberry.field(
         default=None, description="Set false to retire the field without deleting its values"
