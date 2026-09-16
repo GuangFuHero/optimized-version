@@ -41,7 +41,12 @@ async def create_station_suggestion(
     new_value: str,
     comment: str | None,
 ) -> StationUpdateSuggestion:
-    """Propose a change to a station/station-property field (gated by station.view).
+    """Propose a change to a station/station-property field.
+
+    Gated by `station.view`, which is public (ADR-273), so in practice the gate is just
+    having a real actor. The call is kept as the explicit statement of what this needs, and
+    would bite again if `station.view` ever left PUBLIC_PERMS. Approving a suggestion needs
+    `station.review`, which is not public.
 
     Verifies the target exists and the field/value are valid for the target type. Starts
     in 'pending' until an admin reviews it.
