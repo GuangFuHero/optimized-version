@@ -21,7 +21,11 @@ from app.core.security import create_access_token
 from app.db.triggers import AUDIT_TRIGGER_FUNC_SQL, get_audit_trigger_sql
 from app.models.auth import User
 from app.models.disaster_type import DisasterType
-from app.models.property_config import TicketPropertyConfig
+from app.models.property_config import (
+    StationPropertyConfig,
+    TaskPropertyConfig,
+    TicketPropertyConfig,
+)
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.repositories.session_repository import SessionRepository
@@ -125,11 +129,18 @@ async def field_admin_auth(redis):
 
 @pytest_asyncio.fixture(autouse=True)
 async def clean_disaster_tables():
-    """Seed the vocabulary, and leave no field definitions behind for other modules."""
+    """Seed the vocabulary, and leave no field definitions behind for other modules.
+
+    All three config tables are wiped, not just the ticket one: this module's `disaster_types`
+    validation tests write to the station and task tables too, and a row left behind would
+    reach `test_property_config_filtering.py`, which shares this database.
+    """
     async def _wipe():
         async with test_db() as db:
             await db.execute(delete(TicketDisasterDetail))
             await db.execute(delete(TicketPropertyConfig))
+            await db.execute(delete(StationPropertyConfig))
+            await db.execute(delete(TaskPropertyConfig))
             await db.execute(delete(DisasterType))
 
     await _wipe()
@@ -1008,3 +1019,73 @@ async def test_an_oversized_disaster_detail_write_is_refused_with_a_readable_mes
 
     within = await _set([{"propertyName": "note", "values": ["x" * 500, "ok"]}])
     assert within.get("errors") is None, within
+
+
+# --------------------------------------------------------------------------------------
+# PR #50 review round three (ADR-277~279)
+# --------------------------------------------------------------------------------------
+
+
+async def test_a_config_field_can_be_resaved_after_its_disaster_type_is_retired(
+    client, field_admin_auth
+):
+    """Retiring a type must not freeze the config fields already scoped to it (ADR-277).
+
+    ADR-266 grandfathered a record's own labels on tickets and project settings, but the
+    three property-config tables still checked the whole submitted list. A field scoped to a
+    retired type could be relabelled (leave `disasterTypes` out) yet not re-saved with its
+    own unchanged scope, so an admin form that submits the entire object got a 422 it could
+    only clear by dropping a type the field legitimately has.
+
+    The second half is the guard: a label the row does not already carry is still rejected,
+    so retirement still stops a retired type spreading to a new field.
+    """
+    _, token = field_admin_auth
+
+    async def _upsert(call: str) -> dict:
+        return (await client.post("/graphql", json={
+            "query": f"mutation {{ {call} {{ propertyName disasterTypes }} }}",
+        }, headers=auth_header(token))).json()
+
+    created = {
+        "station": 'upsertStationPropertyConfig(stationType: "shelter", input: '
+                   '{propertyName: "probe_ls", dataType: number, '
+                   'disasterTypes: ["landslide"]})',
+        "task": 'upsertTaskPropertyConfig(taskType: "rescue", input: '
+                '{propertyName: "probe_ls", dataType: number, '
+                'disasterTypes: ["landslide"]})',
+        "ticket": 'upsertTicketPropertyConfig(input: '
+                  '{propertyName: "probe_ls", dataType: number, '
+                  'disasterTypes: ["landslide"]})',
+    }
+    for target, call in created.items():
+        body = await _upsert(call)
+        assert body.get("errors") is None, (target, body)
+
+    async with test_db() as db:
+        await db.execute(text(
+            "UPDATE disaster_types SET is_active = false WHERE key = 'landslide'"
+        ))
+
+    # Half one: the row's own label survives a whole-object re-save.
+    for target, call in created.items():
+        body = await _upsert(call)
+        assert body.get("errors") is None, (target, body)
+        assert body["data"][next(iter(body["data"]))]["disasterTypes"] == ["landslide"]
+
+    # Half two: a retired label the row does not carry is still refused.
+    adding = {
+        "station": 'upsertStationPropertyConfig(stationType: "shelter", input: '
+                   '{propertyName: "probe_fresh", dataType: number, '
+                   'disasterTypes: ["landslide"]})',
+        "task": 'upsertTaskPropertyConfig(taskType: "rescue", input: '
+                '{propertyName: "probe_fresh", dataType: number, '
+                'disasterTypes: ["landslide"]})',
+        "ticket": 'upsertTicketPropertyConfig(input: '
+                  '{propertyName: "probe_fresh", dataType: number, '
+                  'disasterTypes: ["landslide"]})',
+    }
+    for target, call in adding.items():
+        body = await _upsert(call)
+        assert body.get("errors"), f"{target} scoped a new field to a retired type"
+        assert "landslide" in body["errors"][0]["message"], (target, body)

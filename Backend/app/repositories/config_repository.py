@@ -87,6 +87,23 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
         )
         return result.scalars().all()
 
+    async def get_by_key(
+        self, db: AsyncSession, *, station_type: str, property_name: str
+    ) -> StationPropertyConfig | None:
+        """Return the row `(station_type, property_name)` identifies, or None.
+
+        `upsert` uses this to decide insert-vs-update; `app/services/config.py` uses it to
+        read the labels the row already carries, which `validate_disaster_types(keep=)` then
+        grandfathers (ADR-277).
+        """
+        result = await db.execute(
+            select(self.model).where(
+                self.model.station_type == station_type,
+                self.model.property_name == property_name,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def upsert(
         self, db: AsyncSession, *,
         station_type: str, property_name: str, data_type: str | None = None,
@@ -101,13 +118,9 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
         so passing a new name creates a new row rather than renaming an existing one.
         """
         async def lookup():
-            result = await db.execute(
-                select(self.model).where(
-                    self.model.station_type == station_type,
-                    self.model.property_name == property_name,
-                )
+            return await self.get_by_key(
+                db, station_type=station_type, property_name=property_name
             )
-            return result.scalar_one_or_none()
 
         update_values = _optional_config_fields(
             data_type, enum_options, disaster_types, label, sort_order, is_active, unit
@@ -151,6 +164,22 @@ class TaskPropertyConfigRepository(GenericRepository[TaskPropertyConfig]):
         )
         return result.scalars().all()
 
+    async def get_by_key(
+        self, db: AsyncSession, *, task_type: str, property_name: str
+    ) -> TaskPropertyConfig | None:
+        """Return the row `(task_type, property_name)` identifies, or None.
+
+        Same two callers as the station side: `upsert`'s insert-vs-update decision, and the
+        `validate_disaster_types(keep=)` read in `app/services/config.py` (ADR-277).
+        """
+        result = await db.execute(
+            select(self.model).where(
+                self.model.task_type == task_type,
+                self.model.property_name == property_name,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def upsert(
         self, db: AsyncSession, *,
         task_type: str, property_name: str, data_type: str | None = None,
@@ -161,13 +190,9 @@ class TaskPropertyConfigRepository(GenericRepository[TaskPropertyConfig]):
     ) -> TaskPropertyConfig:
         """Create or update a config entry for the given task type and property name."""
         async def lookup():
-            result = await db.execute(
-                select(self.model).where(
-                    self.model.task_type == task_type,
-                    self.model.property_name == property_name,
-                )
+            return await self.get_by_key(
+                db, task_type=task_type, property_name=property_name
             )
-            return result.scalar_one_or_none()
 
         update_values = _optional_config_fields(
             data_type, enum_options, disaster_types, label, sort_order, is_active, unit
@@ -233,6 +258,20 @@ class TicketPropertyConfigRepository(GenericRepository[TicketPropertyConfig]):
         )
         return result.scalars().all()
 
+    async def get_by_key(
+        self, db: AsyncSession, *, property_name: str
+    ) -> TicketPropertyConfig | None:
+        """Return the row `property_name` identifies, or None.
+
+        `property_name` alone is the key here (ADR-247). Same two callers as the siblings:
+        `upsert`'s insert-vs-update decision, and the `validate_disaster_types(keep=)` read
+        in `app/services/config.py` (ADR-277).
+        """
+        result = await db.execute(
+            select(self.model).where(self.model.property_name == property_name)
+        )
+        return result.scalar_one_or_none()
+
     async def upsert(
         self, db: AsyncSession, *,
         property_name: str, data_type: str | None = None,
@@ -247,10 +286,7 @@ class TicketPropertyConfigRepository(GenericRepository[TicketPropertyConfig]):
         `ticket_disaster_details` points at it by string with no foreign key.
         """
         async def lookup():
-            result = await db.execute(
-                select(self.model).where(self.model.property_name == property_name)
-            )
-            return result.scalar_one_or_none()
+            return await self.get_by_key(db, property_name=property_name)
 
         update_values = _optional_config_fields(
             data_type, enum_options, disaster_types, label, None, is_active, unit, hint

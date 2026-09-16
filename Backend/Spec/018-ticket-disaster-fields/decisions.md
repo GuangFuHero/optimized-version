@@ -458,3 +458,32 @@ project settings 只改 `name` 可以過，同一個 PATCH 帶上沒變的 `disa
 但 bulk 必須知道 `level` 是 int4 而 `latitude` 不是。
 ➕ 逗號分隔讓兩種災害型別的通報單能原樣往返；沿用單數欄位會在匯入時靜默掉第二種。
 ◾ `number` 對應到 `Integer`：兩張 EAV 值表也只能存到這個精度，小數會在自己那一列帶著可讀訊息失敗。
+
+## Review round three（ADR-277~279）
+
+### ADR-277 三張設定表的 `disaster_types` 也沿用 ADR-266 的 `keep`
+
+**Context**：ADR-266 只改了通報單與 `project_settings`，三張設定表維持「整份檢查」，理由是
+「更新是部分的，不送 `disasterTypes` 就不會檢查」。但從管理介面走過來就踩得到：
+
+```
+停用 landslide
+upsertStationPropertyConfig(stationType:"shelter",
+    input:{propertyName:"probe_ls", dataType:number, disasterTypes:["landslide"]})
+  → 未知或已停用的災害型別：landslide
+upsertStationPropertyConfig(... input:{propertyName:"probe_ls", label:"改標籤"})
+  → 200，disasterTypes 仍是 ["landslide"]
+```
+
+同一列可以改標籤，卻不能帶著自己**沒有變動**的 scope 存回去。一個送出整個物件的表單拿到
+422，而唯一的解法是把這個欄位本來就該有的災害型別刪掉。
+
+**Decision**：`disasterTypes` 有送進來時，先讀出既有列，把它現有的 `disaster_types` 當成
+`keep` 傳進 `validate_disaster_types`。三個 repository 各補一個 `get_by_key`，`upsert` 內部原本
+的 `lookup()` 改為呼叫它 —— 鍵的查詢只寫一次。
+
+➕ 與通報單、`project_settings` 三邊語意一致：`keep` 讓既成事實通過，新加的標籤照樣要 `is_active`。
+➕ 停用仍然擋得住擴散：`probe_fresh` 這種本來沒有 `landslide` 的欄位還是被拒絕。
+➖ 送了 `disasterTypes` 的寫入多一次 SELECT。這是後台管理的寫入，而且 `upsert` 本來就要查同一列
+決定 insert/update。沒送的話完全不查。
+◾ 沒帶 `disasterTypes` 的部分更新行為不變（ADR-228/099）—— `None` 仍然代表「不動」，不重新檢查。

@@ -22,6 +22,31 @@ from app.repositories.config_repository import (
 from app.services.authz import require_scope
 
 
+async def _validated_disaster_types(
+    db: AsyncSession, disaster_types: list[str] | None, load_stored
+) -> list[str] | None:
+    """Validate an explicitly supplied `disaster_types`, grandfathering the row's own labels.
+
+    `None` means the caller omitted the key, so the stored value is left untouched, not
+    re-checked, and `load_stored` is never called — a row carrying a stale label survives an
+    unrelated edit (ADR-228/099) without costing a query.
+
+    When a value *is* supplied, the labels the stored row already carries pass whatever their
+    `is_active`, exactly as `update_ticket` and the project-settings PATCH already do
+    (ADR-266, extended to these three tables by ADR-277). Without it, retiring a type left a
+    field scoped to it editable only by omitting `disasterTypes` — an admin form that submits
+    the whole object got a 422 it could not resolve without dropping the type from a field
+    that legitimately has it. A label the row does not already carry is still rejected, so
+    retirement still stops a retired type spreading to new fields.
+    """
+    if disaster_types is None:
+        return None
+    stored = await load_stored()
+    return await validate_disaster_types(
+        db, disaster_types, keep=(stored.disaster_types or ()) if stored else ()
+    )
+
+
 async def upsert_station_property_config(
     db: AsyncSession,
     *,
@@ -45,11 +70,16 @@ async def upsert_station_property_config(
     `disaster_types` is validated against the vocabulary table: a field scoped to a disaster
     that does not exist stores cleanly and then shows up for nobody. Only an explicit write is
     checked — omitting the key leaves the stored value untouched, so a row carrying a stale
-    label is not re-validated on an unrelated edit.
+    label is not re-validated on an unrelated edit — and the labels the row already carries
+    are grandfathered (ADR-277).
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
-    if disaster_types is not None:
-        disaster_types = await validate_disaster_types(db, disaster_types)
+    disaster_types = await _validated_disaster_types(
+        db, disaster_types,
+        lambda: station_property_config_repository.get_by_key(
+            db, station_type=station_type, property_name=property_name
+        ),
+    )
     return await station_property_config_repository.upsert(
         db,
         station_type=station_type,
@@ -81,11 +111,15 @@ async def upsert_task_property_config(
     """Create or update a task property config entry (checkpoint 1 only).
 
     Same partial-update semantics as the station side, and the same `disaster_types`
-    validation against the vocabulary table.
+    validation against the vocabulary table, grandfathering included (ADR-277).
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
-    if disaster_types is not None:
-        disaster_types = await validate_disaster_types(db, disaster_types)
+    disaster_types = await _validated_disaster_types(
+        db, disaster_types,
+        lambda: task_property_config_repository.get_by_key(
+            db, task_type=task_type, property_name=property_name
+        ),
+    )
     return await task_property_config_repository.upsert(
         db,
         task_type=task_type,
@@ -127,11 +161,13 @@ async def upsert_ticket_property_config(
     `disaster_types` is validated against the vocabulary table rather than merely lower-cased:
     scoping a field to a disaster that does not exist would store cleanly and then show the
     field to nobody, which is the exact silent failure ADR-169 could only warn about before
-    the vocabulary was closed.
+    the vocabulary was closed. Labels the row already carries are grandfathered (ADR-277).
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
-    if disaster_types is not None:
-        disaster_types = await validate_disaster_types(db, disaster_types)
+    disaster_types = await _validated_disaster_types(
+        db, disaster_types,
+        lambda: ticket_property_config_repository.get_by_key(db, property_name=property_name),
+    )
     return await ticket_property_config_repository.upsert(
         db,
         property_name=property_name,
