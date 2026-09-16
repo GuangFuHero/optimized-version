@@ -1,4 +1,4 @@
-"""create briefing templates and briefings; drop unused station/task score columns
+"""create briefing templates and briefings; drop unused columns
 
 Revision ID: c3f0a1b2d4e6
 Revises: c4a91e77b0d3
@@ -69,9 +69,18 @@ def upgrade() -> None:
     op.execute("ALTER TABLE stations DROP COLUMN IF EXISTS priority_score")
     op.execute("ALTER TABLE ticket_tasks DROP COLUMN IF EXISTS confidence_score")
 
+    # The contract half of d19cda4d9871, which moved passwords to
+    # `user_identities.password_hash` and left `users.password` nullable "pending P4 (contract
+    # stage)". P4 was never written, so every migration-built database has carried a column the
+    # models dropped in 739eea8. Nothing reads or writes it — non-null for 0 of 41 users on a dev
+    # database, while `user_identities.password_hash` is populated for 37 — so there is nothing to
+    # back up or hand over. IF EXISTS for the same reason as the score drops above.
+    op.execute("ALTER TABLE users DROP COLUMN IF EXISTS password")
+
 
 def downgrade() -> None:
-    """Restore the score columns, then drop the briefings tables."""
+    """Restore the dropped columns, then drop the briefings tables."""
+    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password varchar(512)")
     op.execute("ALTER TABLE ticket_tasks ADD COLUMN IF NOT EXISTS confidence_score double precision")  # noqa: E501
     op.execute("ALTER TABLE stations ADD COLUMN IF NOT EXISTS priority_score double precision")
     op.execute("ALTER TABLE stations ADD COLUMN IF NOT EXISTS confidence_score double precision")

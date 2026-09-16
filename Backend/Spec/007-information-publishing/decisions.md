@@ -1,10 +1,11 @@
-# 行前通知（briefings）— ADR 全集（ADR-259~262、ADR-273~274）
+# 行前通知（briefings）— ADR 全集（ADR-259~262、ADR-273~275）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號從 259 起跳，避開 `Spec/018-ticket-disaster-fields/decisions.md` 已佔用但尚未合併的 ADR-244~258。
 
 ADR-259~262 源自 PR #49 第一輪 review；ADR-273~274 源自第二輪。
 273 起跳是避開 PR #50 已佔用的 ADR-263~272。
+ADR-275 源自 PR #48 第二輪 review——決策本身與行前通知無關，但它改的是本 PR 的 migration `c3f0a1b2d4e6`，所以記在這裡。
 
 ---
 
@@ -150,3 +151,43 @@ check_permission(info, perm, resource)          require_scope(actor, perm, db, r
 ◾ 已實作的部分不會因此作廢:free-form 的 template/briefing 是 PRD 形狀的子集。
 ➖ 在那個 feature 做之前，「同時只有一則公開公告」這條不變式沒有東西擋著。
 
+---
+
+### ADR-275 `users.password` 的 contract stage 補在 `c3f0a1b2d4e6`，不另開 revision
+
+**白話**：兩年前搬家搬一半的欄位，現在補上最後一步；順手補在本 PR 已經在刪廢欄位的那支 migration 裡。
+
+**Context**：`d19cda4d9871`（2026-05-31）是一組 expand/contract 的 expand 半邊——新增
+`user_identities.password_hash`，並把 `users.password` 改成 nullable，註解寫明
+`# expand stage: keep the column but make it nullable; drop happens in P4 (contract stage)`。
+P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_column(String(512))` 從
+`app/models/auth.py` 移掉了，但資料庫那邊沒有動，於是形成一個只存在於「用 migration 建出來的
+資料庫」的欄位：
+
+| 建庫方式 | `users.password` |
+|---|---|
+| `alembic upgrade head`（正式環境） | **存在** |
+| `Base.metadata.create_all`（`tests/conftest.py`） | 不存在 |
+
+沒有任何東西讀它或寫它（全庫 grep 只命中請求欄位、provider 標籤與
+`user_identities.password_hash`），dev 資料庫上 41 個使用者有 **0 個**非 NULL，同一批人裡
+`user_identities.password_hash` 有 37 個有值。所以這不是資料遺失風險，是 schema 對不上。
+
+**Decision**：把 `ALTER TABLE users DROP COLUMN IF EXISTS password` 補進
+`c3f0a1b2d4e6` 的 `upgrade()`，`downgrade()` 以 `varchar(512)`（`739eea8` 移除前的型別）還原。
+
+不另開 revision 的理由有兩個。一是本 revision 已經在做同一件事——它本來就順手刪掉
+`stations.confidence_score` / `stations.priority_score` / `ticket_tasks.confidence_score`
+三個廢欄位，`users.password` 是第四個，性質完全相同。二是 `c3f0a1b2d4e6` 還沒進 main，
+仍是 branch-local，改它不會讓任何已經跑過 migration 的環境對不上。
+
+`IF EXISTS` / `IF NOT EXISTS` 的理由與既有的 score drops 相同：有人可能在這幾行被補上之前
+就已經在自己的 branch checkout 上跑過這支 revision。
+
+**Consequences**：
+➕ 「用 migration 建的資料庫」與「用 model 建的資料庫」在 `users` 上終於一致。
+➕ 一個沒有寫入路徑、名字看起來像機密的欄位從正式 schema 消失。
+◾ 對應用程式零行為差異：沒有程式碼路徑讀寫它，密碼驗證早就走 `user_identities.password_hash`。
+➖ 本 PR 的 migration 因此多帶一個與行前通知無關的決策。替代方案是另開一支 revision 或另開一個
+  PR，但兩者都違反本 repo「branch-local 的 revision 直接修改，不疊新的」的慣例。
+➖ `downgrade()` 只還原欄位形狀，不還原資料——原本就沒有資料可還原。
