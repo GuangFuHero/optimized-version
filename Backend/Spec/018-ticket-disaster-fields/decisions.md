@@ -487,3 +487,26 @@ upsertStationPropertyConfig(... input:{propertyName:"probe_ls", label:"改標籤
 ➖ 送了 `disasterTypes` 的寫入多一次 SELECT。這是後台管理的寫入，而且 `upsert` 本來就要查同一列
 決定 insert/update。沒送的話完全不查。
 ◾ 沒帶 `disasterTypes` 的部分更新行為不變（ADR-228/099）—— `None` 仍然代表「不動」，不重新檢查。
+
+### ADR-278 `multi_select` 的 CSV 儲存格保留多值
+
+**Context**：ADR-272 的 `_WIDGET_COERCION` 把 `multi_select` 對到 `Enum`，而 `Enum` 是單值的：
+
+```
+'gas_odor'            → 通過
+'gas_odor,power_out'  → 「gas_odor,power_out」不是允許的值
+```
+
+匯出端寫的就是這個逗號字串，所以匯出再匯入會整列失敗。改名成 `multi_select` 之前，
+`Array` 是原樣通過、完全不驗證。
+
+**Decision**：新增 `MULTI_ENUM` 這個轉型方式：以逗號（半形或全形）切開，每一段都對
+`enum_options` 檢查，再用半形逗號接回成**一個字串**。
+
+➕ 兩件事同時成立：多值可以往返，而且每個值仍受 `enum_options` 約束 —— 直接對到既有的
+`LIST` 只有前者，會把值的檢查整個丟掉。
+➕ 回傳字串而不是 list 是必要的：`task_properties.property_value` 只有一個文字欄位，
+`bulk_import._write_task_properties` 存的是 `str(value)`，list 會變成
+`"['gas_odor', 'power_out']"` 這種 Python repr 進資料庫。
+◾ 目前還踩不到：`task_property_config` 只有 `number` / `single_select` / `text`，
+而 bulk 從不碰 `ticket_property_config`。要等某個操作員建出第一個 multi_select 任務欄位才會發生。

@@ -22,6 +22,7 @@ from app.services.bulk_columns import (
     station_columns,
     ticket_columns,
 )
+from app.services.bulk_validate import coerce
 
 
 async def _station_configs(db, rows: list[tuple[str, str, str]], **kwargs) -> None:
@@ -281,3 +282,34 @@ async def test_the_same_type_yields_the_same_headers_twice(db):
     second = [c.header for c in await station_columns(db, "shelter")]
 
     assert first == second
+
+
+@pytest.mark.asyncio
+async def test_a_multi_select_cell_keeps_every_value_and_still_checks_the_options(db):
+    """A `multi_select` field is several values in one cell (ADR-278).
+
+    `_WIDGET_COERCION` sent it to the single-valued `Enum`, so `gas_odor,power_out` — the
+    exact string the exporter writes for a field with two values selected — came back as
+    「gas_odor,power_out」不是允許的值 and failed its row. Before ADR-245 renamed the widget,
+    the same cell passed through as `Array` unvalidated.
+
+    Coercion has to yield a *string*, not a list: `task_properties.property_value` is one text
+    column and `bulk_import._write_task_properties` stores `str(value)`, which would turn a
+    list into the Python repr `"['gas_odor', 'power_out']"`.
+    """
+    db.add(
+        TaskPropertyConfig(
+            task_type="rescue", property_name="utility_hazards",
+            data_type="multi_select", enum_options=["gas_odor", "power_out", "sparks"],
+        )
+    )
+    await db.flush()
+
+    column = _by_header(await ticket_columns(db, "rescue"), f"{DYNAMIC_PREFIX}utility_hazards")
+
+    assert column.data_type == "MultiEnum"
+    # Full-width commas are accepted and canonicalized, matching what the exporter writes.
+    assert coerce(column, "gas_odor，power_out") == "gas_odor,power_out"
+    assert coerce(column, "gas_odor") == "gas_odor"
+    with pytest.raises(ValueError, match="not_an_option"):
+        coerce(column, "gas_odor,not_an_option")

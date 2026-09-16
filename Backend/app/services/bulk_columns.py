@@ -39,6 +39,10 @@ TIMESTAMP = "Timestamp"  # export-only columns; never produced by a config row
 # a typhoon brings 水災 and 土石流 at once (feature 018, ADR-246), and a singular column would
 # silently drop every type but the first on the way back in.
 LIST = "List"
+# Several of `enum_options` in one cell, comma-separated, stored back as one canonical
+# comma-joined string. `task_properties.property_value` is a single text column, so a
+# `multi_select` task field has nowhere else to put a second value (feature 018, ADR-278).
+MULTI_ENUM = "MultiEnum"
 
 # Config widget -> the coercion above. `number` becomes `Integer` because that is what both
 # EAV value columns can hold; a decimal in such a cell fails its own row with a readable
@@ -49,7 +53,7 @@ _WIDGET_COERCION = {
     FieldDataType.number.value: INTEGER,
     FieldDataType.boolean.value: BOOLEAN,
     FieldDataType.single_select.value: ENUM,
-    FieldDataType.multi_select.value: ENUM,
+    FieldDataType.multi_select.value: MULTI_ENUM,
 }
 
 # ADR-118: `station_properties` has no value column — only `quantity: int` — so a config row
