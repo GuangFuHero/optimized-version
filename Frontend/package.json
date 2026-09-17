@@ -8,6 +8,9 @@
     "start:demo": "nx start demo",
     "build": "nx run-many -t build",
     "lint": "nx run-many -t lint",
+    "test": "nx run-many -t test",
+    "test:watch": "nx test ui --configuration=watch",
+    "affected:test": "nx affected -t test",
     "format": "nx format:write",
     "format:check": "nx format:check",
     "affected:build": "nx affected -t build",
@@ -55,7 +58,8 @@
     "prettier": "~3.6.2",
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
-    "typescript-eslint": "^8.40.0"
+    "typescript-eslint": "^8.40.0",
+    "vitest": "^5.0.1"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
