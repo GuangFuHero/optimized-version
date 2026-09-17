@@ -55,14 +55,13 @@ async def check_permission(info, perm: Perm, resource=None) -> Scope:
     GraphQL-specific Guest handling layered on top of `app.services.authz.require_scope`
     (the entrypoint-agnostic version every use-case calls directly).
 
-    A PUBLIC_PERM resolves to `Scope.ALL` for every caller, authenticated or not
-    (ADR-025/259). Gating it on a role grant instead would let a logged-in user see *less*
-    than an anonymous one — no seeded role holds `announcement.view` / `pre_departure.view`
-    — and narrowing a capability the world already reads is meaningless.
+    All this adds is the Guest case: an anonymous caller has no `User` row, so it cannot be
+    passed to `require_scope` at all. A PUBLIC_PERM is `Scope.ALL` for it; anything else is
+    a flat 403, because there is nothing to run checkpoint 2 against (ADR-023).
 
-    Anything else is the full two-checkpoint model; an anonymous caller has no `User` row to
-    run checkpoint 2 against, so it is a flat 403 (ADR-023). See `require_scope`'s docstring
-    for the 403-vs-404 rationale.
+    Authenticated callers go straight to `require_scope`, which owns the public-capability
+    rule for every entrypoint (ADR-273) — duplicating it here is what made GraphQL and the
+    service layer disagree. See `require_scope`'s docstring for the 403-vs-404 rationale.
 
     Returns the resolved Scope so read-path callers can also use it for list-level
     filtering without a second lookup.
@@ -70,10 +69,9 @@ async def check_permission(info, perm: Perm, resource=None) -> Scope:
     user = info.context["user"]
     db = info.context["db"]
 
-    if perm in PUBLIC_PERMS:
-        return Scope.ALL
-
     if user is None:
+        if perm in PUBLIC_PERMS:
+            return Scope.ALL
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
 
     return await require_scope(user, perm, db, resource=resource, cache=info.context["_rbac_cache"])

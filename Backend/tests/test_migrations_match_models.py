@@ -10,6 +10,10 @@ This runs the real migrations against a throwaway database and diffs the result,
 divergence is caught here rather than by hand. Only table and column *names* are compared —
 types and nullability drift for legitimate reasons (server defaults, dialect aliases) and
 would make this noisy without catching more of the class of bug it exists for.
+
+ADR-149 in `Spec/011-resource-search/decisions.md` predicted this gap and deferred the guard
+("另開票"); ADR-276 in the same file records why it is name-only, and ADR-275 in
+`Spec/007-information-publishing/decisions.md` covers the `users.password` drop itself.
 """
 
 import asyncio

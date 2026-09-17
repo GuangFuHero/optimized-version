@@ -70,10 +70,11 @@ def upgrade() -> None:
     op.execute("ALTER TABLE ticket_tasks DROP COLUMN IF EXISTS confidence_score")
 
     # The contract half of d19cda4d9871, which moved passwords to
-    # `user_identities.password_hash` and left `users.password` for a "P4" stage never written;
-    # nothing has read or written it since, so no backfill is needed. Until now a
-    # migration-built database had this column and a `Base.metadata.create_all` one (what the
-    # tests build) did not, so the two disagreed on the schema.
+    # `user_identities.password_hash` and left `users.password` nullable "pending P4 (contract
+    # stage)". P4 was never written, so every migration-built database has carried a column the
+    # models dropped in 739eea8. Nothing reads or writes it — non-null for 0 of 41 users on a dev
+    # database, while `user_identities.password_hash` is populated for 37 — so there is nothing to
+    # back up or hand over. IF EXISTS for the same reason as the score drops above.
     op.execute("ALTER TABLE users DROP COLUMN IF EXISTS password")
 
 
