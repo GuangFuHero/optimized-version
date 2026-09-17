@@ -1,70 +1,18 @@
-export interface M3ColorScheme {
-  // ── Core ────────────────────────────────────────────────────
-  primary: string;
-  onPrimary: string;
-  primaryContainer: string;
-  onPrimaryContainer: string;
+import { designToM3Light } from './bridge';
+import { designTokens as dt, fontStack, withAlpha } from './design-tokens';
 
-  secondary: string;
-  onSecondary: string;
-  secondaryContainer: string;
-  onSecondaryContainer: string;
+/**
+ * Scrim stops for the login hero. The photograph underneath needs the text side darkened and the
+ * form side lifted; these three take the hue from tokens and keep the tuned alpha ramp.
+ */
+const scrimDark = (alpha: number) => withAlpha(dt.primitives.color.neutral[900], alpha);
+const scrimLight = (alpha: number) => withAlpha(dt.primitives.color.neutral.white, alpha);
+const scrimPage = (alpha: number) => withAlpha(dt.color.bg.neutral.subtle, alpha);
+import type { M3ColorScheme, RescueColorMode } from './m3-color-scheme';
 
-  tertiary: string;
-  onTertiary: string;
-  tertiaryContainer: string;
-  onTertiaryContainer: string;
-
-  error: string;
-  onError: string;
-  errorContainer: string;
-  onErrorContainer: string;
-
-  // ── Surface ─────────────────────────────────────────────────
-  background: string;
-  onBackground: string;
-  surface: string;
-  onSurface: string;
-  surfaceVariant: string;
-  onSurfaceVariant: string;
-  surfaceContainerLowest: string;
-  surfaceContainerLow: string;
-  surfaceContainer: string;
-  surfaceContainerHigh: string;
-  surfaceContainerHighest: string;
-
-  // ── Outline ─────────────────────────────────────────────────
-  outline: string;
-  outlineVariant: string;
-
-  // ── Inverse ─────────────────────────────────────────────────
-  inverseSurface: string;
-  inverseOnSurface: string;
-  inversePrimary: string;
-
-  // ── Other ───────────────────────────────────────────────────
-  shadow: string;
-  scrim: string;
-  surfaceTint: string;
-
-  // ── Semantic (rescue) ────────────────────────────────────────
-  danger: string;
-  onDanger: string;
-  dangerContainer: string;
-  onDangerContainer: string;
-
-  warning: string;
-  onWarning: string;
-  warningContainer: string;
-  onWarningContainer: string;
-
-  safe: string;
-  onSafe: string;
-  safeContainer: string;
-  onSafeContainer: string;
-}
-
-export type RescueColorMode = 'light' | 'dark';
+// The M3 role contract now lives in its own module so `bridge.ts` can name it without this
+// file and that one importing each other. Re-exported here so existing importers keep working.
+export type { M3ColorScheme, RescueColorMode } from './m3-color-scheme';
 
 export const moduleColorSchemeInventory = {
   auth: ['authPalette', 'heroDesktopOverlay', 'heroMobileOverlay'],
@@ -360,24 +308,27 @@ interface ModuleColorPrimitives {
 }
 
 const moduleColorPrimitives: Record<RescueColorMode, ModuleColorPrimitives> = {
+  // Every one of the eleven module palettes below is built from this object, so pointing it at the
+  // design system is what moves the shell, the drawers and the admin surfaces at once. Only `light`
+  // is derived — the design system ships no dark mode, so `dark` stays as hand-written values.
   light: {
-    surface: '#FFFFFF',
-    shellSurface: '#F6FAFF',
-    frameSurface: '#F6FAFF',
-    panelSurface: '#E7EFF7',
-    tintSurface: '#F6FAFF',
-    darkSurface: '#293138',
-    border: '#DCC1B1',
-    divider: '#dbe3ec',
-    mutedTrack: '#D3DBE3',
-    textPrimary: '#151C22',
-    textSecondary: '#564337',
-    action: '#E3791E',
-    actionHover: '#D36A0D',
-    actionText: '#4C2200',
-    warmAccent: '#954900',
-    coolAccent: '#77D5FE',
-    danger: '#BA1A1A',
+    surface: dt.color.bg.neutral.default,
+    shellSurface: dt.color.bg.neutral.subtle,
+    frameSurface: dt.color.bg.neutral.subtle,
+    panelSurface: dt.color.bg.neutral.sunken,
+    tintSurface: dt.color.bg.neutral.subtle,
+    darkSurface: dt.primitives.color.neutral[800],
+    border: dt.color.border.accent,
+    divider: dt.color.border.default,
+    mutedTrack: dt.color.bg.neutral.sunken,
+    textPrimary: dt.color.fg.neutral.default,
+    textSecondary: dt.color.fg.neutral.subtle,
+    action: dt.color.bg.primary.default,
+    actionHover: dt.color.bg.primary.hover,
+    actionText: dt.color.fg.onPrimary,
+    warmAccent: dt.color.brand.primary.subtle,
+    coolAccent: dt.color.bg.secondary.subtle,
+    danger: dt.color.bg.danger.default,
   },
   dark: {
     surface: '#1E2022',
@@ -404,67 +355,16 @@ const lightModuleColors = moduleColorPrimitives.light;
 const darkModuleColors = moduleColorPrimitives.dark;
 
 export const colorSchemes: Record<'light' | 'dark', M3ColorScheme> = {
-  light: {
-    // Primary
-    primary: '#179BC6',
-    onPrimary: '#FFFFFF',
-    primaryContainer: '#D8E2FF',
-    onPrimaryContainer: '#001945',
-    // Secondary
-    secondary: '#585E71',
-    onSecondary: '#FFFFFF',
-    secondaryContainer: '#DCE2F9',
-    onSecondaryContainer: '#15192B',
-    // Tertiary
-    tertiary: '#725472',
-    onTertiary: '#FFFFFF',
-    tertiaryContainer: '#FDD7FB',
-    onTertiaryContainer: '#2A122B',
-    // Error
-    error: '#BA1A1A',
-    onError: '#FFFFFF',
-    errorContainer: '#FFDAD6',
-    onErrorContainer: '#410002',
-    // Surface
-    background: '#FAFAF9',
-    onBackground: '#1A1C1E',
-    surface: '#FAFAF9',
-    onSurface: '#1A1C1E',
-    surfaceVariant: '#E1E2EC',
-    onSurfaceVariant: '#44464F',
-    surfaceContainerLowest: '#FFFFFF',
-    surfaceContainerLow: '#F5F3FA',
-    surfaceContainer: '#EEEDF4',
-    surfaceContainerHigh: '#E8E8EF',
-    surfaceContainerHighest: '#E2E2E9',
-    // Outline
-    outline: '#757680',
-    outlineVariant: '#C5C6D0',
-    // Inverse
-    inverseSurface: '#2F3033',
-    inverseOnSurface: '#F1F0F4',
-    inversePrimary: '#ADC6FF',
-    // Other
-    shadow: '#000000',
-    scrim: '#000000',
-    surfaceTint: '#005AC1',
-    // Semantic — Danger
-    danger: '#BA1A1A',
-    onDanger: '#FFFFFF',
-    dangerContainer: '#FFDAD6',
-    onDangerContainer: '#410002',
-    // Semantic — Warning
-    warning: '#7D5700',
-    onWarning: '#FFFFFF',
-    warningContainer: '#FFDEAA',
-    onWarningContainer: '#271600',
-    // Semantic — Safe
-    safe: '#1B6B3A',
-    onSafe: '#FFFFFF',
-    safeContainer: '#A7F2C4',
-    onSafeContainer: '#00210D',
-  },
+  // Derived from the design system via `bridge.ts` — see note/design-token-alignment-review.md.
+  // What this replaced: a hand-written scheme whose `primary` was the blue `#179BC6`, with
+  // `primaryContainer` / `inversePrimary` / `surfaceTint` left holding the Material baseline
+  // blue-violet a generator emits. The design system's primary is the orange `#E3791E`, so this
+  // is the line that turns the product from blue to orange.
+  light: designToM3Light,
 
+  // Left hand-written on purpose: the design system ships light only (`Mode: light` in its
+  // semantic.css header) and `theme.ts` never reads this, so deriving it would mean inventing a
+  // dark palette the designer has not drawn. See the review's open question 5.3.
   dark: {
     // Primary
     primary: '#ADC6FF',
@@ -540,24 +440,24 @@ export const moduleColorSchemes: Record<
       surface: lightModuleColors.surface,
       textPrimary: lightModuleColors.textPrimary,
       textSecondary: lightModuleColors.textSecondary,
-      textMuted: 'rgba(86, 67, 55, 0.5)',
+      textMuted: dt.color.fg.neutral.muted,
       fieldBackground: lightModuleColors.panelSurface,
       fieldBorder: lightModuleColors.border,
       primaryAction: lightModuleColors.action,
-      primaryActionHover: '#CE6710',
+      primaryActionHover: dt.color.bg.primary.hover,
       warmLink: lightModuleColors.warmAccent,
-      coolLink: '#006685',
+      coolLink: dt.color.brand.secondary.subtle,
       divider: lightModuleColors.border,
-      info: '#005A7A',
-      error: '#A53B2A',
+      info: dt.color.fg.info,
+      error: dt.color.fg.danger,
       heroDesktopOverlay: [
-        'radial-gradient(circle at 18% 74%, rgba(14, 20, 26, 0.58) 0%, rgba(14, 20, 26, 0.32) 26%, rgba(14, 20, 26, 0) 58%)',
-        'linear-gradient(90deg, rgba(16, 21, 28, 0.26) 0%, rgba(16, 21, 28, 0.12) 34%, rgba(16, 21, 28, 0.04) 58%, rgba(16, 21, 28, 0) 100%)',
-        'linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 18%, rgba(10, 14, 18, 0.12) 100%)',
+        `radial-gradient(circle at 18% 74%, ${scrimDark(0.58)} 0%, ${scrimDark(0.32)} 26%, ${scrimDark(0)} 58%)`,
+        `linear-gradient(90deg, ${scrimDark(0.26)} 0%, ${scrimDark(0.12)} 34%, ${scrimDark(0.04)} 58%, ${scrimDark(0)} 100%)`,
+        `linear-gradient(180deg, ${scrimLight(0.05)} 0%, ${scrimLight(0)} 18%, ${scrimDark(0.12)} 100%)`,
       ].join(', '),
       heroMobileOverlay: [
-        'radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.12) 30%, rgba(255, 255, 255, 0) 62%)',
-        'linear-gradient(180deg, rgba(246, 250, 255, 0.54) 0%, rgba(246, 250, 255, 0.74) 42%, rgba(246, 250, 255, 0.9) 100%)',
+        `radial-gradient(circle at 50% 22%, ${scrimLight(0.34)} 0%, ${scrimLight(0.12)} 30%, ${scrimLight(0)} 62%)`,
+        `linear-gradient(180deg, ${scrimPage(0.54)} 0%, ${scrimPage(0.74)} 42%, ${scrimPage(0.9)} 100%)`,
       ].join(', '),
     },
     adminShell: {
@@ -570,7 +470,7 @@ export const moduleColorSchemes: Record<
         primaryActionText: lightModuleColors.actionText,
         primaryActionHover: lightModuleColors.actionHover,
         activeSurface: lightModuleColors.coolAccent,
-        activeText: '#005B77',
+        activeText: dt.color.brand.secondary.subtle,
         navText: lightModuleColors.textSecondary,
         sectionText: lightModuleColors.textSecondary,
         layerText: lightModuleColors.textPrimary,
@@ -580,14 +480,14 @@ export const moduleColorSchemes: Record<
       },
       topNavBar: {
         frame: lightModuleColors.frameSurface,
-        border: '#DCC1B1',
-        searchBorder: '#6B7280',
-        searchBorderFocus: '#374151',
-        searchText: '#6B7280',
-        brandText: '#000000',
-        roleText: '#000000',
+        border: dt.color.border.accent,
+        searchBorder: dt.color.border.default,
+        searchBorderFocus: dt.color.brand.secondary.default,
+        searchText: dt.color.fg.neutral.muted,
+        brandText: dt.color.fg.neutral.default,
+        roleText: dt.color.fg.neutral.subtle,
         surface: lightModuleColors.surface,
-        avatarHover: '#F8FAFC',
+        avatarHover: dt.color.bg.secondary.subtle,
       },
     },
     adminPanels: {
@@ -601,8 +501,8 @@ export const moduleColorSchemes: Record<
         actionSurfaceHover: lightModuleColors.actionHover,
         actionText: lightModuleColors.actionText,
         copySurface: lightModuleColors.coolAccent,
-        copySurfaceHover: '#5DC4F1',
-        copyText: '#005B77',
+        copySurfaceHover: dt.primitives.color.blue[300],
+        copyText: dt.color.brand.secondary.subtle,
         warningText: lightModuleColors.warmAccent,
         qrBorder: lightModuleColors.action,
         roleSurface: lightModuleColors.surface,
@@ -611,21 +511,21 @@ export const moduleColorSchemes: Record<
         surface: lightModuleColors.surface,
         shellBackground: lightModuleColors.shellSurface,
         border: lightModuleColors.border,
-        shadow: '0px 1px 2px 0px rgba(0, 0, 0, 0.05)',
+        shadow: dt.shadow.sm,
         heading: lightModuleColors.textPrimary,
         bodyText: lightModuleColors.textSecondary,
         actionSurface: lightModuleColors.action,
         actionSurfaceHover: lightModuleColors.actionHover,
         actionText: lightModuleColors.actionText,
-        noticeSurface: 'rgba(227, 121, 30, 0.1)',
+        noticeSurface: withAlpha(dt.color.bg.primary.default, 0.1),
         noticeAccent: lightModuleColors.warmAccent,
         headerSurface: lightModuleColors.tintSurface,
-        rowHighlight: 'rgba(237, 244, 253, 0.5)',
+        rowHighlight: withAlpha(dt.color.bg.neutral.subtle, 0.5),
         roleSurface: lightModuleColors.tintSurface,
         roleText: lightModuleColors.textSecondary,
-        roleMutedText: 'rgba(86, 67, 55, 0.2)',
+        roleMutedText: withAlpha(dt.color.fg.neutral.subtle, 0.2),
         approvalPrimary: lightModuleColors.warmAccent,
-        approvalSecondary: '#897365',
+        approvalSecondary: dt.color.fg.neutral.muted,
         actionLink: lightModuleColors.warmAccent,
       },
       fieldConfiguration: {
@@ -634,18 +534,18 @@ export const moduleColorSchemes: Record<
         footerSurface: lightModuleColors.panelSurface,
         border: lightModuleColors.border,
         shadow:
-          '0px 20px 25px -5px rgba(0, 0, 0, 0.10), 0px 8px 10px -6px rgba(0, 0, 0, 0.10)',
+          dt.shadow.lg,
         headerSurface: lightModuleColors.darkSurface,
-        headerText: '#EAF2FA',
-        contextText: '#FFDCC6',
+        headerText: dt.color.bg.neutral.subtle,
+        contextText: dt.primitives.color.orange[100],
         heading: lightModuleColors.textPrimary,
         bodyText: lightModuleColors.textPrimary,
         mutedBodyText: lightModuleColors.textSecondary,
-        metadataText: '#5A6A80',
+        metadataText: dt.color.fg.neutral.subtle,
         helperText: lightModuleColors.textSecondary,
-        helperTextMuted: '#897365',
+        helperTextMuted: dt.color.fg.neutral.muted,
         sectionBorder: lightModuleColors.border,
-        extensionHighlightBorder: '#FFB786',
+        extensionHighlightBorder: dt.color.border.accent,
         extensionHighlightSurface: lightModuleColors.shellSurface,
         neutralBadgeSurface: lightModuleColors.divider,
         neutralBadgeText: lightModuleColors.textSecondary,
@@ -654,7 +554,7 @@ export const moduleColorSchemes: Record<
         actionText: lightModuleColors.actionText,
         trackOn: lightModuleColors.action,
         trackOff: lightModuleColors.mutedTrack,
-        knobOn: '#2563EB',
+        knobOn: dt.color.brand.secondary.default,
         knobOff: lightModuleColors.surface,
       },
     },
@@ -666,18 +566,18 @@ export const moduleColorSchemes: Record<
       divider: lightModuleColors.divider,
       heading: lightModuleColors.textPrimary,
       bodyText: lightModuleColors.textSecondary,
-      mutedText: '#6B7280',
+      mutedText: dt.color.fg.neutral.muted,
       action: lightModuleColors.action,
       actionText: lightModuleColors.actionText,
-      actionHover: '#F6E5D7',
-      activeSurface: '#E8F5E9',
-      activeText: '#2E7D32',
-      limitedSurface: '#FFF4E5',
+      actionHover: dt.color.bg.primary.subtle,
+      activeSurface: dt.color.bg.success.subtle,
+      activeText: dt.color.fg.success,
+      limitedSurface: dt.color.bg.warning.subtle,
       limitedText: lightModuleColors.warmAccent,
-      offlineSurface: '#F2F4F7',
-      offlineText: '#475569',
+      offlineSurface: dt.color.bg.neutral.sunken,
+      offlineText: dt.color.fg.neutral.subtle,
       danger: lightModuleColors.danger,
-      cool: '#006685',
+      cool: dt.color.brand.secondary.subtle,
     },
     stationDetail: {
       frame: lightModuleColors.frameSurface,
@@ -690,34 +590,34 @@ export const moduleColorSchemes: Record<
       cardSurface: lightModuleColors.shellSurface,
       cardBorder: lightModuleColors.border,
       cardDivider: lightModuleColors.divider,
-      activeStatusBackground: '#E8F5E9',
-      activeStatusBorder: '#A5D6A7',
-      activeStatusDot: '#4CAF50',
-      activeStatusText: '#2E7D32',
-      warningStatusBackground: '#FFF4E5',
-      warningStatusBorder: '#F0B55A',
+      activeStatusBackground: dt.color.bg.success.subtle,
+      activeStatusBorder: dt.primitives.color.green[500],
+      activeStatusDot: dt.color.bg.success.default,
+      activeStatusText: dt.color.fg.success,
+      warningStatusBackground: dt.color.bg.warning.subtle,
+      warningStatusBorder: dt.primitives.color.amber[500],
       warningStatusDot: lightModuleColors.action,
       warningStatusText: lightModuleColors.warmAccent,
-      inactiveStatusBackground: '#F2F4F7',
-      inactiveStatusBorder: '#CBD5E1',
-      inactiveStatusDot: '#94A3B8',
-      inactiveStatusText: '#475569',
+      inactiveStatusBackground: dt.color.bg.neutral.sunken,
+      inactiveStatusBorder: dt.color.border.default,
+      inactiveStatusDot: dt.color.fg.neutral.muted,
+      inactiveStatusText: dt.color.fg.neutral.subtle,
       capacityTrack: lightModuleColors.divider,
       capacityFill: lightModuleColors.action,
       editActionBackground: lightModuleColors.shellSurface,
       editActionText: lightModuleColors.textPrimary,
-      editActionHover: '#EAF2FB',
+      editActionHover: dt.color.bg.secondary.subtle,
       tabActiveSurface: lightModuleColors.divider,
       tabActiveAccent: lightModuleColors.warmAccent,
       tabActiveText: lightModuleColors.warmAccent,
       tabInactiveText: lightModuleColors.textSecondary,
       pendingBadgeBackground: lightModuleColors.danger,
       pendingBadgeBorder: lightModuleColors.panelSurface,
-      pendingBadgeText: '#FFFFFF',
+      pendingBadgeText: dt.color.fg.onDanger,
       contactAvatarBackground: lightModuleColors.coolAccent,
       destructiveActionText: lightModuleColors.danger,
       destructiveActionBorder: lightModuleColors.danger,
-      destructiveActionHover: 'rgba(186, 26, 26, 0.06)',
+      destructiveActionHover: withAlpha(dt.color.bg.danger.default, 0.06),
     },
     ticket: {
       list: {
@@ -733,17 +633,17 @@ export const moduleColorSchemes: Record<
         actionSurface: lightModuleColors.surface,
         actionFilled: lightModuleColors.action,
         actionFilledText: lightModuleColors.actionText,
-        actionHover: '#F6E5D7',
+        actionHover: dt.color.bg.primary.subtle,
         filterSelected: lightModuleColors.panelSurface,
         activeBorder: lightModuleColors.warmAccent,
         critical: lightModuleColors.danger,
-        inProgress: '#006685',
+        inProgress: dt.color.brand.secondary.subtle,
         pendingSurface: lightModuleColors.mutedTrack,
-        completed: '#15803D',
+        completed: dt.color.fg.success,
         warningText: lightModuleColors.warmAccent,
         unverified: lightModuleColors.danger,
-        disputedSurface: '#FFDAD6',
-        disputedText: '#93000A',
+        disputedSurface: dt.color.bg.danger.subtle,
+        disputedText: dt.color.fg.danger,
         verificationSurface: lightModuleColors.divider,
         paginationIcon: lightModuleColors.textSecondary,
       },
@@ -765,13 +665,13 @@ export const moduleColorSchemes: Record<
       },
     },
     mapOverlay: {
-      surface: 'rgba(225, 233, 241, 0.9)',
+      surface: withAlpha(dt.color.bg.neutral.default, 0.92),
       border: lightModuleColors.border,
       activeSurface: lightModuleColors.divider,
       text: lightModuleColors.textPrimary,
       mutedText: lightModuleColors.textSecondary,
-      shadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
-      cardSurface: 'rgba(225, 233, 241, 0.9)',
+      shadow: dt.shadow.sm,
+      cardSurface: withAlpha(dt.color.bg.neutral.default, 0.92),
       progressTrack: lightModuleColors.divider,
     },
   },
@@ -1022,14 +922,14 @@ export const moduleColorSchemes: Record<
 };
 
 export const typography = {
-  fontFamily: '"Inter", "Roboto", "Helvetica Neue", Arial, sans-serif',
+  // Derived from the design system (ADR pending — see note/design-token-alignment-review.md).
+  // The previous literal was `"Inter", "Roboto", "Helvetica Neue", Arial, sans-serif` — four faces
+  // with no CJK coverage between them, so every Chinese glyph in the product fell through to
+  // whatever the browser picked. Body copy is predominantly Chinese, hence the `body` role.
+  fontFamily: fontStack.body,
   fontFamilyMono: '"JetBrains Mono", "Courier New", monospace',
 } as const;
 
 export const shape = {
   borderRadius: 12, // M3 medium shape
-} as const;
-
-export const spacing = {
-  unit: 8,
 } as const;
