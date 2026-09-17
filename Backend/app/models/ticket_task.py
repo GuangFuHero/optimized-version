@@ -6,7 +6,6 @@ from sqlalchemy import (
     Boolean,
     Computed,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     String,
@@ -32,7 +31,6 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(50), default="pending")
     source: Mapped[str] = mapped_column(String(50), default="user")
     progress_note: Mapped[str | None] = mapped_column(String)
-    confidence_score: Mapped[float | None] = mapped_column(Float)
     is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False)
     dedup_group_id: Mapped[str | None] = mapped_column(String)
     moderation_status: Mapped[str] = mapped_column(String(50), default="pending_review")

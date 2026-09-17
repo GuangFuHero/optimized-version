@@ -158,10 +158,21 @@
 
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
-| announcement.view | all（公開） | — | — | all | — | — |
+| announcement.view | all（公開） | all（公開） | all（公開） | all | all（公開） | all（公開） |
 | announcement.publish | — | — | — | all | — | — |
 | announcement.edit | — | — | — | all | — | — |
 | announcement.delete | — | — | — | all | — | — |
+
+### 行前通知 Pre-Departure（功能 007）
+
+| capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
+|---|---|---|---|---|---|---|
+| pre_departure.view | all（公開） | all（公開） | all（公開） | all | all（公開） | all（公開） |
+| pre_departure.publish | — | — | — | all | — | — |
+| pre_departure.edit | — | — | — | all | — | — |
+| pre_departure.delete | — | — | — | all | — | — |
+
+> 公開的是**生成後的 briefing**；template 是編輯者的作業面，讀取要 `pre_departure.publish`。
 
 ### 稽核 / RBAC 自管
 
@@ -177,7 +188,9 @@
 ## 補充說明
 
 ### 公開白名單（`PUBLIC_PERMS`，`app/core/permissions.py`）
-`map.view`、`station.view`、`ticket.view`、`announcement.view` — 匿名可唯讀。`ticket.view_pii` **絕不**公開；匿名一律看不到 PII。
+`map.view`、`station.view`、`ticket.view`、`announcement.view`、`pre_departure.view` — **所有**呼叫端唯讀可用，
+`check_permission` 直接給 `Scope.ALL` 而不查 grant；靠 role 發這些鍵會讓登入者讀得比匿名少（ADR-259）。
+`ticket.view_pii` **絕不**公開；匿名一律看不到 PII。
 
 ### PII 遮罩（ADR-049）
 `ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩、user→own、team admin/member→zone、data_auditor/super_admin→all。
@@ -198,8 +211,8 @@
 
 ### 「已定義、但目前無角色授予」的 capability（ahead-of-feature，ADR-050）
 下列 key 存在於目錄、但 seed 沒發給任何角色，等對應功能實作時才會接上 enforcement：
-`ai_duplicate.view`、`ai_duplicate.review`、`pre_departure.view/publish/edit`。
-（`ticket.export` 自功能 015 起已授予；`audit.view` 自功能 016 起首次真正被 enforcement 消費。）
+`ai_duplicate.view`、`ai_duplicate.review`。
+（`ticket.export` 自功能 015 起已授予；`audit.view` 自功能 016 起首次真正被 enforcement 消費；`pre_departure.*` 自功能 007 起已接上 enforcement，並補上原本沒有的 `pre_departure.delete`。）
 
 ### 相關 ADR
 ADR-018（union）、ADR-019（兩軸/一人一 team，**身分部分被 010/ADR-068 取代**）、010/ADR-068·073·074（多 team 身分切換）、010/ADR-097（team 角色必須自給自足，`station.contribute`）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）。

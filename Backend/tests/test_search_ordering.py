@@ -36,9 +36,9 @@ def test_order_by_ends_on_the_primary_key():
 
     Searching makes ties the common case rather than the exception: every row matched only
     through a related table ties on BOTH relevance keys (the ILIKE boolean is false and
-    similarity() is 0 for a CJK mid-string match — ADR-147), `priority_score` is usually
-    NULL, and `created_at` comes from `server_default=func.now()`, which is
-    transaction-scoped — one bulk insert leaves a whole block sharing a timestamp.
+    similarity() is 0 for a CJK mid-string match — ADR-147), and `created_at` comes from
+    `server_default=func.now()`, which is transaction-scoped — one bulk insert leaves a
+    whole block sharing a timestamp.
     """
     for repo, model, term in _cases():
         clauses = repo._order_by(term)

@@ -261,10 +261,8 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
         "status_changed_at": _DERIVED_STAMP,
         "child_station_uuid": _FK,
         "updated_by": _FK,
-        "confidence_score": _SCORE,
         "is_duplicate": _SCORE,
         "dedup_group_id": _SCORE,
-        "priority_score": _SCORE,
     },
     ("ticket", "ticket_tasks"): {
         "uuid": _ID,
@@ -281,7 +279,6 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
             "no delete path exists for a task — there is no delete_ticket_task mutation or "
             "service function (ADR-131)"
         ),
-        "confidence_score": _SCORE,
         "is_duplicate": _SCORE,
         "dedup_group_id": _SCORE,
     },

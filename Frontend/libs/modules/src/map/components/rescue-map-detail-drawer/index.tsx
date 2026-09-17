@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import LocalPhoneRoundedIcon from '@mui/icons-material/LocalPhoneRounded';
 import RadioRoundedIcon from '@mui/icons-material/RadioRounded';
-import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded';
 import { Box } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
@@ -101,15 +100,6 @@ function createStationResources(marker: RescueMapMarkerItem) {
           ? `Level ${station.level}`
           : '未提供',
       icon: <IncidentLogIcon />,
-    },
-    {
-      id: 'confidence',
-      label: '可信度',
-      value:
-        typeof station?.confidenceScore === 'number'
-          ? `${Math.round(station.confidenceScore * 100)}%`
-          : '未提供',
-      icon: <WaterDropRoundedIcon />,
     },
   ];
 }

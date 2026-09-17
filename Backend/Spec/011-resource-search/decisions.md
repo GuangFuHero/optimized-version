@@ -135,7 +135,9 @@
 
 ### ADR-083 `q` 有值時以相關性優先排序，既有排序降為 tiebreaker
 
-> **排序鍵被 ADR-147 取代**：`similarity()` 對中文常為 0，改為「自身命中」布林優先、`similarity()` 降為組內排序。本 ADR 的其餘部分（分支處理、`priority_score` 為 no-op tiebreaker）仍成立。
+> **排序鍵被 ADR-147 取代**：`similarity()` 對中文常為 0，改為「自身命中」布林優先、`similarity()` 降為組內排序。
+>
+> **`priority_score` 已移除（PR #49）**：下方「衍生問題」採「從 API 移除」一途——欄位、`ORDER BY` 鍵與 GraphQL 曝露皆已刪除，`stations` 的 standing order 現為 `created_at DESC, uuid DESC`，與 `tickets` 一致。本 ADR 的分支處理仍成立。
 
 **白話**：有關鍵字時，最像的排前面；沒關鍵字時，維持原本的排序。
 
@@ -155,6 +157,8 @@ q 無值：priority_score DESC NULLS LAST, created_at DESC        （維持現�
 ➖ `similarity()` 需對每一筆命中列計算，但命中集已被索引收斂，成本可忽略。
 
 **衍生問題（本票不處理）**：`priority_score` 是半實作且對外曝露一個恆為 `null` 的欄位，前端可能已在讀取。建議另開票處理——要嘛實作寫入邏輯，要嘛從 API 移除。
+
+> **已結案（PR #49）**：選擇「從 API 移除」。`stations.priority_score`、`stations.confidence_score`、`ticket_tasks.confidence_score` 三個從未被寫入的欄位一併刪除。
 
 ---
 

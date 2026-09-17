@@ -329,13 +329,11 @@ stations {
     string source "user/gov/crawler"
     string visibility "public/restricted/internal"
     string verification_status "unverified/ai_verified/human_verified"
-    float confidence_score "0.0-1.0"
     boolean is_duplicate
     string dedup_group_id "nullable"
     boolean is_temporary
     timestamp expires_at "nullable"
     boolean is_official
-    float priority_score "0.0-1.0, nullable"
     uuid updated_by FK "nullable, FK to users"
     string contact_name "nullable, String(100), independent of tickets.contact_name"
     string contact_email "nullable, String(100)"
@@ -507,7 +505,6 @@ ticket_tasks {
     string status "pending/in_progress/fulfilled/canceled"
     string source "user/gov/crawler/ngo/admin"
     string progress_note "nullable"
-    float confidence_score "0.0-1.0, nullable"
     boolean is_duplicate
     string dedup_group_id "nullable"
     string moderation_status "pending_review/approved/rejected/merged"

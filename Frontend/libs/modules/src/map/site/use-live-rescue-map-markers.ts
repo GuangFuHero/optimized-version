@@ -81,12 +81,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
         const nextItems = dedupeMarkersById(
           (result.data?.stations.items ?? [])
             .map((station) => mapStationToMarker(station))
-            .filter((marker): marker is RescueMapMarkerItem => Boolean(marker))
-            .sort(
-              (left, right) =>
-                (right.stationMeta?.priorityScore ?? 0) -
-                (left.stationMeta?.priorityScore ?? 0),
-            ),
+            .filter((marker): marker is RescueMapMarkerItem => Boolean(marker)),
         );
         const pageInfo = result.data?.stations.pageInfo
           ? useFragment(PageInfoFieldsFragmentDoc, result.data.stations.pageInfo)

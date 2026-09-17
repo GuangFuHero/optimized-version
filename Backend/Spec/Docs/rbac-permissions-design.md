@@ -21,7 +21,7 @@
 2. **兩軸模型（ADR-019/049）**：授權 = **功能角色**（做什麼）×**組織 team**（在哪個區域）。一帳號 = 一 `platform` 角色 + 最多一 `team` 角色（`users.team_uuid`）。組織身分（gov/ngo）由 `team.type` 表達，**不進角色名、不進 scope**。
 3. **固定 scope、非通用 ABAC（ADR-020/021/049）**：資料邊界用固定 enum `none/own/team/zone/all`，不做 free-JSON condition 引擎。地理管轄靠 `zone`（point-in-polygon），不靠在資源上存 owning-org。
 4. **相加、無 deny（ADR-018）**：多來源 grant 取**聯集**、同一 capability 取**最寬** scope（`all > zone > team > own > none`）。收權靠移除角色/grant，**沒有 deny override**。
-5. **預設 deny + 公開白名單（ADR-025/027）**：未明列一律 deny；`PUBLIC_PERMS` 匿名可讀；`ticket.view_pii` 永不公開。
+5. **預設 deny + 公開白名單（ADR-025/027）**：未明列一律 deny；`PUBLIC_PERMS` 內的鍵對**所有**呼叫端（含已登入者）一律 `Scope.ALL`，不看 role grant——否則登入後讀到的會比匿名還少；`ticket.view_pii` 永不公開。
 
 ### 系統架構
 ```
@@ -42,7 +42,7 @@
 
 ## 2. 能力鍵目錄（`app/core/permissions.py:Perm`）
 
-命名規則：`<capability>.<action>`。★ = 屬 `PUBLIC_PERMS`，匿名唯讀可用（ADR-025/027）。
+命名規則：`<capability>.<action>`。★ = 屬 `PUBLIC_PERMS`，任何人唯讀可用、不需 grant（ADR-025/027）。
 
 | 模組 | 能力鍵 |
 | :--- | :--- |
@@ -55,13 +55,17 @@
 | **Team（團隊管理）** | `team.view`、`team.edit`、`team.member.manage` |
 | **Work Zone（責任區）** | `work_zone.view`、`work_zone.add`、`work_zone.edit`、`work_zone.assign`、`work_zone.delete` |
 | **Dynamic Field（動態欄位設定）** | `dynamic_field.view`、`dynamic_field.add`、`dynamic_field.edit`、`dynamic_field.delete` |
-| **Pre-Departure（出勤前須知）** | `pre_departure.view`、`pre_departure.publish`、`pre_departure.edit` |
+| **Pre-Departure（出勤前須知／行前通知）** | `pre_departure.view` ★、`pre_departure.publish`、`pre_departure.edit`、`pre_departure.delete` |
 | **Audit（稽核日誌）** | `audit.view` |
 | **RBAC 自管（僅 Super Admin）** | `rbac.assign`、`rbac.edit` |
 
 > `PII` 與檢視分離（ADR-012）：`ticket.view`（看得到單）≠ `ticket.view_pii`（看得到聯絡資訊）。
 > Dashboard 是衍生視圖（ADR-049），可見性繼承自來源模組，**刻意沒有自己的 permission key**。
-> 部分鍵（`ticket.export`、`ai_duplicate.*`、`pre_departure.*`）已註冊進 catalog，但**目前 seed 尚未授予任何角色**——先讓 key 存在，待對應功能落地再 wire（見 `seed_rbac.py` 開頭）。
+> 部分鍵（`ticket.export`、`ai_duplicate.*`）已註冊進 catalog，但**目前 seed 尚未授予任何角色**——先讓 key 存在，待對應功能落地再 wire（見 `seed_rbac.py` 開頭）。
+> `pre_departure.*` 原本也在此列，功能落地後（briefing templates + briefings）已接上 enforcement 並授予 `super_admin`；
+> 同時補上原本沒有的 `pre_departure.delete`，與 `announcement.*` 的四鍵形狀對齊。
+> `pre_departure.view` 列入 `PUBLIC_PERMS`：志工要先讀得到行前通知才能決定是否出勤，與 `announcement.view` 同理。
+> 但**只有 briefings 是公開的**：template 是編輯者挑選用的作業面，讀取要 `pre_departure.publish`。
 
 ---
 
