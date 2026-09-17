@@ -4,21 +4,16 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Mirrors the design system's `body` role (see libs/ui/src/theme/design-tokens.ts `fontStack`).
+     It has to be repeated here rather than imported: the MUI theme only reaches MUI components, so
+     without this every plain element would keep rendering in the browser's default face while the
+     components next to it rendered in Noto Sans TC. The `var()` names come from next/font in
+     layout.tsx; each carries an inline fallback so an unset variable degrades to the next name
+     instead of invalidating the whole declaration. */
   font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    Segoe UI,
-    Roboto,
-    Helvetica Neue,
-    Arial,
-    Noto Sans,
-    sans-serif,
-    Apple Color Emoji,
-    Segoe UI Emoji,
-    Segoe UI Symbol,
-    Noto Color Emoji;
+    var(--font-noto-sans-tc, 'Noto Sans TC'),
+    var(--font-nunito, 'Nunito'),
+    sans-serif;
   line-height: 1.5;
   tab-size: 4;
   scroll-behavior: smooth;
