@@ -1130,11 +1130,11 @@ async def test_update_task_property_blocked_when_parent_task_soft_deleted(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("data_type", ["Boolean", "String"])
+@pytest.mark.parametrize("data_type", ["boolean", "text"])
 async def test_upsert_station_property_config_idempotent(client, coordinator_auth, data_type):
     """Hypothesis: upsertStationPropertyConfig is idempotent — calling it twice updates, not duplicates.
 
-    Test case: upsert power_stable with Boolean then String → second call's dataType wins.
+    Test case: upsert power_stable with boolean then text → second call's dataType wins.
     """
     _, token = coordinator_auth
     resp = await client.post(

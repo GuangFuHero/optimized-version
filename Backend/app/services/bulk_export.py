@@ -348,9 +348,11 @@ async def export_tickets(
                 "task_quantity": _text(task.quantity),
                 **_contact_fields(ticket, visible=await may_see_pii(ticket)),
             }
-            for field in ("title", "description", "status", "priority", "disaster_type",
+            for field in ("title", "description", "status", "priority",
                           "visibility", "verification_status", "review_note", "created_at"):
                 row[field] = _text(getattr(ticket, field, None))
+            # One cell, comma-separated, matching what the importer splits back apart.
+            row["disaster_types"] = ",".join(ticket.disaster_types or [])
             for column in columns:
                 if column.is_dynamic:
                     prop = properties.get(str(task.uuid), {}).get(column.field)

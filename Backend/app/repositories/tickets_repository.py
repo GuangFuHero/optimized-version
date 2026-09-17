@@ -1,11 +1,12 @@
-"""Repositories for tickets, ticket tasks, and task properties."""
+"""Repositories for tickets, ticket tasks, task properties, and disaster-field values."""
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
+from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 
 
@@ -249,7 +250,43 @@ class TaskAssignmentRepository(GenericRepository[TaskAssignment]):
         return result.scalar_one_or_none()
 
 
+class TicketDisasterDetailRepository(GenericRepository[TicketDisasterDetail]):
+    """Repository for the per-ticket values of disaster-specific dynamic fields."""
+
+    def __init__(self):
+        """Initialize with TicketDisasterDetail as the managed model."""
+        super().__init__(TicketDisasterDetail)
+
+    async def list_by_ticket(self, db: AsyncSession, ticket_uuid: str) -> list[TicketDisasterDetail]:
+        """List a ticket's disaster-field values, ordered so a multi-select reads stably.
+
+        Ordered on `(property_name, value)` rather than insertion: a `multi_select` is several
+        rows and the caller renders them as one field, so an unordered result would reshuffle
+        the checkbox list between reads for no reason.
+        """
+        result = await db.execute(
+            select(self.model)
+            .where(self.model.ticket_uuid == ticket_uuid, self.model.delete_at.is_(None))
+            .order_by(self.model.property_name, self.model.value)
+        )
+        return result.scalars().all()
+
+    async def delete_for_ticket(self, db: AsyncSession, ticket_uuid: str) -> None:
+        """Hard-delete every value row for a ticket, without committing.
+
+        Hard, not soft: these rows are a *replacement* set, and a soft-deleted row would still
+        occupy `uq_ticket_disaster_detail_value`, so re-selecting a value the reporter had
+        previously cleared would hit a unique violation. The audit trigger records the DELETE,
+        so nothing is lost — the trail lives in `audit_logs`, not in tombstones here.
+
+        No commit: the caller owns the transaction so that clearing and re-inserting is one
+        atomic swap.
+        """
+        await db.execute(delete(self.model).where(self.model.ticket_uuid == ticket_uuid))
+
+
 ticket_repository = TicketRepository()
 ticket_task_repository = TicketTaskRepository()
 task_property_repository = TaskPropertyRepository()
 task_assignment_repository = TaskAssignmentRepository()
+ticket_disaster_detail_repository = TicketDisasterDetailRepository()

@@ -8,11 +8,16 @@ from app.models.auth import (  # noqa: F401
     UserIdentity,
 )
 from app.models.briefing import Briefing, BriefingTemplate  # noqa: F401
+from app.models.disaster_type import DisasterType  # noqa: F401
 from app.models.geo import BaseGeometry, ClosureArea, Station  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.photo import Photo  # noqa: F401
 from app.models.project_settings import ProjectSettings  # noqa: F401
-from app.models.property_config import StationPropertyConfig, TaskPropertyConfig  # noqa: F401
+from app.models.property_config import (  # noqa: F401
+    StationPropertyConfig,
+    TaskPropertyConfig,
+    TicketPropertyConfig,
+)
 from app.models.rbac import (  # noqa: F401
     Permission,
     Role,
@@ -29,5 +34,6 @@ from app.models.station_property import (  # noqa: F401
     StationUpdateSuggestion,
 )
 from app.models.team import Team, TeamZoneAssign, WorkZone  # noqa: F401
+from app.models.ticket_disaster_detail import TicketDisasterDetail  # noqa: F401
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask  # noqa: F401
 

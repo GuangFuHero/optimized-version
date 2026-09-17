@@ -105,7 +105,7 @@ async def _importer(db, *, scope="all") -> User:
 
 async def _configs(db) -> None:
     db.add(TaskPropertyConfig(
-        task_type="rescue", property_name="people_count", data_type="Integer", enum_options=None
+        task_type="rescue", property_name="people_count", data_type="number", enum_options=None
     ))
     await db.commit()
 

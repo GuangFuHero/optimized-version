@@ -264,6 +264,22 @@ class SecondaryLocationRepository(GenericRepository[SecondaryLocation]):
         """Initialize with SecondaryLocation as the managed model."""
         super().__init__(SecondaryLocation)
 
+    async def get_by_geometry(
+        self, db: AsyncSession, geometry_uuid: str
+    ) -> SecondaryLocation | None:
+        """Return the address row attached to a station or ticket, if it has one.
+
+        One row per geometry by convention rather than by constraint, so this takes the
+        first; it exists so an update replaces the address instead of adding a second.
+        """
+        result = await db.execute(
+            select(SecondaryLocation)
+            .where(SecondaryLocation.geometry_uuid == geometry_uuid)
+            .order_by(SecondaryLocation.uuid)
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
 
 station_repository = StationRepository()
 closure_area_repository = ClosureAreaRepository()

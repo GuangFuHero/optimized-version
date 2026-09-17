@@ -151,13 +151,13 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
 
 async def _configs(db) -> None:
     db.add(StationPropertyConfig(
-        station_type="shelter", property_name="capacity_total", data_type="Integer", enum_options=None
+        station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
     ))
     db.add(StationPropertyConfig(
-        station_type="shelter", property_name="pet_friendly", data_type="Boolean", enum_options=None
+        station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
     ))
     db.add(TaskPropertyConfig(
-        task_type="rescue", property_name="people_count", data_type="Integer", enum_options=None
+        task_type="rescue", property_name="people_count", data_type="number", enum_options=None
     ))
     await db.flush()
 
