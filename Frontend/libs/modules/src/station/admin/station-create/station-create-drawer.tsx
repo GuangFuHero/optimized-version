@@ -37,6 +37,10 @@ import type { RescueMapMarkerItem } from '../../../map/types';
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 import type { StationListRow } from '../station-list/types';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color } = designTokens;
+
 interface StationCreateFormState {
   type: StationTypeValue;
   description: string;
@@ -114,16 +118,16 @@ function formatNow() {
 }
 
 const stationCreatePalette = {
-  surface: '#FFFFFF',
-  sectionSurface: '#F6FAFF',
-  border: '#D7E3F0',
-  heading: '#0F3F75',
-  bodyText: '#39516B',
-  primary: '#179BC6',
-  primaryHover: '#127EA6',
-  primaryText: '#FFFFFF',
-  secondaryText: '#245C8C',
-  secondaryBorder: '#BFD0DD',
+  surface: color.bg.neutral.default,
+  sectionSurface: color.bg.neutral.subtle,
+  border: color.border.default,
+  heading: color.fg.neutral.default,
+  bodyText: color.fg.neutral.subtle,
+  primary: color.brand.secondary.default,
+  primaryHover: color.bg.secondary.hover,
+  primaryText: color.fg.onSecondary,
+  secondaryText: color.brand.secondary.subtle,
+  secondaryBorder: color.border.default,
 };
 
 const MAX_STATION_PHOTO_URLS = 10;
@@ -237,7 +241,7 @@ function Section({
   return (
     <Stack spacing={1.5}>
       <Box>
-        <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#151C22' }}>
+        <Typography sx={{ fontSize: 15, fontWeight: 800, color: color.fg.neutral.default }}>
           {title}
         </Typography>
         {description ? (
@@ -972,14 +976,14 @@ export function StationCreateDrawer({
                             objectFit: 'cover',
                             borderRadius: 2,
                             border: `1px solid ${stationCreatePalette.border}`,
-                            bgcolor: '#EAF2FB',
+                            bgcolor: color.bg.secondary.subtle,
                           }}
                         />
                       ) : (
                         <Typography
                           sx={{
                             fontSize: 12,
-                            color: '#A53B2A',
+                            color: color.fg.danger,
                             lineHeight: 1.6,
                           }}
                         >

@@ -25,6 +25,10 @@ import {
 } from './model';
 import { StationReportHistoryPanel } from './station-report-history-panel';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color } = designTokens;
+
 interface SiteStationReportDrawerProps {
   open: boolean;
   station: RescueMapMarkerItem | null;
@@ -105,7 +109,7 @@ export function SiteStationReportDrawer({
         '& .MuiDrawer-paper': {
           width: { mobile: '100vw', tablet: 480 },
           maxWidth: '100vw',
-          bgcolor: '#FFFFFF',
+          bgcolor: color.bg.neutral.default,
           overflow: 'hidden',
         },
       }}
@@ -115,8 +119,8 @@ export function SiteStationReportDrawer({
           sx={{
             px: 3,
             py: 2.5,
-            borderBottom: '1px solid #D7DEE8',
-            bgcolor: '#F6FAFF',
+            borderBottom: `1px solid ${color.border.default}`,
+            bgcolor: color.bg.neutral.subtle,
             display: 'flex',
             justifyContent: 'space-between',
             gap: 2,
@@ -124,12 +128,12 @@ export function SiteStationReportDrawer({
         >
           <Stack spacing={0.5} sx={{ minWidth: 0 }}>
             <Typography
-              sx={{ color: '#17212B', fontSize: 22, fontWeight: 800 }}
+              sx={{ color: color.fg.neutral.default, fontSize: 22, fontWeight: 800 }}
             >
               建議修改站點資訊
             </Typography>
             <Typography
-              sx={{ color: '#667085', fontSize: 13, lineHeight: '18px' }}
+              sx={{ color: color.fg.neutral.muted, fontSize: 13, lineHeight: '18px' }}
             >
               {station?.title ?? '未選取站點'}
             </Typography>
@@ -196,7 +200,7 @@ export function SiteStationReportDrawer({
             <Stack spacing={1.25}>
               <Typography
                 sx={{
-                  color: '#17212B',
+                  color: color.fg.neutral.default,
                   fontSize: 15,
                   lineHeight: '22px',
                   fontWeight: 800,
@@ -208,7 +212,7 @@ export function SiteStationReportDrawer({
                 <StationReportHistoryPanel reports={[latestReport]} compact />
               ) : (
                 <Typography
-                  sx={{ color: '#667085', fontSize: 13, lineHeight: '20px' }}
+                  sx={{ color: color.fg.neutral.muted, fontSize: 13, lineHeight: '20px' }}
                 >
                   尚無回報
                 </Typography>
@@ -219,7 +223,7 @@ export function SiteStationReportDrawer({
               <Stack spacing={1.25}>
                 <Typography
                   sx={{
-                    color: '#17212B',
+                    color: color.fg.neutral.default,
                     fontSize: 15,
                     lineHeight: '22px',
                     fontWeight: 800,
@@ -233,7 +237,7 @@ export function SiteStationReportDrawer({
           </Stack>
         </Box>
 
-        <Box sx={{ px: 3, py: 2, borderTop: '1px solid #D7DEE8' }}>
+        <Box sx={{ px: 3, py: 2, borderTop: `1px solid ${color.border.default}` }}>
           <Button
             type="submit"
             form="site-station-report-form"

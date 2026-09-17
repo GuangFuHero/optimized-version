@@ -23,15 +23,19 @@ import {
 import type { RescueMapMarkerItem } from '../../map/types';
 import { formatTicketStatusLabel } from '../status';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color } = designTokens;
+
 const detailPalette = {
-  surface: '#FFFFFF',
-  sectionSurface: '#F6FAFF',
-  border: '#D7E3F0',
-  heading: '#17324D',
-  text: '#1F2B37',
-  muted: '#5D7288',
-  accent: '#1F5C7A',
-  accentSoft: '#EAF2FB',
+  surface: color.bg.neutral.default,
+  sectionSurface: color.bg.neutral.subtle,
+  border: color.border.default,
+  heading: color.fg.neutral.default,
+  text: color.fg.neutral.default,
+  muted: color.fg.neutral.muted,
+  accent: color.brand.secondary.subtle,
+  accentSoft: color.bg.secondary.subtle,
 };
 
 // 詳情面板自行顯示載入狀態，停用 suspense 避免整頁因抓取任務資料而閃爍重渲染。
@@ -577,12 +581,18 @@ export function TaskMatchTicketDetailsPanel({
                 <Chip
                   size="small"
                   label={formatTicketTypeLabel(activeTask.taskType)}
-                  sx={{ bgcolor: '#E8F5FB', color: '#005579' }}
+                  sx={{
+                    bgcolor: color.bg.secondary.subtle,
+                    color: color.brand.secondary.subtle,
+                  }}
                 />
                 <Chip
                   size="small"
                   label={formatTicketStatusLabel(activeTask.status)}
-                  sx={{ bgcolor: '#FFF3E8', color: '#9A4D00' }}
+                  sx={{
+                    bgcolor: color.bg.primary.subtle,
+                    color: color.brand.primary.subtle,
+                  }}
                 />
                 <Chip
                   size="small"
@@ -591,12 +601,18 @@ export function TaskMatchTicketDetailsPanel({
                       ? `需求數量 ${activeTask.quantity}`
                       : '需求數量未提供'
                   }
-                  sx={{ bgcolor: '#EEF3F7', color: '#43505C' }}
+                  sx={{
+                    bgcolor: color.bg.neutral.sunken,
+                    color: color.fg.neutral.subtle,
+                  }}
                 />
                 <Chip
                   size="small"
                   label={`已指派 ${activeTask.assignments.length} 筆`}
-                  sx={{ bgcolor: '#EEF3F7', color: '#43505C' }}
+                  sx={{
+                    bgcolor: color.bg.neutral.sunken,
+                    color: color.fg.neutral.subtle,
+                  }}
                 />
               </Box>
             </Box>

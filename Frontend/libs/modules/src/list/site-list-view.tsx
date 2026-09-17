@@ -33,6 +33,10 @@ import {
 import { usePaginatedRescueMapMarkers } from '../map/site';
 import { SiteListRow } from './site-list-row';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color } = designTokens;
+
 /**
  * 前台列表模組：與地圖共用路由狀態與篩選邏輯，支援維度切換、子分類篩選與詳情雙向綁定。
  */
@@ -188,7 +192,7 @@ export function SiteListView() {
         gridTemplateRows: 'minmax(0, 1fr)',
         transition: 'grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'hidden',
-        bgcolor: '#f3f5f8',
+        bgcolor: color.bg.neutral.subtle,
       }}
     >
       <Box
@@ -209,8 +213,8 @@ export function SiteListView() {
             gap: 1.5,
             px: { mobile: 2, tablet: 3 },
             py: 2,
-            borderBottom: '1px solid #e3e8ee',
-            bgcolor: '#fff',
+            borderBottom: `1px solid ${color.border.default}`,
+            bgcolor: color.bg.neutral.default,
           }}
         >
           <SiteDataTypeToggle
@@ -222,7 +226,7 @@ export function SiteListView() {
             selected={controller.subDataTypes}
             onToggle={controller.toggleSubDataType}
           />
-          <Typography sx={{ ml: 'auto', fontSize: 13, color: '#564337' }}>
+          <Typography sx={{ ml: 'auto', fontSize: 13, color: color.fg.neutral.subtle }}>
             共 {controller.markers.length} 筆
           </Typography>
         </Box>
@@ -241,7 +245,7 @@ export function SiteListView() {
                 height: '100%',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#6B7280',
+                color: color.fg.neutral.muted,
               }}
             >
               <Typography sx={{ fontSize: 14 }}>沒有符合條件的資料</Typography>
@@ -296,7 +300,7 @@ export function SiteListView() {
                     pt: 1,
                     textAlign: 'center',
                     fontSize: 13,
-                    color: '#6B7280',
+                    color: color.fg.neutral.muted,
                   }}
                 >
                   載入中...

@@ -12,9 +12,9 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
+import { designTokens, Icons } from '@rescue-frontend/ui';
 
-import { getRescueColorScheme, Icons } from '@rescue-frontend/ui';
+const { color, radius, shadow, spacing, motion } = designTokens;
 
 const PersonIcon = Icons.person;
 
@@ -33,7 +33,6 @@ export function SiteUserMenu({
   onSignOut,
 }: SiteUserMenuProps) {
   const router = useRouter();
-  const palette = getRescueColorScheme(useTheme()).adminShell.topNavBar;
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
 
@@ -57,9 +56,9 @@ export function SiteUserMenu({
         onClick={(event) => setAnchorEl(event.currentTarget)}
         sx={{
           borderRadius: '50%',
-          transition: 'box-shadow 120ms ease',
+          transition: `box-shadow ${motion.transition.fast}`,
           '&:hover': {
-            boxShadow: `0 0 0 3px ${palette.avatarHover}`,
+            boxShadow: `0 0 0 3px ${color.bg.secondary.subtle}`,
           },
         }}
       >
@@ -69,9 +68,9 @@ export function SiteUserMenu({
           sx={{
             width: 32,
             height: 32,
-            bgcolor: '#d7dbdf',
-            color: '#2f3133',
-            border: '1px solid rgba(32, 26, 24, 0.08)',
+            bgcolor: color.brand.secondary.default,
+            color: color.fg.onSecondary,
+            border: `1px solid ${color.border.default}`,
           }}
         >
           {!userImage ? <PersonIcon sx={{ fontSize: 20 }} /> : null}
@@ -84,14 +83,27 @@ export function SiteUserMenu({
         onClose={() => setAnchorEl(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { sx: { mt: 1, minWidth: 180 } } }}
+        slotProps={{
+          paper: {
+            sx: {
+              mt: 1,
+              minWidth: 240,
+              p: `${spacing[2]}px`,
+              bgcolor: color.bg.neutral.default,
+              border: `1px solid ${color.border.default}`,
+              borderRadius: `${radius.lg}px`,
+              backgroundImage: 'none',
+              boxShadow: shadow.lg,
+            },
+          },
+        }}
       >
         <MenuItem disabled sx={{ opacity: 1 }}>
           <Stack>
             <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
               {userName || '指揮中心'}
             </Typography>
-            <Typography sx={{ fontSize: 12, color: '#6B7280' }}>
+            <Typography sx={{ fontSize: 12, color: color.fg.neutral.muted }}>
               已登入
             </Typography>
           </Stack>

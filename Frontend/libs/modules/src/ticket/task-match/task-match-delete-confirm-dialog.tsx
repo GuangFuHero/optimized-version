@@ -4,6 +4,10 @@ import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typog
 
 import type { RescueMapMarkerItem } from '../../map/types';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, radius, shadow } = designTokens;
+
 interface TaskMatchDeleteConfirmDialogProps {
   open: boolean;
   task: RescueMapMarkerItem | null;
@@ -24,17 +28,12 @@ export function TaskMatchDeleteConfirmDialog({
       fullWidth
       maxWidth="xs"
       slotProps={{
-        backdrop: {
-          sx: {
-            backgroundColor: 'rgba(21, 28, 34, 0.28)',
-          },
-        },
         paper: {
           sx: {
-            borderRadius: 2,
-            border: '1px solid #DCC1B1',
-            bgcolor: '#F6FAFF',
-            boxShadow: '0 18px 48px rgba(21, 28, 34, 0.18)',
+            borderRadius: `${radius.lg}px`,
+            border: `1px solid ${color.border.accent}`,
+            bgcolor: color.bg.neutral.default,
+            boxShadow: shadow.lg,
             backgroundImage: 'none',
           },
         },
@@ -44,7 +43,7 @@ export function TaskMatchDeleteConfirmDialog({
         <Stack spacing={0.75}>
           <Typography
             sx={{
-              color: '#151C22',
+              color: color.fg.neutral.default,
               fontSize: 18,
               lineHeight: '24px',
               fontWeight: 700,
@@ -54,7 +53,7 @@ export function TaskMatchDeleteConfirmDialog({
           </Typography>
           <Typography
             sx={{
-              color: '#667085',
+              color: color.fg.neutral.muted,
               fontSize: 12,
               lineHeight: '16px',
               fontWeight: 600,
@@ -69,7 +68,7 @@ export function TaskMatchDeleteConfirmDialog({
       <DialogContent sx={{ px: 3, pb: 1 }}>
         <Typography
           sx={{
-            color: '#344256',
+            color: color.fg.neutral.subtle,
             fontSize: 14,
             lineHeight: '22px',
           }}
@@ -87,11 +86,11 @@ export function TaskMatchDeleteConfirmDialog({
             minWidth: 96,
             height: 40,
             borderRadius: 1,
-            borderColor: '#D0D5DD',
-            color: '#344256',
+            borderColor: color.border.default,
+            color: color.fg.neutral.subtle,
             '&:hover': {
-              borderColor: '#98A2B3',
-              bgcolor: '#F2F4F7',
+              borderColor: color.fg.neutral.muted,
+              bgcolor: color.bg.neutral.sunken,
             },
           }}
         >
@@ -105,10 +104,10 @@ export function TaskMatchDeleteConfirmDialog({
             minWidth: 120,
             height: 40,
             borderRadius: 1,
-            bgcolor: '#BA1A1A',
-            color: '#FFFFFF',
+            bgcolor: color.bg.danger.default,
+            color: color.fg.onDanger,
             '&:hover': {
-              bgcolor: '#9F1414',
+              bgcolor: color.bg.danger.hover,
             },
           }}
         >

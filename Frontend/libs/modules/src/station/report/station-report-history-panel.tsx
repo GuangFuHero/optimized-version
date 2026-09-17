@@ -12,16 +12,37 @@ import {
   type StationReportRecord,
 } from './model';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, primitives, radius } = designTokens;
+
 interface StationReportHistoryPanelProps {
   reports?: readonly StationReportRecord[];
   compact?: boolean;
 }
 
+/** Text / fill / border triples, one per status tone, all from the design system's status set. */
 const STATUS_TONE_STYLES = {
-  success: { color: '#087443', bgcolor: '#E7F8EF', borderColor: '#B7E4C7' },
-  warning: { color: '#954900', bgcolor: '#FFF7E6', borderColor: '#F3D19B' },
-  error: { color: '#B3261E', bgcolor: '#FCEEEE', borderColor: '#F3B8B3' },
-  neutral: { color: '#3F5161', bgcolor: '#F3F5F8', borderColor: '#D7DEE8' },
+  success: {
+    color: color.fg.success,
+    bgcolor: color.bg.success.subtle,
+    borderColor: primitives.color.green[500],
+  },
+  warning: {
+    color: color.fg.warning,
+    bgcolor: color.bg.warning.subtle,
+    borderColor: primitives.color.amber[500],
+  },
+  error: {
+    color: color.fg.danger,
+    bgcolor: color.bg.danger.subtle,
+    borderColor: primitives.color.red[500],
+  },
+  neutral: {
+    color: color.fg.neutral.subtle,
+    bgcolor: color.bg.neutral.sunken,
+    borderColor: color.border.default,
+  },
 } as const;
 
 function getStatusIcon(tone: keyof typeof STATUS_TONE_STYLES) {
@@ -46,12 +67,12 @@ export function StationReportHistoryPanel({
       <Box
         sx={{
           p: compact ? 1.5 : 2.5,
-          border: '1px solid #D7DEE8',
-          borderRadius: '24px',
-          bgcolor: '#FFFFFF',
+          border: `1px solid ${color.border.default}`,
+          borderRadius: `${radius.lg}px`,
+          bgcolor: color.bg.neutral.default,
         }}
       >
-        <Typography sx={{ color: '#667085', fontSize: 13, lineHeight: '20px' }}>
+        <Typography sx={{ color: color.fg.neutral.muted, fontSize: 13, lineHeight: '20px' }}>
           尚無現場評論
         </Typography>
       </Box>
@@ -85,7 +106,7 @@ export function StationReportHistoryPanel({
                 borderRadius: '50%',
                 display: 'grid',
                 placeItems: 'center',
-                bgcolor: '#FFFFFF',
+                bgcolor: color.bg.neutral.default,
                 color: toneStyle.color,
               }}
             >
@@ -104,7 +125,7 @@ export function StationReportHistoryPanel({
               </Typography>
               <Typography
                 sx={{
-                  color: '#17212B',
+                  color: color.fg.neutral.default,
                   fontSize: 13,
                   lineHeight: '20px',
                   overflowWrap: 'anywhere',
@@ -113,7 +134,7 @@ export function StationReportHistoryPanel({
                 {report.comment}
               </Typography>
               <Typography
-                sx={{ color: '#667085', fontSize: 12, lineHeight: '16px' }}
+                sx={{ color: color.fg.neutral.muted, fontSize: 12, lineHeight: '16px' }}
               >
                 {report.reporterName} ·{' '}
                 {formatStationReportDate(report.submittedAt)}

@@ -1,3 +1,5 @@
+import type { BadgeTone } from '@rescue-frontend/ui';
+
 export const TICKET_STATUS_OPTIONS = [
   { value: 'pending', label: '待處理' },
   { value: 'in_progress', label: '處理中' },
@@ -128,4 +130,34 @@ export function matchesTicketStatusSelection(
   return normalizedValue
     ? normalizedSelections.includes(normalizedValue)
     : false;
+}
+
+/**
+ * Status → badge tone, mirroring `TICKET_STATUS_TONES` in the design prototype
+ * (`Design/前台/js/site/site-route.js:105`).
+ *
+ * `pending` maps to `danger`, not to a neutral or warning tone: an unclaimed request during a
+ * disaster is the state that needs attention, and the prototype colours it accordingly. A
+ * cancelled ticket is `neutral` rather than `danger` — it needs nobody's attention.
+ */
+const TICKET_STATUS_TONES: Record<string, BadgeTone> = {
+  pending: 'danger',
+  open: 'danger',
+  in_progress: 'warning',
+  'in-progress': 'warning',
+  processing: 'warning',
+  assigned: 'warning',
+  accepted: 'warning',
+  completed: 'success',
+  fulfilled: 'success',
+  resolved: 'success',
+  closed: 'success',
+  cancelled: 'neutral',
+  canceled: 'neutral',
+};
+
+export function getTicketStatusTone(value?: string | null): BadgeTone {
+  const key = normalizeStatusKey(value);
+
+  return (key && TICKET_STATUS_TONES[key]) || 'neutral';
 }

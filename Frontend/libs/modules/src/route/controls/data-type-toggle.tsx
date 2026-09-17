@@ -1,10 +1,46 @@
 'use client';
 
-import { ButtonBase, Stack, Typography } from '@mui/material';
+import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
+import Inventory2RoundedIcon from '@mui/icons-material/Inventory2Rounded';
+import { ButtonBase, Stack } from '@mui/material';
+
+import { designTokens } from '@rescue-frontend/ui';
 
 import { SITE_DATA_TYPES, SITE_DATA_TYPE_LABELS } from '../constants';
 import type { RescueMapDataType } from '../types';
 import { SiteControlSurface } from './control-surface';
+
+const { color, radius, spacing, typography, motion } = designTokens;
+
+const DATA_TYPE_ICONS: Record<RescueMapDataType, typeof AssignmentRoundedIcon> = {
+  station: Inventory2RoundedIcon,
+  ticket: AssignmentRoundedIcon,
+};
+
+/**
+ * Selected segment carries a visible border, not just a fill. On a map the pill sits over
+ * arbitrary terrain, and fill alone stops reading as "selected" once the tiles behind it are busy.
+ */
+function segmentSx(active: boolean) {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: `${spacing[1]}px`,
+    minHeight: 30,
+    px: 2,
+    py: '6px',
+    border: `1px solid ${active ? color.brand.secondary.default : 'transparent'}`,
+    borderRadius: `${radius.full}px`,
+    background: active ? color.bg.secondary.subtle : 'transparent',
+    color: active ? color.fg.neutral.default : color.fg.neutral.subtle,
+    fontFamily: typography.label[400].fontFamily,
+    fontSize: typography.label[400].fontSize,
+    lineHeight: 1.33,
+    fontWeight: 700,
+    whiteSpace: 'nowrap',
+    transition: `background ${motion.transition.fast}, color ${motion.transition.fast}`,
+  } as const;
+}
 
 interface SiteDataTypeToggleProps {
   value: RescueMapDataType;
@@ -22,9 +58,15 @@ export function SiteDataTypeToggle({
     <SiteControlSurface
       sx={{ display: 'inline-flex', alignItems: 'center', p: '5px' }}
     >
-      <Stack direction="row" spacing={0.5}>
+      <Stack
+        direction="row"
+        spacing={0.5}
+        role="group"
+        aria-label="資料維度"
+      >
         {SITE_DATA_TYPES.map((dataType) => {
           const active = dataType === value;
+          const Icon = DATA_TYPE_ICONS[dataType];
 
           return (
             <ButtonBase
@@ -32,25 +74,10 @@ export function SiteDataTypeToggle({
               disableRipple
               aria-pressed={active}
               onClick={() => onChange(dataType)}
-              sx={{
-                borderRadius: 999,
-                bgcolor: active ? '#D8F2FF' : 'transparent',
-                border: active ? '1px solid #8ED8F8' : '1px solid transparent',
-                color: active ? '#151c22' : '#564337',
-                px: 2,
-                py: '6px',
-              }}
+              sx={segmentSx(active)}
             >
-              <Typography
-                sx={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  lineHeight: '16px',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {SITE_DATA_TYPE_LABELS[dataType]}
-              </Typography>
+              <Icon sx={{ fontSize: 14 }} />
+              {SITE_DATA_TYPE_LABELS[dataType]}
             </ButtonBase>
           );
         })}

@@ -27,6 +27,10 @@ import {
 } from './share-links';
 import type { PointShareChannel, PointShareTarget } from './types';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color } = designTokens;
+
 interface PointShareDrawerProps {
   open: boolean;
   target: PointShareTarget | null;
@@ -73,7 +77,7 @@ export function PointShareDrawer({
         '& .MuiDrawer-paper': {
           width: { mobile: '100vw', tablet: 400 },
           maxWidth: '100vw',
-          bgcolor: '#F6F8FA',
+          bgcolor: color.bg.neutral.subtle,
         },
       }}
     >
@@ -88,14 +92,14 @@ export function PointShareDrawer({
           sx={{
             px: 3,
             py: 2.5,
-            borderBottom: '1px solid #D9E1EA',
-            bgcolor: '#FFFFFF',
+            borderBottom: `1px solid ${color.border.default}`,
+            bgcolor: color.bg.neutral.default,
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography
-                sx={{ color: '#17212B', fontSize: 14, fontWeight: 800 }}
+                sx={{ color: color.fg.neutral.default, fontSize: 14, fontWeight: 800 }}
               >
                 {target?.title ?? '分享資訊'}
               </Typography>
@@ -110,7 +114,7 @@ export function PointShareDrawer({
           <Stack spacing={2.5} sx={{ minHeight: 0, overflowY: 'auto', p: 3 }}>
             <Stack spacing={1}>
               <Typography
-                sx={{ color: '#17212B', fontSize: 14, fontWeight: 800 }}
+                sx={{ color: color.fg.neutral.default, fontSize: 14, fontWeight: 800 }}
               >
                 分享方式
               </Typography>
@@ -130,9 +134,9 @@ export function PointShareDrawer({
                     sx={{
                       minWidth: 0,
                       px: 1,
-                      color: '#245C8C',
-                      borderColor: '#BFD0DD',
-                      bgcolor: '#FFFFFF',
+                      color: color.brand.secondary.subtle,
+                      borderColor: color.border.default,
+                      bgcolor: color.bg.neutral.default,
                       textTransform: 'none',
                       fontWeight: 800,
                     }}
@@ -145,7 +149,7 @@ export function PointShareDrawer({
 
             <Stack spacing={1}>
               <Typography
-                sx={{ color: '#17212B', fontSize: 14, fontWeight: 800 }}
+                sx={{ color: color.fg.neutral.default, fontSize: 14, fontWeight: 800 }}
               >
                 連結
               </Typography>
@@ -171,7 +175,7 @@ export function PointShareDrawer({
 
             <Stack spacing={1.5}>
               <Typography
-                sx={{ color: '#17212B', fontSize: 14, fontWeight: 800 }}
+                sx={{ color: color.fg.neutral.default, fontSize: 14, fontWeight: 800 }}
               >
                 QR Code
               </Typography>
@@ -181,8 +185,8 @@ export function PointShareDrawer({
                   aspectRatio: '1 / 1',
                   maxWidth: 260,
                   alignSelf: 'center',
-                  bgcolor: '#FFFFFF',
-                  border: '1px solid #D7E0EA',
+                  bgcolor: color.bg.neutral.default,
+                  border: `1px solid ${color.border.default}`,
                   p: 2,
                 }}
               >

@@ -14,6 +14,10 @@ import { SiteControlSurface } from '../../route/controls/control-surface';
 import { SiteDataTypeToggle } from '../../route/controls/data-type-toggle';
 import { SiteSubTypeFilter } from '../../route/controls/sub-type-filter';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color } = designTokens;
+
 interface SiteMapControlsProps {
   controller: RescueMapControllerValue;
 }
@@ -100,7 +104,9 @@ function SiteLayerButton({ controller }: SiteMapControlsProps) {
           width: '100%',
           height: '100%',
           borderRadius: 999,
-          color: controller.layerPanelOpen ? '#151c22' : '#564337',
+          color: controller.layerPanelOpen
+            ? color.fg.neutral.default
+            : color.fg.neutral.subtle,
         }}
       >
         <LayersOutlinedIcon sx={{ fontSize: 18 }} />
@@ -137,7 +143,7 @@ function SitePinnedFilterRow({
           height: 6,
         },
         '&::-webkit-scrollbar-thumb': {
-          backgroundColor: 'rgba(86, 67, 55, 0.24)',
+          backgroundColor: color.border.default,
           borderRadius: 999,
         },
       }}
@@ -155,8 +161,12 @@ function SitePinnedFilterRow({
               key={item.value}
               sx={{
                 flex: '0 0 auto',
-                bgcolor: active ? '#D8F2FF' : '#F6FAFF',
-                borderColor: active ? '#8ED8F8' : '#dcc1b1',
+                bgcolor: active
+                  ? color.bg.secondary.subtle
+                  : color.bg.neutral.default,
+                borderColor: active
+                  ? color.brand.secondary.default
+                  : color.border.accent,
               }}
             >
               <ButtonBase
@@ -170,7 +180,9 @@ function SitePinnedFilterRow({
                   borderRadius: 999,
                   px: 1.5,
                   py: 1,
-                  color: active ? '#151c22' : '#564337',
+                  color: active
+                    ? color.fg.neutral.default
+                    : color.fg.neutral.subtle,
                   whiteSpace: 'nowrap',
                 }}
               >

@@ -10,6 +10,10 @@ import {
 } from '../../constants';
 import type { RescueMapBaseLayer, RescueMapControllerValue } from '../../types';
 
+import { designTokens, withAlpha } from '@rescue-frontend/ui';
+
+const { color, radius, shadow } = designTokens;
+
 interface RescueMapLayerPanelProps {
   controller: RescueMapControllerValue;
 }
@@ -26,22 +30,22 @@ function RescueMapLayerPanelContent({
             width: 48,
             height: 4,
             borderRadius: 999,
-            backgroundColor: 'rgba(148, 163, 184, 0.45)',
+            backgroundColor: color.fg.neutral.muted,
             mx: 'auto',
             mb: 1.5,
           }}
         />
       ) : null}
 
-      <Typography sx={{ fontSize: 20, fontWeight: 800, color: '#151c22' }}>
+      <Typography sx={{ fontSize: 20, fontWeight: 800, color: color.fg.neutral.default }}>
         圖層切換
       </Typography>
-      <Typography sx={{ mt: 0.6, fontSize: 14, color: '#344256' }}>
+      <Typography sx={{ mt: 0.6, fontSize: 14, color: color.fg.neutral.subtle }}>
         選擇底圖與目前可用的疊加圖層。
       </Typography>
 
       <Typography
-        sx={{ mt: 2, fontSize: 13, fontWeight: 800, color: '#151c22' }}
+        sx={{ mt: 2, fontSize: 13, fontWeight: 800, color: color.fg.neutral.default }}
       >
         底圖
       </Typography>
@@ -75,13 +79,15 @@ function RescueMapLayerPanelContent({
                     gap: 1.4,
                     p: 1.2,
                     borderRadius: 3,
-                    border: active
-                      ? '1px solid rgba(95, 85, 246, 0.34)'
-                      : '1px solid rgba(204, 214, 226, 0.92)',
-                    backgroundColor: active ? '#e7eff7' : '#fff',
-                    boxShadow: active
-                      ? '0 10px 24px rgba(21, 28, 34, 0.12)'
-                      : 'none',
+                    border: `1px solid ${
+                      active
+                        ? color.brand.secondary.default
+                        : color.border.default
+                    }`,
+                    backgroundColor: active
+                      ? color.bg.secondary.subtle
+                      : color.bg.neutral.default,
+                    boxShadow: active ? shadow.md : 'none',
                   }}
                 >
                   <Box
@@ -90,10 +96,12 @@ function RescueMapLayerPanelContent({
                       height: 56,
                       borderRadius: 2,
                       background: value.preview,
-                      border: '1px solid rgba(204, 214, 226, 0.82)',
+                      border: `1px solid ${color.border.default}`,
                       display: 'grid',
                       placeItems: 'center',
-                      color: active ? '#5f55f6' : '#4b5563',
+                      color: active
+                        ? color.brand.secondary.subtle
+                        : color.fg.neutral.subtle,
                     }}
                   >
                     <Icon sx={{ fontSize: 26 }} />
@@ -101,18 +109,18 @@ function RescueMapLayerPanelContent({
 
                   <Box sx={{ flex: 1 }}>
                     <Typography
-                      sx={{ fontSize: 16, fontWeight: 800, color: '#151c22' }}
+                      sx={{ fontSize: 16, fontWeight: 800, color: color.fg.neutral.default }}
                     >
                       {value.label}
                     </Typography>
                     <Typography
-                      sx={{ mt: 0.35, fontSize: 12, color: '#344256' }}
+                      sx={{ mt: 0.35, fontSize: 12, color: color.fg.neutral.subtle }}
                     >
                       {value.description}
                     </Typography>
                     {value.licenseNote ? (
                       <Typography
-                        sx={{ mt: 0.35, fontSize: 11, color: '#b45309' }}
+                        sx={{ mt: 0.35, fontSize: 11, color: color.fg.warning }}
                       >
                         {value.licenseNote}
                       </Typography>
@@ -120,7 +128,7 @@ function RescueMapLayerPanelContent({
                   </Box>
 
                   {active ? (
-                    <CheckRoundedIcon sx={{ color: '#5f55f6' }} />
+                    <CheckRoundedIcon sx={{ color: color.brand.secondary.subtle }} />
                   ) : null}
                 </Box>
               </ButtonBase>
@@ -129,7 +137,7 @@ function RescueMapLayerPanelContent({
       </Stack>
 
       <Typography
-        sx={{ mt: 2.4, fontSize: 13, fontWeight: 800, color: '#151c22' }}
+        sx={{ mt: 2.4, fontSize: 13, fontWeight: 800, color: color.fg.neutral.default }}
       >
         疊加圖層
       </Typography>
@@ -165,14 +173,14 @@ function RescueMapLayerPanelContent({
                     gap: 1.4,
                     p: 1.2,
                     borderRadius: 3,
-                    border: active
-                      ? `1px solid ${value.color}55`
-                      : '1px solid rgba(204, 214, 226, 0.92)',
-                    backgroundColor: active ? `${value.color}12` : '#fff',
+                    border: `1px solid ${
+                      active ? `${value.color}55` : color.border.default
+                    }`,
+                    backgroundColor: active
+                      ? `${value.color}12`
+                      : color.bg.neutral.default,
                     opacity: disabled ? 0.52 : 1,
-                    boxShadow: active
-                      ? '0 10px 24px rgba(21, 28, 34, 0.08)'
-                      : 'none',
+                    boxShadow: active ? shadow.md : 'none',
                   }}
                 >
                   <Box
@@ -192,12 +200,12 @@ function RescueMapLayerPanelContent({
 
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
-                      sx={{ fontSize: 16, fontWeight: 800, color: '#151c22' }}
+                      sx={{ fontSize: 16, fontWeight: 800, color: color.fg.neutral.default }}
                     >
                       {value.label}
                     </Typography>
                     <Typography
-                      sx={{ mt: 0.35, fontSize: 12, color: '#344256' }}
+                      sx={{ mt: 0.35, fontSize: 12, color: color.fg.neutral.subtle }}
                     >
                       {value.disabledReason ?? value.description}
                     </Typography>
@@ -233,11 +241,11 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
         sx={{
           display: { mobile: 'block', tablet: 'none' },
           '& .MuiDrawer-paper': {
-            bgcolor: 'rgba(225, 233, 241, 0.58)',
+            bgcolor: withAlpha(color.bg.neutral.default, 0.92),
             backdropFilter: 'blur(10px)',
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            boxShadow: '0 -16px 40px rgba(21, 28, 34, 0.18)',
+            borderTopLeftRadius: radius.lg,
+            borderTopRightRadius: radius.lg,
+            boxShadow: shadow.lg,
             px: 2,
             pt: 1.25,
             pb: 3,
@@ -261,9 +269,9 @@ export function RescueMapLayerPanel({ controller }: RescueMapLayerPanelProps) {
         sx={{
           display: { mobile: 'none', tablet: 'block' },
           '& .MuiDrawer-paper': {
-            bgcolor: 'rgba(225, 233, 241, 0.58)',
+            bgcolor: withAlpha(color.bg.neutral.default, 0.92),
             backdropFilter: 'blur(10px)',
-            boxShadow: '0 16px 40px rgba(21, 28, 34, 0.18)',
+            boxShadow: shadow.lg,
             width: 320,
             px: 2.25,
             py: 2.5,

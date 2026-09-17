@@ -7,8 +7,12 @@ import type { ReactNode } from 'react';
 
 import { getRescueColorScheme } from '@rescue-frontend/ui';
 
+import { designTokens, withAlpha } from '@rescue-frontend/ui';
+
+const { color: token } = designTokens;
+
 const sidebarMenuItemTransition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-const sidebarMenuItemHoverSurface = 'rgba(119, 213, 254, 0.18)';
+const sidebarMenuItemHoverSurface = withAlpha(token.bg.secondary.subtle, 0.6);
 
 type SidebarMenuItemColorVariant = 'default' | 'active';
 
@@ -67,13 +71,15 @@ export function SidebarMenuItem({
         py: 1,
         borderRadius: '32px',
         justifyContent: 'flex-start',
-        bgcolor: active ? '#D8F2FF' : 'transparent',
-        border: active ? '1px solid #8ED8F8' : '1px solid transparent',
+        bgcolor: active ? token.bg.secondary.subtle : 'transparent',
+        border: `1px solid ${
+          active ? token.brand.secondary.default : 'transparent'
+        }`,
         color,
         transition: sidebarMenuItemTransition,
         '&:hover': {
           bgcolor: active
-            ? '#D8F2FF'
+            ? token.bg.secondary.subtle
             : sidebarMenuItemHoverSurface,
         },
       }}

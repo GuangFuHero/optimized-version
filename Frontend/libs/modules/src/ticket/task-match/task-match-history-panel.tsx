@@ -14,30 +14,34 @@ import {
   type TaskMatchState,
 } from './model';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, primitives, radius } = designTokens;
+
 interface TaskMatchHistoryPanelProps {
   state: TaskMatchState;
 }
 
 const statusToneStyles = {
   neutral: {
-    color: '#3D4652',
-    backgroundColor: '#EEF2F5',
-    borderColor: '#CFD8E2',
+    color: color.fg.neutral.subtle,
+    backgroundColor: color.bg.neutral.sunken,
+    borderColor: color.border.default,
   },
   warning: {
-    color: '#8B5B00',
-    backgroundColor: '#FFF6DA',
-    borderColor: '#E9C65D',
+    color: color.fg.warning,
+    backgroundColor: color.bg.warning.subtle,
+    borderColor: primitives.color.amber[500],
   },
   success: {
-    color: '#166044',
-    backgroundColor: '#DDF4EA',
-    borderColor: '#8ECDB7',
+    color: color.fg.success,
+    backgroundColor: color.bg.success.subtle,
+    borderColor: primitives.color.green[500],
   },
   danger: {
-    color: '#A13B2B',
-    backgroundColor: '#FFF0EB',
-    borderColor: '#E6AB9C',
+    color: color.fg.danger,
+    backgroundColor: color.bg.danger.subtle,
+    borderColor: primitives.color.red[500],
   },
 } as const;
 
@@ -56,18 +60,20 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
       <Stack
         spacing={1.5}
         sx={{
-          border: '1px solid #D7E0EA',
-          borderRadius: '28px',
-          bgcolor: '#FFFFFF',
+          border: `1px solid ${color.border.default}`,
+          borderRadius: `${radius.xl}px`,
+          bgcolor: color.bg.neutral.default,
           px: 2.25,
           py: 2.25,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-          <PeopleAltRoundedIcon sx={{ color: '#235A80', fontSize: 20 }} />
+          <PeopleAltRoundedIcon
+            sx={{ color: color.brand.secondary.subtle, fontSize: 20 }}
+          />
           <Typography
             sx={{
-              color: '#1F2B37',
+              color: color.fg.neutral.default,
               fontSize: 15,
               lineHeight: '22px',
               fontWeight: 700,
@@ -85,7 +91,7 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
           }}
         >
           <Typography
-            sx={{ color: '#52616F', fontSize: 13, lineHeight: '20px' }}
+            sx={{ color: color.fg.neutral.subtle, fontSize: 13, lineHeight: '20px' }}
           >
             {createTaskMatchSummary(state)}。目前前台媒合紀錄以日誌狀態追蹤為主。
           </Typography>
@@ -112,7 +118,7 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
         <Box
           sx={{
             height: 8,
-            bgcolor: '#E7EDF3',
+            bgcolor: color.bg.neutral.sunken,
             overflow: 'hidden',
             borderRadius: '999px',
           }}
@@ -121,7 +127,10 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
             sx={{
               width: statusProgressWidths[state.status],
               height: '100%',
-              bgcolor: state.status === 'deleted' ? '#C46A58' : '#3F7DAB',
+              bgcolor:
+                state.status === 'deleted'
+                  ? color.bg.danger.default
+                  : color.brand.secondary.default,
               borderRadius: '999px',
             }}
           />
@@ -144,10 +153,12 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
 
       <Stack spacing={1.5}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <HistoryRoundedIcon sx={{ color: '#6D7A86', fontSize: 18 }} />
+          <HistoryRoundedIcon
+            sx={{ color: color.fg.neutral.muted, fontSize: 18 }}
+          />
           <Typography
             sx={{
-              color: '#1F2B37',
+              color: color.fg.neutral.default,
               fontSize: 14,
               lineHeight: '20px',
               fontWeight: 700,
@@ -166,14 +177,14 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
                 sx={{
                   px: 2,
                   py: 1.5,
-                  border: '1px solid #D7E0EA',
-                  borderRadius: '22px',
-                  bgcolor: '#FFFFFF',
+                  border: `1px solid ${color.border.default}`,
+                  borderRadius: `${radius.lg}px`,
+                  bgcolor: color.bg.neutral.default,
                 }}
               >
                 <Typography
                   sx={{
-                    color: '#1F2B37',
+                    color: color.fg.neutral.default,
                     fontSize: 13,
                     lineHeight: '19px',
                     fontWeight: 700,
@@ -182,7 +193,7 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
                   {entry.summary}
                 </Typography>
                 <Typography
-                  sx={{ color: '#667582', fontSize: 12, lineHeight: '18px' }}
+                  sx={{ color: color.fg.neutral.muted, fontSize: 12, lineHeight: '18px' }}
                 >
                   {entry.actorName} · {formatTaskMatchDate(entry.occurredAt)}
                 </Typography>
@@ -192,15 +203,15 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
         ) : (
           <Box
             sx={{
-              border: '1px dashed #C8D3DE',
-              borderRadius: '22px',
-              bgcolor: '#F7FAFC',
+              border: `1px dashed ${color.border.default}`,
+              borderRadius: `${radius.lg}px`,
+              bgcolor: color.bg.neutral.subtle,
               px: 2,
               py: 1.5,
             }}
           >
             <Typography
-              sx={{ color: '#667582', fontSize: 13, lineHeight: '20px' }}
+              sx={{ color: color.fg.neutral.muted, fontSize: 13, lineHeight: '20px' }}
             >
               尚無相關日誌紀錄。
             </Typography>

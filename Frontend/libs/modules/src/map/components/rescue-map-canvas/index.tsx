@@ -12,6 +12,10 @@ import type {
 } from '../../types';
 import { createMapMarkerIcon } from '../map-marker';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, primitives } = designTokens;
+
 interface RescueMapCanvasProps {
   controller: RescueMapControllerValue;
   onMarkerClick: (item: RescueMapMarkerItem) => void;
@@ -121,8 +125,8 @@ function getClosureAreaStyle(status: string) {
 
   if (normalizedStatus === 'dangerous' || normalizedStatus === 'active') {
     return {
-      color: '#c2410c',
-      fillColor: '#f97316',
+      color: color.fg.warning,
+      fillColor: color.bg.warning.default,
       fillOpacity: 0.18,
       opacity: 0.84,
       weight: 2,
@@ -132,8 +136,8 @@ function getClosureAreaStyle(status: string) {
 
   if (normalizedStatus === 'block') {
     return {
-      color: '#b91c1c',
-      fillColor: '#ef4444',
+      color: color.fg.danger,
+      fillColor: color.bg.danger.default,
       fillOpacity: 0.14,
       opacity: 0.78,
       weight: 2,
@@ -142,8 +146,8 @@ function getClosureAreaStyle(status: string) {
   }
 
   return {
-    color: '#9a3412',
-    fillColor: '#fdba74',
+    color: color.brand.primary.subtle,
+    fillColor: primitives.color.orange[200],
     fillOpacity: 0.12,
     opacity: 0.72,
     weight: 2,
@@ -226,8 +230,13 @@ function syncClosureAreaLayer({
   });
 }
 
+/** Unsubscribe handle for the no-op store. Named so the empty body reads as deliberate. */
+function unsubscribeNoop() {
+  // Nothing was subscribed, so there is nothing to tear down.
+}
+
 function subscribeViewportStoreNoop() {
-  return () => {};
+  return unsubscribeNoop;
 }
 
 function getEmptyViewportState(): RescueMapViewportStoreSnapshot {

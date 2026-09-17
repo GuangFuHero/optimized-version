@@ -11,6 +11,10 @@ import { SidebarCloseButton } from '../sidebar-close-button';
 import { SidebarMenuItem } from '../sidebar-menu-item';
 import type { SidebarResolvedContent } from '../../../sidebar';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { shadow } = designTokens;
+
 const sidebarTransition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
 
 interface SidebarPanelProps {
@@ -63,7 +67,7 @@ export function SidebarPanel({
         bgcolor: sidebarPalette.frame,
         borderRight: `1px solid ${sidebarPalette.border}`,
         transition: sidebarTransition,
-        boxShadow: open ? '0 24px 48px rgba(21, 28, 34, 0.16)' : 'none',
+        boxShadow: open ? shadow.lg : 'none',
       }}
     >
       {showCloseButton && headerContent ? (

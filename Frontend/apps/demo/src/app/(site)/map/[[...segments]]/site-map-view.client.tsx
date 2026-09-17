@@ -11,6 +11,8 @@ import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box, ButtonBase, Fab, Stack, Typography, Zoom } from '@mui/material';
 import { useSession } from 'next-auth/react';
 
+import { designTokens } from '@rescue-frontend/ui';
+
 import {
   createPointShareTarget,
   createTaskMatchTicketDetailOverrides,
@@ -37,6 +39,8 @@ import {
   type SiteRouteState,
 } from '@rescue-frontend/modules';
 
+const { color, primitives, shadow } = designTokens;
+
 export function SiteMapView() {
   return <SiteMapViewContent />;
 }
@@ -50,20 +54,20 @@ const DEFAULT_CREATE_CENTER: [number, number] = [23.884, 121.0];
 function getCreateAccent(dataType: RescueMapDataType) {
   if (dataType === 'ticket') {
     return {
-      solid: '#E3791E',
-      soft: '#FFF1E5',
-      text: '#9A4D00',
-      border: 'rgba(227, 121, 30, 0.26)',
-      hover: '#FFE4CC',
+      solid: color.bg.primary.default,
+      soft: color.bg.primary.subtle,
+      text: color.brand.primary.subtle,
+      border: color.border.accent,
+      hover: primitives.color.orange[100],
     };
   }
 
   return {
-    solid: '#006493',
-    soft: '#E8F5FB',
-    text: '#005579',
-    border: 'rgba(0, 100, 147, 0.24)',
-    hover: '#D7ECF8',
+    solid: color.brand.secondary.default,
+    soft: color.bg.secondary.subtle,
+    text: color.brand.secondary.subtle,
+    border: color.brand.secondary.default,
+    hover: primitives.color.blue[100],
   };
 }
 
@@ -94,14 +98,22 @@ function ControlChip({
         height: 38,
         px: 1.5,
         borderRadius: '999px',
-        border: `1px solid ${active ? (toneBorder ?? '#DCC1B1') : '#DCC1B1'}`,
-        bgcolor: active ? (toneSoft ?? '#FFF1E5') : '#F6FAFF',
-        color: active ? (toneText ?? '#7A3E00') : '#151C22',
+        border: `1px solid ${
+          active ? (toneBorder ?? color.border.accent) : color.border.accent
+        }`,
+        bgcolor: active
+          ? (toneSoft ?? color.bg.primary.subtle)
+          : color.bg.neutral.default,
+        color: active
+          ? (toneText ?? color.brand.primary.subtle)
+          : color.fg.neutral.default,
         display: 'inline-flex',
         alignItems: 'center',
         gap: 0.75,
         '&:hover': {
-          bgcolor: active ? (toneHover ?? toneSoft ?? '#FFF1E5') : '#EEF4FA',
+          bgcolor: active
+            ? (toneHover ?? toneSoft ?? color.bg.primary.subtle)
+            : color.bg.neutral.subtle,
         },
       }}
     >
@@ -180,13 +192,13 @@ function SiteMapCreateDock({
             width: 48,
             height: 48,
             minHeight: 48,
-            bgcolor: active ? accent.soft : '#FFFFFF',
-            color: active ? accent.text : '#151C22',
-            border: `1px solid ${active ? accent.border : 'rgba(227, 121, 30, 0.22)'}`,
-            boxShadow: '0 12px 24px rgba(21, 28, 34, 0.16)',
+            bgcolor: active ? accent.soft : color.bg.neutral.default,
+            color: active ? accent.text : color.fg.neutral.default,
+            border: `1px solid ${active ? accent.border : color.border.accent}`,
+            boxShadow: shadow.lg,
             pointerEvents: 'auto',
             '&:hover': {
-              bgcolor: active ? accent.hover : '#FFF8F3',
+              bgcolor: active ? accent.hover : color.bg.primary.subtle,
             },
           }}
         >
@@ -229,13 +241,15 @@ function SiteMapCenterPin({
               height: 44,
               borderRadius: '999px',
               bgcolor: accent.solid,
-              border: '2px solid rgba(255,255,255,0.94)',
-              boxShadow: '0 12px 24px rgba(21, 28, 34, 0.2)',
+              border: `2px solid ${color.bg.neutral.default}`,
+              boxShadow: shadow.lg,
               display: 'grid',
               placeItems: 'center',
             }}
           >
-            <PlaceRoundedIcon sx={{ fontSize: 20, color: '#FFFFFF' }} />
+            <PlaceRoundedIcon
+              sx={{ fontSize: 20, color: color.fg.onSecondary }}
+            />
           </Box>
           <Box
             sx={{
@@ -244,9 +258,9 @@ function SiteMapCenterPin({
               mt: '-8px',
               bgcolor: accent.solid,
               transform: 'rotate(45deg)',
-              borderBottom: '2px solid rgba(255,255,255,0.94)',
-              borderRight: '2px solid rgba(255,255,255,0.94)',
-              boxShadow: '6px 6px 14px rgba(21, 28, 34, 0.12)',
+              borderBottom: `2px solid ${color.bg.neutral.default}`,
+              borderRight: `2px solid ${color.bg.neutral.default}`,
+              boxShadow: shadow.md,
             }}
           />
         </Stack>

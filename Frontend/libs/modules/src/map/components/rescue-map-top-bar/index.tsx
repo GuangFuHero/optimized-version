@@ -11,6 +11,10 @@ import type { ReactNode } from 'react';
 
 import type { RescueMapControllerValue } from '../../types';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, radius, shadow } = designTokens;
+
 interface RescueMapTopBarProps {
   controller: RescueMapControllerValue;
 }
@@ -25,12 +29,12 @@ function ControlSurface({
   return (
     <Box
       sx={{
-        backdropFilter: 'blur(6px)',
-        bgcolor: '#F6FAFF',
-        border: '1px solid #dcc1b1',
-        borderRadius: 999,
-        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
-        color: '#151c22',
+        backdropFilter: 'blur(8px)',
+        bgcolor: color.bg.neutral.default,
+        border: `1px solid ${color.border.accent}`,
+        borderRadius: `${radius.full}px`,
+        boxShadow: shadow.sm,
+        color: color.fg.neutral.default,
         ...sx,
       }}
     >
@@ -44,12 +48,12 @@ function ToolbarButton({ icon, label }: { icon: ReactNode; label: string }) {
     <ButtonBase
       disableRipple
       sx={{
-        borderRadius: 999,
+        borderRadius: `${radius.full}px`,
         display: 'inline-flex',
         alignItems: 'center',
         gap: 0.5,
         p: 0.5,
-        color: '#151c22',
+        color: color.fg.neutral.default,
       }}
     >
       <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>{icon}</Box>
@@ -70,7 +74,7 @@ function ToolbarButton({ icon, label }: { icon: ReactNode; label: string }) {
 }
 
 function ToolbarDivider() {
-  return <Box sx={{ width: 1, height: 16, bgcolor: '#dcc1b1' }} />;
+  return <Box sx={{ width: 1, height: 16, bgcolor: color.border.accent }} />;
 }
 
 function FloatingToolbar() {
@@ -122,8 +126,10 @@ function LayerButton({ controller }: RescueMapTopBarProps) {
         sx={{
           width: '100%',
           height: '100%',
-          borderRadius: 999,
-          color: controller.layerPanelOpen ? '#151c22' : '#564337',
+          borderRadius: `${radius.full}px`,
+          color: controller.layerPanelOpen
+            ? color.fg.neutral.default
+            : color.fg.neutral.subtle,
         }}
       >
         <LayersOutlinedIcon sx={{ fontSize: 18 }} />
@@ -145,9 +151,9 @@ function ViewToggleButton({
     <ButtonBase
       disableRipple
       sx={{
-        borderRadius: 999,
-        bgcolor: active ? '#dbe3ec' : 'transparent',
-        color: active ? '#151c22' : '#564337',
+        borderRadius: `${radius.full}px`,
+        bgcolor: active ? color.bg.secondary.subtle : 'transparent',
+        color: active ? color.fg.neutral.default : color.fg.neutral.subtle,
         display: 'inline-flex',
         alignItems: 'center',
         gap: 0.5,

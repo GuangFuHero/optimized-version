@@ -23,6 +23,8 @@ import { RescueMapLayerPanel } from './components/rescue-map-layer-panel';
 import { RescueMapStatusMessage } from './components/rescue-map-status-message';
 import { RescueMapTopBar } from './components/rescue-map-top-bar';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from './constants';
+import { designTokens, withAlpha } from '@rescue-frontend/ui';
+
 import { useRescueMapController } from './hooks/use-rescue-map-controller';
 import type {
   RescueMapClosureArea,
@@ -31,6 +33,8 @@ import type {
   RescueMapRouteState,
   RescueMapViewportStoreLike,
 } from './types';
+
+const { color, primitives, radius, shadow } = designTokens;
 
 const RescueMapCanvas = dynamic(
   () =>
@@ -49,7 +53,7 @@ const MAP_STATIC_GLOBAL_STYLES = {
     fontFamily: 'Inter, system-ui, sans-serif',
   },
   '.leaflet-control-attribution': {
-    backgroundColor: 'rgba(255,255,255,0.76)',
+    backgroundColor: withAlpha(color.bg.neutral.default, 0.8),
     backdropFilter: 'blur(3px)',
   },
   '.leaflet-control-zoom': {
@@ -67,8 +71,8 @@ const MAP_STATIC_GLOBAL_STYLES = {
     display: 'grid',
     placeItems: 'center',
     borderRadius: '999px',
-    border: '3px solid rgba(255, 255, 255, 0.94)',
-    boxShadow: '0 10px 20px rgba(21, 28, 34, 0.22)',
+    border: `3px solid ${color.bg.neutral.default}`,
+    boxShadow: shadow.lg,
     fontWeight: 800,
     lineHeight: 1,
   },
@@ -88,14 +92,16 @@ const MAP_STATIC_GLOBAL_STYLES = {
     fontSize: 15,
   },
   '.map-marker-cluster--ticket': {
-    color: '#4C2200',
-    background:
-      'linear-gradient(180deg, rgba(245, 176, 109, 0.98) 0%, rgba(227, 121, 30, 0.98) 100%)',
+    color: color.fg.onPrimary,
+    background: `linear-gradient(180deg, ${primitives.color.orange[200]} 0%, ${color.bg.primary.default} 100%)`,
   },
   '.map-marker-cluster--station': {
-    color: '#F5FAFF',
-    background:
-      'linear-gradient(180deg, rgba(82, 173, 213, 0.98) 0%, rgba(0, 102, 133, 0.98) 100%)',
+    // Light-to-mid gradient, mirroring the ticket cluster above. It used to run blue-300 → blue-600,
+    // which no label colour survives: black hits 2.78:1 at the dark end, white 2.20:1 at the light
+    // end. Ending on `secondary` keeps the whole sweep readable with the black label (5.30:1 at the
+    // darkest point).
+    color: color.fg.onSecondary,
+    background: `linear-gradient(180deg, ${primitives.color.blue[200]} 0%, ${color.brand.secondary.default} 100%)`,
   },
   '.map-marker-cluster__count': {
     display: 'block',
@@ -188,14 +194,18 @@ export const Map = memo(function Map({
         padding: '2px 8px',
         fontSize: 11,
         fontWeight: 700,
-        color: '#151c22',
+        color: color.fg.neutral.default,
         lineHeight: '16px',
-        background: isTicketTone ? '#F5E2D7' : '#E8F5FB',
+        background: isTicketTone
+          ? color.bg.primary.subtle
+          : color.bg.secondary.subtle,
         backdropFilter: 'blur(6px)',
         border: 'none',
-        borderTop: `5px solid ${isTicketTone ? '#F37C0E' : '#006493'}`,
-        borderRadius: '0 0 12px 12px',
-        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
+        borderTop: `5px solid ${
+          isTicketTone ? color.bg.primary.default : color.brand.secondary.default
+        }`,
+        borderRadius: `0 0 ${radius.md}px ${radius.md}px`,
+        boxShadow: shadow.sm,
       },
     }),
     [isTicketTone],
@@ -253,7 +263,7 @@ export const Map = memo(function Map({
           position: 'relative',
           isolation: 'isolate',
           overflow: 'hidden',
-          bgcolor: '#d3dbe3',
+          bgcolor: color.bg.neutral.sunken,
         }}
       >
         <GlobalStyles styles={globalStyles} />

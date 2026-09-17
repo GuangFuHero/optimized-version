@@ -1,22 +1,18 @@
 'use client';
 
-import FilterListOutlinedIcon from '@mui/icons-material/FilterListOutlined';
-import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import PushPinRoundedIcon from '@mui/icons-material/PushPinRounded';
-import {
-  Box,
-  ButtonBase,
-  Checkbox,
-  Menu,
-  MenuItem,
-  Stack,
-  Typography,
-} from '@mui/material';
+import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+import { Box, ButtonBase, Menu, MenuItem, Stack } from '@mui/material';
 import { useState, type MouseEvent } from 'react';
+
+import { designTokens } from '@rescue-frontend/ui';
 
 import { SITE_SUB_DATA_TYPE_OPTIONS } from '../constants';
 import type { RescueMapDataType } from '../types';
 import { SiteControlSurface } from './control-surface';
+
+const { color, radius, shadow, spacing, typography } = designTokens;
 
 interface SiteSubTypeFilterProps {
   dataType: RescueMapDataType;
@@ -28,6 +24,10 @@ interface SiteSubTypeFilterProps {
 
 /**
  * 依目前維度提供子分類多選篩選（站點類型或任務狀態）。
+ *
+ * Mirrors `SiteSubTypeFilter` in `Design/前台/js/site/site-controls.jsx`. The count badge next to
+ * the label is load-bearing, not decoration: without it a filtered view looks like an empty
+ * dataset, and someone reads "只剩這幾筆" as the situation rather than as their own filter.
  */
 export function SiteSubTypeFilter({
   dataType,
@@ -69,32 +69,29 @@ export function SiteSubTypeFilter({
           sx={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 0.5,
-            borderRadius: 999,
-            color: '#151c22',
+            gap: `${spacing[1]}px`,
+            borderRadius: `${radius.full}px`,
+            color: color.fg.neutral.default,
+            fontFamily: typography.label[400].fontFamily,
+            fontSize: typography.label[400].fontSize,
+            lineHeight: 1.33,
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
           }}
         >
-          <FilterListOutlinedIcon sx={{ fontSize: 18 }} />
-          <Typography
-            sx={{
-              fontSize: 12,
-              fontWeight: 700,
-              lineHeight: '16px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            篩選
-          </Typography>
+          <TuneRoundedIcon sx={{ fontSize: 16 }} />
+          篩選
           {selectedCount > 0 ? (
             <Box
               sx={{
-                ml: 0.25,
+                ml: '2px',
                 minWidth: 18,
                 height: 18,
-                px: 0.5,
-                borderRadius: 999,
-                bgcolor: '#954900',
-                color: '#fff',
+                px: '5px',
+                borderRadius: `${radius.full}px`,
+                bgcolor: color.bg.primary.default,
+                color: color.fg.onPrimary,
+                fontFamily: typography.data[300].fontFamily,
                 fontSize: 11,
                 fontWeight: 700,
                 lineHeight: '18px',
@@ -117,12 +114,14 @@ export function SiteSubTypeFilter({
           paper: {
             sx: {
               mt: 1.5,
-              px: 1,
-              minWidth: 200,
-              bgcolor: '#FFFFFF',
-              borderRadius: '20px',
+              p: `${spacing[2]}px`,
+              minWidth: 232,
+              maxHeight: 'min(60dvh, 420px)',
+              bgcolor: color.bg.neutral.default,
+              border: `1px solid ${color.border.default}`,
+              borderRadius: `${radius.lg}px`,
               backgroundImage: 'none',
-              boxShadow: '0 12px 30px rgba(21, 28, 34, 0.12)',
+              boxShadow: shadow.lg,
             },
           },
         }}
@@ -135,35 +134,62 @@ export function SiteSubTypeFilter({
             <MenuItem
               key={option.value}
               onClick={() => onToggle(option.value)}
+              role="menuitemcheckbox"
+              aria-checked={checked}
               sx={{
-                gap: 1,
-                px: 1,
-                borderRadius: '12px',
-                bgcolor: '#FFFFFF',
-                '&:hover': {
-                  bgcolor: '#F7F9FC',
-                },
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                alignItems: 'center',
+                gap: `${spacing[2]}px`,
+                minHeight: 40,
+                px: `${spacing[2]}px`,
+                pr: '4px',
+                borderRadius: `${radius.md}px`,
+                color: color.fg.neutral.default,
+                '&:hover': { bgcolor: color.bg.neutral.subtle },
               }}
             >
               <Stack
                 direction="row"
-                spacing={1}
                 sx={{
                   alignItems: 'center',
+                  gap: `${spacing[2]}px`,
                   minWidth: 0,
-                  flex: 1,
-                  color: '#333',
                 }}
               >
-                <Checkbox
-                  edge="start"
-                  checked={checked}
-                  tabIndex={-1}
-                  disableRipple
-                  size="small"
-                  sx={{ p: 0 }}
-                />
-                <Typography sx={{ fontSize: 14 }}>{option.label}</Typography>
+                {/* A bespoke box rather than MUI's Checkbox: the design system's checked state is a
+                    filled primary square with a white tick, which MUI's default renders as an
+                    outlined tick in the palette's primary instead. */}
+                <Box
+                  sx={{
+                    width: 18,
+                    height: 18,
+                    flexShrink: 0,
+                    borderRadius: `${radius.sm}px`,
+                    display: 'grid',
+                    placeItems: 'center',
+                    border: `1px solid ${checked ? color.bg.primary.default : color.border.default}`,
+                    bgcolor: checked
+                      ? color.bg.primary.default
+                      : color.bg.neutral.default,
+                    color: color.fg.onPrimary,
+                  }}
+                >
+                  {checked ? <CheckRoundedIcon sx={{ fontSize: 13 }} /> : null}
+                </Box>
+                <Box
+                  component="span"
+                  sx={{
+                    fontFamily: typography.body[300].fontFamily,
+                    fontSize: 14,
+                    lineHeight: 1.5,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {option.label}
+                </Box>
               </Stack>
               {onTogglePinned ? (
                 <ButtonBase
@@ -182,19 +208,19 @@ export function SiteSubTypeFilter({
                   sx={{
                     width: 32,
                     height: 32,
-                    borderRadius: 999,
+                    borderRadius: `${radius.full}px`,
                     display: 'grid',
                     placeItems: 'center',
                     flexShrink: 0,
-                    color: pinnedOption ? '#954900' : '#7a6b61',
-                    bgcolor: pinnedOption ? '#FDE7D8' : '#FFFFFF',
+                    color: pinnedOption
+                      ? color.brand.primary.subtle
+                      : color.fg.neutral.muted,
+                    bgcolor: pinnedOption
+                      ? color.bg.primary.subtle
+                      : 'transparent',
                   }}
                 >
-                  {pinnedOption ? (
-                    <PushPinRoundedIcon sx={{ fontSize: 18 }} />
-                  ) : (
-                    <PushPinOutlinedIcon sx={{ fontSize: 18 }} />
-                  )}
+                  <PushPinRoundedIcon sx={{ fontSize: 16 }} />
                 </ButtonBase>
               ) : null}
             </MenuItem>
