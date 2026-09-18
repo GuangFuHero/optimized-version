@@ -2,6 +2,8 @@
 
 import { Box, Typography } from '@mui/material';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import {
   type StationDetailColorScheme,
   useStationDetailColorScheme,
@@ -101,7 +103,7 @@ export function StationStatusCard({
         <Typography
           sx={{
             color: stationDetailPalette.bodyText,
-            fontSize: 14,
+            fontSize: displayTextSize[14],
             lineHeight: '20px',
             fontWeight: 400,
             minWidth: 0,
@@ -136,8 +138,8 @@ export function StationStatusCard({
         <Typography
           sx={{
             color: statusPalette.textColor,
-            fontSize: 10,
-            lineHeight: '12px',
+            fontSize: displayTextSize[10],
+            lineHeight: 1.2,
             fontWeight: 700,
             letterSpacing: '0.8px',
             textTransform: 'uppercase',

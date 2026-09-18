@@ -2,6 +2,8 @@
 
 import { Box, Stack, Typography } from '@mui/material';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { useStationDetailColorScheme } from './constants';
 import { StationContactCard } from './station-contact-card';
 import { StationDetailSectionHeading } from './station-detail-primitives';
@@ -61,7 +63,7 @@ export function StationDetailInfoPanel({
           <Typography
             sx={{
               color: stationDetailPalette.bodyText,
-              fontSize: 14,
+              fontSize: displayTextSize[14],
               lineHeight: '20px',
             }}
           >

@@ -2,6 +2,8 @@
 
 import { Box, ButtonBase, Typography } from '@mui/material';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import {
   stationDetailDimensions,
   useStationDetailColorScheme,
@@ -92,7 +94,7 @@ export function StationDetailTabs({
                   <Typography
                     sx={{
                       color: stationDetailPalette.pendingBadgeText,
-                      fontSize: 10,
+                      fontSize: displayTextSize[10],
                       lineHeight: '15px',
                       fontWeight: 700,
                     }}
@@ -108,7 +110,7 @@ export function StationDetailTabs({
                 color: active
                   ? stationDetailPalette.tabActiveText
                   : stationDetailPalette.tabInactiveText,
-                fontSize: 12,
+                fontSize: displayTextSize[12],
                 lineHeight: item.badgeCount ? '15px' : '16px',
                 fontWeight: 600,
                 letterSpacing: '0.6px',

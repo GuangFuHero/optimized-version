@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
-import { Icons } from '@rescue-frontend/ui';
+import { displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 
@@ -259,7 +259,7 @@ export function TicketDetailHeader({
         <Typography
           sx={{
             color: ticketDetailPalette.heading,
-            fontSize: 18,
+            fontSize: displayTextSize[18],
             lineHeight: '24px',
             fontWeight: 600,
           }}
@@ -294,8 +294,8 @@ export function TicketDetailHeader({
           sx={{
             mt: 0.75,
             color: ticketDetailPalette.summary,
-            fontSize: 13,
-            lineHeight: '16px',
+            fontSize: displayTextSize[13],
+            lineHeight: 1.23,
             fontWeight: 600,
             letterSpacing: '1.1px',
           }}
@@ -362,7 +362,7 @@ export function TicketDetailTabs({
               <Typography
                 sx={{
                   color,
-                  fontSize: 12,
+                  fontSize: displayTextSize[12],
                   lineHeight: '16px',
                   fontWeight: 600,
                   letterSpacing: '0.6px',
@@ -425,7 +425,7 @@ export function TicketDetailTabs({
             <Typography
               sx={{
                 color,
-                fontSize: 12,
+                fontSize: displayTextSize[12],
                 lineHeight: '16px',
                 fontWeight: 600,
                 letterSpacing: '0.6px',
@@ -485,8 +485,8 @@ export function TicketDetailStatusBadge({
         <Typography
           sx={{
             color: ticketDetailPalette.label,
-            fontSize: 10,
-            lineHeight: '12px',
+            fontSize: displayTextSize[10],
+            lineHeight: 1.2,
             fontWeight: 700,
             letterSpacing: '0.8px',
           }}
@@ -496,7 +496,7 @@ export function TicketDetailStatusBadge({
         <Typography
           sx={{
             color: accentColor,
-            fontSize: 20,
+            fontSize: displayTextSize[20],
             lineHeight: '28px',
             fontWeight: 600,
           }}
@@ -528,8 +528,8 @@ export function TicketDetailFieldRow({
       <Typography
         sx={{
           color: ticketDetailPalette.label,
-          fontSize: 10,
-          lineHeight: '12px',
+          fontSize: displayTextSize[10],
+          lineHeight: 1.2,
           fontWeight: 700,
           letterSpacing: '0.8px',
         }}
@@ -548,7 +548,7 @@ export function TicketDetailFieldRow({
             <Typography
               sx={{
                 color: valueColor,
-                fontSize: 16,
+                fontSize: displayTextSize[16],
                 lineHeight: '24px',
                 fontWeight: 400,
               }}
@@ -573,8 +573,8 @@ export function TicketDetailNotesCard({
       <Typography
         sx={{
           color: ticketDetailPalette.label,
-          fontSize: 10,
-          lineHeight: '12px',
+          fontSize: displayTextSize[10],
+          lineHeight: 1.2,
           fontWeight: 700,
           letterSpacing: '0.8px',
         }}
@@ -593,7 +593,7 @@ export function TicketDetailNotesCard({
           <Typography
             sx={{
               color: ticketDetailPalette.label,
-              fontSize: 14,
+              fontSize: displayTextSize[14],
               lineHeight: '20px',
               fontWeight: 400,
             }}
@@ -635,7 +635,7 @@ export function TicketDetailDetailsPane({
                   key={line}
                   sx={{
                     color: ticketDetailPalette.body,
-                    fontSize: 16,
+                    fontSize: displayTextSize[16],
                     lineHeight: '24px',
                     fontWeight: 400,
                   }}
@@ -707,7 +707,7 @@ function TicketDetailFooterButton({
       <Typography
         sx={{
           color: 'inherit',
-          fontSize: 12,
+          fontSize: displayTextSize[12],
           lineHeight: '16px',
           fontWeight: 600,
           letterSpacing: '0.6px',

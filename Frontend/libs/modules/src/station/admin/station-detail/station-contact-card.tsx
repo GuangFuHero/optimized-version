@@ -2,6 +2,8 @@
 
 import { Box, Stack, Typography } from '@mui/material';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { useStationDetailColorScheme } from './constants';
 import { StationDetailIconSlot } from './station-detail-primitives';
 import type { StationContactCardProps } from './types';
@@ -57,8 +59,8 @@ export function StationContactCard({
             <Typography
               sx={{
                 color: stationDetailPalette.heading,
-                fontSize: 14,
-                lineHeight: '16px',
+                fontSize: displayTextSize[14],
+                lineHeight: 1.14,
                 fontWeight: 600,
                 letterSpacing: '0.7px',
               }}
@@ -68,7 +70,7 @@ export function StationContactCard({
             <Typography
               sx={{
                 color: stationDetailPalette.bodyText,
-                fontSize: 14,
+                fontSize: displayTextSize[14],
                 lineHeight: '20px',
                 fontWeight: 400,
               }}
@@ -104,7 +106,7 @@ export function StationContactCard({
                 <Typography
                   sx={{
                     color: stationDetailPalette.heading,
-                    fontSize: 14,
+                    fontSize: displayTextSize[14],
                     lineHeight: '20px',
                     fontWeight: 400,
                   }}
