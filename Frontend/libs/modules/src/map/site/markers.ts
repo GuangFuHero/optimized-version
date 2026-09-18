@@ -16,7 +16,7 @@ import type {
   RescueMapMarkerItem,
 } from '../types';
 import { getStationTypeLabel } from '../../station/type-options';
-import { formatTicketStatusLabel } from '../../ticket/status';
+import { formatTicketStatusLabel, formatTicketTypeLabel } from '../../ticket/status';
 import type { SiteRouteState } from '../../route/types';
 
 export interface BoundsInput {
@@ -182,10 +182,11 @@ export function mapTicketToMarker(
 
   const title =
     ticket.title.trim() || ticket.propertyName?.trim() || ticket.uuid;
+  // Not `ticket.status`: the status is already the badge beside the title, translated. Falling back
+  // to it here printed the raw enum (`in_progress`) under every ticket that has no description.
   const subtitle =
     ticket.description?.trim() ||
-    ticket.taskType?.trim() ||
-    ticket.status?.trim() ||
+    (ticket.taskType?.trim() ? formatTicketTypeLabel(ticket.taskType) : '') ||
     '救災任務';
 
   return {

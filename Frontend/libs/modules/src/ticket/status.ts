@@ -161,3 +161,29 @@ export function getTicketStatusTone(value?: string | null): BadgeTone {
 
   return (key && TICKET_STATUS_TONES[key]) || 'neutral';
 }
+
+/**
+ * `ticket_tasks.task_type` → the label a reader sees.
+ *
+ * The backend documents exactly four values (`rescue` / `supply` / `medical` / `hr`). Anything else
+ * is passed through unchanged rather than hidden, so a new backend value shows up as itself instead
+ * of silently disappearing — the tell that this table needs a row.
+ */
+export function formatTicketTypeLabel(value?: string | null) {
+  if (!value?.trim()) {
+    return '未提供';
+  }
+
+  switch (value.trim().toLowerCase()) {
+    case 'rescue':
+      return '救援';
+    case 'hr':
+      return '人力';
+    case 'supply':
+      return '物資';
+    case 'medical':
+      return '醫療';
+    default:
+      return value;
+  }
+}

@@ -13,6 +13,7 @@ import type {
   StationDetailTabPanels,
 } from '../../../station/station-detail';
 import { TicketDetailDrawer } from '../../../ticket';
+import { formatTicketTypeLabel } from '../../../ticket/status';
 import type { TicketDetailDrawerProps } from '../../../ticket/ticket-detail';
 import type { RescueMapMarkerItem } from '../../types';
 
@@ -127,7 +128,7 @@ function createTicketSummary(marker: RescueMapMarkerItem) {
         `緯度 ${latitude.toFixed(6)} / 經度 ${longitude.toFixed(6)}`,
       ],
       taskLabel: '任務類型',
-      taskValue: marker.ticketMeta?.taskType?.trim() || '未提供',
+      taskValue: formatTicketTypeLabel(marker.ticketMeta?.taskType),
       requesterLabel: '現場聯絡人',
       requesterValue: contactSummary.join(' / ') || '未提供',
       notesLabel: '任務說明',

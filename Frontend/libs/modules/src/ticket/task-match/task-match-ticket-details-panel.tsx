@@ -21,7 +21,7 @@ import {
 } from '@rescue-frontend/data-access';
 
 import type { RescueMapMarkerItem } from '../../map/types';
-import { formatTicketStatusLabel } from '../status';
+import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
@@ -101,27 +101,6 @@ function formatDateTime(value?: string | null) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
-}
-
-function formatTicketTypeLabel(value?: string | null) {
-  if (!value) {
-    return '未提供';
-  }
-
-  const normalized = value.trim().toLowerCase();
-
-  switch (normalized) {
-    case 'rescue':
-      return '救援';
-    case 'hr':
-      return '人力';
-    case 'supply':
-      return '物資';
-    case 'medical':
-      return '醫療';
-    default:
-      return value;
-  }
 }
 
 function formatPriorityLabel(value?: string | null) {
