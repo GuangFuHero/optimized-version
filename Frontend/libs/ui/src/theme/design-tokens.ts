@@ -365,8 +365,8 @@ export const semanticTypographyMobile = {
  *
  * ## Why the whole ladder shifts instead of only the small end
  *
- * 10 through 18 gain +4, 20 gains +3, 24 gains +2, and nothing is left behind. Enlarging only the
- * "important" text would flatten the hierarchy — 11 vs 14 reads as "footnote vs content", and
+ * 10 through 18 gain +4, 20 and 22 gain +3, 24 gains +2, and nothing is left behind. Enlarging only
+ * the "important" text would flatten the hierarchy — 11 vs 14 reads as "footnote vs content", and
  * pulling 11 up to 14 makes them equal, so the reader has to relearn which is which. A uniform shift
  * keeps every step distinguishable while making all of them legible. The ladder does compress
  * slightly at the top; that trade was made on purpose, because being readable in the field beats
@@ -374,6 +374,16 @@ export const semanticTypographyMobile = {
  *
  * The designer shipped this twice: the first pass added only +2 and was reported back as "字體沒有
  * 變大", because +2 is imperceptible at the small end. Do not shrink these deltas.
+ *
+ * ## 22 is ours, not the prototype's
+ *
+ * `site.css` has no `--fs-22`. The station-report drawer title was 22 and fell between 20 and 24;
+ * rather than round it into either, the product owner added the step (2026-09-18). Its phone size
+ * had to land strictly between 23 and 26 to keep the ladder monotonic, so 24 or 25. 25 was chosen
+ * because 22 mostly sits beside 20-step text, and 23 vs 24 on a phone is a 1px difference nobody
+ * reads as hierarchy. So this table is AHEAD of `site.css` until the designer adds `--fs-22` there;
+ * the step is listed with the other code-ahead-of-design items in
+ * `note/design-system-decisions.md`.
  *
  * ## How to use it
  *
@@ -400,6 +410,7 @@ export const displayTextSize = {
   17: { mobile: 21, tablet: 17 },
   18: { mobile: 22, tablet: 18 },
   20: { mobile: 23, tablet: 20 },
+  22: { mobile: 25, tablet: 22 },
   24: { mobile: 26, tablet: 24 },
 } as const satisfies Record<number, { mobile: number; tablet: number }>;
 

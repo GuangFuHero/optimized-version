@@ -130,9 +130,7 @@ export function SiteStationReportDrawer({
             <Typography
               sx={{
                 color: color.fg.neutral.default,
-                // 22 is not a rung on the display ladder (10-18, 20, 24), so it stays a raw number
-                // rather than being rounded into one by guesswork. Needs a designer ruling.
-                fontSize: 22,
+                fontSize: displayTextSize[22],
                 fontWeight: 800,
               }}
             >

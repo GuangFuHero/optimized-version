@@ -261,8 +261,8 @@ describe('scales', () => {
 describe('display text scale', () => {
   const steps = Object.keys(displayTextSize).map(Number) as DisplayTextStep[];
 
-  it('mirrors the --fs-* ladder in site.css', () => {
-    expect(steps).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 24]);
+  it('mirrors the --fs-* ladder in site.css, plus the 22 step added on our side', () => {
+    expect(steps).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 22, 24]);
   });
 
   it('keys are the desktop size, so porting from the prototype is a lookup', () => {
@@ -283,6 +283,7 @@ describe('display text scale', () => {
     expect(delta(14)).toBe(4);
     expect(delta(18)).toBe(4);
     expect(delta(20)).toBe(3);
+    expect(delta(22)).toBe(3);
     expect(delta(24)).toBe(2);
   });
 
