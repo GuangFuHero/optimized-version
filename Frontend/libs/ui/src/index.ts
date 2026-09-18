@@ -9,8 +9,17 @@ export {
   designExtensions,
   designTokens,
   designToM3Light,
+  DISPLAY_SCALE_MOBILE_MEDIA,
+  displayTextSize,
+  displayTextSizeCss,
   fontStack,
   fontVariables,
+  IOS_NO_ZOOM_INPUT_PX,
   withAlpha,
 } from './theme';
-export type { DesignExtensions, DesignTokens, StatusColor } from './theme';
+export type {
+  DesignExtensions,
+  DesignTokens,
+  DisplayTextStep,
+  StatusColor,
+} from './theme';

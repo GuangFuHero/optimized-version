@@ -1,5 +1,6 @@
 import { designToM3Light } from './bridge';
 import { designTokens as dt, fontStack, withAlpha } from './design-tokens';
+import type { M3ColorScheme, RescueColorMode } from './m3-color-scheme';
 
 /**
  * Scrim stops for the login hero. The photograph underneath needs the text side darkened and the
@@ -8,7 +9,6 @@ import { designTokens as dt, fontStack, withAlpha } from './design-tokens';
 const scrimDark = (alpha: number) => withAlpha(dt.primitives.color.neutral[900], alpha);
 const scrimLight = (alpha: number) => withAlpha(dt.primitives.color.neutral.white, alpha);
 const scrimPage = (alpha: number) => withAlpha(dt.color.bg.neutral.subtle, alpha);
-import type { M3ColorScheme, RescueColorMode } from './m3-color-scheme';
 
 // The M3 role contract now lives in its own module so `bridge.ts` can name it without this
 // file and that one importing each other. Re-exported here so existing importers keep working.

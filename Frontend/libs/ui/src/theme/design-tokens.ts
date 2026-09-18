@@ -323,10 +323,11 @@ export const semanticTypography = {
  * numerals stay legible. 600px is the design system's only breakpoint — it lines up with MUI's `sm`,
  * NOT with the bespoke `tablet: 768` in this theme.
  *
- * ⚠️ MIRRORED BUT NOT YET APPLIED. `theme.ts` sets no breakpoint-dependent type sizes, so the
- * product currently renders desktop sizes at every width. This table is here so the values are not
- * lost, not because responsive typography works — wiring it up changes what every heading looks
- * like on a phone, which is a deliberate step, not a side effect of mirroring the tokens.
+ * ⚠️ MIRRORED, AND DELIBERATELY NOT APPLIED TO THE PUBLIC SITE. This is the design SYSTEM's ramp,
+ * used by DS components (Button / Input / Badge) via their own CSS. The public site runs on a
+ * different, larger scale — see `displayTextSize` below — and the two move in OPPOSITE directions
+ * on a phone: this ramp shrinks, the site's scale grows. Wiring this one into the site would undo
+ * the field requirement that `displayTextSize` exists to satisfy. Keep them separate.
  */
 export const MOBILE_BREAKPOINT_PX = 600;
 
@@ -343,6 +344,88 @@ export const semanticTypographyMobile = {
     500: { ...semanticTypography.body[500], fontSize: 16 },
   },
 } as const satisfies Record<string, Record<number, TypeStyle>>;
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Display text scale — mirrors the `--fs-*` ladder in `Design/前台/js/site/site.css`
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The public site's own text scale, and the only one its screens should use.
+ *
+ * ## Why this exists at all, separate from `semanticTypography`
+ *
+ * Designer's ruling (2026-09-11), quoted from `site.css`:
+ *
+ * > Sucre：「手機版本的字要加大，大多現場的人都看不清楚，年紀大。」
+ *
+ * Responders read this on a phone, outdoors, and many of them are elderly — so on a phone every
+ * size steps UP, it does not step down. That is the exact opposite of `semanticTypographyMobile`,
+ * which is the design system's ramp for its own components. The designer's note calls them out as
+ * two different things (「這是顯示層的刻度，與 DS 的 typography token 是兩回事」); do not merge them.
+ *
+ * ## Why the whole ladder shifts instead of only the small end
+ *
+ * 10 through 18 gain +4, 20 gains +3, 24 gains +2, and nothing is left behind. Enlarging only the
+ * "important" text would flatten the hierarchy — 11 vs 14 reads as "footnote vs content", and
+ * pulling 11 up to 14 makes them equal, so the reader has to relearn which is which. A uniform shift
+ * keeps every step distinguishable while making all of them legible. The ladder does compress
+ * slightly at the top; that trade was made on purpose, because being readable in the field beats
+ * typographic rhythm.
+ *
+ * The designer shipped this twice: the first pass added only +2 and was reported back as "字體沒有
+ * 變大", because +2 is imperceptible at the small end. Do not shrink these deltas.
+ *
+ * ## How to use it
+ *
+ * Keys are the DESKTOP px, matching the `--fs-NN` names in `site.css`, so porting a value from the
+ * prototype is a lookup rather than a judgement call. Each entry is a ready-made MUI responsive
+ * value keyed on this theme's `mobile` / `tablet` breakpoints:
+ *
+ *     <Typography sx={{ fontSize: displayTextSize[13] }}>   // 17px on a phone, 13px from 768px up
+ *
+ * `tablet` is 768, so the switch lands on `max-width: 767.95px` — the 767px cutoff `site.css` uses.
+ * Note this is NOT `MOBILE_BREAKPOINT_PX` (600); that one belongs to the DS ramp above.
+ *
+ * ⚠️ Text only. MUI icons take their size through `fontSize` too, but an icon is not text and must
+ * not ride this scale — icons keep plain numbers.
+ */
+export const displayTextSize = {
+  10: { mobile: 14, tablet: 10 },
+  11: { mobile: 15, tablet: 11 },
+  12: { mobile: 16, tablet: 12 },
+  13: { mobile: 17, tablet: 13 },
+  14: { mobile: 18, tablet: 14 },
+  15: { mobile: 19, tablet: 15 },
+  16: { mobile: 20, tablet: 16 },
+  17: { mobile: 21, tablet: 17 },
+  18: { mobile: 22, tablet: 18 },
+  20: { mobile: 23, tablet: 20 },
+  24: { mobile: 26, tablet: 24 },
+} as const satisfies Record<number, { mobile: number; tablet: number }>;
+
+export type DisplayTextStep = keyof typeof displayTextSize;
+
+/**
+ * `max-width` form of the same cutoff, for places MUI will not resolve a responsive value.
+ *
+ * `<GlobalStyles>` hands its object straight to Emotion without running the `sx` system, so
+ * `{ mobile, tablet }` would be emitted as literal garbage there. That is how the Leaflet marker and
+ * cluster classes get styled — their markup is an HTML string, outside React — so those rules use
+ * `displayTextSizeCss()` instead. The spec asserts this string equals
+ * `theme.breakpoints.down('tablet')`, so the two paths cannot drift apart.
+ */
+export const DISPLAY_SCALE_MOBILE_MEDIA = '@media (max-width:767.95px)';
+
+/** `displayTextSize`, pre-rendered as plain CSS for non-`sx` contexts. */
+export function displayTextSizeCss(step: DisplayTextStep) {
+  return {
+    fontSize: displayTextSize[step].tablet,
+    [DISPLAY_SCALE_MOBILE_MEDIA]: { fontSize: displayTextSize[step].mobile },
+  };
+}
+
+/** Smallest font size iOS Safari will not zoom a focused input to. See `theme.ts` `MuiInputBase`. */
+export const IOS_NO_ZOOM_INPUT_PX = 16;
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Elevation & motion
@@ -435,11 +518,14 @@ export const designTokens = {
   spacing: semanticSpacing,
   typography: semanticTypography,
   typographyMobile: semanticTypographyMobile,
+  /** The public site's text scale. Not the same ladder as `typographyMobile` — see its docstring. */
+  textSize: displayTextSize,
   elevation: semanticElevation,
   elevationShadow,
   motion: semanticMotion,
   grid: primitives.grid,
   mobileBreakpointPx: MOBILE_BREAKPOINT_PX,
+  iosNoZoomInputPx: IOS_NO_ZOOM_INPUT_PX,
 } as const;
 
 export type DesignTokens = typeof designTokens;

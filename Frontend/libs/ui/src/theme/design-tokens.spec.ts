@@ -2,7 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import { AA_TEXT, contrastRatio } from './contrast';
 import { designExtensions, designToM3Light } from './bridge';
-import { designTokens, fontStack, fontVariables } from './design-tokens';
+import {
+  designTokens,
+  DISPLAY_SCALE_MOBILE_MEDIA,
+  displayTextSize,
+  displayTextSizeCss,
+  fontStack,
+  fontVariables,
+  IOS_NO_ZOOM_INPUT_PX,
+  type DisplayTextStep,
+} from './design-tokens';
+import { theme } from './theme';
 
 const { color, primitives } = designTokens;
 
@@ -238,5 +248,79 @@ describe('scales', () => {
     for (const shadow of Object.values(designTokens.shadow)) {
       expect(shadow).toContain('rgba(227, 121, 30');
     }
+  });
+});
+
+/**
+ * The display scale exists because responders read this outdoors, on a phone, and many of them are
+ * elderly. Every rule below is a design ruling that the type system is blind to: `fontSize: 11` and
+ * `fontSize: 15` are both `number`, so shrinking the mobile end type-checks perfectly and silently
+ * undoes the one thing this scale is for. That regression already happened once in the prototype —
+ * the first pass shipped +2 and came back as 「字體沒有變大」.
+ */
+describe('display text scale', () => {
+  const steps = Object.keys(displayTextSize).map(Number) as DisplayTextStep[];
+
+  it('mirrors the --fs-* ladder in site.css', () => {
+    expect(steps).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 24]);
+  });
+
+  it('keys are the desktop size, so porting from the prototype is a lookup', () => {
+    for (const step of steps) {
+      expect(displayTextSize[step].tablet).toBe(step);
+    }
+  });
+
+  it.each(steps)('grows rather than shrinks on a phone (%i)', (step) => {
+    expect(displayTextSize[step].mobile).toBeGreaterThan(displayTextSize[step].tablet);
+  });
+
+  it('shifts the small end by +4 and the large end by +2', () => {
+    const delta = (step: DisplayTextStep) =>
+      displayTextSize[step].mobile - displayTextSize[step].tablet;
+
+    expect(delta(10)).toBe(4);
+    expect(delta(14)).toBe(4);
+    expect(delta(18)).toBe(4);
+    expect(delta(20)).toBe(3);
+    expect(delta(24)).toBe(2);
+  });
+
+  /**
+   * The whole ladder moves together on purpose. Enlarging only the "important" text would collapse
+   * 11-vs-14 — "footnote vs content" — into one size, and the reader would have to relearn the
+   * hierarchy on a phone.
+   */
+  it('keeps every step distinguishable at both widths', () => {
+    const mobile = steps.map((s) => displayTextSize[s].mobile);
+    const tablet = steps.map((s) => displayTextSize[s].tablet);
+
+    expect(mobile).toStrictEqual([...mobile].sort((a, b) => a - b));
+    expect(tablet).toStrictEqual([...tablet].sort((a, b) => a - b));
+    expect(new Set(mobile).size).toBe(mobile.length);
+    expect(new Set(tablet).size).toBe(tablet.length);
+  });
+
+  /**
+   * `sx` values switch at the theme's `tablet` breakpoint, computed by MUI. `<GlobalStyles>` rules
+   * switch at `DISPLAY_SCALE_MOBILE_MEDIA`, a hand-written string. If the breakpoint ever moves and
+   * the string does not, markers and clusters would change size at a different width from the rest
+   * of the page — silently, since both paths still render.
+   */
+  it('uses the same cutoff for sx and non-sx contexts', () => {
+    expect(theme.breakpoints.down('tablet')).toBe(DISPLAY_SCALE_MOBILE_MEDIA);
+  });
+
+  it('emits the 767px cutoff for contexts MUI will not resolve', () => {
+    expect(displayTextSizeCss(13)).toStrictEqual({
+      fontSize: 13,
+      '@media (max-width:767.95px)': { fontSize: 17 },
+    });
+    expect(DISPLAY_SCALE_MOBILE_MEDIA).toBe('@media (max-width:767.95px)');
+  });
+
+  /** Below 16px, iOS Safari zooms the page on focus and the user has to pinch back out. */
+  it('keeps inputs at the size iOS will not zoom', () => {
+    expect(IOS_NO_ZOOM_INPUT_PX).toBe(16);
   });
 });

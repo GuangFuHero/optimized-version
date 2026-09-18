@@ -13,6 +13,7 @@ import type { CssVarsTheme } from '@mui/material/styles';
 import { extendTheme } from '@mui/material/styles';
 
 import { designExtensions } from './bridge';
+import { IOS_NO_ZOOM_INPUT_PX } from './design-tokens';
 import {
   colorSchemes as cs,
   moduleColorSchemes,
@@ -133,6 +134,16 @@ export const theme = extendTheme({
   },
 
   components: {
+    // 🔒 A focused input smaller than 16px makes iOS Safari zoom the whole page in, and the user has
+    // to pinch back out — worse than small text. `site.css` pins inputs to 16px below its 767px
+    // cutoff for exactly this reason; `down('tablet')` is that same cutoff.
+    MuiInputBase: {
+      styleOverrides: {
+        input: ({ theme: t }) => ({
+          [t.breakpoints.down('tablet')]: { fontSize: IOS_NO_ZOOM_INPUT_PX },
+        }),
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {
