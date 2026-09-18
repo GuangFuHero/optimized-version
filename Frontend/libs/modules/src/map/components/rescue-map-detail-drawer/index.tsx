@@ -2,9 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
-import LocalPhoneRoundedIcon from '@mui/icons-material/LocalPhoneRounded';
-import RadioRoundedIcon from '@mui/icons-material/RadioRounded';
-import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded';
 import { Box } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
@@ -44,7 +41,6 @@ interface RescueMapDetailDrawerProps {
 }
 
 const DetailsIcon = Icons.details;
-const IncidentLogIcon = Icons.incidentLog;
 const CloseIcon = Icons.close;
 const MapIcon = Icons.map;
 const PersonIcon = Icons.person;
@@ -59,22 +55,34 @@ function formatStationStatus(marker: RescueMapMarkerItem) {
     station?.verificationStatus === 'human_verified'
   ) {
     return {
-      label: station.isTemporary ? 'TEMP VERIFIED' : 'ACTIVE VERIFIED',
+      label: station.isTemporary ? '臨時 · 已人工驗證' : '啟用 · 已人工驗證',
       tone: 'active' as const,
     };
   }
 
   if (station?.verificationStatus === 'ai_verified') {
     return {
-      label: 'AI VERIFIED',
+      label: 'AI 驗證',
       tone: 'warning' as const,
     };
   }
 
   return {
-    label: station?.visibility?.toUpperCase() ?? 'ACTIVE',
+    label: station?.visibility === 'public' ? '公開' : '未驗證',
     tone: 'inactive' as const,
   };
+}
+
+function formatVerificationStatus(status: string | null | undefined) {
+  if (status === 'human_verified') {
+    return '人工驗證';
+  }
+
+  if (status === 'ai_verified') {
+    return 'AI 驗證';
+  }
+
+  return '未驗證';
 }
 
 function createStationResources(marker: RescueMapMarkerItem) {
@@ -93,24 +101,9 @@ function createStationResources(marker: RescueMapMarkerItem) {
       value: station?.opHour?.trim() || '未提供',
       icon: <MapIcon />,
     },
-    {
-      id: 'level',
-      label: '站點等級',
-      value:
-        typeof station?.level === 'number'
-          ? `Level ${station.level}`
-          : '未提供',
-      icon: <IncidentLogIcon />,
-    },
-    {
-      id: 'confidence',
-      label: '可信度',
-      value:
-        typeof station?.confidenceScore === 'number'
-          ? `${Math.round(station.confidenceScore * 100)}%`
-          : '未提供',
-      icon: <WaterDropRoundedIcon />,
-    },
+    // 「站點等級」與「可信度」依設計決議不在前台顯示：`level` 的語意還在問後端，
+    // 對讀者顯示一個我們自己都不確定意思的數字沒有意義；信任制度 v0.1.0 不做，
+    // `confidenceScore` 留空不讀。
   ];
 }
 
@@ -174,25 +167,15 @@ function createStationSummary({
     //   icon: <EditRoundedIcon />,
     // },
     secondaryAction: stationSecondaryAction,
-    contactCard: marker.stationMeta?.source
-      ? {
-          name: marker.stationMeta.isOfficial ? '官方站點' : '一般站點',
-          role: marker.stationMeta.source.toUpperCase(),
-          avatarIcon: <PersonIcon />,
-          methods: [
-            {
-              id: 'verification',
-              value: marker.stationMeta.verificationStatus ?? '未驗證',
-              icon: <RadioRoundedIcon />,
-            },
-            {
-              id: 'visibility',
-              value: marker.stationMeta.visibility ?? '未提供',
-              icon: <LocalPhoneRoundedIcon />,
-            },
-          ],
-        }
-      : undefined,
+    // 2026-08-21 決議：前台不顯示 `source`。站點一律由後台建立，來源不具區別力；
+    // 有區別力的是「是不是官方造冊」。這張卡也不再列 visibility —— 讀者只會看到
+    // 公開的站點，這個欄位對他永遠是同一個值。
+    contactCard: {
+      name: marker.stationMeta?.isOfficial ? '官方站點' : '一般站點',
+      role: formatVerificationStatus(marker.stationMeta?.verificationStatus),
+      avatarIcon: <PersonIcon />,
+      methods: [],
+    },
     resources: createStationResources(marker),
   };
 }
