@@ -18,7 +18,6 @@ import {
   RescueMapDetailDrawer,
   type RescueMapTicketDetailOverrides,
 } from './components/rescue-map-detail-drawer';
-import { RescueMapFloatingActions } from './components/rescue-map-floating-actions';
 import { RescueMapLayerPanel } from './components/rescue-map-layer-panel';
 import { RescueMapStatusMessage } from './components/rescue-map-status-message';
 import { RescueMapTopBar } from './components/rescue-map-top-bar';
@@ -293,16 +292,7 @@ export const Map = memo(function Map({
           {renderControls ? (
             renderControls(controller)
           ) : (
-            <>
-              <RescueMapTopBar controller={controller} />
-              <Box
-                sx={{
-                  display: { mobile: 'none', tablet: 'block' },
-                }}
-              >
-                <RescueMapFloatingActions />
-              </Box>
-            </>
+            <RescueMapTopBar controller={controller} />
           )}
         </Box>
 
