@@ -4,7 +4,7 @@ import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typog
 
 import type { RescueMapMarkerItem } from '../../map/types';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 const { color, radius, shadow } = designTokens;
 
@@ -44,7 +44,7 @@ export function TaskMatchDeleteConfirmDialog({
           <Typography
             sx={{
               color: color.fg.neutral.default,
-              fontSize: 18,
+              fontSize: displayTextSize[18],
               lineHeight: '24px',
               fontWeight: 700,
             }}
@@ -54,7 +54,7 @@ export function TaskMatchDeleteConfirmDialog({
           <Typography
             sx={{
               color: color.fg.neutral.muted,
-              fontSize: 12,
+              fontSize: displayTextSize[12],
               lineHeight: '16px',
               fontWeight: 600,
               letterSpacing: '0.4px',
@@ -69,7 +69,7 @@ export function TaskMatchDeleteConfirmDialog({
         <Typography
           sx={{
             color: color.fg.neutral.subtle,
-            fontSize: 14,
+            fontSize: displayTextSize[14],
             lineHeight: '22px',
           }}
         >

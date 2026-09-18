@@ -33,7 +33,7 @@ import {
 import { usePaginatedRescueMapMarkers } from '../map/site';
 import { SiteListRow } from './site-list-row';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -226,7 +226,7 @@ export function SiteListView() {
             selected={controller.subDataTypes}
             onToggle={controller.toggleSubDataType}
           />
-          <Typography sx={{ ml: 'auto', fontSize: 13, color: color.fg.neutral.subtle }}>
+          <Typography sx={{ ml: 'auto', fontSize: displayTextSize[13], color: color.fg.neutral.subtle }}>
             共 {controller.markers.length} 筆
           </Typography>
         </Box>
@@ -248,7 +248,7 @@ export function SiteListView() {
                 color: color.fg.neutral.muted,
               }}
             >
-              <Typography sx={{ fontSize: 14 }}>沒有符合條件的資料</Typography>
+              <Typography sx={{ fontSize: displayTextSize[14] }}>沒有符合條件的資料</Typography>
             </Stack>
           ) : (
             <Stack spacing={1.5}>
@@ -299,7 +299,7 @@ export function SiteListView() {
                   sx={{
                     pt: 1,
                     textAlign: 'center',
-                    fontSize: 13,
+                    fontSize: displayTextSize[13],
                     color: color.fg.neutral.muted,
                   }}
                 >

@@ -6,7 +6,7 @@ import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import { Box, ButtonBase, Menu, MenuItem, Stack } from '@mui/material';
 import { useState, type MouseEvent } from 'react';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { SITE_SUB_DATA_TYPE_OPTIONS } from '../constants';
 import type { RescueMapDataType } from '../types';
@@ -73,7 +73,7 @@ export function SiteSubTypeFilter({
             borderRadius: `${radius.full}px`,
             color: color.fg.neutral.default,
             fontFamily: typography.label[400].fontFamily,
-            fontSize: typography.label[400].fontSize,
+            fontSize: displayTextSize[14],
             lineHeight: 1.33,
             fontWeight: 700,
             whiteSpace: 'nowrap',
@@ -92,7 +92,7 @@ export function SiteSubTypeFilter({
                 bgcolor: color.bg.primary.default,
                 color: color.fg.onPrimary,
                 fontFamily: typography.data[300].fontFamily,
-                fontSize: 11,
+                fontSize: displayTextSize[11],
                 fontWeight: 700,
                 lineHeight: '18px',
                 textAlign: 'center',
@@ -181,7 +181,7 @@ export function SiteSubTypeFilter({
                   component="span"
                   sx={{
                     fontFamily: typography.body[300].fontFamily,
-                    fontSize: 14,
+                    fontSize: displayTextSize[14],
                     lineHeight: 1.5,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',

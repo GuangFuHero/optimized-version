@@ -6,7 +6,7 @@ import { Box, Drawer, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { usePathname } from 'next/navigation';
 
-import { getRescueColorScheme } from '@rescue-frontend/ui';
+import { displayTextSize, getRescueColorScheme } from '@rescue-frontend/ui';
 
 import { LAYOUT_DIMENSIONS } from '../layout';
 import { GuangFuBrandIcon } from '../../brand';
@@ -62,7 +62,7 @@ export function SiteShell({
         sx={{
           minWidth: 0,
           color: rescue.adminShell.sidebar.heading,
-          fontSize: 20,
+          fontSize: displayTextSize[20],
           lineHeight: '28px',
           fontWeight: 700,
           whiteSpace: 'nowrap',

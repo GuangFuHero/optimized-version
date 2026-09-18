@@ -14,7 +14,7 @@ import {
   type TaskMatchState,
 } from './model';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 const { color, primitives, radius } = designTokens;
 
@@ -74,7 +74,7 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
           <Typography
             sx={{
               color: color.fg.neutral.default,
-              fontSize: 15,
+              fontSize: displayTextSize[15],
               lineHeight: '22px',
               fontWeight: 700,
             }}
@@ -91,7 +91,7 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
           }}
         >
           <Typography
-            sx={{ color: color.fg.neutral.subtle, fontSize: 13, lineHeight: '20px' }}
+            sx={{ color: color.fg.neutral.subtle, fontSize: displayTextSize[13], lineHeight: '20px' }}
           >
             {createTaskMatchSummary(state)}。目前前台媒合紀錄以日誌狀態追蹤為主。
           </Typography>
@@ -106,7 +106,7 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
               borderRadius: '999px',
               bgcolor: tone.backgroundColor,
               color: tone.color,
-              fontSize: 12,
+              fontSize: displayTextSize[12],
               lineHeight: '18px',
               fontWeight: 700,
               whiteSpace: 'nowrap',
@@ -159,7 +159,7 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
           <Typography
             sx={{
               color: color.fg.neutral.default,
-              fontSize: 14,
+              fontSize: displayTextSize[14],
               lineHeight: '20px',
               fontWeight: 700,
             }}
@@ -185,7 +185,7 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
                 <Typography
                   sx={{
                     color: color.fg.neutral.default,
-                    fontSize: 13,
+                    fontSize: displayTextSize[13],
                     lineHeight: '19px',
                     fontWeight: 700,
                   }}
@@ -193,7 +193,7 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
                   {entry.summary}
                 </Typography>
                 <Typography
-                  sx={{ color: color.fg.neutral.muted, fontSize: 12, lineHeight: '18px' }}
+                  sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[12], lineHeight: '18px' }}
                 >
                   {entry.actorName} · {formatTaskMatchDate(entry.occurredAt)}
                 </Typography>
@@ -211,7 +211,7 @@ export function TaskMatchHistoryPanel({ state }: TaskMatchHistoryPanelProps) {
             }}
           >
             <Typography
-              sx={{ color: color.fg.neutral.muted, fontSize: 13, lineHeight: '20px' }}
+              sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13], lineHeight: '20px' }}
             >
               尚無相關日誌紀錄。
             </Typography>

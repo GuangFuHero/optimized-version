@@ -1,4 +1,4 @@
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSizeCss } from '@rescue-frontend/ui';
 
 const { color, radius, shadow, typography, motion } = designTokens;
 
@@ -83,7 +83,7 @@ export const rescueMapMarkerStyles = {
   '.map-marker__label-text': {
     display: 'block',
     fontFamily: typography.label[400].fontFamily,
-    fontSize: 11,
+    ...displayTextSizeCss(11),
     lineHeight: 1.35,
     fontWeight: 700,
     color: color.fg.neutral.default,

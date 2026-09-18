@@ -12,7 +12,7 @@ import {
   type StationReportRecord,
 } from './model';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 const { color, primitives, radius } = designTokens;
 
@@ -72,7 +72,7 @@ export function StationReportHistoryPanel({
           bgcolor: color.bg.neutral.default,
         }}
       >
-        <Typography sx={{ color: color.fg.neutral.muted, fontSize: 13, lineHeight: '20px' }}>
+        <Typography sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13], lineHeight: '20px' }}>
           尚無現場評論
         </Typography>
       </Box>
@@ -126,7 +126,7 @@ export function StationReportHistoryPanel({
               <Typography
                 sx={{
                   color: color.fg.neutral.default,
-                  fontSize: 13,
+                  fontSize: displayTextSize[13],
                   lineHeight: '20px',
                   overflowWrap: 'anywhere',
                 }}
@@ -134,7 +134,7 @@ export function StationReportHistoryPanel({
                 {report.comment}
               </Typography>
               <Typography
-                sx={{ color: color.fg.neutral.muted, fontSize: 12, lineHeight: '16px' }}
+                sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[12], lineHeight: '16px' }}
               >
                 {report.reporterName} ·{' '}
                 {formatStationReportDate(report.submittedAt)}

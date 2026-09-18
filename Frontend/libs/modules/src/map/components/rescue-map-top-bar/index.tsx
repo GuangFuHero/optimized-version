@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
 
 import type { RescueMapControllerValue } from '../../types';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 const { color, radius, shadow } = designTokens;
 
@@ -60,7 +60,7 @@ function ToolbarButton({ icon, label }: { icon: ReactNode; label: string }) {
       <Typography
         sx={{
           pr: 0.5,
-          fontSize: 12,
+          fontSize: displayTextSize[12],
           fontWeight: 700,
           lineHeight: '16px',
           letterSpacing: 0,
@@ -168,7 +168,7 @@ function ViewToggleButton({
       </Box>
       <Typography
         sx={{
-          fontSize: 12,
+          fontSize: displayTextSize[12],
           fontWeight: 700,
           lineHeight: '16px',
           letterSpacing: 0,

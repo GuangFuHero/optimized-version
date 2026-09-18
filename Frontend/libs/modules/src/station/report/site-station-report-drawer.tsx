@@ -25,7 +25,7 @@ import {
 } from './model';
 import { StationReportHistoryPanel } from './station-report-history-panel';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -128,12 +128,18 @@ export function SiteStationReportDrawer({
         >
           <Stack spacing={0.5} sx={{ minWidth: 0 }}>
             <Typography
-              sx={{ color: color.fg.neutral.default, fontSize: 22, fontWeight: 800 }}
+              sx={{
+                color: color.fg.neutral.default,
+                // 22 is not a rung on the display ladder (10-18, 20, 24), so it stays a raw number
+                // rather than being rounded into one by guesswork. Needs a designer ruling.
+                fontSize: 22,
+                fontWeight: 800,
+              }}
             >
               建議修改站點資訊
             </Typography>
             <Typography
-              sx={{ color: color.fg.neutral.muted, fontSize: 13, lineHeight: '18px' }}
+              sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13], lineHeight: '18px' }}
             >
               {station?.title ?? '未選取站點'}
             </Typography>
@@ -201,7 +207,7 @@ export function SiteStationReportDrawer({
               <Typography
                 sx={{
                   color: color.fg.neutral.default,
-                  fontSize: 15,
+                  fontSize: displayTextSize[15],
                   lineHeight: '22px',
                   fontWeight: 800,
                 }}
@@ -212,7 +218,7 @@ export function SiteStationReportDrawer({
                 <StationReportHistoryPanel reports={[latestReport]} compact />
               ) : (
                 <Typography
-                  sx={{ color: color.fg.neutral.muted, fontSize: 13, lineHeight: '20px' }}
+                  sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13], lineHeight: '20px' }}
                 >
                   尚無回報
                 </Typography>
@@ -224,7 +230,7 @@ export function SiteStationReportDrawer({
                 <Typography
                   sx={{
                     color: color.fg.neutral.default,
-                    fontSize: 15,
+                    fontSize: displayTextSize[15],
                     lineHeight: '22px',
                     fontWeight: 800,
                   }}

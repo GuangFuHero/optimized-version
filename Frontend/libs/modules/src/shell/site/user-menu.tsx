@@ -12,7 +12,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { designTokens, Icons } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
 const { color, radius, shadow, spacing, motion } = designTokens;
 
@@ -100,10 +100,15 @@ export function SiteUserMenu({
       >
         <MenuItem disabled sx={{ opacity: 1 }}>
           <Stack>
-            <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
+            <Typography sx={{ fontSize: displayTextSize[14], fontWeight: 700 }}>
               {userName || '指揮中心'}
             </Typography>
-            <Typography sx={{ fontSize: 12, color: color.fg.neutral.muted }}>
+            <Typography
+              sx={{
+                fontSize: displayTextSize[12],
+                color: color.fg.neutral.muted,
+              }}
+            >
               已登入
             </Typography>
           </Stack>
@@ -111,11 +116,11 @@ export function SiteUserMenu({
         <Divider />
         {/* <MenuItem onClick={handleOpenSecurity} sx={{ gap: 1 }}>
           <PersonIcon sx={{ fontSize: 18 }} />
-          <Typography sx={{ fontSize: 14 }}>帳號安全</Typography>
+          <Typography sx={{ fontSize: displayTextSize[14] }}>帳號安全</Typography>
         </MenuItem> */}
         <MenuItem onClick={handleSignOut} sx={{ gap: 1 }}>
           <PersonIcon sx={{ fontSize: 18 }} />
-          <Typography sx={{ fontSize: 14 }}>登出</Typography>
+          <Typography sx={{ fontSize: displayTextSize[14] }}>登出</Typography>
         </MenuItem>
       </Menu>
     </>

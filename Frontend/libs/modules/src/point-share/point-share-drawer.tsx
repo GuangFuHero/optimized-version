@@ -27,7 +27,7 @@ import {
 } from './share-links';
 import type { PointShareChannel, PointShareTarget } from './types';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -99,7 +99,7 @@ export function PointShareDrawer({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography
-                sx={{ color: color.fg.neutral.default, fontSize: 14, fontWeight: 800 }}
+                sx={{ color: color.fg.neutral.default, fontSize: displayTextSize[14], fontWeight: 800 }}
               >
                 {target?.title ?? '分享資訊'}
               </Typography>
@@ -114,7 +114,7 @@ export function PointShareDrawer({
           <Stack spacing={2.5} sx={{ minHeight: 0, overflowY: 'auto', p: 3 }}>
             <Stack spacing={1}>
               <Typography
-                sx={{ color: color.fg.neutral.default, fontSize: 14, fontWeight: 800 }}
+                sx={{ color: color.fg.neutral.default, fontSize: displayTextSize[14], fontWeight: 800 }}
               >
                 分享方式
               </Typography>
@@ -149,7 +149,7 @@ export function PointShareDrawer({
 
             <Stack spacing={1}>
               <Typography
-                sx={{ color: color.fg.neutral.default, fontSize: 14, fontWeight: 800 }}
+                sx={{ color: color.fg.neutral.default, fontSize: displayTextSize[14], fontWeight: 800 }}
               >
                 連結
               </Typography>
@@ -175,7 +175,7 @@ export function PointShareDrawer({
 
             <Stack spacing={1.5}>
               <Typography
-                sx={{ color: color.fg.neutral.default, fontSize: 14, fontWeight: 800 }}
+                sx={{ color: color.fg.neutral.default, fontSize: displayTextSize[14], fontWeight: 800 }}
               >
                 QR Code
               </Typography>

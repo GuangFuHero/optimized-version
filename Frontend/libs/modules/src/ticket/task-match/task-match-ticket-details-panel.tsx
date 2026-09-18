@@ -23,7 +23,7 @@ import {
 import type { RescueMapMarkerItem } from '../../map/types';
 import { formatTicketStatusLabel } from '../status';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -200,7 +200,7 @@ function SectionCard({
           <Typography
             sx={{
               color: detailPalette.heading,
-              fontSize: 15,
+              fontSize: displayTextSize[15],
               lineHeight: '22px',
               fontWeight: 800,
             }}
@@ -227,7 +227,7 @@ function DetailRow({
       <Typography
         sx={{
           color: detailPalette.muted,
-          fontSize: 12,
+          fontSize: displayTextSize[12],
           lineHeight: '18px',
           fontWeight: 700,
         }}
@@ -238,7 +238,7 @@ function DetailRow({
         <Typography
           sx={{
             color: detailPalette.text,
-            fontSize: 14,
+            fontSize: displayTextSize[14],
             lineHeight: '21px',
           }}
         >
@@ -264,7 +264,7 @@ function CarouselControls({
 }) {
   if (total <= 1) {
     return (
-      <Typography sx={{ color: detailPalette.muted, fontSize: 12 }}>
+      <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12] }}>
         {total === 0 ? '0 / 0' : '1 / 1'}
       </Typography>
     );
@@ -287,7 +287,7 @@ function CarouselControls({
       >
         <ChevronLeftRoundedIcon sx={{ fontSize: 18 }} />
       </ButtonBase>
-      <Typography sx={{ color: detailPalette.muted, fontSize: 12, minWidth: 44, textAlign: 'center' }}>
+      <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12], minWidth: 44, textAlign: 'center' }}>
         {index + 1} / {total}
       </Typography>
       <ButtonBase
@@ -467,7 +467,7 @@ export function TaskMatchTicketDetailsPanel({
         <Typography
           sx={{
             color: detailPalette.muted,
-            fontSize: 12,
+            fontSize: displayTextSize[12],
             lineHeight: '19px',
           }}
         >
@@ -547,7 +547,7 @@ export function TaskMatchTicketDetailsPanel({
         }
       >
         {isTicketFetching || isTaskFetching ? (
-          <Typography sx={{ color: detailPalette.muted, fontSize: 13 }}>
+          <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
             載入子任務資料中...
           </Typography>
         ) : activeTask ? (
@@ -563,7 +563,7 @@ export function TaskMatchTicketDetailsPanel({
               <Typography
                 sx={{
                   color: detailPalette.heading,
-                  fontSize: 16,
+                  fontSize: displayTextSize[16],
                   lineHeight: '24px',
                   fontWeight: 800,
                 }}
@@ -649,7 +649,7 @@ export function TaskMatchTicketDetailsPanel({
               <Typography
                 sx={{
                   color: detailPalette.heading,
-                  fontSize: 13,
+                  fontSize: displayTextSize[13],
                   lineHeight: '20px',
                   fontWeight: 800,
                 }}
@@ -668,10 +668,10 @@ export function TaskMatchTicketDetailsPanel({
                         border: `1px solid ${detailPalette.border}`,
                       }}
                     >
-                      <Typography sx={{ color: detailPalette.text, fontSize: 13, fontWeight: 700 }}>
+                      <Typography sx={{ color: detailPalette.text, fontSize: displayTextSize[13], fontWeight: 700 }}>
                         {property.propertyName}
                       </Typography>
-                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: 12 }}>
+                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
                         {property.propertyValue}
                         {property.quantity !== null && property.quantity !== undefined
                           ? ` / 數量 ${property.quantity}`
@@ -679,7 +679,7 @@ export function TaskMatchTicketDetailsPanel({
                         {property.status ? ` / 狀態 ${property.status}` : ''}
                       </Typography>
                       {property.comment?.trim() ? (
-                        <Typography sx={{ mt: 0.75, color: detailPalette.text, fontSize: 12 }}>
+                        <Typography sx={{ mt: 0.75, color: detailPalette.text, fontSize: displayTextSize[12] }}>
                           {property.comment}
                         </Typography>
                       ) : null}
@@ -687,7 +687,7 @@ export function TaskMatchTicketDetailsPanel({
                   ))}
                 </Stack>
               ) : (
-                <Typography sx={{ mt: 1, color: detailPalette.muted, fontSize: 12 }}>
+                <Typography sx={{ mt: 1, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
                   此子任務目前沒有額外屬性資料。
                 </Typography>
               )}
@@ -706,7 +706,7 @@ export function TaskMatchTicketDetailsPanel({
                 <Typography
                   sx={{
                     color: detailPalette.heading,
-                    fontSize: 13,
+                    fontSize: displayTextSize[13],
                     lineHeight: '20px',
                     fontWeight: 800,
                   }}
@@ -726,27 +726,27 @@ export function TaskMatchTicketDetailsPanel({
                         border: `1px solid ${detailPalette.border}`,
                       }}
                     >
-                      <Typography sx={{ color: detailPalette.text, fontSize: 13, fontWeight: 700 }}>
+                      <Typography sx={{ color: detailPalette.text, fontSize: displayTextSize[13], fontWeight: 700 }}>
                         {assignment.role?.trim() || '未指定角色'}
                       </Typography>
-                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: 12 }}>
+                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
                         接案者 UUID：{assignment.actorUuid}
                       </Typography>
-                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: 12 }}>
+                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
                         指派時間：{formatDateTime(assignment.assignedAt)}
                       </Typography>
                     </Box>
                   ))}
                 </Stack>
               ) : (
-                <Typography sx={{ mt: 1, color: detailPalette.muted, fontSize: 12 }}>
+                <Typography sx={{ mt: 1, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
                   此子任務目前沒有指派紀錄。
                 </Typography>
               )}
             </Box>
           </Stack>
         ) : (
-          <Typography sx={{ color: detailPalette.muted, fontSize: 13 }}>
+          <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
             這張任務單目前沒有子任務。
           </Typography>
         )}
@@ -799,7 +799,7 @@ export function TaskMatchTicketDetailsPanel({
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <ImageRoundedIcon sx={{ color: detailPalette.muted, fontSize: 18 }} />
-              <Typography sx={{ color: detailPalette.muted, fontSize: 13 }}>
+              <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
                 這張任務單目前沒有照片。
               </Typography>
             </Box>

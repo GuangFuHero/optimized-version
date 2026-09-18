@@ -23,7 +23,7 @@ import { RescueMapLayerPanel } from './components/rescue-map-layer-panel';
 import { RescueMapStatusMessage } from './components/rescue-map-status-message';
 import { RescueMapTopBar } from './components/rescue-map-top-bar';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from './constants';
-import { designTokens, withAlpha } from '@rescue-frontend/ui';
+import { designTokens, displayTextSizeCss, withAlpha } from '@rescue-frontend/ui';
 
 import { useRescueMapController } from './hooks/use-rescue-map-controller';
 import type {
@@ -79,17 +79,17 @@ const MAP_STATIC_GLOBAL_STYLES = {
   '.map-marker-cluster--small': {
     width: 42,
     height: 42,
-    fontSize: 13,
+    ...displayTextSizeCss(13),
   },
   '.map-marker-cluster--medium': {
     width: 50,
     height: 50,
-    fontSize: 14,
+    ...displayTextSizeCss(14),
   },
   '.map-marker-cluster--large': {
     width: 58,
     height: 58,
-    fontSize: 15,
+    ...displayTextSizeCss(15),
   },
   '.map-marker-cluster--ticket': {
     color: color.fg.onPrimary,
@@ -192,6 +192,9 @@ export const Map = memo(function Map({
       ...MAP_STATIC_GLOBAL_STYLES,
       '.leaflet-control-scale-line': {
         padding: '2px 8px',
+        // Leaflet's own chrome stays off the display scale — `site.css` pins the scale line,
+        // attribution and tooltip to raw px. It is map furniture, not content to be read at arm's
+        // length, and it has to fit Leaflet's fixed control geometry.
         fontSize: 11,
         fontWeight: 700,
         color: color.fg.neutral.default,

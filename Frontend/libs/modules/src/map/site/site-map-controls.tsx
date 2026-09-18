@@ -14,7 +14,7 @@ import { SiteControlSurface } from '../../route/controls/control-surface';
 import { SiteDataTypeToggle } from '../../route/controls/data-type-toggle';
 import { SiteSubTypeFilter } from '../../route/controls/sub-type-filter';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
@@ -188,7 +188,7 @@ function SitePinnedFilterRow({
               >
                 <Typography
                   sx={{
-                    fontSize: 12,
+                    fontSize: displayTextSize[12],
                     fontWeight: active ? 800 : 700,
                     lineHeight: '16px',
                     color: 'inherit',

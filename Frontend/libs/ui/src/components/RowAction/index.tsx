@@ -3,7 +3,7 @@
 import { ButtonBase, type ButtonBaseProps } from '@mui/material';
 import type { ReactNode } from 'react';
 
-import { designTokens } from '../../theme';
+import { designTokens, displayTextSize } from '../../theme';
 
 const { color, radius, typography } = designTokens;
 
@@ -70,7 +70,7 @@ export function RowAction({
         background: t.background,
         color: t.color,
         fontFamily: typography.label[400].fontFamily,
-        fontSize: typography.label[400].fontSize,
+        fontSize: displayTextSize[14],
         lineHeight: typography.label[400].lineHeight,
         fontWeight: 700,
         whiteSpace: 'nowrap',

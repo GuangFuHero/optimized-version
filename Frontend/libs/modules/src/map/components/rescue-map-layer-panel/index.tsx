@@ -10,7 +10,7 @@ import {
 } from '../../constants';
 import type { RescueMapBaseLayer, RescueMapControllerValue } from '../../types';
 
-import { designTokens, withAlpha } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, withAlpha } from '@rescue-frontend/ui';
 
 const { color, radius, shadow } = designTokens;
 
@@ -37,15 +37,15 @@ function RescueMapLayerPanelContent({
         />
       ) : null}
 
-      <Typography sx={{ fontSize: 20, fontWeight: 800, color: color.fg.neutral.default }}>
+      <Typography sx={{ fontSize: displayTextSize[20], fontWeight: 800, color: color.fg.neutral.default }}>
         圖層切換
       </Typography>
-      <Typography sx={{ mt: 0.6, fontSize: 14, color: color.fg.neutral.subtle }}>
+      <Typography sx={{ mt: 0.6, fontSize: displayTextSize[14], color: color.fg.neutral.subtle }}>
         選擇底圖與目前可用的疊加圖層。
       </Typography>
 
       <Typography
-        sx={{ mt: 2, fontSize: 13, fontWeight: 800, color: color.fg.neutral.default }}
+        sx={{ mt: 2, fontSize: displayTextSize[13], fontWeight: 800, color: color.fg.neutral.default }}
       >
         底圖
       </Typography>
@@ -109,18 +109,18 @@ function RescueMapLayerPanelContent({
 
                   <Box sx={{ flex: 1 }}>
                     <Typography
-                      sx={{ fontSize: 16, fontWeight: 800, color: color.fg.neutral.default }}
+                      sx={{ fontSize: displayTextSize[16], fontWeight: 800, color: color.fg.neutral.default }}
                     >
                       {value.label}
                     </Typography>
                     <Typography
-                      sx={{ mt: 0.35, fontSize: 12, color: color.fg.neutral.subtle }}
+                      sx={{ mt: 0.35, fontSize: displayTextSize[12], color: color.fg.neutral.subtle }}
                     >
                       {value.description}
                     </Typography>
                     {value.licenseNote ? (
                       <Typography
-                        sx={{ mt: 0.35, fontSize: 11, color: color.fg.warning }}
+                        sx={{ mt: 0.35, fontSize: displayTextSize[11], color: color.fg.warning }}
                       >
                         {value.licenseNote}
                       </Typography>
@@ -137,7 +137,7 @@ function RescueMapLayerPanelContent({
       </Stack>
 
       <Typography
-        sx={{ mt: 2.4, fontSize: 13, fontWeight: 800, color: color.fg.neutral.default }}
+        sx={{ mt: 2.4, fontSize: displayTextSize[13], fontWeight: 800, color: color.fg.neutral.default }}
       >
         疊加圖層
       </Typography>
@@ -200,12 +200,12 @@ function RescueMapLayerPanelContent({
 
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
-                      sx={{ fontSize: 16, fontWeight: 800, color: color.fg.neutral.default }}
+                      sx={{ fontSize: displayTextSize[16], fontWeight: 800, color: color.fg.neutral.default }}
                     >
                       {value.label}
                     </Typography>
                     <Typography
-                      sx={{ mt: 0.35, fontSize: 12, color: color.fg.neutral.subtle }}
+                      sx={{ mt: 0.35, fontSize: displayTextSize[12], color: color.fg.neutral.subtle }}
                     >
                       {value.disabledReason ?? value.description}
                     </Typography>

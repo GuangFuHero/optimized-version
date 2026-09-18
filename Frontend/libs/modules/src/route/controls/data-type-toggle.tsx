@@ -4,7 +4,7 @@ import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import Inventory2RoundedIcon from '@mui/icons-material/Inventory2Rounded';
 import { ButtonBase, Stack } from '@mui/material';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { SITE_DATA_TYPES, SITE_DATA_TYPE_LABELS } from '../constants';
 import type { RescueMapDataType } from '../types';
@@ -34,7 +34,7 @@ function segmentSx(active: boolean) {
     background: active ? color.bg.secondary.subtle : 'transparent',
     color: active ? color.fg.neutral.default : color.fg.neutral.subtle,
     fontFamily: typography.label[400].fontFamily,
-    fontSize: typography.label[400].fontSize,
+    fontSize: displayTextSize[14],
     lineHeight: 1.33,
     fontWeight: 700,
     whiteSpace: 'nowrap',

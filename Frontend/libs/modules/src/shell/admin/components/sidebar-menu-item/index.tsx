@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 
 import { getRescueColorScheme } from '@rescue-frontend/ui';
 
-import { designTokens, withAlpha } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, withAlpha } from '@rescue-frontend/ui';
 
 const { color: token } = designTokens;
 
@@ -117,7 +117,11 @@ export function SidebarMenuItem({
           whiteSpace: 'nowrap',
           my: 0,
           color,
-          fontSize: 14,
+          // 🔴 The designer's 2026-09-11 note calls this element out by name: the sidebar label
+          // rides the DS `label[400]` size, which is NOT on the display ladder, so it sat still
+          // while the rest of the site grew on a phone. 18px is their stated ceiling for a row
+          // this short — do not raise it further without also raising `lineHeight`.
+          fontSize: displayTextSize[14],
           lineHeight,
           fontWeight: item.fontWeight ?? 400,
           letterSpacing,

@@ -9,7 +9,7 @@ import ShieldRoundedIcon from '@mui/icons-material/Shield';
 import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
-import { Badge, designTokens, RowAction, type BadgeTone } from '@rescue-frontend/ui';
+import { Badge, designTokens, displayTextSize, RowAction, type BadgeTone } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import {
@@ -158,7 +158,7 @@ export function SiteListRow({
               >
                 <Typography
                   sx={{
-                    fontSize: 15,
+                    fontSize: displayTextSize[15],
                     fontWeight: 700,
                     lineHeight: 1.4,
                     color: color.fg.neutral.default,
@@ -190,7 +190,7 @@ export function SiteListRow({
             <Typography
               sx={{
                 mt: 0.5,
-                fontSize: 13,
+                fontSize: displayTextSize[13],
                 lineHeight: 1.6,
                 color: color.fg.neutral.subtle,
               }}
@@ -217,7 +217,7 @@ export function SiteListRow({
           >
             <Typography
               sx={{
-                fontSize: 12,
+                fontSize: displayTextSize[12],
                 lineHeight: 1.5,
                 color: color.fg.neutral.default,
                 overflow: 'hidden',
@@ -246,7 +246,7 @@ export function SiteListRow({
           >
             <Typography
               sx={{
-                fontSize: 12,
+                fontSize: displayTextSize[12],
                 lineHeight: 1.5,
                 color: color.fg.neutral.default,
                 overflow: 'hidden',
@@ -258,7 +258,7 @@ export function SiteListRow({
             </Typography>
             <Typography
               sx={{
-                fontSize: 11,
+                fontSize: displayTextSize[11],
                 lineHeight: 1.4,
                 fontWeight: 700,
                 color: color.fg.neutral.subtle,

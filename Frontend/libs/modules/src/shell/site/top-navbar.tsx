@@ -6,7 +6,7 @@ import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 
-import { getRescueColorScheme } from '@rescue-frontend/ui';
+import { displayTextSize, getRescueColorScheme } from '@rescue-frontend/ui';
 
 import { GuangFuBrandIcon } from '../../brand';
 import {
@@ -56,7 +56,7 @@ export function SiteTopNavBar({
         <Typography
           sx={{
             color: palette.brandText,
-            fontSize: 16,
+            fontSize: displayTextSize[16],
             lineHeight: '24px',
             fontWeight: 700,
             whiteSpace: 'nowrap',

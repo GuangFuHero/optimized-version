@@ -3,7 +3,7 @@
 import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 
-import { designTokens, withAlpha } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, withAlpha } from '@rescue-frontend/ui';
 
 const { color, radius, shadow, typography } = designTokens;
 
@@ -52,7 +52,7 @@ function KpiValueCard({
           sx={{
             color: color.fg.neutral.subtle,
             fontFamily: typography.label[400].fontFamily,
-            fontSize: 10,
+            fontSize: displayTextSize[10],
             fontWeight: 700,
             lineHeight: 1.2,
             letterSpacing: '.06em',
@@ -64,7 +64,7 @@ function KpiValueCard({
         <Typography
           sx={{
             color: valueColor,
-            fontSize: 24,
+            fontSize: displayTextSize[24],
             fontWeight: 700,
             lineHeight: '32px',
             letterSpacing: 0,
@@ -89,7 +89,7 @@ function VolunteerKpiCard() {
           <Typography
             sx={{
               color: color.fg.neutral.subtle,
-              fontSize: 10,
+              fontSize: displayTextSize[10],
               fontWeight: 700,
               lineHeight: '12px',
               letterSpacing: 0,
@@ -101,7 +101,7 @@ function VolunteerKpiCard() {
           <Typography
             sx={{
               color: color.brand.primary.subtle,
-              fontSize: 12,
+              fontSize: displayTextSize[12],
               fontWeight: 700,
               lineHeight: '16px',
               letterSpacing: 0,
