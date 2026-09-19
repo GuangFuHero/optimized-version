@@ -316,9 +316,15 @@ async def test_tickets_returns_data(client, sample_ticket):
 
 
 @pytest.mark.asyncio
-async def test_tickets_with_bounds(client, sample_ticket):
-    """Tickets query with a bounding box returns only tickets inside the bounds."""
-    response = await client.post("/graphql", json={
+async def test_tickets_with_bounds(client, sample_ticket, coordinator_auth):
+    """Tickets query with a bounding box returns only tickets inside the bounds.
+
+    Asked as a holder of `ticket.view_pii` at `all`: a bbox only reaches tickets whose point
+    the caller may see (ADR-282), and the anonymous case is covered in
+    test_ticket_coordinate_pii.py.
+    """
+    _, token = coordinator_auth
+    response = await client.post("/graphql", headers=auth_header(token), json={
         "query": """
             query {
                 tickets(bounds: {minLat: 24.9, maxLat: 25.1, minLng: 121.4, maxLng: 121.6}) {
