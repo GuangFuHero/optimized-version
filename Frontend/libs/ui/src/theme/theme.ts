@@ -13,7 +13,7 @@ import type { CssVarsTheme } from '@mui/material/styles';
 import { extendTheme } from '@mui/material/styles';
 
 import { designExtensions } from './bridge';
-import { IOS_NO_ZOOM_INPUT_PX } from './design-tokens';
+import { designTokens, IOS_NO_ZOOM_INPUT_PX } from './design-tokens';
 import {
   colorSchemes as cs,
   moduleColorSchemes,
@@ -41,6 +41,8 @@ declare module '@mui/material/styles' {
     rescue: RescueModuleColorScheme;
   }
 }
+
+const { focusRing } = designTokens;
 
 export const theme = extendTheme({
   breakpoints: {
@@ -134,6 +136,21 @@ export const theme = extendTheme({
   },
 
   components: {
+    // Keyboard focus ring (`designTokens.focusRing`, from the design system's `tokens/base.css`).
+    // ButtonBase resets `outline: 0` and signals focus with a ripple instead, but most controls
+    // here set `disableRipple`, so keyboard users saw no focus at all. `&:focus-visible` outranks
+    // ButtonBase's own reset. It relies on the browser's :focus-visible heuristic to stay quiet on
+    // mouse clicks — that part is per spec, not verified in an automated browser.
+    MuiButtonBase: {
+      styleOverrides: {
+        root: {
+          '&:focus-visible': {
+            outline: `${focusRing.width}px solid ${focusRing.color}`,
+            outlineOffset: focusRing.offset,
+          },
+        },
+      },
+    },
     // 🔒 A focused input smaller than 16px makes iOS Safari zoom the whole page in, and the user has
     // to pinch back out — worse than small text. `site.css` pins inputs to 16px below its 767px
     // cutoff for exactly this reason; `down('tablet')` is that same cutoff.

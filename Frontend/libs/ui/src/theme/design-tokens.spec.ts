@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { AA_TEXT, contrastRatio } from './contrast';
+import { AA_LARGE, AA_TEXT, contrastRatio } from './contrast';
 import { designExtensions, designToM3Light } from './bridge';
 import {
   designTokens,
@@ -258,6 +258,30 @@ describe('scales', () => {
  * undoes the one thing this scale is for. That regression already happened once in the prototype —
  * the first pass shipped +2 and came back as 「字體沒有變大」.
  */
+/**
+ * The ring is drawn outside the control (`offset`), so it sits on whatever surface surrounds the
+ * control. It has to read against every neutral surface a focusable thing can sit on — `sunken` is
+ * the track behind the map/list view switch's segments.
+ */
+describe('keyboard focus ring', () => {
+  const { focusRing } = designTokens;
+  const surfaces: [name: string, bg: string][] = [
+    ['neutral.default', color.bg.neutral.default],
+    ['neutral.subtle', color.bg.neutral.subtle],
+    ['neutral.sunken', color.bg.neutral.sunken],
+  ];
+
+  it.each(surfaces)('is visible on bg.%s', (_name, bg) => {
+    expect(contrastRatio(focusRing.color, bg)).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+
+  it('matches the design system base rule', () => {
+    expect(focusRing.width).toBe(3);
+    expect(focusRing.offset).toBe(2);
+    expect(focusRing.color).toBe(color.brand.secondary.default);
+  });
+});
+
 describe('display text scale', () => {
   const steps = Object.keys(displayTextSize).map(Number) as DisplayTextStep[];
 

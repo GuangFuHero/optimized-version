@@ -240,6 +240,22 @@ export const semanticShadow = {
   lg: primitives.shadow.lg,
 } as const;
 
+/**
+ * Keyboard focus indicator — mirrors the design system's global rule in `tokens/base.css`:
+ * `:focus-visible` gets a 3px solid `--color-brand-secondary-default` outline, offset 2px.
+ *
+ * The ring is drawn OUTSIDE the element (the offset), so what it has to contrast with is the
+ * surface around the control, not the control's own fill. The spec checks it against every neutral
+ * surface a focusable control sits on.
+ */
+export const semanticFocusRing = {
+  color: semanticColor.brand.secondary.default,
+  /** px */
+  width: 3,
+  /** px */
+  offset: 2,
+} as const;
+
 export const semanticRadius = {
   sm: primitives.scale[6],
   md: primitives.scale[12],
@@ -525,6 +541,7 @@ export const designTokens = {
   fontStack,
   color: semanticColor,
   shadow: semanticShadow,
+  focusRing: semanticFocusRing,
   radius: semanticRadius,
   spacing: semanticSpacing,
   typography: semanticTypography,
