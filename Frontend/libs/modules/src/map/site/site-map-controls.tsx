@@ -13,6 +13,7 @@ import type { RescueMapDataType, SiteSubDataTypeOption } from '../../route/types
 import { SiteControlSurface } from '../../route/controls/control-surface';
 import { SiteDataTypeToggle } from '../../route/controls/data-type-toggle';
 import { SiteSubTypeFilter } from '../../route/controls/sub-type-filter';
+import { SiteViewSwitch } from '../../route/controls/view-switch';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
@@ -90,6 +91,18 @@ function writePinnedSubDataTypes(
     JSON.stringify(pinnedSubDataTypes),
   );
 }
+
+/**
+ * 地圖欄寬到多少才放得下兩段切換（container query 門檻）。
+ *
+ * 左上群組（站點⇄任務＋篩選＋兩段切換）要放在圖層按鈕左邊：左邊距 24 ＋ 群組寬 ＋ 間距 16 ＋
+ * 圖層按鈕 40 ＋ 右邊距 16。群組寬實測：桌機字級 444px → 需要 540；手機字級 484px → 需要 580。
+ * 取 640 讓兩種字級都有餘量。
+ *
+ * 以視窗寬度判斷會漏掉兩種情況：桌機開著詳情面板時地圖欄少 352px，滑鼠停在側欄上時再少 192px。
+ * 768–923px 開著詳情時群組會被裁切並撞上圖層按鈕 —— 平板直向就落在這個範圍。
+ */
+const VIEW_SWITCH_SEGMENTED_MIN = '@640';
 
 function SiteLayerButton({ controller }: SiteMapControlsProps) {
   return (
@@ -255,6 +268,9 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
         inset: 0,
         zIndex: 1200,
         pointerEvents: 'none',
+        // 地圖這一欄的寬度會隨桌機詳情面板（352px）與側欄 hover 展開（+192px）變動，
+        // 視窗寬度說明不了這裡剩多少空間，所以下面的切換依這一欄的寬度決定。
+        containerType: 'inline-size',
       }}
     >
       <Box
@@ -291,6 +307,12 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
             onToggle={controller.toggleSubDataType}
             onTogglePinned={handleTogglePinnedSubDataType}
           />
+          {/* 空間夠：帶字的兩段切換，把「現在是哪一種看法」講出來。 */}
+          <Box sx={{ display: { '@': 'none', [VIEW_SWITCH_SEGMENTED_MIN]: 'flex' } }}>
+            <SiteControlSurface sx={{ p: '3px' }}>
+              <SiteViewSwitch module="map" variant="segmented" />
+            </SiteControlSurface>
+          </Box>
         </Box>
         <SitePinnedFilterRow
           items={pinnedOptions}
@@ -304,10 +326,26 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
           position: 'absolute',
           top: 16,
           right: 16,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
           pointerEvents: 'auto',
         }}
       >
         <SiteLayerButton controller={controller} />
+        {/* 空間不夠：純圖示，跟圖層按鈕同一種形狀。不做第二組分段控制 —— 左邊已經有
+            站點⇄任務，兩組並排分不出誰是誰。
+            直向疊在圖層按鈕下方而不是並排：390px 實測並排會蓋住「篩選」。 */}
+        <SiteControlSurface
+          sx={{
+            display: { '@': 'grid', [VIEW_SWITCH_SEGMENTED_MIN]: 'none' },
+            width: 40,
+            height: 40,
+            placeItems: 'center',
+          }}
+        >
+          <SiteViewSwitch module="map" variant="icon" />
+        </SiteControlSurface>
       </Box>
     </Box>
   );

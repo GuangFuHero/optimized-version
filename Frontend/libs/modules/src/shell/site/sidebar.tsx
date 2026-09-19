@@ -8,18 +8,11 @@ import type { SidebarResolvedContent } from '../sidebar';
 import { SidebarPanel } from '../sidebar';
 import { useSiteRouteState } from '../../route';
 import { SITE_MODULES } from '../../route/constants';
+import { SITE_MODULE_META } from '../../route/module-meta';
 import { createSiteHref } from '../../route/serialize';
 import type { SiteModule, SiteRouteState } from '../../route/types';
 
-const MapIcon = Icons.map;
-const DataGridIcon = Icons.dataGrid;
 const PersonIcon = Icons.person;
-
-const SITE_MODULE_META: Record<SiteModule, { label: string; icon: ReactNode }> =
-  {
-    map: { label: '地圖', icon: <MapIcon /> },
-    list: { label: '列表', icon: <DataGridIcon /> },
-  };
 
 /**
  * 依目前模組與路由狀態建立側欄內容。
@@ -33,14 +26,18 @@ function buildSiteSidebarContent(
   onSignOut?: () => void,
 ): SidebarResolvedContent {
   return {
-    navigationItems: SITE_MODULES.map((target) => ({
-      id: target,
-      label: SITE_MODULE_META[target].label,
-      icon: SITE_MODULE_META[target].icon,
-      selected: target === module,
-      fontWeight: 600,
-      path: createSiteHref(target, state),
-    })),
+    navigationItems: SITE_MODULES.map((target) => {
+      const { label, Icon } = SITE_MODULE_META[target];
+
+      return {
+        id: target,
+        label,
+        icon: <Icon />,
+        selected: target === module,
+        fontWeight: 600,
+        path: createSiteHref(target, state),
+      };
+    }),
     footerActions: isAuthenticated
       ? []
       : [
