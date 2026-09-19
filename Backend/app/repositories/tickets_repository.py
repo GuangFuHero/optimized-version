@@ -1,9 +1,10 @@
 """Repositories for tickets, ticket tasks, task properties, and disaster-field values."""
 
-from sqlalchemy import delete, exists, func, or_, select
+from sqlalchemy import and_, delete, exists, false, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
+from app.db.h3 import COARSE_MAX_H3_RESOLUTION, coarse_margin_degrees, h3_centroid
 from app.infrastructure.repository.base import GenericRepository
 from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
@@ -17,7 +18,7 @@ class TicketRepository(GenericRepository[Tickets]):
         """Initialize with Tickets as the managed model."""
         super().__init__(Tickets)
 
-    def _search_condition(self, term: str):
+    def _search_condition(self, term: str, *, public_only: bool = False):
         """Match the ticket itself, its tasks, or those tasks' properties.
 
         EXISTS rather than JOIN throughout (ADR-080) — a ticket with three matching task
@@ -29,16 +30,24 @@ class TicketRepository(GenericRepository[Tickets]):
         station's — see ADR-146. The same table means "shelter location" under a station
         and "the requester's home" under a ticket, and ticket.view is public, so searching
         it would let an anonymous caller confirm a street address the API never returns.
+
+        `public_only` applies the same reasoning to the free text (ADR-281): it matches the
+        title and the task names — each with its own trigram index — instead of the
+        `search_text` columns, which also carry the description and task description a
+        caller without ticket.view_detail cannot read. Task properties are structured values
+        and match either way.
         """
         pattern = like_pattern(term)
+        ticket_text = self.model.title if public_only else self.model.search_text
+        task_text = TicketTask.task_name if public_only else TicketTask.search_text
         return or_(
-            matches(self.model.search_text, pattern),
+            matches(ticket_text, pattern),
             exists(
                 select(1).where(
                     TicketTask.ticket_uuid == self.model.uuid,
                     TicketTask.delete_at.is_(None),
                     or_(
-                        matches(TicketTask.search_text, pattern),
+                        matches(task_text, pattern),
                         exists(
                             select(1).where(
                                 TaskProperty.task_uuid == TicketTask.uuid,
@@ -59,6 +68,8 @@ class TicketRepository(GenericRepository[Tickets]):
         priority: str | None = None,
         q: str | None = None,
         extra_filters=(),
+        detail_filters,
+        coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
     ) -> list:
         """The single source of truth for "which tickets match this request".
 
@@ -66,40 +77,81 @@ class TicketRepository(GenericRepository[Tickets]):
         nothing else. A condition present in one but not the other makes totalCount
         disagree with the rows actually returned, which silently breaks pagination — and
         no existing test would go red.
+
+        `detail_filters` is `scope_filter()` of the caller's ticket.view_detail: the rows
+        whose exact point and free text the caller may read ([] = all of them, [false()] =
+        none). Required, with no default, so a new caller cannot forget it and fall open.
+        Each row is then matched on what that caller can see of it (ADR-282) — otherwise a
+        box shrunk around a ticket, or a keyword taken from its description, would give
+        back what the fields withhold.
         """
         conditions = [self.model.delete_at.is_(None), *extra_filters]
+        # NULL-safe: `created_by = :me` is NULL on a row with no author, and NOT NULL is
+        # still NULL — such a row would match neither branch below and silently vanish.
+        seen = func.coalesce(and_(*detail_filters), false()) if detail_filters else None
         if bounds:
-            conditions.append(
-                func.ST_Intersects(
-                    self.model.geometry,
-                    func.ST_MakeEnvelope(
-                        bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
-                    ),
-                )
+            envelope = func.ST_MakeEnvelope(
+                bounds.min_lng, bounds.min_lat, bounds.max_lng, bounds.max_lat, 4326
             )
+            exact = func.ST_Intersects(self.model.geometry, envelope)
+            if seen is None:
+                conditions.append(exact)
+            else:
+                # The coarse branch uses the cell centre at the resolution the caller is
+                # shown, so every row returned lies inside the box it asked about. The centre
+                # is an expression no index can serve, so a pre-filter comes first: a row
+                # whose centre is in the box has its point within one cell of it, and "point
+                # in the grown box" is a question the GIST index on `geometry` answers. Only
+                # ever a superset — the centre test below still decides every row, so the
+                # pre-filter narrows the scan without widening what can be learned (ADR-282).
+                dx, dy = coarse_margin_degrees(
+                    coarse_resolution, max(abs(bounds.min_lat), abs(bounds.max_lat))
+                )
+                conditions.append(
+                    func.ST_Intersects(self.model.geometry, func.ST_Expand(envelope, dx, dy))
+                )
+                coarse = func.ST_Intersects(
+                    h3_centroid(self.model.geometry, coarse_resolution), envelope
+                )
+                conditions.append(or_(and_(seen, exact), and_(not_(seen), coarse)))
         if status:
             conditions.append(self.model.status == status)
         if priority:
             conditions.append(self.model.priority == priority)
         term = normalize_query(q)
         if term is not None:
-            conditions.append(self._search_condition(term))
+            if seen is None:
+                conditions.append(self._search_condition(term))
+            else:
+                # The public match is a subset of what the full one matches on the same row,
+                # so OR-ing them never loses a row the caller could legitimately find.
+                conditions.append(
+                    or_(
+                        self._search_condition(term, public_only=True),
+                        and_(seen, self._search_condition(term)),
+                    )
+                )
         return conditions
 
-    def _order_by(self, term: str | None) -> list:
+    def _order_by(self, term: str | None, *, public_only: bool = False) -> list:
         """Relevance first when searching, otherwise newest first (ADR-083/147/153).
 
         Same three-key shape as StationRepository._order_by — "the ticket's own text
         matched" as a boolean first, then similarity() to grade within each group, then
         the standing order. See that docstring for why similarity() alone cannot express
         this for CJK, and for why the standing order ends in `uuid`.
+
+        `public_only` ranks on the title alone (ADR-281): ranking on `search_text` would
+        order the rows by how well a description the caller cannot read matched, leaking
+        that match one position at a time.
         """
         standing = [self.model.created_at.desc(), self.model.uuid.desc()]
         if term is None:
             return standing
+        text_column = self.model.title if public_only else self.model.search_text
         return [
-            matches(self.model.search_text, like_pattern(term)).desc(),
-            func.similarity(self.model.search_text, term).desc(),
+            matches(text_column, like_pattern(term)).desc(),
+            func.similarity(text_column, term).desc(),
             *standing,
         ]
 
@@ -114,16 +166,22 @@ class TicketRepository(GenericRepository[Tickets]):
         skip: int = 0,
         limit: int = 50,
         extra_filters=(),
+        detail_filters,
+        coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
     ) -> list[Tickets]:
-        """List active tickets with optional bbox/status/priority/keyword filter and RBAC scope."""
+        """List active tickets with optional bbox/status/priority/keyword filter and RBAC scope.
+
+        `detail_filters` / `coarse_resolution`: see _active_conditions (ADR-281/282).
+        """
         term = normalize_query(q)
         conditions = self._active_conditions(
-            bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters
+            bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters,
+            detail_filters=detail_filters, coarse_resolution=coarse_resolution,
         )
         async with search_timeout(db, term):
             result = await db.execute(
                 select(self.model).where(*conditions)
-                .order_by(*self._order_by(term))
+                .order_by(*self._order_by(term, public_only=bool(detail_filters)))
                 .offset(skip).limit(limit)
             )
         return result.scalars().all()
@@ -137,10 +195,13 @@ class TicketRepository(GenericRepository[Tickets]):
         priority: str | None = None,
         q: str | None = None,
         extra_filters=(),
+        detail_filters,
+        coarse_resolution: int = COARSE_MAX_H3_RESOLUTION,
     ) -> int:
         """Count active tickets — MUST use the same conditions as list_active()."""
         conditions = self._active_conditions(
-            bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters
+            bounds=bounds, status=status, priority=priority, q=q, extra_filters=extra_filters,
+            detail_filters=detail_filters, coarse_resolution=coarse_resolution,
         )
         async with search_timeout(db, normalize_query(q)):
             return await db.scalar(
@@ -164,8 +225,14 @@ class TicketTaskRepository(GenericRepository[TicketTask]):
         q: str | None = None,
         skip: int = 0,
         limit: int = 50,
+        public_only: bool,
     ) -> list[TicketTask]:
-        """List active tasks for a ticket with optional status and keyword filters."""
+        """List active tasks for a ticket with optional status and keyword filters.
+
+        `public_only` — the caller may not read this ticket's detail (ADR-281) — matches `q`
+        against the task name instead of `search_text`, which carries the task description
+        too. Required, like TicketRepository's `detail_filters`, so no caller falls open.
+        """
         query = select(self.model).where(
             self.model.ticket_uuid == ticket_uuid,
             self.model.delete_at.is_(None),
@@ -175,11 +242,12 @@ class TicketTaskRepository(GenericRepository[TicketTask]):
         term = normalize_query(q)
         if term is not None:
             pattern = like_pattern(term)
+            task_text = self.model.task_name if public_only else self.model.search_text
             # A task matches on its own name/description or on any of its properties,
             # mirroring how a ticket reaches into its tasks (ADR-080).
             query = query.where(
                 or_(
-                    matches(self.model.search_text, pattern),
+                    matches(task_text, pattern),
                     exists(
                         select(1).where(
                             TaskProperty.task_uuid == self.model.uuid,

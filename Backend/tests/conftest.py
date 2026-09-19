@@ -80,6 +80,11 @@ async def _ensure_test_database():
         # Base.metadata.create_all builds those indexes, so without this every schema
         # creation below fails — not one test, the whole suite.
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+        # h3 + h3_postgis snap a ticket's point to a hexagon for callers without
+        # ticket.view_detail (ADR-281). The resolvers call them at query time, so a
+        # database without them fails every anonymous ticket read.
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS h3")
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE")
     await eng.dispose()
 
 
@@ -113,6 +118,9 @@ async def db():
         # so it must be re-created here too — Base.metadata.create_all builds the
         # search_text GIN indexes, which need gin_trgm_ops.
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
+        # Same reason as pg_trgm: h3 installs into public and went with the schema.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3;"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
@@ -132,6 +140,9 @@ async def db_session():
         # so it must be re-created here too — Base.metadata.create_all builds the
         # search_text GIN indexes, which need gin_trgm_ops.
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
+        # Same reason as pg_trgm: h3 installs into public and went with the schema.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3;"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:

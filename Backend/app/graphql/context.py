@@ -44,7 +44,11 @@ async def get_context(request: Request):
             # redis comes from app.state because this path bypasses FastAPI's dependency
             # injection — get_current_user needs it to check the token's session (ADR-102).
             user = await get_current_user(db=db, token=token, redis=request.app.state.redis)
-        yield {"db": db, "user": user, "loaders": build_loaders(db), "_rbac_cache": {}}
+        yield {
+            "db": db, "user": user, "loaders": build_loaders(db), "_rbac_cache": {},
+            # ticket uuid -> Task[bool]; see app/graphql/tickets/types.py:ticket_detail_visible.
+            "_ticket_detail_visible": {},
+        }
     finally:
         await db_gen.aclose()
 

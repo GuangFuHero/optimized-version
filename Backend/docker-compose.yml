@@ -3,7 +3,10 @@
 # ./scripts/deploy.sh with docker-compose.staging.yml — never `docker compose up` directly.
 services:
   db:
-    image: postgis/postgis:16-3.4
+    # PostGIS + h3-pg (ADR-283). After pulling this change once:
+    #   docker compose up -d --build db
+    build: ./docker/postgres-h3
+    image: disaster-postgres-h3:16-3.4
     ports:
       - "5432:5432"
     environment:

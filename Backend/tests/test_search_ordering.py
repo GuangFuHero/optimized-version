@@ -66,6 +66,18 @@ def test_searching_only_prepends_relevance_keys():
         assert len(searching) == len(standing) + 2, "expected exactly two relevance keys"
 
 
+def test_the_public_ticket_ordering_has_the_same_shape():
+    """Ranking on the title alone (ADR-281) is still relevance-over-standing, still total."""
+    repo = TicketRepository()
+    standing = [_rendered(c) for c in repo._order_by(None, public_only=True)]
+    searching = [_rendered(c) for c in repo._order_by("光復", public_only=True)]
+
+    assert searching[-len(standing):] == standing
+    assert len(searching) == len(standing) + 2
+    assert searching[-1] == _rendered(Tickets.uuid.desc())
+    assert "search_text" not in " ".join(searching), "ranked on text the caller cannot read"
+
+
 @pytest.mark.asyncio
 async def test_list_by_ticket_also_ends_on_the_primary_key():
     """Same rule for the third paged list, which builds its ORDER BY inline.
@@ -77,7 +89,9 @@ async def test_list_by_ticket_also_ends_on_the_primary_key():
     timestamp, so the tie this guards against is the normal case, not an edge case.
     """
     db = CapturingSession()
-    await TicketTaskRepository().list_by_ticket(db, "00000000-0000-0000-0000-000000000000")
+    await TicketTaskRepository().list_by_ticket(
+        db, "00000000-0000-0000-0000-000000000000", public_only=False
+    )
 
     last = list(db.statements[-1]._order_by_clauses)[-1]
     assert _rendered(last) == _rendered(TicketTask.uuid.desc()), (

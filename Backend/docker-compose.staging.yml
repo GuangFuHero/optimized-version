@@ -5,7 +5,10 @@
 # frontend moves to the cloud and the backend must serve https.
 services:
   db:
-    image: postgis/postgis:16-3.4
+    # PostGIS + h3-pg (ADR-283). Built by deploy.sh step 5 with the other images, so a
+    # change to the Dockerfile reaches the VM on the next deploy.
+    build: ./docker/postgres-h3
+    image: disaster-postgres-h3:16-3.4
     restart: unless-stopped
     # Loopback-ONLY publish: reachable from the VM itself (and SSH tunnels) for DB inspection,
     # never from the internet (binds 127.0.0.1, not 0.0.0.0).
