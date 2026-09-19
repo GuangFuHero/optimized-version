@@ -16,7 +16,7 @@ the wrong order); the calibration below is his.
 import math
 
 from geoalchemy2 import Geometry
-from sqlalchemy import cast, func
+from sqlalchemy import String, cast, func
 
 # The finest cell a caller without ticket.view_detail can ever get, whatever zoom it sends.
 # Resolution 8: average edge 531 m, area 0.737 km², about 1 km across (h3geo.org resolution
@@ -77,9 +77,27 @@ def coarse_resolution(zoom: float | None) -> int:
     return min(zoom_to_h3_resolution(zoom), COARSE_MAX_H3_RESOLUTION)
 
 
+def h3_cell(geometry_column, resolution: int):
+    """SQL expression: the H3 cell `geometry_column` falls in at `resolution` (an `h3index`).
+
+    `ST_PointOnSurface` first, although a ticket's geometry is always a point: the column
+    lives on `base_geometries`, which also holds closure-area polygons, and Postgres may
+    evaluate a WHERE condition while scanning that table — before the join to `tickets` has
+    thrown the polygons out. `h3_lat_lng_to_cell` raises on anything but a point
+    ("geometry_to_point only accepts Points"), so without this the anonymous map failed
+    wherever a closure area sat in the box. For a point it returns the point unchanged.
+    """
+    return func.h3_lat_lng_to_cell(func.ST_PointOnSurface(geometry_column), resolution)
+
+
+def h3_cell_text(geometry_column, resolution: int):
+    """The same cell as its canonical hex string, e.g. '884ba0a511fffff' — what clients key on."""
+    return cast(h3_cell(geometry_column, resolution), String)
+
+
 def h3_centroid(geometry_column, resolution: int):
     """SQL expression: the centre of the H3 cell `geometry_column` falls in at `resolution`."""
     return cast(
-        func.h3_cell_to_geometry(func.h3_lat_lng_to_cell(geometry_column, resolution)),
+        func.h3_cell_to_geometry(h3_cell(geometry_column, resolution)),
         Geometry(geometry_type="POINT", srid=4326),
     )

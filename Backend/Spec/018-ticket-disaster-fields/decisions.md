@@ -659,6 +659,10 @@ DB image 改為 `Backend/docker/postgres-h3/Dockerfile`（`postgis/postgis:16-3.
 ➕ 固定網格而不是亂數偏移：亂數每次不同，重複查詢取平均就能回推（HC）。
 ➕ 格子中心走 `coarse_point` DataLoader：list、單筆、mutation 回傳都經過同一個 resolver，
 一個 request 只多一次批次查詢，不必把額外屬性掛在 ORM 物件上。
+➕ 另開 `TicketType.locationCell`（H3 index 字串，精確時為 `null`）：座標點本身看不出是格子中心
+還是精確點，前端若靠「有沒有登入」猜，`view_detail` 一縮成 `own` 就會錯（同一份列表兩種都有）。
+有了 cell id，前端用 h3-js `cellToBoundary` 畫格子、用字串分組，resolution 也在 index 裡，
+不必在前端重寫一份 zoom→resolution 公式。與 `geometry` 由同一個 statement 算出，兩者不會不一致。
 ➖ resolution 8 實際比口述大：H3 官方表平均邊長 531 m、面積 0.737 km²，整格寬約 1 km，
 不是「直徑 550 m」。選較粗的：鄉間一格可能只有幾戶，resolution 9（邊長 201 m）會把範圍縮到一兩戶。
 ➖ H3 不同解析度的格子不是完全套疊（aperture 7 的子格會跨出母格邊界）。訪客用不同 `zoom`
@@ -668,4 +672,8 @@ DB image 改為 `Backend/docker/postgres-h3/Dockerfile`（`postgis/postgis:16-3.
 原型的 `GUEST_GRID_DIAMETER_M = 550` 把 550 當直徑，只是示意，不可沿用。
 ➖ 換 DB image：staging 部署時 db container 會以同一個 `pgdata` volume 重建，停機數秒。
 `CREATE EXTENSION h3` 需要 superuser（staging 是）。
+◾ 取 cell 前先套 `ST_PointOnSurface`：`base_geometries` 同時放 ticket 的點與封閉區域的多邊形，
+Postgres 可能在 join `tickets` 之前就對整張表套用 bbox 條件，`h3_lat_lng_to_cell` 遇到多邊形會
+報錯（`geometry_to_point only accepts Points`），訪客地圖只要框內有封閉區域就整個失敗。
+是否發生取決於查詢計畫，所以時好時壞；回歸測試固定在框內放一塊封閉區域。
 ◾ `pyproject.toml` 已有未被使用的 `h3`（Python 版）依賴，本條不使用它；是否移除另議。

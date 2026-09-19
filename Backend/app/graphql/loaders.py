@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from strawberry.dataloader import DataLoader
 
-from app.db.h3 import h3_centroid
+from app.db.h3 import h3_cell_text, h3_centroid
 from app.graphql.geo.types import (
     CrowdSourcingType,
     SecondaryLocationType,
@@ -229,7 +229,11 @@ def _make_ticket_uuid_by_task_loader(db: AsyncSession):
 
 
 def _make_coarse_point_loader(db: AsyncSession):
-    """Batch-load H3 cell centres, keyed ``(ticket_uuid, resolution)`` (ADR-281/283).
+    """Batch-load the coarse location, keyed ``(ticket_uuid, resolution)`` (ADR-281/283).
+
+    Each value is ``{"point": <GeoJSON of the cell centre>, "cell": <H3 index hex string>}``,
+    or None when the row is gone. Both come from one statement so the point and the cell a
+    client groups by can never disagree.
 
     One statement per resolution in the batch — in practice one, since a request carries one
     `zoom`. Selected from `base_geometries` directly: the point lives there, and selecting
@@ -241,15 +245,18 @@ def _make_coarse_point_loader(db: AsyncSession):
         by_resolution: dict[int, list[str]] = defaultdict(list)
         for uuid, resolution in keys:
             by_resolution[resolution].append(uuid)
-        centres: dict[tuple[str, int], dict | None] = {}
+        coarse: dict[tuple[str, int], dict] = {}
         for resolution, uuids in by_resolution.items():
             rows = await db.execute(
-                select(BaseGeometry.uuid, h3_centroid(BaseGeometry.geometry, resolution))
-                .where(BaseGeometry.uuid.in_(uuids))
+                select(
+                    BaseGeometry.uuid,
+                    h3_centroid(BaseGeometry.geometry, resolution),
+                    h3_cell_text(BaseGeometry.geometry, resolution),
+                ).where(BaseGeometry.uuid.in_(uuids))
             )
-            for uuid, centre in rows:
-                centres[(str(uuid), resolution)] = geom_to_geojson(centre)
-        return [centres.get((str(uuid), resolution)) for uuid, resolution in keys]
+            for uuid, centre, cell in rows:
+                coarse[(str(uuid), resolution)] = {"point": geom_to_geojson(centre), "cell": cell}
+        return [coarse.get((str(uuid), resolution)) for uuid, resolution in keys]
 
     return load_fn
 

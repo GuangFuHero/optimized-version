@@ -501,7 +501,32 @@ class TicketType:
         """
         if await self._detail_visible(info):
             return self._geometry_geojson
-        return await info.context["loaders"]["coarse_point"].load(
+        coarse = await self._coarse(info)
+        return coarse["point"] if coarse else None
+
+    @strawberry.field(
+        description=(
+            "The H3 cell `geometry` stands in for, as its hex index (e.g. '884ba0a511fffff'), "
+            "when the caller is shown the coarse location; null when `geometry` is the exact "
+            "point. Tickets sharing a value share a location on the map — group by it, and "
+            "draw the cell from it (h3-js `cellToBoundary`); its resolution is in the index"
+        )
+    )
+    async def location_cell(self, info: strawberry.types.Info) -> str | None:
+        """Tell the client which points are cell centres, and which cell (ADR-281/283).
+
+        Without it a client cannot tell a centre from an exact point — both are a GeoJSON
+        Point — and would have to guess from whether it is signed in, which breaks the day an
+        admin narrows view_detail to `own` and one list carries both kinds.
+        """
+        if await self._detail_visible(info):
+            return None
+        coarse = await self._coarse(info)
+        return coarse["cell"] if coarse else None
+
+    def _coarse(self, info: strawberry.types.Info):
+        """The `coarse_point` loader's `{point, cell}` for this ticket at its resolution."""
+        return info.context["loaders"]["coarse_point"].load(
             (str(self.uuid), self._coarse_resolution)
         )
 

@@ -21,6 +21,7 @@ from sqlalchemy import select, text
 from app.core.permissions import PUBLIC_PERMS, Perm
 from app.db import h3
 from app.models.auth import User
+from app.models.geo import ClosureArea
 from app.models.photo import Photo
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
@@ -174,6 +175,15 @@ async def _centre(point: Point, resolution: int = 8) -> list[float]:
         return [row[0], row[1]]
 
 
+async def _cell(point: Point, resolution: int = 8) -> str:
+    """The H3 index h3-pg computes for `point`, as the hex string clients receive."""
+    async with db_ctx() as db:
+        return await db.scalar(
+            text("SELECT h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(:x, :y), 4326), :r)::text"),
+            {"x": point.x, "y": point.y, "r": resolution},
+        )
+
+
 def _box(centre: list[float], half: float) -> dict:
     return {
         "minLng": centre[0] - half, "maxLng": centre[0] + half,
@@ -233,6 +243,32 @@ async def test_an_anonymous_caller_gets_the_cell_centre_not_the_point(client):
 
     assert _point(geometry) == pytest.approx(await _centre(INSIDE))
     assert _point(geometry) != pytest.approx([INSIDE.x, INSIDE.y])
+
+
+@pytest.mark.asyncio
+async def test_location_cell_names_the_cell_the_centre_stands_in_for(client):
+    """A client cannot tell a centre from a point by looking; `locationCell` tells it."""
+    uuid = await _ticket(INSIDE)
+    query = "query($uuid: UUID!, $zoom: Float) { ticket(uuid: $uuid, zoom: $zoom) { locationCell } }"
+
+    at_cap = (await _query(client, query, {"uuid": uuid}))["ticket"]
+    zoomed_out = (await _query(client, query, {"uuid": uuid, "zoom": 7}))["ticket"]
+
+    assert at_cap["locationCell"] == await _cell(INSIDE, 8)
+    assert zoomed_out["locationCell"] == await _cell(INSIDE, 4)
+
+
+@pytest.mark.asyncio
+async def test_location_cell_is_null_when_the_point_is_exact(client, redis):
+    """Null means "this geometry is the real point" — the only signal a mixed list needs."""
+    user_uuid, token = await _signed_in(redis, detail_scope="own")
+    mine, theirs = await _ticket(INSIDE, created_by=user_uuid), await _ticket(INSIDE)
+    query = "query { tickets(limit: 50) { items { uuid locationCell } } }"
+
+    items = {i["uuid"]: i for i in (await _query(client, query, {}, token))["tickets"]["items"]}
+
+    assert items[mine]["locationCell"] is None
+    assert items[theirs]["locationCell"] == await _cell(INSIDE, 8)
 
 
 @pytest.mark.asyncio
@@ -343,6 +379,31 @@ async def test_a_bbox_matches_each_row_by_the_point_its_caller_can_see(client, r
     assert [i["uuid"] for i in around_point["items"]] == [mine]
     assert [i["uuid"] for i in around_centre["items"]] == [theirs]
     assert around_centre["pageInfo"]["totalCount"] == 1
+
+
+@pytest.mark.asyncio
+async def test_an_anonymous_bbox_survives_a_closure_area_in_the_same_box(client):
+    """`base_geometries` holds closure-area polygons beside ticket points.
+
+    The planner is free to apply the bbox condition while scanning `base_geometries`, before
+    the join narrows it to tickets — so the cell expression meets polygons too. h3's
+    `h3_lat_lng_to_cell` rejects anything but a point ("geometry_to_point only accepts
+    Points"), which turned the anonymous map into an error wherever a road was closed.
+    """
+    uuid = await _ticket(INSIDE)
+    async with db_ctx() as db:
+        closer = User(name="closer")
+        db.add(closer)
+        await db.flush()
+        db.add(ClosureArea(
+            geometry=from_shape(INSIDE.buffer(0.01), srid=4326), created_by=str(closer.uuid),
+            status="blocked", information_source="test", comment=TITLE,
+        ))
+    centre = await _centre(INSIDE)
+
+    page = (await _query(client, TICKETS, {"bounds": _box(centre, 0.02)}))["tickets"]
+
+    assert uuid in {i["uuid"] for i in page["items"]}
 
 
 @pytest.mark.asyncio
