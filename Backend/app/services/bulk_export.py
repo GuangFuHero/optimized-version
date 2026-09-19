@@ -337,7 +337,10 @@ async def export_tickets(
 
         rows = []
         for task, ticket in pairs:
-            latitude, longitude = _coordinates(ticket.geometry)
+            visible = await may_see_pii(ticket)
+            # The point is PII like the address (ADR-281). Blank rather than masked: the
+            # importer never updates a ticket's point, so a blank cell round-trips safely.
+            latitude, longitude = _coordinates(ticket.geometry) if visible else ("", "")
             row = {
                 "uuid": _text(ticket.uuid),
                 "latitude": latitude,
@@ -346,7 +349,7 @@ async def export_tickets(
                 "task_name": _text(task.task_name),
                 "task_description": _text(task.task_description),
                 "task_quantity": _text(task.quantity),
-                **_contact_fields(ticket, visible=await may_see_pii(ticket)),
+                **_contact_fields(ticket, visible=visible),
             }
             for field in ("title", "description", "status", "priority",
                           "visibility", "verification_status", "review_note", "created_at"):

@@ -378,6 +378,41 @@ async def test_a_caller_without_view_pii_gets_every_contact_masked(db):
     assert row["contact_phone"] != "0912345678"
 
 
+@pytest.mark.asyncio
+async def test_coordinates_follow_view_pii_row_by_row(db):
+    """A ticket's point is PII like its address (ADR-281): out of scope, the cells are blank."""
+    await _configs(db)
+    team = await _zoned_team(db)
+    actor = User(name="TeamAdmin")
+    author = User(name="Someone")
+    db.add_all([actor, author])
+    await db.flush()
+    await _grant(db, actor, Perm.TICKET_EXPORT, "all", "exporter", team=team)
+    await _grant(db, actor, Perm.TICKET_VIEW_PII, "zone", "zoned-pii", team=team)
+    await _ticket_with_task(db, title="區內", point=IN_ZONE, creator=author)
+    await _ticket_with_task(db, title="區外", point=OUT_OF_ZONE, creator=author)
+
+    rows = {r["title"]: r for r in _parse(await export_tickets(db, actor=actor, task_type="rescue")).rows}
+
+    assert (rows["區內"]["latitude"], rows["區內"]["longitude"]) == ("25", "121.5")
+    assert (rows["區外"]["latitude"], rows["區外"]["longitude"]) == ("", "")
+
+
+@pytest.mark.asyncio
+async def test_a_caller_without_view_pii_exports_no_coordinates(db):
+    """Holding export does not imply seeing where anyone lives."""
+    await _configs(db)
+    actor = User(name="Admin")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.TICKET_EXPORT, "all", "exporter")
+    await _ticket_with_task(db, title="求救", point=IN_ZONE, creator=actor)
+
+    row = _parse(await export_tickets(db, actor=actor, task_type="rescue")).rows[0]
+
+    assert (row["latitude"], row["longitude"]) == ("", "")
+
+
 # --------------------------------------------------------------------------------------
 # PR #42 review round 2 (ADR-238/239)
 # --------------------------------------------------------------------------------------

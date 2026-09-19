@@ -325,9 +325,6 @@ class TicketType:
 
     uuid: UUID
     property_name: str = strawberry.field(description="Internal polymorphic discriminator — always 'request'")
-    geometry: GeoJSON | None = strawberry.field(
-        default=None, description="GeoJSON Point indicating where help is needed"
-    )
     title: str = strawberry.field(default="", description="Short subject line describing the request")
     description: str | None = None
     status: str = strawberry.field(
@@ -372,10 +369,12 @@ class TicketType:
     _contact_phone_raw: strawberry.Private[str | None] = None
     # Gated on the same capability as the contact fields above. Not identifying on their
     # own, but "there is a trapped person at this address" is the most sensitive thing a
-    # ticket carries, and the coordinate beside it is public.
+    # ticket carries.
     _person_trapped_reported_raw: strawberry.Private[str | None] = None
     _immediate_danger_reported_raw: strawberry.Private[str | None] = None
     _geometry_raw: strawberry.Private[object | None] = None
+    # The same point as GeoJSON, readable only through the gated `geometry` resolver.
+    _geometry_geojson: strawberry.Private[dict | None] = None
     _pii_visible_task: strawberry.Private[object | None] = None
 
     def _pii_visible(self, info: strawberry.types.Info):
@@ -412,6 +411,21 @@ class TicketType:
             return True
         resource = SimpleNamespace(created_by=self.created_by, geometry=self._geometry_raw)
         return await in_scope(scope, actor=user, resource=resource, db=info.context["db"])
+
+    @strawberry.field(
+        description=(
+            "GeoJSON Point indicating where help is needed. Null to a caller without "
+            "ticket.view_pii here"
+        )
+    )
+    async def geometry(self, info: strawberry.types.Info) -> GeoJSON | None:
+        """Return the ticket's point, or null when the caller is out of PII scope.
+
+        A precise point locates the reporter's home as surely as the address does, so it is
+        gated with it (ADR-281) rather than published beside a withheld street number.
+        Denial is null, never masked: a coarsened point would still be location data.
+        """
+        return self._geometry_geojson if await self._pii_visible(info) else None
 
     @strawberry.field(description="Requester full name — masked unless the caller holds ticket.view_pii here")
     async def contact_name(self, info: strawberry.types.Info) -> str | None:
@@ -511,7 +525,6 @@ class TicketType:
         return cls(
             uuid=m.uuid,
             property_name=m.property_name,
-            geometry=geom_to_geojson(m.geometry),
             title=m.title,
             description=m.description,
             status=m.status,
@@ -530,6 +543,7 @@ class TicketType:
             _person_trapped_reported_raw=m.person_trapped_reported,
             _immediate_danger_reported_raw=m.immediate_danger_reported,
             _geometry_raw=m.geometry,
+            _geometry_geojson=geom_to_geojson(m.geometry),
         )
 
 

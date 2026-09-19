@@ -10,10 +10,12 @@ task_properties are sub-resources of an already-gated ticket and only need check
 from uuid import UUID
 
 import strawberry
+from sqlalchemy import false
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout
+from app.core.security import resolve_scope
 from app.graphql.context import check_permission
 from app.graphql.geo.types import BoundsInput
 from app.graphql.shared import PageInfo
@@ -29,6 +31,24 @@ from app.repositories.tickets_repository import (
     ticket_repository,
     ticket_task_repository,
 )
+
+
+async def _located_by_caller(info: strawberry.types.Info) -> list:
+    """Filters keeping only tickets whose coordinate this caller may see (ADR-282).
+
+    `bounds` is a question about where a ticket is. Answered for a ticket whose point the
+    caller may not read, it would recover that point by shrinking the box until the ticket
+    drops out — so a bbox query only ever reaches tickets under the caller's
+    `ticket.view_pii`. A caller with none gets an empty page; the unbounded list is
+    unaffected and still shows every ticket, with a null `geometry` where it is withheld.
+    """
+    user = info.context["user"]
+    if user is None:
+        return [false()]
+    pii_scope = await resolve_scope(
+        user, Perm.TICKET_VIEW_PII, info.context["db"], cache=info.context["_rbac_cache"]
+    )
+    return scope_filter(pii_scope, actor=user, model=Tickets)
 
 
 @strawberry.type
@@ -71,6 +91,8 @@ class RequestQuery:
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Tickets)
+        if bounds is not None:
+            extra_filters = [*extra_filters, *await _located_by_caller(info)]
         # One ceiling for the whole request, not one per statement (ADR-176). count and
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their

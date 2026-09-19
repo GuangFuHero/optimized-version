@@ -159,5 +159,6 @@ def scope_filter(scope: Scope, *, actor: User, model) -> list:
             )
         ]
 
-    # Scope.NONE — defensive only; checkpoint 1 should already have 403'd before this.
+    # Scope.NONE. Usually defensive — checkpoint 1 has already 403'd — but a caller may narrow
+    # a public list by a capability it does not hold at all (ADR-282), and that matches nothing.
     return [false()]
