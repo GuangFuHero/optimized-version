@@ -107,7 +107,12 @@ export function createTaskMatchTicketDetailOverrides({
         icon: <HistoryRoundedIcon />,
       },
     ],
-    detailsContent: <TaskMatchTicketDetailsPanel marker={marker} />,
+    detailsContent: (
+      <TaskMatchTicketDetailsPanel
+        marker={marker}
+        isAuthenticated={isAuthenticated}
+      />
+    ),
     content: <TaskMatchHistoryPanel state={state} />,
     footerActions: createFooterActions({
       state,

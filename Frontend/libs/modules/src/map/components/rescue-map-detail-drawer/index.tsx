@@ -15,7 +15,9 @@ import type {
 import { TicketDetailDrawer } from '../../../ticket';
 import { formatTicketTypeLabel } from '../../../ticket/status';
 import type { TicketDetailDrawerProps } from '../../../ticket/ticket-detail';
-import type { RescueMapMarkerItem } from '../../types';
+import { describeLocationCellSpan } from '../../location-cells';
+import type { RescueMapDetailItem, RescueMapMarkerItem } from '../../types';
+import { LocationCellDetail } from '../location-cell-detail';
 
 export type RescueMapTicketDetailOverrides = Partial<
   Pick<
@@ -32,8 +34,12 @@ export type RescueMapTicketDetailOverrides = Partial<
 };
 
 interface RescueMapDetailDrawerProps {
-  marker: RescueMapMarkerItem | null;
+  marker: RescueMapDetailItem | null;
   onClose: () => void;
+  /** 從概略區塊的清單點進某一筆時切換選取。 */
+  onSelectMarker?: (markerId: string) => void;
+  /** 只影響訪客提示文案（「登入後可看」），不決定遮不遮 —— 遮在後端。 */
+  isAuthenticated?: boolean;
   ticketDetailOverrides?: RescueMapTicketDetailOverrides;
   stationAction?: StationDetailActionProps;
   stationSecondaryAction?: StationDetailActionProps;
@@ -123,10 +129,13 @@ function createTicketSummary(marker: RescueMapMarkerItem) {
         label: marker.label,
       },
       locationLabel: '位置資訊',
-      locationLines: [
-        marker.subtitle,
-        `緯度 ${latitude.toFixed(6)} / 經度 ${longitude.toFixed(6)}`,
-      ],
+      // A cell centre is not a place: printing it to six decimals would pass it off as one.
+      locationLines: marker.locationCell
+        ? [`概略區塊（${describeLocationCellSpan(marker.locationCell)}範圍）`]
+        : [
+            marker.subtitle,
+            `緯度 ${latitude.toFixed(6)} / 經度 ${longitude.toFixed(6)}`,
+          ],
       taskLabel: '任務類型',
       taskValue: formatTicketTypeLabel(marker.ticketMeta?.taskType),
       requesterLabel: '現場聯絡人',
@@ -184,6 +193,8 @@ function createStationSummary({
 export function RescueMapDetailDrawer({
   marker,
   onClose,
+  onSelectMarker,
+  isAuthenticated = false,
   ticketDetailOverrides,
   stationSecondaryAction,
 }: RescueMapDetailDrawerProps) {
@@ -204,6 +215,17 @@ export function RescueMapDetailDrawer({
 
   if (!marker) {
     return null;
+  }
+
+  if (marker.detailType === 'cell') {
+    return (
+      <LocationCellDetail
+        cell={marker}
+        isAuthenticated={isAuthenticated}
+        onClose={onClose}
+        onSelectMember={(markerId) => onSelectMarker?.(markerId)}
+      />
+    );
   }
 
   const resolvedTicketOverrides = ticketDetailOverrides

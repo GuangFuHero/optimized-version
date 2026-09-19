@@ -16,6 +16,7 @@ import { designTokens } from '@rescue-frontend/ui';
 import {
   createPointShareTarget,
   createTaskMatchTicketDetailOverrides,
+  hasRescueMapDetailItem,
   Map,
   PointShareDrawer,
   SITE_FALLBACK_DATA_TYPE,
@@ -429,8 +430,10 @@ function SiteMapViewportDataLayer({
       return;
     }
 
-    const hasSelectedMarker = visibleMarkers.some(
-      (marker) => marker.id === baseRouteState.selectedMarkerId,
+    // A guest's location cell is selectable too, and is not a marker of its own.
+    const hasSelectedMarker = hasRescueMapDetailItem(
+      visibleMarkers,
+      baseRouteState.selectedMarkerId,
     );
 
     if (hasSelectedMarker) {
@@ -548,6 +551,7 @@ function SiteMapViewportDataLayer({
         onRouteStateChange={onMapRouteStateChange}
         showScale
         viewportStore={viewportStore}
+        isAuthenticated={isAuthenticated}
         renderControls={renderControls}
         ticketDetailOverrides={createTicketDetailOverrides}
         stationDetailAction={stationDetailAction}

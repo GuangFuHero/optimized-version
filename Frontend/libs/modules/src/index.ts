@@ -33,6 +33,7 @@ export type {
 export { SiteListView } from './list';
 
 export { Map, readRescueMapMarkers } from './map';
+export { hasRescueMapDetailItem } from './map/location-cells';
 export type {
   RescueMapBaseLayer,
   RescueMapControllerValue,

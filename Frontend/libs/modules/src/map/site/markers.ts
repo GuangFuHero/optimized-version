@@ -195,6 +195,8 @@ export function mapTicketToMarker(
     label: formatTicketStatusLabel(ticket.status, '任務'),
     variant: resolveTicketVariant(ticket),
     detailType: 'ticket',
+    // Set when `position` is only a cell centre (ADR-281) — see `buildLocationCells`.
+    locationCell: ticket.locationCell ?? null,
     ticketMeta: {
       status: ticket.status,
       priority: ticket.priority,

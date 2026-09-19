@@ -25,9 +25,12 @@ import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from './constants';
 import { designTokens, displayTextSizeCss, withAlpha } from '@rescue-frontend/ui';
 
 import { useRescueMapController } from './hooks/use-rescue-map-controller';
+import { buildLocationCells } from './location-cells';
 import type {
   RescueMapClosureArea,
   RescueMapControllerValue,
+  RescueMapDetailItem,
+  RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapRouteState,
   RescueMapViewportStoreLike,
@@ -106,6 +109,32 @@ const MAP_STATIC_GLOBAL_STYLES = {
     display: 'block',
     transform: 'translateY(0.5px)',
   },
+  // 訪客概略區塊中央的數量（ADR-281）。沒有容器、沒有描邊、沒有陰影 —— 對比全由六角形的
+  // 填色負責（見 rescue-map-canvas 的 getLocationCellFill）。設計 2026-09-18：白字。
+  '.map-location-cell-wrapper': {
+    background: 'transparent',
+    border: 'none',
+  },
+  '.map-location-cell': {
+    display: 'flex',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: 4,
+    whiteSpace: 'nowrap',
+    color: color.fg.inverse,
+    fontWeight: 800,
+    lineHeight: 1,
+    transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+  '.map-location-cell__count': displayTextSizeCss(24),
+  '.map-location-cell__unit': displayTextSizeCss(14),
+  // 選取由六角形自己加粗、加深表達；數字只放大，不換色 —— 換色會讓人以為是另一種狀態。
+  '.map-location-cell--active': {
+    transform: 'scale(1.12)',
+  },
+  '.map-location-cell-wrapper:hover .map-location-cell': {
+    transform: 'scale(1.06)',
+  },
 } as const;
 
 interface MapProps {
@@ -149,6 +178,8 @@ interface MapProps {
   closureAreas?: readonly RescueMapClosureArea[];
   /** 以 external store 提供視角狀態，避免拖動時將 viewport 更新擴散到整個 React tree。 */
   viewportStore?: RescueMapViewportStoreLike;
+  /** 只用於訪客提示文案（「登入後可看」）；遮不遮由後端決定。 */
+  isAuthenticated?: boolean;
 }
 
 export const Map = memo(function Map({
@@ -167,6 +198,7 @@ export const Map = memo(function Map({
   cursor,
   closureAreas,
   viewportStore,
+  isAuthenticated = false,
 }: MapProps = {}) {
   const controller = useRescueMapController({
     routeState,
@@ -177,12 +209,19 @@ export const Map = memo(function Map({
     filterMarkersByBbox: false,
   });
 
-  const selectedMarker = useMemo(
+  // 訪客的概略區塊不在 markers 裡（見 buildLocationCells），但一樣可以被選取、開詳情。
+  const locationCells = useMemo(
+    () => buildLocationCells(controller.markers),
+    [controller.markers],
+  );
+  const selectedMarker = useMemo<RescueMapDetailItem | null>(
     () =>
       controller.markers.find(
         (marker) => marker.id === controller.selectedMarkerId,
-      ) ?? null,
-    [controller.markers, controller.selectedMarkerId],
+      ) ??
+      locationCells.find((cell) => cell.id === controller.selectedMarkerId) ??
+      null,
+    [controller.markers, controller.selectedMarkerId, locationCells],
   );
   const isTicketTone = controller.dataType === 'ticket';
   const globalStyles = useMemo(
@@ -215,7 +254,7 @@ export const Map = memo(function Map({
 
   // 保留最後選取的標記，讓行動版抽屜在關閉動畫期間仍有內容可渲染。
   const [displayMarker, setDisplayMarker] =
-    useState<RescueMapMarkerItem | null>(selectedMarker);
+    useState<RescueMapDetailItem | null>(selectedMarker);
   const [detailOpen, setDetailOpen] = useState(Boolean(selectedMarker));
 
   useEffect(() => {
@@ -244,6 +283,11 @@ export const Map = memo(function Map({
   const handleMarkerClick = (marker: RescueMapMarkerItem) => {
     controller.closeLayerPanel();
     controller.setSelectedMarkerId(marker.id);
+  };
+
+  const handleLocationCellClick = (cell: RescueMapLocationCell) => {
+    controller.closeLayerPanel();
+    controller.setSelectedMarkerId(cell.id);
   };
 
   return (
@@ -282,6 +326,7 @@ export const Map = memo(function Map({
           <RescueMapCanvas
             controller={controller}
             onMarkerClick={handleMarkerClick}
+            onLocationCellClick={handleLocationCellClick}
             previewMarker={previewMarker}
             cursor={cursor}
             onMapClick={onMapClick}
@@ -319,6 +364,8 @@ export const Map = memo(function Map({
             <RescueMapDetailDrawer
               marker={displayMarker}
               onClose={closeDetail}
+              onSelectMarker={controller.setSelectedMarkerId}
+              isAuthenticated={isAuthenticated}
               ticketDetailOverrides={
                 displayMarker?.detailType === 'ticket'
                   ? ticketDetailOverrides?.(displayMarker)
@@ -373,6 +420,8 @@ export const Map = memo(function Map({
         <RescueMapDetailDrawer
           marker={displayMarker}
           onClose={closeDetail}
+          onSelectMarker={controller.setSelectedMarkerId}
+          isAuthenticated={isAuthenticated}
           ticketDetailOverrides={
             displayMarker?.detailType === 'ticket'
               ? ticketDetailOverrides?.(displayMarker)

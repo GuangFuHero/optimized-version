@@ -20,6 +20,8 @@ import {
   useFragment,
 } from '@rescue-frontend/data-access';
 
+import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
+import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
 
@@ -290,9 +292,15 @@ function CarouselControls({
 
 export function TaskMatchTicketDetailsPanel({
   marker,
+  isAuthenticated = false,
 }: {
   marker: RescueMapMarkerItem;
+  isAuthenticated?: boolean;
 }) {
+  // The backend withheld this ticket's detail (ADR-281): the point is a cell centre, and the
+  // free text, notes and photos came back empty. Rows for them are left out rather than shown as
+  // 「未提供」— that would claim the reporter wrote nothing, which is not what happened.
+  const coarse = Boolean(marker.locationCell);
   const [{ data: ticketData, fetching: isTicketFetching, error: ticketError }] =
     useQuery({
       query: GetTicketDocument,
@@ -442,6 +450,12 @@ export function TaskMatchTicketDetailsPanel({
         </Alert>
       ) : null}
 
+      {coarse ? (
+        <LocationPrivacyNotice isAuthenticated={isAuthenticated}>
+          為保護求助者，這裡只顯示<b>概略區塊</b>與結構化資訊。精確位置、狀況描述與照片不會對外公開。
+        </LocationPrivacyNotice>
+      ) : null}
+
       <SectionCard title="任務單摘要" icon={<InfoOutlinedIcon sx={{ fontSize: 18 }} />}>
         <Typography
           sx={{
@@ -471,14 +485,32 @@ export function TaskMatchTicketDetailsPanel({
               .filter(Boolean)
               .join(' / ') || '未提供'}
           />
-          <DetailRow
-            label="座標"
-            value={`緯度 ${marker.position[0].toFixed(6)} / 經度 ${marker.position[1].toFixed(6)}`}
-          />
-          <DetailRow
-            label="任務單說明"
-            value={ticket?.description?.trim() || marker.subtitle}
-          />
+          {marker.locationCell ? (
+            <DetailRow
+              label="位置"
+              value={
+                <Stack spacing={0.25}>
+                  <Typography sx={{ color: detailPalette.text, fontSize: displayTextSize[14], lineHeight: '21px' }}>
+                    概略區塊（{describeLocationCellSpan(marker.locationCell)}範圍）
+                  </Typography>
+                  <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12], lineHeight: '19px' }}>
+                    同一區塊內的求助會顯示在一起，看不出是哪一戶
+                  </Typography>
+                </Stack>
+              }
+            />
+          ) : (
+            <DetailRow
+              label="座標"
+              value={`緯度 ${marker.position[0].toFixed(6)} / 經度 ${marker.position[1].toFixed(6)}`}
+            />
+          )}
+          {coarse ? null : (
+            <DetailRow
+              label="任務單說明"
+              value={ticket?.description?.trim() || marker.subtitle}
+            />
+          )}
           <Box
             sx={{
               display: 'flex',
@@ -496,11 +528,13 @@ export function TaskMatchTicketDetailsPanel({
               label={`子任務 ${tasks.length} 張`}
               sx={{ bgcolor: detailPalette.accentSoft, color: detailPalette.accent }}
             />
-            <Chip
-              size="small"
-              label={`照片 ${photos.length} 張`}
-              sx={{ bgcolor: detailPalette.accentSoft, color: detailPalette.accent }}
-            />
+            {coarse ? null : (
+              <Chip
+                size="small"
+                label={`照片 ${photos.length} 張`}
+                sx={{ bgcolor: detailPalette.accentSoft, color: detailPalette.accent }}
+              />
+            )}
           </Box>
           <DetailRow
             label="建立時間"
@@ -596,22 +630,28 @@ export function TaskMatchTicketDetailsPanel({
               </Box>
             </Box>
 
-            <DetailRow
-              label="子任務說明"
-              value={activeTask.taskDescription?.trim() || '未提供'}
-            />
+            {coarse ? null : (
+              <DetailRow
+                label="子任務說明"
+                value={activeTask.taskDescription?.trim() || '未提供'}
+              />
+            )}
             <DetailRow
               label="審核狀態"
               value={formatModerationStatusLabel(activeTask.moderationStatus)}
             />
-            <DetailRow
-              label="進度備註"
-              value={activeTask.progressNote?.trim() || '未提供'}
-            />
-            <DetailRow
-              label="審核備註"
-              value={activeTask.reviewNote?.trim() || '未提供'}
-            />
+            {coarse ? null : (
+              <>
+                <DetailRow
+                  label="進度備註"
+                  value={activeTask.progressNote?.trim() || '未提供'}
+                />
+                <DetailRow
+                  label="審核備註"
+                  value={activeTask.reviewNote?.trim() || '未提供'}
+                />
+              </>
+            )}
             <DetailRow
               label="建立時間"
               value={formatDateTime(activeTask.createdAt)}
@@ -731,6 +771,8 @@ export function TaskMatchTicketDetailsPanel({
         )}
       </SectionCard>
 
+      {/* Withheld with the location — a scene photo can show the house number (AC-03). */}
+      {coarse ? null : (
       <SectionCard
         title={`現場照片${photos.length > 0 ? ` (${photos.length})` : ''}`}
         icon={<PhotoLibraryRoundedIcon sx={{ fontSize: 18 }} />}
@@ -785,6 +827,7 @@ export function TaskMatchTicketDetailsPanel({
           </Box>
         )}
       </SectionCard>
+      )}
     </Stack>
   );
 }

@@ -2,6 +2,8 @@ fragment TicketFields on TicketType {
   uuid
   propertyName
   geometry
+  # H3 cell `geometry` stands in for when the caller only gets a region (ADR-281); null = exact.
+  locationCell
   title
   description
   contactName
@@ -43,6 +45,7 @@ query GetTickets(
   $priority: String
   $skip: Int = 0
   $limit: Int = 50
+  $zoom: Float
 ) {
   tickets(
     bounds: $bounds
@@ -50,6 +53,7 @@ query GetTickets(
     priority: $priority
     skip: $skip
     limit: $limit
+    zoom: $zoom
   ) {
     items {
       ...TicketFields

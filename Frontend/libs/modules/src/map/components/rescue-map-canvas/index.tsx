@@ -3,9 +3,15 @@
 import L from 'leaflet';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 
+import {
+  buildLocationCells,
+  isCoarseTicket,
+  locationCellBoundary,
+} from '../../location-cells';
 import type {
   RescueMapClosureArea,
   RescueMapControllerValue,
+  RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapViewportStoreSnapshot,
   RescueMapViewportStoreLike,
@@ -19,6 +25,8 @@ const { color, primitives } = designTokens;
 interface RescueMapCanvasProps {
   controller: RescueMapControllerValue;
   onMarkerClick: (item: RescueMapMarkerItem) => void;
+  /** 點選訪客的概略區塊（ADR-281）。未提供時格子只畫不接點擊。 */
+  onLocationCellClick?: (cell: RescueMapLocationCell) => void;
   previewMarker?: RescueMapMarkerItem | null;
   cursor?: string;
   onMapClick?: (position: [number, number]) => void;
@@ -71,6 +79,16 @@ type MarkerClusterConstructor = new (options: {
     getAllChildMarkers: () => Array<L.Marker & { __rescueDetailType?: string }>;
   }) => L.DivIcon;
 }) => MarkerClusterGroupLike;
+
+/**
+ * 畫成圖釘的：站點與精確座標的任務單。概略座標的單（`locationCell`）改由格子層畫 ——
+ * 它們都落在格子中心，當圖釘會整疊壓在同一點，也會讓人以為那就是地點。
+ */
+function getPinnedMarkers(
+  markers: readonly RescueMapMarkerItem[],
+): RescueMapMarkerItem[] {
+  return markers.filter((marker) => !isCoarseTicket(marker));
+}
 
 /** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定。 */
 function getMarkerIconSignature(item: RescueMapMarkerItem): string {
@@ -324,9 +342,97 @@ function syncMarkerLayer({
   });
 }
 
+/**
+ * 格子的填色：一般用深一階的橘（orange-600），裡面有急件就用 danger。
+ *
+ * 設計 2026-09-18（`origin/sucrelindesign` site-map.jsx）量過的數字：白字壓在淺色底圖上，
+ * orange-400 @0.72 只有 2.29:1，orange-600 @0.90 才到 4.90:1（WCAG AA）。字上不加描邊或
+ * 陰影 —— 讀不清楚時要調的是這裡的不透明度（PUB-PS-126）。語意層沒有「更深的 primary」，
+ * 所以直接取 primitive。
+ */
+function getLocationCellFill(cell: RescueMapLocationCell): string {
+  return cell.variant === 'urgent-ticket'
+    ? color.bg.danger.default
+    : primitives.color.orange[600];
+}
+
+function createLocationCellLabelIcon(
+  cell: RescueMapLocationCell,
+  selected: boolean,
+): L.DivIcon {
+  return L.divIcon({
+    className: 'map-location-cell-wrapper',
+    html: [
+      `<div class="map-location-cell${selected ? ' map-location-cell--active' : ''}">`,
+      `<span class="map-location-cell__count">${cell.members.length}</span>`,
+      '<span class="map-location-cell__unit">求助</span>',
+      '</div>',
+    ].join(''),
+    // 罩得住放大後的字，否則 Leaflet 會裁掉。
+    iconSize: [104, 34],
+    iconAnchor: [52, 17],
+  });
+}
+
+function getLocationCellLayerSignature(
+  cells: readonly RescueMapLocationCell[],
+  selectedId: string | undefined,
+): string {
+  return cells
+    .map(
+      (cell) =>
+        `${cell.id}:${cell.members.length}:${cell.variant}:${cell.id === selectedId ? 1 : 0}`,
+    )
+    .join('|');
+}
+
+/**
+ * 訪客的概略區塊：六角形本身 ＋ 中央的數量。整層重畫 —— 格子數量少，而簽章相同時整個跳過，
+ * 不會每次資料刷新都閃爍。選取狀態由六角形自己表達（線變粗、底色變深），數字不換色。
+ */
+function syncLocationCellLayer({
+  cellLayer,
+  cells,
+  selectedId,
+  onCellClickRef,
+}: {
+  cellLayer: L.LayerGroup;
+  cells: readonly RescueMapLocationCell[];
+  selectedId: string | undefined;
+  onCellClickRef: React.MutableRefObject<
+    ((cell: RescueMapLocationCell) => void) | undefined
+  >;
+}) {
+  cellLayer.clearLayers();
+
+  cells.forEach((cell) => {
+    const selected = cell.id === selectedId;
+    const fill = getLocationCellFill(cell);
+    const onClick = () => onCellClickRef.current?.(cell);
+
+    L.polygon(locationCellBoundary(cell.cell), {
+      color: fill,
+      weight: selected ? 4 : 2,
+      fillColor: fill,
+      fillOpacity: selected ? 0.96 : 0.9,
+    })
+      .on('click', onClick)
+      .addTo(cellLayer);
+
+    L.marker(cell.position, {
+      icon: createLocationCellLabelIcon(cell, selected),
+      title: `${cell.members.length} 筆求助（概略區塊）`,
+      keyboard: true,
+    })
+      .on('click', onClick)
+      .addTo(cellLayer);
+  });
+}
+
 export function RescueMapCanvas({
   controller,
   onMarkerClick,
+  onLocationCellClick,
   previewMarker,
   cursor,
   onMapClick,
@@ -346,6 +452,8 @@ export function RescueMapCanvas({
   const scaleControlRef = useRef<L.Control.Scale | null>(null);
   const markerLayerRef = useRef<MarkerClusterGroupLike | null>(null);
   const overlayLayerRef = useRef<L.LayerGroup | null>(null);
+  const cellLayerRef = useRef<L.LayerGroup | null>(null);
+  const cellLayerSignatureRef = useRef<string | null>(null);
   const previewMarkerRef = useRef<L.Marker | null>(null);
   const markerHandlesRef = useRef<Map<string, MarkerHandle>>(new Map());
   const closureAreaHandlesRef = useRef<Map<string, ClosureAreaHandle>>(
@@ -354,11 +462,13 @@ export function RescueMapCanvas({
   const controllerRef = useRef(controller);
   const onMapClickRef = useRef(onMapClick);
   const onMarkerClickRef = useRef(onMarkerClick);
+  const onLocationCellClickRef = useRef(onLocationCellClick);
   const initialViewportStateRef = useRef(externalViewportState);
 
   controllerRef.current = controller;
   onMapClickRef.current = onMapClick;
   onMarkerClickRef.current = onMarkerClick;
+  onLocationCellClickRef.current = onLocationCellClick;
 
   // 地圖實例整個生命週期只建立一次；受控的視角變化由下方 setView 效果套用，
   // 避免位置寫回路由狀態後反過來把整張地圖銷毀重建。
@@ -390,13 +500,17 @@ export function RescueMapCanvas({
     map.attributionControl.setPrefix(false);
 
     const overlayLayer = L.layerGroup();
+    const cellLayer = L.layerGroup();
     const markerHandles = markerHandlesRef.current;
     let cancelled = false;
 
     mapRef.current = map;
     overlayLayerRef.current = overlayLayer;
+    cellLayerRef.current = cellLayer;
 
     overlayLayer.addTo(map);
+    // Drawn by the cell effect below, which runs after this one in the same commit.
+    cellLayer.addTo(map);
 
     void import(MARKER_CLUSTER_MODULE_ID).then(() => {
       if (cancelled || !mapRef.current) {
@@ -454,7 +568,7 @@ export function RescueMapCanvas({
       markerLayerRef.current = markerLayer;
       syncMarkerLayer({
         markerLayer,
-        items: controllerRef.current.markers,
+        items: getPinnedMarkers(controllerRef.current.markers),
         handles: markerHandles,
         leaflet: L,
         onMarkerClickRef,
@@ -519,6 +633,8 @@ export function RescueMapCanvas({
       closureAreaHandlesRef.current.clear();
       markerLayerRef.current = null;
       overlayLayerRef.current = null;
+      cellLayerRef.current = null;
+      cellLayerSignatureRef.current = null;
       previewMarkerRef.current = null;
       tileLayerRef.current = null;
       scaleControlRef.current = null;
@@ -651,12 +767,38 @@ export function RescueMapCanvas({
 
     syncMarkerLayer({
       markerLayer,
-      items: controller.markers,
+      items: getPinnedMarkers(controller.markers),
       handles: markerHandlesRef.current,
       leaflet: L,
       onMarkerClickRef,
     });
   }, [controller.markers]);
+
+  useEffect(() => {
+    const cellLayer = cellLayerRef.current;
+
+    if (!cellLayer) {
+      return;
+    }
+
+    const cells = buildLocationCells(controller.markers);
+    const signature = getLocationCellLayerSignature(
+      cells,
+      controller.selectedMarkerId,
+    );
+
+    if (signature === cellLayerSignatureRef.current) {
+      return;
+    }
+
+    cellLayerSignatureRef.current = signature;
+    syncLocationCellLayer({
+      cellLayer,
+      cells,
+      selectedId: controller.selectedMarkerId,
+      onCellClickRef: onLocationCellClickRef,
+    });
+  }, [controller.markers, controller.selectedMarkerId]);
 
   useEffect(() => {
     const overlayLayer = overlayLayerRef.current;

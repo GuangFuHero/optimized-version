@@ -71,6 +71,7 @@
     "@urql/next": "^2.0.0",
     "google-libphonenumber": "^3.2.44",
     "graphql": "^16.13.2",
+    "h3-js": "^4.5.0",
     "leaflet": "^1.9.4",
     "next": "~16.1.6",
     "next-auth": "^4.24.14",

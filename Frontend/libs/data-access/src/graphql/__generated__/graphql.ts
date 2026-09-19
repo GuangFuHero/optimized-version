@@ -1608,6 +1608,7 @@ export type TicketFieldsFragment = {
   uuid: string;
   propertyName: string;
   geometry?: Geometry | null;
+  locationCell?: string | null;
   title: string;
   description?: string | null;
   contactName?: string | null;
@@ -1648,6 +1649,7 @@ export type GetTicketsQueryVariables = Exact<{
   priority?: InputMaybe<Scalars['String']['input']>;
   skip?: InputMaybe<Scalars['Int']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  zoom?: InputMaybe<Scalars['Float']['input']>;
 }>;
 
 export type GetTicketsQuery = {
@@ -1900,6 +1902,7 @@ export const TicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -2919,6 +2922,11 @@ export const GetTicketsDocument = {
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
           defaultValue: { kind: 'IntValue', value: '50' },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'zoom' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Float' } },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -2965,6 +2973,14 @@ export const GetTicketsDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'limit' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'zoom' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'zoom' },
                 },
               },
             ],
@@ -3024,6 +3040,7 @@ export const GetTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -3137,6 +3154,7 @@ export const GetTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -3440,6 +3458,7 @@ export const CreateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
@@ -3546,6 +3565,7 @@ export const UpdateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
           { kind: 'Field', name: { kind: 'Name', value: 'title' } },
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },

@@ -62,7 +62,7 @@ function markersSignature(markers: readonly RescueMapMarkerItem[]) {
   return markers
     .map(
       (marker) =>
-        `${marker.id}:${marker.detailType}:${marker.variant}:${marker.position[0]}:${marker.position[1]}:${marker.label}`,
+        `${marker.id}:${marker.detailType}:${marker.variant}:${marker.position[0]}:${marker.position[1]}:${marker.label}:${marker.locationCell ?? ''}`,
     )
     .join('|');
 }
@@ -261,6 +261,9 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
                   status: ticketStatus,
                   skip: 0,
                   limit: 200,
+                  // Coarser cells as the map zooms out; the server caps how fine they get and
+                  // ignores it entirely for a viewer who may see exact points (ADR-283).
+                  zoom: state.position?.zoom,
                 },
                 LIVE_QUERY_CONTEXT,
               )

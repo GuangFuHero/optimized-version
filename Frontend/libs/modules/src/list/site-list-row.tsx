@@ -3,6 +3,7 @@
 import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
+import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
 import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import ShieldRoundedIcon from '@mui/icons-material/Shield';
@@ -172,6 +173,14 @@ export function SiteListRow({
                   <Badge tone="secondary" variant="subtle">
                     <ShieldRoundedIcon sx={{ fontSize: 12 }} />
                     官方
+                  </Badge>
+                ) : null}
+                {/* The list shows no coordinates, but its map link and its detail do: say up
+                    front that this ticket's place is a region (ADR-281). */}
+                {marker.locationCell ? (
+                  <Badge tone="neutral" variant="subtle">
+                    <HexagonOutlinedIcon sx={{ fontSize: 12 }} />
+                    概略位置
                   </Badge>
                 ) : null}
               </Stack>
