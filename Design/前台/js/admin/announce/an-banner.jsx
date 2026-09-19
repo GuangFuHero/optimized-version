@@ -78,19 +78,29 @@
     React.useEffect(() => {
       const root = document.documentElement;
       const write = () => {
-        const h = (list.length && barRef.current) ? barRef.current.offsetHeight : 0;
+        const el = list.length ? barRef.current : null;
+        const h = el ? el.offsetHeight : 0;
         root.style.setProperty('--wg-banner-h', h + 'px');
+        /* 2026-09-14：後台浮層要的是**視窗座標的底部**，不是高度。
+           前台橫幅在 y=0，兩者相同；後台上面還有原型的角色切換列（52px），
+           用高度會讓浮層有 52px 壓在橫幅上 —— 那正是「緊急公告擋住個人設定」。
+           前台既有的 --wg-banner-h 用法不動，避免改到正在運作的東西。 */
+        root.style.setProperty('--wg-banner-bottom',
+          (el ? Math.max(0, Math.round(el.getBoundingClientRect().bottom)) : 0) + 'px');
       };
       write();
       const ro = (typeof ResizeObserver !== 'undefined' && barRef.current)
         ? new ResizeObserver(write) : null;
       if (ro && barRef.current) ro.observe(barRef.current);
       window.addEventListener('resize', write);
+      window.addEventListener('scroll', write, true);
       return () => {
         if (ro) ro.disconnect();
         window.removeEventListener('resize', write);
+        window.removeEventListener('scroll', write, true);
         /* 卸載（或公告被關掉）時一定要歸零 —— 留著舊值會讓浮層永遠空一條。 */
         root.style.setProperty('--wg-banner-h', '0px');
+        root.style.setProperty('--wg-banner-bottom', '0px');
       };
     }, [list.length, open]);
 
