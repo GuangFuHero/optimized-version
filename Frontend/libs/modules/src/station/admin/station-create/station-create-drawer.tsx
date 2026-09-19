@@ -185,11 +185,9 @@ function buildStationMarker(input: {
   source?: string | null;
   visibility?: string | null;
   verificationStatus?: string | null;
-  confidenceScore?: number | null;
   isDuplicate?: boolean;
   isTemporary?: boolean;
   isOfficial?: boolean;
-  priorityScore?: number | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   position: [number, number];
@@ -218,11 +216,9 @@ function buildStationMarker(input: {
       source: input.source,
       visibility: input.visibility,
       verificationStatus: input.verificationStatus,
-      confidenceScore: input.confidenceScore,
       isDuplicate: input.isDuplicate,
       isTemporary: input.isTemporary,
       isOfficial: input.isOfficial,
-      priorityScore: input.priorityScore,
       createdAt: input.createdAt,
       updatedAt: input.updatedAt,
     },
@@ -530,11 +526,9 @@ export function StationCreateDrawer({
         source: createdStation.source,
         visibility: createdStation.visibility,
         verificationStatus: createdStation.verificationStatus,
-        confidenceScore: createdStation.confidenceScore,
         isDuplicate: createdStation.isDuplicate,
         isTemporary: createdStation.isTemporary,
         isOfficial: createdStation.isOfficial,
-        priorityScore: createdStation.priorityScore,
         createdAt: createdStation.createdAt?.toString() ?? null,
         updatedAt: createdStation.updatedAt?.toString() ?? null,
         position: [latitude, longitude],

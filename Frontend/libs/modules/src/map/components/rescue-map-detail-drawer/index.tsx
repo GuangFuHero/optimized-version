@@ -104,7 +104,7 @@ function createStationResources(marker: RescueMapMarkerItem) {
     },
     // 「站點等級」與「可信度」依設計決議不在前台顯示：`level` 的語意還在問後端，
     // 對讀者顯示一個我們自己都不確定意思的數字沒有意義；信任制度 v0.1.0 不做，
-    // `confidenceScore` 留空不讀。
+    // 後端也已移除 `confidence_score`（a889fd4，從未被寫入）。
   ];
 }
 
