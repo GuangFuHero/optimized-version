@@ -235,8 +235,8 @@ export function SiteListView() {
           <SiteControlSurface
             sx={{
               display: { mobile: 'grid', tablet: 'none' },
-              width: 40,
-              height: 40,
+              width: 44,
+              height: 44,
               placeItems: 'center',
             }}
           >

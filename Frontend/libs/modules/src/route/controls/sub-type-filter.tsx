@@ -57,7 +57,7 @@ export function SiteSubTypeFilter({
           alignItems: 'center',
           px: '9px',
           py: '5px',
-          height: 40,
+          height: 44,
         }}
       >
         <ButtonBase

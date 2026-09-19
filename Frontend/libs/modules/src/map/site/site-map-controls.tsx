@@ -96,7 +96,7 @@ function writePinnedSubDataTypes(
  * 地圖欄寬到多少才放得下兩段切換（container query 門檻）。
  *
  * 左上群組（站點⇄任務＋篩選＋兩段切換）要放在圖層按鈕左邊：左邊距 24 ＋ 群組寬 ＋ 間距 16 ＋
- * 圖層按鈕 40 ＋ 右邊距 16。群組寬實測：桌機字級 444px → 需要 540；手機字級 484px → 需要 580。
+ * 圖層按鈕 44 ＋ 右邊距 16。群組寬實測：桌機字級 444px → 需要 544；手機字級 484px → 需要 584。
  * 取 640 讓兩種字級都有餘量。
  *
  * 以視窗寬度判斷會漏掉兩種情況：桌機開著詳情面板時地圖欄少 352px，滑鼠停在側欄上時再少 192px。
@@ -107,7 +107,7 @@ const VIEW_SWITCH_SEGMENTED_MIN = '@640';
 function SiteLayerButton({ controller }: SiteMapControlsProps) {
   return (
     <SiteControlSurface
-      sx={{ width: 40, height: 40, display: 'grid', placeItems: 'center' }}
+      sx={{ width: 44, height: 44, display: 'grid', placeItems: 'center' }}
     >
       <ButtonBase
         disableRipple
@@ -339,8 +339,8 @@ export function SiteMapControls({ controller }: SiteMapControlsProps) {
         <SiteControlSurface
           sx={{
             display: { '@': 'grid', [VIEW_SWITCH_SEGMENTED_MIN]: 'none' },
-            width: 40,
-            height: 40,
+            width: 44,
+            height: 44,
             placeItems: 'center',
           }}
         >
