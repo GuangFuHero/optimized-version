@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/elevation.css">
 <link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/base.css">
 <link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
-<link rel="stylesheet" href="js/site/site.css?v=20260913b">
+<link rel="stylesheet" href="js/site/site.css?v=20260919a">
 <style id="__om-edit-overrides"></style>
 </head>
 <body>
@@ -30,21 +30,22 @@
 
 <!-- 前後台共用狀態橋接（2026-08-22）：民眾建立的任務單與接任務狀態，後台任務管理讀同一份 -->
 <!-- QR 產生器（vendored，不走 CDN）：分享面板的現場列印張貼用 -->
-<script src="js/vendor/qrcode.js?v=20260913b"></script>
-<script src="js/shared/wg-bridge.js?v=20260913b"></script>
-<script src="js/site/site-route.js?v=20260913b"></script>
-<script src="js/site/site-data.js?v=20260913b"></script>
-<script type="text/babel" src="js/site/site-controls.jsx?v=20260913b" data-presets="react"></script>
+<script src="js/vendor/qrcode.js?v=20260919a"></script>
+<script src="js/shared/wg-bridge.js?v=20260919a"></script>
+<script src="js/site/site-route.js?v=20260919a"></script>
+<script src="js/site/site-data.js?v=20260919a"></script>
+<script type="text/babel" src="js/site/site-controls.jsx?v=20260919a" data-presets="react"></script>
 <!-- 全站橫幅（EA-FEAT-001）：前台與後台共用同一支元件，realm 不同 -->
-<script src="js/admin/announce/an-data.js?v=20260913b"></script>
-<script type="text/babel" src="js/admin/announce/an-banner.jsx?v=20260913b" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-shell.jsx?v=20260913b" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-detail.jsx?v=20260913b" data-presets="react"></script>
+<script src="js/admin/announce/an-data.js?v=20260919a"></script>
+<script type="text/babel" src="js/admin/announce/an-banner.jsx?v=20260919a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-shell.jsx?v=20260919a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-detail.jsx?v=20260919a" data-presets="react"></script>
 <!-- 地標選點：與後台建單共用同一支元件（2026-08-22）。必須排在 site-controls.jsx 之後 —— 它在載入當下就讀 window.WGIcon -->
-<script type="text/babel" src="js/admin/ticket/tk-locpicker.jsx?v=20260913b" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-actions.jsx?v=20260913b" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-notify.jsx?v=20260913b" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-list.jsx?v=20260913b" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-locpicker.jsx?v=20260919a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-actions.jsx?v=20260919a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-building.jsx?v=20260919a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-notify.jsx?v=20260919a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-list.jsx?v=20260919a" data-presets="react"></script>
 
 <script type="text/babel" data-presets="react">
 /* /list — app route composition（對應 apps/demo/src/app/(site)/list/[[...segments]]/page.tsx）
