@@ -16,5 +16,8 @@
     "next-auth": "^4.24.14",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
+  },
+  "scripts": {
+    "typecheck": "next typegen && tsc --noEmit -p tsconfig.json"
   }
 }

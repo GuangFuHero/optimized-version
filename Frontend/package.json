@@ -14,7 +14,8 @@
     "affected:lint": "nx affected -t lint",
     "graph": "nx graph",
     "reset": "nx reset",
-    "codegen": "graphql-codegen --config libs/data-access/src/graphql/codegen.ts"
+    "codegen": "graphql-codegen --config libs/data-access/src/graphql/codegen.ts",
+    "typecheck": "pnpm -r typecheck"
   },
   "private": true,
   "devDependencies": {

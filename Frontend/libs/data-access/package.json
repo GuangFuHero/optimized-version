@@ -12,5 +12,8 @@
     "graphql": "^16.13.2",
     "react": "^19.0.0",
     "urql": "^5.0.1"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json"
   }
 }

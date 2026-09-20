@@ -85,6 +85,8 @@ Frontend/
 
 Libraries 透過 `exports` 提供 `src/index.ts`，`@rescue-frontend/data-access/server` 則提供 `src/server.ts`。Next.js 的 `transpilePackages` 負責編譯這些 TypeScript source，不需要先 build libraries。
 
+在 `Frontend/` 執行 `pnpm typecheck` 可檢查所有 packages，也可用 `pnpm --filter @rescue-frontend/ui typecheck` 單獨檢查一個 package。Demo 的 typecheck 會先執行 `next typegen` 產生 route types，不需要先 build 或啟動 dev server。GitHub Actions 的 `frontend-ci.yaml` 會在 frontend pull requests 與 main branch 更新時執行 typecheck 與 lint。
+
 ---
 
 ## 常用指令
