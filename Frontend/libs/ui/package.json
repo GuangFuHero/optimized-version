@@ -1,12 +1,19 @@
 {
   "name": "@rescue-frontend/ui",
   "version": "0.0.1",
-  "main": "./index.js",
-  "types": "./index.d.ts",
+  "private": true,
   "exports": {
-    ".": {
-      "import": "./index.mjs",
-      "require": "./index.js"
-    }
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.0.0",
+    "@mui/material": "^9.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json"
   }
 }

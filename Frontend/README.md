@@ -6,7 +6,7 @@
 
 ## 技術棧
 
-- **Monorepo**：Nx 22（integrated monorepo，單一 root `package.json`）+ pnpm workspaces
+- **Monorepo**：Nx 22 + pnpm workspaces，各 app 與 library 使用自己的 `package.json`
 - **App framework**：Next.js 16（App Router）、React 19
 - **UI**：MUI 9 + Emotion、Leaflet / react-leaflet（地圖）
 - **資料存取**：urql 5 + `@urql/exchange-graphcache`（GraphQL）、GraphQL Code Generator
@@ -79,13 +79,13 @@ Frontend/
 
 ```
 
-### Path Aliases（`tsconfig.base.json`）
+### Workspace packages
 
-| Alias                          | 指向                            |
-| ------------------------------ | ------------------------------- |
-| `@rescue-frontend/ui`          | `libs/ui/src/index.ts`          |
-| `@rescue-frontend/modules`     | `libs/modules/src/index.ts`     |
-| `@rescue-frontend/data-access` | `libs/data-access/src/index.ts` |
+`apps/demo` 與 `libs/*` 都是 private workspace packages，各自在 `package.json` 宣告 dependencies。內部依賴使用 `workspace:*`，由 pnpm 連結，不使用 TypeScript path aliases。共用開發工具保留在 root `package.json`。
+
+Libraries 透過 `exports` 提供 `src/index.ts`，`@rescue-frontend/data-access/server` 則提供 `src/server.ts`。Next.js 的 `transpilePackages` 負責編譯這些 TypeScript source，不需要先 build libraries。
+
+在 `Frontend/` 執行 `pnpm typecheck` 可檢查所有 packages，也可用 `pnpm --filter @rescue-frontend/ui typecheck` 單獨檢查一個 package。Demo 的 typecheck 會先執行 `next typegen` 產生 route types，不需要先 build 或啟動 dev server。GitHub Actions 的 `frontend-ci.yaml` 會在 frontend pull requests 與 main branch 更新時執行 typecheck 與 lint。
 
 ---
 

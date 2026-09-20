@@ -15,12 +15,10 @@ function buildCacheControl() {
   return `public, max-age=${ATTRIBUTION_STALE_SECONDS}, s-maxage=${ATTRIBUTION_CACHE_SECONDS}, stale-while-revalidate=${ATTRIBUTION_STALE_SECONDS}`;
 }
 
-export async function GET(context: {
-  params: Promise<{
-    type: string;
-    source: string;
-  }>;
-}) {
+export async function GET(
+  _request: Request,
+  context: RouteContext<'/api/map/attribution/[type]/[source]'>,
+) {
   const params = await context.params;
   const backendUrl = buildAttributionUrl(params);
 
