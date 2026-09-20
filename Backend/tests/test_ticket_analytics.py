@@ -394,6 +394,12 @@ def test_render_pivoted_line_tolerates_a_none_key():
     assert list(fig.data[0].x) == ["a", "b", None]
 
 
+def test_render_pivoted_line_orders_categories_by_glossary():
+    """task_type keys sort in _CATEGORY_LABEL order, not alphabetically; 未分類 last."""
+    fig = _render_pivoted(["uncategorized", "hr", "rescue"], {"v": [1, 2, 3]}, "line", ChartStyle())
+    assert list(fig.data[0].x) == ["搜救", "人力", "未分類"]
+
+
 def test_resolve_forced_x_fallback_is_deterministic():
     """allowed_x is an ordered tuple, so a forced-shape metric's fallback is stable."""
     for _ in range(5):

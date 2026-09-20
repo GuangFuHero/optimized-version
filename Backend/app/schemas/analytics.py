@@ -118,7 +118,9 @@ class ChartResponse(BaseModel):
 class ValueResponse(BaseModel):
     """A metric's single ungrouped aggregate — the number a KPI card shows."""
 
-    value: int | float
+    value: int | float = Field(
+        description="In the metric's catalog `unit`; completion_rate is 0–100."
+    )
 
 
 class YMetricSpec(BaseModel):
@@ -129,7 +131,7 @@ class YMetricSpec(BaseModel):
     """
 
     label: str = Field(description="Display name (zh-TW).")
-    unit: str = Field(description="Unit suffix for the value, e.g. '件', '%', '天'.")
+    unit: str = Field(description="Unit suffix for the `/value` number, e.g. '件', '%', '天'.")
     description: str = Field(description="One-line explanation of what the metric measures.")
     allowed_x: list[str] = Field(
         description="Valid values for the `x` query param on this y-metric: any of "

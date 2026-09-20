@@ -19,6 +19,7 @@ from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
+from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import chart_render
 from tests.conftest import auth_headers_for
 
@@ -479,12 +480,40 @@ async def test_value_returns_the_aggregate_within_the_callers_scope(client, db_s
 
 
 @pytest.mark.asyncio
-async def test_value_of_completion_rate_is_a_fraction(client, db_session, redis):
-    """Rate metrics come back as 0–1 floats, not counts; empty data is 0.0 rather than a 500."""
-    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
+async def test_value_of_completion_rate_is_a_percentage(client, db_session, redis):
+    """The number is in the catalog's unit (`%`), so 1 of 2 completed is 50.0, not 0.5.
+
+    The chart keeps the 0–1 row and formats it with `.0%`; only `/value` scales, because a
+    KPI card composes `value + unit` straight from the catalog. Empty data is 0, not a 500.
+    """
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(TICKETS_VALUE_URL, params={"y": "completion_rate"}, headers=headers)
     assert res.status_code == 200
-    assert res.json()["value"] == 0.0
+    assert res.json()["value"] == 0
+
+    open_ticket, done_ticket = (
+        Tickets(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid,
+            title="t", contact_name="c", status="pending", priority="high",
+            task_type="rescue", visibility="public",
+        )
+        for _ in range(2)
+    )
+    db_session.add_all([open_ticket, done_ticket])
+    await db_session.flush()
+    task = TicketTask(
+        ticket_uuid=done_ticket.uuid, task_type="rescue", task_name="task",
+        source="user", visibility="public", created_by=user_uuid, status="fulfilled",
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(TaskAssignment(task_uuid=task.uuid, actor_uuid=user_uuid, status="completed"))
+    await db_session.commit()
+
+    res = await client.get(TICKETS_VALUE_URL, params={"y": "completion_rate"}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["value"] == 50.0
 
 
 @pytest.mark.asyncio

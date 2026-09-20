@@ -105,7 +105,8 @@ _Y_DESCRIPTION = (
 _VALUE_Y_DESCRIPTION = (
     "Which metric's total to return. Only single-number metrics are accepted "
     "(ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or "
-    "multi-series metric such as age_distribution or net_backlog_change is a 400."
+    "multi-series metric such as age_distribution or net_backlog_change is a 400. The "
+    "number is in the metric's catalog `unit` — completion_rate is 0–100, not a fraction."
 )
 _X_DESCRIPTION = (
     "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). "
@@ -293,7 +294,12 @@ async def _value_domain(
         )
     except AnalyticsInputError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
-    return ValueResponse(value=data[0][key] if data else 0)
+    value = data[0][key] if data else 0
+    if chart_render.CATALOG[domain][y.value]["unit"] == "%":
+        # Rate rows are 0–1 fractions (the chart's `.0%` tickformat needs that); the
+        # catalog promises `%`, so the KPI number is scaled to match its own unit.
+        value *= 100
+    return ValueResponse(value=value)
 
 
 @router.get(

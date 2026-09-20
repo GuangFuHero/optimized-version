@@ -118,14 +118,16 @@ CATALOG = {"tickets": _TICKET_CATALOG, "stations": _STATION_CATALOG}
 # Axis-category display names. Keys are the raw values the data layer emits (task_type,
 # operational_status, the fixed pie/aggregate labels). Anything not listed — station `type`
 # is free text — renders as-is. Age buckets ("<24h") are already readable and stay ASCII.
+# Insertion order is the axis order for line charts (_render_pivoted), so 未分類 stays last.
 _CATEGORY_LABEL = {
     "overall": "總計",
-    "uncategorized": "未分類",
     "rescue": "搜救", "supply": "物資", "medical": "醫療", "hr": "人力",
     "active": "營運中", "temporarily_closed": "暫停營運", "permanently_closed": "永久關閉",
     "completed": "已完成", "remaining": "未完成",
     "shelter": "收容所",
+    "uncategorized": "未分類",
 }
+_CATEGORY_ORDER = {k: i for i, k in enumerate(_CATEGORY_LABEL)}
 
 # Per-metric axis rules the style input must not be able to break.
 _METRIC_LAYOUT = {
@@ -184,11 +186,21 @@ def _render_pivoted(
         # of showing a clean trend. Sort here so every line chart is correct regardless
         # of which query produced its rows (some data-layer functions already return
         # date-sorted rows; this makes it true unconditionally, not by convention).
-        # The `is None` half of the key is a backstop: the data layer labels NULL
-        # categories and drops NULL dates, so None shouldn't reach here — but this is the
-        # one function every metric's line chart flows through, and mixing None with str
-        # or datetime raises TypeError, which would surface as a 500.
-        order = sorted(range(len(x_values)), key=lambda i: (x_values[i] is None, x_values[i]))
+        # Known categories go in glossary order (_CATEGORY_ORDER); dates and free-text
+        # keys share the `unknown` rank and fall through to the value itself, so dates
+        # stay chronological. The `is None` half of the key is a backstop: the data layer
+        # labels NULL categories and drops NULL dates, so None shouldn't reach here — but
+        # this is the one function every metric's line chart flows through, and mixing
+        # None with str or datetime raises TypeError, which would surface as a 500.
+        unknown = len(_CATEGORY_ORDER)
+        order = sorted(
+            range(len(x_values)),
+            key=lambda i: (
+                x_values[i] is None,
+                _CATEGORY_ORDER.get(x_values[i], unknown),
+                x_values[i],
+            ),
+        )
         x_values = [x_values[i] for i in order]
         series = {name: [values[i] for i in order] for name, values in series.items()}
     x_values = [_CATEGORY_LABEL.get(v, v) if isinstance(v, str) else v for v in x_values]
