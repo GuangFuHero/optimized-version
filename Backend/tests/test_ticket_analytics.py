@@ -16,6 +16,7 @@ from shapely.geometry import Point
 from app.models.auth import User
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
+from app.schemas.analytics import ChartStyle
 from app.services import ticket_analytics
 from app.services.analytics_common import UNCATEGORIZED_LABEL
 from app.services.chart_render import _render_pivoted, render_chart, resolve
@@ -389,7 +390,7 @@ async def test_duplicate_count_requires_a_date_range(db):
 
 def test_render_pivoted_line_tolerates_a_none_key():
     """Backstop at the shared render boundary: a None key sorts last instead of raising."""
-    fig = _render_pivoted(["b", None, "a"], {"v": [1, 2, 3]}, "line")
+    fig = _render_pivoted(["b", None, "a"], {"v": [1, 2, 3]}, "line", ChartStyle())
     assert list(fig.data[0].x) == ["a", "b", None]
 
 

@@ -18,14 +18,19 @@ Example queries:
 - `?y=task_completion_distribution` — no `x` needed, always a fixed 2-slice pie
 - `?y=net_backlog_change` — no `x` needed either; this metric is always date-grouped
 
-Each endpoint runs its aggregation query (app.services.ticket_analytics /
+Each chart endpoint runs its aggregation query (app.services.ticket_analytics /
 station_analytics) and renders it to a partial HTML `<div>` (no embedded plotly.js —
 the frontend loads the library once and injects the div; see
-https://plotly.com/python/interactive-html-export/).
+https://plotly.com/python/interactive-html-export/). The `/value` endpoints run the same
+query ungrouped and return the one number a KPI card shows, so the frontend doesn't have to
+render a chart just to read a total.
 
-`layout_overrides` lets the frontend adjust chart styling beyond `theme`/`width`/
-`height` — any key from the Plotly Layout reference
-(https://plotly.com/python/reference/layout/), passed through to `Figure.update_layout`.
+Presentation is layered: `style` (JSON, see ChartStyle — palette, font, legend, line/pie
+shape, modebar; defaults are the ops dashboard's look and are published as
+`default_style` on `/catalog`) is applied first, then `width`/`height`, then
+`layout_overrides` — any key from the Plotly Layout reference
+(https://plotly.com/python/reference/layout/) passed through to `Figure.update_layout`,
+for anything `style` doesn't cover.
 """
 
 import json
@@ -34,6 +39,7 @@ from functools import partial
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
@@ -45,12 +51,13 @@ from app.models.request import Tickets
 from app.schemas.analytics import (
     CatalogResponse,
     ChartResponse,
-    ChartTheme,
+    ChartStyle,
     ChartType,
     ChartX,
     ChartXGranularity,
     StationYMetric,
     TicketYMetric,
+    ValueResponse,
     YMetricSpec,
 )
 from app.services import chart_render, station_analytics, ticket_analytics
@@ -78,9 +85,27 @@ STATION_METRIC_FNS = {
     StationYMetric.station_freshness_trend: station_analytics.get_station_freshness_trend,
 }
 
+# Metrics whose ungrouped aggregate is one number (the KPI cards), and which row key holds
+# it. The rest are forced-shape or multi-series and only make sense as a chart.
+VALUE_KEYS = {
+    TicketYMetric.total_tickets: "count",
+    TicketYMetric.ongoing_tickets: "count",
+    TicketYMetric.unassigned_tickets: "count",
+    TicketYMetric.completed_tickets: "count",
+    TicketYMetric.canceled_tickets: "count",
+    TicketYMetric.completion_rate: "rate",
+    TicketYMetric.duplicate_count: "count",
+    StationYMetric.station_count: "count",
+}
+
 _Y_DESCRIPTION = (
     "What to measure — see GET /analytics/catalog for the full list and which `x` "
     "values / chart types each one supports."
+)
+_VALUE_Y_DESCRIPTION = (
+    "Which metric's total to return. Only single-number metrics are accepted "
+    "(ticket counts, completion_rate, duplicate_count, station_count); a forced-shape or "
+    "multi-series metric such as age_distribution or net_backlog_change is a 400."
 )
 _X_DESCRIPTION = (
     "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). "
@@ -98,8 +123,13 @@ _TZ_DESCRIPTION = (
     "interpreted (local midnight in this timezone, not UTC midnight) — duration-based "
     "metrics like age_distribution/time_to_completion ignore it."
 )
+_STYLE_DESCRIPTION = (
+    "JSON-encoded ChartStyle: palette, font, legend position, line/pie shape, margin, "
+    "modebar. Every field is optional; omitted ones take the defaults published as "
+    "`default_style` on GET /analytics/catalog. Unknown fields are a 400."
+)
 _LAYOUT_OVERRIDES_DESCRIPTION = (
-    "JSON-encoded object merged into the figure's layout — any key from "
+    "JSON-encoded object merged into the figure's layout after `style` — any key from "
     "https://plotly.com/python/reference/layout/, e.g. "
     '\'{"title": {"text": "Custom title"}}\'.'
 )
@@ -149,12 +179,34 @@ def _parse_layout_overrides(layout_overrides: str | None) -> dict | None:
     return parsed
 
 
+def _parse_style(style: str | None) -> ChartStyle:
+    """Decode the JSON-encoded `style` query param into a ChartStyle (defaults when omitted)."""
+    if not style:
+        return ChartStyle()
+    try:
+        return ChartStyle.model_validate(json.loads(style))
+    except json.JSONDecodeError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="style is not valid JSON"
+        ) from err
+    except ValidationError as err:
+        detail = "; ".join(
+            f"{'.'.join(str(p) for p in e['loc']) or 'style'}: {e['msg']}" for e in err.errors()
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"invalid style: {detail}"
+        ) from err
+
+
 def _serialize_spec(spec: dict) -> YMetricSpec:
     """Convert one chart_render.CATALOG entry into a JSON-friendly YMetricSpec.
 
     'none' stands in for the Python None / aggregate-no-grouping value.
     """
     return YMetricSpec(
+        label=spec["label"],
+        unit=spec["unit"],
+        description=spec["description"],
         allowed_x=sorted("none" if v is None else v for v in spec["allowed_x"]),
         default_chart_type=spec["default_chart_type"],
         allowed_chart_types=sorted(spec["allowed_chart_types"]),
@@ -163,46 +215,85 @@ def _serialize_spec(spec: dict) -> YMetricSpec:
     )
 
 
+async def _query_metric(
+    domain: str, metric_fns: dict, db: AsyncSession, *,
+    y, x: str | None, x_granularity: str, chart_type: str | None,
+    start_date: date | None, end_date: date | None, tz: str,
+    extra_filters: list,
+) -> tuple[str | None, str, list[dict]]:
+    """Resolve the request against the catalog and run the metric's aggregation query.
+
+    Shared by the chart and value endpoints. `extra_filters` is the caller's RBAC row
+    filter; see the service module docstrings. Raises HTTPException (bad tz) or
+    AnalyticsInputError (unknown y, bad chart_type, missing/over-wide date range).
+    """
+    tzinfo = _parse_tz(tz)
+    resolved_x, resolved_chart_type = chart_render.resolve(domain, y.value, x, chart_type)
+    data = await metric_fns[y](
+        db, x=resolved_x, x_granularity=x_granularity,
+        start_date=start_date, end_date=end_date, tz=tzinfo,
+        extra_filters=extra_filters,
+    )
+    return resolved_x, resolved_chart_type, data
+
+
 async def _render_domain(
     domain: str, metric_fns: dict, db: AsyncSession, *,
     y, x, x_granularity, chart_type,
     start_date: date | None, end_date: date | None, tz: str,
-    theme, width: int | None, height: int | None, layout_overrides: str | None,
+    style: str | None, width: int | None, height: int | None, layout_overrides: str | None,
     extra_filters: list,
 ) -> ChartResponse:
     """Shared body of both chart endpoints — resolve, query, render.
 
     The two handlers keep their own signatures so OpenAPI documents each domain's real
     `y` enum, but everything after parameter binding is identical, so it lives here.
-    `extra_filters` is the caller's RBAC row filter; see the service module docstrings.
 
-    Every 400 comes from `_parse_tz` / `_parse_layout_overrides`, which raise HTTPException
-    themselves, or from an AnalyticsInputError below. Catching that narrow type rather than
-    ValueError is deliberate: our own bugs raise plain ValueError, and 400-ing those would
-    file a server fault as the caller's mistake and echo internal text back to them.
+    Every 400 comes from `_parse_tz` / `_parse_style` / `_parse_layout_overrides`, which
+    raise HTTPException themselves, or from an AnalyticsInputError below. Catching that
+    narrow type rather than ValueError is deliberate: our own bugs raise plain ValueError,
+    and 400-ing those would file a server fault as the caller's mistake and echo internal
+    text back to them.
     """
     try:
-        tzinfo = _parse_tz(tz)
+        chart_style = _parse_style(style)
         overrides = _parse_layout_overrides(layout_overrides)
-        x_value = x.value if x is not None else None
-        chart_type_value = chart_type.value if chart_type is not None else None
-
-        resolved_x, resolved_chart_type = chart_render.resolve(
-            domain, y.value, x_value, chart_type_value
-        )
-        data = await metric_fns[y](
-            db, x=resolved_x, x_granularity=x_granularity.value,
-            start_date=start_date, end_date=end_date, tz=tzinfo,
-            extra_filters=extra_filters,
+        resolved_x, resolved_chart_type, data = await _query_metric(
+            domain, metric_fns, db,
+            y=y, x=x.value if x is not None else None, x_granularity=x_granularity.value,
+            chart_type=chart_type.value if chart_type is not None else None,
+            start_date=start_date, end_date=end_date, tz=tz, extra_filters=extra_filters,
         )
         html = chart_render.render_chart(
             domain, y.value, data,
             x=resolved_x, chart_type=resolved_chart_type,
-            theme=theme.value, width=width, height=height, layout_overrides=overrides,
+            style=chart_style, width=width, height=height, layout_overrides=overrides,
         )
     except AnalyticsInputError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
     return ChartResponse(html=html)
+
+
+async def _value_domain(
+    domain: str, metric_fns: dict, db: AsyncSession, *,
+    y, start_date: date | None, end_date: date | None, tz: str, extra_filters: list,
+) -> ValueResponse:
+    """Shared body of both value endpoints — the metric's ungrouped aggregate as one number."""
+    key = VALUE_KEYS.get(y)
+    if key is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"y={y.value!r} has no single-value form; use the chart endpoint",
+        )
+    try:
+        _, _, data = await _query_metric(
+            domain, metric_fns, db,
+            y=y, x=None, x_granularity=ChartXGranularity.day.value, chart_type=None,
+            start_date=start_date, end_date=end_date, tz=tz, extra_filters=extra_filters,
+        )
+    except AnalyticsInputError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
+    return ValueResponse(value=data[0][key] if data else 0)
 
 
 @router.get(
@@ -224,6 +315,7 @@ async def get_analytics_catalog():
     return CatalogResponse(
         tickets={k: _serialize_spec(v) for k, v in chart_render.CATALOG["tickets"].items()},
         stations={k: _serialize_spec(v) for k, v in chart_render.CATALOG["stations"].items()},
+        default_style=ChartStyle(),
     )
 
 
@@ -236,7 +328,7 @@ async def get_ticket_chart(
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
     tz: str = Query("UTC", description=_TZ_DESCRIPTION),
-    theme: ChartTheme = Query(ChartTheme.light, description="Base Plotly template."),
+    style: str | None = Query(None, description=_STYLE_DESCRIPTION),
     width: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_WIDTH_DESCRIPTION),
     height: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_HEIGHT_DESCRIPTION),
     layout_overrides: str | None = Query(None, description=_LAYOUT_OVERRIDES_DESCRIPTION),
@@ -258,7 +350,25 @@ async def get_ticket_chart(
         "tickets", TICKET_METRIC_FNS, db,
         y=y, x=x, x_granularity=x_granularity, chart_type=chart_type,
         start_date=start_date, end_date=end_date, tz=tz,
-        theme=theme, width=width, height=height, layout_overrides=layout_overrides,
+        style=style, width=width, height=height, layout_overrides=layout_overrides,
+        extra_filters=scope_filter(scope, actor=current_user, model=Tickets),
+    )
+
+
+@router.get("/tickets/value", response_model=ValueResponse)
+async def get_ticket_value(
+    y: TicketYMetric = Query(..., description=_VALUE_Y_DESCRIPTION),
+    start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
+    end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
+    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    scope: Scope = security.has_permission(Perm.TICKET_VIEW),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+):
+    """One ticket/task metric's ungrouped aggregate as a number — what a KPI card shows."""
+    return await _value_domain(
+        "tickets", TICKET_METRIC_FNS, db,
+        y=y, start_date=start_date, end_date=end_date, tz=tz,
         extra_filters=scope_filter(scope, actor=current_user, model=Tickets),
     )
 
@@ -272,7 +382,7 @@ async def get_station_chart(
     start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
     end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
     tz: str = Query("UTC", description=_TZ_DESCRIPTION),
-    theme: ChartTheme = Query(ChartTheme.light, description="Base Plotly template."),
+    style: str | None = Query(None, description=_STYLE_DESCRIPTION),
     width: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_WIDTH_DESCRIPTION),
     height: int | None = Query(None, ge=_MIN_FIGURE_PX, description=_HEIGHT_DESCRIPTION),
     layout_overrides: str | None = Query(None, description=_LAYOUT_OVERRIDES_DESCRIPTION),
@@ -290,6 +400,24 @@ async def get_station_chart(
         "stations", STATION_METRIC_FNS, db,
         y=y, x=x, x_granularity=x_granularity, chart_type=chart_type,
         start_date=start_date, end_date=end_date, tz=tz,
-        theme=theme, width=width, height=height, layout_overrides=layout_overrides,
+        style=style, width=width, height=height, layout_overrides=layout_overrides,
+        extra_filters=scope_filter(scope, actor=current_user, model=Station),
+    )
+
+
+@router.get("/stations/value", response_model=ValueResponse)
+async def get_station_value(
+    y: StationYMetric = Query(..., description=_VALUE_Y_DESCRIPTION),
+    start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
+    end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
+    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    scope: Scope = security.has_permission(Perm.STATION_VIEW),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+):
+    """One station metric's ungrouped aggregate as a number — what a KPI card shows."""
+    return await _value_domain(
+        "stations", STATION_METRIC_FNS, db,
+        y=y, start_date=start_date, end_date=end_date, tz=tz,
         extra_filters=scope_filter(scope, actor=current_user, model=Station),
     )
