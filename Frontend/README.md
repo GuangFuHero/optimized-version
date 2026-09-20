@@ -87,6 +87,8 @@ Libraries 透過 `exports` 提供 `src/index.ts`，`@rescue-frontend/data-access
 
 在 `Frontend/` 執行 `pnpm typecheck` 可檢查所有 packages，也可用 `pnpm --filter @rescue-frontend/ui typecheck` 單獨檢查一個 package。Demo 的 typecheck 會先執行 `next typegen` 產生 route types，不需要先 build 或啟動 dev server。GitHub Actions 的 `frontend-ci.yaml` 會在 frontend pull requests 與 main branch 更新時執行 typecheck 與 lint。
 
+開發 UI library 時，執行 `pnpm dev:ui` 啟動 Storybook，預設 port 為 6006。Stories 使用共用 MUI theme，包含 icon gallery 與可互動的 pagination。更多指令見 [`libs/ui/README.md`](libs/ui/README.md)。
+
 ---
 
 ## 常用指令
