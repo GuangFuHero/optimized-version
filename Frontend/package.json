@@ -16,7 +16,7 @@
     "reset": "nx reset",
     "codegen": "graphql-codegen --config libs/data-access/src/graphql/codegen.ts",
     "typecheck": "pnpm -r typecheck",
-    "dev:ui": "pnpm --filter @rescue-frontend/ui dev"
+    "dev:ui": "nx dev ui"
   },
   "private": true,
   "devDependencies": {
