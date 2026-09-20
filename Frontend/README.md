@@ -20,6 +20,7 @@
 ### 1. 安裝套件
 
 ```bash
+corepack enable
 pnpm install
 ```
 
