@@ -115,10 +115,9 @@ _STATION_CATALOG = {
 
 CATALOG = {"tickets": _TICKET_CATALOG, "stations": _STATION_CATALOG}
 
-# Axis-category display names. Keys are the raw values the data layer emits (task_type,
-# operational_status, the fixed pie/aggregate labels). Anything not listed — station `type`
-# is free text — renders as-is. Age buckets ("<24h") are already readable and stay ASCII.
-# Insertion order is the axis order for line charts (_render_pivoted), so 未分類 stays last.
+# Axis-category display names, keyed by the raw values the data layer emits; unlisted values
+# (free-text station `type`, age buckets) render as-is. Insertion order is the line-chart
+# axis order, so 未分類 stays last.
 _CATEGORY_LABEL = {
     "overall": "總計",
     "rescue": "搜救", "supply": "物資", "medical": "醫療", "hr": "人力",
@@ -181,17 +180,10 @@ def _render_pivoted(
     Series colours are not set per trace; they come from layout.colorway (see _layout_for).
     """
     if chart_type == "line":
-        # A line connects points in array order, not by re-sorting them — since a SQL
-        # GROUP BY doesn't guarantee row order, an unsorted trace would zig-zag instead
-        # of showing a clean trend. Sort here so every line chart is correct regardless
-        # of which query produced its rows (some data-layer functions already return
-        # date-sorted rows; this makes it true unconditionally, not by convention).
-        # Known categories go in glossary order (_CATEGORY_ORDER); dates and free-text
-        # keys share the `unknown` rank and fall through to the value itself, so dates
-        # stay chronological. The `is None` half of the key is a backstop: the data layer
-        # labels NULL categories and drops NULL dates, so None shouldn't reach here — but
-        # this is the one function every metric's line chart flows through, and mixing
-        # None with str or datetime raises TypeError, which would surface as a 500.
+        # A line connects points in array order and SQL GROUP BY promises none, so sort
+        # here. Known categories follow glossary order; dates and free-text keys share the
+        # `unknown` rank and sort by value, so dates stay chronological. None sorts last so
+        # a stray NULL can't raise TypeError against str/datetime.
         unknown = len(_CATEGORY_ORDER)
         order = sorted(
             range(len(x_values)),

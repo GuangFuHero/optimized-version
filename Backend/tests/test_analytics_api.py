@@ -481,10 +481,9 @@ async def test_value_returns_the_aggregate_within_the_callers_scope(client, db_s
 
 @pytest.mark.asyncio
 async def test_value_of_completion_rate_is_a_percentage(client, db_session, redis):
-    """The number is in the catalog's unit (`%`), so 1 of 2 completed is 50.0, not 0.5.
+    """`/value` is in the catalog unit (`%`): 1 of 2 completed is 50.0, not the chart's 0.5.
 
-    The chart keeps the 0–1 row and formats it with `.0%`; only `/value` scales, because a
-    KPI card composes `value + unit` straight from the catalog. Empty data is 0, not a 500.
+    Empty data is 0, not a 500.
     """
     user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
     res = await client.get(TICKETS_VALUE_URL, params={"y": "completion_rate"}, headers=headers)

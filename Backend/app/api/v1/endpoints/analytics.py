@@ -296,8 +296,8 @@ async def _value_domain(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
     value = data[0][key] if data else 0
     if chart_render.CATALOG[domain][y.value]["unit"] == "%":
-        # Rate rows are 0–1 fractions (the chart's `.0%` tickformat needs that); the
-        # catalog promises `%`, so the KPI number is scaled to match its own unit.
+        # Rate rows are 0–1 fractions but the catalog unit is `%`. The chart still needs
+        # the fraction for its `.0%` tickformat, so only the KPI number is scaled.
         value *= 100
     return ValueResponse(value=value)
 
