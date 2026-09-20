@@ -69,7 +69,7 @@ function SiteHeaderSearchField({
           />
         }
         endAdornment={
-          !!value ? (
+          value ? (
             <Box
               component="button"
               onClick={() =>

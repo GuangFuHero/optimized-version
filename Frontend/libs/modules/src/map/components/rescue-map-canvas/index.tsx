@@ -227,7 +227,7 @@ function syncClosureAreaLayer({
 }
 
 function subscribeViewportStoreNoop() {
-  return () => {};
+  return () => undefined;
 }
 
 function getEmptyViewportState(): RescueMapViewportStoreSnapshot {
