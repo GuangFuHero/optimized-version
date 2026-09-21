@@ -52,6 +52,11 @@ ROLES_DATA = [
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",      # help-request board is public (ADR-027)
             Perm.TICKET_VIEW_PII: "own",  # only your own request's contact info; others masked
+            # ADR-281: signing in is what unlocks the exact point, the address and the free
+            # text — the team's rule since 2026-07 (訪客看區域、登入看精確). `all` rather than
+            # hard-coded "logged in" so it can be narrowed here or at /admin/rbac, e.g. to
+            # `own` once the volunteer flow can hand out detail on sign-up instead.
+            Perm.TICKET_VIEW_DETAIL: "all",
             # ADR-128: the timeline mirrors view_pii's tiering exactly. `own` is what makes
             # Notion's front-of-house requirement real — a requester following their own
             # ticket's progress — without exposing anyone else's.
@@ -74,6 +79,7 @@ ROLES_DATA = [
             Perm.STATION_VIEW_PII: "all",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "all",
+            Perm.TICKET_VIEW_DETAIL: "all",
             Perm.USER_VIEW: "all",
             Perm.AUDIT_VIEW: "all",
             # ADR-130: audit.view is no longer the ticket into the timeline (that is
@@ -96,8 +102,8 @@ ROLES_DATA = [
                 Perm.STATION_VIEW, Perm.STATION_VIEW_PII, Perm.STATION_VIEW_HISTORY,
                 Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
                 Perm.STATION_DELETE, Perm.STATION_REVIEW,
-                Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_VIEW_HISTORY,
-                Perm.TICKET_ADD, Perm.TICKET_EDIT,
+                Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_VIEW_DETAIL,
+                Perm.TICKET_VIEW_HISTORY, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
                 Perm.FIELD_VIEW, Perm.FIELD_ADD, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
                 Perm.ANN_VIEW, Perm.ANN_PUBLISH, Perm.ANN_EDIT, Perm.ANN_DELETE,
@@ -140,6 +146,10 @@ ROLES_DATA = [
             Perm.STATION_REVIEW: "zone",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
+            # ADR-281: `all`, not `zone` like the contact details beside it. Every signed-in
+            # account already reads the exact point (see `user`), and a team identity that
+            # saw less than the citizen one would lose it on switching (ADR-097).
+            Perm.TICKET_VIEW_DETAIL: "all",
             # ADR-128: `zone`, never `team`. ADR-049 removed team_uuid from base_geometries,
             # so in_scope()'s TEAM branch can never match a geo resource — granting `team`
             # here would be an authorization that silently never holds.
@@ -183,6 +193,7 @@ ROLES_DATA = [
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
+            Perm.TICKET_VIEW_DETAIL: "all",  # ADR-281, see the admin role above
             # ADR-128: field workers need the timeline for the resources they actually work
             # — who took a task, who dropped it — so it matches view_pii at `zone`.
             Perm.TICKET_VIEW_HISTORY: "zone",

@@ -252,14 +252,16 @@ async def export_stations(
 # --- tickets ---
 
 
-async def _pii_decider(db: AsyncSession, actor: User):
-    """Return an `async (ticket) -> bool` answering "may this caller see this row's PII".
+async def _row_decider(db: AsyncSession, actor: User, perm: Perm):
+    """Return an `async (ticket) -> bool` answering "does `perm` reach this row for this caller".
 
-    Resolves the capability once and only falls back to a per-row geometry check when the
-    scope actually needs one — `all` and `none` are decided without touching the database
-    again (mirrors app/graphql/tickets/types.py:375).
+    Used for ticket.view_pii (the contact columns) and ticket.view_detail (the point and the
+    free text, ADR-281) — the same two decisions the API makes per field. Resolves the
+    capability once and only falls back to a per-row geometry check when the scope actually
+    needs one — `all` and `none` are decided without touching the database again (mirrors
+    TicketType._compute_pii_visible in app/graphql/tickets/types.py).
     """
-    scope = await resolve_scope(actor, Perm.TICKET_VIEW_PII, db)
+    scope = await resolve_scope(actor, perm, db)
     if scope == Scope.ALL:
         return lambda ticket: _always(True)
     if scope == Scope.NONE:
@@ -302,7 +304,8 @@ async def export_tickets(
             data_column=TicketTask.task_type, config_column=TaskPropertyConfig.task_type,
         )
         columns = await ticket_columns(db, task_type)
-        may_see_pii = await _pii_decider(db, actor)
+        may_see_pii = await _row_decider(db, actor, Perm.TICKET_VIEW_PII)
+        may_see_detail = await _row_decider(db, actor, Perm.TICKET_VIEW_DETAIL)
 
         pairs = list(
             (
@@ -337,20 +340,27 @@ async def export_tickets(
 
         rows = []
         for task, ticket in pairs:
-            latitude, longitude = _coordinates(ticket.geometry)
+            # AC-04: the export is one more path to the same fields, so the same boundary
+            # (ADR-281). Blank rather than coarsened or masked — the importer reads a blank
+            # cell as "leave it alone" (ADR-121) and never updates a ticket's point, so an
+            # out-of-scope row round-trips without erasing anything.
+            detail = await may_see_detail(ticket)
+            latitude, longitude = _coordinates(ticket.geometry) if detail else ("", "")
             row = {
                 "uuid": _text(ticket.uuid),
                 "latitude": latitude,
                 "longitude": longitude,
                 "task_type": _text(task.task_type),
                 "task_name": _text(task.task_name),
-                "task_description": _text(task.task_description),
+                "task_description": _text(task.task_description) if detail else "",
                 "task_quantity": _text(task.quantity),
                 **_contact_fields(ticket, visible=await may_see_pii(ticket)),
             }
             for field in ("title", "description", "status", "priority",
                           "visibility", "verification_status", "review_note", "created_at"):
                 row[field] = _text(getattr(ticket, field, None))
+            if not detail:
+                row["description"] = row["review_note"] = ""
             # One cell, comma-separated, matching what the importer splits back apart.
             row["disaster_types"] = ",".join(ticket.disaster_types or [])
             for column in columns:

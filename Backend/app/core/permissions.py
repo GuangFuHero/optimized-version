@@ -21,6 +21,13 @@ class Perm(StrEnum):
     # Ticket (PII split from the ticket itself: view != view_pii)
     TICKET_VIEW = "ticket.view"
     TICKET_VIEW_PII = "ticket.view_pii"
+    # ADR-281: everything that places the reporter or tells their story in their own words —
+    # the exact point, the street address, the free text, the photos, the review notes, who
+    # filed it. Not a reuse of ticket.view (public, ADR-027) nor of ticket.view_pii (contact
+    # details and triage answers, role-scoped): the seed grants this one to every role at
+    # `all`, so today it reads "signed in", but it stays a scope an admin can narrow at
+    # runtime. Without it the point comes back as the centre of an H3 cell (app/db/h3.py).
+    TICKET_VIEW_DETAIL = "ticket.view_detail"
     # Feature 016 (ADR-127): the change timeline is its own capability, not a reuse of
     # audit.view — that key is auditor-only, while the requirement is that a requester can
     # follow their own ticket. Not a reuse of ticket.view either: that one is in
@@ -125,6 +132,8 @@ class Perm(StrEnum):
 # these to Scope.ALL for every caller, authenticated or not, because the map, shelter list,
 # help-request board and 公告/行前通知 are all readable without an account. `ticket.view_pii`
 # is deliberately absent: PII always needs a real actor and is redacted per-field (ADR-029).
+# So is `ticket.view_detail`: withholding it from the anonymous caller is its whole point
+# (ADR-281).
 PUBLIC_PERMS = frozenset(
     {Perm.MAP_VIEW, Perm.ANN_VIEW, Perm.STATION_VIEW, Perm.TICKET_VIEW, Perm.PREDEP_VIEW}
 )

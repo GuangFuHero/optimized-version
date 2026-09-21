@@ -552,3 +552,128 @@ class docstring，並在 `unit` / `label` / `hint` / `enumOptions` 每一個欄�
 ➕ `disasterTypes: []` 順便講清楚：它不是清空，空陣列本身就是「所有災害型別都啟用」這個值。
 ◾ 可發現性是這次真正修的東西。行為零變化 —— 沒有任何 resolver 或 service 改動，
 只有 schema 說明文字，等於 GraphiQL / introspection 直接看得到。
+
+---
+
+以下三條來自 2026-09-19 的 PII 範圍盤點，取代 PR #51 初稿的 ADR-281/282（「沒權限回 `null`」）。
+
+### ADR-281 通報單的「詳情」由新能力 `ticket.view_detail` 把關：訪客看區域，登入看精確
+
+**Context**：實測匿名查 `ticket` / `tickets`，`geometry` 是原始座標（小數第 7 位），但地址
+`secondaryLocation` 已由 ADR-268 擋掉 —— 兩者指的是同一棟房子，等於沒擋。016 的分級表
+（`Spec/016-resource-history/decisions.md` §PII 層）把「精確座標」列為 PII，ADR-254 卻以
+「座標是公開的」為前提推論，兩份規格互相矛盾。
+
+團隊其實早有定案（Discord 2026-06-30〜07-03，UIUX × 後端；使用者 2026-09-19 再確認）：
+**沒登入只看一個區域，登入看精確位置**；用固定網格、不用亂數偏移。HC 當時也實作了
+（`20a3cfb`，PR #23：H3 格子中心 + 地址遮罩），但疊加 PR 由下往上合併，#23 合進一條
+已經合走的分支，從未抵達 main。Spec 008 另外以「二元模型與角色化互斥」為由只移植了
+`masking.py`（`Spec/008-rbac-authorization/decisions.md:293-295`）。
+
+設計原型 `Design/前台/js/site/site-data.js` 引用的 TM-FEAT-003 範圍更大：AC-02 訪客回應不含
+門牌級座標；AC-03 原始自由文字、照片、審核備註、建立者身分、聯絡資料不給訪客；AC-04 同一道
+邊界套用在 list / single / nested / mutation 回傳 / export 所有路徑。
+
+**Decision**：新增能力 `ticket.view_detail`，seed 給**全部五個角色 `all`**，不進 `PUBLIC_PERMS`。
+它把關下列欄位，沒權限時：
+
+| 欄位 | 沒有 `ticket.view_detail` |
+|---|---|
+| `TicketType.geometry` | 所在 H3 格子的中心點（ADR-283） |
+| `secondaryLocation` | `null`（原本看 `ticket.view_pii`，ADR-268） |
+| `description`、`reviewNote`、`createdBy` | `null` |
+| `photos` | `[]` |
+| task 的 `taskDescription`、`progressNote`、`reviewNote`、`createdBy` | `null` |
+| task property 的 `comment` | `null` |
+| 匯出的經緯度、描述、審核備註、任務說明 | 空白 |
+
+判斷是**一張單一次**：`ticket_detail_visible()` 以 ticket uuid 為 key 快取在 request context，
+單、它的任務、任務的屬性共用；任務與屬性沒有自己的座標與建立者，一律依所屬的單判斷。
+
+➕ 用能力而不是寫死「有沒有登入」：Spec 008 反對的是二元模型，這裡仍是 capability + scope。
+haoyun 當時的後續考量（登入門檻太低、72 小時緊急期與復原期是否不同、理想上接單後才給）
+以後**不需要改程式** —— 在 `/admin/rbac` 把 `user` 的 scope 縮成 `own`，範圍外的單自動退回格子。
+➕ 五個角色都要給：ADR-097 之後同一時間只有一個身分生效，團隊角色不會借用 `user` 的授權。
+`test_every_actionable_role_covers_the_citizen_baseline` 會替這件事把關。
+➕ 聯絡資料與兩個檢傷欄位**維持** `ticket.view_pii`（一般帳號 `own`）：那是「能不能聯絡到本人」，
+與「在哪裡」是兩條線。
+➕ 任務名稱、類型、人數、進度維持公開：那是志工判斷「我幫得上忙嗎」的結構化資訊，
+AC-03 要擋的是原始自由文字。
+➖ 取代 ADR-268「地址由 `ticket.view_pii` 把關」：登入的志工現在看得到別人的門牌。這是定案規則
+本身的內容，不是副作用；登入門檻太低的疑慮由上面的「可縮 scope」回應。
+➖ 否決 PR #51 初稿的「沒權限回 `null`」：前端 `mapTicketToMarker`（`markers.ts`）遇到 null 座標
+直接丟掉，列表也濾掉，訪客與一般志工會看到**空的任務地圖與列表**。
+◾ 本條取代 ADR-254 Context 裡「地圖上的座標也是公開的」這個前提，與 ADR-279「個人資訊在
+`secondaryLocation` 與兩個檢傷欄位，三者都由 `ticket.view_pii` 把關」中關於地址的那一半。
+◾ 標題維持公開、仍可能被寫進門牌 —— 原型同樣保留標題給訪客，列表也必須有東西可顯示。已知缺口。
+◾ 變更歷程（Spec 016）的地址欄位仍依 `ticket.view_pii` 分級；由於歷程本身要 `ticket.view_history`
+（一般帳號 `own`），實務上看得到歷程的人都已持有 detail。若日後縮小 `view_detail`，要回頭對齊。
+
+### ADR-282 `bounds` 與 `q` 逐列以「呼叫者看得到的那一份」比對
+
+**Context**：欄位擋住了，查詢條件沒擋就等於沒擋。`tickets(bounds:)` 用原始座標做
+`ST_Intersects`：把框對半縮小、看某張單還在不在，就能把被隱藏的點逼回來。`q` 比對的
+`search_text` 由標題**加描述**組成：輸入「中正路十二號」看有沒有結果，就能確認描述裡寫的門牌
+（與 ADR-146 把地址移出搜尋是同一類問題）。`ticketTasks(q:)` 的任務說明同理。
+
+**Decision**：repository 的 `list_active` / `count_active` 新增**必填**的 `detail_filters`
+（`scope_filter(ticket.view_detail)`：`[]` 全部看得到、`[false()]` 全部看不到），逐列判斷：
+
+```
+bounds：(看得到 AND 原始點在框內) OR (看不到 AND 格子中心在框內)
+q     ：公開比對（標題、任務名稱、任務屬性值）OR (看得到 AND 完整比對)
+排序  ：看不到時只以標題計算相關度
+```
+
+`ticketTasks(q:)` 依所屬單的 detail 決定比對 `task_name` 或 `search_text`（`public_only` 必填）。
+`title` 與 `task_name` 各加一個 trigram GIN 索引（ADR-152：公開那一半正是匿名呼叫端會跑的）。
+
+➕ 格子中心用**與顯示相同的 resolution**，所以回傳的每一點都在框內；縮框最多逼到格子，
+跟直接看到的一樣，沒有多洩漏。
+➕ 訪客的 bbox 仍有結果（#51 初稿讓它永遠為空，公開地圖會整片空白）。
+➕ 參數必填、沒有預設值：新的呼叫端不會因為忘了傳而退回「全部可比對」。
+➕ 排序也要換欄位：以 `search_text` 排序等於把「描述比對得多好」一列一列洩漏出去。
+➕ 格子中心是運算式、用不到空間索引，所以前面加一道預篩：中心在框內的列，原始點離框
+不會超過一個格子，「原始點在擴大後的框內」可以走 `geometry` 的 GIST 索引。擴大量取該
+resolution 平均邊長的 2 倍（`app/db/h3.py:coarse_margin_degrees`；H3 同一解析度的格子面積
+最多相差約一倍）。預篩只是多一個 AND，最後仍由格子中心決定，不會多透露任何東西。
+➖ 預篩範圍若抓太小會漏單：常數表由測試對照 h3-pg 的實際值，另有一個測試把單放在格子頂點
+附近（離中心最遠處）、框只圍住中心，確認仍查得到。
+◾ `count_active` 與 `list_active` 共用 `_active_conditions`，`totalCount` 不會透露被濾掉幾筆。
+◾ `seen` 以 `coalesce(..., false)` 包起來：`created_by` 為 NULL 的列，`own` 條件是 NULL，
+`NOT NULL` 仍是 NULL，兩個分支都不成立，那一列會無聲消失。
+
+### ADR-283 格子用 H3、在 Postgres 算（h3-pg），最細 resolution 8
+
+**Context**：「訪客看區域」需要一個固定、可重現的網格。HC 在 #23 選了 H3 並在資料庫端計算；
+對話中描述為「大約直徑 550m 的圓會被 mapping 在同一個點」。
+
+**Decision**：沿用 #23：`h3` + `h3_postgis` extension，`h3_cell_to_geometry(h3_lat_lng_to_cell(點, r))`。
+`zoom` 決定 resolution（錨點 zoom 13 → resolution 8，每一級 zoom 約 0.71 級 resolution），
+**封頂 resolution 8**，不論前端送什麼。`ticket` / `tickets` 新增選填參數 `zoom`。
+DB image 改為 `Backend/docker/postgres-h3/Dockerfile`（`postgis/postgis:16-3.4` + `postgresql-16-h3`），
+`deploy.sh` 第 5 步一併 build `db`。
+
+➕ 在資料庫端算：精確座標對沒權限的呼叫端從不離開 Postgres，而且 ADR-282 的 bbox 比對
+必須是 SQL 運算式才做得到。
+➕ 固定網格而不是亂數偏移：亂數每次不同，重複查詢取平均就能回推（HC）。
+➕ 格子中心走 `coarse_point` DataLoader：list、單筆、mutation 回傳都經過同一個 resolver，
+一個 request 只多一次批次查詢，不必把額外屬性掛在 ORM 物件上。
+➕ 另開 `TicketType.locationCell`（H3 index 字串，精確時為 `null`）：座標點本身看不出是格子中心
+還是精確點，前端若靠「有沒有登入」猜，`view_detail` 一縮成 `own` 就會錯（同一份列表兩種都有）。
+有了 cell id，前端用 h3-js `cellToBoundary` 畫格子、用字串分組，resolution 也在 index 裡，
+不必在前端重寫一份 zoom→resolution 公式。與 `geometry` 由同一個 statement 算出，兩者不會不一致。
+➖ resolution 8 實際比口述大：H3 官方表平均邊長 531 m、面積 0.737 km²，整格寬約 1 km，
+不是「直徑 550 m」。選較粗的：鄉間一格可能只有幾戶，resolution 9（邊長 201 m）會把範圍縮到一兩戶。
+➖ H3 不同解析度的格子不是完全套疊（aperture 7 的子格會跨出母格邊界）。訪客用不同 `zoom`
+查同一張單，把各解析度的中心交叉比對，可以把位置縮到 resolution 8 格子的一部分 ——
+但不會超出那一格。接受：保證的下限仍是一個 resolution 8 格子。
+➖ 同一格的單會疊在同一點，前端需要把「概略位置」畫成區域並分群（前端 PR 另開）。
+原型的 `GUEST_GRID_DIAMETER_M = 550` 把 550 當直徑，只是示意，不可沿用。
+➖ 換 DB image：staging 部署時 db container 會以同一個 `pgdata` volume 重建，停機數秒。
+`CREATE EXTENSION h3` 需要 superuser（staging 是）。
+◾ 取 cell 前先套 `ST_PointOnSurface`：`base_geometries` 同時放 ticket 的點與封閉區域的多邊形，
+Postgres 可能在 join `tickets` 之前就對整張表套用 bbox 條件，`h3_lat_lng_to_cell` 遇到多邊形會
+報錯（`geometry_to_point only accepts Points`），訪客地圖只要框內有封閉區域就整個失敗。
+是否發生取決於查詢計畫，所以時好時壞；回歸測試固定在框內放一塊封閉區域。
+◾ `pyproject.toml` 已有未被使用的 `h3`（Python 版）依賴，本條不使用它；是否移除另議。

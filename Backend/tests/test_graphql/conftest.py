@@ -79,6 +79,8 @@ async def _ensure_db():
         await _grant(db, login_role, perm_cache, Perm.STATION_VIEW_PII, "own")
         await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW, "all")
         await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW_PII, "own")
+        # Every seeded role holds this at `all` (ADR-281): signing in shows the exact place.
+        await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW_DETAIL, "all")
         await _grant(db, login_role, perm_cache, Perm.TICKET_ADD, "all")
         await _grant(db, login_role, perm_cache, Perm.TICKET_EDIT, "own")
         await _grant(db, login_role, perm_cache, Perm.TICKET_DELETE, "own")
@@ -100,6 +102,7 @@ async def _ensure_db():
         await _grant(db, coordinator_role, perm_cache, Perm.FIELD_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW_PII, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW_DETAIL, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_ADD, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_DELETE, "all")

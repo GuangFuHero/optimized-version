@@ -15,7 +15,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
-from app.models.search import plain, search_text_expression, search_text_index, truncated
+from app.models.search import (
+    plain,
+    search_text_expression,
+    search_text_index,
+    trigram_index,
+    truncated,
+)
 
 
 class TicketTask(Base, UUIDPKMixin, TimestampMixin):
@@ -54,7 +60,8 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
         deferred=True,
     )
 
-    __table_args__ = (search_text_index("ticket_tasks"),)
+    # The name on its own: what a caller without ticket.view_detail searches (ADR-281).
+    __table_args__ = (search_text_index("ticket_tasks"), trigram_index("ticket_tasks", "task_name"))
 
 
 class TaskProperty(Base, UUIDPKMixin, TimestampMixin):

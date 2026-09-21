@@ -45,7 +45,9 @@ class _SelectCounter:
 @pytest.mark.asyncio
 async def test_tickets_photos_uses_single_batched_query(client, coordinator_auth):
     """Asking for photos across N tickets must issue one SELECT against photos."""
-    user_uuid, _ = coordinator_auth
+    # Signed in: photos are ticket.view_detail (ADR-281), so an anonymous caller would get an
+    # empty list without the loader running at all — nothing left to count.
+    user_uuid, token = coordinator_auth
 
     async with _test_db_ctx() as db:
         tickets: list[Tickets] = []
@@ -72,7 +74,7 @@ async def test_tickets_photos_uses_single_batched_query(client, coordinator_auth
         await db.flush()
 
     with _SelectCounter("photos") as counter:
-        resp = await client.post("/graphql", json={
+        resp = await client.post("/graphql", headers=auth_header(token), json={
             "query": "query { tickets { items { uuid photos { url } } } }"
         })
 

@@ -4,7 +4,13 @@ from sqlalchemy import ARRAY, Computed, ForeignKey, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.geo import BaseGeometry
-from app.models.search import plain, search_text_expression, search_text_index, truncated
+from app.models.search import (
+    plain,
+    search_text_expression,
+    search_text_index,
+    trigram_index,
+    truncated,
+)
 
 
 class Tickets(BaseGeometry):
@@ -62,4 +68,5 @@ class Tickets(BaseGeometry):
         "polymorphic_identity": "request",
     }
 
-    __table_args__ = (search_text_index("tickets"),)
+    # The title on its own: what a caller without ticket.view_detail searches (ADR-281).
+    __table_args__ = (search_text_index("tickets"), trigram_index("tickets", "title"))

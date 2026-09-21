@@ -17,11 +17,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from strawberry.dataloader import DataLoader
 
+from app.db.h3 import h3_cell_text, h3_centroid
 from app.graphql.geo.types import (
     CrowdSourcingType,
     SecondaryLocationType,
     StationPropertyType,
 )
+from app.graphql.scalars import geom_to_geojson
 from app.graphql.tickets.types import (
     PhotoType,
     TaskAssignmentType,
@@ -30,7 +32,9 @@ from app.graphql.tickets.types import (
     TicketTaskType,
 )
 from app.graphql.work_zone.types import AssignedTeamType
+from app.models.geo import BaseGeometry
 from app.models.photo import Photo
+from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import CrowdSourcing, StationProperty
 from app.models.ticket_disaster_detail import TicketDisasterDetail
@@ -109,6 +113,11 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
             )
         ),
         "teams_by_zone": DataLoader(load_fn=_make_teams_by_zone_loader(db)),
+        # The three below serve the ticket.view_detail boundary (ADR-281): the ticket a task
+        # or property is judged by, and the coarse point shown in place of the exact one.
+        "ticket_by_uuid": DataLoader(load_fn=_make_ticket_by_uuid_loader(db)),
+        "ticket_uuid_by_task": DataLoader(load_fn=_make_ticket_uuid_by_task_loader(db)),
+        "coarse_point": DataLoader(load_fn=_make_coarse_point_loader(db)),
     }
 
 
@@ -183,6 +192,71 @@ def _make_photos_by_geometry_loader(db: AsyncSession):
         for row in rows:
             grouped[str(row.ref_uuid)].append(PhotoType.from_model(row))
         return [grouped[str(uuid)] for uuid in geometry_uuids]
+
+    return load_fn
+
+
+def _make_ticket_by_uuid_loader(db: AsyncSession):
+    """Batch-load tickets by uuid, for the `own`/`zone` detail check of their tasks.
+
+    Soft-deleted tickets included on purpose: this answers "whose is it and where", and a
+    task still reachable through `ticketTasks` must be judged by its ticket either way.
+    """
+
+    async def load_fn(ticket_uuids: list[str]) -> list[Tickets | None]:
+        rows = (
+            await db.execute(select(Tickets).where(Tickets.uuid.in_(ticket_uuids)))
+        ).scalars().all()
+        by_uuid = {str(row.uuid): row for row in rows}
+        return [by_uuid.get(str(uuid)) for uuid in ticket_uuids]
+
+    return load_fn
+
+
+def _make_ticket_uuid_by_task_loader(db: AsyncSession):
+    """Batch-load the ticket each task belongs to — a task property's only route to a scope."""
+
+    async def load_fn(task_uuids: list[str]) -> list[str | None]:
+        rows = (
+            await db.execute(
+                select(TicketTask.uuid, TicketTask.ticket_uuid).where(TicketTask.uuid.in_(task_uuids))
+            )
+        ).all()
+        by_task = {str(task_uuid): str(ticket_uuid) for task_uuid, ticket_uuid in rows}
+        return [by_task.get(str(uuid)) for uuid in task_uuids]
+
+    return load_fn
+
+
+def _make_coarse_point_loader(db: AsyncSession):
+    """Batch-load the coarse location, keyed ``(ticket_uuid, resolution)`` (ADR-281/283).
+
+    Each value is ``{"point": <GeoJSON of the cell centre>, "cell": <H3 index hex string>}``,
+    or None when the row is gone. Both come from one statement so the point and the cell a
+    client groups by can never disagree.
+
+    One statement per resolution in the batch — in practice one, since a request carries one
+    `zoom`. Selected from `base_geometries` directly: the point lives there, and selecting
+    `Tickets.geometry` as a bare column would put both halves of the joined inheritance in
+    the FROM clause with nothing joining them.
+    """
+
+    async def load_fn(keys: list[tuple[str, int]]) -> list[dict | None]:
+        by_resolution: dict[int, list[str]] = defaultdict(list)
+        for uuid, resolution in keys:
+            by_resolution[resolution].append(uuid)
+        coarse: dict[tuple[str, int], dict] = {}
+        for resolution, uuids in by_resolution.items():
+            rows = await db.execute(
+                select(
+                    BaseGeometry.uuid,
+                    h3_centroid(BaseGeometry.geometry, resolution),
+                    h3_cell_text(BaseGeometry.geometry, resolution),
+                ).where(BaseGeometry.uuid.in_(uuids))
+            )
+            for uuid, centre, cell in rows:
+                coarse[(str(uuid), resolution)] = {"point": geom_to_geojson(centre), "cell": cell}
+        return [coarse.get((str(uuid), resolution)) for uuid, resolution in keys]
 
     return load_fn
 

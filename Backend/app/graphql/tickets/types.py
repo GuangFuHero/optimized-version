@@ -11,6 +11,7 @@ import strawberry
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
+from app.db.h3 import COARSE_MAX_H3_RESOLUTION
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import (
@@ -20,6 +21,48 @@ from app.graphql.shared import (
     TriState,
     Visibility,
 )
+
+
+def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resource=None):
+    """Whether the caller may see this ticket's detail (ADR-281), decided once per request.
+
+    Detail is everything `ticket.view_detail` guards: the exact point, the address, the free
+    text of the ticket and its tasks, the photos, the review notes, who filed it. One ticket
+    is one decision, so the answer is shared by the ticket, its tasks and their properties —
+    keyed by ticket uuid in the request context rather than memoized per GraphQL object,
+    because a task has no object in common with its ticket.
+
+    Returns the cached asyncio Task (await it). `resource` — anything with `created_by` and
+    `geometry` — spares the loader round-trip when the caller already holds the ticket; the
+    tasks, which carry neither, pass nothing and the ticket is loaded only if the scope is
+    `own` or `zone`. Same no-double-scheduling argument as TicketType._pii_visible: the
+    check-then-store below runs synchronously on the event loop.
+    """
+    decided = info.context["_ticket_detail_visible"]
+    key = str(ticket_uuid)
+    if key not in decided:
+        decided[key] = asyncio.ensure_future(_decide_ticket_detail(info, key, resource))
+    return decided[key]
+
+
+async def _decide_ticket_detail(info: strawberry.types.Info, ticket_uuid: str, resource) -> bool:
+    """resolve_scope + in_scope, like _compute_pii_visible. Never raises: denial is withholding."""
+    user = info.context["user"]
+    if user is None:
+        return False
+    db = info.context["db"]
+    scope = await resolve_scope(
+        user, Perm.TICKET_VIEW_DETAIL, db, cache=info.context["_rbac_cache"]
+    )
+    if scope == Scope.NONE:
+        return False
+    if scope == Scope.ALL:
+        return True
+    if resource is None:
+        resource = await info.context["loaders"]["ticket_by_uuid"].load(ticket_uuid)
+        if resource is None:
+            return False
+    return await in_scope(scope, actor=user, resource=resource, db=db)
 
 
 @strawberry.enum
@@ -86,8 +129,27 @@ class TaskPropertyType:
     status: str | None = strawberry.field(
         default=None, description="Fulfillment state: 'pending' or 'fulfilled'"
     )
-    comment: str | None = strawberry.field(default=None, description="Optional notes about this property")
     created_at: datetime | None = None
+
+    _comment_raw: strawberry.Private[str | None] = None
+
+    @strawberry.field(
+        description=(
+            "Optional notes about this property. Null to a caller without ticket.view_detail "
+            "on the parent ticket"
+        )
+    )
+    async def comment(self, info: strawberry.types.Info) -> str | None:
+        """Return the note, or null when the caller may not see the ticket's detail.
+
+        Free text like the task description beside it (AC-03, ADR-281), and the value is
+        structured while the note is not. Judged by the ticket the task belongs to — a
+        property carries neither a point nor an author of its own to judge it by.
+        """
+        ticket_uuid = await info.context["loaders"]["ticket_uuid_by_task"].load(self.task_uuid)
+        if ticket_uuid is None or not await ticket_detail_visible(info, ticket_uuid):
+            return None
+        return self._comment_raw
 
     @classmethod
     def from_model(cls, m) -> "TaskPropertyType":
@@ -99,8 +161,8 @@ class TaskPropertyType:
             property_value=m.property_value,
             quantity=m.quantity,
             status=m.status,
-            comment=m.comment,
             created_at=m.created_at,
+            _comment_raw=m.comment,
         )
 
 
@@ -145,9 +207,6 @@ class TicketTaskType:
     ticket_uuid: str = strawberry.field(description="UUID of the parent ticket this task belongs to")
     task_type: str = strawberry.field(description="Category of task: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str = strawberry.field(description="Short name summarising the task")
-    task_description: str | None = strawberry.field(
-        default=None, description="Detailed task instructions or context"
-    )
     quantity: int | None = strawberry.field(
         default=None, description="Number of people or units needed — null means unspecified"
     )
@@ -156,9 +215,6 @@ class TicketTaskType:
         description="Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'",
     )
     source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
-    progress_note: str | None = strawberry.field(
-        default=None, description="Current progress update written by the assignee"
-    )
     visibility: str = strawberry.field(
         default="public", description="Who can see this task: 'public', 'restricted', or 'internal'"
     )
@@ -166,14 +222,60 @@ class TicketTaskType:
         default="pending_review",
         description="Review state: 'pending_review', 'approved', or 'rejected'",
     )
-    review_note: str | None = strawberry.field(
-        default=None, description="Moderator's notes explaining the review decision"
-    )
-    created_by: str | None = strawberry.field(
-        default=None, description="UUID of the user who created this task"
-    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    # Readable only through the gated resolvers below (ADR-281): the free text and the author
+    # of a task are withheld exactly when its ticket's are. The name, type, quantity and
+    # progress stay public — they are what a volunteer decides "can I help?" on (AC-03 is
+    # about original free text, not structure).
+    _task_description_raw: strawberry.Private[str | None] = None
+    _progress_note_raw: strawberry.Private[str | None] = None
+    _review_note_raw: strawberry.Private[str | None] = None
+    _created_by_raw: strawberry.Private[str | None] = None
+
+    def _detail_visible(self, info: strawberry.types.Info):
+        return ticket_detail_visible(info, self.ticket_uuid)
+
+    @strawberry.field(
+        description=(
+            "Detailed task instructions or context. Null to a caller without "
+            "ticket.view_detail on the parent ticket"
+        )
+    )
+    async def task_description(self, info: strawberry.types.Info) -> str | None:
+        """The reporter's own words about the task — may say which door, which floor."""
+        return self._task_description_raw if await self._detail_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "Current progress update written by the assignee. Null to a caller without "
+            "ticket.view_detail on the parent ticket"
+        )
+    )
+    async def progress_note(self, info: strawberry.types.Info) -> str | None:
+        """Operational notes accumulate who is where — kept out of search for the same reason."""
+        return self._progress_note_raw if await self._detail_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "Moderator's notes explaining the review decision. Null to a caller without "
+            "ticket.view_detail on the parent ticket"
+        )
+    )
+    async def review_note(self, info: strawberry.types.Info) -> str | None:
+        """Return the moderator's note, or null when the caller is out of detail scope."""
+        return self._review_note_raw if await self._detail_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "UUID of the user who created this task. Null to a caller without "
+            "ticket.view_detail on the parent ticket"
+        )
+    )
+    async def created_by(self, info: strawberry.types.Info) -> str | None:
+        """Return the author's uuid, or null when the caller is out of detail scope."""
+        return self._created_by_raw if await self._detail_visible(info) else None
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list[TaskPropertyType]:
@@ -218,17 +320,17 @@ class TicketTaskType:
             ticket_uuid=m.ticket_uuid,
             task_type=m.task_type,
             task_name=m.task_name,
-            task_description=m.task_description,
             quantity=m.quantity,
             status=m.status,
             source=m.source,
-            progress_note=m.progress_note,
             visibility=m.visibility,
             moderation_status=m.moderation_status,
-            review_note=m.review_note,
-            created_by=m.created_by,
             created_at=m.created_at,
             updated_at=m.updated_at,
+            _task_description_raw=m.task_description,
+            _progress_note_raw=m.progress_note,
+            _review_note_raw=m.review_note,
+            _created_by_raw=m.created_by,
         )
 
 
@@ -325,11 +427,7 @@ class TicketType:
 
     uuid: UUID
     property_name: str = strawberry.field(description="Internal polymorphic discriminator — always 'request'")
-    geometry: GeoJSON | None = strawberry.field(
-        default=None, description="GeoJSON Point indicating where help is needed"
-    )
     title: str = strawberry.field(default="", description="Short subject line describing the request")
-    description: str | None = None
     status: str = strawberry.field(
         default="",
         description="Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled'",
@@ -347,9 +445,6 @@ class TicketType:
     verification_status: str | None = strawberry.field(
         default=None, description="Review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'"
     )
-    review_note: str | None = strawberry.field(
-        default=None, description="Moderator's notes about the verification decision"
-    )
     disaster_types: list[str] = strawberry.field(
         default_factory=list,
         description=(
@@ -357,9 +452,6 @@ class TicketType:
             "Plural because one incident is routinely two disasters at once. Drives which "
             "fields `ticketPropertyConfigs` returns for it"
         ),
-    )
-    created_by: str | None = strawberry.field(
-        default=None, description="UUID of the user who submitted this ticket"
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -372,11 +464,101 @@ class TicketType:
     _contact_phone_raw: strawberry.Private[str | None] = None
     # Gated on the same capability as the contact fields above. Not identifying on their
     # own, but "there is a trapped person at this address" is the most sensitive thing a
-    # ticket carries, and the coordinate beside it is public.
+    # ticket carries.
     _person_trapped_reported_raw: strawberry.Private[str | None] = None
     _immediate_danger_reported_raw: strawberry.Private[str | None] = None
     _geometry_raw: strawberry.Private[object | None] = None
     _pii_visible_task: strawberry.Private[object | None] = None
+    # Backing the ticket.view_detail resolvers (ADR-281). `_created_by_raw` also feeds both
+    # scope checks — `own` is decided on it whether or not the caller may read it.
+    _geometry_geojson: strawberry.Private[dict | None] = None
+    _description_raw: strawberry.Private[str | None] = None
+    _review_note_raw: strawberry.Private[str | None] = None
+    _created_by_raw: strawberry.Private[str | None] = None
+    # How coarse the point is for a caller without detail: the query's `zoom`, capped.
+    _coarse_resolution: strawberry.Private[int] = COARSE_MAX_H3_RESOLUTION
+
+    def _detail_visible(self, info: strawberry.types.Info):
+        """This ticket's ticket.view_detail decision, shared with its tasks (see the helper)."""
+        resource = SimpleNamespace(created_by=self._created_by_raw, geometry=self._geometry_raw)
+        return ticket_detail_visible(info, str(self.uuid), resource)
+
+    @strawberry.field(
+        description=(
+            "GeoJSON Point indicating where help is needed. To a caller without "
+            "ticket.view_detail here, the centre of the H3 cell the point falls in — at most "
+            "resolution 8 (about 1 km across), coarser when `zoom` asks for it"
+        )
+    )
+    async def geometry(self, info: strawberry.types.Info) -> GeoJSON | None:
+        """Return the exact point, or the centre of its H3 cell when out of detail scope.
+
+        A cell, not null (ADR-281, reversing #51's draft): the public map needs the ticket
+        somewhere, and the team's rule is "a region before signing in". A cell centre, not a
+        random offset: the same answer every time, so repeated queries average to nothing.
+        The centre is computed in Postgres (the `coarse_point` loader) so the exact point
+        never reaches this process for that caller; null only if that lookup finds no row.
+        """
+        if await self._detail_visible(info):
+            return self._geometry_geojson
+        coarse = await self._coarse(info)
+        return coarse["point"] if coarse else None
+
+    @strawberry.field(
+        description=(
+            "The H3 cell `geometry` stands in for, as its hex index (e.g. '884ba0a511fffff'), "
+            "when the caller is shown the coarse location; null when `geometry` is the exact "
+            "point. Tickets sharing a value share a location on the map — group by it, and "
+            "draw the cell from it (h3-js `cellToBoundary`); its resolution is in the index"
+        )
+    )
+    async def location_cell(self, info: strawberry.types.Info) -> str | None:
+        """Tell the client which points are cell centres, and which cell (ADR-281/283).
+
+        Without it a client cannot tell a centre from an exact point — both are a GeoJSON
+        Point — and would have to guess from whether it is signed in, which breaks the day an
+        admin narrows view_detail to `own` and one list carries both kinds.
+        """
+        if await self._detail_visible(info):
+            return None
+        coarse = await self._coarse(info)
+        return coarse["cell"] if coarse else None
+
+    def _coarse(self, info: strawberry.types.Info):
+        """The `coarse_point` loader's `{point, cell}` for this ticket at its resolution."""
+        return info.context["loaders"]["coarse_point"].load(
+            (str(self.uuid), self._coarse_resolution)
+        )
+
+    @strawberry.field(
+        description=(
+            "The reporter's own account. Null to a caller without ticket.view_detail here — "
+            "free text can name a door number the address field withholds"
+        )
+    )
+    async def description(self, info: strawberry.types.Info) -> str | None:
+        """Return the description, or null when the caller is out of detail scope (AC-03)."""
+        return self._description_raw if await self._detail_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "Moderator's notes about the verification decision. Null to a caller without "
+            "ticket.view_detail here"
+        )
+    )
+    async def review_note(self, info: strawberry.types.Info) -> str | None:
+        """Return the moderator's note, or null when the caller is out of detail scope."""
+        return self._review_note_raw if await self._detail_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "UUID of the user who submitted this ticket. Null to a caller without "
+            "ticket.view_detail here"
+        )
+    )
+    async def created_by(self, info: strawberry.types.Info) -> str | None:
+        """Return the reporter's uuid, or null when the caller is out of detail scope."""
+        return self._created_by_raw if await self._detail_visible(info) else None
 
     def _pii_visible(self, info: strawberry.types.Info):
         """Memoized PII-visibility check shared by the contact_* and triage-flag resolvers.
@@ -410,7 +592,7 @@ class TicketType:
             return False
         if scope == Scope.ALL:
             return True
-        resource = SimpleNamespace(created_by=self.created_by, geometry=self._geometry_raw)
+        resource = SimpleNamespace(created_by=self._created_by_raw, geometry=self._geometry_raw)
         return await in_scope(scope, actor=user, resource=resource, db=info.context["db"])
 
     @strawberry.field(description="Requester full name — masked unless the caller holds ticket.view_pii here")
@@ -462,9 +644,19 @@ class TicketType:
         """Return the reporter's danger answer, or null when the caller is out of PII scope."""
         return self._immediate_danger_reported_raw if await self._pii_visible(info) else None
 
-    @strawberry.field
+    @strawberry.field(
+        description=(
+            "Photos attached to this ticket. Empty to a caller without ticket.view_detail here"
+        )
+    )
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
-        """Resolve photos attached to this ticket."""
+        """Resolve photos attached to this ticket, or none when out of detail scope.
+
+        A photo taken at the scene can show the house number the address field withholds
+        (AC-03). Empty rather than null, so the list's shape does not change with the caller.
+        """
+        if not await self._detail_visible(info):
+            return []
         return await info.context["loaders"]["photos_by_ticket"].load(str(self.uuid))
 
     @strawberry.field
@@ -475,19 +667,22 @@ class TicketType:
     @strawberry.field(
         description=(
             "Street address and space detail for where help is needed. Null to a caller "
-            "without ticket.view_pii here, and null when the ticket carries no address"
+            "without ticket.view_detail here, and null when the ticket carries no address"
         )
     )
     async def secondary_location(
         self, info: strawberry.types.Info
     ) -> SecondaryLocationType | None:
-        """Resolve the ticket's address, or null when the caller is out of PII scope.
+        """Resolve the ticket's address, or null when the caller is out of detail scope.
 
         Gated where the station's identical field is not (ADR-268): a shelter's address is
-        already on the public map, while a ticket's is the reporter's own home — the ADR-146
-        decision that kept this field off `TicketType` until now, taken rather than deferred.
+        already on the public map, while a ticket's is the reporter's own home. Gated on
+        ticket.view_detail, beside the exact point, rather than ADR-268's ticket.view_pii
+        (ADR-281): the address and the point name the same house, and the team's rule is
+        that signing in shows it — `view_pii` is `own` for a plain account, which left a
+        signed-in volunteer the pin but not the door.
         """
-        if not await self._pii_visible(info):
+        if not await self._detail_visible(info):
             return None
         return await info.context["loaders"]["secondary_location_by_geometry"].load(
             str(self.uuid)
@@ -506,22 +701,24 @@ class TicketType:
         return await info.context["loaders"]["disaster_details_by_ticket"].load(str(self.uuid))
 
     @classmethod
-    def from_model(cls, m) -> "TicketType":
-        """Build from a SQLAlchemy model instance."""
+    def from_model(
+        cls, m, *, coarse_resolution: int = COARSE_MAX_H3_RESOLUTION
+    ) -> "TicketType":
+        """Build from a SQLAlchemy model instance.
+
+        `coarse_resolution` is how coarse `geometry` is for a caller without detail — the
+        read queries pass their `zoom`-derived value; everything else gets the cap.
+        """
         return cls(
             uuid=m.uuid,
             property_name=m.property_name,
-            geometry=geom_to_geojson(m.geometry),
             title=m.title,
-            description=m.description,
             status=m.status,
             priority=m.priority,
             task_type=m.task_type,
             visibility=m.visibility,
             verification_status=m.verification_status,
-            review_note=m.review_note,
             disaster_types=list(m.disaster_types or []),
-            created_by=m.created_by,
             created_at=m.created_at,
             updated_at=m.updated_at,
             _contact_name_raw=m.contact_name,
@@ -530,6 +727,11 @@ class TicketType:
             _person_trapped_reported_raw=m.person_trapped_reported,
             _immediate_danger_reported_raw=m.immediate_danger_reported,
             _geometry_raw=m.geometry,
+            _geometry_geojson=geom_to_geojson(m.geometry),
+            _description_raw=m.description,
+            _review_note_raw=m.review_note,
+            _created_by_raw=m.created_by,
+            _coarse_resolution=coarse_resolution,
         )
 
 
