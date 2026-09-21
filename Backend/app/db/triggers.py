@@ -36,12 +36,21 @@ AUDITED_TABLES = [
     # the disaster types flips a whole batch of dynamic fields, so it is audited.
     "project_settings",
 
-    # Feature 015 (ADR-124): the EAV value tables. They were the only mutable content tables
-    # left out, so a station's stock quantity, a crowd-sourced entry's review status, or a
-    # task's dynamic field could all be changed with no trail whatsoever. Bulk import writes
-    # them in batches, which turns that blind spot from theoretical into easy to hit.
+    # Feature 015 (ADR-124): the EAV value tables, the only mutable content tables left
+    # unaudited. Bulk import writes them in batches, which makes the blind spot easy to hit.
     "station_properties",
     "task_properties",
+
+    # Feature 018 (ADR-251): the disaster vocabulary and the three tables that define the
+    # dynamic fields keyed off it — `project_settings` is audited, so their definitions must be.
+    "disaster_types",
+    "station_property_config",
+    "task_property_config",
+    "ticket_property_config",
+
+    # Feature 018: the per-ticket answers. An edit flipping "person trapped" from no to yes is
+    # exactly what a timeline has to show, and ADR-124's missing trail is the mistake not to repeat.
+    "ticket_disaster_details",
 ]
 
 # PL/pgSQL function that serializes row mutations into JSONB, redacting password_hash

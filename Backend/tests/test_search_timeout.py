@@ -9,7 +9,7 @@ bound that keeps one such statement from holding a connection indefinitely.
 import asyncio
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import false, text
 from sqlalchemy.exc import DBAPIError
 
 from app.core import search
@@ -211,12 +211,17 @@ async def test_every_public_search_path_sets_the_timeout():
     correlated EXISTS over task_properties — and ticket.view is in PUBLIC_PERMS, so an
     anonymous Guest reaches it too. Asserting across all three search paths means a new
     one cannot be added unbounded without this going red.
+
+    The ticket paths run as the anonymous caller does (no ticket.view_detail, ADR-281):
+    that is the shape a Guest can send, and the one whose predicate differs.
     """
     paths = {
         "stations(q:)": lambda db: StationRepository().list_active(db, q="光復"),
-        "tickets(q:)": lambda db: TicketRepository().list_active(db, q="光復"),
+        "tickets(q:)": lambda db: TicketRepository().list_active(
+            db, q="光復", detail_filters=[false()]
+        ),
         "ticketTasks(q:)": lambda db: TicketTaskRepository().list_by_ticket(
-            db, "00000000-0000-0000-0000-000000000000", q="光復"
+            db, "00000000-0000-0000-0000-000000000000", q="光復", public_only=True
         ),
     }
     for name, call in paths.items():
@@ -228,7 +233,9 @@ async def test_every_public_search_path_sets_the_timeout():
 async def test_no_timeout_when_those_same_paths_are_not_searching():
     """The control: term=None must leave the plain list paths byte-for-byte as they were."""
     db = CapturingSession()
-    await TicketTaskRepository().list_by_ticket(db, "00000000-0000-0000-0000-000000000000")
+    await TicketTaskRepository().list_by_ticket(
+        db, "00000000-0000-0000-0000-000000000000", public_only=True
+    )
     assert "set_config" not in db.sql()
 
 

@@ -22,6 +22,7 @@ from app.graphql.geo.types import (
     UpdateClosureAreaInput,
     UpdateStationInput,
     UpdateStationPropertyInput,
+    secondary_location_to_dict,
 )
 from app.graphql.tickets.types import PhotoType
 from app.services import closure_area as closure_area_service
@@ -44,12 +45,7 @@ class GeoMutation:
         sl_dict = None
         if input.secondary_location is not None:
             sl = input.secondary_location
-            sl_dict = {
-                "location_type": sl.location_type,
-                "county": sl.county, "city": sl.city, "lane": sl.lane, "alley": sl.alley,
-                "no": sl.no, "floor": sl.floor, "room": sl.room,
-                "pole_id": sl.pole_id, "pole_type": sl.pole_type, "pole_note": sl.pole_note,
-            }
+            sl_dict = secondary_location_to_dict(sl)
         station = await station_service.create_station(
             info.context["db"],
             actor=require_authenticated(info),

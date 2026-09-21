@@ -151,13 +151,13 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
 
 async def _configs(db) -> None:
     db.add(StationPropertyConfig(
-        station_type="shelter", property_name="capacity_total", data_type="Integer", enum_options=None
+        station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
     ))
     db.add(StationPropertyConfig(
-        station_type="shelter", property_name="pet_friendly", data_type="Boolean", enum_options=None
+        station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
     ))
     db.add(TaskPropertyConfig(
-        task_type="rescue", property_name="people_count", data_type="Integer", enum_options=None
+        task_type="rescue", property_name="people_count", data_type="number", enum_options=None
     ))
     await db.flush()
 
@@ -376,6 +376,56 @@ async def test_a_caller_without_view_pii_gets_every_contact_masked(db):
 
     assert row["contact_name"] == "王◯◯"
     assert row["contact_phone"] != "0912345678"
+
+
+async def _with_free_text(db, ticket, task) -> None:
+    ticket.description, ticket.review_note = "中正路十二號", "已電話確認"
+    task.task_description = "從後門進去"
+    await db.flush()
+
+
+@pytest.mark.asyncio
+async def test_detail_follows_view_detail_row_by_row(db):
+    """The point and the free text are behind ticket.view_detail here too (ADR-281, AC-04)."""
+    await _configs(db)
+    team = await _zoned_team(db)
+    actor = User(name="TeamAdmin")
+    author = User(name="Someone")
+    db.add_all([actor, author])
+    await db.flush()
+    await _grant(db, actor, Perm.TICKET_EXPORT, "all", "exporter", team=team)
+    await _grant(db, actor, Perm.TICKET_VIEW_DETAIL, "zone", "zoned-detail", team=team)
+    await _with_free_text(db, *await _ticket_with_task(db, title="區內", point=IN_ZONE, creator=author))
+    await _with_free_text(db, *await _ticket_with_task(db, title="區外", point=OUT_OF_ZONE, creator=author))
+
+    rows = {r["title"]: r for r in _parse(await export_tickets(db, actor=actor, task_type="rescue")).rows}
+
+    inside, outside = rows["區內"], rows["區外"]
+    assert (inside["latitude"], inside["longitude"]) == ("25", "121.5")
+    assert inside["description"] == "中正路十二號"
+    assert inside["review_note"] == "已電話確認"
+    assert inside["task_description"] == "從後門進去"
+    assert (outside["latitude"], outside["longitude"]) == ("", "")
+    assert outside["description"] == outside["review_note"] == outside["task_description"] == ""
+    assert outside["task_name"] == "區外 任務"  # structured fields are never withheld
+
+
+@pytest.mark.asyncio
+async def test_holding_export_does_not_imply_holding_view_detail(db):
+    """Nor does view_pii: contact details and whereabouts are separate grants."""
+    await _configs(db)
+    actor = User(name="Admin")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.TICKET_EXPORT, "all", "exporter")
+    await _grant(db, actor, Perm.TICKET_VIEW_PII, "all", "pii-reader")
+    await _with_free_text(db, *await _ticket_with_task(db, title="求救", point=IN_ZONE, creator=actor))
+
+    row = _parse(await export_tickets(db, actor=actor, task_type="rescue")).rows[0]
+
+    assert row["contact_phone"] == "0912345678"
+    assert (row["latitude"], row["longitude"]) == ("", "")
+    assert row["description"] == row["task_description"] == ""
 
 
 # --------------------------------------------------------------------------------------

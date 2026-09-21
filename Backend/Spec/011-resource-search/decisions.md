@@ -1,8 +1,8 @@
-# Resource Search — ADR 全集（ADR-077~084、146~158、174~177）
+# Resource Search — ADR 全集（ADR-077~084、146~158、174~177、276）
 
 **Date**: 2026-08-16（ADR-146 於 2026-08-23 追加）
 **Feature**: 011-resource-search
-**Status**: 已實作（PR #35）；ADR-146~158 為 review 後的修正，ADR-174~177 為第二輪 review 後的修正
+**Status**: 已實作（PR #35）；ADR-146~158 為 review 後的修正，ADR-174~177 為第二輪 review 後的修正；ADR-276 補上 ADR-149 當初「另開票」的那支守衛測試（PR #48）
 **慣例**: 沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。編號接續 `Spec/010-multi-team-membership/decisions.md`（ADR-068~076）。
 
 ---
@@ -135,7 +135,9 @@
 
 ### ADR-083 `q` 有值時以相關性優先排序，既有排序降為 tiebreaker
 
-> **排序鍵被 ADR-147 取代**：`similarity()` 對中文常為 0，改為「自身命中」布林優先、`similarity()` 降為組內排序。本 ADR 的其餘部分（分支處理、`priority_score` 為 no-op tiebreaker）仍成立。
+> **排序鍵被 ADR-147 取代**：`similarity()` 對中文常為 0，改為「自身命中」布林優先、`similarity()` 降為組內排序。
+>
+> **`priority_score` 已移除（PR #49）**：下方「衍生問題」採「從 API 移除」一途——欄位、`ORDER BY` 鍵與 GraphQL 曝露皆已刪除，`stations` 的 standing order 現為 `created_at DESC, uuid DESC`，與 `tickets` 一致。本 ADR 的分支處理仍成立。
 
 **白話**：有關鍵字時，最像的排前面；沒關鍵字時，維持原本的排序。
 
@@ -155,6 +157,8 @@ q 無值：priority_score DESC NULLS LAST, created_at DESC        （維持現�
 ➖ `similarity()` 需對每一筆命中列計算，但命中集已被索引收斂，成本可忽略。
 
 **衍生問題（本票不處理）**：`priority_score` 是半實作且對外曝露一個恆為 `null` 的欄位，前端可能已在讀取。建議另開票處理——要嘛實作寫入邏輯，要嘛從 API 移除。
+
+> **已結案（PR #49）**：選擇「從 API 移除」。`stations.priority_score`、`stations.confidence_score`、`ticket_tasks.confidence_score` 三個從未被寫入的欄位一併刪除。
 
 ---
 
@@ -325,7 +329,7 @@ search_text VARCHAR GENERATED ALWAYS AS (coalesce(title,'')) STORED NOT NULL
 **Consequences**：
 ➕ `test_search_schema.py` 開始驗到真正會上線的 schema。
 ➕ `autogenerate` 的幽靈 diff 消失。
-➖ 兩份 DDL 仍是手動維持一致，沒有自動守衛。真正的解法是加一支「跑 migration 建庫、與 `create_all` 建的庫做 schema diff」的測試——值得做，但屬於測試基礎建設，另開票。
+➖ 兩份 DDL 仍是手動維持一致，沒有自動守衛。真正的解法是加一支「跑 migration 建庫、與 `create_all` 建的庫做 schema diff」的測試——值得做，但屬於測試基礎建設，另開票。**（那支測試已於 ADR-276 補上，但只釘 table/column 名稱，不含型別與 nullability——「逐字相符」這條通則仍然靠人工。）**
 
 ---
 
@@ -721,3 +725,35 @@ SET -> count -> list -> RESET
 
 驗證：拿掉這段修正，該測試會紅；還原後綠。修正後實測外層 `pg_sleep(10)` 於 3.00s 被中止。
 
+---
+
+### ADR-276 migration 與 model 的 schema 漂移由一支守衛測試釘住，只比對名稱
+
+**白話**：測試資料庫是用 model 建的，正式環境是用 migration 建的。ADR-149 說真正的解法是加一支「兩邊做 schema diff」的測試，這就是那支。
+
+**Context**：ADR-149 的最後一條 ➖ 自己留了票：「兩份 DDL 仍是手動維持一致，沒有自動守衛……值得做，但屬於測試基礎建設，另開票。」那張票沒有開，代價在 PR #48 的 ER 圖稽核裡具體出現。
+
+`tests/conftest.py` 用 `Base.metadata.create_all` 建測試 schema，整個 suite 從來不執行任何一支 migration，所以測試庫是**由 model 定義的**、與 model 恆等一致。結果：
+
+| 建庫方式 | `users.password` |
+|---|---|
+| `alembic upgrade head`（正式環境） | 存在 |
+| `Base.metadata.create_all`（測試） | 不存在 |
+
+這個欄位（見 `Spec/007-information-publishing/decisions.md` 的 ADR-275）就這樣存活了數個月，1317 個測試裡沒有一個有辦法看到它——不是漏測，是結構上不可見。下一次漂移會以同樣的方式躲過去。
+
+**Decision**：加 `tests/test_migrations_match_models.py`。session-scoped fixture 建一個丟棄式資料庫、跑 `alembic upgrade head`、reflect 結果，再與 `Base.metadata` 雙向比對 table 與 column。
+
+alembic 走 subprocess 而非 in-process，有兩個原因：`alembic/env.py` 呼叫 `asyncio.run()`，在 pytest-asyncio 已經在跑的 loop 裡不能再進入；而且它在 import 時就讀掉 `SQLALCHEMY_DATABASE_URL`，那時已經綁在一般測試庫上。subprocess 也正好是 migration 真實的執行方式。
+
+**只比對名稱，不比對型別與 nullability**。型別與 nullability 會因為 server default、dialect alias 等正當理由漂移，納進來會讓這支測試變吵，卻不會多抓到它存在要抓的那類 bug（整個欄位有或沒有）。`alembic_version` 與 `spatial_ref_sys` 排除在外：一個是 alembic 的簿記表，一個是 PostGIS extension 裝的，兩者本來就不會在 `Base.metadata` 裡。
+
+**否決「把整個 suite 改成用 migration 建 schema」的理由**：那是 1317 個測試各跑約 30 支 migration。一支守衛測試是便宜的版本，而且抓的是同一件事。
+
+**Consequences**：
+➕ ADR-149 留下的票關掉了：migration/model 漂移從「結構上不可見」變成會紅。
+➕ 已驗證它抓的是真東西，不是永遠綠的裝飾——把 ADR-275 的 drop 拿掉，這支測試會紅並印出
+  `migration/model column drift: {'users': {'only in migrations': ['password'], 'only in models': []}}`。
+◾ 對 production 零行為差異，純測試基礎建設。
+➖ 只釘名稱，所以 ADR-149 的「DDL 與 `create_all` 產出逐字相符」這條通則仍然沒有自動守衛；型別與 nullability 的漂移抓不到，還是靠人工與 `autogenerate` 的幽靈 diff。
+➖ suite 多一次真實的 migration run（session-scoped，兩支測試共用，實測 3.5s），且執行者需要 `CREATE DATABASE` 權限。

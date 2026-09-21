@@ -22,6 +22,7 @@ from app.services.bulk_columns import (
     station_columns,
     ticket_columns,
 )
+from app.services.bulk_validate import coerce
 
 
 async def _station_configs(db, rows: list[tuple[str, str, str]], **kwargs) -> None:
@@ -66,15 +67,15 @@ def _by_header(columns, header):
 
 @pytest.mark.asyncio
 async def test_station_takes_only_the_integer_dynamic_fields(db):
-    """`station_properties` can only store a number, so only Integer configs get a column."""
+    """`station_properties` can only store a number, so only `number` configs get a column."""
     await _station_configs(
         db,
         [
-            ("shelter", "capacity_total", "Integer"),
-            ("shelter", "beds_available", "Integer"),
-            ("shelter", "price", "Integer"),
-            ("shelter", "pet_friendly", "Boolean"),
-            ("shelter", "long_term_stay", "Boolean"),
+            ("shelter", "capacity_total", "number"),
+            ("shelter", "beds_available", "number"),
+            ("shelter", "price", "number"),
+            ("shelter", "pet_friendly", "boolean"),
+            ("shelter", "long_term_stay", "boolean"),
         ],
     )
 
@@ -91,7 +92,7 @@ async def test_station_takes_only_the_integer_dynamic_fields(db):
 async def test_a_station_type_with_no_integer_field_gets_no_dynamic_column(db):
     """Eight of the twelve seeded station types are in this state — the file is still valid."""
     await _station_configs(
-        db, [("water", "is_potable", "Boolean"), ("water", "water_level", "Enum")]
+        db, [("water", "is_potable", "boolean"), ("water", "water_level", "single_select")]
     )
 
     columns = await station_columns(db, "water")
@@ -104,22 +105,22 @@ async def test_a_station_type_with_no_integer_field_gets_no_dynamic_column(db):
 async def test_skipped_station_fields_are_reported_with_a_reason(db):
     """`preview` has to explain the absence, otherwise the file looks like it lost fields."""
     await _station_configs(
-        db, [("water", "is_potable", "Boolean"), ("water", "water_level", "Enum")]
+        db, [("water", "is_potable", "boolean"), ("water", "water_level", "single_select")]
     )
-    await _station_configs(db, [("all", "crowd_level", "Enum")])
+    await _station_configs(db, [("all", "crowd_level", "single_select")])
 
     skipped = await dynamic_columns_skipped_for_station(db, "water")
 
     assert {s.property_name for s in skipped} == {"is_potable", "water_level", "crowd_level"}
-    assert all("Boolean" in s.reason or "Enum" in s.reason for s in skipped)
-    assert all(s.data_type in ("Boolean", "Enum") for s in skipped)
+    assert all("boolean" in s.reason or "single_select" in s.reason for s in skipped)
+    assert all(s.data_type in ("boolean", "single_select") for s in skipped)
 
 
 @pytest.mark.asyncio
 async def test_the_universal_all_bucket_reaches_every_station_type(db):
     """`list_by_type` unions the 'all' bucket, so a shared field belongs to each type's file."""
-    await _station_configs(db, [("all", "shared_count", "Integer")])
-    await _station_configs(db, [("shelter", "capacity_total", "Integer")])
+    await _station_configs(db, [("all", "shared_count", "number")])
+    await _station_configs(db, [("shelter", "capacity_total", "number")])
 
     columns = await station_columns(db, "shelter")
 
@@ -135,10 +136,10 @@ async def test_ticket_takes_every_data_type(db):
     await _task_configs(
         db,
         [
-            ("rescue", "people_count", "Integer"),
-            ("rescue", "floor_level", "Integer"),
-            ("rescue", "unit_number", "String"),
-            ("rescue", "hazard_note", "String"),
+            ("rescue", "people_count", "number"),
+            ("rescue", "floor_level", "number"),
+            ("rescue", "unit_number", "text"),
+            ("rescue", "hazard_note", "text"),
         ],
     )
 
@@ -150,6 +151,7 @@ async def test_ticket_takes_every_data_type(db):
         f"{DYNAMIC_PREFIX}people_count",
         f"{DYNAMIC_PREFIX}unit_number",
     ]
+    # The column carries the coercion the widget maps to, not the widget name (ADR-272).
     assert _by_header(columns, f"{DYNAMIC_PREFIX}unit_number").data_type == "String"
 
 
@@ -159,8 +161,8 @@ async def test_ticket_takes_every_data_type(db):
 @pytest.mark.asyncio
 async def test_deactivated_fields_never_become_columns(db):
     """A field turned off in the console must not reappear as a spreadsheet column."""
-    await _station_configs(db, [("shelter", "capacity_total", "Integer")])
-    await _station_configs(db, [("shelter", "retired_count", "Integer")], is_active=False)
+    await _station_configs(db, [("shelter", "capacity_total", "number")])
+    await _station_configs(db, [("shelter", "retired_count", "number")], is_active=False)
 
     columns = await station_columns(db, "shelter")
 
@@ -172,12 +174,12 @@ async def test_fields_for_another_disaster_type_never_become_columns(db):
     """The deployment runs a flood; a landslide-only field is not part of its file."""
     db.add(ProjectSettings(name="Hualien 0816", disaster_types=["flood"]))
     await _station_configs(
-        db, [("shelter", "flood_depth", "Integer")], disaster_types=["flood"]
+        db, [("shelter", "flood_depth", "number")], disaster_types=["flood"]
     )
     await _station_configs(
-        db, [("shelter", "slope_angle", "Integer")], disaster_types=["landslide"]
+        db, [("shelter", "slope_angle", "number")], disaster_types=["landslide"]
     )
-    await _station_configs(db, [("shelter", "capacity_total", "Integer")])  # empty = all
+    await _station_configs(db, [("shelter", "capacity_total", "number")])  # empty = all
 
     columns = await station_columns(db, "shelter")
 
@@ -190,7 +192,7 @@ async def test_fields_for_another_disaster_type_never_become_columns(db):
 @pytest.mark.asyncio
 async def test_an_unconfigured_deployment_filters_nothing(db):
     """No project settings row means "no filter", not "no fields"."""
-    await _station_configs(db, [("shelter", "flood_depth", "Integer")], disaster_types=["flood"])
+    await _station_configs(db, [("shelter", "flood_depth", "number")], disaster_types=["flood"])
 
     columns = await station_columns(db, "shelter")
 
@@ -251,7 +253,7 @@ async def test_coordinates_are_required_when_creating(db):
 @pytest.mark.asyncio
 async def test_fixed_columns_come_first_and_uuid_leads(db):
     """A stable, readable layout: identity, then content, then the dynamic tail."""
-    await _station_configs(db, [("shelter", "capacity_total", "Integer")])
+    await _station_configs(db, [("shelter", "capacity_total", "number")])
 
     headers = [c.header for c in await station_columns(db, "shelter")]
 
@@ -262,8 +264,8 @@ async def test_fixed_columns_come_first_and_uuid_leads(db):
 @pytest.mark.asyncio
 async def test_dynamic_columns_follow_sort_order_then_name(db):
     """013 orders configs by (sort_order, property_name); the file must not reshuffle them."""
-    await _station_configs(db, [("shelter", "zzz_first", "Integer")], sort_order=1)
-    await _station_configs(db, [("shelter", "aaa_second", "Integer")], sort_order=2)
+    await _station_configs(db, [("shelter", "zzz_first", "number")], sort_order=1)
+    await _station_configs(db, [("shelter", "aaa_second", "number")], sort_order=2)
 
     assert _dynamic(await station_columns(db, "shelter")) == [
         f"{DYNAMIC_PREFIX}zzz_first",
@@ -274,9 +276,40 @@ async def test_dynamic_columns_follow_sort_order_then_name(db):
 @pytest.mark.asyncio
 async def test_the_same_type_yields_the_same_headers_twice(db):
     """Export must not hand back a different layout on the second click."""
-    await _station_configs(db, [("shelter", "capacity_total", "Integer")])
+    await _station_configs(db, [("shelter", "capacity_total", "number")])
 
     first = [c.header for c in await station_columns(db, "shelter")]
     second = [c.header for c in await station_columns(db, "shelter")]
 
     assert first == second
+
+
+@pytest.mark.asyncio
+async def test_a_multi_select_cell_keeps_every_value_and_still_checks_the_options(db):
+    """A `multi_select` field is several values in one cell (ADR-278).
+
+    `_WIDGET_COERCION` sent it to the single-valued `Enum`, so `gas_odor,power_out` — the
+    exact string the exporter writes for a field with two values selected — came back as
+    「gas_odor,power_out」不是允許的值 and failed its row. Before ADR-245 renamed the widget,
+    the same cell passed through as `Array` unvalidated.
+
+    Coercion has to yield a *string*, not a list: `task_properties.property_value` is one text
+    column and `bulk_import._write_task_properties` stores `str(value)`, which would turn a
+    list into the Python repr `"['gas_odor', 'power_out']"`.
+    """
+    db.add(
+        TaskPropertyConfig(
+            task_type="rescue", property_name="utility_hazards",
+            data_type="multi_select", enum_options=["gas_odor", "power_out", "sparks"],
+        )
+    )
+    await db.flush()
+
+    column = _by_header(await ticket_columns(db, "rescue"), f"{DYNAMIC_PREFIX}utility_hazards")
+
+    assert column.data_type == "MultiEnum"
+    # Full-width commas are accepted and canonicalized, matching what the exporter writes.
+    assert coerce(column, "gas_odor，power_out") == "gas_odor,power_out"
+    assert coerce(column, "gas_odor") == "gas_odor"
+    with pytest.raises(ValueError, match="not_an_option"):
+        coerce(column, "gas_odor,not_an_option")

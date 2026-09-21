@@ -169,8 +169,11 @@ main() {
     log "[4/9] generating .env (after checkout, so new refs can add variables)"   # S2
     gen_env
 
-    log "[5/9] building backend + frontend images"
-    compose build backend frontend
+    log "[5/9] building db + backend + frontend images"
+    # db is built too (PostGIS + h3-pg, ADR-283): `compose up` below only builds an image that
+    # is missing, so without this a Dockerfile change would never reach an existing VM. A
+    # changed image makes step 6 recreate the db container on the same pgdata volume.
+    compose build db backend frontend
 
     log "[6/9] starting db + redis (waiting for healthy)"
     compose up -d --wait db redis

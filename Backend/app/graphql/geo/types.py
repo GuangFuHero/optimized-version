@@ -13,7 +13,14 @@ from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
-from app.graphql.shared import PageInfo, Visibility
+from app.graphql.shared import (  # noqa: F401 -- the address types and their mapper are
+    AccessStatus,  # re-exported here for existing geo callers
+    PageInfo,
+    SecondaryLocationInput,
+    SecondaryLocationType,
+    Visibility,
+    secondary_location_to_dict,
+)
 from app.graphql.tickets.types import PhotoType
 
 
@@ -34,68 +41,6 @@ class BoundsInput:
     max_lat: float = strawberry.field(description="North boundary latitude")
     min_lng: float = strawberry.field(description="West boundary longitude")
     max_lng: float = strawberry.field(description="East boundary longitude")
-
-
-@strawberry.type
-class SecondaryLocationType:
-    """GraphQL type for secondary address or pole location details."""
-
-    uuid: UUID
-    geometry_uuid: str = strawberry.field(
-        description="UUID of the parent station this location belongs to"
-    )
-    location_type: str = strawberry.field(
-        description="Type of secondary location: 'address' or 'pole'"
-    )
-    county: str | None = None
-    city: str | None = None
-    lane: str | None = None
-    alley: str | None = None
-    no: str | None = None
-    floor: str | None = None
-    room: str | None = None
-    pole_id: str | None = strawberry.field(
-        default=None,
-        description="Utility pole identifier (only set when location_type is 'pole')",
-    )
-    pole_type: str | None = strawberry.field(
-        default=None,
-        description="Type of utility pole, e.g. '電線桿' (electricity pole), '電話線桿' (telephone pole)",
-    )
-    pole_note: str | None = strawberry.field(
-        default=None, description="Additional notes about the pole location"
-    )
-
-    @classmethod
-    def from_model(cls, m) -> "SecondaryLocationType":
-        """Build from a SQLAlchemy model instance."""
-        return cls(
-            uuid=m.uuid, geometry_uuid=m.geometry_uuid,
-            location_type=m.location_type,
-            county=m.county, city=m.city, lane=m.lane, alley=m.alley,
-            no=m.no, floor=m.floor, room=m.room,
-            pole_id=m.pole_id, pole_type=m.pole_type, pole_note=m.pole_note,
-        )
-
-
-@strawberry.input
-class SecondaryLocationInput:
-    """Input for attaching a secondary address or pole location to a station."""
-
-    location_type: str = strawberry.field(
-        default="address",
-        description="Type of secondary location: 'address' (default) or 'pole'",
-    )
-    county: str | None = None
-    city: str | None = None
-    lane: str | None = None
-    alley: str | None = None
-    no: str | None = None
-    floor: str | None = None
-    room: str | None = None
-    pole_id: str | None = None
-    pole_type: str | None = None
-    pole_note: str | None = None
 
 
 @strawberry.type
@@ -137,10 +82,6 @@ class StationType:
     verification_status: str | None = strawberry.field(
         default=None, description="Review state: 'unverified', 'ai_verified', or 'human_verified'"
     )
-    confidence_score: float | None = strawberry.field(
-        default=None,
-        description="Aggregate credibility score based on crowd-sourced ratings [0.0–1.0]",
-    )
     is_duplicate: bool = strawberry.field(
         default=False,
         description="True if this station has been flagged as a duplicate entry",
@@ -152,10 +93,6 @@ class StationType:
     is_official: bool = strawberry.field(
         default=False,
         description="True if this station is operated by a government or official body",
-    )
-    priority_score: float | None = strawberry.field(
-        default=None,
-        description="Computed urgency score used for display ordering — higher is more urgent",
     )
     operational_status: str = strawberry.field(
         default="active",
@@ -258,9 +195,8 @@ class StationType:
             op_hour=m.op_hour, level=m.level, comment=m.comment,
             source=m.source, visibility=m.visibility,
             verification_status=m.verification_status,
-            confidence_score=m.confidence_score,
             is_duplicate=m.is_duplicate, is_temporary=m.is_temporary,
-            is_official=m.is_official, priority_score=m.priority_score,
+            is_official=m.is_official,
             operational_status=m.operational_status, status_changed_at=m.status_changed_at,
             created_at=m.created_at, updated_at=m.updated_at,
             _contact_name_raw=m.contact_name,
@@ -552,3 +488,4 @@ class CreateCrowdSourcingInput:
         default=None,
         description="Distance in meters from the user to the station at time of submission",
     )
+

@@ -9,9 +9,10 @@ identity is active per request, platform roles included. Every switchable, actio
 must therefore stand on its own — see ADR-097 and the station.contribute grants below.
 
 Only capabilities with a real enforcement point today (station/map/ticket/dynamic_field/
-user/team/work_zone/audit/rbac/announcement/project) are actually granted below; the rest of the Perm
-catalog (ticket.export/ai_duplicate/pre_departure) is registered as a Permission row so
-it exists ahead of the feature that will enforce it, but isn't wired into any role yet.
+user/team/work_zone/audit/rbac/announcement/pre_departure/project) are actually granted
+below; the rest of the Perm catalog (ticket.export/ai_duplicate) is registered as a
+Permission row so it exists ahead of the feature that will enforce it, but isn't wired
+into any role yet.
 """
 
 import asyncio
@@ -51,6 +52,11 @@ ROLES_DATA = [
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",      # help-request board is public (ADR-027)
             Perm.TICKET_VIEW_PII: "own",  # only your own request's contact info; others masked
+            # ADR-281: signing in is what unlocks the exact point, the address and the free
+            # text — the team's rule since 2026-07 (訪客看區域、登入看精確). `all` rather than
+            # hard-coded "logged in" so it can be narrowed here or at /admin/rbac, e.g. to
+            # `own` once the volunteer flow can hand out detail on sign-up instead.
+            Perm.TICKET_VIEW_DETAIL: "all",
             # ADR-128: the timeline mirrors view_pii's tiering exactly. `own` is what makes
             # Notion's front-of-house requirement real — a requester following their own
             # ticket's progress — without exposing anyone else's.
@@ -73,6 +79,7 @@ ROLES_DATA = [
             Perm.STATION_VIEW_PII: "all",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "all",
+            Perm.TICKET_VIEW_DETAIL: "all",
             Perm.USER_VIEW: "all",
             Perm.AUDIT_VIEW: "all",
             # ADR-130: audit.view is no longer the ticket into the timeline (that is
@@ -95,11 +102,12 @@ ROLES_DATA = [
                 Perm.STATION_VIEW, Perm.STATION_VIEW_PII, Perm.STATION_VIEW_HISTORY,
                 Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
                 Perm.STATION_DELETE, Perm.STATION_REVIEW,
-                Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_VIEW_HISTORY,
-                Perm.TICKET_ADD, Perm.TICKET_EDIT,
+                Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_VIEW_DETAIL,
+                Perm.TICKET_VIEW_HISTORY, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
                 Perm.FIELD_VIEW, Perm.FIELD_ADD, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
                 Perm.ANN_VIEW, Perm.ANN_PUBLISH, Perm.ANN_EDIT, Perm.ANN_DELETE,
+                Perm.PREDEP_VIEW, Perm.PREDEP_PUBLISH, Perm.PREDEP_EDIT, Perm.PREDEP_DELETE,
                 Perm.USER_VIEW, Perm.USER_ADD, Perm.USER_EDIT, Perm.USER_DELETE,
                 Perm.RBAC_VIEW, Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
                 Perm.TEAM_VIEW, Perm.TEAM_EDIT, Perm.TEAM_MEMBER_MANAGE,
@@ -138,6 +146,10 @@ ROLES_DATA = [
             Perm.STATION_REVIEW: "zone",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
+            # ADR-281: `all`, not `zone` like the contact details beside it. Every signed-in
+            # account already reads the exact point (see `user`), and a team identity that
+            # saw less than the citizen one would lose it on switching (ADR-097).
+            Perm.TICKET_VIEW_DETAIL: "all",
             # ADR-128: `zone`, never `team`. ADR-049 removed team_uuid from base_geometries,
             # so in_scope()'s TEAM branch can never match a geo resource — granting `team`
             # here would be an authorization that silently never holds.
@@ -181,6 +193,7 @@ ROLES_DATA = [
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
+            Perm.TICKET_VIEW_DETAIL: "all",  # ADR-281, see the admin role above
             # ADR-128: field workers need the timeline for the resources they actually work
             # — who took a task, who dropped it — so it matches view_pii at `zone`.
             Perm.TICKET_VIEW_HISTORY: "zone",

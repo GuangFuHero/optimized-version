@@ -80,7 +80,30 @@ async def _ensure_test_database():
         # Base.metadata.create_all builds those indexes, so without this every schema
         # creation below fails — not one test, the whole suite.
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+        # h3 + h3_postgis snap a ticket's point to a hexagon for callers without
+        # ticket.view_detail (ADR-281). The resolvers call them at query time, so a
+        # database without them fails every anonymous ticket read.
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS h3")
+        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE")
     await eng.dispose()
+
+
+
+# The six disaster keys migration e7b249d0af31 seeds. The test schema comes from
+# `Base.metadata.create_all`, which carries data from no migration, so any fixture whose test
+# writes a disaster type has to seed them — since feature 018 the vocabulary is validated
+# against this table and an unseeded one rejects every label.
+DISASTER_TYPES = [
+    ("flood", "水災"), ("landslide", "土石流"), ("epidemic", "疫情"),
+    ("radiation", "核／輻射"), ("fire", "火災"), ("earthquake", "地震"),
+]
+
+
+def seed_disaster_types(session) -> None:
+    """Add the six seeded disaster types to a session (caller commits)."""
+    from app.models.disaster_type import DisasterType
+
+    session.add_all(DisasterType(key=key, label=label) for key, label in DISASTER_TYPES)
 
 
 @pytest_asyncio.fixture
@@ -95,6 +118,9 @@ async def db():
         # so it must be re-created here too — Base.metadata.create_all builds the
         # search_text GIN indexes, which need gin_trgm_ops.
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
+        # Same reason as pg_trgm: h3 installs into public and went with the schema.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3;"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
@@ -114,10 +140,14 @@ async def db_session():
         # so it must be re-created here too — Base.metadata.create_all builds the
         # search_text GIN indexes, which need gin_trgm_ops.
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
+        # Same reason as pg_trgm: h3 installs into public and went with the schema.
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3;"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;"))
         await conn.run_sync(Base.metadata.create_all)
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
     async with factory() as session:
         session.add(Role(name="user", kind="platform"))
+        seed_disaster_types(session)
         await session.commit()
         yield session
     await engine.dispose()

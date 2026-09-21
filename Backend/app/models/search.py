@@ -67,9 +67,20 @@ def search_text_index(table: str) -> Index:
     Naming is uniform (`ix_<table>_search_text_trgm`) so tests can assert every
     searchable table has one without a hand-maintained list of index names.
     """
+    return trigram_index(table, "search_text")
+
+
+def trigram_index(table: str, column: str) -> Index:
+    """Build a trigram GIN index on one column, named `ix_<table>_<column>_trgm`.
+
+    `search_text` is the usual target. The other use is the public half of the ticket search
+    (ADR-281): a caller without ticket.view_detail matches the title and task names on their
+    own, because `search_text` also holds the free text they may not read — and ADR-152 is
+    why that half still needs an index, since it is exactly what an anonymous caller runs.
+    """
     return Index(
-        f"ix_{table}_search_text_trgm",
-        "search_text",
+        f"ix_{table}_{column}_trgm",
+        column,
         postgresql_using="gin",
-        postgresql_ops={"search_text": "gin_trgm_ops"},
+        postgresql_ops={column: "gin_trgm_ops"},
     )

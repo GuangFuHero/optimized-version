@@ -10,15 +10,19 @@ from types import SimpleNamespace
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.disaster_types import validate_disaster_types
 from app.core.permissions import Perm
 from app.graphql.scalars import geojson_to_geom
 from app.models.auth import User
 from app.models.request import Tickets
+from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.repositories.auth_repository import user_repository
+from app.repositories.geo_repository import secondary_location_repository
 from app.repositories.tickets_repository import (
     task_assignment_repository,
     task_property_repository,
+    ticket_disaster_detail_repository,
     ticket_repository,
     ticket_task_repository,
 )
@@ -26,6 +30,17 @@ from app.services.authz import require_scope
 from app.services.geo_validation import normalize_contact_fields, validate_point
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
+
+# Size limits for `set_ticket_disaster_details` (ADR-267). ADR-092 leaves the vocabulary
+# unchecked but bounded nothing, so ticket.edit on one ticket was a megabyte store — the
+# values are publicly readable and copied into `audit_logs`. Generous against the seeded form
+# (14 fields, largest a 4-option multi_select) and still a hard ceiling.
+MAX_DISASTER_DETAIL_FIELDS = 100
+MAX_DISASTER_DETAIL_VALUES = 50
+MAX_DISASTER_DETAIL_VALUE_LENGTH = 500
+# Matches `ticket_disaster_details.property_name`: a longer key used to reach the column and
+# come back as "Unexpected error." rather than naming itself.
+MAX_DISASTER_DETAIL_KEY_LENGTH = 100
 
 # Business rule (ADR-020): status transitions live here, not in the RBAC layer.
 VALID_TRANSITIONS = {
@@ -83,10 +98,24 @@ async def create_ticket(
     priority: str,
     task_type: str | None,
     visibility: str,
-    disaster_type: str | None,
+    disaster_types: list[str] | None = None,
+    person_trapped_reported: str | None = None,
+    immediate_danger_reported: str | None = None,
+    secondary_location: dict | None = None,
 ) -> Tickets:
-    """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner)."""
+    """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner).
+
+    `disaster_types` is validated against the vocabulary table before anything is written: a
+    ticket filed under a disaster that does not exist would store cleanly and then render an
+    empty disaster-field form, telling the reporter nothing was asked of them.
+
+    `secondary_location` is new in feature 018. Stations have been able to carry an address
+    since they existed; tickets could not, which meant the one record that most needs a door
+    number — somebody asking to be found — had only a map pin. Owns the two-table orchestration
+    and the single commit that makes it atomic, exactly as `station.py::create_station` does.
+    """
     await require_scope(actor, Perm.TICKET_ADD, db)
+    disaster_types = await validate_disaster_types(db, disaster_types or [])
     validate_point(geometry, entity="Ticket")
     contacts = normalize_contact_fields(
         {
@@ -98,7 +127,7 @@ async def create_ticket(
         # whitespace-only value has to be refused here rather than normalized to None.
         required=frozenset({"contact_name"}),
     )
-    return await ticket_repository.create(
+    ticket = await ticket_repository.add(
         db,
         obj_in={
             "property_name": "request",
@@ -112,31 +141,145 @@ async def create_ticket(
             "priority": priority,
             "task_type": task_type,
             "visibility": visibility,
-            "disaster_type": disaster_type,
+            "disaster_types": disaster_types,
+            "person_trapped_reported": person_trapped_reported,
+            "immediate_danger_reported": immediate_danger_reported,
         },
     )
+    if secondary_location:
+        # A ticket's uuid IS its base_geometries.uuid (joined-table inheritance), which is
+        # what secondary_locations.geometry_uuid points at — the same key the station path
+        # uses, so one address table serves both.
+        await secondary_location_repository.add(
+            db, obj_in={"geometry_uuid": str(ticket.uuid), **secondary_location}
+        )
+    await db.commit()
+    await db.refresh(ticket)
+    return ticket
 
 
 async def update_ticket(
-    db: AsyncSession, *, actor: User, uuid: str, status: str | None = None, changes: dict
+    db: AsyncSession, *, actor: User, uuid: str, status: str | None = None, changes: dict,
+    secondary_location: dict | None = None,
 ) -> Tickets:
     """Update a ticket (checkpoint 1 ticket.edit, then checkpoint 2 against the loaded ticket).
 
     Status changes are validated against VALID_TRANSITIONS; `changes` is the already-diffed
     non-status field dict.
+
+    `secondary_location` replaces the ticket's address, creating the row if the ticket was
+    filed without one (ADR-268). Create-only would mean a mistyped door number stays wrong
+    for the rescue team that has to find it.
     """
     ticket = await ticket_repository.get_by_uuid_active(db, uuid)
     if not ticket:
         raise ValueError("Ticket not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
+    if secondary_location is not None:
+        await _replace_secondary_location(db, str(ticket.uuid), secondary_location)
 
     obj_in = dict(changes)
+    if "disaster_types" in obj_in:
+        # `keep`: the ticket's current types pass even if retired since it was filed, so
+        # dropping one type does not require the others still to be active (ADR-266).
+        obj_in["disaster_types"] = await validate_disaster_types(
+            db, obj_in["disaster_types"] or [], keep=ticket.disaster_types or []
+        )
     if status is not None:
         allowed = VALID_TRANSITIONS.get(ticket.status, [])
         if status not in allowed:
             raise ValueError(f"Cannot transition from '{ticket.status}' to '{status}'")
         obj_in["status"] = status
     return await ticket_repository.update(db, db_obj=ticket, obj_in=obj_in)
+
+
+async def _replace_secondary_location(
+    db: AsyncSession, geometry_uuid: str, values: dict
+) -> None:
+    """Overwrite the address row for a geometry, or create it when there is none.
+
+    A whole-input replacement, so clearing a member means sending it null, not omitting it.
+    Flush only: `update_ticket` always ends in a repository `update()`, which is the commit.
+    """
+    existing = await secondary_location_repository.get_by_geometry(db, geometry_uuid)
+    if existing is None:
+        await secondary_location_repository.add(
+            db, obj_in={"geometry_uuid": geometry_uuid, **values}
+        )
+        return
+    for field, value in values.items():
+        setattr(existing, field, value)
+    await db.flush()
+
+
+async def set_ticket_disaster_details(
+    db: AsyncSession, *, actor: User, ticket_uuid: str, details: dict[str, list[str]]
+) -> list[TicketDisasterDetail]:
+    """Replace a ticket's disaster-field values wholesale.
+
+    `details` maps `property_name` to its selected values — one entry for a single-valued
+    field, several for a `multi_select`. An empty list clears the field; a `property_name`
+    absent from the mapping is also cleared, because this is a replacement, not a patch. That
+    choice matches how the form actually submits: the reporter sees every field at once and
+    sends back the whole answer set, so a merge would make un-answering a question impossible.
+
+    Per ADR-092 nothing here is checked against `ticket_property_config` — not the key, not
+    the value. A field retired between the form loading and it being submitted still stores,
+    because losing a trapped person's answer to a config change would be far worse than
+    keeping a row whose definition has moved on.
+
+    *Size* is checked, which ADR-092 never covered — see the MAX_DISASTER_DETAIL_* constants
+    above (ADR-267).
+
+    Delete-then-insert inside one transaction, committed once, so a reader never observes the
+    ticket mid-swap with half its answers gone.
+    """
+    ticket = await ticket_repository.get_by_uuid_active(db, ticket_uuid)
+    if not ticket:
+        raise ValueError("Ticket not found")
+    await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
+    _check_disaster_detail_size(details)
+
+    await ticket_disaster_detail_repository.delete_for_ticket(db, ticket_uuid)
+    for property_name, values in details.items():
+        # dict.fromkeys, not set(): duplicates would violate the unique constraint, but the
+        # reporter's ordering is the one thing worth keeping when it survives at all.
+        for value in dict.fromkeys(v for v in values if v is not None and v != ""):
+            await ticket_disaster_detail_repository.add(
+                db,
+                obj_in={
+                    "ticket_uuid": ticket_uuid,
+                    "property_name": property_name,
+                    "value": value,
+                },
+            )
+    await db.commit()
+    return await ticket_disaster_detail_repository.list_by_ticket(db, ticket_uuid)
+
+
+def _check_disaster_detail_size(details: dict[str, list[str]]) -> None:
+    """Reject a detail payload that exceeds the ADR-267 ceilings, naming what broke.
+
+    `ValueError` is allow-listed by the `MaskErrors` extension, so the reporter is told which
+    key or value was too big rather than getting "Unexpected error."
+    """
+    if len(details) > MAX_DISASTER_DETAIL_FIELDS:
+        raise ValueError(f"一次最多只能填寫 {MAX_DISASTER_DETAIL_FIELDS} 個災害欄位")
+    for property_name, values in details.items():
+        if len(property_name) > MAX_DISASTER_DETAIL_KEY_LENGTH:
+            raise ValueError(
+                f"欄位名稱長度上限為 {MAX_DISASTER_DETAIL_KEY_LENGTH} 字：{property_name[:20]}…"
+            )
+        if len(values) > MAX_DISASTER_DETAIL_VALUES:
+            raise ValueError(
+                f"欄位「{property_name}」的選項數量上限為 {MAX_DISASTER_DETAIL_VALUES}"
+            )
+        for value in values:
+            if value is not None and len(value) > MAX_DISASTER_DETAIL_VALUE_LENGTH:
+                raise ValueError(
+                    f"欄位「{property_name}」的單一值長度上限為 "
+                    f"{MAX_DISASTER_DETAIL_VALUE_LENGTH} 字"
+                )
 
 
 async def review_ticket(

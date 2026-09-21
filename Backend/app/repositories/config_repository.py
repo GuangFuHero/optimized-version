@@ -1,4 +1,4 @@
-"""Repositories for station and task property configuration schemas.
+"""Repositories for station, task and ticket property configuration schemas.
 
 `list_by_type` answers "which fields should the form show right now": the requested target
 type (plus the universal 'all' bucket for stations), narrowed to fields enabled for the
@@ -6,6 +6,11 @@ deployment's current disaster types (ADR-091), excluding deactivated fields (ADR
 totally ordered list. Before feature 013 there was no ORDER BY at all, so the same query
 could come back in a different order twice in a row. Pass `include_inactive=True` for the
 management view that can still see retired fields (ADR-226).
+
+The ticket repository (feature 018) answers the same question from a different key: there is
+no first-dimension type column, because for a ticket the disaster type IS the only axis. It
+also reads the empty list differently — see `TicketPropertyConfigRepository.list_for_disasters`,
+which is the one place `_enabled_for` is deliberately not reused.
 """
 
 from sqlalchemy import ARRAY, String, cast, func, or_, select, true
@@ -15,7 +20,11 @@ from sqlalchemy.sql import ColumnElement
 
 from app.core.disaster_types import normalize_disaster_types
 from app.infrastructure.repository.base import GenericRepository
-from app.models.property_config import StationPropertyConfig, TaskPropertyConfig
+from app.models.property_config import (
+    StationPropertyConfig,
+    TaskPropertyConfig,
+    TicketPropertyConfig,
+)
 
 
 class PropertyConfigValidationError(ValueError):
@@ -78,12 +87,30 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
         )
         return result.scalars().all()
 
+    async def get_by_key(
+        self, db: AsyncSession, *, station_type: str, property_name: str
+    ) -> StationPropertyConfig | None:
+        """Return the row `(station_type, property_name)` identifies, or None.
+
+        `upsert` uses this to decide insert-vs-update; `app/services/config.py` uses it to
+        read the labels the row already carries, which `validate_disaster_types(keep=)` then
+        grandfathers (ADR-277).
+        """
+        result = await db.execute(
+            select(self.model).where(
+                self.model.station_type == station_type,
+                self.model.property_name == property_name,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def upsert(
         self, db: AsyncSession, *,
         station_type: str, property_name: str, data_type: str | None = None,
         enum_options: list[str] | None = None,
         disaster_types: list[str] | None = None, label: str | None = None,
         sort_order: int | None = None, is_active: bool | None = None,
+        unit: str | None = None,
     ) -> StationPropertyConfig:
         """Create or update a config entry for the given station type and property name.
 
@@ -91,16 +118,12 @@ class StationPropertyConfigRepository(GenericRepository[StationPropertyConfig]):
         so passing a new name creates a new row rather than renaming an existing one.
         """
         async def lookup():
-            result = await db.execute(
-                select(self.model).where(
-                    self.model.station_type == station_type,
-                    self.model.property_name == property_name,
-                )
+            return await self.get_by_key(
+                db, station_type=station_type, property_name=property_name
             )
-            return result.scalar_one_or_none()
 
         update_values = _optional_config_fields(
-            data_type, enum_options, disaster_types, label, sort_order, is_active
+            data_type, enum_options, disaster_types, label, sort_order, is_active, unit
         )
         return await _upsert_with_conflict_retry(
             self, db, lookup=lookup, update_values=update_values,
@@ -141,31 +164,136 @@ class TaskPropertyConfigRepository(GenericRepository[TaskPropertyConfig]):
         )
         return result.scalars().all()
 
+    async def get_by_key(
+        self, db: AsyncSession, *, task_type: str, property_name: str
+    ) -> TaskPropertyConfig | None:
+        """Return the row `(task_type, property_name)` identifies, or None.
+
+        Same two callers as the station side: `upsert`'s insert-vs-update decision, and the
+        `validate_disaster_types(keep=)` read in `app/services/config.py` (ADR-277).
+        """
+        result = await db.execute(
+            select(self.model).where(
+                self.model.task_type == task_type,
+                self.model.property_name == property_name,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def upsert(
         self, db: AsyncSession, *,
         task_type: str, property_name: str, data_type: str | None = None,
         enum_options: list[str] | None = None,
         disaster_types: list[str] | None = None, label: str | None = None,
         sort_order: int | None = None, is_active: bool | None = None,
+        unit: str | None = None,
     ) -> TaskPropertyConfig:
         """Create or update a config entry for the given task type and property name."""
         async def lookup():
-            result = await db.execute(
-                select(self.model).where(
-                    self.model.task_type == task_type,
-                    self.model.property_name == property_name,
-                )
+            return await self.get_by_key(
+                db, task_type=task_type, property_name=property_name
             )
-            return result.scalar_one_or_none()
 
         update_values = _optional_config_fields(
-            data_type, enum_options, disaster_types, label, sort_order, is_active
+            data_type, enum_options, disaster_types, label, sort_order, is_active, unit
         )
         return await _upsert_with_conflict_retry(
             self, db, lookup=lookup, update_values=update_values,
             create_values={
                 "task_type": task_type, "property_name": property_name, **update_values,
             },
+        )
+
+
+class TicketPropertyConfigRepository(GenericRepository[TicketPropertyConfig]):
+    """Repository for the disaster-specific field schema shown on tickets."""
+
+    def __init__(self):
+        """Initialize with TicketPropertyConfig as the managed model."""
+        super().__init__(TicketPropertyConfig)
+
+    async def list_for_disasters(
+        self, db: AsyncSession, disaster_types: list[str], *, include_inactive: bool = False,
+    ) -> list[TicketPropertyConfig]:
+        """Return the fields a ticket with these disaster types should show, ordered.
+
+        `disaster_types` is the *ticket's* own set, not the deployment's. A ticket is one
+        concrete incident, so `project_settings` has no say here: a deployment configured for
+        {flood, landslide} must still render the fire fields on the one fire ticket that comes
+        in, or the reporter simply cannot say there are flames.
+
+        **This is why `_enabled_for` is not reused.** That helper reads an empty list as "no
+        filter, show everything", which is right for an unconfigured *deployment* and wrong for
+        a *ticket*: a ticket nobody has classified would get all fourteen fields — every
+        disaster's questions at once — instead of none of them. Here an empty list means the
+        reporter has not said what kind of disaster this is, so only the universal rows (those
+        whose own `disaster_types` is empty) apply.
+
+        The argument is normalized first (ADR-265): `&&` is exact string equality per
+        element, so an un-lowered `"Flood"` used to render an empty form rather than error.
+
+        Ordering is `(property_name, uuid)`. There is no `sort_order` column on this table
+        (ADR-248), but the order still has to be total or the same query can come back
+        differently twice running (ADR-227).
+        """
+        disaster_types = normalize_disaster_types(disaster_types)
+        universal = func.cardinality(self.model.disaster_types) == 0
+        if disaster_types:
+            # `&&` is PostgreSQL's array-intersection operator: a two-disaster ticket is one
+            # condition, not a loop. A field enabled for {flood,landslide} matches a ticket
+            # that is either.
+            enabled = or_(
+                universal,
+                self.model.disaster_types.op("&&")(cast(disaster_types, ARRAY(String))),
+            )
+        else:
+            enabled = universal
+        conditions = [enabled]
+        if not include_inactive:
+            conditions.append(self.model.is_active.is_(True))
+        result = await db.execute(
+            select(self.model)
+            .where(*conditions)
+            .order_by(self.model.property_name, self.model.uuid)
+        )
+        return result.scalars().all()
+
+    async def get_by_key(
+        self, db: AsyncSession, *, property_name: str
+    ) -> TicketPropertyConfig | None:
+        """Return the row `property_name` identifies, or None.
+
+        `property_name` alone is the key here (ADR-247). Same two callers as the siblings:
+        `upsert`'s insert-vs-update decision, and the `validate_disaster_types(keep=)` read
+        in `app/services/config.py` (ADR-277).
+        """
+        result = await db.execute(
+            select(self.model).where(self.model.property_name == property_name)
+        )
+        return result.scalar_one_or_none()
+
+    async def upsert(
+        self, db: AsyncSession, *,
+        property_name: str, data_type: str | None = None,
+        enum_options: list[str] | None = None,
+        disaster_types: list[str] | None = None, label: str | None = None,
+        is_active: bool | None = None, unit: str | None = None, hint: str | None = None,
+    ) -> TicketPropertyConfig:
+        """Create or update a ticket disaster-field definition.
+
+        `property_name` alone is the key, and it is immutable (ADR-095) — passing a new name
+        creates a new field rather than renaming an existing one, because
+        `ticket_disaster_details` points at it by string with no foreign key.
+        """
+        async def lookup():
+            return await self.get_by_key(db, property_name=property_name)
+
+        update_values = _optional_config_fields(
+            data_type, enum_options, disaster_types, label, None, is_active, unit, hint
+        )
+        return await _upsert_with_conflict_retry(
+            self, db, lookup=lookup, update_values=update_values,
+            create_values={"property_name": property_name, **update_values},
         )
 
 
@@ -198,6 +326,7 @@ async def _upsert_with_conflict_retry(repo, db, *, lookup, create_values, update
 def _optional_config_fields(
     data_type: str | None, enum_options: list[str] | None, disaster_types: list[str] | None,
     label: str | None, sort_order: int | None, is_active: bool | None,
+    unit: str | None = None, hint: str | None = None,
 ) -> dict:
     """Keep only the fields the caller actually supplied.
 
@@ -223,22 +352,22 @@ def _optional_config_fields(
             None if disaster_types is None else normalize_disaster_types(disaster_types)
         ),
         "label": label, "sort_order": sort_order, "is_active": is_active,
+        "unit": unit, "hint": hint,
     }
     return {k: v for k, v in supplied.items() if v is not None}
 
 
 async def disaster_types_in_use(db: AsyncSession) -> set[str]:
-    """Every disaster label that at least one config row is scoped to.
+    """Every disaster label that at least one *station or task* config row is scoped to.
 
-    The vocabulary of real disaster types lives in PM-Scure's spec, not in this repository
-    (ADR-091), so there is nothing to validate a label against. What *is* knowable is which
-    labels the configured fields actually use, and that is enough to tell an operator that
-    the label they just saved matches none of them — the difference between a typo and a
-    disaster nobody has configured fields for yet (ADR-169).
+    Its one caller warns that a saved `project_settings.disaster_types` reaches no configured
+    field (ADR-169), and project settings only scope those two tables — ticket fields resolve
+    against each ticket's own types. Counting them here made the warning unreachable, since
+    the migration seeds ticket fields for all six types (ADR-264).
 
-    Rows with an empty `disaster_types` are universal ("every type") and contribute no label,
-    which is correct here: they stay enabled whatever the deployment is set to, so they can
-    never be the thing a mistyped label was meant to reach.
+    Rows with an empty `disaster_types` are universal ("every type") and contribute no label:
+    they stay enabled whatever the deployment is set to, so they can never be the thing a
+    mistyped label was meant to reach.
     """
     labels: set[str] = set()
     for model in (StationPropertyConfig, TaskPropertyConfig):
@@ -249,3 +378,4 @@ async def disaster_types_in_use(db: AsyncSession) -> set[str]:
 
 station_property_config_repository = StationPropertyConfigRepository()
 task_property_config_repository = TaskPropertyConfigRepository()
+ticket_property_config_repository = TicketPropertyConfigRepository()

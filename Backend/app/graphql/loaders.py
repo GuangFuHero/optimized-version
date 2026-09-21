@@ -5,6 +5,10 @@ Each loader collapses an N+1 access pattern into a single
 Loaders are constructed fresh by :func:`build_loaders` for every GraphQL
 request via ``app.graphql.context.get_context``; they must NOT be cached
 across requests because DataLoaders memoise their own results.
+
+Every list loader passes an explicit ``order_by`` ending on a unique column, so the order is
+total. Without one, a batched ``WHERE parent_uuid IN (...)`` returns rows in whatever order
+the plan produced, and the same field can come back differently twice running.
 """
 
 from collections import defaultdict
@@ -13,21 +17,27 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from strawberry.dataloader import DataLoader
 
+from app.db.h3 import h3_cell_text, h3_centroid
 from app.graphql.geo.types import (
     CrowdSourcingType,
     SecondaryLocationType,
     StationPropertyType,
 )
+from app.graphql.scalars import geom_to_geojson
 from app.graphql.tickets.types import (
     PhotoType,
     TaskAssignmentType,
     TaskPropertyType,
+    TicketDisasterDetailType,
     TicketTaskType,
 )
 from app.graphql.work_zone.types import AssignedTeamType
+from app.models.geo import BaseGeometry
 from app.models.photo import Photo
+from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import CrowdSourcing, StationProperty
+from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.repositories.team_repository import team_zone_assign_repository
 
@@ -50,43 +60,80 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         ),
         "station_properties_by_station": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, StationProperty, "station_uuid", StationPropertyType
+                db, StationProperty, "station_uuid", StationPropertyType,
+                # Groups the form by facility/supply/service, then by name within each.
+                order_by=(
+                    StationProperty.property_type,
+                    StationProperty.property_name,
+                    StationProperty.uuid,
+                ),
             )
         ),
         "crowd_sourcings_by_property": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, CrowdSourcing, "item_uuid", CrowdSourcingType
+                db, CrowdSourcing, "item_uuid", CrowdSourcingType,
+                # A feed, not a form: newest rating first.
+                order_by=(CrowdSourcing.created_at.desc(), CrowdSourcing.uuid),
             )
         ),
         "photos_by_ticket": photos_by_geometry,
         "photos_by_station": photos_by_geometry,
+        "disaster_details_by_ticket": DataLoader(
+            load_fn=_make_one_to_many_loader(
+                db, TicketDisasterDetail, "ticket_uuid", TicketDisasterDetailType,
+                soft_delete=True,
+                # Must match the write path's ordering, or the same values come back one
+                # way from a write and another from a read. Already total: the unique
+                # constraint makes this pair unique per ticket.
+                order_by=(
+                    TicketDisasterDetail.property_name,
+                    TicketDisasterDetail.value,
+                ),
+            )
+        ),
         "tasks_by_ticket": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, TicketTask, "ticket_uuid", TicketTaskType, soft_delete=True
+                db, TicketTask, "ticket_uuid", TicketTaskType, soft_delete=True,
+                # A worklist reads chronologically, oldest first.
+                order_by=(TicketTask.created_at, TicketTask.uuid),
             )
         ),
         "task_properties_by_task": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, TaskProperty, "task_uuid", TaskPropertyType, soft_delete=True
+                db, TaskProperty, "task_uuid", TaskPropertyType, soft_delete=True,
+                # By field name, so the values line up with the form's field order.
+                order_by=(TaskProperty.property_name, TaskProperty.uuid),
             )
         ),
         "task_assignments_by_task": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, TaskAssignment, "task_uuid", TaskAssignmentType
+                db, TaskAssignment, "task_uuid", TaskAssignmentType,
+                # This table has no `created_at`; `assigned_at` is the timestamp.
+                order_by=(TaskAssignment.assigned_at, TaskAssignment.uuid),
             )
         ),
         "teams_by_zone": DataLoader(load_fn=_make_teams_by_zone_loader(db)),
+        # The three below serve the ticket.view_detail boundary (ADR-281): the ticket a task
+        # or property is judged by, and the coarse point shown in place of the exact one.
+        "ticket_by_uuid": DataLoader(load_fn=_make_ticket_by_uuid_loader(db)),
+        "ticket_uuid_by_task": DataLoader(load_fn=_make_ticket_uuid_by_task_loader(db)),
+        "coarse_point": DataLoader(load_fn=_make_coarse_point_loader(db)),
     }
 
 
 def _make_one_to_many_loader(
-    db: AsyncSession, model, parent_column: str, gql_type, soft_delete: bool = False
+    db: AsyncSession, model, parent_column: str, gql_type,
+    soft_delete: bool = False, order_by=None,
 ):
     """Build a load function: ``list[parent_uuid] -> list[list[gql_type]]``.
 
     Issues one ``WHERE parent_column IN (:uuids)`` query, groups results by
     parent uuid, returns lists aligned to the input order (empty list when a
     parent has no children).
+
+    ``order_by`` is a tuple of columns applied to the batched query. End it on a unique
+    column so the order is total; rows are grouped below in arrival order, so this is the
+    only place the per-parent order is decided.
     """
     column = getattr(model, parent_column)
 
@@ -94,6 +141,8 @@ def _make_one_to_many_loader(
         stmt = select(model).where(column.in_(parent_uuids))
         if soft_delete:
             stmt = stmt.where(model.delete_at.is_(None))
+        if order_by is not None:
+            stmt = stmt.order_by(*order_by)
         rows = (await db.execute(stmt)).scalars().all()
         grouped: dict[str, list] = defaultdict(list)
         for row in rows:
@@ -128,19 +177,86 @@ def _make_photos_by_geometry_loader(db: AsyncSession):
     """
 
     async def load_fn(geometry_uuids: list[str]) -> list[list[PhotoType]]:
-        rows = (
-            await db.execute(
-                select(Photo).where(
-                    Photo.ref_type == "geometry",
-                    Photo.ref_uuid.in_(geometry_uuids),
-                    Photo.delete_at.is_(None),
-                )
+        stmt = (
+            select(Photo)
+            .where(
+                Photo.ref_type == "geometry",
+                Photo.ref_uuid.in_(geometry_uuids),
+                Photo.delete_at.is_(None),
             )
-        ).scalars().all()
+            # Oldest first, so a gallery keeps its order between loads.
+            .order_by(Photo.created_at, Photo.uuid)
+        )
+        rows = (await db.execute(stmt)).scalars().all()
         grouped: dict[str, list[PhotoType]] = defaultdict(list)
         for row in rows:
             grouped[str(row.ref_uuid)].append(PhotoType.from_model(row))
         return [grouped[str(uuid)] for uuid in geometry_uuids]
+
+    return load_fn
+
+
+def _make_ticket_by_uuid_loader(db: AsyncSession):
+    """Batch-load tickets by uuid, for the `own`/`zone` detail check of their tasks.
+
+    Soft-deleted tickets included on purpose: this answers "whose is it and where", and a
+    task still reachable through `ticketTasks` must be judged by its ticket either way.
+    """
+
+    async def load_fn(ticket_uuids: list[str]) -> list[Tickets | None]:
+        rows = (
+            await db.execute(select(Tickets).where(Tickets.uuid.in_(ticket_uuids)))
+        ).scalars().all()
+        by_uuid = {str(row.uuid): row for row in rows}
+        return [by_uuid.get(str(uuid)) for uuid in ticket_uuids]
+
+    return load_fn
+
+
+def _make_ticket_uuid_by_task_loader(db: AsyncSession):
+    """Batch-load the ticket each task belongs to — a task property's only route to a scope."""
+
+    async def load_fn(task_uuids: list[str]) -> list[str | None]:
+        rows = (
+            await db.execute(
+                select(TicketTask.uuid, TicketTask.ticket_uuid).where(TicketTask.uuid.in_(task_uuids))
+            )
+        ).all()
+        by_task = {str(task_uuid): str(ticket_uuid) for task_uuid, ticket_uuid in rows}
+        return [by_task.get(str(uuid)) for uuid in task_uuids]
+
+    return load_fn
+
+
+def _make_coarse_point_loader(db: AsyncSession):
+    """Batch-load the coarse location, keyed ``(ticket_uuid, resolution)`` (ADR-281/283).
+
+    Each value is ``{"point": <GeoJSON of the cell centre>, "cell": <H3 index hex string>}``,
+    or None when the row is gone. Both come from one statement so the point and the cell a
+    client groups by can never disagree.
+
+    One statement per resolution in the batch — in practice one, since a request carries one
+    `zoom`. Selected from `base_geometries` directly: the point lives there, and selecting
+    `Tickets.geometry` as a bare column would put both halves of the joined inheritance in
+    the FROM clause with nothing joining them.
+    """
+
+    async def load_fn(keys: list[tuple[str, int]]) -> list[dict | None]:
+        by_resolution: dict[int, list[str]] = defaultdict(list)
+        for uuid, resolution in keys:
+            by_resolution[resolution].append(uuid)
+        coarse: dict[tuple[str, int], dict] = {}
+        for resolution, uuids in by_resolution.items():
+            rows = await db.execute(
+                select(
+                    BaseGeometry.uuid,
+                    h3_centroid(BaseGeometry.geometry, resolution),
+                    h3_cell_text(BaseGeometry.geometry, resolution),
+                ).where(BaseGeometry.uuid.in_(uuids))
+            )
+            for uuid, centre, cell in rows:
+                coarse[(str(uuid), resolution)] = {"point": geom_to_geojson(centre), "cell": cell}
+        return [coarse.get((str(uuid), resolution)) for uuid, resolution in keys]
 
     return load_fn
 

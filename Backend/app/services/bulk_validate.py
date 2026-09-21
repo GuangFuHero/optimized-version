@@ -17,6 +17,8 @@ from app.services.bulk_columns import (
     ENUM,
     FLOAT,
     INTEGER,
+    LIST,
+    MULTI_ENUM,
     ColumnSpec,
 )
 
@@ -77,10 +79,30 @@ def _to_boolean(value: str) -> bool:
     raise ValueError(f"「{value}」不是是/否值")
 
 
+def _to_list(value: str) -> list[str]:
+    """Split one cell into several values on a comma, ASCII or full-width."""
+    return [part.strip() for part in value.replace("，", ",").split(",") if part.strip()]
+
+
 def _to_enum(value: str, options: tuple[str, ...]) -> str:
     if value not in options:
         raise ValueError(f"「{value}」不是允許的值；可用：{'、'.join(options)}")
     return value
+
+
+def _to_multi_enum(value: str, options: tuple[str, ...]) -> str:
+    """Check every comma-separated part against `options`, returning them comma-joined.
+
+    A `multi_select` config field is several values, but `task_properties.property_value` is
+    one text column — so the cell splits for validation and is stored back as one canonical
+    ASCII-comma-joined string, which is byte-for-byte what the exporter wrote (ADR-278).
+    Coercing to a `list` instead would reach `str(value)` in `bulk_import` and store the
+    Python repr `"['a', 'b']"`.
+    """
+    parts = _to_list(value)
+    for part in parts:
+        _to_enum(part, options)
+    return ",".join(parts)
 
 
 def coerce(column: ColumnSpec, raw: str):
@@ -100,6 +122,10 @@ def coerce(column: ColumnSpec, raw: str):
         return _to_boolean(value)
     if column.data_type == ENUM:
         return _to_enum(value, column.enum_options or ())
+    if column.data_type == MULTI_ENUM:
+        return _to_multi_enum(value, column.enum_options or ())
+    if column.data_type == LIST:
+        return _to_list(value)
     return value
 
 

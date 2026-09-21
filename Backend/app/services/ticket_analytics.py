@@ -480,7 +480,7 @@ async def get_task_completion_distribution(
 def _duplicate_pair_condition(a, b, *, lower=None, upper=None):
     """Join condition flagging tickets `a` and `b` as likely duplicates of each other.
 
-    Same task_type/disaster_type, and within DUPLICATE_DISTANCE_METERS and
+    Same task_type and the same *set* of disaster_types, and within DUPLICATE_DISTANCE_METERS and
     DUPLICATE_TIME_WINDOW_HOURS of one another.
 
     Pass `lower`/`upper` (the caller's date range) to bound `b` as well as `a`: worth ~20%,
@@ -496,7 +496,11 @@ def _duplicate_pair_condition(a, b, *, lower=None, upper=None):
         a.uuid != b.uuid,
         a.delete_at.is_(None), b.delete_at.is_(None),
         a.task_type.is_not(None), a.task_type == b.task_type,
-        func.coalesce(a.disaster_type, "") == func.coalesce(b.disaster_type, ""),
+        # Array equality, and it is order-sensitive in PostgreSQL — which is safe only
+        # because `normalize_disaster_types` sorts on write (ADR-246). No coalesce: the
+        # column is NOT NULL DEFAULT '{}', so two unclassified tickets compare equal as
+        # `{} == {}` rather than both being NULL and matching nothing.
+        a.disaster_types == b.disaster_types,
         func.ST_DWithin(cast(a.geometry, Geography), cast(b.geometry, Geography), DUPLICATE_DISTANCE_METERS),
         func.abs(func.extract("epoch", a.created_at - b.created_at)) <= DUPLICATE_TIME_WINDOW_HOURS * 3600,
     ]
@@ -515,7 +519,7 @@ async def get_duplicate_count(
 ) -> list[dict]:
     """Count tickets flagged as likely duplicates.
 
-    A ticket is flagged if it has >=1 other ticket sharing task_type/disaster_type
+    A ticket is flagged if it has >=1 other ticket sharing task_type/disaster_types
     within the distance/time thresholds above — a context flag, not an urgency signal.
     `x="date"` groups flagged tickets by their own creation day/week; `x="category"`
     by task_type.

@@ -21,6 +21,13 @@ class Perm(StrEnum):
     # Ticket (PII split from the ticket itself: view != view_pii)
     TICKET_VIEW = "ticket.view"
     TICKET_VIEW_PII = "ticket.view_pii"
+    # ADR-281: everything that places the reporter or tells their story in their own words —
+    # the exact point, the street address, the free text, the photos, the review notes, who
+    # filed it. Not a reuse of ticket.view (public, ADR-027) nor of ticket.view_pii (contact
+    # details and triage answers, role-scoped): the seed grants this one to every role at
+    # `all`, so today it reads "signed in", but it stays a scope an admin can narrow at
+    # runtime. Without it the point comes back as the centre of an H3 cell (app/db/h3.py).
+    TICKET_VIEW_DETAIL = "ticket.view_detail"
     # Feature 016 (ADR-127): the change timeline is its own capability, not a reuse of
     # audit.view — that key is auditor-only, while the requirement is that a requester can
     # follow their own ticket. Not a reuse of ticket.view either: that one is in
@@ -103,10 +110,14 @@ class Perm(StrEnum):
     ANN_EDIT = "announcement.edit"
     ANN_DELETE = "announcement.delete"
 
-    # Pre-Departure Notice
+    # Pre-Departure Notice (行前通知) — briefing templates + generated briefings.
+    # PREDEP_DELETE was added when the feature landed; the other three predate it as
+    # ahead-of-feature placeholders (ADR-026 era). Shape mirrors ANN_* deliberately: both
+    # are admin-authored content with a public read.
     PREDEP_VIEW = "pre_departure.view"
     PREDEP_PUBLISH = "pre_departure.publish"
     PREDEP_EDIT = "pre_departure.edit"
+    PREDEP_DELETE = "pre_departure.delete"
 
     # Audit Log
     AUDIT_VIEW = "audit.view"
@@ -117,12 +128,15 @@ class Perm(StrEnum):
     RBAC_EDIT = "rbac.edit"
 
 
-# ADR-025/027: capabilities an unauthenticated Guest may use, read-only. Guest is a
-# program-level view (no DB row); anything not in this set is a 403 for an anonymous
-# caller. station.view/ticket.view are public (disaster map + help-request board don't
-# require login); ticket.view_pii is deliberately never in this set — PII always requires
-# a real actor, checked separately per-field (ADR-029).
-PUBLIC_PERMS = frozenset({Perm.MAP_VIEW, Perm.ANN_VIEW, Perm.STATION_VIEW, Perm.TICKET_VIEW})
+# ADR-025/027: read-only capabilities the whole world holds — `check_permission` resolves
+# these to Scope.ALL for every caller, authenticated or not, because the map, shelter list,
+# help-request board and 公告/行前通知 are all readable without an account. `ticket.view_pii`
+# is deliberately absent: PII always needs a real actor and is redacted per-field (ADR-029).
+# So is `ticket.view_detail`: withholding it from the anonymous caller is its whole point
+# (ADR-281).
+PUBLIC_PERMS = frozenset(
+    {Perm.MAP_VIEW, Perm.ANN_VIEW, Perm.STATION_VIEW, Perm.TICKET_VIEW, Perm.PREDEP_VIEW}
+)
 
 # ADR-064: capabilities that, for a team-kind holder, only take effect when the actor's team
 # is gov-type. Checkpoint 1 (holding the grant) is not enough — work_zone.py's

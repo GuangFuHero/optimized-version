@@ -125,15 +125,16 @@ def test_review_columns_are_audit_tier():
 
 
 def test_dedup_and_scoring_columns_are_excluded_everywhere():
-    """ADR-113/143: nothing in the codebase writes these, so exposing them adds dead UI."""
+    """ADR-113/143: nothing in the codebase writes these, so exposing them adds dead UI.
+
+    `confidence_score` / `priority_score` were on this list until the same audit dropped the
+    columns outright (ADR-083); a column that no longer exists needs no exclusion entry.
+    """
     for entity, table, column in (
         ("station", "stations", "is_duplicate"),
         ("station", "stations", "dedup_group_id"),
-        ("station", "stations", "confidence_score"),
-        ("station", "stations", "priority_score"),
         ("ticket", "ticket_tasks", "is_duplicate"),
         ("ticket", "ticket_tasks", "dedup_group_id"),
-        ("ticket", "ticket_tasks", "confidence_score"),
         ("station", "station_properties", "weightings"),
     ):
         assert column in EXCLUDED[(entity, table)], f"{entity}/{table}.{column}"

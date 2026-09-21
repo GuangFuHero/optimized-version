@@ -321,7 +321,7 @@ Schema 在 `app/schemas/bulk.py` 的 `BulkPreviewResponse` / `BulkImportResponse
 | 比對到多筆只報筆數 | 210 | `bulk_import.py` `_ambiguous_error()` |
 | 動態欄位依 config 驗證 | 117 | `app/services/bulk_validate.py` `coerce()` / `validate_row()` |
 | 遮蔽過的聯絡資料不能匯回 | 109 | `bulk_validate.py` `_check_masked_contact()` |
-| 匯出逐列 PII 遮蔽 | 109 | `bulk_export.py` `_pii_decider()` / `_contact_fields()` |
+| 匯出逐列 PII 遮蔽 | 109, 281 | `bulk_export.py` `_row_decider()` / `_contact_fields()` |
 | 更新列丟掉比對鍵與僅新增欄位 | 108 | `bulk_validate.py` `writable_values()` |
 | 新任務掛在既有求助單下仍帶檔案的值 | 240 | `bulk_validate.py` `values_for()`；`bulk_import.py` `_write_ticket()` → `_write_task()` |
 | 有寬度上限的欄位與 int4 範圍 | 241 | `bulk_validate.py` `coerce()` / `_to_integer()`；`bulk_import.py` `_write_all()` 的 `SQLAlchemyError` 防線 |

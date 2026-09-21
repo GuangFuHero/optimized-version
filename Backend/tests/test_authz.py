@@ -206,6 +206,10 @@ async def test_require_scope_unions_a_role_grant_with_a_direct_grant(db):
     longer merge (see the test below) because only one of them is ever being acted as, so the
     remaining way to hold two scopes on one capability is a role grant plus a direct grant on
     the same identity.
+
+    Both this and the test below use `ticket.edit`, not `ticket.view`: the latter is public,
+    so it never reaches the grant matrix at all (ADR-273). The mechanism under test is the
+    same either way.
     """
     team = Team(name="T1", type="gov")
     db.add(team)
@@ -213,10 +217,10 @@ async def test_require_scope_unions_a_role_grant_with_a_direct_grant(db):
     actor = User(name="A")
     db.add(actor)
     await db.flush()
-    await _grant(db, actor, Perm.TICKET_VIEW, "own", "team-role", team=team)
-    await _grant_directly(db, actor, Perm.TICKET_VIEW, "team", team=team)
+    await _grant(db, actor, Perm.TICKET_EDIT, "own", "team-role", team=team)
+    await _grant_directly(db, actor, Perm.TICKET_EDIT, "team", team=team)
 
-    scope = await require_scope(actor, Perm.TICKET_VIEW, db)
+    scope = await require_scope(actor, Perm.TICKET_EDIT, db)
     assert scope == Scope.TEAM
 
 
@@ -234,11 +238,11 @@ async def test_require_scope_ignores_the_roles_the_actor_is_not_acting_as(db):
     actor = User(name="A")
     db.add(actor)
     await db.flush()
-    await _grant(db, actor, Perm.TICKET_VIEW, "all", "platform-role")
+    await _grant(db, actor, Perm.TICKET_EDIT, "all", "platform-role")
     # Granted second, so this is the identity the actor ends up acting as.
-    await _grant(db, actor, Perm.TICKET_VIEW, "own", "team-role", team=team)
+    await _grant(db, actor, Perm.TICKET_EDIT, "own", "team-role", team=team)
 
-    assert await require_scope(actor, Perm.TICKET_VIEW, db) == Scope.OWN
+    assert await require_scope(actor, Perm.TICKET_EDIT, db) == Scope.OWN
 
 
 @pytest.mark.asyncio
@@ -292,3 +296,26 @@ async def test_a_team_identity_does_not_inherit_the_platform_role_grant(db):
     with pytest.raises(HTTPException) as exc:
         await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
     assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_require_scope_resolves_a_public_capability_without_the_grant_matrix(db):
+    """A PUBLIC_PERMS capability is `Scope.ALL` for any actor, and refuses a `resource` (ADR-273).
+
+    `station.view` is public — the map is readable without an account — so consulting the
+    grant matrix could only ever make a logged-in caller see less than an anonymous one.
+    And a capability the whole world holds has nothing to narrow per object, so checkpoint 2
+    can never run for it: passing `resource` raises rather than silently skipping the check.
+
+    This is the service-layer half of the rule; `check_permission` (GraphQL) reaches the
+    same answer by delegating here, which is what keeps the two entrypoints in agreement.
+    """
+    actor = User(name="A")
+    db.add(actor)
+    await db.flush()
+
+    assert await require_scope(actor, Perm.STATION_VIEW, db) == Scope.ALL
+
+    resource = Station(geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(actor.uuid))
+    with pytest.raises(ValueError, match="PUBLIC_PERMS"):
+        await require_scope(actor, Perm.STATION_VIEW, db, resource=resource)

@@ -44,7 +44,11 @@ async def get_context(request: Request):
             # redis comes from app.state because this path bypasses FastAPI's dependency
             # injection — get_current_user needs it to check the token's session (ADR-102).
             user = await get_current_user(db=db, token=token, redis=request.app.state.redis)
-        yield {"db": db, "user": user, "loaders": build_loaders(db), "_rbac_cache": {}}
+        yield {
+            "db": db, "user": user, "loaders": build_loaders(db), "_rbac_cache": {},
+            # ticket uuid -> Task[bool]; see app/graphql/tickets/types.py:ticket_detail_visible.
+            "_ticket_detail_visible": {},
+        }
     finally:
         await db_gen.aclose()
 
@@ -55,12 +59,13 @@ async def check_permission(info, perm: Perm, resource=None) -> Scope:
     GraphQL-specific Guest handling layered on top of `app.services.authz.require_scope`
     (the entrypoint-agnostic version every use-case calls directly).
 
-    An anonymous (Guest) caller only ever holds PUBLIC_PERMS, granted at `Scope.ALL`
-    (ADR-025) — there's no `User` row to run checkpoint 2 against, but ALL never needs one
-    anyway. Anything else for an anonymous caller is 403 (ADR-023).
+    All this adds is the Guest case: an anonymous caller has no `User` row, so it cannot be
+    passed to `require_scope` at all. A PUBLIC_PERM is `Scope.ALL` for it; anything else is
+    a flat 403, because there is nothing to run checkpoint 2 against (ADR-023).
 
-    An authenticated caller goes through the full two-checkpoint model; see
-    `require_scope`'s docstring for the 403-vs-404 rationale.
+    Authenticated callers go straight to `require_scope`, which owns the public-capability
+    rule for every entrypoint (ADR-273) — duplicating it here is what made GraphQL and the
+    service layer disagree. See `require_scope`'s docstring for the 403-vs-404 rationale.
 
     Returns the resolved Scope so read-path callers can also use it for list-level
     filtering without a second lookup.
@@ -69,9 +74,9 @@ async def check_permission(info, perm: Perm, resource=None) -> Scope:
     db = info.context["db"]
 
     if user is None:
-        if perm not in PUBLIC_PERMS:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
-        return Scope.ALL
+        if perm in PUBLIC_PERMS:
+            return Scope.ALL
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
 
     return await require_scope(user, perm, db, resource=resource, cache=info.context["_rbac_cache"])
 
