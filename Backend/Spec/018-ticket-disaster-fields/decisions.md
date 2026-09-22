@@ -678,3 +678,4 @@ Postgres 可能在 join `tickets` 之前就對整張表套用 bbox 條件，`h3_
 報錯（`geometry_to_point only accepts Points`），訪客地圖只要框內有封閉區域就整個失敗。
 是否發生取決於查詢計畫，所以時好時壞；回歸測試固定在框內放一塊封閉區域。
 ◾ `pyproject.toml` 已有未被使用的 `h3`（Python 版）依賴，本條不使用它；是否移除另議。
+（2026-09-22 已移除：全專案沒有任何 `import h3`，`app.db.h3` 是 SQL 包裝，不依賴它。）
