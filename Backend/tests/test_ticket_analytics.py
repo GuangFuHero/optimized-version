@@ -400,6 +400,14 @@ def test_render_pivoted_line_orders_categories_by_glossary():
     assert list(fig.data[0].x) == ["搜救", "人力", "未分類"]
 
 
+def test_render_pivoted_line_marks_a_single_point():
+    """A one-point line has no segment to draw, so it falls back to a marker."""
+    single = _render_pivoted(["overall"], {"v": [1]}, "line", ChartStyle())
+    multi = _render_pivoted(["a", "b"], {"v": [1, 2]}, "line", ChartStyle())
+    assert single.data[0].mode == "lines+markers"
+    assert multi.data[0].mode == "lines"
+
+
 def test_resolve_forced_x_fallback_is_deterministic():
     """allowed_x is an ordered tuple, so a forced-shape metric's fallback is stable."""
     for _ in range(5):

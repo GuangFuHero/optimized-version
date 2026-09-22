@@ -206,9 +206,12 @@ def _render_pivoted(
         ))
     fig = go.Figure()
     if chart_type == "line":
+        # A single point has no segment to draw, so show the marker there or the chart is
+        # blank (e.g. an ungrouped total or a one-day range).
+        mode = "lines+markers" if len(x_values) == 1 else "lines"
         for name, values in series.items():
             fig.add_trace(go.Scatter(
-                x=x_values, y=values, mode="lines", name=name,
+                x=x_values, y=values, mode=mode, name=name,
                 line={"width": style.line_width, "shape": style.line_shape, "smoothing": 0.4},
             ))
         return fig
