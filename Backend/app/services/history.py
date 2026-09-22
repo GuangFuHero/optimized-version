@@ -431,6 +431,7 @@ class Visibility:
     """
 
     pii: bool = False
+    detail: bool = False
     audit: bool = False
 
 
@@ -445,6 +446,10 @@ async def resolve_visibility(
     columns on a ticket capability — and `app/graphql/geo/types.py` gates those same columns
     on `station.view_pii`, so the timeline would disagree with the single-row read.
 
+    DETAIL is the same shape on `ticket.view_detail` (ADR-284), for the same reason: it is
+    what gates the exact point, the address and the free text on the single-row query
+    (ADR-281). A station has no detail tier — its location is public — so it stays False.
+
     AUDIT requires `audit.view` at `Scope.ALL` (ADR-198). There is no checkpoint 2 to narrow
     it against — the tier is oversight over the whole platform, not over this resource — so
     without the range condition every narrower grant would behave as `all`.
@@ -452,14 +457,17 @@ async def resolve_visibility(
     if actor is None:
         return Visibility()
 
-    pii_perm = Perm.STATION_VIEW_PII if entity == "station" else Perm.TICKET_VIEW_PII
-    pii_scope = await resolve_scope(actor, pii_perm, db, cache=cache)
-    pii = pii_scope == Scope.ALL or (
-        pii_scope != Scope.NONE
-        and await in_scope(pii_scope, actor=actor, resource=resource, db=db)
-    )
+    async def reaches(perm: Perm) -> bool:
+        """Checkpoint 1, then checkpoint 2 against the resource unless the scope is `all`."""
+        scope = await resolve_scope(actor, perm, db, cache=cache)
+        return scope == Scope.ALL or (
+            scope != Scope.NONE and await in_scope(scope, actor=actor, resource=resource, db=db)
+        )
+
+    pii = await reaches(Perm.STATION_VIEW_PII if entity == STATION else Perm.TICKET_VIEW_PII)
+    detail = entity == TICKET and await reaches(Perm.TICKET_VIEW_DETAIL)
     audit = await resolve_scope(actor, Perm.AUDIT_VIEW, db, cache=cache) == Scope.ALL
-    return Visibility(pii=pii, audit=audit)
+    return Visibility(pii=pii, detail=detail, audit=audit)
 
 
 def _render_value(value, names: dict[str, tuple[str, bool]], change: Change):
@@ -484,17 +492,22 @@ def _render_change(
     if spec.tier is Tier.AUDIT and not visibility.audit:
         return None
 
+    locked = (spec.tier is Tier.PII and not visibility.pii) or (
+        spec.tier is Tier.DETAIL and not visibility.detail
+    )
+
     # ADR-141: geometry never carries a value under any tier — WKB is unreadable and a
     # decoded coordinate is location data. The tier only decides whether the fact appears.
     if change.field == _GEOMETRY_COLUMN:
-        if spec.tier is Tier.PII and not visibility.pii:
+        if locked:
             return None
         return {"field": change.field, "before": None, "after": None, "changed": True}
 
-    if spec.tier is Tier.PII and not visibility.pii:
+    if locked:
         if spec.mask is None:
-            # Nothing to reveal partially without inventing plausible location data, so the
-            # change is reported as having happened and the values are withheld (ADR-142).
+            # No masker: half an address would be fabricated location data (ADR-142), and
+            # half of a free-text note still carries whatever house number it holds (ADR-284).
+            # So the change is reported as having happened and the values are withheld.
             return {"field": change.field, "before": None, "after": None, "changed": True}
         return {
             "field": change.field,

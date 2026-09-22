@@ -206,7 +206,7 @@ async def test_a_user_without_the_grant_gets_nothing(db):
     assert await resolve_scope(actor, Perm.STATION_VIEW_HISTORY, db) == Scope.NONE
 
 
-# --- four-tier visibility (ADR-130/141/142) ---
+# --- five-tier visibility (ADR-130/141/142/284) ---
 
 import uuid as uuidlib  # noqa: E402
 from datetime import UTC, datetime  # noqa: E402
@@ -223,8 +223,8 @@ from app.services.history import (  # noqa: E402
     resolve_visibility,
 )
 
-FULL = Visibility(pii=True, audit=True)
-NONE = Visibility(pii=False, audit=False)
+FULL = Visibility(pii=True, detail=True, audit=True)
+NONE = Visibility(pii=False, detail=False, audit=False)
 
 
 def _audit_row(table, action, *, old=None, new=None, row_id=None, user=None):
@@ -269,6 +269,21 @@ def test_contact_details_are_masked_without_view_pii():
     assert changes["contact_name"]["after"] == "王◯◯"
 
 
+def test_view_detail_does_not_unmask_contact_details():
+    """ADR-281 kept contact on `ticket.view_pii`: "where" and "who to call" are two lines.
+
+    Every role that can open a timeline holds view_detail at `all` today, so collapsing the
+    two tiers would compile and pass everything else while unmasking every phone number.
+    """
+    rows = [_audit_row("tickets", "UPDATE",
+                       old={"contact_phone": "0912345678"},
+                       new={"contact_phone": "0987654321"})]
+
+    changes = _fields(_render(rows, Visibility(pii=False, detail=True)))
+
+    assert changes["contact_phone"]["after"] == "09*****321"
+
+
 def test_contact_details_are_raw_with_view_pii():
     """In scope, the timeline shows exactly what the single-row query would show."""
     rows = [_audit_row("tickets", "UPDATE",
@@ -291,6 +306,47 @@ def test_a_ticket_address_is_withheld_rather_than_half_revealed():
 
     assert withheld == {"field": "no", "before": None, "after": None, "changed": True}
     assert revealed["before"] == "12" and revealed["after"] == "34"
+
+
+def test_a_ticket_address_follows_view_detail_not_view_pii():
+    """ADR-284: the timeline gates the address on the capability the single-row query uses.
+
+    ADR-281 moved `secondaryLocation` from `ticket.view_pii` to `ticket.view_detail`; the
+    timeline kept the old gate, so the two disagreed in both directions.
+    """
+    rows = [_audit_row("secondary_locations", "UPDATE",
+                       old={"no": "12"}, new={"no": "34"})]
+
+    pii_only = _fields(_render(rows, Visibility(pii=True, detail=False)))["no"]
+    detail_only = _fields(_render(rows, Visibility(pii=False, detail=True)))["no"]
+
+    assert pii_only == {"field": "no", "before": None, "after": None, "changed": True}
+    assert detail_only["before"] == "12" and detail_only["after"] == "34"
+
+
+@pytest.mark.parametrize(
+    ("table", "field"),
+    [
+        ("tickets", "description"),
+        ("ticket_tasks", "task_description"),
+        ("ticket_tasks", "progress_note"),
+        ("task_properties", "comment"),
+    ],
+)
+def test_free_text_is_withheld_without_view_detail(table, field):
+    """ADR-284: the free text ADR-281 withholds from the single-row query.
+
+    Requesters write house numbers into descriptions; hiding the point and the address while
+    the timeline still printed the text would be the "等於沒擋" ADR-281 exists to close.
+    """
+    rows = [_audit_row(table, "UPDATE",
+                       old={field: "中正路 12 號二樓"}, new={field: "中正路 34 號二樓"})]
+
+    withheld = _fields(_render(rows, Visibility(pii=True, detail=False)))[field]
+    revealed = _fields(_render(rows, Visibility(pii=False, detail=True)))[field]
+
+    assert withheld == {"field": field, "before": None, "after": None, "changed": True}
+    assert revealed["after"] == "中正路 34 號二樓"
 
 
 def test_a_station_address_needs_no_authority_at_all():
@@ -316,13 +372,17 @@ def test_geometry_never_carries_a_coordinate_even_at_the_top_tier():
     }
 
 
-def test_a_tickets_geometry_move_is_hidden_without_view_pii():
-    """A relocated help request points at somebody's home; a relocated shelter does not."""
+def test_a_tickets_geometry_move_follows_view_detail_not_view_pii():
+    """A relocated help request points at somebody's home; a relocated shelter does not.
+
+    ADR-284: the exact point is `ticket.view_detail` material (ADR-281), so the fact that it
+    moved is too — view_pii alone no longer reveals it, and no longer needs to.
+    """
     rows = [_audit_row("base_geometries", "UPDATE",
                        old={"geometry": "AA"}, new={"geometry": "BB"})]
 
-    assert "geometry" not in _fields(_render(rows, NONE))
-    assert "geometry" in _fields(_render(rows, FULL))
+    assert "geometry" not in _fields(_render(rows, Visibility(pii=True, detail=False)))
+    assert "geometry" in _fields(_render(rows, Visibility(pii=False, detail=True)))
 
 
 def test_review_columns_require_audit_view():
@@ -431,6 +491,27 @@ async def test_a_requester_unlocks_pii_on_their_own_ticket_only(db):
 
 
 @pytest.mark.asyncio
+async def test_view_detail_at_own_unlocks_detail_on_the_callers_ticket_only(db):
+    """ADR-281 made view_detail narrowable without code, so checkpoint 2 must really run.
+
+    The seed grants it at `all` to every role, which would hide a missing in_scope call.
+    """
+    owner = User(name="Detail owner")
+    stranger = User(name="Detail stranger")
+    db.add_all([owner, stranger])
+    await db.flush()
+    await _grant(db, owner, Perm.TICKET_VIEW_DETAIL, "own")
+    await _grant(db, stranger, Perm.TICKET_VIEW_DETAIL, "own")
+    ticket = await _ticket_owned_by(db, owner)
+
+    mine = await resolve_visibility(db, actor=owner, resource=ticket, entity=TICKET)
+    theirs = await resolve_visibility(db, actor=stranger, resource=ticket, entity=TICKET)
+
+    assert mine.detail is True
+    assert theirs.detail is False
+
+
+@pytest.mark.asyncio
 async def test_an_auditor_unlocks_both_pii_and_audit(db):
     """Which is why the RAW tier needs no special case for super_admin either."""
     auditor = User(name="Auditor")
@@ -457,7 +538,7 @@ async def test_an_anonymous_caller_unlocks_nothing(db):
 
     visibility = await resolve_visibility(db, actor=None, resource=ticket, entity=TICKET)
 
-    assert visibility == Visibility(pii=False, audit=False)
+    assert visibility == Visibility(pii=False, detail=False, audit=False)
 
 
 @pytest.mark.asyncio

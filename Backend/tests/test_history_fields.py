@@ -84,25 +84,25 @@ def test_contact_fields_reuse_the_existing_masking_helpers():
     assert ticket["contact_phone"].mask is mask_phone
 
 
-def test_a_tickets_address_and_coordinate_are_pii_without_a_masker():
-    """Address and coordinate are PII but carry no masker.
+def test_a_tickets_address_and_coordinate_are_detail_without_a_masker():
+    """Address and coordinate are detail (ADR-284) but carry no masker.
 
     ADR-141/142: they are withheld rather than masked, since inventing a partial address or
     a partial coordinate would fabricate plausible-looking location data.
     """
     for column in ("county", "city", "lane", "no", "floor", "room"):
         spec = FIELD_TIERS[("ticket", "secondary_locations")][column]
-        assert spec.tier is Tier.PII and spec.mask is None, column
+        assert spec.tier is Tier.DETAIL and spec.mask is None, column
     geometry = FIELD_TIERS[("ticket", "base_geometries")]["geometry"]
-    assert geometry.tier is Tier.PII and geometry.mask is None
+    assert geometry.tier is Tier.DETAIL and geometry.mask is None
 
 
 def test_a_stations_address_and_coordinate_are_public():
     """ADR-142 (revised): a shelter's location is already on the public map.
 
     Gating it would protect nothing and would make the timeline read as though the station
-    had never been corrected. The same two tables under a ticket stay PII — which is the
-    whole reason the classification is keyed by (entity, table).
+    had never been corrected. The same two tables under a ticket are detail (ADR-284) —
+    which is the whole reason the classification is keyed by (entity, table).
     """
     for column in ("county", "city", "lane", "no", "floor", "room"):
         assert FIELD_TIERS[("station", "secondary_locations")][column].tier is Tier.PUBLIC
