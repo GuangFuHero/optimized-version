@@ -242,6 +242,16 @@ INSERT INTO stations (uuid, type, name, description, op_hour, level, comment, so
  ('b0000000-0000-4000-8000-000000000008','supply','三奇里物資站 (重複回報)','疑似與三奇里物資集散點為同一站,重複回報','08:00-20:00',0,'與 b…07 疑似重複','user','public','unverified',true,'dup-sanqi-supply',true,NULL,false,'c0000000-0000-4000-8000-000000000030'),
  ('b0000000-0000-4000-8000-000000000009','water','員山鄉加水站','員山端加水點','24h',0,NULL,'user','public','unverified',false,NULL,true,NULL,false,'c0000000-0000-4000-8000-000000000029');
 
+-- 2a. 站點指派(ADR-285):比照「以 team 身分建立就指派給那個 team」,依建立者的 team 身分回填
+-- (1d 每個官方/NGO 帳號恰好一個)。志工只有平台身分,他們建的站維持未指派,
+-- demo 上 gov 的待指派清單才有東西可看。
+UPDATE stations s
+SET team_uuid = ura.team_uuid
+FROM base_geometries bg
+JOIN user_role_assign ura ON ura.user_uuid = bg.created_by AND ura.role_kind = 'team'
+WHERE bg.uuid = s.uuid
+  AND (s.uuid::text LIKE 'a0000000-%' OR s.uuid::text LIKE 'b0000000-%');
+
 INSERT INTO station_properties (uuid, station_uuid, property_type, property_name, quantity, comment, status, weightings, created_by, created_at, updated_at) VALUES
  (gen_random_uuid(),'a0000000-0000-4000-8000-000000000001','supply','supply_types',NULL,'food,water,daily_items,repair_tool','verified',1.5,'c0000000-0000-4000-8000-000000000025','2024-07-24 07:30+08','2024-07-24 16:00+08'),
  (gen_random_uuid(),'a0000000-0000-4000-8000-000000000001','supply','supply_rationed',NULL,'false','verified',1.5,'c0000000-0000-4000-8000-000000000025','2024-07-24 07:30+08','2024-07-24 16:00+08'),
