@@ -5,8 +5,9 @@ GET /api/v1/analytics/catalog (CatalogResponse below) for its machine-readable f
 """
 
 from enum import Enum
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TicketYMetric(str, Enum):
@@ -68,11 +69,44 @@ class ChartType(str, Enum):
     pie = "pie"
 
 
-class ChartTheme(str, Enum):
-    """Base Plotly template — https://plotly.com/python/templates/."""
+HexColor = Annotated[str, Field(pattern=r"^#[0-9A-Fa-f]{6}$")]
 
-    light = "light"
-    dark = "dark"
+
+class ChartMargin(BaseModel):
+    """Figure margins in px — the space around the plot area for axis labels and legend."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    left: int = Field(48, ge=0)
+    right: int = Field(16, ge=0)
+    top: int = Field(8, ge=0)
+    bottom: int = Field(40, ge=0)
+
+
+class ChartStyle(BaseModel):
+    """Presentation knobs for a rendered chart; defaults reproduce the ops dashboard mock.
+
+    Passed JSON-encoded as the `style` query param. Anything not covered here goes through
+    `layout_overrides`, which is applied after this and wins.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    palette: list[HexColor] = Field(
+        default=["#E3791E", "#2592B9", "#2E7D32", "#8B5CF6", "#D32F2F", "#62BADA", "#F57C00", "#64748B"],
+        min_length=1,
+        description="Series colours, cycled in trace order (Plotly `colorway`/`piecolorway`).",
+    )
+    font_family: str = "Inter, Noto Sans TC, sans-serif"
+    font_size: int = Field(12, ge=6, le=48)
+    font_color: HexColor = "#475569"
+    grid_color: HexColor = "#EDF2F7"
+    legend: Literal["bottom", "right", "none"] = "bottom"
+    line_width: float = Field(2.5, gt=0)
+    line_shape: Literal["spline", "linear"] = "spline"
+    pie_hole: float = Field(0.5, ge=0, lt=1, description="0 for a full pie, up to <1 for a donut.")
+    margin: ChartMargin = ChartMargin()
+    modebar: bool = Field(False, description="Show Plotly's hover toolbar (zoom/pan/download).")
 
 
 class ChartResponse(BaseModel):
@@ -81,13 +115,24 @@ class ChartResponse(BaseModel):
     html: str
 
 
+class ValueResponse(BaseModel):
+    """A metric's single ungrouped aggregate — the number a KPI card shows."""
+
+    value: int | float = Field(
+        description="In the metric's catalog `unit`; completion_rate is 0–100."
+    )
+
+
 class YMetricSpec(BaseModel):
-    """One y-metric's valid x-axis values and chart types.
+    """One y-metric's display glossary plus its valid x-axis values and chart types.
 
     The machine-readable form of app.services.chart_render.resolve()'s rules — build
     x/y dropdowns from this instead of hardcoding the catalog client-side.
     """
 
+    label: str = Field(description="Display name (zh-TW).")
+    unit: str = Field(description="Unit suffix for the `/value` number, e.g. '件', '%', '天'.")
+    description: str = Field(description="One-line explanation of what the metric measures.")
     allowed_x: list[str] = Field(
         description="Valid values for the `x` query param on this y-metric: any of "
         "'date', 'category', 'none' (aggregate/no grouping — omit `x` entirely). An "
@@ -117,3 +162,6 @@ class CatalogResponse(BaseModel):
 
     tickets: dict[str, YMetricSpec]
     stations: dict[str, YMetricSpec]
+    default_style: ChartStyle = Field(
+        description="What the chart endpoints render with when `style` is omitted."
+    )

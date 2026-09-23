@@ -16,6 +16,7 @@ from shapely.geometry import Point
 from app.models.auth import User
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
+from app.schemas.analytics import ChartStyle
 from app.services import ticket_analytics
 from app.services.analytics_common import UNCATEGORIZED_LABEL
 from app.services.chart_render import _render_pivoted, render_chart, resolve
@@ -389,8 +390,22 @@ async def test_duplicate_count_requires_a_date_range(db):
 
 def test_render_pivoted_line_tolerates_a_none_key():
     """Backstop at the shared render boundary: a None key sorts last instead of raising."""
-    fig = _render_pivoted(["b", None, "a"], {"v": [1, 2, 3]}, "line")
+    fig = _render_pivoted(["b", None, "a"], {"v": [1, 2, 3]}, "line", ChartStyle())
     assert list(fig.data[0].x) == ["a", "b", None]
+
+
+def test_render_pivoted_line_orders_categories_by_glossary():
+    """task_type keys sort in _CATEGORY_LABEL order, not alphabetically; 未分類 last."""
+    fig = _render_pivoted(["uncategorized", "hr", "rescue"], {"v": [1, 2, 3]}, "line", ChartStyle())
+    assert list(fig.data[0].x) == ["搜救", "人力", "未分類"]
+
+
+def test_render_pivoted_line_marks_a_single_point():
+    """A one-point line has no segment to draw, so it falls back to a marker."""
+    single = _render_pivoted(["overall"], {"v": [1]}, "line", ChartStyle())
+    multi = _render_pivoted(["a", "b"], {"v": [1, 2]}, "line", ChartStyle())
+    assert single.data[0].mode == "lines+markers"
+    assert multi.data[0].mode == "lines"
 
 
 def test_resolve_forced_x_fallback_is_deterministic():
