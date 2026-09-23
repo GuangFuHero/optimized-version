@@ -21,8 +21,21 @@ from sqlalchemy import false, select
 from app.core.rbac_scopes import Scope, in_scope, scope_filter, widest
 from app.models.auth import User
 from app.models.geo import Station
+from app.models.request import Tickets
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from tests.conftest import acting_as
+
+
+def _ticket(point: Point, creator: User) -> Tickets:
+    """A ticket at `point`: the geo resource `zone` scope is for, and one with no team_uuid.
+
+    Stations carry a team_uuid since ADR-285 and are governed by it, so the zone and
+    "no team column" tests below use tickets.
+    """
+    return Tickets(
+        geometry=from_shape(point, srid=4326), created_by=str(creator.uuid),
+        title="t", contact_name="c", status="pending", priority="normal",
+    )
 
 
 def _acting_in_team(actor, team):
@@ -154,11 +167,11 @@ async def test_in_scope_team_false_when_actor_has_no_team(db):
 
 @pytest.mark.asyncio
 async def test_in_scope_team_false_for_geo_resource_with_no_team_uuid(db):
-    """A geo resource (no team_uuid column) cleanly fails TEAM scope, never raises (ADR-045/049)."""
+    """A ticket (no team_uuid column) cleanly fails TEAM scope, never raises (ADR-045/049)."""
     actor = User(name="A")
     db.add(actor)
     await db.flush()
-    resource = Station(geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(actor.uuid))
+    resource = _ticket(Point(121.5, 25.0), actor)
     assert await in_scope(Scope.TEAM, actor=actor, resource=resource, db=db) is False
 
 
@@ -187,7 +200,7 @@ async def test_in_scope_zone_matches_point_inside_assigned_zone(db):
     )
     await db.flush()
 
-    resource = Station(geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(actor.uuid))
+    resource = _ticket(Point(121.5, 25.0), actor)
     assert await in_scope(Scope.ZONE, actor=actor, resource=resource, db=db) is True
 
 
@@ -213,7 +226,7 @@ async def test_in_scope_zone_rejects_point_outside_assigned_zone(db):
     )
     await db.flush()
 
-    resource = Station(geometry=from_shape(Point(130.0, 30.0), srid=4326), created_by=str(actor.uuid))
+    resource = _ticket(Point(130.0, 30.0), actor)
     assert await in_scope(Scope.ZONE, actor=actor, resource=resource, db=db) is False
 
 
@@ -223,7 +236,7 @@ async def test_in_scope_zone_false_when_actor_has_no_team(db):
     actor = User(name="A")
     db.add(actor)
     await db.flush()
-    resource = Station(geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(actor.uuid))
+    resource = _ticket(Point(121.5, 25.0), actor)
     assert await in_scope(Scope.ZONE, actor=actor, resource=resource, db=db) is False
 
 
@@ -266,6 +279,12 @@ async def _station_uuids(db, *conditions) -> set[str]:
     return {str(u) for u in result.scalars().all()}
 
 
+async def _ticket_uuids(db, *conditions) -> set[str]:
+    """Run a Tickets query with the given WHERE conditions, return matching UUIDs as strings."""
+    result = await db.execute(select(Tickets.uuid).where(*conditions))
+    return {str(u) for u in result.scalars().all()}
+
+
 def test_scope_filter_all_returns_no_conditions():
     """ALL scope returns an empty filter list — no row is excluded."""
     actor = User(name="A")
@@ -296,8 +315,8 @@ async def test_scope_filter_own_matches_only_actors_rows(db):
 
 
 @pytest.mark.asyncio
-async def test_scope_filter_team_on_geo_model_excludes_everything(db):
-    """A geo model has no team_uuid (ADR-049), so TEAM scope_filter yields false() → no rows."""
+async def test_scope_filter_team_on_a_ticket_excludes_everything(db):
+    """Tickets have no team_uuid (ADR-049), so TEAM scope_filter yields false() → no rows."""
     team = Team(name="A", type="gov")
     db.add(team)
     await db.flush()
@@ -305,12 +324,30 @@ async def test_scope_filter_team_on_geo_model_excludes_everything(db):
     db.add(actor)
     await db.flush()
     _acting_in_team(actor, team)
-    s = Station(geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(actor.uuid))
-    db.add(s)
+    db.add(_ticket(Point(121.5, 25.0), actor))
+    await db.flush()
+
+    uuids = await _ticket_uuids(db, *scope_filter(Scope.TEAM, actor=actor, model=Tickets))
+    assert uuids == set()
+
+
+@pytest.mark.asyncio
+async def test_scope_filter_team_matches_the_stations_assigned_to_the_team(db):
+    """Stations carry team_uuid (ADR-285): TEAM keeps exactly the team's own stations."""
+    mine, other = Team(name="Mine", type="ngo"), Team(name="Other", type="ngo")
+    actor = User(name="Actor")
+    db.add_all([mine, other, actor])
+    await db.flush()
+    _acting_in_team(actor, mine)
+    point = from_shape(Point(121.5, 25.0), srid=4326)
+    own = Station(geometry=point, created_by=str(actor.uuid), team_uuid=mine.uuid)
+    others = Station(geometry=point, created_by=str(actor.uuid), team_uuid=other.uuid)
+    unassigned = Station(geometry=point, created_by=str(actor.uuid))
+    db.add_all([own, others, unassigned])
     await db.flush()
 
     uuids = await _station_uuids(db, *scope_filter(Scope.TEAM, actor=actor, model=Station))
-    assert uuids == set()
+    assert uuids == {str(own.uuid)}
 
 
 @pytest.mark.asyncio
@@ -335,12 +372,12 @@ async def test_scope_filter_zone_matches_rows_inside_assigned_zone_only(db):
     )
     await db.flush()
 
-    inside = Station(geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(actor.uuid))
-    outside = Station(geometry=from_shape(Point(130.0, 30.0), srid=4326), created_by=str(actor.uuid))
+    inside = _ticket(Point(121.5, 25.0), actor)
+    outside = _ticket(Point(130.0, 30.0), actor)
     db.add_all([inside, outside])
     await db.flush()
 
-    uuids = await _station_uuids(db, *scope_filter(Scope.ZONE, actor=actor, model=Station))
+    uuids = await _ticket_uuids(db, *scope_filter(Scope.ZONE, actor=actor, model=Tickets))
     assert uuids == {str(inside.uuid)}
 
 

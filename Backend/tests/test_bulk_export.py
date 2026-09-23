@@ -208,21 +208,25 @@ async def test_station_export_writes_the_point_as_latitude_and_longitude(db):
 
 
 @pytest.mark.asyncio
-async def test_zone_scoped_export_only_reaches_the_team_s_own_area(db):
-    """A team admin's file must contain its responsibility area and nothing else (ADR-111)."""
+async def test_zone_scoped_ticket_export_only_reaches_the_team_s_own_area(db):
+    """A team admin's ticket file must contain its responsibility area and nothing else (ADR-111).
+
+    Tickets, not stations: stations follow the team they are assigned to since ADR-285 (see
+    test_team_scoped_export_follows_station_assignment below).
+    """
     await _configs(db)
     team = await _zoned_team(db)
     actor = User(name="TeamAdmin")
     author = User(name="Someone")
     db.add_all([actor, author])
     await db.flush()
-    await _grant(db, actor, Perm.STATION_EXPORT, "zone", "zoned-exporter", team=team)
-    await _station(db, name="區內站", point=IN_ZONE, creator=author)
-    await _station(db, name="區外站", point=OUT_OF_ZONE, creator=author)
+    await _grant(db, actor, Perm.TICKET_EXPORT, "zone", "zoned-exporter", team=team)
+    await _ticket_with_task(db, title="區內", point=IN_ZONE, creator=author)
+    await _ticket_with_task(db, title="區外", point=OUT_OF_ZONE, creator=author)
 
-    table = _parse(await export_stations(db, actor=actor, station_type="shelter"))
+    table = _parse(await export_tickets(db, actor=actor, task_type="rescue"))
 
-    assert [row["name"] for row in table.rows] == ["區內站"]
+    assert [row["title"] for row in table.rows] == ["區內"]
 
 
 @pytest.mark.asyncio

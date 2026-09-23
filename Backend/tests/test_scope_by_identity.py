@@ -18,8 +18,8 @@ from sqlalchemy import select
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, scope_filter
 from app.models.auth import User
-from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+from app.models.request import Tickets
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from app.services.authz import require_scope
 from tests.conftest import acting_as
@@ -27,6 +27,13 @@ from tests.conftest import acting_as
 pytestmark = pytest.mark.asyncio
 
 _ZONE_POLY = Polygon([(121.0, 24.0), (121.0, 25.0), (122.0, 25.0), (122.0, 24.0), (121.0, 24.0)])
+
+
+def _ticket(point: Point, creator: User) -> Tickets:
+    return Tickets(
+        geometry=from_shape(point, srid=4326), created_by=str(creator.uuid),
+        title="t", contact_name="c", status="pending", priority="normal",
+    )
 
 
 async def _permission(db, perm: Perm) -> Permission:
@@ -144,27 +151,24 @@ async def test_zone_scope_covers_only_the_active_identitys_zones(db):
     far_poly = Polygon([(130.0, 30.0), (130.0, 31.0), (131.0, 31.0), (131.0, 30.0), (130.0, 30.0)])
     far = await _team_with_zone(db, "Far", far_poly, actor)
 
-    near_role = await _identity(db, actor, "near-editor", {Perm.STATION_EDIT: "zone"}, team=near)
-    await _identity(db, actor, "far-editor", {Perm.STATION_EDIT: "zone"}, team=far)
+    near_role = await _identity(db, actor, "near-editor", {Perm.TICKET_EDIT: "zone"}, team=near)
+    await _identity(db, actor, "far-editor", {Perm.TICKET_EDIT: "zone"}, team=far)
 
-    inside_near = Station(
-        geometry=from_shape(Point(121.5, 24.5), srid=4326), created_by=str(actor.uuid)
-    )
-    inside_far = Station(
-        geometry=from_shape(Point(130.5, 30.5), srid=4326), created_by=str(actor.uuid)
-    )
+    # Tickets: `zone` is how tickets are governed; stations follow their team (ADR-285).
+    inside_near = _ticket(Point(121.5, 24.5), actor)
+    inside_far = _ticket(Point(130.5, 30.5), actor)
     db.add_all([inside_near, inside_far])
     await db.flush()
 
     acting_as(actor, near_role, near)
-    assert await require_scope(actor, Perm.STATION_EDIT, db, resource=inside_near) == Scope.ZONE
+    assert await require_scope(actor, Perm.TICKET_EDIT, db, resource=inside_near) == Scope.ZONE
     with pytest.raises(HTTPException) as exc:
-        await require_scope(actor, Perm.STATION_EDIT, db, resource=inside_far)
+        await require_scope(actor, Perm.TICKET_EDIT, db, resource=inside_far)
     assert exc.value.status_code == 404
 
     rows = (
         await db.execute(
-            select(Station.uuid).where(*scope_filter(Scope.ZONE, actor=actor, model=Station))
+            select(Tickets.uuid).where(*scope_filter(Scope.ZONE, actor=actor, model=Tickets))
         )
     ).scalars().all()
     assert {str(u) for u in rows} == {str(inside_near.uuid)}
