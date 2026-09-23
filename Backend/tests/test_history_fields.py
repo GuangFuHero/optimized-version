@@ -141,18 +141,20 @@ def test_dedup_and_scoring_columns_are_excluded_everywhere():
         assert spec_for(entity, table, column) is None
 
 
-def test_the_only_foreign_key_kept_is_the_assignee():
-    """Foreign keys are dropped, with exactly one deliberate exception.
+def test_the_only_foreign_keys_kept_are_the_named_ones():
+    """Foreign keys are dropped, with exactly two deliberate exceptions.
 
-    ADR-143: on a task assignment the actor_uuid *is* the event, so it stays and gets
-    resolved to a display name rather than emitted as a bare uuid.
+    ADR-143: on a task assignment the actor_uuid *is* the event. ADR-285: so is the team a
+    station is handed to. Both stay and are resolved to a display name rather than emitted as
+    a bare uuid.
     """
+    kept = {("task_assignments", "actor_uuid"), ("stations", "team_uuid")}
     assert FIELD_TIERS[("ticket", "task_assignments")]["actor_uuid"].tier is Tier.PUBLIC
+    assert FIELD_TIERS[("station", "stations")]["team_uuid"].tier is Tier.PUBLIC
     for (entity, table), spec in FIELD_TIERS.items():
         for column in spec:
             if column.endswith("_uuid"):
-                assert table == "task_assignments" and column == "actor_uuid", (
-                    f"{entity}/{table}.{column}")
+                assert (table, column) in kept, f"{entity}/{table}.{column}"
 
 
 def test_delete_at_is_never_a_field_change():

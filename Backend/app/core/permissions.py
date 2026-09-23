@@ -148,3 +148,18 @@ PUBLIC_PERMS = frozenset(
 GOV_TEAM_ONLY_PERMS = frozenset(
     {Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN, Perm.ZONE_DELETE}
 )
+
+# ADR-285: capabilities whose `team` scope widens to `all` when the actor acts for a gov team —
+# gov manages every station, whichever team it is assigned to and unassigned ones too, while an
+# ngo's `team` scope stays its own stations. Applied in `resolve_scope` (checkpoint 1). Like
+# GOV_TEAM_ONLY_PERMS it is a team.type condition the role×capability matrix can't express.
+GOV_TEAM_WIDENED_PERMS = frozenset(
+    {
+        Perm.STATION_VIEW_PII,
+        Perm.STATION_VIEW_HISTORY,
+        Perm.STATION_EDIT,
+        Perm.STATION_DELETE,
+        Perm.STATION_REVIEW,
+        Perm.STATION_EXPORT,
+    }
+)

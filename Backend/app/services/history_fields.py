@@ -147,6 +147,10 @@ _STATION_FIELDS = {
     "is_temporary": _public(),
     "expires_at": _public(),
     "is_official": _public(),
+    # ADR-285: the second foreign key kept, beside the assignee (ADR-143). "Handed from team A
+    # to team B" is the event, and the service resolves it to the team's name. A team name is
+    # not PII, and which organisation runs a station is public on the station itself.
+    "team_uuid": _public(),
 }
 
 _TASK_FIELDS = {

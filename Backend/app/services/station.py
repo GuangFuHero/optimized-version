@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
+from app.core.rbac_scopes import active_team
 from app.graphql.scalars import geojson_to_geom
 from app.models.auth import User
 from app.models.geo import Station
@@ -126,6 +127,9 @@ async def create_station(
         obj_in={
             "geometry": geojson_to_geom(geometry),
             "created_by": str(actor_uid),
+            # Created as a team → that team runs it; as a platform identity (incl. citizens) →
+            # unassigned until gov assigns it (ADR-285). Bulk import creates through here too.
+            "team_uuid": active_team(actor),
             "type": type,
             "name": name,
             "description": description,
@@ -273,16 +277,15 @@ async def create_station_property(
 async def _property_scope_target(db: AsyncSession, prop: StationProperty) -> SimpleNamespace:
     """Scope target for a station property (ADR-052, direction B).
 
-    A StationProperty has no geometry of its own, so `zone` scope could never match it
-    directly (in_scope's ZONE branch needs resource.geometry). It borrows its parent
-    station's location for the zone check, so a team's `zone`-scoped station.edit reaches
-    properties on stations sitting inside its WorkZone. `own` still means the property's
-    own creator.
+    A StationProperty has no team or geometry of its own, so it borrows its parent station's:
+    the team for `team` scope (ADR-285), so a team's station.edit reaches properties on the
+    stations assigned to it, and the location for `zone` scope. `own` still means the
+    property's own creator.
     """
     station = await station_repository.get_by_uuid_active(db, prop.station_uuid)
     return SimpleNamespace(
         created_by=prop.created_by,
-        team_uuid=None,
+        team_uuid=station.team_uuid if station else None,
         geometry=station.geometry if station else None,
     )
 

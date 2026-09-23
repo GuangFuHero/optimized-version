@@ -87,10 +87,13 @@ async def _zoned_team(db) -> Team:
     return team
 
 
-async def _station(db, *, name: str, point: Point, creator: User, quantity: int | None = None) -> Station:
+async def _station(
+    db, *, name: str, point: Point, creator: User, quantity: int | None = None, team: Team | None = None
+) -> Station:
     station = Station(
         geometry=from_shape(point, srid=4326),
         created_by=str(creator.uuid),
+        team_uuid=team.uuid if team is not None else None,
         type="shelter",
         name=name,
         level=0,
@@ -220,6 +223,33 @@ async def test_zone_scoped_export_only_reaches_the_team_s_own_area(db):
     table = _parse(await export_stations(db, actor=actor, station_type="shelter"))
 
     assert [row["name"] for row in table.rows] == ["區內站"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("exporter_type", "expected"),
+    [("ngo", {"本隊站"}), ("gov", {"本隊站", "他隊站", "未指派站"})],
+    ids=["ngo-own-stations", "gov-every-station"],
+)
+async def test_team_scoped_export_follows_station_assignment(db, exporter_type, expected):
+    """ADR-285: `team` reaches the stations assigned to the team; for gov it widens to all."""
+    await _configs(db)
+    mine = Team(name="Mine", type=exporter_type)
+    other = Team(name="Other", type="ngo")
+    actor = User(name="TeamAdmin")
+    author = User(name="Someone")
+    db.add_all([mine, other, actor, author])
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "team", "team-exporter", team=mine)
+    await _station(db, name="本隊站", point=IN_ZONE, creator=author, team=mine)
+    await _station(db, name="他隊站", point=IN_ZONE, creator=author, team=other)
+    await _station(db, name="未指派站", point=IN_ZONE, creator=author)
+
+    table = _parse(await export_stations(db, actor=actor, station_type="shelter"))
+
+    # A set: all three rows share one transaction's now(), so their created_at order is a tie.
+    assert {row["name"] for row in table.rows} == expected
+    assert len(table.rows) == len(expected)
 
 
 @pytest.mark.asyncio

@@ -12,16 +12,17 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from redis.exceptions import RedisError
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.context import request_identity
-from app.core.permissions import Perm
-from app.core.rbac_scopes import Scope
+from app.core.permissions import GOV_TEAM_WIDENED_PERMS, Perm
+from app.core.rbac_scopes import Scope, active_team
 from app.core.redis import get_redis
 from app.db.session import SessionLocal
 from app.models.auth import User
+from app.models.team import Team
 from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import user_repository
 
@@ -366,7 +367,28 @@ async def resolve_scope(
         )
         if cache is not None:
             cache[actor.uuid] = grants
-    return grants.get(perm.value, Scope.NONE)
+    scope = grants.get(perm.value, Scope.NONE)
+    if scope == Scope.TEAM and perm in GOV_TEAM_WIDENED_PERMS and await _acts_for_gov_team(actor, db, cache):
+        return Scope.ALL
+    return scope
+
+
+async def _acts_for_gov_team(actor: User, db: AsyncSession, cache: dict | None) -> bool:
+    """Whether `actor`'s active identity speaks for a live gov team (ADR-285).
+
+    The team type is cached per request under its own key, next to the grant maps keyed by
+    user uuid, so a page checking many station capabilities looks it up once.
+    """
+    team_uuid = active_team(actor)
+    if team_uuid is None:
+        return False
+    key = ("team_type", str(team_uuid))
+    if cache is not None and key in cache:
+        return cache[key] == "gov"
+    team_type = await db.scalar(select(Team.type).where(Team.uuid == team_uuid, Team.delete_at.is_(None)))
+    if cache is not None:
+        cache[key] = team_type
+    return team_type == "gov"
 
 
 class PermissionChecker:

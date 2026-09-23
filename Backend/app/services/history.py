@@ -23,6 +23,7 @@ from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import StationProperty
+from app.models.team import Team
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.services.authz import require_scope
 from app.services.history_fields import Tier, spec_for
@@ -407,6 +408,34 @@ async def resolve_actors(db: AsyncSession, events: list[Event]) -> dict[str, tup
     return {str(uuid): (name, delete_at is not None) for uuid, name, delete_at in rows}
 
 
+_STATIONS = "stations"
+_STATION_TEAM = (_STATIONS, "team_uuid")
+_NAMED_FOREIGN_KEYS = {(_ASSIGNMENTS, "actor_uuid"), _STATION_TEAM}
+
+
+async def resolve_teams(db: AsyncSession, events: list[Event]) -> dict[str, tuple[str, bool]]:
+    """Look up every team a station was assigned to or from, as {uuid: (name, is_removed)}.
+
+    Same shape and the same single batched query as `resolve_actors`, so the two maps can be
+    merged: user and team uuids never collide. A deleted team keeps its name here — the
+    timeline records who ran the station then, not who runs it now.
+    """
+    referenced = {
+        str(v)
+        for event in events
+        for change in event.changes
+        if (change.table, change.field) == _STATION_TEAM
+        for v in (change.before, change.after)
+        if v
+    }
+    if not referenced:
+        return {}
+    rows = (
+        await db.execute(select(Team.uuid, Team.name, Team.delete_at).where(Team.uuid.in_(referenced)))
+    ).all()
+    return {str(uuid): (name, delete_at is not None) for uuid, name, delete_at in rows}
+
+
 def actor_view(event: Event, names: dict[str, tuple[str, bool]]) -> ActorView:
     """Present one event's actor."""
     if event.actor_uuid is None:
@@ -471,11 +500,12 @@ async def resolve_visibility(
 
 
 def _render_value(value, names: dict[str, tuple[str, bool]], change: Change):
-    """Assignment actors become names; everything else passes through.
+    """Assignment actors and station teams become names; everything else passes through.
 
-    ADR-143 keeps exactly one foreign key, and it would be useless as a bare uuid.
+    These are the only foreign keys kept (ADR-143, ADR-285), and they would be useless as bare
+    uuids.
     """
-    if change.table == _ASSIGNMENTS and change.field == "actor_uuid" and value:
+    if (change.table, change.field) in _NAMED_FOREIGN_KEYS and value:
         name, _ = names.get(str(value), (None, False))
         return name
     return value
@@ -604,7 +634,7 @@ async def load_timeline(
     events = build_events(rows)
 
     page = events[offset : offset + limit]
-    names = await resolve_actors(db, page)
+    names = await resolve_actors(db, page) | await resolve_teams(db, page)
     visibility = await resolve_visibility(
         db, actor=actor, resource=resource, entity=entity, cache=cache
     )
