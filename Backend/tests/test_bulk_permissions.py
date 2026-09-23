@@ -33,7 +33,7 @@ EXPECTED_GRANTS = {
     "data_auditor": {Perm.STATION_EXPORT: "all", Perm.TICKET_EXPORT: "all"},
     "super_admin": dict.fromkeys(BULK_PERMS, "all"),
     "admin": {
-        Perm.STATION_EXPORT: "zone",
+        Perm.STATION_EXPORT: "team",  # ADR-285: the stations assigned to the team
         Perm.STATION_IMPORT: "all",
         Perm.TICKET_EXPORT: "zone",
         Perm.TICKET_IMPORT: "all",
@@ -42,12 +42,14 @@ EXPECTED_GRANTS = {
 }
 
 
-async def _assign_seed_role(db, user: User, role_name: str) -> None:
-    """Build `role_name` from ROLES_DATA and make it `user`'s active identity."""
-    """Build `role_name` in the DB straight from ROLES_DATA and assign it to `user`.
+async def _assign_seed_role(db, user: User, role_name: str, *, team_type: str = "gov") -> None:
+    """Build `role_name` from ROLES_DATA and make it `user`'s active identity.
 
     Deliberately seeds from the real matrix rather than hand-written grants: the point is to
     catch a wrong scope in `seed_rbac.py`, and a hand-written fixture would just restate it.
+
+    A team-kind role gets a fresh team of `team_type`: the type matters since ADR-285, which
+    widens a gov team's station `team` scope to `all`.
     """
     spec = next(r for r in ROLES_DATA if r["name"] == role_name)
     role = Role(name=spec["name"], kind=spec["kind"])
@@ -70,7 +72,7 @@ async def _assign_seed_role(db, user: User, role_name: str) -> None:
     # so the fixture follows the seed's own `kind` rather than assuming platform.
     team = None
     if spec["kind"] == "team":
-        team = Team(name=f"team-for-{role_name}", type="gov")
+        team = Team(name=f"team-for-{role_name}", type=team_type)
         db.add(team)
         await db.flush()
     db.add(UserRoleAssign(
@@ -130,14 +132,18 @@ def test_import_is_never_granted_without_the_matching_write_capability():
 
 
 @pytest.mark.asyncio
-async def test_team_admin_exports_within_its_zone_but_imports_platform_wide(db):
-    """Team admin: export is zone-scoped, import is `all` (ADR-111)."""
+async def test_team_admin_exports_its_share_but_imports_platform_wide(db):
+    """Team admin: export reaches its own share, import is `all` (ADR-111).
+
+    Its share: its zone's tickets, and the stations assigned to it (ADR-285). An ngo team on
+    purpose — a gov team's station `team` scope widens to `all`.
+    """
     actor = User(name="TeamAdmin")
     db.add(actor)
     await db.flush()
-    await _assign_seed_role(db, actor, "admin")
+    await _assign_seed_role(db, actor, "admin", team_type="ngo")
 
-    assert await resolve_scope(actor, Perm.STATION_EXPORT, db) == Scope.ZONE
+    assert await resolve_scope(actor, Perm.STATION_EXPORT, db) == Scope.TEAM
     assert await resolve_scope(actor, Perm.TICKET_EXPORT, db) == Scope.ZONE
     assert await resolve_scope(actor, Perm.STATION_IMPORT, db) == Scope.ALL
     assert await resolve_scope(actor, Perm.TICKET_IMPORT, db) == Scope.ALL

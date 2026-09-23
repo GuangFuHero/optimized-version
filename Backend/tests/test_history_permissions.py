@@ -29,13 +29,17 @@ EXPECTED_GRANTS = {
     "user": dict.fromkeys(HISTORY_PERMS, "own"),
     "data_auditor": dict.fromkeys(HISTORY_PERMS, "all"),
     "super_admin": dict.fromkeys(HISTORY_PERMS, "all"),
-    "admin": dict.fromkeys(HISTORY_PERMS, "zone"),
-    "member": dict.fromkeys(HISTORY_PERMS, "zone"),
+    # ADR-285: stations are governed by the team they are assigned to, tickets by zone.
+    "admin": {Perm.TICKET_VIEW_HISTORY: "zone", Perm.STATION_VIEW_HISTORY: "team"},
+    "member": {Perm.TICKET_VIEW_HISTORY: "zone", Perm.STATION_VIEW_HISTORY: "team"},
 }
 
 
-async def _assign_seed_role(db, user: User, role_name: str) -> None:
+async def _assign_seed_role(db, user: User, role_name: str, *, team_type: str = "gov") -> None:
     """Build `role_name` in the DB straight from ROLES_DATA and assign it to `user`.
+
+    A team-kind role gets a fresh team of `team_type`: the type matters since ADR-285, which
+    widens a gov team's station `team` scope to `all`.
 
     Deliberately seeds from the real matrix rather than hand-written grants: the point is to
     catch a wrong scope in `seed_rbac.py`, and a hand-written fixture would just restate it.
@@ -69,7 +73,7 @@ async def _assign_seed_role(db, user: User, role_name: str) -> None:
     # A team-kind role must carry a team and a platform-kind one must not (ADR-073's CHECK).
     team = None
     if spec["kind"] == "team":
-        team = Team(name=f"team-for-{role_name}", type="gov")
+        team = Team(name=f"team-for-{role_name}", type=team_type)
         db.add(team)
         await db.flush()
     db.add(UserRoleAssign(
@@ -113,26 +117,25 @@ def test_seed_matrix_matches_adr_128(role_name):
 
 @pytest.mark.parametrize("role_name", sorted(EXPECTED_GRANTS))
 def test_history_scope_mirrors_view_pii(role_name):
-    """ADR-128: the timeline tiers exactly like ticket.view_pii, by design.
+    """ADR-128: each timeline tiers exactly like its own resource's view_pii, by design.
 
     Asserted as a relationship rather than as two independent tables so that moving
     view_pii without reconsidering the timeline fails here instead of drifting silently.
     """
     perms = next(r for r in ROLES_DATA if r["name"] == role_name)["permissions"]
     assert perms[Perm.TICKET_VIEW_HISTORY] == perms[Perm.TICKET_VIEW_PII]
-    assert perms[Perm.STATION_VIEW_HISTORY] == perms[Perm.TICKET_VIEW_PII]
+    assert perms[Perm.STATION_VIEW_HISTORY] == perms[Perm.STATION_VIEW_PII]
 
 
-def test_team_roles_never_get_team_scope_on_a_geo_resource():
-    """ADR-128/ADR-049: `team` can never match a ticket or a station.
+def test_team_roles_never_get_team_scope_on_a_ticket_timeline():
+    """ADR-128/ADR-049: `team` can never match a ticket.
 
-    base_geometries carries no team_uuid, so in_scope()'s TEAM branch resolves to False for
-    every geo resource. Granting `team` here would look like an authorization and behave
-    like a denial.
+    Tickets carry no team_uuid, so in_scope()'s TEAM branch resolves to False for every one.
+    Granting `team` here would look like an authorization and behave like a denial. Stations
+    are the exception since ADR-285 — they carry the team they are assigned to.
     """
     for spec in ROLES_DATA:
-        for perm in HISTORY_PERMS:
-            assert spec["permissions"].get(perm) != "team", f"{spec['name']}/{perm}"
+        assert spec["permissions"].get(Perm.TICKET_VIEW_HISTORY) != "team", spec["name"]
 
 
 def test_audit_view_is_no_longer_an_unwired_shell():
@@ -171,15 +174,18 @@ async def test_requester_resolves_to_own(db):
 
 
 @pytest.mark.asyncio
-async def test_team_member_resolves_to_zone(db):
-    """A field worker reads the timeline of resources inside its team's work zone."""
+async def test_team_member_resolves_tickets_to_zone_and_stations_to_team(db):
+    """A field worker reads tickets in its work zone and the stations its team runs (ADR-285).
+
+    An ngo team on purpose: a gov team's station `team` scope widens to `all`.
+    """
     actor = User(name="FieldWorker")
     db.add(actor)
     await db.flush()
-    await _assign_seed_role(db, actor, "member")
+    await _assign_seed_role(db, actor, "member", team_type="ngo")
 
     assert await resolve_scope(actor, Perm.TICKET_VIEW_HISTORY, db) == Scope.ZONE
-    assert await resolve_scope(actor, Perm.STATION_VIEW_HISTORY, db) == Scope.ZONE
+    assert await resolve_scope(actor, Perm.STATION_VIEW_HISTORY, db) == Scope.TEAM
 
 
 @pytest.mark.asyncio
