@@ -100,7 +100,7 @@ async def detach_station_photo(db: AsyncSession, *, actor: User, uuid: str) -> N
 
     Removing *your own* photo needs only the `station.contribute` that created it. Undoing a
     contribution should cost exactly what making it cost, and `station.review` is seeded only
-    at super_admin/`all` and team admin/`zone` (seed_rbac.py:79,111) — without this branch an
+    at super_admin/`all` and team admin/`team` (scripts/seed_rbac.py) — without this branch an
     uploader could not fix their own mistake and had to find a moderator. This is the same
     `own` treatment the `user` role already gets on station.edit/station.delete. It is scoped
     narrowly on purpose: granting `station.review: own` instead would also reach
