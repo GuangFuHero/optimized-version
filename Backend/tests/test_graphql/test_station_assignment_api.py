@@ -5,6 +5,7 @@ tests/test_station_assignment.py; these only prove the API is wired to them.
 """
 
 import uuid as uuid_mod
+from datetime import UTC, datetime
 
 import pytest
 from geoalchemy2.shape import from_shape
@@ -97,3 +98,128 @@ async def test_a_station_is_assigned_and_unassigned_through_graphql(client, redi
     )
     assert "errors" not in unassigned.json(), unassigned.json()
     assert await _team_of(station_uuid) is None
+
+
+# --- reading the assignment (ADR-285 decision 11) ---
+
+STATION_TEAM = "query($uuid: UUID!) { station(uuid: $uuid) { assignedTeam { uuid name } } }"
+
+STATIONS_BY_ASSIGNMENT = """
+query($q: String!, $teamUuid: UUID, $unassignedOnly: Boolean) {
+    stations(q: $q, assignedTeamUuid: $teamUuid, unassignedOnly: $unassignedOnly) {
+        items { name }
+        pageInfo { totalCount }
+    }
+}
+"""
+
+
+async def _assigned_and_unassigned() -> dict[str, str]:
+    """One station assigned to a fresh team and one unassigned, sharing a unique name tag.
+
+    The test_graphql schema persists across tests, so every listing also sees other tests'
+    stations; searching by the tag keeps the assertions to these two.
+    """
+    tag = f"篩選{uuid_mod.uuid4().hex[:8]}"
+    async with test_db() as db:
+        author = User(name=f"author_{uuid_mod.uuid4().hex[:8]}")
+        team = Team(name=f"NGO {tag}", type="ngo")
+        db.add_all([author, team])
+        await db.flush()
+        stations = {}
+        for key, team_uuid in (("assigned", team.uuid), ("unassigned", None)):
+            station = Station(
+                geometry=from_shape(Point(121.5, 24.5), srid=4326), created_by=str(author.uuid),
+                name=f"{tag} {key}", team_uuid=team_uuid,
+            )
+            db.add(station)
+            await db.flush()
+            stations[key] = str(station.uuid)
+        return {"tag": tag, "team_uuid": str(team.uuid), "team_name": team.name, **stations}
+
+
+@pytest.mark.asyncio
+async def test_anyone_can_see_which_team_runs_a_station(client):
+    """Public, like the station itself: an anonymous caller gets the team's name, or null."""
+    made = await _assigned_and_unassigned()
+
+    assigned = await client.post(
+        "/graphql", json={"query": STATION_TEAM, "variables": {"uuid": made["assigned"]}}
+    )
+    unassigned = await client.post(
+        "/graphql", json={"query": STATION_TEAM, "variables": {"uuid": made["unassigned"]}}
+    )
+
+    assert "errors" not in assigned.json(), assigned.json()
+    assert assigned.json()["data"]["station"]["assignedTeam"] == {
+        "uuid": made["team_uuid"], "name": made["team_name"]
+    }
+    assert unassigned.json()["data"]["station"]["assignedTeam"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("by", ["assigned", "unassigned"])
+async def test_stations_can_be_listed_by_assignment(client, by):
+    """By one team's stations, or only the unassigned ones — gov's queue to hand out."""
+    made = await _assigned_and_unassigned()
+    tag, team_uuid, expected = made["tag"], made["team_uuid"], by
+    variables = {"q": tag, "teamUuid": team_uuid} if by == "assigned" else {"q": tag, "unassignedOnly": True}
+
+    resp = await client.post("/graphql", json={"query": STATIONS_BY_ASSIGNMENT, "variables": variables})
+
+    body = resp.json()
+    assert "errors" not in body, body
+    assert [item["name"] for item in body["data"]["stations"]["items"]] == [f"{tag} {expected}"]
+    assert body["data"]["stations"]["pageInfo"]["totalCount"] == 1
+
+
+@pytest.mark.asyncio
+async def test_the_two_assignment_filters_cannot_be_combined(client):
+    """One team's stations and "no team at all" contradict each other; say so instead of []."""
+    made = await _assigned_and_unassigned()
+
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": STATIONS_BY_ASSIGNMENT,
+            "variables": {"q": made["tag"], "teamUuid": made["team_uuid"], "unassignedOnly": True},
+        },
+    )
+
+    assert any("cannot be combined" in e["message"] for e in resp.json().get("errors", [])), resp.json()
+
+
+@pytest.mark.asyncio
+async def test_a_station_of_a_deleted_team_reads_as_unassigned(client):
+    """ADR-285 decision 8: the station must not claim a team that no longer exists."""
+    made = await _assigned_and_unassigned()
+    async with test_db() as db:
+        team = await db.get(Team, uuid_mod.UUID(made["team_uuid"]))
+        team.delete_at = datetime.now(UTC)
+
+    resp = await client.post(
+        "/graphql", json={"query": STATION_TEAM, "variables": {"uuid": made["assigned"]}}
+    )
+
+    assert "errors" not in resp.json(), resp.json()
+    assert resp.json()["data"]["station"]["assignedTeam"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_station_of_a_deleted_team_is_in_the_unassigned_queue(client):
+    """It reads as unassigned, so gov must find it where unassigned stations are listed."""
+    made = await _assigned_and_unassigned()
+    async with test_db() as db:
+        team = await db.get(Team, uuid_mod.UUID(made["team_uuid"]))
+        team.delete_at = datetime.now(UTC)
+
+    resp = await client.post(
+        "/graphql",
+        json={"query": STATIONS_BY_ASSIGNMENT, "variables": {"q": made["tag"], "unassignedOnly": True}},
+    )
+
+    body = resp.json()
+    assert "errors" not in body, body
+    assert sorted(item["name"] for item in body["data"]["stations"]["items"]) == [
+        f"{made['tag']} assigned", f"{made['tag']} unassigned"
+    ]

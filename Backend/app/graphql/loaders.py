@@ -37,6 +37,7 @@ from app.models.photo import Photo
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import CrowdSourcing, StationProperty
+from app.models.team import Team
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.repositories.team_repository import team_zone_assign_repository
@@ -113,6 +114,7 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
             )
         ),
         "teams_by_zone": DataLoader(load_fn=_make_teams_by_zone_loader(db)),
+        "team_by_uuid": DataLoader(load_fn=_make_team_by_uuid_loader(db)),
         # The three below serve the ticket.view_detail boundary (ADR-281): the ticket a task
         # or property is judged by, and the coarse point shown in place of the exact one.
         "ticket_by_uuid": DataLoader(load_fn=_make_ticket_by_uuid_loader(db)),
@@ -257,6 +259,24 @@ def _make_coarse_point_loader(db: AsyncSession):
             for uuid, centre, cell in rows:
                 coarse[(str(uuid), resolution)] = {"point": geom_to_geojson(centre), "cell": cell}
         return [coarse.get((str(uuid), resolution)) for uuid, resolution in keys]
+
+    return load_fn
+
+
+def _make_team_by_uuid_loader(db: AsyncSession):
+    """Batch-load the team each station is assigned to (ADR-285).
+
+    Soft-deleted teams come back as None, so a station still pointing at one reads as
+    unassigned (ADR-285 decision 8) — the timeline keeps the old name; the station itself does
+    not claim a team that no longer exists.
+    """
+
+    async def load_fn(team_uuids: list[str]) -> list[AssignedTeamType | None]:
+        rows = (
+            await db.execute(select(Team).where(Team.uuid.in_(team_uuids), Team.delete_at.is_(None)))
+        ).scalars().all()
+        by_uuid = {str(row.uuid): AssignedTeamType.from_model(row) for row in rows}
+        return [by_uuid.get(str(uuid)) for uuid in team_uuids]
 
     return load_fn
 

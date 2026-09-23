@@ -22,6 +22,7 @@ from app.graphql.shared import (  # noqa: F401 -- the address types and their ma
     secondary_location_to_dict,
 )
 from app.graphql.tickets.types import PhotoType
+from app.graphql.work_zone.types import AssignedTeamType
 
 
 @strawberry.enum
@@ -111,7 +112,19 @@ class StationType:
     _contact_email_raw: strawberry.Private[str | None] = None
     _contact_phone_raw: strawberry.Private[str | None] = None
     _geometry_raw: strawberry.Private[object | None] = None
+    _team_uuid_raw: strawberry.Private[object | None] = None
     _pii_visible_task: strawberry.Private[object | None] = None
+
+    @strawberry.field(
+        description="The team that runs this station, or null when unassigned (ADR-285). Public: "
+        "which organisation runs a station is not protected. Only the team's uuid, name and type "
+        "show — never its members."
+    )
+    async def assigned_team(self, info: strawberry.types.Info) -> AssignedTeamType | None:
+        """Resolve the assigned team; a soft-deleted one reads as unassigned."""
+        if self._team_uuid_raw is None:
+            return None
+        return await info.context["loaders"]["team_by_uuid"].load(str(self._team_uuid_raw))
 
     def _pii_visible(self, info: strawberry.types.Info):
         """Memoized PII-visibility check shared by the three contact_* resolvers.
@@ -203,6 +216,7 @@ class StationType:
             _contact_email_raw=m.contact_email,
             _contact_phone_raw=m.contact_phone,
             _geometry_raw=m.geometry,
+            _team_uuid_raw=m.team_uuid,
         )
 
 
