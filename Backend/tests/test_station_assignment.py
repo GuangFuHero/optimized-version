@@ -20,6 +20,7 @@ from app.core.permissions import Perm
 from app.models.audit import AuditLog
 from app.models.auth import User
 from app.models.geo import Station
+from app.models.notification import Notification
 from app.models.photo import Photo
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.station_property import StationProperty, StationUpdateSuggestion
@@ -28,7 +29,13 @@ from app.repositories.geo_repository import station_repository
 from app.repositories.photo_repository import photo_repository
 from app.services.history import STATION, load_timeline
 from app.services.photo import detach_station_photo
-from app.services.station import create_station, delete_station, update_station, update_station_property
+from app.services.station import (
+    assign_station,
+    create_station,
+    delete_station,
+    update_station,
+    update_station_property,
+)
 from app.services.suggestion import review_station_suggestion
 from tests.conftest import acting_as
 
@@ -325,3 +332,147 @@ async def test_a_teams_history_scope_stops_at_its_own_stations(db):
         await load_timeline(db, actor=viewer, entity=STATION, uuid=station.uuid, limit=50, offset=0)
 
     assert exc.value.status_code == 404
+
+
+# --- assigning (ADR-285 decision 4) ---
+
+
+@pytest.mark.asyncio
+async def test_a_gov_admin_assigns_a_station_to_a_team(db):
+    """Gov assigns; the station then belongs to that team."""
+    gov = await _team(db, "Gov", "gov")
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    admin = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=None)
+    station_uuid, ngo_uuid = str(station.uuid), str(ngo.uuid)
+    await _grant(db, admin, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
+
+    assigned = await assign_station(db, actor=admin, station_uuid=station_uuid, team_uuid=ngo_uuid)
+
+    assert str(assigned.team_uuid) == ngo_uuid
+
+
+@pytest.mark.asyncio
+async def test_an_ngo_admin_holding_station_assign_is_refused(db):
+    """Gov-only like work_zone.assign: the seed gives it to every team admin, the type check fences ngo."""
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    admin = await _user(db, "NGO admin")
+    station = await _station(db, created_by=author, team=None)
+    await _grant(db, admin, Perm.STATION_ASSIGN, "all", "role-assign", team=ngo)
+
+    with pytest.raises(HTTPException) as exc:
+        await assign_station(db, actor=admin, station_uuid=str(station.uuid), team_uuid=str(ngo.uuid))
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_super_admin_platform_identity_can_assign(db):
+    """The gov fence is aimed at team identities; a platform holder passes it."""
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    root = await _user(db, "Super admin")
+    station = await _station(db, created_by=author, team=None)
+    station_uuid, ngo_uuid = str(station.uuid), str(ngo.uuid)
+    await _grant(db, root, Perm.STATION_ASSIGN, "all", "role-assign")
+
+    assigned = await assign_station(db, actor=root, station_uuid=station_uuid, team_uuid=ngo_uuid)
+
+    assert str(assigned.team_uuid) == ngo_uuid
+
+
+@pytest.mark.asyncio
+async def test_unassigning_clears_the_team(db):
+    """`team_uuid=None` takes the station back; it is then unassigned."""
+    gov = await _team(db, "Gov", "gov")
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    admin = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=ngo)
+    station_uuid = str(station.uuid)
+    await _grant(db, admin, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
+
+    unassigned = await assign_station(db, actor=admin, station_uuid=station_uuid, team_uuid=None)
+
+    assert unassigned.team_uuid is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("target", "message"), [("missing", "Team not found"), ("inactive", "Team is not active")]
+)
+async def test_a_station_cannot_go_to_a_missing_or_inactive_team(db, target, message):
+    """Same create-time check as assign_zone_to_team: the target team must exist and be active."""
+    gov = await _team(db, "Gov", "gov")
+    author = await _user(db, "Author")
+    admin = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=None)
+    if target == "inactive":
+        dormant = Team(name="Dormant", type="ngo", status="inactive")
+        db.add(dormant)
+        await db.flush()
+        team_uuid = str(dormant.uuid)
+    else:
+        team_uuid = str(uuidlib.uuid4())
+    await _grant(db, admin, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
+
+    with pytest.raises(ValueError, match=message):
+        await assign_station(db, actor=admin, station_uuid=str(station.uuid), team_uuid=team_uuid)
+
+
+async def _admin_of(db, team: Team, admin_role: Role) -> str:
+    """A user holding the team's `admin` role — who `resolve_team_admin` notifies."""
+    user = await _user(db, f"{team.name} admin")
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=admin_role.uuid, team_uuid=team.uuid))
+    await db.flush()
+    return str(user.uuid)
+
+
+async def _notification_types(db, recipient: str) -> list[str]:
+    rows = await db.execute(select(Notification.type).where(Notification.recipient_uuid == recipient))
+    return sorted(rows.scalars().all())
+
+
+@pytest.mark.asyncio
+async def test_reassigning_tells_both_teams(db):
+    """ADR-285 decision 4: the new team hears it got the station, the old one that it lost it."""
+    gov = await _team(db, "Gov", "gov")
+    old = await _team(db, "Old NGO", "ngo")
+    new = await _team(db, "New NGO", "ngo")
+    admin_role = Role(name="admin", kind="team")
+    db.add(admin_role)
+    await db.flush()
+    old_admin = await _admin_of(db, old, admin_role)
+    new_admin = await _admin_of(db, new, admin_role)
+    author = await _user(db, "Author")
+    assigner = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=old)
+    station_uuid, new_uuid = str(station.uuid), str(new.uuid)
+    await _grant(db, assigner, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
+
+    await assign_station(db, actor=assigner, station_uuid=station_uuid, team_uuid=new_uuid)
+
+    assert await _notification_types(db, old_admin) == ["station_unassigned"]
+    assert await _notification_types(db, new_admin) == ["station_assigned"]
+
+
+@pytest.mark.asyncio
+async def test_assigning_to_the_team_it_already_has_changes_nothing(db):
+    """Idempotent like assign_zone_to_team: nothing moved, so nobody is told anything."""
+    gov = await _team(db, "Gov", "gov")
+    ngo = await _team(db, "NGO", "ngo")
+    admin_role = Role(name="admin", kind="team")
+    db.add(admin_role)
+    await db.flush()
+    ngo_admin = await _admin_of(db, ngo, admin_role)
+    author = await _user(db, "Author")
+    assigner = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=ngo)
+    station_uuid, ngo_uuid = str(station.uuid), str(ngo.uuid)
+    await _grant(db, assigner, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
+
+    await assign_station(db, actor=assigner, station_uuid=station_uuid, team_uuid=ngo_uuid)
+
+    assert await _notification_types(db, ngo_admin) == []

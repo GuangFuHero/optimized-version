@@ -52,6 +52,9 @@ class Perm(StrEnum):
     STATION_EDIT = "station.edit"
     STATION_DELETE = "station.delete"
     STATION_REVIEW = "station.review"
+    # ADR-285: hand a station to the one team that runs it (or take it back). Gov-only, like
+    # work_zone.assign — see GOV_TEAM_ONLY_PERMS.
+    STATION_ASSIGN = "station.assign"
     # Open crowd-sourcing: attach a property or submit a rating to ANY station (no ownership
     # check — deliberately capability-only, not scoped like station.edit=own). See station.py.
     STATION_CONTRIBUTE = "station.contribute"
@@ -144,9 +147,10 @@ PUBLIC_PERMS = frozenset(
 # admin holds these in the seed matrix but is blocked in practice. A platform holder
 # (super_admin, no team) is unaffected. Surfaced in the capability catalog so the read/matrix
 # display matches what is actually enforced (the role×capability matrix alone can't express a
-# team.type condition). Keep this in lockstep with the `_require_gov_zone_authority` call sites.
+# team.type condition). Keep this in lockstep with the `_require_gov_zone_authority` and
+# `require_gov_team` call sites.
 GOV_TEAM_ONLY_PERMS = frozenset(
-    {Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN, Perm.ZONE_DELETE}
+    {Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN, Perm.ZONE_DELETE, Perm.STATION_ASSIGN}
 )
 
 # ADR-285: capabilities whose `team` scope widens to `all` when the actor acts for a gov team —

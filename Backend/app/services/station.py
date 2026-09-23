@@ -18,13 +18,14 @@ from app.graphql.scalars import geojson_to_geom
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.station_property import CrowdSourcing, StationProperty
+from app.models.team import Team
 from app.repositories.geo_repository import (
     crowd_sourcing_repository,
     secondary_location_repository,
     station_property_repository,
     station_repository,
 )
-from app.services.authz import require_scope
+from app.services.authz import require_gov_team, require_scope
 from app.services.geo_validation import normalize_contact_fields, validate_point
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
@@ -240,6 +241,67 @@ async def delete_station(db: AsyncSession, *, actor: User, uuid: str) -> None:
         raise ValueError("Station not found")
     await require_scope(actor, Perm.STATION_DELETE, db, resource=station)
     await station_repository.soft_delete(db, db_obj=station)
+
+
+async def assign_station(
+    db: AsyncSession, *, actor: User, station_uuid: str, team_uuid: str | None
+) -> Station:
+    """Hand a station to the one team that runs it, or unassign it with `team_uuid=None` (ADR-285).
+
+    Idempotent like assign_zone_to_team: assigning the team it already has changes nothing and
+    tells nobody. Otherwise the new team's admins hear they got it and the old team's admins
+    that they lost it.
+    """
+    station = await station_repository.get_by_uuid_active(db, station_uuid)
+    if not station:
+        raise ValueError("Station not found")
+    await require_scope(actor, Perm.STATION_ASSIGN, db, resource=station)
+    await require_gov_team(db, actor, detail="Only gov teams may assign stations.")
+    if team_uuid is not None:
+        # Same create-time check as assign_zone_to_team: a team that goes inactive later keeps
+        # its stations until gov moves them.
+        team = await db.scalar(select(Team).where(Team.uuid == team_uuid, Team.delete_at.is_(None)))
+        if team is None:
+            raise ValueError("Team not found")
+        if team.status != "active":
+            raise ValueError("Team is not active")
+
+    old_team = str(station.team_uuid) if station.team_uuid else None
+    new_team = str(team_uuid) if team_uuid else None
+    if old_team == new_team:
+        return station
+
+    # Plain values before the write: update() and dispatch() both commit, and the test suite
+    # runs with expire_on_commit=True (see update_station_property).
+    station_name = station.name or "物資站"
+    actor_uid = actor.uuid
+    updated = await station_repository.update(db, db_obj=station, obj_in={"team_uuid": team_uuid})
+    team_admins = NotificationRecipientResolver.resolve_team_admin
+    if new_team:
+        await NotificationService.dispatch(
+            db,
+            event_type="station_assigned",
+            title=f"新指派物資站：{station_name}",
+            body=f"您的團隊已獲指派負責物資站「{station_name}」。",
+            priority="high",
+            actor_uuid=actor_uid,
+            ref_type="station",
+            ref_uuid=station_uuid,
+            explicit_recipients=await team_admins(db, team_uuid=new_team),
+        )
+    if old_team:
+        await NotificationService.dispatch(
+            db,
+            event_type="station_unassigned",
+            title=f"物資站指派已解除：{station_name}",
+            body=f"您的團隊對物資站「{station_name}」的指派已解除。",
+            priority="medium",
+            actor_uuid=actor_uid,
+            ref_type="station",
+            ref_uuid=station_uuid,
+            explicit_recipients=await team_admins(db, team_uuid=old_team),
+        )
+    return updated
 
 
 async def create_station_property(

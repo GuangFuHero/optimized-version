@@ -35,6 +35,8 @@ class CapabilityInfo(BaseModel):
     `public` = in PUBLIC_PERMS. `team_gov_only` (ADR-064) = held by a team-kind role it only
     takes effect on gov-type teams (work_zone.py `_require_gov_zone_authority`), so the matrix
     grant alone overstates what an ngo admin can do; the frontend shows a "gov teams only" note.
+    `team_gov_widened` (ADR-285) = a `team` grant on it reaches every station when held by a gov
+    team, so the matrix's `team` understates what a gov admin can do.
     """
 
     key: str
@@ -42,6 +44,7 @@ class CapabilityInfo(BaseModel):
     action: str
     public: bool
     team_gov_only: bool = False
+    team_gov_widened: bool = False
 
 
 class CapabilityCatalogResponse(BaseModel):
