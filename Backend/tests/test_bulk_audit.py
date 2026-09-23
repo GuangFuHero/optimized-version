@@ -13,6 +13,7 @@ this branch's ancestry. See ADR-124.
 import os
 import pathlib
 import re
+import uuid
 
 os.environ["ENV"] = "testing"
 
@@ -211,6 +212,64 @@ async def test_task_property_value_change_records_both_sides(db):
 
     assert update[0].old_values["property_value"] == "bottled water"
     assert update[0].new_values["property_value"] == "drinking water"
+
+
+# --- station suggestions and merges ---
+
+
+@pytest.mark.asyncio
+async def test_suggestion_submit_merge_and_revoke_each_leave_an_attributed_trail(db):
+    """Every step of a suggestion's life lands in audit_logs under the user who took it."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.core.context import request_user_uuid
+    from app.services import suggestion as suggestion_service
+
+    # The helper's commit expires `author`; the refreshed property still names them.
+    _author, prop = await _station_property(db)
+    author_id, station_id, prop_id = prop.created_by, prop.station_uuid, prop.uuid
+    reviewer = User(name="Reviewer")
+    db.add(reviewer)
+    await db.flush()
+    reviewer_id = reviewer.uuid
+    await db.commit()
+
+    async def as_user(user_id, action):
+        # Each call stands in for one request, so close any transaction the last one left
+        # open; attribution is fixed when a transaction begins.
+        await db.commit()
+        token = request_user_uuid.set(str(user_id))
+        try:
+            with patch("app.services.suggestion.require_scope", new_callable=AsyncMock):
+                return await action(await db.get(User, user_id))
+        finally:
+            request_user_uuid.reset(token)
+
+    await as_user(author_id, lambda actor: suggestion_service.create_station_suggestion(
+        db, actor=actor, target_type="station_property", target_uuid=str(prop_id),
+        field_name="quantity", new_value="150", comment=None,
+    ))
+    merge = await as_user(reviewer_id, lambda actor: suggestion_service.merge_station_suggestions(
+        db, actor=actor, station_uuid=str(station_id),
+        decisions=[suggestion_service.SuggestionDecision(str(prop_id), "quantity", True, "150")],
+    ))
+    merge_id = merge.uuid
+    await as_user(reviewer_id, lambda actor: suggestion_service.revoke_station_suggestion_merge(
+        db, actor=actor, uuid=str(merge_id),
+    ))
+
+    suggestion_logs = await _logs_for(db, "station_update_suggestions")
+    assert [(log.action, log.new_values["status"], log.user_uuid) for log in suggestion_logs] == [
+        ("INSERT", "pending", uuid.UUID(str(author_id))),
+        ("UPDATE", "approved", uuid.UUID(str(reviewer_id))),
+        ("UPDATE", "revoked", uuid.UUID(str(reviewer_id))),
+    ]
+    merge_logs = await _logs_for(db, "station_suggestion_merges")
+    assert [(log.action, log.new_values["status"]) for log in merge_logs] == [
+        ("INSERT", "applied"), ("UPDATE", "revoked"),
+    ]
+    quantities = [log.new_values["quantity"] for log in await _logs_for(db, "station_properties")]
+    assert quantities[-2:] == [150, 200]
 
 
 # --- the list alone does nothing without a migration ---

@@ -31,6 +31,7 @@ from app.models.secondary_location import SecondaryLocation  # noqa: F401
 from app.models.station_property import (  # noqa: F401
     CrowdSourcing,
     StationProperty,
+    StationSuggestionMerge,
     StationUpdateSuggestion,
 )
 from app.models.team import Team, TeamZoneAssign, WorkZone  # noqa: F401

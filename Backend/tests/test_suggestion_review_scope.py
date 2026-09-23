@@ -1,11 +1,8 @@
-"""Scope checks for reviewing station_property suggestions (PR #24 [3], ADR-052, ADR-285).
+"""Scope checks for merging station_property suggestions (ADR-285).
 
-`review_station_suggestion` scopes a station_property target through the parent station
-(like `update_station_property`), so a `station.review=team` reviewer reaches property
-suggestions on the stations assigned to its team. Regression guard for the half-applied fix
-where the review path still passed the bare StationProperty — which has no team or location
-of its own — and so always 404'd scoped reviewers. Service-level (not GraphQL) so it uses the
-root conftest, not the test_graphql one.
+A merge is scope-checked against the station, so a `station.review=team` reviewer reaches
+property suggestions on stations assigned to its team and gets a 404 on any other team's.
+Service-level (not GraphQL) so it uses the root conftest, not the test_graphql one.
 """
 
 import os
@@ -24,7 +21,7 @@ from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.station_property import StationProperty, StationUpdateSuggestion
 from app.models.team import Team
-from app.services.suggestion import review_station_suggestion
+from app.services.suggestion import SuggestionDecision, merge_station_suggestions
 from tests.conftest import acting_as
 
 _POINT = Point(121.5, 24.5)
@@ -103,20 +100,21 @@ async def _team_reviewer_with_property_suggestion(db, *, on_own_station: bool):
     return reviewer, prop, suggestion
 
 
-@pytest.mark.asyncio
-async def test_team_reviewer_can_review_property_suggestion_on_its_own_station(db):
-    """A property on a station assigned to the reviewer's team can be reviewed.
+def _decide(prop) -> list[SuggestionDecision]:
+    return [SuggestionDecision(str(prop.uuid), "property_name", True, "bottled water")]
 
-    The property has no team of its own; checkpoint 2 borrows the parent station's, which is
-    what makes this pass (PR #24 [3], ADR-285).
-    """
+
+@pytest.mark.asyncio
+async def test_team_reviewer_can_merge_property_suggestion_on_its_own_station(db):
+    """A property on a station assigned to the reviewer's team can be merged."""
     reviewer, prop, suggestion = await _team_reviewer_with_property_suggestion(db, on_own_station=True)
 
-    reviewed = await review_station_suggestion(
-        db, actor=reviewer, uuid=str(suggestion.uuid), approve=True
+    await merge_station_suggestions(
+        db, actor=reviewer, station_uuid=str(prop.station_uuid), decisions=_decide(prop)
     )
 
-    assert reviewed.status == "approved"
+    await db.refresh(suggestion)
+    assert suggestion.status == "approved"
     # commit expired `prop`; reload in the async context before reading the applied value.
     await db.refresh(prop)
     assert prop.property_name == "bottled water"
@@ -124,16 +122,12 @@ async def test_team_reviewer_can_review_property_suggestion_on_its_own_station(d
 
 @pytest.mark.asyncio
 async def test_team_reviewer_is_404_for_property_suggestion_on_another_teams_station(db):
-    """A property whose parent station another team runs still 404s.
-
-    The team is still enforced: borrowing the parent's team widens what checkpoint 2 can
-    see, it does not blanket-open property reviews.
-    """
-    reviewer, _prop, suggestion = await _team_reviewer_with_property_suggestion(db, on_own_station=False)
+    """A property whose parent station another team runs 404s."""
+    reviewer, prop, _suggestion = await _team_reviewer_with_property_suggestion(db, on_own_station=False)
 
     with pytest.raises(HTTPException) as exc:
-        await review_station_suggestion(
-            db, actor=reviewer, uuid=str(suggestion.uuid), approve=True
+        await merge_station_suggestions(
+            db, actor=reviewer, station_uuid=str(prop.station_uuid), decisions=_decide(prop)
         )
 
     assert exc.value.status_code == 404

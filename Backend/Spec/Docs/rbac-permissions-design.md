@@ -47,7 +47,7 @@
 | 模組 | 能力鍵 |
 | :--- | :--- |
 | **Ticket（求助單）** | `ticket.view` ★、`ticket.view_pii`、`ticket.add`、`ticket.edit`、`ticket.delete`、`ticket.assign`、`ticket.review`、`ticket.export` |
-| **Station（資源站點）** | `station.view` ★、`station.view_pii`、`station.add`、`station.contribute`、`station.edit`、`station.delete`、`station.review` |
+| **Station（資源站點）** | `station.view` ★、`station.view_pii`、`station.add`、`station.contribute`、`station.edit`、`station.delete`、`station.review`、`station.revoke` |
 | **Map（地圖圖層/封閉區）** | `map.view` ★、`map.add`、`map.edit`、`map.delete` |
 | **Announcement（緊急公告）** | `announcement.view` ★、`announcement.publish`、`announcement.edit`、`announcement.delete` |
 | **AI Duplicate（重複審核）** | `ai_duplicate.view`、`ai_duplicate.review` |
@@ -108,7 +108,7 @@
 | 角色 | 定位 | scope grant 重點 |
 | :--- | :--- | :--- |
 | **`user`** | 一般民眾（每個註冊帳號的預設） | `map.view`/`station.view`/`ticket.view`=all；`station.add`/`ticket.add`=all；**`station.contribute`=all**（群眾貢獻刻意開放，ADR-063 [5]）；`station.edit`/`station.delete`/`ticket.edit`/`ticket.delete`/`ticket.assign`=own；`ticket.view_pii`/**`station.view_pii`**=own |
-| **`data_auditor`** | 監督查核（唯讀，看全部含 PII） | `map.view`/`station.view`/`ticket.view`=all；`ticket.view_pii`/**`station.view_pii`**=all；`user.view`=all；`audit.view`=all |
+| **`data_auditor`** | 監督查核（看全部含 PII；唯一的寫入是審核與撤銷站點修改建議） | `map.view`/`station.view`/`ticket.view`=all；`ticket.view_pii`/**`station.view_pii`**=all；`user.view`=all；`audit.view`=all；**`station.review`/`station.revoke`**=all |
 | **`super_admin`** | 平台最高權限（1–2 人） | 上述所有模組 + user/team/work_zone/rbac/audit/announcement 全部 = all（**唯一持有 `rbac.assign`/`rbac.edit`、`team.edit`**） |
 
 ### 4.2 Team 角色（綁在 `user_role_assign`；組織 = 該 team 的 `type`）

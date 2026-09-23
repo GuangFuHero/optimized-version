@@ -40,9 +40,9 @@ mutation($input: CreateStationSuggestionInput!) {
 }
 """
 
-REVIEW_SUGGESTION = """
-mutation($uuid: UUID!, $approve: Boolean!) {
-    reviewStationSuggestion(uuid: $uuid, approve: $approve) { uuid status }
+MERGE_SUGGESTIONS = """
+mutation($station: UUID!, $decisions: [SuggestionDecisionInput!]!) {
+    mergeStationSuggestions(stationUuid: $station, decisions: $decisions) { uuid status }
 }
 """
 
@@ -100,11 +100,11 @@ async def test_update_station_over_long_type_is_masked(client, coordinator_auth)
 
 
 @pytest.mark.asyncio
-async def test_review_suggestion_over_long_value_is_masked(client, coordinator_auth):
+async def test_merge_suggestion_over_long_value_is_masked(client, coordinator_auth):
     """The indirect path, and the reason per-field validation is the wrong shape here.
 
     `station_update_suggestions.new_value` is an unbounded String, so an over-long value
-    stores fine and only hits the narrow `stations.type` when a reviewer approves it. Nothing
+    stores fine and only hits the narrow `stations.type` when a reviewer merges it. Nothing
     at the suggestion's own entry point could have caught this, and the statement leaked to
     the moderator rather than to the submitter.
     """
@@ -115,9 +115,10 @@ async def test_review_suggestion_over_long_value_is_masked(client, coordinator_a
         "fieldName": "type", "newValue": "T" * 300,
     }}, token)
     assert "errors" not in body, body
-    suggestion_uuid = body["data"]["createStationSuggestion"]["uuid"]
 
-    body = await _post(client, REVIEW_SUGGESTION, {"uuid": suggestion_uuid, "approve": True}, token)
+    body = await _post(client, MERGE_SUGGESTIONS, {"station": station_uuid, "decisions": [
+        {"targetUuid": station_uuid, "fieldName": "type", "approve": True, "value": "T" * 300},
+    ]}, token)
     _assert_masked(body)
 
 
