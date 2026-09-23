@@ -65,63 +65,85 @@ async def test_resolve_team_admin_real_db(db: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_resolve_gov_and_zone_ngo_with_postgis(db: AsyncSession):
-    """Verify resolve_gov_and_zone_ngo resolves Gov staff and NGO Admins whose zone contains the station."""
-    gov_team = Team(name="花蓮縣應變中心", type="gov", status="active")
-    ngo_team = Team(name="慈濟搜救隊", type="ngo", status="active")
-    db.add_all([gov_team, ngo_team])
-    await db.flush()
+async def test_station_notices_go_to_gov_and_the_team_the_station_is_assigned_to(db: AsyncSession):
+    """Gov staff plus the admins of the team running the station — not whoever's zone covers it.
 
-    gov_team_id = gov_team.uuid
-    ngo_team_id = ngo_team.uuid
+    ADR-285 decision 10: stations left the zone model, so the zone's team is exactly the one
+    that must NOT be told any more. The zone below covers the station on purpose.
+    """
+    gov_team = Team(name="花蓮縣應變中心", type="gov", status="active")
+    running_team = Team(name="慈濟搜救隊", type="ngo", status="active")
+    zone_team = Team(name="紅十字會", type="ngo", status="active")
+    db.add_all([gov_team, running_team, zone_team])
+    await db.flush()
 
     admin_role = Role(name="admin", kind="team")
     member_role = Role(name="member", kind="team")
-    db.add_all([admin_role, member_role])
-    await db.flush()
-
     gov_user = User(name="Charlie 政府專員")
-    ngo_admin = User(name="Alice NGO隊長")
-    db.add_all([gov_user, ngo_admin])
+    running_admin = User(name="Alice 營運隊長")
+    zone_admin = User(name="Dora 責任區隊長")
+    db.add_all([admin_role, member_role, gov_user, running_admin, zone_admin])
     await db.flush()
+    gov_uid, running_admin_uid, zone_admin_uid = gov_user.uuid, running_admin.uuid, zone_admin.uuid
 
-    gov_uid = gov_user.uuid
-    ngo_admin_uid = ngo_admin.uuid
-
-    # Membership is the grant (ADR-072/073). The gov user needs one too: resolve_gov_and_zone_ngo
-    # now reaches Team through user_role_assign, so a user with no grant belongs to no team.
+    # Membership is the grant (ADR-072/073): a user with no grant belongs to no team.
     db.add_all([
-        UserRoleAssign(user_uuid=gov_uid, role_uuid=member_role.uuid, team_uuid=gov_team_id),
-        UserRoleAssign(user_uuid=ngo_admin_uid, role_uuid=admin_role.uuid, team_uuid=ngo_team_id),
+        UserRoleAssign(user_uuid=gov_uid, role_uuid=member_role.uuid, team_uuid=gov_team.uuid),
+        UserRoleAssign(user_uuid=running_admin_uid, role_uuid=admin_role.uuid, team_uuid=running_team.uuid),
+        UserRoleAssign(user_uuid=zone_admin_uid, role_uuid=admin_role.uuid, team_uuid=zone_team.uuid),
     ])
-    await db.flush()
-
-    # 建立一個包含 (121.6, 23.99) 的多邊形工作分區
     polygon_wkt = "SRID=4326;POLYGON((121.5 23.9, 121.7 23.9, 121.7 24.1, 121.5 24.1, 121.5 23.9))"
-    work_zone = WorkZone(
-        name="第一搜救責任區",
-        geometry=WKTElement(polygon_wkt, srid=4326),
-    )
+    work_zone = WorkZone(name="第一搜救責任區", geometry=WKTElement(polygon_wkt, srid=4326))
     db.add(work_zone)
     await db.flush()
+    db.add(TeamZoneAssign(team_uuid=zone_team.uuid, zone_uuid=work_zone.uuid, assigned_by=str(gov_uid)))
 
-    db.add(TeamZoneAssign(team_uuid=ngo_team_id, zone_uuid=work_zone.uuid, assigned_by=str(gov_uid)))
-    await db.flush()
-
-    # 建立位於多邊形內部的物資站 (POINT(121.6 23.99))
-    station_inside = Station(
+    station = Station(
         name="吉安國小收容中心",
         geometry=WKTElement("SRID=4326;POINT(121.6 23.99)", srid=4326),
+        team_uuid=running_team.uuid,
     )
-    db.add(station_inside)
+    db.add(station)
     # Read the PK after flush but before commit: the session expires attributes on commit
     # (matching app/db/session.py), so touching them afterwards would need a reload.
     await db.flush()
-    station_id = station_inside.uuid
+    station_id = station.uuid
     await db.commit()
-    recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, station_uuid=station_id)
-    assert str(gov_uid) in recipients
-    assert str(ngo_admin_uid) in recipients
+
+    recipients = await NotificationRecipientResolver.resolve_gov_and_station_team(db, station_uuid=station_id)
+
+    assert sorted(recipients) == sorted([str(gov_uid), str(running_admin_uid)])
+
+
+@pytest.mark.asyncio
+async def test_an_unassigned_station_notifies_gov_only(db: AsyncSession):
+    """No team runs it, so nobody but Gov is told — even with a zone right over it."""
+    gov_team = Team(name="花蓮縣應變中心", type="gov", status="active")
+    zone_team = Team(name="紅十字會", type="ngo", status="active")
+    admin_role = Role(name="admin", kind="team")
+    gov_user = User(name="Charlie 政府專員")
+    zone_admin = User(name="Dora 責任區隊長")
+    db.add_all([gov_team, zone_team, admin_role, gov_user, zone_admin])
+    await db.flush()
+    gov_uid = gov_user.uuid
+    db.add_all([
+        UserRoleAssign(user_uuid=gov_uid, role_uuid=admin_role.uuid, team_uuid=gov_team.uuid),
+        UserRoleAssign(user_uuid=zone_admin.uuid, role_uuid=admin_role.uuid, team_uuid=zone_team.uuid),
+    ])
+    polygon_wkt = "SRID=4326;POLYGON((121.5 23.9, 121.7 23.9, 121.7 24.1, 121.5 24.1, 121.5 23.9))"
+    work_zone = WorkZone(name="第一搜救責任區", geometry=WKTElement(polygon_wkt, srid=4326))
+    db.add(work_zone)
+    await db.flush()
+    db.add(TeamZoneAssign(team_uuid=zone_team.uuid, zone_uuid=work_zone.uuid, assigned_by=str(gov_uid)))
+    station = Station(name="無人認領站", geometry=WKTElement("SRID=4326;POINT(121.6 23.99)", srid=4326))
+    db.add(station)
+    await db.flush()
+    station_id = station.uuid
+    await db.commit()
+
+    recipients = await NotificationRecipientResolver.resolve_gov_and_station_team(db, station_uuid=station_id)
+
+    assert recipients == [str(gov_uid)]
 
 
 @pytest.mark.asyncio
@@ -291,7 +313,7 @@ async def _gov_recipient_and_shelter(db: AsyncSession) -> tuple[uuid.UUID, uuid.
     """Seed a Gov user, a shelter station, and a `beds_available` property on it.
 
     Returns (gov_user_uuid, station_uuid, property_uuid). The Gov user is the expected
-    recipient of `resource_station_updated` (resolve_gov_and_zone_ngo, §Q7).
+    recipient of `resource_station_updated` (resolve_gov_and_station_team, §Q7).
     """
     from app.models.station_property import StationProperty
 

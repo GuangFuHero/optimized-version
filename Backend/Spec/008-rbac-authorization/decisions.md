@@ -1176,7 +1176,7 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
    例外，比照 `actor_uuid`（`services/history_fields.py:174-176`）。team 名稱不是 PII。已刪除的 team 在時間軸上
    仍顯示原名——時間軸記的是「當時由誰營運」；決策 8 的「當作未指派」只適用於站點現況的讀取。
 10. **通知**：`resolve_gov_and_zone_ngo` 的「站點落在哪些 NGO 的 zone 裡」改為「站點指派給哪個 team」；gov 端
-    照舊。
+    照舊。函式隨之改名為 `resolve_gov_and_station_team`。
 11. **API**：站點對外多一個「指派的 team」（id 與名稱），**所有人都看得到，含匿名訪客**——「這個站由哪個單位
     營運」是公開資訊。這是刻意的例外：`team.view` 不是公開權限，但這裡只露出 team 名稱，不露成員。站點查詢
     可依指派的 team 篩選，也可只列未指派的站（gov 的待指派清單）。

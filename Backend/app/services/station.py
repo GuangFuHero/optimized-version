@@ -62,7 +62,7 @@ OPERATIONAL_PROPERTY_NAMES = {
 async def notify_operational_status_change(
     db: AsyncSession, *, station_uuid: str, property_name: str, actor_uuid: str | None
 ) -> None:
-    """Tell Gov staff and the covering NGO admins that a station's live status changed.
+    """Tell Gov staff and the station's team admins that a station's live status changed.
 
     Shared by the two write paths that can change an operational value: direct property
     edits (update_station_property) and approved suggestions
@@ -74,7 +74,7 @@ async def notify_operational_status_change(
     """
     station = await station_repository.get_by_uuid_active(db, station_uuid)
     station_name = (station.name if station else None) or "物資站"
-    recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, station_uuid)
+    recipients = await NotificationRecipientResolver.resolve_gov_and_station_team(db, station_uuid)
     await NotificationService.dispatch(
         db,
         event_type="resource_station_updated",
@@ -158,7 +158,7 @@ async def create_station(
     await db.refresh(station)
 
     # 觸發 resource_station_updated 通知
-    recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, str(station.uuid))
+    recipients = await NotificationRecipientResolver.resolve_gov_and_station_team(db, str(station.uuid))
     await NotificationService.dispatch(
         db,
         event_type="resource_station_updated",
@@ -357,13 +357,13 @@ async def update_station_property(
 ) -> StationProperty:
     """Update a station property (checkpoint 1 station.edit, then checkpoint 2 against it).
 
-    The property has no geometry, so checkpoint 2 borrows the parent station's location for
-    `zone` scope (ADR-052); `own` resolves against the property's creator. Without this a
-    team role (`station.edit=zone`) could never edit any property, even inside its own zone.
+    The property has no team or geometry, so checkpoint 2 borrows the parent station's
+    (ADR-052, ADR-285); `own` resolves against the property's creator. Without this a team
+    role (`station.edit=team`) could never edit any property, even on its own stations.
 
     Changing an operational value (OPERATIONAL_PROPERTY_NAMES) also fires
-    `resource_station_updated` to all Gov staff plus the NGO admins whose work zone covers
-    the station — those values are EAV rows here, not columns on `stations`. This mutation
+    `resource_station_updated` to all Gov staff plus the admins of the station's team
+    (ADR-285) — those values are EAV rows here, not columns on `stations`. This mutation
     only reaches the Integer ones (it writes `quantity`); the Boolean/Enum ones live in
     `comment` and are changed through the suggestion workflow, which notifies too.
     """

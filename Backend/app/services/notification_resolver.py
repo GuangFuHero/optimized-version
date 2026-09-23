@@ -3,7 +3,7 @@
 import uuid as _uuid
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
@@ -15,7 +15,7 @@ from app.models.rbac import (
     UserPermissionAssign,
     UserRoleAssign,
 )
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team
 
 
 def _to_uuid_str(val: Any) -> str | None:
@@ -91,11 +91,16 @@ class NotificationRecipientResolver:
         return [str(uid) for uid in result.scalars().all()]
 
     @staticmethod
-    async def resolve_gov_and_zone_ngo(
+    async def resolve_gov_and_station_team(
         db: AsyncSession,
         station_uuid: str | _uuid.UUID | None = None,
     ) -> list[str]:
-        """Resolve all Gov staff plus NGO Admins whose assigned work zones contain the station (Q8)."""
+        """Resolve all Gov staff plus the admins of the team the station is assigned to (Q8, ADR-285).
+
+        Stations left the zone model (ADR-285): which team runs a station is its `team_uuid`,
+        not whose work zone its point falls in, so the zone's team is not told. An unassigned
+        station, or one whose team was deleted, notifies Gov only.
+        """
         recipients: set[str] = set()
 
         # 1. 查詢所有 Gov 團隊成員 (Team.type == 'gov')
@@ -113,29 +118,25 @@ class NotificationRecipientResolver:
         gov_res = await db.execute(gov_stmt)
         recipients.update(str(uid) for uid in gov_res.scalars().all())
 
-        # 2. 若指定站點 UUID，透過 PostGIS 空間查詢找出責任分區涵蓋該站點的 NGO Admin
+        # 2. 若指定站點 UUID，找出該站點被指派的 team 的 Admin (ADR-285)
         station_uid_str = _to_uuid_str(station_uuid)
         if station_uid_str:
-            ngo_admin_stmt = (
+            team_admin_stmt = (
                 select(User.uuid)
                 .join(UserRoleAssign, UserRoleAssign.user_uuid == User.uuid)
                 .join(Role, Role.uuid == UserRoleAssign.role_uuid)
                 .join(Team, Team.uuid == UserRoleAssign.team_uuid)
-                .join(TeamZoneAssign, TeamZoneAssign.team_uuid == Team.uuid)
-                .join(WorkZone, WorkZone.uuid == TeamZoneAssign.zone_uuid)
-                .join(Station, Station.uuid == station_uid_str)
+                .join(Station, Station.team_uuid == Team.uuid)
                 .where(
+                    Station.uuid == station_uid_str,
                     User.delete_at.is_(None),
                     Team.delete_at.is_(None),
-                    WorkZone.delete_at.is_(None),
                     Station.delete_at.is_(None),
-                    Team.type == "ngo",
                     Role.name == "admin",
-                    func.ST_Contains(WorkZone.geometry, Station.geometry),
                 )
             )
-            ngo_res = await db.execute(ngo_admin_stmt)
-            recipients.update(str(uid) for uid in ngo_res.scalars().all())
+            team_res = await db.execute(team_admin_stmt)
+            recipients.update(str(uid) for uid in team_res.scalars().all())
 
         return list(recipients)
 
