@@ -70,3 +70,74 @@ class CreateStationSuggestionInput:
     field_name: str = strawberry.field(description="Which field to change (see suggestableFields)")
     new_value: str = strawberry.field(description="Proposed new value as text")
     comment: str | None = strawberry.field(default=None, description="Why the change is suggested")
+
+
+@strawberry.input
+class SuggestionDecisionInput:
+    """A reviewer's decision on one suggested field: apply `value`, or reject every suggestion on it."""
+
+    target_uuid: UUID = strawberry.field(description="The station, or one of its properties")
+    field_name: str
+    approve: bool
+    value: str | None = strawberry.field(
+        default=None, description="Value to write, possibly edited by the reviewer; required to approve"
+    )
+
+
+@strawberry.type
+class SuggestionChangeType:
+    """One field a merge applied, with its value before and after (as text)."""
+
+    target_type: str
+    target_uuid: str
+    field_name: str
+    before: str | None
+    after: str | None
+
+
+@strawberry.type
+class StationSuggestionMergeType:
+    """One reviewer decision that applied suggested values to a station, and whether it was revoked."""
+
+    uuid: UUID
+    station_uuid: str
+    changes: list[SuggestionChangeType]
+    status: str = strawberry.field(description="'applied' or 'revoked'")
+    review_note: str | None
+    reviewed_by: str
+    revoked_by: str | None
+    revoked_at: datetime | None
+    created_at: datetime | None
+
+    @classmethod
+    def from_model(cls, m) -> "StationSuggestionMergeType":
+        """Build from a SQLAlchemy model instance."""
+        return cls(
+            uuid=m.uuid, station_uuid=str(m.station_uuid),
+            changes=[
+                SuggestionChangeType(
+                    target_type=c["target_type"], target_uuid=c["target_uuid"],
+                    field_name=c["field_name"],
+                    before=None if c["before"] is None else str(c["before"]),
+                    after=None if c["after"] is None else str(c["after"]),
+                )
+                for c in m.changes
+            ],
+            status=m.status, review_note=m.review_note,
+            reviewed_by=str(m.reviewed_by),
+            revoked_by=str(m.revoked_by) if m.revoked_by else None,
+            revoked_at=m.revoked_at, created_at=m.created_at,
+        )
+
+
+@strawberry.type
+class SuggestedFieldType:
+    """Every pending suggestion on one field, pooled without saying who made which."""
+
+    target_type: str
+    target_uuid: str
+    field_name: str
+    proposed_values: list[str] = strawberry.field(description="Distinct proposed values, newest first")
+    suggestion_count: int
+    comments: list[str]
+    first_suggested_at: datetime | None

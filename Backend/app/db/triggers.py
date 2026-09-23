@@ -51,6 +51,11 @@ AUDITED_TABLES = [
     # Feature 018: the per-ticket answers. An edit flipping "person trapped" from no to yes is
     # exactly what a timeline has to show, and ADR-124's missing trail is the mistake not to repeat.
     "ticket_disaster_details",
+
+    # Crowd-sourced station suggestions and the merges that apply them, so every submit,
+    # review and revoke leaves a trail. Rows written before these triggers have none.
+    "station_update_suggestions",
+    "station_suggestion_merges",
 ]
 
 # PL/pgSQL function that serializes row mutations into JSONB, redacting password_hash

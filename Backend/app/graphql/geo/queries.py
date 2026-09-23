@@ -9,7 +9,7 @@ detail queries.
 from uuid import UUID
 
 import strawberry
-from sqlalchemy import exists, select
+from sqlalchemy import String, cast, exists, or_, select
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
@@ -25,8 +25,31 @@ from app.graphql.geo.types import (
 )
 from app.graphql.shared import PageInfo
 from app.models.geo import ClosureArea, Station
+from app.models.station_property import StationProperty, StationUpdateSuggestion
 from app.models.team import Team
 from app.repositories.geo_repository import closure_area_repository, station_repository
+
+
+def _has_pending_suggestion():
+    """EXISTS clause: the station, or one of its active properties, has a pending suggestion."""
+    return exists(
+        select(1)
+        .select_from(StationUpdateSuggestion)
+        .outerjoin(
+            StationProperty,
+            (cast(StationProperty.uuid, String) == StationUpdateSuggestion.target_uuid)
+            & StationProperty.delete_at.is_(None),
+        )
+        .where(
+            StationUpdateSuggestion.status == "pending",
+            StationUpdateSuggestion.delete_at.is_(None),
+            or_(
+                StationUpdateSuggestion.target_uuid == cast(Station.uuid, String),
+                StationProperty.station_uuid == Station.uuid,
+            ),
+        )
+        .correlate(Station)
+    )
 
 
 @strawberry.type
@@ -42,6 +65,7 @@ class GeoQuery:
         q: str | None = None,
         assigned_team_uuid: UUID | None = None,
         unassigned_only: bool = False,
+        has_pending_suggestions: bool = False,
         skip: int = 0, limit: int = 50,
     ) -> StationConnection:
         """List stations within an optional geographic bounding box.
@@ -63,6 +87,8 @@ class GeoQuery:
             assigned_team_uuid: Optional — only the stations assigned to this team (ADR-285).
             unassigned_only: Only the stations no team runs yet — gov's queue to hand out.
                 Mutually exclusive with assigned_team_uuid.
+            has_pending_suggestions: When true, only stations with a pending suggestion on
+                themselves or one of their properties — the reviewer's queue.
             skip: Pagination offset.
             limit: Max results per page (default 50).
 
@@ -84,6 +110,8 @@ class GeoQuery:
             extra_filters += [Station.team_uuid == assigned_team_uuid, runs_it]
         if unassigned_only:
             extra_filters.append(~runs_it)
+        if has_pending_suggestions:
+            extra_filters.append(_has_pending_suggestion())
         # One ceiling for the whole request, not one per statement (ADR-176). count and
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their

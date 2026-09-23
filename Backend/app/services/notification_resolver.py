@@ -3,9 +3,10 @@
 import uuid as _uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import GOV_TEAM_WIDENED_PERMS
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import (
@@ -16,6 +17,13 @@ from app.models.rbac import (
     UserRoleAssign,
 )
 from app.models.team import Team
+
+
+def _team_reaches_station(team_uuid_col, station_uuid: str, gov_widened: bool):
+    """EXISTS clause: the grant's live team runs the station, or is a gov team when `gov_widened`."""
+    runs_it = Team.uuid == select(Station.team_uuid).where(Station.uuid == station_uuid).scalar_subquery()
+    reach = (runs_it | (Team.type == "gov")) if gov_widened else runs_it
+    return exists(select(1).where(Team.uuid == team_uuid_col, Team.delete_at.is_(None), reach))
 
 
 def _to_uuid_str(val: Any) -> str | None:
@@ -144,8 +152,27 @@ class NotificationRecipientResolver:
     async def resolve_permission(
         db: AsyncSession,
         capability_key: str,
+        station_uuid: str | _uuid.UUID | None = None,
     ) -> list[str]:
-        """Resolve users holding a given capability key via role assignment or direct user grant."""
+        """Resolve users holding a given capability key via role assignment or direct user grant.
+
+        With `station_uuid`, only grants that reach that station count: an `all` grant, or a
+        `team` grant for the live team the station is assigned to, or for any gov team when the
+        capability is gov-widened (ADR-285).
+        """
+        role_granted = RolePermissionAssign.scope.is_not(None) & (RolePermissionAssign.scope != "none")
+        user_granted = UserPermissionAssign.scope.is_not(None) & (UserPermissionAssign.scope != "none")
+        station_uid_str = _to_uuid_str(station_uuid)
+        if station_uid_str:
+            gov_widened = capability_key in {p.value for p in GOV_TEAM_WIDENED_PERMS}
+            role_granted = (RolePermissionAssign.scope == "all") | (
+                (RolePermissionAssign.scope == "team")
+                & _team_reaches_station(UserRoleAssign.team_uuid, station_uid_str, gov_widened)
+            )
+            user_granted = (UserPermissionAssign.scope == "all") | (
+                (UserPermissionAssign.scope == "team")
+                & _team_reaches_station(UserPermissionAssign.team_uuid, station_uid_str, gov_widened)
+            )
         stmt = (
             select(User.uuid)
             .outerjoin(UserRoleAssign, UserRoleAssign.user_uuid == User.uuid)
@@ -165,10 +192,9 @@ class NotificationRecipientResolver:
             .where(
                 User.delete_at.is_(None),
                 Permission.key == capability_key,
-                (
-                    (RolePermissionAssign.scope.is_not(None) & (RolePermissionAssign.scope != "none"))
-                    | (UserPermissionAssign.scope.is_not(None) & (UserPermissionAssign.scope != "none"))
-                ),
+                # Tie each scope to the grant that matched the key, not to any grant the user holds.
+                ((Permission.uuid == RolePermissionAssign.permission_uuid) & role_granted)
+                | ((Permission.uuid == UserPermissionAssign.permission_uuid) & user_granted),
             )
             .distinct()
         )
