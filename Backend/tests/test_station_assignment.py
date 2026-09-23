@@ -43,22 +43,28 @@ _POINT = Point(121.5, 24.5)
 
 
 async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, team=None) -> None:
-    """Create a role granting `perm` at `scope`, assign it to `user`, and act as it.
+    """Create a role granting `perm` at `scope`, assign it to `user`, and act as it."""
+    await _grant_all(db, user, {perm: scope}, role_name, team=team)
 
-    Grants only count for the identity being acted as (ADR-068/074), so assigning without
-    activating would leave the actor with nothing.
+
+async def _grant_all(db, user: User, grants: dict[Perm, str], role_name: str, team=None) -> None:
+    """Create one role holding every `grants` entry, assign it to `user`, and act as it.
+
+    One role, not one per capability: grants only count for the identity being acted as
+    (ADR-068/074), so a second role would leave whichever is active holding half of them.
     """
-    permission = (
-        await db.execute(select(Permission).where(Permission.key == perm.value))
-    ).scalar_one_or_none()
-    if permission is None:
-        permission = Permission(key=perm.value)
-        db.add(permission)
-        await db.flush()
     role = Role(name=role_name, kind="team" if team is not None else "platform")
     db.add(role)
     await db.flush()
-    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
+    for perm, scope in grants.items():
+        permission = (
+            await db.execute(select(Permission).where(Permission.key == perm.value))
+        ).scalar_one_or_none()
+        if permission is None:
+            permission = Permission(key=perm.value)
+            db.add(permission)
+            await db.flush()
+        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     db.add(
         UserRoleAssign(
             user_uuid=user.uuid,
@@ -332,6 +338,38 @@ async def test_a_teams_history_scope_stops_at_its_own_stations(db):
         await load_timeline(db, actor=viewer, entity=STATION, uuid=station.uuid, limit=50, offset=0)
 
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("whose", "expected"), [("own", "0912345678"), ("other", "09*****678")], ids=["own-team", "other-team"]
+)
+async def test_a_teams_timeline_contacts_follow_the_assignment(db, whose, expected):
+    """The timeline's PII tier gates on `station.view_pii` like the single-row query does.
+
+    `view_history=all` opens both timelines; `view_pii=team` then decides raw or masked.
+    """
+    ngo = await _team(db, "NGO", "ngo")
+    other = await _team(db, "Other NGO", "ngo")
+    author = await _user(db, "Author")
+    viewer = await _user(db, "Viewer")
+    station = await _station(db, created_by=author, team=ngo if whose == "own" else other)
+    db.add(
+        AuditLog(
+            uuid=uuidlib.uuid4(), table_name="stations", action="UPDATE", row_id=station.uuid,
+            old_values={"contact_phone": None}, new_values={"contact_phone": "0912345678"},
+            user_uuid=author.uuid, client_ip="10.0.0.1", created_at=datetime.now(UTC),
+        )
+    )
+    await db.flush()
+    await _grant_all(
+        db, viewer, {Perm.STATION_VIEW_HISTORY: "all", Perm.STATION_VIEW_PII: "team"}, "role-read", team=ngo
+    )
+
+    timeline = await load_timeline(db, actor=viewer, entity=STATION, uuid=station.uuid, limit=50, offset=0)
+
+    [change] = [c for e in timeline.events for c in e["changes"] if c["field"] == "contact_phone"]
+    assert change["after"] == expected
 
 
 # --- assigning (ADR-285 decision 4) ---

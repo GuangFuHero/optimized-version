@@ -141,6 +141,7 @@ class StationType:
 
         Neither raises — a denial renders as a *masked* contact field, not a GraphQL
         field-level error. Per-role scope: guest -> not visible; own -> own station;
+        team -> a station assigned to my team (ADR-285; a gov team resolves to all);
         zone -> station's location inside my team's WorkZone; all -> everything.
         """
         user = info.context["user"]
@@ -153,7 +154,9 @@ class StationType:
             return False
         if scope == Scope.ALL:
             return True
-        resource = SimpleNamespace(created_by=self.created_by, geometry=self._geometry_raw)
+        resource = SimpleNamespace(
+            created_by=self.created_by, team_uuid=self._team_uuid_raw, geometry=self._geometry_raw
+        )
         return await in_scope(scope, actor=user, resource=resource, db=info.context["db"])
 
     @strawberry.field(

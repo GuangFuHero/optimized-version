@@ -43,19 +43,28 @@ async def _permission(db, perm: Perm) -> Permission:
     return permission
 
 
-async def _gov_assigner(redis) -> str:
-    """A token acting as a gov team identity that holds `station.assign`."""
+async def _team_member(redis, team_type: str, perm: Perm, scope: str) -> tuple[str, str]:
+    """A token acting as a fresh `team_type` team's identity holding `perm` at `scope`.
+
+    Returns (token, team_uuid).
+    """
     async with test_db() as db:
-        team = Team(name=f"Gov {uuid_mod.uuid4().hex[:8]}", type="gov")
-        role = Role(name=f"assigner-{uuid_mod.uuid4().hex[:8]}", kind="team")
-        user = User(name=f"gov_{uuid_mod.uuid4().hex[:8]}")
+        team = Team(name=f"{team_type} {uuid_mod.uuid4().hex[:8]}", type=team_type)
+        role = Role(name=f"member-{uuid_mod.uuid4().hex[:8]}", kind="team")
+        user = User(name=f"{team_type}_{uuid_mod.uuid4().hex[:8]}")
         db.add_all([team, role, user])
         await db.flush()
-        permission = await _permission(db, Perm.STATION_ASSIGN)
-        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
+        permission = await _permission(db, perm)
+        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid))
         await db.flush()
-        return await token_for(redis, user.uuid, role, team)
+        return await token_for(redis, user.uuid, role, team), str(team.uuid)
+
+
+async def _gov_assigner(redis) -> str:
+    """A token acting as a gov team identity that holds `station.assign`."""
+    token, _ = await _team_member(redis, "gov", Perm.STATION_ASSIGN, "all")
+    return token
 
 
 async def _station_and_team() -> tuple[str, str]:
@@ -223,3 +232,59 @@ async def test_a_station_of_a_deleted_team_is_in_the_unassigned_queue(client):
     assert sorted(item["name"] for item in body["data"]["stations"]["items"]) == [
         f"{made['tag']} assigned", f"{made['tag']} unassigned"
     ]
+
+
+# --- contact details follow the assignment (ADR-285, `station.view_pii=team`) ---
+
+PHONE = "0912345678"
+MASKED_PHONE = "09*****678"
+
+STATION_CONTACTS = """
+query($q: String!) { stations(q: $q) { items { name contactPhone } } }
+"""
+
+
+async def _contact_stations(own_team_uuid: str) -> str:
+    """Three stations with a contact phone: on `own_team_uuid`, on another team, unassigned."""
+    tag = f"聯絡{uuid_mod.uuid4().hex[:8]}"
+    async with test_db() as db:
+        author = User(name=f"author_{uuid_mod.uuid4().hex[:8]}")
+        other = Team(name=f"Other {tag}", type="ngo")
+        db.add_all([author, other])
+        await db.flush()
+        for key, team_uuid in (("own", own_team_uuid), ("other", str(other.uuid)), ("unassigned", None)):
+            db.add(Station(
+                geometry=from_shape(Point(121.5, 24.5), srid=4326), created_by=str(author.uuid),
+                name=f"{tag} {key}", team_uuid=team_uuid, contact_phone=PHONE,
+            ))
+        await db.flush()
+    return tag
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("team_type", "expected"),
+    [
+        ("ngo", {"own": PHONE, "other": MASKED_PHONE, "unassigned": MASKED_PHONE}),
+        ("gov", {"own": PHONE, "other": PHONE, "unassigned": PHONE}),
+    ],
+    ids=["ngo-sees-its-own", "gov-sees-all"],
+)
+async def test_station_contacts_follow_the_assignment(client, redis, team_type, expected):
+    """An ngo sees the contacts of the stations it runs; gov sees every station's (decision 5).
+
+    A listing, not one station at a time, so the per-row checks run side by side the way a
+    real map page runs them.
+    """
+    token, team_uuid = await _team_member(redis, team_type, Perm.STATION_VIEW_PII, "team")
+    tag = await _contact_stations(team_uuid)
+
+    resp = await client.post(
+        "/graphql", json={"query": STATION_CONTACTS, "variables": {"q": tag}}, headers=auth_header(token)
+    )
+
+    body = resp.json()
+    assert "errors" not in body, body
+    items = body["data"]["stations"]["items"]
+    phones = {item["name"].removeprefix(f"{tag} "): item["contactPhone"] for item in items}
+    assert phones == expected
