@@ -50,7 +50,7 @@ Then connect your DB client to `localhost:5433`, user `postgres`, database `post
 is no longer the dev default — fetch it from Secret Manager:
 
 ```bash
-gcloud secrets versions access latest --secret=app-postgres-password
+gcloud secrets versions access latest --secret=staging-backend-postgres-password
 ```
 
 ---
@@ -65,8 +65,9 @@ gcloud secrets versions access latest --secret=app-postgres-password
 | Data | Named volumes `backend_pgdata` / `backend_redisdata` — **survive all deploys** |
 | Published ports | Backend `:8000`; Postgres on **loopback only** (`127.0.0.1:5432`, for SSH-tunnel inspection); Redis internal-only |
 | GCP firewall | Only 22/SSH open. **8000 is NOT open** — access via SSH tunnel until a firewall rule (or Caddy/HTTPS) is added for the frontend |
-| External IP | Ephemeral (not reserved). It can change when the VM is stopped/started — always connect via `gcloud compute ssh`, don't hardcode the IP |
-| Secrets | GCP Secret Manager: `app-postgres-password`, `app-secret-key`, `app-smtp2go-api-key` |
+| External IP | Static `34.80.0.121` (reserved as `wanguard-prod-external-ip`). 簡訊王 only accepts API calls from this registered IP — releasing it breaks SMS (`statuscode=k`). Still connect via `gcloud compute ssh` |
+| Secrets | GCP Secret Manager: `staging-backend-{jwt-signing-key,postgres-password,smtp2go-api-key,kotsms-username,kotsms-password}`, `staging-frontend-{nextauth-secret,google-client-secret,line-client-secret}`, `staging-cloudflared-tunnel-token` |
+| SMS | 簡訊王 (KotSMS), `SMS_PROVIDER=kotsms` written by `gen_env`. Messages are signed 島嶼守望, the 實名制 identity the account is approved for; a mismatch is dropped by the carrier while the API still answers `statuscode=1`. **Takes two deploys to switch on**: a running `deploy.sh` keeps the `gen_env` it parsed before checkout, so the first deploy that ships the KotSMS lines still writes the old `.env` (SMS stays on `console`); the next deploy writes them |
 | Backups | `gs://wanguard-250923-db-backups` |
 | Swap | 2 GB `/swapfile`, `vm.swappiness=10` — prevents the OOM killer hitting Postgres during image builds |
 
@@ -225,14 +226,16 @@ Real (non-prefixed) data is untouched. Without the flag, the seed step is skippe
 ## Secret rotation
 
 ```bash
-# SMTP key or JWT SECRET_KEY: add a new version; next deploy picks it up automatically
-printf '%s' '<new-value>' | gcloud secrets versions add app-smtp2go-api-key --data-file=-
-# (rotating app-secret-key invalidates ALL existing logins — users just sign in again)
+# SMTP key, KotSMS password or JWT SECRET_KEY: add a new version; next deploy picks it up automatically
+printf '%s' '<new-value>' | gcloud secrets versions add staging-backend-smtp2go-api-key --data-file=-
+# (rotating staging-backend-jwt-signing-key invalidates ALL existing logins — users just sign in again)
+# (a KotSMS password change in the 簡訊王 console takes effect at once, so every SMS fails from then
+#  until the deploy that carries the new secret version — add the version and deploy right away)
 
 # DB password: the postgres volume is already initialized, so changing the secret alone does NOT
 # change the actual DB password. Do both, in this order:
 #   1. inside the db container: ALTER USER postgres PASSWORD '<new-value>';
-#   2. gcloud secrets versions add app-postgres-password ... with the same value
+#   2. gcloud secrets versions add staging-backend-postgres-password ... with the same value
 #   3. deploy (regenerates .env)
 # Values must match ^[A-Za-z0-9_-]+$ (the script validates; use `openssl rand -hex 32`).
 ```
@@ -246,12 +249,17 @@ If this environment ever needs to be rebuilt from scratch:
 ```bash
 # Enable the API, create secrets (hex values are dotenv/DSN/shell-safe)
 gcloud services enable secretmanager.googleapis.com
-openssl rand -hex 32 | tr -d '\n' | gcloud secrets create app-postgres-password --data-file=-
-openssl rand -hex 32 | tr -d '\n' | gcloud secrets create app-secret-key --data-file=-
-printf '%s' '<smtp2go-key>' | gcloud secrets create app-smtp2go-api-key --data-file=-
+openssl rand -hex 32 | tr -d '\n' | gcloud secrets create staging-backend-postgres-password --data-file=-
+openssl rand -hex 32 | tr -d '\n' | gcloud secrets create staging-backend-jwt-signing-key --data-file=-
+printf '%s' '<smtp2go-key>' | gcloud secrets create staging-backend-smtp2go-api-key --data-file=-
+# 簡訊王 member login (the API authenticates with it); also register the static IP above in its console
+printf '%s' '<kotsms-username>' | gcloud secrets create staging-backend-kotsms-username --data-file=-
+printf '%s' '<kotsms-password>' | gcloud secrets create staging-backend-kotsms-password --data-file=-
 
-# Grant the VM's service account read access (least privilege: these 3 secrets only)
-for s in app-postgres-password app-secret-key app-smtp2go-api-key; do
+# Grant the VM's service account read access (least privilege: one binding per secret). The
+# staging-frontend-* and staging-cloudflared-tunnel-token secrets need the same binding.
+for s in staging-backend-postgres-password staging-backend-jwt-signing-key \
+         staging-backend-smtp2go-api-key staging-backend-kotsms-username staging-backend-kotsms-password; do
   gcloud secrets add-iam-policy-binding $s \
     --member="serviceAccount:<vm-service-account-email>" \
     --role="roles/secretmanager.secretAccessor"

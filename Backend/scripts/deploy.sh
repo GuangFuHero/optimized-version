@@ -76,10 +76,13 @@ on_failure() {
 
 gen_env() {     # .env is a deploy-time artifact: compose interpolation + container env share it (S7)
     log "generating .env from Secret Manager"
-    local secret_key pg_pw smtp_key nextauth_secret google_secret line_secret tunnel_token
+    local secret_key pg_pw smtp_key kotsms_user kotsms_pw
+    local nextauth_secret google_secret line_secret tunnel_token
     secret_key=$(gcloud secrets versions access latest --secret=staging-backend-jwt-signing-key)
     pg_pw=$(gcloud secrets versions access latest --secret=staging-backend-postgres-password)
     smtp_key=$(gcloud secrets versions access latest --secret=staging-backend-smtp2go-api-key)
+    kotsms_user=$(gcloud secrets versions access latest --secret=staging-backend-kotsms-username)
+    kotsms_pw=$(gcloud secrets versions access latest --secret=staging-backend-kotsms-password)
     # Frontend (Next.js) + Cloudflare Tunnel secrets — shared with the frontend/cloudflared containers.
     nextauth_secret=$(gcloud secrets versions access latest --secret=staging-frontend-nextauth-secret)
     google_secret=$(gcloud secrets versions access latest --secret=staging-frontend-google-client-secret)
@@ -94,6 +97,8 @@ gen_env() {     # .env is a deploy-time artifact: compose interpolation + contai
         || { printf 'ERROR: backend jwt key has .env-unsafe characters\n' >&2; false; }
     [[ "$smtp_key" =~ ^[A-Za-z0-9_-]+$ ]] \
         || { printf 'ERROR: smtp2go key has .env-unsafe characters\n' >&2; false; }
+    [[ "$kotsms_user" =~ ^[A-Za-z0-9_-]+$ && "$kotsms_pw" =~ ^[A-Za-z0-9_-]+$ ]] \
+        || { printf 'ERROR: a kotsms credential has .env-unsafe characters\n' >&2; false; }
     # Frontend secrets/token go into plain KEY=value (not a URL), so only newlines would corrupt the
     # dotenv file — OAuth secrets / tunnel tokens may legitimately contain + / = and are fine unquoted.
     for v in "$nextauth_secret" "$google_secret" "$line_secret" "$tunnel_token"; do
@@ -112,6 +117,13 @@ gen_env() {     # .env is a deploy-time artifact: compose interpolation + contai
         printf 'REDIS_URL=redis://redis:6379\n'
         printf 'SECRET_KEY=%s\n' "$secret_key"
         printf 'SMTP2GO_API_KEY=%s\n' "$smtp_key"
+        # SMS_PROVIDER is written here, not in deploy-config.staging.env. bash parsed this function
+        # before the checkout, so a deploy that changes gen_env still runs the old body while the
+        # config file already comes from the new checkout: from there the provider would switch on
+        # one deploy before the credentials are written, and every SMS would fail in between.
+        printf 'SMS_PROVIDER=kotsms\n'
+        printf 'KOTSMS_USERNAME=%s\n' "$kotsms_user"
+        printf 'KOTSMS_PASSWORD=%s\n' "$kotsms_pw"
         cat scripts/deploy-config.staging.env
     } > .env
     {
