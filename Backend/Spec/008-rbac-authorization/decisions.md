@@ -303,6 +303,9 @@
 - 測試:`tests/test_graphql/test_team_scope.py`(team scope 案例)移除或改寫成 zone;`tests/test_rbac_scopes.py` 拔 team/gov/ngo、保留 zone;PII 測試從 null 斷言改成遮罩斷言。
 
 #### ADR-049 角色改採「功能 × 組織」兩軸;scope 模型定案 = 乙(純地理);一災一 DB
+
+> **部分被 ADR-285 取代**：站點不再由地理決定管轄，改為手動指派給單一 team（`stations.team_uuid`）；ticket/task 仍走 zone。
+
 > **狀態:ACCEPTED 並已落地驗證（2026-07-09,`pytest` 367 passed、`ruff` 乾淨)。** 本條整合 2026-07-08/09 對照 `Docs/rbac-permissions-design.md`(v1.1)+ `Dashboard.md` §3~§7 後的修正,並取代 ADR-048 的 scope 部分。
 >
 > **落地內容**:`permissions.py` 移除 `DASHBOARD_*`;`rbac_scopes.py` 移除 `Scope.GOV`/`NGO`(留 none/own/team/zone/all,team 僅團隊管理用);`models/geo.py` + migration `2f9a1c7b6e04` drop `base_geometries.team_uuid`;`services/{station,ticket,closure_area}.py` 建立時不再寫 team_uuid;`seed_rbac.py` 角色重寫成 super_admin/data_auditor/user(平台)+ admin/member(團隊),廢除 gov_manager/ngo_manager;新增 `graphql/masking.py`(移植 PR #23 遮罩)+ `tickets/types.py` PII resolver 從 null 改遮罩(zone 判定改吃 geometry);測試:移除 `test_team_scope.py`(team-geo 已退場)、`test_rbac_scopes.py`/`test_authz.py` 的 team/gov/ngo 案例改 zone、`test_query_rbac.py` PII 斷言改遮罩、新增 `test_masking.py`。
@@ -1113,6 +1116,100 @@ FR-023 的檢舉流程，見 Blast Radius。
   中彈——後者早於 PR #31（ADR-029 的 ticket 遮罩就有），只是既有測試從未在 mutation 回傳裡選過聯絡欄位，
   所以沒人發現。
 
+#### ADR-285 站點改為手動指派給單一 team，不再跟著 zone 走（推翻 ADR-049 的站點部分）
+> **狀態：ACCEPTED（2026-09-23），實作中。** 決策 5（gov 管所有站點）為**暫定**，待產品端正式確認；
+> 若改成「gov 只管未指派的站」，只需在該規則多加 `team_uuid IS NULL` 條件，其餘不變。
+
+**白話**：zone 繼續管通報單與任務；站點改成「派給哪個 team，就由哪個 team 管」，一站只派一隊。gov 可以管
+所有站點，也只有 gov（和 super_admin）能派。
+
+**Context**：ADR-049 讓所有 geo 資源的管轄權由地理決定——座標落在誰被指派的 WorkZone 裡，誰就能管。這對
+通報單成立（「這一區的求助由這支隊伍處理」），對站點不成立。產品端的結論（2026-09-22，含 Discord backend
+頻道）：
+
+- 站點是由某個單位**營運**的據點，不是某塊轄區裡的事件；「站點跟著 zone 走是錯誤的」。zone 只管 ticket/task。
+- 站點「只能手動單一指派」，「以 team 為單位」；預設歸建立者的 team。
+- 站點多半由後台匯入（single entry / batch import），不是現場回報。
+
+現況下站點與 team 之間沒有任何資料連結（`models/geo.py:20-21`），能管到站點的只有 zone
+（`core/rbac_scopes.py:95-110,143-160`），通知另外複製了一份同樣的判斷（`services/notification_resolver.py:134`）。
+順帶一提，zone 制下 `update_station` 只用舊座標做第二關（`services/station.py:184-191`），能把站點搬出自己
+的 zone——改成指派制後此問題自然消失。
+
+ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 NGO 就得轉移歸屬，gov 因此失去存取」。本條以
+決策 5 處理這點：gov 的權限不來自歸屬，所以派給 NGO 不會讓 gov 失去存取。
+
+**Decision**：
+
+1. **資料**：`stations.team_uuid`，nullable FK → `teams.uuid`（`ON DELETE SET NULL`，與決策 8 一致），加 index。
+   放在 `stations`，不放回 `base_geometries`——通報單與封路區域不受影響。null＝未指派。
+2. **範圍只有站點**：ticket/task 照舊由 zone 管（ADR-049）；封路區域照舊（`map.*` 目前只有 super_admin，
+   `scripts/seed_rbac.py:101`）。站點的子資源（屬性、照片、修改建議）跟著父站點走，同 ADR-052 的借用方式。
+3. **scope 從 `zone` 改成 `team`**：team 角色在站點上的 grant——admin 的 `view_pii`/`view_history`/`edit`/
+   `delete`/`review`/`export`，member 的 `view_pii`/`view_history`/`edit`——由 `zone` 改為 `team`，比對
+   `stations.team_uuid` 與當前身分的 team。seed 是 additive bootstrap（ADR-055，`ensure_role_grant` 不改既有
+   grant），所以既有 DB 另以 alembic 資料 migration 改：凡 `station.*` 的 grant——角色的
+   `role_permission_assign` 與個人的 `user_permission_assign`（`models/rbac.py:51,110`）——目前值為 `zone` 者改為
+   `team`。`zone` 在站點上已不再有意義，`team` 是最接近的對應。**runtime 已被改成其他值的 grant 不動**，尊重
+   ADR-055「runtime DB 才是事實來源」。downgrade 只能把站點上的 `team` 全部改回 `zone`，無法分辨哪些原本就是
+   `team`；在本條之前站點上的 `team` 永遠不成立，所以實際上沒有這種 grant。
+4. **指派**：新增 `station.assign`。seed 發給 super_admin 與 team admin（`all`），執行時再擋掉非 gov team，
+   並列入 `GOV_TEAM_ONLY_PERMS`——與 `work_zone.assign` 同一套做法（`services/work_zone.py:26-46`，ADR-063/064）。
+   取消指派＝設回 null。通知：指派時通知新 team 的 admin，取消指派時通知原 team 的 admin，從 A 改派給 B 兩邊
+   都通知。
+5. **gov 管所有站點（暫定）**：gov team 身分在站點上的 `team` scope **視同 `all`**，不論該站派給誰或未指派；
+   NGO 的 `team` scope 只比對 `team_uuid`。gov 與 NGO 共用 admin/member 角色（`seed_rbac.py:132,184`），無法
+   用 seed 表達，因此在 checkpoint 1 依當前身分 team 的 `type` 提升。提升放在 `resolve_scope`
+   （`core/security.py:352`）：它是唯一入口，`require_scope`、REST 的 `PermissionChecker`、時間軸、匯出、PII
+   resolver 都經過它，改一處就涵蓋全部。只提升 `team`：gov member 的 `station.delete` 仍是 `own`。範圍包含
+   刪除與聯絡人：gov admin 可刪除、並看得到所有站點的聯絡人。capability catalog 要能顯示這條規則（同
+   `GOV_TEAM_ONLY_PERMS`），否則後台矩陣顯示的 `team` 與實際行為不符。
+6. **建立時自動指派**：以 team 身分建立的站點，`team_uuid` 設為當前身分的 team；以平台身分建立（含民眾）則為
+   null。批次匯入走同一條建立路徑（`services/bulk_import.py` → `create_station`），自動適用。
+7. **未指派的站點**：建立者（`own`）、super_admin（`all`）、gov（決策 5）可管。沒有這條，民眾建的站在 gov
+   指派前，修改建議將無人能審。
+8. **team 被刪除 → 名下站點變成未指派。** 目前 app 內沒有刪除或停用 team 的功能（team 服務只有
+   `create_team`/`list_teams`，`services/admin.py:361-374`；`Team.delete_at`/`status` 無人寫入）。之後實作刪除
+   時必須同時清空 `stations.team_uuid`；在那之前，讀取時把指向已刪除 team 的站點當作未指派。權限面不受影響：
+   已刪除 team 的身分無法啟用（`repositories/active_identity_repository.py:31`）。
+9. **時間軸**：`stations.team_uuid` 的變更顯示為 team 名稱，放一般層。這是 ADR-143「外鍵不上時間軸」的第二個
+   例外，比照 `actor_uuid`（`services/history_fields.py:174-176`）。team 名稱不是 PII。已刪除的 team 在時間軸上
+   仍顯示原名——時間軸記的是「當時由誰營運」；決策 8 的「當作未指派」只適用於站點現況的讀取。
+10. **通知**：`resolve_gov_and_zone_ngo` 的「站點落在哪些 NGO 的 zone 裡」改為「站點指派給哪個 team」；gov 端
+    照舊。
+11. **API**：站點對外多一個「指派的 team」（id 與名稱），**所有人都看得到，含匿名訪客**——「這個站由哪個單位
+    營運」是公開資訊。這是刻意的例外：`team.view` 不是公開權限，但這裡只露出 team 名稱，不露成員。站點查詢
+    可依指派的 team 篩選，也可只列未指派的站（gov 的待指派清單）。
+
+**取代關係**：
+
+- ADR-049「管轄權由地理決定，不由歸屬」「`resource.team_uuid` 整欄移除」——**對站點不再成立**；ticket、task
+  維持。ADR-049「`team` 僅用於團隊成員管理」同樣對站點不再成立。
+- ADR-128（Spec 016）「團隊角色用 `zone` 而非 `team`」——站點改為 `team`；通報單維持 `zone`。
+- 附錄 A 的 `team` 列同步更新。
+
+**後果**：
+
+- 所有把站點包成 `SimpleNamespace` 送進引擎的轉接器都寫死 `team_uuid=None`（例：`services/station.py:285`、
+  `services/photo.py:145`；`graphql/geo/types.py:143` 則根本沒帶這個欄位），必須改帶真值，否則 `team` scope
+  永遠不成立，而且是無聲的。
+- `in_scope` 的 TEAM 分支寫死讀 `team_uuid`（`core/rbac_scopes.py:91`），`scope_filter` 則讀
+  `__team_scope_attr__`（l.138）。欄位就叫 `team_uuid`，兩邊都能用，但這個不一致仍在。
+- **站點權限不要再設成 `zone`。** 引擎沒有改，`zone` 在站點上仍會照地理判斷；而同一身分若同時持有 `zone`
+  與 `team`，最寬勝會選 `zone`，gov 的提升（決策 5）就不會發生。決策 3 的 migration 會把既有的 `zone` 轉掉，
+  所以只有之後在 `/api/v1/admin/rbac` 手動設 `zone` 才會踩到。
+- 寬度順序 `zone > team > own`：team 角色在站點上不再持有 `zone`，兩者不會衝突。但 `team` 比 `own` 寬，
+  team 身分下的 `team` 會蓋過 `own`：用 team 身分時，改不了「指派給別隊或未指派」的自建站。team member 自己
+  建的站會自動派給自己的 team，所以這只發生在兩種情況：站點被改派出去（刻意的：改派就是交出管理權），或
+  站點是用另一個身分建的（平台身分或另一個 team）——這時切回建立時的身分即可。
+- 釘住 zone 行為的站點測試要改寫（`tests/test_rbac_scopes.py`、`test_authz.py`、`test_scope_by_identity.py`、
+  `test_suggestion_review_scope.py`、`test_graphql/test_station_photo.py`、`test_bulk_export.py`、
+  `test_bulk_import_station.py`、`test_bulk_permissions.py`、`test_history_permissions.py`、
+  `test_notifications_db_integration.py`）。其中 `test_history_permissions.py` 的
+  `test_team_roles_never_get_team_scope_on_a_geo_resource` 是釘住 ADR-128 的守門測試，會直接擋住本條，要改成
+  「站點例外」而不是刪掉。
+- 文件與註解要同步：`scripts/seed_rbac.py:153-155` 的「`zone`, never `team`」、`RBAC_RESOURCE_ROLE_MATRIX.md`。
+
 ---
 
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
@@ -1120,7 +1217,7 @@ FR-023 的檢舉流程，見 Blast Radius。
 |---|---|---|
 | none | `false()`（防禦性；CP1 應已先擋掉） | — |
 | own | `resource.created_by == actor.uuid` | — |
-| team | `resource.<team 邊界欄位> == actor 當前身分的 team`（預設欄位 `team_uuid`；`Team` 宣告 `uuid`）。**只用於團隊成員管理**，不套用在 geo 資源 | active identity（010/ADR-074）、`__team_scope_attr__`（ADR-053） |
+| team | `resource.<team 邊界欄位> == actor 當前身分的 team`（預設欄位 `team_uuid`；`Team` 宣告 `uuid`）。用於團隊成員管理，以及**站點**（`stations.team_uuid`，ADR-285；gov team 身分視同 `all`）。不套用在其他 geo 資源 | active identity（010/ADR-074）、`__team_scope_attr__`（ADR-053） |
 | zone | `ST_Contains(actor 當前身分那個 team 被指派的 WorkZone, resource.geometry)` | `work_zones`+`team_zone_assign`（ADR-049/052） |
 | all | 全域 | — |
 

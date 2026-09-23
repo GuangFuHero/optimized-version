@@ -35,6 +35,8 @@
 
 ### ADR-128 `view_history` 的 scope 對齊 `ticket.view_pii`，且團隊角色用 `zone` 而非 `team`
 
+> **部分被 ADR-285 取代**：站點改為手動指派，團隊角色在站點上改用 `team`（比對 `stations.team_uuid`）；通報單仍用 `zone`。
+
 **白話**：誰看得到哪些歷史，跟誰看得到聯絡資訊用同一套分法；團隊看的是自己轄區內的，不是「自己團隊的」。
 
 **Context**：需要決定兩件事——分幾層，以及團隊角色用哪個 scope。
