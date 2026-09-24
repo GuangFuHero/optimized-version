@@ -1,8 +1,12 @@
 """GraphQL integration tests for the station-update suggestion workflow."""
 
-import pytest
+from datetime import UTC, datetime
 
-from tests.test_graphql.conftest import _create_user_with_role, auth_header
+import pytest
+from sqlalchemy import update
+
+from app.models.station_property import StationProperty
+from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
 
 # ---------------------------------------------------------------------------
 # GraphQL query strings
@@ -322,6 +326,31 @@ async def test_revoke_refused_after_a_later_edit(
 
 
 @pytest.mark.asyncio
+async def test_revoke_skips_a_property_deleted_since_the_merge(
+    client, auditor_auth, login_user_auth, sample_station, sample_station_property
+):
+    """A deleted property has nothing to restore, so the rest of the merge still reverts."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, user_token, "station", sample_station, "op_hour", "24h")
+    await _create(client, user_token, "station_property", sample_station_property, "quantity", "42")
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "op_hour", "24h"), _decide(sample_station_property, "quantity", "42"),
+    ]))["data"]["mergeStationSuggestions"]
+    async with test_db() as db:
+        await db.execute(
+            update(StationProperty)
+            .where(StationProperty.uuid == sample_station_property)
+            .values(delete_at=datetime.now(UTC))
+        )
+
+    body = await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
+    assert body["data"]["revokeStationSuggestionMerge"]["status"] == "revoked", body
+    view = (await _gql(client, auditor_token, REVIEW_VIEW, {"uuid": sample_station}))["data"]["station"]
+    assert view["opHour"] == "08:00-18:00"
+
+
+@pytest.mark.asyncio
 async def test_revoke_denied_for_reviewer_without_station_revoke(
     client, coordinator_auth, login_user_auth, sample_station
 ):
@@ -419,6 +448,43 @@ async def test_operational_status_merge_stamps_status_changed_at(
     after = (await _gql(client, auditor_token, status_query, {"uuid": sample_station}))["data"]["station"]
     assert after["operationalStatus"] == "temporarily_closed"
     assert after["statusChangedAt"] != before["statusChangedAt"]
+
+
+@pytest.mark.asyncio
+async def test_revoke_restores_status_changed_at(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """Undoing a wrong closure puts back when the old status began, not the time of the revoke."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    status_query = "query($uuid: UUID!) { station(uuid: $uuid) { operationalStatus statusChangedAt } }"
+    before = (await _gql(client, auditor_token, status_query, {"uuid": sample_station}))["data"]["station"]
+    await _create(client, user_token, "station", sample_station, "operational_status", "temporarily_closed")
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "operational_status", "temporarily_closed"),
+    ]))["data"]["mergeStationSuggestions"]
+
+    await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
+
+    after = (await _gql(client, auditor_token, status_query, {"uuid": sample_station}))["data"]["station"]
+    assert after == before
+
+
+@pytest.mark.asyncio
+async def test_free_text_over_the_limit_is_refused(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """A comment or review note past 1000 characters is a clear error, not a stored blob."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    body = await _create(client, user_token, "station", sample_station, "name", "A", comment="c" * 1001)
+    assert "at most 1000" in body["errors"][0]["message"]
+
+    await _create(client, user_token, "station", sample_station, "name", "A")
+    body = await _merge(
+        client, auditor_token, sample_station, [_decide(sample_station, "name", "A")], note="n" * 1001
+    )
+    assert "at most 1000" in body["errors"][0]["message"]
 
 
 @pytest.mark.asyncio
