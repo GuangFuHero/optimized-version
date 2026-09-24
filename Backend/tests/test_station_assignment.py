@@ -4,6 +4,8 @@ Service-level (root conftest), like tests/test_suggestion_review_scope.py: autho
 in the service layer, so that is where the behaviour is observed.
 """
 
+import asyncio
+import contextlib
 import os
 import uuid as uuidlib
 from datetime import UTC, datetime
@@ -15,6 +17,8 @@ from fastapi import HTTPException
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.core.permissions import Perm
 from app.models.audit import AuditLog
@@ -27,6 +31,7 @@ from app.models.station_property import StationProperty, StationUpdateSuggestion
 from app.models.team import Team
 from app.repositories.geo_repository import station_repository
 from app.repositories.photo_repository import photo_repository
+from app.services import station as station_service
 from app.services.history import STATION, load_timeline
 from app.services.photo import detach_station_photo
 from app.services.station import (
@@ -37,7 +42,7 @@ from app.services.station import (
     update_station_property,
 )
 from app.services.suggestion import review_station_suggestion
-from tests.conftest import acting_as
+from tests.conftest import TEST_DB_URL, acting_as
 
 _POINT = Point(121.5, 24.5)
 
@@ -514,6 +519,74 @@ async def test_the_returned_station_is_readable_after_the_notices_go_out(db):
     returned = await assign_station(db, actor=assigner, station_uuid=station_uuid, team_uuid=ngo_uuid)
 
     assert str(returned.team_uuid) == ngo_uuid
+
+
+@pytest.mark.asyncio
+async def test_two_concurrent_reassignments_tell_every_team_once(db, monkeypatch):
+    """Two gov admins moving one station at once must each see the team the other left it with.
+
+    Same recipe as `test_two_concurrent_deletes_cannot_strand_the_account`: two real
+    connections, with a rendezvous after the station is read. Unlocked, both read team A,
+    so A hears "unassigned" twice and the team in between never hears it lost the station.
+    Locked, the second read waits for the first commit, the first times out of the
+    rendezvous alone, and each notice goes to the team that actually held the station.
+    """
+    gov = await _team(db, "Gov", "gov")
+    teams = {key: await _team(db, f"NGO {key}", "ngo") for key in "ABC"}
+    admin_role = Role(name="admin", kind="team")
+    db.add(admin_role)
+    await db.flush()
+    admins = {key: await _admin_of(db, team, admin_role) for key, team in teams.items()}
+    author = await _user(db, "Author")
+    assigner = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=teams["A"])
+    await _grant(db, assigner, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
+    identity = assigner.active_identity
+    station_uuid, assigner_uuid = str(station.uuid), str(assigner.uuid)
+    team_uuids = {key: str(team.uuid) for key, team in teams.items()}
+    await db.commit()
+
+    arrived, both_arrived = [], asyncio.Event()
+    real_require_gov_team = station_service.require_gov_team
+
+    async def rendezvous(*args, **kwargs):
+        """Hold each call until the other has read the station too, or give up waiting."""
+        arrived.append(None)
+        if len(arrived) == 2:
+            both_arrived.set()
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(both_arrived.wait(), timeout=1)
+        await real_require_gov_team(*args, **kwargs)
+
+    monkeypatch.setattr(station_service, "require_gov_team", rendezvous)
+
+    engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
+    sessions = [sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)() for engine in engines]
+    try:
+        async def move_to(session, key):
+            actor = await session.get(User, assigner_uuid)
+            actor.active_identity = identity
+            await assign_station(session, actor=actor, station_uuid=station_uuid, team_uuid=team_uuids[key])
+
+        await asyncio.gather(move_to(sessions[0], "B"), move_to(sessions[1], "C"))
+    finally:
+        for session in sessions:
+            await session.close()
+        for engine in engines:
+            await engine.dispose()
+
+    final = await _team_of_station(db, station_uuid)
+    assert final in (team_uuids["B"], team_uuids["C"]), "the station should end with whoever wrote last"
+    holder = "B" if final == team_uuids["B"] else "C"
+    passed_through = "C" if holder == "B" else "B"
+    assert await _notification_types(db, admins["A"]) == ["station_unassigned"]
+    assert await _notification_types(db, admins[passed_through]) == ["station_assigned", "station_unassigned"]
+    assert await _notification_types(db, admins[holder]) == ["station_assigned"]
+
+
+async def _team_of_station(db, station_uuid: str) -> str | None:
+    team_uuid = await db.scalar(select(Station.team_uuid).where(Station.uuid == station_uuid))
+    return str(team_uuid) if team_uuid else None
 
 
 @pytest.mark.asyncio
