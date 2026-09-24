@@ -9,7 +9,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, literal_column, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -20,12 +21,14 @@ from app.models.station_property import StationSuggestionMerge, StationUpdateSug
 from app.repositories.geo_repository import (
     station_property_repository,
     station_repository,
-    station_suggestion_repository,
 )
 from app.services.authz import require_scope
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 from app.services.station import OPERATIONAL_PROPERTY_NAMES, notify_operational_status_change
+
+# Free text a caller can write on every submit; the audit trigger copies each write.
+_MAX_TEXT = 1000
 
 # Maps a suggestion's target_type to the repository that owns that table.
 _TARGET_REPOS = {
@@ -57,7 +60,7 @@ async def create_station_suggestion(
     """Propose a change to a station/station-property field (requires station.contribute).
 
     Resubmitting a field the caller already has pending updates that row instead of adding
-    another. Reviewers who can act on the station are notified either way.
+    another, in one upsert so concurrent submits cannot race. Only a new row notifies reviewers.
     """
     await require_scope(actor, Perm.STATION_CONTRIBUTE, db)
     actor_uid = actor.uuid
@@ -69,36 +72,29 @@ async def create_station_suggestion(
         raise ValueError(f"{target_type} not found")
     station_uuid = str(target.station_uuid if target_type == "station_property" else target.uuid)
 
+    _check_length(new_value=new_value, comment=comment)
     value = str(coerce_and_validate(target_type, field_name, new_value))
 
-    suggestion = (
+    # xmax = 0 only on a freshly inserted row, which tells an insert from a resubmit.
+    suggestion_uuid, inserted = (
         await db.execute(
-            select(StationUpdateSuggestion).where(
-                StationUpdateSuggestion.created_by == actor_uid,
-                StationUpdateSuggestion.target_uuid == target_uuid,
-                StationUpdateSuggestion.field_name == field_name,
-                StationUpdateSuggestion.status == "pending",
+            insert(StationUpdateSuggestion)
+            .values(
+                target_type=target_type, target_uuid=target_uuid, field_name=field_name,
+                new_value=value, comment=comment, status="pending", created_by=str(actor_uid),
             )
+            .on_conflict_do_update(
+                index_elements=["created_by", "target_uuid", "field_name"],
+                index_where=StationUpdateSuggestion.status == "pending",
+                set_={"new_value": value, "comment": comment, "updated_at": func.now()},
+            )
+            .returning(StationUpdateSuggestion.uuid, literal_column("xmax = 0"))
         )
-    ).scalar_one_or_none()
-    if suggestion:
-        suggestion.new_value = value
-        suggestion.comment = comment
-        await db.commit()
-    else:
-        suggestion = await station_suggestion_repository.create(
-            db,
-            obj_in={
-                "target_type": target_type,
-                "target_uuid": target_uuid,
-                "field_name": field_name,
-                "new_value": value,
-                "comment": comment,
-                "status": "pending",
-                "created_by": str(actor_uid),
-            },
-        )
-    suggestion_uuid = suggestion.uuid
+    ).one()
+    await db.commit()
+    suggestion = await db.get(StationUpdateSuggestion, suggestion_uuid, populate_existing=True)
+    if not inserted:
+        return suggestion
 
     recipients = await NotificationRecipientResolver.resolve_permission(
         db, Perm.STATION_REVIEW.value, station_uuid=station_uuid
@@ -131,7 +127,10 @@ async def merge_station_suggestions(
     Only fields with a pending suggestion can be decided; anything else is a station.edit.
     Every pending row on a decided field shares the decision, and fields left out stay pending.
     """
-    station = await station_repository.get_by_uuid_active(db, station_uuid)
+    _check_length(review_note=review_note)
+    for decision in decisions:
+        _check_length(**{decision.field_name: decision.value})
+    station = await _lock_station(db, station_uuid)
     if not station:
         raise ValueError("Station not found")
     await require_scope(actor, Perm.STATION_REVIEW, db, resource=station)
@@ -195,19 +194,23 @@ async def revoke_station_suggestion_merge(
     ).scalar_one_or_none()
     if not merge:
         raise ValueError("Merge not found")
-    station = await station_repository.get_by_uuid_active(db, merge.station_uuid)
+    station = await _lock_station(db, merge.station_uuid)
     if not station:
         raise ValueError("Station not found")
     await require_scope(actor, Perm.STATION_REVOKE, db, resource=station)
+    # Re-read under the station lock, so a revoke that waited sees the one before it.
+    await db.refresh(merge)
     if merge.status != "applied":
         raise ValueError(f"Merge already {merge.status}")
     actor_uid = str(actor.uuid)
 
-    changes = list(merge.changes)
-    targets = [
-        await _station_target(db, station, change["target_type"], change["target_uuid"])
-        for change in changes
-    ]
+    # A property deleted since the merge has nothing left to restore, so only live targets revert.
+    changes, targets = [], []
+    for change in merge.changes:
+        target = await _revoke_target(db, station, change)
+        if target is not None:
+            changes.append(change)
+            targets.append(target)
     drifted = [
         change["field_name"]
         for change, target in zip(changes, targets, strict=True)
@@ -218,6 +221,9 @@ async def revoke_station_suggestion_merge(
 
     for change, target in zip(changes, targets, strict=True):
         _set_field(target, change["field_name"], change["before"])
+        if "status_changed_at_before" in change:
+            before = change["status_changed_at_before"]
+            target.status_changed_at = datetime.fromisoformat(before) if before else None
     merge.status = "revoked"
     merge.revoked_by = actor_uid
     merge.revoked_at = datetime.now(UTC)
@@ -254,15 +260,20 @@ async def _apply_decisions(db: AsyncSession, station: Station, decisions, rows_b
             raise ValueError(f"'{decision.field_name}' needs a value to approve")
         value = coerce_and_validate(target_type, decision.field_name, decision.value)
         before = getattr(target, decision.field_name)
-        _set_field(target, decision.field_name, value)
-        touched.append(target)
-        changes.append({
+        change = {
             "target_type": target_type,
             "target_uuid": decision.target_uuid,
             "field_name": decision.field_name,
             "before": before,
             "after": value,
-        })
+        }
+        if decision.field_name == "operational_status":
+            # A revoke restores the old status, so it restores when that status began too.
+            stamp = target.status_changed_at
+            change["status_changed_at_before"] = stamp.isoformat() if stamp else None
+        _set_field(target, decision.field_name, value)
+        touched.append(target)
+        changes.append(change)
     return changes, touched
 
 
@@ -276,6 +287,34 @@ async def _station_target(db: AsyncSession, station: Station, target_type: str, 
     if not prop or str(prop.station_uuid) != str(station.uuid):
         raise ValueError(f"{target_uuid} is not a property of this station")
     return prop
+
+
+async def _lock_station(db: AsyncSession, station_uuid) -> Station | None:
+    """Load the active station FOR UPDATE, so merges and revokes on one station run one at a time."""
+    return (
+        await db.execute(
+            select(Station)
+            .where(Station.uuid == station_uuid, Station.delete_at.is_(None))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+
+
+async def _revoke_target(db: AsyncSession, station: Station, change: dict):
+    """Return the change's target, or None for a property soft-deleted since the merge."""
+    if change["target_type"] == "station_property":
+        prop = await station_property_repository.get_by_uuid(db, change["target_uuid"])
+        if prop and prop.delete_at is not None and str(prop.station_uuid) == str(station.uuid):
+            return None
+    return await _station_target(db, station, change["target_type"], change["target_uuid"])
+
+
+def _check_length(**fields: str | None) -> None:
+    """Refuse free text over _MAX_TEXT characters."""
+    for name, text in fields.items():
+        if text is not None and len(text) > _MAX_TEXT:
+            raise ValueError(f"'{name}' must be at most {_MAX_TEXT} characters")
 
 
 def _set_field(target, field_name: str, value) -> None:

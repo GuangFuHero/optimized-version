@@ -235,21 +235,22 @@ async def test_new_suggestion_notifies_only_reviewers_who_can_act(db: AsyncSessi
     station_id = station.uuid
     await db.commit()
 
-    submitter_obj = await db.get(User, ids["投稿"])
     with patch("app.services.suggestion.require_scope", new_callable=AsyncMock):
-        await suggestion_service.create_station_suggestion(
-            db, actor=submitter_obj, target_type="station", target_uuid=str(station_id),
-            field_name="name", new_value="新站名", comment=None,
-        )
-
-    notified = set(
-        (
-            await db.execute(
-                select(Notification.recipient_uuid).where(Notification.type == "station_suggestion_created")
+        # The second submit only edits the first's pending row, so it notifies nobody again.
+        for new_value in ("新站名", "新站名2"):
+            # Reload each time: the previous submit's commit expired the user.
+            submitter_obj = await db.get(User, ids["投稿"], populate_existing=True)
+            await suggestion_service.create_station_suggestion(
+                db, actor=submitter_obj, target_type="station", target_uuid=str(station_id),
+                field_name="name", new_value=new_value, comment=None,
             )
-        ).scalars().all()
-    )
-    assert notified == {ids["稽核"], ids["本隊"], ids["政府"], ids["直授"]}
+
+    notified = (
+        await db.execute(
+            select(Notification.recipient_uuid).where(Notification.type == "station_suggestion_created")
+        )
+    ).scalars().all()
+    assert sorted(notified) == sorted([ids["稽核"], ids["本隊"], ids["政府"], ids["直授"]])
 
 
 @pytest.mark.asyncio

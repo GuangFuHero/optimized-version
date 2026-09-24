@@ -210,3 +210,40 @@ async def test_an_unexpected_error_still_logs_at_error_with_its_traceback(
     assert "simulated internal fault" in str(errors[0].getMessage()), (
         "the log must keep the original message even though the client sees the mask"
     )
+
+
+@pytest.mark.asyncio
+async def test_a_concurrent_request_does_not_unmask_another(client, monkeypatch):
+    """Each request masks its own errors while another request is in flight.
+
+    Strawberry shares one MaskErrors instance across requests, so the request that fails here
+    finishes while the second one has already overwritten the shared execution context.
+    """
+    import asyncio
+
+    from app.repositories import geo_repository
+
+    second_started, first_done = asyncio.Event(), asyncio.Event()
+
+    async def count_active(*args, q=None, **kwargs):
+        if q == "失敗":
+            await second_started.wait()
+            raise RuntimeError("SQL: SELECT secret FROM stations")
+        second_started.set()
+        await first_done.wait()
+        return 0
+
+    async def list_active(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(geo_repository.station_repository, "count_active", count_active)
+    monkeypatch.setattr(geo_repository.station_repository, "list_active", list_active)
+
+    async def first():
+        body = await _post(client, STATIONS_SEARCH, {"q": "失敗"})
+        first_done.set()
+        return body
+
+    failed, _ = await asyncio.gather(first(), _post(client, STATIONS_SEARCH, {"q": "成功"}))
+
+    _assert_masked(failed)
