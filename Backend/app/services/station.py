@@ -301,6 +301,7 @@ async def assign_station(
             ref_uuid=station_uuid,
             explicit_recipients=await team_admins(db, team_uuid=old_team),
         )
+    await db.refresh(updated)
     return updated
 
 

@@ -497,6 +497,26 @@ async def test_reassigning_tells_both_teams(db):
 
 
 @pytest.mark.asyncio
+async def test_the_returned_station_is_readable_after_the_notices_go_out(db):
+    """dispatch() commits once a team has an admin; the GraphQL type then reads the station."""
+    gov = await _team(db, "Gov", "gov")
+    ngo = await _team(db, "NGO", "ngo")
+    admin_role = Role(name="admin", kind="team")
+    db.add(admin_role)
+    await db.flush()
+    await _admin_of(db, ngo, admin_role)
+    author = await _user(db, "Author")
+    assigner = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=None)
+    station_uuid, ngo_uuid = str(station.uuid), str(ngo.uuid)
+    await _grant(db, assigner, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
+
+    returned = await assign_station(db, actor=assigner, station_uuid=station_uuid, team_uuid=ngo_uuid)
+
+    assert str(returned.team_uuid) == ngo_uuid
+
+
+@pytest.mark.asyncio
 async def test_assigning_to_the_team_it_already_has_changes_nothing(db):
     """Idempotent like assign_zone_to_team: nothing moved, so nobody is told anything."""
     gov = await _team(db, "Gov", "gov")
