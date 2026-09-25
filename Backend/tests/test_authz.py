@@ -27,9 +27,18 @@ from app.models.rbac import (
     UserPermissionAssign,
     UserRoleAssign,
 )
+from app.models.request import Tickets
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from app.services.authz import require_scope
 from tests.conftest import acting_as
+
+
+def _ticket(point: Point, creator: User) -> Tickets:
+    """A ticket at `point` — what `zone` scope governs since stations moved to `team` (ADR-285)."""
+    return Tickets(
+        geometry=from_shape(point, srid=4326), created_by=str(creator.uuid),
+        title="t", contact_name="c", status="pending", priority="normal",
+    )
 
 
 async def _permission(db, perm: Perm) -> Permission:
@@ -159,11 +168,11 @@ async def test_require_scope_zone_mismatch_is_404_not_403(db):
     db.add_all([actor, other])
     await db.flush()
     await _assign_zone(db, team, _ZONE_POLY)
-    await _grant(db, actor, Perm.STATION_EDIT, "zone", "role-edit", team=team)
-    # Station at (123.5, 24.5) is OUTSIDE the team's zone polygon.
-    resource = Station(geometry=from_shape(Point(123.5, 24.5), srid=4326), created_by=str(other.uuid))
+    await _grant(db, actor, Perm.TICKET_EDIT, "zone", "role-edit", team=team)
+    # Ticket at (123.5, 24.5) is OUTSIDE the team's zone polygon.
+    resource = _ticket(Point(123.5, 24.5), other)
     with pytest.raises(HTTPException) as exc:
-        await require_scope(actor, Perm.STATION_EDIT, db, resource=resource)
+        await require_scope(actor, Perm.TICKET_EDIT, db, resource=resource)
     assert exc.value.status_code == 404
 
 
@@ -178,10 +187,10 @@ async def test_require_scope_zone_match_passes(db):
     db.add_all([actor, other])
     await db.flush()
     await _assign_zone(db, team, _ZONE_POLY)
-    await _grant(db, actor, Perm.STATION_EDIT, "zone", "role-edit", team=team)
-    # Station at (121.5, 24.5) is INSIDE the team's zone polygon.
-    resource = Station(geometry=from_shape(Point(121.5, 24.5), srid=4326), created_by=str(other.uuid))
-    scope = await require_scope(actor, Perm.STATION_EDIT, db, resource=resource)
+    await _grant(db, actor, Perm.TICKET_EDIT, "zone", "role-edit", team=team)
+    # Ticket at (121.5, 24.5) is INSIDE the team's zone polygon.
+    resource = _ticket(Point(121.5, 24.5), other)
+    scope = await require_scope(actor, Perm.TICKET_EDIT, db, resource=resource)
     assert scope == Scope.ZONE
 
 
@@ -278,7 +287,9 @@ async def test_a_team_identity_does_not_inherit_the_platform_role_grant(db):
     test pins the mechanism; `test_every_actionable_role_covers_the_citizen_baseline`
     (tests/test_seed_rbac.py) pins the seed side, and more broadly than this one capability.
     """
-    team = Team(name="Gov Team", type="gov")
+    # An ngo team: a gov team's station `team` scope widens to `all` (ADR-285), which would
+    # blur the "the team role's own grant applies" half of this test.
+    team = Team(name="NGO Team", type="ngo")
     db.add(team)
     await db.flush()
     actor = User(name="team admin")
@@ -288,10 +299,10 @@ async def test_a_team_identity_does_not_inherit_the_platform_role_grant(db):
     # Platform role "user" grants station.contribute, exactly as the seed does.
     await _grant(db, actor, Perm.STATION_CONTRIBUTE, "all", "user")
     # Team role "admin" narrows station.edit and says nothing about station.contribute.
-    await _grant(db, actor, Perm.STATION_EDIT, "zone", "admin", team=team)
+    await _grant(db, actor, Perm.STATION_EDIT, "team", "admin", team=team)
 
     # Acting as the team identity (granted last): the team role's own grant applies...
-    assert await require_scope(actor, Perm.STATION_EDIT, db) == Scope.ZONE
+    assert await require_scope(actor, Perm.STATION_EDIT, db) == Scope.TEAM
     # ...and the platform role's does not come with it.
     with pytest.raises(HTTPException) as exc:
         await require_scope(actor, Perm.STATION_CONTRIBUTE, db)

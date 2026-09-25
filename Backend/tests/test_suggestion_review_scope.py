@@ -1,10 +1,11 @@
-"""Scope checks for reviewing station_property suggestions (PR #24 [3], ADR-052).
+"""Scope checks for reviewing station_property suggestions (PR #24 [3], ADR-052, ADR-285).
 
-`review_station_suggestion` scopes a station_property target through the parent station's
-geometry (like `update_station_property`), so a `station.review=zone` reviewer reaches
-property suggestions inside its WorkZone. Regression guard for the half-applied fix where
-the review path still passed the geometry-less StationProperty and always 404'd zone
-reviewers. Service-level (not GraphQL) so it uses the root conftest, not the test_graphql one.
+`review_station_suggestion` scopes a station_property target through the parent station
+(like `update_station_property`), so a `station.review=team` reviewer reaches property
+suggestions on the stations assigned to its team. Regression guard for the half-applied fix
+where the review path still passed the bare StationProperty — which has no team or location
+of its own — and so always 404'd scoped reviewers. Service-level (not GraphQL) so it uses the
+root conftest, not the test_graphql one.
 """
 
 import os
@@ -14,7 +15,7 @@ os.environ["ENV"] = "testing"
 import pytest
 from fastapi import HTTPException
 from geoalchemy2.shape import from_shape
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point
 from sqlalchemy import select
 
 from app.core.permissions import Perm
@@ -22,13 +23,11 @@ from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.station_property import StationProperty, StationUpdateSuggestion
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team
 from app.services.suggestion import review_station_suggestion
 from tests.conftest import acting_as
 
-_ZONE_POLY = Polygon([(121.0, 24.0), (121.0, 25.0), (122.0, 25.0), (122.0, 24.0), (121.0, 24.0)])
-_INSIDE = Point(121.5, 24.5)  # inside _ZONE_POLY
-_OUTSIDE = Point(123.5, 24.5)  # outside _ZONE_POLY
+_POINT = Point(121.5, 24.5)
 
 
 async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, team=None) -> None:
@@ -59,31 +58,27 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, team=No
     acting_as(user, role, team)
 
 
-async def _zone_reviewer_with_property_suggestion(db, station_point: Point):
-    """Build a gov team with a WorkZone, a station.review=zone reviewer, and a suggestion.
+async def _team_reviewer_with_property_suggestion(db, *, on_own_station: bool):
+    """Build an ngo team, a station.review=team reviewer, and a pending property suggestion.
 
-    The pending property suggestion's parent station sits at `station_point`. Returns the
-    suggestion.
+    The suggestion's parent station is assigned to the reviewer's team when `on_own_station`,
+    otherwise to another team. An ngo team on purpose: a gov team's `team` widens to `all`.
+    Returns the reviewer, the property and the suggestion.
     """
-    team = Team(name="T1", type="gov")
-    db.add(team)
+    team = Team(name="T1", type="ngo")
+    other = Team(name="T2", type="ngo")
+    db.add_all([team, other])
     await db.flush()
     reviewer = User(name="Reviewer")
     author = User(name="Author")
     db.add_all([reviewer, author])
     await db.flush()
+    await _grant(db, reviewer, Perm.STATION_REVIEW, "team", "role-review", team=team)
 
-    zone = WorkZone(name="Z", geometry=from_shape(_ZONE_POLY, srid=4326))
-    db.add(zone)
-    await db.flush()
-    db.add(
-        TeamZoneAssign(
-            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(reviewer.uuid)
-        )
+    station = Station(
+        geometry=from_shape(_POINT, srid=4326), created_by=str(author.uuid),
+        team_uuid=team.uuid if on_own_station else other.uuid,
     )
-    await _grant(db, reviewer, Perm.STATION_REVIEW, "zone", "role-review", team=team)
-
-    station = Station(geometry=from_shape(station_point, srid=4326), created_by=str(author.uuid))
     db.add(station)
     await db.flush()
     prop = StationProperty(
@@ -109,13 +104,13 @@ async def _zone_reviewer_with_property_suggestion(db, station_point: Point):
 
 
 @pytest.mark.asyncio
-async def test_zone_reviewer_can_review_property_suggestion_inside_zone(db):
-    """A property inside the reviewer's WorkZone can be reviewed.
+async def test_team_reviewer_can_review_property_suggestion_on_its_own_station(db):
+    """A property on a station assigned to the reviewer's team can be reviewed.
 
-    The property has no geometry of its own; checkpoint 2 borrows the parent station's,
-    which is what makes this pass (PR #24 [3]).
+    The property has no team of its own; checkpoint 2 borrows the parent station's, which is
+    what makes this pass (PR #24 [3], ADR-285).
     """
-    reviewer, prop, suggestion = await _zone_reviewer_with_property_suggestion(db, _INSIDE)
+    reviewer, prop, suggestion = await _team_reviewer_with_property_suggestion(db, on_own_station=True)
 
     reviewed = await review_station_suggestion(
         db, actor=reviewer, uuid=str(suggestion.uuid), approve=True
@@ -128,13 +123,13 @@ async def test_zone_reviewer_can_review_property_suggestion_inside_zone(db):
 
 
 @pytest.mark.asyncio
-async def test_zone_reviewer_is_404_for_property_suggestion_outside_zone(db):
-    """A property whose parent station is outside the WorkZone still 404s.
+async def test_team_reviewer_is_404_for_property_suggestion_on_another_teams_station(db):
+    """A property whose parent station another team runs still 404s.
 
-    Zone is still enforced: borrowing the parent's geometry widens what checkpoint 2 can
+    The team is still enforced: borrowing the parent's team widens what checkpoint 2 can
     see, it does not blanket-open property reviews.
     """
-    reviewer, _prop, suggestion = await _zone_reviewer_with_property_suggestion(db, _OUTSIDE)
+    reviewer, _prop, suggestion = await _team_reviewer_with_property_suggestion(db, on_own_station=False)
 
     with pytest.raises(HTTPException) as exc:
         await review_station_suggestion(

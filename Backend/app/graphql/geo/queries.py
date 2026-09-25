@@ -9,6 +9,7 @@ detail queries.
 from uuid import UUID
 
 import strawberry
+from sqlalchemy import exists, select
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
@@ -24,6 +25,7 @@ from app.graphql.geo.types import (
 )
 from app.graphql.shared import PageInfo
 from app.models.geo import ClosureArea, Station
+from app.models.team import Team
 from app.repositories.geo_repository import closure_area_repository, station_repository
 
 
@@ -38,6 +40,8 @@ class GeoQuery:
         station_type: str | None = None,
         operational_status: StationOperationalStatus | None = None,
         q: str | None = None,
+        assigned_team_uuid: UUID | None = None,
+        unassigned_only: bool = False,
         skip: int = 0, limit: int = 50,
     ) -> StationConnection:
         """List stations within an optional geographic bounding box.
@@ -56,6 +60,9 @@ class GeoQuery:
                 properties, and its address — including the full secondary-location
                 address and pole_id (ADR-077/079/080). 2–50 characters; outside that range
                 raises. Composes with every other filter rather than replacing them.
+            assigned_team_uuid: Optional — only the stations assigned to this team (ADR-285).
+            unassigned_only: Only the stations no team runs yet — gov's queue to hand out.
+                Mutually exclusive with assigned_team_uuid.
             skip: Pagination offset.
             limit: Max results per page (default 50).
 
@@ -64,8 +71,19 @@ class GeoQuery:
         """
         db = info.context["db"]
         status_value = operational_status.value if operational_status is not None else None
+        if assigned_team_uuid is not None and unassigned_only:
+            raise ValueError("assignedTeamUuid and unassignedOnly cannot be combined")
         scope = await check_permission(info, Perm.STATION_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Station)
+        # Appended to extra_filters, which both count_active and list_active build from, so
+        # totalCount keeps agreeing with the rows returned. "Assigned" means to a live team:
+        # a station still pointing at a soft-deleted one reads as unassigned on
+        # StationType.assignedTeam (ADR-285 decision 8), so it belongs in gov's queue here too.
+        runs_it = exists(select(1).where(Team.uuid == Station.team_uuid, Team.delete_at.is_(None)))
+        if assigned_team_uuid is not None:
+            extra_filters += [Station.team_uuid == assigned_team_uuid, runs_it]
+        if unassigned_only:
+            extra_filters.append(~runs_it)
         # One ceiling for the whole request, not one per statement (ADR-176). count and
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their

@@ -10,13 +10,14 @@ asks for.
 from contextlib import asynccontextmanager
 
 from fastapi import HTTPException, status
-from sqlalchemy import inspect
+from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import PUBLIC_PERMS, Perm
-from app.core.rbac_scopes import Scope, in_scope
+from app.core.rbac_scopes import Scope, active_team, in_scope
 from app.core.security import resolve_scope
 from app.models.auth import User
+from app.models.team import Team
 
 
 async def require_scope(
@@ -56,6 +57,25 @@ async def require_scope(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found.")
 
     return scope
+
+
+async def require_gov_team(db: AsyncSession, actor: User, *, detail: str) -> None:
+    """Fence a GOV_TEAM_ONLY_PERMS capability to gov teams and platform identities (ADR-064).
+
+    Checkpoint 1 has already confirmed the capability. The seed gives it to every team admin,
+    gov and ngo alike, because they share one `admin` role; this is where the ngo half is
+    turned away. A platform identity (super_admin, no team) passes, as the rule was never
+    aimed at it.
+
+    The gov team must also be active: a suspended or inactive one cannot be handed a zone or a
+    station, so it does not get to hand them out either.
+    """
+    mine = active_team(actor)
+    if mine is None:
+        return
+    team = await db.scalar(select(Team).where(Team.uuid == mine, Team.delete_at.is_(None)))
+    if team is None or team.type != "gov" or team.status != "active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 async def refresh_actor(db: AsyncSession, actor: User) -> None:

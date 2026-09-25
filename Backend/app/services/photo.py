@@ -100,7 +100,7 @@ async def detach_station_photo(db: AsyncSession, *, actor: User, uuid: str) -> N
 
     Removing *your own* photo needs only the `station.contribute` that created it. Undoing a
     contribution should cost exactly what making it cost, and `station.review` is seeded only
-    at super_admin/`all` and team admin/`zone` (seed_rbac.py:79,111) — without this branch an
+    at super_admin/`all` and team admin/`team` (scripts/seed_rbac.py) — without this branch an
     uploader could not fix their own mistake and had to find a moderator. This is the same
     `own` treatment the `user` role already gets on station.edit/station.delete. It is scoped
     narrowly on purpose: granting `station.review: own` instead would also reach
@@ -115,10 +115,10 @@ async def detach_station_photo(db: AsyncSession, *, actor: User, uuid: str) -> N
        moderator delete a *ticket's* photos, which a different capability governs. Both
        failure paths raise the same message, so the error cannot be used to probe whether
        some uuid belongs to a ticket.
-    2. The parent station supplies the geometry the scope check needs. A photo has no
-       location of its own, so a reviewer restricted to their team's work zone would match
-       nothing without borrowing the station's coordinates. Station properties, which have
-       the same problem, borrow theirs the same way (see station.py).
+    2. The parent station supplies the team and geometry the scope check needs. A photo has
+       neither of its own, so a reviewer restricted to the stations assigned to their team
+       (ADR-285) would match nothing without borrowing the station's. Station properties,
+       which have the same problem, borrow theirs the same way (see station.py).
     """
     photo = await photo_repository.get_by_uuid_active(db, uuid)
     if not photo or photo.ref_type != "geometry":
@@ -142,7 +142,7 @@ async def detach_station_photo(db: AsyncSession, *, actor: User, uuid: str) -> N
             Perm.STATION_REVIEW,
             db,
             resource=SimpleNamespace(
-                created_by=photo.created_by, team_uuid=None, geometry=station.geometry
+                created_by=photo.created_by, team_uuid=station.team_uuid, geometry=station.geometry
             ),
         )
     await photo_repository.soft_delete(db, db_obj=photo)

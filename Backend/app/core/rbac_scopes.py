@@ -1,15 +1,16 @@
 """Scope engine (ADR-020/021/049): fixed data-boundary scopes in place of a general ABAC engine.
 
-ADR-049 (乙, pure-geography model): a geo resource's jurisdiction is decided by *where it is*
-(does its point fall inside a WorkZone polygon assigned to my team?), never by a stored
-owner-org. So there is no `resource.team_uuid` and no `gov`/`ngo` scope. The surviving scopes:
+ADR-049 (乙, pure-geography model): a ticket's jurisdiction is decided by *where it is* (does its
+point fall inside a WorkZone polygon assigned to my team?), never by a stored owner-org. There is
+no `gov`/`ngo` scope. Stations are the exception (ADR-285): each is assigned by hand to one team
+and carries that `team_uuid`. The scopes:
 
 - `own`  — I created it (`created_by`).
-- `zone` — its location is inside a WorkZone assigned to my team (`ST_Contains`).
+- `zone` — its location is inside a WorkZone assigned to my team (`ST_Contains`). Tickets.
 - `all`  — everything.
-- `team` — kept ONLY for team-member management (a team admin manages their own team); it
-  matches on a `team_uuid` attribute that only the Team-management adaptor supplies, never a
-  geo resource (which no longer has that column).
+- `team` — its `team_uuid` is my active team. Used for team-member management (a team admin
+  manages their own team) and for stations. `resolve_scope` widens it to `all` for a gov team
+  on the station capabilities in GOV_TEAM_WIDENED_PERMS.
 
 `widest()` implements ADR-018's union merge; `in_scope()` is checkpoint 2 (post-load single
 object); `scope_filter()` is the same policy reshaped into a SQL WHERE clause for lists.
@@ -76,8 +77,8 @@ async def in_scope(scope: Scope, *, actor: User, resource, db: AsyncSession) -> 
     TaskAssignment, keyed on `actor_uuid`) pass a small adaptor exposing `.created_by`
     instead of the raw model (see app/services/ticket.py `_as_scope_target`).
 
-    `team` survives only for team-member management: geo resources no longer carry a
-    `team_uuid` column, so getattr returns None and the TEAM branch cleanly fails for them.
+    `team` matches a `team_uuid` attribute: a Team-management adaptor's, or a station's (ADR-285).
+    Tickets carry no such column, so getattr returns None and the TEAM branch cleanly fails.
     """
     if scope == Scope.ALL:
         return True
