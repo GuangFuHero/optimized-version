@@ -45,6 +45,9 @@ class NotificationRecipientResolver:
         (ADR-072), so the team predicate sits on `user_role_assign`, not on `users` — the
         `users.team_uuid` column this used to read no longer exists. A user who admins two
         teams is resolved for each of them independently, which is the point of the feature.
+
+        A soft-deleted team has no admins to tell, whatever still points at it — a zone, or a
+        station, which then reads as unassigned (ADR-285 decision 8).
         """
         team_uid_str = _to_uuid_str(team_uuid)
         if not team_uid_str:
@@ -54,8 +57,10 @@ class NotificationRecipientResolver:
             select(User.uuid)
             .join(UserRoleAssign, UserRoleAssign.user_uuid == User.uuid)
             .join(Role, Role.uuid == UserRoleAssign.role_uuid)
+            .join(Team, Team.uuid == UserRoleAssign.team_uuid)
             .where(
                 User.delete_at.is_(None),
+                Team.delete_at.is_(None),
                 UserRoleAssign.team_uuid == team_uid_str,
                 Role.name == "admin",
             )
