@@ -229,6 +229,28 @@ async def test_gov_widening_leaves_own_scope_alone(db):
     assert exc.value.status_code == 403
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["suspended", "inactive"])
+async def test_a_gov_team_that_is_not_active_does_not_widen(db, status):
+    """Only an active gov team reaches every station; a suspended or inactive one keeps plain `team`.
+
+    assign_station already refuses a team that is not active. Widening one would hand it the
+    nationwide reach it cannot even be given a single station with.
+    """
+    gov = await _team(db, "Gov", "gov")
+    gov.status = status
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    member = await _user(db, "Gov member")
+    station = await _station(db, created_by=author, team=ngo)
+    await _grant(db, member, Perm.STATION_EDIT, "team", "role-edit", team=gov)
+
+    with pytest.raises(HTTPException) as exc:
+        await update_station(db, actor=member, uuid=str(station.uuid), changes={"name": "new name"})
+
+    assert exc.value.status_code == 404
+
+
 async def _property(db, station: Station, author: User) -> StationProperty:
     prop = StationProperty(
         station_uuid=station.uuid,
@@ -404,6 +426,23 @@ async def test_an_ngo_admin_holding_station_assign_is_refused(db):
     admin = await _user(db, "NGO admin")
     station = await _station(db, created_by=author, team=None)
     await _grant(db, admin, Perm.STATION_ASSIGN, "all", "role-assign", team=ngo)
+
+    with pytest.raises(HTTPException) as exc:
+        await assign_station(db, actor=admin, station_uuid=str(station.uuid), team_uuid=str(ngo.uuid))
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_gov_admin_of_a_suspended_team_cannot_assign(db):
+    """require_gov_team fences to an active gov team, as assign_station does for the target team."""
+    gov = await _team(db, "Gov", "gov")
+    gov.status = "suspended"
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    admin = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=None)
+    await _grant(db, admin, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
 
     with pytest.raises(HTTPException) as exc:
         await assign_station(db, actor=admin, station_uuid=str(station.uuid), team_uuid=str(ngo.uuid))

@@ -374,21 +374,28 @@ async def resolve_scope(
 
 
 async def _acts_for_gov_team(actor: User, db: AsyncSession, cache: dict | None) -> bool:
-    """Whether `actor`'s active identity speaks for a live gov team (ADR-285).
+    """Whether `actor`'s active identity speaks for a live, active gov team (ADR-285).
 
-    The team type is cached per request under its own key, next to the grant maps keyed by
+    A suspended or inactive gov team does not widen: assign_station will not hand such a team
+    even one station, so it must not reach all of them either.
+
+    The answer is cached per request under its own key, next to the grant maps keyed by
     user uuid, so a page checking many station capabilities looks it up once.
     """
     team_uuid = active_team(actor)
     if team_uuid is None:
         return False
-    key = ("team_type", str(team_uuid))
+    key = ("active_gov_team", str(team_uuid))
     if cache is not None and key in cache:
-        return cache[key] == "gov"
-    team_type = await db.scalar(select(Team.type).where(Team.uuid == team_uuid, Team.delete_at.is_(None)))
+        return cache[key]
+    is_active_gov = await db.scalar(
+        select(Team.uuid).where(
+            Team.uuid == team_uuid, Team.delete_at.is_(None), Team.type == "gov", Team.status == "active"
+        )
+    ) is not None
     if cache is not None:
-        cache[key] = team_type
-    return team_type == "gov"
+        cache[key] = is_active_gov
+    return is_active_gov
 
 
 class PermissionChecker:

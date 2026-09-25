@@ -929,6 +929,9 @@ async def create_station(self, info, input) -> StationType:
 - **assign 要求 target team `status == "active"`，但這是 create-time 檢查**。zone scope 查詢
   只看 `WorkZone.delete_at`，不看 `Team.status`/`Team.delete_at`，所以 team 事後轉為 inactive
   不會使既有委派失效。改變這點會影響既有授權行為，屬 breaking change，需獨立評估。
+  **2026-09-25（ADR-285）**：這條講的是「被委派 team 的 zone scope」，至今未變。另一件事——gov
+  的管理權限（畫、改、刪、指派 zone，經 `require_gov_team`）——改為只放行 active 的 gov team，
+  gov team 停用或暫停後即失去。兩者對象不同，並不矛盾。
 - **zone attribute 不走 `*_property_config` 動態機制**。該機制沒有驗證能力（`enum_options` /
   `data_type` 從未被任何寫入路徑讀取），只是前端表單提示。zone 是授權邊界，未來若有 attribute
   參與授權判斷，必須是有型別、有約束、可索引的真欄位。需要什麼就加欄位 + migration。
@@ -1165,7 +1168,10 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
    （`core/security.py:352`）：它是唯一入口，`require_scope`、REST 的 `PermissionChecker`、時間軸、匯出、PII
    resolver 都經過它，改一處就涵蓋全部。只提升 `team`：gov member 的 `station.delete` 仍是 `own`。範圍包含
    刪除與聯絡人：gov admin 可刪除、並看得到所有站點的聯絡人。capability catalog 要能顯示這條規則（同
-   `GOV_TEAM_ONLY_PERMS`），否則後台矩陣顯示的 `team` 與實際行為不符。
+   `GOV_TEAM_ONLY_PERMS`），否則後台矩陣顯示的 `team` 與實際行為不符。只提升 `status = 'active'` 的 gov
+   team；`require_gov_team` 同樣只放行 active 的 gov team。停用或暫停的 team 連一個站點都不能被指派
+   （`assign_station` 與 zone 指派同樣要求 target team active，見上方 zone 指派的 create-time 檢查），
+   不應反而管得到全部站點，也不應能指派站點或管理 zone（畫、改、刪、指派）。
 6. **建立時自動指派**：以 team 身分建立的站點，`team_uuid` 設為當前身分的 team；以平台身分建立（含民眾）則為
    null。批次匯入走同一條建立路徑（`services/bulk_import.py` → `create_station`），自動適用。
 7. **未指派的站點**：建立者（`own`）、super_admin（`all`）、gov（決策 5）可管。沒有這條，民眾建的站在 gov
