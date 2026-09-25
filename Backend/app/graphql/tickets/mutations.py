@@ -307,3 +307,16 @@ class TicketTaskMutation:
             info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
         )
         return True
+
+    @strawberry.mutation
+    async def stop_recruiting(self, info: strawberry.types.Info, ticket_uuid: UUID) -> list[TicketTaskType]:
+        """Cancel every open need on a ticket at once — the requester's 停止招募.
+
+        Requires ticket.edit on the ticket. Pending and in-progress tasks become canceled in
+        one transaction; fulfilled ones are left alone. Everyone who claimed one hears once
+        that they need not go. Returns the tasks it canceled — empty if none were open.
+        """
+        tasks = await ticket_service.stop_recruiting(
+            info.context["db"], actor=require_authenticated(info), ticket_uuid=str(ticket_uuid)
+        )
+        return [TicketTaskType.from_model(t) for t in tasks]

@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 os.environ["ENV"] = "testing"
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -25,7 +26,7 @@ from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import ticket as ticket_service
 from app.services.authz import refresh_actor
-from app.services.ticket import assign_task_actor
+from app.services.ticket import assign_task_actor, stop_recruiting
 from tests.conftest import TEST_DB_URL, acting_as
 
 
@@ -340,3 +341,133 @@ async def test_a_need_without_a_quantity_never_fills(db):
     assert await _notices(db, first_uuid, "task_full") == []
     requester_notices = await _notices(db, requester, "task_claimed")
     assert [n.body for n in requester_notices] == ["需要清淤人力　目前 1 人", "需要清淤人力　目前 2 人"]
+
+
+# --- the requester stops recruiting (spec Q17/Q21) ---
+
+
+async def _may_edit_own_tickets(db, user: User) -> User:
+    """Act as the platform `user` role's `ticket.edit: own` (seed_rbac.py)."""
+    role = Role(name=f"editor-{uuidlib.uuid4().hex[:8]}", kind="platform")
+    db.add(role)
+    await db.flush()
+    permission = (
+        await db.execute(select(Permission).where(Permission.key == Perm.TICKET_EDIT.value))
+    ).scalar_one_or_none()
+    if permission is None:
+        permission = Permission(key=Perm.TICKET_EDIT.value)
+        db.add(permission)
+        await db.flush()
+    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="own"))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    await db.flush()
+    return acting_as(user, role)
+
+
+async def _requester_of(db, task_uuid: str) -> User:
+    """The requester of the need's ticket, signed in."""
+    task = await db.get(TicketTask, task_uuid)
+    return await _may_edit_own_tickets(db, await db.get(User, task.created_by))
+
+
+async def _second_need(db, first: TicketTask, name: str, status: str = "pending") -> TicketTask:
+    """Another need on the same ticket as `first`."""
+    task = TicketTask(
+        uuid=uuidlib.uuid4(), ticket_uuid=first.ticket_uuid, task_type="hr", task_name=name,
+        quantity=5, status=status, created_by=first.created_by,
+    )
+    db.add(task)
+    await db.flush()
+    return task
+
+
+async def _statuses(db, ticket_uuid: str) -> dict[str, str]:
+    rows = await db.execute(
+        select(TicketTask.task_name, TicketTask.status).where(TicketTask.ticket_uuid == ticket_uuid)
+    )
+    return dict(rows.all())
+
+
+@pytest.mark.asyncio
+async def test_stopping_recruitment_cancels_every_open_need(db):
+    """Pending and in-progress needs close; one already fulfilled keeps its outcome."""
+    first = await _need(db, quantity=5)
+    await _second_need(db, first, "搬家具", status="in_progress")
+    await _second_need(db, first, "送水", status="fulfilled")
+    ticket_uuid, first_uuid = str(first.ticket_uuid), str(first.uuid)
+    requester = await _requester_of(db, first_uuid)
+
+    await stop_recruiting(db, actor=requester, ticket_uuid=ticket_uuid)
+
+    assert await _statuses(db, ticket_uuid) == {"清淤": "canceled", "搬家具": "canceled", "送水": "fulfilled"}
+    canceled_at = await db.scalar(select(TicketTask.canceled_at).where(TicketTask.uuid == first_uuid))
+    assert canceled_at is not None
+
+
+@pytest.mark.asyncio
+async def test_each_volunteer_hears_once_that_they_need_not_go(db):
+    """One notice per person, naming every need of theirs that closed — not one per need."""
+    first = await _need(db, quantity=5)
+    second = await _second_need(db, first, "搬家具")
+    ticket_uuid, first_uuid, second_uuid = str(first.ticket_uuid), str(first.uuid), str(second.uuid)
+    both = await _volunteer(db, "兩筆都接")
+    one = await _volunteer(db, "只接一筆")
+    both_uuid, one_uuid = str(both.uuid), str(one.uuid)
+    await _claim(db, both, first_uuid)
+    await _claim(db, both, second_uuid)
+    await _claim(db, one, second_uuid)
+    requester = await _requester_of(db, first_uuid)
+
+    await stop_recruiting(db, actor=requester, ticket_uuid=ticket_uuid)
+
+    [to_both] = await _notices(db, both_uuid, "ticket_recruiting_stopped")
+    # Needs are named in the order they were filed, then by name; both were filed in this
+    # test's one transaction, so the name decides.
+    assert to_both.title == "你承接的「搬家具」、「清淤」已經取消"
+    assert to_both.body == "需要清淤人力　建立者停止招募了，不用前往了。"
+    [to_one] = await _notices(db, one_uuid, "ticket_recruiting_stopped")
+    assert to_one.title == "你承接的「搬家具」已經取消"
+
+
+@pytest.mark.asyncio
+async def test_only_someone_who_may_edit_the_ticket_can_stop_it(db):
+    """ticket.edit on the ticket: a volunteer cannot call off someone else's request."""
+    task = await _need(db, quantity=5)
+    ticket_uuid = str(task.ticket_uuid)
+    stranger = User(name="路人")
+    db.add(stranger)
+    await db.flush()
+    stranger = await _may_edit_own_tickets(db, stranger)
+
+    with pytest.raises(HTTPException) as exc:
+        await stop_recruiting(db, actor=stranger, ticket_uuid=ticket_uuid)
+
+    assert exc.value.status_code == 403
+    assert await _statuses(db, ticket_uuid) == {"清淤": "pending"}
+
+
+@pytest.mark.asyncio
+async def test_a_ticket_with_nothing_open_changes_nothing(db):
+    """Stopping twice, or after everything was done, is a quiet no-op."""
+    task = await _need(db, quantity=5, status="fulfilled")
+    ticket_uuid, task_uuid = str(task.ticket_uuid), str(task.uuid)
+    requester = await _requester_of(db, task_uuid)
+
+    stopped = await stop_recruiting(db, actor=requester, ticket_uuid=ticket_uuid)
+
+    assert stopped == []
+    assert await _statuses(db, ticket_uuid) == {"清淤": "fulfilled"}
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_ticket_cannot_be_stopped(db):
+    """A deleted ticket is gone, like everywhere else."""
+    task = await _need(db, quantity=5)
+    ticket_uuid, task_uuid = str(task.ticket_uuid), str(task.uuid)
+    requester = await _requester_of(db, task_uuid)
+    ticket = await db.get(Tickets, task.ticket_uuid)
+    ticket.delete_at = datetime.now(UTC)
+    await db.flush()
+
+    with pytest.raises(ValueError, match="Ticket not found"):
+        await stop_recruiting(db, actor=requester, ticket_uuid=ticket_uuid)
