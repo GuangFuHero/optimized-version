@@ -97,7 +97,10 @@ class TaskAssignment(Base, UUIDPKMixin):
     actor_uuid: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
     role: Mapped[str | None] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), server_default="accepted")
-    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    # func.now(), not the string "now()": a string is a literal, which Postgres evaluates once
+    # when the table is created, so every row read that moment. The migration
+    # (a2a8e4d8c51d) was always right; only tables built from this model (the tests) were not.
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
