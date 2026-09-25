@@ -412,6 +412,58 @@ async def test_an_ngo_admin_holding_station_assign_is_refused(db):
 
 
 @pytest.mark.asyncio
+async def test_station_assign_is_a_capability_not_a_check_against_the_station(db):
+    """Like work_zone.assign: a `team` grant must still reach the unassigned stations gov hands out.
+
+    Checked against the station, `team` would compare its (empty) team with gov's and 404 on
+    exactly the stations waiting to be assigned.
+    """
+    gov = await _team(db, "Gov", "gov")
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    admin = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=None)
+    station_uuid, ngo_uuid = str(station.uuid), str(ngo.uuid)
+    await _grant(db, admin, Perm.STATION_ASSIGN, "team", "role-assign", team=gov)
+
+    assigned = await assign_station(db, actor=admin, station_uuid=station_uuid, team_uuid=ngo_uuid)
+
+    assert str(assigned.team_uuid) == ngo_uuid
+
+
+@pytest.mark.asyncio
+async def test_a_refused_caller_never_waits_on_the_station_lock(db):
+    """Authorization runs before the row lock, so a caller who will be refused never takes it.
+
+    Another connection holds the station FOR UPDATE, as a concurrent assignment would. An ngo
+    admin must get the 403 at once rather than queue behind that lock for a refusal.
+    """
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    admin = await _user(db, "NGO admin")
+    station = await _station(db, created_by=author, team=None)
+    station_uuid, ngo_uuid = str(station.uuid), str(ngo.uuid)
+    await _grant(db, admin, Perm.STATION_ASSIGN, "all", "role-assign", team=ngo)
+    await db.commit()
+    await db.refresh(admin)  # expire_on_commit; `active_identity` is not a column, so it survives
+
+    engine = create_async_engine(TEST_DB_URL)
+    holder = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)()
+    try:
+        await holder.execute(select(Station).where(Station.uuid == station_uuid).with_for_update())
+        with pytest.raises(HTTPException) as exc:
+            await asyncio.wait_for(
+                assign_station(db, actor=admin, station_uuid=station_uuid, team_uuid=ngo_uuid), timeout=2
+            )
+    finally:
+        await holder.rollback()
+        await holder.close()
+        await engine.dispose()
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_a_super_admin_platform_identity_can_assign(db):
     """The gov fence is aimed at team identities; a platform holder passes it."""
     ngo = await _team(db, "NGO", "ngo")

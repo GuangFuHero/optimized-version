@@ -1156,7 +1156,9 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 4. **指派**：新增 `station.assign`。seed 發給 super_admin 與 team admin（`all`），執行時再擋掉非 gov team，
    並列入 `GOV_TEAM_ONLY_PERMS`——與 `work_zone.assign` 同一套做法（`services/work_zone.py:26-46`，ADR-063/064）。
    取消指派＝設回 null。通知：指派時通知新 team 的 admin，取消指派時通知原 team 的 admin，從 A 改派給 B 兩邊
-   都通知。
+   都通知。只檢查 capability、不對著站點比對 scope（同 `work_zone.assign`）：若對著站點比對，`team` grant 會
+   對未指派的站點回 404，而那正是 gov 要指派的站點。權限檢查在鎖定站點列（`FOR UPDATE`）之前，被拒的呼叫者
+   不會拿到鎖。
 5. **gov 管所有站點（暫定）**：gov team 身分在站點上的 `team` scope **視同 `all`**，不論該站派給誰或未指派；
    NGO 的 `team` scope 只比對 `team_uuid`。gov 與 NGO 共用 admin/member 角色（`seed_rbac.py:132,184`），無法
    用 seed 表達，因此在 checkpoint 1 依當前身分 team 的 `type` 提升。提升放在 `resolve_scope`
