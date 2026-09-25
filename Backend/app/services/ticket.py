@@ -576,6 +576,30 @@ async def assign_task_actor(
         raise ValueError("Actor already assigned to this task") from exc
 
 
+async def list_my_claims(
+    db: AsyncSession, *, actor: User
+) -> list[tuple[TaskAssignment, TicketTask, Tickets]]:
+    """Every task `actor` is assigned to, with the task and its ticket — 「我承接的」 (spec Q16).
+
+    Newest claim first, unpaged: one volunteer's claims stay few. A canceled or fulfilled task
+    stays listed, since seeing that is how the volunteer learns not to go; a deleted task or
+    ticket drops off. No capability check: these are the caller's own rows, and each ticket
+    is still masked per field by TicketType like anywhere else.
+    """
+    rows = await db.execute(
+        select(TaskAssignment, TicketTask, Tickets)
+        .join(TicketTask, TicketTask.uuid == TaskAssignment.task_uuid)
+        .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
+        .where(
+            TaskAssignment.actor_uuid == actor.uuid,
+            TicketTask.delete_at.is_(None),
+            Tickets.delete_at.is_(None),
+        )
+        .order_by(TaskAssignment.assigned_at.desc(), TaskAssignment.uuid)
+    )
+    return [tuple(row) for row in rows.all()]
+
+
 async def _lock_task_with_room(
     db: AsyncSession, *, task_uuid: str, target_actor: str, capped: bool
 ) -> tuple[TicketTask, int]:

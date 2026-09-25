@@ -17,10 +17,12 @@ from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout
 from app.core.security import resolve_scope
 from app.db.h3 import coarse_resolution
-from app.graphql.context import check_permission
+from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import BoundsInput
 from app.graphql.shared import PageInfo
 from app.graphql.tickets.types import (
+    MyTaskAssignmentType,
+    TaskAssignmentType,
     TaskPropertyType,
     TicketConnection,
     TicketTaskType,
@@ -33,6 +35,7 @@ from app.repositories.tickets_repository import (
     ticket_repository,
     ticket_task_repository,
 )
+from app.services import ticket as ticket_service
 
 _ZOOM_DESCRIPTION = (
     "Map zoom the result is for. Only affects a caller without ticket.view_detail: sets how "
@@ -183,6 +186,24 @@ class TicketTaskQuery:
             public_only=public_only,
         )
         return [TicketTaskType.from_model(t) for t in items]
+
+    @strawberry.field
+    async def my_task_assignments(self, info: strawberry.types.Info) -> list[MyTaskAssignmentType]:
+        """The needs the caller claimed, newest first — 「我的任務 › 我承接的」 (spec Q16).
+
+        Sign-in only, no capability: every row is the caller's own claim. Canceled and
+        fulfilled needs stay listed; deleted ones drop off. Each ticket is masked per field
+        as anywhere else — claiming does not unlock the requester's contact details.
+        """
+        rows = await ticket_service.list_my_claims(info.context["db"], actor=require_authenticated(info))
+        return [
+            MyTaskAssignmentType(
+                assignment=TaskAssignmentType.from_model(assignment),
+                task=TicketTaskType.from_model(task),
+                ticket=TicketType.from_model(ticket),
+            )
+            for assignment, task, ticket in rows
+        ]
 
     @strawberry.field
     async def task_properties(

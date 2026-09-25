@@ -767,6 +767,15 @@ class TicketType:
         )
 
 
+@strawberry.type(description="One of the caller's claims, with the need and the ticket it is for")
+class MyTaskAssignmentType:
+    """A row of 「我的任務 › 我承接的」: what I claimed, which need, and where to go."""
+
+    assignment: TaskAssignmentType
+    task: TicketTaskType
+    ticket: TicketType
+
+
 @strawberry.type
 class TicketConnection:
     """Paginated list of tickets with page metadata."""
