@@ -10,6 +10,7 @@ import pytest
 
 from app.services.dedup_scoring import (
     FAST_LAYER_PARAMETERS,
+    STATION_FAST_LAYER_PARAMETERS,
     DedupCandidate,
     FastLayerParameters,
     max_hint_distance_m,
@@ -202,4 +203,37 @@ def test_the_boundary_scales_with_the_distance_half_life():
     """Doubling `distance_half_m` doubles the reach — the radius tracks the parameters."""
     assert max_hint_distance_m(FastLayerParameters(distance_half_m=400.0)) == pytest.approx(
         2 * max_hint_distance_m()
+    )
+
+
+def test_station_parameters_are_the_ticket_parameters_without_time():
+    """STATION_FAST_LAYER_PARAMETERS only zeroes `time_weight`."""
+    assert FastLayerParameters(time_weight=0.0) == STATION_FAST_LAYER_PARAMETERS
+
+
+def test_a_zero_time_weight_drops_the_time_component():
+    """A zero-weight signal is left out of the breakdown rather than reported as a fake light."""
+    candidate = DedupCandidate("c", distance_m=0.0, age_min=1.0, task_type="shelter", text_similarity=0.9)
+    score = score_candidate(candidate, query_task_type="shelter", parameters=STATION_FAST_LAYER_PARAMETERS)
+    assert {c.name for c in score.components} == {"distance", "task_type", "text"}
+
+
+def test_the_station_boundary_is_tighter_and_ignores_age():
+    """Without time the boundary shrinks, and a candidate on it qualifies however old it is."""
+    boundary = max_hint_distance_m(STATION_FAST_LAYER_PARAMETERS)
+    assert boundary < max_hint_distance_m(FAST_LAYER_PARAMETERS)
+
+    def ancient(distance_m):
+        return DedupCandidate(
+            "s", distance_m=distance_m, age_min=10_000_000.0, task_type="shelter", text_similarity=1.0
+        )
+
+    on_boundary = score_candidate(
+        ancient(boundary), query_task_type="shelter", parameters=STATION_FAST_LAYER_PARAMETERS
+    )
+    assert on_boundary.similarity == pytest.approx(STATION_FAST_LAYER_PARAMETERS.hint_threshold)
+    assert top_hint([ancient(boundary)], query_task_type="shelter", parameters=STATION_FAST_LAYER_PARAMETERS)
+    assert (
+        top_hint([ancient(boundary + 1)], query_task_type="shelter", parameters=STATION_FAST_LAYER_PARAMETERS)
+        is None
     )
