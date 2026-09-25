@@ -7,6 +7,7 @@ its own authz + validation + persistence (ADR-013/014/015/022).
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +42,10 @@ MAX_DISASTER_DETAIL_VALUE_LENGTH = 500
 # Matches `ticket_disaster_details.property_name`: a longer key used to reach the column and
 # come back as "Unexpected error." rather than naming itself.
 MAX_DISASTER_DETAIL_KEY_LENGTH = 100
+
+# A task in one of these states takes no more volunteers: done, or called off. Note the task
+# vocabulary spells it `canceled`, unlike the ticket-level `cancelled` below.
+CLOSED_TASK_STATUSES = frozenset({"fulfilled", "canceled"})
 
 # Business rule (ADR-020): status transitions live here, not in the RBAC layer.
 VALID_TRANSITIONS = {
@@ -485,22 +490,47 @@ async def assign_task_actor(
 
     Self-signup needs only ticket.assign (checkpoint 1); assigning someone else also
     scope-checks the task (checkpoint 2). The same actor can't be linked to a task twice.
-    """
-    task = await ticket_task_repository.get_by_uuid_active(db, task_uuid)
-    if not task:
-        raise ValueError("Ticket task not found")
 
+    A fulfilled or canceled task takes nobody. A volunteer claims a need, not a ticket
+    (PUB-PS-140), and signing themselves up is refused once a task with a `quantity` has that
+    many people; a task without one has no cap, as the requester never said how many. A
+    coordinator assigning someone else may still over-subscribe (d847624): they can see the
+    ground and may knowingly send more. The task row is locked FOR UPDATE from the count to
+    the insert's commit, so two volunteers racing for the last place cannot both get it.
+    Authorization runs first, so a caller who will be refused never takes the lock.
+    """
     current_uuid = str(actor.uuid)
     target_actor = actor_uuid or current_uuid
-    if target_actor == current_uuid:
+    self_signup = target_actor == current_uuid
+    if self_signup:
         await require_scope(actor, Perm.TICKET_ASSIGN, db)
     else:
-        await require_scope(actor, Perm.TICKET_ASSIGN, db, resource=await _task_scope_target(db, task))
+        unlocked = await ticket_task_repository.get_by_uuid_active(db, task_uuid)
+        if not unlocked:
+            raise ValueError("Ticket task not found")
+        await require_scope(actor, Perm.TICKET_ASSIGN, db, resource=await _task_scope_target(db, unlocked))
         if not await user_repository.get_by_uuid_active(db, target_actor):
             raise ValueError("User not found")
 
+    task = await db.scalar(
+        select(TicketTask)
+        .where(TicketTask.uuid == task_uuid, TicketTask.delete_at.is_(None))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if not task:
+        raise ValueError("Ticket task not found")
+    if task.status in CLOSED_TASK_STATUSES:
+        raise ValueError("Task is no longer open")
+
     if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
         raise ValueError("Actor already assigned to this task")
+    if self_signup and task.quantity is not None:
+        claimed = await db.scalar(
+            select(func.count()).select_from(TaskAssignment).where(TaskAssignment.task_uuid == task_uuid)
+        )
+        if claimed >= task.quantity:
+            raise ValueError("Task is full")
 
     task_name = task.task_name
     task_id = task.uuid

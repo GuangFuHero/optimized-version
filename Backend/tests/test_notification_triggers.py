@@ -94,6 +94,8 @@ async def test_task_assignment_triggers_notification(mock_actor):
     mock_task.ticket_uuid = str(uuid.uuid4())
 
     mock_assignment = TaskAssignment(task_uuid=task_id, actor_uuid=target_assignee_id, status="accepted")
+    # The task is re-read FOR UPDATE through db.scalar before the claim is counted.
+    mock_db.scalar = AsyncMock(return_value=mock_task)
 
     with (
         patch("app.services.ticket.require_scope", new_callable=AsyncMock),
