@@ -118,10 +118,12 @@ def test_team_roles_reach_stations_by_team_not_zone():
     }
 
 
-def test_station_assign_goes_to_super_admin_and_team_admins_only():
+def test_station_assign_goes_to_super_admin_and_every_team_role():
     """ADR-285 decision 4: gov-only, fenced at runtime like work_zone.assign.
 
-    The shared `admin` role hands it to ngo admins too; `require_gov_team` turns them away.
+    Gov members assign too (Carol, 2026-09-24): a district commander is a gov member. The
+    shared `admin`/`member` roles hand it to ngo teams as well; `require_gov_team` turns them
+    away.
     """
     from app.core.permissions import Perm
     from scripts.seed_rbac import ROLES_DATA
@@ -131,4 +133,4 @@ def test_station_assign_goes_to_super_admin_and_team_admins_only():
         for spec in ROLES_DATA
         if Perm.STATION_ASSIGN in spec["permissions"]
     }
-    assert holders == {"super_admin": "all", "admin": "all"}
+    assert holders == {"super_admin": "all", "admin": "all", "member": "all"}

@@ -1120,11 +1120,11 @@ FR-023 的檢舉流程，見 Blast Radius。
   所以沒人發現。
 
 #### ADR-285 站點改為手動指派給單一 team，不再跟著 zone 走（推翻 ADR-049 的站點部分）
-> **狀態：ACCEPTED（2026-09-23），實作中。** 決策 5（gov 管所有站點）為**暫定**，待產品端正式確認；
-> 若改成「gov 只管未指派的站」，只需在該規則多加 `team_uuid IS NULL` 條件，其餘不變。
+> **狀態：ACCEPTED（2026-09-23）。** 決策 5（gov 管所有站點，含 gov member）與「gov member 也可指派」
+> 已由產品端（Carol）於 2026-09-24 在 Discord backend 頻道確認。
 
 **白話**：zone 繼續管通報單與任務；站點改成「派給哪個 team，就由哪個 team 管」，一站只派一隊。gov 可以管
-所有站點，也只有 gov（和 super_admin）能派。
+所有站點，也只有 gov（admin 與 member）和 super_admin 能派。
 
 **Context**：ADR-049 讓所有 geo 資源的管轄權由地理決定——座標落在誰被指派的 WorkZone 裡，誰就能管。這對
 通報單成立（「這一區的求助由這支隊伍處理」），對站點不成立。產品端的結論（2026-09-22，含 Discord backend
@@ -1156,22 +1156,25 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
    `team`。`zone` 在站點上已不再有意義，`team` 是最接近的對應。**runtime 已被改成其他值的 grant 不動**，尊重
    ADR-055「runtime DB 才是事實來源」。downgrade 只能把站點上的 `team` 全部改回 `zone`，無法分辨哪些原本就是
    `team`；在本條之前站點上的 `team` 永遠不成立，所以實際上沒有這種 grant。
-4. **指派**：新增 `station.assign`。seed 發給 super_admin 與 team admin（`all`），執行時再擋掉非 gov team，
-   並列入 `GOV_TEAM_ONLY_PERMS`——與 `work_zone.assign` 同一套做法（`services/work_zone.py:26-46`，ADR-063/064）。
-   取消指派＝設回 null。通知：指派時通知新 team 的 admin，取消指派時通知原 team 的 admin，從 A 改派給 B 兩邊
-   都通知。只檢查 capability、不對著站點比對 scope（同 `work_zone.assign`）：若對著站點比對，`team` grant 會
-   對未指派的站點回 404，而那正是 gov 要指派的站點。權限檢查在鎖定站點列（`FOR UPDATE`）之前，被拒的呼叫者
-   不會拿到鎖。
-5. **gov 管所有站點（暫定）**：gov team 身分在站點上的 `team` scope **視同 `all`**，不論該站派給誰或未指派；
-   NGO 的 `team` scope 只比對 `team_uuid`。gov 與 NGO 共用 admin/member 角色（`seed_rbac.py:132,184`），無法
-   用 seed 表達，因此在 checkpoint 1 依當前身分 team 的 `type` 提升。提升放在 `resolve_scope`
-   （`core/security.py:352`）：它是唯一入口，`require_scope`、REST 的 `PermissionChecker`、時間軸、匯出、PII
-   resolver 都經過它，改一處就涵蓋全部。只提升 `team`：gov member 的 `station.delete` 仍是 `own`。範圍包含
-   刪除與聯絡人：gov admin 可刪除、並看得到所有站點的聯絡人。capability catalog 要能顯示這條規則（同
-   `GOV_TEAM_ONLY_PERMS`），否則後台矩陣顯示的 `team` 與實際行為不符。只提升 `status = 'active'` 的 gov
-   team；`require_gov_team` 同樣只放行 active 的 gov team。停用或暫停的 team 連一個站點都不能被指派
-   （`assign_station` 與 zone 指派同樣要求 target team active，見上方 zone 指派的 create-time 檢查），
-   不應反而管得到全部站點，也不應能指派站點或管理 zone（畫、改、刪、指派）。
+4. **指派**：新增 `station.assign`。seed 發給 super_admin 與 team admin、member（`all`），執行時再擋掉非 gov
+   team，並列入 `GOV_TEAM_ONLY_PERMS`——與 `work_zone.assign` 同一套做法（`services/work_zone.py:26-46`，
+   ADR-063/064）。member 也有，是因為 gov member 可能是執行事務的區域指揮官（例：救災 1–10 區指揮官），admin
+   則是局長、總指揮官這一層（Carol，2026-09-24）；`work_zone.assign` 仍只發給 admin。取消指派＝設回 null。
+   通知：指派時通知新 team 的 admin，取消指派時通知原 team 的 admin，從 A 改派給 B 兩邊都通知。只檢查
+   capability、不對著站點比對 scope（同 `work_zone.assign`）：若對著站點比對，`team` grant 會對未指派的站點
+   回 404，而那正是 gov 要指派的站點。權限檢查在鎖定站點列（`FOR UPDATE`）之前，被拒的呼叫者不會拿到鎖。
+5. **gov 管所有站點（Carol，2026-09-24 確認）**：gov team 身分在站點上的 `team` scope **視同 `all`**，不論該站
+   派給誰或未指派；NGO 的 `team` scope 只比對 `team_uuid`。gov 與 NGO 共用 admin/member 角色
+   （`seed_rbac.py:132,184`），無法用 seed 表達，因此在 checkpoint 1 依當前身分 team 的 `type` 提升。
+   提升放在 `resolve_scope`（`core/security.py:352`）：它是唯一入口，`require_scope`、REST 的
+   `PermissionChecker`、時間軸、匯出、PII resolver 都經過它，改一處就涵蓋全部。提升看的是 team 的類型、
+   不看角色，**gov member 與 gov admin 一樣**：可以修改任何站點（含 NGO 負責的）、看得到所有站點的完整
+   聯絡人——這是刻意的，理由同決策 4 的區域指揮官。只提升 `team`：gov member 的 `station.delete` 仍是
+   `own`。範圍包含刪除與聯絡人：gov admin 可刪除、並看得到所有站點的聯絡人。capability catalog 要能顯示
+   這條規則（同 `GOV_TEAM_ONLY_PERMS`），否則後台矩陣顯示的 `team` 與實際行為不符。只提升
+   `status = 'active'` 的 gov team；`require_gov_team` 同樣只放行 active 的 gov team。停用或暫停的 team
+   連一個站點都不能被指派（`assign_station` 與 zone 指派同樣要求 target team active，見上方 zone 指派的
+   create-time 檢查），不應反而管得到全部站點，也不應能指派站點或管理 zone（畫、改、刪、指派）。
 6. **建立時自動指派**：以 team 身分建立的站點，`team_uuid` 設為當前身分的 team；以平台身分建立（含民眾）則為
    null。批次匯入走同一條建立路徑（`services/bulk_import.py` → `create_station`），自動適用。
 7. **未指派的站點**：建立者（`own`）、super_admin（`all`）、gov（決策 5）可管。沒有這條，民眾建的站在 gov
