@@ -91,3 +91,29 @@ similarity       = Σ(signal × weight) / Σ(可用訊號的 weight)
 | 權重 文字 | 1.0 | **未跑過 grid**，判斷值 |
 | `hint_threshold` | 0.8 | grid search 第一名，**不是建議值** |
 | `component_baseline` | 0.5 | 成分燈號用；**未跑過 grid** |
+
+---
+
+## 4. 據點
+
+登記據點前走同一套快層：跟附近、還在服務的據點比一次，過門檻就提示，出錯一樣 fail-open。
+
+```graphql
+"登記據點前查重複候選：回最像的一筆，過門檻才回，否則空陣列"
+stationDedupCandidates(input: StationDedupCheckInput!): [StationDedupHint!]!
+
+recordDedupHintOutcome(input: RecordDedupHintOutcomeInput!, entityKind: DedupEntityKind! = ticket): RecordDedupHintOutcomeResult!
+
+input StationDedupCheckInput { geometry: GeoJSON!  type: String  name: String  description: String }
+type StationDedupHint { relatedStationUuid: String!  similarity: Float!  scoreComponents: [DedupScoreComponent!]! }
+enum DedupEntityKind { ticket  station }
+```
+
+- `stationDedupCandidates` 要 `station.add`（跟 `createStation` 同一個權限）。
+- 候選：未軟刪、`operational_status IN ('active', 'temporarily_closed')`，且不是已過 `expires_at`
+  的臨時據點。
+- 計分用 `STATION_FAST_LAYER_PARAMETERS`：送單那組參數把 `time_weight` 歸零，時間訊號整項不出現在
+  `scoreComponents`。文字訊號比 `name || ' ' || description`，類型訊號比 `stations.type`。
+- `recordDedupHintOutcome` 的 `entityKind` 預設 `ticket`，不帶就跟 §1 完全相同；送 `station` 時
+  `candidateTicketUuid`／`submittedTicketUuid` 放據點 uuid，兩張表的 `entity_kind` 寫 `'station'`，
+  權限換成 `station.add`。
