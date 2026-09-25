@@ -48,6 +48,8 @@ async def get_context(request: Request):
             "db": db, "user": user, "loaders": build_loaders(db), "_rbac_cache": {},
             # ticket uuid -> Task[bool]; see app/graphql/tickets/types.py:ticket_detail_visible.
             "_ticket_detail_visible": {},
+            # Same, for ticket.view_pii; see ticket_pii_visible beside it.
+            "_ticket_pii_visible": {},
         }
     finally:
         await db_gen.aclose()

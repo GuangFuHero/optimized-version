@@ -41,19 +41,35 @@ def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resourc
     decided = info.context["_ticket_detail_visible"]
     key = str(ticket_uuid)
     if key not in decided:
-        decided[key] = asyncio.ensure_future(_decide_ticket_detail(info, key, resource))
+        decided[key] = asyncio.ensure_future(
+            _decide_ticket_scope(info, Perm.TICKET_VIEW_DETAIL, key, resource)
+        )
     return decided[key]
 
 
-async def _decide_ticket_detail(info: strawberry.types.Info, ticket_uuid: str, resource) -> bool:
+def ticket_pii_visible(info: strawberry.types.Info, ticket_uuid: str):
+    """Whether the caller holds ticket.view_pii on this ticket, decided once per request.
+
+    ticket_detail_visible for the task side of PII: a task's `assignments` name the accounts
+    of the volunteers going, which is the requester's and the coordinators' business, like
+    the contact fields TicketType._pii_visible guards on the ticket itself.
+    """
+    decided = info.context["_ticket_pii_visible"]
+    key = str(ticket_uuid)
+    if key not in decided:
+        decided[key] = asyncio.ensure_future(_decide_ticket_scope(info, Perm.TICKET_VIEW_PII, key, None))
+    return decided[key]
+
+
+async def _decide_ticket_scope(
+    info: strawberry.types.Info, perm: Perm, ticket_uuid: str, resource
+) -> bool:
     """resolve_scope + in_scope, like _compute_pii_visible. Never raises: denial is withholding."""
     user = info.context["user"]
     if user is None:
         return False
     db = info.context["db"]
-    scope = await resolve_scope(
-        user, Perm.TICKET_VIEW_DETAIL, db, cache=info.context["_rbac_cache"]
-    )
+    scope = await resolve_scope(user, perm, db, cache=info.context["_rbac_cache"])
     if scope == Scope.NONE:
         return False
     if scope == Scope.ALL:
@@ -282,10 +298,26 @@ class TicketTaskType:
         """Resolve structured properties (skills, cargo type, etc.) for this task."""
         return await info.context["loaders"]["task_properties_by_task"].load(str(self.uuid))
 
-    @strawberry.field
+    @strawberry.field(
+        description=(
+            "Everyone who claimed this task. Empty to a caller without ticket.view_pii on the "
+            "parent ticket — assignedCount stays public, and a caller's own claim is myAssignment"
+        )
+    )
     async def assignments(self, info: strawberry.types.Info) -> list[TaskAssignmentType]:
-        """Resolve actors (volunteers, responders) assigned to this task."""
+        """The accounts going: the requester's and the coordinators' to see, not the public's."""
+        if not await ticket_pii_visible(info, self.ticket_uuid):
+            return []
         return await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
+
+    @strawberry.field(description="The caller's own claim on this task. Null to a guest or a non-claimant")
+    async def my_assignment(self, info: strawberry.types.Info) -> TaskAssignmentType | None:
+        """What the site shows as 已承接, and the uuid 釋出名額 (unassignTaskActor) releases."""
+        user = info.context["user"]
+        if user is None:
+            return None
+        rows = await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
+        return next((a for a in rows if str(a.actor_uuid) == str(user.uuid)), None)
 
     @strawberry.field
     async def assigned_count(self, info: strawberry.types.Info) -> int:
