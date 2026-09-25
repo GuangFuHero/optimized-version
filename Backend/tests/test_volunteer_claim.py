@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import os
 import uuid as uuidlib
+from datetime import UTC, datetime
 
 os.environ["ENV"] = "testing"
 
@@ -18,6 +19,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.permissions import Perm
 from app.models.auth import User
+from app.models.notification import Notification
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
@@ -139,6 +141,22 @@ async def test_a_closed_need_cannot_be_claimed(db, status):
 
 
 @pytest.mark.asyncio
+async def test_a_need_on_a_deleted_ticket_cannot_be_claimed(db):
+    """Deleting the ticket takes its needs with it, even though the task rows stay behind."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    ticket = await db.get(Tickets, task.ticket_uuid)
+    ticket.delete_at = datetime.now(UTC)
+    await db.flush()
+    volunteer = await _volunteer(db)
+
+    with pytest.raises(ValueError, match="Ticket task not found"):
+        await _claim(db, volunteer, task_uuid)
+
+    assert await _claims(db, task_uuid) == 0
+
+
+@pytest.mark.asyncio
 async def test_a_need_awaiting_review_can_be_claimed(db):
     """`pending_review` needs are already on the public site; blocking them would strand them."""
     task = await _need(db, quantity=2)
@@ -203,3 +221,122 @@ async def test_two_volunteers_racing_for_the_last_place_get_one_claim(db, monkey
     assert len(refused) == 1, f"expected exactly one refusal, got {outcomes}"
     assert "Task is full" in str(refused[0])
     assert await _claims(db, task_uuid) == 1
+
+
+# --- who hears about a claim (spec Q18; prototype site-actions.jsx:473-496) ---
+
+
+async def _notices(db, recipient: str, event_type: str) -> list[Notification]:
+    rows = await db.execute(
+        select(Notification).where(Notification.recipient_uuid == recipient, Notification.type == event_type)
+    )
+    return list(rows.scalars().all())
+
+
+@pytest.mark.asyncio
+async def test_the_requester_hears_who_claimed_their_need(db):
+    """The requester is told a volunteer is coming, and who — not just that a count moved."""
+    task = await _need(db, quantity=3)
+    task_uuid, requester = str(task.uuid), str(task.created_by)
+    volunteer = await _volunteer(db, "陳志工")
+
+    await _claim(db, volunteer, task_uuid)
+
+    [notice] = await _notices(db, requester, "task_claimed")
+    assert notice.title == "陳志工 承接了你的「清淤」"
+    assert notice.body == "需要清淤人力　目前 1/3 人"
+
+
+@pytest.mark.asyncio
+async def test_the_requester_hears_who_a_coordinator_sent(db):
+    """Someone is coming either way: a coordinator's assignment names the person sent."""
+    task = await _need(db, quantity=3)
+    task_uuid, requester = str(task.uuid), str(task.created_by)
+    sent = await _volunteer(db, "林志工")
+    sent_uuid = str(sent.uuid)
+    coordinator = await _volunteer(db, "協調者", scope="all")
+
+    await assign_task_actor(db, actor=coordinator, task_uuid=task_uuid, actor_uuid=sent_uuid, role=None)
+
+    [notice] = await _notices(db, requester, "task_claimed")
+    assert notice.title == "林志工 承接了你的「清淤」"
+    assert notice.body == "需要清淤人力　目前 1/3 人"
+
+
+@pytest.mark.asyncio
+async def test_a_ticket_without_a_requester_tells_nobody(db):
+    """`tickets.created_by` is nullable (e.g. an import); there is then nobody to tell."""
+    task = await _need(db, quantity=3)
+    task_uuid = str(task.uuid)
+    ticket = await db.get(Tickets, task.ticket_uuid)
+    ticket.created_by = None
+    await db.flush()
+    volunteer = await _volunteer(db)
+
+    await _claim(db, volunteer, task_uuid)
+
+    claimed_notices = await db.scalar(
+        select(func.count()).select_from(Notification).where(Notification.type == "task_claimed")
+    )
+    assert claimed_notices == 0
+
+
+@pytest.mark.asyncio
+async def test_a_requester_claiming_their_own_need_is_not_told_about_it(db):
+    """A village chief who asks for help and also brings people does not notify themselves."""
+    task = await _need(db, quantity=3)
+    task_uuid, requester_uuid = str(task.uuid), str(task.created_by)
+    requester = await db.get(User, requester_uuid)
+    role = Role(name="self-claim", kind="platform")
+    db.add(role)
+    await db.flush()
+    permission = (
+        await db.execute(select(Permission).where(Permission.key == Perm.TICKET_ASSIGN.value))
+    ).scalar_one_or_none() or Permission(key=Perm.TICKET_ASSIGN.value)
+    db.add(permission)
+    await db.flush()
+    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="own"))
+    db.add(UserRoleAssign(user_uuid=requester.uuid, role_uuid=role.uuid))
+    await db.flush()
+    acting_as(requester, role)
+
+    await _claim(db, requester, task_uuid)
+
+    assert await _notices(db, requester_uuid, "task_claimed") == []
+
+
+@pytest.mark.asyncio
+async def test_the_claim_that_fills_a_need_tells_the_others_already_on_it(db):
+    """Only at the moment the need fills: everyone already signed up hears they are complete."""
+    task = await _need(db, quantity=2)
+    task_uuid, requester = str(task.uuid), str(task.created_by)
+    first = await _volunteer(db, "先到")
+    last = await _volunteer(db, "補滿")
+    first_uuid, last_uuid = str(first.uuid), str(last.uuid)
+
+    await _claim(db, first, task_uuid)
+    assert await _notices(db, first_uuid, "task_full") == []
+    await _claim(db, last, task_uuid)
+
+    [notice] = await _notices(db, first_uuid, "task_full")
+    assert notice.title == "「清淤」已經湊齊人了"
+    assert notice.body == "需要清淤人力　你仍然在名單上，時間到請照常前往。"
+    assert await _notices(db, last_uuid, "task_full") == []
+    assert await _notices(db, requester, "task_full") == []
+
+
+@pytest.mark.asyncio
+async def test_a_need_without_a_quantity_never_fills(db):
+    """No cap means no moment of filling up, so nobody is told the need is complete."""
+    task = await _need(db, quantity=None)
+    task_uuid, requester = str(task.uuid), str(task.created_by)
+    first = await _volunteer(db, "先到")
+    second = await _volunteer(db, "後到")
+    first_uuid = str(first.uuid)
+
+    await _claim(db, first, task_uuid)
+    await _claim(db, second, task_uuid)
+
+    assert await _notices(db, first_uuid, "task_full") == []
+    requester_notices = await _notices(db, requester, "task_claimed")
+    assert [n.body for n in requester_notices] == ["需要清淤人力　目前 1 人", "需要清淤人力　目前 2 人"]

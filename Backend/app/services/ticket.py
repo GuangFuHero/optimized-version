@@ -497,43 +497,42 @@ async def assign_task_actor(
     coordinator assigning someone else may still over-subscribe (d847624): they can see the
     ground and may knowingly send more. The task row is locked FOR UPDATE from the count to
     the insert's commit, so two volunteers racing for the last place cannot both get it.
-    Authorization runs first, so a caller who will be refused never takes the lock.
+    Authorization runs first, so a caller who will be refused never takes the lock. A task
+    whose ticket was deleted is gone with it.
+
+    Three notices go out: the assignee hears they were assigned (dispatch() drops it for a
+    self-signup), the requester hears who is coming, and when this claim fills the need,
+    everyone already on it hears it is complete.
     """
     current_uuid = str(actor.uuid)
     target_actor = actor_uuid or current_uuid
     self_signup = target_actor == current_uuid
     if self_signup:
         await require_scope(actor, Perm.TICKET_ASSIGN, db)
+        assignee_name = actor.name
     else:
         unlocked = await ticket_task_repository.get_by_uuid_active(db, task_uuid)
         if not unlocked:
             raise ValueError("Ticket task not found")
         await require_scope(actor, Perm.TICKET_ASSIGN, db, resource=await _task_scope_target(db, unlocked))
-        if not await user_repository.get_by_uuid_active(db, target_actor):
+        assignee = await user_repository.get_by_uuid_active(db, target_actor)
+        if not assignee:
             raise ValueError("User not found")
+        assignee_name = assignee.name
 
-    task = await db.scalar(
-        select(TicketTask)
-        .where(TicketTask.uuid == task_uuid, TicketTask.delete_at.is_(None))
-        .with_for_update()
-        .execution_options(populate_existing=True)
+    task, claimed = await _lock_task_with_room(
+        db, task_uuid=task_uuid, target_actor=target_actor, capped=self_signup
     )
-    if not task:
-        raise ValueError("Ticket task not found")
-    if task.status in CLOSED_TASK_STATUSES:
-        raise ValueError("Task is no longer open")
 
-    if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
-        raise ValueError("Actor already assigned to this task")
-    if self_signup and task.quantity is not None:
-        claimed = await db.scalar(
-            select(func.count()).select_from(TaskAssignment).where(TaskAssignment.task_uuid == task_uuid)
-        )
-        if claimed >= task.quantity:
-            raise ValueError("Task is full")
-
+    # Plain values before the insert commits (expire_on_commit in tests), and the count taken
+    # under the lock: `fills` must be decided here, not recounted after the lock is released.
     task_name = task.task_name
     task_id = task.uuid
+    quantity = task.quantity
+    fills = quantity is not None and claimed + 1 == quantity
+    ticket = await db.scalar(select(Tickets).where(Tickets.uuid == task.ticket_uuid))
+    ticket_title = ticket.title
+    requester = str(ticket.created_by) if ticket.created_by else None
     actor_uid = actor.uuid
     try:
         assignment = await task_assignment_repository.create(
@@ -557,6 +556,17 @@ async def assign_task_actor(
             ref_uuid=task_id,
             explicit_recipients=[target_actor],
         )
+        if requester is not None and requester != target_actor:
+            await _notify_claim(
+                db, task_id=task_id, task_name=task_name, ticket_title=ticket_title,
+                requester=requester, actor_uid=actor_uid, assignee_name=assignee_name,
+                claimed=claimed + 1, quantity=quantity,
+            )
+        if fills:
+            await _notify_need_full(
+                db, task_id=task_id, task_name=task_name, ticket_title=ticket_title,
+                newcomer=target_actor, actor_uid=actor_uid,
+            )
         await db.refresh(assignment)
         return assignment
     except IntegrityError as exc:
@@ -564,6 +574,81 @@ async def assign_task_actor(
         # surface the same clean domain error instead of a raw 500.
         await db.rollback()
         raise ValueError("Actor already assigned to this task") from exc
+
+
+async def _lock_task_with_room(
+    db: AsyncSession, *, task_uuid: str, target_actor: str, capped: bool
+) -> tuple[TicketTask, int]:
+    """Lock the task FOR UPDATE and check it can take `target_actor`; return it with its count.
+
+    The lock is held until the caller's insert commits. `capped` applies the quantity cap,
+    which binds a volunteer signing themselves up but not a coordinator (see assign_task_actor).
+    """
+    task = await db.scalar(
+        select(TicketTask)
+        .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
+        .where(TicketTask.uuid == task_uuid, TicketTask.delete_at.is_(None), Tickets.delete_at.is_(None))
+        .with_for_update(of=TicketTask)
+        .execution_options(populate_existing=True)
+    )
+    if not task:
+        raise ValueError("Ticket task not found")
+    if task.status in CLOSED_TASK_STATUSES:
+        raise ValueError("Task is no longer open")
+    if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
+        raise ValueError("Actor already assigned to this task")
+    claimed = await db.scalar(
+        select(func.count()).select_from(TaskAssignment).where(TaskAssignment.task_uuid == task_uuid)
+    )
+    if capped and task.quantity is not None and claimed >= task.quantity:
+        raise ValueError("Task is full")
+    return task, claimed
+
+
+async def _notify_claim(
+    db: AsyncSession, *, task_id, task_name: str, ticket_title: str, requester: str,
+    actor_uid, assignee_name: str | None, claimed: int, quantity: int | None,
+) -> None:
+    """Tell the requester someone is coming, and who (prototype site-actions.jsx:473-483).
+
+    Named after the person going, whether they signed up or a coordinator sent them. The
+    caller skips a requester who is that person; one who is the actor dispatch() leaves out.
+    """
+    count = f"{claimed}/{quantity}" if quantity is not None else f"{claimed}"
+    await NotificationService.dispatch(
+        db,
+        event_type="task_claimed",
+        title=f"{assignee_name or '一位志工'} 承接了你的「{task_name}」",
+        body=f"{ticket_title}　目前 {count} 人",
+        priority="high",
+        actor_uuid=actor_uid,
+        ref_type="ticket_task",
+        ref_uuid=task_id,
+        explicit_recipients=[requester],
+    )
+
+
+async def _notify_need_full(
+    db: AsyncSession, *, task_id, task_name: str, ticket_title: str, newcomer: str, actor_uid,
+) -> None:
+    """Tell everyone already on a need that this claim completed it (site-actions.jsx:484-496).
+
+    Sent only at the moment the need fills — sent later it would say nothing new. The one
+    whose claim filled it just saw that for themselves.
+    """
+    assignments = await task_assignment_repository.list_by_task(db, str(task_id))
+    others = [str(a.actor_uuid) for a in assignments if str(a.actor_uuid) != newcomer]
+    await NotificationService.dispatch(
+        db,
+        event_type="task_full",
+        title=f"「{task_name}」已經湊齊人了",
+        body=f"{ticket_title}　你仍然在名單上，時間到請照常前往。",
+        priority="medium",
+        actor_uuid=actor_uid,
+        ref_type="ticket_task",
+        ref_uuid=task_id,
+        explicit_recipients=others,
+    )
 
 
 async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> None:
