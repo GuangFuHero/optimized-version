@@ -48,6 +48,14 @@ MAX_DISASTER_DETAIL_KEY_LENGTH = 100
 CLOSED_TASK_STATUSES = frozenset({"fulfilled", "canceled"})
 OPEN_TASK_STATUSES = frozenset({"pending", "in_progress"})
 
+# What a notice calls each state — the site's own words (Frontend ticket/status.ts and the
+# task detail panel), never the enum. An unknown value falls through as itself, so a new
+# state shows up rather than vanishing.
+TASK_STATUS_LABELS = {
+    "pending": "待處理", "in_progress": "處理中", "fulfilled": "已完成", "canceled": "已取消",
+}
+MODERATION_STATUS_LABELS = {"pending_review": "待審核", "approved": "已通過", "rejected": "已退回"}
+
 # Business rule (ADR-020): status transitions live here, not in the RBAC layer.
 VALID_TRANSITIONS = {
     "pending": ["in_progress", "cancelled"],
@@ -397,11 +405,12 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     if "moderation_status" in changes and changes["moderation_status"] != old_mod:
         assignments = await task_assignment_repository.list_by_task(db, str(task_id))
         recipients = {task_created_by} | {str(a.actor_uuid) for a in assignments}
+        mod_label = MODERATION_STATUS_LABELS.get(mod_status, mod_status)
         await NotificationService.dispatch(
             db,
             event_type="ticket_task_moderation_update",
             title=f"工單審核狀態更新：{task_name}",
-            body=f"工單任務「{task_name}」審核狀態已變更為【{mod_status}】。",
+            body=f"工單任務「{task_name}」審核狀態已變更為【{mod_label}】。",
             priority="high",
             actor_uuid=actor_uid,
             ref_type="ticket_task",
@@ -409,16 +418,17 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
             explicit_recipients=list(recipients),
         )
 
-    # 2. 任務執行狀態變更通知 (Medium)
+    # 2. 任務執行狀態變更通知 (Medium；取消為 High，見 _task_status_notice)
     if "status" in changes and changes["status"] != old_status:
         assignments = await task_assignment_repository.list_by_task(db, str(task_id))
         recipients = {str(a.actor_uuid) for a in assignments}
+        title, body, priority = _task_status_notice(task_name, exec_status)
         await NotificationService.dispatch(
             db,
             event_type="ticket_task_status_update",
-            title=f"工單進度更新：{task_name}",
-            body=f"工單任務「{task_name}」狀態已變更為【{exec_status}】。",
-            priority="medium",
+            title=title,
+            body=body,
+            priority=priority,
             actor_uuid=actor_uid,
             ref_type="ticket_task",
             ref_uuid=task_id,
@@ -696,6 +706,18 @@ async def _lock_task_with_room(
     if capped and task.quantity is not None and claimed >= task.quantity:
         raise ValueError("Task is full")
     return task, claimed
+
+
+def _task_status_notice(task_name: str, status: str) -> tuple[str, str, str]:
+    """Title, body and priority telling a task's volunteers its status changed.
+
+    Canceled is the one change a volunteer must not miss, so it is worded and weighted like
+    stop_recruiting's notice; any other state is named in the site's words.
+    """
+    if status == "canceled":
+        return f"你承接的「{task_name}」已經取消", f"「{task_name}」已取消，不用前往了。", "high"
+    label = TASK_STATUS_LABELS.get(status, status)
+    return f"工單進度更新：{task_name}", f"工單任務「{task_name}」狀態已變更為【{label}】。", "medium"
 
 
 async def _notify_claim(

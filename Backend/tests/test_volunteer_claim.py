@@ -26,7 +26,7 @@ from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import ticket as ticket_service
 from app.services.authz import refresh_actor
-from app.services.ticket import assign_task_actor, stop_recruiting
+from app.services.ticket import assign_task_actor, stop_recruiting, update_ticket_task
 from tests.conftest import TEST_DB_URL, acting_as
 
 
@@ -471,3 +471,52 @@ async def test_a_deleted_ticket_cannot_be_stopped(db):
 
     with pytest.raises(ValueError, match="Ticket not found"):
         await stop_recruiting(db, actor=requester, ticket_uuid=ticket_uuid)
+
+
+# --- the per-task notices speak Chinese, not enum values (spec Q22) ---
+
+
+async def _claimed_by_one(db) -> tuple[str, str, User]:
+    """A need one volunteer claimed; returns (task_uuid, volunteer_uuid, signed-in requester)."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    volunteer = await _volunteer(db, "陳志工")
+    volunteer_uuid = str(volunteer.uuid)
+    await _claim(db, volunteer, task_uuid)
+    return task_uuid, volunteer_uuid, await _requester_of(db, task_uuid)
+
+
+@pytest.mark.asyncio
+async def test_canceling_a_need_tells_its_volunteers_they_need_not_go(db):
+    """The one change a volunteer must not miss reads like the stop-recruiting notice."""
+    task_uuid, volunteer_uuid, requester = await _claimed_by_one(db)
+
+    await update_ticket_task(db, actor=requester, uuid=task_uuid, changes={"status": "canceled"})
+
+    [notice] = await _notices(db, volunteer_uuid, "ticket_task_status_update")
+    assert notice.title == "你承接的「清淤」已經取消"
+    assert notice.body == "「清淤」已取消，不用前往了。"
+    assert notice.priority == "high"  # same weight as stop_recruiting's 不用前往了
+
+
+@pytest.mark.asyncio
+async def test_other_status_changes_name_the_status_in_chinese(db):
+    """「處理中」, not 【in_progress】: the reader is a volunteer, not the database."""
+    task_uuid, volunteer_uuid, requester = await _claimed_by_one(db)
+
+    await update_ticket_task(db, actor=requester, uuid=task_uuid, changes={"status": "in_progress"})
+
+    [notice] = await _notices(db, volunteer_uuid, "ticket_task_status_update")
+    assert notice.body == "工單任務「清淤」狀態已變更為【處理中】。"
+    assert notice.priority == "medium"
+
+
+@pytest.mark.asyncio
+async def test_moderation_changes_name_the_outcome_in_chinese(db):
+    """「已通過」, not 【approved】 — same words the site uses (待審核／已通過／已退回)."""
+    task_uuid, volunteer_uuid, requester = await _claimed_by_one(db)
+
+    await update_ticket_task(db, actor=requester, uuid=task_uuid, changes={"moderation_status": "approved"})
+
+    [notice] = await _notices(db, volunteer_uuid, "ticket_task_moderation_update")
+    assert notice.body == "工單任務「清淤」審核狀態已變更為【已通過】。"
