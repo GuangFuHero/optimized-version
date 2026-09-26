@@ -3,6 +3,7 @@
 import pytest
 from sqlalchemy import select
 
+from app.core.permissions import Perm
 from app.models.rbac import Permission, Role, RolePermissionAssign
 from scripts.seed_rbac import ensure_role_grant
 
@@ -67,6 +68,11 @@ async def test_ensure_role_grant_never_overwrites_existing(db_session):
 # deliberately if the role ever changes.
 _OVERSIGHT_ONLY_ROLES = {"data_auditor"}
 
+# The other way round: capabilities that only make sense for someone with no back-office
+# identity yet. Applying to become staff (Spec/019) is refused to anyone who already is, so a
+# team role or super_admin holding it would show a grant in the matrix that can never succeed.
+_CITIZEN_ONLY_PERMS = {Perm.ROLE_REQUEST_ADD}
+
 
 def _grants_of(role_name: str) -> dict:
     """The seeded capability->scope map for one role."""
@@ -83,11 +89,31 @@ def test_every_actionable_role_covers_the_citizen_baseline():
     capability a team role does not grant itself is one its holder silently loses on
     switching — which is how station.contribute went missing (ADR-097).
     """
-    baseline = set(_grants_of("user"))
+    baseline = set(_grants_of("user")) - _CITIZEN_ONLY_PERMS
     for role_name in ("super_admin", "admin", "member"):
         assert role_name not in _OVERSIGHT_ONLY_ROLES
         missing = baseline - set(_grants_of(role_name))
         assert not missing, f"{role_name} is missing citizen capabilities: {missing}"
+
+
+# --- Role requests (Spec/019): who may apply, who decides -------------------------------------
+
+
+def test_a_citizen_can_apply_for_a_backoffice_role():
+    """Registration grants `user`, and the 申請成為後台人員 entry exists for exactly that account."""
+    assert _grants_of("user")[Perm.ROLE_REQUEST_ADD] == "all"
+
+
+def test_only_super_admin_reviews_role_requests():
+    """Every option on the application form names the super admin as its reviewer."""
+    from scripts.seed_rbac import ROLES_DATA
+
+    holders = {
+        role["name"]: role["permissions"][Perm.ROLE_REQUEST_REVIEW]
+        for role in ROLES_DATA
+        if Perm.ROLE_REQUEST_REVIEW in role["permissions"]
+    }
+    assert holders == {"super_admin": "all"}
 
 
 def test_team_roles_reach_stations_by_team_not_zone():
