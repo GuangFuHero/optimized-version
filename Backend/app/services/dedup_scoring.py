@@ -11,7 +11,7 @@ Each signal is normalised to 0–1 and the similarity is their weighted average 
 signals that are available:
 
     distance  = 2 ** (-distance_m / distance_half_m)
-    time      = 2 ** (-age_min / time_half_min)
+    time      = 2 ** (-age_min / time_half_min)        (skipped if time_weight is 0)
     task_type = 1.0 if both types match else 0.0   (skipped if either side is unknown)
     text      = pg_trgm similarity                  (skipped if either side has no text)
 
@@ -43,6 +43,8 @@ class FastLayerParameters:
 
 
 FAST_LAYER_PARAMETERS = FastLayerParameters()
+# Stations: a station's age says nothing about whether it duplicates one being registered now.
+STATION_FAST_LAYER_PARAMETERS = FastLayerParameters(time_weight=0.0)
 
 
 @dataclass(frozen=True)
@@ -83,10 +85,9 @@ def score_candidate(
 ) -> CandidateScore:
     """Score one candidate. Raises ValueError if no available signal has positive weight."""
     p = parameters
-    signals = [
-        ("distance", 2 ** (-candidate.distance_m / p.distance_half_m), p.distance_weight),
-        ("time", 2 ** (-candidate.age_min / p.time_half_min), p.time_weight),
-    ]
+    signals = [("distance", 2 ** (-candidate.distance_m / p.distance_half_m), p.distance_weight)]
+    if p.time_weight > 0:
+        signals.append(("time", 2 ** (-candidate.age_min / p.time_half_min), p.time_weight))
     if query_task_type is not None and candidate.task_type is not None:
         signals.append(("task_type", float(query_task_type == candidate.task_type), p.task_type_weight))
     if candidate.text_similarity is not None:
