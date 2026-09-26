@@ -22,6 +22,46 @@ export type Scalars = {
   UUID: { input: string; output: string; }
 };
 
+export const AccessStatus = {
+  Accessible: 'accessible',
+  Inaccessible: 'inaccessible',
+  Restricted: 'restricted',
+  Unknown: 'unknown'
+} as const;
+
+export type AccessStatus = typeof AccessStatus[keyof typeof AccessStatus];
+export const AnnouncementFilter = {
+  Active: 'ACTIVE',
+  All: 'ALL'
+} as const;
+
+export type AnnouncementFilter = typeof AnnouncementFilter[keyof typeof AnnouncementFilter];
+export const AnnouncementMoveDirection = {
+  Down: 'DOWN',
+  Up: 'UP'
+} as const;
+
+export type AnnouncementMoveDirection = typeof AnnouncementMoveDirection[keyof typeof AnnouncementMoveDirection];
+export type AnnouncementType = {
+  __typename?: 'AnnouncementType';
+  active: Scalars['Boolean']['output'];
+  content: Scalars['String']['output'];
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the user who created this announcement */
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** Display position (1 = top) among active announcements; null when inactive */
+  order?: Maybe<Scalars['Int']['output']>;
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
+export type AssignedTeamType = {
+  __typename?: 'AssignedTeamType';
+  name: Scalars['String']['output'];
+  type: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
+};
+
 export type BoundsInput = {
   /** North boundary latitude */
   maxLat: Scalars['Float']['input'];
@@ -31,6 +71,43 @@ export type BoundsInput = {
   minLat: Scalars['Float']['input'];
   /** West boundary longitude */
   minLng: Scalars['Float']['input'];
+};
+
+export const BriefingState = {
+  Briefing: 'BRIEFING',
+  Debrief: 'DEBRIEF',
+  InField: 'IN_FIELD'
+} as const;
+
+export type BriefingState = typeof BriefingState[keyof typeof BriefingState];
+export type BriefingTemplateType = {
+  __typename?: 'BriefingTemplateType';
+  content: Scalars['String']['output'];
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the user who created this template */
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** Lifecycle phase: 'briefing', 'in_field', or 'debrief' */
+  state: Scalars['String']['output'];
+  /** Free-form categorization tags */
+  tags: Array<Scalars['String']['output']>;
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
+export type BriefingType = {
+  __typename?: 'BriefingType';
+  content: Scalars['String']['output'];
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the user who created this briefing */
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** Lifecycle phase: 'briefing', 'in_field', or 'debrief' */
+  state: Scalars['String']['output'];
+  /** Free-form categorization tags */
+  tags: Array<Scalars['String']['output']>;
+  /** UUID of the source template, or null for ad-hoc briefings */
+  templateUuid?: Maybe<Scalars['UUID']['output']>;
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
 };
 
 export type ClosureAreaConnection = {
@@ -58,6 +135,20 @@ export type ClosureAreaType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export type CreateAnnouncementInput = {
+  /** The announcement body text */
+  content: Scalars['String']['input'];
+};
+
+export type CreateBriefingTemplateInput = {
+  /** The template body text */
+  content: Scalars['String']['input'];
+  /** Lifecycle phase this template targets */
+  state?: BriefingState;
+  /** Categorization tags */
+  tags?: Array<Scalars['String']['input']>;
+};
+
 export type CreateClosureAreaInput = {
   comment?: InputMaybe<Scalars['String']['input']>;
   /** GeoJSON Polygon or MultiPolygon — must not be a Point */
@@ -81,6 +172,12 @@ export type CreateCrowdSourcingInput = {
 
 export type CreateStationInput = {
   comment?: InputMaybe<Scalars['String']['input']>;
+  /** Optional station contact email */
+  contactEmail?: InputMaybe<Scalars['String']['input']>;
+  /** Optional station contact name */
+  contactName?: InputMaybe<Scalars['String']['input']>;
+  /** Optional station contact phone */
+  contactPhone?: InputMaybe<Scalars['String']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
   /** GeoJSON Point — must be a valid Point within lon/lat bounds */
   geometry: Scalars['GeoJSON']['input'];
@@ -89,14 +186,16 @@ export type CreateStationInput = {
   name?: InputMaybe<Scalars['String']['input']>;
   /** Operating hours in free-text format */
   opHour?: InputMaybe<Scalars['String']['input']>;
+  /** Whether the station is open: 'active' (default), 'temporarily_closed', or 'permanently_closed' */
+  operationalStatus?: StationOperationalStatus;
   /** Optional secondary address or pole location to attach to this station */
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** Data origin: 'user' (default) or 'official' */
   source?: Scalars['String']['input'];
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: InputMaybe<Scalars['String']['input']>;
-  /** Visibility: 'public' (default) or 'restricted' */
-  visibility?: Scalars['String']['input'];
+  /** Visibility: 'public' (default), 'restricted', or 'internal' */
+  visibility?: Visibility;
 };
 
 export type CreateStationPropertyInput = {
@@ -109,6 +208,19 @@ export type CreateStationPropertyInput = {
   stationUuid: Scalars['String']['input'];
   /** Initial credibility weight [0.0–2.0], default 1.0 */
   weightings?: Scalars['Float']['input'];
+};
+
+export type CreateStationSuggestionInput = {
+  /** Why the change is suggested */
+  comment?: InputMaybe<Scalars['String']['input']>;
+  /** Which field to change (see suggestableFields) */
+  fieldName: Scalars['String']['input'];
+  /** Proposed new value as text */
+  newValue: Scalars['String']['input'];
+  /** 'station' or 'station_property' */
+  targetType: Scalars['String']['input'];
+  /** UUID of the station/property to change */
+  targetUuid: Scalars['UUID']['input'];
 };
 
 export type CreateTaskPropertyInput = {
@@ -131,15 +243,23 @@ export type CreateTicketInput = {
   /** Optional phone number for follow-up */
   contactPhone?: InputMaybe<Scalars['String']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
+  /** Disaster type keys, e.g. ['flood', 'landslide']. Each must be an active key from `disasterTypes`; an unknown one is rejected rather than stored, because a ticket filed under a disaster that does not exist would show the reporter an empty form */
+  disasterTypes?: InputMaybe<Array<Scalars['String']['input']>>;
   /** GeoJSON Point for the location where help is needed — [longitude, latitude] */
   geometry: Scalars['GeoJSON']['input'];
+  /** 立即生命危險. Omit when nobody was asked */
+  immediateDangerReported?: InputMaybe<TriState>;
+  /** 災民受困／無法自行離開. Omit when nobody was asked */
+  personTrappedReported?: InputMaybe<TriState>;
   /** Urgency: 'low' (default), 'medium', 'high', or 'critical' */
   priority?: Scalars['String']['input'];
+  /** Street address and space detail for where help is needed. New in feature 018 — before it, only stations could carry one, so the record that most needs a door number had nothing but a map pin */
+  secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** Type of help: 'rescue', 'supply', 'medical', or 'hr' */
   taskType?: InputMaybe<Scalars['String']['input']>;
   title: Scalars['String']['input'];
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
-  visibility?: Scalars['String']['input'];
+  visibility?: Visibility;
 };
 
 export type CreateTicketTaskInput = {
@@ -156,7 +276,13 @@ export type CreateTicketTaskInput = {
   /** UUID of the ticket this task belongs to */
   ticketUuid: Scalars['String']['input'];
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
-  visibility?: Scalars['String']['input'];
+  visibility?: Visibility;
+};
+
+export type CreateWorkZoneInput = {
+  /** GeoJSON Polygon or MultiPolygon — must not be a Point */
+  geometry: Scalars['GeoJSON']['input'];
+  name: Scalars['String']['input'];
 };
 
 export type CrowdSourcingType = {
@@ -177,24 +303,132 @@ export type CrowdSourcingType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export const DedupHintOutcome = {
+  AcceptedHint: 'accepted_hint',
+  IgnoredHint: 'ignored_hint'
+} as const;
+
+export type DedupHintOutcome = typeof DedupHintOutcome[keyof typeof DedupHintOutcome];
+export type DedupScoreComponent = {
+  __typename?: 'DedupScoreComponent';
+  /** 成分名稱：'distance' / 'time' / 'task_type' / 'text'；慢層升級後可能新增 */
+  name: Scalars['String']['output'];
+  /** 過線布林：得分 >= 該成分參考線即 true —— 成分燈號直接畫這顆 */
+  passed: Scalars['Boolean']['output'];
+  /** 此成分的得分，0–1 正規化 */
+  score: Scalars['Float']['output'];
+  /** 此成分在總分中的權重（隨規則版本走） */
+  weight: Scalars['Float']['output'];
+};
+
+export type DisasterTypeType = {
+  __typename?: 'DisasterTypeType';
+  /** False retires the type: no new writes, existing ones readable */
+  isActive: Scalars['Boolean']['output'];
+  /** Immutable lower-case English code, e.g. 'flood'. Referenced as a bare string by tickets and every field config, so it is never renamed — edit `label` instead */
+  key: Scalars['String']['output'];
+  /** Display name, e.g. '水災' */
+  label: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
+};
+
+export const FieldDataType = {
+  Boolean: 'boolean',
+  LongText: 'long_text',
+  MultiSelect: 'multi_select',
+  Number: 'number',
+  SingleSelect: 'single_select',
+  Text: 'text'
+} as const;
+
+export type FieldDataType = typeof FieldDataType[keyof typeof FieldDataType];
+export type GenerateBriefingInput = {
+  /** Override content; defaults to the template's content */
+  content?: InputMaybe<Scalars['String']['input']>;
+  /** Override phase; defaults to the template's state */
+  state?: InputMaybe<BriefingState>;
+  /** Override tags; defaults to the template's tags */
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Source template UUID; null for an ad-hoc briefing */
+  templateUuid?: InputMaybe<Scalars['UUID']['input']>;
+};
+
 export type Mutation = {
   __typename?: 'Mutation';
+  assignTaskActor: TaskAssignmentType;
+  assignZoneToTeam: ZoneAssignmentType;
+  attachStationPhoto: PhotoType;
+  createAnnouncement: AnnouncementType;
+  createBriefingTemplate: BriefingTemplateType;
   createClosureArea: ClosureAreaType;
   createCrowdSourcing: CrowdSourcingType;
   createStation: StationType;
   createStationProperty: StationPropertyType;
+  createStationSuggestion: StationSuggestionType;
   createTaskProperty: TaskPropertyType;
   createTicket: TicketType;
   createTicketTask: TicketTaskType;
+  createWorkZone: WorkZoneType;
+  deleteAnnouncement: Scalars['Boolean']['output'];
+  deleteBriefing: Scalars['Boolean']['output'];
+  deleteBriefingTemplate: Scalars['Boolean']['output'];
+  deleteClosureArea: Scalars['Boolean']['output'];
   deleteStation: Scalars['Boolean']['output'];
+  deleteTicket: Scalars['Boolean']['output'];
+  deleteWorkZone: Scalars['Boolean']['output'];
+  detachStationPhoto: Scalars['Boolean']['output'];
+  generateBriefing: BriefingType;
+  moveAnnouncement: AnnouncementType;
+  recordDedupHintOutcome: RecordDedupHintOutcomeResult;
+  removeZoneFromTeam: Scalars['Boolean']['output'];
+  reviewStationSuggestion: StationSuggestionType;
+  reviewTicket: TicketType;
+  setAnnouncementActive: AnnouncementType;
+  setTicketDisasterDetails: Array<TicketDisasterDetailType>;
+  unassignTaskActor: Scalars['Boolean']['output'];
+  updateAnnouncement: AnnouncementType;
+  updateBriefing: BriefingType;
+  updateBriefingTemplate: BriefingTemplateType;
   updateClosureArea: ClosureAreaType;
   updateStation: StationType;
   updateStationProperty: StationPropertyType;
+  updateTaskAssignment: TaskAssignmentType;
   updateTaskProperty: TaskPropertyType;
   updateTicket: TicketType;
   updateTicketTask: TicketTaskType;
+  updateWorkZone: WorkZoneType;
+  upsertDisasterType: DisasterTypeType;
   upsertStationPropertyConfig: StationPropertyConfigType;
   upsertTaskPropertyConfig: TaskPropertyConfigType;
+  upsertTicketPropertyConfig: TicketPropertyConfigType;
+};
+
+
+export type MutationAssignTaskActorArgs = {
+  actorUuid?: InputMaybe<Scalars['UUID']['input']>;
+  role?: InputMaybe<Scalars['String']['input']>;
+  taskUuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationAssignZoneToTeamArgs = {
+  input: ZoneTeamAssignmentInput;
+};
+
+
+export type MutationAttachStationPhotoArgs = {
+  stationUuid: Scalars['UUID']['input'];
+  url: Scalars['String']['input'];
+};
+
+
+export type MutationCreateAnnouncementArgs = {
+  input: CreateAnnouncementInput;
+};
+
+
+export type MutationCreateBriefingTemplateArgs = {
+  input: CreateBriefingTemplateInput;
 };
 
 
@@ -218,6 +452,11 @@ export type MutationCreateStationPropertyArgs = {
 };
 
 
+export type MutationCreateStationSuggestionArgs = {
+  input: CreateStationSuggestionInput;
+};
+
+
 export type MutationCreateTaskPropertyArgs = {
   input: CreateTaskPropertyInput;
 };
@@ -233,7 +472,117 @@ export type MutationCreateTicketTaskArgs = {
 };
 
 
+export type MutationCreateWorkZoneArgs = {
+  input: CreateWorkZoneInput;
+};
+
+
+export type MutationDeleteAnnouncementArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationDeleteBriefingArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationDeleteBriefingTemplateArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationDeleteClosureAreaArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
 export type MutationDeleteStationArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationDeleteTicketArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationDeleteWorkZoneArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationDetachStationPhotoArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationGenerateBriefingArgs = {
+  input: GenerateBriefingInput;
+};
+
+
+export type MutationMoveAnnouncementArgs = {
+  direction: AnnouncementMoveDirection;
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationRecordDedupHintOutcomeArgs = {
+  input: RecordDedupHintOutcomeInput;
+};
+
+
+export type MutationRemoveZoneFromTeamArgs = {
+  input: ZoneTeamAssignmentInput;
+};
+
+
+export type MutationReviewStationSuggestionArgs = {
+  approve: Scalars['Boolean']['input'];
+  reviewNote?: InputMaybe<Scalars['String']['input']>;
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationReviewTicketArgs = {
+  reviewNote?: InputMaybe<Scalars['String']['input']>;
+  uuid: Scalars['UUID']['input'];
+  verificationStatus: Scalars['String']['input'];
+};
+
+
+export type MutationSetAnnouncementActiveArgs = {
+  active: Scalars['Boolean']['input'];
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationSetTicketDisasterDetailsArgs = {
+  details: Array<TicketDisasterDetailInput>;
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationUnassignTaskActorArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationUpdateAnnouncementArgs = {
+  input: UpdateAnnouncementInput;
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationUpdateBriefingArgs = {
+  input: UpdateBriefingInput;
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationUpdateBriefingTemplateArgs = {
+  input: UpdateBriefingTemplateInput;
   uuid: Scalars['UUID']['input'];
 };
 
@@ -256,6 +605,12 @@ export type MutationUpdateStationPropertyArgs = {
 };
 
 
+export type MutationUpdateTaskAssignmentArgs = {
+  input: UpdateTaskAssignmentInput;
+  uuid: Scalars['UUID']['input'];
+};
+
+
 export type MutationUpdateTaskPropertyArgs = {
   input: UpdateTaskPropertyInput;
   uuid: Scalars['UUID']['input'];
@@ -274,6 +629,17 @@ export type MutationUpdateTicketTaskArgs = {
 };
 
 
+export type MutationUpdateWorkZoneArgs = {
+  input: UpdateWorkZoneInput;
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationUpsertDisasterTypeArgs = {
+  input: UpsertDisasterTypeInput;
+};
+
+
 export type MutationUpsertStationPropertyConfigArgs = {
   input: UpsertPropertyConfigInput;
   stationType: Scalars['String']['input'];
@@ -283,6 +649,11 @@ export type MutationUpsertStationPropertyConfigArgs = {
 export type MutationUpsertTaskPropertyConfigArgs = {
   input: UpsertPropertyConfigInput;
   taskType: Scalars['String']['input'];
+};
+
+
+export type MutationUpsertTicketPropertyConfigArgs = {
+  input: UpsertTicketPropertyConfigInput;
 };
 
 export type PageInfo = {
@@ -300,7 +671,7 @@ export type PhotoType = {
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who uploaded this photo */
   createdBy: Scalars['String']['output'];
-  /** Type of the parent entity: 'station' or 'ticket' */
+  /** 'geometry' (attached to a ticket or station) or 'pole' (attached to a secondary_location) */
   refType: Scalars['String']['output'];
   /** UUID of the parent entity this photo is attached to */
   refUuid: Scalars['String']['output'];
@@ -311,16 +682,62 @@ export type PhotoType = {
 
 export type Query = {
   __typename?: 'Query';
+  announcement?: Maybe<AnnouncementType>;
+  announcements: Array<AnnouncementType>;
+  briefing?: Maybe<BriefingType>;
+  briefingTemplate?: Maybe<BriefingTemplateType>;
+  briefingTemplates: Array<BriefingTemplateType>;
+  briefings: Array<BriefingType>;
   closureArea?: Maybe<ClosureAreaType>;
   closureAreas: ClosureAreaConnection;
+  disasterTypes: Array<DisasterTypeType>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
+  stationSuggestions: Array<StationSuggestionType>;
   stations: StationConnection;
+  suggestableFields: Array<SuggestableFieldType>;
   taskProperties: Array<TaskPropertyType>;
   taskPropertyConfigs: Array<TaskPropertyConfigType>;
   ticket?: Maybe<TicketType>;
+  ticketDedupCandidates: Array<TicketDedupHint>;
+  ticketPropertyConfigs: Array<TicketPropertyConfigType>;
   ticketTasks: Array<TicketTaskType>;
   tickets: TicketConnection;
+  workZone?: Maybe<WorkZoneType>;
+  workZones: WorkZoneConnection;
+  zonesByTeam: WorkZoneConnection;
+};
+
+
+export type QueryAnnouncementArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type QueryAnnouncementsArgs = {
+  filter?: AnnouncementFilter;
+};
+
+
+export type QueryBriefingArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type QueryBriefingTemplateArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type QueryBriefingTemplatesArgs = {
+  state?: InputMaybe<BriefingState>;
+  tag?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryBriefingsArgs = {
+  state?: InputMaybe<BriefingState>;
+  tag?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -336,21 +753,42 @@ export type QueryClosureAreasArgs = {
 };
 
 
+export type QueryDisasterTypesArgs = {
+  includeInactive?: Scalars['Boolean']['input'];
+};
+
+
 export type QueryStationArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
 
 export type QueryStationPropertyConfigsArgs = {
+  includeInactive?: Scalars['Boolean']['input'];
   stationType: Scalars['String']['input'];
+};
+
+
+export type QueryStationSuggestionsArgs = {
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+  status?: InputMaybe<Scalars['String']['input']>;
+  targetUuid?: InputMaybe<Scalars['String']['input']>;
 };
 
 
 export type QueryStationsArgs = {
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
+  operationalStatus?: InputMaybe<StationOperationalStatus>;
+  q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
   stationType?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QuerySuggestableFieldsArgs = {
+  targetType: Scalars['String']['input'];
 };
 
 
@@ -360,17 +798,31 @@ export type QueryTaskPropertiesArgs = {
 
 
 export type QueryTaskPropertyConfigsArgs = {
+  includeInactive?: Scalars['Boolean']['input'];
   taskType: Scalars['String']['input'];
 };
 
 
 export type QueryTicketArgs = {
   uuid: Scalars['UUID']['input'];
+  zoom?: InputMaybe<Scalars['Float']['input']>;
+};
+
+
+export type QueryTicketDedupCandidatesArgs = {
+  input: TicketDedupCheckInput;
+};
+
+
+export type QueryTicketPropertyConfigsArgs = {
+  disasterTypes: Array<Scalars['String']['input']>;
+  includeInactive?: Scalars['Boolean']['input'];
 };
 
 
 export type QueryTicketTasksArgs = {
   limit?: Scalars['Int']['input'];
+  q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
   status?: InputMaybe<Scalars['String']['input']>;
   ticketUuid: Scalars['String']['input'];
@@ -381,15 +833,61 @@ export type QueryTicketsArgs = {
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
   priority?: InputMaybe<Scalars['String']['input']>;
+  q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
   status?: InputMaybe<Scalars['String']['input']>;
+  zoom?: InputMaybe<Scalars['Float']['input']>;
+};
+
+
+export type QueryWorkZoneArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+
+export type QueryWorkZonesArgs = {
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+};
+
+
+export type QueryZonesByTeamArgs = {
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+  teamUuid: Scalars['UUID']['input'];
+};
+
+export type RecordDedupHintOutcomeInput = {
+  /** 提示指向的既有單 uuid */
+  candidateTicketUuid: Scalars['String']['input'];
+  /** 使用者對提示的選擇 */
+  outcome: DedupHintOutcome;
+  /** 照樣送出時新建的單 uuid；接受提示而沒有建單時省略（不會產生配對卡） */
+  submittedTicketUuid?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type RecordDedupHintOutcomeResult = {
+  __typename?: 'RecordDedupHintOutcomeResult';
+  /** 寫入的去重稽核事件 uuid */
+  auditEventUuid: Scalars['String']['output'];
+  /** 配對卡上的收斂值：'accepted_hint' 或 'ignored_hint' */
+  hintOutcome: Scalars['String']['output'];
+  /** 配對卡 uuid；接受提示而沒有建立新單時為 null（沒有第二張單可以配對） */
+  pairUuid?: Maybe<Scalars['String']['output']>;
 };
 
 export type SecondaryLocationInput = {
+  /** Whether the space can be entered right now */
+  accessStatus?: InputMaybe<AccessStatus>;
   alley?: InputMaybe<Scalars['String']['input']>;
+  /** 樓棟／區域, e.g. 'A棟'; leave empty if unknown */
+  buildingSection?: InputMaybe<Scalars['String']['input']>;
   city?: InputMaybe<Scalars['String']['input']>;
   county?: InputMaybe<Scalars['String']['input']>;
+  /** Floor label: 'B1', '1F', 'RF'. Free text on purpose */
   floor?: InputMaybe<Scalars['String']['input']>;
+  /** 地標補充 — entrance, landmark, building, which side of the road */
+  landmarkNote?: InputMaybe<Scalars['String']['input']>;
   lane?: InputMaybe<Scalars['String']['input']>;
   /** Type of secondary location: 'address' (default) or 'pole' */
   locationType?: Scalars['String']['input'];
@@ -397,17 +895,29 @@ export type SecondaryLocationInput = {
   poleId?: InputMaybe<Scalars['String']['input']>;
   poleNote?: InputMaybe<Scalars['String']['input']>;
   poleType?: InputMaybe<Scalars['String']['input']>;
+  /** 房號／空間, e.g. '302', '樓梯間' */
   room?: InputMaybe<Scalars['String']['input']>;
+  /** 空間描述, e.g. '三房兩廳' */
+  spaceDescription?: InputMaybe<Scalars['String']['input']>;
+  /** 求救者所在空間, e.g. '主臥衣櫃' */
+  victimSpace?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type SecondaryLocationType = {
   __typename?: 'SecondaryLocationType';
+  /** Whether the space can be entered: 'accessible', 'restricted', 'inaccessible', 'unknown'. A current observation, not a safety certification */
+  accessStatus?: Maybe<Scalars['String']['output']>;
   alley?: Maybe<Scalars['String']['output']>;
+  /** 樓棟／區域, e.g. 'A棟', '東翼' */
+  buildingSection?: Maybe<Scalars['String']['output']>;
   city?: Maybe<Scalars['String']['output']>;
   county?: Maybe<Scalars['String']['output']>;
+  /** Floor label as spoken: 'B1', '1F', 'RF' — never coerced to a number */
   floor?: Maybe<Scalars['String']['output']>;
-  /** UUID of the parent station this location belongs to */
+  /** UUID of the parent station or ticket this location belongs to */
   geometryUuid: Scalars['String']['output'];
+  /** 地標補充 — how to find the entrance when coordinates are not enough */
+  landmarkNote?: Maybe<Scalars['String']['output']>;
   lane?: Maybe<Scalars['String']['output']>;
   /** Type of secondary location: 'address' or 'pole' */
   locationType: Scalars['String']['output'];
@@ -418,8 +928,13 @@ export type SecondaryLocationType = {
   poleNote?: Maybe<Scalars['String']['output']>;
   /** Type of utility pole, e.g. '電線桿' (electricity pole), '電話線桿' (telephone pole) */
   poleType?: Maybe<Scalars['String']['output']>;
+  /** 房號／空間, e.g. '302', '樓梯間' */
   room?: Maybe<Scalars['String']['output']>;
+  /** 空間描述, e.g. '三房兩廳' */
+  spaceDescription?: Maybe<Scalars['String']['output']>;
   uuid: Scalars['UUID']['output'];
+  /** 求救者所在空間, e.g. '主臥衣櫃' */
+  victimSpace?: Maybe<Scalars['String']['output']>;
 };
 
 export type StationConnection = {
@@ -428,16 +943,35 @@ export type StationConnection = {
   pageInfo: PageInfo;
 };
 
+export const StationOperationalStatus = {
+  Active: 'active',
+  PermanentlyClosed: 'permanently_closed',
+  TemporarilyClosed: 'temporarily_closed'
+} as const;
+
+export type StationOperationalStatus = typeof StationOperationalStatus[keyof typeof StationOperationalStatus];
 export type StationPropertyConfigType = {
   __typename?: 'StationPropertyConfigType';
-  /** Expected data type: 'string', 'integer', 'float', or 'enum' */
-  dataType: Scalars['String']['output'];
-  /** Allowed values when data_type is 'enum', e.g. ['available', 'depleted'] */
+  /** Which control the form renders for this field */
+  dataType: FieldDataType;
+  /** Disaster types this field is enabled for; empty means every type */
+  disasterTypes: Array<Scalars['String']['output']>;
+  /** Text to render: the label, falling back to property_name */
+  displayLabel: Scalars['String']['output'];
+  /** Allowed values for single_select / multi_select, e.g. ['available', 'depleted'] */
   enumOptions?: Maybe<Array<Scalars['String']['output']>>;
+  /** Whether the field is in use */
+  isActive: Scalars['Boolean']['output'];
+  /** Display text; null when no custom label has been set */
+  label?: Maybe<Scalars['String']['output']>;
   /** The property key this config defines, e.g. 'water', 'food_ration' */
   propertyName: Scalars['String']['output'];
+  /** Field order within the form */
+  sortOrder: Scalars['Int']['output'];
   /** The station type this config applies to, or 'all' for universal properties */
   stationType: Scalars['String']['output'];
+  /** Unit suffix for a number field, e.g. 'cm'; null otherwise */
+  unit?: Maybe<Scalars['String']['output']>;
   uuid: Scalars['UUID']['output'];
 };
 
@@ -463,10 +997,40 @@ export type StationPropertyType = {
   weightings: Scalars['Float']['output'];
 };
 
+export type StationSuggestionType = {
+  __typename?: 'StationSuggestionType';
+  /** Why the user suggests this change */
+  comment?: Maybe<Scalars['String']['output']>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the user who made the suggestion */
+  createdBy?: Maybe<Scalars['String']['output']>;
+  fieldName: Scalars['String']['output'];
+  /** Proposed value, stored as text */
+  newValue: Scalars['String']['output'];
+  /** Admin's note recorded when approving/rejecting */
+  reviewNote?: Maybe<Scalars['String']['output']>;
+  /** UUID of the admin who decided */
+  reviewedBy?: Maybe<Scalars['String']['output']>;
+  /** 'pending', 'approved', or 'rejected' */
+  status: Scalars['String']['output'];
+  /** What the suggestion targets: 'station' or 'station_property' */
+  targetType: Scalars['String']['output'];
+  /** UUID of the targeted station/property */
+  targetUuid: Scalars['String']['output'];
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
 export type StationType = {
   __typename?: 'StationType';
   /** Internal admin comment, not shown to the public */
   comment?: Maybe<Scalars['String']['output']>;
+  /** Station contact email — masked unless the caller holds station.view_pii here */
+  contactEmail?: Maybe<Scalars['String']['output']>;
+  /** Station contact name — masked unless the caller holds station.view_pii here */
+  contactName?: Maybe<Scalars['String']['output']>;
+  /** Station contact phone — masked unless the caller holds station.view_pii here */
+  contactPhone?: Maybe<Scalars['String']['output']>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who created this station */
   createdBy?: Maybe<Scalars['String']['output']>;
@@ -484,12 +1048,17 @@ export type StationType = {
   name?: Maybe<Scalars['String']['output']>;
   /** Operating hours in free-text format, e.g. '09:00–18:00' or '24h' */
   opHour?: Maybe<Scalars['String']['output']>;
+  /** Whether the station is open: 'active', 'temporarily_closed', or 'permanently_closed' */
+  operationalStatus: Scalars['String']['output'];
+  photos: Array<PhotoType>;
   properties: Array<StationPropertyType>;
   /** Internal polymorphic discriminator — always 'station' */
   propertyName: Scalars['String']['output'];
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Data source of this record: 'user' or 'official' */
   source?: Maybe<Scalars['String']['output']>;
+  /** When operational_status last changed */
+  statusChangedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: Maybe<Scalars['String']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -500,6 +1069,22 @@ export type StationType = {
   visibility?: Maybe<Scalars['String']['output']>;
 };
 
+export type SuggestableFieldType = {
+  __typename?: 'SuggestableFieldType';
+  /** Input widget hint: 'string', 'integer', or 'enum' */
+  dataType: Scalars['String']['output'];
+  /** Allowed values when data_type is 'enum', else null */
+  enumOptions?: Maybe<Array<Scalars['String']['output']>>;
+  fieldName: Scalars['String']['output'];
+};
+
+export const TaskAssignmentStatus = {
+  Accepted: 'accepted',
+  Completed: 'completed',
+  EnRoute: 'en_route'
+} as const;
+
+export type TaskAssignmentStatus = typeof TaskAssignmentStatus[keyof typeof TaskAssignmentStatus];
 export type TaskAssignmentType = {
   __typename?: 'TaskAssignmentType';
   /** UUID of the assigned user or group */
@@ -508,31 +1093,51 @@ export type TaskAssignmentType = {
   assignedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Role in the task, e.g. 'lead', 'support' */
   role?: Maybe<Scalars['String']['output']>;
+  /** Work-completion state: 'accepted', 'en_route', or 'completed' */
+  status: Scalars['String']['output'];
   /** UUID of the task this assignment belongs to */
   taskUuid: Scalars['String']['output'];
+  /** Timestamp when the status was last changed */
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
 };
 
 export type TaskPropertyConfigType = {
   __typename?: 'TaskPropertyConfigType';
-  /** Expected data type: 'string', 'integer', 'float', or 'enum' */
-  dataType: Scalars['String']['output'];
-  /** Allowed values when data_type is 'enum' */
+  /** Which control the form renders for this field */
+  dataType: FieldDataType;
+  /** Disaster types this field is enabled for; empty means every type */
+  disasterTypes: Array<Scalars['String']['output']>;
+  /** Text to render: the label, falling back to property_name */
+  displayLabel: Scalars['String']['output'];
+  /** Allowed values for single_select / multi_select */
   enumOptions?: Maybe<Array<Scalars['String']['output']>>;
+  /** Whether the field is in use */
+  isActive: Scalars['Boolean']['output'];
+  /** Display text; null when no custom label has been set */
+  label?: Maybe<Scalars['String']['output']>;
   /** The property key this config defines */
   propertyName: Scalars['String']['output'];
+  /** Field order within the form */
+  sortOrder: Scalars['Int']['output'];
   /** The task type this config applies to */
   taskType: Scalars['String']['output'];
+  /** Unit suffix for a number field, e.g. 'cm'; null otherwise */
+  unit?: Maybe<Scalars['String']['output']>;
   uuid: Scalars['UUID']['output'];
 };
 
+export const TaskPropertyStatus = {
+  Fulfilled: 'fulfilled',
+  Pending: 'pending'
+} as const;
+
+export type TaskPropertyStatus = typeof TaskPropertyStatus[keyof typeof TaskPropertyStatus];
 export type TaskPropertyType = {
   __typename?: 'TaskPropertyType';
-  /** Optional notes about this property */
+  /** Optional notes about this property. Null to a caller without ticket.view_detail on the parent ticket */
   comment?: Maybe<Scalars['String']['output']>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who added this property */
-  createdBy?: Maybe<Scalars['String']['output']>;
   /** Structured attribute key, e.g. 'skill_required', 'cargo_type' */
   propertyName: Scalars['String']['output'];
   /** Value for the attribute, e.g. 'medical_first_aid', 'food' */
@@ -552,24 +1157,87 @@ export type TicketConnection = {
   pageInfo: PageInfo;
 };
 
+export type TicketDedupCheckInput = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** GeoJSON Point for the location help is needed at — [longitude, latitude] */
+  geometry: Scalars['GeoJSON']['input'];
+  /** Type of help: 'rescue', 'supply', 'medical', or 'hr' */
+  taskType?: InputMaybe<Scalars['String']['input']>;
+  title: Scalars['String']['input'];
+};
+
+export type TicketDedupHint = {
+  __typename?: 'TicketDedupHint';
+  /** 疑似重複的既有單 uuid */
+  relatedTicketUuid: Scalars['String']['output'];
+  /** 分數拆帳：每個訊號的得分、權重與過線燈號 */
+  scoreComponents: Array<DedupScoreComponent>;
+  /** 加權總分 0–1（各成分得分 × 權重加總，再除以可用成分的權重和） */
+  similarity: Scalars['Float']['output'];
+};
+
+export type TicketDisasterDetailInput = {
+  /** The field key from `ticketPropertyConfigs` */
+  propertyName: Scalars['String']['input'];
+  /** Selected values. One entry for a single-valued field, several for multi_select, [] to clear the field */
+  values: Array<Scalars['String']['input']>;
+};
+
+export type TicketDisasterDetailType = {
+  __typename?: 'TicketDisasterDetailType';
+  /** The field key, matching a `ticketPropertyConfigs` entry */
+  propertyName: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
+  /** One selected value. Numbers arrive as strings — the config's dataType says how to read it */
+  value: Scalars['String']['output'];
+};
+
+export type TicketPropertyConfigType = {
+  __typename?: 'TicketPropertyConfigType';
+  /** Which control the form renders for this field */
+  dataType: FieldDataType;
+  /** Disaster type keys this field is enabled for; empty means every type */
+  disasterTypes: Array<Scalars['String']['output']>;
+  /** Text to render: the label, falling back to property_name */
+  displayLabel: Scalars['String']['output'];
+  /** Allowed values for single_select / multi_select */
+  enumOptions?: Maybe<Array<Scalars['String']['output']>>;
+  /** Guidance shown under the field, including safety limits such as 「不可為了量測進入危險區」. Render it — some of these tell a reporter not to take a risk */
+  hint?: Maybe<Scalars['String']['output']>;
+  /** Whether the field is in use */
+  isActive: Scalars['Boolean']['output'];
+  /** Display text; null when no custom label has been set */
+  label?: Maybe<Scalars['String']['output']>;
+  /** The immutable field key, e.g. 'water_depth_cm', 'access_blocked' */
+  propertyName: Scalars['String']['output'];
+  /** Unit suffix for a number field, e.g. 'cm', 'mm' */
+  unit?: Maybe<Scalars['String']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
 export type TicketTaskType = {
   __typename?: 'TicketTaskType';
+  assignedCount: Scalars['Int']['output'];
   assignments: Array<TaskAssignmentType>;
+  completedCount: Scalars['Int']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket */
+  createdBy?: Maybe<Scalars['String']['output']>;
   /** Review state: 'pending_review', 'approved', or 'rejected' */
   moderationStatus: Scalars['String']['output'];
-  /** Current progress update written by the assignee */
+  progress?: Maybe<Scalars['Float']['output']>;
+  /** Current progress update written by the assignee. Null to a caller without ticket.view_detail on the parent ticket */
   progressNote?: Maybe<Scalars['String']['output']>;
   properties: Array<TaskPropertyType>;
   /** Number of people or units needed — null means unspecified */
   quantity?: Maybe<Scalars['Int']['output']>;
-  /** Moderator's notes explaining the review decision */
+  /** Moderator's notes explaining the review decision. Null to a caller without ticket.view_detail on the parent ticket */
   reviewNote?: Maybe<Scalars['String']['output']>;
   /** Origin of this task: 'user' or 'official' */
   source: Scalars['String']['output'];
   /** Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled' */
   status: Scalars['String']['output'];
-  /** Detailed task instructions or context */
+  /** Detailed task instructions or context. Null to a caller without ticket.view_detail on the parent ticket */
   taskDescription?: Maybe<Scalars['String']['output']>;
   /** Short name summarising the task */
   taskName: Scalars['String']['output'];
@@ -585,25 +1253,38 @@ export type TicketTaskType = {
 
 export type TicketType = {
   __typename?: 'TicketType';
-  /** Email address for follow-up communication */
+  /** Follow-up email — masked unless the caller holds ticket.view_pii here */
   contactEmail?: Maybe<Scalars['String']['output']>;
-  /** Full name of the person who submitted this request */
-  contactName: Scalars['String']['output'];
-  /** Phone number for follow-up communication */
+  /** Requester full name — masked unless the caller holds ticket.view_pii here */
+  contactName?: Maybe<Scalars['String']['output']>;
+  /** Follow-up phone — masked unless the caller holds ticket.view_pii here */
   contactPhone?: Maybe<Scalars['String']['output']>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who submitted this ticket */
+  /** UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here */
   createdBy?: Maybe<Scalars['String']['output']>;
+  /** The reporter's own account. Null to a caller without ticket.view_detail here — free text can name a door number the address field withholds */
   description?: Maybe<Scalars['String']['output']>;
-  /** GeoJSON Point indicating where help is needed */
+  disasterDetails: Array<TicketDisasterDetailType>;
+  /** Disaster type keys this ticket is filed under, e.g. ['flood', 'landslide']. Plural because one incident is routinely two disasters at once. Drives which fields `ticketPropertyConfigs` returns for it */
+  disasterTypes: Array<Scalars['String']['output']>;
+  /** GeoJSON Point indicating where help is needed. To a caller without ticket.view_detail here, the centre of the H3 cell the point falls in — at most resolution 8 (about 1 km across), coarser when `zoom` asks for it */
   geometry?: Maybe<Scalars['GeoJSON']['output']>;
+  /** Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. Not a triage grade and not a risk classification */
+  immediateDangerReported?: Maybe<Scalars['String']['output']>;
+  /** The H3 cell `geometry` stands in for, as its hex index (e.g. '884ba0a511fffff'), when the caller is shown the coarse location; null when `geometry` is the exact point. Tickets sharing a value share a location on the map — group by it, and draw the cell from it (h3-js `cellToBoundary`); its resolution is in the index */
+  locationCell?: Maybe<Scalars['String']['output']>;
+  /** Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. What the person said, not a professional assessment */
+  personTrappedReported?: Maybe<Scalars['String']['output']>;
+  /** Photos attached to this ticket. Empty to a caller without ticket.view_detail here */
   photos: Array<PhotoType>;
   /** Urgency level: 'low', 'medium', 'high', or 'critical' */
   priority: Scalars['String']['output'];
   /** Internal polymorphic discriminator — always 'request' */
   propertyName: Scalars['String']['output'];
-  /** Moderator's notes about the verification decision */
+  /** Moderator's notes about the verification decision. Null to a caller without ticket.view_detail here */
   reviewNote?: Maybe<Scalars['String']['output']>;
+  /** Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address */
+  secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
   status: Scalars['String']['output'];
   /** Type of help needed: 'rescue', 'supply', 'medical', or 'hr' */
@@ -619,6 +1300,36 @@ export type TicketType = {
   visibility?: Maybe<Scalars['String']['output']>;
 };
 
+export const TriState = {
+  No: 'no',
+  Unknown: 'unknown',
+  Yes: 'yes'
+} as const;
+
+export type TriState = typeof TriState[keyof typeof TriState];
+export type UpdateAnnouncementInput = {
+  /** The new announcement body text */
+  content: Scalars['String']['input'];
+};
+
+export type UpdateBriefingInput = {
+  /** New body text */
+  content?: InputMaybe<Scalars['String']['input']>;
+  /** New lifecycle phase */
+  state?: InputMaybe<BriefingState>;
+  /** Replacement tag list */
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+export type UpdateBriefingTemplateInput = {
+  /** New body text */
+  content?: InputMaybe<Scalars['String']['input']>;
+  /** New lifecycle phase */
+  state?: InputMaybe<BriefingState>;
+  /** Replacement tag list */
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
 export type UpdateClosureAreaInput = {
   comment?: InputMaybe<Scalars['String']['input']>;
   geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
@@ -628,6 +1339,9 @@ export type UpdateClosureAreaInput = {
 
 export type UpdateStationInput = {
   comment?: InputMaybe<Scalars['String']['input']>;
+  contactEmail?: InputMaybe<Scalars['String']['input']>;
+  contactName?: InputMaybe<Scalars['String']['input']>;
+  contactPhone?: InputMaybe<Scalars['String']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
   /** New GeoJSON Point — replaces existing geometry if provided */
   geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
@@ -635,9 +1349,11 @@ export type UpdateStationInput = {
   level?: InputMaybe<Scalars['Int']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   opHour?: InputMaybe<Scalars['String']['input']>;
+  /** Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed' */
+  operationalStatus?: InputMaybe<StationOperationalStatus>;
   type?: InputMaybe<Scalars['String']['input']>;
-  /** Updated visibility: 'public' or 'restricted' */
-  visibility?: InputMaybe<Scalars['String']['input']>;
+  /** Updated visibility: 'public', 'restricted', or 'internal' */
+  visibility?: InputMaybe<Visibility>;
 };
 
 export type UpdateStationPropertyInput = {
@@ -648,6 +1364,13 @@ export type UpdateStationPropertyInput = {
   weightings?: InputMaybe<Scalars['Float']['input']>;
 };
 
+export type UpdateTaskAssignmentInput = {
+  /** Updated role, e.g. 'lead' or 'support' — pass null to clear */
+  role?: InputMaybe<Scalars['String']['input']>;
+  /** New work-completion state */
+  status?: InputMaybe<TaskAssignmentStatus>;
+};
+
 export type UpdateTaskPropertyInput = {
   /** Updated notes — pass null to clear */
   comment?: InputMaybe<Scalars['String']['input']>;
@@ -655,16 +1378,24 @@ export type UpdateTaskPropertyInput = {
   propertyValue?: InputMaybe<Scalars['String']['input']>;
   /** Updated number of units — pass null to clear */
   quantity?: InputMaybe<Scalars['Int']['input']>;
-  /** Updated fulfillment state: 'pending' or 'fulfilled' */
-  status?: InputMaybe<Scalars['String']['input']>;
+  /** Updated fulfillment state */
+  status?: InputMaybe<TaskPropertyStatus>;
 };
 
 export type UpdateTicketInput = {
   description?: InputMaybe<Scalars['String']['input']>;
+  /** Disaster type keys — pass [] or null to clear. Validated against `disasterTypes` */
+  disasterTypes?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** 立即生命危險 — pass null to unset */
+  immediateDangerReported?: InputMaybe<TriState>;
+  /** 災民受困／無法自行離開 — pass null to unset */
+  personTrappedReported?: InputMaybe<TriState>;
   /** Updated urgency: 'low', 'medium', 'high', or 'critical' */
   priority?: InputMaybe<Scalars['String']['input']>;
   /** Moderator's review notes — pass null to clear */
   reviewNote?: InputMaybe<Scalars['String']['input']>;
+  /** Replace the ticket's street address and space detail, creating it if the ticket was filed without one. A whole-input replacement, not a patch — omitted members are written as null */
+  secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** New lifecycle state — must follow valid transitions (e.g. pending → in_progress) */
   status?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
@@ -682,16 +1413,99 @@ export type UpdateTicketTaskInput = {
   /** New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled' */
   status?: InputMaybe<Scalars['String']['input']>;
   /** Updated visibility: 'public', 'restricted', or 'internal' */
-  visibility?: InputMaybe<Scalars['String']['input']>;
+  visibility?: InputMaybe<Visibility>;
+};
+
+export type UpdateWorkZoneInput = {
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpsertDisasterTypeInput = {
+  /** Set false to retire the type; there is no delete */
+  isActive?: InputMaybe<Scalars['Boolean']['input']>;
+  /** The code to create or update; normalized (trimmed, lower-cased) */
+  key: Scalars['String']['input'];
+  /** Display name. Required when creating */
+  label?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpsertPropertyConfigInput = {
-  /** Expected data type: 'string', 'integer', 'float', or 'enum' */
-  dataType: Scalars['String']['input'];
-  /** Allowed enum values — required when data_type is 'enum', null otherwise */
+  /** Which control the form renders. Required when the field is being created; omit to leave an existing field's type untouched */
+  dataType?: InputMaybe<FieldDataType>;
+  /** Disaster types this field is enabled for; an empty list means every type, so [] sets that value rather than clearing the field. Omit to leave it untouched */
+  disasterTypes?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Allowed values for single_select / multi_select. Omit or pass null to leave the stored options untouched; pass [] to clear them */
   enumOptions?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Set false to retire the field without deleting its data */
+  isActive?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Display text for the field. Omit or pass null to leave the stored label untouched; pass "" to clear it and fall back to the property name */
+  label?: InputMaybe<Scalars['String']['input']>;
   /** The property key to create or update */
   propertyName: Scalars['String']['input'];
+  /** Field order in the form */
+  sortOrder?: InputMaybe<Scalars['Int']['input']>;
+  /** Unit suffix for a number field, e.g. 'cm'. Omit or pass null to leave the stored unit untouched; pass "" to clear it */
+  unit?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpsertTicketPropertyConfigInput = {
+  /** Which control the form renders. Required when creating; omit to leave an existing field's type untouched */
+  dataType?: InputMaybe<FieldDataType>;
+  /** Disaster type keys this field applies to; empty list means every type. Each must be an active key from `disasterTypes` — an unknown one is rejected, not stored */
+  disasterTypes?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Allowed values for single_select / multi_select. Omit or pass null to leave them untouched; pass [] to clear */
+  enumOptions?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** Guidance and safety text shown under the field. Omit or pass null to leave the stored hint untouched; pass "" to clear it */
+  hint?: InputMaybe<Scalars['String']['input']>;
+  /** Set false to retire the field without deleting its values */
+  isActive?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Display text for the field. Omit or pass null to leave the stored label untouched; pass "" to clear it and fall back to the property name */
+  label?: InputMaybe<Scalars['String']['input']>;
+  /** The field key to create or update */
+  propertyName: Scalars['String']['input'];
+  /** Unit suffix for a number field, e.g. 'cm', 'mm'. Omit or pass null to leave the stored unit untouched; pass "" to clear it */
+  unit?: InputMaybe<Scalars['String']['input']>;
+};
+
+export const Visibility = {
+  Internal: 'internal',
+  Public: 'public',
+  Restricted: 'restricted'
+} as const;
+
+export type Visibility = typeof Visibility[keyof typeof Visibility];
+export type WorkZoneConnection = {
+  __typename?: 'WorkZoneConnection';
+  items: Array<WorkZoneType>;
+  pageInfo: PageInfo;
+};
+
+export type WorkZoneType = {
+  __typename?: 'WorkZoneType';
+  /** Teams this zone has been delegated to */
+  assignedTeams: Array<AssignedTeamType>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the gov user who drew this zone */
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** GeoJSON Polygon or MultiPolygon marking the zone boundary */
+  geometry?: Maybe<Scalars['GeoJSON']['output']>;
+  name: Scalars['String']['output'];
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
+export type ZoneAssignmentType = {
+  __typename?: 'ZoneAssignmentType';
+  assignedAt?: Maybe<Scalars['DateTime']['output']>;
+  assignedBy?: Maybe<Scalars['String']['output']>;
+  teamUuid: Scalars['UUID']['output'];
+  zoneUuid: Scalars['UUID']['output'];
+};
+
+export type ZoneTeamAssignmentInput = {
+  teamUuid: Scalars['UUID']['input'];
+  zoneUuid: Scalars['UUID']['input'];
 };
 
 export type PageInfoFieldsFragment = { __typename?: 'PageInfo', totalCount: number, hasNextPage: boolean, hasPreviousPage: boolean } & { ' $fragmentName'?: 'PageInfoFieldsFragment' };
@@ -793,7 +1607,33 @@ export type CreateCrowdSourcingMutationVariables = Exact<{
 
 export type CreateCrowdSourcingMutation = { __typename?: 'Mutation', createCrowdSourcing: { __typename?: 'CrowdSourcingType', uuid: string, stationUuid: string, itemUuid?: string | null, rating: string, createdAt?: any | null } };
 
-export type TicketFieldsFragment = { __typename?: 'TicketType', uuid: string, propertyName: string, geometry?: Geometry | null, title: string, description?: string | null, contactName: string, contactEmail?: string | null, contactPhone?: string | null, status: string, priority: string, taskType?: string | null, visibility?: string | null, verificationStatus?: string | null, reviewNote?: string | null, createdBy?: string | null, createdAt?: any | null, updatedAt?: any | null } & { ' $fragmentName'?: 'TicketFieldsFragment' };
+export type TicketDedupCandidatesQueryVariables = Exact<{
+  input: TicketDedupCheckInput;
+}>;
+
+
+export type TicketDedupCandidatesQuery = { __typename?: 'Query', ticketDedupCandidates: Array<{ __typename?: 'TicketDedupHint', relatedTicketUuid: string, similarity: number, scoreComponents: Array<{ __typename?: 'DedupScoreComponent', name: string, score: number, weight: number, passed: boolean }> }> };
+
+export type RecordDedupHintOutcomeMutationVariables = Exact<{
+  input: RecordDedupHintOutcomeInput;
+}>;
+
+
+export type RecordDedupHintOutcomeMutation = { __typename?: 'Mutation', recordDedupHintOutcome: { __typename?: 'RecordDedupHintOutcomeResult', auditEventUuid: string, hintOutcome: string, pairUuid?: string | null } };
+
+export type TicketSummaryFieldsFragment = { __typename?: 'TicketType', uuid: string, title: string, status: string, taskType?: string | null, createdAt?: any | null, geometry?: Geometry | null } & { ' $fragmentName'?: 'TicketSummaryFieldsFragment' };
+
+export type GetTicketSummaryQueryVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+
+export type GetTicketSummaryQuery = { __typename?: 'Query', ticket?: (
+    { __typename?: 'TicketType' }
+    & { ' $fragmentRefs'?: { 'TicketSummaryFieldsFragment': TicketSummaryFieldsFragment } }
+  ) | null };
+
+export type TicketFieldsFragment = { __typename?: 'TicketType', uuid: string, propertyName: string, geometry?: Geometry | null, title: string, description?: string | null, contactName?: string | null, contactEmail?: string | null, contactPhone?: string | null, status: string, priority: string, taskType?: string | null, visibility?: string | null, verificationStatus?: string | null, reviewNote?: string | null, createdBy?: string | null, createdAt?: any | null, updatedAt?: any | null } & { ' $fragmentName'?: 'TicketFieldsFragment' };
 
 export type TicketTaskFieldsFragment = { __typename?: 'TicketTaskType', uuid: string, ticketUuid: string, taskType: string, taskName: string, taskDescription?: string | null, quantity?: number | null, status: string, source: string, progressNote?: string | null, visibility: string, moderationStatus: string, reviewNote?: string | null, createdAt?: any | null, updatedAt?: any | null } & { ' $fragmentName'?: 'TicketTaskFieldsFragment' };
 
@@ -889,6 +1729,7 @@ export type CreateTaskPropertyMutation = { __typename?: 'Mutation', createTaskPr
 export const PageInfoFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PageInfoFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PageInfo"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}}]}}]} as unknown as DocumentNode<PageInfoFieldsFragment, unknown>;
 export const StationFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"StationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"opHour"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"isDuplicate"}},{"kind":"Field","name":{"kind":"Name","value":"isTemporary"}},{"kind":"Field","name":{"kind":"Name","value":"isOfficial"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<StationFieldsFragment, unknown>;
 export const ClosureAreaFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"ClosureAreaFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"ClosureAreaType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"informationSource"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<ClosureAreaFieldsFragment, unknown>;
+export const TicketSummaryFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"TicketSummaryFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}}]}}]} as unknown as DocumentNode<TicketSummaryFieldsFragment, unknown>;
 export const TicketFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"TicketFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"contactName"}},{"kind":"Field","name":{"kind":"Name","value":"contactEmail"}},{"kind":"Field","name":{"kind":"Name","value":"contactPhone"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"priority"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"reviewNote"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<TicketFieldsFragment, unknown>;
 export const TicketTaskFieldsFragmentDoc = {"kind":"Document","definitions":[{"kind":"FragmentDefinition","name":{"kind":"Name","value":"TicketTaskFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketTaskType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"ticketUuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"taskName"}},{"kind":"Field","name":{"kind":"Name","value":"taskDescription"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"progressNote"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"moderationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"reviewNote"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<TicketTaskFieldsFragment, unknown>;
 export const GetStationsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetStations"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"bounds"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BoundsInput"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stationType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"skip"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"0"}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"50"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stations"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"bounds"},"value":{"kind":"Variable","name":{"kind":"Name","value":"bounds"}}},{"kind":"Argument","name":{"kind":"Name","value":"stationType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stationType"}}},{"kind":"Argument","name":{"kind":"Name","value":"skip"},"value":{"kind":"Variable","name":{"kind":"Name","value":"skip"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"StationFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"PageInfoFields"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"PageInfoFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"PageInfo"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"StationFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"StationType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"opHour"}},{"kind":"Field","name":{"kind":"Name","value":"level"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"isDuplicate"}},{"kind":"Field","name":{"kind":"Name","value":"isTemporary"}},{"kind":"Field","name":{"kind":"Name","value":"isOfficial"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<GetStationsQuery, GetStationsQueryVariables>;
@@ -900,6 +1741,9 @@ export const UpdateStationDocument = {"kind":"Document","definitions":[{"kind":"
 export const DeleteStationDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteStation"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteStation"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}]}]}}]} as unknown as DocumentNode<DeleteStationMutation, DeleteStationMutationVariables>;
 export const CreateStationPropertyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateStationProperty"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateStationPropertyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createStationProperty"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"stationUuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyType"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"weightings"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CreateStationPropertyMutation, CreateStationPropertyMutationVariables>;
 export const CreateCrowdSourcingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateCrowdSourcing"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateCrowdSourcingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createCrowdSourcing"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"stationUuid"}},{"kind":"Field","name":{"kind":"Name","value":"itemUuid"}},{"kind":"Field","name":{"kind":"Name","value":"rating"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CreateCrowdSourcingMutation, CreateCrowdSourcingMutationVariables>;
+export const TicketDedupCandidatesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TicketDedupCandidates"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"TicketDedupCheckInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ticketDedupCandidates"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"relatedTicketUuid"}},{"kind":"Field","name":{"kind":"Name","value":"similarity"}},{"kind":"Field","name":{"kind":"Name","value":"scoreComponents"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"score"}},{"kind":"Field","name":{"kind":"Name","value":"weight"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}}]}}]}}]}}]} as unknown as DocumentNode<TicketDedupCandidatesQuery, TicketDedupCandidatesQueryVariables>;
+export const RecordDedupHintOutcomeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RecordDedupHintOutcome"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RecordDedupHintOutcomeInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"recordDedupHintOutcome"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"auditEventUuid"}},{"kind":"Field","name":{"kind":"Name","value":"hintOutcome"}},{"kind":"Field","name":{"kind":"Name","value":"pairUuid"}}]}}]}}]} as unknown as DocumentNode<RecordDedupHintOutcomeMutation, RecordDedupHintOutcomeMutationVariables>;
+export const GetTicketSummaryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetTicketSummary"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ticket"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"TicketSummaryFields"}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"TicketSummaryFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}}]}}]} as unknown as DocumentNode<GetTicketSummaryQuery, GetTicketSummaryQueryVariables>;
 export const GetTicketsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetTickets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"bounds"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"BoundsInput"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"priority"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"skip"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"0"}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"50"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tickets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"bounds"},"value":{"kind":"Variable","name":{"kind":"Name","value":"bounds"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"priority"},"value":{"kind":"Variable","name":{"kind":"Name","value":"priority"}}},{"kind":"Argument","name":{"kind":"Name","value":"skip"},"value":{"kind":"Variable","name":{"kind":"Name","value":"skip"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"TicketFields"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"hasPreviousPage"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"TicketFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"contactName"}},{"kind":"Field","name":{"kind":"Name","value":"contactEmail"}},{"kind":"Field","name":{"kind":"Name","value":"contactPhone"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"priority"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"reviewNote"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<GetTicketsQuery, GetTicketsQueryVariables>;
 export const GetTicketDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetTicket"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ticket"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"uuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"uuid"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"TicketFields"}},{"kind":"Field","name":{"kind":"Name","value":"photos"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"url"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"tasks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"TicketTaskFields"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"TicketFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"geometry"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"contactName"}},{"kind":"Field","name":{"kind":"Name","value":"contactEmail"}},{"kind":"Field","name":{"kind":"Name","value":"contactPhone"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"priority"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"verificationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"reviewNote"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"TicketTaskFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketTaskType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"ticketUuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"taskName"}},{"kind":"Field","name":{"kind":"Name","value":"taskDescription"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"progressNote"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"moderationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"reviewNote"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<GetTicketQuery, GetTicketQueryVariables>;
 export const GetTicketTasksDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetTicketTasks"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"ticketUuid"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"skip"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"0"}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}},"defaultValue":{"kind":"IntValue","value":"50"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ticketTasks"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"ticketUuid"},"value":{"kind":"Variable","name":{"kind":"Name","value":"ticketUuid"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"skip"},"value":{"kind":"Variable","name":{"kind":"Name","value":"skip"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"FragmentSpread","name":{"kind":"Name","value":"TicketTaskFields"}},{"kind":"Field","name":{"kind":"Name","value":"properties"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskUuid"}},{"kind":"Field","name":{"kind":"Name","value":"propertyName"}},{"kind":"Field","name":{"kind":"Name","value":"propertyValue"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"comment"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"assignments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskUuid"}},{"kind":"Field","name":{"kind":"Name","value":"actorUuid"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"assignedAt"}}]}}]}}]}},{"kind":"FragmentDefinition","name":{"kind":"Name","value":"TicketTaskFields"},"typeCondition":{"kind":"NamedType","name":{"kind":"Name","value":"TicketTaskType"}},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"uuid"}},{"kind":"Field","name":{"kind":"Name","value":"ticketUuid"}},{"kind":"Field","name":{"kind":"Name","value":"taskType"}},{"kind":"Field","name":{"kind":"Name","value":"taskName"}},{"kind":"Field","name":{"kind":"Name","value":"taskDescription"}},{"kind":"Field","name":{"kind":"Name","value":"quantity"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"progressNote"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"moderationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"reviewNote"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]} as unknown as DocumentNode<GetTicketTasksQuery, GetTicketTasksQueryVariables>;
