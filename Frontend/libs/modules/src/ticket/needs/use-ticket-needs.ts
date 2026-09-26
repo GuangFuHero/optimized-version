@@ -21,6 +21,11 @@ export function readTicketNeeds(ticket: GetTicketQuery['ticket']): TicketNeed[] 
   return (ticket?.tasks ?? []).map((task) => useFragment(TicketNeedFieldsFragmentDoc, task));
 }
 
+/** The ticket's own status — a withdrawn or finished ticket closes every need on it. */
+export function readTicketStatus(ticket: GetTicketQuery['ticket']): string | null {
+  return ticket ? useFragment(TicketFieldsFragmentDoc, ticket).status : null;
+}
+
 /**
  * A ticket's needs and its status, from the same `GetTicket` the detail panel runs — urql shares
  * one request between them, so the drawer footer does not fetch the ticket twice.
@@ -38,7 +43,7 @@ export function useTicketNeeds(ticketUuid: string) {
 
     return {
       needs: readTicketNeeds(ticket),
-      ticketStatus: ticket ? useFragment(TicketFieldsFragmentDoc, ticket).status : null,
+      ticketStatus: readTicketStatus(ticket),
     };
   }, [data?.ticket]);
 }

@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+
 import { Typography } from '@mui/material';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
@@ -23,7 +25,13 @@ interface NeedClaimFooterProps {
  */
 export function NeedClaimFooter({ ticketUuid, isAuthenticated }: NeedClaimFooterProps) {
   const { needs, ticketStatus } = useTicketNeeds(ticketUuid);
-  const { requestClaim, requestSignIn } = useNeedClaim();
+  const { requestClaim, requestSignIn, ticketShown } = useNeedClaim();
+
+  // Only a ticket's drawer has this footer, so its mounting says the drawer is up — what a need
+  // brought back from signing in waits for (NeedClaimProvider).
+  useEffect(() => {
+    ticketShown(ticketUuid);
+  }, [ticketShown, ticketUuid]);
 
   if (needs.length === 0) {
     return null;
@@ -54,7 +62,7 @@ export function NeedClaimFooter({ ticketUuid, isAuthenticated }: NeedClaimFooter
       claim={resolveNeedClaim(need, { ticketStatus, isAuthenticated })}
       needName={need.taskName}
       onClaim={() => requestClaim(ticketUuid, need.uuid)}
-      onSignIn={requestSignIn ? () => requestSignIn(ticketUuid) : undefined}
+      onSignIn={requestSignIn ? () => requestSignIn(ticketUuid, need.uuid) : undefined}
     />
   );
 }

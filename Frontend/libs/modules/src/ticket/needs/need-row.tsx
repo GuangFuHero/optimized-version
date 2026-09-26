@@ -92,7 +92,7 @@ export function NeedRow({ need, ticketUuid, ticketStatus, isAuthenticated }: Nee
           claim={claim}
           needName={need.taskName}
           onClaim={() => requestClaim(ticketUuid, need.uuid)}
-          onSignIn={requestSignIn ? () => requestSignIn(ticketUuid) : undefined}
+          onSignIn={requestSignIn ? () => requestSignIn(ticketUuid, need.uuid) : undefined}
         />
       </Stack>
     </Box>

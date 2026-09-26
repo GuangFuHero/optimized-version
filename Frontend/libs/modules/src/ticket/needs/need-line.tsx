@@ -115,7 +115,7 @@ export function NeedLine({
           claim={claim}
           needName={need.taskName}
           onClaim={() => requestClaim(ticketUuid, need.uuid)}
-          onSignIn={requestSignIn ? () => requestSignIn(ticketUuid) : undefined}
+          onSignIn={requestSignIn ? () => requestSignIn(ticketUuid, need.uuid) : undefined}
         />
       </Box>
     </Stack>

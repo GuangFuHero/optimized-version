@@ -1,12 +1,14 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -15,21 +17,32 @@ import { useClient, useMutation } from 'urql';
 import { ClaimNeedDocument, GetTicketDocument } from '@rescue-frontend/data-access';
 
 import { claimErrorMessage } from './claim-error';
-import { buildClaimSignInHref } from './claim-return';
-import type { TicketNeed } from './need-claim';
+import {
+  buildClaimSignInHref,
+  readClaimReturn,
+  stripClaimReturn,
+  type ClaimReturn,
+} from './claim-return';
+import { resolveNeedClaim, type TicketNeed } from './need-claim';
 import { NeedClaimDialog, type NeedClaimTarget } from './need-claim-dialog';
 import { NeedClaimToast } from './need-claim-toast';
-import { readTicketNeeds, TICKET_NEEDS_QUERY_CONTEXT } from './use-ticket-needs';
+import {
+  readTicketNeeds,
+  readTicketStatus,
+  TICKET_NEEDS_QUERY_CONTEXT,
+} from './use-ticket-needs';
 
 interface NeedClaimContextValue {
   /** Ask the signed-in viewer to confirm claiming one of the ticket's needs. */
   requestClaim: (ticketUuid: string, needUuid: string) => void;
   /**
-   * Send a guest to sign in, and back to this page with the ticket open. Null until the session is
-   * known to be a guest's: while it loads, a signed-in viewer's buttons read 「登入後接」 for a
-   * moment, and pressing one then must not send them to sign in again.
+   * Send a guest to sign in, and back to this page with the ticket open and the need offered.
+   * Null until the session is known to be a guest's: while it loads, a signed-in viewer's buttons
+   * read 「登入後接」 for a moment, and pressing one then must not send them to sign in again.
    */
-  requestSignIn: ((ticketUuid: string) => void) | null;
+  requestSignIn: ((ticketUuid: string, needUuid: string) => void) | null;
+  /** Said by a ticket's drawer once it is up (`NeedClaimFooter`), for the offer below to wait on. */
+  ticketShown: (ticketUuid: string) => void;
 }
 
 const NeedClaimContext = createContext<NeedClaimContextValue | null>(null);
@@ -48,6 +61,7 @@ interface NeedClaimProviderProps {
  */
 export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimProviderProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { status: sessionStatus } = useSession();
   const client = useClient();
   const [, executeClaim] = useMutation(ClaimNeedDocument);
@@ -66,7 +80,8 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
   }, []);
 
   const sendToSignIn = useCallback(
-    (ticketUuid: string) => router.push(buildClaimSignInHref(window.location, ticketUuid)),
+    (ticketUuid: string, needUuid: string) =>
+      router.push(buildClaimSignInHref(window.location, ticketUuid, needUuid)),
     [router],
   );
 
@@ -80,7 +95,7 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
    * drawer and this dialog read the answer from the cache; the list keeps its own copy, so it is
    * told.
    */
-  const reloadNeeds = useCallback(
+  const reloadTicket = useCallback(
     async (ticketUuid: string) => {
       const result = await client
         .query(
@@ -89,13 +104,16 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
           { ...TICKET_NEEDS_QUERY_CONTEXT, requestPolicy: 'network-only' },
         )
         .toPromise();
-      const needs = result.data?.ticket ? readTicketNeeds(result.data.ticket) : null;
+      const ticket = result.data?.ticket;
 
-      if (needs) {
-        onTicketNeedsChange?.(ticketUuid, needs);
+      if (!ticket) {
+        return null;
       }
 
-      return needs;
+      const needs = readTicketNeeds(ticket);
+      onTicketNeedsChange?.(ticketUuid, needs);
+
+      return { needs, ticketStatus: readTicketStatus(ticket) };
     },
     [client, onTicketNeedsChange],
   );
@@ -114,7 +132,7 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
       const result = await executeClaim({ taskUuid: needUuid });
       // Either way: a refusal usually means the need changed under the volunteer — filled up,
       // closed — and the dialog and every button should now say so (Q29).
-      const needs = await reloadNeeds(ticketUuid);
+      const reloaded = await reloadTicket(ticketUuid);
 
       if (result.error) {
         setError(claimErrorMessage(result.error));
@@ -124,17 +142,80 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
       setDialogOpen(false);
       setToast({
         open: true,
-        needName: needs?.find((need) => need.uuid === needUuid)?.taskName ?? '這筆需求',
+        needName: reloaded?.needs.find((need) => need.uuid === needUuid)?.taskName ?? '這筆需求',
       });
     } finally {
       setSubmitting(false);
     }
-  }, [executeClaim, reloadNeeds, target]);
+  }, [executeClaim, reloadTicket, target]);
+
+  // The need a guest pressed 「登入後接」 on, back from signing in (`claim=`). Read once, from the
+  // router: on the way back the page renders before the address changes, and the site's route
+  // state rewrites the address without it soon after.
+  const [claimReturn] = useState(() => readClaimReturn(searchParams));
+  const claimReturnStripped = useRef(false);
+  const claimReturnOffered = useRef(false);
+  const [shownTicketUuid, setShownTicketUuid] = useState<string | null>(null);
+
+  /**
+   * Offer the need back, as if pressed again — but only while it can still be taken: it may have
+   * filled or closed while they signed in, or be theirs already. Then the drawer says so instead.
+   */
+  const offerReturnedClaim = useCallback(
+    async ({ ticketUuid, needUuid }: ClaimReturn) => {
+      const reloaded = await reloadTicket(ticketUuid);
+      const need = reloaded?.needs.find((item) => item.uuid === needUuid);
+      const claim = need
+        ? resolveNeedClaim(need, { ticketStatus: reloaded?.ticketStatus, isAuthenticated: true })
+        : null;
+
+      if (claim?.action === 'claim') {
+        requestClaim(ticketUuid, needUuid);
+      }
+    },
+    [reloadTicket, requestClaim],
+  );
+
+  // Off the address as soon as the session is known, offered or not, so a reload or a copied link
+  // does not ask again.
+  useEffect(() => {
+    if (!claimReturn || claimReturnStripped.current || sessionStatus === 'loading') {
+      return;
+    }
+
+    claimReturnStripped.current = true;
+
+    const address = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const withoutClaim = stripClaimReturn(address);
+
+    if (withoutClaim !== address) {
+      window.history.replaceState(window.history.state, '', withoutClaim);
+    }
+  }, [claimReturn, sessionStatus]);
+
+  // Offered once the ticket's drawer is up. Opened before it, the confirmation ends up under the
+  // drawer — a modal on a phone — hidden from screen readers and out of the keyboard's reach. No
+  // drawer, no offer: the ticket may be gone, or off the map's view. A guest here did not sign in —
+  // the link came some other way — and has nothing to confirm.
+  useEffect(() => {
+    if (
+      !claimReturn ||
+      claimReturnOffered.current ||
+      sessionStatus !== 'authenticated' ||
+      shownTicketUuid !== claimReturn.ticketUuid
+    ) {
+      return;
+    }
+
+    claimReturnOffered.current = true;
+    void offerReturnedClaim(claimReturn);
+  }, [claimReturn, offerReturnedClaim, sessionStatus, shownTicketUuid]);
 
   const value = useMemo(
     () => ({
       requestClaim,
       requestSignIn: sessionStatus === 'unauthenticated' ? sendToSignIn : null,
+      ticketShown: setShownTicketUuid,
     }),
     [requestClaim, sendToSignIn, sessionStatus],
   );
