@@ -8,7 +8,7 @@ import {
   Typography,
 } from '@mui/material';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
 import {
@@ -21,6 +21,7 @@ import {
   verifyAsync,
 } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
+import { withCallbackUrl } from './callback-url';
 import { createHashedCredentialAsync } from './credentials';
 
 const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
@@ -48,6 +49,11 @@ interface PendingRegistration {
 
 export default function RegisterFormClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // The page the login page was asked to return to, carried here — a guest who pressed 「登入後接」
+  // and had no account yet lands back on that ticket. Nothing asked: the map.
+  const requestedCallbackUrl = searchParams.get('callbackUrl');
+  const callbackUrl = requestedCallbackUrl ?? '/map';
   const [pendingRegistration, setPendingRegistration] =
     useState<PendingRegistration | null>(null);
   const [verificationCode, setVerificationCode] = useState('');
@@ -93,7 +99,7 @@ export default function RegisterFormClient() {
           refreshToken: tokenPair.refresh_token,
           tokenType: tokenPair.token_type ?? 'bearer',
           expiresIn: String(tokenPair.expires_in),
-          callbackUrl: '/map',
+          callbackUrl,
           redirect: false,
         });
       } catch (error) {
@@ -109,7 +115,7 @@ export default function RegisterFormClient() {
       setVerificationSuccess('帳號驗證完成，正在登入。');
 
       startTransition(() => {
-        router.replace(result?.url ?? '/map', { scroll: false });
+        router.replace(result?.url ?? callbackUrl, { scroll: false });
       });
     } catch (error) {
       setVerificationError(
@@ -262,7 +268,9 @@ export default function RegisterFormClient() {
       secondaryActionLabel="返回登入"
       onSecondaryAction={() => {
         startTransition(() => {
-          router.push('/login', { scroll: false });
+          router.push(withCallbackUrl('/login', requestedCallbackUrl), {
+            scroll: false,
+          });
         });
       }}
     />

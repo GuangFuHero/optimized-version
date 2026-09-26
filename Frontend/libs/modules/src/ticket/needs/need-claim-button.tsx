@@ -40,8 +40,10 @@ interface NeedClaimButtonProps {
   claim: NeedClaim;
   /** Joins the label in the accessible name — 「接這筆」alone does not say which need. */
   needName: string;
-  /** Runs the `claim` action. Without it the button cannot be pressed. */
+  /** Runs the `claim` action. A button whose action has no handler cannot be pressed. */
   onClaim?: () => void;
+  /** Runs the `sign-in` action: a guest's 「登入後接」. */
+  onSignIn?: () => void;
   /**
    * `row` sits beside a need; `footer` is the drawer's one main action, shaped like the footer's
    * other buttons (`TicketDetailFooterButton`) so the row of them reads as one set.
@@ -53,9 +55,14 @@ export function NeedClaimButton({
   claim,
   needName,
   onClaim,
+  onSignIn,
   placement = 'row',
 }: NeedClaimButtonProps) {
-  const pressable = claim.action === 'claim' && Boolean(onClaim);
+  const onPress =
+    claim.action === 'claim' ? onClaim : claim.action === 'sign-in' ? onSignIn : undefined;
+  const pressable = Boolean(onPress);
+  // A guest's 「登入後接」 takes the same fill as 「接這筆」 and keeps its lock: the prototype's
+  // button, only pressable — it disabled it (site-detail.jsx:103, 128-129).
   const look = pressable
     ? LOOKS.pressable
     : claim.kind === 'mine'
@@ -73,7 +80,7 @@ export function NeedClaimButton({
     <ButtonBase
       disableRipple
       disabled={!pressable}
-      onClick={pressable ? onClaim : undefined}
+      onClick={onPress}
       // Starts with the visible label, so a voice user saying what they see still hits it.
       aria-label={`${claim.label}：${needName}`}
       sx={{

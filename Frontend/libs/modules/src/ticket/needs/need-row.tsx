@@ -31,7 +31,7 @@ interface NeedRowProps {
  * `NeedRow`, `Design/前台/js/site/site-detail.jsx:99-136`).
  */
 export function NeedRow({ need, ticketUuid, ticketStatus, isAuthenticated }: NeedRowProps) {
-  const { requestClaim } = useNeedClaim();
+  const { requestClaim, requestSignIn } = useNeedClaim();
   const claim = resolveNeedClaim(need, { ticketStatus, isAuthenticated });
   const quota = formatNeedQuota(need, claim.kind);
   const closed = claim.kind === 'canceled' || claim.kind === 'fulfilled';
@@ -92,6 +92,7 @@ export function NeedRow({ need, ticketUuid, ticketStatus, isAuthenticated }: Nee
           claim={claim}
           needName={need.taskName}
           onClaim={() => requestClaim(ticketUuid, need.uuid)}
+          onSignIn={requestSignIn ? () => requestSignIn(ticketUuid) : undefined}
         />
       </Stack>
     </Box>

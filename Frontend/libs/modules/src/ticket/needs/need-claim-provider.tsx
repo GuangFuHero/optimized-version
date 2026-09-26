@@ -1,5 +1,7 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import {
   createContext,
   useCallback,
@@ -13,6 +15,7 @@ import { useClient, useMutation } from 'urql';
 import { ClaimNeedDocument, GetTicketDocument } from '@rescue-frontend/data-access';
 
 import { claimErrorMessage } from './claim-error';
+import { buildClaimSignInHref } from './claim-return';
 import type { TicketNeed } from './need-claim';
 import { NeedClaimDialog, type NeedClaimTarget } from './need-claim-dialog';
 import { NeedClaimToast } from './need-claim-toast';
@@ -21,6 +24,12 @@ import { readTicketNeeds, TICKET_NEEDS_QUERY_CONTEXT } from './use-ticket-needs'
 interface NeedClaimContextValue {
   /** Ask the signed-in viewer to confirm claiming one of the ticket's needs. */
   requestClaim: (ticketUuid: string, needUuid: string) => void;
+  /**
+   * Send a guest to sign in, and back to this page with the ticket open. Null until the session is
+   * known to be a guest's: while it loads, a signed-in viewer's buttons read 「登入後接」 for a
+   * moment, and pressing one then must not send them to sign in again.
+   */
+  requestSignIn: ((ticketUuid: string) => void) | null;
 }
 
 const NeedClaimContext = createContext<NeedClaimContextValue | null>(null);
@@ -34,9 +43,12 @@ interface NeedClaimProviderProps {
 /**
  * The one place a page's claim buttons claim through — the drawer's rows, its footer and the list's
  * lines — so every entry point gets the same confirmation (Q9), the same words for a refusal and
- * the same word of success, and one reload that every view of the ticket hears.
+ * the same word of success, and one reload that every view of the ticket hears. A guest's button
+ * goes through here too, to sign in and come back to the ticket.
  */
 export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimProviderProps) {
+  const router = useRouter();
+  const { status: sessionStatus } = useSession();
   const client = useClient();
   const [, executeClaim] = useMutation(ClaimNeedDocument);
   // Open is kept apart from what is being confirmed, so the dialog keeps its content while it
@@ -52,6 +64,11 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
     setTarget({ ticketUuid, needUuid });
     setDialogOpen(true);
   }, []);
+
+  const sendToSignIn = useCallback(
+    (ticketUuid: string) => router.push(buildClaimSignInHref(window.location, ticketUuid)),
+    [router],
+  );
 
   const closeDialog = useCallback(() => setDialogOpen(false), []);
   // Stable, so a re-render — the list taking in new needs — does not restart the toast's timer.
@@ -114,7 +131,13 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
     }
   }, [executeClaim, reloadNeeds, target]);
 
-  const value = useMemo(() => ({ requestClaim }), [requestClaim]);
+  const value = useMemo(
+    () => ({
+      requestClaim,
+      requestSignIn: sessionStatus === 'unauthenticated' ? sendToSignIn : null,
+    }),
+    [requestClaim, sendToSignIn, sessionStatus],
+  );
 
   return (
     <NeedClaimContext.Provider value={value}>

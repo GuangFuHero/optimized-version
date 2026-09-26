@@ -7,6 +7,7 @@ import { startTransition } from 'react';
 
 import { AuthFormError, LoginForm } from '@rescue-frontend/modules';
 import { messageForCode } from '../api/error-messages';
+import { withCallbackUrl } from './callback-url';
 import { resolveHashedCredentialAsync } from './credentials';
 
 const LOGIN_FALLBACK_MESSAGE = '登入失敗，請確認帳號或密碼。';
@@ -59,9 +60,11 @@ export default function () {
   const router = useRouter();
   const searchParams = useSearchParams();
   const audience = searchParams.get('audience');
+  // Set by the page that sent the user here — a guest's 「登入後接」 among them — and kept if they
+  // register instead.
+  const requestedCallbackUrl = searchParams.get('callbackUrl');
   const callbackUrl =
-    searchParams.get('callbackUrl') ??
-    (audience === 'admin' ? '/admin/map' : '/map');
+    requestedCallbackUrl ?? (audience === 'admin' ? '/admin/map' : '/map');
   const authErrorMessage = resolveAuthErrorMessage(searchParams.get('error'));
 
   return (
@@ -118,7 +121,9 @@ export default function () {
         }}
         onSecondaryAction={() => {
           startTransition(() => {
-            router.push('/register', { scroll: false });
+            router.push(withCallbackUrl('/register', requestedCallbackUrl), {
+              scroll: false,
+            });
           });
         }}
       />
