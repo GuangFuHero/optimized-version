@@ -17,9 +17,9 @@ class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
     property_name: Mapped[str] = mapped_column(String(50))
     geometry = mapped_column(Geometry("GEOMETRY", srid=4326))
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"))
-    # No `team_uuid` here (ADR-049, 乙): a geo resource's jurisdiction is decided by geography
-    # — whether its point falls inside a WorkZone polygon assigned to a team (`zone` scope) —
-    # not by a stored owning-org. Removed to keep authorization purely capability + own + zone.
+    # No `team_uuid` here (ADR-049, 乙): a ticket's jurisdiction is decided by geography —
+    # whether its point falls inside a WorkZone polygon assigned to a team (`zone` scope).
+    # Stations are the exception and carry their own `team_uuid` (ADR-285).
 
     __mapper_args__ = {
         "polymorphic_on": property_name,
@@ -62,6 +62,11 @@ class Station(BaseGeometry):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_official: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), nullable=True)
+    # The one team that runs this station, assigned by hand; null = unassigned (ADR-285). This is
+    # what `team` scope compares against for stations, instead of the WorkZone geometry tickets use.
+    team_uuid: Mapped[str | None] = mapped_column(
+        ForeignKey("teams.uuid", ondelete="SET NULL"), nullable=True, index=True
+    )
     contact_name: Mapped[str | None] = mapped_column(String(100))
     contact_email: Mapped[str | None] = mapped_column(String(100))
     contact_phone: Mapped[str | None] = mapped_column(String(50))

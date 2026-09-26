@@ -28,7 +28,7 @@
 
 - **回溯還原（restore / revert）**。MVP 是唯讀時間軸。
 - **跨資源的稽核查詢**（「李四這個月改過哪些東西」）。本票只做「單一資源的歷史」。
-- **修好 `task_assignments` 硬刪**（ADR-132）、**`source` 的值域**（ADR-137）、**GraphQL 側的地址 PII 閘門**（ADR-142）。三者都另開票。
+- **修好 `task_assignments` 硬刪**（ADR-132）、**`source` 的值域**（ADR-137）、**GraphQL 側的地址 PII 閘門**（ADR-142）。三者都另開票。（地址閘門後來由 018 的 ADR-268、ADR-281 補上，時間軸再由 ADR-284 對齊。）
 - **替 `crowd_sourcing` / `station_update_suggestions` / `photos` 補 trigger**。
 - **匯出歷史成檔案**。
 
@@ -49,7 +49,7 @@ GET /api/v1/history/stations/{uuid}?limit=50&offset=0
   ⑤ 合流      A ∪ B，去重（現存指派兩邊都會撈到）
   ⑥ 合併      同 (row_id, created_at) 併成一個事件
   ⑦ 推導      event_type、actor.kind、欄位變更
-  ⑧ 過濾      依 caller 權限套用四層白名單
+  ⑧ 過濾      依 caller 權限套用五層白名單
   ⑨ 切片      排序後 [offset:offset+limit]
 ```
 
@@ -111,32 +111,43 @@ STATION_VIEW_HISTORY = "station.view_history"
 
 ---
 
-## 5. 欄位可見度：四層
+## 5. 欄位可見度：五層
 
 | 層級 | 內容 | 解鎖條件 |
 |---|---|---|
 | **一般** | 業務欄位 | `*.view_history` |
-| **PII** | `contact_*`、詳細地址、精確座標 | `ticket.view_pii` 且 in scope，否則遮罩 |
+| **PII** | `contact_*`、兩個檢傷欄位 | `ticket.view_pii` 且 in scope，否則遮罩或不給值 |
+| **詳情** | 通報單的詳細地址、精確座標、自由文字 | `ticket.view_detail` 且 in scope，否則不給值（ADR-284） |
 | **稽核** | `review_note`、`moderation_status` | `audit.view` |
 | **RAW** | 整列 `old_values` / `new_values` | `audit.view` |
 
-`super_admin` 與 `data_auditor` 同時持有 `audit.view=all` 與 `ticket.view_pii=all`，自動看得到四層全部，無需特例（ADR-130）。
+`super_admin` 與 `data_auditor` 同時持有 `audit.view=all`、`ticket.view_pii=all` 與 `ticket.view_detail=all`，自動看得到五層全部，無需特例（ADR-130）。
 
 ### 白名單（一般層）
 
 | 表 | 欄位 |
 |---|---|
-| `tickets` | title, description, status, priority, task_type, visibility, verification_status, disaster_type |
+| `tickets` | title, status, priority, task_type, visibility, verification_status, disaster_type |
 | `stations` | type, name, description, op_hour, level, comment, source, visibility, verification_status, is_temporary, expires_at, is_official |
-| `ticket_tasks` | task_type, task_name, task_description, quantity, status, source, progress_note, visibility |
-| `task_properties` | property_name, property_value, quantity, status, comment |
+| `ticket_tasks` | task_type, task_name, quantity, status, source, visibility |
+| `task_properties` | property_name, property_value, quantity, status |
 | `task_assignments` | actor_uuid（解析成人名）, role, status |
 | `station_properties` | property_type, property_name, quantity, comment, status |
-| `base_geometries` | geometry（只報「已變更」，ADR-141） |
+| `base_geometries` | geometry（站點；只報「已變更」，ADR-141） |
 
 ### PII 層
 
-`contact_name` / `contact_email` / `contact_phone` 走 `app/graphql/masking.py` 現有的 `mask_name` / `mask_email` / `mask_phone`；`secondary_locations` 的 `county/city/lane/alley/no/floor/room/pole_*` 與 `geometry` 的座標值同層（ADR-142）。
+`contact_name` / `contact_email` / `contact_phone` 走 `app/graphql/masking.py` 現有的 `mask_name` / `mask_email` / `mask_phone`；`person_trapped_reported` / `immediate_danger_reported` 沒有可遮的形狀，不給值（ADR-254）。
+
+### 詳情層
+
+通報單這一側、`ticket.view_detail` 在單筆查詢擋的那些（ADR-281），時間軸照同一張表擋（ADR-284）：
+
+- `secondary_locations` 的 `county/city/lane/alley/no/floor/room/pole_*` 與 018 新增的五個空間欄位（ADR-142 的「不做半遮」照舊）
+- `base_geometries.geometry` 的「已變更」這件事本身
+- `tickets.description`、`ticket_tasks.task_description`、`ticket_tasks.progress_note`、`task_properties.comment`
+
+沒權限時只留欄位名與 `changed: true`，座標則整筆不出現。站點的地址與座標是公開的，不在這一層。
 
 ### 明確排除（不屬於任何層）
 
@@ -224,7 +235,7 @@ CREATE INDEX ix_audit_logs_assign_task ON audit_logs
   tests/test_history_fields.py          分類守衛
   tests/test_history_endpoints.py       HTTP 層：信封格式、403/404、分頁、遮罩
   tests/test_history_service.py         聚合／合併／推導
-  tests/test_history_permissions.py     四層可見度 × scope
+  tests/test_history_permissions.py     五層可見度 × scope
 
 修改
   app/core/permissions.py               + 2 個 Perm
@@ -241,4 +252,4 @@ CREATE INDEX ix_audit_logs_assign_task ON audit_logs
 - **超過 2000 列會截斷**，靠 `meta.truncated` 告知（ADR-139）。
 - **交易內無法排序**。同一次操作的多列已合併成一個事件，所以這個限制不外顯；但若未來要拆開顯示，需要先把 trigger 的 `now()` 換成 `clock_timestamp()`。
 - **「任務改排到另一條路線」看不到**（外鍵被排除，ADR-143）。
-- **歷史的地址可見度比 GraphQL 嚴**。這是刻意的（ADR-142），不一致要靠另開的票從 GraphQL 側修。
+- **歷史與單筆查詢用同一個 `ticket.view_detail`**（ADR-284），但有兩個刻意的例外：CREATED 事件的操作者就是建立者，照樣顯示（每個事件都有操作者，只擋這一筆擋不住）；`location_type` 維持公開（只說是地址還是電線桿，定位不了任何東西）。

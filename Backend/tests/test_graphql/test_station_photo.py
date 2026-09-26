@@ -22,17 +22,16 @@ import uuid as uuid_mod
 
 import pytest
 import pytest_asyncio
-from geoalchemy2.shape import from_shape
-from shapely.geometry import Polygon
 from sqlalchemy import select
 
 from app.core.identity import encode_act
 from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.models.auth import User
+from app.models.geo import Station
 from app.models.photo import Photo
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team
 from app.repositories.session_repository import SessionRepository
 from tests.test_graphql.conftest import auth_header, test_db
 
@@ -57,10 +56,6 @@ query($uuid: UUID!) { station(uuid: $uuid) { photos { uuid url } } }
 CREATE_TICKET = """
 mutation($input: CreateTicketInput!) { createTicket(input: $input) { uuid } }
 """
-
-# Matches test_zone_scope.py: the zone covers 121-122E/24-25N.
-ZONE_POLYGON = Polygon([(121.0, 24.0), (121.0, 25.0), (122.0, 25.0), (122.0, 24.0), (121.0, 24.0)])
-OUTSIDE_ZONE_LONLAT = [123.5, 24.5]
 
 
 async def _create_station(client, token: str, lonlat=(121.5, 24.5)) -> str:
@@ -150,21 +145,20 @@ async def contributor_auth(redis):
 
 
 @pytest_asyncio.fixture
-async def team_assigned_to_zone() -> str:
-    """A Team assigned to a WorkZone covering 121-122E/24-25N."""
+async def reviewer_team() -> str:
+    """An ngo Team for a team-scoped moderator — a gov team's `team` scope widens to `all`."""
     async with test_db() as db:
-        team = Team(name=f"Photo Zone Team {uuid_mod.uuid4().hex[:8]}", type="gov")
-        assigner = User(name=f"assigner_{uuid_mod.uuid4().hex[:8]}")
-        zone = WorkZone(name="Photo Test Zone", geometry=from_shape(ZONE_POLYGON, srid=4326))
-        db.add_all([team, assigner, zone])
-        await db.flush()
-        db.add(
-            TeamZoneAssign(
-                team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)
-            )
-        )
+        team = Team(name=f"Photo Team {uuid_mod.uuid4().hex[:8]}", type="ngo")
+        db.add(team)
         await db.flush()
         return str(team.uuid)
+
+
+async def _assign_station(station_uuid: str, team_uuid: str) -> None:
+    """Hand a station to a team directly — the assign mutation has its own tests (ADR-285)."""
+    async with test_db() as db:
+        station = await db.get(Station, uuid_mod.UUID(station_uuid))
+        station.team_uuid = team_uuid
 
 
 # --- A2: url validation -----------------------------------------------------------------
@@ -298,7 +292,7 @@ async def test_detach_station_photo_denied_without_review(client, contributor_au
 async def test_detach_station_photo_uploader_removes_own(client, contributor_auth):
     """The uploader can remove their own photo without holding station.review.
 
-    station.review is seeded only at super_admin/all and team admin/zone, so without this
+    station.review is seeded only at super_admin/all and team admin/team, so without this
     exemption someone who uploaded the wrong photo could not take it down and had to find a
     moderator. Undoing a contribution costs what making it cost: station.contribute, the same
     capability attach requires, with no scope check — the mirror of attach.
@@ -320,33 +314,33 @@ async def test_detach_station_photo_uploader_removes_own(client, contributor_aut
 
 
 @pytest.mark.asyncio
-async def test_detach_station_photo_zone_scoped_reviewer_outside_zone(
-    client, coordinator_auth, team_assigned_to_zone, redis
+async def test_detach_station_photo_team_scoped_reviewer_on_another_teams_station(
+    client, coordinator_auth, reviewer_team, redis
 ):
-    """A moderator limited to their team's area can only remove photos inside it.
+    """A moderator limited to their team's stations can only remove photos on those (ADR-285).
 
-    Both halves matter. The rejection shows the geographic limit is enforced. The success
-    shows it is enforced using the *station's* coordinates: a photo has no location of its
-    own, so if the check did not borrow the parent station's, even the in-area case would
-    fail and the limit would look like a blanket denial.
+    Both halves matter. The rejection shows the limit is enforced. The success shows it is
+    enforced using the *station's* team: a photo has no team of its own, so if the check did
+    not borrow the parent station's, even the own-station case would fail and the limit would
+    look like a blanket denial.
     """
     _, coord_token = coordinator_auth
     _, reviewer_token = await _make_user_with_grants(
-        redis,
-        {Perm.STATION_REVIEW: "zone", Perm.STATION_VIEW: "all"}, team_uuid=team_assigned_to_zone
+        redis, {Perm.STATION_REVIEW: "team", Perm.STATION_VIEW: "all"}, team_uuid=reviewer_team
     )
 
-    inside = await _create_station(client, coord_token, (121.5, 24.5))
-    outside = await _create_station(client, coord_token, OUTSIDE_ZONE_LONLAT)
-    inside_photo = (await _attach(client, coord_token, inside,
-                                  "https://example.com/in.jpg"))["data"]["attachStationPhoto"]["uuid"]
-    outside_photo = (await _attach(client, coord_token, outside,
-                                   "https://example.com/out.jpg"))["data"]["attachStationPhoto"]["uuid"]
+    own = await _create_station(client, coord_token)
+    unassigned = await _create_station(client, coord_token)
+    await _assign_station(own, reviewer_team)
+    own_photo = (await _attach(client, coord_token, own,
+                               "https://example.com/own.jpg"))["data"]["attachStationPhoto"]["uuid"]
+    other_photo = (await _attach(client, coord_token, unassigned,
+                                 "https://example.com/other.jpg"))["data"]["attachStationPhoto"]["uuid"]
 
-    denied = await _detach(client, reviewer_token, outside_photo)
+    denied = await _detach(client, reviewer_token, other_photo)
     assert "errors" in denied, denied
 
-    allowed = await _detach(client, reviewer_token, inside_photo)
+    allowed = await _detach(client, reviewer_token, own_photo)
     assert "errors" not in allowed, allowed
 
 

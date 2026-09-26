@@ -134,6 +134,33 @@ class GeoMutation:
         return True
 
     @strawberry.mutation
+    async def assign_station_to_team(
+        self, info: strawberry.types.Info, station_uuid: UUID, team_uuid: UUID
+    ) -> StationType:
+        """Hand a station to the one team that runs it (ADR-285).
+
+        Requires station.assign, and a gov team or platform identity. Replaces any previous
+        assignment; assigning the team it already has is a no-op.
+        """
+        station = await station_service.assign_station(
+            info.context["db"], actor=require_authenticated(info),
+            station_uuid=str(station_uuid), team_uuid=str(team_uuid),
+        )
+        return StationType.from_model(station)
+
+    @strawberry.mutation
+    async def unassign_station(self, info: strawberry.types.Info, station_uuid: UUID) -> StationType:
+        """Take a station back from its team, leaving it unassigned (ADR-285).
+
+        Requires station.assign, and a gov team or platform identity.
+        """
+        station = await station_service.assign_station(
+            info.context["db"], actor=require_authenticated(info),
+            station_uuid=str(station_uuid), team_uuid=None,
+        )
+        return StationType.from_model(station)
+
+    @strawberry.mutation
     async def create_closure_area(
         self, info: strawberry.types.Info, input: CreateClosureAreaInput
     ) -> ClosureAreaType:

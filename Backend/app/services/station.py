@@ -13,17 +13,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
+from app.core.rbac_scopes import active_team
 from app.graphql.scalars import geojson_to_geom
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.station_property import CrowdSourcing, StationProperty
+from app.models.team import Team
 from app.repositories.geo_repository import (
     crowd_sourcing_repository,
     secondary_location_repository,
     station_property_repository,
     station_repository,
 )
-from app.services.authz import require_scope
+from app.services.authz import require_gov_team, require_scope
 from app.services.geo_validation import normalize_contact_fields, validate_point
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
@@ -60,7 +62,7 @@ OPERATIONAL_PROPERTY_NAMES = {
 async def notify_operational_status_change(
     db: AsyncSession, *, station_uuid: str, property_name: str, actor_uuid: str | None
 ) -> None:
-    """Tell Gov staff and the covering NGO admins that a station's live status changed.
+    """Tell Gov staff and the station's team admins that a station's live status changed.
 
     Shared by the two write paths that can change an operational value: direct property
     edits (update_station_property) and approved suggestions
@@ -72,7 +74,7 @@ async def notify_operational_status_change(
     """
     station = await station_repository.get_by_uuid_active(db, station_uuid)
     station_name = (station.name if station else None) or "物資站"
-    recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, station_uuid)
+    recipients = await NotificationRecipientResolver.resolve_gov_and_station_team(db, station_uuid)
     await NotificationService.dispatch(
         db,
         event_type="resource_station_updated",
@@ -126,6 +128,9 @@ async def create_station(
         obj_in={
             "geometry": geojson_to_geom(geometry),
             "created_by": str(actor_uid),
+            # Created as a team → that team runs it; as a platform identity (incl. citizens) →
+            # unassigned until gov assigns it (ADR-285). Bulk import creates through here too.
+            "team_uuid": active_team(actor),
             "type": type,
             "name": name,
             "description": description,
@@ -153,7 +158,7 @@ async def create_station(
     await db.refresh(station)
 
     # 觸發 resource_station_updated 通知
-    recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, str(station.uuid))
+    recipients = await NotificationRecipientResolver.resolve_gov_and_station_team(db, str(station.uuid))
     await NotificationService.dispatch(
         db,
         event_type="resource_station_updated",
@@ -238,6 +243,82 @@ async def delete_station(db: AsyncSession, *, actor: User, uuid: str) -> None:
     await station_repository.soft_delete(db, db_obj=station)
 
 
+async def assign_station(
+    db: AsyncSession, *, actor: User, station_uuid: str, team_uuid: str | None
+) -> Station:
+    """Hand a station to the one team that runs it, or unassign it with `team_uuid=None` (ADR-285).
+
+    Idempotent like assign_zone_to_team: assigning the team it already has changes nothing and
+    tells nobody. Otherwise the new team's admins hear they got it and the old team's admins
+    that they lost it.
+
+    Checked as a capability alone, like work_zone.assign: assigning is a gov-wide action, and
+    checked against the station a `team` grant would 404 on exactly the unassigned stations
+    gov is there to hand out.
+
+    The station row stays locked FOR UPDATE until the write commits, so a second assignment
+    racing this one reads the team this one left it with. Without the lock both would read
+    the same old team: it would hear "unassigned" twice, and the team in between would never
+    hear it lost the station. Authorization runs first, so a caller who is refused never
+    takes the lock.
+    """
+    await require_scope(actor, Perm.STATION_ASSIGN, db)
+    await require_gov_team(db, actor, detail="Only gov teams may assign stations.")
+    station = await db.scalar(
+        select(Station)
+        .where(Station.uuid == station_uuid, Station.delete_at.is_(None))
+        .with_for_update()
+    )
+    if not station:
+        raise ValueError("Station not found")
+    if team_uuid is not None:
+        # Same create-time check as assign_zone_to_team: a team that goes inactive later keeps
+        # its stations until gov moves them.
+        team = await db.scalar(select(Team).where(Team.uuid == team_uuid, Team.delete_at.is_(None)))
+        if team is None:
+            raise ValueError("Team not found")
+        if team.status != "active":
+            raise ValueError("Team is not active")
+
+    old_team = str(station.team_uuid) if station.team_uuid else None
+    new_team = str(team_uuid) if team_uuid else None
+    if old_team == new_team:
+        return station
+
+    # Plain values before the write: update() and dispatch() both commit, and the test suite
+    # runs with expire_on_commit=True (see update_station_property).
+    station_name = station.name or "物資站"
+    actor_uid = actor.uuid
+    updated = await station_repository.update(db, db_obj=station, obj_in={"team_uuid": team_uuid})
+    team_admins = NotificationRecipientResolver.resolve_team_admin
+    if new_team:
+        await NotificationService.dispatch(
+            db,
+            event_type="station_assigned",
+            title=f"新指派物資站：{station_name}",
+            body=f"您的團隊已獲指派負責物資站「{station_name}」。",
+            priority="high",
+            actor_uuid=actor_uid,
+            ref_type="station",
+            ref_uuid=station_uuid,
+            explicit_recipients=await team_admins(db, team_uuid=new_team),
+        )
+    if old_team:
+        await NotificationService.dispatch(
+            db,
+            event_type="station_unassigned",
+            title=f"物資站指派已解除：{station_name}",
+            body=f"您的團隊對物資站「{station_name}」的指派已解除。",
+            priority="medium",
+            actor_uuid=actor_uid,
+            ref_type="station",
+            ref_uuid=station_uuid,
+            explicit_recipients=await team_admins(db, team_uuid=old_team),
+        )
+    await db.refresh(updated)
+    return updated
+
+
 async def create_station_property(
     db: AsyncSession,
     *,
@@ -273,16 +354,15 @@ async def create_station_property(
 async def _property_scope_target(db: AsyncSession, prop: StationProperty) -> SimpleNamespace:
     """Scope target for a station property (ADR-052, direction B).
 
-    A StationProperty has no geometry of its own, so `zone` scope could never match it
-    directly (in_scope's ZONE branch needs resource.geometry). It borrows its parent
-    station's location for the zone check, so a team's `zone`-scoped station.edit reaches
-    properties on stations sitting inside its WorkZone. `own` still means the property's
-    own creator.
+    A StationProperty has no team or geometry of its own, so it borrows its parent station's:
+    the team for `team` scope (ADR-285), so a team's station.edit reaches properties on the
+    stations assigned to it, and the location for `zone` scope. `own` still means the
+    property's own creator.
     """
     station = await station_repository.get_by_uuid_active(db, prop.station_uuid)
     return SimpleNamespace(
         created_by=prop.created_by,
-        team_uuid=None,
+        team_uuid=station.team_uuid if station else None,
         geometry=station.geometry if station else None,
     )
 
@@ -292,13 +372,13 @@ async def update_station_property(
 ) -> StationProperty:
     """Update a station property (checkpoint 1 station.edit, then checkpoint 2 against it).
 
-    The property has no geometry, so checkpoint 2 borrows the parent station's location for
-    `zone` scope (ADR-052); `own` resolves against the property's creator. Without this a
-    team role (`station.edit=zone`) could never edit any property, even inside its own zone.
+    The property has no team or geometry, so checkpoint 2 borrows the parent station's
+    (ADR-052, ADR-285); `own` resolves against the property's creator. Without this a team
+    role (`station.edit=team`) could never edit any property, even on its own stations.
 
     Changing an operational value (OPERATIONAL_PROPERTY_NAMES) also fires
-    `resource_station_updated` to all Gov staff plus the NGO admins whose work zone covers
-    the station — those values are EAV rows here, not columns on `stations`. This mutation
+    `resource_station_updated` to all Gov staff plus the admins of the station's team
+    (ADR-285) — those values are EAV rows here, not columns on `stations`. This mutation
     only reaches the Integer ones (it writes `quantity`); the Boolean/Enum ones live in
     `comment` and are changed through the suggestion workflow, which notifies too.
     """

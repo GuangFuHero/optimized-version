@@ -19,11 +19,14 @@ from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
+from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import chart_render
 from tests.conftest import auth_headers_for
 
 TICKETS_URL = "/api/v1/analytics/tickets/chart"
 STATIONS_URL = "/api/v1/analytics/stations/chart"
+TICKETS_VALUE_URL = "/api/v1/analytics/tickets/value"
+STATIONS_VALUE_URL = "/api/v1/analytics/stations/value"
 CATALOG_URL = "/api/v1/analytics/catalog"
 
 
@@ -215,7 +218,7 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
     assert res.status_code == 200
 
     body = res.json()
-    assert set(body) == {"tickets", "stations"}
+    assert set(body) == {"tickets", "stations", "default_style"}
     # Named rather than counted, so adding a metric doesn't fail this test for no reason —
     # but a metric silently disappearing from the frontend's dropdowns still does.
     assert set(body["tickets"]) == {
@@ -235,6 +238,14 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
     assert body["tickets"]["total_tickets"]["allowed_x"] == ["category", "date", "none"]
     # station_status_count is grouping-only: ungrouped it would just repeat station_count.
     assert body["stations"]["station_status_count"]["allowed_x"] == ["category"]
+    # The glossary the dashboard shows comes from here, not from a frontend copy.
+    assert body["tickets"]["total_tickets"]["label"] == "任務單總數"
+    assert body["tickets"]["total_tickets"]["unit"] == "件"
+    assert body["tickets"]["completion_rate"]["unit"] == "%"
+    assert all(spec["description"] for spec in {**body["tickets"], **body["stations"]}.values())
+    # default_style is what the chart endpoints use when `style` is omitted.
+    assert body["default_style"]["palette"][0] == "#E3791E"
+    assert body["default_style"]["legend"] == "bottom"
 
 
 @pytest.mark.asyncio
@@ -282,9 +293,10 @@ async def test_station_status_count_always_groups_by_status(client, db_session, 
     res = await client.get(STATIONS_URL, params={"y": "station_status_count"}, headers=headers)
     assert res.status_code == 200
     html = res.json()["html"]
-    # Compared as a set: GROUP BY makes no promise about row order.
+    # Compared as a set: GROUP BY makes no promise about row order. Labels are the zh-TW
+    # display names, not the raw operational_status values.
     labels = set(json.loads(re.search(r'"labels":(\[[^]]*\])', html).group(1)))
-    assert labels == {"active", "temporarily_closed", "permanently_closed"}
+    assert labels == {"營運中", "暫停營運", "永久關閉"}
     assert '"values":[1,1,1]' in html
 
 
@@ -333,6 +345,202 @@ async def test_unknown_layout_overrides_key_is_a_400(client, db_session, redis):
     )
     assert res.status_code == 400
     assert "layout_overrides" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_default_style_matches_the_dashboard_mock(client, db_session, redis):
+    """With no `style`, the rendered figure carries the ops dashboard's look.
+
+    The frontend injects this HTML verbatim, so these have to be baked in server-side —
+    the palette, the font stack, the bottom legend, and no modebar.
+    """
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
+    res = await client.get(TICKETS_URL, params={"y": "total_tickets"}, headers=headers)
+    assert res.status_code == 200
+    html = res.json()["html"]
+    assert '"colorway":["#E3791E"' in html
+    assert '"family":"Inter, Noto Sans TC, sans-serif"' in html
+    assert '"legend":{"orientation":"h"' in html
+    assert '"paper_bgcolor":"rgba(0,0,0,0)"' in html
+    # The config object is serialised with spaces, unlike the figure JSON.
+    assert '"displayModeBar": false' in html
+
+
+@pytest.mark.asyncio
+async def test_style_param_overrides_the_defaults(client, db_session, redis):
+    """A partial `style` replaces only the fields it names."""
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
+    res = await client.get(
+        TICKETS_URL,
+        params={
+            "y": "total_tickets",
+            "style": json.dumps({"palette": ["#123456"], "legend": "none", "modebar": True}),
+        },
+        headers=headers,
+    )
+    assert res.status_code == 200
+    html = res.json()["html"]
+    assert '"colorway":["#123456"]' in html
+    assert '"showlegend":false' in html
+    assert '"displayModeBar": true' in html
+    assert '"family":"Inter, Noto Sans TC, sans-serif"' in html  # untouched default
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "style",
+    [
+        "not json",
+        json.dumps({"no_such_field": 1}),
+        json.dumps({"font_color": "red"}),
+        json.dumps({"palette": []}),
+    ],
+)
+async def test_bad_style_is_a_400(client, db_session, redis, style):
+    """Undecodable, unknown-field, non-hex, or empty-palette styles are the caller's error."""
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
+    res = await client.get(
+        TICKETS_URL, params={"y": "total_tickets", "style": style}, headers=headers
+    )
+    assert res.status_code == 400
+    assert "style" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_completion_rate_axis_is_a_percentage(client, db_session, redis):
+    """The metric's own axis rule survives the style layer: the rate is 0–1 but reads as %."""
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
+    res = await client.get(TICKETS_URL, params={"y": "completion_rate"}, headers=headers)
+    assert res.status_code == 200
+    assert '"tickformat":".0%"' in res.json()["html"]
+
+
+@pytest.mark.asyncio
+async def test_category_axis_shows_display_names(client, db_session, redis):
+    """Raw task_type keys become their zh-TW names on the axis; the series name is zh-TW too."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    db_session.add(
+        Tickets(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid,
+            title="t", contact_name="c", status="pending", priority="high",
+            task_type="rescue", visibility="public",
+        )
+    )
+    await db_session.commit()
+
+    res = await client.get(
+        TICKETS_URL, params={"y": "total_tickets", "x": "category"}, headers=headers
+    )
+    assert res.status_code == 200
+    html = res.json()["html"]
+    # Plotly serialises the figure with ensure_ascii, so CJK shows up as \uXXXX escapes.
+    assert f'"x":[{json.dumps("搜救")}]' in html
+    assert f'"name":{json.dumps("任務單")}' in html
+    assert "rescue" not in html
+
+
+@pytest.mark.asyncio
+async def test_value_requires_authentication(client):
+    """Same rule as the chart endpoints — a KPI number is not public data."""
+    res = await client.get(TICKETS_VALUE_URL, params={"y": "total_tickets"})
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_value_requires_the_domain_permission(client, db_session, redis):
+    """station.view doesn't substitute for ticket.view on the ticket number either."""
+    headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
+    res = await client.get(TICKETS_VALUE_URL, params={"y": "total_tickets"}, headers=headers)
+    assert res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_value_returns_the_aggregate_within_the_callers_scope(client, db_session, redis):
+    """The KPI number, as a number — narrowed by scope exactly like the chart is."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW, scope="own")
+    stranger = User(name="somebody else")
+    db_session.add(stranger)
+    await db_session.flush()
+    stranger_uuid = str(stranger.uuid)
+    for owner in (user_uuid, stranger_uuid):
+        db_session.add(
+            Tickets(
+                geometry=from_shape(Point(121.5, 25.0), srid=4326),
+                created_by=owner,
+                title="t", contact_name="c", status="pending", priority="high",
+                task_type="rescue", visibility="public",
+            )
+        )
+    await db_session.commit()
+
+    res = await client.get(TICKETS_VALUE_URL, params={"y": "total_tickets"}, headers=headers)
+    assert res.status_code == 200
+    assert res.json() == {"value": 1}
+
+
+@pytest.mark.asyncio
+async def test_value_of_completion_rate_is_a_percentage(client, db_session, redis):
+    """`/value` is in the catalog unit (`%`): 1 of 2 completed is 50.0, not the chart's 0.5.
+
+    Empty data is 0, not a 500.
+    """
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    res = await client.get(TICKETS_VALUE_URL, params={"y": "completion_rate"}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["value"] == 0
+
+    open_ticket, done_ticket = (
+        Tickets(
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid,
+            title="t", contact_name="c", status="pending", priority="high",
+            task_type="rescue", visibility="public",
+        )
+        for _ in range(2)
+    )
+    db_session.add_all([open_ticket, done_ticket])
+    await db_session.flush()
+    task = TicketTask(
+        ticket_uuid=done_ticket.uuid, task_type="rescue", task_name="task",
+        source="user", visibility="public", created_by=user_uuid, status="fulfilled",
+    )
+    db_session.add(task)
+    await db_session.flush()
+    db_session.add(TaskAssignment(task_uuid=task.uuid, actor_uuid=user_uuid, status="completed"))
+    await db_session.commit()
+
+    res = await client.get(TICKETS_VALUE_URL, params={"y": "completion_rate"}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["value"] == 50.0
+
+
+@pytest.mark.asyncio
+async def test_station_value_renders(client, db_session, redis):
+    """The station handler shares _value_domain; an empty table is 0, not a 500."""
+    headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
+    res = await client.get(STATIONS_VALUE_URL, params={"y": "station_count"}, headers=headers)
+    assert res.status_code == 200
+    assert res.json() == {"value": 0}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("y", ["age_distribution", "net_backlog_change", "time_to_completion"])
+async def test_value_rejects_a_metric_with_no_single_number(client, db_session, redis, y):
+    """Forced-shape and multi-series metrics have no one number to return."""
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
+    res = await client.get(TICKETS_VALUE_URL, params={"y": y}, headers=headers)
+    assert res.status_code == 400
+    assert y in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_value_keeps_the_metrics_own_input_rules(client, db_session, redis):
+    """duplicate_count's mandatory date range applies to the number as much as the chart."""
+    headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
+    res = await client.get(TICKETS_VALUE_URL, params={"y": "duplicate_count"}, headers=headers)
+    assert res.status_code == 400
+    assert "start_date" in res.json()["detail"]
 
 
 @pytest.mark.asyncio
