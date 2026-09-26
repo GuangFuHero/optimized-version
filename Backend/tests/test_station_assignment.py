@@ -41,7 +41,7 @@ from app.services.station import (
     update_station,
     update_station_property,
 )
-from app.services.suggestion import review_station_suggestion
+from app.services.suggestion import SuggestionDecision, merge_station_suggestions
 from tests.conftest import TEST_DB_URL, acting_as
 
 _POINT = Point(121.5, 24.5)
@@ -280,8 +280,8 @@ async def test_a_property_follows_its_stations_team(db):
 
 
 @pytest.mark.asyncio
-async def test_a_property_suggestion_is_reviewed_by_the_stations_team(db):
-    """Reviewing a property suggestion scopes through the parent station's team."""
+async def test_a_property_suggestion_is_merged_by_the_stations_team(db):
+    """Merging a property suggestion scopes through the parent station's team."""
     ngo = await _team(db, "NGO", "ngo")
     author = await _user(db, "Author")
     reviewer = await _user(db, "Reviewer")
@@ -300,9 +300,13 @@ async def test_a_property_suggestion_is_reviewed_by_the_stations_team(db):
     await db.flush()
     await _grant(db, reviewer, Perm.STATION_REVIEW, "team", "role-review", team=ngo)
 
-    reviewed = await review_station_suggestion(db, actor=reviewer, uuid=str(suggestion.uuid), approve=True)
+    await merge_station_suggestions(
+        db, actor=reviewer, station_uuid=str(station.uuid),
+        decisions=[SuggestionDecision(str(prop.uuid), "property_name", True, "bottled water")],
+    )
 
-    assert reviewed.status == "approved"
+    await db.refresh(suggestion)
+    assert suggestion.status == "approved"
 
 
 @pytest.mark.asyncio

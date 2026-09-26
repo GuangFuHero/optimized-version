@@ -527,16 +527,33 @@ station_update_suggestions {
     string field_name "String(100), the single field being changed"
     string new_value "stored as text; coerced to the field's data type on approval"
     string comment "nullable, submitter's rationale"
-    string status "pending/approved/rejected, String(20), default pending"
+    string status "pending/approved/rejected/revoked, String(20), default pending"
     string review_note "nullable, reviewer's rationale"
     uuid reviewed_by FK "nullable, FK to users; NULL until reviewed"
-    uuid created_by FK "FK to users"
+    uuid created_by FK "FK to users; one pending row per (created_by, target_uuid, field_name)"
+    uuid merge_uuid FK "nullable, the merge that decided this row"
+    timestamp created_at
+    timestamp updated_at
+    timestamp delete_at
+}
+station_suggestion_merges {
+    uuid uuid PK
+    uuid station_uuid FK "FK to stations"
+    jsonb changes "[{target_type, target_uuid, field_name, before, after}] per applied field"
+    string review_note "nullable"
+    string status "applied/revoked, String(20)"
+    uuid reviewed_by FK "FK to users"
+    uuid revoked_by FK "nullable, FK to users"
+    timestamp revoked_at "nullable"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at
 }
 users ||--o{ station_update_suggestions : "suggests"
 users ||--o{ station_update_suggestions : "reviews"
+station_suggestion_merges ||--o{ station_update_suggestions : "decides"
+stations ||--o{ station_suggestion_merges : "merged into"
+users ||--o{ station_suggestion_merges : "merges / revokes"
 %% Dashed = logical reference; target_uuid is a plain column selected by target_type.
 stations ||..o{ station_update_suggestions : "target when target_type='station'"
 station_properties ||..o{ station_update_suggestions : "target when target_type='station_property'"

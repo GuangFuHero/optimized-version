@@ -211,6 +211,69 @@ async def test_resolve_permission_scope_filtering(db: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_new_suggestion_notifies_only_reviewers_who_can_act(db: AsyncSession):
+    """A new suggestion reaches reviewers whose grant covers the station, never the submitter.
+
+    That is an `all` grant, a `team` grant (role or direct) for the station's team, or a gov
+    team's `team` grant, which is widened for station.review (ADR-285).
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import suggestion as suggestion_service
+
+    review = Permission(key=Perm.STATION_REVIEW.value)
+    platform_reviewer_role = Role(name="data_auditor", kind="platform")
+    team_reviewer_role = Role(name="admin", kind="team")
+    own, other = Team(name="本隊", type="ngo"), Team(name="他隊", type="ngo")
+    gov = Team(name="政府", type="gov")
+    db.add_all([review, platform_reviewer_role, team_reviewer_role, own, other, gov])
+    await db.flush()
+    db.add_all([
+        RolePermissionAssign(role_uuid=platform_reviewer_role.uuid, permission_uuid=review.uuid, scope="all"),
+        RolePermissionAssign(role_uuid=team_reviewer_role.uuid, permission_uuid=review.uuid, scope="team"),
+    ])
+
+    users = [User(name=n) for n in ("稽核", "本隊", "他隊", "政府", "直授", "投稿")]
+    db.add_all(users)
+    await db.flush()
+    ids = {u.name: u.uuid for u in users}
+    db.add_all([
+        UserRoleAssign(user_uuid=ids["稽核"], role_uuid=platform_reviewer_role.uuid),
+        UserRoleAssign(user_uuid=ids["投稿"], role_uuid=platform_reviewer_role.uuid),
+        UserRoleAssign(user_uuid=ids["本隊"], role_uuid=team_reviewer_role.uuid, team_uuid=own.uuid),
+        UserRoleAssign(user_uuid=ids["他隊"], role_uuid=team_reviewer_role.uuid, team_uuid=other.uuid),
+        UserRoleAssign(user_uuid=ids["政府"], role_uuid=team_reviewer_role.uuid, team_uuid=gov.uuid),
+        UserPermissionAssign(
+            user_uuid=ids["直授"], permission_uuid=review.uuid, scope="team", team_uuid=own.uuid
+        ),
+    ])
+    station = Station(
+        name="站", geometry=WKTElement("SRID=4326;POINT(121.42 23.66)", srid=4326), team_uuid=own.uuid
+    )
+    db.add(station)
+    await db.flush()
+    station_id = station.uuid
+    await db.commit()
+
+    with patch("app.services.suggestion.require_scope", new_callable=AsyncMock):
+        # The second submit only edits the first's pending row, so it notifies nobody again.
+        for new_value in ("新站名", "新站名2"):
+            # Reload each time: the previous submit's commit expired the user.
+            submitter_obj = await db.get(User, ids["投稿"], populate_existing=True)
+            await suggestion_service.create_station_suggestion(
+                db, actor=submitter_obj, target_type="station", target_uuid=str(station_id),
+                field_name="name", new_value=new_value, comment=None,
+            )
+
+    notified = (
+        await db.execute(
+            select(Notification.recipient_uuid).where(Notification.type == "station_suggestion_created")
+        )
+    ).scalars().all()
+    assert sorted(notified) == sorted([ids["稽核"], ids["本隊"], ids["政府"], ids["直授"]])
+
+
+@pytest.mark.asyncio
 async def test_notification_dispatch_persists_across_sessions(db: AsyncSession):
     """Verify notifications dispatched are committed and persist after the session is closed."""
     recipient = User(name="Recipient User")
@@ -484,13 +547,10 @@ async def test_non_operational_property_update_is_silent(db: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_approved_suggestion_on_boolean_property_notifies_gov(db: AsyncSession):
-    """Approving a suggestion that flips a Boolean operational value must notify Gov.
+    """Merging a suggestion that flips a Boolean operational value must notify Gov.
 
-    Boolean/Enum property values live in `station_properties.comment`, and
-    UpdateStationPropertyInput exposes no `comment` field — so the suggestion workflow is
-    the *only* way `is_open`, `water_level`, `supply_rationed` and `power_stable` ever
-    change. review_station_suggestion() applies the change with setattr + commit, bypassing
-    update_station_property entirely, so it needs its own dispatch.
+    Boolean/Enum property values live in `station_properties.comment`, which only the
+    suggestion workflow can change, so a merge needs its own dispatch.
     """
     from unittest.mock import AsyncMock, patch
 
@@ -517,6 +577,7 @@ async def test_approved_suggestion_on_boolean_property_notifies_gov(db: AsyncSes
     )
     db.add(prop)
     await db.flush()
+    prop_id = prop.uuid
 
     sugg = StationUpdateSuggestion(
         target_type="station_property",
@@ -533,12 +594,14 @@ async def test_approved_suggestion_on_boolean_property_notifies_gov(db: AsyncSes
 
     reviewer_obj = await db.get(User, reviewer_id)
     with patch("app.services.suggestion.require_scope", new_callable=AsyncMock):
-        reviewed = await suggestion_service.review_station_suggestion(
-            db, actor=reviewer_obj, uuid=str(sugg_id), approve=True, review_note=None
+        merge = await suggestion_service.merge_station_suggestions(
+            db, actor=reviewer_obj, station_uuid=str(station_id),
+            decisions=[suggestion_service.SuggestionDecision(str(prop_id), "comment", True, "false")],
         )
 
-    # The endpoint reads the returned suggestion straight after; dispatch() committed.
-    assert reviewed.status == "approved"
+    # The endpoint reads the returned merge straight after; dispatch() committed.
+    assert merge.status == "applied"
+    assert (await db.get(StationUpdateSuggestion, sugg_id)).status == "approved"
 
     rows = (
         (
@@ -583,6 +646,7 @@ async def test_rejected_suggestion_does_not_notify(db: AsyncSession):
     )
     db.add(prop)
     await db.flush()
+    prop_id = prop.uuid
 
     sugg = StationUpdateSuggestion(
         target_type="station_property",
@@ -599,9 +663,12 @@ async def test_rejected_suggestion_does_not_notify(db: AsyncSession):
 
     reviewer_obj = await db.get(User, reviewer_id)
     with patch("app.services.suggestion.require_scope", new_callable=AsyncMock):
-        await suggestion_service.review_station_suggestion(
-            db, actor=reviewer_obj, uuid=str(sugg_id), approve=False, review_note="無法查證"
+        await suggestion_service.merge_station_suggestions(
+            db, actor=reviewer_obj, station_uuid=str(station_id),
+            decisions=[suggestion_service.SuggestionDecision(str(prop_id), "comment", False)],
+            review_note="無法查證",
         )
+    assert (await db.get(StationUpdateSuggestion, sugg_id)).status == "rejected"
 
     rows = (
         (

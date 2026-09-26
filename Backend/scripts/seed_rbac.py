@@ -70,8 +70,8 @@ ROLES_DATA = [
         },
     },
     {
-        # Oversight only — no edit/review/make (ADR-049 / Docs/rbac-permissions-design.md §2.4).
-        # Sees all data incl. PII; reviews the audit trail (endpoint TBD, granted ahead).
+        # Oversight: sees all data incl. PII and the audit trail, and makes no edits of its own.
+        # The one write it holds is reviewing crowd-sourced station suggestions, and undoing that review.
         "name": "data_auditor",
         "kind": "platform",
         "permissions": {
@@ -92,6 +92,8 @@ ROLES_DATA = [
             # No import counterpart — this role has no write path anywhere else either.
             Perm.STATION_EXPORT: "all",
             Perm.TICKET_EXPORT: "all",
+            Perm.STATION_REVIEW: "all",
+            Perm.STATION_REVOKE: "all",
         },
     },
     {
@@ -102,7 +104,7 @@ ROLES_DATA = [
                 Perm.MAP_VIEW, Perm.MAP_ADD, Perm.MAP_EDIT, Perm.MAP_DELETE,
                 Perm.STATION_VIEW, Perm.STATION_VIEW_PII, Perm.STATION_VIEW_HISTORY,
                 Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
-                Perm.STATION_DELETE, Perm.STATION_REVIEW, Perm.STATION_ASSIGN,
+                Perm.STATION_DELETE, Perm.STATION_REVIEW, Perm.STATION_ASSIGN, Perm.STATION_REVOKE,
                 Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_VIEW_DETAIL,
                 Perm.TICKET_VIEW_HISTORY, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,

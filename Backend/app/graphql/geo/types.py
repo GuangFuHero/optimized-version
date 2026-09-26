@@ -21,8 +21,26 @@ from app.graphql.shared import (  # noqa: F401 -- the address types and their ma
     Visibility,
     secondary_location_to_dict,
 )
+from app.graphql.suggestions.types import StationSuggestionMergeType, SuggestedFieldType
 from app.graphql.tickets.types import PhotoType
 from app.graphql.work_zone.types import AssignedTeamType
+
+
+async def _can_review_suggestions(info: strawberry.types.Info) -> bool:
+    """Whether the caller holds station.review at any scope. Never raises: a denial reads as []."""
+    user = info.context["user"]
+    if user is None:
+        return False
+    scope = await resolve_scope(
+        user, Perm.STATION_REVIEW, info.context["db"], cache=info.context["_rbac_cache"]
+    )
+    return scope != Scope.NONE
+
+
+async def _pending_suggested_fields(info: strawberry.types.Info, station_uuid, target_uuid) -> list[str]:
+    """Names of the fields on one target with a pending suggestion, from the station's batch."""
+    rows = await info.context["loaders"]["pending_suggestions_by_station"].load(str(station_uuid))
+    return sorted({r.field_name for r in rows if r.target_uuid == str(target_uuid)})
 
 
 @strawberry.enum
@@ -200,6 +218,45 @@ class StationType:
     async def properties(self, info: strawberry.types.Info) -> list["StationPropertyType"]:
         """Resolve all properties (supply items, services) attached to this station."""
         return await info.context["loaders"]["station_properties_by_station"].load(str(self.uuid))
+
+    @strawberry.field(
+        description="Fields of this station with a suggested edit awaiting review. Names only, so public."
+    )
+    async def pending_suggested_fields(self, info: strawberry.types.Info) -> list[str]:
+        """Resolve the field names on this station that have a pending suggestion."""
+        return await _pending_suggested_fields(info, self.uuid, self.uuid)
+
+    @strawberry.field(
+        description="Pending suggestions on this station and its properties, pooled per field; "
+        "empty without station.review"
+    )
+    async def suggested_fields(self, info: strawberry.types.Info) -> list[SuggestedFieldType]:
+        """Group every pending suggestion by field, without saying who made which."""
+        if not await _can_review_suggestions(info):
+            return []
+        rows = await info.context["loaders"]["pending_suggestions_by_station"].load(str(self.uuid))
+        grouped: dict[tuple[str, str], list] = {}
+        for row in rows:  # newest first, from the loader
+            grouped.setdefault((row.target_uuid, row.field_name), []).append(row)
+        return [
+            SuggestedFieldType(
+                target_type=group[0].target_type, target_uuid=target_uuid, field_name=field_name,
+                proposed_values=list(dict.fromkeys(r.new_value for r in group)),
+                suggestion_count=len(group),
+                comments=[r.comment for r in group if r.comment],
+                first_suggested_at=group[-1].created_at,
+            )
+            for (target_uuid, field_name), group in sorted(grouped.items())
+        ]
+
+    @strawberry.field(
+        description="Merges applied to this station, newest first; empty without station.review"
+    )
+    async def suggestion_merges(self, info: strawberry.types.Info) -> list[StationSuggestionMergeType]:
+        """Resolve the merge history, which is what a revoke targets."""
+        if not await _can_review_suggestions(info):
+            return []
+        return await info.context["loaders"]["suggestion_merges_by_station"].load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "StationType":
@@ -401,6 +458,13 @@ class StationPropertyType:
         default=None, description="UUID of the user who added this property"
     )
     created_at: datetime | None = None
+
+    @strawberry.field(
+        description="Fields of this property with a suggested edit awaiting review. Names only, so public."
+    )
+    async def pending_suggested_fields(self, info: strawberry.types.Info) -> list[str]:
+        """Resolve the field names on this property that have a pending suggestion."""
+        return await _pending_suggested_fields(info, self.station_uuid, self.uuid)
 
     @strawberry.field
     async def crowd_sourcings(self, info: strawberry.types.Info) -> list["CrowdSourcingType"]:
