@@ -2,8 +2,9 @@
 
 import {
   GetStationsDocument,
-  GetTicketsDocument,
+  GetTicketsWithNeedsDocument,
   PageInfoFieldsFragmentDoc,
+  TicketNeedFieldsFragmentDoc,
   createUrqlClient,
   useFragment,
 } from '@rescue-frontend/data-access';
@@ -12,6 +13,7 @@ import { fetchExchange, type CombinedError } from 'urql';
 
 import type { RescueMapMarkerItem } from '../types';
 import type { SiteRouteState } from '../../route/types';
+import type { TicketNeed } from '../../ticket/needs/need-claim';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
 import {
   dedupeMarkersById,
@@ -96,7 +98,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
       }
 
       const result = await client
-        .query(GetTicketsDocument, {
+        .query(GetTicketsWithNeedsDocument, {
           bounds: undefined,
           status: ticketStatus,
           skip,
@@ -119,7 +121,16 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
 
       const nextItems = dedupeMarkersById(
         (result.data?.tickets.items ?? [])
-          .map((ticket) => mapTicketToMarker(ticket))
+          .map((ticket): RescueMapMarkerItem | null => {
+            const marker = mapTicketToMarker(ticket);
+
+            return marker && {
+              ...marker,
+              needs: ticket.tasks.map((task) =>
+                useFragment(TicketNeedFieldsFragmentDoc, task),
+              ),
+            };
+          })
           .filter((marker): marker is RescueMapMarkerItem => Boolean(marker)),
       );
 
@@ -161,6 +172,21 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     void loadPage(loadedCount, true);
   }, [hasNextPage, isFetching, loadPage, loadedCount]);
 
+  /**
+   * Swap in one ticket's needs as they stand after a claim, so its row agrees with the detail
+   * drawer without reloading every page of the list.
+   */
+  const replaceTicketNeeds = useCallback(
+    (ticketUuid: string, needs: readonly TicketNeed[]) => {
+      setSourceMarkers((current) =>
+        current.map((marker) =>
+          marker.id === ticketUuid ? { ...marker, needs } : marker,
+        ),
+      );
+    },
+    [],
+  );
+
   return {
     markers,
     error,
@@ -168,5 +194,6 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     dismissMarker,
     hasNextPage,
     loadNextPage,
+    replaceTicketNeeds,
   };
 }

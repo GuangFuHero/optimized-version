@@ -7,10 +7,9 @@ import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
 import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import ShieldRoundedIcon from '@mui/icons-material/Shield';
-import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
-import { Badge, designTokens, displayTextSize, RowAction, type BadgeTone } from '@rescue-frontend/ui';
+import { Badge, designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
 import {
@@ -18,13 +17,9 @@ import {
   type StationReportRecord,
 } from '../station/report';
 import { getStationTypeIcon } from '../station/type-options';
+import { NeedLine } from '../ticket/needs';
 import { getTicketStatusTone } from '../ticket/status';
-import {
-  createTaskMatchSummary,
-  taskMatchStatusLabels,
-  taskMatchStatusTones,
-  type TaskMatchState,
-} from '../ticket/task-match';
+import type { TaskMatchState } from '../ticket/task-match';
 
 const { color, radius, shadow, spacing, motion } = designTokens;
 
@@ -38,23 +33,8 @@ interface SiteListRowProps {
   onSelect: () => void;
   onShare?: () => void;
   onSuggestUpdate?: () => void;
-  onClaimTask?: () => void;
   onDeleteMatchSheet?: () => void;
 }
-
-/**
- * Fill behind the task-match summary. Only the surface is tinted — the text stays neutral, as in
- * the design prototype, so the strip reads as one status rather than two competing signals.
- */
-const TASK_STATUS_BACKGROUND: Record<BadgeTone, string> = {
-  neutral: color.bg.neutral.sunken,
-  primary: color.bg.primary.subtle,
-  secondary: color.bg.secondary.subtle,
-  success: color.bg.success.subtle,
-  warning: color.bg.warning.subtle,
-  danger: color.bg.danger.subtle,
-  info: color.bg.info.subtle,
-};
 
 const ICON_SIZE = 18;
 const ACTION_ICON = { fontSize: 14 } as const;
@@ -76,31 +56,15 @@ export function SiteListRow({
   onSelect,
   onShare,
   onSuggestUpdate,
-  onClaimTask,
   onDeleteMatchSheet,
 }: SiteListRowProps) {
   const isStation = marker.detailType === 'station';
   const TypeIcon = isStation
     ? getStationTypeIcon(marker.stationMeta?.type)
     : AssignmentRoundedIcon;
-  const taskTone = taskMatchState
-    ? taskMatchStatusTones[taskMatchState.status]
-    : null;
-  const taskClaimDisabled =
-    !isAuthenticated ||
-    taskMatchState?.status === 'matched' ||
-    taskMatchState?.status === 'deleted';
   const taskDeleteDisabled =
     !canDeleteMatchSheet || taskMatchState?.status === 'deleted';
-
-  const claimLabel =
-    taskMatchState?.status === 'matched'
-      ? '媒合完成'
-      : taskMatchState?.status === 'deleted'
-        ? '已刪除'
-        : !isAuthenticated
-          ? '登入後接任務'
-          : '接任務';
+  const needs = marker.detailType === 'ticket' ? (marker.needs ?? []) : [];
 
   return (
     <Box
@@ -238,47 +202,24 @@ export function SiteListRow({
             </Typography>
           </Box>
         ) : null}
-
-        {taskMatchState && taskTone ? (
-          <Box
-            sx={{
-              mt: `${spacing[3]}px`,
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) auto',
-              alignItems: 'center',
-              gap: `${spacing[2]}px`,
-              px: `${spacing[3]}px`,
-              py: '6px',
-              borderRadius: `${radius.sm}px`,
-              bgcolor: TASK_STATUS_BACKGROUND[taskTone],
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: displayTextSize[12],
-                lineHeight: 1.5,
-                color: color.fg.neutral.default,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              任務：{createTaskMatchSummary(taskMatchState)}
-            </Typography>
-            <Typography
-              sx={{
-                fontSize: displayTextSize[11],
-                lineHeight: 1.4,
-                fontWeight: 700,
-                color: color.fg.neutral.subtle,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {taskMatchStatusLabels[taskMatchState.status]}
-            </Typography>
-          </Box>
-        ) : null}
       </ButtonBase>
+
+      {/* Claiming is per need, never per ticket (PUB-PS-140): each need is its own line with its own
+          button. Outside the row's button, which opens the drawer — a button cannot hold buttons. */}
+      {needs.length > 0 ? (
+        <Box sx={{ mt: `${spacing[2]}px` }}>
+          {needs.map((need, index) => (
+            <NeedLine
+              key={need.uuid}
+              need={need}
+              ticketUuid={marker.id}
+              ticketStatus={marker.ticketMeta?.status}
+              isAuthenticated={isAuthenticated}
+              divider={index > 0}
+            />
+          ))}
+        </Box>
+      ) : null}
 
       {onShare || onSuggestUpdate || taskMatchState ? (
         <Stack
@@ -313,22 +254,6 @@ export function SiteListRow({
               disabled={!isAuthenticated}
               onClick={onSuggestUpdate}
               aria-label={`建議修改 ${marker.title}`}
-            />
-          ) : null}
-
-          {taskMatchState && onClaimTask ? (
-            <RowAction
-              icon={
-                isAuthenticated ? (
-                  <VolunteerActivismRoundedIcon sx={ACTION_ICON} />
-                ) : (
-                  <LockRoundedIcon sx={ACTION_ICON} />
-                )
-              }
-              label={claimLabel}
-              disabled={taskClaimDisabled}
-              onClick={onClaimTask}
-              aria-label={`接任務 ${marker.title}`}
             />
           ) : null}
 

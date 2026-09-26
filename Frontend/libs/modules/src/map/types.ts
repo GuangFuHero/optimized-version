@@ -1,5 +1,7 @@
 import type { ElementType } from 'react';
 
+import type { TicketNeed } from '../ticket/needs/need-claim';
+
 export type RescueMapMarkerVariant =
   | 'urgent-ticket'
   | 'in-progress'
@@ -152,6 +154,11 @@ export interface RescueMapMarkerItem {
     createdAt?: string | null;
     updatedAt?: string | null;
   };
+  /**
+   * The ticket's needs, each with its own claim button. Only the site list fetches them
+   * (`GetTicketsWithNeeds`); a map marker has none, as its popup offers no claiming.
+   */
+  needs?: readonly TicketNeed[];
   /** 任務媒合所需志工數；僅任務 marker 使用。 */
   requiredVolunteers?: number;
   /** 初始已媒合志工數；使用者操作後以前臺本地狀態為準。 */

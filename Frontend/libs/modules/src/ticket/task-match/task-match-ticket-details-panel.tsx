@@ -23,7 +23,7 @@ import {
 import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
 import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
-import { NeedRow, readTicketNeeds, useClaimNeed } from '../needs';
+import { NeedRow, readTicketNeeds } from '../needs';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
@@ -391,7 +391,6 @@ export function TaskMatchTicketDetailsPanel({
     [ticketData?.ticket],
   );
   const ticketStatus = ticket?.status ?? marker.ticketMeta?.status;
-  const { claimNeed, claimingNeedUuid } = useClaimNeed(marker.id);
 
   const activeTask = tasks[activeTaskIndex] ?? null;
   const activePhoto = photos[activePhotoIndex] ?? null;
@@ -463,10 +462,9 @@ export function TaskMatchTicketDetailsPanel({
                 <NeedRow
                   key={need.uuid}
                   need={need}
+                  ticketUuid={marker.id}
                   ticketStatus={ticketStatus}
                   isAuthenticated={isAuthenticated}
-                  busy={claimingNeedUuid === need.uuid}
-                  onClaim={(target) => void claimNeed(target.uuid)}
                 />
               ))}
             </Stack>

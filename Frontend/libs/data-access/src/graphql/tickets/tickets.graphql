@@ -81,6 +81,38 @@ query GetTickets(
   }
 }
 
+# The site list's page of tickets, each with the needs its rows claim. The map keeps GetTickets:
+# it has no claim buttons, so it has no use for the needs.
+query GetTicketsWithNeeds(
+  $bounds: BoundsInput
+  $status: String
+  $priority: String
+  $skip: Int = 0
+  $limit: Int = 50
+  $zoom: Float
+) {
+  tickets(
+    bounds: $bounds
+    status: $status
+    priority: $priority
+    skip: $skip
+    limit: $limit
+    zoom: $zoom
+  ) {
+    items {
+      ...TicketFields
+      tasks {
+        ...TicketNeedFields
+      }
+    }
+    pageInfo {
+      totalCount
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}
+
 query GetTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...TicketFields

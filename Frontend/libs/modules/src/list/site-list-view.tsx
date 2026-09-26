@@ -27,6 +27,7 @@ import {
   StationReportHistoryPanel,
   useStationReports,
 } from '../station/report';
+import { NeedClaimProvider } from '../ticket/needs';
 import {
   createTaskMatchTicketDetailOverrides,
   TaskMatchDeleteConfirmDialog,
@@ -46,7 +47,7 @@ export function SiteListView() {
   const { data: session, status: authStatus } = useSession();
   const { module, state, replace } = useSiteRouteState();
   const { reportsByStationId, submitStationReport } = useStationReports();
-  const { getTaskMatchState, claimTask, deleteMatchSheet } = useTaskMatches();
+  const { getTaskMatchState, deleteMatchSheet } = useTaskMatches();
   const isAuthenticated = authStatus === 'authenticated';
   const currentUserId =
     session?.user && 'id' in session.user ? (session.user.id ?? null) : null;
@@ -57,6 +58,7 @@ export function SiteListView() {
     dismissMarker,
     hasNextPage,
     loadNextPage,
+    replaceTicketNeeds,
   } = usePaginatedRescueMapMarkers(state);
 
   const controller = useRescueMapController({
@@ -178,7 +180,7 @@ export function SiteListView() {
     });
   };
 
-  return (
+  const view = (
     <Box
       sx={{
         position: 'absolute',
@@ -291,11 +293,6 @@ export function SiteListView() {
                     onSuggestUpdate={
                       marker.detailType === 'station'
                         ? () => setReportStation(marker)
-                        : undefined
-                    }
-                    onClaimTask={
-                      marker.detailType === 'ticket'
-                        ? () => claimTask(marker)
                         : undefined
                     }
                     onDeleteMatchSheet={
@@ -492,5 +489,11 @@ export function SiteListView() {
         onClose={() => setShareTarget(null)}
       />
     </Box>
+  );
+
+  // The list keeps its own copy of each ticket's needs, so a claim made in a row or in the drawer
+  // is reported back here to update that ticket's row.
+  return (
+    <NeedClaimProvider onTicketNeedsChange={replaceTicketNeeds}>{view}</NeedClaimProvider>
   );
 }

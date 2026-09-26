@@ -18,6 +18,7 @@ import {
   createTaskMatchTicketDetailOverrides,
   hasRescueMapDetailItem,
   Map,
+  NeedClaimProvider,
   PointShareDrawer,
   SITE_FALLBACK_DATA_TYPE,
   SiteMapControls,
@@ -541,7 +542,9 @@ function SiteMapViewportDataLayer({
   );
 
   return (
-    <>
+    // The drawer's claim buttons claim through this. The map keeps no copy of the needs (its popups
+    // offer no claiming), so there is nothing to tell after a claim.
+    <NeedClaimProvider>
       <Map
         markers={visibleMarkers}
         closureAreas={liveDataSnapshot.closureAreas}
@@ -577,7 +580,7 @@ function SiteMapViewportDataLayer({
           setPendingDeleteTask(null);
         }}
       />
-    </>
+    </NeedClaimProvider>
   );
 }
 

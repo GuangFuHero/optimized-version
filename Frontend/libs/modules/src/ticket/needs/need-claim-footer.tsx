@@ -6,7 +6,8 @@ import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { resolveNeedClaim } from './need-claim';
 import { NeedClaimButton } from './need-claim-button';
-import { useClaimNeed, useTicketNeeds } from './use-ticket-needs';
+import { useNeedClaim } from './need-claim-provider';
+import { useTicketNeeds } from './use-ticket-needs';
 
 const { color } = designTokens;
 
@@ -22,7 +23,7 @@ interface NeedClaimFooterProps {
  */
 export function NeedClaimFooter({ ticketUuid, isAuthenticated }: NeedClaimFooterProps) {
   const { needs, ticketStatus } = useTicketNeeds(ticketUuid);
-  const { claimNeed, claimingNeedUuid } = useClaimNeed(ticketUuid);
+  const { claimNeed, claimingNeedUuid } = useNeedClaim();
 
   if (needs.length === 0) {
     return null;
@@ -53,7 +54,7 @@ export function NeedClaimFooter({ ticketUuid, isAuthenticated }: NeedClaimFooter
       claim={resolveNeedClaim(need, { ticketStatus, isAuthenticated })}
       needName={need.taskName}
       busy={claimingNeedUuid === need.uuid}
-      onClaim={() => void claimNeed(need.uuid)}
+      onClaim={() => void claimNeed(ticketUuid, need.uuid)}
     />
   );
 }
