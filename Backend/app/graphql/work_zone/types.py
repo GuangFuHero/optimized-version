@@ -11,11 +11,11 @@ from app.graphql.shared import PageInfo
 
 @strawberry.type
 class AssignedTeamType:
-    """A team a work zone has been delegated to.
+    """A team a work zone has been delegated to, or a station assigned to (ADR-285).
 
     Deliberately minimal: teams are managed over REST (/admin/teams) and this schema has no
     Team type. Building a full one here would split team reads and writes across two API
-    styles; these three fields are all the delegation view needs.
+    styles; these three fields are all the delegation and station views need.
     """
 
     uuid: UUID

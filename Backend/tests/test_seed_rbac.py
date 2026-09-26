@@ -88,3 +88,49 @@ def test_every_actionable_role_covers_the_citizen_baseline():
         assert role_name not in _OVERSIGHT_ONLY_ROLES
         missing = baseline - set(_grants_of(role_name))
         assert not missing, f"{role_name} is missing citizen capabilities: {missing}"
+
+
+def test_team_roles_reach_stations_by_team_not_zone():
+    """ADR-285: a team governs the stations assigned to it; `zone` no longer means anything there.
+
+    Exact dicts rather than "no zone anywhere", so a capability quietly dropped from a role
+    fails here too.
+    """
+    def station_grants(role_name: str) -> dict[str, str]:
+        return {
+            perm.value: scope
+            for perm, scope in _grants_of(role_name).items()
+            if perm.value.startswith("station.") and scope not in ("all", "own")
+        }
+
+    assert station_grants("admin") == {
+        "station.view_pii": "team",
+        "station.view_history": "team",
+        "station.edit": "team",
+        "station.delete": "team",
+        "station.review": "team",
+        "station.export": "team",
+    }
+    assert station_grants("member") == {
+        "station.view_pii": "team",
+        "station.view_history": "team",
+        "station.edit": "team",
+    }
+
+
+def test_station_assign_goes_to_super_admin_and_every_team_role():
+    """ADR-285 decision 4: gov-only, fenced at runtime like work_zone.assign.
+
+    Gov members assign too (Carol, 2026-09-24): a district commander is a gov member. The
+    shared `admin`/`member` roles hand it to ngo teams as well; `require_gov_team` turns them
+    away.
+    """
+    from app.core.permissions import Perm
+    from scripts.seed_rbac import ROLES_DATA
+
+    holders = {
+        spec["name"]: spec["permissions"][Perm.STATION_ASSIGN]
+        for spec in ROLES_DATA
+        if Perm.STATION_ASSIGN in spec["permissions"]
+    }
+    assert holders == {"super_admin": "all", "admin": "all", "member": "all"}
