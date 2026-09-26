@@ -4,6 +4,8 @@ Service-level (root conftest), like tests/test_suggestion_review_scope.py: autho
 in the service layer, so that is where the behaviour is observed.
 """
 
+import asyncio
+import contextlib
 import os
 import uuid as uuidlib
 from datetime import UTC, datetime
@@ -15,6 +17,8 @@ from fastapi import HTTPException
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.core.permissions import Perm
 from app.models.audit import AuditLog
@@ -27,6 +31,7 @@ from app.models.station_property import StationProperty, StationUpdateSuggestion
 from app.models.team import Team
 from app.repositories.geo_repository import station_repository
 from app.repositories.photo_repository import photo_repository
+from app.services import station as station_service
 from app.services.history import STATION, load_timeline
 from app.services.photo import detach_station_photo
 from app.services.station import (
@@ -37,7 +42,7 @@ from app.services.station import (
     update_station_property,
 )
 from app.services.suggestion import SuggestionDecision, merge_station_suggestions
-from tests.conftest import acting_as
+from tests.conftest import TEST_DB_URL, acting_as
 
 _POINT = Point(121.5, 24.5)
 
@@ -222,6 +227,28 @@ async def test_gov_widening_leaves_own_scope_alone(db):
         await delete_station(db, actor=member, uuid=str(station.uuid))
 
     assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["suspended", "inactive"])
+async def test_a_gov_team_that_is_not_active_does_not_widen(db, status):
+    """Only an active gov team reaches every station; a suspended or inactive one keeps plain `team`.
+
+    assign_station already refuses a team that is not active. Widening one would hand it the
+    nationwide reach it cannot even be given a single station with.
+    """
+    gov = await _team(db, "Gov", "gov")
+    gov.status = status
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    member = await _user(db, "Gov member")
+    station = await _station(db, created_by=author, team=ngo)
+    await _grant(db, member, Perm.STATION_EDIT, "team", "role-edit", team=gov)
+
+    with pytest.raises(HTTPException) as exc:
+        await update_station(db, actor=member, uuid=str(station.uuid), changes={"name": "new name"})
+
+    assert exc.value.status_code == 404
 
 
 async def _property(db, station: Station, author: User) -> StationProperty:
@@ -411,6 +438,75 @@ async def test_an_ngo_admin_holding_station_assign_is_refused(db):
 
 
 @pytest.mark.asyncio
+async def test_a_gov_admin_of_a_suspended_team_cannot_assign(db):
+    """require_gov_team fences to an active gov team, as assign_station does for the target team."""
+    gov = await _team(db, "Gov", "gov")
+    gov.status = "suspended"
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    admin = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=None)
+    await _grant(db, admin, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
+
+    with pytest.raises(HTTPException) as exc:
+        await assign_station(db, actor=admin, station_uuid=str(station.uuid), team_uuid=str(ngo.uuid))
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_station_assign_is_a_capability_not_a_check_against_the_station(db):
+    """Like work_zone.assign: a `team` grant must still reach the unassigned stations gov hands out.
+
+    Checked against the station, `team` would compare its (empty) team with gov's and 404 on
+    exactly the stations waiting to be assigned.
+    """
+    gov = await _team(db, "Gov", "gov")
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    admin = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=None)
+    station_uuid, ngo_uuid = str(station.uuid), str(ngo.uuid)
+    await _grant(db, admin, Perm.STATION_ASSIGN, "team", "role-assign", team=gov)
+
+    assigned = await assign_station(db, actor=admin, station_uuid=station_uuid, team_uuid=ngo_uuid)
+
+    assert str(assigned.team_uuid) == ngo_uuid
+
+
+@pytest.mark.asyncio
+async def test_a_refused_caller_never_waits_on_the_station_lock(db):
+    """Authorization runs before the row lock, so a caller who will be refused never takes it.
+
+    Another connection holds the station FOR UPDATE, as a concurrent assignment would. An ngo
+    admin must get the 403 at once rather than queue behind that lock for a refusal.
+    """
+    ngo = await _team(db, "NGO", "ngo")
+    author = await _user(db, "Author")
+    admin = await _user(db, "NGO admin")
+    station = await _station(db, created_by=author, team=None)
+    station_uuid, ngo_uuid = str(station.uuid), str(ngo.uuid)
+    await _grant(db, admin, Perm.STATION_ASSIGN, "all", "role-assign", team=ngo)
+    await db.commit()
+    await db.refresh(admin)  # expire_on_commit; `active_identity` is not a column, so it survives
+
+    engine = create_async_engine(TEST_DB_URL)
+    holder = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)()
+    try:
+        await holder.execute(select(Station).where(Station.uuid == station_uuid).with_for_update())
+        with pytest.raises(HTTPException) as exc:
+            await asyncio.wait_for(
+                assign_station(db, actor=admin, station_uuid=station_uuid, team_uuid=ngo_uuid), timeout=2
+            )
+    finally:
+        await holder.rollback()
+        await holder.close()
+        await engine.dispose()
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_a_super_admin_platform_identity_can_assign(db):
     """The gov fence is aimed at team identities; a platform holder passes it."""
     ngo = await _team(db, "NGO", "ngo")
@@ -498,6 +594,94 @@ async def test_reassigning_tells_both_teams(db):
 
     assert await _notification_types(db, old_admin) == ["station_unassigned"]
     assert await _notification_types(db, new_admin) == ["station_assigned"]
+
+
+@pytest.mark.asyncio
+async def test_the_returned_station_is_readable_after_the_notices_go_out(db):
+    """dispatch() commits once a team has an admin; the GraphQL type then reads the station."""
+    gov = await _team(db, "Gov", "gov")
+    ngo = await _team(db, "NGO", "ngo")
+    admin_role = Role(name="admin", kind="team")
+    db.add(admin_role)
+    await db.flush()
+    await _admin_of(db, ngo, admin_role)
+    author = await _user(db, "Author")
+    assigner = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=None)
+    station_uuid, ngo_uuid = str(station.uuid), str(ngo.uuid)
+    await _grant(db, assigner, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
+
+    returned = await assign_station(db, actor=assigner, station_uuid=station_uuid, team_uuid=ngo_uuid)
+
+    assert str(returned.team_uuid) == ngo_uuid
+
+
+@pytest.mark.asyncio
+async def test_two_concurrent_reassignments_tell_every_team_once(db, monkeypatch):
+    """Two gov admins moving one station at once must each see the team the other left it with.
+
+    Same recipe as `test_two_concurrent_deletes_cannot_strand_the_account`: two real
+    connections, with a rendezvous after the station is read. Unlocked, both read team A,
+    so A hears "unassigned" twice and the team in between never hears it lost the station.
+    Locked, the second read waits for the first commit, the first times out of the
+    rendezvous alone, and each notice goes to the team that actually held the station.
+    """
+    gov = await _team(db, "Gov", "gov")
+    teams = {key: await _team(db, f"NGO {key}", "ngo") for key in "ABC"}
+    admin_role = Role(name="admin", kind="team")
+    db.add(admin_role)
+    await db.flush()
+    admins = {key: await _admin_of(db, team, admin_role) for key, team in teams.items()}
+    author = await _user(db, "Author")
+    assigner = await _user(db, "Gov admin")
+    station = await _station(db, created_by=author, team=teams["A"])
+    await _grant(db, assigner, Perm.STATION_ASSIGN, "all", "role-assign", team=gov)
+    identity = assigner.active_identity
+    station_uuid, assigner_uuid = str(station.uuid), str(assigner.uuid)
+    team_uuids = {key: str(team.uuid) for key, team in teams.items()}
+    await db.commit()
+
+    arrived, both_arrived = [], asyncio.Event()
+    real_require_gov_team = station_service.require_gov_team
+
+    async def rendezvous(*args, **kwargs):
+        """Hold each call until the other has read the station too, or give up waiting."""
+        arrived.append(None)
+        if len(arrived) == 2:
+            both_arrived.set()
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(both_arrived.wait(), timeout=1)
+        await real_require_gov_team(*args, **kwargs)
+
+    monkeypatch.setattr(station_service, "require_gov_team", rendezvous)
+
+    engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
+    sessions = [sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)() for engine in engines]
+    try:
+        async def move_to(session, key):
+            actor = await session.get(User, assigner_uuid)
+            actor.active_identity = identity
+            await assign_station(session, actor=actor, station_uuid=station_uuid, team_uuid=team_uuids[key])
+
+        await asyncio.gather(move_to(sessions[0], "B"), move_to(sessions[1], "C"))
+    finally:
+        for session in sessions:
+            await session.close()
+        for engine in engines:
+            await engine.dispose()
+
+    final = await _team_of_station(db, station_uuid)
+    assert final in (team_uuids["B"], team_uuids["C"]), "the station should end with whoever wrote last"
+    holder = "B" if final == team_uuids["B"] else "C"
+    passed_through = "C" if holder == "B" else "B"
+    assert await _notification_types(db, admins["A"]) == ["station_unassigned"]
+    assert await _notification_types(db, admins[passed_through]) == ["station_assigned", "station_unassigned"]
+    assert await _notification_types(db, admins[holder]) == ["station_assigned"]
+
+
+async def _team_of_station(db, station_uuid: str) -> str | None:
+    team_uuid = await db.scalar(select(Station.team_uuid).where(Station.uuid == station_uuid))
+    return str(team_uuid) if team_uuid else None
 
 
 @pytest.mark.asyncio

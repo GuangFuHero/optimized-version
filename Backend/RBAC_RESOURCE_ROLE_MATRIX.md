@@ -68,16 +68,16 @@
 | station.edit | — | own | — | all | team | team |
 | station.delete | — | own | — | all | team | own |
 | station.review | — | — | — | all | team | — |
-| **station.assign** | — | — | — | all | all（僅 gov） | — |
+| **station.assign** | — | — | — | all | all（僅 gov） | all（僅 gov） |
 | station.export | — | — | all | all | team | — |
 | station.import | — | — | — | all | all | — |
 
 > **站點跟著指派的 team 走，不跟 zone（ADR-285）。** `team` ＝指派給當前身分那一隊的站點
 > （`stations.team_uuid`）；以 team 身分建立的站會自動指派給該隊，民眾建的站為未指派。
-> **gov team 身分在上表的 `team` 視同 `all`**——gov 管所有站點，不論指派給誰或未指派
-> （`app/core/security.py:resolve_scope`，`GOV_TEAM_WIDENED_PERMS`）；ngo 的 `team` 只到自己的站。
-> `station.assign` 與 `work_zone.assign` 同一套：seed 發給所有 team admin，執行時擋掉非 gov team
-> （`require_gov_team`）。capability 目錄以 `team_gov_widened` / `team_gov_only` 兩個旗標標示這兩條
+> **active 的 gov team 身分在上表的 `team` 視同 `all`**——gov 管所有站點，不論指派給誰或未指派，
+> admin 與 member 皆然（`app/core/security.py:resolve_scope`，`GOV_TEAM_WIDENED_PERMS`）；ngo 的 `team`
+> 只到自己的站。`station.assign` 與 `work_zone.assign` 同一套：seed 發出、執行時擋掉非 gov team
+> （`require_gov_team`），差別是 `station.assign` 連 member 也有（gov member 可能是區域指揮官）。capability 目錄以 `team_gov_widened` / `team_gov_only` 兩個旗標標示這兩條
 > 規則，因為角色×capability 矩陣本身表達不了 team 類型的條件。
 
 > **⚠️ 本表每一欄是「該角色自己的 grant」。** 在 identity switching 之前，team 角色是疊加在

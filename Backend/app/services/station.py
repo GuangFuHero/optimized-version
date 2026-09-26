@@ -246,12 +246,26 @@ async def assign_station(
     Idempotent like assign_zone_to_team: assigning the team it already has changes nothing and
     tells nobody. Otherwise the new team's admins hear they got it and the old team's admins
     that they lost it.
+
+    Checked as a capability alone, like work_zone.assign: assigning is a gov-wide action, and
+    checked against the station a `team` grant would 404 on exactly the unassigned stations
+    gov is there to hand out.
+
+    The station row stays locked FOR UPDATE until the write commits, so a second assignment
+    racing this one reads the team this one left it with. Without the lock both would read
+    the same old team: it would hear "unassigned" twice, and the team in between would never
+    hear it lost the station. Authorization runs first, so a caller who is refused never
+    takes the lock.
     """
-    station = await station_repository.get_by_uuid_active(db, station_uuid)
+    await require_scope(actor, Perm.STATION_ASSIGN, db)
+    await require_gov_team(db, actor, detail="Only gov teams may assign stations.")
+    station = await db.scalar(
+        select(Station)
+        .where(Station.uuid == station_uuid, Station.delete_at.is_(None))
+        .with_for_update()
+    )
     if not station:
         raise ValueError("Station not found")
-    await require_scope(actor, Perm.STATION_ASSIGN, db, resource=station)
-    await require_gov_team(db, actor, detail="Only gov teams may assign stations.")
     if team_uuid is not None:
         # Same create-time check as assign_zone_to_team: a team that goes inactive later keeps
         # its stations until gov moves them.
@@ -296,6 +310,7 @@ async def assign_station(
             ref_uuid=station_uuid,
             explicit_recipients=await team_admins(db, team_uuid=old_team),
         )
+    await db.refresh(updated)
     return updated
 
 

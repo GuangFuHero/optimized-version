@@ -128,8 +128,8 @@ ROLES_DATA = [
     # assigned to it. Station access is `team` — the stations assigned to the team (ADR-285);
     # a gov team's `team` widens to `all` in resolve_scope (GOV_TEAM_WIDENED_PERMS). Zone
     # operations and station assignment are gov-only: `_require_gov_zone_authority` /
-    # `require_gov_team` enforce it. NGO admins hold these capabilities in the seed but are
-    # rejected with 403 at the service layer. GOV_TEAM_ONLY_PERMS in app/core/permissions.py
+    # `require_gov_team` enforce it. NGO admins hold these capabilities in the seed (NGO
+    # members hold station.assign) but are rejected with 403 at the service layer. GOV_TEAM_ONLY_PERMS in app/core/permissions.py
     # mirrors this for display—keep in lockstep.
     {
         # Team coordinator: full operations on the team's tickets (zone) and stations (team)
@@ -186,9 +186,11 @@ ROLES_DATA = [
         },
     },
     {
-        # Team field worker: works the team's zone and stations, but no team management, no
-        # zone drawing or station assignment, and destructive/assign-others actions stay
-        # own-scoped.
+        # Team field worker: works the team's zone and stations, but no team management and no
+        # zone drawing, and destructive/assign-others actions stay own-scoped. Station
+        # assignment is the exception: a gov member may be a district commander handing out
+        # stations (Carol, 2026-09-24; ADR-285 decision 4). NGO members hold it too and are
+        # turned away by `require_gov_team`, as NGO admins are.
         "name": "member",
         "kind": "team",
         "permissions": {
@@ -199,6 +201,7 @@ ROLES_DATA = [
             Perm.STATION_CONTRIBUTE: "all",  # ADR-097, see the admin role above
             Perm.STATION_EDIT: "team",
             Perm.STATION_DELETE: "own",
+            Perm.STATION_ASSIGN: "all",  # ADR-285: gov-only at runtime (require_gov_team)
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
             Perm.TICKET_VIEW_DETAIL: "all",  # ADR-281, see the admin role above

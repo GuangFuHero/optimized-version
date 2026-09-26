@@ -5,6 +5,7 @@ and dispatch persistence work seamlessly against real PostgreSQL and PostGIS.
 """
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from geoalchemy2.elements import WKTElement
@@ -62,6 +63,25 @@ async def test_resolve_team_admin_real_db(db: AsyncSession):
 
     admins = await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=team_id)
     assert admins == [str(alice_id)]
+
+
+@pytest.mark.asyncio
+async def test_a_soft_deleted_team_has_no_admins_to_notify(db: AsyncSession):
+    """A deleted team's former admins hear nothing, whatever still points at the team.
+
+    A station still carrying a deleted team reads as unassigned (ADR-285 decision 8), so
+    unassigning or reassigning it must not tell that team it lost the station.
+    """
+    team = Team(name="已解散隊", type="ngo", status="active", delete_at=datetime.now(UTC))
+    admin_role = Role(name="admin", kind="team")
+    former_admin = User(name="Former 隊長")
+    db.add_all([team, admin_role, former_admin])
+    await db.flush()
+    db.add(UserRoleAssign(user_uuid=former_admin.uuid, role_uuid=admin_role.uuid, team_uuid=team.uuid))
+    team_id = team.uuid
+    await db.commit()
+
+    assert await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=team_id) == []
 
 
 @pytest.mark.asyncio

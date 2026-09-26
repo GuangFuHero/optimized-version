@@ -66,12 +66,15 @@ async def require_gov_team(db: AsyncSession, actor: User, *, detail: str) -> Non
     gov and ngo alike, because they share one `admin` role; this is where the ngo half is
     turned away. A platform identity (super_admin, no team) passes, as the rule was never
     aimed at it.
+
+    The gov team must also be active: a suspended or inactive one cannot be handed a zone or a
+    station, so it does not get to hand them out either.
     """
     mine = active_team(actor)
     if mine is None:
         return
     team = await db.scalar(select(Team).where(Team.uuid == mine, Team.delete_at.is_(None)))
-    if team is None or team.type != "gov":
+    if team is None or team.type != "gov" or team.status != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
