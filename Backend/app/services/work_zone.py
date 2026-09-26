@@ -3,13 +3,11 @@
 Same flat-service style as station.py (ADR-013/022/021, Phase 4).
 """
 
-from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
-from app.core.rbac_scopes import active_team
 from app.graphql.scalars import geojson_to_geom
 from app.models.auth import User
 from app.models.team import Team, TeamZoneAssign, WorkZone
@@ -17,7 +15,7 @@ from app.repositories.team_repository import (
     team_zone_assign_repository,
     work_zone_repository,
 )
-from app.services.authz import require_scope
+from app.services.authz import require_gov_team, require_scope
 from app.services.geo_validation import validate_polygon
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
@@ -31,19 +29,11 @@ async def _require_gov_zone_authority(db: AsyncSession, actor: User) -> None:
     with no team) passes through. NGO team admins hold the capability in the seed but are
     blocked here — closing the "any NGO admin draws a zone over anywhere + self-assigns it to
     reach raw victim PII" escalation the seed's `zone` scope otherwise allows.
+
+    The check itself is `require_gov_team`, shared with station assignment (ADR-285); this
+    wrapper keeps the zone wording and the name the ADRs and tests refer to.
     """
-    # No team on the active identity means a platform identity (super_admin), which the
-    # gov-only rule was never aimed at — same meaning the old `users.team_uuid is None`
-    # carried, now read off the identity instead (ADR-074).
-    mine = active_team(actor)
-    if mine is None:
-        return
-    team = await db.scalar(select(Team).where(Team.uuid == mine, Team.delete_at.is_(None)))
-    if team is None or team.type != "gov":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only gov teams may draw or assign work zones.",
-        )
+    await require_gov_team(db, actor, detail="Only gov teams may draw or assign work zones.")
 
 
 async def create_work_zone(db: AsyncSession, *, actor: User, name: str, geometry: dict) -> WorkZone:

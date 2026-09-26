@@ -35,6 +35,8 @@
 
 ### ADR-128 `view_history` 的 scope 對齊 `ticket.view_pii`，且團隊角色用 `zone` 而非 `team`
 
+> **部分被 ADR-285 取代**：站點改為手動指派，團隊角色在站點上改用 `team`（比對 `stations.team_uuid`）；通報單仍用 `zone`。
+
 **白話**：誰看得到哪些歷史，跟誰看得到聯絡資訊用同一套分法；團隊看的是自己轄區內的，不是「自己團隊的」。
 
 **Context**：需要決定兩件事——分幾層，以及團隊角色用哪個 scope。
@@ -77,6 +79,8 @@ dev DB 裡一列真實的 `tickets` audit 負載就含有 `search_text`——那
 ---
 
 ### ADR-130 四層可見度：一般 / PII / 稽核 / RAW
+
+> **部分被 ADR-284 取代**：通報單的地址、座標與自由文字從 PII / 一般層移到新的詳情層（`ticket.view_detail`），共五層。
 
 **白話**：欄位分四級，級別越高要越大的權限；最高一級直接給整列原始 JSON。
 
@@ -349,6 +353,8 @@ GET /api/v1/history/stations/{uuid}?limit=50&offset=0
 
 ### ADR-141 `geometry` 只報「位置已變更」，不吐座標
 
+> **部分被 ADR-284 取代**：通報單的「位置已變更」改看 `ticket.view_detail`，不再看 `ticket.view_pii`。不吐座標照舊。
+
 **白話**：位置改了要讓人知道，但不把經緯度印出來。
 
 **Context**：`geometry` 是 WKB 二進位，直接吐出去是 `0101000020E6100000...` 這種亂碼。但搬遷、地址標錯修正都是重要的歷史事件。
@@ -362,6 +368,8 @@ GET /api/v1/history/stations/{uuid}?limit=50&offset=0
 ---
 
 ### ADR-142 詳細地址納入白名單，放 PII 層
+
+> **部分被 ADR-284 取代**：通報單的地址改放詳情層（`ticket.view_detail`）。「不做半遮、只報已變更」照舊。
 
 **白話**：地址修正要看得到，但地址本身當敏感資料處理。
 
@@ -655,3 +663,53 @@ reviewer 明確表示這不是正確性問題，「說明阻塞多久」與「�
 ➖ 未來若有人想在時間軸上呈現「這筆資料的可搜尋內容變了」，要另外設計，不能靠這一欄。
    目前沒有這個需求。
 ➖ 又一個「加欄位就要來這裡分類」的項目。這正是這個守衛存在的理由，成本是刻意付的。
+
+---
+
+### ADR-284 時間軸的通報單詳情改由 `ticket.view_detail` 把關，對齊 ADR-281
+
+**白話**：單筆查詢怎麼擋，時間軸就怎麼擋。ADR-281 把地址、座標、自由文字改由 `ticket.view_detail`
+把關之後，時間軸還停在舊的分法 —— 地址反而比較嚴，四個自由文字欄位反而全公開。
+
+**Date**: 2026-09-22
+
+**Context**：ADR-281（Spec 018）新增 `ticket.view_detail`，把關通報單的精確座標、地址與自由文字。
+時間軸的分級表（`app/services/history_fields.py`）沒有跟上，兩邊在兩個方向不一致：
+
+| 欄位 | 時間軸（修正前） | 單筆查詢（ADR-281） |
+|---|---|---|
+| 地址 | PII（`view_pii`） | `view_detail` |
+| 座標移動 | PII | `view_detail` |
+| `tickets.description`、`ticket_tasks.task_description`、`ticket_tasks.progress_note`、`task_properties.comment` | 一般（公開） | `view_detail` |
+
+ADR-281 末尾記下了地址這一項（「若日後縮小 `view_detail`，要回頭對齊」），但漏了四個自由文字欄位。
+
+目前實務上沒有人受影響：`ticket.view_history` 不在 `PUBLIC_PERMS`，訪客在 `require_scope` 就 403；
+能開時間軸的角色都持有 `view_detail=all`（2026-09-21 staging 查無缺 `view_detail` 的角色）。但 ADR-281
+選用能力而不是「有沒有登入」，正是為了能在 `/admin/rbac` 縮 scope 而不改程式 —— 縮下去的那一刻，
+時間軸就會成為繞過單筆查詢、讀描述（常寫著門牌）的旁路。
+
+**Decision**：新增 `Tier.DETAIL`，解鎖條件與 PII 同形：`resolve_scope(ticket.view_detail)` 為 `all`，或
+不為 `none` 且 `in_scope` 成立。只對通報單解析；站點沒有詳情層。
+
+移入 DETAIL：`secondary_locations` 的地址欄位（含 018 的五個空間欄位）、通報單側的
+`base_geometries.geometry`、`tickets.description`、`ticket_tasks.task_description`、
+`ticket_tasks.progress_note`、`task_properties.comment`。沒權限時不給值，只留欄位名與 `changed: true`；
+座標移動整筆不出現。
+
+**Consequences**：
+➕ 時間軸與單筆查詢用同一個能力、同一張表，縮 scope 時兩邊一起縮。
+➕ 持有 `view_detail` 而沒有 `view_pii` 的人，現在看得到地址的變更，與單筆查詢一致。
+➖ 多一層要理解。聯絡資料與兩個檢傷欄位**維持** PII，`view_detail` 不會解開它們 ——
+   `test_view_detail_does_not_unmask_contact_details` 守著這條：今天每個角色都有 `detail=all`，
+   把兩層合併會安靜通過其他所有測試。
+◾ 審核備註維持稽核層：比 `view_detail` 嚴，不需要對齊。
+◾ **刻意不對齊的兩處**（2026-09-22 review 時發現，使用者決定保留）：
+   - **建立者**。ADR-281 對沒有 `view_detail` 的人擋 `createdBy`，但時間軸每個事件都帶操作者，
+     CREATED 那一筆的操作者就是建立者。不擋：建立者之後只要再改一次單，他的名字就出現在那個事件上，
+     只擋 CREATED 擋不住；要擋就得藏掉所有操作者，時間軸就失去「誰改了什麼」的用途。
+   - **`location_type`**。ADR-281 把整個 `secondaryLocation` 設成 `null`，這裡只擋地址欄位、留下
+     「地址 / 電線桿」這個類型。它定位不了任何東西，而少了它，一排「已變更」讀不出是哪一種位置動了。
+◾ 取代 ADR-142「地址放 PII 層」、ADR-141「座標看 `view_pii`」與 ADR-130 分級表中地址、座標、
+   自由文字的歸屬；ADR-142 的「不做半遮」與 ADR-141 的「不吐座標」照舊。
+◾ `title` 仍公開、仍可能寫進門牌 —— 與 ADR-281 記下的已知缺口相同。

@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from app.core.permissions import GOV_TEAM_ONLY_PERMS, Perm
+from app.core.permissions import GOV_TEAM_ONLY_PERMS, GOV_TEAM_WIDENED_PERMS, Perm
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserPermissionAssign, UserRoleAssign
 from app.models.team import Team
@@ -93,6 +93,28 @@ async def test_capabilities_flag_work_zone_caps_as_gov_team_only(client, db_sess
 
     flagged = {key for key, cap in by_key.items() if cap["team_gov_only"] is True}
     assert flagged == {p.value for p in GOV_TEAM_ONLY_PERMS}
+
+
+@pytest.mark.asyncio
+async def test_capabilities_flag_station_caps_whose_team_scope_widens_for_gov(client, db_session, redis):
+    """ADR-285: a `team` grant on these reaches every station for a gov team, so the matrix says so.
+
+    Without the flag the grid shows `team` for a gov admin, which reads as "their own stations"
+    while `resolve_scope` actually hands them all of them.
+    """
+    admin_uuid = await _make_rbac_admin(db_session)
+    resp = await client.get(
+        "/api/v1/admin/rbac/capabilities", headers=await _auth_header(redis, admin_uuid)
+    )
+    assert resp.status_code == 200, resp.json()
+    by_key = {c["key"]: c for c in resp.json()["capabilities"]}
+
+    assert by_key["station.edit"]["team_gov_widened"] is True
+    assert by_key["station.add"]["team_gov_widened"] is False  # held at `all` anyway
+    assert by_key["ticket.edit"]["team_gov_widened"] is False
+
+    flagged = {key for key, cap in by_key.items() if cap["team_gov_widened"] is True}
+    assert flagged == {p.value for p in GOV_TEAM_WIDENED_PERMS}
 
 
 @pytest.mark.asyncio

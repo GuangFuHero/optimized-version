@@ -10,7 +10,8 @@
 -- UUID 前綴:users=c…、A站=a…、B站=b…、tickets=d…、tasks=e…、assignments=f…、
 --   teams=1…、work_zones=2…、team_zone_assign=3… (可重跑自清)
 -- 登入:全部 37 人,密碼 Mock1234!(salt_frontend=mockdata12345678;
---   API password=sha256('Mock1234!'+salt)=3a88d3527a01c374689c19033f45ecfad25a749ade957b3044591ad30551e79a)
+--   前端送出的 password=PBKDF2-HMAC-SHA256('Mock1234!', salt_frontend, 100000)
+--   =8c0aefb55114ef12e444543df20424fd9adff2bccfc861a6456386411f6a274c,直接打 API 時用這個值)
 -- Run (local dev):  psql "host=127.0.0.1 port=5432 user=postgres dbname=postgres" \
 --                     -f scripts/seed_mock_scenarios.sql
 -- Run (staging VM): docker compose -f docker-compose.staging.yml exec -T db \
@@ -123,12 +124,19 @@ INSERT INTO user_contacts (uuid, user_uuid, type, value, verified, verified_at, 
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000036', 'email', 'bngo05@mock.test', true, now(), now()),
  (gen_random_uuid(), 'c0000000-0000-4000-8000-000000000037', 'email', 'bgov01@mock.test', true, now(), now());
 INSERT INTO user_identities (uuid, user_uuid, provider, provider_subject, password_hash, created_at)
--- Hash restored to its pre-f28d64e value. That commit ("fix(seed): correct mock password hash to
--- match frontend PBKDF2 scheme") replaced a correct digest with one that matches no construction
--- the codebase uses, so every mock login has failed since 2026-06-14. This value is
--- pbkdf2_hmac('sha256', sha256('Mock1234!' + salt_frontend), salt_backend, 600000) — exactly what
--- app/core/security.py:PBKDF2SHA256Handler.verify recomputes.
-SELECT gen_random_uuid(), u.uuid, 'password', NULL, 'pbkdf2_sha256$600000$mockdata12345678$22c5f18b05a3da2d9b73ce908b1b0209$2e9aa846631acac187bcd7c2373fe94702ff7d57fdd1af73a7f258dea4c11a4d', now()
+-- The password is hashed twice. The login form derives
+--   pbkdf2_hmac('sha256', 'Mock1234!', salt_frontend, 100000)
+-- (Frontend/apps/demo/src/modules/auth/login/credentials.ts) and sends that hex as the password;
+-- app/core/security.py:PBKDF2SHA256Handler.verify then runs it through
+--   pbkdf2_hmac('sha256', <that hex>, salt_backend, 600000)
+-- and compares with the value below.
+--
+-- This is f28d64e's value. db63a0b swapped it for one built on sha256('Mock1234!' + salt_frontend)
+-- instead of the frontend's PBKDF2, which made every mock account impossible to log into from the
+-- login page. It went unnoticed because it was checked with curl against /api/v1/auth/login using
+-- the sha256 digest as the password — that proves the backend agrees with itself, not that the
+-- login page works. Verify a change here by logging in through the browser.
+SELECT gen_random_uuid(), u.uuid, 'password', NULL, 'pbkdf2_sha256$600000$mockdata12345678$22c5f18b05a3da2d9b73ce908b1b0209$99a483d62cf51799d5cb4ce03dd460c8b3414b9fd1d12f816d8b35fe724d6479', now()
 FROM users u WHERE u.uuid::text LIKE 'c0000000-%';
 -- ADR-026 dropped the Group/Policy model: the old 'Login User' group is now the `user` platform
 -- role that every registered account gets (see scripts/seed_rbac.py). role_uuid is NOT NULL, so
@@ -233,6 +241,16 @@ INSERT INTO stations (uuid, type, name, description, op_hour, level, comment, so
  ('b0000000-0000-4000-8000-000000000007','supply','三奇里物資集散點','三奇里長協助設立','08:00-20:00',0,NULL,'user','public','unverified',false,'dup-sanqi-supply',true,NULL,false,'c0000000-0000-4000-8000-000000000031'),
  ('b0000000-0000-4000-8000-000000000008','supply','三奇里物資站 (重複回報)','疑似與三奇里物資集散點為同一站,重複回報','08:00-20:00',0,'與 b…07 疑似重複','user','public','unverified',true,'dup-sanqi-supply',true,NULL,false,'c0000000-0000-4000-8000-000000000030'),
  ('b0000000-0000-4000-8000-000000000009','water','員山鄉加水站','員山端加水點','24h',0,NULL,'user','public','unverified',false,NULL,true,NULL,false,'c0000000-0000-4000-8000-000000000029');
+
+-- 2a. 站點指派(ADR-285):比照「以 team 身分建立就指派給那個 team」,依建立者的 team 身分回填
+-- (1d 每個官方/NGO 帳號恰好一個)。志工只有平台身分,他們建的站維持未指派,
+-- demo 上 gov 的待指派清單才有東西可看。
+UPDATE stations s
+SET team_uuid = ura.team_uuid
+FROM base_geometries bg
+JOIN user_role_assign ura ON ura.user_uuid = bg.created_by AND ura.role_kind = 'team'
+WHERE bg.uuid = s.uuid
+  AND (s.uuid::text LIKE 'a0000000-%' OR s.uuid::text LIKE 'b0000000-%');
 
 INSERT INTO station_properties (uuid, station_uuid, property_type, property_name, quantity, comment, status, weightings, created_by, created_at, updated_at) VALUES
  (gen_random_uuid(),'a0000000-0000-4000-8000-000000000001','supply','supply_types',NULL,'food,water,daily_items,repair_tool','verified',1.5,'c0000000-0000-4000-8000-000000000025','2024-07-24 07:30+08','2024-07-24 16:00+08'),

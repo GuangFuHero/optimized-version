@@ -80,11 +80,11 @@ async def review_station_suggestion(
 ) -> StationUpdateSuggestion:
     """Approve (apply the change) or reject a pending suggestion (requires station.review).
 
-    Scope-checked against the target. A station_property has no geometry of its own, so it
-    borrows its parent station's location via `_property_scope_target` (ADR-052) — the same
-    adaptor `update_station_property` uses — so a `zone`-scoped reviewer reaches property
-    suggestions inside its WorkZone instead of always 404ing. Applying the value and marking
-    the suggestion reviewed happen in ONE commit (ADR-043).
+    Scope-checked against the target. A station_property has no team or geometry of its own,
+    so it borrows its parent station's via `_property_scope_target` (ADR-052, ADR-285) — the
+    same adaptor `update_station_property` uses — so a `team`-scoped reviewer reaches property
+    suggestions on its team's stations instead of always 404ing. Applying the value and
+    marking the suggestion reviewed happen in ONE commit (ADR-043).
     """
     suggestion = await station_suggestion_repository.get_by_uuid_active(db, uuid)
     if not suggestion:
