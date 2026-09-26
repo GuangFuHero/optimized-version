@@ -23,7 +23,7 @@ interface NeedClaimFooterProps {
  */
 export function NeedClaimFooter({ ticketUuid, isAuthenticated }: NeedClaimFooterProps) {
   const { needs, ticketStatus } = useTicketNeeds(ticketUuid);
-  const { claimNeed, claimingNeedUuid } = useNeedClaim();
+  const { requestClaim } = useNeedClaim();
 
   if (needs.length === 0) {
     return null;
@@ -53,8 +53,7 @@ export function NeedClaimFooter({ ticketUuid, isAuthenticated }: NeedClaimFooter
       placement="footer"
       claim={resolveNeedClaim(need, { ticketStatus, isAuthenticated })}
       needName={need.taskName}
-      busy={claimingNeedUuid === need.uuid}
-      onClaim={() => void claimNeed(ticketUuid, need.uuid)}
+      onClaim={() => requestClaim(ticketUuid, need.uuid)}
     />
   );
 }

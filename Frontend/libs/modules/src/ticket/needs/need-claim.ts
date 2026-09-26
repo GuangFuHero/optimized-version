@@ -102,3 +102,28 @@ export function formatNeedQuota(need: TicketNeed, kind: NeedClaimKind): NeedQuot
     fraction: need.assignedCount / quantity,
   };
 }
+
+/**
+ * The line the claim confirmation reads out before a volunteer commits (prototype
+ * `NeedClaimConfirmDialog`).
+ */
+export function formatNeedHeadcount(need: TicketNeed, kind: NeedClaimKind): string {
+  const quantity = need.quantity;
+
+  if (quantity == null) {
+    return `目前 ${need.assignedCount} 人（未填數量）`;
+  }
+
+  const count = `目前 ${need.assignedCount}/${quantity} 人`;
+
+  // Same order as formatNeedQuota: a full need says so even once it closed.
+  if (isNeedFull(need)) {
+    return `${count}，已滿`;
+  }
+
+  if (kind === 'canceled' || kind === 'fulfilled') {
+    return count;
+  }
+
+  return `${count}，還缺 ${quantity - need.assignedCount} 位`;
+}

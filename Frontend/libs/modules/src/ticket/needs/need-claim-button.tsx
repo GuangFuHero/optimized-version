@@ -40,8 +40,6 @@ interface NeedClaimButtonProps {
   claim: NeedClaim;
   /** Joins the label in the accessible name — 「接這筆」alone does not say which need. */
   needName: string;
-  /** This button's claim is on its way to the server. */
-  busy?: boolean;
   /** Runs the `claim` action. Without it the button cannot be pressed. */
   onClaim?: () => void;
   /**
@@ -54,12 +52,10 @@ interface NeedClaimButtonProps {
 export function NeedClaimButton({
   claim,
   needName,
-  busy = false,
   onClaim,
   placement = 'row',
 }: NeedClaimButtonProps) {
-  const label = busy ? '承接中...' : claim.label;
-  const pressable = !busy && claim.action === 'claim' && Boolean(onClaim);
+  const pressable = claim.action === 'claim' && Boolean(onClaim);
   const look = pressable
     ? LOOKS.pressable
     : claim.kind === 'mine'
@@ -79,7 +75,7 @@ export function NeedClaimButton({
       disabled={!pressable}
       onClick={pressable ? onClaim : undefined}
       // Starts with the visible label, so a voice user saying what they see still hits it.
-      aria-label={`${label}：${needName}`}
+      aria-label={`${claim.label}：${needName}`}
       sx={{
         flex: footer ? 1 : '0 0 auto',
         minWidth: 0,
@@ -107,7 +103,7 @@ export function NeedClaimButton({
       }}
     >
       <Icon sx={{ fontSize: footer ? 14 : 15 }} />
-      {label}
+      {claim.label}
     </ButtonBase>
   );
 }

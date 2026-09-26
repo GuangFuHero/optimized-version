@@ -1741,6 +1741,17 @@ export type GetTicketQuery = {
   ticket?:
     | ({
         __typename?: 'TicketType';
+        secondaryLocation?: {
+          __typename?: 'SecondaryLocationType';
+          county?: string | null;
+          city?: string | null;
+          lane?: string | null;
+          alley?: string | null;
+          no?: string | null;
+          buildingSection?: string | null;
+          floor?: string | null;
+          room?: string | null;
+        } | null;
         photos: Array<{
           __typename?: 'PhotoType';
           uuid: string;
@@ -3440,6 +3451,29 @@ export const GetTicketDocument = {
                 {
                   kind: 'FragmentSpread',
                   name: { kind: 'Name', value: 'TicketFields' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'secondaryLocation' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'county' },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'city' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'lane' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'alley' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'no' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'buildingSection' },
+                      },
+                      { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'room' } },
+                    ],
+                  },
                 },
                 {
                   kind: 'Field',

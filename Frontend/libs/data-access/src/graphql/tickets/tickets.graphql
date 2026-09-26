@@ -116,6 +116,18 @@ query GetTicketsWithNeeds(
 query GetTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...TicketFields
+    # Where a volunteer is going, for the claim confirmation. Null without an address, and to a
+    # caller without ticket.view_detail.
+    secondaryLocation {
+      county
+      city
+      lane
+      alley
+      no
+      buildingSection
+      floor
+      room
+    }
     photos {
       uuid
       url

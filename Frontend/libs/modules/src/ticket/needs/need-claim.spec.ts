@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatNeedQuota, resolveNeedClaim, type TicketNeed } from './need-claim';
+import {
+  formatNeedHeadcount,
+  formatNeedQuota,
+  resolveNeedClaim,
+  type TicketNeed,
+} from './need-claim';
 
 function need(overrides: Partial<TicketNeed> = {}): TicketNeed {
   return {
@@ -128,5 +133,35 @@ describe('formatNeedQuota', () => {
 
     expect(formatNeedQuota(halfway, 'canceled')).toEqual({ text: '1/3', fraction: 1 / 3 });
     expect(formatNeedQuota(halfway, 'fulfilled')).toEqual({ text: '1/3', fraction: 1 / 3 });
+  });
+});
+
+describe('formatNeedHeadcount', () => {
+  it('tells the volunteer about to confirm how many are going and how many are still missing', () => {
+    expect(formatNeedHeadcount(need({ quantity: 3, assignedCount: 1 }), 'open')).toBe(
+      '目前 1/3 人，還缺 2 位',
+    );
+  });
+
+  it('says a need is full rather than missing nobody — or a negative number when over-sent', () => {
+    expect(formatNeedHeadcount(need({ quantity: 3, assignedCount: 3 }), 'full')).toBe(
+      '目前 3/3 人，已滿',
+    );
+    expect(formatNeedHeadcount(need({ quantity: 3, assignedCount: 4 }), 'full')).toBe(
+      '目前 4/3 人，已滿',
+    );
+  });
+
+  it('counts heads without inventing a total the requester never gave', () => {
+    expect(formatNeedHeadcount(need({ quantity: null, assignedCount: 2 }), 'open')).toBe(
+      '目前 2 人（未填數量）',
+    );
+  });
+
+  it('stops asking for people once the need closed under the dialog', () => {
+    // A refused claim reloads the need (Q29), and a canceled one is missing nobody.
+    expect(formatNeedHeadcount(need({ quantity: 3, assignedCount: 1 }), 'canceled')).toBe(
+      '目前 1/3 人',
+    );
   });
 });

@@ -37,7 +37,7 @@ export function NeedLine({
   isAuthenticated,
   divider = false,
 }: NeedLineProps) {
-  const { claimNeed, claimingNeedUuid } = useNeedClaim();
+  const { requestClaim } = useNeedClaim();
   const claim = resolveNeedClaim(need, { ticketStatus, isAuthenticated });
   const quota = formatNeedQuota(need, claim.kind);
   const closed = claim.kind === 'canceled' || claim.kind === 'fulfilled';
@@ -114,8 +114,7 @@ export function NeedLine({
         <NeedClaimButton
           claim={claim}
           needName={need.taskName}
-          busy={claimingNeedUuid === need.uuid}
-          onClaim={() => void claimNeed(ticketUuid, need.uuid)}
+          onClaim={() => requestClaim(ticketUuid, need.uuid)}
         />
       </Box>
     </Stack>
