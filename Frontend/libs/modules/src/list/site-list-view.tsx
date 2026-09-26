@@ -55,9 +55,11 @@ export function SiteListView() {
   const {
     markers: sourceMarkers,
     isFetching,
+    hasFetchedOnce,
     dismissMarker,
     hasNextPage,
     loadNextPage,
+    loadTicketMarker,
     replaceTicketNeeds,
   } = usePaginatedRescueMapMarkers(state);
 
@@ -70,12 +72,22 @@ export function SiteListView() {
 
   const dataType = controller.dataType ?? SITE_FALLBACK_DATA_TYPE;
 
+  // A linked ticket that no loaded page holds — the list loads a page at a time — fetched on its
+  // own so its drawer still opens.
+  const [unlistedMarker, setUnlistedMarker] =
+    useState<RescueMapMarkerItem | null>(null);
+  // The last selection seen in the list. One that drops out of it afterwards was filtered out.
+  const listedSelectionRef = useRef<string | undefined>(undefined);
+
   const selectedMarker = useMemo(
     () =>
       controller.markers.find(
         (marker) => marker.id === controller.selectedMarkerId,
-      ) ?? null,
-    [controller.markers, controller.selectedMarkerId],
+      ) ??
+      (unlistedMarker?.id === controller.selectedMarkerId
+        ? unlistedMarker
+        : null),
+    [controller.markers, controller.selectedMarkerId, unlistedMarker],
   );
 
   const [displayMarker, setDisplayMarker] =
@@ -100,22 +112,59 @@ export function SiteListView() {
   }, [controller.selectedMarkerId, selectedMarker]);
 
   useEffect(() => {
-    if (!controller.selectedMarkerId || isFetching) {
+    const selectedId = controller.selectedMarkerId;
+
+    // Before the first page is in, every ticket looks missing: judged then, a link straight to one
+    // found an empty list and closed its drawer.
+    if (!selectedId || !hasFetchedOnce || isFetching) {
       return;
     }
 
-    const hasSelectedMarker = controller.markers.some(
-      (marker) => marker.id === controller.selectedMarkerId,
-    );
-
-    if (hasSelectedMarker) {
+    if (controller.markers.some((marker) => marker.id === selectedId)) {
+      listedSelectionRef.current = selectedId;
       return;
     }
 
-    setDetailOpen(false);
-    controller.setSelectedMarkerId(undefined);
+    if (unlistedMarker?.id === selectedId) {
+      return;
+    }
+
+    const clearSelection = () => {
+      setDetailOpen(false);
+      controller.setSelectedMarkerId(undefined);
+    };
+
+    // Listed before and gone now: a filter left it out, and the drawer goes with it. Never listed:
+    // a link to a ticket past the loaded pages, looked up on its own. Stations are not looked up.
+    if (dataType !== 'ticket' || listedSelectionRef.current === selectedId) {
+      clearSelection();
+      return;
+    }
+
+    let cancelled = false;
+
+    void loadTicketMarker(selectedId).then((marker) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (marker) {
+        setUnlistedMarker(marker);
+        return;
+      }
+
+      clearSelection();
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
+    dataType,
+    hasFetchedOnce,
     isFetching,
+    loadTicketMarker,
+    unlistedMarker,
     controller.markers,
     controller.selectedMarkerId,
     controller.setSelectedMarkerId,

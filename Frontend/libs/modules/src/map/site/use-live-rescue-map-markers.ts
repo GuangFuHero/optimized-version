@@ -2,6 +2,7 @@
 
 import {
   GetStationsDocument,
+  GetTicketDocument,
   GetTicketsWithNeedsDocument,
   PageInfoFieldsFragmentDoc,
   TicketNeedFieldsFragmentDoc,
@@ -45,6 +46,8 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     [],
   );
   const [isFetching, setIsFetching] = useState(false);
+  // Until the first page is in, an empty list says nothing about what exists.
+  const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
   const [error, setError] = useState<CombinedError | null>(null);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [loadedCount, setLoadedCount] = useState(0);
@@ -72,6 +75,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
         }
 
         setIsFetching(false);
+        setHasFetchedOnce(true);
 
         if (result.error) {
           setError(result.error);
@@ -111,6 +115,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
       }
 
       setIsFetching(false);
+      setHasFetchedOnce(true);
 
       if (result.error) {
         setError(result.error);
@@ -187,13 +192,33 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     [],
   );
 
+  /**
+   * One ticket as a marker, fetched on its own — for a link to a ticket that none of the loaded
+   * pages holds. Only its drawer shows it, and the drawer reads the needs itself, so the marker
+   * carries none (a copy here would go stale after a claim). Null when the ticket is gone or has
+   * no point to place.
+   */
+  const loadTicketMarker = useCallback(
+    async (uuid: string): Promise<RescueMapMarkerItem | null> => {
+      const result = await client
+        .query(GetTicketDocument, { uuid }, IMPERATIVE_QUERY_CONTEXT)
+        .toPromise();
+      const ticket = result.data?.ticket;
+
+      return ticket ? mapTicketToMarker(ticket) : null;
+    },
+    [client],
+  );
+
   return {
     markers,
     error,
     isFetching,
+    hasFetchedOnce,
     dismissMarker,
     hasNextPage,
     loadNextPage,
+    loadTicketMarker,
     replaceTicketNeeds,
   };
 }
