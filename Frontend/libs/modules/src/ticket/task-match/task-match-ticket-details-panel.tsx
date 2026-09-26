@@ -7,8 +7,8 @@ import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import ImageRoundedIcon from '@mui/icons-material/ImageRounded';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import PeopleAltRoundedIcon from '@mui/icons-material/PeopleAltRounded';
 import PhotoLibraryRoundedIcon from '@mui/icons-material/PhotoLibraryRounded';
+import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Alert, Box, ButtonBase, Chip, Stack, Typography } from '@mui/material';
 import { useQuery } from 'urql';
 
@@ -23,6 +23,7 @@ import {
 import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
 import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
+import { NeedRow, readTicketNeeds, useClaimNeed } from '../needs';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
@@ -60,13 +61,6 @@ interface TicketTaskPropertyItem {
   createdAt?: string | null;
 }
 
-interface TicketTaskAssignmentItem {
-  uuid: string;
-  actorUuid: string;
-  role?: string | null;
-  assignedAt?: string | null;
-}
-
 interface TicketTaskDetailItem {
   uuid: string;
   taskType: string;
@@ -82,7 +76,6 @@ interface TicketTaskDetailItem {
   createdAt?: string | null;
   updatedAt?: string | null;
   properties: TicketTaskPropertyItem[];
-  assignments: TicketTaskAssignmentItem[];
 }
 
 function formatDateTime(value?: string | null) {
@@ -387,16 +380,18 @@ export function TaskMatchTicketDetailsPanel({
             comment: property.comment,
             createdAt: property.createdAt?.toString() ?? null,
           })) ?? [],
-        assignments:
-          detailedTask?.assignments.map((assignment) => ({
-            uuid: assignment.uuid,
-            actorUuid: assignment.actorUuid,
-            role: assignment.role,
-            assignedAt: assignment.assignedAt?.toString() ?? null,
-          })) ?? [],
       };
     });
   }, [taskData?.ticketTasks, ticket?.tasks]);
+
+  // The same tasks, as needs a volunteer can claim. Who claimed them is not shown: without
+  // ticket.view_pii `assignments` comes back empty, and `assignedCount` is what everyone gets.
+  const needs = useMemo(
+    () => readTicketNeeds(ticketData?.ticket ?? null),
+    [ticketData?.ticket],
+  );
+  const ticketStatus = ticket?.status ?? marker.ticketMeta?.status;
+  const { claimNeed, claimingNeedUuid } = useClaimNeed(marker.id);
 
   const activeTask = tasks[activeTaskIndex] ?? null;
   const activePhoto = photos[activePhotoIndex] ?? null;
@@ -448,6 +443,39 @@ export function TaskMatchTicketDetailsPanel({
         <Alert severity="error">
           {(ticketError ?? taskError)?.message ?? '載入任務詳情失敗。'}
         </Alert>
+      ) : null}
+
+      {/* First, as in the prototype (site-detail.jsx:330-332): what a volunteer came to decide. */}
+      {needs.length > 0 || isTicketFetching ? (
+        <SectionCard
+          title={needs.length > 0 ? `需求（${needs.length} 筆）` : '需求'}
+          icon={<VolunteerActivismRoundedIcon sx={{ fontSize: 18 }} />}
+        >
+          {/* Under the title, not beside it: on a phone the two squeezed each other onto two lines. */}
+          {needs.length > 1 ? (
+            <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12], lineHeight: 1.5 }}>
+              一筆一筆接，可以接多筆
+            </Typography>
+          ) : null}
+          {needs.length > 0 ? (
+            <Stack spacing={1}>
+              {needs.map((need) => (
+                <NeedRow
+                  key={need.uuid}
+                  need={need}
+                  ticketStatus={ticketStatus}
+                  isAuthenticated={isAuthenticated}
+                  busy={claimingNeedUuid === need.uuid}
+                  onClaim={(target) => void claimNeed(target.uuid)}
+                />
+              ))}
+            </Stack>
+          ) : (
+            <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
+              載入需求中...
+            </Typography>
+          )}
+        </SectionCard>
       ) : null}
 
       {coarse ? (
@@ -619,14 +647,6 @@ export function TaskMatchTicketDetailsPanel({
                     color: color.fg.neutral.subtle,
                   }}
                 />
-                <Chip
-                  size="small"
-                  label={`已指派 ${activeTask.assignments.length} 筆`}
-                  sx={{
-                    bgcolor: color.bg.neutral.sunken,
-                    color: color.fg.neutral.subtle,
-                  }}
-                />
               </Box>
             </Box>
 
@@ -708,58 +728,6 @@ export function TaskMatchTicketDetailsPanel({
               ) : (
                 <Typography sx={{ mt: 1, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
                   此子任務目前沒有額外屬性資料。
-                </Typography>
-              )}
-            </Box>
-
-            <Box
-              sx={{
-                p: 1.5,
-                borderRadius: 2.5,
-                bgcolor: detailPalette.sectionSurface,
-                border: `1px solid ${detailPalette.border}`,
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <PeopleAltRoundedIcon sx={{ color: detailPalette.accent, fontSize: 18 }} />
-                <Typography
-                  sx={{
-                    color: detailPalette.heading,
-                    fontSize: displayTextSize[13],
-                    lineHeight: '20px',
-                    fontWeight: 800,
-                  }}
-                >
-                  指派紀錄
-                </Typography>
-              </Box>
-              {activeTask.assignments.length > 0 ? (
-                <Stack spacing={1} sx={{ mt: 1.25 }}>
-                  {activeTask.assignments.map((assignment) => (
-                    <Box
-                      key={assignment.uuid}
-                      sx={{
-                        p: 1.25,
-                        borderRadius: 2,
-                        bgcolor: detailPalette.surface,
-                        border: `1px solid ${detailPalette.border}`,
-                      }}
-                    >
-                      <Typography sx={{ color: detailPalette.text, fontSize: displayTextSize[13], fontWeight: 700 }}>
-                        {assignment.role?.trim() || '未指定角色'}
-                      </Typography>
-                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
-                        接案者 UUID：{assignment.actorUuid}
-                      </Typography>
-                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
-                        指派時間：{formatDateTime(assignment.assignedAt)}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Stack>
-              ) : (
-                <Typography sx={{ mt: 1, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
-                  此子任務目前沒有指派紀錄。
                 </Typography>
               )}
             </Box>

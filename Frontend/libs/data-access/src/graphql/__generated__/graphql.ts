@@ -381,6 +381,7 @@ export type Mutation = {
   reviewTicket: TicketType;
   setAnnouncementActive: AnnouncementType;
   setTicketDisasterDetails: Array<TicketDisasterDetailType>;
+  stopRecruiting: Array<TicketTaskType>;
   unassignTaskActor: Scalars['Boolean']['output'];
   updateAnnouncement: AnnouncementType;
   updateBriefing: BriefingType;
@@ -525,6 +526,10 @@ export type MutationSetTicketDisasterDetailsArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+export type MutationStopRecruitingArgs = {
+  ticketUuid: Scalars['UUID']['input'];
+};
+
 export type MutationUnassignTaskActorArgs = {
   uuid: Scalars['UUID']['input'];
 };
@@ -602,6 +607,14 @@ export type MutationUpsertTicketPropertyConfigArgs = {
   input: UpsertTicketPropertyConfigInput;
 };
 
+/** One of the caller's claims, with the need and the ticket it is for */
+export type MyTaskAssignmentType = {
+  __typename?: 'MyTaskAssignmentType';
+  assignment: TaskAssignmentType;
+  task: TicketTaskType;
+  ticket: TicketType;
+};
+
 export type PageInfo = {
   __typename?: 'PageInfo';
   /** True if there are more records after the current page */
@@ -637,6 +650,7 @@ export type Query = {
   closureArea?: Maybe<ClosureAreaType>;
   closureAreas: ClosureAreaConnection;
   disasterTypes: Array<DisasterTypeType>;
+  myTaskAssignments: Array<MyTaskAssignmentType>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
   stationSuggestions: Array<StationSuggestionType>;
@@ -1100,6 +1114,7 @@ export type TicketPropertyConfigType = {
 export type TicketTaskType = {
   __typename?: 'TicketTaskType';
   assignedCount: Scalars['Int']['output'];
+  /** Everyone who claimed this task. Empty to a caller without ticket.view_pii on the parent ticket — assignedCount stays public, and a caller's own claim is myAssignment */
   assignments: Array<TaskAssignmentType>;
   completedCount: Scalars['Int']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1107,6 +1122,8 @@ export type TicketTaskType = {
   createdBy?: Maybe<Scalars['String']['output']>;
   /** Review state: 'pending_review', 'approved', or 'rejected' */
   moderationStatus: Scalars['String']['output'];
+  /** The caller's own claim on this task. Null to a guest or a non-claimant */
+  myAssignment?: Maybe<TaskAssignmentType>;
   progress?: Maybe<Scalars['Float']['output']>;
   /** Current progress update written by the assignee. Null to a caller without ticket.view_detail on the parent ticket */
   progressNote?: Maybe<Scalars['String']['output']>;
@@ -1643,6 +1660,17 @@ export type TicketTaskFieldsFragment = {
   updatedAt?: any | null;
 } & { ' $fragmentName'?: 'TicketTaskFieldsFragment' };
 
+export type TicketNeedFieldsFragment = {
+  __typename?: 'TicketTaskType';
+  uuid: string;
+  taskName: string;
+  taskType: string;
+  quantity?: number | null;
+  status: string;
+  assignedCount: number;
+  myAssignment?: { __typename?: 'TaskAssignmentType'; uuid: string } | null;
+} & { ' $fragmentName'?: 'TicketNeedFieldsFragment' };
+
 export type GetTicketsQueryVariables = Exact<{
   bounds?: InputMaybe<BoundsInput>;
   status?: InputMaybe<Scalars['String']['input']>;
@@ -1690,6 +1718,7 @@ export type GetTicketQuery = {
           { __typename?: 'TicketTaskType' } & {
             ' $fragmentRefs'?: {
               TicketTaskFieldsFragment: TicketTaskFieldsFragment;
+              TicketNeedFieldsFragment: TicketNeedFieldsFragment;
             };
           }
         >;
@@ -1719,14 +1748,6 @@ export type GetTicketTasksQuery = {
         status?: string | null;
         comment?: string | null;
         createdAt?: any | null;
-      }>;
-      assignments: Array<{
-        __typename?: 'TaskAssignmentType';
-        uuid: string;
-        taskUuid: string;
-        actorUuid: string;
-        role?: string | null;
-        assignedAt?: any | null;
       }>;
     } & {
       ' $fragmentRefs'?: { TicketTaskFieldsFragment: TicketTaskFieldsFragment };
@@ -1777,6 +1798,19 @@ export type UpdateTicketTaskMutation = {
   __typename?: 'Mutation';
   updateTicketTask: { __typename?: 'TicketTaskType' } & {
     ' $fragmentRefs'?: { TicketTaskFieldsFragment: TicketTaskFieldsFragment };
+  };
+};
+
+export type ClaimNeedMutationVariables = Exact<{
+  taskUuid: Scalars['UUID']['input'];
+}>;
+
+export type ClaimNeedMutation = {
+  __typename?: 'Mutation';
+  assignTaskActor: {
+    __typename?: 'TaskAssignmentType';
+    uuid: string;
+    taskUuid: string;
   };
 };
 
@@ -1957,6 +1991,40 @@ export const TicketTaskFieldsFragmentDoc = {
     },
   ],
 } as unknown as DocumentNode<TicketTaskFieldsFragment, unknown>;
+export const TicketNeedFieldsFragmentDoc = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketNeedFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketTaskType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'myAssignment' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<TicketNeedFieldsFragment, unknown>;
 export const GetStationsDocument = {
   kind: 'Document',
   definitions: [
@@ -3132,6 +3200,10 @@ export const GetTicketDocument = {
                         kind: 'FragmentSpread',
                         name: { kind: 'Name', value: 'TicketTaskFields' },
                       },
+                      {
+                        kind: 'FragmentSpread',
+                        name: { kind: 'Name', value: 'TicketNeedFields' },
+                      },
                     ],
                   },
                 },
@@ -3199,6 +3271,35 @@ export const GetTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketNeedFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketTaskType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'myAssignment' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+              ],
+            },
+          },
         ],
       },
     },
@@ -3331,29 +3432,6 @@ export const GetTicketTasksDocument = {
                       {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'createdAt' },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'assignments' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'taskUuid' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'actorUuid' },
-                      },
-                      { kind: 'Field', name: { kind: 'Name', value: 'role' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'assignedAt' },
                       },
                     ],
                   },
@@ -3775,6 +3853,55 @@ export const UpdateTicketTaskDocument = {
   UpdateTicketTaskMutation,
   UpdateTicketTaskMutationVariables
 >;
+export const ClaimNeedDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'ClaimNeed' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'taskUuid' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'assignTaskActor' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'taskUuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'taskUuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'taskUuid' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<ClaimNeedMutation, ClaimNeedMutationVariables>;
 export const CreateTaskPropertyDocument = {
   kind: 'Document',
   definitions: [

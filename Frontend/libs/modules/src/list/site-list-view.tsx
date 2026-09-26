@@ -173,7 +173,6 @@ export function SiteListView() {
       state: taskMatchState,
       isAuthenticated,
       canDeleteMatchSheet,
-      onClaimTask: () => claimTask(marker),
       onDeleteMatchSheet: () => setPendingDeleteTask(marker),
       onShare: () => openPointShare(marker),
     });

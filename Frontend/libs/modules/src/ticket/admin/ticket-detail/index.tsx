@@ -110,6 +110,11 @@ export interface TicketDetailTabsProps {
 
 export interface TicketDetailFooterActionsProps {
   items: readonly TicketDetailFooterActionItem[];
+  /**
+   * Goes first on the inline row, before the items. For an action that has to render itself — the
+   * public site's claim button reads the ticket's needs, which a plain item cannot.
+   */
+  lead?: ReactNode;
 }
 
 export interface TicketDetailDrawerProps {
@@ -120,6 +125,8 @@ export interface TicketDetailDrawerProps {
   detailsPane?: TicketDetailDetailsPaneProps;
   content?: ReactNode;
   footerActions?: readonly TicketDetailFooterActionItem[];
+  /** See `TicketDetailFooterActionsProps.lead`. */
+  footerLead?: ReactNode;
   tabsVariant?: TicketDetailTabsVariant;
   width?: number | string;
   height?: number | string;
@@ -722,6 +729,7 @@ function TicketDetailFooterButton({
 
 export function TicketDetailFooterActions({
   items,
+  lead,
 }: TicketDetailFooterActionsProps) {
   const inlineItems = items.filter(
     (item) => item.placement !== 'block' && item.intent !== 'danger',
@@ -741,8 +749,9 @@ export function TicketDetailFooterActions({
         bgcolor: ticketDetailPalette.frame,
       }}
     >
-      {inlineItems.length > 0 ? (
+      {lead || inlineItems.length > 0 ? (
         <Box sx={{ display: 'flex', alignItems: 'stretch', gap: 1.5 }}>
+          {lead}
           {inlineItems.map((item) => (
             <TicketDetailFooterButton key={item.id} item={item} />
           ))}
@@ -763,6 +772,7 @@ export function TicketDetailDrawer({
   detailsPane = createDefaultDetailsPane(),
   content,
   footerActions = createDefaultFooterActions(),
+  footerLead,
   tabsVariant = 'default',
   width = 400,
   height,
@@ -785,7 +795,7 @@ export function TicketDetailDrawer({
         />
       }
       tabs={<TicketDetailTabs items={tabs} variant={tabsVariant} />}
-      footer={<TicketDetailFooterActions items={footerActions} />}
+      footer={<TicketDetailFooterActions items={footerActions} lead={footerLead} />}
     >
       {content ?? <TicketDetailDetailsPane {...detailsPane} />}
     </AdminDetailModalFrame>

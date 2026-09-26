@@ -418,6 +418,7 @@ type Mutation {
   assignTaskActor(taskUuid: UUID!, actorUuid: UUID = null, role: String = null): TaskAssignmentType!
   updateTaskAssignment(uuid: UUID!, input: UpdateTaskAssignmentInput!): TaskAssignmentType!
   unassignTaskActor(uuid: UUID!): Boolean!
+  stopRecruiting(ticketUuid: UUID!): [TicketTaskType!]!
   upsertStationPropertyConfig(stationType: String!, input: UpsertPropertyConfigInput!): StationPropertyConfigType!
   upsertTaskPropertyConfig(taskType: String!, input: UpsertPropertyConfigInput!): TaskPropertyConfigType!
   upsertTicketPropertyConfig(input: UpsertTicketPropertyConfigInput!): TicketPropertyConfigType!
@@ -440,6 +441,13 @@ type Mutation {
   assignZoneToTeam(input: ZoneTeamAssignmentInput!): ZoneAssignmentType!
   removeZoneFromTeam(input: ZoneTeamAssignmentInput!): Boolean!
   deleteWorkZone(uuid: UUID!): Boolean!
+}
+
+"""One of the caller's claims, with the need and the ticket it is for"""
+type MyTaskAssignmentType {
+  assignment: TaskAssignmentType!
+  task: TicketTaskType!
+  ticket: TicketType!
 }
 
 type PageInfo {
@@ -499,6 +507,7 @@ type Query {
     zoom: Float = null
   ): TicketType
   ticketTasks(ticketUuid: String!, status: String = null, q: String = null, skip: Int! = 0, limit: Int! = 50): [TicketTaskType!]!
+  myTaskAssignments: [MyTaskAssignmentType!]!
   taskProperties(taskUuid: String!): [TaskPropertyType!]!
   stationPropertyConfigs(stationType: String!, includeInactive: Boolean! = false): [StationPropertyConfigType!]!
   taskPropertyConfigs(taskType: String!, includeInactive: Boolean! = false): [TaskPropertyConfigType!]!
@@ -996,7 +1005,14 @@ type TicketTaskType {
   """
   createdBy: String
   properties: [TaskPropertyType!]!
+
+  """
+  Everyone who claimed this task. Empty to a caller without ticket.view_pii on the parent ticket — assignedCount stays public, and a caller's own claim is myAssignment
+  """
   assignments: [TaskAssignmentType!]!
+
+  """The caller's own claim on this task. Null to a guest or a non-claimant"""
+  myAssignment: TaskAssignmentType
   assignedCount: Int!
   completedCount: Int!
   progress: Float

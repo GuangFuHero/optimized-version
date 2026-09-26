@@ -37,6 +37,21 @@ fragment TicketTaskFields on TicketTaskType {
   updatedAt
 }
 
+# What a need's claim button is decided on (ticket/needs/need-claim.ts): a volunteer claims a need,
+# not a ticket (PUB-PS-140). `myAssignment` is null to a guest and to anyone who has not claimed it;
+# `assignedCount` is public, the claimants themselves are not (`assignments` needs ticket.view_pii).
+fragment TicketNeedFields on TicketTaskType {
+  uuid
+  taskName
+  taskType
+  quantity
+  status
+  assignedCount
+  myAssignment {
+    uuid
+  }
+}
+
 # ─── Queries ────────────────────────────────────────────────
 
 query GetTickets(
@@ -77,6 +92,7 @@ query GetTicket($uuid: UUID!) {
     }
     tasks {
       ...TicketTaskFields
+      ...TicketNeedFields
     }
   }
 }
@@ -104,13 +120,6 @@ query GetTicketTasks(
       comment
       createdAt
     }
-    assignments {
-      uuid
-      taskUuid
-      actorUuid
-      role
-      assignedAt
-    }
   }
 }
 
@@ -137,6 +146,14 @@ mutation CreateTicketTask($input: CreateTicketTaskInput!) {
 mutation UpdateTicketTask($uuid: UUID!, $input: UpdateTicketTaskInput!) {
   updateTicketTask(uuid: $uuid, input: $input) {
     ...TicketTaskFields
+  }
+}
+
+# The caller claims a need for themselves: no actorUuid means self-signup (ticket.assign: own).
+mutation ClaimNeed($taskUuid: UUID!) {
+  assignTaskActor(taskUuid: $taskUuid) {
+    uuid
+    taskUuid
   }
 }
 

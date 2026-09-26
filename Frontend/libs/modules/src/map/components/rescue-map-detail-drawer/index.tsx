@@ -26,6 +26,7 @@ export type RescueMapTicketDetailOverrides = Partial<
     | 'detailsPane'
     | 'content'
     | 'footerActions'
+    | 'footerLead'
     | 'tabs'
     | 'tabsVariant'
   >

@@ -3,11 +3,11 @@
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
-import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Icons } from '@rescue-frontend/ui';
 
 import type { RescueMapTicketDetailOverrides } from '../../map/components/rescue-map-detail-drawer';
 import type { RescueMapMarkerItem } from '../../map/types';
+import { NeedClaimFooter } from '../needs';
 import type { TicketDetailFooterActionItem } from '../ticket-detail';
 import { TaskMatchHistoryPanel } from './task-match-history-panel';
 import type { TaskMatchState } from './model';
@@ -20,27 +20,23 @@ interface TaskMatchTicketDetailOptions {
   state: TaskMatchState;
   isAuthenticated: boolean;
   canDeleteMatchSheet: boolean;
-  onClaimTask: () => void;
   onDeleteMatchSheet: () => void;
   onShare?: () => void;
 }
 
 function createFooterActions({
   state,
-  isAuthenticated,
   canDeleteMatchSheet,
-  onClaimTask,
   onDeleteMatchSheet,
   onShare,
 }: Omit<
   TaskMatchTicketDetailOptions,
-  'marker'
+  'marker' | 'isAuthenticated'
 >): readonly TicketDetailFooterActionItem[] {
-  const canClaim =
-    isAuthenticated &&
-    (state.status === 'pending' || state.status === 'matching');
   const canDelete = canDeleteMatchSheet && state.status !== 'deleted';
 
+  // Claiming is not an item here: a volunteer claims a need, and `NeedClaimFooter` (the footer
+  // lead) is the one that knows the ticket's needs.
   return [
     ...(onShare
       ? [
@@ -52,22 +48,6 @@ function createFooterActions({
           },
         ]
       : []),
-    {
-      id: 'claim-task',
-      label:
-        state.status === 'matched'
-          ? '媒合完成'
-          : state.status === 'deleted'
-            ? '已刪除'
-            : !isAuthenticated
-              ? '登入後接任務'
-              : canClaim
-                ? '接任務'
-                : '接任務',
-      icon: <VolunteerActivismRoundedIcon />,
-      disabled: !canClaim,
-      onClick: canClaim ? onClaimTask : undefined,
-    },
     ...(canDeleteMatchSheet
       ? [
           {
@@ -89,7 +69,6 @@ export function createTaskMatchTicketDetailOverrides({
   state,
   isAuthenticated,
   canDeleteMatchSheet,
-  onClaimTask,
   onDeleteMatchSheet,
   onShare,
 }: TaskMatchTicketDetailOptions): RescueMapTicketDetailOverrides {
@@ -114,11 +93,12 @@ export function createTaskMatchTicketDetailOverrides({
       />
     ),
     content: <TaskMatchHistoryPanel state={state} />,
+    footerLead: (
+      <NeedClaimFooter ticketUuid={marker.id} isAuthenticated={isAuthenticated} />
+    ),
     footerActions: createFooterActions({
       state,
-      isAuthenticated,
       canDeleteMatchSheet,
-      onClaimTask,
       onDeleteMatchSheet,
       onShare,
     }),

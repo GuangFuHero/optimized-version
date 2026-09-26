@@ -373,7 +373,7 @@ function SiteMapViewportDataLayer({
   const viewportStore = useSiteMapViewportStore();
   const liveDataStore = useSiteMapLiveData(baseRouteState);
   const liveDataSnapshot = useSiteMapLiveDataSnapshot(liveDataStore);
-  const { getTaskMatchState, claimTask, deleteMatchSheet } = useTaskMatches();
+  const { getTaskMatchState, deleteMatchSheet } = useTaskMatches();
   const isAuthenticated = authStatus === 'authenticated';
   const currentUserId = session?.user?.id ?? null;
   const mergedRouteState = useMemo<SiteRouteState>(
@@ -465,13 +465,11 @@ function SiteMapViewportDataLayer({
         state: taskMatchState,
         isAuthenticated,
         canDeleteMatchSheet,
-        onClaimTask: () => claimTask(marker),
         onDeleteMatchSheet: () => setPendingDeleteTask(marker),
         onShare: () => onOpenShareTarget(createCurrentPointShareTarget(marker)),
       });
     },
     [
-      claimTask,
       currentUserId,
       createCurrentPointShareTarget,
       getTaskMatchState,
