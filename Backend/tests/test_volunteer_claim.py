@@ -158,6 +158,38 @@ async def test_a_need_on_a_deleted_ticket_cannot_be_claimed(db):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["completed", "cancelled"])
+async def test_a_need_on_a_closed_ticket_cannot_be_claimed(db, status):
+    """Closing a ticket leaves its needs pending, but a done or withdrawn request has nothing left to do."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    ticket = await db.get(Tickets, task.ticket_uuid)
+    ticket.status = status
+    await db.flush()
+    volunteer = await _volunteer(db)
+
+    with pytest.raises(ValueError, match="Task is no longer open"):
+        await _claim(db, volunteer, task_uuid)
+
+    assert await _claims(db, task_uuid) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_need_on_a_ticket_in_progress_can_still_be_claimed(db):
+    """`in_progress` means someone has started on the ticket, not that it is done — it still takes people."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    ticket = await db.get(Tickets, task.ticket_uuid)
+    ticket.status = "in_progress"
+    await db.flush()
+    volunteer = await _volunteer(db)
+
+    await _claim(db, volunteer, task_uuid)
+
+    assert await _claims(db, task_uuid) == 1
+
+
+@pytest.mark.asyncio
 async def test_a_need_awaiting_review_can_be_claimed(db):
     """`pending_review` needs are already on the public site; blocking them would strand them."""
     task = await _need(db, quantity=2)

@@ -47,6 +47,9 @@ MAX_DISASTER_DETAIL_KEY_LENGTH = 100
 # vocabulary spells it `canceled`, unlike the ticket-level `cancelled` below.
 CLOSED_TASK_STATUSES = frozenset({"fulfilled", "canceled"})
 OPEN_TASK_STATUSES = frozenset({"pending", "in_progress"})
+# A ticket in one of these states takes no more volunteers on any of its tasks, whatever
+# each task's own status says: update_ticket closes the ticket alone and leaves them pending.
+CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
 
 # What a notice calls each state — the site's own words (Frontend ticket/status.ts and the
 # task detail panel), never the enum. An unknown value falls through as itself, so a new
@@ -502,7 +505,8 @@ async def assign_task_actor(
     Self-signup needs only ticket.assign (checkpoint 1); assigning someone else also
     scope-checks the task (checkpoint 2). The same actor can't be linked to a task twice.
 
-    A fulfilled or canceled task takes nobody. A volunteer claims a need, not a ticket
+    A fulfilled or canceled task takes nobody, nor does a task of a completed or cancelled
+    ticket. A volunteer claims a need, not a ticket
     (PUB-PS-140), and signing themselves up is refused once a task with a `quantity` has that
     many people; a task without one has no cap, as the requester never said how many. A
     coordinator assigning someone else may still over-subscribe (d847624): they can see the
@@ -687,16 +691,19 @@ async def _lock_task_with_room(
     The lock is held until the caller's insert commits. `capped` applies the quantity cap,
     which binds a volunteer signing themselves up but not a coordinator (see assign_task_actor).
     """
-    task = await db.scalar(
-        select(TicketTask)
-        .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
-        .where(TicketTask.uuid == task_uuid, TicketTask.delete_at.is_(None), Tickets.delete_at.is_(None))
-        .with_for_update(of=TicketTask)
-        .execution_options(populate_existing=True)
-    )
-    if not task:
+    row = (
+        await db.execute(
+            select(TicketTask, Tickets.status)
+            .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
+            .where(TicketTask.uuid == task_uuid, TicketTask.delete_at.is_(None), Tickets.delete_at.is_(None))
+            .with_for_update(of=TicketTask)
+            .execution_options(populate_existing=True)
+        )
+    ).first()
+    if row is None:
         raise ValueError("Ticket task not found")
-    if task.status in CLOSED_TASK_STATUSES:
+    task, ticket_status = row
+    if task.status in CLOSED_TASK_STATUSES or ticket_status in CLOSED_TICKET_STATUSES:
         raise ValueError("Task is no longer open")
     if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
         raise ValueError("Actor already assigned to this task")
