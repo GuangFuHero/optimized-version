@@ -23,7 +23,10 @@ export function PortalSiteShell({ children }: { children: ReactNode }) {
       }
 
       await signOut({ redirect: false });
-      router.refresh();
+      // Reload, not `router.refresh()`: what the page fetched while signed in — the list's
+      // claims, the map's exact pins, the urql cache — lives in the browser, and a refresh only
+      // re-renders the server's part. A guest must not go on seeing it.
+      window.location.reload();
     })();
   };
 
