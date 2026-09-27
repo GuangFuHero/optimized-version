@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
-import { Box, Drawer, Stack, Typography } from '@mui/material';
+import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
 import { useSession } from 'next-auth/react';
 
 import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawer';
@@ -93,6 +93,9 @@ export function SiteListView() {
   const [displayMarker, setDisplayMarker] =
     useState<RescueMapMarkerItem | null>(selectedMarker);
   const [detailOpen, setDetailOpen] = useState(Boolean(selectedMarker));
+  // The phone's drawer opens on a phone only. Hidden by CSS on a wider screen, it was still an open
+  // modal, and MUI hid the rest of the page — the list, the detail panel — from screen readers.
+  const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
   const [reportStation, setReportStation] =
     useState<RescueMapMarkerItem | null>(null);
   const [pendingDeleteTask, setPendingDeleteTask] =
@@ -373,6 +376,9 @@ export function SiteListView() {
       </Box>
 
       <Box
+        // Collapsed, the panel still holds the last detail — nothing clears it now that the phone's
+        // drawer stays shut here — so keep it out of reach of the keyboard and screen readers.
+        inert={!detailOpen}
         sx={{
           gridColumn: 2,
           gridRow: 1,
@@ -440,11 +446,19 @@ export function SiteListView() {
 
       <Drawer
         anchor="right"
-        open={detailOpen}
+        open={detailOpen && isPhone}
         onClose={closeDetail}
         ModalProps={{ keepMounted: true }}
         slotProps={{
-          transition: { onExited: () => setDisplayMarker(null) },
+          // Only once closed for good: widening past the phone's width shuts this drawer while the
+          // detail stays open in the panel, which must keep its content (as the map does).
+          transition: {
+            onExited: () => {
+              if (!detailOpen) {
+                setDisplayMarker(null);
+              }
+            },
+          },
         }}
         sx={{
           display: { mobile: 'block', tablet: 'none' },

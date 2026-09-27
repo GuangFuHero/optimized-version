@@ -6,7 +6,7 @@ import 'react-leaflet-cluster/dist/assets/MarkerCluster.Default.css';
 
 import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { Box, Drawer, GlobalStyles } from '@mui/material';
+import { Box, Drawer, GlobalStyles, useMediaQuery } from '@mui/material';
 import dynamic from 'next/dynamic';
 
 import type {
@@ -256,6 +256,9 @@ export const Map = memo(function Map({
   const [displayMarker, setDisplayMarker] =
     useState<RescueMapDetailItem | null>(selectedMarker);
   const [detailOpen, setDetailOpen] = useState(Boolean(selectedMarker));
+  // The phone's drawer opens on a phone only. Hidden by CSS on a wider screen, it was still an open
+  // modal, and MUI hid the rest of the page — the map, the detail panel — from screen readers.
+  const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
 
   useEffect(() => {
     if (selectedMarker) {
@@ -342,6 +345,9 @@ export const Map = memo(function Map({
         </Box>
 
         <Box
+          // Collapsed, the panel still holds the last detail — nothing clears it now that the phone's
+          // drawer stays shut here — so keep it out of reach of the keyboard and screen readers.
+          inert={!detailOpen}
           sx={{
             gridColumn: 2,
             gridRow: 1,
@@ -398,7 +404,7 @@ export const Map = memo(function Map({
       <RescueMapLayerPanel controller={controller} />
       <Drawer
         anchor="right"
-        open={detailOpen}
+        open={detailOpen && isPhone}
         onClose={closeDetail}
         ModalProps={{ keepMounted: true }}
         slotProps={{
