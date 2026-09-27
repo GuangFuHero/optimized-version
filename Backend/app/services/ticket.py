@@ -4,7 +4,7 @@ Same flat-service style as station.py: `db` first, keyword-only args, each funct
 its own authz + validation + persistence (ADR-013/014/015/022).
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from sqlalchemy import func, select
@@ -50,6 +50,14 @@ OPEN_TASK_STATUSES = frozenset({"pending", "in_progress"})
 # A ticket in one of these states takes no more volunteers on any of its tasks, whatever
 # each task's own status says: update_ticket closes the ticket alone and leaves them pending.
 CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
+
+# The kinds of help a need can ask for — the values `CreateTicketTaskInput.taskType` documents
+# and `chart_render` labels. Enforced only by `create_help_request`; `create_ticket_task`
+# still stores whatever it is sent.
+TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
+# `tickets.title` and `ticket_tasks.task_name` are both String(200).
+TICKET_TITLE_MAX_LENGTH = 200
+TASK_NAME_MAX_LENGTH = 200
 
 # What a notice calls each state — the site's own words (Frontend ticket/status.ts and the
 # task detail panel), never the enum. An unknown value falls through as itself, so a new
@@ -169,6 +177,107 @@ async def create_ticket(
         # uses, so one address table serves both.
         await secondary_location_repository.add(
             db, obj_in={"geometry_uuid": str(ticket.uuid), **secondary_location}
+        )
+    await db.commit()
+    await db.refresh(ticket)
+    return ticket
+
+
+def _validate_help_request_task(task: dict) -> None:
+    """Refuse a need the public site could not have meant.
+
+    `create_ticket_task` checks none of this and lets the column limit raise a database error
+    the client only sees as "Unexpected error.". A zero quantity would read as full the moment
+    it was filed (`_lock_task_with_room`).
+    """
+    if task["task_type"] not in TASK_TYPES:
+        raise ValueError(f"Unknown task type: {task['task_type']}")
+    name = task["task_name"]
+    if not name.strip():
+        raise ValueError("task_name is required")
+    if len(name) > TASK_NAME_MAX_LENGTH:
+        raise ValueError(f"task_name must be at most {TASK_NAME_MAX_LENGTH} characters")
+    quantity = task.get("quantity")
+    if quantity is not None and quantity < 1:
+        raise ValueError("quantity must be at least 1")
+
+
+async def create_help_request(
+    db: AsyncSession,
+    *,
+    actor: User,
+    geometry: dict,
+    title: str,
+    description: str | None,
+    contact_name: str,
+    contact_phone: str | None,
+    secondary_location: dict | None,
+    tasks: list[dict],
+) -> Tickets:
+    """File a citizen's request for help: the ticket and every need on it, in one commit.
+
+    The public site's 「請求協助」 (spec note/help-request-spec.md, D1). `create_ticket` followed
+    by one `create_ticket_task` per need commits each step on its own, so a failure part-way
+    leaves a ticket with some of its needs missing and a retry files a second ticket. Here
+    nothing is written unless all of it is.
+
+    The site never asks how urgent a request is or who may see it: priority is `medium` and
+    visibility `public`, and staff adjust both afterwards. The ticket's own `task_type` is the
+    first need's, as the admin form sets it.
+    """
+    await require_scope(actor, Perm.TICKET_ADD, db)
+    if not title.strip():
+        raise ValueError("title is required")
+    if len(title) > TICKET_TITLE_MAX_LENGTH:
+        raise ValueError(f"title must be at most {TICKET_TITLE_MAX_LENGTH} characters")
+    if not tasks:
+        raise ValueError("At least one task is required")
+    # Every need is checked before anything is written, so one bad need refuses the request
+    # rather than leaving the ones before it filed.
+    for task in tasks:
+        _validate_help_request_task(task)
+    validate_point(geometry, entity="Ticket")
+    contacts = normalize_contact_fields(
+        {"contact_name": contact_name, "contact_email": None, "contact_phone": contact_phone},
+        required=frozenset({"contact_name"}),
+    )
+    creator = str(actor.uuid)
+    ticket = await ticket_repository.add(
+        db,
+        obj_in={
+            "property_name": "request",
+            "geometry": geojson_to_geom(geometry),
+            "created_by": creator,
+            "title": title,
+            "description": description,
+            **contacts,
+            "status": "pending",
+            "priority": "medium",
+            "task_type": tasks[0]["task_type"],
+            "visibility": "public",
+        },
+    )
+    if secondary_location:
+        await secondary_location_repository.add(
+            db, obj_in={"geometry_uuid": str(ticket.uuid), **secondary_location}
+        )
+    for position, task in enumerate(tasks):
+        await ticket_task_repository.add(
+            db,
+            obj_in={
+                "ticket_uuid": str(ticket.uuid),
+                "task_type": task["task_type"],
+                "task_name": task["task_name"],
+                "task_description": task.get("task_description"),
+                "quantity": task.get("quantity"),
+                "source": "user",
+                "visibility": "public",
+                "created_by": creator,
+                # One transaction means one `now()` for every need, and the tasks loader
+                # breaks that tie on uuid — random. A microsecond apart keeps them in the order
+                # the requester listed them (第 1 件、第 2 件…) on the database's own clock.
+                "created_at": func.now() + timedelta(microseconds=position),
+            },
         )
     await db.commit()
     await db.refresh(ticket)

@@ -386,6 +386,38 @@ class CreateTicketTaskInput:
 
 
 @strawberry.input
+class HelpRequestTaskInput:
+    """One need on a help request filed from the public site."""
+
+    task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
+    task_name: str = strawberry.field(description="What is needed, at most 200 characters")
+    task_description: str | None = None
+    quantity: int | None = strawberry.field(
+        default=None, description="People or units needed, at least 1; omit when not known"
+    )
+
+
+@strawberry.input
+class CreateHelpRequestInput:
+    """A citizen's request for help: the ticket and its first needs, filed together."""
+
+    title: str = strawberry.field(description="At most 200 characters")
+    description: str | None = None
+    geometry: GeoJSON = strawberry.field(
+        description="GeoJSON Point for the location where help is needed — [longitude, latitude]"
+    )
+    contact_name: str = strawberry.field(description="Who to ask for at the place")
+    contact_phone: str | None = strawberry.field(
+        default=None, description="Phone number or LINE ID, as the person typed it"
+    )
+    secondary_location: SecondaryLocationInput | None = strawberry.field(
+        default=None,
+        description="The address as typed goes in `landmarkNote`, with `floor` and `room`",
+    )
+    tasks: list[HelpRequestTaskInput] = strawberry.field(description="At least one need")
+
+
+@strawberry.input
 class UpdateTicketTaskInput:
     """Input for updating a ticket task's status, visibility, or review notes."""
 
