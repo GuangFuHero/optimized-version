@@ -1,8 +1,9 @@
 """GraphQL types for the dedup fast layer (送單前查重複).
 
-The check compares one task being filed against open tasks nearby. `TicketDedupHint` names
-the matched ticket and task; it carries the contract's `TicketDedupRelation` fields that
-exist before the new task does, so there is no `pairUuid`/`pairStatus` yet.
+The ticket check compares one task being filed against open tasks nearby; the station check
+compares a station against open stations. `TicketDedupHint` names the matched ticket and
+task. Both hints carry the contract's `TicketDedupRelation` fields that exist before the new
+entity does, so there is no `pairUuid`/`pairStatus` yet.
 """
 
 import enum
@@ -19,6 +20,14 @@ class DedupHintOutcome(enum.Enum):
 
     accepted_hint = "accepted_hint"
     ignored_hint = "ignored_hint"
+
+
+@strawberry.enum
+class DedupEntityKind(enum.Enum):
+    """Which entity a hint outcome is about; written to `entity_kind` as-is."""
+
+    ticket_task = "ticket_task"
+    station = "station"
 
 
 @strawberry.type
@@ -53,11 +62,37 @@ class TicketDedupHint:
             related_ticket_uuid=score.candidate.parent_uuid,
             related_task_uuid=score.candidate.entity_uuid,
             similarity=score.similarity,
-            score_components=[
-                DedupScoreComponent(name=c.name, score=c.score, weight=c.weight, passed=c.passed)
-                for c in score.components
-            ],
+            score_components=_score_components(score),
         )
+
+
+@strawberry.type
+class StationDedupHint:
+    """One existing station that looks like the one being registered."""
+
+    related_station_uuid: str = strawberry.field(description="疑似重複的既有據點 uuid")
+    similarity: float = strawberry.field(
+        description="加權總分 0–1（各成分得分 × 權重加總，再除以可用成分的權重和）"
+    )
+    score_components: list[DedupScoreComponent] = strawberry.field(
+        description="分數拆帳：每個訊號的得分、權重與過線燈號（沒有時間訊號 —— 據點不比時間）"
+    )
+
+    @classmethod
+    def from_score(cls, score: CandidateScore) -> "StationDedupHint":
+        """Build from the scoring module's CandidateScore."""
+        return cls(
+            related_station_uuid=score.candidate.entity_uuid,
+            similarity=score.similarity,
+            score_components=_score_components(score),
+        )
+
+
+def _score_components(score: CandidateScore) -> list[DedupScoreComponent]:
+    return [
+        DedupScoreComponent(name=c.name, score=c.score, weight=c.weight, passed=c.passed)
+        for c in score.components
+    ]
 
 
 @strawberry.input
@@ -79,6 +114,20 @@ class TicketDedupCheckInput:
         description="Existing ticket the task is added to: its location is used, `geometry` is ignored, "
         "and its own tasks are not candidates",
     )
+
+
+@strawberry.input
+class StationDedupCheckInput:
+    """The scoring subset of CreateStationInput. Stations have no time signal."""
+
+    geometry: GeoJSON = strawberry.field(
+        description="GeoJSON Point for the location the station sits at — [longitude, latitude]"
+    )
+    type: str | None = strawberry.field(
+        default=None, description="Station category, e.g. 'shelter', 'supply', 'medical'"
+    )
+    name: str | None = None
+    description: str | None = None
 
 
 @strawberry.input

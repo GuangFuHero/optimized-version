@@ -3,25 +3,36 @@
 import strawberry
 
 from app.graphql.context import require_authenticated
-from app.graphql.dedup.types import RecordDedupHintOutcomeInput, RecordDedupHintOutcomeResult
+from app.graphql.dedup.types import (
+    DedupEntityKind,
+    RecordDedupHintOutcomeInput,
+    RecordDedupHintOutcomeResult,
+)
 from app.services import dedup as dedup_service
 
 
 @strawberry.type
 class DedupMutation:
-    """Mutations for ticket deduplication."""
+    """Mutations for ticket and station deduplication."""
 
     @strawberry.mutation
     async def record_dedup_hint_outcome(
-        self, info: strawberry.types.Info, input: RecordDedupHintOutcomeInput
+        self,
+        info: strawberry.types.Info,
+        input: RecordDedupHintOutcomeInput,
+        entity_kind: DedupEntityKind = DedupEntityKind.ticket_task,
     ) -> RecordDedupHintOutcomeResult:
-        """Record the submitter's response to a duplicate hint. Only the submitter may call it."""
+        """Record the submitter's response to a duplicate hint. Only the submitter may call it.
+
+        `candidateUuid`/`submittedUuid` are task uuids, or station uuids for `entityKind: station`.
+        """
         pair, event_uuid = await dedup_service.record_hint_outcome(
             info.context["db"],
             actor=require_authenticated(info),
             candidate_uuid=input.candidate_uuid,
             outcome=input.outcome.value,
             submitted_uuid=input.submitted_uuid,
+            entity_kind=entity_kind.value,
         )
         return RecordDedupHintOutcomeResult(
             audit_event_uuid=event_uuid,
