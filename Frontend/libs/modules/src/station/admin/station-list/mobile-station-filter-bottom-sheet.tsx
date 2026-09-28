@@ -25,7 +25,7 @@ import {
   setStationFilterSearchParams,
   stationFilterGroups,
   type StationFilterKey,
-} from '../../../station/admin/station-list/station-filters';
+} from './station-filters';
 
 const FilterIcon = TuneRoundedIcon;
 const CheckIcon = CheckRoundedIcon;
