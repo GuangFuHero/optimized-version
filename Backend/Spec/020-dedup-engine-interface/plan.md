@@ -698,6 +698,12 @@ def to_candidate(kind, row, *, distance_m: float, submission_phone: str | None) 
 
 **Files:** Modify `app/repositories/dedup_repository.py`
 
+
+> **實作時調整（2026-09-28）**：新方法取名 `nearby_open_rows(db, *, kind, longitude, latitude, radius_m, now)` 與
+> `row_with_distance(db, *, kind, uuid, longitude, latitude)`，**與舊的 `list_nearby_open` / `get_candidate_features` 並存**。
+> 舊 service／舊 GraphQL 仍呼叫它們，先刪會讓全套件整片紅；舊方法與 `DedupEntity.text_fields` 等欄位在 **Task 13** 與其他舊碼一併刪。
+> `row_with_distance` 對格式錯誤的 uuid 回 None（它來自 client 的 `acknowledgedDuplicateOf`）。
+
 - [ ] `list_nearby_open(db, *, kind, longitude, latitude, radius_m, now) -> list[tuple[Model, float]]`：
   移除 `query_text` 參數、`func.similarity`、`_to_candidate`、`has_text`、`age_min`
 - [ ] `get_with_distance(db, *, kind, uuid, longitude, latitude) -> tuple[Model, float] | None`：
@@ -715,7 +721,8 @@ def to_candidate(kind, row, *, distance_m: float, submission_phone: str | None) 
 
 **Files:** Rewrite `app/services/dedup.py`, `tests/test_dedup_service.py`
 
-公開兩個函式，其餘全刪（`find_duplicate_hints`、`record_hint_outcome`、`_KINDS`、`_rescore_pair`、`_evidence`、`_components_json`）。
+新增三個函式。舊的 `find_duplicate_hints`、`record_hint_outcome`、`_KINDS`、`_rescore_pair`、`_evidence`、`_components_json`
+**留到 Task 13 才刪**：舊 GraphQL resolver 到 Task 11 才移除，在那之前仍呼叫它們（2026-09-28 實作時調整）。
 
 ```python
 MAX_CANDIDATE_RADIUS_M = 1000.0  # 後端防呆上限（ADR-292）

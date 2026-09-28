@@ -1,5 +1,6 @@
 """Repositories for the dedup fast layer: candidate retrieval, pair cards, audit events."""
 
+import uuid as _uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -72,7 +73,59 @@ DEDUP_ENTITIES = {
 
 
 class DedupCandidateRepository:
-    """Measures entities against a proposed submission: distance in PostGIS, text in pg_trgm."""
+    """Finds and measures entities near a proposed submission.
+
+    `nearby_open_rows` / `row_with_distance` return facts only — the row and its distance — for
+    the Spec 020 engine, which does all scoring itself. `list_nearby_open` /
+    `get_candidate_features` are Spec 019's pg_trgm-scoring versions, kept until the service
+    moves to the engine (plan Task 9) and removed with it.
+    """
+
+    async def nearby_open_rows(
+        self,
+        db: AsyncSession,
+        *,
+        kind: str,
+        longitude: float,
+        latitude: float,
+        radius_m: float,
+        now: datetime,
+    ) -> list[tuple[Tickets | Station, float]]:
+        """Every open entity of `kind` within `radius_m`, with its distance in metres.
+
+        No row limit: the radius is the only cut, and the engine guarantees nothing outside it
+        can match (ADR-292).
+        """
+        entity = DEDUP_ENTITIES[kind]
+        point = _point(longitude, latitude)
+        result = await db.execute(
+            _distance_query(entity, point).where(
+                *entity.open_filters(now),
+                func.ST_DWithin(cast(entity.geometry(), Geography), point, radius_m),
+            )
+        )
+        return [(row[0], float(row.distance_m)) for row in result]
+
+    async def row_with_distance(
+        self, db: AsyncSession, *, kind: str, uuid: str, longitude: float, latitude: float
+    ) -> tuple[Tickets | Station, float] | None:
+        """One named entity and its distance, ignoring radius and status; None if absent or deleted.
+
+        Used for the entity a submitter acknowledged as a duplicate, which may have closed or
+        moved since the hint. A deleted one has nothing left to pair with.
+        """
+        try:
+            _uuid.UUID(str(uuid))
+        except ValueError:
+            return None  # the uuid came from a client; a malformed one is simply not found
+        entity = DEDUP_ENTITIES[kind]
+        result = await db.execute(
+            _distance_query(entity, _point(longitude, latitude)).where(
+                entity.model.uuid == uuid, entity.model.delete_at.is_(None)
+            )
+        )
+        row = result.first()
+        return None if row is None else (row[0], float(row.distance_m))
 
     async def list_nearby_open(
         self,
@@ -120,6 +173,13 @@ class DedupCandidateRepository:
 
 def _point(longitude: float, latitude: float):
     return cast(func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326), Geography)
+
+
+def _distance_query(entity: DedupEntity, point) -> Select:
+    """SELECT each entity with its geography distance (metres) to `point`."""
+    return select(
+        entity.model, func.ST_Distance(cast(entity.geometry(), Geography), point).label("distance_m")
+    )
 
 
 def _features_query(entity: DedupEntity, point, query_text: str) -> Select:
