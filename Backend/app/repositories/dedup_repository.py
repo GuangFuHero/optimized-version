@@ -13,7 +13,6 @@ from app.infrastructure.repository.base import GenericRepository
 from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.geo import Station
 from app.models.request import Tickets
-from app.services.dedup_scoring import DedupCandidate
 
 # The two terminal statuses in services/ticket.py VALID_TRANSITIONS.
 CLOSED_TICKET_STATUSES = ("completed", "cancelled")
@@ -26,18 +25,8 @@ class DedupEntity:
     """How one entity kind maps onto the candidate query."""
 
     model: type
-    text_fields: tuple[str, str]  # concatenated for pg_trgm
-    type_field: str  # the task-type signal
     use_centroid: bool  # stations.geometry is a generic GEOMETRY column
     open_filters: Callable[[datetime], tuple[ColumnElement, ...]]
-
-    def texts(self, entity) -> tuple[str | None, str | None]:
-        """The entity's two text fields."""
-        return tuple(getattr(entity, field) for field in self.text_fields)
-
-    def type_of(self, entity) -> str | None:
-        """The entity's type, for the task-type signal."""
-        return getattr(entity, self.type_field)
 
     def geometry(self):
         """The geometry column to measure from."""
@@ -47,8 +36,6 @@ class DedupEntity:
 DEDUP_ENTITIES = {
     "ticket": DedupEntity(
         model=Tickets,
-        text_fields=("title", "description"),
-        type_field="task_type",
         use_centroid=False,
         open_filters=lambda _now: (
             Tickets.delete_at.is_(None),
@@ -58,8 +45,6 @@ DEDUP_ENTITIES = {
     ),
     "station": DedupEntity(
         model=Station,
-        text_fields=("name", "description"),
-        type_field="type",
         use_centroid=True,
         # An expired temporary station is out even if nobody has updated its status.
         open_filters=lambda now: (
@@ -75,10 +60,8 @@ DEDUP_ENTITIES = {
 class DedupCandidateRepository:
     """Finds and measures entities near a proposed submission.
 
-    `nearby_open_rows` / `row_with_distance` return facts only — the row and its distance — for
-    the Spec 020 engine, which does all scoring itself. `list_nearby_open` /
-    `get_candidate_features` are Spec 019's pg_trgm-scoring versions, kept until the service
-    moves to the engine (plan Task 9) and removed with it.
+    Facts only — the row and its distance. All scoring, text included, is the engine's
+    (Spec 020, ADR-288).
     """
 
     async def nearby_open_rows(
@@ -127,49 +110,6 @@ class DedupCandidateRepository:
         row = result.first()
         return None if row is None else (row[0], float(row.distance_m))
 
-    async def list_nearby_open(
-        self,
-        db: AsyncSession,
-        *,
-        longitude: float,
-        latitude: float,
-        query_text: str,
-        radius_m: float,
-        now: datetime,
-        entity_kind: str = "ticket",
-    ) -> list[DedupCandidate]:
-        """Every open entity within `radius_m`. No row limit: the radius is the only cut."""
-        entity = DEDUP_ENTITIES[entity_kind]
-        point = _point(longitude, latitude)
-        result = await db.execute(
-            _features_query(entity, point, query_text).where(
-                *entity.open_filters(now),
-                func.ST_DWithin(cast(entity.geometry(), Geography), point, radius_m),
-            )
-        )
-        return [_to_candidate(entity, row, query_text, now) for row in result]
-
-    async def get_candidate_features(
-        self,
-        db: AsyncSession,
-        *,
-        longitude: float,
-        latitude: float,
-        query_text: str,
-        candidate_uuid: str,
-        now: datetime,
-        entity_kind: str = "ticket",
-    ) -> DedupCandidate | None:
-        """Measure one named entity, ignoring the radius and open filters."""
-        entity = DEDUP_ENTITIES[entity_kind]
-        result = await db.execute(
-            _features_query(entity, _point(longitude, latitude), query_text).where(
-                entity.model.uuid == candidate_uuid
-            )
-        )
-        row = result.first()
-        return None if row is None else _to_candidate(entity, row, query_text, now)
-
 
 def _point(longitude: float, latitude: float):
     return cast(func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326), Geography)
@@ -179,29 +119,6 @@ def _distance_query(entity: DedupEntity, point) -> Select:
     """SELECT each entity with its geography distance (metres) to `point`."""
     return select(
         entity.model, func.ST_Distance(cast(entity.geometry(), Geography), point).label("distance_m")
-    )
-
-
-def _features_query(entity: DedupEntity, point, query_text: str) -> Select:
-    """SELECT each entity with its distance (metres) and text similarity to the query."""
-    text_1, text_2 = (getattr(entity.model, field) for field in entity.text_fields)
-    return select(
-        entity.model,
-        func.ST_Distance(cast(entity.geometry(), Geography), point).label("distance_m"),
-        func.similarity(func.concat_ws(" ", text_1, text_2), query_text).label("text_similarity"),
-    )
-
-
-def _to_candidate(entity: DedupEntity, row, query_text: str, now: datetime) -> DedupCandidate:
-    record = row[0]
-    # No text on either side means the text signal is unavailable, not a score of 0.
-    has_text = bool(query_text.strip()) and bool(" ".join(t or "" for t in entity.texts(record)).strip())
-    return DedupCandidate(
-        entity_uuid=str(record.uuid),
-        distance_m=float(row.distance_m),
-        age_min=max(0.0, (now - record.created_at).total_seconds() / 60),
-        task_type=entity.type_of(record),
-        text_similarity=float(row.text_similarity) if has_text else None,
     )
 
 

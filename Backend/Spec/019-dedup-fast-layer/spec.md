@@ -2,6 +2,12 @@
 
 **Status**: Draft — 參數暫定，等真實資料重跑
 
+> **2026-09-28：部分內容已被 `Spec/020-dedup-engine-interface/` 取代。**
+> §1 與 §4 的 GraphQL（`ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`）已移除，
+> 改為 `createTicket` / `createStation` 兩段式（ADR-286、296）；§3 的計分移到 `app/dedup_engine/`（fast-v1），
+> 文字相似度改由 Python 計算（ADR-288）；§2 的 `score_components` 改為 `evidence`，並新增 `engine_version`（ADR-294）。
+> 計分公式、參數與未結案定義不變。
+
 送求助單前，先跟「附近＋還沒結案」的單比一次，最像的一筆過門檻就提示使用者；不硬擋、不自動合併。
 系統出錯就跳過提示、照常送單。
 

@@ -12,12 +12,10 @@ Both tables are entity-agnostic: `entity_kind` says what `low_uuid`/`high_uuid` 
 cannot FK to whichever entity table `entity_kind` names. The fast layer only ever writes
 `entity_kind='ticket'`.
 
-The fast layer's text signal uses pg_trgm `similarity()`; the extension is created by
-f2b7c9d4e0a3.
-
 Spec 020 (ADR-294) amended this migration before it merged: `score_components` became the
 opaque `evidence`, both tables gained `engine_version` (required on every card an engine made),
-and `hint_shown` joined the audit event types.
+and `hint_shown` joined the audit event types. Scoring, the text signal included, moved into
+the algorithm core (`app.dedup_engine`); nothing here depends on pg_trgm any more.
 
 Revision ID: d4c8b1e07a92
 Revises: b3e8d1f4a6c2
