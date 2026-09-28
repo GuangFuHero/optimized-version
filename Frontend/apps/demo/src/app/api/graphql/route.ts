@@ -1,6 +1,7 @@
 import {
   applyBackendAuthResponseCookies,
   expireSessionResponse,
+  getBackendGraphqlUrl,
   refreshUnavailableResponse,
   resolveBackendAuthTokenAsync,
 } from '@rescue-frontend/modules/server';
