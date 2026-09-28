@@ -1,6 +1,6 @@
 # 020 去重引擎介面 — Implementation Plan
 
-**進度（2026-09-28）**：Task 1~14 完成，Docker 完整驗證通過（見 `Backend/DEDUP_ENGINE_020_VERIFICATION.md`）。Task 0（與 Chi 確認合約、效能門檻）與 Task 15（前端 #47）未做。
+**進度（2026-09-28）**：Task 1~14 完成，Docker 完整驗證通過（見 `Backend/DEDUP_ENGINE_020_VERIFICATION.md`）。Task 0（與 Chi 確認合約、效能門檻）未做。前端不在後端範圍，§「交給前端的 API 變更」只是交接說明。
 
 **Goal:** 把 Spec 019 的去重快層包成「演算法可獨立迭代」的後端服務：Chi 只動 `app/dedup_engine/`，
 後端只依賴 `contract.py`；提示改由 `createTicket` / `createStation` 兩段式帶出，拿掉獨立的 dedup API。
@@ -984,13 +984,19 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 ---
 
-## Task 15: 前端跟進（#47，不在本分支）
+## 交給前端的 API 變更（後端不負責實作）
 
-- [ ] `tickets.graphql` 的 `CreateTicket`、`geo.graphql` 的 `CreateStation` 改成 union 選取
-- [ ] `useDedupSubmitFlow`：拿掉 `findDuplicateCandidate` 與 `recordOutcome`；第一次送出依 `__typename` 進 `hint` 或 `done`，
-  「照樣建立」帶 `acknowledgedDuplicateOf` 再送一次
-- [ ] 刪 `dedup/dedup-check.ts`、`dedup/record-outcome.ts`、`tickets/dedup.graphql`
-- [ ] `station-create-drawer.tsx` 比照（019 沒有做站點 UI，這是新增）
-- [ ] 重新匯出 SDL、`pnpm codegen`
-- [ ] 測試：`useDedupSubmitFlow` 的狀態轉移單元測試（`TicketCreated` → done；`DuplicateSuspected` → hint；
-  「照樣建立」送出時帶 `acknowledgedDuplicateOf`；網路錯誤 → error）；`nx run-many -t build`、`lint` 不比 main 差
+前端改動由前端負責，後端只提供合約。以下是本票對 GraphQL 的破壞性變更，供前端與 #47 作者調整：
+
+- **移除**：`ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`，以及 `TicketDedupHint`、
+  `StationDedupHint`、`DedupScoreComponent`、`DedupEntityKind`、`DedupHintOutcome` 等型別。
+- **`createTicket(input, acknowledgedDuplicateOf: String = null): CreateTicketResult!`**，回傳 union：
+  - `TicketCreated { ticket: TicketType! }`：已建立。
+  - `DuplicateSuspected { relatedTicketUuid: String! }`：**沒有建立**，附近有疑似同一件的未結案工單。
+- **`createStation(input, acknowledgedDuplicateOf: String = null): CreateStationResult!`**，回傳
+  `StationCreated { station }` 或 `DuplicateStationSuspected { relatedStationUuid }`。
+- **流程**：第一次送出不帶 `acknowledgedDuplicateOf`。收到 `DuplicateSuspected` 時，使用者若選擇照樣建立，
+  用**同一份 input** 加上 `acknowledgedDuplicateOf = relatedTicketUuid` 再送一次，後端就建立、不再檢查，並記錄這對配對。
+  使用者若改去看既有的單，前端不需要呼叫任何 API。
+- **錯誤行為不變**：權限不足、輸入錯誤仍在 `errors` 裡，`data.createTicket` 為 null；去重本身出錯時後端照常建立（fail-open），前端不會看到差別。
+- **選取寫法**：`createTicket(input: $input) { __typename ... on TicketCreated { ticket { uuid ... } } ... on DuplicateSuspected { relatedTicketUuid } }`。

@@ -245,7 +245,7 @@ createTicket(input: CreateTicketInput!, acknowledgedDuplicateOf: String = null):
 | `app/models/dedup.py`、`alembic/versions/d4c8b1e07a92_*.py` | §6 |
 | `Spec/019-dedup-fast-layer/spec.md` | 加註 §1 GraphQL、§3 計分位置已被本 Spec 取代 |
 
-前端（#47）另行調整：`useDedupSubmitFlow` 改依 `createTicket` 回傳型別切換狀態，移除 `dedup.graphql`。
+前端不在本 Spec 範圍；後端合約變更的交接說明見 `plan.md`「交給前端的 API 變更」。
 
 ---
 
@@ -301,4 +301,3 @@ createTicket(input: CreateTicketInput!, acknowledgedDuplicateOf: String = null):
 4. contract test，以 `fast-v1` 產生第一份 golden file。
 5. §6 schema 改動。
 6. `create_ticket`／`create_station` 兩段式，移除 `app/graphql/dedup/`。
-7. #47 前端跟進。
