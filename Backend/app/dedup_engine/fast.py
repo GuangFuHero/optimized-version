@@ -30,7 +30,7 @@ from app.dedup_engine.contract import (
     Snapshot,
     TicketSnapshot,
 )
-from app.dedup_engine.text import trigram_similarity
+from app.dedup_engine.text import set_similarity, trigrams
 
 # 200 is the width of `tickets.title`; descriptions are unbounded, so 2000 is a chosen cap.
 TITLE_MAX_CHARS = 200
@@ -83,33 +83,57 @@ class FastEngine:
 
     def score(self, submission: Snapshot, candidate: Candidate, now: datetime) -> Match:
         """Score one candidate, no threshold. Raises ValueError if no signal has weight."""
-        similarity, components = combine(measure(submission, candidate, now), self._params(submission))
+        return self._score(_Submission.of(submission), candidate, now)
+
+    def rank(self, submission: Snapshot, candidates: Sequence[Candidate], now: datetime) -> list[Match]:
+        """Candidates reaching the threshold, best first; ties break on uuid."""
+        prepared = _Submission.of(submission)  # the submission's trigrams, once for all candidates
+        threshold = self._params(submission).hint_threshold
+        hits = [m for m in (self._score(prepared, c, now) for c in candidates) if m.similarity >= threshold]
+        return sorted(hits, key=lambda m: (-m.similarity, m.candidate_uuid))
+
+    def _score(self, submission: "_Submission", candidate: Candidate, now: datetime) -> Match:
+        signals = _measure(submission, candidate, now)
+        similarity, components = combine(signals, self._params(submission.snapshot))
         return Match(
             candidate_uuid=str(candidate.snapshot.uuid),
             similarity=similarity,
             evidence={"components": components},
         )
 
-    def rank(self, submission: Snapshot, candidates: Sequence[Candidate], now: datetime) -> list[Match]:
-        """Candidates reaching the threshold, best first; ties break on uuid."""
-        threshold = self._params(submission).hint_threshold
-        hits = [m for m in (self.score(submission, c, now) for c in candidates) if m.similarity >= threshold]
-        return sorted(hits, key=lambda m: (-m.similarity, m.candidate_uuid))
-
     def _params(self, snapshot: Snapshot) -> FastParameters:
         return self._parameters["ticket" if isinstance(snapshot, TicketSnapshot) else "station"]
 
 
+@dataclass(frozen=True)
+class _Submission:
+    """A submission with its text trigrams extracted, so `rank` does it once, not per candidate."""
+
+    snapshot: Snapshot
+    has_text: bool
+    grams: frozenset[str]
+
+    @classmethod
+    def of(cls, snapshot: Snapshot) -> "_Submission":
+        text = _text(snapshot)
+        return cls(snapshot, bool(text), trigrams(text))
+
+
 def measure(submission: Snapshot, candidate: Candidate, now: datetime) -> Signals:
     """Turn a submission and a candidate into the formula's inputs."""
+    return _measure(_Submission.of(submission), candidate, now)
+
+
+def _measure(submission: _Submission, candidate: Candidate, now: datetime) -> Signals:
     other = candidate.snapshot
-    mine, theirs = _category(submission), _category(other)
-    text_a, text_b = _text(submission), _text(other)
+    mine, theirs = _category(submission.snapshot), _category(other)
+    other_text = _text(other)
+    has_text = submission.has_text and bool(other_text)
     return Signals(
         distance_m=candidate.distance_m,
         age_min=max(0.0, (now - other.created_at).total_seconds() / 60),
         same_category=None if mine is None or theirs is None else mine == theirs,
-        text_similarity=trigram_similarity(text_a, text_b) if text_a and text_b else None,
+        text_similarity=set_similarity(submission.grams, trigrams(other_text)) if has_text else None,
     )
 
 

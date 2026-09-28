@@ -24,7 +24,11 @@ def trigrams(text: str) -> frozenset[str]:
 
 def trigram_similarity(a: str, b: str) -> float:
     """Shared trigrams over all trigrams, 0–1. Zero when either side has none."""
-    grams_a, grams_b = trigrams(a), trigrams(b)
+    return set_similarity(trigrams(a), trigrams(b))
+
+
+def set_similarity(grams_a: frozenset[str], grams_b: frozenset[str]) -> float:
+    """`trigram_similarity` on trigram sets already extracted, for callers comparing one text to many."""
     if not grams_a or not grams_b:
         return 0.0
     return len(grams_a & grams_b) / len(grams_a | grams_b)
