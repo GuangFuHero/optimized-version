@@ -419,6 +419,8 @@ type Mutation {
   detachStationPhoto(uuid: UUID!): Boolean!
   updateStation(uuid: UUID!, input: UpdateStationInput!): StationType!
   deleteStation(uuid: UUID!): Boolean!
+  assignStationToTeam(stationUuid: UUID!, teamUuid: UUID!): StationType!
+  unassignStation(stationUuid: UUID!): StationType!
   createClosureArea(input: CreateClosureAreaInput!): ClosureAreaType!
   updateClosureArea(uuid: UUID!, input: UpdateClosureAreaInput!): ClosureAreaType!
   deleteClosureArea(uuid: UUID!): Boolean!
@@ -493,7 +495,7 @@ type PhotoType {
 }
 
 type Query {
-  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
   station(uuid: UUID!): StationType
   closureAreas(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): ClosureAreaConnection!
   closureArea(uuid: UUID!): ClosureAreaType
@@ -539,24 +541,24 @@ type Query {
 }
 
 input RecordDedupHintOutcomeInput {
-  """提示指向的既有單 uuid"""
-  candidateTicketUuid: String!
+  """提示指向的既有 task uuid（hint 的 relatedTaskUuid）"""
+  candidateUuid: String!
 
   """使用者對提示的選擇"""
   outcome: DedupHintOutcome!
 
-  """照樣送出時新建的單 uuid；接受提示而沒有建單時省略（不會產生配對卡）"""
-  submittedTicketUuid: String = null
+  """照樣送出時新建的 task uuid；接受提示而沒有建立 task 時省略（不會產生配對卡）"""
+  submittedUuid: String = null
 }
 
 type RecordDedupHintOutcomeResult {
   """寫入的去重稽核事件 uuid"""
   auditEventUuid: String!
 
-  """配對卡上的收斂值：'accepted_hint' 或 'ignored_hint'"""
+  """配對卡上的 hint_outcome：'accepted_hint' 或 'ignored_hint'"""
   hintOutcome: String!
 
-  """配對卡 uuid；接受提示而沒有建立新單時為 null（沒有第二張單可以配對）"""
+  """配對卡 uuid；接受提示而沒有建立新 task 時為 null（沒有第二個 task 可以配對）"""
   pairUuid: String
 }
 
@@ -810,6 +812,11 @@ type StationType {
   updatedAt: DateTime
 
   """
+  The team that runs this station, or null when unassigned (ADR-285). Public: which organisation runs a station is not protected. Only the team's uuid, name and type show — never its members.
+  """
+  assignedTeam: AssignedTeamType
+
+  """
   Station contact name — masked unless the caller holds station.view_pii here
   """
   contactName: String
@@ -936,20 +943,28 @@ type TicketConnection {
 }
 
 input TicketDedupCheckInput {
-  """
-  GeoJSON Point for the location help is needed at — [longitude, latitude]
-  """
-  geometry: GeoJSON!
-  title: String!
-  description: String = null
-
   """Type of help: 'rescue', 'supply', 'medical', or 'hr'"""
-  taskType: String = null
+  taskType: String!
+  taskName: String = null
+  taskDescription: String = null
+
+  """
+  New ticket: GeoJSON Point for the location help is needed at — [longitude, latitude]
+  """
+  geometry: GeoJSON = null
+
+  """
+  Existing ticket the task is added to: its location is used, `geometry` is ignored, and its own tasks are not candidates
+  """
+  ticketUuid: String = null
 }
 
 type TicketDedupHint {
   """疑似重複的既有單 uuid"""
   relatedTicketUuid: String!
+
+  """該單底下比對到的 task uuid"""
+  relatedTaskUuid: String!
 
   """加權總分 0–1（各成分得分 × 權重加總，再除以可用成分的權重和）"""
   similarity: Float!

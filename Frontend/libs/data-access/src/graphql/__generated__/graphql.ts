@@ -355,6 +355,7 @@ export type GenerateBriefingInput = {
 
 export type Mutation = {
   __typename?: 'Mutation';
+  assignStationToTeam: StationType;
   assignTaskActor: TaskAssignmentType;
   assignZoneToTeam: ZoneAssignmentType;
   attachStationPhoto: PhotoType;
@@ -385,6 +386,7 @@ export type Mutation = {
   reviewTicket: TicketType;
   setAnnouncementActive: AnnouncementType;
   setTicketDisasterDetails: Array<TicketDisasterDetailType>;
+  unassignStation: StationType;
   unassignTaskActor: Scalars['Boolean']['output'];
   updateAnnouncement: AnnouncementType;
   updateBriefing: BriefingType;
@@ -401,6 +403,12 @@ export type Mutation = {
   upsertStationPropertyConfig: StationPropertyConfigType;
   upsertTaskPropertyConfig: TaskPropertyConfigType;
   upsertTicketPropertyConfig: TicketPropertyConfigType;
+};
+
+
+export type MutationAssignStationToTeamArgs = {
+  stationUuid: Scalars['UUID']['input'];
+  teamUuid: Scalars['UUID']['input'];
 };
 
 
@@ -561,6 +569,11 @@ export type MutationSetAnnouncementActiveArgs = {
 export type MutationSetTicketDisasterDetailsArgs = {
   details: Array<TicketDisasterDetailInput>;
   uuid: Scalars['UUID']['input'];
+};
+
+
+export type MutationUnassignStationArgs = {
+  stationUuid: Scalars['UUID']['input'];
 };
 
 
@@ -778,12 +791,14 @@ export type QueryStationSuggestionsArgs = {
 
 
 export type QueryStationsArgs = {
+  assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
   operationalStatus?: InputMaybe<StationOperationalStatus>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
   stationType?: InputMaybe<Scalars['String']['input']>;
+  unassignedOnly?: Scalars['Boolean']['input'];
 };
 
 
@@ -858,21 +873,21 @@ export type QueryZonesByTeamArgs = {
 };
 
 export type RecordDedupHintOutcomeInput = {
-  /** 提示指向的既有單 uuid */
-  candidateTicketUuid: Scalars['String']['input'];
+  /** 提示指向的既有 task uuid（hint 的 relatedTaskUuid） */
+  candidateUuid: Scalars['String']['input'];
   /** 使用者對提示的選擇 */
   outcome: DedupHintOutcome;
-  /** 照樣送出時新建的單 uuid；接受提示而沒有建單時省略（不會產生配對卡） */
-  submittedTicketUuid?: InputMaybe<Scalars['String']['input']>;
+  /** 照樣送出時新建的 task uuid；接受提示而沒有建立 task 時省略（不會產生配對卡） */
+  submittedUuid?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type RecordDedupHintOutcomeResult = {
   __typename?: 'RecordDedupHintOutcomeResult';
   /** 寫入的去重稽核事件 uuid */
   auditEventUuid: Scalars['String']['output'];
-  /** 配對卡上的收斂值：'accepted_hint' 或 'ignored_hint' */
+  /** 配對卡上的 hint_outcome：'accepted_hint' 或 'ignored_hint' */
   hintOutcome: Scalars['String']['output'];
-  /** 配對卡 uuid；接受提示而沒有建立新單時為 null（沒有第二張單可以配對） */
+  /** 配對卡 uuid；接受提示而沒有建立新 task 時為 null（沒有第二個 task 可以配對） */
   pairUuid?: Maybe<Scalars['String']['output']>;
 };
 
@@ -1023,6 +1038,8 @@ export type StationSuggestionType = {
 
 export type StationType = {
   __typename?: 'StationType';
+  /** The team that runs this station, or null when unassigned (ADR-285). Public: which organisation runs a station is not protected. Only the team's uuid, name and type show — never its members. */
+  assignedTeam?: Maybe<AssignedTeamType>;
   /** Internal admin comment, not shown to the public */
   comment?: Maybe<Scalars['String']['output']>;
   /** Station contact email — masked unless the caller holds station.view_pii here */
@@ -1158,16 +1175,20 @@ export type TicketConnection = {
 };
 
 export type TicketDedupCheckInput = {
-  description?: InputMaybe<Scalars['String']['input']>;
-  /** GeoJSON Point for the location help is needed at — [longitude, latitude] */
-  geometry: Scalars['GeoJSON']['input'];
+  /** New ticket: GeoJSON Point for the location help is needed at — [longitude, latitude] */
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
+  taskDescription?: InputMaybe<Scalars['String']['input']>;
+  taskName?: InputMaybe<Scalars['String']['input']>;
   /** Type of help: 'rescue', 'supply', 'medical', or 'hr' */
-  taskType?: InputMaybe<Scalars['String']['input']>;
-  title: Scalars['String']['input'];
+  taskType: Scalars['String']['input'];
+  /** Existing ticket the task is added to: its location is used, `geometry` is ignored, and its own tasks are not candidates */
+  ticketUuid?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type TicketDedupHint = {
   __typename?: 'TicketDedupHint';
+  /** 該單底下比對到的 task uuid */
+  relatedTaskUuid: Scalars['String']['output'];
   /** 疑似重複的既有單 uuid */
   relatedTicketUuid: Scalars['String']['output'];
   /** 分數拆帳：每個訊號的得分、權重與過線燈號 */
