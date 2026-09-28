@@ -23,9 +23,7 @@ from app.models.request import Tickets
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TicketTask
 from app.repositories.session_repository import SessionRepository
-from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
-
-_db_initialized = False
+from tests.conftest import TEST_DB_URL, schema_has_role  # env-driven, per-worker under xdist
 
 
 @asynccontextmanager
@@ -51,11 +49,12 @@ async def _grant(db, role: Role, perm_cache: dict, perm: Perm, scope: str) -> No
 
 
 async def _ensure_db():
-    """Create tables and seed RBAC roles (runs once)."""
-    global _db_initialized
-    if _db_initialized:
+    """Create tables and seed RBAC roles, unless another test left them in place.
+
+    The roles below are committed together, so finding the first one means all are there.
+    """
+    if await schema_has_role("Login User"):
         return
-    _db_initialized = True
 
     eng = create_async_engine(TEST_DB_URL, echo=False)
     async with eng.begin() as conn:
