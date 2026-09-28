@@ -2,7 +2,7 @@
 
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -95,13 +95,10 @@ async def test_task_assignment_triggers_notification(mock_actor):
     mock_task.ticket_uuid = str(uuid.uuid4())
 
     mock_assignment = TaskAssignment(task_uuid=task_id, actor_uuid=target_assignee_id, status="accepted")
-    # db.execute serves the task re-read FOR UPDATE with its ticket's status; db.scalar then
-    # serves, in order, the claim count and the ticket.
+    # db.scalar serves, in order: the need's ticket uuid, the ticket and the need (each locked
+    # FOR UPDATE, ticket first), then the claim count.
     mock_ticket = Tickets(title="物資需求", created_by=str(uuid.uuid4()))
-    locked = MagicMock()
-    locked.first.return_value = (mock_task, "pending")
-    mock_db.execute = AsyncMock(return_value=locked)
-    mock_db.scalar = AsyncMock(side_effect=[0, mock_ticket])
+    mock_db.scalar = AsyncMock(side_effect=[mock_task.ticket_uuid, mock_ticket, mock_task, 0])
 
     with (
         patch("app.services.ticket.require_scope", new_callable=AsyncMock),
@@ -121,7 +118,7 @@ async def test_task_assignment_triggers_notification(mock_actor):
             return_value=None,
         ),
         patch(
-            "app.services.ticket.task_assignment_repository.create",
+            "app.services.ticket.task_assignment_repository.add",
             new_callable=AsyncMock,
             return_value=mock_assignment,
         ),

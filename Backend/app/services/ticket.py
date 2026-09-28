@@ -7,7 +7,7 @@ its own authz + validation + persistence (ADR-013/014/015/022).
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -619,10 +619,10 @@ async def assign_task_actor(
     (PUB-PS-140), and signing themselves up is refused once a task with a `quantity` has that
     many people; a task without one has no cap, as the requester never said how many. A
     coordinator assigning someone else may still over-subscribe (d847624): they can see the
-    ground and may knowingly send more. The task row is locked FOR UPDATE from the count to
-    the insert's commit, so two volunteers racing for the last place cannot both get it.
-    Authorization runs first, so a caller who will be refused never takes the lock. A task
-    whose ticket was deleted is gone with it.
+    ground and may knowingly send more. The need's ticket and then the need are locked FOR
+    UPDATE from the count to the commit (_lock_ticket_and_task), so two volunteers racing for
+    the last place cannot both get it. Authorization runs first, so a caller who will be
+    refused never takes the locks. A task whose ticket was deleted is gone with it.
 
     Three notices go out: the assignee hears they were assigned (dispatch() drops it for a
     self-signup), the requester hears who is coming, and when this claim fills the need,
@@ -644,22 +644,21 @@ async def assign_task_actor(
             raise ValueError("User not found")
         assignee_name = assignee.name
 
-    task, claimed = await _lock_task_with_room(
+    ticket, task, claimed = await _lock_task_with_room(
         db, task_uuid=task_uuid, target_actor=target_actor, capped=self_signup
     )
 
-    # Plain values before the insert commits (expire_on_commit in tests), and the count taken
-    # under the lock: `fills` must be decided here, not recounted after the lock is released.
+    # Plain values before the commit (expire_on_commit in tests), and the count taken under
+    # the lock: `fills` must be decided here, not recounted after the lock is released.
     task_name = task.task_name
     task_id = task.uuid
     quantity = task.quantity
     fills = quantity is not None and claimed + 1 == quantity
-    ticket = await db.scalar(select(Tickets).where(Tickets.uuid == task.ticket_uuid))
     ticket_title = ticket.title
     requester = str(ticket.created_by) if ticket.created_by else None
     actor_uid = actor.uuid
     try:
-        assignment = await task_assignment_repository.create(
+        assignment = await task_assignment_repository.add(
             db,
             obj_in={
                 "task_uuid": task_uuid,
@@ -668,36 +667,37 @@ async def assign_task_actor(
                 "status": "accepted",
             },
         )
-        # 觸發 task_assignment_created 通知 (High)
-        await NotificationService.dispatch(
-            db,
-            event_type="task_assignment_created",
-            title=f"📋 您有新的任務指派：{task_name}",
-            body=f"您已獲指派負責工單任務「{task_name}」。",
-            priority="high",
-            actor_uuid=actor_uid,
-            ref_type="ticket_task",
-            ref_uuid=task_id,
-            explicit_recipients=[target_actor],
-        )
-        if requester is not None and requester != target_actor:
-            await _notify_claim(
-                db, task_id=task_id, task_name=task_name, ticket_title=ticket_title,
-                requester=requester, actor_uid=actor_uid, assignee_name=assignee_name,
-                claimed=claimed + 1, quantity=quantity,
-            )
-        if fills:
-            await _notify_need_full(
-                db, task_id=task_id, task_name=task_name, ticket_title=ticket_title,
-                newcomer=target_actor, actor_uid=actor_uid,
-            )
-        await db.refresh(assignment)
-        return assignment
+        await db.commit()
     except IntegrityError as exc:
         # Concurrent duplicate lost the race to uq_assignment_task_actor (PR #24 [10]) —
         # surface the same clean domain error instead of a raw 500.
         await db.rollback()
         raise ValueError("Actor already assigned to this task") from exc
+    # 觸發 task_assignment_created 通知 (High)
+    await NotificationService.dispatch(
+        db,
+        event_type="task_assignment_created",
+        title=f"📋 您有新的任務指派：{task_name}",
+        body=f"您已獲指派負責工單任務「{task_name}」。",
+        priority="high",
+        actor_uuid=actor_uid,
+        ref_type="ticket_task",
+        ref_uuid=task_id,
+        explicit_recipients=[target_actor],
+    )
+    if requester is not None and requester != target_actor:
+        await _notify_claim(
+            db, task_id=task_id, task_name=task_name, ticket_title=ticket_title,
+            requester=requester, actor_uid=actor_uid, assignee_name=assignee_name,
+            claimed=claimed + 1, quantity=quantity,
+        )
+    if fills:
+        await _notify_need_full(
+            db, task_id=task_id, task_name=task_name, ticket_title=ticket_title,
+            newcomer=target_actor, actor_uid=actor_uid,
+        )
+    await db.refresh(assignment)
+    return assignment
 
 
 async def list_my_claims(
@@ -792,27 +792,51 @@ async def stop_recruiting(db: AsyncSession, *, actor: User, ticket_uuid: str) ->
     return tasks
 
 
+async def _lock_ticket_and_task(
+    db: AsyncSession, *, task_uuid: str, live_only: bool = True
+) -> tuple[Tickets, TicketTask]:
+    """Lock a need's ticket, then the need, FOR UPDATE: the order agreed for writes (spec Q44).
+
+    A ticket's status is worked out from all of its needs (recompute_ticket_status), so whatever
+    changes a need holds its ticket as well, and taking the two in one fixed order makes writers
+    on the same ticket queue instead of deadlocking. The need's ticket is read unlocked first: a
+    need never moves to another ticket.
+
+    A deleted need, or a need of a deleted ticket, is not found — checked under the locks, so a
+    deletion cannot slip in between. `live_only=False` locks it anyway, for a release: giving a
+    place back asks nothing of the need.
+    """
+    ticket_uuid = await db.scalar(select(TicketTask.ticket_uuid).where(TicketTask.uuid == task_uuid))
+    if ticket_uuid is None:
+        raise ValueError("Ticket task not found")
+    ticket = await db.scalar(
+        select(Tickets)
+        .where(Tickets.uuid == ticket_uuid)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    task = await db.scalar(
+        select(TicketTask)
+        .where(TicketTask.uuid == task_uuid)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if task is None or (live_only and (ticket.delete_at is not None or task.delete_at is not None)):
+        raise ValueError("Ticket task not found")
+    return ticket, task
+
+
 async def _lock_task_with_room(
     db: AsyncSession, *, task_uuid: str, target_actor: str, capped: bool
-) -> tuple[TicketTask, int]:
-    """Lock the task FOR UPDATE and check it can take `target_actor`; return it with its count.
+) -> tuple[Tickets, TicketTask, int]:
+    """Lock the ticket, then the need (_lock_ticket_and_task); check the need can take `target_actor`.
 
-    The lock is held until the caller's insert commits. `capped` applies the quantity cap,
-    which binds a volunteer signing themselves up but not a coordinator (see assign_task_actor).
+    Returns the ticket, the need and the need's count. The locks are held until the caller
+    commits. `capped` applies the quantity cap, which binds a volunteer signing themselves up
+    but not a coordinator (see assign_task_actor).
     """
-    row = (
-        await db.execute(
-            select(TicketTask, Tickets.status)
-            .join(Tickets, Tickets.uuid == TicketTask.ticket_uuid)
-            .where(TicketTask.uuid == task_uuid, TicketTask.delete_at.is_(None), Tickets.delete_at.is_(None))
-            .with_for_update(of=TicketTask)
-            .execution_options(populate_existing=True)
-        )
-    ).first()
-    if row is None:
-        raise ValueError("Ticket task not found")
-    task, ticket_status = row
-    if task.status in CLOSED_TASK_STATUSES or ticket_status in CLOSED_TICKET_STATUSES:
+    ticket, task = await _lock_ticket_and_task(db, task_uuid=task_uuid)
+    if task.status in CLOSED_TASK_STATUSES or ticket.status in CLOSED_TICKET_STATUSES:
         raise ValueError("Task is no longer open")
     if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
         raise ValueError("Actor already assigned to this task")
@@ -821,7 +845,7 @@ async def _lock_task_with_room(
     )
     if capped and task.quantity is not None and claimed >= task.quantity:
         raise ValueError("Task is full")
-    return task, claimed
+    return ticket, task, claimed
 
 
 def _task_status_notice(task_name: str, status: str) -> tuple[str, str, str]:
@@ -883,14 +907,27 @@ async def _notify_need_full(
 
 
 async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> None:
-    """Remove a task assignment. The assignee can remove their own, coordinators can remove any."""
+    """Remove a task assignment. The assignee can remove their own, coordinators can remove any.
+
+    Authorization first; then the need's ticket and the need are locked like a claim locks them
+    (_lock_ticket_and_task), and the removal commits once. A place on a deleted need can still
+    be given back.
+    """
     assignment = await task_assignment_repository.get_by_uuid(db, uuid)
     if not assignment:
         raise ValueError("Task assignment not found")
     await require_scope(
         actor, Perm.TICKET_ASSIGN, db, resource=await _assignment_scope_target(db, assignment)
     )
-    await task_assignment_repository.remove(db, uuid=uuid)
+    await _lock_ticket_and_task(db, task_uuid=str(assignment.task_uuid), live_only=False)
+    removed = await db.scalar(
+        delete(TaskAssignment).where(TaskAssignment.uuid == uuid).returning(TaskAssignment.uuid)
+    )
+    if removed is None:
+        # Given back by a concurrent call while this one waited for the locks.
+        await db.rollback()
+        raise ValueError("Task assignment not found")
+    await db.commit()
 
 
 async def update_task_assignment(
