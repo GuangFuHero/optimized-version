@@ -1,5 +1,7 @@
 # 020 去重引擎介面 — Implementation Plan
 
+**進度（2026-09-28）**：Task 1~14 完成，Docker 完整驗證通過（見 `Backend/DEDUP_ENGINE_020_VERIFICATION.md`）。Task 0（與 Chi 確認合約、效能門檻）與 Task 15（前端 #47）未做。
+
 **Goal:** 把 Spec 019 的去重快層包成「演算法可獨立迭代」的後端服務：Chi 只動 `app/dedup_engine/`，
 後端只依賴 `contract.py`；提示改由 `createTicket` / `createStation` 兩段式帶出，拿掉獨立的 dedup API。
 
@@ -96,8 +98,8 @@ export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/
 **Files:** Create `app/dedup_engine/__init__.py`, `app/dedup_engine/contract.py`, `tests/dedup_engine/__init__.py`,
 `tests/dedup_engine/test_core_isolation.py`, `tests/dedup_engine/test_contract_types.py`
 
-- [ ] **開工前記基準**：`uv run pytest tests -q` 的 passed／failed／error 數寫進 PR 描述草稿，後面每個 Task 都對照它
-- [ ] **RED**：`test_core_isolation.py`，掃 `app/dedup_engine/**/*.py` 的 import，禁止清單出現就失敗
+- [x] **開工前記基準**：`uv run pytest tests -q` 的 passed／failed／error 數寫進 PR 描述草稿，後面每個 Task 都對照它
+- [x] **RED**：`test_core_isolation.py`，掃 `app/dedup_engine/**/*.py` 的 import，禁止清單出現就失敗
 
 ```python
 """app/dedup_engine is the algorithm owner's code: it must stay pure (ADR-287)."""
@@ -131,7 +133,7 @@ def test_core_does_no_io():
     assert not offenders, f"app/dedup_engine must not import I/O layers: {sorted(offenders)}"
 ```
 
-- [ ] **GREEN**：寫 `contract.py`（內容即 spec §3、§4，下面是完整檔案）
+- [x] **GREEN**：寫 `contract.py`（內容即 spec §3、§4，下面是完整檔案）
 
 ```python
 """The contract between the backend and the dedup algorithm (Spec 020, ADR-289~292).
@@ -228,12 +230,12 @@ class DedupEngine(Protocol):
     def score(self, submission: Snapshot, candidate: Candidate, now: datetime) -> Match: ...
 ```
 
-- [ ] **RED → GREEN**：`test_contract_types.py`
-  - [ ] 所有快照與 `Candidate`、`Match`、`RetrievalSpec` 都是 frozen（賦值拋 `FrozenInstanceError`）
-  - [ ] 快照除必填欄位外全部有預設值（ADR-289 第 4 點「只加不改」的前提）：用 `dataclasses.fields` 檢查
-  - [ ] 快照欄位不含 `contact_*`、`review_note`、`visibility`、`team_uuid`、`updated_by`、`search_text`
-  - [ ] `FastEngine`（Task 3 之後）滿足 `DedupEngine` Protocol：先寫成 `@pytest.mark.skip(reason="Task 3")`，Task 3 拿掉
-- [ ] `uv run pytest tests/dedup_engine -q` 綠
+- [x] **RED → GREEN**：`test_contract_types.py`
+  - [x] 所有快照與 `Candidate`、`Match`、`RetrievalSpec` 都是 frozen（賦值拋 `FrozenInstanceError`）
+  - [x] 快照除必填欄位外全部有預設值（ADR-289 第 4 點「只加不改」的前提）：用 `dataclasses.fields` 檢查
+  - [x] 快照欄位不含 `contact_*`、`review_note`、`visibility`、`team_uuid`、`updated_by`、`search_text`
+  - [x] `FastEngine`（Task 3 之後）滿足 `DedupEngine` Protocol：先寫成 `@pytest.mark.skip(reason="Task 3")`，Task 3 拿掉
+- [x] `uv run pytest tests/dedup_engine -q` 綠
 
 ---
 
@@ -243,7 +245,7 @@ class DedupEngine(Protocol):
 
 目標：fast-v1 的文字分數與 019 在 SQL 算的 **完全相同**，這樣「門檻要重跑回測」（ADR-288）的風險就縮到只剩欄位串接方式。
 
-- [ ] **RED**：`test_text.py` 單元測試
+- [x] **RED**：`test_text.py` 單元測試
 
 ```python
 from app.dedup_engine.text import trigram_similarity
@@ -266,7 +268,7 @@ def test_symmetric():
     assert trigram_similarity(a, b) == trigram_similarity(b, a)
 ```
 
-- [ ] **RED**：`test_dedup_trgm_parity.py`（真 DB）：同一組字串，Python 與 `SELECT similarity(a, b)` 差距 < 1e-6
+- [x] **RED**：`test_dedup_trgm_parity.py`（真 DB）：同一組字串，Python 與 `SELECT similarity(a, b)` 差距 < 1e-6
 
 ```python
 PAIRS = [
@@ -285,7 +287,7 @@ async def test_python_trigram_matches_pg_trgm(a, b):
     assert trigram_similarity(a, b) == pytest.approx(expected, abs=1e-6)
 ```
 
-- [ ] **GREEN**：`text.py`
+- [x] **GREEN**：`text.py`
 
 ```python
 """pg_trgm-compatible trigram similarity, in Python (ADR-288).
@@ -316,7 +318,7 @@ def trigram_similarity(a: str, b: str) -> float:
     return len(ga & gb) / len(ga | gb)
 ```
 
-- [ ] parity 測試若有任何一組不等：**先查 pg_trgm 的斷詞規則（`t_isalnum` 依 DB locale），修 Python 端**，
+- [x] parity 測試若有任何一組不等：**先查 pg_trgm 的斷詞規則（`t_isalnum` 依 DB locale），修 Python 端**，
   不要放寬容差。真的對不齊的案例寫進 `CHANGELOG.md` 的 fast-v1 條目
 
 ---
@@ -332,7 +334,7 @@ def trigram_similarity(a: str, b: str) -> float:
 >   改打 `combine()`；另用 4 萬組隨機輸入比對 019 的 `score_candidate` 與 `combine()`，最大差距 0.0。
 > - `rank()` 只抽一次送出端的 trigram（`_Submission`），500 筆 2000 字候選從 132 ms 降到 68 ms。
 
-- [ ] **RED**：把 `tests/test_dedup_scoring.py` 每一條改寫成吃快照的版本放進 `test_fast.py`。測試輔助：
+- [x] **RED**：把 `tests/test_dedup_scoring.py` 每一條改寫成吃快照的版本放進 `test_fast.py`。測試輔助：
 
 ```python
 NOW = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
@@ -350,12 +352,12 @@ def near(uuid="c1", *, distance_m=8.0, minutes_ago=12.0, **fields) -> Candidate:
 ```
 
   另外補 019 沒有的四條：
-  - [ ] 站點沒有 `time` 成分（`STATION_PARAMETERS.time_weight == 0`）
-  - [ ] 任一邊文字為空 → 沒有 `text` 成分（不是 0 分）
-  - [ ] `evidence` 裡不含 `title` / `description` 原文
-  - [ ] `retrieval("ticket").radius_m == pytest.approx(147.4 * 1.1, abs=0.1)`；`retrieval("station")` ≈ 124.3 × 1.1
+  - [x] 站點沒有 `time` 成分（`STATION_PARAMETERS.time_weight == 0`）
+  - [x] 任一邊文字為空 → 沒有 `text` 成分（不是 0 分）
+  - [x] `evidence` 裡不含 `title` / `description` 原文
+  - [x] `retrieval("ticket").radius_m == pytest.approx(147.4 * 1.1, abs=0.1)`；`retrieval("station")` ≈ 124.3 × 1.1
 
-- [ ] **GREEN**：`fast.py`
+- [x] **GREEN**：`fast.py`
 
 ```python
 """fast-v1: the rule-based fast layer, ported from Spec 019's dedup_scoring.py.
@@ -473,7 +475,7 @@ def max_hint_distance_m(p: FastParameters) -> float:
     return -p.distance_half_m * math.log2(required)
 ```
 
-- [ ] `registry.py`：後端取 engine 的唯一入口，測試用 monkeypatch 換掉
+- [x] `registry.py`：後端取 engine 的唯一入口，測試用 monkeypatch 換掉
 
 ```python
 from app.dedup_engine.contract import DedupEngine
@@ -496,7 +498,7 @@ def get_engine() -> DedupEngine:
 **Files:** Create `tests/dedup_engine/test_contract.py`, `tests/dedup_engine/golden_cases.py`,
 `tests/dedup_engine/golden/fast.json`, `scripts/regen_dedup_golden.py`, `app/dedup_engine/CHANGELOG.md`
 
-- [ ] **RED → GREEN**：`test_contract.py`，逐條對應 spec §8（1~9），對 `ENGINES = [FastEngine()]` 參數化
+- [x] **RED → GREEN**：`test_contract.py`，逐條對應 spec §8（1~9），對 `ENGINES = [FastEngine()]` 參數化
 
 ```python
 ENGINES = [FastEngine()]
@@ -529,8 +531,8 @@ def test_performance(engine): ...                        # 500 筆候選 < PERF_
 def test_version_format(engine): assert re.fullmatch(r"[a-z]+-v[1-9][0-9]*", engine.version)
 ```
 
-- [ ] `golden_cases.py`：約 20 組固定輸入（019 的 fixture 情境＋站點＋邊界：剛好在半徑上、文字為空、類別缺一邊）
-- [ ] `scripts/regen_dedup_golden.py`：算出所有案例的 `rank` 與 `score` 結果寫進 `golden/fast.json`
+- [x] `golden_cases.py`：約 20 組固定輸入（019 的 fixture 情境＋站點＋邊界：剛好在半徑上、文字為空、類別缺一邊）
+- [x] `scripts/regen_dedup_golden.py`：算出所有案例的 `rank` 與 `score` 結果寫進 `golden/fast.json`
 
 ```python
 # 要點：輸出改了但版本號沒變 → 拒絕寫入。更新 golden 的唯一途徑是先升版（ADR-297）。
@@ -541,7 +543,7 @@ if old and old["version"] == new["version"] and old["cases"] != new["cases"]:
 GOLDEN.write_text(json.dumps(new, ensure_ascii=False, indent=2, sort_keys=True))
 ```
 
-- [ ] golden 測試（spec §8 第 10 條）
+- [x] golden 測試（spec §8 第 10 條）
 
 ```python
 def test_golden():
@@ -554,8 +556,8 @@ def test_golden():
 ```
 
   similarity 在 golden 裡一律 `round(x, 6)`，避免浮點尾數讓測試不穩
-- [ ] `CHANGELOG.md` 寫 fast-v1：參數表（照 019 spec §3）、與 019 的兩處差異、回測結果欄位先留「待 Chi 補」
-- [ ] 跑一次 regen 產生第一份 golden，commit
+- [x] `CHANGELOG.md` 寫 fast-v1：參數表（照 019 spec §3）、與 019 的兩處差異、回測結果欄位先留「待 Chi 補」
+- [x] 跑一次 regen 產生第一份 golden，commit
 
 ---
 
@@ -563,19 +565,19 @@ def test_golden():
 
 **Files:** Modify `app/models/dedup.py`, `alembic/versions/d4c8b1e07a92_dedup_fast_layer_tables.py`
 
-- [ ] `AUDIT_EVENT_TYPES` 加 `"hint_shown"`
-- [ ] `DuplicatePair.score_components` → `evidence: Mapped[dict | None]`（JSONB，comment：「engine 的 evidence，內容由 engine 版本決定」）
-- [ ] `DuplicatePair.engine_version: Mapped[str | None]`，CHECK `method = 'manual' OR engine_version IS NOT NULL`（ADR-294 修訂）
-- [ ] `DedupAuditEvent.engine_version: Mapped[str | None] = mapped_column(Text, nullable=True)`
-- [ ] migration 同步改：`sa.Column("evidence", ...)`、兩個 `engine_version` 欄、`ck_dedup_audit_events_type` 的值清單
-- [ ] `uv run pytest tests/test_migrations_match_models.py -q` 綠
-- [ ] `uv run alembic heads` 只有 `d4c8b1e07a92`
-- [ ] 在全新 DB 上 `alembic upgrade head` → `downgrade -1` → `upgrade head` 都成功
-- [ ] **RED → GREEN**：`tests/test_dedup_schema.py`（真 DB）
-  - [ ] `method='fast_rule'` 不帶 `engine_version` → `IntegrityError`；`method='manual'` 不帶 → 成功
-  - [ ] `dedup_audit_events` 寫 `event_type="hint_shown"` 成功；寫不在清單的值 → CHECK 失敗
-  - [ ] `evidence` 存巢狀 dict 讀回相等（JSONB round-trip）
-  - [ ] 表上已不存在 `score_components` 欄（查 `information_schema.columns`）
+- [x] `AUDIT_EVENT_TYPES` 加 `"hint_shown"`
+- [x] `DuplicatePair.score_components` → `evidence: Mapped[dict | None]`（JSONB，comment：「engine 的 evidence，內容由 engine 版本決定」）
+- [x] `DuplicatePair.engine_version: Mapped[str | None]`，CHECK `method = 'manual' OR engine_version IS NOT NULL`（ADR-294 修訂）
+- [x] `DedupAuditEvent.engine_version: Mapped[str | None] = mapped_column(Text, nullable=True)`
+- [x] migration 同步改：`sa.Column("evidence", ...)`、兩個 `engine_version` 欄、`ck_dedup_audit_events_type` 的值清單
+- [x] `uv run pytest tests/test_migrations_match_models.py -q` 綠
+- [x] `uv run alembic heads` 只有 `d4c8b1e07a92`
+- [x] 在全新 DB 上 `alembic upgrade head` → `downgrade -1` → `upgrade head` 都成功
+- [x] **RED → GREEN**：`tests/test_dedup_schema.py`（真 DB）
+  - [x] `method='fast_rule'` 不帶 `engine_version` → `IntegrityError`；`method='manual'` 不帶 → 成功
+  - [x] `dedup_audit_events` 寫 `event_type="hint_shown"` 成功；寫不在清單的值 → CHECK 失敗
+  - [x] `evidence` 存巢狀 dict 讀回相等（JSONB round-trip）
+  - [x] 表上已不存在 `score_components` 欄（查 `information_schema.columns`）
 
 ---
 
@@ -583,7 +585,7 @@ def test_golden():
 
 **Files:** Modify `app/services/ticket.py`, `app/services/station.py`
 
-- [ ] `ticket.py` 新增
+- [x] `ticket.py` 新增
 
 ```python
 @dataclass(frozen=True)
@@ -631,16 +633,16 @@ async def create_ticket(db, *, actor, **kwargs) -> Tickets:   # 簽章保持原�
 ```
 
   原本 docstring 與註解（`contact_name` NOT NULL、`secondary_location` 的 joined-table 說明）跟著各自的段落搬，不要丟
-- [ ] `station.py` 比照：`StationFields`、`validate_station`、`insert_station`、`create_station`
-- [ ] **`create_station` commit 後會發 `resource_station_updated` 通知**：抽成 `announce_station_created(db, *, station, actor_uuid)`，
+- [x] `station.py` 比照：`StationFields`、`validate_station`、`insert_station`、`create_station`
+- [x] **`create_station` commit 後會發 `resource_station_updated` 通知**：抽成 `announce_station_created(db, *, station, actor_uuid)`，
   `create_station` 與 Task 10 的 `submit_station` 都在 commit 後呼叫它，否則 GraphQL 建站點會少發通知
-- [ ] **RED → GREEN**：`tests/test_create_split.py`（真 DB），ticket／station 各一組
-  - [ ] `validate_*` 對無權限、非法 geometry、未知 `disaster_types`、過長聯絡欄位各自拋錯，**且 DB 無任何新列**
-  - [ ] `validate_*` 成功時也**不寫任何列**
-  - [ ] `insert_*` 之後 `rollback` → 單與地址都不存在（證明它不 commit）
-  - [ ] `create_*` 的結果與拆分前逐欄相同（聯絡欄位是正規化後的值、`status="pending"`、地址有寫入）
-  - [ ] `create_*` 的簽章沒變：`inspect.signature` 的參數名稱清單與拆分前相同（批次匯入靠它）
-- [ ] **全套件**：`uv run pytest tests -q`，結果必須與分支起點相同（記下起點的 passed 數當基準）。
+- [x] **RED → GREEN**：`tests/test_create_split.py`（真 DB），ticket／station 各一組
+  - [x] `validate_*` 對無權限、非法 geometry、未知 `disaster_types`、過長聯絡欄位各自拋錯，**且 DB 無任何新列**
+  - [x] `validate_*` 成功時也**不寫任何列**
+  - [x] `insert_*` 之後 `rollback` → 單與地址都不存在（證明它不 commit）
+  - [x] `create_*` 的結果與拆分前逐欄相同（聯絡欄位是正規化後的值、`status="pending"`、地址有寫入）
+  - [x] `create_*` 的簽章沒變：`inspect.signature` 的參數名稱清單與拆分前相同（批次匯入靠它）
+- [x] **全套件**：`uv run pytest tests -q`，結果必須與分支起點相同（記下起點的 passed 數當基準）。
   特別看 `test_bulk_import_*`、`test_graphql/test_mutations.py`
 
 ---
@@ -649,12 +651,12 @@ async def create_ticket(db, *, actor, **kwargs) -> Tickets:   # 簽章保持原�
 
 **Files:** Create `app/services/dedup_snapshot.py`, `tests/test_dedup_snapshot.py`
 
-- [ ] **RED**：
-  - [ ] 同一張工單，`ticket_submission(fields, now)` 與寫入後 `ticket_snapshot(row)` 的欄位除 `uuid`／`status`／`created_at` 外全相等
-  - [ ] `dataclasses.fields(TicketSnapshot)` 不含任何 `contact_*`、`review_note`、`visibility`、`team_uuid`、`updated_by`、`search_text`
-  - [ ] `same_contact_phone("0912-345-678", "+886912345678") is True`；`("0912345678", None) is None`；`("abc", "0912345678") is None`；不同號碼 `is False`
-  - [ ] 站點 row 的 geometry 若不是 Point：取 centroid（防呆，ADR-298）
-- [ ] **GREEN**：
+- [x] **RED**：
+  - [x] 同一張工單，`ticket_submission(fields, now)` 與寫入後 `ticket_snapshot(row)` 的欄位除 `uuid`／`status`／`created_at` 外全相等
+  - [x] `dataclasses.fields(TicketSnapshot)` 不含任何 `contact_*`、`review_note`、`visibility`、`team_uuid`、`updated_by`、`search_text`
+  - [x] `same_contact_phone("0912-345-678", "+886912345678") is True`；`("0912345678", None) is None`；`("abc", "0912345678") is None`；不同號碼 `is False`
+  - [x] 站點 row 的 geometry 若不是 Point：取 centroid（防呆，ADR-298）
+- [x] **GREEN**：
 
 ```python
 """Backend-side conversion into the dedup contract (Spec 020 §3). No scoring here."""
@@ -704,16 +706,16 @@ def to_candidate(kind, row, *, distance_m: float, submission_phone: str | None) 
 > 舊 service／舊 GraphQL 仍呼叫它們，先刪會讓全套件整片紅；舊方法與 `DedupEntity.text_fields` 等欄位在 **Task 13** 與其他舊碼一併刪。
 > `row_with_distance` 對格式錯誤的 uuid 回 None（它來自 client 的 `acknowledgedDuplicateOf`）。
 
-- [ ] `list_nearby_open(db, *, kind, longitude, latitude, radius_m, now) -> list[tuple[Model, float]]`：
+- [x] `list_nearby_open(db, *, kind, longitude, latitude, radius_m, now) -> list[tuple[Model, float]]`：
   移除 `query_text` 參數、`func.similarity`、`_to_candidate`、`has_text`、`age_min`
-- [ ] `get_with_distance(db, *, kind, uuid, longitude, latitude) -> tuple[Model, float] | None`：
+- [x] `get_with_distance(db, *, kind, uuid, longitude, latitude) -> tuple[Model, float] | None`：
   取代 `get_candidate_features`，不套半徑與未結案過濾，**要套軟刪過濾**（spec §5 確認後送出第 4 點）
-- [ ] `DedupEntity` 拿掉 `text_fields`、`type_field`、`texts()`、`type_of()`；保留 `model`、`use_centroid`、`open_filters`、`geometry()`
-- [ ] 不再 import `app.services.dedup_scoring`
-- [ ] 測試（真 DB，沿用 `test_graphql/test_dedup.py` 的 `_seed_ticket`，搬到 `tests/test_dedup_repository.py`）：
-  - [ ] 半徑外、`completed`／`cancelled`、軟刪的不出現
-  - [ ] 過期臨時站點、`permanently_closed` 站點不出現
-  - [ ] 回傳距離與 `ST_Distance` 一致（±0.5 m）
+- [x] `DedupEntity` 拿掉 `text_fields`、`type_field`、`texts()`、`type_of()`；保留 `model`、`use_centroid`、`open_filters`、`geometry()`
+- [x] 不再 import `app.services.dedup_scoring`
+- [x] 測試（真 DB，沿用 `test_graphql/test_dedup.py` 的 `_seed_ticket`，搬到 `tests/test_dedup_repository.py`）：
+  - [x] 半徑外、`completed`／`cancelled`、軟刪的不出現
+  - [x] 過期臨時站點、`permanently_closed` 站點不出現
+  - [x] 回傳距離與 `ST_Distance` 一致（±0.5 m）
 
 ---
 
@@ -774,11 +776,11 @@ async def record_acknowledged(db, *, kind, created: Snapshot, submission_phone, 
 
 測試（`test_dedup_service.py`）：
 
-- [ ] 用 stub engine（monkeypatch `registry._ENGINE`）驗證：半徑超過 1000 被截斷並記 warning
-- [ ] engine `rank` 拋錯 → `find_match` 回 None、rollback 有被呼叫
-- [ ] **真 DB**：engine 拋錯後，同一個 session 接著讀 `actor.uuid` 不拋 `MissingGreenlet`（已知陷阱 1）
-- [ ] `record_acknowledged`：目標已軟刪 → None、無卡；`score` 拋錯 → 卡的 `similarity`／`evidence` 為 null
-- [ ] 寫入的 audit / pair 的 JSON 內不含送出快照的標題、描述原文（ADR-295；用 MARK 字串驗）
+- [x] 用 stub engine（monkeypatch `registry._ENGINE`）驗證：半徑超過 1000 被截斷並記 warning
+- [x] engine `rank` 拋錯 → `find_match` 回 None、rollback 有被呼叫
+- [x] **真 DB**：engine 拋錯後，同一個 session 接著讀 `actor.uuid` 不拋 `MissingGreenlet`（已知陷阱 1）
+- [x] `record_acknowledged`：目標已軟刪 → None、無卡；`score` 拋錯 → 卡的 `similarity`／`evidence` 為 null
+- [x] 寫入的 audit / pair 的 JSON 內不含送出快照的標題、描述原文（ADR-295；用 MARK 字串驗）
 
 ---
 
@@ -829,14 +831,14 @@ async def submit_ticket(db, *, actor: User, acknowledged_duplicate_of: str | Non
 
 測試（真 DB，stub engine 控制命中與否）：
 
-- [ ] 命中：不建單、`hint_shown` 一筆、回 `Suspected`
-- [ ] 未命中：建單、無 audit、回 `Created`
-- [ ] 確認後送出：建單＋配對卡＋`ignored_by_submitter` 同時存在；engine 的 `rank` 沒被呼叫
-- [ ] **atomic**：讓 `record_acknowledged` 在寫卡後拋錯 → 單、卡、audit 全都不存在
-- [ ] 驗證失敗（無 `ticket.add`、非法 geometry、未知 `disaster_types`）→ 在跑 dedup 之前就失敗，無任何 audit
-- [ ] engine 拋錯 → 照常建單（fail-open，走真 DB，順便覆蓋陷阱 1）
-- [ ] 確認的 uuid 不存在 → 照常建單、無卡
-- [ ] 站點：上面前三條各一條
+- [x] 命中：不建單、`hint_shown` 一筆、回 `Suspected`
+- [x] 未命中：建單、無 audit、回 `Created`
+- [x] 確認後送出：建單＋配對卡＋`ignored_by_submitter` 同時存在；engine 的 `rank` 沒被呼叫
+- [x] **atomic**：讓 `record_acknowledged` 在寫卡後拋錯 → 單、卡、audit 全都不存在
+- [x] 驗證失敗（無 `ticket.add`、非法 geometry、未知 `disaster_types`）→ 在跑 dedup 之前就失敗，無任何 audit
+- [x] engine 拋錯 → 照常建單（fail-open，走真 DB，順便覆蓋陷阱 1）
+- [x] 確認的 uuid 不存在 → 照常建單、無卡
+- [x] 站點：上面前三條各一條
 
 ---
 
@@ -851,7 +853,7 @@ async def submit_ticket(db, *, actor: User, acknowledged_duplicate_of: str | Non
 **Files:** Modify `app/graphql/tickets/types.py`, `app/graphql/tickets/mutations.py`, `app/graphql/geo/types.py`,
 `app/graphql/geo/mutations.py`, `app/graphql/schema.py`；Delete `app/graphql/dedup/`
 
-- [ ] 型別
+- [x] 型別
 
 ```python
 @strawberry.type
@@ -868,17 +870,17 @@ CreateTicketResult = Annotated[TicketCreated | DuplicateSuspected, strawberry.un
 ```
 
   站點：`StationCreated { station }`、`DuplicateStationSuspected { relatedStationUuid }`、`CreateStationResult`
-- [ ] resolver：多一個參數 `acknowledged_duplicate_of: str | None = None`，改呼叫 `submit_ticket`，依回傳型別組 union。
+- [x] resolver：多一個參數 `acknowledged_duplicate_of: str | None = None`，改呼叫 `submit_ticket`，依回傳型別組 union。
   docstring 寫清楚兩段式（前端靠這段理解流程）
-- [ ] `schema.py` 移除 `DedupQuery`、`DedupMutation`；刪 `app/graphql/dedup/`
-- [ ] SDL 檢查：`print_schema` 裡不再有 `ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`、
+- [x] `schema.py` 移除 `DedupQuery`、`DedupMutation`；刪 `app/graphql/dedup/`
+- [x] SDL 檢查：`print_schema` 裡不再有 `ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`、
   `DedupScoreComponent`、`TicketDedupHint`、`StationDedupHint`、`DedupEntityKind`、`DedupHintOutcome`
-- [ ] 新測試 `tests/test_graphql/test_create_dedup.py`（取代 `test_dedup.py`、`test_dedup_station.py`）：
-  - [ ] 真 engine、真 DB：在既有單旁送出同文字 → `__typename == "DuplicateSuspected"`、`relatedTicketUuid` 正確
-  - [ ] 帶 `acknowledgedDuplicateOf` 再送 → `TicketCreated`，DB 有配對卡
-  - [ ] 遠處、不同內容 → 直接 `TicketCreated`
-  - [ ] 無權限 → 403，**不透露**是否有疑似重複（回應裡沒有 `DuplicateSuspected`）
-  - [ ] 站點同上三條
+- [x] 新測試 `tests/test_graphql/test_create_dedup.py`（取代 `test_dedup.py`、`test_dedup_station.py`）：
+  - [x] 真 engine、真 DB：在既有單旁送出同文字 → `__typename == "DuplicateSuspected"`、`relatedTicketUuid` 正確
+  - [x] 帶 `acknowledgedDuplicateOf` 再送 → `TicketCreated`，DB 有配對卡
+  - [x] 遠處、不同內容 → 直接 `TicketCreated`
+  - [x] 無權限 → 403，**不透露**是否有疑似重複（回應裡沒有 `DuplicateSuspected`）
+  - [x] 站點同上三條
 
 ---
 
@@ -888,9 +890,9 @@ CreateTicketResult = Annotated[TicketCreated | DuplicateSuspected, strawberry.un
 `test_edge_cases.py`（5）、`test_station_photo.py`（4）、`test_error_masking.py`（4）、`test_ticket_disaster_fields.py`（3）、
 `test_delete_review.py`（2）、`tests/test_notifications_db_integration.py`（1）
 
-- [ ] 查詢改成 `createTicket(input: $input) { __typename ... on TicketCreated { ticket { <原本的欄位> } } }`；
+- [x] 查詢改成 `createTicket(input: $input) { __typename ... on TicketCreated { ticket { <原本的欄位> } } }`；
   斷言改讀 `data.createTicket.ticket`
-- [ ] 這些測試的 fixture 可能在同一地點連建多張相似的單，會意外觸發 `DuplicateSuspected`。
+- [x] 這些測試的 fixture 可能在同一地點連建多張相似的單，會意外觸發 `DuplicateSuspected`。
   **不要為此改 fixture 的座標或文字**；在 `tests/test_graphql/conftest.py` 加一個 autouse fixture，
   預設把 engine 換成永不命中的 stub，只有 `test_create_dedup.py` 用 marker 關掉它：
 
@@ -909,23 +911,23 @@ def _no_dedup_hints(request, monkeypatch):
 ```
 
   （`real_dedup` marker 記得註冊到 `pyproject.toml` 的 `markers`）
-- [ ] **RED → GREEN**：`tests/test_graphql/test_dedup_stub_fixture.py`
-  - [ ] 沒標 marker 的測試裡 `get_engine().version == "stub-v1"`
-  - [ ] 標了 `@pytest.mark.real_dedup` 的測試裡 `get_engine().version == "fast-v1"`（確保 `test_create_dedup.py` 不會默默測到 stub）
-- [ ] 錯誤路徑測試（`test_error_masking.py`、`test_edge_cases.py`）：錯誤仍在 `errors`，`data.createTicket` 為 null，行為不變
+- [x] **RED → GREEN**：`tests/test_graphql/test_dedup_stub_fixture.py`
+  - [x] 沒標 marker 的測試裡 `get_engine().version == "stub-v1"`
+  - [x] 標了 `@pytest.mark.real_dedup` 的測試裡 `get_engine().version == "fast-v1"`（確保 `test_create_dedup.py` 不會默默測到 stub）
+- [x] 錯誤路徑測試（`test_error_masking.py`、`test_edge_cases.py`）：錯誤仍在 `errors`，`data.createTicket` 為 null，行為不變
 
 ---
 
 ## Task 13: 收尾
 
 - [x] ~~刪 `tests/test_graphql/test_dedup.py`、`test_dedup_station.py`~~（已在 Task 11 刪）
-- [ ] `Spec/019-dedup-fast-layer/spec.md` 開頭加註：§1 GraphQL、§3 計分位置、§4 的 GraphQL 已被 Spec 020 取代
-- [ ] `grep -rn "dedup_scoring\|find_duplicate_hints\|record_hint_outcome\|score_components" app tests` 為零
-- [ ] `ruff==0.11.0 check` 與 `ruff format --check` 在本票改動的檔案上乾淨
-- [ ] **RED → GREEN**：`tests/test_dedup_legacy_removed.py`
-  - [ ] `import app.services.dedup_scoring` 與 `import app.graphql.dedup` 都拋 `ModuleNotFoundError`
-  - [ ] `print_schema(schema)` 不含 Task 11 列出的舊型別與舊欄位名稱
-  - [ ] `app.services.dedup` 沒有 `find_duplicate_hints`、`record_hint_outcome` 屬性
+- [x] `Spec/019-dedup-fast-layer/spec.md` 開頭加註：§1 GraphQL、§3 計分位置、§4 的 GraphQL 已被 Spec 020 取代
+- [x] `grep -rn "dedup_scoring\|find_duplicate_hints\|record_hint_outcome\|score_components" app tests` 為零
+- [x] `ruff==0.11.0 check` 與 `ruff format --check` 在本票改動的檔案上乾淨
+- [x] **RED → GREEN**：`tests/test_dedup_legacy_removed.py`
+  - [x] `import app.services.dedup_scoring` 與 `import app.graphql.dedup` 都拋 `ModuleNotFoundError`
+  - [x] `print_schema(schema)` 不含 Task 11 列出的舊型別與舊欄位名稱
+  - [x] `app.services.dedup` 沒有 `find_duplicate_hints`、`record_hint_outcome` 屬性
 
 ---
 
@@ -936,49 +938,49 @@ compose 檔、腳本都放 scratchpad，不進 repo。
 
 ### 14.1 本機收尾
 
-- [ ] `uv run pytest tests -q`：與基準相比只多不少，無新紅燈
-- [ ] `COVERAGE_CORE=sysmon uv run pytest --cov=app/dedup_engine --cov=app/services/dedup --cov=app/services/dedup_submission --cov=app/services/dedup_snapshot tests -q`：≥ 80%
-- [ ] `uv run alembic heads` 單一 head
+- [x] `uv run pytest tests -q`：與基準相比只多不少，無新紅燈
+- [x] `COVERAGE_CORE=sysmon uv run pytest --cov=app/dedup_engine --cov=app/services/dedup --cov=app/services/dedup_submission --cov=app/services/dedup_snapshot tests -q`：≥ 80%
+- [x] `uv run alembic heads` 單一 head
 
 ### 14.2 從零建立
 
-- [ ] 建 image（`compose up --build` 會卡在 buildx，一律用這個）：
+- [x] 建 image（`compose up --build` 會卡在 buildx，一律用這個）：
   `DOCKER_BUILDKIT=0 docker build -t dedup020-backend:verify .`
-- [ ] 用 `-p dedup020verify` ＋ scratchpad 的 compose 檔起 db、redis、backend：
+- [x] 用 `-p dedup020verify` ＋ scratchpad 的 compose 檔起 db、redis、backend：
   - db 用 `disaster-postgres-h3:16-3.4`（`b3e8d1f4a6c2` 需要 h3）
   - backend 用 `image: dedup020-backend:verify`，不用 `build:`
   - db／redis 不對外開 port；backend 若要開，避開 8000／8001（常被佔），用 8011
-- [ ] 全新 volume：`alembic upgrade head` 乾淨；`alembic downgrade -1` → `upgrade head` 再走一次
-- [ ] seed：`docker exec -e PYTHONPATH=/app <backend> python scripts/seed_rbac.py`
+- [x] 全新 volume：`alembic upgrade head` 乾淨；`alembic downgrade -1` → `upgrade head` 再走一次
+- [x] seed：`docker exec -e PYTHONPATH=/app <backend> python scripts/seed_rbac.py`
 
 ### 14.3 容器裡跑全套件
 
-- [ ] 在 backend 容器內對 stack 的 db 跑 `pytest tests -q`（`TEST_DB_URL` 指向容器網路內的 db），結果與 14.1 一致
-- [ ] 注意：image 用 `uv pip install .`，不吃 `uv.lock`，套件版本可能與本機不同。兩邊結果不一致時先比 `pip freeze`
+- [x] 在 backend 容器內對 stack 的 db 跑 `pytest tests -q`（`TEST_DB_URL` 指向容器網路內的 db），結果與 14.1 一致
+- [x] 注意：image 用 `uv pip install .`，不吃 `uv.lock`，套件版本可能與本機不同。兩邊結果不一致時先比 `pip freeze`
 
 ### 14.4 實際打 API
 
 sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 backend 容器、`docker exec <backend> python /tmp/x.py`
 打 `localhost:8000`（image 內有 httpx）。測試帳號用 ORM 腳本直接建（比走註冊快）。
 
-- [ ] 求助單：建一張 → 在旁邊送同內容 → `DuplicateSuspected`（`relatedTicketUuid` 正確、DB 沒有新單、有 `hint_shown`）
+- [x] 求助單：建一張 → 在旁邊送同內容 → `DuplicateSuspected`（`relatedTicketUuid` 正確、DB 沒有新單、有 `hint_shown`）
   → 帶 `acknowledgedDuplicateOf` 再送 → `TicketCreated`；`duplicate_pairs` 一筆 `dup_ignored`、`engine_version='fast-v1'`；
   `dedup_audit_events` 有 `ignored_by_submitter`
-- [ ] 站點：同上一輪
-- [ ] 遠處、不同內容 → 直接 `TicketCreated`，沒有任何 dedup 列
-- [ ] 無 `ticket.add` 的帳號 → 403，回應不含 `DuplicateSuspected`
-- [ ] 批次匯入一個含重複列的檔 → 全部照常建立，沒有任何 dedup 列（ADR-299）
-- [ ] fail-open：暫時讓候選查詢失敗（例如 `ALTER TABLE base_geometries RENAME COLUMN geometry TO geometry_x` 前先
+- [x] 站點：同上一輪
+- [x] 遠處、不同內容 → 直接 `TicketCreated`，沒有任何 dedup 列
+- [x] 無 `ticket.add` 的帳號 → 403，回應不含 `DuplicateSuspected`
+- [x] 批次匯入一個含重複列的檔 → 全部照常建立，沒有任何 dedup 列（ADR-299）
+- [x] fail-open：暫時讓候選查詢失敗（例如 `ALTER TABLE base_geometries RENAME COLUMN geometry TO geometry_x` 前先
   確認建單路徑不讀它——**若會讀就改用 stub engine 拋錯的方式**）→ 建單成功、backend log 有 fail-open 訊息、無 `MissingGreenlet`
-- [ ] 查 audit／pair 的 JSON：不含任何送出的標題、描述原文（ADR-295）
-- [ ] `EXPLAIN` 候選查詢使用 `ix_base_geometries_geography`
-- [ ] 並發：20 個請求同時對同一地點建單，無 500、無外洩 SQL 的錯誤訊息
+- [x] 查 audit／pair 的 JSON：不含任何送出的標題、描述原文（ADR-295）
+- [x] `EXPLAIN` 候選查詢使用 `ix_base_geometries_geography`
+- [x] 並發：20 個請求同時對同一地點建單，無 500、無外洩 SQL 的錯誤訊息
 
 ### 14.5 清理與回報
 
-- [ ] `docker compose -p dedup020verify -f <scratchpad compose> down -v`；手動起的容器 `docker rm -f`；`docker network rm dedup020verify_app-network`
-- [ ] 確認使用者原本的 `backend-db-1`、`backend-redis-1` 仍在跑、沒被重建
-- [ ] 把 14.1~14.4 的實際輸出（passed 數、SQL 查詢結果、HTTP 回應）整理成驗證報告，回報使用者。**不自行開 PR**
+- [x] `docker compose -p dedup020verify -f <scratchpad compose> down -v`；手動起的容器 `docker rm -f`；`docker network rm dedup020verify_app-network`
+- [x] 確認使用者原本的 `backend-db-1`、`backend-redis-1` 仍在跑、沒被重建
+- [x] 把 14.1~14.4 的實際輸出（passed 數、SQL 查詢結果、HTTP 回應）整理成驗證報告，回報使用者。**不自行開 PR**
 
 ---
 
