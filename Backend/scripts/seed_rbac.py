@@ -33,8 +33,9 @@ AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=F
 #
 # 角色 = 功能軸 × 組織軸(ADR-049)。功能角色住這裡(user_role_assign);組織(gov/ngo)是
 # users.team_uuid → team.type,不進角色名。"政府協調員" = 團隊角色 admin + gov 型 team。
-# 授權靠地理:geo 資源能不能被某 team 的人 edit/看 PII,看它的座標是否落在該 team 被指派的
-# WorkZone polygon 內(zone scope);建立(make)是純 capability,任何人有能力就能建。
+# 通報單授權靠地理:能不能被某 team 的人 edit/看 PII,看它的座標是否落在該 team 被指派的
+# WorkZone polygon 內(zone scope)。站點例外(ADR-285):看它被指派給哪個 team(team scope)。
+# 建立(make)是純 capability,任何人有能力就能建。
 ROLES_DATA = [
     {
         # Default platform role every registered account gets (app/services/auth_account.py).
@@ -101,7 +102,7 @@ ROLES_DATA = [
                 Perm.MAP_VIEW, Perm.MAP_ADD, Perm.MAP_EDIT, Perm.MAP_DELETE,
                 Perm.STATION_VIEW, Perm.STATION_VIEW_PII, Perm.STATION_VIEW_HISTORY,
                 Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
-                Perm.STATION_DELETE, Perm.STATION_REVIEW,
+                Perm.STATION_DELETE, Perm.STATION_REVIEW, Perm.STATION_ASSIGN,
                 Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_VIEW_DETAIL,
                 Perm.TICKET_VIEW_HISTORY, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
@@ -121,40 +122,44 @@ ROLES_DATA = [
     },
     # --- Team-kind functional roles (attached to a team via user_role_assign; org = the
     # team's team.type). "gov admin" = admin + gov team; "ngo admin" = admin + ngo team.
-    # Operational data access is `zone` — the team edits resources geographically inside a
-    # WorkZone assigned to it. Zone operations are gov-only: `_require_gov_zone_authority` in
-    # app/services/work_zone.py enforces this. NGO admins hold these capabilities in the seed
-    # but are rejected with 403 at the service layer. GOV_TEAM_ONLY_PERMS in
-    # app/core/permissions.py mirrors this for display—keep in lockstep.
+    # Ticket access is `zone` — the team works tickets geographically inside a WorkZone
+    # assigned to it. Station access is `team` — the stations assigned to the team (ADR-285);
+    # a gov team's `team` widens to `all` in resolve_scope (GOV_TEAM_WIDENED_PERMS). Zone
+    # operations and station assignment are gov-only: `_require_gov_zone_authority` /
+    # `require_gov_team` enforce it. NGO admins hold these capabilities in the seed (NGO
+    # members hold station.assign) but are rejected with 403 at the service layer. GOV_TEAM_ONLY_PERMS in app/core/permissions.py
+    # mirrors this for display—keep in lockstep.
     {
-        # Team coordinator: full operations within the team's zone + team-member management
-        # + zone drawing/assignment.
+        # Team coordinator: full operations on the team's tickets (zone) and stations (team)
+        # + team-member management + zone drawing/assignment + station assignment (gov).
         "name": "admin",
         "kind": "team",
         "permissions": {
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
-            Perm.STATION_VIEW_PII: "zone",
+            Perm.STATION_VIEW_PII: "team",
             Perm.STATION_ADD: "all",
             # ADR-097: switchable identities must be self-sufficient. Team roles used to
             # borrow this from the platform `user` role, which identity switching no longer
             # keeps active — without it a field worker acting as their team would lose the
             # one capability the role exists to exercise.
             Perm.STATION_CONTRIBUTE: "all",
-            Perm.STATION_EDIT: "zone",
-            Perm.STATION_DELETE: "zone",
-            Perm.STATION_REVIEW: "zone",
+            Perm.STATION_EDIT: "team",
+            Perm.STATION_DELETE: "team",
+            Perm.STATION_REVIEW: "team",
+            Perm.STATION_ASSIGN: "all",  # ADR-285: gov-only at runtime (require_gov_team)
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
             # ADR-281: `all`, not `zone` like the contact details beside it. Every signed-in
             # account already reads the exact point (see `user`), and a team identity that
             # saw less than the citizen one would lose it on switching (ADR-097).
             Perm.TICKET_VIEW_DETAIL: "all",
-            # ADR-128: `zone`, never `team`. ADR-049 removed team_uuid from base_geometries,
-            # so in_scope()'s TEAM branch can never match a geo resource — granting `team`
-            # here would be an authorization that silently never holds.
+            # ADR-128: a ticket's timeline is `zone`, never `team` — tickets carry no team_uuid,
+            # so in_scope()'s TEAM branch can never match one and `team` would be an
+            # authorization that silently never holds. A station's is `team` (ADR-285): it
+            # carries the team it is assigned to.
             Perm.TICKET_VIEW_HISTORY: "zone",
-            Perm.STATION_VIEW_HISTORY: "zone",
+            Perm.STATION_VIEW_HISTORY: "team",
             Perm.TICKET_ADD: "all",
             Perm.TICKET_EDIT: "zone",
             Perm.TICKET_DELETE: "zone",
@@ -167,37 +172,42 @@ ROLES_DATA = [
             Perm.ZONE_EDIT: "all",
             Perm.ZONE_ASSIGN: "all",
             Perm.ZONE_DELETE: "all",
-            # ADR-111: export is zone-scoped so a team's file only ever contains its own
-            # responsibility area — no extra range parameter needed on the endpoint. Import
-            # is "all" because the real per-row gate is the station.edit/ticket.edit zone
-            # check each row runs anyway; a zone scope here would look meaningful and change
-            # nothing.
-            Perm.STATION_EXPORT: "zone",
+            # ADR-111: export is scoped so a team's file only ever contains its own share —
+            # its zone's tickets, the stations assigned to it (ADR-285) — with no extra range
+            # parameter on the endpoint. Import is "all" because the real per-row gate is the
+            # station.edit/ticket.edit check each row runs anyway; a narrower scope here would
+            # look meaningful and change nothing.
+            Perm.STATION_EXPORT: "team",
             Perm.STATION_IMPORT: "all",
             Perm.TICKET_EXPORT: "zone",
             Perm.TICKET_IMPORT: "all",
         },
     },
     {
-        # Team field worker: works the team's zone, but no team management, no zone drawing,
-        # and destructive/assign-others actions stay own-scoped.
+        # Team field worker: works the team's zone and stations, but no team management and no
+        # zone drawing, and destructive/assign-others actions stay own-scoped. Station
+        # assignment is the exception: a gov member may be a district commander handing out
+        # stations (Carol, 2026-09-24; ADR-285 decision 4). NGO members hold it too and are
+        # turned away by `require_gov_team`, as NGO admins are.
         "name": "member",
         "kind": "team",
         "permissions": {
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
-            Perm.STATION_VIEW_PII: "zone",
+            Perm.STATION_VIEW_PII: "team",
             Perm.STATION_ADD: "all",
             Perm.STATION_CONTRIBUTE: "all",  # ADR-097, see the admin role above
-            Perm.STATION_EDIT: "zone",
+            Perm.STATION_EDIT: "team",
             Perm.STATION_DELETE: "own",
+            Perm.STATION_ASSIGN: "all",  # ADR-285: gov-only at runtime (require_gov_team)
             Perm.TICKET_VIEW: "all",
             Perm.TICKET_VIEW_PII: "zone",
             Perm.TICKET_VIEW_DETAIL: "all",  # ADR-281, see the admin role above
             # ADR-128: field workers need the timeline for the resources they actually work
-            # — who took a task, who dropped it — so it matches view_pii at `zone`.
+            # — who took a task, who dropped it — so each matches its view_pii: tickets at
+            # `zone`, stations at `team` (ADR-285).
             Perm.TICKET_VIEW_HISTORY: "zone",
-            Perm.STATION_VIEW_HISTORY: "zone",
+            Perm.STATION_VIEW_HISTORY: "team",
             Perm.TICKET_ADD: "all",
             Perm.TICKET_EDIT: "zone",
             Perm.TICKET_DELETE: "own",
