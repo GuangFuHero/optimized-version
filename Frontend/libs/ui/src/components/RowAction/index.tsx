@@ -9,13 +9,6 @@ const { color, radius, typography } = designTokens;
 
 export type RowActionTone = 'default' | 'danger';
 
-/**
- * Pill button used in list rows and card footers.
- *
- * Ported from the design system prototype's `rowActionStyle` (`Design/前台/js/site/site-list.jsx`).
- * Three states, not two: `danger` carries a saturated red border (`bg.danger`) rather than a pale
- * tint, and `disabled` overrides tone entirely — a disabled destructive button is grey, not red.
- */
 const TONES = {
   default: {
     border: color.border.default,
