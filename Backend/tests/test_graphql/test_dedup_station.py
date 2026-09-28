@@ -144,8 +144,8 @@ async def test_recording_a_station_outcome_writes_entity_kind_station(client, co
             "query": RECORD_OUTCOME,
             "variables": {
                 "input": {
-                    "candidateTaskUuid": original,
-                    "submittedTaskUuid": submitted,
+                    "candidateUuid": original,
+                    "submittedUuid": submitted,
                     "outcome": "ignored_hint",
                 },
                 "entityKind": "station",

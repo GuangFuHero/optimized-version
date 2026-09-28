@@ -125,9 +125,9 @@ async def record_hint_outcome(
     db: AsyncSession,
     *,
     actor: User,
-    candidate_task_uuid: str,
+    candidate_uuid: str,
     outcome: str,
-    submitted_task_uuid: str | None = None,
+    submitted_uuid: str | None = None,
     entity_kind: str = "ticket_task",
 ) -> tuple[DuplicatePair | None, str]:
     """Record the submitter's response to a hint. Returns (pair card or None, audit event uuid).
@@ -135,7 +135,7 @@ async def record_hint_outcome(
     Always writes an audit event. Writes a pair card only when a second entity exists. Only
     the creator of the submitted entity may report on it: the add permission is held at
     `all` by every logged-in role, so without this check anyone could card any pair. The
-    `*_task_uuid` arguments carry station uuids when `entity_kind` is "station".
+    `*_uuid` arguments are task uuids, or station uuids when `entity_kind` is "station".
 
     Raises:
         ValueError: unsupported entity kind, unknown outcome, entity not found, or an entity
@@ -147,14 +147,14 @@ async def record_hint_outcome(
         raise ValueError(f"Unsupported dedup entity kind: {entity_kind}")
     if outcome not in PAIR_HINT_OUTCOMES:
         raise ValueError(f"Unknown dedup hint outcome: {outcome}")
-    candidate = await _get_entity(db, kind, candidate_task_uuid)
+    candidate = await _get_entity(db, kind, candidate_uuid)
     accepted = outcome == "accepted_hint"
 
     pair = score = None
-    if not submitted_task_uuid:
+    if not submitted_uuid:
         await require_scope(actor, kind.add_perm, db)
     else:
-        submitted = await _get_entity(db, kind, submitted_task_uuid)
+        submitted = await _get_entity(db, kind, submitted_uuid)
         location = await _location_of(db, entity_kind, submitted)
         await require_scope(actor, kind.add_perm, db, resource=location)
         if str(submitted.created_by) != str(actor.uuid):
@@ -179,7 +179,7 @@ async def record_hint_outcome(
             "event_type": "hint_accepted" if accepted else "ignored_by_submitter",
             "pair_uuid": str(pair.uuid) if pair else None,
             "primary_uuid": str(candidate.uuid),
-            "duplicate_uuid": submitted_task_uuid,
+            "duplicate_uuid": submitted_uuid,
             "actor_uuid": str(actor.uuid),
             "source_layer": "fast",
             "decision_reason": outcome,

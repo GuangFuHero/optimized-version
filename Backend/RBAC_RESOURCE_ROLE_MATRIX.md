@@ -4,7 +4,7 @@
 > 事實來源：`scripts/seed_rbac.py`（授權）+ `app/core/permissions.py`（capability 目錄）+ `app/core/rbac_scopes.py`（scope 引擎）。
 > 此檔為快照，seed 一改就會過時——以程式碼為準。
 >
-> **⚠️ Live 事實來源（feature 009）**：runtime 的權威視圖是 `GET /admin/rbac/matrix`（角色×capability×scope 即時網格）+ `GET /admin/rbac/capabilities`（capability 目錄，含 `public` / `team_gov_only` 旗標）。此 `.md` 只是 2026-07-12 的靜態快照、且早於 PR #24 review 的收斂，個別 cell（例如下方 Work Zone 的 gov/ngo 註記）可能已落後——需要當下真值時查 API，不要以本檔為準。
+> **⚠️ Live 事實來源（feature 009）**：runtime 的權威視圖是 `GET /admin/rbac/matrix`（角色×capability×scope 即時網格）+ `GET /admin/rbac/capabilities`（capability 目錄，含 `public` / `team_gov_only` / `team_gov_widened` 旗標）。此 `.md` 只是 2026-07-12 的靜態快照、且早於 PR #24 review 的收斂，個別 cell（例如下方 Work Zone 的 gov/ngo 註記）可能已落後——需要當下真值時查 API，不要以本檔為準。站點（Station）一節與 scope 語意表已於 2026-09-23 依 ADR-285 更新。
 
 ## 模型速記（ADR-019 / ADR-049，**身分部分已由 `Spec/010` 取代**）
 
@@ -22,8 +22,8 @@
 | scope | 意義 | 判定 |
 |---|---|---|
 | `all` | 全域 | 無條件 |
-| `zone` | **當前身分**那個 team 的責任區內 | `ST_Contains(該 team 被指派的 WorkZone, resource.geometry)` |
-| `team` | **當前身分**那個 team | `resource.<team 邊界欄位> == active identity 的 team`（僅團隊成員管理用） |
+| `zone` | **當前身分**那個 team 的責任區內（通報單） | `ST_Contains(該 team 被指派的 WorkZone, resource.geometry)` |
+| `team` | **當前身分**那個 team | `resource.<team 邊界欄位> == active identity 的 team`。用於團隊成員管理，以及**站點**（`stations.team_uuid`，ADR-285）；gov team 身分在站點上視同 `all` |
 | `own` | 我建立的 | `resource.created_by == actor.uuid` |
 | `—` | 未授予 | CP1 直接 403 |
 
@@ -40,8 +40,8 @@
 | **user** | platform | 預設民眾：可瀏覽、可建立，只能動自己建的 |
 | **data_auditor** | platform | 稽核：全平台唯讀（含 PII、audit log），無 edit/make/review |
 | **super_admin** | platform | 全能 |
-| **admin** | team | 團隊協調者：責任區內全操作 + 管團隊成員 + 畫/指派 zone |
-| **member** | team | 團隊現場人員：責任區內編輯，無團隊管理、無 zone |
+| **admin** | team | 團隊協調者：責任區內的通報單、指派給本隊的站點全操作 + 管團隊成員 + 畫/指派 zone + 指派站點（後兩者僅 gov） |
+| **member** | team | 團隊現場人員：責任區內的通報單、本隊的站點可編輯，無團隊管理、無 zone、無站點指派 |
 
 ## 權限矩陣
 
@@ -61,16 +61,24 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | station.view | all（公開） | all | all | all | all | all |
-| **station.view_pii** | —（遮罩） | own | all | all | zone | zone |
-| **station.view_history** | — | own | all | all | zone | zone |
+| **station.view_pii** | —（遮罩） | own | all | all | team | team |
+| **station.view_history** | — | own | all | all | team | team |
 | station.add | — | all | — | all | all | all |
 | station.contribute | — | all | — | all | all | all |
-| station.edit | — | own | — | all | zone | zone |
-| station.delete | — | own | — | all | zone | own |
-| station.review | — | — | — | all | zone | — |
-| station.contribute | — | all | — | all | all | all |
-| station.export | — | — | all | all | zone | — |
+| station.edit | — | own | — | all | team | team |
+| station.delete | — | own | — | all | team | own |
+| station.review | — | — | — | all | team | — |
+| **station.assign** | — | — | — | all | all（僅 gov） | all（僅 gov） |
+| station.export | — | — | all | all | team | — |
 | station.import | — | — | — | all | all | — |
+
+> **站點跟著指派的 team 走，不跟 zone（ADR-285）。** `team` ＝指派給當前身分那一隊的站點
+> （`stations.team_uuid`）；以 team 身分建立的站會自動指派給該隊，民眾建的站為未指派。
+> **active 的 gov team 身分在上表的 `team` 視同 `all`**——gov 管所有站點，不論指派給誰或未指派，
+> admin 與 member 皆然（`app/core/security.py:resolve_scope`，`GOV_TEAM_WIDENED_PERMS`）；ngo 的 `team`
+> 只到自己的站。`station.assign` 與 `work_zone.assign` 同一套：seed 發出、執行時擋掉非 gov team
+> （`require_gov_team`），差別是 `station.assign` 連 member 也有（gov member 可能是區域指揮官）。capability 目錄以 `team_gov_widened` / `team_gov_only` 兩個旗標標示這兩條
+> 規則，因為角色×capability 矩陣本身表達不了 team 類型的條件。
 
 > **⚠️ 本表每一欄是「該角色自己的 grant」。** 在 identity switching 之前，team 角色是疊加在
 > platform 角色之上的，所以空格不代表沒權限——聯集後仍可能有效。**那個讀法已經失效**：
@@ -96,7 +104,7 @@
 | ticket.export | — | — | all | all | zone | — |
 | ticket.import | — | — | — | all | all | — |
 
-> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
+> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
 
 ### 使用者 User
 
@@ -212,7 +220,7 @@
 
 `data_auditor` 與 `super_admin` 同時持有 `audit.view=all` 與 `ticket.view_pii=all`，因此自動看得到四層全部，**沒有任何特例程式**。
 
-> **團隊角色是 `zone` 不是 `team`。** ADR-049 把 `team_uuid` 從 `base_geometries` 移除後，`in_scope()` 的 TEAM 分支對 ticket/station 永遠回 `False`（`app/core/rbac_scopes.py:77`）——對地理資源發 `team` 等於發一個不成立的授權。
+> **通報單的團隊角色是 `zone` 不是 `team`。** ADR-049 把 `team_uuid` 從 `base_geometries` 移除後，`in_scope()` 的 TEAM 分支對 ticket 永遠回 `False`——對通報單發 `team` 等於發一個不成立的授權。**站點相反，是 `team`**：ADR-285 讓 `stations` 帶上指派的 `team_uuid`，站點不再用 zone。
 
 ### 「已定義、但目前無角色授予」的 capability（ahead-of-feature，ADR-050）
 下列 key 存在於目錄、但 seed 沒發給任何角色，等對應功能實作時才會接上 enforcement：
@@ -220,4 +228,4 @@
 （`ticket.export` 自功能 015 起已授予；`audit.view` 自功能 016 起首次真正被 enforcement 消費；`pre_departure.*` 自功能 007 起已接上 enforcement，並補上原本沒有的 `pre_departure.delete`。）
 
 ### 相關 ADR
-ADR-018（union）、ADR-019（兩軸/一人一 team，**身分部分被 010/ADR-068 取代**）、010/ADR-068·073·074（多 team 身分切換）、010/ADR-097（team 角色必須自給自足，`station.contribute`）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）。
+ADR-018（union）、ADR-019（兩軸/一人一 team，**身分部分被 010/ADR-068 取代**）、010/ADR-068·073·074（多 team 身分切換）、010/ADR-097（team 角色必須自給自足，`station.contribute`）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）、ADR-285（站點改為手動指派給單一 team，不跟 zone）。

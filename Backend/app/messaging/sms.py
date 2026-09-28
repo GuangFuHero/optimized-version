@@ -7,13 +7,13 @@ from app.core.config import settings
 
 logger = logging.getLogger("app.sms")
 
-# Sender identity required by Taiwan's 簡訊實名制 (in force since 2025-11-01). This is the registered
-# entity, NOT the product name — it MUST match what KotSMS approved for this account character for
-# character (full/half width, case, punctuation) or the carriers drop the message. The API still
-# answers statuscode=1 in that case, so a mismatch fails silently. Verified by live send on
-# 2026-08-15: bare identity, no 【】, arrives on the handset. Bodies stay Chinese-only and under
-# 70 chars so each send costs 1 point instead of 2.
-_SENDER_IDENTITY_ZH = "開放文化基金會"
+# Sender identity required by Taiwan's 簡訊實名制 (in force since 2025-11-01). It MUST match what
+# KotSMS approved for this account character for character (full/half width, case, punctuation) or
+# the carriers drop the message. The API still answers statuscode=1 in that case, so a mismatch
+# fails silently — only a live send to a handset proves it. Bare identity, no 【】. The account was
+# first approved as 開放文化基金會 (live-verified 2026-08-15) and re-approved as 島嶼守望 in
+# 2026-09. Bodies stay Chinese-only and under 70 chars so each send costs 1 point instead of 2.
+_SENDER_IDENTITY_ZH = "島嶼守望"
 
 
 class SmsSender(Protocol):

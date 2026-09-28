@@ -24,14 +24,14 @@ class DedupMutation:
     ) -> RecordDedupHintOutcomeResult:
         """Record the submitter's response to a duplicate hint. Only the submitter may call it.
 
-        For `entityKind: station`, the `*TaskUuid` input fields carry station uuids.
+        `candidateUuid`/`submittedUuid` are task uuids, or station uuids for `entityKind: station`.
         """
         pair, event_uuid = await dedup_service.record_hint_outcome(
             info.context["db"],
             actor=require_authenticated(info),
-            candidate_task_uuid=input.candidate_task_uuid,
+            candidate_uuid=input.candidate_uuid,
             outcome=input.outcome.value,
-            submitted_task_uuid=input.submitted_task_uuid,
+            submitted_uuid=input.submitted_uuid,
             entity_kind=entity_kind.value,
         )
         return RecordDedupHintOutcomeResult(

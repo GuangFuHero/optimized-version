@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.permissions import GOV_TEAM_ONLY_PERMS, PUBLIC_PERMS, Perm
+from app.core.permissions import GOV_TEAM_ONLY_PERMS, GOV_TEAM_WIDENED_PERMS, PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
 from app.models.auth import User
 from app.models.rbac import UserRoleAssign
@@ -65,6 +65,7 @@ def list_capabilities() -> CapabilityCatalogResponse:
                 action=action,
                 public=perm in PUBLIC_PERMS,
                 team_gov_only=perm in GOV_TEAM_ONLY_PERMS,
+                team_gov_widened=perm in GOV_TEAM_WIDENED_PERMS,
             )
         )
     return CapabilityCatalogResponse(

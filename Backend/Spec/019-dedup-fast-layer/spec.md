@@ -34,7 +34,7 @@ type TicketDedupHint { relatedTicketUuid: String!  relatedTaskUuid: String!  sim
 type DedupScoreComponent { name: String!  score: Float!  weight: Float!  passed: Boolean! }
 
 enum DedupHintOutcome { accepted_hint  ignored_hint }
-input RecordDedupHintOutcomeInput { candidateTaskUuid: String!  outcome: DedupHintOutcome!  submittedTaskUuid: String }
+input RecordDedupHintOutcomeInput { candidateUuid: String!  outcome: DedupHintOutcome!  submittedUuid: String }
 type RecordDedupHintOutcomeResult { auditEventUuid: String!  hintOutcome: String!  pairUuid: String }
 ```
 
@@ -48,8 +48,8 @@ type RecordDedupHintOutcomeResult { auditEventUuid: String!  hintOutcome: String
   rollback、回空。權限檢查在 fail-open 之外，仍然 403。
 - **沒有 `submittedAt`**：時間訊號一律用伺服器時鐘。
 - `taskName`／`taskDescription` 進 pg_trgm 前截斷到 200／2000 字元，不拒收。
-- **`recordDedupHintOutcome` 只能回報自己建立的 task**（actor 必須是 `submittedTaskUuid` 的建立者），
-  不 fail-open。`candidateTaskUuid` 就是 hint 的 `relatedTaskUuid`。配對卡的 `similarity`／`score_components`
+- **`recordDedupHintOutcome` 只能回報自己建立的 task**（actor 必須是 `submittedUuid` 的建立者），
+  不 fail-open。`candidateUuid` 就是 hint 的 `relatedTaskUuid`。配對卡的 `similarity`／`score_components`
   由後端重算，不收前端分數；重算時不套半徑與「還開著」的過濾。
 
 ---
@@ -130,5 +130,5 @@ enum DedupEntityKind { ticket_task  station }
 - 計分用 `STATION_FAST_LAYER_PARAMETERS`：送單那組參數把 `time_weight` 歸零，時間訊號整項不出現在
   `scoreComponents`。文字訊號比 `name || ' ' || description`，類型訊號比 `stations.type`。
 - `recordDedupHintOutcome` 的 `entityKind` 預設 `ticket_task`，不帶就跟 §1 完全相同；送 `station` 時
-  `candidateTaskUuid`／`submittedTaskUuid` 放據點 uuid，兩張表的 `entity_kind` 寫 `'station'`，
+  `candidateUuid`／`submittedUuid` 放據點 uuid，兩張表的 `entity_kind` 寫 `'station'`，
   權限換成 `station.add`。

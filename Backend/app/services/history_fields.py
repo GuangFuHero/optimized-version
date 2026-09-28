@@ -38,6 +38,7 @@ class Tier(StrEnum):
 
     PUBLIC = "public"  # any caller who got past *.view_history
     PII = "pii"  # ticket.view_pii AND in scope, else masked or withheld
+    DETAIL = "detail"  # ticket.view_detail AND in scope, else withheld (ADR-281/284)
     AUDIT = "audit"  # audit.view
 
 
@@ -47,9 +48,10 @@ class FieldSpec:
 
     `mask` applies only to PII: it renders an out-of-scope value as a partial reveal rather
     than dropping it, which reads as "get authorized to see this" instead of "no data". A
-    PII field with `mask=None` is withheld entirely when out of scope — that is the honest
-    outcome for values no masking function exists for (an address fragment, a coordinate),
-    since inventing one would fabricate plausible-looking location data.
+    locked field with `mask=None` is withheld entirely — that is the honest outcome for values
+    no masking function exists for (the triage answers on PII; an address fragment, a
+    coordinate or free text on DETAIL), since inventing one would fabricate plausible-looking
+    data.
     """
 
     tier: Tier
@@ -62,6 +64,10 @@ def _public() -> FieldSpec:
 
 def _pii(mask: Callable[[str | None], str | None] | None = None) -> FieldSpec:
     return FieldSpec(Tier.PII, mask)
+
+
+def _detail() -> FieldSpec:
+    return FieldSpec(Tier.DETAIL)
 
 
 def _audit() -> FieldSpec:
@@ -95,13 +101,13 @@ _ADDRESS_COLUMNS = (
     "county", "city", "lane", "alley", "no", "floor", "room",
     "pole_id", "pole_type", "pole_note",
     # Feature 018 (ADR-249) added these five to the same table, so they follow whatever tier
-    # the entity gives the rest of its address — PII on a ticket, public on a station.
+    # the entity gives the rest of its address — detail on a ticket, public on a station.
     "building_section", "space_description", "victim_space", "access_status", "landmark_note",
 )
 
 _TICKET_FIELDS = {
     "title": _public(),
-    "description": _public(),
+    "description": _detail(),
     "status": _public(),
     "priority": _public(),
     "task_type": _public(),
@@ -141,16 +147,20 @@ _STATION_FIELDS = {
     "is_temporary": _public(),
     "expires_at": _public(),
     "is_official": _public(),
+    # ADR-285: the second foreign key kept, beside the assignee (ADR-143). "Handed from team A
+    # to team B" is the event, and the service resolves it to the team's name. A team name is
+    # not PII, and which organisation runs a station is public on the station itself.
+    "team_uuid": _public(),
 }
 
 _TASK_FIELDS = {
     "task_type": _public(),
     "task_name": _public(),
-    "task_description": _public(),
+    "task_description": _detail(),
     "quantity": _public(),
     "status": _public(),
     "source": _public(),
-    "progress_note": _public(),
+    "progress_note": _detail(),
     "visibility": _public(),
     "moderation_status": _audit(),
     "review_note": _audit(),
@@ -161,7 +171,7 @@ _TASK_PROPERTY_FIELDS = {
     "property_value": _public(),
     "quantity": _public(),
     "status": _public(),
-    "comment": _public(),
+    "comment": _detail(),
 }
 
 _ASSIGNMENT_FIELDS = {
@@ -185,19 +195,19 @@ FIELD_TIERS: dict[tuple[str, str], dict[str, FieldSpec]] = {
     # unreadable and a decoded coordinate is location data. The tier decides whether the
     # *fact* that it moved is visible at all: a relocated shelter is public knowledge, a
     # relocated help request points at somebody's home.
-    ("ticket", "base_geometries"): {"geometry": _pii()},
+    ("ticket", "base_geometries"): {"geometry": _detail()},
     ("station", "base_geometries"): {"geometry": _public()},
     ("ticket", "tickets"): _TICKET_FIELDS,
     ("ticket", "ticket_tasks"): _TASK_FIELDS,
     ("ticket", "task_properties"): _TASK_PROPERTY_FIELDS,
     ("ticket", "task_assignments"): _ASSIGNMENT_FIELDS,
-    # ADR-142 (revised): the requester's address, gated like their phone number. This makes
-    # the timeline stricter than the single-resource GraphQL query, where
-    # `secondary_location` has no PII gate at all — deliberately, rather than reproducing
-    # that gap here.
+    # ADR-284: the requester's address, gated on `ticket.view_detail` like
+    # `TicketType.secondaryLocation` (ADR-281) — the timeline must not be a second way in.
+    # `location_type` stays public on purpose: it only says address vs. pole, which locates
+    # nothing, and without it a row of withheld fields would not say what kind of place moved.
     ("ticket", "secondary_locations"): {
         "location_type": _public(),
-        **{column: _pii() for column in _ADDRESS_COLUMNS},
+        **{column: _detail() for column in _ADDRESS_COLUMNS},
     },
     ("station", "stations"): _STATION_FIELDS,
     ("station", "station_properties"): _STATION_PROPERTY_FIELDS,
