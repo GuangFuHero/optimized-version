@@ -14,9 +14,12 @@ from app.graphql.shared import secondary_location_to_dict
 from app.graphql.tickets.types import (
     CreateTaskPropertyInput,
     CreateTicketInput,
+    CreateTicketResult,
     CreateTicketTaskInput,
+    DuplicateSuspected,
     TaskAssignmentType,
     TaskPropertyType,
+    TicketCreated,
     TicketDisasterDetailInput,
     TicketDisasterDetailType,
     TicketTaskType,
@@ -27,6 +30,7 @@ from app.graphql.tickets.types import (
     UpdateTicketTaskInput,
 )
 from app.services import ticket as ticket_service
+from app.services.dedup_submission import Suspected, submit_ticket
 
 
 @strawberry.type
@@ -34,13 +38,24 @@ class RequestMutation:
     """Mutations for creating and updating disaster relief support tickets."""
 
     @strawberry.mutation
-    async def create_ticket(self, info: strawberry.types.Info, input: CreateTicketInput) -> TicketType:
-        """Create a new support ticket with location, contact info, and priority.
+    async def create_ticket(
+        self,
+        info: strawberry.types.Info,
+        input: CreateTicketInput,
+        acknowledged_duplicate_of: str | None = None,
+    ) -> CreateTicketResult:
+        """Create a support ticket — unless it looks like an open ticket nearby.
 
-        Requires ticket.add permission. Returns the created TicketType.
+        Two-phase (Spec 020, ADR-296). The first call either creates (`TicketCreated`) or, when
+        an open ticket nearby looks like the same request, creates nothing and returns
+        `DuplicateSuspected` with that ticket's uuid. To file anyway, call again with the same
+        input and `acknowledgedDuplicateOf` = that uuid: the ticket is created without a second
+        check and the pair is recorded for review. A failing duplicate check never blocks:
+        the ticket is created as if nothing matched. Requires ticket.add.
         """
-        ticket = await ticket_service.create_ticket(
+        result = await submit_ticket(
             info.context["db"], actor=require_authenticated(info),
+            acknowledged_duplicate_of=acknowledged_duplicate_of,
             geometry=input.geometry, title=input.title, description=input.description,
             contact_name=input.contact_name, contact_email=input.contact_email,
             contact_phone=input.contact_phone, priority=input.priority,
@@ -58,7 +73,9 @@ class RequestMutation:
                 else None
             ),
         )
-        return TicketType.from_model(ticket)
+        if isinstance(result, Suspected):
+            return DuplicateSuspected(related_ticket_uuid=result.related_uuid)
+        return TicketCreated(ticket=TicketType.from_model(result.entity))
 
     @strawberry.mutation
     async def update_ticket(

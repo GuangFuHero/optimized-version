@@ -842,6 +842,12 @@ async def submit_ticket(db, *, actor: User, acknowledged_duplicate_of: str | Non
 
 ## Task 11: GraphQL
 
+> **實作時調整（2026-09-28）**：
+> - **Task 11 與 Task 12 合成一個 commit**。union 一上，既有的 `createTicket` / `createStation` 測試查詢全部失效，
+>   分開 commit 會讓中間那個 commit 全套件紅。
+> - `tests/test_graphql/test_dedup.py`、`test_dedup_station.py` **在這裡刪**（原排 Task 13）：它們測的 `graphql/dedup/` 在這一步移除。
+> - 既有測試實際要改的是 13 個查詢、19 個讀取點（原估 53 是 grep 行數），用平衡括號解析機械式改寫。
+
 **Files:** Modify `app/graphql/tickets/types.py`, `app/graphql/tickets/mutations.py`, `app/graphql/geo/types.py`,
 `app/graphql/geo/mutations.py`, `app/graphql/schema.py`；Delete `app/graphql/dedup/`
 
@@ -912,7 +918,7 @@ def _no_dedup_hints(request, monkeypatch):
 
 ## Task 13: 收尾
 
-- [ ] 刪 `tests/test_graphql/test_dedup.py`、`tests/test_graphql/test_dedup_station.py`（內容已由 Task 8、11 取代）
+- [x] ~~刪 `tests/test_graphql/test_dedup.py`、`test_dedup_station.py`~~（已在 Task 11 刪）
 - [ ] `Spec/019-dedup-fast-layer/spec.md` 開頭加註：§1 GraphQL、§3 計分位置、§4 的 GraphQL 已被 Spec 020 取代
 - [ ] `grep -rn "dedup_scoring\|find_duplicate_hints\|record_hint_outcome\|score_components" app tests` 為零
 - [ ] `ruff==0.11.0 check` 與 `ruff format --check` 在本票改動的檔案上乾淨

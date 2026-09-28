@@ -4,6 +4,7 @@ import asyncio
 import enum
 from datetime import datetime
 from types import SimpleNamespace
+from typing import Annotated
 from uuid import UUID
 
 import strawberry
@@ -204,6 +205,29 @@ class StationType:
             _contact_phone_raw=m.contact_phone,
             _geometry_raw=m.geometry,
         )
+
+
+@strawberry.type
+class StationCreated:
+    """`createStation` registered the station."""
+
+    station: StationType
+
+
+@strawberry.type
+class DuplicateStationSuspected:
+    """`createStation` registered nothing: a serving station nearby looks like the same one.
+
+    Show it to the submitter. To register anyway, call `createStation` again with
+    `acknowledgedDuplicateOf` set to `relatedStationUuid` (Spec 020, ADR-296).
+    """
+
+    related_station_uuid: str = strawberry.field(description="疑似重複的既有據點 uuid")
+
+
+CreateStationResult = Annotated[
+    StationCreated | DuplicateStationSuspected, strawberry.union("CreateStationResult")
+]
 
 
 @strawberry.type

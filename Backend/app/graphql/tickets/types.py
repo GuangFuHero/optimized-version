@@ -4,6 +4,7 @@ import asyncio
 import enum
 from datetime import datetime
 from types import SimpleNamespace
+from typing import Annotated
 from uuid import UUID
 
 import strawberry
@@ -733,6 +734,27 @@ class TicketType:
             _created_by_raw=m.created_by,
             _coarse_resolution=coarse_resolution,
         )
+
+
+@strawberry.type
+class TicketCreated:
+    """`createTicket` created the ticket."""
+
+    ticket: TicketType
+
+
+@strawberry.type
+class DuplicateSuspected:
+    """`createTicket` created nothing: an open ticket nearby looks like the same request.
+
+    Show it to the submitter. To file anyway, call `createTicket` again with
+    `acknowledgedDuplicateOf` set to `relatedTicketUuid` (Spec 020, ADR-296).
+    """
+
+    related_ticket_uuid: str = strawberry.field(description="疑似重複的既有求助單 uuid")
+
+
+CreateTicketResult = Annotated[TicketCreated | DuplicateSuspected, strawberry.union("CreateTicketResult")]
 
 
 @strawberry.type
