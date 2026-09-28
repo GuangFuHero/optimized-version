@@ -6,6 +6,7 @@ each owns its own authz (require_scope) + validation + persistence so resolvers 
 secondary_location) lives here.
 """
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -86,6 +87,106 @@ async def notify_operational_status_change(
     )
 
 
+@dataclass(frozen=True)
+class StationFields:
+    """A station that passed authz and validation but is not written yet (Spec 020, ADR-299)."""
+
+    point: dict
+    values: dict
+    secondary_location: dict | None
+
+
+async def validate_station(
+    db: AsyncSession,
+    *,
+    actor: User,
+    geometry: dict,
+    type: str | None,
+    name: str | None,
+    description: str | None,
+    op_hour: str | None,
+    level: int,
+    comment: str | None,
+    source: str,
+    visibility: str,
+    contact_name: str | None = None,
+    contact_email: str | None = None,
+    contact_phone: str | None = None,
+    operational_status: str = "active",
+    secondary_location: dict | None = None,
+) -> StationFields:
+    """Checkpoint 1 plus every input check `create_station` makes, without writing anything."""
+    await require_scope(actor, Perm.STATION_ADD, db)
+    validate_point(geometry)
+    contacts = normalize_contact_fields(
+        {
+            "contact_name": contact_name,
+            "contact_email": contact_email,
+            "contact_phone": contact_phone,
+        }
+    )
+    return StationFields(
+        point=geometry,
+        values={
+            "type": type,
+            "name": name,
+            "description": description,
+            "op_hour": op_hour,
+            "level": level,
+            "comment": comment,
+            "source": source,
+            "visibility": visibility,
+            # Spread the normalized values, never the raw arguments: the length check ran
+            # against the stripped strings, so storing the originals is what round 3 of the
+            # PR #40 review found leaking the INSERT.
+            **contacts,
+            "operational_status": operational_status,
+        },
+        secondary_location=secondary_location,
+    )
+
+
+async def insert_station(db: AsyncSession, *, actor: User, fields: StationFields) -> Station:
+    """Write a validated station and its address, and flush. The caller owns the commit."""
+    station = await station_repository.add(
+        db,
+        obj_in={
+            "geometry": geojson_to_geom(fields.point),
+            "created_by": str(actor.uuid),
+            **fields.values,
+            # Stamped on every operational_status assignment, including creation, so
+            # analytics' freshness-trend query never has to special-case a null here.
+            "status_changed_at": datetime.now(UTC),
+        },
+    )
+    if fields.secondary_location:
+        await secondary_location_repository.add(
+            db, obj_in={"geometry_uuid": str(station.uuid), **fields.secondary_location}
+        )
+    return station
+
+
+async def announce_station_created(db: AsyncSession, *, station: Station, actor_uuid: str) -> None:
+    """Send the resource_station_updated notice for a committed new station.
+
+    Every path that creates a station calls this after its commit, so the GraphQL two-phase
+    create (Spec 020) notifies exactly like the batch import does.
+    """
+    recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, str(station.uuid))
+    await NotificationService.dispatch(
+        db,
+        event_type="resource_station_updated",
+        title=f"🏢 新建物資資源站：{station.name or '物資站'}",
+        body=f"新建物資資源站「{station.name or station.uuid}」，請留意物資與避難整備狀況。",
+        priority="medium",
+        actor_uuid=actor_uuid,
+        ref_type="station",
+        ref_uuid=station.uuid,
+        explicit_recipients=recipients,
+    )
+    await db.refresh(station)
+
+
 async def create_station(
     db: AsyncSession,
     *,
@@ -107,66 +208,33 @@ async def create_station(
 ) -> Station:
     """Create a station (checkpoint 1 only — a new station has no prior owner to scope-check).
 
-    Owns the two-table station + secondary_location orchestration and the single commit
-    that makes it atomic.
+    Validate, insert, one commit that makes the station + address pair atomic, then notify.
+    Batch import calls this; the interactive GraphQL path goes through
+    `dedup_submission.submit_station` (Spec 020, ADR-299).
     """
-    await require_scope(actor, Perm.STATION_ADD, db)
-    validate_point(geometry)
     actor_uid = actor.uuid
-    contacts = normalize_contact_fields(
-        {
-            "contact_name": contact_name,
-            "contact_email": contact_email,
-            "contact_phone": contact_phone,
-        }
-    )
-
-    station = await station_repository.add(
+    fields = await validate_station(
         db,
-        obj_in={
-            "geometry": geojson_to_geom(geometry),
-            "created_by": str(actor_uid),
-            "type": type,
-            "name": name,
-            "description": description,
-            "op_hour": op_hour,
-            "level": level,
-            "comment": comment,
-            "source": source,
-            "visibility": visibility,
-            # Spread the normalized values, never the raw arguments: the length check ran
-            # against the stripped strings, so storing the originals is what round 3 of the
-            # PR #40 review found leaking the INSERT.
-            **contacts,
-            "operational_status": operational_status,
-            # Stamped on every operational_status assignment, including creation, so
-            # analytics' freshness-trend query never has to special-case a null here.
-            "status_changed_at": datetime.now(UTC),
-        },
+        actor=actor,
+        geometry=geometry,
+        type=type,
+        name=name,
+        description=description,
+        op_hour=op_hour,
+        level=level,
+        comment=comment,
+        source=source,
+        visibility=visibility,
+        contact_name=contact_name,
+        contact_email=contact_email,
+        contact_phone=contact_phone,
+        operational_status=operational_status,
+        secondary_location=secondary_location,
     )
-    if secondary_location:
-        await secondary_location_repository.add(
-            db, obj_in={"geometry_uuid": str(station.uuid), **secondary_location}
-        )
-
+    station = await insert_station(db, actor=actor, fields=fields)
     await db.commit()
     await db.refresh(station)
-
-    # 觸發 resource_station_updated 通知
-    recipients = await NotificationRecipientResolver.resolve_gov_and_zone_ngo(db, str(station.uuid))
-    await NotificationService.dispatch(
-        db,
-        event_type="resource_station_updated",
-        title=f"🏢 新建物資資源站：{station.name or '物資站'}",
-        body=f"新建物資資源站「{station.name or station.uuid}」，請留意物資與避難整備狀況。",
-        priority="medium",
-        actor_uuid=actor_uid,
-        ref_type="station",
-        ref_uuid=station.uuid,
-        explicit_recipients=recipients,
-    )
-    await db.refresh(station)
-
+    await announce_station_created(db, station=station, actor_uuid=actor_uid)
     return station
 
 

@@ -632,6 +632,8 @@ async def create_ticket(db, *, actor, **kwargs) -> Tickets:   # 簽章保持原�
 
   原本 docstring 與註解（`contact_name` NOT NULL、`secondary_location` 的 joined-table 說明）跟著各自的段落搬，不要丟
 - [ ] `station.py` 比照：`StationFields`、`validate_station`、`insert_station`、`create_station`
+- [ ] **`create_station` commit 後會發 `resource_station_updated` 通知**：抽成 `announce_station_created(db, *, station, actor_uuid)`，
+  `create_station` 與 Task 10 的 `submit_station` 都在 commit 後呼叫它，否則 GraphQL 建站點會少發通知
 - [ ] **RED → GREEN**：`tests/test_create_split.py`（真 DB），ticket／station 各一組
   - [ ] `validate_*` 對無權限、非法 geometry、未知 `disaster_types`、過長聯絡欄位各自拋錯，**且 DB 無任何新列**
   - [ ] `validate_*` 成功時也**不寫任何列**
@@ -815,7 +817,7 @@ async def submit_ticket(db, *, actor: User, acknowledged_duplicate_of: str | Non
     return Created(ticket)
 ```
 
-- `submit_station` 比照（`validate_station` / `insert_station` / `station_submission`）
+- `submit_station` 比照（`validate_station` / `insert_station` / `station_submission`）；**commit 後呼叫 `announce_station_created`**（建單路徑的 `create_ticket` 沒有通知，不需要）
 - 確認後送出**不跑 `find_match`**（ADR-296）
 
 測試（真 DB，stub engine 控制命中與否）：
