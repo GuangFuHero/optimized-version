@@ -1,3 +1,3 @@
-export default function AdminUsersPage() {
-  return <></>;
-}
+import { AdminPlaceholderPage } from '@rescue-frontend/modules';
+
+export default AdminPlaceholderPage;
