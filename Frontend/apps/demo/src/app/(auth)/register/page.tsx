@@ -1,8 +1,6 @@
-import { AuthShell } from '@rescue-frontend/modules';
+import { AuthShell, RegisterFormClient } from '@rescue-frontend/modules';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-
-import RegisterForm from '../../../modules/auth/login/register-form.client';
 
 export const metadata: Metadata = {
   title: '註冊 - 島嶼守望',
@@ -13,7 +11,7 @@ export default function RegisterPage() {
   return (
     <Suspense fallback={null}>
       <AuthShell>
-        <RegisterForm />
+        <RegisterFormClient />
       </AuthShell>
     </Suspense>
   );

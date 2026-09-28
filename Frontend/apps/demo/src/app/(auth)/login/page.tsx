@@ -1,7 +1,6 @@
-import { AuthShell } from '@rescue-frontend/modules';
+import { AuthShell, LoginFormClient } from '@rescue-frontend/modules';
 import { Metadata } from 'next';
 import { Suspense } from 'react';
-import LoginForm from '../../../modules/auth/login/login-form.client';
 
 // TODO: Update the footer links when the actual pages are ready
 // const FOOTER_LINKS = [
@@ -28,7 +27,7 @@ export default function Index() {
   return (
     <Suspense fallback={null}>
       <AuthShell>
-        <LoginForm />
+        <LoginFormClient />
 
         {/* <AuthFooterLinks items={FOOTER_LINKS} /> */}
       </AuthShell>
