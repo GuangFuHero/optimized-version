@@ -15,7 +15,7 @@ import {
   normalizeIdentityValue,
   validateIdentityValue,
   type AuthIdentityType,
-} from '@rescue-frontend/modules';
+} from './utils/identity-validation';
 import { resetPasswordAsync } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
@@ -37,7 +37,7 @@ interface FieldErrors {
  * 重設密碼. From 忘記密碼 the address carries the account the code went to, so the page does not ask
  * for it again; opened on its own it does, since the backend needs it.
  */
-export default function ResetPasswordFormClient() {
+export function ResetPasswordFormClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // The page the sign-in should end on, carried back to login (or round again for a new code).

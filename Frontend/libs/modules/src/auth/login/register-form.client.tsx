@@ -45,7 +45,7 @@ interface PendingRegistration {
   normalizedIdentity: string;
 }
 
-export default function RegisterFormClient() {
+export function RegisterFormClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // The page the login page was asked to return to, carried here — a guest who pressed 「登入後接」

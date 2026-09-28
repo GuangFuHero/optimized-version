@@ -1,10 +1,9 @@
-import { getBackendGraphqlUrl } from '../../../lib/server-backend-auth';
 import {
   applyBackendAuthResponseCookies,
   expireSessionResponse,
   resolveBackendAuthTokenAsync,
-} from '../../../lib/server-backend-auth';
-import { SITE_REALM_HEADERS } from '../../../lib/site-realm';
+} from '@rescue-frontend/modules/server';
+import { SITE_REALM_HEADERS } from '@rescue-frontend/modules/server';
 import { isSessionExpired } from '@rescue-frontend/modules/session';
 import { NextResponse, type NextRequest } from 'next/server';
 

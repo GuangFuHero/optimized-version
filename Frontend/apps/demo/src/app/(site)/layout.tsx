@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
-import { PortalSiteShell } from '../../modules/auth/session/site-shell.client';
+import { PortalSiteShell } from '@rescue-frontend/modules';
 
 export const metadata: Metadata = {
   title: '島嶼守望 - 救災前台',

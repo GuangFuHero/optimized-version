@@ -19,7 +19,7 @@ import {
   normalizeIdentityValue,
   validateIdentityValue,
   type AuthIdentityType,
-} from '@rescue-frontend/modules';
+} from '../login/utils/identity-validation';
 import {
   addContactAsync,
   changePasswordAsync,
@@ -73,7 +73,7 @@ function SecuritySection({
   );
 }
 
-export default function AccountSecurityClient({
+export function AccountSecurityClient({
   currentIdentity,
   currentProvider,
 }: AccountSecurityClientProps) {
