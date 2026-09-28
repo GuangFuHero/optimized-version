@@ -85,11 +85,9 @@ class TicketDedupCheckInput:
 class RecordDedupHintOutcomeInput:
     """What the submitter did about a hint, and which tasks it was about."""
 
-    candidate_task_uuid: str = strawberry.field(
-        description="提示指向的既有 task uuid（hint 的 relatedTaskUuid）"
-    )
+    candidate_uuid: str = strawberry.field(description="提示指向的既有 task uuid（hint 的 relatedTaskUuid）")
     outcome: DedupHintOutcome = strawberry.field(description="使用者對提示的選擇")
-    submitted_task_uuid: str | None = strawberry.field(
+    submitted_uuid: str | None = strawberry.field(
         default=None,
         description="照樣送出時新建的 task uuid；接受提示而沒有建立 task 時省略（不會產生配對卡）",
     )

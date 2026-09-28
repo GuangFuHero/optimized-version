@@ -289,7 +289,7 @@ async def test_submitting_anyway_writes_a_dup_ignored_task_pair_and_an_event(cli
     _, [submitted] = await _seed_ticket(user_uuid, PUMP | {"age_min": 0.0})
 
     body = await _record(
-        client, token, candidateTaskUuid=original, submittedTaskUuid=submitted, outcome="ignored_hint"
+        client, token, candidateUuid=original, submittedUuid=submitted, outcome="ignored_hint"
     )
     result = body["data"]["recordDedupHintOutcome"]
     assert result["hintOutcome"] == "ignored_hint"
@@ -324,7 +324,7 @@ async def test_accepting_the_hint_records_an_event_with_no_pair(client, login_us
     user_uuid, token = login_user_auth
     _, [original] = await _seed_ticket(user_uuid, PUMP)
 
-    result = (await _record(client, token, candidateTaskUuid=original, outcome="accepted_hint"))["data"][
+    result = (await _record(client, token, candidateUuid=original, outcome="accepted_hint"))["data"][
         "recordDedupHintOutcome"
     ]
     assert (result["hintOutcome"], result["pairUuid"]) == ("accepted_hint", None)
@@ -343,7 +343,7 @@ async def test_accepting_the_hint_records_an_event_with_no_pair(client, login_us
 async def test_recording_an_outcome_for_a_missing_task_errors(client, login_user_auth):
     """Unlike the check, the outcome write is not fail-open — a bad uuid is a real error."""
     _, token = login_user_auth
-    body = await _record(client, token, candidateTaskUuid=str(uuid_mod.uuid4()), outcome="ignored_hint")
+    body = await _record(client, token, candidateUuid=str(uuid_mod.uuid4()), outcome="ignored_hint")
     assert body["errors"][0]["message"] == "Task not found"
 
 
@@ -356,7 +356,7 @@ async def test_only_the_submitter_may_record_their_own_outcome(client, login_use
     _, [submitted] = await _seed_ticket(owner_uuid, PUMP | {"age_min": 0.0})
 
     body = await _record(
-        client, other_token, candidateTaskUuid=original, submittedTaskUuid=submitted, outcome="ignored_hint"
+        client, other_token, candidateUuid=original, submittedUuid=submitted, outcome="ignored_hint"
     )
     assert body["data"] is None
     assert "Permission Denied" in body["errors"][0]["message"]
@@ -392,7 +392,7 @@ async def test_an_existing_card_is_flipped_to_dup_ignored_in_place(
         )
 
     body = await _record(
-        client, token, candidateTaskUuid=original, submittedTaskUuid=submitted, outcome="ignored_hint"
+        client, token, candidateUuid=original, submittedUuid=submitted, outcome="ignored_hint"
     )
     pair_uuid = body["data"]["recordDedupHintOutcome"]["pairUuid"]
     assert await _all_pairs() == [(pair_uuid, "dup_ignored", True, "ignored_hint")]

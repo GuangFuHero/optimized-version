@@ -100,9 +100,9 @@ async def record_hint_outcome(
     db: AsyncSession,
     *,
     actor: User,
-    candidate_task_uuid: str,
+    candidate_uuid: str,
     outcome: str,
-    submitted_task_uuid: str | None = None,
+    submitted_uuid: str | None = None,
 ) -> tuple[DuplicatePair | None, str]:
     """Record the submitter's response to a hint. Returns (pair card or None, audit event uuid).
 
@@ -116,14 +116,14 @@ async def record_hint_outcome(
     """
     if outcome not in PAIR_HINT_OUTCOMES:
         raise ValueError(f"Unknown dedup hint outcome: {outcome}")
-    candidate = await _get_task(db, candidate_task_uuid)
+    candidate = await _get_task(db, candidate_uuid)
     accepted = outcome == "accepted_hint"
 
     pair = score = None
-    if not submitted_task_uuid:
+    if not submitted_uuid:
         await require_scope(actor, Perm.TICKET_ADD, db)
     else:
-        submitted = await _get_task(db, submitted_task_uuid)
+        submitted = await _get_task(db, submitted_uuid)
         submitted_ticket = await _get_ticket(db, submitted.ticket_uuid)
         await require_scope(actor, Perm.TICKET_ADD, db, resource=submitted_ticket)
         if str(submitted.created_by) != str(actor.uuid):
@@ -144,7 +144,7 @@ async def record_hint_outcome(
             "event_type": "hint_accepted" if accepted else "ignored_by_submitter",
             "pair_uuid": str(pair.uuid) if pair else None,
             "primary_uuid": str(candidate.uuid),
-            "duplicate_uuid": submitted_task_uuid,
+            "duplicate_uuid": submitted_uuid,
             "actor_uuid": str(actor.uuid),
             "source_layer": "fast",
             "decision_reason": outcome,

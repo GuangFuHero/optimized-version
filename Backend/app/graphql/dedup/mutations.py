@@ -19,9 +19,9 @@ class DedupMutation:
         pair, event_uuid = await dedup_service.record_hint_outcome(
             info.context["db"],
             actor=require_authenticated(info),
-            candidate_task_uuid=input.candidate_task_uuid,
+            candidate_uuid=input.candidate_uuid,
             outcome=input.outcome.value,
-            submitted_task_uuid=input.submitted_task_uuid,
+            submitted_uuid=input.submitted_uuid,
         )
         return RecordDedupHintOutcomeResult(
             audit_event_uuid=event_uuid,
