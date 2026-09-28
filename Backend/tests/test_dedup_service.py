@@ -55,12 +55,12 @@ def retrieval(monkeypatch):
 
 
 async def _check(db=None, **overrides):
-    """Run the pre-submit check with a fixed query ticket."""
+    """Run the pre-submit check for a fixed task filed at POINT."""
     fields = {
         "geometry": POINT,
-        "title": "民生街淹水需要抽水機",
-        "description": "一樓積水",
         "task_type": "rescue",
+        "task_name": "民生街淹水需要抽水機",
+        "task_description": "一樓積水",
     }
     return await dedup_service.find_duplicate_hints(db or FakeSession(), **(fields | overrides))
 
@@ -93,7 +93,7 @@ async def test_only_the_top_candidate_is_returned(retrieval):
     ],
 )
 async def test_no_hint_below_the_threshold_or_with_no_candidates(retrieval, candidates):
-    """A merely-nearby ticket, or nothing at all, returns an empty list."""
+    """A merely-nearby task, or nothing at all, returns an empty list."""
     retrieval.result = candidates
     assert await _check() == []
 
@@ -139,11 +139,11 @@ async def test_unusable_geometry_returns_no_hint(retrieval, bad):
 async def test_oversized_text_is_truncated_not_refused(retrieval):
     """A giant description still gets a hint — the text handed to pg_trgm is just bounded."""
     retrieval.result = [DedupCandidate("near", distance_m=1.0, age_min=1.0, text_similarity=0.9)]
-    hints = await _check(title="淹" * 500, description="水" * 9000)
+    hints = await _check(task_name="淹" * 500, task_description="水" * 9000)
     assert len(hints) == 1
     assert (
         len(retrieval.kwargs["query_text"])
-        == dedup_service.TITLE_MAX_CHARS + 1 + dedup_service.DESCRIPTION_MAX_CHARS
+        == dedup_service.NAME_MAX_CHARS + 1 + dedup_service.DESCRIPTION_MAX_CHARS
     )
 
 

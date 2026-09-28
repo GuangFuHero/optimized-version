@@ -87,10 +87,13 @@ async def _zoned_team(db) -> Team:
     return team
 
 
-async def _station(db, *, name: str, point: Point, creator: User, quantity: int | None = None) -> Station:
+async def _station(
+    db, *, name: str, point: Point, creator: User, quantity: int | None = None, team: Team | None = None
+) -> Station:
     station = Station(
         geometry=from_shape(point, srid=4326),
         created_by=str(creator.uuid),
+        team_uuid=team.uuid if team is not None else None,
         type="shelter",
         name=name,
         level=0,
@@ -205,21 +208,52 @@ async def test_station_export_writes_the_point_as_latitude_and_longitude(db):
 
 
 @pytest.mark.asyncio
-async def test_zone_scoped_export_only_reaches_the_team_s_own_area(db):
-    """A team admin's file must contain its responsibility area and nothing else (ADR-111)."""
+async def test_zone_scoped_ticket_export_only_reaches_the_team_s_own_area(db):
+    """A team admin's ticket file must contain its responsibility area and nothing else (ADR-111).
+
+    Tickets, not stations: stations follow the team they are assigned to since ADR-285 (see
+    test_team_scoped_export_follows_station_assignment below).
+    """
     await _configs(db)
     team = await _zoned_team(db)
     actor = User(name="TeamAdmin")
     author = User(name="Someone")
     db.add_all([actor, author])
     await db.flush()
-    await _grant(db, actor, Perm.STATION_EXPORT, "zone", "zoned-exporter", team=team)
-    await _station(db, name="區內站", point=IN_ZONE, creator=author)
-    await _station(db, name="區外站", point=OUT_OF_ZONE, creator=author)
+    await _grant(db, actor, Perm.TICKET_EXPORT, "zone", "zoned-exporter", team=team)
+    await _ticket_with_task(db, title="區內", point=IN_ZONE, creator=author)
+    await _ticket_with_task(db, title="區外", point=OUT_OF_ZONE, creator=author)
+
+    table = _parse(await export_tickets(db, actor=actor, task_type="rescue"))
+
+    assert [row["title"] for row in table.rows] == ["區內"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("exporter_type", "expected"),
+    [("ngo", {"本隊站"}), ("gov", {"本隊站", "他隊站", "未指派站"})],
+    ids=["ngo-own-stations", "gov-every-station"],
+)
+async def test_team_scoped_export_follows_station_assignment(db, exporter_type, expected):
+    """ADR-285: `team` reaches the stations assigned to the team; for gov it widens to all."""
+    await _configs(db)
+    mine = Team(name="Mine", type=exporter_type)
+    other = Team(name="Other", type="ngo")
+    actor = User(name="TeamAdmin")
+    author = User(name="Someone")
+    db.add_all([mine, other, actor, author])
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "team", "team-exporter", team=mine)
+    await _station(db, name="本隊站", point=IN_ZONE, creator=author, team=mine)
+    await _station(db, name="他隊站", point=IN_ZONE, creator=author, team=other)
+    await _station(db, name="未指派站", point=IN_ZONE, creator=author)
 
     table = _parse(await export_stations(db, actor=actor, station_type="shelter"))
 
-    assert [row["name"] for row in table.rows] == ["區內站"]
+    # A set: all three rows share one transaction's now(), so their created_at order is a tie.
+    assert {row["name"] for row in table.rows} == expected
+    assert len(table.rows) == len(expected)
 
 
 @pytest.mark.asyncio

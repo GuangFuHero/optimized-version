@@ -12,7 +12,7 @@ os.environ["ENV"] = "testing"
 import pytest
 from fastapi import HTTPException
 from geoalchemy2.shape import from_shape
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point
 from sqlalchemy import func, select
 
 from app.core.permissions import Perm
@@ -23,7 +23,7 @@ from app.models.property_config import StationPropertyConfig
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import StationProperty
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team
 from app.services.bulk_columns import DYNAMIC_PREFIX
 from app.services.bulk_export import export_stations
 from app.services.bulk_import import (
@@ -35,8 +35,6 @@ from app.services.bulk_import import (
 from tests.conftest import acting_as
 
 IN_ZONE = Point(121.50, 25.00)
-OUT_OF_ZONE = Point(121.90, 25.40)
-ZONE_POLYGON = Polygon([(121.4, 24.9), (121.6, 24.9), (121.6, 25.1), (121.4, 25.1)])
 
 CAPACITY = f"{DYNAMIC_PREFIX}capacity_total"
 HEADERS = ("uuid", "name", "type", "comment", "latitude", "longitude", "county", "city", CAPACITY)
@@ -57,15 +55,16 @@ def _file(rows) -> tuple[bytes, str]:
     return write_csv(HEADERS, rows), "stations.csv"
 
 
-async def _grant(db, user: User, *perms_and_scopes) -> None:
-    """Give `user` one platform identity holding all of `perms_and_scopes`.
+async def _grant(db, user: User, *perms_and_scopes, team: Team | None = None) -> None:
+    """Give `user` one identity holding all of `perms_and_scopes` — in `team` when given.
 
     One role, not one per permission. Since feature 010 only the **active identity's** grants
     count (`get_user_permissions` returns {} for `identity=None`), so a user wearing five
     single-permission roles would resolve to whichever one is active and none of the rest.
     `acting_as` then attaches the identity a real request would have resolved from its token.
     """
-    role = Role(name=f"bulk-tests-{user.name}", kind="platform")
+    kind = "team" if team is not None else "platform"
+    role = Role(name=f"bulk-tests-{user.name}", kind=kind)
     db.add(role)
     await db.flush()
     for perm, scope in perms_and_scopes:
@@ -80,15 +79,15 @@ async def _grant(db, user: User, *perms_and_scopes) -> None:
             RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope)
         )
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid,
-                          team_uuid=None, role_kind="platform"))
+                          team_uuid=team.uuid if team is not None else None, role_kind=kind))
     # Before the commit: `expire_on_commit` is True on this fixture, so reading `role.uuid`
     # afterwards would lazily reload it and raise MissingGreenlet under asyncio.
-    acting_as(user, role)
+    acting_as(user, role, team)
     await db.commit()
 
 
-async def _importer(db, *, scope="all") -> User:
-    """A user holding everything a station import needs (ADR-110/111)."""
+async def _importer(db, *, scope="all", team: Team | None = None) -> User:
+    """A user holding everything a station import needs (ADR-110/111), acting in `team` if given."""
     actor = User(name="Importer")
     db.add(actor)
     await db.flush()
@@ -99,6 +98,7 @@ async def _importer(db, *, scope="all") -> User:
         (Perm.STATION_EDIT, scope),
         (Perm.STATION_CONTRIBUTE, "all"),
         (Perm.STATION_EXPORT, "all"),
+        team=team,
     )
     return actor
 
@@ -336,44 +336,50 @@ async def test_importing_the_same_file_twice_changes_nothing_the_second_time(db)
 
 
 @pytest.mark.asyncio
-async def test_a_zone_scoped_importer_cannot_update_outside_its_area(db):
-    """Import is not a way around the per-row scope check (ADR-110)."""
+async def test_a_team_scoped_importer_cannot_update_another_teams_station(db):
+    """Import is not a way around the per-row scope check (ADR-110, ADR-285).
+
+    Both halves in one file: the importer's own station takes the update, another team's does
+    not. Without the first half a check that always failed would pass too — which is how the
+    zone version of this test went vacuous: it set a `users.team_uuid` that no longer exists,
+    so the importer had no team and every row failed whatever the scope check did.
+    """
     await _configs(db)
-    team = Team(name="Hualien", type="gov")
-    assigner = User(name="assigner")
-    zone = WorkZone(name="Z", geometry=from_shape(ZONE_POLYGON, srid=4326))
-    db.add_all([team, assigner, zone])
+    mine = Team(name="Mine", type="ngo")  # ngo: a gov team's `team` scope widens to `all`
+    other = Team(name="Other", type="ngo")
+    author = User(name="author")
+    db.add_all([mine, other, author])
     await db.flush()
-    # Every uuid is read here, before the first commit: a commit expires loaded objects, and
-    # async SQLAlchemy cannot reload one lazily.
-    team_uuid, assigner_uuid, zone_uuid = team.uuid, str(assigner.uuid), zone.uuid
+    actor = await _importer(db, scope="team", team=mine)
 
-    db.add(TeamZoneAssign(team_uuid=team_uuid, zone_uuid=zone_uuid, assigned_by=assigner_uuid))
-    outsider = Station(
-        geometry=from_shape(OUT_OF_ZONE, srid=4326), created_by=assigner_uuid,
-        type="shelter", name="區外站", level=0, visibility="public",
-    )
-    db.add(outsider)
-    await db.flush()
-    db.add(SecondaryLocation(
-        geometry_uuid=str(outsider.uuid), location_type="address", county="宜蘭縣", city="蘇澳鎮"
-    ))
-    await db.commit()
-
-    actor = await _importer(db, scope="zone")
-    actor.team_uuid = team_uuid
+    # Re-read after _importer's commit expired everything it touched.
+    mine_uuid = (await db.execute(select(Team.uuid).where(Team.name == "Mine"))).scalar_one()
+    other_uuid = (await db.execute(select(Team.uuid).where(Team.name == "Other"))).scalar_one()
+    author_uuid = str((await db.execute(select(User.uuid).where(User.name == "author"))).scalar_one())
+    for name, team_uuid in (("本隊站", mine_uuid), ("他隊站", other_uuid)):
+        station = Station(
+            geometry=from_shape(Point(121.90, 25.40), srid=4326), created_by=author_uuid,
+            team_uuid=team_uuid,
+            type="shelter", name=name, level=0, visibility="public",
+        )
+        db.add(station)
+        await db.flush()
+        db.add(SecondaryLocation(
+            geometry_uuid=str(station.uuid), location_type="address", county="宜蘭縣", city="蘇澳鎮"
+        ))
     await db.commit()
 
     raw, filename = _file([
-        _row("區外站", comment="不該進去", county="宜蘭縣", city="蘇澳鎮",
-             latitude="25.40", longitude="121.90")
+        _row(name, comment="匯入的備註", county="宜蘭縣", city="蘇澳鎮", latitude="25.40", longitude="121.90")
+        for name in ("本隊站", "他隊站")
     ])
     outcome = await commit_stations(
         db, actor=actor, raw=raw, filename=filename, station_type="shelter"
     )
 
-    assert outcome.failed == 1
-    assert (await _station_named(db, "區外站")).comment is None
+    assert (outcome.updated, outcome.failed) == (1, 1)
+    assert (await _station_named(db, "本隊站")).comment == "匯入的備註"
+    assert (await _station_named(db, "他隊站")).comment is None
 
 
 # --- commit: failures and the report ---
