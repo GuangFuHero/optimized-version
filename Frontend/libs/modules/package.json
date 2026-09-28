@@ -4,15 +4,17 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./session": "./src/session/index.ts"
+    "./session": "./src/session/index.ts", "./server": "./src/server.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.0.0",
     "@mui/material": "^9.0.0",
+    "@mui/material-nextjs": "^9.0.1",
     "@rescue-frontend/data-access": "workspace:*",
     "@rescue-frontend/ui": "workspace:*",
+    "@urql/next": "^2.0.0",
     "google-libphonenumber": "^3.2.44",
     "graphql": "^16.13.2",
     "h3-js": "^4.5.0",

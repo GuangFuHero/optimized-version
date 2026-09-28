@@ -6,7 +6,7 @@ import {
   loginAsync,
   type ITokenPair,
 } from '@rescue-frontend/data-access';
-import type { NextAuthOptions } from 'next-auth';
+import type { DefaultSession, NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import LineProvider from 'next-auth/providers/line';
@@ -17,6 +17,29 @@ import {
   type BackendAuthToken,
 } from './server-backend-auth';
 import { withClientIpAsync } from './client-ip';
+
+declare module 'next-auth' {
+  interface Session {
+    authProvider?: 'credentials' | 'google' | 'line';
+    loginIdentity?: string;
+    user?: DefaultSession['user'] & {
+      id?: string;
+    };
+  }
+}
+
+declare module 'next-auth/jwt' {
+  interface JWT {
+    accessToken?: string;
+    refreshToken?: string;
+    tokenType?: string;
+    expiresIn?: number;
+    accessTokenExpiresAt?: number;
+    authError?: 'RefreshAccessTokenError' | 'RefreshUnavailable';
+    authProvider?: 'credentials' | 'google' | 'line';
+    loginIdentity?: string;
+  }
+}
 
 /** `account` with the slot `signIn` uses to hand its result to `jwt`. */
 type OAuthAccountWithBackendUser = {

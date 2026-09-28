@@ -12,7 +12,7 @@ import {
   normalizeIdentityValue,
   validateIdentityValue,
   type AuthIdentityType,
-} from '@rescue-frontend/modules';
+} from './utils/identity-validation';
 import { forgotPasswordAsync } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
@@ -24,7 +24,7 @@ import { AuthActionCard } from '../shared/auth-action-card';
  * design's: its words offer another code but its form has no way to ask, and a mistyped address
  * needs a way back. The backend's three-a-minute limit answers anyone who presses too often.
  */
-export default function ForgotPasswordFormClient() {
+export function ForgotPasswordFormClient() {
   const router = useRouter();
   // The page the sign-in should end on, carried through the reset and back to login.
   const callbackUrl = useSearchParams().get('callbackUrl');

@@ -63,7 +63,7 @@ function resolveAuthErrorMessage(errorCode: string | null) {
   }
 }
 
-export default function () {
+export function LoginFormClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const audience = searchParams.get('audience');
