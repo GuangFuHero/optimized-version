@@ -26,6 +26,7 @@ import {
   CreateTicketDocument,
   CreateTicketTaskDocument,
   TicketFieldsFragmentDoc,
+  TicketTaskFieldsFragmentDoc,
   useFragment,
   type CreateTicketTaskInput,
 } from '@rescue-frontend/data-access';
@@ -33,8 +34,19 @@ import {
 import type { RescueMapMarkerItem } from '../../../map/types';
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 import type { TicketListRowItem } from '../ticket-list/types';
-
-type TicketTaskTypeOption = 'rescue' | 'hr' | 'supply';
+import {
+  DedupHintDialog,
+  TicketCreatedButTasksFailedError,
+  shownHint,
+  useDedupSubmitFlow,
+  type CreatedTasks,
+} from './dedup';
+import { ticketCreatePalette } from './palette';
+import {
+  TICKET_TYPE_OPTIONS,
+  mapTaskTypeLabel,
+  type TicketTaskTypeOption,
+} from './task-type';
 
 interface TaskDraft {
   id: string;
@@ -87,30 +99,8 @@ interface ReverseGeocodePayload {
   room: string;
 }
 
-const TICKET_TYPE_OPTIONS: readonly {
-  value: TicketTaskTypeOption;
-  label: string;
-}[] = [
-  { value: 'rescue', label: '救援' },
-  { value: 'hr', label: '人力' },
-  { value: 'supply', label: '物資' },
-];
-
 const DETAIL_WIDTH = { mobile: '100vw', tablet: 460, desktop: 520 };
 const MAX_TICKET_PHOTO_URLS = 10;
-
-const ticketCreatePalette = {
-  surface: '#FFFFFF',
-  sectionSurface: '#F6FAFF',
-  border: '#D7E3F0',
-  heading: '#0F3F75',
-  bodyText: '#39516B',
-  primary: '#179BC6',
-  primaryHover: '#127EA6',
-  primaryText: '#FFFFFF',
-  secondaryText: '#245C8C',
-  secondaryBorder: '#BFD0DD',
-};
 
 function isValidHttpUrl(value: string) {
   try {
@@ -166,10 +156,17 @@ function formatNow() {
   }).format(new Date());
 }
 
-function mapTaskTypeLabel(value: string) {
-  return (
-    TICKET_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value
-  );
+function describeCreateTicketError(message: string) {
+  if (
+    message.includes('401') ||
+    message.includes('Could not validate credentials')
+  ) {
+    return '登入狀態已失效，請重新登入後再試。';
+  }
+  if (message.includes('403') || message.includes('Permission Denied')) {
+    return '目前帳號沒有建立任務的權限，請確認後端 RBAC 的 request:create 權限。';
+  }
+  return message;
 }
 
 function mapPriority(priority?: string | null): TicketListRowItem['priority'] {
@@ -354,12 +351,17 @@ export function TicketCreateDrawer({
   const [tasks, setTasks] = useState<TaskDraft[]>([createInitialTaskDraft()]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
-  const [createTicketResult, createTicket] = useMutation(CreateTicketDocument);
+  const [, createTicket] = useMutation(CreateTicketDocument);
   const [, createTicketTask] = useMutation(CreateTicketTaskDocument);
   const { status: authStatus } = useSession();
   const reverseGeocodeRequestKeyRef = useRef<string | null>(null);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
 
-  const isSubmitting = createTicketResult.fetching;
+  const [flowState, flow] = useDedupSubmitFlow(createTicketFromDraft);
+  const isChecking = flowState.phase === 'checking';
+  const isCreating = flowState.phase === 'creating';
+  const shown = shownHint(flowState);
+  const shownTaskIndex = tasks.findIndex((task) => task.id === shown?.taskId);
   const derivedStatus = 'pending';
   const derivedUpdatedAt = useMemo(() => formatNow(), [open]);
 
@@ -439,19 +441,46 @@ export function TicketCreateDrawer({
     }));
   }, [initialPosition, open]);
 
+  useEffect(() => {
+    if (flowState.phase === 'error') {
+      setSubmitError(flowState.message);
+    }
+  }, [flowState]);
+
   const resetForm = () => {
     setForm(createInitialState());
     setTasks([createInitialTaskDraft()]);
     setSubmitError(null);
   };
 
+  const closeDrawer = () => {
+    resetForm();
+    flow.reset();
+    onClose();
+  };
+
+  useEffect(() => {
+    if (flowState.phase === 'done') {
+      closeDrawer();
+    }
+  }, [flowState.phase]);
+
   const handleClose = () => {
-    if (isSubmitting) {
+    // 提示開著時不關抽屜：關掉會把草稿清掉，使用者應該在 dialog 內做選擇。
+    if (isCreating || isChecking || flowState.phase === 'hint') {
       return;
     }
 
-    resetForm();
-    onClose();
+    closeDrawer();
+  };
+
+  const handleHintDialogExited = () => {
+    const backToForm = ['idle', 'error', 'nothingFiled'].includes(
+      flowState.phase,
+    );
+    if (backToForm) {
+      createButtonRef.current?.focus();
+    }
   };
 
   const updateForm = <K extends keyof TicketCreateFormState>(
@@ -561,37 +590,12 @@ export function TicketCreateDrawer({
     });
   };
 
-  const handleSubmit = async () => {
-    setSubmitError(null);
-
-    if (authStatus !== 'authenticated') {
-      setSubmitError('目前尚未登入，無法建立任務。請先登入後再試。');
-      return;
-    }
-
-    if (
-      !form.title.trim() ||
-      !form.contactName.trim() ||
-      !form.address.trim() ||
-      !form.longitude.trim() ||
-      !form.latitude.trim()
-    ) {
-      setSubmitError('請先填完所有必填欄位。');
-      return;
-    }
-
-    if (tasks.some((task) => !task.taskName.trim())) {
-      setSubmitError('每個子任務都需要任務名稱。');
-      return;
-    }
-
+  // function 宣告會 hoist，上面的 useDedupSubmitFlow 才能直接拿到它。
+  async function createTicketFromDraft(
+    taskIds: string[],
+  ): Promise<CreatedTasks> {
     const longitude = Number(form.longitude);
     const latitude = Number(form.latitude);
-
-    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
-      setSubmitError('經緯度格式不正確。');
-      return;
-    }
 
     const ticketResult = await createTicket({
       input: {
@@ -612,28 +616,11 @@ export function TicketCreateDrawer({
     });
 
     if (ticketResult.error || !ticketResult.data?.createTicket) {
-      const errorMessage = ticketResult.error?.message ?? '新增任務失敗。';
-
-      if (
-        errorMessage.includes('401') ||
-        errorMessage.includes('Could not validate credentials')
-      ) {
-        setSubmitError('登入狀態已失效，請重新登入後再試。');
-        return;
-      }
-
-      if (
-        errorMessage.includes('403') ||
-        errorMessage.includes('Permission Denied')
-      ) {
-        setSubmitError(
-          '目前帳號沒有建立任務的權限，請確認後端 RBAC 的 request:create 權限。',
-        );
-        return;
-      }
-
-      setSubmitError(errorMessage);
-      return;
+      throw new Error(
+        describeCreateTicketError(
+          ticketResult.error?.message ?? '新增任務失敗。',
+        ),
+      );
     }
 
     const createdTicket = useFragment(
@@ -641,25 +628,32 @@ export function TicketCreateDrawer({
       ticketResult.data.createTicket,
     );
 
-    const taskInputs: CreateTicketTaskInput[] = tasks.map((task) => ({
-      ticketUuid: createdTicket.uuid,
-      taskType: task.taskType,
-      taskName: task.taskName.trim(),
-      taskDescription: task.taskDescription.trim() || undefined,
-      quantity: task.quantity ? Number(task.quantity) : undefined,
-      source: 'user',
-      visibility: 'public',
-      // TODO: backend 目前沒有 create task assignment mutation，
-      // actorUuid / assignedAt 先保留在前端 UI，暫不送出。
-    }));
-
-    for (const taskInput of taskInputs) {
+    const created: CreatedTasks = {};
+    for (const task of tasks.filter(({ id }) => taskIds.includes(id))) {
+      const taskInput: CreateTicketTaskInput = {
+        ticketUuid: createdTicket.uuid,
+        taskType: task.taskType,
+        taskName: task.taskName.trim(),
+        taskDescription: task.taskDescription.trim() || undefined,
+        quantity: task.quantity ? Number(task.quantity) : undefined,
+        source: 'user',
+        visibility: 'public',
+        // TODO: backend 目前沒有 create task assignment mutation，
+        // actorUuid / assignedAt 先保留在前端 UI，暫不送出。
+      };
       const taskResult = await createTicketTask({ input: taskInput });
+      const createdTask = taskResult.data?.createTicketTask;
 
-      if (taskResult.error) {
-        setSubmitError(taskResult.error.message);
-        return;
+      if (taskResult.error || !createdTask) {
+        throw new TicketCreatedButTasksFailedError(
+          created,
+          taskResult.error?.message ?? '新增子任務失敗。',
+        );
       }
+      created[task.id] = useFragment(
+        TicketTaskFieldsFragmentDoc,
+        createdTask,
+      ).uuid;
     }
 
     onCreated?.(
@@ -694,7 +688,45 @@ export function TicketCreateDrawer({
       }),
     );
 
-    handleClose();
+    return created;
+  }
+
+  const handleSubmit = async () => {
+    setSubmitError(null);
+
+    if (authStatus !== 'authenticated') {
+      setSubmitError('目前尚未登入，無法建立任務。請先登入後再試。');
+      return;
+    }
+
+    if (
+      !form.title.trim() ||
+      !form.contactName.trim() ||
+      !form.address.trim() ||
+      !form.longitude.trim() ||
+      !form.latitude.trim()
+    ) {
+      setSubmitError('請先填完所有必填欄位。');
+      return;
+    }
+
+    if (tasks.some((task) => !task.taskName.trim())) {
+      setSubmitError('每個子任務都需要任務名稱。');
+      return;
+    }
+
+    const longitude = Number(form.longitude);
+    const latitude = Number(form.latitude);
+
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+      setSubmitError('經緯度格式不正確。');
+      return;
+    }
+
+    await flow.submit(
+      { type: 'Point', coordinates: [longitude, latitude] },
+      tasks,
+    );
   };
 
   return (
@@ -774,15 +806,16 @@ export function TicketCreateDrawer({
             <Button
               variant="outlined"
               onClick={handleClose}
-              disabled={isSubmitting}
+              disabled={isCreating || isChecking}
               sx={{ flex: 1, borderRadius: '999px' }}
             >
               取消
             </Button>
             <Button
+              ref={createButtonRef}
               variant="contained"
               onClick={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isChecking || isCreating || flowState.phase === 'hint'}
               sx={{
                 flex: 1,
                 borderRadius: '999px',
@@ -795,13 +828,18 @@ export function TicketCreateDrawer({
                 },
               }}
             >
-              {isSubmitting ? '建立中...' : '建立任務'}
+              {isChecking ? '檢查中…' : isCreating ? '建立中…' : '建立任務'}
             </Button>
           </Stack>
         }
       >
         <Stack spacing={2.5}>
           {submitError ? <Alert severity="error">{submitError}</Alert> : null}
+          {flowState.phase === 'nothingFiled' ? (
+            <Alert severity="info">
+              每個子任務附近都已經有相同的需求，這次沒有建立新的求助單。
+            </Alert>
+          ) : null}
 
           <Section title="主任務">
             <Stack spacing={1.5}>
@@ -1286,6 +1324,19 @@ export function TicketCreateDrawer({
           </Section>
         </Stack>
       </AdminDetailModalFrame>
+      <DedupHintDialog
+        hint={shown?.hint ?? null}
+        taskLabel={
+          shownTaskIndex >= 0
+            ? `子任務 ${shownTaskIndex + 1}：${tasks[shownTaskIndex].taskName.trim()}`
+            : ''
+        }
+        busy={isCreating}
+        onViewCandidate={flow.viewCandidate}
+        onProceedAnyway={() => void flow.proceedAnyway()}
+        onBack={flow.dismissHint}
+        onExited={handleHintDialogExited}
+      />
     </Drawer>
   );
 }
