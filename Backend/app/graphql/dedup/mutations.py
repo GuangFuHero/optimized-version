@@ -20,18 +20,18 @@ class DedupMutation:
         self,
         info: strawberry.types.Info,
         input: RecordDedupHintOutcomeInput,
-        entity_kind: DedupEntityKind = DedupEntityKind.ticket,
+        entity_kind: DedupEntityKind = DedupEntityKind.ticket_task,
     ) -> RecordDedupHintOutcomeResult:
         """Record the submitter's response to a duplicate hint. Only the submitter may call it.
 
-        For `entityKind: station`, the `*TicketUuid` input fields carry station uuids.
+        For `entityKind: station`, the `*TaskUuid` input fields carry station uuids.
         """
         pair, event_uuid = await dedup_service.record_hint_outcome(
             info.context["db"],
             actor=require_authenticated(info),
-            candidate_ticket_uuid=input.candidate_ticket_uuid,
+            candidate_task_uuid=input.candidate_task_uuid,
             outcome=input.outcome.value,
-            submitted_ticket_uuid=input.submitted_ticket_uuid,
+            submitted_task_uuid=input.submitted_task_uuid,
             entity_kind=entity_kind.value,
         )
         return RecordDedupHintOutcomeResult(

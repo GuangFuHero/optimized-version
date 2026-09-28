@@ -49,13 +49,17 @@ STATION_FAST_LAYER_PARAMETERS = FastLayerParameters(time_weight=0.0)
 
 @dataclass(frozen=True)
 class DedupCandidate:
-    """An existing entity, measured against the one being submitted."""
+    """An existing entity, measured against the one being submitted.
+
+    `parent_uuid` is only carried through (a task's ticket); scoring never reads it.
+    """
 
     entity_uuid: str
     distance_m: float
     age_min: float
     task_type: str | None = None
     text_similarity: float | None = None
+    parent_uuid: str | None = None
 
 
 @dataclass(frozen=True)
