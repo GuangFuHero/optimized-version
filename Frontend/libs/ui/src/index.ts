@@ -62,7 +62,7 @@ export type {
   TimelineProps,
   TimelineTone,
 } from './components/Timeline';
-export { getRescueColorScheme, Icons, theme } from './foundation';
+export { getRescueColorScheme, Icons, layoutSizes, theme } from './foundation';
 export {
   designExtensions,
   designTokens,
