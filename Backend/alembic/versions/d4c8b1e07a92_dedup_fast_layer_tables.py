@@ -15,6 +15,10 @@ cannot FK to whichever entity table `entity_kind` names. The fast layer only eve
 The fast layer's text signal uses pg_trgm `similarity()`; the extension is created by
 f2b7c9d4e0a3.
 
+Spec 020 (ADR-294) amended this migration before it merged: `score_components` became the
+opaque `evidence`, both tables gained `engine_version` (required on every card an engine made),
+and `hint_shown` joined the audit event types.
+
 Revision ID: d4c8b1e07a92
 Revises: b3e8d1f4a6c2
 Create Date: 2026-09-04 00:00:00.000000
@@ -48,9 +52,18 @@ def upgrade() -> None:
             "similarity", sa.Numeric(5, 4), nullable=True, comment="加權總分 0–1；人工建卡沒跑分時為 NULL"
         ),  # noqa: E501
         sa.Column(
-            "score_components", postgresql.JSONB(), nullable=True, comment="判定當下的分數拆帳快照（不可變）"
-        ),  # noqa: E501
+            "evidence",
+            postgresql.JSONB(),
+            nullable=True,
+            comment="engine 的判定依據（不透明，結構由 engine_version 決定；不可變）",
+        ),
         sa.Column("method", sa.Text(), nullable=False),
+        sa.Column(
+            "engine_version",
+            sa.Text(),
+            nullable=True,
+            comment="判定的 engine 版本，例 fast-v1；人工建卡為 NULL",
+        ),
         sa.Column("source_layer", sa.Text(), nullable=False),
         sa.Column("status", sa.Text(), nullable=False),
         sa.Column("reason", postgresql.JSONB(), nullable=True),
@@ -82,6 +95,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "method IN ('fast_rule', 'slow_vector', 'slow_hybrid', 'manual')",
             name="ck_duplicate_pairs_method",
+        ),
+        sa.CheckConstraint(
+            "method = 'manual' OR engine_version IS NOT NULL",
+            name="ck_duplicate_pairs_engine_version",
         ),
         sa.CheckConstraint(
             "source_layer IN ('fast', 'slow', 'manual', 'system')",
@@ -132,6 +149,12 @@ def upgrade() -> None:
         sa.Column("source_layer", sa.Text(), nullable=False),
         sa.Column("decision_reason", sa.Text(), nullable=True),
         sa.Column("evidence", postgresql.JSONB(), nullable=True),
+        sa.Column(
+            "engine_version",
+            sa.Text(),
+            nullable=True,
+            comment="產生此事件的 engine 版本；非 engine 事件（如 manual_note）為 NULL",
+        ),
         sa.Column("before_state", postgresql.JSONB(), nullable=True),
         sa.Column("after_state", postgresql.JSONB(), nullable=True),
         sa.Column("affected_refs", postgresql.JSONB(), nullable=True),
@@ -144,7 +167,7 @@ def upgrade() -> None:
             comment="建立時間",
         ),  # noqa: E501
         sa.CheckConstraint(
-            "event_type IN ('suggested', 'hint_accepted', 'ignored_by_submitter', 'rejected', "
+            "event_type IN ('suggested', 'hint_accepted', 'ignored_by_submitter', 'hint_shown', 'rejected', "
             "'confirmed', 'merged', 'unmerged', 'manual_note', "
             # Slow-layer values the fast layer never writes; included so the group welding and
             # detach flows land without having to rewrite this constraint (contract §1.5).

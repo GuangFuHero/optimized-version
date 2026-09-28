@@ -199,7 +199,7 @@ async def test_submitting_anyway_writes_a_dup_ignored_pair_and_an_event(client, 
         assert (pair.status, pair.source_layer, pair.method) == ("dup_ignored", "fast", "fast_rule")
         assert (pair.hint_outcome, pair.rescan_needed) == ("ignored_hint", True)
         assert str(pair.low_uuid) < str(pair.high_uuid)
-        assert {c["name"] for c in pair.score_components} == ALL_SIGNALS
+        assert {c["name"] for c in pair.evidence["components"]} == ALL_SIGNALS
         assert 0 <= float(pair.similarity) <= 1
 
         event = await db.get(DedupAuditEvent, uuid_mod.UUID(result["auditEventUuid"]))
@@ -282,6 +282,7 @@ async def test_an_existing_card_is_flipped_to_dup_ignored_in_place(
                 low_uuid=low,
                 high_uuid=high,
                 method="fast_rule",
+                engine_version="fast-v1",  # an engine-made card must name its engine (ADR-294)
                 source_layer=source_layer,
                 status=status,
             )

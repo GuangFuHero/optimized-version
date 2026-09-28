@@ -189,10 +189,12 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 | 表 | 改動 |
 |---|---|
-| `duplicate_pairs` | `score_components` 改名 `evidence`（JSONB，內容由 engine 決定）；新增 `engine_version text NOT NULL`；`similarity`、`method` 保留 |
+| `duplicate_pairs` | `score_components` 改名 `evidence`（JSONB，內容由 engine 決定）；新增 `engine_version text`，並以 CHECK `method = 'manual' OR engine_version IS NOT NULL` 約束；`similarity`、`method` 保留 |
 | `dedup_audit_events` | 新增 `engine_version`；`evidence` 直接存 engine 的 `evidence` |
 | `AUDIT_EVENT_TYPES` | 新增 `hint_shown` |
 
+- `engine_version` 允許 null，但只限 `method = 'manual'`（admin 手動建的卡沒有經過任何 engine）。engine 產生的卡一律要有版本。
+  原本寫 NOT NULL，實作 Task 5 時發現會讓日後的手動建卡寫不進去，2026-09-28 改為現行寫法。
 - `engine_version` 不塞進 `method`：`method` 有 CHECK（`PAIR_METHODS`），表示「哪一層、哪一類方法」，語意不同。
 - `hint_shown`：兩段式（ADR-296）下，使用者看到提示後選擇「去看既有的單」不會再呼叫任何 API；
   要靠這筆事件才量得到接受率。取代 Spec 019 以 mutation 主動回報的 `accepted_hint`。

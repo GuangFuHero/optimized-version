@@ -166,7 +166,7 @@ async def test_recording_a_station_outcome_writes_entity_kind_station(client, co
             "fast",
             "fast_rule",
         )
-        assert {c["name"] for c in pair.score_components} == STATION_SIGNALS
+        assert {c["name"] for c in pair.evidence["components"]} == STATION_SIGNALS
 
         event = await db.get(DedupAuditEvent, uuid_mod.UUID(result["auditEventUuid"]))
         assert (event.entity_kind, event.event_type) == ("station", "ignored_by_submitter")

@@ -216,7 +216,7 @@ createTicket(input: CreateTicketInput!, acknowledgedDuplicateOf: String = null):
 | 表 / 常數 | 改動 |
 |---|---|
 | `duplicate_pairs.score_components` | 改名 `evidence`（JSONB） |
-| `duplicate_pairs.engine_version` | 新增 `text NOT NULL` |
+| `duplicate_pairs.engine_version` | 新增 `text`；CHECK `method = 'manual' OR engine_version IS NOT NULL`（手動建卡沒有 engine） |
 | `dedup_audit_events.engine_version` | 新增 `text`（非 engine 產生的事件，如 `manual_note`，可為 null） |
 | `dedup_audit_events.evidence` | 後端外層 `{"similarity": …, "engine": <engine 的 evidence>}`；engine 內容不拆 |
 | `AUDIT_EVENT_TYPES` / CHECK | 新增 `hint_shown` |

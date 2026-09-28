@@ -565,14 +565,14 @@ def test_golden():
 
 - [ ] `AUDIT_EVENT_TYPES` 加 `"hint_shown"`
 - [ ] `DuplicatePair.score_components` → `evidence: Mapped[dict | None]`（JSONB，comment：「engine 的 evidence，內容由 engine 版本決定」）
-- [ ] `DuplicatePair.engine_version: Mapped[str] = mapped_column(Text)`（NOT NULL）
+- [ ] `DuplicatePair.engine_version: Mapped[str | None]`，CHECK `method = 'manual' OR engine_version IS NOT NULL`（ADR-294 修訂）
 - [ ] `DedupAuditEvent.engine_version: Mapped[str | None] = mapped_column(Text, nullable=True)`
 - [ ] migration 同步改：`sa.Column("evidence", ...)`、兩個 `engine_version` 欄、`ck_dedup_audit_events_type` 的值清單
 - [ ] `uv run pytest tests/test_migrations_match_models.py -q` 綠
 - [ ] `uv run alembic heads` 只有 `d4c8b1e07a92`
 - [ ] 在全新 DB 上 `alembic upgrade head` → `downgrade -1` → `upgrade head` 都成功
 - [ ] **RED → GREEN**：`tests/test_dedup_schema.py`（真 DB）
-  - [ ] `duplicate_pairs` 不帶 `engine_version` 寫入 → `IntegrityError`（NOT NULL）
+  - [ ] `method='fast_rule'` 不帶 `engine_version` → `IntegrityError`；`method='manual'` 不帶 → 成功
   - [ ] `dedup_audit_events` 寫 `event_type="hint_shown"` 成功；寫不在清單的值 → CHECK 失敗
   - [ ] `evidence` 存巢狀 dict 讀回相等（JSONB round-trip）
   - [ ] 表上已不存在 `score_components` 欄（查 `information_schema.columns`）

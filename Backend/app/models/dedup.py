@@ -36,6 +36,9 @@ AUDIT_EVENT_TYPES = (
     "suggested",
     "hint_accepted",
     "ignored_by_submitter",
+    # Spec 020 (ADR-294): a hint was shown and the submission stopped there. A later create
+    # with acknowledgedDuplicateOf adds `ignored_by_submitter`; none means the hint was taken.
+    "hint_shown",
     "rejected",
     "confirmed",
     "merged",
@@ -64,6 +67,11 @@ class DuplicatePair(Base, UUIDPKMixin, TimestampMixin):
             name="ck_duplicate_pairs_similarity",
         ),
         CheckConstraint(_in_list("method", PAIR_METHODS), name="ck_duplicate_pairs_method"),
+        # Every engine-made card names the engine version that judged it; only a card an admin
+        # made by hand has no engine behind it (Spec 020, ADR-294).
+        CheckConstraint(
+            "method = 'manual' OR engine_version IS NOT NULL", name="ck_duplicate_pairs_engine_version"
+        ),
         CheckConstraint(_in_list("source_layer", PAIR_SOURCE_LAYERS), name="ck_duplicate_pairs_source_layer"),
         CheckConstraint(_in_list("status", PAIR_STATUSES), name="ck_duplicate_pairs_status"),
         CheckConstraint(
@@ -96,10 +104,13 @@ class DuplicatePair(Base, UUIDPKMixin, TimestampMixin):
     similarity: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 4), nullable=True, comment="加權總分 0–1；人工建卡沒跑分時為 NULL"
     )
-    score_components: Mapped[list | None] = mapped_column(
-        JSONB, nullable=True, comment="判定當下的分數拆帳快照（不可變）"
+    evidence: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True, comment="engine 的判定依據（不透明，結構由 engine_version 決定；不可變）"
     )
     method: Mapped[str] = mapped_column(Text)
+    engine_version: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="判定的 engine 版本，例 fast-v1；人工建卡為 NULL"
+    )
     source_layer: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text)
     reason: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -137,6 +148,9 @@ class DedupAuditEvent(Base, UUIDPKMixin):
     source_layer: Mapped[str] = mapped_column(Text)
     decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     evidence: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    engine_version: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="產生此事件的 engine 版本；非 engine 事件（如 manual_note）為 NULL"
+    )
     before_state: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     after_state: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     affected_refs: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

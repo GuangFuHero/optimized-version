@@ -19,6 +19,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
+from app.dedup_engine.registry import get_engine
 from app.graphql.scalars import geom_to_geojson
 from app.infrastructure.repository.base import GenericRepository
 from app.models.auth import User
@@ -170,6 +171,7 @@ async def record_hint_outcome(
             "source_layer": "fast",
             "decision_reason": outcome,
             "evidence": _evidence(score),
+            "engine_version": get_engine().version,
         },
     )
     await db.commit()
@@ -247,6 +249,7 @@ async def _upsert_fast_pair(
     )
     if existing:
         existing.hint_outcome = hint_outcome
+        existing.engine_version = get_engine().version
         if not accepted:
             existing.status = "dup_ignored"
             existing.rescan_needed = True
@@ -261,8 +264,9 @@ async def _upsert_fast_pair(
             "low_uuid": low_uuid,
             "high_uuid": high_uuid,
             "similarity": None if score is None else Decimal(f"{score.similarity:.4f}"),
-            "score_components": None if score is None else _components_json(score),
+            "evidence": None if score is None else {"components": _components_json(score)},
             "method": "fast_rule",
+            "engine_version": get_engine().version,
             "source_layer": "fast",
             "status": "suggested" if accepted else "dup_ignored",
             "hint_outcome": hint_outcome,
