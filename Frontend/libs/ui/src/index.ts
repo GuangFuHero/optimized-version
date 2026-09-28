@@ -10,6 +10,13 @@ export type {
 } from './components/Badge';
 export { CountBadge } from './components/CountBadge';
 export type { CountBadgeProps, CountBadgeTone } from './components/CountBadge';
+export { DataTable } from './components/DataTable';
+export type {
+  DataTableColumnMeta,
+  DataTableDensity,
+  DataTableFeatures,
+  DataTableProps,
+} from './components/DataTable';
 export { EmptyState } from './components/EmptyState';
 export type { EmptyStateProps } from './components/EmptyState';
 export { ListPagination } from './components/ListPagination';
