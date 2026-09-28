@@ -96,6 +96,8 @@ export type {
 } from './point-share';
 
 export { BackOfficePlaceholder } from './role-request';
+export { AdminPlaceholderPage, AdminShell } from './shell';
+export type { AdminEvent, AdminShellProps, AdminUser } from './shell';
 
 // The browser's half of the session-expiry handling; the pure half is `@rescue-frontend/modules/session`.
 export {
@@ -106,7 +108,6 @@ export {
 } from './session/end-expired-session';
 export { SessionExpiredNotice } from './session/session-expired-notice';
 
-export { AdminLayout } from './shell';
 export {
   SiteActionDrawer,
   SiteShell,

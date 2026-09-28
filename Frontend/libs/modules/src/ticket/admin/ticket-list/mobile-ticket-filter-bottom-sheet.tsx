@@ -31,7 +31,7 @@ import {
   ticketFilterGroups,
   ticketFilterKeywordQueryKey,
   type TicketFilterKey,
-} from '../../../ticket/admin/ticket-list/ticket-filters';
+} from './ticket-filters';
 
 const FilterIcon = TuneRoundedIcon;
 const CheckIcon = CheckRoundedIcon;
