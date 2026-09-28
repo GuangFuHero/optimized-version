@@ -12,6 +12,7 @@ import strawberry
 from app.graphql.context import require_authenticated
 from app.graphql.shared import secondary_location_to_dict
 from app.graphql.tickets.types import (
+    CreateHelpRequestInput,
     CreateTaskPropertyInput,
     CreateTicketInput,
     CreateTicketTaskInput,
@@ -57,6 +58,36 @@ class RequestMutation:
                 if input.secondary_location is not None
                 else None
             ),
+        )
+        return TicketType.from_model(ticket)
+
+    @strawberry.mutation
+    async def create_help_request(
+        self, info: strawberry.types.Info, input: CreateHelpRequestInput
+    ) -> TicketType:
+        """File a citizen's request for help and its needs in one transaction (請求協助).
+
+        Requires ticket.add. Nothing is written unless every need is valid; see
+        app/services/ticket.py::create_help_request for the rules.
+        """
+        ticket = await ticket_service.create_help_request(
+            info.context["db"], actor=require_authenticated(info),
+            geometry=input.geometry, title=input.title, description=input.description,
+            contact_name=input.contact_name, contact_phone=input.contact_phone,
+            secondary_location=(
+                secondary_location_to_dict(input.secondary_location)
+                if input.secondary_location is not None
+                else None
+            ),
+            tasks=[
+                {
+                    "task_type": task.task_type,
+                    "task_name": task.task_name,
+                    "task_description": task.task_description,
+                    "quantity": task.quantity,
+                }
+                for task in input.tasks
+            ],
         )
         return TicketType.from_model(ticket)
 

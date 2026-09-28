@@ -26,7 +26,7 @@ from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import ticket as ticket_service
 from app.services.authz import refresh_actor
-from app.services.ticket import assign_task_actor, stop_recruiting, update_ticket_task
+from app.services.ticket import assign_task_actor, stop_recruiting, unassign_task_actor, update_ticket_task
 from tests.conftest import TEST_DB_URL, acting_as
 
 
@@ -219,7 +219,7 @@ async def test_two_volunteers_racing_for_the_last_place_get_one_claim(db, monkey
     await db.commit()
 
     arrived, both_arrived = [], asyncio.Event()
-    real_create = ticket_service.task_assignment_repository.create
+    real_add = ticket_service.task_assignment_repository.add
 
     async def rendezvous(*args, **kwargs):
         """Hold each insert until the other has counted too, or give up waiting."""
@@ -228,9 +228,9 @@ async def test_two_volunteers_racing_for_the_last_place_get_one_claim(db, monkey
             both_arrived.set()
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(both_arrived.wait(), timeout=1)
-        return await real_create(*args, **kwargs)
+        return await real_add(*args, **kwargs)
 
-    monkeypatch.setattr(ticket_service.task_assignment_repository, "create", rendezvous)
+    monkeypatch.setattr(ticket_service.task_assignment_repository, "add", rendezvous)
 
     engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
     sessions = [sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)() for engine in engines]
@@ -254,6 +254,75 @@ async def test_two_volunteers_racing_for_the_last_place_get_one_claim(db, monkey
     assert len(refused) == 1, f"expected exactly one refusal, got {outcomes}"
     assert "Task is full" in str(refused[0])
     assert await _claims(db, task_uuid) == 1
+
+
+# --- the lock order every writer keeps: the ticket, then its need (spec Q44) ---
+
+
+async def _waits_for_the_ticket(ticket_uuid: str, action) -> None:
+    """Run `action(session)` on one connection while another holds the ticket FOR UPDATE.
+
+    A ticket's status is worked out from all of its needs, so whatever changes a need locks the
+    ticket first and the need second; one fixed order makes a claim and a delete of the whole
+    ticket queue behind each other instead of deadlocking. The holder stands in for such a
+    writer: the action must still be waiting a second later, and finish once it lets go.
+    """
+    engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
+    holder, other = (sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)() for engine in engines)
+    try:
+        await holder.execute(select(Tickets).where(Tickets.uuid == ticket_uuid).with_for_update())
+        running = asyncio.create_task(action(other))
+        done, _ = await asyncio.wait({running}, timeout=1)
+        if done:
+            running.result()  # a failure is the real story; re-raise it
+            pytest.fail("finished while another connection held the ticket: it never asked for the ticket")
+        await holder.rollback()
+        await running
+    finally:
+        await holder.close()
+        await other.close()
+        for engine in engines:
+            await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_claim_waits_for_whoever_holds_the_ticket(db):
+    """A claim takes the ticket's lock before the need's, so it queues behind the ticket's holder."""
+    task = await _need(db, quantity=2)
+    volunteer = await _volunteer(db)
+    volunteer_uuid, identity = str(volunteer.uuid), volunteer.active_identity
+    task_uuid, ticket_uuid = str(task.uuid), task.ticket_uuid
+    await db.commit()
+
+    async def claim(session):
+        actor = await session.get(User, volunteer_uuid)
+        actor.active_identity = identity
+        await assign_task_actor(session, actor=actor, task_uuid=task_uuid, actor_uuid=None, role=None)
+
+    await _waits_for_the_ticket(ticket_uuid, claim)
+
+    assert await _claims(db, task_uuid) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_release_waits_for_whoever_holds_the_ticket(db):
+    """Releasing a place keeps the same order as claiming one: the ticket first, then the need."""
+    task = await _need(db, quantity=2)
+    volunteer = await _volunteer(db)
+    volunteer_uuid, identity = str(volunteer.uuid), volunteer.active_identity
+    task_uuid, ticket_uuid = str(task.uuid), task.ticket_uuid
+    assignment = await _claim(db, volunteer, task_uuid)
+    assignment_uuid = str(assignment.uuid)
+    await db.commit()
+
+    async def release(session):
+        actor = await session.get(User, volunteer_uuid)
+        actor.active_identity = identity
+        await unassign_task_actor(session, actor=actor, uuid=assignment_uuid)
+
+    await _waits_for_the_ticket(ticket_uuid, release)
+
+    assert await _claims(db, task_uuid) == 0
 
 
 # --- who hears about a claim (spec Q18; prototype site-actions.jsx:473-496) ---
