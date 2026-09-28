@@ -1,6 +1,7 @@
 import {
   applyBackendAuthResponseCookies,
   expireSessionResponse,
+  getBackendGraphqlUrl,
   resolveBackendAuthTokenAsync,
 } from '@rescue-frontend/modules/server';
 import { SITE_REALM_HEADERS } from '@rescue-frontend/modules/server';

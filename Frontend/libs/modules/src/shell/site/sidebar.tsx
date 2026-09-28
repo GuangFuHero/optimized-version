@@ -1,234 +1,163 @@
 'use client';
 
-import { Suspense, type ReactNode } from 'react';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
+import { IconButton, Stack, Typography } from '@mui/material';
+import Link from 'next/link';
+import { Suspense } from 'react';
+
+import {
+  designTokens,
+  displayTextSize,
+  SidebarItem,
+} from '@rescue-frontend/ui';
 
 import HandshakeRoundedIcon from '@mui/icons-material/HandshakeRounded';
 import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
-
-import { Icons } from '@rescue-frontend/ui';
-
 import { BACK_OFFICE_HREF, type SitePortalEntry } from '../../role-request';
-import type { SidebarMenuItemData } from '../admin/components/sidebar-menu-item';
-import type { SidebarResolvedContent } from '../sidebar';
-import { SidebarPanel } from '../sidebar';
-import { useSiteRouteState } from '../../route';
 import { openHelpRequest } from '../../ticket/help-request/open-help-request';
+import { PageHelpIcon } from './page-help';
+
+import { GuangFuBrandIcon } from '../../brand';
+import { useSiteRouteState } from '../../route';
 import { SITE_MODULES } from '../../route/constants';
 import { SITE_MODULE_META } from '../../route/module-meta';
 import { createSiteHref } from '../../route/serialize';
 import type { SiteModule, SiteRouteState } from '../../route/types';
-import { PageHelpIcon } from './page-help';
 
-const PersonIcon = Icons.person;
-
-/** 這一頁怎麼用 in the phone's menu, which its top bar has no room for. */
-interface SiteMenuPageHelp {
-  /** Not opened on this device yet: the row's ？ carries a dot. */
-  fresh: boolean;
-  onOpen: () => void;
-}
-
-/** The row, when the page has help: the menu shuts first, as for 請求協助. */
-function pageHelpFooterActions(
-  pageHelp: SiteMenuPageHelp | undefined,
-  onClose?: () => void,
-): SidebarMenuItemData[] {
-  if (!pageHelp) {
-    return [];
-  }
-
-  return [
-    {
-      id: 'page-help',
-      label: '這一頁怎麼用',
-      icon: <PageHelpIcon fresh={pageHelp.fresh} />,
-      onClick: () => {
-        onClose?.();
-        pageHelp.onOpen();
-      },
-    },
-  ];
-}
-
-/** The menu's back-office entry: a link to the back office, or a button that opens the application. */
-function portalFooterActions(
-  portalEntry: SitePortalEntry,
-  onApplyRoleRequest?: () => void,
-): SidebarMenuItemData[] {
-  if (portalEntry === 'backOffice') {
-    return [
-      {
-        id: 'back-office',
-        label: '前往後台',
-        icon: <SwapHorizRoundedIcon />,
-        path: BACK_OFFICE_HREF,
-      },
-    ];
-  }
-
-  if (portalEntry === 'apply') {
-    return [
-      {
-        id: 'apply-back-office',
-        label: '申請成為後台人員',
-        icon: <VerifiedRoundedIcon />,
-        onClick: onApplyRoleRequest,
-      },
-    ];
-  }
-
-  return [];
-}
-
-/**
- * 依目前模組與路由狀態建立側欄內容。
- * 各模組連結以 {@link createSiteHref} 帶上現有狀態，切換時保留篩選與詳情。
- */
-function buildSiteSidebarContent(
-  module: SiteModule,
-  state: SiteRouteState,
-  isAuthenticated?: boolean,
-  onSignIn?: () => void,
-  onSignOut?: () => void,
-  portalEntry: SitePortalEntry = 'none',
-  onApplyRoleRequest?: () => void,
-  onClose?: () => void,
-  pageHelp?: SiteMenuPageHelp,
-): SidebarResolvedContent {
-  return {
-    navigationItems: SITE_MODULES.map((target) => {
-      const { label, Icon } = SITE_MODULE_META[target];
-
-      return {
-        id: target,
-        label,
-        icon: <Icon />,
-        selected: target === module,
-        fontWeight: 600,
-        path: createSiteHref(target, state),
-      };
-    }),
-    footerActions: [
-      // First at the foot (prototype site-shell.jsx:588-590), and for guests too: the drawer asks
-      // them to sign in before sending, not before starting. The phone's menu shuts first, or it
-      // would sit open under the drawer.
-      {
-        id: 'request-help',
-        label: '請求協助',
-        icon: <HandshakeRoundedIcon />,
-        onClick: () => {
-          onClose?.();
-          openHelpRequest();
-        },
-      },
-      // Then, as the prototype orders it (`site-shell.jsx:588-598`), 這一頁怎麼用 and the
-      // back-office entry, which a phone's top bar has no room for, then 登入 for a guest.
-      ...pageHelpFooterActions(pageHelp, onClose),
-      ...portalFooterActions(portalEntry, onApplyRoleRequest),
-      ...(isAuthenticated
-        ? []
-        : [
-            {
-              id: 'login',
-              label: '登入',
-              icon: <PersonIcon />,
-              onClick: onSignIn,
-            },
-          ]),
-    ],
-  };
-}
+const { color, shadow, typography, motion } = designTokens;
 
 interface SiteSidebarProps {
+  collapsed?: boolean;
   isAuthenticated?: boolean;
   onSignIn?: () => void;
-  open: boolean;
-  width?: number | string;
-  collapsedWidth?: number | string;
-  minHeight?: number | string;
-  headerContent?: ReactNode;
-  showCloseButton?: boolean;
   onClose?: () => void;
   onSignOut?: () => void;
-  /**
-   * The back-office entry at the foot of the menu. Only the phone's menu drawer is given one: on a
-   * desktop the top bar carries it, and the prototype shows it once.
-   */
   portalEntry?: SitePortalEntry;
-  /** 申請成為後台人員 in the menu: opens the application drawer, which the shell holds. */
   onApplyRoleRequest?: () => void;
-  /** 這一頁怎麼用 at the foot of the menu: like the back-office entry, the phone's menu only. */
-  pageHelp?: SiteMenuPageHelp;
+  pageHelp?: { fresh: boolean; onOpen: () => void };
 }
 
-function SiteSidebarConnected(props: SiteSidebarProps) {
-  const { module, state } = useSiteRouteState();
-  const {
-    isAuthenticated,
-    onSignIn,
-    onSignOut,
-    portalEntry,
-    onApplyRoleRequest,
-    pageHelp,
-    ...panelProps
-  } = props;
-
-  return (
-    <SidebarPanel
-      content={buildSiteSidebarContent(
-        module,
-        state,
-        isAuthenticated,
-        onSignIn,
-        onSignOut,
-        portalEntry,
-        onApplyRoleRequest,
-        panelProps.onClose,
-        pageHelp,
-      )}
-      {...panelProps}
-    />
-  );
-}
-
-function SiteSidebarFallback(props: SiteSidebarProps) {
-  const {
-    isAuthenticated,
-    onSignIn,
-    onSignOut,
-    portalEntry,
-    onApplyRoleRequest,
-    pageHelp,
-    ...panelProps
-  } = props;
-
-  return (
-    <SidebarPanel
-      content={buildSiteSidebarContent(
-        'map',
-        {},
-        isAuthenticated,
-        onSignIn,
-        onSignOut,
-        portalEntry,
-        onApplyRoleRequest,
-        panelProps.onClose,
-        pageHelp,
-      )}
-      {...panelProps}
-    />
-  );
-}
-
-/**
- * 前台側欄：沿用後台側欄 UI，模組選項改為地圖 / 列表。
- * 以 Suspense 包覆讀取網址狀態的部分，避免內容區重新掛載。
- */
 export function SiteSidebar(props: SiteSidebarProps) {
   return (
-    <Suspense fallback={<SiteSidebarFallback {...props} />}>
-      <SiteSidebarConnected {...props} />
+    <Suspense fallback={<SiteSidebarNav {...props} module="map" state={{}} />}>
+      <RoutedSiteSidebarNav {...props} />
     </Suspense>
+  );
+}
+
+function RoutedSiteSidebarNav(props: SiteSidebarProps) {
+  const { module, state } = useSiteRouteState();
+
+  return <SiteSidebarNav {...props} module={module} state={state} />;
+}
+
+function SiteSidebarNav({
+  module,
+  state,
+  collapsed = false,
+  isAuthenticated = false,
+  onSignIn,
+  onClose,
+  portalEntry,
+  onApplyRoleRequest,
+  pageHelp,
+}: SiteSidebarProps & { module: SiteModule; state: SiteRouteState }) {
+  return (
+    <Stack
+      component="nav"
+      aria-label="前台模組"
+      sx={{
+        height: '100%',
+        gap: '8px',
+        p: '16px 12px',
+        alignItems: collapsed ? 'center' : 'stretch',
+        overflow: 'hidden',
+        bgcolor: color.bg.neutral.default,
+        borderRight: `1px solid ${color.border.default}`,
+        boxShadow: collapsed || onClose ? 'none' : shadow.md,
+        transition: `box-shadow ${motion.transition.base}`,
+      }}
+    >
+      {onClose ? (
+        <Stack
+          direction="row"
+          sx={{ alignItems: 'center', gap: '10px', pb: '16px' }}
+        >
+          <GuangFuBrandIcon width={38} height={26} />
+          <Typography
+            noWrap
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: displayTextSize[20],
+              lineHeight: '28px',
+              fontWeight: 700,
+              color: color.fg.neutral.default,
+            }}
+          >
+            島嶼守望
+          </Typography>
+          <IconButton
+            aria-label="關閉選單"
+            onClick={onClose}
+            sx={{ color: color.fg.neutral.subtle }}
+          >
+            <CloseRoundedIcon sx={{ fontSize: 20 }} />
+          </IconButton>
+        </Stack>
+      ) : null}
+
+      {collapsed ? null : (
+        <Typography
+          sx={{
+            px: '8px',
+            pb: '4px',
+            fontFamily: typography.label[300].fontFamily,
+            fontSize: displayTextSize[11],
+            fontWeight: 700,
+            lineHeight: 1.4,
+            letterSpacing: '0.08em',
+            color: color.fg.neutral.muted,
+          }}
+        >
+          檢視模式
+        </Typography>
+      )}
+
+      {SITE_MODULES.map((target) => {
+        const { label, Icon } = SITE_MODULE_META[target];
+
+        return (
+          <SidebarItem
+            key={target}
+            LinkComponent={Link}
+            href={createSiteHref(target, state)}
+            icon={<Icon />}
+            label={label}
+            active={target === module}
+            collapsed={collapsed}
+          />
+        );
+      })}
+
+<Stack sx={{ mt: 'auto', gap: '8px' }}>
+  <SidebarItem icon={<HandshakeRoundedIcon />} label="請求協助" collapsed={collapsed} onClick={() => { onClose?.(); openHelpRequest(); }} />
+  {pageHelp ? <SidebarItem icon={<PageHelpIcon fresh={pageHelp.fresh} />} label="這一頁怎麼用" collapsed={collapsed} onClick={() => { onClose?.(); pageHelp.onOpen(); }} /> : null}
+  {portalEntry === 'backOffice' ? <SidebarItem LinkComponent={Link} href={BACK_OFFICE_HREF} icon={<SwapHorizRoundedIcon />} label="前往後台" collapsed={collapsed} /> : null}
+  {portalEntry === 'apply' ? <SidebarItem icon={<VerifiedRoundedIcon />} label="申請成為後台人員" collapsed={collapsed} onClick={onApplyRoleRequest} /> : null}
+{isAuthenticated ? null : (
+
+        <SidebarItem
+          icon={<LoginRoundedIcon />}
+          label="登入"
+          collapsed={collapsed}
+          onClick={onSignIn}
+          sx={{ mt: 'auto' }}
+        />
+      )}
+      </Stack>
+    </Stack>
   );
 }
