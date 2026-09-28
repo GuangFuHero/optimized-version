@@ -1,18 +1,21 @@
 """Shape of the backend ↔ algorithm contract (Spec 020 §3, §4; ADR-289~292)."""
 
 import dataclasses
+import inspect
 from datetime import UTC, datetime
 
 import pytest
 
 from app.dedup_engine.contract import (
     Candidate,
+    DedupEngine,
     GeoPoint,
     Match,
     RetrievalSpec,
     StationSnapshot,
     TicketSnapshot,
 )
+from app.dedup_engine.registry import get_engine
 
 NOW = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
 HERE = GeoPoint(121.5601, 23.6701)
@@ -80,6 +83,10 @@ def test_candidate_phone_signal_defaults_to_unknown():
     assert Candidate(snapshot=snapshot, distance_m=5.0).same_contact_phone is None
 
 
-@pytest.mark.skip(reason="FastEngine arrives in Task 3")
-def test_fast_engine_satisfies_the_protocol():
-    """The shipped engine implements every method the backend calls."""
+def test_the_registered_engine_satisfies_the_protocol():
+    """The engine the backend gets implements every member of `DedupEngine` with matching parameters."""
+    engine = get_engine()
+    assert isinstance(engine.version, str)
+    for name in ("retrieval", "rank", "score"):
+        expected = list(inspect.signature(getattr(DedupEngine, name)).parameters)[1:]  # drop self
+        assert list(inspect.signature(getattr(engine, name)).parameters) == expected, name

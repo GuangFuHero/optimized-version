@@ -37,6 +37,17 @@ pytest（`uv run pytest`）, ruff。無新依賴（文字相似度自己實作�
 4. **整張票完成後做 Task 14 的 Docker 完整驗證**：從零建 image、全新 DB、在容器裡跑全套件、實際打 API 走流程。
    沒通過 Task 14 不算完成，也不回報完成。
 
+### 測試環境
+
+`backend-db-1` 是 `postgis/postgis:16-3.4`，沒有 h3；測試的 session fixture 會 `CREATE EXTENSION h3`，所以整套測試在它上面
+全部 error。本票另起一個只給測試用的容器（不動 `backend-db-1`）：
+
+```
+docker run -d --name dedup020-testdb -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5435:5432 disaster-postgres-h3:16-3.4
+export TEST_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/disaster_rescue_test"
+export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/postgres"
+```
+
 ### 已知陷阱
 
 1. **rollback 會 expire actor。** fail-open 的 `db.rollback()` 會讓所有已載入物件過期，之後讀 `actor.uuid`
@@ -312,8 +323,14 @@ def trigram_similarity(a: str, b: str) -> float:
 
 ## Task 3: fast engine（由 `dedup_scoring.py` 搬入）
 
-**Files:** Create `app/dedup_engine/fast.py`, `app/dedup_engine/registry.py`, `tests/dedup_engine/test_fast.py`；
-Delete `app/services/dedup_scoring.py`, `tests/test_dedup_scoring.py`（內容搬進 `test_fast.py`）
+**Files:** Create `app/dedup_engine/fast.py`, `app/dedup_engine/registry.py`, `tests/dedup_engine/test_fast.py`
+
+> **實作時調整（2026-09-28）**：
+> - `app/services/dedup_scoring.py` 與 `tests/test_dedup_scoring.py` **留到 Task 13 才刪**。舊的 service／repository
+>   在 Task 8、9 之前仍 import 它，提早刪會讓全套件整片紅，違反「每個 Task 全套件不比基準差」。
+> - 公式拆成 `measure()`（快照 → `Signals`）與 `combine()`（`Signals` → 分數與成分），019 對照 harness 的精確數字測試
+>   改打 `combine()`；另用 4 萬組隨機輸入比對 019 的 `score_candidate` 與 `combine()`，最大差距 0.0。
+> - `rank()` 只抽一次送出端的 trigram（`_Submission`），500 筆 2000 字候選從 132 ms 降到 68 ms。
 
 - [ ] **RED**：把 `tests/test_dedup_scoring.py` 每一條改寫成吃快照的版本放進 `test_fast.py`。測試輔助：
 
