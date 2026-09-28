@@ -1,9 +1,12 @@
 """Dedup fast layer service.
 
+The unit compared is a ticket task: the task about to be filed against every open task
+nearby. A hint names the matched task and its ticket.
+
 Two entry points:
 
-- `find_duplicate_hints`: runs before `create_ticket` and returns at most one hint.
-  Fail-open: any error returns `[]`, so a broken dedup layer never blocks a report.
+- `find_duplicate_hints`: runs before `createTicketTask` writes a task and returns at most
+  one hint. Fail-open: any error returns `[]`, so a broken dedup layer never blocks a report.
 - `record_hint_outcome`: records what the submitter did with the hint. Not fail-open.
 """
 
@@ -20,12 +23,13 @@ from app.graphql.scalars import geom_to_geojson
 from app.models.auth import User
 from app.models.dedup import PAIR_HINT_OUTCOMES, DuplicatePair
 from app.models.request import Tickets
+from app.models.ticket_task import TicketTask
 from app.repositories.dedup_repository import (
     dedup_audit_event_repository,
     dedup_candidate_repository,
     duplicate_pair_repository,
 )
-from app.repositories.tickets_repository import ticket_repository
+from app.repositories.tickets_repository import ticket_repository, ticket_task_repository
 from app.services.authz import require_scope
 from app.services.dedup_scoring import (
     FAST_LAYER_PARAMETERS,
@@ -39,9 +43,10 @@ from app.services.geo_validation import validate_point
 
 logger = logging.getLogger("app.dedup")
 
+ENTITY_KIND = "ticket_task"
 # Text handed to pg_trgm is truncated, not refused: the check is advisory. 200 is the width
-# of `tickets.title`; `tickets.description` is unbounded, so 2000 is a chosen cap.
-TITLE_MAX_CHARS = 200
+# of `ticket_tasks.task_name`; `task_description` is unbounded, so 2000 is a chosen cap.
+NAME_MAX_CHARS = 200
 DESCRIPTION_MAX_CHARS = 2000
 # Margin so float rounding cannot drop a candidate that scores exactly on the threshold.
 RETRIEVAL_RADIUS_SAFETY_FACTOR = 1.1
@@ -52,27 +57,33 @@ MAX_CANDIDATE_RADIUS_M = 1000.0
 async def find_duplicate_hints(
     db: AsyncSession,
     *,
-    geometry: dict,
-    title: str,
-    description: str | None = None,
-    task_type: str | None = None,
+    task_type: str,
+    task_name: str | None = None,
+    task_description: str | None = None,
+    geometry: dict | None = None,
+    ticket_uuid: str | None = None,
     parameters: FastLayerParameters = FAST_LAYER_PARAMETERS,
 ) -> list[CandidateScore]:
-    """Return the best nearby open ticket as a one-element list, or `[]`. Never raises.
+    """Return the best open task nearby as a one-element list, or `[]`. Never raises.
 
-    The caller checks permissions first, so a 403 is not swallowed by the fail-open.
-    Invalid geometry also returns `[]`; `create_ticket` is the gate that rejects it.
+    Where the task will be filed: `ticket_uuid` for an existing ticket (its geometry is used,
+    `geometry` is ignored, and its own tasks are excluded), else `geometry` for a new ticket.
+    The caller checks permissions first, so a 403 is not swallowed by the fail-open. Invalid
+    geometry or an unknown ticket also returns `[]`.
     """
     try:
+        if ticket_uuid:
+            geometry = geom_to_geojson((await _get_ticket(db, ticket_uuid)).geometry)
         validate_point(geometry, entity="Ticket")
         longitude, latitude = geometry["coordinates"][:2]
         candidates = await dedup_candidate_repository.list_nearby_open(
             db,
             longitude=longitude,
             latitude=latitude,
-            query_text=_query_text(title, description),
+            query_text=_query_text(task_name, task_description),
             radius_m=_retrieval_radius_m(parameters),
             now=datetime.now(UTC),
+            exclude_ticket_uuid=ticket_uuid,
         )
         best = top_hint(candidates, query_task_type=task_type, parameters=parameters)
     except Exception:
@@ -89,36 +100,39 @@ async def record_hint_outcome(
     db: AsyncSession,
     *,
     actor: User,
-    candidate_ticket_uuid: str,
+    candidate_task_uuid: str,
     outcome: str,
-    submitted_ticket_uuid: str | None = None,
+    submitted_task_uuid: str | None = None,
 ) -> tuple[DuplicatePair | None, str]:
     """Record the submitter's response to a hint. Returns (pair card or None, audit event uuid).
 
-    Always writes an audit event. Writes a pair card only when a second ticket exists. Only
-    the creator of the submitted ticket may report on it: `ticket.add` is held at `all` by
-    every logged-in role, so without this check anyone could card any pair.
+    Always writes an audit event. Writes a pair card only when a second task exists. Only the
+    creator of the submitted task may report on it: `ticket.add` is held at `all` by every
+    logged-in role, so without this check anyone could card any pair.
 
     Raises:
-        ValueError: unknown outcome, ticket not found, or a ticket paired with itself.
-        HTTPException: 403 when the caller did not create the submitted ticket.
+        ValueError: unknown outcome, task not found, or a task paired with itself.
+        HTTPException: 403 when the caller did not create the submitted task.
     """
     if outcome not in PAIR_HINT_OUTCOMES:
         raise ValueError(f"Unknown dedup hint outcome: {outcome}")
-    candidate = await _get_ticket(db, candidate_ticket_uuid)
+    candidate = await _get_task(db, candidate_task_uuid)
     accepted = outcome == "accepted_hint"
 
     pair = score = None
-    if not submitted_ticket_uuid:
+    if not submitted_task_uuid:
         await require_scope(actor, Perm.TICKET_ADD, db)
     else:
-        submitted = await _get_ticket(db, submitted_ticket_uuid)
-        await require_scope(actor, Perm.TICKET_ADD, db, resource=submitted)
+        submitted = await _get_task(db, submitted_task_uuid)
+        submitted_ticket = await _get_ticket(db, submitted.ticket_uuid)
+        await require_scope(actor, Perm.TICKET_ADD, db, resource=submitted_ticket)
         if str(submitted.created_by) != str(actor.uuid):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
         if str(submitted.uuid) == str(candidate.uuid):
-            raise ValueError("A ticket cannot be a duplicate of itself")
-        score = await _rescore_pair(db, submitted=submitted, candidate=candidate)
+            raise ValueError("A task cannot be a duplicate of itself")
+        score = await _rescore_pair(
+            db, submitted=submitted, submitted_ticket=submitted_ticket, candidate=candidate
+        )
         pair = await _upsert_fast_pair(
             db, uuids=(str(submitted.uuid), str(candidate.uuid)), accepted=accepted, score=score
         )
@@ -126,11 +140,11 @@ async def record_hint_outcome(
     event = await dedup_audit_event_repository.add(
         db,
         obj_in={
-            "entity_kind": "ticket",
+            "entity_kind": ENTITY_KIND,
             "event_type": "hint_accepted" if accepted else "ignored_by_submitter",
             "pair_uuid": str(pair.uuid) if pair else None,
             "primary_uuid": str(candidate.uuid),
-            "duplicate_uuid": submitted_ticket_uuid,
+            "duplicate_uuid": submitted_task_uuid,
             "actor_uuid": str(actor.uuid),
             "source_layer": "fast",
             "decision_reason": outcome,
@@ -156,8 +170,8 @@ def _retrieval_radius_m(parameters: FastLayerParameters) -> float:
     return radius
 
 
-def _query_text(title: str | None, description: str | None) -> str:
-    parts = ((title or "")[:TITLE_MAX_CHARS], (description or "")[:DESCRIPTION_MAX_CHARS])
+def _query_text(name: str | None, description: str | None) -> str:
+    parts = ((name or "")[:NAME_MAX_CHARS], (description or "")[:DESCRIPTION_MAX_CHARS])
     return " ".join(part for part in parts if part).strip()
 
 
@@ -168,9 +182,18 @@ async def _get_ticket(db: AsyncSession, ticket_uuid: str) -> Tickets:
     return ticket
 
 
-async def _rescore_pair(db: AsyncSession, *, submitted: Tickets, candidate: Tickets) -> CandidateScore | None:
+async def _get_task(db: AsyncSession, task_uuid: str) -> TicketTask:
+    task = await ticket_task_repository.get_by_uuid_active(db, task_uuid)
+    if not task:
+        raise ValueError("Task not found")
+    return task
+
+
+async def _rescore_pair(
+    db: AsyncSession, *, submitted: TicketTask, submitted_ticket: Tickets, candidate: TicketTask
+) -> CandidateScore | None:
     """Recompute the pair's score server-side instead of trusting the client's."""
-    geojson = geom_to_geojson(submitted.geometry)
+    geojson = geom_to_geojson(submitted_ticket.geometry)
     if not geojson or geojson.get("type") != "Point":
         return None
     longitude, latitude = geojson["coordinates"][:2]
@@ -178,7 +201,7 @@ async def _rescore_pair(db: AsyncSession, *, submitted: Tickets, candidate: Tick
         db,
         longitude=longitude,
         latitude=latitude,
-        query_text=_query_text(submitted.title, submitted.description),
+        query_text=_query_text(submitted.task_name, submitted.task_description),
         candidate_uuid=str(candidate.uuid),
         now=submitted.created_at,
     )
@@ -199,7 +222,7 @@ async def _upsert_fast_pair(
     hint_outcome = "accepted_hint" if accepted else "ignored_hint"
 
     existing = await duplicate_pair_repository.get_active_by_entities(
-        db, entity_kind="ticket", low_uuid=low_uuid, high_uuid=high_uuid
+        db, entity_kind=ENTITY_KIND, low_uuid=low_uuid, high_uuid=high_uuid
     )
     if existing:
         existing.hint_outcome = hint_outcome
@@ -213,7 +236,7 @@ async def _upsert_fast_pair(
     return await duplicate_pair_repository.add(
         db,
         obj_in={
-            "entity_kind": "ticket",
+            "entity_kind": ENTITY_KIND,
             "low_uuid": low_uuid,
             "high_uuid": high_uuid,
             "similarity": None if score is None else Decimal(f"{score.similarity:.4f}"),
