@@ -16,20 +16,19 @@ export type BadgeTone =
   | 'danger'
   | 'info';
 
-export type BadgeVariant = 'solid' | 'subtle';
+export type BadgeVariant = 'solid' | 'subtle' | 'outline' | 'dashed';
 
-/**
- * Fill + label for every tone, in both variants.
- *
- * Ported from the design system's `Badge` (`_ds_bundle.js`, `components/core/Badge.jsx`). Values
- * track `design-tokens.ts`, which since 2026-09-17 is ahead of the Figma export on `on-secondary`
- * and `on-info`. The point of keeping the pairs together is that the label colour is never assumed —
- * `warning` solid is a light amber that takes near-black text, while `danger` solid takes white.
- * Picking a fill without its label is how the old per-component badges ended up with white-on-amber.
- *
- * `neutral` deliberately has the same fill in both variants: the design system defines no solid
- * neutral, so a solid request falls back to the sunken surface rather than inventing a grey.
- */
+export type BadgeSize = 'sm' | 'md' | 'lg';
+
+const SIZES: Record<
+  BadgeSize,
+  { height: number; px: number; gap: number; icon: number }
+> = {
+  sm: { height: 20, px: 7, gap: 3, icon: 11 },
+  md: { height: 22, px: 8, gap: 4, icon: 12 },
+  lg: { height: 24, px: 10, gap: 5, icon: 13 },
+};
+
 const TONES: Record<
   BadgeTone,
   { solidBg: string; solidFg: string; subBg: string; subFg: string }
@@ -81,27 +80,36 @@ const TONES: Record<
 export interface BadgeProps extends Omit<BoxProps, 'color'> {
   tone?: BadgeTone;
   variant?: BadgeVariant;
+  size?: BadgeSize;
+  icon?: ReactNode;
   children?: ReactNode;
 }
 
-/**
- * Compact status / metadata label.
- *
- * Both `secondary` and `info` solid label BLACK, not white, since the designer's 2026-09-17 ruling:
- * white on `#2592B9` measured 3.56:1, black measures 5.30:1.
- *
- * Every tone/variant pair clears WCAG AA, and `design-tokens.spec.ts` asserts it — including
- * `warning` + `subtle`, which measured 3.46:1 until the `amber-900` primitive was added.
- */
 export function Badge({
   tone = 'neutral',
   variant = 'subtle',
+  size = 'md',
+  icon,
   children,
   sx,
   ...rest
 }: BadgeProps) {
   const t = TONES[tone];
-  const solid = variant === 'solid';
+  const s = SIZES[size];
+  const fill = {
+    solid: { background: t.solidBg, color: t.solidFg, border: 'none' },
+    subtle: { background: t.subBg, color: t.subFg, border: 'none' },
+    outline: {
+      background: 'transparent',
+      color: t.subFg,
+      border: `1px solid ${color.border.default}`,
+    },
+    dashed: {
+      background: color.bg.neutral.subtle,
+      color: color.fg.neutral.muted,
+      border: `1px dashed ${color.border.default}`,
+    },
+  }[variant];
 
   return (
     <Box
@@ -109,22 +117,24 @@ export function Badge({
       sx={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 0.5,
-        height: 22,
-        px: 1,
+        boxSizing: 'border-box',
+        gap: `${s.gap}px`,
+        height: s.height,
+        px: `${s.px}px`,
         borderRadius: `${radius.full}px`,
-        background: solid ? t.solidBg : t.subBg,
-        color: solid ? t.solidFg : t.subFg,
+        ...fill,
         fontFamily: typography.label[300].fontFamily,
         fontSize: typography.label[300].fontSize,
         lineHeight: typography.label[300].lineHeight,
-        fontWeight: 700,
+        fontWeight: variant === 'dashed' ? 400 : 700,
         letterSpacing: '0.02em',
         whiteSpace: 'nowrap',
+        '& .MuiSvgIcon-root': { fontSize: s.icon, flexShrink: 0 },
         ...sx,
       }}
       {...rest}
     >
+      {icon}
       {children}
     </Box>
   );
