@@ -1,3 +1,3 @@
 export { DedupHintDialog } from './dedup-hint-dialog';
-export { TicketCreatedButTasksFailedError } from './errors';
-export { useDedupSubmitFlow } from './use-dedup-submit-flow';
+export { TicketCreatedButTasksFailedError, type CreatedTasks } from './errors';
+export { shownHint, useDedupSubmitFlow } from './use-dedup-submit-flow';

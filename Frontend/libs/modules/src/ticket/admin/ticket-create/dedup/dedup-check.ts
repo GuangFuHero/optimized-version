@@ -6,11 +6,12 @@ import {
   type TicketDedupCandidatesQuery,
 } from '@rescue-frontend/data-access';
 
+/** 一個即將送出的 task，加上新單的位置。 */
 export type DedupCheckInput = {
   geometry: Geometry;
-  title: string;
-  description?: string | null;
-  taskType?: string | null;
+  taskType: string;
+  taskName: string;
+  taskDescription: string;
 };
 
 export type DedupHint =
@@ -19,8 +20,9 @@ export type DedupHint =
 const CHECK_TIMEOUT_MS = 4000;
 
 /**
- * 回傳最像的一張既有單。沒有候選、逾時、403、網路或 GraphQL 錯誤都回 null：
- * 去重只是提示，任何失敗都不能擋住開單（fail-open）。永不 throw。
+ * 回傳附近最像這個 task 的既有 task（hint 帶著它和它的單）。沒有候選、逾時、403、
+ * 網路或 GraphQL 錯誤都回 null：去重只是提示，任何失敗都不能擋住開單（fail-open）。
+ * 永不 throw。
  */
 export async function findDuplicateCandidate(
   client: Client,
@@ -34,9 +36,9 @@ export async function findDuplicateCandidate(
           {
             input: {
               geometry: input.geometry,
-              title: input.title.trim().slice(0, 200),
-              description: input.description?.trim().slice(0, 2000),
               taskType: input.taskType,
+              taskName: input.taskName.trim().slice(0, 200),
+              taskDescription: input.taskDescription.trim().slice(0, 2000),
             },
           },
           { requestPolicy: 'network-only' },

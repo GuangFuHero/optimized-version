@@ -3,6 +3,7 @@
 query TicketDedupCandidates($input: TicketDedupCheckInput!) {
   ticketDedupCandidates(input: $input) {
     relatedTicketUuid
+    relatedTaskUuid
     similarity
     scoreComponents {
       name
@@ -33,5 +34,9 @@ fragment TicketSummaryFields on TicketType {
 query GetTicketSummary($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...TicketSummaryFields
+    tasks {
+      uuid
+      taskName
+    }
   }
 }

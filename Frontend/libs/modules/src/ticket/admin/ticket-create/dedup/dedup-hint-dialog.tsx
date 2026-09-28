@@ -50,8 +50,10 @@ function formatCreatedAt(value: unknown): string | null {
 }
 
 type DedupHintDialogProps = {
-  /** 要提示的候選單；null 時關閉。 */
+  /** 要提示的候選；null 時關閉。 */
   hint: DedupHint | null;
+  /** 這個提示是關於哪個草稿 task，例如「子任務 2：搬沙包」。 */
+  taskLabel: string;
   /** 正在另外開單：鎖住所有動作。 */
   busy: boolean;
   onViewCandidate: () => void;
@@ -63,6 +65,7 @@ type DedupHintDialogProps = {
 
 export function DedupHintDialog({
   hint,
+  taskLabel,
   busy,
   onViewCandidate,
   onProceedAnyway,
@@ -87,6 +90,9 @@ export function DedupHintDialog({
     data?.ticket ?? null,
   );
   const summaryMissing = !fetching && (Boolean(error) || !ticket);
+  const matchedTaskName = data?.ticket?.tasks.find(
+    (task) => task.uuid === hint?.relatedTaskUuid,
+  )?.taskName;
 
   const close = () => {
     if (!busy) {
@@ -161,11 +167,17 @@ export function DedupHintDialog({
 
       <DialogContent sx={{ px: 2.5, pb: 1 }}>
         <Stack spacing={2}>
+          <Typography
+            sx={{ fontSize: 14, fontWeight: 800, color: palette.secondaryText }}
+          >
+            {taskLabel}
+          </Typography>
           <Typography id={descriptionId} sx={bodyTextSx}>
-            我們找到一張很像的求助單。如果是同一件事，去那張單看看就好，不用再開一張；如果不是，可以另外開單，系統會分開追蹤。
+            附近有一張求助單的需求跟這個子任務很像。如果是同一件事，去那張單看看就好，這個子任務就不送出；如果不是，可以照樣送出，系統會分開追蹤。
           </Typography>
           <CandidateCard
             ticket={summaryMissing ? null : ticket}
+            matchedTaskName={matchedTaskName}
             loading={fetching && !ticket}
           />
         </Stack>
@@ -241,9 +253,11 @@ export function DedupHintDialog({
 /** 候選單摘要：載入中顯示骨架，讀不到就請使用者直接開啟。 */
 function CandidateCard({
   ticket,
+  matchedTaskName,
   loading,
 }: {
   ticket: TicketSummaryFieldsFragment | null;
+  matchedTaskName?: string;
   loading: boolean;
 }) {
   const animation = useMediaQuery(REDUCED_MOTION) ? false : 'pulse';
@@ -331,6 +345,11 @@ function CandidateCard({
               </Typography>
             ) : null}
           </Stack>
+          {matchedTaskName ? (
+            <Typography sx={{ fontSize: 13, color: palette.bodyText }}>
+              相似的需求：{matchedTaskName}
+            </Typography>
+          ) : null}
           {createdAt ? (
             <Typography sx={{ fontSize: 12, color: palette.bodyText }}>
               {createdAt}

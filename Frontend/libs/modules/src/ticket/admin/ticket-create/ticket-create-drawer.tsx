@@ -26,6 +26,7 @@ import {
   CreateTicketDocument,
   CreateTicketTaskDocument,
   TicketFieldsFragmentDoc,
+  TicketTaskFieldsFragmentDoc,
   useFragment,
   type CreateTicketTaskInput,
 } from '@rescue-frontend/data-access';
@@ -36,7 +37,9 @@ import type { TicketListRowItem } from '../ticket-list/types';
 import {
   DedupHintDialog,
   TicketCreatedButTasksFailedError,
+  shownHint,
   useDedupSubmitFlow,
+  type CreatedTasks,
 } from './dedup';
 import { ticketCreatePalette } from './palette';
 import {
@@ -357,7 +360,8 @@ export function TicketCreateDrawer({
   const [flowState, flow] = useDedupSubmitFlow(createTicketFromDraft);
   const isChecking = flowState.phase === 'checking';
   const isCreating = flowState.phase === 'creating';
-  const hint = 'hint' in flowState ? flowState.hint : null;
+  const shown = shownHint(flowState);
+  const shownTaskIndex = tasks.findIndex((task) => task.id === shown?.taskId);
   const derivedStatus = 'pending';
   const derivedUpdatedAt = useMemo(() => formatNow(), [open]);
 
@@ -471,7 +475,10 @@ export function TicketCreateDrawer({
   };
 
   const handleHintDialogExited = () => {
-    if (flowState.phase === 'idle' || flowState.phase === 'error') {
+    const backToForm = ['idle', 'error', 'nothingFiled'].includes(
+      flowState.phase,
+    );
+    if (backToForm) {
       createButtonRef.current?.focus();
     }
   };
@@ -584,7 +591,9 @@ export function TicketCreateDrawer({
   };
 
   // function 宣告會 hoist，上面的 useDedupSubmitFlow 才能直接拿到它。
-  async function createTicketFromDraft(): Promise<{ uuid: string }> {
+  async function createTicketFromDraft(
+    taskIds: string[],
+  ): Promise<CreatedTasks> {
     const longitude = Number(form.longitude);
     const latitude = Number(form.latitude);
 
@@ -619,27 +628,32 @@ export function TicketCreateDrawer({
       ticketResult.data.createTicket,
     );
 
-    const taskInputs: CreateTicketTaskInput[] = tasks.map((task) => ({
-      ticketUuid: createdTicket.uuid,
-      taskType: task.taskType,
-      taskName: task.taskName.trim(),
-      taskDescription: task.taskDescription.trim() || undefined,
-      quantity: task.quantity ? Number(task.quantity) : undefined,
-      source: 'user',
-      visibility: 'public',
-      // TODO: backend 目前沒有 create task assignment mutation，
-      // actorUuid / assignedAt 先保留在前端 UI，暫不送出。
-    }));
-
-    for (const taskInput of taskInputs) {
+    const created: CreatedTasks = {};
+    for (const task of tasks.filter(({ id }) => taskIds.includes(id))) {
+      const taskInput: CreateTicketTaskInput = {
+        ticketUuid: createdTicket.uuid,
+        taskType: task.taskType,
+        taskName: task.taskName.trim(),
+        taskDescription: task.taskDescription.trim() || undefined,
+        quantity: task.quantity ? Number(task.quantity) : undefined,
+        source: 'user',
+        visibility: 'public',
+        // TODO: backend 目前沒有 create task assignment mutation，
+        // actorUuid / assignedAt 先保留在前端 UI，暫不送出。
+      };
       const taskResult = await createTicketTask({ input: taskInput });
+      const createdTask = taskResult.data?.createTicketTask;
 
-      if (taskResult.error) {
+      if (taskResult.error || !createdTask) {
         throw new TicketCreatedButTasksFailedError(
-          createdTicket.uuid,
-          taskResult.error.message,
+          created,
+          taskResult.error?.message ?? '新增子任務失敗。',
         );
       }
+      created[task.id] = useFragment(
+        TicketTaskFieldsFragmentDoc,
+        createdTask,
+      ).uuid;
     }
 
     onCreated?.(
@@ -674,7 +688,7 @@ export function TicketCreateDrawer({
       }),
     );
 
-    return { uuid: createdTicket.uuid };
+    return created;
   }
 
   const handleSubmit = async () => {
@@ -709,15 +723,10 @@ export function TicketCreateDrawer({
       return;
     }
 
-    await flow.submit({
-      geometry: {
-        type: 'Point',
-        coordinates: [longitude, latitude],
-      },
-      title: form.title,
-      description: form.description,
-      taskType: form.taskType,
-    });
+    await flow.submit(
+      { type: 'Point', coordinates: [longitude, latitude] },
+      tasks,
+    );
   };
 
   return (
@@ -826,6 +835,11 @@ export function TicketCreateDrawer({
       >
         <Stack spacing={2.5}>
           {submitError ? <Alert severity="error">{submitError}</Alert> : null}
+          {flowState.phase === 'nothingFiled' ? (
+            <Alert severity="info">
+              每個子任務附近都已經有相同的需求，這次沒有建立新的求助單。
+            </Alert>
+          ) : null}
 
           <Section title="主任務">
             <Stack spacing={1.5}>
@@ -1311,7 +1325,12 @@ export function TicketCreateDrawer({
         </Stack>
       </AdminDetailModalFrame>
       <DedupHintDialog
-        hint={hint}
+        hint={shown?.hint ?? null}
+        taskLabel={
+          shownTaskIndex >= 0
+            ? `子任務 ${shownTaskIndex + 1}：${tasks[shownTaskIndex].taskName.trim()}`
+            : ''
+        }
         busy={isCreating}
         onViewCandidate={flow.viewCandidate}
         onProceedAnyway={() => void flow.proceedAnyway()}

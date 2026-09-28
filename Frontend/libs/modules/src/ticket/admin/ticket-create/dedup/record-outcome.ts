@@ -6,9 +6,9 @@ import {
 } from '@rescue-frontend/data-access';
 
 /**
- * 記下使用者對提示的選擇：
- * - `accepted_hint`：去看了舊單、沒有開新單，不帶 `submittedTicketUuid`。
- * - `ignored_hint`：照樣開了新單，帶新單的 `submittedTicketUuid`。
+ * 記下使用者對某個 task 提示的選擇（`candidateUuid` 是 hint 的 `relatedTaskUuid`）：
+ * - `accepted_hint`：去看了舊單、這個 task 不送出，不帶 `submittedUuid`。
+ * - `ignored_hint`：照樣送出，帶新建 task 的 `submittedUuid`。
  *
  * 只是稽核紀錄：失敗只 console.warn，永不 throw，不影響開單流程。
  */
