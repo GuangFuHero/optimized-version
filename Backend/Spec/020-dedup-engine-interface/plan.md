@@ -1036,7 +1036,11 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 ## Task 21: 兩段式編排
 
-**Files:** `app/services/dedup_submission.py`、`tests/test_dedup_submission.py`
+**Files:** `app/services/dedup_submission.py`、`tests/test_dedup_submission_v2.py`
+
+> **實作時調整（2026-09-29）**：新函式取名 `submit_new_ticket`／`submit_new_task`／`submit_new_station`，回傳
+> `SubmissionCreated`／`SubmissionHeld`，與 Phase 1 的 `submit_ticket`／`submit_station` 並存到 Task 22 切換 GraphQL、
+> Task 23 刪除舊的；任務以 `TaskSubmission`（含各自的 `acknowledged_duplicate_of`）傳入。
 
 - [ ] `submit_ticket(..., tasks, acknowledged)`：驗證全部 → `check_submission(NewTicket)` → 有疑似重複：各寫 `hint_shown`、回 `Suspected(suspects)`、零寫入；否則工單＋任務同一 transaction，確認的草稿各寫配對卡
 - [ ] `submit_ticket_task(..., ticket_uuid, draft, acknowledged_duplicate_of)`、`submit_station` 改走 `check_submission`
@@ -1044,7 +1048,11 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 ## Task 22: GraphQL
 
-**Files:** `app/graphql/tickets/*`、`app/graphql/geo/*`、`tests/test_graphql/*`
+**Files:** `app/graphql/tickets/*`、`app/graphql/geo/*`、`app/graphql/shared.py`、`tests/test_graphql/*`
+
+> **實作時調整（2026-09-29）**：通用的 `DuplicateSuspect`／`DuplicatesSuspected` 放在 `app/graphql/shared.py`（工單與站點共用，
+> 避免 geo↔tickets 互相 import）；`createTicket` 的工單層確認改放在 `CreateTicketInput.acknowledgedDuplicateOf`（spec §5.1），
+> 不再是 mutation 參數；GraphQL 測試的 stub 同時蓋掉 `_ENGINE` 與 `_SUBMISSION_ENGINE`。
 
 - [ ] 通用 `DuplicatesSuspected { suspects: [DuplicateSuspect] }`；`CreateTicketTaskDraft`、`CreateTicketInput.tasks`／`acknowledgedDuplicateOf`、`TicketCreated { ticket, tasks }`
 - [ ] `createTicketTask(input, acknowledgedDuplicateOf)` 回 `CreateTicketTaskResult`；`createStation` 改回通用型別
