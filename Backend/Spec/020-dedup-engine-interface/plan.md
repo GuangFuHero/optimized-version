@@ -1,6 +1,6 @@
 # 020 去重引擎介面 — Implementation Plan
 
-**進度（2026-09-28）**：Task 1~14 完成，Docker 完整驗證通過（見 `Backend/DEDUP_ENGINE_020_VERIFICATION.md`）。Task 0（與 Chi 確認合約、效能門檻）未做。前端不在後端範圍，§「交給前端的 API 變更」只是交接說明。
+**進度（2026-09-29）**：Phase 1（Task 1~14，工單層級）完成並通過 Docker 驗證（見 `Backend/DEDUP_ENGINE_020_VERIFICATION.md`）。2026-09-29 合進 Chi 的任務層級更新與 main（merge `af2ca1d95`，全套件 1587 passed）；**Phase 2（Task 16~24，任務層級，ADR-300~303）待實作**。Task 0（與 Chi 確認合約、效能門檻）未做。前端不在後端範圍，§「交給前端的 API 變更」只是交接說明。
 
 **Goal:** 把 Spec 019 的去重快層包成「演算法可獨立迭代」的後端服務：Chi 只動 `app/dedup_engine/`，
 後端只依賴 `contract.py`；提示改由 `createTicket` / `createStation` 兩段式帶出，拿掉獨立的 dedup API。
@@ -1062,6 +1062,10 @@ Chi 把 019 的比對單位改成任務後追加。前提：本分支已合進 #
 ## 交給前端的 API 變更（後端不負責實作）
 
 前端改動由前端負責，後端只提供合約。以下是本票對 GraphQL 的破壞性變更，供前端與 #47 作者調整：
+
+> ⚠️ **以下是 Phase 1（工單層級）的合約，Phase 2 會再改**：`createTicket` 改為帶 `tasks` 清單、回傳
+> `DuplicatesSuspected { suspects: [{ draftIndex, relatedTicketUuid, relatedTaskUuid }] }`，`createTicketTask` 也改兩段式
+>（spec §5.1、§5.2）。Task 23 完成時改寫本段；前端請以 Phase 2 完成後的版本為準。
 
 - **移除**：`ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`，以及 `TicketDedupHint`、
   `StationDedupHint`、`DedupScoreComponent`、`DedupEntityKind`、`DedupHintOutcome` 等型別。

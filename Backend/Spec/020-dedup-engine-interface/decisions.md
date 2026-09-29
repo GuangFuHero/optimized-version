@@ -85,6 +85,8 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 ### ADR-289 送事實不送特徵：型別化的白名單快照，送出與候選同型
 
+> **部分被 ADR-300 取代（2026-09-29）**：`TicketSnapshot` 改為 `TaskSnapshot`。「送事實、白名單、同型、只加不改」的原則不變。
+
 **白話**：後端送整份實體的欄位原值，不送算好的分數；送出中那筆和候選是同一種型別。
 
 **Context**：Spec 019 的 `DedupCandidate(distance_m, age_min, task_type, text_similarity)`
@@ -217,6 +219,8 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 ---
 
 ### ADR-296 建單兩段式：`createTicket` / `createStation` 回傳 union
+
+> **求助單部分被 ADR-301／302 取代（2026-09-29）**：比對單位改為任務，`createTicket` 帶任務清單、`createTicketTask` 也兩段式。站點部分與「第一段不建立、第二段帶確認」的原則不變。
 
 **白話**：第一次送出如果疑似重複，就不建單，回傳疑似重複的那一筆；使用者確認後再送一次才建單。
 
