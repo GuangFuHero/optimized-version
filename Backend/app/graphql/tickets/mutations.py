@@ -10,18 +10,19 @@ from uuid import UUID
 import strawberry
 
 from app.graphql.context import require_authenticated
-from app.graphql.shared import secondary_location_to_dict
+from app.graphql.shared import DuplicatesSuspected, secondary_location_to_dict
 from app.graphql.tickets.types import (
     CreateTaskPropertyInput,
     CreateTicketInput,
     CreateTicketResult,
     CreateTicketTaskInput,
-    DuplicateSuspected,
+    CreateTicketTaskResult,
     TaskAssignmentType,
     TaskPropertyType,
     TicketCreated,
     TicketDisasterDetailInput,
     TicketDisasterDetailType,
+    TicketTaskCreated,
     TicketTaskType,
     TicketType,
     UpdateTaskAssignmentInput,
@@ -30,7 +31,7 @@ from app.graphql.tickets.types import (
     UpdateTicketTaskInput,
 )
 from app.services import ticket as ticket_service
-from app.services.dedup_submission import Suspected, submit_ticket
+from app.services.dedup_submission import SubmissionHeld, TaskSubmission, submit_new_task, submit_new_ticket
 
 
 @strawberry.type
@@ -39,23 +40,22 @@ class RequestMutation:
 
     @strawberry.mutation
     async def create_ticket(
-        self,
-        info: strawberry.types.Info,
-        input: CreateTicketInput,
-        acknowledged_duplicate_of: str | None = None,
+        self, info: strawberry.types.Info, input: CreateTicketInput
     ) -> CreateTicketResult:
-        """Create a support ticket — unless it looks like an open ticket nearby.
+        """Create a support ticket with its tasks — unless any part looks like something already there.
 
-        Two-phase (Spec 020, ADR-296). The first call either creates (`TicketCreated`) or, when
-        an open ticket nearby looks like the same request, creates nothing and returns
-        `DuplicateSuspected` with that ticket's uuid. To file anyway, call again with the same
-        input and `acknowledgedDuplicateOf` = that uuid: the ticket is created without a second
-        check and the pair is recorded for review. A failing duplicate check never blocks:
-        the ticket is created as if nothing matched. Requires ticket.add.
+        Two-phase (Spec 020 §5.1). If any task (or the ticket) looks like an open one nearby,
+        nothing is created and `DuplicatesSuspected` lists each suspect: which part of the input
+        (`draftRef`) and what it looks like. Send the same input again after editing, or with
+        `acknowledgedDuplicateOf` set on each part confirmed not to be a duplicate; those parts are
+        not checked again and the pair is recorded for review. Otherwise the ticket and all its
+        tasks are created together (`TicketCreated`). A failing duplicate check never blocks.
+        Requires ticket.add.
         """
-        result = await submit_ticket(
+        result = await submit_new_ticket(
             info.context["db"], actor=require_authenticated(info),
-            acknowledged_duplicate_of=acknowledged_duplicate_of,
+            acknowledged_duplicate_of=input.acknowledged_duplicate_of,
+            tasks=[_task_submission(task) for task in input.tasks],
             geometry=input.geometry, title=input.title, description=input.description,
             contact_name=input.contact_name, contact_email=input.contact_email,
             contact_phone=input.contact_phone, priority=input.priority,
@@ -73,9 +73,12 @@ class RequestMutation:
                 else None
             ),
         )
-        if isinstance(result, Suspected):
-            return DuplicateSuspected(related_ticket_uuid=result.related_uuid)
-        return TicketCreated(ticket=TicketType.from_model(result.entity))
+        if isinstance(result, SubmissionHeld):
+            return DuplicatesSuspected.of(result.suspects)
+        return TicketCreated(
+            ticket=TicketType.from_model(result.entity),
+            tasks=[TicketTaskType.from_model(task) for task in result.tasks],
+        )
 
     @strawberry.mutation
     async def update_ticket(
@@ -185,21 +188,32 @@ class TicketTaskMutation:
 
     @strawberry.mutation
     async def create_ticket_task(
-        self, info: strawberry.types.Info, input: CreateTicketTaskInput
-    ) -> TicketTaskType:
-        """Create a new task (rescue, HR, supply, etc.) under an existing ticket.
+        self,
+        info: strawberry.types.Info,
+        input: CreateTicketTaskInput,
+        acknowledged_duplicate_of: str | None = None,
+    ) -> CreateTicketTaskResult:
+        """Add a task (rescue, HR, supply, etc.) to an existing ticket — unless it looks like another.
 
-        Verifies the parent ticket exists. Requires ticket.add permission (checkpoint 1
-        only — matches prior behavior, which did not scope-check against the parent ticket).
-        Returns the created TicketTaskType.
+        Two-phase (Spec 020 §5.2): `DuplicatesSuspected` (nothing added) when it looks like an
+        open task of another ticket; send again with `acknowledgedDuplicateOf` to add it anyway.
+        The ticket's own tasks are never suspects. Verifies the parent ticket exists. Requires
+        ticket.add (checkpoint 1 only — no scope check against the parent ticket).
         """
-        task = await ticket_service.create_ticket_task(
-            info.context["db"], actor=require_authenticated(info),
-            ticket_uuid=input.ticket_uuid, task_type=input.task_type, task_name=input.task_name,
-            task_description=input.task_description, quantity=input.quantity,
-            source=input.source, visibility=input.visibility.value, route_uuid=input.route_uuid,
+        result = await submit_new_task(
+            info.context["db"],
+            actor=require_authenticated(info),
+            ticket_uuid=input.ticket_uuid,
+            task=TaskSubmission(
+                task_type=input.task_type, task_name=input.task_name,
+                task_description=input.task_description, quantity=input.quantity,
+                source=input.source, visibility=input.visibility.value, route_uuid=input.route_uuid,
+                acknowledged_duplicate_of=acknowledged_duplicate_of,
+            ),
         )
-        return TicketTaskType.from_model(task)
+        if isinstance(result, SubmissionHeld):
+            return DuplicatesSuspected.of(result.suspects)
+        return TicketTaskCreated(task=TicketTaskType.from_model(result.entity))
 
     @strawberry.mutation
     async def update_ticket_task(
@@ -323,3 +337,17 @@ class TicketTaskMutation:
             info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
         )
         return True
+
+
+def _task_submission(draft) -> TaskSubmission:
+    """A `CreateTicketTaskDraft` as the service takes it."""
+    return TaskSubmission(
+        task_type=draft.task_type,
+        task_name=draft.task_name,
+        task_description=draft.task_description,
+        quantity=draft.quantity,
+        source=draft.source,
+        visibility=draft.visibility.value,
+        route_uuid=draft.route_uuid,
+        acknowledged_duplicate_of=draft.acknowledged_duplicate_of,
+    )

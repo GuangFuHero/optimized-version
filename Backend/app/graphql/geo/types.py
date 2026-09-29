@@ -16,6 +16,7 @@ from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import (  # noqa: F401 -- the address types and their mapper are
     AccessStatus,  # re-exported here for existing geo callers
+    DuplicatesSuspected,
     PageInfo,
     SecondaryLocationInput,
     SecondaryLocationType,
@@ -231,20 +232,7 @@ class StationCreated:
     station: StationType
 
 
-@strawberry.type
-class DuplicateStationSuspected:
-    """`createStation` registered nothing: a serving station nearby looks like the same one.
-
-    Show it to the submitter. To register anyway, call `createStation` again with
-    `acknowledgedDuplicateOf` set to `relatedStationUuid` (Spec 020, ADR-296).
-    """
-
-    related_station_uuid: str = strawberry.field(description="疑似重複的既有據點 uuid")
-
-
-CreateStationResult = Annotated[
-    StationCreated | DuplicateStationSuspected, strawberry.union("CreateStationResult")
-]
+CreateStationResult = Annotated[StationCreated | DuplicatesSuspected, strawberry.union("CreateStationResult")]
 
 
 @strawberry.type

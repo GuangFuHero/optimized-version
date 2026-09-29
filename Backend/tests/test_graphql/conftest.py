@@ -164,6 +164,20 @@ class _NeverMatches:
         raise AssertionError("the stub dedup engine does not score")
 
 
+class _NeverSuspects:
+    """The ADR-304 counterpart of `_NeverMatches`: `check` suspects nothing."""
+
+    version = "stub-v2"
+
+    async def check(self, db, submission, now):
+        """Never a suspect."""
+        return []
+
+    async def score(self, db, submission, draft_ref, related_kind, related_uuid, now):
+        """Only reached through an acknowledged create, which these tests do not send."""
+        raise AssertionError("the stub dedup engine does not score")
+
+
 def pytest_configure(config):
     """Register the marker that opts a test into the real dedup engine."""
     config.addinivalue_line("markers", "real_dedup: run create mutations with the real dedup engine")
@@ -174,6 +188,7 @@ def _no_dedup_hints(request, monkeypatch):
     """Every GraphQL test runs with the never-matching engine unless marked `real_dedup`."""
     if request.node.get_closest_marker("real_dedup") is None:
         monkeypatch.setattr(dedup_registry, "_ENGINE", _NeverMatches())
+        monkeypatch.setattr(dedup_registry, "_SUBMISSION_ENGINE", _NeverSuspects())
 
 
 @pytest_asyncio.fixture(autouse=True)

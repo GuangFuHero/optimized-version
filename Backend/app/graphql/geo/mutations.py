@@ -18,7 +18,6 @@ from app.graphql.geo.types import (
     CreateStationPropertyInput,
     CreateStationResult,
     CrowdSourcingType,
-    DuplicateStationSuspected,
     StationCreated,
     StationPropertyType,
     StationType,
@@ -27,11 +26,12 @@ from app.graphql.geo.types import (
     UpdateStationPropertyInput,
     secondary_location_to_dict,
 )
+from app.graphql.shared import DuplicatesSuspected
 from app.graphql.tickets.types import PhotoType
 from app.services import closure_area as closure_area_service
 from app.services import photo as photo_service
 from app.services import station as station_service
-from app.services.dedup_submission import Suspected, submit_station
+from app.services.dedup_submission import SubmissionHeld, submit_new_station
 
 
 @strawberry.type
@@ -50,15 +50,16 @@ class GeoMutation:
         Validates the geometry as a Point within valid lon/lat bounds. Optionally attaches a
         secondary address or pole location. Requires station.add.
 
-        Two-phase (Spec 020, ADR-296): returns `StationCreated`, or creates nothing and returns
-        `DuplicateStationSuspected`. Call again with `acknowledgedDuplicateOf` = its uuid to
-        register anyway; the pair is recorded for review. A failing duplicate check never blocks.
+        Two-phase (Spec 020 §5.3): returns `StationCreated`, or registers nothing and returns
+        `DuplicatesSuspected`. Call again with `acknowledgedDuplicateOf` = the suspect's
+        `relatedUuid` to register anyway; the pair is recorded for review. A failing duplicate
+        check never blocks.
         """
         sl_dict = None
         if input.secondary_location is not None:
             sl = input.secondary_location
             sl_dict = secondary_location_to_dict(sl)
-        result = await submit_station(
+        result = await submit_new_station(
             info.context["db"],
             actor=require_authenticated(info),
             acknowledged_duplicate_of=acknowledged_duplicate_of,
@@ -71,8 +72,8 @@ class GeoMutation:
             operational_status=input.operational_status.value,
             secondary_location=sl_dict,
         )
-        if isinstance(result, Suspected):
-            return DuplicateStationSuspected(related_station_uuid=result.related_uuid)
+        if isinstance(result, SubmissionHeld):
+            return DuplicatesSuspected.of(result.suspects)
         return StationCreated(station=StationType.from_model(result.entity))
 
     @strawberry.mutation

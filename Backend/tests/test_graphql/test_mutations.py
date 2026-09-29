@@ -86,7 +86,7 @@ mutation($uuid: UUID!, $input: UpdateTicketInput!) {
 
 CREATE_TICKET_TASK = """
 mutation($input: CreateTicketTaskInput!) {
-    createTicketTask(input: $input) { uuid taskType taskName status }
+    createTicketTask(input: $input) { ... on TicketTaskCreated { task { uuid taskType taskName status } } }
 }
 """
 
@@ -939,7 +939,7 @@ async def test_create_ticket_task(client, coordinator_auth, sample_ticket):
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["createTicketTask"]
+    data = resp.json()["data"]["createTicketTask"]["task"]
     assert data["uuid"] is not None
     assert data["taskType"] == "hr"
     assert data["status"] == "pending"

@@ -210,3 +210,45 @@ def secondary_location_to_dict(sl: SecondaryLocationInput) -> dict:
         "landmark_note": sl.landmark_note,
         "pole_id": sl.pole_id, "pole_type": sl.pole_type, "pole_note": sl.pole_note,
     }
+
+
+@strawberry.type
+class DuplicateSuspect:
+    """One part of a submission that looks like something already there (Spec 020, ADR-304)."""
+
+    draft_ref: str = strawberry.field(
+        description='Which part of what was sent: "ticket", "task:0", "task:1"…, or "station"'
+    )
+    related_kind: str = strawberry.field(
+        description='What it looks like: "ticket", "ticket_task" or "station"'
+    )
+    related_uuid: str = strawberry.field(description="The existing entity it looks like")
+    related_ticket_uuid: str | None = strawberry.field(
+        default=None, description="When it looks like a task, that task's ticket"
+    )
+
+
+@strawberry.type
+class DuplicatesSuspected:
+    """Nothing was created: these parts look like existing ones (Spec 020 §5).
+
+    Show them to the submitter. To create anyway, send the same input again with
+    `acknowledgedDuplicateOf` set on each part the submitter confirmed is not a duplicate.
+    """
+
+    suspects: list[DuplicateSuspect]
+
+    @classmethod
+    def of(cls, suspects) -> "DuplicatesSuspected":
+        """From the service's suspects."""
+        return cls(
+            suspects=[
+                DuplicateSuspect(
+                    draft_ref=s.draft_ref,
+                    related_kind=s.related_kind,
+                    related_uuid=s.related_uuid,
+                    related_ticket_uuid=s.related_ticket_uuid,
+                )
+                for s in suspects
+            ]
+        )
