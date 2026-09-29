@@ -498,4 +498,5 @@ ADR-301／302 的 API 保留，但回傳的疑似重複改為通用形狀（見 
 
 ➕ 候選查詢成本只跟半徑內的筆數有關，不再跟全表大小有關。
 ➖ 多一個 GIST expression index：`base_geometries` 每次寫入多算一次 centroid（工單也會建，因為 index 建在父表）。
-◾ engine 以後換查詢寫法時，這兩條測試會提醒要對得上 index；Chi 改用別的表達式就要自己補 index。
+◾ **index 與所有 DB schema 歸後端管**（使用者 2026-09-29 定案）：engine 只寫唯讀查詢。Chi 換了查詢的距離表達式或篩選條件，
+  這兩條測試會紅，由後端補或調整 index／migration；Chi 不需要動 migration 或 model。

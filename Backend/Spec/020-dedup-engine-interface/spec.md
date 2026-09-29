@@ -44,7 +44,7 @@ Spec 019 交付了去重快層（2026-09-29 起比對單位是任務）。本功
 | contract | `app/dedup_engine/contract.py` | 雙方 | 草稿與 `Submission`、`Suspect`、`DedupEngine` Protocol | 改動需雙方同意 |
 | service | `app/services/dedup.py` | 後端 | 呼叫 engine（SAVEPOINT＋rollback、逾時、fail-open）、寫 `hint_shown`／配對卡／audit | 不含任何比對邏輯 |
 | 編排 | `app/services/dedup_submission.py` | 後端 | 三個觸發點的兩段式（§5），只給 GraphQL 用 | 批次匯入不經過這裡 |
-| model | `app/models/dedup.py` | 後端 | `duplicate_pairs`、`dedup_audit_events` | — |
+| model／schema | `app/models/`、`alembic/versions/` | 後端 | `duplicate_pairs`、`dedup_audit_events`，以及候選查詢要用的 index（ADR-305） | engine 不改 model、migration、index |
 
 **觸發點固定三個**：新開單（工單連同任務）、替既有的單加任務、登記站點。所有會被去重的東西都經過其中之一，
 所以觸發時機不隨演算法改變。
