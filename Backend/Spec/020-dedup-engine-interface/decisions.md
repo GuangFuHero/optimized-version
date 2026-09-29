@@ -1,4 +1,4 @@
-# 去重引擎介面 — ADR 全集（ADR-286~299）
+# 去重引擎介面 — ADR 全集（ADR-286~303）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/008-rbac-authorization/decisions.md`（ADR-285 為 2026-09-28 全 repo 各分支掃描的最大值）。
@@ -309,3 +309,87 @@ SemVer 的 major/minor 對演算法很難定義；commit hash 讀不懂且改註
 ➕ 批次匯入零改動。
 ➕ `create_*` 的既有呼叫端與測試不受影響。
 ➖ 匯入的資料不會在快層被比對。
+
+---
+
+## 任務層級（2026-09-29 追加）
+
+Chi 在 2026-09-29 把 Spec 019 的比對單位從工單改成任務（commit `0d186dedb`、`cf0e51c3e`、`7e28d72e3`，
+已合進本分支）。以下 ADR 把任務層級接到 Spec 020 的架構上。ADR-296 的「以工單為單位的 createTicket 兩段式」
+被 ADR-301／302 取代；ADR-289 的 `TicketSnapshot` 被 ADR-300 的 `TaskSnapshot` 取代。
+
+---
+
+### ADR-300 求助單這邊的比對單位是任務；快照改為 `TaskSnapshot`
+
+**白話**：比的不是「這張單像不像那張單」，而是「這個任務像不像附近另一個還開著的任務」。
+
+**Context**：019 的三個決定（Chi 註明「user 定案」）：每個任務寫入前都比對；每個任務最多一個提示；
+替既有的單加任務時排除同一張單自己的任務。候選是「還開著」的任務：任務 status 不是 `fulfilled`／`canceled`、
+未軟刪，所屬工單未軟刪、不是 `cancelled`（`completed` 的單仍算，它可以再加任務）。
+
+**Decision**：
+
+- contract 以 `TaskSnapshot` 取代 `TicketSnapshot`，`SNAPSHOT_SCHEMA_VERSION` 升為 2（改名＝破壞性，依 ADR-289 第 4 點）。
+  欄位：`uuid`、`ticket_uuid`、`location`（所屬工單的點）、`created_at`、`task_type`、`task_name`、`task_description`、
+  `quantity`、`status`。`EntityKind` 改為 `"ticket_task" | "station"`。
+- engine 的文字訊號比 `task_name + task_description`，類別比 `task_type`，距離是兩個任務所屬工單之間。
+- repository 的候選條件照 019；新增「排除某張工單的任務」參數。
+- `same_contact_phone` 比的是兩個任務**所屬工單**的電話（ADR-293 不變）。
+- 分數行為改變（單位、文字欄位都換了），engine 升為 **`fast-v2`**，重產 golden，寫 CHANGELOG。
+
+➖ 工單本身不再去重：兩張單的任務都不像，就不會提示。這是 019 的產品決定，照做。
+
+---
+
+### ADR-301 新開單：`createTicket` 帶任務清單，兩段式以任務為單位
+
+**白話**：開新單時連同任務一起送。任一任務疑似重複，整筆都不建，回傳每個被懷疑的任務對到誰；
+沒有命中就一次建好。
+
+**Context**：前端（#47）的流程是「存檔前先查所有草稿任務、逐一審閱、全部放棄就不建單」。後端目前新開單是
+`createTicket`（不帶任務）再逐個 `createTicketTask`，第一段若在 `createTicketTask` 才判斷，工單已經建好，
+使用者放棄所有任務時會留下空單。使用者 2026-09-29 定案：第一段回報「已經存在的」、什麼都不建；
+改好後送第二次，或確認不是重複後直接建立；沒碰到就一段建立。
+
+**Decision**：
+
+```graphql
+input CreateTicketTaskDraft {
+  taskType: String!  taskName: String!  taskDescription: String  quantity: Int
+  source: String = "user"  visibility: Visibility = public  routeUuid: String
+  acknowledgedDuplicateOf: String = null   # 使用者已確認「這不是那個任務的重複」
+}
+# CreateTicketInput 新增 tasks: [CreateTicketTaskDraft!]! = []
+
+union CreateTicketResult = TicketCreated | DuplicatesSuspected
+type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
+type DuplicatesSuspected { suspects: [TaskSuspect!]! }
+type TaskSuspect { draftIndex: Int!  relatedTicketUuid: String!  relatedTaskUuid: String! }
+```
+
+- 第一段：驗證工單與每個任務草稿 → 對**沒有** `acknowledgedDuplicateOf` 的草稿逐一跑去重（草稿之間不互相比，
+  它們屬於同一張新單）→ 任一命中：寫 `hint_shown`（每個命中一筆），回 `DuplicatesSuspected`，**工單與任務都不建**。
+- 全部未命中（或都已確認）：工單＋所有任務同一個 transaction 建立；帶確認的任務各寫一張 `dup_ignored` 配對卡與
+  `ignored_by_submitter`。
+- 確認綁在**每個任務草稿上**，不綁草稿順序：使用者刪掉或重排任務，確認仍跟著對的任務。
+- `tasks` 預設空清單：不帶任務的建單照舊（沒有可比的東西，直接建立），既有呼叫端不受影響。
+- 去重出錯照樣 fail-open，整筆照常建立。
+
+➕ 不會留下空單；工單與任務原子地一起出現。
+➖ `createTicket` 的 input 與回傳都改，前端要改成一次送出（交接說明見 plan）。
+
+---
+
+### ADR-302 替既有的單加任務：`createTicketTask` 兩段式
+
+**Decision**：`createTicketTask(input, acknowledgedDuplicateOf: String = null): CreateTicketTaskResult!`，
+回 `TicketTaskCreated { task }` 或 `DuplicatesSuspected`（`draftIndex` 固定 0）。位置取所屬工單的座標，
+候選排除同一張工單自己的任務（019 決定 3）。流程與 ADR-301 相同。
+
+---
+
+### ADR-303 `accepted_hint` 仍由第二段推得，以任務計
+
+**Decision**：每個命中的草稿任務在第一段各寫一筆 `hint_shown`（`primary_uuid` = 被比中的任務）。第二段該任務帶著
+確認送出 → `ignored_by_submitter`；沒有再出現 → 視為接受提示（去看舊單）。沿用 ADR-296 的推得方式，不另開 API。

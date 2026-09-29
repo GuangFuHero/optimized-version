@@ -984,6 +984,81 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 ---
 
+## Phase 2：任務層級（ADR-300~303，2026-09-29）
+
+Chi 把 019 的比對單位改成任務後追加。前提：本分支已合進 #59 的新 head（`3f97468f8`，含 main 的站點指派）。
+完成條件同前：每個 Task 自己的測試（先紅後綠）＋全套件不比基準差；全部做完再跑一次 Task 14 的 Docker 完整驗證。
+
+## Task 16: contract 改為 `TaskSnapshot`
+
+**Files:** `app/dedup_engine/contract.py`、`tests/dedup_engine/test_contract_types.py`
+
+- [ ] `TaskSnapshot(uuid, ticket_uuid, location, created_at, task_type, task_name, task_description=None, quantity=None, status=None)`
+- [ ] 移除 `TicketSnapshot`；`Snapshot = TaskSnapshot | StationSnapshot`；`EntityKind = Literal["ticket_task", "station"]`
+- [ ] `SNAPSHOT_SCHEMA_VERSION = 2`
+- [ ] 測試：必填欄位清單、無個資欄位、frozen
+
+## Task 17: engine `fast-v2`
+
+**Files:** `app/dedup_engine/fast.py`、`tests/dedup_engine/*`、`golden/fast.json`、`CHANGELOG.md`
+
+- [ ] `_category` / `_text` 改讀任務欄位（`task_type`、`task_name + task_description`，截斷 200／2000）
+- [ ] 參數表 key 改 `ticket_task`（值同 ticket）；`version = "fast-v2"`
+- [ ] `test_fast.py`、`test_contract.py`、`golden_cases.py` 改用任務快照；`regen_dedup_golden.py` 產生 fast-v2
+- [ ] CHANGELOG 加 fast-v2：比對單位改任務、文字欄位改任務名稱與說明，公式與參數不變
+- [ ] pg_trgm 對照測試加任務名稱樣本
+
+## Task 18: snapshot builder
+
+**Files:** `app/services/dedup_snapshot.py`、`tests/test_dedup_snapshot.py`
+
+- [ ] `task_submission(draft, *, ticket_location, ticket_uuid, now)`、`task_snapshot(task_row, ticket_row)`
+- [ ] `to_candidate("ticket_task", (task, ticket), ...)`：電話比所屬工單的 `contact_phone`
+- [ ] 測試：送出中與已存的任務快照一致；電話取自工單
+
+## Task 19: repository 任務候選
+
+**Files:** `app/repositories/dedup_repository.py`、`tests/test_dedup_repository.py`
+
+- [ ] `ticket_task` entity：join 所屬工單取座標；候選條件照 019（任務非 fulfilled／canceled、未刪；工單未刪、非 cancelled）
+- [ ] `nearby_open_rows(..., exclude_ticket_uuid=None)` 回 `(task, ticket, distance)`；`row_with_distance` 支援任務
+- [ ] 移除 `ticket` entity
+- [ ] 測試：completed 工單的開著任務仍是候選、cancelled 工單的不是、排除同一張單、距離取工單
+
+## Task 20: 任務的 validate／insert 拆分
+
+**Files:** `app/services/ticket.py`、`tests/test_create_split.py`
+
+- [ ] `validate_ticket_task_draft(...)`（不需要工單已存在）、`insert_ticket_task(db, *, actor, ticket_uuid, fields)`（flush 不 commit）
+- [ ] `create_ticket_task` 簽章與行為不變（批次匯入、既有測試）
+- [ ] 測試：驗證不寫入、insert 不 commit、create 結果不變
+
+## Task 21: 兩段式編排（任務層級）
+
+**Files:** `app/services/dedup_submission.py`、`app/services/dedup.py`、`tests/test_dedup_submission.py`、`tests/test_dedup_engine_service.py`
+
+- [ ] `submit_ticket(..., tasks: list[TaskDraft])`：驗證工單＋全部草稿 → 未確認的草稿逐一 `find_match` → 任一命中：每個命中寫 `hint_shown`，回 `Suspected([(draft_index, related_ticket, related_task)])`，不建任何東西
+- [ ] 全部未命中：工單＋任務同一 transaction；帶確認的任務各 `record_acknowledged`
+- [ ] `submit_ticket_task(..., ticket_uuid, draft, acknowledged_duplicate_of)`：位置取工單、排除同單任務
+- [ ] 測試：多任務部分命中整筆不建；確認綁在草稿上（重排仍正確）；全放棄＝不送出＝零寫入；atomic；fail-open；無權限在比對前失敗；既有單加任務排除同單
+
+## Task 22: GraphQL
+
+**Files:** `app/graphql/tickets/types.py`、`mutations.py`、`tests/test_graphql/*`
+
+- [ ] `CreateTicketTaskDraft`、`CreateTicketInput.tasks`、`DuplicatesSuspected { suspects: [TaskSuspect] }`、`TicketCreated { ticket, tasks }`
+- [ ] `createTicketTask(input, acknowledgedDuplicateOf)` 回 `CreateTicketTaskResult`
+- [ ] 既有 `createTicketTask` 測試改走 union；`test_create_dedup.py` 改寫成任務層級（真 engine）
+- [ ] SDL 守門：舊型別不存在
+
+## Task 23: 收尾
+
+- [ ] 移除工單層級殘留（`ticket_submission`、`ticket_snapshot`、ticket entity）；legacy 守門測試補上
+- [ ] 更新「交給前端的 API 變更」為任務層級版本
+- [ ] ruff、全套件
+
+## Task 24: Docker 完整驗證（重跑 Task 14，情境改為任務層級）
+
 ## 交給前端的 API 變更（後端不負責實作）
 
 前端改動由前端負責，後端只提供合約。以下是本票對 GraphQL 的破壞性變更，供前端與 #47 作者調整：
