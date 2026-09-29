@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 from tests.test_graphql.conftest import auth_header
 
@@ -849,41 +850,29 @@ async def test_create_ticket_rejects_blank_contact_name(client, coordinator_auth
 
 
 @pytest.mark.asyncio
-async def test_update_ticket_valid_transition(client, coordinator_auth):
-    """Hypothesis: valid status transitions are accepted by the API.
+async def test_update_ticket_takes_no_status(client, coordinator_auth, sample_ticket):
+    """A ticket's status is worked out from its needs, so `updateTicket` has no way to set it.
 
-    Test case: pending → in_progress → completed each return the new status.
+    `in_progress` is a move the old state machine allowed from `pending`, so only a missing
+    field can explain the refusal.
     """
+    from tests.test_graphql.conftest import test_db
+
     _, token = coordinator_auth
-    headers = auth_header(token)
 
     resp = await client.post(
         "/graphql",
         json={
-            "query": CREATE_TICKET,
-            "variables": {
-                "input": {
-                    "title": "Transition test",
-                    "geometry": POINT_TAIPEI,
-                    "contactName": "Bob",
-                    "taskType": "hr",
-                }
-            },
+            "query": UPDATE_TICKET,
+            "variables": {"uuid": sample_ticket, "input": {"status": "in_progress"}},
         },
-        headers=headers,
+        headers=auth_header(token),
     )
-    ticket_uuid = resp.json()["data"]["createTicket"]["uuid"]
 
-    for _, to_status in [("pending", "in_progress"), ("in_progress", "completed")]:
-        resp = await client.post(
-            "/graphql",
-            json={
-                "query": UPDATE_TICKET,
-                "variables": {"uuid": ticket_uuid, "input": {"status": to_status}},
-            },
-            headers=headers,
-        )
-        assert resp.json()["data"]["updateTicket"]["status"] == to_status
+    body = resp.json()
+    assert body.get("errors") and body.get("data") is None, body
+    async with test_db() as db:
+        assert (await db.get(Tickets, uuid.UUID(sample_ticket))).status == "pending"
 
 
 @pytest.mark.asyncio
@@ -901,7 +890,7 @@ async def test_update_ticket_no_permission_edit(
             "query": UPDATE_TICKET,
             "variables": {
                 "uuid": sample_ticket,
-                "input": {"status": "in_progress"},
+                "input": {"priority": "low"},
             },
         },
         headers=auth_header(login_token),

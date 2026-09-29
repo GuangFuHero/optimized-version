@@ -1,8 +1,7 @@
 """Ticket import: one row is one ticket plus one task (feature 015, ADR-120/122).
 
-The status test is the load-bearing one. An untouched export carries every row's own status
-back, so if a same-value status were sent as a change, every completed ticket would fail its
-own state machine and a clean round-trip would come back all red.
+The status column is export-only: a ticket's status is worked out from its needs, so the file
+shows it and an import never reads it.
 """
 
 import os
@@ -191,8 +190,8 @@ async def test_a_row_declaring_another_task_type_is_refused(db):
 
 
 @pytest.mark.asyncio
-async def test_a_completed_ticket_round_trips_without_tripping_its_state_machine(db):
-    """The core regression: same-value status must never be sent as a change."""
+async def test_a_completed_ticket_round_trips_untouched(db):
+    """An untouched export comes back as a clean update, and a completed ticket stays completed."""
     await _configs(db)
     actor = await _importer(db)
     raw, filename = _file([_row("求救")])
@@ -211,36 +210,35 @@ async def test_a_completed_ticket_round_trips_without_tripping_its_state_machine
 
 
 @pytest.mark.asyncio
-async def test_an_illegal_transition_fails_that_row_and_says_why(db):
-    """`completed` is terminal (app/services/ticket.py:28)."""
+async def test_a_status_in_the_file_is_never_written(db):
+    """A ticket's status is worked out from its needs, so an import cannot set it either."""
     await _configs(db)
     actor = await _importer(db)
     raw, filename = _file([_row("求救")])
     await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
-    ticket = await _ticket_titled(db, "求救")
-    ticket.status = "completed"
-    await db.commit()
 
-    raw, filename = _file([_row("求救", status="pending")])
+    raw, filename = _file([_row("求救", status="in_progress", description="二樓有人受困")])
     outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
-    assert outcome.failed == 1
-    assert (await _ticket_titled(db, "求救")).status == "completed"
+    assert (outcome.updated, outcome.failed) == (1, 0)
+    ticket = await _ticket_titled(db, "求救")
+    assert ticket.status == "pending"
+    assert ticket.description == "二樓有人受困"
 
 
 @pytest.mark.asyncio
-async def test_a_legal_transition_goes_through(db):
-    """Pending → in_progress is allowed, so the import applies it like the UI would."""
+async def test_a_status_cell_holding_anything_at_all_does_not_fail_the_row(db):
+    """The cell is never read, so a value no ticket could hold must not cost the row its edits."""
     await _configs(db)
     actor = await _importer(db)
     raw, filename = _file([_row("求救")])
     await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
-    raw, filename = _file([_row("求救", status="in_progress")])
+    raw, filename = _file([_row("求救", status="已完成", description="二樓有人受困")])
     outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
 
-    assert outcome.updated == 1
-    assert (await _ticket_titled(db, "求救")).status == "in_progress"
+    assert (outcome.updated, outcome.failed) == (1, 0)
+    assert (await _ticket_titled(db, "求救")).description == "二樓有人受困"
 
 
 # --- matching and PII ---

@@ -867,12 +867,11 @@ class CreateTicketInput:
 
 @strawberry.input
 class UpdateTicketInput:
-    """Input for updating a ticket's status, priority, or review notes."""
+    """Input for updating a ticket's priority, content, address, or review notes.
 
-    status: str | None = strawberry.field(
-        default=None,
-        description="New lifecycle state — must follow valid transitions (e.g. pending → in_progress)",
-    )
+    There is no `status`: a ticket's status is worked out from its needs.
+    """
+
     priority: str | None = strawberry.field(
         default=None, description="Updated urgency: 'low', 'medium', 'high', or 'critical'"
     )

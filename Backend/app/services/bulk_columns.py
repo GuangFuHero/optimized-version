@@ -19,7 +19,6 @@ from app.repositories.config_repository import (
     task_property_config_repository,
 )
 from app.repositories.project_settings_repository import project_settings_repository
-from app.services.ticket import VALID_TRANSITIONS
 
 # Header prefix marking a dynamic (EAV) column, so a config field named `status` can never
 # collide with the fixed column of the same name.
@@ -69,9 +68,8 @@ class ColumnSpec:
     """One column of a bulk file.
 
     `writable_on_create` / `writable_on_update` are separate because the two directions
-    genuinely differ: a ticket's `status` is meaningless on a new row (`create_ticket` always
-    writes "pending") while an address can only be set at creation, since `UpdateStationInput`
-    has no `secondary_location`.
+    genuinely differ: an address can only be set at creation, since `UpdateStationInput` has
+    no `secondary_location`.
     """
 
     header: str
@@ -104,7 +102,6 @@ def _c(header: str, data_type: str = STRING, *, field: str | None = None, **kwar
 
 
 _VISIBILITY_OPTIONS = tuple(v.value for v in Visibility)
-_TICKET_STATUS_OPTIONS = tuple(VALID_TRANSITIONS)
 
 # A column that is part of the match key can only ever be written with the value that
 # matched it (ADR-107/108) — by the time a row is known to be an update, the file's value
@@ -144,15 +141,9 @@ TICKET_COLUMNS: tuple[ColumnSpec, ...] = (
     _readonly(_c("uuid")),
     _create_only(_c("title", required_on_create=True, max_length=200)),  # _MATCH_KEY_NOTE
     _c("description", TEXT),
-    # `create_ticket` always writes "pending", so a status on a new row means nothing; on an
-    # update it goes through VALID_TRANSITIONS like any other status change (ADR-122).
-    ColumnSpec(
-        header="status",
-        field="status",
-        data_type=ENUM,
-        enum_options=_TICKET_STATUS_OPTIONS,
-        writable_on_create=False,
-    ),
+    # A ticket's status is worked out from its needs, so the file shows it and never sets it.
+    # Plain text, not an enum: a cell that is never read must not fail its row (ADR-122).
+    _readonly(_c("status")),
     _c("priority", max_length=20),
     _c("disaster_types", LIST, max_length=200),
     # PII, and `UpdateTicketInput` carries no contact fields at all; contact_phone is also

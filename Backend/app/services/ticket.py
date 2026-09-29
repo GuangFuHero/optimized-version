@@ -67,14 +67,6 @@ TASK_STATUS_LABELS = {
 }
 MODERATION_STATUS_LABELS = {"pending_review": "待審核", "approved": "已通過", "rejected": "已退回"}
 
-# Business rule (ADR-020): status transitions live here, not in the RBAC layer.
-VALID_TRANSITIONS = {
-    "pending": ["in_progress", "cancelled"],
-    "in_progress": ["completed", "cancelled"],
-    "completed": [],
-    "cancelled": [],
-}
-
 
 async def _task_scope_target(db: AsyncSession, task: TicketTask) -> SimpleNamespace:
     """Scope target for a ticket task (ADR-052, direction B).
@@ -285,13 +277,13 @@ async def create_help_request(
 
 
 async def update_ticket(
-    db: AsyncSession, *, actor: User, uuid: str, status: str | None = None, changes: dict,
+    db: AsyncSession, *, actor: User, uuid: str, changes: dict,
     secondary_location: dict | None = None,
 ) -> Tickets:
     """Update a ticket (checkpoint 1 ticket.edit, then checkpoint 2 against the loaded ticket).
 
-    Status changes are validated against VALID_TRANSITIONS; `changes` is the already-diffed
-    non-status field dict.
+    `changes` is the already-diffed field dict. It never carries `status`: a ticket's status
+    is worked out from its needs (`ticket_status.recompute_ticket_status`), not set by hand.
 
     `secondary_location` replaces the ticket's address, creating the row if the ticket was
     filed without one (ADR-268). Create-only would mean a mistyped door number stays wrong
@@ -311,11 +303,6 @@ async def update_ticket(
         obj_in["disaster_types"] = await validate_disaster_types(
             db, obj_in["disaster_types"] or [], keep=ticket.disaster_types or []
         )
-    if status is not None:
-        allowed = VALID_TRANSITIONS.get(ticket.status, [])
-        if status not in allowed:
-            raise ValueError(f"Cannot transition from '{ticket.status}' to '{status}'")
-        obj_in["status"] = status
     return await ticket_repository.update(db, db_obj=ticket, obj_in=obj_in)
 
 

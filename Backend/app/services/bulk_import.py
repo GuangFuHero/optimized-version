@@ -23,7 +23,7 @@ from app.core.permissions import Perm
 from app.core.tabular import Table, read_table, write_csv, write_xlsx
 from app.models.auth import User
 from app.repositories.geo_repository import station_property_repository
-from app.repositories.tickets_repository import task_property_repository, ticket_repository
+from app.repositories.tickets_repository import task_property_repository
 from app.services import station as station_service
 from app.services import ticket as ticket_service
 from app.services.authz import refresh_actor, require_scope, stable_actor
@@ -458,20 +458,10 @@ async def _write_ticket(
 
     if is_update:
         ticket_uuid = resolved.uuid
-        status = fixed.pop("status", None)
-        current = await ticket_repository.get_by_uuid_active(db, ticket_uuid)
-        # ADR-122: an untouched export carries the row's own status back. Sending it as a
-        # change would make every completed ticket fail its own state machine, so only a
-        # genuine difference is passed on.
-        if current is not None and status == current.status:
-            status = None
-        if fixed or status:
-            await ticket_service.update_ticket(
-                db, actor=actor, uuid=ticket_uuid, status=status, changes=fixed
-            )
+        if fixed:
+            await ticket_service.update_ticket(db, actor=actor, uuid=ticket_uuid, changes=fixed)
             progress.parent_written = True
     else:
-        fixed.pop("status", None)  # `create_ticket` always writes "pending"
         ticket = await ticket_service.create_ticket(
             db, actor=actor, geometry=_point_of(plan.row),
             title=fixed.get("title"),
