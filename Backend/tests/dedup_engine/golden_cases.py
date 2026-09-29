@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from app.dedup_engine.contract import Candidate, DedupEngine, GeoPoint, StationSnapshot, TicketSnapshot
+from app.dedup_engine.contract import Candidate, GeoPoint, SnapshotEngine, StationSnapshot, TicketSnapshot
 
 GOLDEN_DIR = Path(__file__).resolve().parent / "golden"
 NOW = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
@@ -16,7 +16,7 @@ HERE = GeoPoint(121.5601, 23.6701)
 PRECISION = 6  # float tails must not make the golden test flaky
 
 
-def golden_path(engine: DedupEngine) -> Path:
+def golden_path(engine: SnapshotEngine) -> Path:
     """golden/fast.json for fast-v1, fast-v2, …: one file per engine family."""
     return GOLDEN_DIR / f"{engine.version.rsplit('-v', 1)[0]}.json"
 
@@ -102,7 +102,7 @@ CASES: dict[str, tuple[Any, list[Candidate]]] = {
 }
 
 
-def compute(engine: DedupEngine) -> dict[str, Any]:
+def compute(engine: SnapshotEngine) -> dict[str, Any]:
     """Every case's `rank` and per-candidate `score`, rounded for a stable comparison."""
 
     def dump(match) -> dict[str, Any]:

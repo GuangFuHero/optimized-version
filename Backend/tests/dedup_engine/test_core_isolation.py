@@ -1,7 +1,9 @@
-"""app/dedup_engine is the algorithm owner's code and must stay pure (ADR-287).
+"""app/dedup_engine is the algorithm owner's code; it may read the database but not the backend (ADR-304).
 
-A core that reaches the database or the web layer can no longer run in the offline tuning
-harness, and every backend refactor would start touching algorithm code again.
+Since ADR-304 the engine queries candidates itself, so SQLAlchemy and the ORM models are fair
+game. What it must not reach is the backend's own layers — services, repositories, GraphQL, the
+HTTP API — or open its own session: the backend hands it one, inside a savepoint it rolls back.
+Otherwise every backend refactor would start touching algorithm code again.
 """
 
 import ast
@@ -9,16 +11,12 @@ from pathlib import Path
 
 CORE = Path(__file__).resolve().parents[2] / "app" / "dedup_engine"
 FORBIDDEN = (
-    "sqlalchemy",
-    "geoalchemy2",
-    "asyncpg",
     "fastapi",
     "strawberry",
-    "app.models",
     "app.repositories",
     "app.services",
     "app.graphql",
-    "app.db",
+    "app.db",  # the session comes from the backend; the engine never opens its own
     "app.api",
 )
 
@@ -39,12 +37,12 @@ def test_core_package_exists():
     assert (CORE / "contract.py").is_file()
 
 
-def test_core_does_no_io():
-    """No module under app/dedup_engine imports a database, web or backend-service layer."""
+def test_core_stays_out_of_the_backend():
+    """No module under app/dedup_engine imports a web, session or backend-service layer."""
     offenders = sorted(
         f"{path.relative_to(CORE)}: {name}"
         for path in CORE.rglob("*.py")
         for name in _imports(path)
         if name.startswith(FORBIDDEN)
     )
-    assert not offenders, f"app/dedup_engine must not import I/O layers: {offenders}"
+    assert not offenders, f"app/dedup_engine must not import backend layers: {offenders}"

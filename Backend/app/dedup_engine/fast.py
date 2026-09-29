@@ -69,7 +69,7 @@ class Signals:
 
 
 class FastEngine:
-    """The fast layer as a `DedupEngine`."""
+    """The fast layer as a `SnapshotEngine` (Phase 1; replaced by fast_v2 in Phase 2)."""
 
     version = "fast-v1"
 

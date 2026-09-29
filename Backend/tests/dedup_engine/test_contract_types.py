@@ -8,10 +8,10 @@ import pytest
 
 from app.dedup_engine.contract import (
     Candidate,
-    DedupEngine,
     GeoPoint,
     Match,
     RetrievalSpec,
+    SnapshotEngine,
     StationSnapshot,
     TicketSnapshot,
 )
@@ -84,9 +84,9 @@ def test_candidate_phone_signal_defaults_to_unknown():
 
 
 def test_the_registered_engine_satisfies_the_protocol():
-    """The engine the backend gets implements every member of `DedupEngine` with matching parameters."""
+    """The engine the backend gets implements every member of `SnapshotEngine` with matching parameters."""
     engine = get_engine()
     assert isinstance(engine.version, str)
     for name in ("retrieval", "rank", "score"):
-        expected = list(inspect.signature(getattr(DedupEngine, name)).parameters)[1:]  # drop self
+        expected = list(inspect.signature(getattr(SnapshotEngine, name)).parameters)[1:]  # drop self
         assert list(inspect.signature(getattr(engine, name)).parameters) == expected, name
