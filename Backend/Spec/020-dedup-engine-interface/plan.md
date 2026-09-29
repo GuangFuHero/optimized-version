@@ -1,9 +1,15 @@
 # 020 去重引擎介面 — Implementation Plan
 
-**進度（2026-09-29）**：Phase 1（Task 1~14）完成並通過 Docker 驗證（摘要見 `verification.md` §8.2）。合進 Chi 的任務層級更新與 main（merge `af2ca1d95`）。**Phase 2（ADR-304）Task 16~23 完成**，每個 commit 的全套件皆綠（T19 1655、T20 1661、T21 1676、T22 1676、T23 1610 passed，0 failed）。**Task 24 完成（2026-09-29，本機與容器皆 1612 passed；驗證中發現並修正 ADR-305，報告 `verification.md`）。Task 25（延遲實測、效能門檻 ADR-307）完成。剩 Task 0（與 Chi 確認合約；效能門檻與逾時已定案，聽他意見）**。前端不在後端範圍，§「交給前端的 API 變更」為交接說明。
+**進度（2026-09-29）**：
+- Phase 1（Task 1~14）完成，Docker 驗證通過（摘要見 `verification.md` §8.2）。之後 merge 了 Chi 改成以任務為單位的版本和 main（merge `af2ca1d95`）。
+- Phase 2（ADR-304）Task 16~23 完成，每個 commit 的全部測試都通過（T19 1655、T20 1661、T21 1676、T22 1676、T23 1610 passed，0 failed）。
+- Task 24 完成：Docker 從零驗證，本機與容器內都是 1612 passed；過程中發現並修好 index 沒被用到的問題（ADR-305）。報告在 `verification.md`。
+- Task 25 完成：量了 dedup 讓使用者多等多久，依此定了速度標準（ADR-307）。
+- **剩 Task 0**：等 Chi 回覆（交接訊息在 `handoff-chi.md`）。速度標準和 timeout 已經定了，只聽他的意見。
+- 前端不歸後端管；最後一節「交給前端的 API 變更」是給前端的說明。
 
 **Goal:** 把 Spec 019 的去重快層包成「演算法可獨立迭代」的後端服務：Chi 只動 `app/dedup_engine/`，
-後端只依賴 `contract.py`；提示改由 `createTicket` / `createStation` 兩段式帶出，拿掉獨立的 dedup API。
+後端只依賴 `contract.py`；提示改由 `createTicket` / `createStation` 本身帶出（先檢查、有疑似重複就先不建立，使用者確認後再送一次），拿掉獨立的 dedup API。
 
 **Architecture:** 純函式的 algorithm core（不做 I/O）＋後端的 snapshot builder / repository / service /
 編排函式。engine 吃快照、回 `Match`；後端只讀 `candidate_uuid` 與 `similarity`，`evidence` 只存不讀。
@@ -66,7 +72,8 @@ export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/
 
 ## Task 順序的關鍵
 
-**Task 0 是閘門。** `contract.py` 是雙方合約，Chi 沒確認之前寫下去的每一行都可能重工。
+**Task 0 原本是閘門。** `contract.py` 是雙方說好的介面，Chi 沒確認之前寫下去的每一行都可能要重做。
+（實際上是先把 Task 1~25 做完、驗證完，再一次交給 Chi 確認；他要改 contract 的話，照 Task 0 最後一項處理。）
 
 **Task 1~4 全在 core，不碰 DB。** 先把 engine 做成可以單獨跑、單獨測的東西，並用 contract test ＋ golden file
 把 fast-v1 的行為釘住。之後後端怎麼接線，都有一個不會動的基準可以對照。
@@ -82,14 +89,17 @@ export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/
 
 ---
 
-## Task 0: 與 Chi 確認合約（閘門）
+## Task 0: 跟 Chi 確認 contract
 
-不寫程式，所以沒有測試；完成條件是 Chi 的確認寫回 spec §3／§4（有改就改、沒改就在 spec 註明確認日期）。
+不用寫程式，所以沒有測試。做完的標準：Chi 的回覆記進 `handoff-chi.md`，並寫回 spec §3、§4（有改就改；沒改就在 spec 註明哪天確認過）。
 
-- [ ] 把交接訊息傳給 Chi（`handoff-chi.md`），回覆記在同一份檔案
-- [ ] 確認他的離線 harness 能接 DB（ADR-304：engine 自己查候選，spec §9）
-- [ ] 讓 Chi 知道效能門檻與逾時已依實測定案（ADR-307：全表 2 萬、半徑內 500、5 個任務、200 ms；逾時 2 秒），聽他的意見
-- [ ] 有任何欄位調整：先改 spec §3／§4 再往下做
+- [ ] 把 `handoff-chi.md` 的訊息傳給 Chi，他的回覆記在同一份檔案最後
+- [ ] 確認 `contract.py` 的型別（`TicketDraft`、`TaskDraft`、`StationDraft`、`Suspect`）和 `check`、`score` 夠他用
+- [ ] 確認他離線調參數的工具怎麼處理 DB：engine 現在會自己去 DB 撈資料（ADR-304），他要準備一個有同樣資料表的 Postgres，或只呼叫 `fast.py` 裡算分數的 `Signals`、`combine`（spec §9）
+- [ ] 讓他知道速度標準和 timeout 已經用實測數字定了（ADR-307：整張表 2 萬筆、附近 500 筆、送 5 個任務，`check` 要在 200 ms 內；timeout 2 秒），聽他的意見
+- [ ] 請他補 `app/dedup_engine/CHANGELOG.md` 的驗證數字（fast-v2 用哪批資料、precision、recall；fast-v1 那格也還空著）
+- [ ] 他要改 contract 的欄位的話：先改 spec §3、§4，再改程式；改完重跑全部測試，必要時重跑 Docker 驗證
+- [ ] Chi 確認後，由使用者決定何時開 PR（merge 順序：#46 → #59 → 這個 branch）
 
 ---
 
