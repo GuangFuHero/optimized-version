@@ -15,7 +15,7 @@ from graphql import print_schema
 from shapely.geometry import Point
 from sqlalchemy import func, select
 
-from app.dedup_engine.registry import get_submission_engine
+from app.dedup_engine.registry import get_engine
 from app.graphql.schema import schema
 from app.models.dedup import DedupAuditEvent, DuplicatePair
 from app.models.geo import Station
@@ -199,7 +199,7 @@ async def test_filing_anyway_creates_the_ticket_its_tasks_and_the_pair(client, l
             {str(pair.low_uuid), str(pair.high_uuid)},
         )
     expected_uuids = {task_uuid, created["tasks"][0]["uuid"]}
-    assert facts == ("ticket_task", "dup_ignored", get_submission_engine().version, expected_uuids)
+    assert facts == ("ticket_task", "dup_ignored", get_engine().version, expected_uuids)
 
 
 async def test_a_ticket_without_tasks_is_created_directly(client, login_user_auth):

@@ -1,1314 +1,183 @@
 {
   "cases": {
-    "station_ancient_is_not_penalised": {
-      "rank": [
-        {
-          "candidate_uuid": "s-old",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9593,
-                "weight": 2.0
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.976722
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "s-old",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9593,
-                "weight": 2.0
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.976722
-        }
-      ]
-    },
-    "station_different_type": {
-      "rank": [
-        {
-          "candidate_uuid": "s-type",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9593,
-                "weight": 2.0
-              },
-              {
-                "name": "task_type",
-                "passed": false,
-                "score": 0.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.833865
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "s-type",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9593,
-                "weight": 2.0
-              },
-              {
-                "name": "task_type",
-                "passed": false,
-                "score": 0.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.833865
-        }
-      ]
-    },
-    "station_just_beyond_the_boundary": {
-      "rank": [],
-      "score": [
-        {
-          "candidate_uuid": "s-out",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.6484,
-                "weight": 2.0
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.799097
-        }
-      ]
-    },
-    "station_near_identical": {
-      "rank": [
-        {
-          "candidate_uuid": "s-near",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9593,
-                "weight": 2.0
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.976722
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "s-near",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9593,
-                "weight": 2.0
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.976722
-        }
-      ]
-    },
-    "station_without_name": {
-      "rank": [
-        {
-          "candidate_uuid": "s-a",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.933,
-                "weight": 2.0
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.961733
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "s-a",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.933,
-                "weight": 2.0
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.961733
-        }
-      ]
-    },
-    "ticket_candidate_in_the_future": {
-      "rank": [
-        {
-          "candidate_uuid": "t-skew",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9659,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.982968
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-skew",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9659,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.982968
-        }
-      ]
-    },
-    "ticket_candidate_without_text": {
-      "rank": [
-        {
-          "candidate_uuid": "t-blank",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9659,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              }
-            ]
-          },
-          "similarity": 0.977291
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-blank",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9659,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              }
-            ]
-          },
-          "similarity": 0.977291
-        }
-      ]
-    },
-    "ticket_english_text": {
-      "rank": [
-        {
-          "candidate_uuid": "t-en",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.933,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 0.9286,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.941325
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-en",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.933,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 0.9286,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.941325
-        }
-      ]
-    },
-    "ticket_far_unrelated": {
-      "rank": [],
-      "score": [
-        {
-          "candidate_uuid": "t-far",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": false,
-                "score": 0.2102,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": false,
-                "score": 0.0005,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": false,
-                "score": 0.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": false,
-                "score": 0.0571,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.119454
-        }
-      ]
-    },
-    "ticket_just_beyond_the_boundary": {
-      "rank": [],
-      "score": [
-        {
-          "candidate_uuid": "t-out",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.5977,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.798851
-        }
-      ]
-    },
-    "ticket_long_text_truncated": {
-      "rank": [
-        {
-          "candidate_uuid": "t-long",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9493,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.974671
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-long",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9493,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.974671
-        }
-      ]
-    },
-    "ticket_near_identical": {
-      "rank": [
-        {
-          "candidate_uuid": "t-near",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9727,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 0.9772,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.983472
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-near",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9727,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 0.9772,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.983472
-        }
-      ]
-    },
-    "ticket_no_candidates": {
-      "rank": [],
-      "score": []
-    },
-    "ticket_old_candidate": {
-      "rank": [
-        {
-          "candidate_uuid": "t-old",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9659,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": false,
-                "score": 0.0039,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.858456
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-old",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9659,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": false,
-                "score": 0.0039,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.858456
-        }
-      ]
-    },
-    "ticket_on_the_boundary": {
-      "rank": [
-        {
-          "candidate_uuid": "t-edge",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.6,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.8
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-edge",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.6,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.8
-        }
-      ]
-    },
-    "ticket_ranking_and_ties": {
-      "rank": [
-        {
-          "candidate_uuid": "t-1",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9828,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.99141
+    "add_task_to_a_missing_ticket": [],
+    "add_task_to_the_flood_ticket": [],
+    "new_station": [
+      {
+        "draft_ref": "station",
+        "evidence": {
+          "components": [
+            {
+              "name": "distance",
+              "passed": true,
+              "score": 1.0,
+              "weight": 2.0
+            },
+            {
+              "name": "task_type",
+              "passed": true,
+              "score": 1.0,
+              "weight": 0.5
+            },
+            {
+              "name": "text",
+              "passed": true,
+              "score": 1.0,
+              "weight": 1.0
+            }
+          ]
         },
-        {
-          "candidate_uuid": "t-2",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9828,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.99141
+        "related_kind": "station",
+        "related_ticket_uuid": null,
+        "related_uuid": "00000000-0000-0000-0000-000000000200",
+        "similarity": 1.0
+      }
+    ],
+    "new_station_other_type": [],
+    "new_ticket_far_away": [],
+    "new_ticket_no_tasks": [],
+    "new_ticket_three_tasks": [
+      {
+        "draft_ref": "task:0",
+        "evidence": {
+          "components": [
+            {
+              "name": "distance",
+              "passed": true,
+              "score": 1.0,
+              "weight": 2.0
+            },
+            {
+              "name": "time",
+              "passed": true,
+              "score": 0.9715,
+              "weight": 0.5
+            },
+            {
+              "name": "task_type",
+              "passed": true,
+              "score": 1.0,
+              "weight": 0.5
+            },
+            {
+              "name": "text",
+              "passed": true,
+              "score": 1.0,
+              "weight": 1.0
+            }
+          ]
         },
-        {
-          "candidate_uuid": "t-3",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.8123,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.906126
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-3",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.8123,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.906126
+        "related_kind": "ticket_task",
+        "related_ticket_uuid": "00000000-0000-0000-0000-000000000010",
+        "related_uuid": "00000000-0000-0000-0000-000000000100",
+        "similarity": 0.996441
+      },
+      {
+        "draft_ref": "task:1",
+        "evidence": {
+          "components": [
+            {
+              "name": "distance",
+              "passed": true,
+              "score": 1.0,
+              "weight": 2.0
+            },
+            {
+              "name": "time",
+              "passed": true,
+              "score": 0.9439,
+              "weight": 0.5
+            },
+            {
+              "name": "task_type",
+              "passed": true,
+              "score": 1.0,
+              "weight": 0.5
+            },
+            {
+              "name": "text",
+              "passed": true,
+              "score": 1.0,
+              "weight": 1.0
+            }
+          ]
         },
-        {
-          "candidate_uuid": "t-2",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9828,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
+        "related_kind": "ticket_task",
+        "related_ticket_uuid": "00000000-0000-0000-0000-000000000010",
+        "related_uuid": "00000000-0000-0000-0000-000000000101",
+        "similarity": 0.992984
+      }
+    ],
+    "score_closed_task": {
+      "draft_ref": "task:0",
+      "evidence": {
+        "components": [
+          {
+            "name": "distance",
+            "passed": true,
+            "score": 1.0,
+            "weight": 2.0
           },
-          "similarity": 0.99141
-        },
-        {
-          "candidate_uuid": "t-1",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9828,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
+          {
+            "name": "time",
+            "passed": true,
+            "score": 0.9904,
+            "weight": 0.5
           },
-          "similarity": 0.99141
-        },
-        {
-          "candidate_uuid": "t-weak",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.6598,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": false,
-                "score": 0.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": false,
-                "score": 0.0,
-                "weight": 1.0
-              }
-            ]
+          {
+            "name": "task_type",
+            "passed": true,
+            "score": 1.0,
+            "weight": 0.5
           },
-          "similarity": 0.454877
-        }
-      ]
+          {
+            "name": "text",
+            "passed": true,
+            "score": 1.0,
+            "weight": 1.0
+          }
+        ]
+      },
+      "related_kind": "ticket_task",
+      "related_ticket_uuid": "00000000-0000-0000-0000-000000000010",
+      "related_uuid": "00000000-0000-0000-0000-000000000105",
+      "similarity": 0.998802
     },
-    "ticket_same_phone_flag": {
-      "rank": [
-        {
-          "candidate_uuid": "t-phone",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.732,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 0.6804,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
+    "score_far_task": {
+      "draft_ref": "task:2",
+      "evidence": {
+        "components": [
+          {
+            "name": "distance",
+            "passed": false,
+            "score": 0.3537,
+            "weight": 2.0
           },
-          "similarity": 0.826071
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-phone",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.732,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 0.6804,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
+          {
+            "name": "time",
+            "passed": true,
+            "score": 0.9904,
+            "weight": 0.5
           },
-          "similarity": 0.826071
-        }
-      ]
-    },
-    "ticket_same_place_different_type": {
-      "rank": [
-        {
-          "candidate_uuid": "t-type",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9828,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": false,
-                "score": 0.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
+          {
+            "name": "task_type",
+            "passed": false,
+            "score": 0.0,
+            "weight": 0.5
           },
-          "similarity": 0.86641
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-type",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9828,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": false,
-                "score": 0.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.86641
-        }
-      ]
-    },
-    "ticket_similar_wording": {
-      "rank": [],
-      "score": [
-        {
-          "candidate_uuid": "t-sim",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.8123,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 0.917,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": false,
-                "score": 0.3103,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.723338
-        }
-      ]
-    },
-    "ticket_submission_punctuation_only": {
-      "rank": [],
-      "score": [
-        {
-          "candidate_uuid": "t-b",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9659,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "task_type",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": false,
-                "score": 0.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.732968
-        }
-      ]
-    },
-    "ticket_submission_without_type": {
-      "rank": [
-        {
-          "candidate_uuid": "t-a",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9013,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.943572
-        }
-      ],
-      "score": [
-        {
-          "candidate_uuid": "t-a",
-          "evidence": {
-            "components": [
-              {
-                "name": "distance",
-                "passed": true,
-                "score": 0.9013,
-                "weight": 2.0
-              },
-              {
-                "name": "time",
-                "passed": true,
-                "score": 1.0,
-                "weight": 0.5
-              },
-              {
-                "name": "text",
-                "passed": true,
-                "score": 1.0,
-                "weight": 1.0
-              }
-            ]
-          },
-          "similarity": 0.943572
-        }
-      ]
+          {
+            "name": "text",
+            "passed": false,
+            "score": 0.0,
+            "weight": 1.0
+          }
+        ]
+      },
+      "related_kind": "ticket_task",
+      "related_ticket_uuid": "00000000-0000-0000-0000-000000000012",
+      "related_uuid": "00000000-0000-0000-0000-000000000103",
+      "similarity": 0.300636
     }
   },
-  "version": "fast-v1"
+  "version": "fast-v2"
 }

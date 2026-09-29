@@ -1,9 +1,10 @@
 # Dedup engine changelog
 
-Every change that makes the same input (snapshots + `now`) produce a different `rank` or
-`score` result gets a new version here, a bump of the engine's `version`, and a regenerated
-golden file (`PYTHONPATH=. uv run python scripts/regen_dedup_golden.py`). Refactors, comments
-and speed-ups that leave outputs unchanged do not (ADR-297).
+Every change that makes the same input (database contents + submission + `now`) produce a
+different `check` or `score` result gets a new version here, a bump of the engine's `version`,
+and a regenerated golden file (`DEDUP_REGEN_GOLDEN=1 uv run pytest tests/dedup_engine/test_golden.py`,
+which refuses to overwrite changed outputs under an unchanged version). Refactors, comments and
+speed-ups that leave outputs unchanged do not (ADR-297).
 
 Each entry records what changed, the parameters, and the backtest result the change was
 accepted on.
@@ -12,7 +13,7 @@ accepted on.
 
 ## fast-v2 — 2026-09-29
 
-Task-level fast layer on the ADR-304 contract (`fast_v2.py`, candidates in `candidates.py`).
+Task-level fast layer on the ADR-304 contract (`fast.py`, candidates in `candidates.py`).
 Spec 019 moved the unit from tickets to tasks the same day; ADR-304 moved candidate retrieval
 into the engine so a change of unit no longer touches the backend.
 
@@ -31,8 +32,8 @@ into the engine so a change of unit no longer touches the backend.
 Formula, parameters and retrieval radius per kind are fast-v1's (ticket parameters now apply
 to tasks). Stations are unchanged. `same_contact_phone`-style phone comparison is still unused.
 
-Golden: `tests/dedup_engine/golden/fast_db.json`, computed on fixed database contents
-(`tests/dedup_engine/golden_v2.py`).
+Golden: `tests/dedup_engine/golden/fast.json`, computed on fixed database contents
+(`tests/dedup_engine/golden.py`). fast-v1's snapshot-based golden and its regen script are gone.
 
 ### Backtest
 

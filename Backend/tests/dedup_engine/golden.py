@@ -27,7 +27,7 @@ from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 
-GOLDEN = Path(__file__).resolve().parent / "golden" / "fast_db.json"
+GOLDEN = Path(__file__).resolve().parent / "golden" / "fast.json"
 NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
 HERE = GeoPoint(121.5601, 23.6701)
 DEG_100M = 0.00098

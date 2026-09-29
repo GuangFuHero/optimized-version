@@ -203,7 +203,7 @@ async def create_ticket(
 
     Validate, insert, and one commit that makes the ticket + address pair atomic, exactly as
     `station.py::create_station` does. Batch import calls this; the interactive GraphQL path
-    goes through `dedup_submission.submit_ticket`, which runs the same two steps around a
+    goes through `dedup_submission.submit_new_ticket`, which runs the same two steps around a
     duplicate check (Spec 020, ADR-299).
     """
     fields = await validate_ticket(
@@ -447,7 +447,7 @@ async def create_ticket_task(
     """Create a task under a ticket (checkpoint 1 only — no scope check against the parent).
 
     Batch import calls this; the interactive GraphQL path goes through
-    `dedup_submission.submit_ticket_task` (Spec 020, ADR-302).
+    `dedup_submission.submit_new_task` (Spec 020, ADR-302).
     """
     fields = await validate_ticket_task(
         db,

@@ -1,30 +1,23 @@
-"""fast-v1, the rule-based fast layer (ported from Spec 019's dedup_scoring.py).
+"""The fast layer's formula: parameters, `combine`, and the hint boundary.
 
-The formula tests call `combine` with signals fixed by hand, so their expected numbers are the
-offline tuning harness's own output for the same inputs; a failure there means the port has
-drifted. The engine tests go through snapshots, the way the backend calls it.
+Expected numbers are the offline tuning harness's own output for the same inputs; a failure here
+means the formula has drifted from it. The engine around the formula — candidates, per-draft
+suspects — is tested in test_fast_engine.py.
 """
 
-import json
 import math
-from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.dedup_engine.contract import Candidate, GeoPoint, StationSnapshot, TicketSnapshot
 from app.dedup_engine.fast import (
     STATION_PARAMETERS,
     TICKET_PARAMETERS,
-    FastEngine,
     FastParameters,
     Signals,
     combine,
     max_hint_distance_m,
-    measure,
 )
 
-NOW = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
-HERE = GeoPoint(121.5601, 23.6701)
 # Harness parameters minus the text signal, so its output is directly comparable.
 THREE_SIGNAL = FastParameters(text_weight=0.0)
 
@@ -33,24 +26,6 @@ def _signals(**overrides) -> Signals:
     """A candidate 100 m away and 60 minutes old, same category, no text — overridable."""
     fields = {"distance_m": 100.0, "age_min": 60.0, "same_category": True, "text_similarity": None}
     return Signals(**(fields | overrides))
-
-
-def _ticket(uuid=None, *, minutes_ago=0.0, **fields) -> TicketSnapshot:
-    base = {"title": "民生街三段淹水需要抽水機", "description": "一樓積水到膝蓋", "task_type": "rescue"}
-    return TicketSnapshot(
-        uuid=uuid, location=HERE, created_at=NOW - timedelta(minutes=minutes_ago), **(base | fields)
-    )
-
-
-def _station(uuid=None, *, minutes_ago=0.0, **fields) -> StationSnapshot:
-    base = {"name": "光復國小臨時收容所", "description": "可收容 200 人", "type": "shelter"}
-    return StationSnapshot(
-        uuid=uuid, location=HERE, created_at=NOW - timedelta(minutes=minutes_ago), **(base | fields)
-    )
-
-
-def _near(snapshot, distance_m=8.0) -> Candidate:
-    return Candidate(snapshot=snapshot, distance_m=distance_m)
 
 
 # --- parameters ------------------------------------------------------------------------
@@ -184,128 +159,3 @@ def test_the_station_boundary_is_tighter():
     """Without time the boundary shrinks."""
     assert max_hint_distance_m(STATION_PARAMETERS) == pytest.approx(124.29767534925406, abs=1e-9)
     assert max_hint_distance_m(STATION_PARAMETERS) < max_hint_distance_m(TICKET_PARAMETERS)
-
-
-# --- measuring snapshots ---------------------------------------------------------------
-
-
-def test_measure_reads_facts_off_the_snapshots():
-    """Distance from the candidate, age from created_at, category and text from the fields."""
-    signals = measure(_ticket(), _near(_ticket("c1", minutes_ago=30.0), distance_m=42.0), NOW)
-    assert signals.distance_m == 42.0
-    assert signals.age_min == pytest.approx(30.0)
-    assert signals.same_category is True
-    assert signals.text_similarity == pytest.approx(1.0)
-
-
-def test_a_candidate_newer_than_now_has_age_zero():
-    """Clock skew never produces a negative age."""
-    assert measure(_ticket(), _near(_ticket("c1", minutes_ago=-5.0)), NOW).age_min == 0.0
-
-
-@pytest.mark.parametrize(
-    ("mine", "theirs"),
-    [("rescue", None), (None, "rescue"), (None, None)],
-)
-def test_a_missing_category_is_unavailable(mine, theirs):
-    """Either side not filling it in means no category signal."""
-    signals = measure(_ticket(task_type=mine), _near(_ticket("c1", task_type=theirs)), NOW)
-    assert signals.same_category is None
-
-
-def test_empty_text_on_either_side_is_unavailable():
-    """No text is an unavailable signal, not a score of 0."""
-    empty = _ticket("c1", title="", description=None)
-    assert measure(_ticket(), _near(empty), NOW).text_similarity is None
-    assert measure(_ticket(title="", description=""), _near(_ticket("c1")), NOW).text_similarity is None
-
-
-def test_station_text_is_name_and_description_and_category_is_type():
-    """Stations compare `name`+`description` and `type`."""
-    signals = measure(_station(), _near(_station("s1", type="supply")), NOW)
-    assert signals.text_similarity == pytest.approx(1.0)
-    assert signals.same_category is False
-
-
-def test_long_text_is_truncated_on_both_sides():
-    """Title 200 and description 2000 characters, on the submission and the candidate alike."""
-    long_tail = "淹水" * 5000
-    a = _ticket(title="抽水機" + "x" * 300, description=long_tail + "甲")
-    b = _ticket("c1", title="抽水機" + "x" * 300, description=long_tail + "乙")
-    assert measure(a, _near(b), NOW).text_similarity == pytest.approx(1.0)
-
-
-# --- the engine ------------------------------------------------------------------------
-
-
-def test_engine_version():
-    """The first shipped version (ADR-297)."""
-    assert FastEngine().version == "fast-v1"
-
-
-def test_rank_returns_a_near_identical_open_ticket():
-    """Same spot, minutes apart, same type and wording -> a match over the threshold."""
-    matches = FastEngine().rank(_ticket(), [_near(_ticket("near", minutes_ago=12.0))], NOW)
-    assert [m.candidate_uuid for m in matches] == ["near"]
-    assert matches[0].similarity >= TICKET_PARAMETERS.hint_threshold
-
-
-def test_rank_drops_candidates_under_the_threshold():
-    """A different problem far away and long ago is not a match."""
-    weak = Candidate(
-        _ticket("weak", minutes_ago=4000.0, title="需要志工搬物資", description="倉庫缺人手", task_type="hr"),
-        distance_m=400.0,
-    )
-    assert FastEngine().rank(_ticket(), [weak], NOW) == []
-
-
-def test_rank_is_best_first_and_breaks_ties_on_uuid():
-    """Highest score first; equal scores in uuid order."""
-    close_b = _near(_ticket("bbb"), distance_m=5.0)
-    close_a = _near(_ticket("aaa"), distance_m=5.0)
-    farther = _near(_ticket("ccc"), distance_m=60.0)
-    matches = FastEngine().rank(_ticket(), [farther, close_b, close_a], NOW)
-    assert [m.candidate_uuid for m in matches] == ["aaa", "bbb", "ccc"]
-
-
-def test_score_applies_no_threshold():
-    """`score` answers for any candidate, even one `rank` would drop."""
-    far = Candidate(_ticket("far", title="完全不同", description=None, task_type="hr"), distance_m=900.0)
-    match = FastEngine().score(_ticket(), far, NOW)
-    assert match.candidate_uuid == "far"
-    assert match.similarity < TICKET_PARAMETERS.hint_threshold
-
-
-def test_station_matches_carry_no_time_component():
-    """Stations are scored without the time signal, however old."""
-    match = FastEngine().score(_station(), _near(_station("s1", minutes_ago=10_000_000.0)), NOW)
-    assert [c["name"] for c in match.evidence["components"]] == ["distance", "task_type", "text"]
-    assert match.similarity >= STATION_PARAMETERS.hint_threshold
-
-
-def test_same_contact_phone_is_not_used_by_fast_v1():
-    """fast-v1 keeps Spec 019's behaviour; the phone signal is available for a later version."""
-    engine = FastEngine()
-    base = _ticket("c1", minutes_ago=90.0)
-    unknown = engine.score(_ticket(), Candidate(base, distance_m=80.0), NOW)
-    same = engine.score(_ticket(), Candidate(base, distance_m=80.0, same_contact_phone=True), NOW)
-    assert unknown == same
-
-
-def test_evidence_holds_the_components_and_no_text():
-    """Evidence is the per-signal breakdown; it never echoes snapshot text (ADR-295)."""
-    marker = "⟦MARK-7f3a⟧"
-    sub = _ticket(title=f"{marker}淹水", description=f"{marker}一樓")
-    other = _ticket("c1", title=f"{marker}淹水", description=f"{marker}一樓")
-    match = FastEngine().score(sub, _near(other), NOW)
-    dumped = json.dumps(match.evidence, ensure_ascii=False)
-    assert marker not in dumped
-    assert {c["name"] for c in match.evidence["components"]} == {"distance", "time", "task_type", "text"}
-
-
-def test_retrieval_radius_is_the_boundary_plus_the_safety_margin():
-    """Radius = hint boundary × 1.1, per entity kind."""
-    engine = FastEngine()
-    assert engine.retrieval("ticket").radius_m == pytest.approx(147.3931188332412 * 1.1)
-    station_boundary = max_hint_distance_m(STATION_PARAMETERS)
-    assert engine.retrieval("station").radius_m == pytest.approx(station_boundary * 1.1)

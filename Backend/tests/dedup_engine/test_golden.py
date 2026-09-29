@@ -1,80 +1,49 @@
-"""Scoring behaviour is pinned per engine version (Spec 020 §8 item 10, ADR-297)."""
+"""fast-v2's outputs on fixed data are pinned per version (ADR-297).
+
+Regenerate with `DEDUP_REGEN_GOLDEN=1 uv run pytest tests/dedup_engine/test_golden.py`; it
+refuses when outputs changed but the engine version did not.
+"""
 
 import json
-import subprocess
-import sys
-from pathlib import Path
+import os
+from dataclasses import replace
 
-from app.dedup_engine.registry import get_engine
-from tests.dedup_engine.golden_cases import compute, golden_path
+import pytest
 
-BACKEND = Path(__file__).resolve().parents[2]
-
-
-def test_outputs_match_the_golden_file_for_this_version():
-    """The registered engine reproduces its golden file exactly, under the version recorded there."""
-    engine = get_engine()
-    golden = json.loads(golden_path(engine).read_text(encoding="utf-8"))
-    assert golden["version"] == engine.version, (
-        f"engine is {engine.version} but the golden file is {golden['version']}: "
-        "run scripts/regen_dedup_golden.py"
-    )
-    # Round-trip through JSON so tuples and lists compare the way the file stores them.
-    current = json.loads(json.dumps(compute(engine), ensure_ascii=False))
-    assert current == golden["cases"], (
-        f"scoring changed under {engine.version}: bump the engine version, add a CHANGELOG entry, "
-        "then regenerate the golden file"
-    )
-
-
-def _run_regen(tmp_path, version: str, similarity_shift: float) -> subprocess.CompletedProcess:
-    """Run the regen script against a copy of the golden file with a stand-in engine."""
-    script = f"""
-import sys
-from dataclasses import dataclass, replace
-from pathlib import Path
-import app.dedup_engine.registry as registry
-import tests.dedup_engine.golden_cases as cases
 from app.dedup_engine.fast import FastEngine
+from tests.dedup_engine.golden import GOLDEN, compute, seed, write_golden
 
-class Shifted(FastEngine):
-    version = {version!r}
-    def score(self, submission, candidate, now):
-        m = super().score(submission, candidate, now)
-        return replace(m, similarity=min(1.0, m.similarity + {similarity_shift}))
-
-registry._ENGINE = Shifted()
-cases.GOLDEN_DIR = Path({str(tmp_path)!r})
-sys.argv = ["regen"]
-import runpy
-runpy.run_path({str(BACKEND / "scripts" / "regen_dedup_golden.py")!r}, run_name="__main__")
-"""
-    return subprocess.run(
-        [sys.executable, "-c", script], cwd=BACKEND, capture_output=True, text=True, env={"PYTHONPATH": "."}
-    )
+pytestmark = pytest.mark.asyncio
 
 
-def test_regen_refuses_changed_outputs_without_a_version_bump(tmp_path):
-    """Changing scores under the same version is rejected: the golden file stays as it was."""
-    source = golden_path(get_engine())
-    target = tmp_path / source.name
-    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-    before = target.read_text(encoding="utf-8")
+async def test_outputs_match_the_golden_file(db):
+    """Same data, same submissions, same answers — under the version the file records."""
+    await seed(db)
+    engine = FastEngine()
+    cases = await compute(engine, db)
+    if os.getenv("DEDUP_REGEN_GOLDEN"):
+        result = write_golden(GOLDEN, engine.version, cases)
+        assert not result.startswith("refused"), result
+    golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    assert golden["version"] == engine.version, "engine version changed: regenerate the golden file"
+    assert cases == golden["cases"], f"scoring changed under {engine.version}: bump the version first"
 
-    result = _run_regen(tmp_path, version=get_engine().version, similarity_shift=0.01)
 
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "Bump the engine's `version`" in result.stderr
-    assert target.read_text(encoding="utf-8") == before
+async def test_regenerating_refuses_changed_outputs_without_a_bump(db, tmp_path):
+    """The only way to change the golden file is a new version."""
+    await seed(db)
+    engine = FastEngine()
+    path = tmp_path / "golden.json"
+    assert write_golden(path, engine.version, await compute(engine, db)) == "written"
 
+    class Shifted(FastEngine):
+        async def check(self, db_, submission, now):
+            return [
+                replace(s, similarity=min(1.0, s.similarity + 0.01))
+                for s in await super().check(db_, submission, now)
+            ]
 
-def test_regen_accepts_changed_outputs_with_a_version_bump(tmp_path):
-    """The same change under a new version rewrites the golden file with that version."""
-    source = golden_path(get_engine())
-    target = tmp_path / source.name
-    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-
-    result = _run_regen(tmp_path, version="fast-v999", similarity_shift=0.01)
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert json.loads(target.read_text(encoding="utf-8"))["version"] == "fast-v999"
+    shifted = await compute(Shifted(), db)
+    assert write_golden(path, engine.version, shifted).startswith("refused")
+    assert write_golden(path, "fast-v999", shifted) == "written"
+    assert json.loads(path.read_text(encoding="utf-8"))["version"] == "fast-v999"

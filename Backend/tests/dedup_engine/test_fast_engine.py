@@ -26,8 +26,7 @@ from app.dedup_engine.contract import (
     TaskDraft,
     TicketDraft,
 )
-from app.dedup_engine.fast import STATION_PARAMETERS, TICKET_PARAMETERS, max_hint_distance_m
-from app.dedup_engine.fast_v2 import FastEngine
+from app.dedup_engine.fast import STATION_PARAMETERS, TICKET_PARAMETERS, FastEngine, max_hint_distance_m
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.request import Tickets

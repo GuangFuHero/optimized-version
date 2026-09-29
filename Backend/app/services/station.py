@@ -215,7 +215,7 @@ async def create_station(
 
     Validate, insert, one commit that makes the station + address pair atomic, then notify.
     Batch import calls this; the interactive GraphQL path goes through
-    `dedup_submission.submit_station` (Spec 020, ADR-299).
+    `dedup_submission.submit_new_station` (Spec 020, ADR-299).
     """
     actor_uid = actor.uuid
     fields = await validate_station(

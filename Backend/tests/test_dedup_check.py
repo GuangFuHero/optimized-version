@@ -54,7 +54,7 @@ SUBMISSION = NewTicket(
 def engine(monkeypatch) -> AsyncStubEngine:
     """The stub the backend will get."""
     stub = AsyncStubEngine()
-    monkeypatch.setattr(registry, "_SUBMISSION_ENGINE", stub)
+    monkeypatch.setattr(registry, "_ENGINE", stub)
     return stub
 
 

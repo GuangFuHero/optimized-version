@@ -17,7 +17,6 @@ from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.db.session import Base
 from app.dedup_engine import registry as dedup_registry
-from app.dedup_engine.contract import RetrievalSpec
 from app.main import app
 from app.models.auth import User
 from app.models.geo import ClosureArea, Station
@@ -140,32 +139,14 @@ async def _ensure_db():
     await eng.dispose()
 
 
-class _NeverMatches:
+class _NeverSuspects:
     """A dedup engine that never suspects a duplicate (Spec 020 plan Task 12).
 
-    GraphQL tests create many similar tickets and stations at the same spot, and with the real
-    engine `createTicket` / `createStation` would answer DuplicateSuspected instead of creating.
-    Those tests are not about deduplication, so they get this; the ones that are opt in to the
-    real engine with `@pytest.mark.real_dedup`.
+    GraphQL tests create many similar tickets, tasks and stations at the same spot, and with the
+    real engine the create mutations would answer DuplicatesSuspected instead of creating. Those
+    tests are not about deduplication, so they get this; the ones that are opt in to the real
+    engine with `@pytest.mark.real_dedup`.
     """
-
-    version = "stub-v1"
-
-    def retrieval(self, kind):
-        """Search nowhere."""
-        return RetrievalSpec(radius_m=1.0)
-
-    def rank(self, submission, candidates, now):
-        """Never a match."""
-        return []
-
-    def score(self, submission, candidate, now):
-        """Only reached through an acknowledged create, which these tests do not send."""
-        raise AssertionError("the stub dedup engine does not score")
-
-
-class _NeverSuspects:
-    """The ADR-304 counterpart of `_NeverMatches`: `check` suspects nothing."""
 
     version = "stub-v2"
 
@@ -185,10 +166,9 @@ def pytest_configure(config):
 
 @pytest.fixture(autouse=True)
 def _no_dedup_hints(request, monkeypatch):
-    """Every GraphQL test runs with the never-matching engine unless marked `real_dedup`."""
+    """Every GraphQL test runs with the never-suspecting engine unless marked `real_dedup`."""
     if request.node.get_closest_marker("real_dedup") is None:
-        monkeypatch.setattr(dedup_registry, "_ENGINE", _NeverMatches())
-        monkeypatch.setattr(dedup_registry, "_SUBMISSION_ENGINE", _NeverSuspects())
+        monkeypatch.setattr(dedup_registry, "_ENGINE", _NeverSuspects())
 
 
 @pytest_asyncio.fixture(autouse=True)

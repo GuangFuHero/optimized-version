@@ -1068,21 +1068,56 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 ## 交給前端的 API 變更（後端不負責實作）
 
-前端改動由前端負責，後端只提供合約。以下是本票對 GraphQL 的破壞性變更，供前端與 #47 作者調整：
+前端改動由前端負責，後端只提供合約。以下是本票（Phase 2 完成後的最終版）對 GraphQL 的變更，供前端與 #47 作者調整。
 
-> ⚠️ **以下是 Phase 1（工單層級）的合約，Phase 2 會再改**：`createTicket` 改為帶 `tasks` 清單、三個建立 mutation 都回通用的
-> `DuplicatesSuspected { suspects: [{ draftRef, relatedKind, relatedUuid, relatedTicketUuid }] }`，`createTicketTask` 也改兩段式
->（spec §5）。Task 23 完成時改寫本段；前端請以 Phase 2 完成後的版本為準。
+**移除**：`ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`，以及 `TicketDedupHint`、
+`StationDedupHint`、`DedupScoreComponent`、`DedupEntityKind`、`DedupHintOutcome`。不需要前端自己查重或回報結果。
 
-- **移除**：`ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`，以及 `TicketDedupHint`、
-  `StationDedupHint`、`DedupScoreComponent`、`DedupEntityKind`、`DedupHintOutcome` 等型別。
-- **`createTicket(input, acknowledgedDuplicateOf: String = null): CreateTicketResult!`**，回傳 union：
-  - `TicketCreated { ticket: TicketType! }`：已建立。
-  - `DuplicateSuspected { relatedTicketUuid: String! }`：**沒有建立**，附近有疑似同一件的未結案工單。
-- **`createStation(input, acknowledgedDuplicateOf: String = null): CreateStationResult!`**，回傳
-  `StationCreated { station }` 或 `DuplicateStationSuspected { relatedStationUuid }`。
-- **流程**：第一次送出不帶 `acknowledgedDuplicateOf`。收到 `DuplicateSuspected` 時，使用者若選擇照樣建立，
-  用**同一份 input** 加上 `acknowledgedDuplicateOf = relatedTicketUuid` 再送一次，後端就建立、不再檢查，並記錄這對配對。
-  使用者若改去看既有的單，前端不需要呼叫任何 API。
-- **錯誤行為不變**：權限不足、輸入錯誤仍在 `errors` 裡，`data.createTicket` 為 null；去重本身出錯時後端照常建立（fail-open），前端不會看到差別。
-- **選取寫法**：`createTicket(input: $input) { __typename ... on TicketCreated { ticket { uuid ... } } ... on DuplicateSuspected { relatedTicketUuid } }`。
+**共同的疑似重複型別**（三個建立 mutation 都用它）：
+
+```graphql
+type DuplicatesSuspected { suspects: [DuplicateSuspect!]! }
+type DuplicateSuspect {
+  draftRef: String!          # 送出的哪一部分："ticket"、"task:0"、"task:1"…、"station"
+  relatedKind: String!       # 它像哪一種既有的東西："ticket"、"ticket_task"、"station"
+  relatedUuid: String!       # 那個既有的東西
+  relatedTicketUuid: String  # 像的是任務時，那個任務所屬的工單（顯示用）
+}
+```
+
+**新開單：`createTicket` 連同任務一起送**
+
+```graphql
+createTicket(input: CreateTicketInput!): CreateTicketResult!   # TicketCreated | DuplicatesSuspected
+# CreateTicketInput 新增：
+#   tasks: [CreateTicketTaskDraft!]! = []
+#   acknowledgedDuplicateOf: String = null      # 工單本身的確認（目前 engine 不比工單，通常不用）
+# CreateTicketTaskDraft：taskType、taskName、taskDescription、quantity、source、visibility、routeUuid、
+#   acknowledgedDuplicateOf（這個任務的確認）
+type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
+```
+
+- 第一次送出：任一部分疑似重複 → `DuplicatesSuspected`，**工單與任務都沒有建立**。
+- 使用者看過後：
+  - **照樣建立**：同一份 input 再送一次，在那個任務草稿上填 `acknowledgedDuplicateOf = relatedUuid`；該任務不再被檢查，後端記錄配對。
+  - **放棄某個任務（去看舊的）**：第二次送出時拿掉那個草稿即可，不需要呼叫任何 API。
+  - **全部放棄**：不再送出，什麼都沒建立。
+- 確認綁在各自的任務草稿上，草稿順序變了也沒關係；`draftRef` 只用來對應「這一次」回應是哪個草稿。
+- 沒有疑似重複：第一次就建好，工單與所有任務一起出現。
+
+**替既有的單加任務：`createTicketTask` 也是兩段式**
+
+```graphql
+createTicketTask(input: CreateTicketTaskInput!, acknowledgedDuplicateOf: String = null): CreateTicketTaskResult!
+# TicketTaskCreated { task } | DuplicatesSuspected（draftRef 固定 "task:0"）
+```
+
+同一張單自己的任務不會被當成疑似重複。
+
+**登記站點：`createStation`**
+
+`createStation(input, acknowledgedDuplicateOf)` 回 `StationCreated { station }` 或 `DuplicatesSuspected`（`draftRef` 為 `"station"`）。
+Phase 1 的 `DuplicateStationSuspected` 已移除。
+
+**錯誤行為不變**：權限不足、輸入錯誤仍在 `errors` 裡、`data` 為 null（此時不會透露任何疑似重複）；去重本身出錯或逾時，
+後端照常建立，前端不會看到差別。
