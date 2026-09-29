@@ -329,6 +329,46 @@ async def test_a_release_waits_for_whoever_holds_the_ticket(db):
     assert await _claims(db, task_uuid) == 0
 
 
+# --- a need that has everyone it asked for stops recruiting by itself (spec Q37) ---
+
+
+async def _state(db, task_uuid: str) -> tuple[str, datetime | None]:
+    """The need's status and completed_at as committed — read afresh, not the session's copy."""
+    query = select(TicketTask.status, TicketTask.completed_at).where(TicketTask.uuid == task_uuid)
+    row = (await db.execute(query)).one()
+    return row.status, row.completed_at
+
+
+@pytest.mark.asyncio
+async def test_the_claim_that_fills_a_need_marks_it_fulfilled(db):
+    """`fulfilled` means 人夠了、照常前往 — not that the work is done; completed_at says when it filled."""
+    task = await _need(db, quantity=2)
+    task_uuid = str(task.uuid)
+    first = await _volunteer(db, "甲")
+    second = await _volunteer(db, "乙")
+
+    await _claim(db, first, task_uuid)
+    assert await _state(db, task_uuid) == ("pending", None)
+
+    await _claim(db, second, task_uuid)
+    status, completed_at = await _state(db, task_uuid)
+    assert status == "fulfilled"
+    assert completed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_a_need_without_a_quantity_never_fills_up(db):
+    """No quantity, no cap: however many come, the need keeps recruiting."""
+    task = await _need(db, quantity=None)
+    task_uuid = str(task.uuid)
+    volunteers = [await _volunteer(db, f"志工{n}") for n in range(3)]
+
+    for volunteer in volunteers:
+        await _claim(db, volunteer, task_uuid)
+
+    assert await _state(db, task_uuid) == ("pending", None)
+
+
 # --- who hears about a claim (spec Q18; prototype site-actions.jsx:473-496) ---
 
 

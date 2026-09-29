@@ -618,11 +618,12 @@ async def assign_task_actor(
     ticket. A volunteer claims a need, not a ticket (PUB-PS-140), and a task with a `quantity`
     takes nobody more once it has that many people — not even from a coordinator assigning
     someone else (spec Q38, reversing d847624): to send more, they open another need. A task
-    without one has no cap, as the requester never said how many. The need's ticket and then
-    the need are locked FOR UPDATE from the count to the commit (_lock_ticket_and_task), so
-    two people racing for the last place cannot both get it. Authorization runs first, so a
-    caller who will be refused never takes the locks. A task whose ticket was deleted is gone
-    with it.
+    without one has no cap, as the requester never said how many. The claim that brings a task
+    to its `quantity` marks it fulfilled in the same commit (spec Q37): it has everyone it asked
+    for, and they still go — fulfilled is not "done". The need's ticket and then the need are
+    locked FOR UPDATE from the count to the commit (_lock_ticket_and_task), so two people racing
+    for the last place cannot both get it. Authorization runs first, so a caller who will be
+    refused never takes the locks. A task whose ticket was deleted is gone with it.
 
     Three notices go out: the assignee hears they were assigned (dispatch() drops it for a
     self-signup), the requester hears who is coming, and when this claim fills the need,
@@ -665,6 +666,9 @@ async def assign_task_actor(
                 "status": "accepted",
             },
         )
+        if fills:
+            task.status = "fulfilled"
+            task.completed_at = datetime.now(UTC)
         await db.commit()
     except IntegrityError as exc:
         # Concurrent duplicate lost the race to uq_assignment_task_actor (PR #24 [10]) —
@@ -832,9 +836,14 @@ async def _lock_task_with_room(
     Returns the ticket, the need and the need's count. The locks are held until the caller
     commits. The quantity cap binds everyone, a coordinator assigning someone else included
     (spec Q38).
+
+    A fulfilled need that has as many people as it asked for says it is full rather than closed —
+    filled by claims (spec Q37), or stopped by its requester with the quantity cut to the
+    headcount — so the site shows 已滿, not 已結束. A fulfilled need with room left, like a
+    canceled one, is no longer open.
     """
     ticket, task = await _lock_ticket_and_task(db, task_uuid=task_uuid)
-    if task.status in CLOSED_TASK_STATUSES or ticket.status in CLOSED_TICKET_STATUSES:
+    if task.status == "canceled" or ticket.status in CLOSED_TICKET_STATUSES:
         raise ValueError("Task is no longer open")
     if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
         raise ValueError("Actor already assigned to this task")
@@ -843,6 +852,8 @@ async def _lock_task_with_room(
     )
     if task.quantity is not None and claimed >= task.quantity:
         raise ValueError("Task is full")
+    if task.status in CLOSED_TASK_STATUSES:
+        raise ValueError("Task is no longer open")
     return ticket, task, claimed
 
 
