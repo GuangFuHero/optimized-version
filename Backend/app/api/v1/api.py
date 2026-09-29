@@ -12,6 +12,7 @@ from app.api.v1.endpoints import (
     notifications,
     rbac_admin,
     rbac_test,
+    role_requests,
     users,
 )
 from app.core.config import settings
@@ -32,6 +33,9 @@ api_router.include_router(admin.router, prefix="/admin", tags=["管理員 API"])
 
 # 註冊 RBAC 管理 API（capability catalog / matrix / user permissions，唯讀，feature 009 P1）
 api_router.include_router(rbac_admin.router, prefix="/admin", tags=["RBAC 管理 API"])
+
+# 註冊後台人員申請審核 API（列表 / 不通過，Spec/019）
+api_router.include_router(role_requests.router, prefix="/admin", tags=["後台人員申請審核"])
 
 
 def rbac_test_enabled(env: str) -> bool:

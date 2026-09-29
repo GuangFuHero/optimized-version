@@ -12,7 +12,13 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope
 from app.core.security import resolve_scope
 from app.models.auth import User
-from app.models.role_request import CONTACT_MAX_LENGTH, REASON_MAX_LENGTH, REQUESTED_ROLES, RoleRequest
+from app.models.role_request import (
+    CONTACT_MAX_LENGTH,
+    REASON_MAX_LENGTH,
+    REQUESTED_ROLES,
+    REVIEW_NOTE_MAX_LENGTH,
+    RoleRequest,
+)
 from app.repositories.active_identity_repository import active_identity_repository
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
@@ -23,6 +29,25 @@ _ONE_PENDING_INDEX = "uq_role_requests_one_pending"
 
 # The applicant-facing names, as the application form shows them (site-actions.jsx).
 ROLE_LABELS = {"government": "政府單位人員", "ngo": "社福團體人員", "data_auditor": "資料檢核員"}
+
+# Q6: what a turned-down applicant reads when the reviewer left no reply (wg-bridge.js).
+_REJECTED_WITHOUT_REPLY = "你原本的權限沒有任何改變，可以再送一次申請。"
+
+
+class RoleRequestNotFoundError(ValueError):
+    """No such application, or not one the caller may act on. REST answers 404."""
+
+
+class RoleRequestConflictError(ValueError):
+    """The application has already left `pending`. REST answers 409."""
+
+
+@dataclass
+class ReviewEntry:
+    """One row of the review list: the application and the name of whoever sent it."""
+
+    request: RoleRequest
+    applicant_name: str
 
 
 @dataclass
@@ -116,29 +141,91 @@ async def submit(
     return request
 
 
+async def _lock_pending(
+    db: AsyncSession, request_uuid: uuid.UUID, *, applicant_uuid: uuid.UUID | None = None
+) -> RoleRequest:
+    """Lock the application FOR UPDATE and check it is still pending.
+
+    Every way out of `pending` goes through here, so a withdrawal and a decision sent together
+    are settled one after the other and the later one is refused. `applicant_uuid` narrows the
+    lookup to that applicant's own: anyone else's is not found, so its existence is not given away.
+    """
+    query = select(RoleRequest).where(RoleRequest.uuid == request_uuid)
+    if applicant_uuid is not None:
+        query = query.where(RoleRequest.created_by == applicant_uuid)
+    request = await db.scalar(query.with_for_update().execution_options(populate_existing=True))
+    if request is None:
+        raise RoleRequestNotFoundError("Role request not found")
+    if request.status != "pending":
+        raise RoleRequestConflictError("Role request is no longer pending")
+    return request
+
+
 async def withdraw(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID) -> RoleRequest:
     """Take back one's own pending application (Q10). Nobody is told.
 
     Asks only that the application is the caller's, not for role_request.add: pausing
-    applications stops new ones and must not strand one already sent. Anyone else's is not
-    found, so whether it exists is never given away. The row is locked, so a withdrawal and a
-    decision sent together are settled one after the other and the later one is refused.
+    applications stops new ones and must not strand one already sent.
     """
-    request = await db.scalar(
-        select(RoleRequest)
-        .where(RoleRequest.uuid == request_uuid, RoleRequest.created_by == actor.uuid)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    if request is None:
-        raise ValueError("Role request not found")
-    if request.status != "pending":
-        raise ValueError("Role request is no longer pending")
+    request = await _lock_pending(db, request_uuid, applicant_uuid=actor.uuid)
     request.status = "withdrawn"
     request.closed_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(request)
     return request
+
+
+def _checked_note(note: str | None) -> str | None:
+    """The reviewer's reply trimmed, or None if blank; refused if longer than the table's CHECK allows."""
+    note = (note or "").strip() or None
+    if note is not None and len(note) > REVIEW_NOTE_MAX_LENGTH:
+        raise ValueError(f"Note must be at most {REVIEW_NOTE_MAX_LENGTH} characters")
+    return note
+
+
+async def reject(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, note: str | None) -> RoleRequest:
+    """Turn a pending application down and tell the applicant, with the reply if there is one."""
+    await require_scope(actor, Perm.ROLE_REQUEST_REVIEW, db)
+    note = _checked_note(note)
+    reviewer_uuid = actor.uuid  # read before the commit expires `actor`
+    request = await _lock_pending(db, request_uuid)
+    request.status = "rejected"
+    request.reviewed_by = reviewer_uuid
+    request.review_note = note
+    request.closed_at = datetime.now(UTC)
+    applicant_uuid, label = request.created_by, ROLE_LABELS[request.requested_role]
+    await db.commit()
+
+    await NotificationService.dispatch(
+        db,
+        event_type="role_request_rejected",
+        title=f"你的「{label}」申請沒有通過",
+        body=note or _REJECTED_WITHOUT_REPLY,
+        actor_uuid=reviewer_uuid,
+        ref_type="role_request",
+        ref_uuid=request_uuid,
+        explicit_recipients=[applicant_uuid],
+    )
+    # dispatch() commits, which expires `request` again.
+    await db.refresh(request)
+    return request
+
+
+async def list_for_review(
+    db: AsyncSession, *, status: str | None, skip: int, limit: int
+) -> list[ReviewEntry]:
+    """Applications oldest first, so whoever applied first is reviewed first (2026-09-29).
+
+    The caller gates this on role_request.review: reason and contact are the applicant's own
+    words and often name their unit and phone number (Q11).
+    """
+    query = select(RoleRequest, User.name).join(User, User.uuid == RoleRequest.created_by)
+    if status is not None:
+        query = query.where(RoleRequest.status == status)
+    rows = await db.execute(
+        query.order_by(RoleRequest.created_at, RoleRequest.uuid).offset(skip).limit(limit)
+    )
+    return [ReviewEntry(request=request, applicant_name=name) for request, name in rows.all()]
 
 
 async def my_role_requests(db: AsyncSession, *, actor: User) -> RoleRequestState:

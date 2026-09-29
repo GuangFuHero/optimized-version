@@ -77,13 +77,19 @@ async def _withdraw(db, actor: User, request_uuid):
 
 
 async def _reviewer(db) -> User:
-    """An account holding role_request.review, as the seed gives super_admin."""
+    """An account acting as super_admin with role_request.review, as the seed gives it."""
     reviewer = User(name="超級管理員")
     db.add(reviewer)
     super_admin = await _role(db, "super_admin", {Perm.ROLE_REQUEST_REVIEW: "all"})
     db.add(UserRoleAssign(user_uuid=reviewer.uuid, role_uuid=super_admin.uuid))
     await db.flush()
-    return reviewer
+    return acting_as(reviewer, super_admin)
+
+
+async def _reject(db, reviewer: User, request_uuid, note: str | None = None):
+    """Turn an application down as `reviewer`, refreshed first for the same reason as in _submit."""
+    await refresh_actor(db, reviewer)
+    return await role_request.reject(db, actor=reviewer, request_uuid=request_uuid, note=note)
 
 
 @pytest.mark.asyncio
@@ -187,10 +193,10 @@ async def test_two_tabs_submitting_at_once_leave_one_application(db):
 @pytest.mark.asyncio
 async def test_a_rejected_applicant_may_apply_again_at_once(db):
     """AC-RE-107: no cooldown (2026-09-11). The list shows the newest first."""
+    reviewer = await _reviewer(db)
     citizen = await _citizen(db)
     first = await _submit(db, citizen, "data_auditor")
-    first.status = "rejected"  # arranging state only: the reject API arrives in C-B4
-    await db.commit()
+    await _reject(db, reviewer, first.uuid)
 
     await _submit(db, citizen, "government")
 
@@ -309,7 +315,7 @@ async def test_a_closed_application_cannot_be_withdrawn(db, status):
     citizen = await _citizen(db)
     request = await _submit(db, citizen)
     request_uuid = request.uuid
-    request.status = status  # arranging state only: approve and reject arrive in C-B4 and C-B6
+    request.status = status  # arranging state only: approval arrives in C-B6
     await db.commit()
 
     with pytest.raises(ValueError, match="^Role request is no longer pending$"):
@@ -349,3 +355,135 @@ async def test_pausing_applications_does_not_trap_one_already_sent(db):
     with pytest.raises(HTTPException) as refused:
         await _submit(db, citizen)
     assert refused.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_rejecting_records_who_decided_and_their_reply(db):
+    """The reply is what the applicant reads on the card; the decision names its reviewer."""
+    reviewer = await _reviewer(db)
+    reviewer_uuid = reviewer.uuid
+    citizen = await _citizen(db)
+    request = await _submit(db, citizen)
+
+    rejected = await _reject(db, reviewer, request.uuid, note="  請改用單位信箱再申請一次  ")
+
+    assert rejected.status == "rejected"
+    assert (rejected.reviewed_by, rejected.review_note) == (reviewer_uuid, "請改用單位信箱再申請一次")
+    assert rejected.closed_at is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("note", [None, "   "])
+async def test_a_blank_reply_is_no_reply(db, note):
+    """Nothing typed and only spaces typed read the same: the card falls back to its default."""
+    reviewer = await _reviewer(db)
+    citizen = await _citizen(db)
+    request = await _submit(db, citizen)
+
+    rejected = await _reject(db, reviewer, request.uuid, note=note)
+
+    assert rejected.review_note is None
+
+
+@pytest.mark.asyncio
+async def test_an_oversized_reply_is_refused(db):
+    """Refused with a message the back office can show, before the table's CHECK is reached."""
+    reviewer = await _reviewer(db)
+    citizen = await _citizen(db)
+    request = await _submit(db, citizen)
+    request_uuid = request.uuid
+
+    with pytest.raises(ValueError, match="^Note must be at most 500 characters$"):
+        await _reject(db, reviewer, request_uuid, note="字" * 501)
+    [still] = (await _state(db, citizen)).requests
+    assert still.status == "pending"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["approved", "rejected", "withdrawn"])
+async def test_a_closed_application_cannot_be_rejected(db, status):
+    """A decision, once made, stands; so does a withdrawal. The back office answers 409."""
+    reviewer = await _reviewer(db)
+    citizen = await _citizen(db)
+    request = await _submit(db, citizen)
+    request_uuid = request.uuid
+    request.status = status  # arranging state only: approval arrives in C-B6
+    await db.commit()
+
+    with pytest.raises(role_request.RoleRequestConflictError, match="^Role request is no longer pending$"):
+        await _reject(db, reviewer, request_uuid)
+    [still] = (await _state(db, citizen)).requests
+    assert still.status == status
+
+
+@pytest.mark.asyncio
+async def test_rejecting_an_application_that_does_not_exist_is_not_found(db):
+    """The back office answers 404."""
+    reviewer = await _reviewer(db)
+
+    with pytest.raises(role_request.RoleRequestNotFoundError, match="^Role request not found$"):
+        await _reject(db, reviewer, uuid.uuid4())
+
+
+@pytest.mark.asyncio
+async def test_only_a_reviewer_can_reject(db):
+    """Holding role_request.review is what makes a reviewer; seed gives it to super_admin only."""
+    applicant = await _citizen(db, "甲")
+    someone_else = await _citizen(db, "乙")
+    request = await _submit(db, applicant)
+    request_uuid = request.uuid
+
+    with pytest.raises(HTTPException) as refused:
+        await _reject(db, someone_else, request_uuid)
+    assert refused.value.status_code == 403
+    [still] = (await _state(db, applicant)).requests
+    assert still.status == "pending"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("note", "body"),
+    [
+        ("請附上單位證明後再申請", "請附上單位證明後再申請"),
+        (None, "你原本的權限沒有任何改變，可以再送一次申請。"),
+    ],
+)
+async def test_the_applicant_hears_they_were_turned_down(db, note, body):
+    """Q6, in the prototype's words (wg-bridge.js): the reply if there is one, else reassurance."""
+    reviewer = await _reviewer(db)
+    citizen = await _citizen(db)
+    citizen_uuid = citizen.uuid
+    request = await _submit(db, citizen, "government")
+    request_uuid = request.uuid
+
+    await _reject(db, reviewer, request_uuid, note=note)
+
+    [notice] = await _notices(db, "role_request_rejected")
+    assert notice.recipient_uuid == citizen_uuid
+    assert (notice.ref_type, notice.ref_uuid) == ("role_request", request_uuid)
+    assert notice.title == "你的「政府單位人員」申請沒有通過"
+    assert (notice.body, notice.priority) == (body, "medium")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "skip", "limit", "applicants"),
+    [
+        (None, 0, 100, ["甲", "乙", "丙"]),
+        ("pending", 0, 100, ["甲", "丙"]),
+        ("withdrawn", 0, 100, ["乙"]),
+        (None, 1, 1, ["乙"]),
+    ],
+)
+async def test_the_review_list_is_oldest_first_and_names_the_applicant(db, status, skip, limit, applicants):
+    """A queue: whoever applied first is reviewed first (2026-09-29). Filter by status, page by skip."""
+    for name in ("甲", "乙", "丙"):
+        citizen = await _citizen(db, name)
+        request = await _submit(db, citizen)
+        if name == "乙":
+            await _withdraw(db, citizen, request.uuid)
+
+    entries = await role_request.list_for_review(db, status=status, skip=skip, limit=limit)
+
+    assert [entry.applicant_name for entry in entries] == applicants
+    assert all(entry.request.reason == REASON for entry in entries)
