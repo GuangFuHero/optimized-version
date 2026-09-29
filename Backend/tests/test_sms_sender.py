@@ -40,7 +40,7 @@ def test_bodies_fit_one_kotsms_point(build):
     """
     body = build()
     assert len(body) <= 70
-    assert body.startswith("開放文化基金會 ")
+    assert body.startswith("島嶼守望 ")
 
 
 def test_get_sms_sender_defaults_to_console(monkeypatch):

@@ -19,6 +19,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.core.context import request_user_uuid
+from app.core.identity import ActiveIdentity
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.services import history  # noqa: E402
@@ -34,8 +35,15 @@ def check(label, condition, detail=""):
     print(f"  {'✓' if condition else '✗'} {label}" + (f"  — {detail}" if detail else ""))
 
 
-async def _grant(db, user, keys, scope="all"):
-    """Give `user` each capability key at `scope`, creating the role and permission rows."""
+async def _grant(db, user, keys, scope="all") -> ActiveIdentity:
+    """Give `user` each capability key at `scope` on one role, and return that identity.
+
+    One role, not one per key: since feature 010 only the active identity's grants count, so
+    a role per capability would leave the actor holding whichever one is active.
+    """
+    role = Role(name=f"r-{user.name}", kind="platform")
+    db.add(role)
+    await db.flush()
     for key in keys:
         permission = (
             await db.execute(select(Permission).where(Permission.key == key))
@@ -44,13 +52,22 @@ async def _grant(db, user, keys, scope="all"):
             permission = Permission(key=key)
             db.add(permission)
             await db.flush()
-        role = Role(name=f"r-{user.name}-{key}", kind="platform")
-        db.add(role)
-        await db.flush()
         db.add(RolePermissionAssign(
             role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    db.add(UserRoleAssign(
+        user_uuid=user.uuid, role_uuid=role.uuid, role_kind="platform", team_uuid=None))
+    # Built before the commit, which expires `role` (see the MissingGreenlet note in main).
+    identity = ActiveIdentity(
+        role_uuid=str(role.uuid), team_uuid=None, role_name=role.name, team_name=None)
     await db.commit()
+    return identity
+
+
+async def _load(db, user_uuid, identity):
+    """Load a user acting as `identity` — what get_current_user resolves from the token."""
+    user = (await db.execute(select(User).where(User.uuid == user_uuid))).scalar_one()
+    user.active_identity = identity
+    return user
 
 
 async def main():
@@ -66,9 +83,10 @@ async def main():
         actor_uuid = str(actor.uuid)
         await db.commit()
         actor = (await db.execute(select(User).where(User.uuid == actor_uuid))).scalar_one()
-        await _grant(db, actor, [
+        identity = await _grant(db, actor, [
             "ticket.view_history", "station.view_history", "ticket.add", "ticket.edit",
-            "ticket.delete", "ticket.assign", "ticket.view_pii", "audit.view",
+            "ticket.delete", "ticket.assign", "ticket.view_pii", "ticket.view_detail",
+            "audit.view",
         ])
 
     # Everything below runs as this user, exactly as an HTTP request would — which is what
@@ -82,10 +100,7 @@ async def main():
     # stable_actor would also hand later reads a stale in-memory ticket.
     async def op(fn):
         async with AsyncSession(engine) as db:
-            actor = (
-                await db.execute(select(User).where(User.uuid == actor_uuid))
-            ).scalar_one()
-            return await fn(db, actor)
+            return await fn(db, await _load(db, actor_uuid, identity))
 
     print("\n--- 走真實 service，讓 trigger 自己寫 audit ---")
 
@@ -94,7 +109,7 @@ async def main():
         geometry={"type": "Point", "coordinates": [121.5, 25.0]},
         title="需要飲用水", description="三樓住戶行動不便",
         contact_name="王小姐", contact_email=None, contact_phone="0912345678",
-        priority="high", task_type=None, visibility="public", disaster_type=None,
+        priority="high", task_type=None, visibility="public", disaster_types=None,
     ))
     ticket_uuid = str(ticket.uuid)
     print(f"  建立求助單 {ticket_uuid}")
@@ -124,7 +139,7 @@ async def main():
     print("  軟刪除求助單")
 
     async with AsyncSession(engine) as db:
-        actor = (await db.execute(select(User).where(User.uuid == actor_uuid))).scalar_one()
+        actor = await _load(db, actor_uuid, identity)
 
         print("\n--- 讀回時間軸 ---")
         timeline = await history.load_timeline(
@@ -185,10 +200,10 @@ async def main():
         plain_uuid = str(plain.uuid)
         await db.commit()
         plain = (await db.execute(select(User).where(User.uuid == plain_uuid))).scalar_one()
-        await _grant(db, plain, ["ticket.view_history"])
+        plain_identity = await _grant(db, plain, ["ticket.view_history"])
 
     async with AsyncSession(engine) as db:
-        plain = (await db.execute(select(User).where(User.uuid == plain_uuid))).scalar_one()
+        plain = await _load(db, plain_uuid, plain_identity)
         limited = await history.load_timeline(
             db, actor=plain, entity=history.TICKET, uuid=ticket_uuid, limit=50, offset=0)
 
@@ -198,8 +213,13 @@ async def main():
 
         check("無 view_pii 時電話被遮罩（ADR-130）",
               phone is not None and phone["after"] == "09*****678", str(phone))
-        check("無 view_pii 時 geometry 變更完全不出現（ticket 的座標即住址，ADR-141）",
+        check("無 view_detail 時 geometry 變更完全不出現（ticket 的座標即住址，ADR-141/284）",
               not any(c["field"] == "geometry" for c in changes))
+        description = next((c for c in changes if c["field"] == "description"), None)
+        check("無 view_detail 時描述只留欄位名、不給值（ADR-284）",
+              description == {"field": "description", "before": None, "after": None,
+                              "changed": True},
+              str(description))
         check("無 audit.view 時沒有 RAW（ADR-130）",
               all(e.get("raw") is None for e in limited.events))
         check("無 audit.view 時看不到 moderation_status（稽核層，ADR-130）",

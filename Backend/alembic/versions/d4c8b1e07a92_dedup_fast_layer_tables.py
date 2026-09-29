@@ -18,7 +18,7 @@ and `hint_shown` joined the audit event types. Scoring, the text signal included
 the algorithm core (`app.dedup_engine`); nothing here depends on pg_trgm any more.
 
 Revision ID: d4c8b1e07a92
-Revises: b3e8d1f4a6c2
+Revises: e3b8f1a6c2d7
 Create Date: 2026-09-04 00:00:00.000000
 
 """
@@ -31,7 +31,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "d4c8b1e07a92"
-down_revision: str | Sequence[str] | None = "b3e8d1f4a6c2"
+down_revision: str | Sequence[str] | None = "e3b8f1a6c2d7"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
