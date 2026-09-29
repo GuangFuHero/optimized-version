@@ -88,7 +88,7 @@ export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/
 
 - [ ] 把 spec §3（快照欄位、`Candidate`）、§4（`Match`、`RetrievalSpec`、`DedupEngine`）給 Chi 看
 - [ ] 確認他的離線 harness 能改吃 `TicketSnapshot` / `StationSnapshot` / `Candidate`（spec §2 第 5 條）
-- [ ] 確認 contract test 的效能門檻 X（spec §10；本計畫先用暫定值 200 ms / 500 筆）
+- [ ] 問 Chi contract test 的效能門檻能否達到（暫定 200 ms / 500 筆；後端拍板，ADR-306）
 - [ ] 有任何欄位調整：先改 spec §3／§4 再往下做
 
 ---

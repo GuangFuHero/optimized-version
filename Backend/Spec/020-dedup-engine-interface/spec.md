@@ -6,7 +6,7 @@
 由 plan Phase 2 實作；Phase 1 的程式在 Phase 2 期間逐步改寫。§4 介面仍待與 Chi 確認（plan Task 0）。
 **Depends on**: `Spec/019-dedup-fast-layer/spec.md`（PR #46 / #59，未合併）
 **Stacked on**: `feat/dedup-station-fast-layer`（#59，已合進 `3f97468f8`，含 main 的站點指派 #58）→ `feat/dedup-fast-layer`（#46）→ `main`
-**Decisions**: `decisions.md`（ADR-286~305；現行架構以 ADR-304 為準）
+**Decisions**: `decisions.md`（ADR-286~306；現行架構以 ADR-304 為準）
 
 ## 概述
 
@@ -40,9 +40,11 @@ Spec 019 交付了去重快層（2026-09-29 起比對單位是任務）。本功
 
 | 層 | 位置 | 擁有者 | 職責 | 不做的事 |
 |---|---|---|---|---|
-| engine | `app/dedup_engine/` | Chi | 候選查詢（唯讀）、比對單位、訊號、分數、門檻、`evidence` | 不寫 DB、不 commit；不 import `app.services`／`app.graphql`／`app.api` |
+| engine | `app/dedup_engine/`（`registry.py` 除外） | Chi | 候選查詢（唯讀）、比對單位、訊號、分數、門檻、`evidence`；演算法測試、golden、`CHANGELOG.md` | 不寫 DB、不 commit；不 import `app.services`／`app.graphql`／`app.api` |
+| registry | `app/dedup_engine/registry.py` | 後端 | 線上用哪個 engine（ADR-306） | Chi 可新增 engine class，不切換上線 |
+| 守門測試 | `tests/dedup_engine/test_contract.py`、`test_core_isolation.py`、`test_candidates.py` 的 index 測試 | 後端（Chi 可改） | 合約、隔離、唯讀、效能、index（ADR-306） | Chi 改動需後端 review |
 | contract | `app/dedup_engine/contract.py` | 雙方 | 草稿與 `Submission`、`Suspect`、`DedupEngine` Protocol | 改動需雙方同意 |
-| service | `app/services/dedup.py` | 後端 | 呼叫 engine（SAVEPOINT＋rollback、逾時、fail-open）、寫 `hint_shown`／配對卡／audit | 不含任何比對邏輯 |
+| service | `app/services/dedup.py` | 後端 | 呼叫 engine（SAVEPOINT＋rollback、逾時、fail-open）、寫 `hint_shown`／配對卡／audit；`ENGINE_TIMEOUT_S` 與效能門檻由後端拍板、Chi 提意見（ADR-306） | 不含任何比對邏輯 |
 | 編排 | `app/services/dedup_submission.py` | 後端 | 三個觸發點的兩段式（§5），只給 GraphQL 用 | 批次匯入不經過這裡 |
 | model／schema | `app/models/`、`alembic/versions/` | 後端 | `duplicate_pairs`、`dedup_audit_events`，以及候選查詢要用的 index（ADR-305） | engine 不改 model、migration、index |
 
@@ -269,7 +271,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 
 ## 9. 延後討論
 
-- **contract test 的效能門檻與 `ENGINE_TIMEOUT_S`**（Task 0 與 Chi 確認）。
+- **contract test 的效能門檻與 `ENGINE_TIMEOUT_S`**（Task 0 問 Chi 能否達到，後端拍板，ADR-306）。
 - **離線 harness**：engine 需要 DB 後，Chi 的離線回測要有對應的資料庫或替身，由 Chi 決定。
 
 ---

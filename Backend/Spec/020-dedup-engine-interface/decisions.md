@@ -500,3 +500,22 @@ ADR-301／302 的 API 保留，但回傳的疑似重複改為通用形狀（見 
 ➖ 多一個 GIST expression index：`base_geometries` 每次寫入多算一次 centroid（工單也會建，因為 index 建在父表）。
 ◾ **index 與所有 DB schema 歸後端管**（使用者 2026-09-29 定案）：engine 只寫唯讀查詢。Chi 換了查詢的距離表達式或篩選條件，
   這兩條測試會紅，由後端補或調整 index／migration；Chi 不需要動 migration 或 model。
+
+### ADR-306 `app/dedup_engine/` 裡屬於後端的三件事：registry、守門測試、時限
+
+**白話**：目錄歸 Chi，但「線上用哪個 engine」「等多久」由後端決定；後端寫的守門測試 Chi 可以改，後端要審。
+
+**Context**：ADR-304 把 `app/dedup_engine/` 整個歸 Chi，但目錄裡有三樣東西的性質不是演算法。使用者 2026-09-29 定案：
+
+**Decision**：
+
+| 東西 | 歸屬 | 規則 |
+|---|---|---|
+| `registry.py`（線上用哪個 engine） | 後端 | Chi 可以新增 engine class；要不要上線、切到哪個，由後端改 registry |
+| 守門測試：`tests/dedup_engine/test_contract.py`、`test_core_isolation.py`、`test_candidates.py` 的 index 測試 | 後端擁有，Chi 可改 | Chi 的改動讓它們紅了，可以在自己的 PR 裡調整，但後端要 review 那部分 |
+| `ENGINE_TIMEOUT_S`、contract test 的效能門檻 | 後端 | Chi 提意見（Task 0 時問他能否達到），後端拍板 |
+
+演算法測試（`test_fast.py`、`test_fast_engine.py`、`test_text.py`、golden）與 `CHANGELOG.md` 仍歸 Chi。
+
+➕ 上線時機與逾時綁在一起，由負責線上穩定的一方決定。
+➖ 守門測試可以被 Chi 改，靠後端 review 把關，不是靠測試本身擋。
