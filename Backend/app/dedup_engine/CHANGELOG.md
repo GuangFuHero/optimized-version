@@ -10,6 +10,36 @@ accepted on.
 
 ---
 
+## fast-v2 — 2026-09-29
+
+Task-level fast layer on the ADR-304 contract (`fast_v2.py`, candidates in `candidates.py`).
+Spec 019 moved the unit from tickets to tasks the same day; ADR-304 moved candidate retrieval
+into the engine so a change of unit no longer touches the backend.
+
+### What changed from fast-v1
+
+1. **Unit is a ticket task.** Each task draft is compared with open tasks nearby and gets at
+   most one suspect; the ticket itself is not compared. Candidate rules are Spec 019's: task not
+   fulfilled/canceled and not deleted, under a ticket not deleted and not cancelled (a completed
+   ticket stays in).
+2. **Signals read task fields**: distance between the tasks' tickets, the candidate task's age,
+   `task_type`, and trigram similarity of `task_name` + `task_description` (200 / 2000 chars).
+3. **Adding a task to an existing ticket** searches from that ticket and skips its own tasks.
+4. **Candidates are the engine's own read-only queries** instead of rows handed over by the
+   backend.
+
+Formula, parameters and retrieval radius per kind are fast-v1's (ticket parameters now apply
+to tasks). Stations are unchanged. `same_contact_phone`-style phone comparison is still unused.
+
+Golden: `tests/dedup_engine/golden/fast_db.json`, computed on fixed database contents
+(`tests/dedup_engine/golden_v2.py`).
+
+### Backtest
+
+待 Chi 補（任務層級的資料集與指標）。
+
+---
+
 ## fast-v1 — 2026-09-28
 
 Spec 019's fast layer (PR #46 / #59), moved behind the Spec 020 contract.
