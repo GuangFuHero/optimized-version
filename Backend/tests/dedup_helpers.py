@@ -65,3 +65,48 @@ class StubEngine:
         if self.fail_score:
             raise RuntimeError("engine exploded")
         return Match(str(candidate.snapshot.uuid), self.similarity, {"stub": True})
+
+
+@dataclass
+class AsyncStubEngine:
+    """An ADR-304 engine whose answers the test decides.
+
+    `suspects` is returned by `check` (a callable receives the submission); `delay_s` sleeps
+    first; `fail` raises; `write` adds a row before answering, to exercise the read-only guard.
+    `scored` is what `score` returns (None = the related entity is gone).
+    """
+
+    version: str = "stub-v2"
+    suspects: Sequence | Callable = ()
+    delay_s: float = 0.0
+    fail: bool = False
+    write: bool = False
+    scored: object = "default"
+    fail_score: bool = False
+    check_calls: list = field(default_factory=list)
+    score_calls: list = field(default_factory=list)
+
+    async def check(self, db, submission, now):
+        """The configured suspects, after the configured misbehaviour."""
+        import asyncio
+
+        self.check_calls.append(submission)
+        if self.delay_s:
+            await asyncio.sleep(self.delay_s)
+        if self.fail:
+            raise RuntimeError("engine exploded")
+        if self.write:
+            db.add(User(name="engine-was-here"))
+            await db.flush()
+        return list(self.suspects(submission) if callable(self.suspects) else self.suspects)
+
+    async def score(self, db, submission, draft_ref, related_kind, related_uuid, now):
+        """A fixed score for any pair, or the configured failure."""
+        from app.dedup_engine.contract import Suspect
+
+        self.score_calls.append((draft_ref, related_kind, related_uuid))
+        if self.fail_score:
+            raise RuntimeError("engine exploded")
+        if self.scored != "default":
+            return self.scored
+        return Suspect(draft_ref, related_kind, related_uuid, 0.91, {"stub": True})

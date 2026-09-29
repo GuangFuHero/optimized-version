@@ -1,4 +1,7 @@
-"""Backend-side conversion into the dedup contract (Spec 020 §3). No scoring here.
+"""Backend-side conversion into the dedup contract (Spec 020 §2). No scoring here.
+
+`ticket_draft` / `station_draft` build ADR-304 drafts; the snapshot builders below them are
+Phase 1's and go in plan Task 23.
 
 Rows and validated create inputs become snapshots of raw facts; pair facts (distance, phone
 equality) go on the Candidate. What stays out of a snapshot — contact details, internal notes,
@@ -15,7 +18,9 @@ from app.dedup_engine.contract import (
     Candidate,
     EntityKind,
     GeoPoint,
+    StationDraft,
     StationSnapshot,
+    TicketDraft,
     TicketSnapshot,
 )
 from app.models.geo import Station
@@ -96,6 +101,50 @@ def station_snapshot(row: Station) -> StationSnapshot:
         level=row.level or 0,
         source=row.source,
     )
+
+
+def ticket_draft(fields: TicketFields) -> TicketDraft:
+    """What the ADR-304 engine is told about a ticket being submitted."""
+    lon, lat = fields.point["coordinates"][:2]
+    v = fields.values
+    return TicketDraft(
+        location=GeoPoint(lon, lat),
+        title=v["title"],
+        description=v.get("description"),
+        task_type=v.get("task_type"),
+        priority=v.get("priority"),
+        disaster_types=tuple(v.get("disaster_types") or ()),
+        person_trapped_reported=v.get("person_trapped_reported"),
+        immediate_danger_reported=v.get("immediate_danger_reported"),
+        contact_phone=e164_or_none(v.get("contact_phone")),
+    )
+
+
+def station_draft(fields: StationFields) -> StationDraft:
+    """What the ADR-304 engine is told about a station being registered."""
+    lon, lat = fields.point["coordinates"][:2]
+    v = fields.values
+    return StationDraft(
+        location=GeoPoint(lon, lat),
+        name=v.get("name"),
+        description=v.get("description"),
+        type=v.get("type"),
+        operational_status=v.get("operational_status"),
+        op_hour=v.get("op_hour"),
+        level=v.get("level") or 0,
+        source=v.get("source"),
+        contact_phone=e164_or_none(v.get("contact_phone")),
+    )
+
+
+def e164_or_none(phone: str | None) -> str | None:
+    """A phone in E.164, or None when there is none or it does not parse."""
+    if not phone:
+        return None
+    try:
+        return normalize_phone(phone)
+    except ValueError:
+        return None
 
 
 def same_contact_phone(a: str | None, b: str | None) -> bool | None:

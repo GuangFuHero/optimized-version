@@ -179,3 +179,63 @@ def test_to_candidate_builds_station_snapshots():
     candidate = to_candidate("station", _station_row(), distance_m=3.0, submission_phone=None)
     assert isinstance(candidate.snapshot, StationSnapshot)
     assert candidate.same_contact_phone is None
+
+
+# --- ADR-304 drafts ----------------------------------------------------------------------
+
+
+def test_ticket_draft_from_validated_fields():
+    """What the engine is told about a ticket being submitted: facts, phone in E.164, no names."""
+    from app.dedup_engine.contract import TicketDraft
+    from app.services.dedup_snapshot import ticket_draft
+
+    draft = ticket_draft(
+        TicketFields(
+            point=POINT, values=TICKET_VALUES | {"contact_phone": "0912-345-678"}, secondary_location=None
+        )
+    )
+    assert draft == TicketDraft(
+        location=GeoPoint(LON, LAT),
+        title="民生街三段淹水需要抽水機",
+        description="一樓積水",
+        task_type="rescue",
+        priority="high",
+        disaster_types=("flood", "landslide"),
+        person_trapped_reported="yes",
+        immediate_danger_reported="no",
+        contact_phone="+886912345678",
+    )
+
+
+@pytest.mark.parametrize("phone", [None, "", "not a phone"])
+def test_an_unusable_phone_reaches_the_engine_as_none(phone):
+    """Missing or unparsable is unavailable, never a raw string."""
+    from app.services.dedup_snapshot import station_draft, ticket_draft
+
+    fields = TicketFields(
+        point=POINT, values=TICKET_VALUES | {"contact_phone": phone}, secondary_location=None
+    )
+    assert ticket_draft(fields).contact_phone is None
+    station = StationFields(
+        point=POINT, values=STATION_VALUES | {"contact_phone": phone}, secondary_location=None
+    )
+    assert station_draft(station).contact_phone is None
+
+
+def test_station_draft_from_validated_fields():
+    """Stations: the same idea."""
+    from app.dedup_engine.contract import StationDraft
+    from app.services.dedup_snapshot import station_draft
+
+    draft = station_draft(StationFields(point=POINT, values=STATION_VALUES, secondary_location=None))
+    assert draft == StationDraft(
+        location=GeoPoint(LON, LAT),
+        name="光復國小臨時收容所",
+        description="可收容 200 人",
+        type="shelter",
+        operational_status="active",
+        op_hour="24h",
+        level=2,
+        source="manual",
+        contact_phone="+886912345678",
+    )
