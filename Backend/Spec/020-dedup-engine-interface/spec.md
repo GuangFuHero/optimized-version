@@ -6,7 +6,7 @@
 由 plan Phase 2 實作；Phase 1 的程式在 Phase 2 期間逐步改寫。§4 介面仍待與 Chi 確認（plan Task 0）。
 **Depends on**: `Spec/019-dedup-fast-layer/spec.md`（PR #46 / #59，未合併）
 **Stacked on**: `feat/dedup-station-fast-layer`（#59，已合進 `3f97468f8`，含 main 的站點指派 #58）→ `feat/dedup-fast-layer`（#46）→ `main`
-**Decisions**: `decisions.md`（ADR-286~304；現行架構以 ADR-304 為準）
+**Decisions**: `decisions.md`（ADR-286~305；現行架構以 ADR-304 為準）
 
 ## 概述
 
@@ -223,7 +223,10 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 | `dedup_audit_events.engine_version`、`evidence` | 後端外層 `{"similarity", "engine"}` |
 | `AUDIT_EVENT_TYPES` | 含 `hint_shown` |
 
-配對卡與事件的 `entity_kind` 取 `related_kind`（`ticket`／`ticket_task`／`station`，CHECK 本來就都含），不需要新 migration。
+| `base_geometries` 的 GIST index | `(geometry::geography)` 給任務候選、`(ST_Centroid(geometry)::geography)` 給站點候選（ADR-305）；查詢必須 cast 成不帶 typmod 的 `geography` 才對得上 |
+
+配對卡與事件的 `entity_kind` 取 `related_kind`（`ticket`／`ticket_task`／`station`，CHECK 本來就都含）。
+不需要新 migration：centroid index 加在 #46 的 `d4c8b1e07a92`（ADR-305）。
 
 ---
 
@@ -260,6 +263,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 - 保護措施：逾時、例外、engine 誤寫（以會寫入的 stub 驗證被 rollback）、種類不符的結果被丟棄，都 fail-open 且照常建立。
 - 兩段式：多任務中任一疑似重複整筆不建、每個一筆 `hint_shown`；確認綁在草稿上（刪除或重排仍正確）；atomic；無權限在比對前失敗。
 - fast-v2 行為（Chi 的決定 1~3）：completed 工單的開著任務仍是候選、cancelled 工單的不是；替既有的單加任務時排除同單任務。
+- 候選查詢用得到空間 index：抓下實際送出的 SQL，關掉 seqscan 後 EXPLAIN 必須出現對應的 index（ADR-305）。
 
 ---
 
@@ -275,3 +279,4 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 - **Phase 1（2026-09-28，Task 1~14）**：以工單為單位；後端送快照（`TicketSnapshot`）、後端撈候選、engine 為純函式。已實作、Docker 驗證通過。
 - **ADR-300~303（2026-09-29）**：Chi 把單位改成任務；原計畫把後端的快照與 repository 改成任務層級。
 - **ADR-304（2026-09-29）**：為避免每次改單位都要改後端，候選查詢與比對單位整個歸 engine；本文件以此為準。
+- **ADR-305（2026-09-29，Task 24 Docker 驗證）**：發現候選查詢從未用到空間 index（cast 的 typmod 對不上、站點無 centroid index），在本票修正。

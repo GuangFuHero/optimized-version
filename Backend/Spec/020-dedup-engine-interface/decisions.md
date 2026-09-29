@@ -472,3 +472,30 @@ ADR-301／302 的 API 保留，但回傳的疑似重複改為通用形狀（見 
 ➕ Chi 可以直接沿用 019 的查詢寫法，不必把資料塞進後端定義的快照。
 ➖ engine 能讀 DB：離線 harness 需要一個 DB（或 Chi 自己的替身），golden test 改為在測試 DB 上跑。
 ➖ 送出的草稿含正規化後的電話（engine 本來就能讀 DB 裡的電話，隔離已無意義）。
+
+### ADR-305 候選查詢必須用得到空間 index：任務查詢改 cast、站點補 centroid 的 expression index
+
+**白話**：原本的候選查詢一次都沒用到為它建的 index，資料一多，每次送出都要掃整張表，慢到會碰到 2 秒逾時、讓提示整個失效。
+
+**Context**：Task 24 Docker 驗證（2026-09-29）在 2 萬筆工單＋任務的資料上實測：
+
+- `ix_base_geometries_geography` 建在 `(geometry::geography)`，但 geoalchemy2 的 `cast(x, Geography)` 產生 `CAST(x AS geography(GEOMETRY,-1))`，
+  Postgres 不把它當成同一個表達式，**index 永遠用不到**（強制關掉 seqscan 仍是 Seq Scan）。
+  #46 migration 的註解說兩者「parse to the same expression」是錯的；Phase 1 Task 14 的 EXPLAIN 用手寫 SQL，所以沒抓到。
+- 站點以 centroid 量距離（`ST_Centroid(geometry)::geography`），根本沒有對應的 index。
+- 影響：任務查詢在密集地點（半徑內 500 筆）2127 ms，`createTicket` 實測 1988 ms，貼著 `ENGINE_TIMEOUT_S = 2` 的邊；稀疏地點 55 ms，隨全表筆數線性成長。
+  contract test 的效能項（500 筆）測不出來，因為測試 DB 只有那 500 筆。
+- 兩種寫法都從 #46／#59 繼承；ADR-304 之後候選查詢歸 engine（`candidates.py`），在本票修。
+
+**Decision**：
+
+1. `candidates.py` 一律 cast 成不帶 typmod 的 `geography`（`Geography(geometry_type=None)`），與 index 表達式一致。
+   同一份資料上：密集 2127 → 3.7 ms、稀疏 55 → 0.12 ms。距離值不變（golden 未變動，不需升版，ADR-297）。
+2. `base_geometries` 新增 `ix_base_geometries_centroid_geography`：`GIST ((ST_Centroid(geometry)::geography))`，給站點查詢用。
+   加在 #46 的 migration `d4c8b1e07a92`（本分支本來就在改它，Task 5），model 同步宣告。
+3. 測試：`tests/dedup_engine/test_candidates.py` 抓下兩條候選查詢實際送出的 SQL，在關掉 seqscan 下 EXPLAIN，斷言用到各自的 index
+   （突變測試：cast 改回預設 `Geography()` 兩條都會失敗）。
+
+➕ 候選查詢成本只跟半徑內的筆數有關，不再跟全表大小有關。
+➖ 多一個 GIST expression index：`base_geometries` 每次寫入多算一次 centroid（工單也會建，因為 index 建在父表）。
+◾ engine 以後換查詢寫法時，這兩條測試會提醒要對得上 index；Chi 改用別的表達式就要自己補 index。
