@@ -3,6 +3,8 @@
 Wiring only: the rules themselves are observed at the service (tests/test_role_request.py).
 """
 
+import uuid
+
 import pytest
 from sqlalchemy import select
 
@@ -19,6 +21,10 @@ mutation($input: SubmitRoleRequestInput!) {
 
 MINE = """
 query { myRoleRequests { hasBackofficeIdentity canApply requests { requestedRole status } } }
+"""
+
+WITHDRAW = """
+mutation($uuid: UUID!) { withdrawRoleRequest(uuid: $uuid) { uuid status closedAt } }
 """
 
 APPLICATION = {"requestedRole": "data_auditor", "reason": "協助檢查重複通報", "contact": "03-8701234"}
@@ -82,10 +88,10 @@ async def test_my_role_requests_reports_what_the_entry_needs(client, redis):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("query", [SUBMIT, MINE])
+@pytest.mark.parametrize("query", [SUBMIT, MINE, WITHDRAW])
 async def test_a_guest_is_asked_to_sign_in(client, query):
     """AC-RE-101: signed-out visitors see neither entry, and the API agrees."""
-    variables = {"input": APPLICATION} if query is SUBMIT else None
+    variables = {SUBMIT: {"input": APPLICATION}, WITHDRAW: {"uuid": str(uuid.uuid4())}}.get(query)
 
     body = await _post(client, query, None, variables)
 
@@ -101,3 +107,31 @@ async def test_a_refusal_reaches_the_caller_in_its_own_words(client, redis):
     body = await _post(client, SUBMIT, token, {"input": APPLICATION})
 
     assert body["errors"][0]["message"] == "You already have a pending request"
+
+
+@pytest.mark.asyncio
+async def test_withdrawing_returns_the_withdrawn_application(client, redis):
+    """The drawer learns the application is closed and can go back to the form."""
+    token = await _citizen_token(redis)
+    submitted = await _post(client, SUBMIT, token, {"input": APPLICATION})
+    request_uuid = submitted["data"]["submitRoleRequest"]["uuid"]
+
+    body = await _post(client, WITHDRAW, token, {"uuid": request_uuid})
+
+    assert "errors" not in body, body
+    withdrawn = body["data"]["withdrawRoleRequest"]
+    assert (withdrawn["uuid"], withdrawn["status"]) == (request_uuid, "withdrawn")
+    assert withdrawn["closedAt"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_refused_withdrawal_reaches_the_caller_in_its_own_words(client, redis):
+    """A second tab withdrawing what the first already did is told why, not "Unexpected error."."""
+    token = await _citizen_token(redis)
+    submitted = await _post(client, SUBMIT, token, {"input": APPLICATION})
+    request_uuid = submitted["data"]["submitRoleRequest"]["uuid"]
+    await _post(client, WITHDRAW, token, {"uuid": request_uuid})
+
+    body = await _post(client, WITHDRAW, token, {"uuid": request_uuid})
+
+    assert body["errors"][0]["message"] == "Role request is no longer pending"

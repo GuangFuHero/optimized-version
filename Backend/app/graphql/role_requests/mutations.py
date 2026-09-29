@@ -1,5 +1,7 @@
 """GraphQL mutations for role requests. Thin per ADR-014; see app/services/role_request.py."""
 
+from uuid import UUID
+
 import strawberry
 
 from app.graphql.context import require_authenticated
@@ -26,5 +28,17 @@ class RoleRequestMutation:
             requested_role=input.requested_role.value,
             reason=input.reason,
             contact=input.contact,
+        )
+        return RoleRequestType.from_model(request)
+
+    @strawberry.mutation
+    async def withdraw_role_request(self, info: strawberry.types.Info, uuid: UUID) -> RoleRequestType:
+        """Take back one's own pending application, so a different one can be sent at once.
+
+        Anyone else's application is reported as not found; one already decided cannot be
+        taken back. Nobody is notified.
+        """
+        request = await role_request_service.withdraw(
+            info.context["db"], actor=require_authenticated(info), request_uuid=uuid
         )
         return RoleRequestType.from_model(request)

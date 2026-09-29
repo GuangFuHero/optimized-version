@@ -2,6 +2,7 @@
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -111,6 +112,31 @@ async def submit(
         explicit_recipients=reviewers,
     )
     # dispatch() commits, which expires `request` again.
+    await db.refresh(request)
+    return request
+
+
+async def withdraw(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID) -> RoleRequest:
+    """Take back one's own pending application (Q10). Nobody is told.
+
+    Asks only that the application is the caller's, not for role_request.add: pausing
+    applications stops new ones and must not strand one already sent. Anyone else's is not
+    found, so whether it exists is never given away. The row is locked, so a withdrawal and a
+    decision sent together are settled one after the other and the later one is refused.
+    """
+    request = await db.scalar(
+        select(RoleRequest)
+        .where(RoleRequest.uuid == request_uuid, RoleRequest.created_by == actor.uuid)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if request is None:
+        raise ValueError("Role request not found")
+    if request.status != "pending":
+        raise ValueError("Role request is no longer pending")
+    request.status = "withdrawn"
+    request.closed_at = datetime.now(UTC)
+    await db.commit()
     await db.refresh(request)
     return request
 

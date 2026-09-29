@@ -6,10 +6,11 @@ tests/test_graphql/test_role_requests.py.
 """
 
 import asyncio
+import uuid
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -67,6 +68,22 @@ async def _submit(db, actor: User, requested_role: str = "data_auditor", reason:
 async def _state(db, actor: User) -> role_request.RoleRequestState:
     await refresh_actor(db, actor)
     return await role_request.my_role_requests(db, actor=actor)
+
+
+async def _withdraw(db, actor: User, request_uuid):
+    """Withdraw as `actor`, refreshed first for the same reason as in _submit."""
+    await refresh_actor(db, actor)
+    return await role_request.withdraw(db, actor=actor, request_uuid=request_uuid)
+
+
+async def _reviewer(db) -> User:
+    """An account holding role_request.review, as the seed gives super_admin."""
+    reviewer = User(name="超級管理員")
+    db.add(reviewer)
+    super_admin = await _role(db, "super_admin", {Perm.ROLE_REQUEST_REVIEW: "all"})
+    db.add(UserRoleAssign(user_uuid=reviewer.uuid, role_uuid=super_admin.uuid))
+    await db.flush()
+    return reviewer
 
 
 @pytest.mark.asyncio
@@ -222,10 +239,7 @@ async def _notices(db, event_type: str) -> list[Notification]:
 @pytest.mark.asyncio
 async def test_reviewers_hear_of_a_new_application(db):
     """Q9: everyone holding role_request.review is told, so the back office need not be polled."""
-    reviewer = User(name="超級管理員")
-    db.add(reviewer)
-    super_admin = await _role(db, "super_admin", {Perm.ROLE_REQUEST_REVIEW: "all"})
-    db.add(UserRoleAssign(user_uuid=reviewer.uuid, role_uuid=super_admin.uuid))
+    reviewer = await _reviewer(db)
     citizen = await _citizen(db, "王小明")
     reviewer_uuid, citizen_uuid = reviewer.uuid, citizen.uuid
 
@@ -248,6 +262,90 @@ async def test_no_one_can_apply_while_applying_is_switched_off(db):
     citizen = acting_as(user, role)
 
     assert (await _state(db, citizen)).can_apply is False
+    with pytest.raises(HTTPException) as refused:
+        await _submit(db, citizen)
+    assert refused.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_a_withdrawn_application_frees_the_applicant_to_apply_again(db):
+    """Q10: the drawer goes back to the form at once, with no cooldown."""
+    citizen = await _citizen(db)
+    first = await _submit(db, citizen, "data_auditor")
+
+    withdrawn = await _withdraw(db, citizen, first.uuid)
+
+    assert withdrawn.status == "withdrawn"
+    assert withdrawn.closed_at is not None
+    assert withdrawn.reviewed_by is None
+    assert (await _state(db, citizen)).can_apply is True
+    await _submit(db, citizen, "government")
+    state = await _state(db, citizen)
+    assert [(r.requested_role, r.status) for r in state.requests] == [
+        ("government", "pending"),
+        ("data_auditor", "withdrawn"),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", ["someone else's", "one that does not exist"])
+async def test_only_the_applicant_can_withdraw_an_application(db, target):
+    """Someone else's application is not found, exactly like one that does not exist."""
+    applicant = await _citizen(db, "甲")
+    someone_else = await _citizen(db, "乙")
+    request = await _submit(db, applicant)
+    request_uuid = request.uuid if target == "someone else's" else uuid.uuid4()
+
+    with pytest.raises(ValueError, match="^Role request not found$"):
+        await _withdraw(db, someone_else, request_uuid)
+    [still] = (await _state(db, applicant)).requests
+    assert still.status == "pending"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["approved", "rejected", "withdrawn"])
+async def test_a_closed_application_cannot_be_withdrawn(db, status):
+    """Only a pending application can be taken back; a decision, once made, stands."""
+    citizen = await _citizen(db)
+    request = await _submit(db, citizen)
+    request_uuid = request.uuid
+    request.status = status  # arranging state only: approve and reject arrive in C-B4 and C-B6
+    await db.commit()
+
+    with pytest.raises(ValueError, match="^Role request is no longer pending$"):
+        await _withdraw(db, citizen, request_uuid)
+    [still] = (await _state(db, citizen)).requests
+    assert still.status == status
+
+
+@pytest.mark.asyncio
+async def test_withdrawing_tells_no_one(db):
+    """Q10: the reviewers keep the notice of the application, and nothing further is sent."""
+    await _reviewer(db)
+    citizen = await _citizen(db)
+    request = await _submit(db, citizen)
+
+    await _withdraw(db, citizen, request.uuid)
+
+    sent = (await db.execute(select(Notification.type))).scalars().all()
+    assert sent == ["role_request_submitted"]
+
+
+@pytest.mark.asyncio
+async def test_pausing_applications_does_not_trap_one_already_sent(db):
+    """Withdrawing asks only that the application is yours, not for role_request.add.
+
+    A super admin pausing applications stops new ones; it must not strand one already sent.
+    """
+    citizen = await _citizen(db)
+    request = await _submit(db, citizen)
+    request_uuid, user_role_uuid = request.uuid, citizen.active_identity.role_uuid
+    await db.execute(delete(RolePermissionAssign).where(RolePermissionAssign.role_uuid == user_role_uuid))
+    await db.commit()
+
+    withdrawn = await _withdraw(db, citizen, request_uuid)
+
+    assert withdrawn.status == "withdrawn"
     with pytest.raises(HTTPException) as refused:
         await _submit(db, citizen)
     assert refused.value.status_code == 403
