@@ -86,8 +86,8 @@ export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/
 
 不寫程式，所以沒有測試；完成條件是 Chi 的確認寫回 spec §3／§4（有改就改、沒改就在 spec 註明確認日期）。
 
-- [ ] 把 spec §3（快照欄位、`Candidate`）、§4（`Match`、`RetrievalSpec`、`DedupEngine`）給 Chi 看
-- [ ] 確認他的離線 harness 能改吃 `TicketSnapshot` / `StationSnapshot` / `Candidate`（spec §2 第 5 條）
+- [ ] 把交接訊息傳給 Chi（`handoff-chi.md`），回覆記在同一份檔案
+- [ ] 確認他的離線 harness 能接 DB（ADR-304：engine 自己查候選，spec §9）
 - [ ] 讓 Chi 知道效能門檻與逾時已依實測定案（ADR-307：全表 2 萬、半徑內 500、5 個任務、200 ms；逾時 2 秒），聽他的意見
 - [ ] 有任何欄位調整：先改 spec §3／§4 再往下做
 
