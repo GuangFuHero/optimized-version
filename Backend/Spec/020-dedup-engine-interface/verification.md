@@ -16,6 +16,7 @@
 ## 1. 摘要
 
 - Chi 的 dedup 快層已包成後端服務，目前版本是 **fast-v2**（以任務為單位比對、engine 自己撈 candidates）。後端只透過 `app/dedup_engine/contract.py` 跟它溝通。
+  沒有另外的 dedup API：後端在原本的 `createTicket`、`createTicketTask`、`createStation` 裡直接呼叫 engine 的 `check`／`score`。
 - **全部測試**：本機、Docker 容器內都是 **1612 passed、0 failed**。dedup 相關程式碼的 test coverage **98%**。
 - **實際呼叫 API**：在全新的 Docker 環境上，**34 個情境全部通過**。engine 出問題的三種情況（丟出錯誤、太慢、偷寫 DB）也都通過。
 - **發現並修好一個問題**：撈 candidates 的查詢**從 #46 開始就沒用到空間 index**。DB 有 2 萬筆時，在資料密集的地點送一張單要約 2 秒，剛好碰到 timeout。

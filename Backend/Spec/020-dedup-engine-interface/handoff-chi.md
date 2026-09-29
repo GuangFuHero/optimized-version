@@ -18,7 +18,8 @@ Chi 你好，我把你的 dedup 快層包成後端服務了（Spec 020）。bran
 - **後端負責**：
   - 什麼時候跑 dedup：新開單（連同任務）、替已經存在的單加任務、登記站點，固定這三個地方。
   - 權限檢查、transaction、timeout 和出錯時的處理（engine 出錯或太慢，就當作沒有重複、照常建立）。
-  - 把結果寫進 DB（`duplicate_pairs`、audit log）、GraphQL API。
+  - 把結果寫進 DB（`duplicate_pairs`、audit log）。
+  - 沒有另外的 dedup API：後端是在原本的 `createTicket`、`createTicketTask`、`createStation` 裡直接呼叫 engine 的 `check`／`score` function，有疑似重複時這三個 mutation 回傳 `DuplicatesSuspected`。這個回傳格式由後端維護。
   - **所有 DB 結構的東西：model、migration、index。** 你改了查詢寫法、需要新的 index，跟我說一聲；或者 `tests/dedup_engine/test_candidates.py` 裡檢查 index 的測試紅了，我這邊來補。
 - **`registry.py` 由後端管**：它決定線上實際用哪一版 engine。你可以寫新的 engine class，要不要上線、切到哪一版由我來改。
 - **後端寫的檢查測試**（`test_contract.py`、`test_core_isolation.py`、`test_candidates.py` 裡檢查 index 的那兩條）：你的改動讓它們失敗的話，可以在你的 PR 裡一起調整，但這部分我會 review。
