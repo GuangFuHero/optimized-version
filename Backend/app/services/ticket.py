@@ -415,16 +415,75 @@ async def review_ticket(
 
 
 async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
-    """Soft-delete a ticket (checkpoint 1 ticket.delete, then checkpoint 2 against it).
+    """Delete a whole ticket — the requester's 「刪除整張單」 (team decision 2026-09-28).
 
-    Soft delete (sets delete_at) — a disaster help-request is never truly destroyed, only
-    hidden from active lists; the audit trigger records the deletion either way.
+    ticket.delete, checked before the locks. Any ticket not already deleted can go. It is
+    cancelled and soft-deleted — a disaster help-request is never destroyed, only hidden, and the
+    audit trigger records the deletion either way. Cancelled is final: a cancelled ticket's status
+    is never worked out again (recompute_ticket_status), so it is not called.
+
+    Every need still on it goes with it the way delete_ticket_task deletes one; a need deleted
+    earlier keeps its record, and its people were told then. The people on the needs stay
+    recorded. The ticket is locked first and then its needs in uuid order, the order every writer
+    keeps, and all of it commits once. Everyone on those needs then hears, once however many of
+    them they were on.
     """
     ticket = await ticket_repository.get_by_uuid_active(db, uuid)
     if not ticket:
         raise ValueError("Ticket not found")
     await require_scope(actor, Perm.TICKET_DELETE, db, resource=ticket)
-    await ticket_repository.soft_delete(db, db_obj=ticket)
+
+    ticket = await db.scalar(
+        select(Tickets)
+        .where(Tickets.uuid == uuid)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if ticket.delete_at is not None:
+        # Deleted by a concurrent call while this one waited for the lock.
+        raise ValueError("Ticket not found")
+    needs = (
+        await db.scalars(
+            select(TicketTask)
+            .where(TicketTask.ticket_uuid == uuid, TicketTask.delete_at.is_(None))
+            .order_by(TicketTask.uuid)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).all()
+    now = datetime.now(UTC)
+    ticket.status = "cancelled"
+    ticket.delete_at = now
+    for need in needs:
+        _mark_need_deleted(need, now)
+    claimants = set()
+    if needs:
+        on_needs = await db.scalars(
+            select(TaskAssignment.actor_uuid).where(TaskAssignment.task_uuid.in_([n.uuid for n in needs]))
+        )
+        claimants = {str(person) for person in on_needs}
+    ticket_id, ticket_title, actor_uid = ticket.uuid, ticket.title, actor.uuid
+    await db.commit()
+
+    await NotificationService.dispatch(
+        db,
+        event_type="ticket_deleted",
+        title=f"你承接的求助「{ticket_title}」已刪除",
+        body="整張求助單已經刪除，你承接的需求都不用前往了。",
+        priority="high",
+        actor_uuid=actor_uid,
+        ref_type="ticket",
+        ref_uuid=ticket_id,
+        explicit_recipients=list(claimants),
+    )
+
+
+def _mark_need_deleted(task: TicketTask, now: datetime) -> None:
+    """Cancel and soft-delete a need at once; completed_at goes with the fulfilled state it leaves."""
+    task.status = "canceled"
+    task.canceled_at = now
+    task.completed_at = None
+    task.delete_at = now
 
 
 async def delete_ticket_task(db: AsyncSession, *, actor: User, uuid: str) -> None:
@@ -448,11 +507,7 @@ async def delete_ticket_task(db: AsyncSession, *, actor: User, uuid: str) -> Non
     await require_scope(actor, Perm.TICKET_DELETE, db, resource=ticket)
 
     ticket, task = await _lock_ticket_and_task(db, task_uuid=uuid)
-    now = datetime.now(UTC)
-    task.status = "canceled"
-    task.canceled_at = now
-    task.completed_at = None
-    task.delete_at = now
+    _mark_need_deleted(task, datetime.now(UTC))
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
     claimants = [str(a.actor_uuid) for a in await task_assignment_repository.list_by_task(db, uuid)]
