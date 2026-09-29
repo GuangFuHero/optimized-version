@@ -1234,20 +1234,27 @@ async def test_duplicate_assignment_rejected(
 
 
 @pytest.mark.asyncio
-async def test_over_subscription_allowed(
+async def test_a_coordinator_cannot_over_subscribe(
     client,
     redis,
     coordinator_auth,
     sample_ticket_task,
 ):
-    """quantity=3 task accepts more than 3 people — no capacity cap."""
+    """quantity=3 task takes three people and turns away a fourth, even a coordinator's (spec Q38).
+
+    Reverses d847624, which let a coordinator knowingly send more: to send more, open another need.
+    """
     from tests.test_graphql.conftest import _create_user_with_role
 
     _, token = coordinator_auth
-    for _ in range(4):
+    for _ in range(3):
         actor_uuid, _ignore = await _create_user_with_role(redis, "Login User")
         body = await _assign(client, token, sample_ticket_task, actor_uuid=actor_uuid)
         assert "errors" not in body, body
+
+    extra_uuid, _ignore = await _create_user_with_role(redis, "Login User")
+    body = await _assign(client, token, sample_ticket_task, actor_uuid=extra_uuid)
+    assert any("Task is full" in e["message"] for e in body["errors"]), body
 
 
 @pytest.mark.asyncio

@@ -295,9 +295,9 @@ class TicketTaskMutation:
         only ticket.assign (checkpoint 1) is required. Assigning someone else additionally
         requires the task to fall within the caller's ticket.assign scope (checkpoint 2).
         A fulfilled or canceled task is refused, as is any task of a completed or cancelled
-        ticket. A self-sign-up is refused once the task has `quantity` people; a coordinator
-        assigning someone else may over-subscribe. The same actor cannot be linked to the
-        same task twice. Returns the new assignment.
+        ticket. Once the task has `quantity` people it takes nobody more, a coordinator
+        assigning someone else included. The same actor cannot be linked to the same task
+        twice. Returns the new assignment.
         """
         assignment = await ticket_service.assign_task_actor(
             info.context["db"], actor=require_authenticated(info),

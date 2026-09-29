@@ -98,8 +98,11 @@ async def test_a_full_need_cannot_be_claimed(db):
 
 
 @pytest.mark.asyncio
-async def test_a_coordinator_may_still_send_more_than_the_need_asks_for(db):
-    """The cap binds volunteers signing themselves up, not a coordinator assigning others (d847624)."""
+async def test_a_coordinator_cannot_send_more_than_the_need_asks_for(db):
+    """A full need is full for a coordinator too: to send more, open another need (spec Q38).
+
+    Reverses d847624, which let a coordinator who could see the ground knowingly over-subscribe.
+    """
     task = await _need(db, quantity=1)
     task_uuid = str(task.uuid)
     first = await _volunteer(db, "先到")
@@ -109,9 +112,10 @@ async def test_a_coordinator_may_still_send_more_than_the_need_asks_for(db):
     await _claim(db, first, task_uuid)
     await refresh_actor(db, coordinator)
 
-    await assign_task_actor(db, actor=coordinator, task_uuid=task_uuid, actor_uuid=extra_uuid, role=None)
+    with pytest.raises(ValueError, match="Task is full"):
+        await assign_task_actor(db, actor=coordinator, task_uuid=task_uuid, actor_uuid=extra_uuid, role=None)
 
-    assert await _claims(db, task_uuid) == 2
+    assert await _claims(db, task_uuid) == 1
 
 
 @pytest.mark.asyncio

@@ -615,14 +615,14 @@ async def assign_task_actor(
     scope-checks the task (checkpoint 2). The same actor can't be linked to a task twice.
 
     A fulfilled or canceled task takes nobody, nor does a task of a completed or cancelled
-    ticket. A volunteer claims a need, not a ticket
-    (PUB-PS-140), and signing themselves up is refused once a task with a `quantity` has that
-    many people; a task without one has no cap, as the requester never said how many. A
-    coordinator assigning someone else may still over-subscribe (d847624): they can see the
-    ground and may knowingly send more. The need's ticket and then the need are locked FOR
-    UPDATE from the count to the commit (_lock_ticket_and_task), so two volunteers racing for
-    the last place cannot both get it. Authorization runs first, so a caller who will be
-    refused never takes the locks. A task whose ticket was deleted is gone with it.
+    ticket. A volunteer claims a need, not a ticket (PUB-PS-140), and a task with a `quantity`
+    takes nobody more once it has that many people — not even from a coordinator assigning
+    someone else (spec Q38, reversing d847624): to send more, they open another need. A task
+    without one has no cap, as the requester never said how many. The need's ticket and then
+    the need are locked FOR UPDATE from the count to the commit (_lock_ticket_and_task), so
+    two people racing for the last place cannot both get it. Authorization runs first, so a
+    caller who will be refused never takes the locks. A task whose ticket was deleted is gone
+    with it.
 
     Three notices go out: the assignee hears they were assigned (dispatch() drops it for a
     self-signup), the requester hears who is coming, and when this claim fills the need,
@@ -644,9 +644,7 @@ async def assign_task_actor(
             raise ValueError("User not found")
         assignee_name = assignee.name
 
-    ticket, task, claimed = await _lock_task_with_room(
-        db, task_uuid=task_uuid, target_actor=target_actor, capped=self_signup
-    )
+    ticket, task, claimed = await _lock_task_with_room(db, task_uuid=task_uuid, target_actor=target_actor)
 
     # Plain values before the commit (expire_on_commit in tests), and the count taken under
     # the lock: `fills` must be decided here, not recounted after the lock is released.
@@ -827,13 +825,13 @@ async def _lock_ticket_and_task(
 
 
 async def _lock_task_with_room(
-    db: AsyncSession, *, task_uuid: str, target_actor: str, capped: bool
+    db: AsyncSession, *, task_uuid: str, target_actor: str
 ) -> tuple[Tickets, TicketTask, int]:
     """Lock the ticket, then the need (_lock_ticket_and_task); check the need can take `target_actor`.
 
     Returns the ticket, the need and the need's count. The locks are held until the caller
-    commits. `capped` applies the quantity cap, which binds a volunteer signing themselves up
-    but not a coordinator (see assign_task_actor).
+    commits. The quantity cap binds everyone, a coordinator assigning someone else included
+    (spec Q38).
     """
     ticket, task = await _lock_ticket_and_task(db, task_uuid=task_uuid)
     if task.status in CLOSED_TASK_STATUSES or ticket.status in CLOSED_TICKET_STATUSES:
@@ -843,7 +841,7 @@ async def _lock_task_with_room(
     claimed = await db.scalar(
         select(func.count()).select_from(TaskAssignment).where(TaskAssignment.task_uuid == task_uuid)
     )
-    if capped and task.quantity is not None and claimed >= task.quantity:
+    if task.quantity is not None and claimed >= task.quantity:
         raise ValueError("Task is full")
     return ticket, task, claimed
 
