@@ -1,6 +1,6 @@
 # 020 去重引擎介面 — Implementation Plan
 
-**進度（2026-09-29）**：Phase 1（Task 1~14，工單層級）完成並通過 Docker 驗證（見 `Backend/DEDUP_ENGINE_020_VERIFICATION.md`）。2026-09-29 合進 Chi 的任務層級更新與 main（merge `af2ca1d95`，全套件 1587 passed）；**Phase 2（Task 16~24，engine 自己撈資料，ADR-304）待實作**。Task 0（與 Chi 確認合約、效能門檻）未做。前端不在後端範圍，§「交給前端的 API 變更」只是交接說明。
+**進度（2026-09-29）**：Phase 1（Task 1~14）完成並通過 Docker 驗證（`Backend/DEDUP_ENGINE_020_VERIFICATION.md`，Phase 1 版）。合進 Chi 的任務層級更新與 main（merge `af2ca1d95`）。**Phase 2（ADR-304）Task 16~23 完成**，每個 commit 的全套件皆綠（T19 1655、T20 1661、T21 1676、T22 1676、T23 1610 passed，0 failed）。**剩 Task 24（Docker 完整驗證，情境改任務層級）與 Task 0（與 Chi 確認合約、效能門檻、逾時秒數）**。前端不在後端範圍，§「交給前端的 API 變更」為交接說明。
 
 **Goal:** 把 Spec 019 的去重快層包成「演算法可獨立迭代」的後端服務：Chi 只動 `app/dedup_engine/`，
 後端只依賴 `contract.py`；提示改由 `createTicket` / `createStation` 兩段式帶出，拿掉獨立的 dedup API。
