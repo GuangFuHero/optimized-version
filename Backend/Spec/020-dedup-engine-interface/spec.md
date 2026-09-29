@@ -1,90 +1,63 @@
 # Design: 去重引擎介面 — Dedup Engine Interface
 
-**Date**: 2026-09-28（2026-09-29 更新：任務層級，ADR-300~303）
+**Date**: 2026-09-28（2026-09-29 改寫：engine 自己撈資料，ADR-304）
 **Feature**: 020-dedup-engine-interface
-**Status**: Phase 1（工單層級，Task 1~14）已實作並通過 Docker 驗證；Phase 2（任務層級，Task 16~24）設計完成、待實作。§3、§4 欄位仍待與 Chi 確認
+**Status**: Phase 1（Task 1~14）已實作並通過 Docker 驗證，但接縫只到「怎麼算分數」。本文件描述 ADR-304 的目標架構，
+由 plan Phase 2 實作；Phase 1 的程式在 Phase 2 期間逐步改寫。§4 介面仍待與 Chi 確認（plan Task 0）。
 **Depends on**: `Spec/019-dedup-fast-layer/spec.md`（PR #46 / #59，未合併）
 **Stacked on**: `feat/dedup-station-fast-layer`（#59，已合進 `3f97468f8`，含 main 的站點指派 #58）→ `feat/dedup-fast-layer`（#46）→ `main`
-**Decisions**: `decisions.md`（ADR-286~303）
+**Decisions**: `decisions.md`（ADR-286~304；現行架構以 ADR-304 為準）
 
 ## 概述
 
-Spec 019 交付了去重快層：送單前跟附近未結案的單比一次，最像的一筆過門檻就提示。
-本功能由後端接手包裝，演算法由 Chi 持續迭代。
+Spec 019 交付了去重快層（2026-09-29 起比對單位是任務）。本功能由後端接手包裝，演算法由 Chi 持續迭代。
 
-019 的演算法細節散在 SQL、service、GraphQL 與資料表裡，Chi 每改一次都可能要動後端。
-本 Spec 畫出一條接縫：
+接縫的原則（ADR-304）：**凡是 Chi 可能會改的，都歸 `app/dedup_engine/`**——撈哪些候選、比對單位（工單、任務、或兩者）、
+訊號、分數、門檻。後端只管不會隨演算法改變的部分：**什麼時候問、送什麼、問完怎麼記**。
 
-- Chi 改演算法（訊號、參數、門檻、公式、文字比對方法、回幾筆）→ **只動 `app/dedup_engine/`**。
-- 後端改外部（權限、查詢、資料表、呼叫端）→ **不影響演算法**。
-- 去重是**內部能力**，由業務流程呼叫，不開獨立 API（ADR-286）。
-
-**比對單位（2026-09-29 起）**：求助單這邊比的是**任務**，不是工單（019 的更新，ADR-300）。每個要送出的任務跟附近
-「還開著」的任務比；站點仍以站點為單位。新開單時工單連同任務一起送（ADR-301），替既有的單加任務也走兩段式（ADR-302）。
+- Chi 改比對單位、候選條件、文字方法、公式、參數 → 只動 `app/dedup_engine/`。
+- 後端改權限、API、資料表、呼叫端 → 不影響演算法。
+- 去重是內部能力，由建立流程呼叫，不開獨立 API（ADR-286）。
 
 ## 目標
 
-- 定義 engine 的輸入（快照）、輸出（`Match`）與 Protocol，雙方只依賴 `contract.py`。
-- 用現有資料做的任何演算法改動，都不需要改後端的 SQL、API、migration。
-- 每筆判斷都記錄引擎版本；改分數行為卻沒升版時 CI 失敗。
-- 建單流程在同一個 transaction 內完成「建單＋記錄提示結果」。
+- engine 只依賴 `contract.py` 的輸入輸出型別，後端只依賴 `DedupEngine` Protocol。
+- 比對單位的改變不需要改後端（本次的教訓，ADR-304）。
+- 每筆判斷記錄 engine 版本；改分數行為卻沒升版時 CI 失敗（ADR-297）。
+- 建立與記錄在同一個 transaction；去重出錯或逾時不擋建立。
 
-## 非目標（YAGNI，明確排除）
+## 非目標
 
-- **不改演算法本身。** 權重、門檻、公式照 019，唯一行為差異是文字相似度改用 Python（ADR-288）。
+- **不改演算法本身。** Phase 2 的 fast-v2 只做 019 已定的任務層級。
 - **不做慢層**（背景掃描、向量、admin 審核）。
-- **不存重播用的輸入快照**（ADR-295）。
-- **不定義「未結案」的新規則**，延後討論（§9）。
-- **不支援區域型站點**（ADR-298）。
+- **不存重播用的輸入**（ADR-295）。
+- **批次匯入不去重**（ADR-299）。
+- **不處理前端**：交接說明見 plan「交給前端的 API 變更」。
 
 ---
 
-## 1. 分層（ADR-287）
+## 1. 分工（ADR-304）
 
 | 層 | 位置 | 擁有者 | 職責 | 不做的事 |
 |---|---|---|---|---|
-| algorithm core | `app/dedup_engine/` | Chi | 訊號、分數、門檻、各種類參數、檢索範圍、`evidence` 內容 | 不 import SQLAlchemy / FastAPI / strawberry；不做 I/O |
-| contract | `app/dedup_engine/contract.py` | 雙方 | 快照、`Candidate`、`Match`、`RetrievalSpec`、`DedupEngine` Protocol | 改動需雙方同意 |
-| snapshot builder | `app/services/dedup_snapshot.py` | 後端 | ORM row / 建單 input → 快照；計算 pair 層級事實 | 不做判斷 |
-| repository | `app/repositories/dedup_repository.py` | 後端 | 依 `RetrievalSpec` 撈「未結案」候選，回傳 `Candidate` | 不算相似度 |
-| service | `app/services/dedup.py` | 後端 | 呼叫 engine、fail-open、寫配對卡與 audit | 不含公式或參數 |
+| engine | `app/dedup_engine/` | Chi | 候選查詢（唯讀）、比對單位、訊號、分數、門檻、`evidence` | 不寫 DB、不 commit；不 import `app.services`／`app.graphql`／`app.api` |
+| contract | `app/dedup_engine/contract.py` | 雙方 | 草稿與 `Submission`、`Suspect`、`DedupEngine` Protocol | 改動需雙方同意 |
+| service | `app/services/dedup.py` | 後端 | 呼叫 engine（SAVEPOINT＋rollback、逾時、fail-open）、寫 `hint_shown`／配對卡／audit | 不含任何比對邏輯 |
+| 編排 | `app/services/dedup_submission.py` | 後端 | 三個觸發點的兩段式（§5），只給 GraphQL 用 | 批次匯入不經過這裡 |
 | model | `app/models/dedup.py` | 後端 | `duplicate_pairs`、`dedup_audit_events` | — |
-| 編排 | `app/services/dedup_submission.py::submit_ticket`、`submit_ticket_task`、`submit_station` | 後端 | 兩段式流程（§5），只給 GraphQL 建立用（ADR-299） | 批次匯入不經過這裡 |
 
-**判斷規則**：Chi 迭代時可能會改的 → core；不管演算法怎麼改都成立的事實 → 後端。
-
-| 項目 | 放哪 |
-|---|---|
-| 兩點距離、是否同一支電話 | repository / builder（關係事實） |
-| 欄位原值、建立時間、狀態 | builder |
-| 「還開著」的定義（任務／站點） | repository |
-| 文字相似度、比哪些文字、截斷 | core（ADR-288） |
-| 權重、門檻、衰減、回幾筆 | core |
-| 檢索半徑 | core 宣告，repository 照用（ADR-292） |
+**觸發點固定三個**：新開單（工單連同任務）、替既有的單加任務、登記站點。所有會被去重的東西都經過其中之一，
+所以觸發時機不隨演算法改變。
 
 ---
 
-## 2. 送值原則（ADR-289~291）
+## 2. 輸入：送出的草稿（ADR-304，沿用 ADR-289 的白名單與只加不改）
 
-1. **給事實，不給特徵。** 送欄位原值，不送算好的分數。
-2. **給整份白名單快照**，不是演算法「現在」用到的欄位。
-3. **送出中那筆與候選同型。**
-4. **時間從外面傳入**，engine 是純函式。
-5. **線上與離線同一格式**：快照型別就是 Chi 離線 harness 的輸入格式。
-6. **只加不改**：新增欄位給預設值；改名、刪欄位、改語意要遞增 `SNAPSHOT_SCHEMA_VERSION`。
-7. **輸出只有 `candidate_uuid` 與 `similarity` 有語意**，其餘是不透明的 `evidence`。
-
----
-
-## 3. 快照（ADR-289、293、298、300）
-
-Phase 1 用 `TicketSnapshot`（schema 版本 1）；ADR-300 起改為 `TaskSnapshot`（版本 2）。以下是 Phase 2 的目標形狀。
+後端送進 engine 的是**驗證過的送出內容**，不是快照；候選由 engine 自己查。
 
 ```python
 # app/dedup_engine/contract.py
-
-SNAPSHOT_SCHEMA_VERSION = 2
-EntityKind = Literal["ticket_task", "station"]
+CONTRACT_VERSION = 2
 
 @dataclass(frozen=True)
 class GeoPoint:
@@ -92,96 +65,120 @@ class GeoPoint:
     lat: float
 
 @dataclass(frozen=True)
-class TaskSnapshot:
-    uuid: str | None                     # None = 送出中、還沒建立
-    ticket_uuid: str | None              # 所屬工單；新開單的草稿為 None
-    location: GeoPoint                   # 所屬工單的點（任務本身沒有位置）
-    created_at: datetime                 # 送出中那筆 = 請求時間
+class TicketDraft:
+    location: GeoPoint
+    title: str
+    description: str | None = None
+    task_type: str | None = None
+    priority: str | None = None
+    disaster_types: tuple[str, ...] = ()
+    person_trapped_reported: str | None = None
+    immediate_danger_reported: str | None = None
+    contact_phone: str | None = None      # E.164 正規化後；engine 自己決定怎麼比
+
+@dataclass(frozen=True)
+class TaskDraft:
     task_type: str
     task_name: str
     task_description: str | None = None
     quantity: int | None = None
-    status: str | None = None            # 送出中那筆為 None
 
 @dataclass(frozen=True)
-class StationSnapshot:
-    uuid: str | None
-    location: GeoPoint                   # 一律是點（ADR-298）
-    created_at: datetime
+class StationDraft:
+    location: GeoPoint
     name: str | None = None
     description: str | None = None
     type: str | None = None
     operational_status: str | None = None
-    is_temporary: bool = False
-    expires_at: datetime | None = None
-    is_official: bool = False
     op_hour: str | None = None
     level: int = 0
     source: str | None = None
-
-Snapshot = TaskSnapshot | StationSnapshot
+    contact_phone: str | None = None
 
 @dataclass(frozen=True)
-class Candidate:
-    snapshot: Snapshot
-    distance_m: float                    # PostGIS geography 距離
-    same_contact_phone: bool | None      # 任務比所屬工單的電話；normalize_phone 後比對；任一邊沒電話 → None（ADR-293）
+class NewTicket:                           # 新開單
+    ticket: TicketDraft
+    tasks: tuple[TaskDraft, ...] = ()
+
+@dataclass(frozen=True)
+class NewTask:                             # 替既有的單加任務
+    ticket_uuid: str
+    task: TaskDraft
+
+@dataclass(frozen=True)
+class NewStation:
+    station: StationDraft
+
+Submission = NewTicket | NewTask | NewStation
 ```
 
-欄位來源：`app/models/ticket_task.py`（`TicketTask`，位置與電話取自所屬的 `Tickets`）、`app/models/geo.py`（`Station`）。
-
-### 不進快照的欄位
-
-| 欄位 | 理由 |
-|---|---|
-| `contact_name`、`contact_email` | 個資，對去重幫助小 |
-| `contact_phone` | 以 `Candidate.same_contact_phone` 代替（ADR-293） |
-| `review_note`、`visibility`、`team_uuid`、`updated_by`、`search_text` | 內部管理或衍生欄位，不描述事件本身 |
+- 草稿欄位是白名單：不含 `contact_name`、`contact_email`、`review_note`、`visibility`。新增欄位一律給預設值；
+  改名、刪欄位、改語意要遞增 `CONTRACT_VERSION` 並雙方同意。
+- `draft_ref` 的寫法：`NewTicket` 的工單是 `"ticket"`、第 i 個任務是 `"task:i"`；`NewTask` 的任務是 `"task:0"`；站點是 `"station"`。
 
 ---
 
-## 4. Engine 介面（ADR-290~292、297）
+## 3. 輸出：疑似重複
 
 ```python
 @dataclass(frozen=True)
-class RetrievalSpec:
-    radius_m: float                      # 之後可加有預設值的欄位
-
-@dataclass(frozen=True)
-class Match:
-    candidate_uuid: str
-    similarity: float                    # 0–1
-    evidence: Mapping[str, Any]          # 不透明、可 JSON 序列化、不含快照文字原文
-
-class DedupEngine(Protocol):
-    version: str                         # "fast-v1"、"fast-v2"…
-
-    def retrieval(self, kind: EntityKind) -> RetrievalSpec: ...
-    def rank(self, submission: Snapshot, candidates: Sequence[Candidate], now: datetime) -> Sequence[Match]: ...
-    def score(self, submission: Snapshot, candidate: Candidate, now: datetime) -> Match: ...
+class Suspect:
+    draft_ref: str                         # 送出的哪一部分
+    related_kind: str                      # "ticket"｜"ticket_task"｜"station"，須與 draft_ref 同種類
+    related_uuid: str
+    related_ticket_uuid: str | None        # 對到任務時，它所屬的工單（給前端顯示）
+    similarity: float                      # 0–1
+    evidence: Mapping[str, Any]            # 不透明、可 JSON 序列化、不含送出的文字原文
 ```
 
-- `rank`：回達門檻的候選，依 `similarity` 遞減；後端目前只用第一筆。
-- `score`：不套門檻，給確認後寫配對卡時算 evidence。
-- `retrieval`：engine 保證半徑外不可能達門檻；後端以 `MAX_CANDIDATE_RADIUS_M = 1000` 截斷。
-- 現行演算法為 Chi 的實作（`app/dedup_engine/fast.py`），service 透過 `get_engine()` 取得。Phase 1 為 `fast-v1`（工單）；Phase 2 改比任務，升為 `fast-v2`（公式與參數不變，ADR-300）。
-
-### 版本號（ADR-297）
-
-- 格式 `^[a-z]+-v[1-9][0-9]*$`。
-- 同樣輸入（快照＋`now`）會得到不同的輸出時就升版；只改註解、重構、效能不升版。
-- 每版在 `app/dedup_engine/CHANGELOG.md` 記錄改動、參數表、回測結果。
-- Golden test 強制「改行為必升版」（§8）。
+- 每個 `draft_ref` 最多一個 `Suspect`（019 決定 2）。回幾個、比哪一層，都是 engine 的事。
+- 後端只讀 `draft_ref`、`related_*`、`similarity`；`evidence` 只存不讀（ADR-291）。
 
 ---
 
-## 5. 呼叫端流程：兩段式（ADR-296、299、301~303）
+## 4. Engine 介面（ADR-290、297、304）
 
-**原則**：第一段送出時，只要有疑似重複，就回報「已經存在的是哪些」，**什麼都不建立**；使用者修改後再送一次，或確認不是重複後
-帶著確認送第二次。沒有命中就在第一段直接建立。`create_ticket`／`create_ticket_task`／`create_station` 拆成 `validate_*`／`insert_*`，
-本身行為不變，批次匯入照舊呼叫、不去重（ADR-299）。
+```python
+class DedupEngine(Protocol):
+    version: str                           # "fast-v2"…
 
-### 5.1 新開單（ADR-301）
+    async def check(self, db: AsyncSession, submission: Submission, now: datetime) -> Sequence[Suspect]: ...
+
+    async def score(self, db: AsyncSession, submission: Submission, draft_ref: str,
+                    related_kind: str, related_uuid: str, now: datetime) -> Suspect | None: ...
+```
+
+- `check`：第一段用。回傳疑似重複，沒有就是空序列。
+- `score`：使用者確認「不是重複」後建立時，替那一對算 evidence；找不到對方回 None。
+- `now` 由後端傳入（ADR-290）。
+- engine 可以用 `db` 做任何**唯讀**查詢；不得寫入、flush、commit。
+- 版本號、CHANGELOG、golden test 沿用 ADR-297；golden 改在測試 DB 上以固定資料執行。
+
+### 後端怎麼呼叫（保護措施）
+
+1. 在 SAVEPOINT 內呼叫，結束後一律 rollback 該 SAVEPOINT（engine 就算誤寫也不會留下）。
+2. `asyncio.wait_for(..., ENGINE_TIMEOUT_S)`（預設 2 秒）；逾時或任何例外 → 記 log、當作沒有疑似重複（fail-open）、reload actor。
+3. 丟掉 `related_kind` 與 `draft_ref` 種類不符的結果（記 warning），避免寫出錯誤的配對卡。
+4. 丟掉已確認（帶 `acknowledgedDuplicateOf`）的草稿上的結果（ADR-296：確認後不再提示）。
+
+---
+
+## 5. 呼叫端流程：兩段式（ADR-296、299、301~304）
+
+**原則**：第一段有疑似重複 → 回報「已經存在的是哪些」，**什麼都不建立**；使用者修改後再送，或確認不是重複後帶著確認再送。
+沒有疑似重複 → 第一段就建立。
+
+```graphql
+type DuplicatesSuspected { suspects: [DuplicateSuspect!]! }
+type DuplicateSuspect {
+  draftRef: String!          # "ticket"｜"task:0"…｜"station"
+  relatedKind: String!       # "ticket"｜"ticket_task"｜"station"
+  relatedUuid: String!
+  relatedTicketUuid: String  # 對到任務時它所屬的工單
+}
+```
+
+### 5.1 新開單
 
 ```graphql
 input CreateTicketTaskDraft {
@@ -189,142 +186,92 @@ input CreateTicketTaskDraft {
   source: String = "user"  visibility: Visibility = public  routeUuid: String
   acknowledgedDuplicateOf: String = null
 }
-# CreateTicketInput 新增 tasks: [CreateTicketTaskDraft!]! = []
+# CreateTicketInput 新增：tasks: [CreateTicketTaskDraft!]! = []、acknowledgedDuplicateOf: String = null（工單本身的確認）
 
 union CreateTicketResult = TicketCreated | DuplicatesSuspected
 type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
-type DuplicatesSuspected { suspects: [TaskSuspect!]! }
-type TaskSuspect { draftIndex: Int!  relatedTicketUuid: String!  relatedTaskUuid: String! }
 ```
 
-1. 權限、工單與每個任務草稿的輸入驗證。
-2. 對**沒有** `acknowledgedDuplicateOf` 的草稿逐一跑去重（位置＝工單草稿座標；同一次送出的草稿之間不互比）。**fail-open**。
-3. 任一命中：每個命中寫一筆 `hint_shown`，回 `DuplicatesSuspected`，**工單與任務都不建**。
-4. 全部未命中（或都已確認）：工單＋所有任務同一個 transaction 建立；帶確認的任務各寫 `dup_ignored` 配對卡＋`ignored_by_submitter`
-   （確認的任務找不到或已刪：照常建立、不寫卡；`engine.score()` 失敗：照常建立、卡的分數為 null）。
-5. 不帶任務：沒有可比的東西，直接建立（既有呼叫端不受影響）。
+1. 權限、工單與每個任務草稿的輸入驗證（失敗就在比對前結束，不透露任何疑似重複）。
+2. `engine.check(NewTicket(...))`，依 §4 的保護措施。
+3. 有疑似重複：每個寫一筆 `hint_shown`，回 `DuplicatesSuspected`，**工單與任務都不建**。
+4. 沒有：工單＋所有任務同一個 transaction 建立；帶確認的草稿，建好後各用 `engine.score` 寫 `dup_ignored` 配對卡＋`ignored_by_submitter`
+   （對方找不到或已刪：照常建立、不寫卡；`score` 失敗：照常建立、卡的分數為 null）。
 
-### 5.2 替既有的單加任務（ADR-302）
+### 5.2 替既有的單加任務
 
-`createTicketTask(input, acknowledgedDuplicateOf: String = null): CreateTicketTaskResult!`，回 `TicketTaskCreated { task }` 或
-`DuplicatesSuspected`（`draftIndex` 固定 0）。位置取所屬工單的座標，候選**排除同一張工單自己的任務**。其餘同 5.1。
+`createTicketTask(input, acknowledgedDuplicateOf: String = null): CreateTicketTaskResult!`，
+回 `TicketTaskCreated { task }` 或 `DuplicatesSuspected`。送 `NewTask(ticket_uuid, task)`；要不要排除同一張單的任務由 engine 決定（019 決定 3 在 fast-v2 內實作）。
 
-### 5.3 站點（ADR-296，未變）
+### 5.3 登記站點
 
-`createStation(input, acknowledgedDuplicateOf)` 回 `StationCreated` 或 `DuplicateStationSuspected { relatedStationUuid }`，流程同 5.1（單一實體）。
+`createStation(input, acknowledgedDuplicateOf)` 回 `StationCreated` 或 `DuplicatesSuspected`（Phase 1 的 `DuplicateStationSuspected` 併入通用型別）。
 
 ### 5.4 使用者的選擇怎麼記（ADR-303）
 
 - 照樣建立：第二段帶確認 → `ignored_by_submitter`＋`dup_ignored` 配對卡。
-- 去看舊單（放棄這個任務）：前端不再送它，後端停在 `hint_shown`，由此推得接受。
-- 全部放棄：前端不再送出，什麼都沒建立。
+- 去看舊的（放棄某個任務或整筆）：前端不再送它，後端停在 `hint_shown`，由此推得接受。
 
 ---
 
-## 6. Schema（ADR-294）
+## 6. Schema（ADR-294，Phase 1 已完成）
 
-改在 019 的 migration `d4c8b1e07a92`（未合併）上，不另開 migration。
-
-| 表 / 常數 | 改動 |
+| 表 / 常數 | 內容 |
 |---|---|
-| `duplicate_pairs.score_components` | 改名 `evidence`（JSONB） |
-| `duplicate_pairs.engine_version` | 新增 `text`；CHECK `method = 'manual' OR engine_version IS NOT NULL`（手動建卡沒有 engine） |
-| `dedup_audit_events.engine_version` | 新增 `text`（非 engine 產生的事件，如 `manual_note`，可為 null） |
-| `dedup_audit_events.evidence` | 後端外層 `{"similarity": …, "engine": <engine 的 evidence>}`；engine 內容不拆 |
-| `AUDIT_EVENT_TYPES` / CHECK | 新增 `hint_shown` |
+| `duplicate_pairs.evidence` | engine 的 evidence（JSONB） |
+| `duplicate_pairs.engine_version` | CHECK `method = 'manual' OR engine_version IS NOT NULL` |
+| `dedup_audit_events.engine_version`、`evidence` | 後端外層 `{"similarity", "engine"}` |
+| `AUDIT_EVENT_TYPES` | 含 `hint_shown` |
 
-`method`、`similarity`、`hint_outcome`、`status` 保留。
-`duplicate_pairs.hint_outcome` 在兩段式下只會寫 `ignored_hint`；`accepted_hint` 值保留給慢層與 admin。
-任務的配對卡與事件寫 `entity_kind='ticket_task'`，兩個 uuid 都是任務 uuid；CHECK 本來就含 `ticket_task`，不需要改 migration。
+配對卡與事件的 `entity_kind` 取 `related_kind`（`ticket`／`ticket_task`／`station`，CHECK 本來就都含），不需要新 migration。
 
 ---
 
-## 7. 逐檔改動
+## 7. 逐檔改動（Phase 2）
 
 | 檔案 | 改動 |
 |---|---|
-| `app/dedup_engine/contract.py` | 新增：§3、§4 的型別與 Protocol |
-| `app/dedup_engine/fast.py` | 新增：由 `services/dedup_scoring.py` 搬入；#59 的 `STATION_FAST_LAYER_PARAMETERS`、`services/dedup.py` 的 `_retrieval_radius_m`／`RETRIEVAL_RADIUS_SAFETY_FACTOR`／`TITLE_MAX_CHARS`／`DESCRIPTION_MAX_CHARS`／`_query_text` 一併搬入；文字相似度改 Python |
-| `app/dedup_engine/CHANGELOG.md` | 新增：`fast-v1` |
-| `app/services/dedup_scoring.py` | 刪除 |
-| `app/services/dedup_snapshot.py` | 新增：`Tickets` / `Station` row → 快照、建單 input → 快照、`same_contact_phone` |
-| `app/repositories/dedup_repository.py` | 移除 `func.similarity`、`has_text`、`age_min`；`list_nearby_open` 回 `list[Candidate]`；`ST_DWithin`、`ST_Distance`、未結案過濾、`DEDUP_ENTITIES` 保留 |
-| `app/services/dedup.py` | 改為呼叫 engine；移除 `record_hint_outcome` 的 mutation 路徑與 `_rescore_pair`；新增兩段式用的 `check`／`record_acknowledged` |
-| `app/services/ticket.py`、`app/services/station.py` | 拆出 `validate_*`／`insert_*`；`create_*` 行為不變（ADR-299） |
-| `app/services/dedup_submission.py` | 新增：`submit_ticket`／`submit_station`，實作 §5 |
-| `app/graphql/tickets/`、`app/graphql/geo/` | `createTicket`／`createStation` 回傳 union、新參數 |
-| `app/graphql/dedup/` | 刪除 |
-| `app/graphql/schema.py` | 移除 `DedupQuery`／`DedupMutation` |
-| `app/models/dedup.py`、`alembic/versions/d4c8b1e07a92_*.py` | §6 |
-| `Spec/019-dedup-fast-layer/spec.md` | 加註 §1 GraphQL、§3 計分位置已被本 Spec 取代 |
-
-**Phase 2（任務層級）追加**：
-
-| 檔案 | 改動 |
-|---|---|
-| `app/dedup_engine/contract.py` | `TaskSnapshot` 取代 `TicketSnapshot`；`EntityKind` 改 `ticket_task`；schema 版本 2 |
-| `app/dedup_engine/fast.py`、`CHANGELOG.md`、golden | 比任務欄位；`fast-v2` |
-| `app/services/dedup_snapshot.py` | 任務快照（位置、電話取自所屬工單） |
-| `app/repositories/dedup_repository.py` | `ticket_task` entity（join 所屬工單）、排除某工單的任務；移除 `ticket` entity |
-| `app/services/ticket.py` | 拆出任務的 `validate_*`／`insert_*`；`create_ticket_task` 行為不變 |
-| `app/services/dedup_submission.py` | `submit_ticket` 帶任務草稿、新增 `submit_ticket_task` |
-| `app/graphql/tickets/` | `CreateTicketTaskDraft`、`CreateTicketInput.tasks`、`DuplicatesSuspected`、`createTicketTask` union |
-
-前端不在本 Spec 範圍；後端合約變更的交接說明見 `plan.md`「交給前端的 API 變更」。
+| `app/dedup_engine/contract.py` | 改為 §2~§4 的草稿、`Submission`、`Suspect`、async `DedupEngine` |
+| `app/dedup_engine/fast.py`、`candidates.py`（新） | fast-v2：任務層級候選查詢（由 019／`app/repositories/dedup_repository.py` 移入）、站點候選、計分；CHANGELOG、golden |
+| `app/repositories/dedup_repository.py` | 候選查詢移出；只留配對卡與 audit 的 repository |
+| `app/services/dedup_snapshot.py` | 改為「驗證過的 input → 草稿」；不再建候選 |
+| `app/services/dedup.py` | 保護措施（SAVEPOINT、逾時、種類檢查、確認過濾）＋寫入 |
+| `app/services/ticket.py` | 任務的 `validate_*`／`insert_*`；`create_ticket_task` 行為不變 |
+| `app/services/dedup_submission.py` | `submit_ticket`（帶任務）、`submit_ticket_task`、`submit_station` 改走 `check` |
+| `app/graphql/tickets/`、`geo/` | `CreateTicketTaskDraft`、`CreateTicketInput.tasks`、通用 `DuplicatesSuspected`、`createTicketTask` union |
 
 ---
 
 ## 8. 測試計畫
 
-### Contract test（後端擁有；任何 engine 實作都要通過）
+### Contract test（後端擁有；任何 engine 都要通過）
 
-1. `similarity` 在 `[0, 1]`；`rank` 結果依分數遞減。
-2. 同樣輸入（含 `now`）→ 同樣輸出。
-3. 空候選 → `rank` 回空序列。
-4. `retrieval().radius_m` 是有限正數；距離大於它的候選，`score().similarity` 不達門檻。
-5. `evidence` 可 `json.dumps`，且不含快照文字欄位原文（用帶特殊標記字串的快照驗證）。
-6. 選填欄位為 `None`、空字串、空 tuple，`same_contact_phone=None` 時不拋錯。
-7. 送出快照 `uuid=None`、`status=None` 時可正常計分。
-8. 效能：N=500 筆候選在 X ms 內（X 待定）。
-9. `version` 符合 `^[a-z]+-v[1-9][0-9]*$`。
-10. Golden test：固定輸入的輸出與 golden file 一致，且 golden file 記錄的版本號等於目前 `version`。重新產生 golden 的腳本在「輸出改變但版本號沒變」時拒絕寫入，所以要更新 golden 只能先升版。
-
-演算法本身的正確性由 Chi 的測試負責。
+1. `similarity ∈ [0,1]`；每個 `draft_ref` 最多一個 `Suspect`；`related_kind` 與 `draft_ref` 同種類。
+2. 同輸入（含 DB 資料與 `now`）→ 同輸出。
+3. DB 無候選 → `check` 回空。
+4. **唯讀**：呼叫後 session 無 new／dirty／deleted 物件，且在 SAVEPOINT rollback 後 DB 沒有新列。
+5. `evidence` 可 `json.dumps`，不含送出的文字原文。
+6. 草稿選填欄位全空不拋錯。
+7. 效能：在測試 DB 放 500 筆鄰近候選，`check` 在時限內（暫定 200 ms，待 Task 0）。
+8. `version` 格式；golden：固定 DB 資料的輸出與 golden 一致且版本相符。
 
 ### 後端整合測試
 
-- builder：ORM row 與建單 input 產生的快照欄位一致；白名單外欄位不出現。
-- `same_contact_phone`：同號不同格式 → true；一邊空 → None。
-- repository：半徑外、已結案、軟刪不出現；超過 1000 m 的 `RetrievalSpec` 被截斷並記 warning。
-- 兩段式：命中不建單並寫 `hint_shown`；確認後建單＋配對卡＋audit 在同一 transaction；engine 拋錯時照常建單（fail-open）；確認的 uuid 不存在時照常建單不寫卡。
-- 任務層級（Phase 2）：多任務中任一命中整筆不建、每個命中各一筆 `hint_shown`；確認綁在草稿上（刪除或重排草稿仍對應正確）；
-  同一次送出的草稿不互比；既有單加任務排除同單任務；completed 工單的開著任務仍是候選、cancelled 工單的不是；距離與電話取自所屬工單。
-- migration：`test_migrations_match_models` 通過；`alembic heads` 單一 head。
+- 保護措施：逾時、例外、engine 誤寫（以會寫入的 stub 驗證被 rollback）、種類不符的結果被丟棄，都 fail-open 且照常建立。
+- 兩段式：多任務中任一疑似重複整筆不建、每個一筆 `hint_shown`；確認綁在草稿上（刪除或重排仍正確）；atomic；無權限在比對前失敗。
+- fast-v2 行為（Chi 的決定 1~3）：completed 工單的開著任務仍是候選、cancelled 工單的不是；替既有的單加任務時排除同單任務。
 
 ---
 
-## 9. 接縫之外（需要後端配合的改動）
+## 9. 延後討論
 
-| 演算法想做的事 | 需要什麼 | 規模 |
-|---|---|---|
-| 用快照裡沒有的欄位（照片、工單的災害欄位、新欄位） | builder 加欄位（只加不改） | 小 |
-| 換候選範圍（不看半徑、跨區、先用文字篩） | repository 新檢索方式；`RetrievalSpec` 加欄位 | 中 |
-| 向量相似度（019 合約已預留 `slow_vector`） | 預先計算並儲存 embedding、向量索引 | 架構改動，屬慢層 |
-| 呼叫外部服務（LLM、geocoding） | engine 不再是純函式 | 架構改動 |
-| 從過去的判斷學習 | 回饋資料管道 | 離線流程 |
+- **contract test 的效能門檻與 `ENGINE_TIMEOUT_S`**（Task 0 與 Chi 確認）。
+- **離線 harness**：engine 需要 DB 後，Chi 的離線回測要有對應的資料庫或替身，由 Chi 決定。
 
-## 10. 延後討論
+---
 
-- ~~**未結案定義**~~：已由 019 的任務層級定案（2026-09-29）：看任務自己的 status（非 `fulfilled`／`canceled`），
-  所屬工單未刪、非 `cancelled`；`completed` 工單的開著任務仍是候選。原本「父單 status 不隨任務更新」的問題因此不再影響候選。
-- **contract test 的效能門檻 X**。
+## 10. 演進紀錄
 
-## 11. 實作順序
-
-1. 與 Chi 確認 §3、§4；建 `contract.py`。
-2. builder＋repository 改回傳 `Candidate`。
-3. 演算法搬進 core，文字相似度改 Python；Chi 重跑回測、確認門檻，定為 `fast-v1`，寫 CHANGELOG。
-4. contract test，以 `fast-v1` 產生第一份 golden file。
-5. §6 schema 改動。
-6. `create_ticket`／`create_station` 兩段式，移除 `app/graphql/dedup/`。
-7. （Phase 2）`TaskSnapshot`、`fast-v2`、任務候選、`createTicket` 帶任務與 `createTicketTask` 兩段式，重跑 Docker 驗證。
+- **Phase 1（2026-09-28，Task 1~14）**：以工單為單位；後端送快照（`TicketSnapshot`）、後端撈候選、engine 為純函式。已實作、Docker 驗證通過。
+- **ADR-300~303（2026-09-29）**：Chi 把單位改成任務；原計畫把後端的快照與 repository 改成任務層級。
+- **ADR-304（2026-09-29）**：為避免每次改單位都要改後端，候選查詢與比對單位整個歸 engine；本文件以此為準。

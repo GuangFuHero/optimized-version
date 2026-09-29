@@ -1,6 +1,6 @@
 # 020 去重引擎介面 — Implementation Plan
 
-**進度（2026-09-29）**：Phase 1（Task 1~14，工單層級）完成並通過 Docker 驗證（見 `Backend/DEDUP_ENGINE_020_VERIFICATION.md`）。2026-09-29 合進 Chi 的任務層級更新與 main（merge `af2ca1d95`，全套件 1587 passed）；**Phase 2（Task 16~24，任務層級，ADR-300~303）待實作**。Task 0（與 Chi 確認合約、效能門檻）未做。前端不在後端範圍，§「交給前端的 API 變更」只是交接說明。
+**進度（2026-09-29）**：Phase 1（Task 1~14，工單層級）完成並通過 Docker 驗證（見 `Backend/DEDUP_ENGINE_020_VERIFICATION.md`）。2026-09-29 合進 Chi 的任務層級更新與 main（merge `af2ca1d95`，全套件 1587 passed）；**Phase 2（Task 16~24，engine 自己撈資料，ADR-304）待實作**。Task 0（與 Chi 確認合約、效能門檻）未做。前端不在後端範圍，§「交給前端的 API 變更」只是交接說明。
 
 **Goal:** 把 Spec 019 的去重快層包成「演算法可獨立迭代」的後端服務：Chi 只動 `app/dedup_engine/`，
 後端只依賴 `contract.py`；提示改由 `createTicket` / `createStation` 兩段式帶出，拿掉獨立的 dedup API。
@@ -984,78 +984,76 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 ---
 
-## Phase 2：任務層級（ADR-300~303，2026-09-29）
+## Phase 2：engine 自己撈資料（ADR-304，2026-09-29）
 
-Chi 把 019 的比對單位改成任務後追加。前提：本分支已合進 #59 的新 head（`3f97468f8`，含 main 的站點指派）。
-完成條件同前：每個 Task 自己的測試（先紅後綠）＋全套件不比基準差；全部做完再跑一次 Task 14 的 Docker 完整驗證。
+取代原本的「任務層級」Phase 2 草案（ADR-300 的 `TaskSnapshot` 方案）。候選查詢與比對單位整個歸 engine；
+後端只管三個觸發點、保護措施與寫入。前提：本分支已合進 #59 的新 head（`af2ca1d95`）。
+完成條件同前：每個 Task 自己的測試（先紅後綠）＋全套件不比基準（1587）差；全部做完重跑 Docker 完整驗證。
 
-## Task 16: contract 改為 `TaskSnapshot`
+## Task 16: contract 改為草稿／Suspect／async engine
 
-**Files:** `app/dedup_engine/contract.py`、`tests/dedup_engine/test_contract_types.py`
+**Files:** `app/dedup_engine/contract.py`、`tests/dedup_engine/test_contract_types.py`、`test_core_isolation.py`
 
-- [ ] `TaskSnapshot(uuid, ticket_uuid, location, created_at, task_type, task_name, task_description=None, quantity=None, status=None)`
-- [ ] 移除 `TicketSnapshot`；`Snapshot = TaskSnapshot | StationSnapshot`；`EntityKind = Literal["ticket_task", "station"]`
-- [ ] `SNAPSHOT_SCHEMA_VERSION = 2`
-- [ ] 測試：必填欄位清單、無個資欄位、frozen
+- [ ] `TicketDraft`、`TaskDraft`、`StationDraft`、`NewTicket`／`NewTask`／`NewStation`、`Suspect`、async `DedupEngine`（spec §2~§4）；`CONTRACT_VERSION = 2`
+- [ ] 移除 `TicketSnapshot`、`StationSnapshot`、`Candidate`、`Match`、`RetrievalSpec`
+- [ ] 隔離守衛改為：engine 可 import `sqlalchemy`、`geoalchemy2`、`app.models`；仍禁止 `app.services`、`app.graphql`、`app.api`、`app.repositories`
+- [ ] 測試：frozen、草稿必填欄位、草稿不含個資欄位（`contact_phone` 除外）
 
-## Task 17: engine `fast-v2`
+## Task 17: fast-v2（任務層級候選＋計分，搬進 engine）
 
-**Files:** `app/dedup_engine/fast.py`、`tests/dedup_engine/*`、`golden/fast.json`、`CHANGELOG.md`
+**Files:** `app/dedup_engine/candidates.py`（新）、`fast.py`、`CHANGELOG.md`、`tests/dedup_engine/*`、golden
 
-- [ ] `_category` / `_text` 改讀任務欄位（`task_type`、`task_name + task_description`，截斷 200／2000）
-- [ ] 參數表 key 改 `ticket_task`（值同 ticket）；`version = "fast-v2"`
-- [ ] `test_fast.py`、`test_contract.py`、`golden_cases.py` 改用任務快照；`regen_dedup_golden.py` 產生 fast-v2
-- [ ] CHANGELOG 加 fast-v2：比對單位改任務、文字欄位改任務名稱與說明，公式與參數不變
-- [ ] pg_trgm 對照測試加任務名稱樣本
+- [ ] `candidates.py`：任務候選（019 條件：任務非 fulfilled／canceled、未刪；工單未刪、非 cancelled；距離取工單；`NewTask` 排除同單）、站點候選（019 條件）；由 `app/repositories/dedup_repository.py` 的 `nearby_open_rows` 移入並改寫
+- [ ] `fast.py`：`check` 對 `NewTicket` 的每個任務、`NewTask` 的任務、`NewStation` 各回最多一個 `Suspect`；`score` 算指定的一對；公式與參數不變（`measure`／`combine` 沿用）
+- [ ] `version = "fast-v2"`；CHANGELOG：比對單位改任務、候選查詢歸 engine
+- [ ] golden 改在測試 DB 上以固定資料產生；regen 腳本「輸出變了但沒升版就拒絕」的規則不變
+- [ ] 測試：Chi 的決定 1~3、completed／cancelled 工單、距離與 019 SQL 一致
 
-## Task 18: snapshot builder
+## Task 18: contract test（DB 版）
 
-**Files:** `app/services/dedup_snapshot.py`、`tests/test_dedup_snapshot.py`
+**Files:** `tests/dedup_engine/test_contract.py`
 
-- [ ] `task_submission(draft, *, ticket_location, ticket_uuid, now)`、`task_snapshot(task_row, ticket_row)`
-- [ ] `to_candidate("ticket_task", (task, ticket), ...)`：電話比所屬工單的 `contact_phone`
-- [ ] 測試：送出中與已存的任務快照一致；電話取自工單
+- [ ] spec §8 的 8 條，對 `FastEngine` 參數化；**唯讀**：呼叫後 `session.new／dirty／deleted` 皆空，且 SAVEPOINT rollback 後列數不變
+- [ ] 效能：500 筆鄰近候選（暫定 200 ms，待 Task 0）
 
-## Task 19: repository 任務候選
+## Task 19: 後端呼叫 engine 的保護措施
 
-**Files:** `app/repositories/dedup_repository.py`、`tests/test_dedup_repository.py`
+**Files:** `app/services/dedup.py`、`app/services/dedup_snapshot.py`、`app/repositories/dedup_repository.py`、`tests/test_dedup_engine_service.py`、`tests/test_dedup_snapshot.py`
 
-- [ ] `ticket_task` entity：join 所屬工單取座標；候選條件照 019（任務非 fulfilled／canceled、未刪；工單未刪、非 cancelled）
-- [ ] `nearby_open_rows(..., exclude_ticket_uuid=None)` 回 `(task, ticket, distance)`；`row_with_distance` 支援任務
-- [ ] 移除 `ticket` entity
-- [ ] 測試：completed 工單的開著任務仍是候選、cancelled 工單的不是、排除同一張單、距離取工單
+- [ ] `dedup_snapshot.py` 改為「驗證過的 input → 草稿」（電話 E.164 正規化，失敗給 None）
+- [ ] `check_submission(db, *, submission, acknowledged, actor, now)`：SAVEPOINT＋rollback、`wait_for(ENGINE_TIMEOUT_S=2)`、例外／逾時 fail-open 並 reload actor、丟掉種類不符與已確認草稿的結果
+- [ ] `record_hint_shown(suspect)`、`record_acknowledged(draft_ref, created_uuid, related)`（用 `engine.score`）
+- [ ] repository 移除候選查詢，只留配對卡與 audit
+- [ ] 測試：逾時、例外、會寫入的 stub 被 rollback、種類不符被丟、確認過濾、寫入不含送出原文
 
 ## Task 20: 任務的 validate／insert 拆分
 
 **Files:** `app/services/ticket.py`、`tests/test_create_split.py`
 
-- [ ] `validate_ticket_task_draft(...)`（不需要工單已存在）、`insert_ticket_task(db, *, actor, ticket_uuid, fields)`（flush 不 commit）
-- [ ] `create_ticket_task` 簽章與行為不變（批次匯入、既有測試）
-- [ ] 測試：驗證不寫入、insert 不 commit、create 結果不變
+- [ ] `validate_ticket_task(...)`（不要求工單已存在，給新開單用）、`insert_ticket_task(db, *, actor, ticket_uuid, fields)`（flush 不 commit）
+- [ ] `create_ticket_task` 簽章與行為不變
 
-## Task 21: 兩段式編排（任務層級）
+## Task 21: 兩段式編排
 
-**Files:** `app/services/dedup_submission.py`、`app/services/dedup.py`、`tests/test_dedup_submission.py`、`tests/test_dedup_engine_service.py`
+**Files:** `app/services/dedup_submission.py`、`tests/test_dedup_submission.py`
 
-- [ ] `submit_ticket(..., tasks: list[TaskDraft])`：驗證工單＋全部草稿 → 未確認的草稿逐一 `find_match` → 任一命中：每個命中寫 `hint_shown`，回 `Suspected([(draft_index, related_ticket, related_task)])`，不建任何東西
-- [ ] 全部未命中：工單＋任務同一 transaction；帶確認的任務各 `record_acknowledged`
-- [ ] `submit_ticket_task(..., ticket_uuid, draft, acknowledged_duplicate_of)`：位置取工單、排除同單任務
-- [ ] 測試：多任務部分命中整筆不建；確認綁在草稿上（重排仍正確）；全放棄＝不送出＝零寫入；atomic；fail-open；無權限在比對前失敗；既有單加任務排除同單
+- [ ] `submit_ticket(..., tasks, acknowledged)`：驗證全部 → `check_submission(NewTicket)` → 有疑似重複：各寫 `hint_shown`、回 `Suspected(suspects)`、零寫入；否則工單＋任務同一 transaction，確認的草稿各寫配對卡
+- [ ] `submit_ticket_task(..., ticket_uuid, draft, acknowledged_duplicate_of)`、`submit_station` 改走 `check_submission`
+- [ ] 測試：部分命中整筆不建；確認綁草稿（重排仍正確）；全放棄＝零寫入；atomic；無權限在比對前失敗；站點仍發通知
 
 ## Task 22: GraphQL
 
-**Files:** `app/graphql/tickets/types.py`、`mutations.py`、`tests/test_graphql/*`
+**Files:** `app/graphql/tickets/*`、`app/graphql/geo/*`、`tests/test_graphql/*`
 
-- [ ] `CreateTicketTaskDraft`、`CreateTicketInput.tasks`、`DuplicatesSuspected { suspects: [TaskSuspect] }`、`TicketCreated { ticket, tasks }`
-- [ ] `createTicketTask(input, acknowledgedDuplicateOf)` 回 `CreateTicketTaskResult`
-- [ ] 既有 `createTicketTask` 測試改走 union；`test_create_dedup.py` 改寫成任務層級（真 engine）
-- [ ] SDL 守門：舊型別不存在
+- [ ] 通用 `DuplicatesSuspected { suspects: [DuplicateSuspect] }`；`CreateTicketTaskDraft`、`CreateTicketInput.tasks`／`acknowledgedDuplicateOf`、`TicketCreated { ticket, tasks }`
+- [ ] `createTicketTask(input, acknowledgedDuplicateOf)` 回 `CreateTicketTaskResult`；`createStation` 改回通用型別
+- [ ] 既有 `createTicketTask` 測試改走 union；`test_create_dedup.py` 改為任務層級（真 engine）；SDL 守門更新
 
 ## Task 23: 收尾
 
-- [ ] 移除工單層級殘留（`ticket_submission`、`ticket_snapshot`、ticket entity）；legacy 守門測試補上
-- [ ] 更新「交給前端的 API 變更」為任務層級版本
-- [ ] ruff、全套件
+- [ ] 移除 Phase 1 殘留（快照型別、後端候選查詢、`DuplicateStationSuspected`）；legacy 守門補上
+- [ ] 改寫「交給前端的 API 變更」為最終版本
+- [ ] ruff、全套件、覆蓋率
 
 ## Task 24: Docker 完整驗證（重跑 Task 14，情境改為任務層級）
 
@@ -1063,9 +1061,9 @@ Chi 把 019 的比對單位改成任務後追加。前提：本分支已合進 #
 
 前端改動由前端負責，後端只提供合約。以下是本票對 GraphQL 的破壞性變更，供前端與 #47 作者調整：
 
-> ⚠️ **以下是 Phase 1（工單層級）的合約，Phase 2 會再改**：`createTicket` 改為帶 `tasks` 清單、回傳
-> `DuplicatesSuspected { suspects: [{ draftIndex, relatedTicketUuid, relatedTaskUuid }] }`，`createTicketTask` 也改兩段式
->（spec §5.1、§5.2）。Task 23 完成時改寫本段；前端請以 Phase 2 完成後的版本為準。
+> ⚠️ **以下是 Phase 1（工單層級）的合約，Phase 2 會再改**：`createTicket` 改為帶 `tasks` 清單、三個建立 mutation 都回通用的
+> `DuplicatesSuspected { suspects: [{ draftRef, relatedKind, relatedUuid, relatedTicketUuid }] }`，`createTicketTask` 也改兩段式
+>（spec §5）。Task 23 完成時改寫本段；前端請以 Phase 2 完成後的版本為準。
 
 - **移除**：`ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`，以及 `TicketDedupHint`、
   `StationDedupHint`、`DedupScoreComponent`、`DedupEntityKind`、`DedupHintOutcome` 等型別。
