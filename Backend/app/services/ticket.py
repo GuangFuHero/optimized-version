@@ -31,6 +31,7 @@ from app.services.authz import require_scope
 from app.services.geo_validation import normalize_contact_fields, validate_point
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
+from app.services.ticket_status import recompute_ticket_status
 
 # Size limits for `set_ticket_disaster_details` (ADR-267). ADR-092 leaves the vocabulary
 # unchecked but bounded nothing, so ticket.edit on one ticket was a megabyte store — the
@@ -424,6 +425,51 @@ async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
         raise ValueError("Ticket not found")
     await require_scope(actor, Perm.TICKET_DELETE, db, resource=ticket)
     await ticket_repository.soft_delete(db, db_obj=ticket)
+
+
+async def delete_ticket_task(db: AsyncSession, *, actor: User, uuid: str) -> None:
+    """Delete one need — the requester's 「刪除這筆需求」 (team decision 2026-09-28).
+
+    ticket.delete on the need's ticket, as for deleting the whole ticket, checked before the
+    locks: for a signed-in citizen that means their own ticket, whoever added the need. Any need
+    not already deleted can go, one that has everyone it asked for included, since the
+    requester's plans can change after people signed up.
+
+    The need is canceled and soft-deleted at once, so no query shows it and nothing brings it
+    back; completed_at goes with the fulfilled state it leaves. The people on it stay recorded.
+    The ticket's status is worked out again, and all of it commits once, under the locks on the
+    ticket and then the need (_lock_ticket_and_task). Everyone on the need then hears they need
+    not go.
+    """
+    unlocked = await ticket_task_repository.get_by_uuid_active(db, uuid)
+    ticket = await ticket_repository.get_by_uuid_active(db, unlocked.ticket_uuid) if unlocked else None
+    if not ticket:
+        raise ValueError("Ticket task not found")
+    await require_scope(actor, Perm.TICKET_DELETE, db, resource=ticket)
+
+    ticket, task = await _lock_ticket_and_task(db, task_uuid=uuid)
+    now = datetime.now(UTC)
+    task.status = "canceled"
+    task.canceled_at = now
+    task.completed_at = None
+    task.delete_at = now
+    await db.flush()
+    await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
+    claimants = [str(a.actor_uuid) for a in await task_assignment_repository.list_by_task(db, uuid)]
+    task_id, task_name, ticket_title, actor_uid = task.uuid, task.task_name, ticket.title, actor.uuid
+    await db.commit()
+
+    await NotificationService.dispatch(
+        db,
+        event_type="task_deleted",
+        title=f"你承接的「{task_name}」已刪除",
+        body=f"{ticket_title}　這筆需求已經刪除，不用前往了。",
+        priority="high",
+        actor_uuid=actor_uid,
+        ref_type="ticket_task",
+        ref_uuid=task_id,
+        explicit_recipients=claimants,
+    )
 
 
 async def create_ticket_task(

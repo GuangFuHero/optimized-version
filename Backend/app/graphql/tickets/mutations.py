@@ -241,6 +241,19 @@ class TicketTaskMutation:
         return TicketTaskType.from_model(task)
 
     @strawberry.mutation
+    async def delete_ticket_task(self, info: strawberry.types.Info, uuid: UUID) -> bool:
+        """Delete one need — the requester's 刪除這筆需求.
+
+        Requires ticket.delete on the need's ticket. Any need not already deleted can go, one
+        with everyone it asked for included. It is canceled and soft-deleted, the ticket's status
+        is worked out again, and everyone on it hears they need not go. Returns True.
+        """
+        await ticket_service.delete_ticket_task(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
+        )
+        return True
+
+    @strawberry.mutation
     async def create_task_property(
         self, info: strawberry.types.Info, input: CreateTaskPropertyInput
     ) -> TaskPropertyType:
