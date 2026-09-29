@@ -1,9 +1,10 @@
 # Design: 去重引擎介面 — Dedup Engine Interface
 
-**Date**: 2026-09-28（2026-09-29 改寫：engine 自己撈資料，ADR-304）
+**Date**: 2026-09-28（2026-09-29 改寫：engine 自己撈資料，ADR-304；同日補 ADR-305~307）
 **Feature**: 020-dedup-engine-interface
-**Status**: Phase 1（Task 1~14）已實作並通過 Docker 驗證，但接縫只到「怎麼算分數」。本文件描述 ADR-304 的目標架構，
-由 plan Phase 2 實作；Phase 1 的程式在 Phase 2 期間逐步改寫。§4 介面仍待與 Chi 確認（plan Task 0）。
+**Status**（2026-09-29）：本文件描述的架構（ADR-304）已全部實作。plan Task 1~25 完成，Docker 從零驗證通過
+（本機與容器內皆 1612 passed、0 failed），驗證結果與速度實測見 `verification.md`。branch 已 push，PR 尚未開。
+剩 plan Task 0：等 Chi 確認 §2~§4 的 contract、離線調參數工具怎麼接 DB，並補 CHANGELOG 的驗證數字（交接訊息見 `handoff-chi.md`）。
 **Depends on**: `Spec/019-dedup-fast-layer/spec.md`（PR #46 / #59，未合併）
 **Stacked on**: `feat/dedup-station-fast-layer`（#59，已合進 `3f97468f8`，含 main 的站點指派 #58）→ `feat/dedup-fast-layer`（#46）→ `main`
 **Decisions**: `decisions.md`（ADR-286~307；現行架構以 ADR-304 為準）
