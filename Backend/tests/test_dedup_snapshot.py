@@ -239,3 +239,16 @@ def test_station_draft_from_validated_fields():
         source="manual",
         contact_phone="+886912345678",
     )
+
+
+def test_task_draft_from_validated_fields():
+    """A task draft carries the task's own facts; its location is the ticket's, known elsewhere."""
+    from app.dedup_engine.contract import TaskDraft
+    from app.services.dedup_snapshot import task_draft
+    from app.services.ticket import TaskFields
+
+    values = {"task_type": "rescue", "task_name": "抽水", "task_description": "一樓", "quantity": 3,
+              "source": "user", "visibility": "public", "route_uuid": None}  # fmt: skip
+    assert task_draft(TaskFields(values=values)) == TaskDraft(
+        task_type="rescue", task_name="抽水", task_description="一樓", quantity=3
+    )

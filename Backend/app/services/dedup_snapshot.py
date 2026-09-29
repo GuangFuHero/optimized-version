@@ -20,13 +20,14 @@ from app.dedup_engine.contract import (
     GeoPoint,
     StationDraft,
     StationSnapshot,
+    TaskDraft,
     TicketDraft,
     TicketSnapshot,
 )
 from app.models.geo import Station
 from app.models.request import Tickets
 from app.services.station import StationFields
-from app.services.ticket import TicketFields
+from app.services.ticket import TaskFields, TicketFields
 
 
 def ticket_submission(fields: TicketFields, *, now: datetime) -> TicketSnapshot:
@@ -117,6 +118,17 @@ def ticket_draft(fields: TicketFields) -> TicketDraft:
         person_trapped_reported=v.get("person_trapped_reported"),
         immediate_danger_reported=v.get("immediate_danger_reported"),
         contact_phone=e164_or_none(v.get("contact_phone")),
+    )
+
+
+def task_draft(fields: TaskFields) -> TaskDraft:
+    """What the ADR-304 engine is told about a task being submitted. Its location is its ticket's."""
+    v = fields.values
+    return TaskDraft(
+        task_type=v["task_type"],
+        task_name=v["task_name"],
+        task_description=v.get("task_description"),
+        quantity=v.get("quantity"),
     )
 
 

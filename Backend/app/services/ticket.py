@@ -385,6 +385,52 @@ async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
     await ticket_repository.soft_delete(db, db_obj=ticket)
 
 
+@dataclass(frozen=True)
+class TaskFields:
+    """A ticket task that passed authz and validation but is not written yet (Spec 020 plan Task 20).
+
+    Carries no ticket: a new ticket's tasks are validated before the ticket exists.
+    """
+
+    values: dict
+
+
+async def validate_ticket_task(
+    db: AsyncSession,
+    *,
+    actor: User,
+    task_type: str,
+    task_name: str,
+    task_description: str | None,
+    quantity: int | None,
+    source: str,
+    visibility: str,
+    route_uuid: str | None,
+) -> TaskFields:
+    """Checkpoint 1 for a task, without writing and without needing its ticket to exist."""
+    await require_scope(actor, Perm.TICKET_ADD, db)
+    return TaskFields(
+        values={
+            "task_type": task_type,
+            "task_name": task_name,
+            "task_description": task_description,
+            "quantity": quantity,
+            "source": source,
+            "visibility": visibility,
+            "route_uuid": route_uuid,
+        }
+    )
+
+
+async def insert_ticket_task(
+    db: AsyncSession, *, actor: User, ticket_uuid: str, fields: TaskFields
+) -> TicketTask:
+    """Write a validated task under `ticket_uuid` and flush. The caller owns the commit."""
+    return await ticket_task_repository.add(
+        db, obj_in={"ticket_uuid": ticket_uuid, "created_by": str(actor.uuid), **fields.values}
+    )
+
+
 async def create_ticket_task(
     db: AsyncSession,
     *,
@@ -398,24 +444,28 @@ async def create_ticket_task(
     visibility: str,
     route_uuid: str | None,
 ) -> TicketTask:
-    """Create a task under a ticket (checkpoint 1 only — no scope check against the parent)."""
-    await require_scope(actor, Perm.TICKET_ADD, db)
+    """Create a task under a ticket (checkpoint 1 only — no scope check against the parent).
+
+    Batch import calls this; the interactive GraphQL path goes through
+    `dedup_submission.submit_ticket_task` (Spec 020, ADR-302).
+    """
+    fields = await validate_ticket_task(
+        db,
+        actor=actor,
+        task_type=task_type,
+        task_name=task_name,
+        task_description=task_description,
+        quantity=quantity,
+        source=source,
+        visibility=visibility,
+        route_uuid=route_uuid,
+    )
     if not await ticket_repository.get_by_uuid_active(db, ticket_uuid):
         raise ValueError("Ticket not found")
-    return await ticket_task_repository.create(
-        db,
-        obj_in={
-            "ticket_uuid": ticket_uuid,
-            "task_type": task_type,
-            "task_name": task_name,
-            "task_description": task_description,
-            "quantity": quantity,
-            "source": source,
-            "visibility": visibility,
-            "route_uuid": route_uuid,
-            "created_by": str(actor.uuid),
-        },
-    )
+    task = await insert_ticket_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
+    await db.commit()
+    await db.refresh(task)
+    return task
 
 
 async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, changes: dict) -> TicketTask:

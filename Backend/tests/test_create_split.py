@@ -21,6 +21,7 @@ from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
+from app.models.ticket_task import TicketTask
 from app.services import station as station_service
 from app.services import ticket as ticket_service
 from app.services.notification_service import NotificationService
@@ -234,3 +235,83 @@ async def test_create_station_behaves_as_before_and_still_notifies(db, monkeypat
 async def test_create_station_keeps_its_signature():
     """Batch import calls create_station by these keyword names (ADR-299)."""
     assert list(inspect.signature(station_service.create_station).parameters) == CREATE_STATION_PARAMS
+
+
+# --- ticket tasks (Spec 020 plan Task 20) ------------------------------------------------
+
+CREATE_TICKET_TASK_PARAMS = [
+    "db", "actor", "ticket_uuid", "task_type", "task_name", "task_description", "quantity",
+    "source", "visibility", "route_uuid",
+]  # fmt: skip
+
+
+def _task_fields(**overrides) -> dict:
+    fields = {
+        "task_type": "rescue",
+        "task_name": "抽水",
+        "task_description": "一樓積水",
+        "quantity": 2,
+        "source": "user",
+        "visibility": "public",
+        "route_uuid": None,
+    }
+    return fields | overrides
+
+
+async def _existing_ticket_uuid(db, actor) -> str:
+    ticket = await ticket_service.create_ticket(db, actor=actor, **_ticket_fields(secondary_location=None))
+    return str(ticket.uuid)
+
+
+async def test_validate_ticket_task_writes_nothing_and_needs_no_ticket(db):
+    """Validation stands alone: a new ticket's tasks are validated before the ticket exists."""
+    actor = await _actor(db, Perm.TICKET_ADD)
+    fields = await ticket_service.validate_ticket_task(db, actor=actor, **_task_fields())
+    assert fields.values == _task_fields()
+    assert await _rows(db, TicketTask) == 0
+
+
+async def test_validate_ticket_task_needs_ticket_add(db):
+    """Checkpoint 1 is part of validation."""
+    actor = await _actor(db)
+    with pytest.raises(HTTPException):
+        await ticket_service.validate_ticket_task(db, actor=actor, **_task_fields())
+
+
+async def test_insert_ticket_task_leaves_the_commit_to_the_caller(db):
+    """Flushed (it has a uuid), not committed (a rollback removes it)."""
+    actor = await _actor(db, Perm.TICKET_ADD)
+    ticket_uuid = await _existing_ticket_uuid(db, actor)
+    await db.refresh(actor)
+    fields = await ticket_service.validate_ticket_task(db, actor=actor, **_task_fields())
+    task = await ticket_service.insert_ticket_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
+    assert task.uuid is not None
+    await db.rollback()
+    assert await _rows(db, TicketTask) == 0
+
+
+async def test_create_ticket_task_behaves_as_before(db):
+    """Same row as before the split, committed; a missing ticket is still 'Ticket not found'."""
+    actor = await _actor(db, Perm.TICKET_ADD)
+    ticket_uuid = await _existing_ticket_uuid(db, actor)
+    await db.refresh(actor)
+    actor_uuid = str(actor.uuid)
+    task = await ticket_service.create_ticket_task(db, actor=actor, ticket_uuid=ticket_uuid, **_task_fields())
+    task_uuid = task.uuid
+    await db.rollback()
+    stored = (await db.execute(select(TicketTask).where(TicketTask.uuid == task_uuid))).scalar_one()
+    assert (str(stored.ticket_uuid), stored.task_name, stored.quantity, str(stored.created_by)) == (
+        ticket_uuid, "抽水", 2, actor_uuid,
+    )  # fmt: skip
+    assert stored.status == "pending"
+
+    await db.refresh(actor)
+    with pytest.raises(ValueError, match="Ticket not found"):
+        await ticket_service.create_ticket_task(
+            db, actor=actor, ticket_uuid="00000000-0000-0000-0000-000000000000", **_task_fields()
+        )
+
+
+async def test_create_ticket_task_keeps_its_signature():
+    """Batch import and the resolver call it by these names."""
+    assert list(inspect.signature(ticket_service.create_ticket_task).parameters) == CREATE_TICKET_TASK_PARAMS
