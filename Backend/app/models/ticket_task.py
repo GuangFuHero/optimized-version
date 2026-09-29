@@ -48,6 +48,10 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     # queue; `updated_at` can't say, since it moves on every edit.
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set when the requester stops recruiting (services/ticket.py::stop_recruiting). The task is
+    # fulfilled either way; this says it was stopped by hand rather than filled by claims, which
+    # decides what giving a place back does to it (spec Q39/Q40).
+    recruiting_stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Keyword-search column (ADR-079/081). progress_note and review_note are excluded:
     # operational notes accumulate contact details and ad-hoc coordination text.

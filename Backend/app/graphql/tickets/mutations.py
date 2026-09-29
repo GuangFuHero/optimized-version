@@ -295,9 +295,9 @@ class TicketTaskMutation:
         only ticket.assign (checkpoint 1) is required. Assigning someone else additionally
         requires the task to fall within the caller's ticket.assign scope (checkpoint 2).
         A fulfilled or canceled task is refused, as is any task of a completed or cancelled
-        ticket. A self-sign-up is refused once the task has `quantity` people; a coordinator
-        assigning someone else may over-subscribe. The same actor cannot be linked to the
-        same task twice. Returns the new assignment.
+        ticket. Once the task has `quantity` people it takes nobody more, a coordinator
+        assigning someone else included. The same actor cannot be linked to the same task
+        twice. Returns the new assignment.
         """
         assignment = await ticket_service.assign_task_actor(
             info.context["db"], actor=require_authenticated(info),
@@ -333,7 +333,9 @@ class TicketTaskMutation:
         """Remove a person from a ticket task (withdraw or un-assign).
 
         Owner-scoped ticket.assign — the assignee can remove their own link, coordinators
-        can remove any. Hard-deletes the assignment row. Returns True on success.
+        can remove any. Hard-deletes the assignment row. Refused, for everyone, once the
+        requester stopped recruiting for the task (recruitingStoppedAt); a task that filled by
+        itself takes people again. Returns True on success.
         """
         await ticket_service.unassign_task_actor(
             info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
@@ -341,14 +343,16 @@ class TicketTaskMutation:
         return True
 
     @strawberry.mutation
-    async def stop_recruiting(self, info: strawberry.types.Info, ticket_uuid: UUID) -> list[TicketTaskType]:
-        """Cancel every open need on a ticket at once — the requester's 停止招募.
+    async def stop_recruiting(self, info: strawberry.types.Info, task_uuid: UUID) -> TicketTaskType:
+        """Stop recruiting for one need — the requester's 停止招募.
 
-        Requires ticket.edit on the ticket. Pending and in-progress tasks become canceled in
-        one transaction; fulfilled ones are left alone. Everyone who claimed one hears once
-        that they need not go. Returns the tasks it canceled — empty if none were open.
+        Requires ticket.edit on the need's ticket. The need becomes fulfilled with its quantity
+        cut to the people already on it, never reopens, and nobody on it can give their place
+        back; to recruit again, open another need. Refused for a need nobody claimed (delete it
+        instead) and for one no longer open. Everyone on it hears they still go. Returns the
+        need.
         """
-        tasks = await ticket_service.stop_recruiting(
-            info.context["db"], actor=require_authenticated(info), ticket_uuid=str(ticket_uuid)
+        task = await ticket_service.stop_recruiting(
+            info.context["db"], actor=require_authenticated(info), task_uuid=str(task_uuid)
         )
-        return [TicketTaskType.from_model(t) for t in tasks]
+        return TicketTaskType.from_model(task)
