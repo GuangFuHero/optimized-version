@@ -11,7 +11,7 @@ import pytest
 from geoalchemy2 import Geography
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
-from sqlalchemy import cast, func, select
+from sqlalchemy import cast, event, func, select
 
 from app.dedup_engine import candidates
 from app.dedup_engine.contract import GeoPoint
@@ -191,3 +191,38 @@ async def test_one_named_station(db):
     assert str(station.uuid) == closed
     assert await candidates.station_with_distance(db, station_uuid=deleted, at=HERE) is None
     assert await candidates.station_with_distance(db, station_uuid="nope", at=HERE) is None
+
+
+async def _plan(db, run_query) -> str:
+    """The plan Postgres picks for the query `run_query` sends, with sequential scans priced out.
+
+    Pricing seq scans out keeps an empty test table from hiding whether an index is usable at all.
+    """
+    connection = await db.connection()
+    sent: list[tuple[str, object]] = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if "ST_DWithin" in statement:
+            sent.append((statement, parameters))
+
+    event.listen(connection.sync_connection, "before_cursor_execute", capture)
+    try:
+        await run_query()
+    finally:
+        event.remove(connection.sync_connection, "before_cursor_execute", capture)
+    await connection.exec_driver_sql("SET LOCAL enable_seqscan = off")
+    statement, parameters = sent[0]
+    rows = await connection.exec_driver_sql("EXPLAIN " + statement, parameters)
+    return "\n".join(row[0] for row in rows)
+
+
+async def test_the_task_query_can_use_the_geography_index(db):
+    """Otherwise every submission scans every geometry row (ADR-305)."""
+    plan = await _plan(db, lambda: candidates.open_tasks_near(db, at=HERE, radius_m=300.0))
+    assert "ix_base_geometries_geography" in plan, plan
+
+
+async def test_the_station_query_can_use_the_centroid_geography_index(db):
+    """Stations are measured from their centroid, so they need an index on that expression (ADR-305)."""
+    plan = await _plan(db, lambda: candidates.open_stations_near(db, at=HERE, radius_m=300.0, now=NOW))
+    assert "ix_base_geometries_centroid_geography" in plan, plan

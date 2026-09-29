@@ -187,20 +187,25 @@ def upgrade() -> None:
     op.create_index("ix_dedup_audit_events_pair", "dedup_audit_events", ["pair_uuid"])
     op.create_index("ix_dedup_audit_events_group", "dedup_audit_events", ["duplicate_group_uuid"])
 
-    # Candidate retrieval filters on ST_DWithin(geometry::geography, ..., metres). The GIST
-    # index geoalchemy2 already builds is on the *geometry* column and cannot serve a
-    # geography operand — different operator class — so without this the submit path
-    # sequentially scans every geometry row in the database. `::geography` here and
-    # SQLAlchemy's `CAST(... AS geography)` in the repository parse to the same expression,
-    # so the planner matches them.
+    # Candidate retrieval filters on ST_DWithin(<geography>, ..., metres): tickets by their
+    # point, stations by their centroid. The GIST index geoalchemy2 already builds is on the
+    # *geometry* column and cannot serve a geography operand — different operator class — so
+    # without these the submit path sequentially scans every geometry row in the database.
+    # The query must cast to a bare `geography` to match; geoalchemy2's default
+    # `Geography()` renders `geography(GEOMETRY,-1)`, which does not (ADR-305).
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_base_geometries_geography "
         "ON base_geometries USING GIST ((geometry::geography))"
     )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_base_geometries_centroid_geography "
+        "ON base_geometries USING GIST ((ST_Centroid(geometry)::geography))"
+    )
 
 
 def downgrade() -> None:
-    """Drop both dedup tables and the geography index."""
+    """Drop both dedup tables and the geography indexes."""
+    op.execute("DROP INDEX IF EXISTS ix_base_geometries_centroid_geography")
     op.execute("DROP INDEX IF EXISTS ix_base_geometries_geography")
     op.drop_index("ix_dedup_audit_events_group", table_name="dedup_audit_events")
     op.drop_index("ix_dedup_audit_events_pair", table_name="dedup_audit_events")

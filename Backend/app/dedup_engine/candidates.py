@@ -29,17 +29,28 @@ CLOSED_TASK_STATUSES = ("fulfilled", "canceled")
 CANCELLED_TICKET_STATUS = "cancelled"
 OPEN_STATION_STATUSES = ("active", "temporarily_closed")
 
+# A bare `geography` cast. geoalchemy2's default `Geography()` renders `geography(GEOMETRY,-1)`,
+# which Postgres does not match against the `::geography` expression indexes on base_geometries,
+# so every submission scanned every geometry row (ADR-305).
+_GEOGRAPHY = Geography(geometry_type=None)
+
 
 def _point(at: GeoPoint):
-    return cast(func.ST_SetSRID(func.ST_MakePoint(at.lon, at.lat), 4326), Geography)
+    return cast(func.ST_SetSRID(func.ST_MakePoint(at.lon, at.lat), 4326), _GEOGRAPHY)
+
+
+def _ticket_geography():
+    """Served by `ix_base_geometries_geography`."""
+    return cast(Tickets.geometry, _GEOGRAPHY)
 
 
 def _ticket_distance(at: GeoPoint):
-    return func.ST_Distance(cast(Tickets.geometry, Geography), _point(at)).label("distance_m")
+    return func.ST_Distance(_ticket_geography(), _point(at)).label("distance_m")
 
 
 def _station_geography():
-    return cast(func.ST_Centroid(Station.geometry), Geography)
+    """Served by `ix_base_geometries_centroid_geography`."""
+    return cast(func.ST_Centroid(Station.geometry), _GEOGRAPHY)
 
 
 def _is_uuid(value: str) -> bool:
@@ -77,7 +88,7 @@ async def open_tasks_near(
             Tickets.delete_at.is_(None),
             Tickets.status != CANCELLED_TICKET_STATUS,
             Tickets.geometry.isnot(None),
-            func.ST_DWithin(cast(Tickets.geometry, Geography), _point(at), radius_m),
+            func.ST_DWithin(_ticket_geography(), _point(at), radius_m),
         )
     )
     if exclude_ticket_uuid:
