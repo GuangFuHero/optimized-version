@@ -228,7 +228,11 @@ class TicketTaskType:
     )
     status: str = strawberry.field(
         default="pending",
-        description="Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'",
+        description=(
+            "Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or "
+            "its requester stopped recruiting — the people on it still go), or 'canceled'. Moves "
+            "only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion"
+        ),
     )
     source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
     visibility: str = strawberry.field(
@@ -428,12 +432,8 @@ class CreateHelpRequestInput:
 
 @strawberry.input
 class UpdateTicketTaskInput:
-    """Input for updating a ticket task's status, visibility, or review notes."""
+    """Input for updating a ticket task's moderation status, visibility, or notes — not its status."""
 
-    status: str | None = strawberry.field(
-        default=None,
-        description="New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'",
-    )
     progress_note: str | None = strawberry.field(
         default=strawberry.UNSET, description="Updated progress description — pass null to clear"
     )

@@ -219,13 +219,13 @@ class TicketTaskMutation:
     async def update_ticket_task(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateTicketTaskInput
     ) -> TicketTaskType:
-        """Update a ticket task's status, moderation status, visibility, or progress notes.
+        """Update a ticket task's moderation status, visibility, or notes.
 
         UNSET fields are skipped. Requires ticket.edit permission. Returns the updated task.
+        Its status is not editable: it moves only through assignTaskActor, unassignTaskActor,
+        stopRecruiting and deletion.
         """
         changes = {}
-        if input.status is not None:
-            changes["status"] = input.status
         if input.moderation_status is not None:
             changes["moderation_status"] = input.moderation_status
         if input.visibility is not None:

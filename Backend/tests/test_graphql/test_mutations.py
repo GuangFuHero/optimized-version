@@ -968,21 +968,41 @@ async def test_create_ticket_task_unknown_ticket(client, coordinator_auth):
 
 
 @pytest.mark.asyncio
-async def test_update_ticket_task_status(client, coordinator_auth, sample_ticket_task):
-    """Hypothesis: updateTicketTask status update is persisted and returned.
-
-    Test case: update sample_ticket_task to in_progress → response reflects new status.
-    """
+async def test_update_ticket_task_progress_note(client, coordinator_auth, sample_ticket_task):
+    """An edit to a task is persisted and returned — here its progress note."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
             "query": UPDATE_TICKET_TASK,
-            "variables": {"uuid": sample_ticket_task, "input": {"status": "in_progress"}},
+            "variables": {"uuid": sample_ticket_task, "input": {"progressNote": "已派兩人前往"}},
         },
         headers=auth_header(token),
     )
-    assert resp.json()["data"]["updateTicketTask"]["status"] == "in_progress"
+    assert resp.json()["data"]["updateTicketTask"]["progressNote"] == "已派兩人前往"
+
+
+@pytest.mark.asyncio
+async def test_update_ticket_task_no_longer_takes_a_status(client, coordinator_auth, sample_ticket_task):
+    """A task's status moves only through claims, releases, stopRecruiting and deletion (spec Q41).
+
+    The input is written into the document rather than passed as a variable: a variable the
+    schema rejects comes back masked as "Unexpected error.", while a document it rejects names
+    the field.
+    """
+    _, token = coordinator_auth
+    query = (
+        'mutation($uuid: UUID!) { updateTicketTask(uuid: $uuid, input: {status: "fulfilled"}) { uuid } }'
+    )
+    resp = await client.post(
+        "/graphql",
+        json={"query": query, "variables": {"uuid": sample_ticket_task}},
+        headers=auth_header(token),
+    )
+    errors = resp.json()["errors"]
+    assert any(
+        "Field 'status' is not defined by type 'UpdateTicketTaskInput'" in e["message"] for e in errors
+    ), errors
 
 
 @pytest.mark.asyncio
@@ -1023,7 +1043,7 @@ async def test_update_ticket_task_blocks_non_owner(client, login_user_auth, samp
         "/graphql",
         json={
             "query": UPDATE_TICKET_TASK,
-            "variables": {"uuid": sample_ticket_task, "input": {"status": "in_progress"}},
+            "variables": {"uuid": sample_ticket_task, "input": {"progressNote": "路過順便改"}},
         },
         headers=auth_header(token),
     )
