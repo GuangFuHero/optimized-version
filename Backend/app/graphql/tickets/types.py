@@ -242,7 +242,8 @@ class TicketTaskType:
         default=None,
         description=(
             "When the requester stopped recruiting for this need by hand (stopRecruiting); null if "
-            "they never did — a need that filled by itself is fulfilled with no such time"
+            "they never did — a need that filled by itself is fulfilled with no such time. Once "
+            "set, nobody on the need can give their place back"
         ),
     )
     created_at: datetime | None = None

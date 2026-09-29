@@ -333,7 +333,9 @@ class TicketTaskMutation:
         """Remove a person from a ticket task (withdraw or un-assign).
 
         Owner-scoped ticket.assign — the assignee can remove their own link, coordinators
-        can remove any. Hard-deletes the assignment row. Returns True on success.
+        can remove any. Hard-deletes the assignment row. Refused, for everyone, once the
+        requester stopped recruiting for the task (recruitingStoppedAt); a task that filled by
+        itself takes people again. Returns True on success.
         """
         await ticket_service.unassign_task_actor(
             info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
@@ -345,9 +347,10 @@ class TicketTaskMutation:
         """Stop recruiting for one need — the requester's 停止招募.
 
         Requires ticket.edit on the need's ticket. The need becomes fulfilled with its quantity
-        cut to the people already on it, and never reopens; to recruit again, open another
-        need. Refused for a need nobody claimed (delete it instead) and for one no longer
-        open. Everyone on it hears they still go. Returns the need.
+        cut to the people already on it, never reopens, and nobody on it can give their place
+        back; to recruit again, open another need. Refused for a need nobody claimed (delete it
+        instead) and for one no longer open. Everyone on it hears they still go. Returns the
+        need.
         """
         task = await ticket_service.stop_recruiting(
             info.context["db"], actor=require_authenticated(info), task_uuid=str(task_uuid)

@@ -660,6 +660,68 @@ async def test_a_stopped_need_takes_nobody_more(db):
         await _claim(db, late, task_uuid)
 
 
+# --- giving a place back (spec Q40, Q46) ---
+
+
+@pytest.mark.asyncio
+async def test_giving_back_a_place_reopens_a_need_that_filled_by_itself(db):
+    """2/2 filled by claims; one drops out, so the need recruits for that place again."""
+    task = await _need(db, quantity=2)
+    task_uuid = str(task.uuid)
+    first, second = await _volunteer(db, "甲"), await _volunteer(db, "乙")
+    late = await _volunteer(db, "補上")
+    await _claim(db, first, task_uuid)
+    assignment_uuid = str((await _claim(db, second, task_uuid)).uuid)
+    assert (await _state(db, task_uuid))[0] == "fulfilled"
+    await refresh_actor(db, second)
+
+    await unassign_task_actor(db, actor=second, uuid=assignment_uuid)
+
+    assert await _state(db, task_uuid) == ("pending", None)
+    await _claim(db, late, task_uuid)
+    assert await _claims(db, task_uuid) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("releaser", ["volunteer", "coordinator"])
+async def test_nobody_can_give_back_a_place_once_recruiting_stopped(db, releaser):
+    """Stopped by hand, the list is final — for the volunteer on it and a coordinator alike.
+
+    The people on it may already have done the work, or were enough, and the site cannot tell;
+    a place given back would leave room to refill a need its requester closed.
+    """
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    volunteer = await _volunteer(db)
+    coordinator = await _volunteer(db, "協調者", scope="all")
+    assignment_uuid = str((await _claim(db, volunteer, task_uuid)).uuid)
+    await stop_recruiting(db, actor=await _requester_of(db, task_uuid), task_uuid=task_uuid)
+    actor = volunteer if releaser == "volunteer" else coordinator
+    await refresh_actor(db, actor)
+
+    with pytest.raises(ValueError, match="Recruiting has stopped for this task"):
+        await unassign_task_actor(db, actor=actor, uuid=assignment_uuid)
+
+    assert await _claims(db, task_uuid) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_place_on_a_deleted_need_can_still_be_given_back(db):
+    """Giving a place back asks nothing of the need, so deleting it traps nobody on it."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    volunteer = await _volunteer(db)
+    assignment_uuid = str((await _claim(db, volunteer, task_uuid)).uuid)
+    deleted = await db.get(TicketTask, task_uuid)
+    deleted.status, deleted.delete_at = "canceled", datetime.now(UTC)
+    await db.flush()
+    await refresh_actor(db, volunteer)
+
+    await unassign_task_actor(db, actor=volunteer, uuid=assignment_uuid)
+
+    assert await _claims(db, task_uuid) == 0
+
+
 # --- the per-task notices speak Chinese, not enum values (spec Q22) ---
 
 

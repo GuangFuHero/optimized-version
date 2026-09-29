@@ -732,7 +732,8 @@ async def stop_recruiting(db: AsyncSession, *, actor: User, task_uuid: str) -> T
     ticket.edit on the need's ticket, as for any edit to it, checked before the locks. The need
     becomes fulfilled with its quantity cut to the people already on it — a need that never had
     one gets that count too — and recruiting_stopped_at records that it was stopped by hand, so
-    it never reopens (spec Q40): to recruit again, the requester opens another need. A need
+    it never reopens (spec Q40) and its list is final: nobody on it can give their place back
+    (spec Q46, unassign_task_actor). To recruit again, the requester opens another need. A need
     nobody claimed has no one to keep, so it is refused: the requester deletes it instead. Nor
     can a need that is no longer open be stopped.
 
@@ -827,14 +828,19 @@ async def _lock_task_with_room(
         raise ValueError("Task is no longer open")
     if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
         raise ValueError("Actor already assigned to this task")
-    claimed = await db.scalar(
-        select(func.count()).select_from(TaskAssignment).where(TaskAssignment.task_uuid == task_uuid)
-    )
+    claimed = await _claim_count(db, task_uuid)
     if task.quantity is not None and claimed >= task.quantity:
         raise ValueError("Task is full")
     if task.status in CLOSED_TASK_STATUSES:
         raise ValueError("Task is no longer open")
     return ticket, task, claimed
+
+
+async def _claim_count(db: AsyncSession, task_uuid) -> int:
+    """How many people are on the need — read under its lock, so it cannot move meanwhile."""
+    return await db.scalar(
+        select(func.count()).select_from(TaskAssignment).where(TaskAssignment.task_uuid == task_uuid)
+    )
 
 
 def _task_status_notice(task_name: str, status: str) -> tuple[str, str, str]:
@@ -899,8 +905,14 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
     """Remove a task assignment. The assignee can remove their own, coordinators can remove any.
 
     Authorization first; then the need's ticket and the need are locked like a claim locks them
-    (_lock_ticket_and_task), and the removal commits once. A place on a deleted need can still
-    be given back.
+    (_lock_ticket_and_task), and the removal commits once.
+
+    Once the requester stopped recruiting by hand, the need's list is final and no place on it
+    can be given back, by anyone (spec Q46): those on it may already have done the work, or were
+    enough, and the site cannot tell — a freed place would leave room to refill a need its
+    requester closed. Any other place can be, a deleted need's included. A need that filled by
+    itself recruits again once a place frees up (spec Q40), with no notice to anyone, as with
+    any release (spec Q18).
     """
     assignment = await task_assignment_repository.get_by_uuid(db, uuid)
     if not assignment:
@@ -908,7 +920,9 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
     await require_scope(
         actor, Perm.TICKET_ASSIGN, db, resource=await _assignment_scope_target(db, assignment)
     )
-    await _lock_ticket_and_task(db, task_uuid=str(assignment.task_uuid), live_only=False)
+    _, task = await _lock_ticket_and_task(db, task_uuid=str(assignment.task_uuid), live_only=False)
+    if task.recruiting_stopped_at is not None:
+        raise ValueError("Recruiting has stopped for this task")
     removed = await db.scalar(
         delete(TaskAssignment).where(TaskAssignment.uuid == uuid).returning(TaskAssignment.uuid)
     )
@@ -916,6 +930,16 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
         # Given back by a concurrent call while this one waited for the locks.
         await db.rollback()
         raise ValueError("Task assignment not found")
+    # Fulfilled but not stopped by hand (refused above) means it filled by itself; reopen it once
+    # there is room again. An over-subscribed need from before the cap bound coordinators
+    # (spec Q38) can still be full after losing one, and stays fulfilled.
+    if (
+        task.status == "fulfilled"
+        and task.quantity is not None
+        and await _claim_count(db, task.uuid) < task.quantity
+    ):
+        task.status = "pending"
+        task.completed_at = None
     await db.commit()
 
 
