@@ -341,14 +341,15 @@ class TicketTaskMutation:
         return True
 
     @strawberry.mutation
-    async def stop_recruiting(self, info: strawberry.types.Info, ticket_uuid: UUID) -> list[TicketTaskType]:
-        """Cancel every open need on a ticket at once — the requester's 停止招募.
+    async def stop_recruiting(self, info: strawberry.types.Info, task_uuid: UUID) -> TicketTaskType:
+        """Stop recruiting for one need — the requester's 停止招募.
 
-        Requires ticket.edit on the ticket. Pending and in-progress tasks become canceled in
-        one transaction; fulfilled ones are left alone. Everyone who claimed one hears once
-        that they need not go. Returns the tasks it canceled — empty if none were open.
+        Requires ticket.edit on the need's ticket. The need becomes fulfilled with its quantity
+        cut to the people already on it, and never reopens; to recruit again, open another
+        need. Refused for a need nobody claimed (delete it instead) and for one no longer
+        open. Everyone on it hears they still go. Returns the need.
         """
-        tasks = await ticket_service.stop_recruiting(
-            info.context["db"], actor=require_authenticated(info), ticket_uuid=str(ticket_uuid)
+        task = await ticket_service.stop_recruiting(
+            info.context["db"], actor=require_authenticated(info), task_uuid=str(task_uuid)
         )
-        return [TicketTaskType.from_model(t) for t in tasks]
+        return TicketTaskType.from_model(task)

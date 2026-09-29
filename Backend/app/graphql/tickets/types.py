@@ -238,6 +238,13 @@ class TicketTaskType:
         default="pending_review",
         description="Review state: 'pending_review', 'approved', or 'rejected'",
     )
+    recruiting_stopped_at: datetime | None = strawberry.field(
+        default=None,
+        description=(
+            "When the requester stopped recruiting for this need by hand (stopRecruiting); null if "
+            "they never did — a need that filled by itself is fulfilled with no such time"
+        ),
+    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -357,6 +364,7 @@ class TicketTaskType:
             source=m.source,
             visibility=m.visibility,
             moderation_status=m.moderation_status,
+            recruiting_stopped_at=m.recruiting_stopped_at,
             created_at=m.created_at,
             updated_at=m.updated_at,
             _task_description_raw=m.task_description,

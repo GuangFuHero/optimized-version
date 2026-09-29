@@ -488,7 +488,7 @@ async def test_a_need_without_a_quantity_never_fills(db):
     assert [n.body for n in requester_notices] == ["需要清淤人力　目前 1 人", "需要清淤人力　目前 2 人"]
 
 
-# --- the requester stops recruiting (spec Q17/Q21) ---
+# --- the requester stops recruiting for one need (spec Q39) ---
 
 
 async def _may_edit_own_tickets(db, user: User) -> User:
@@ -533,89 +533,131 @@ async def _statuses(db, ticket_uuid: str) -> dict[str, str]:
     return dict(rows.all())
 
 
-@pytest.mark.asyncio
-async def test_stopping_recruitment_cancels_every_open_need(db):
-    """Pending and in-progress needs close; one already fulfilled keeps its outcome."""
-    first = await _need(db, quantity=5)
-    await _second_need(db, first, "搬家具", status="in_progress")
-    await _second_need(db, first, "送水", status="fulfilled")
-    ticket_uuid, first_uuid = str(first.ticket_uuid), str(first.uuid)
-    requester = await _requester_of(db, first_uuid)
-
-    await stop_recruiting(db, actor=requester, ticket_uuid=ticket_uuid)
-
-    assert await _statuses(db, ticket_uuid) == {"清淤": "canceled", "搬家具": "canceled", "送水": "fulfilled"}
-    canceled_at = await db.scalar(select(TicketTask.canceled_at).where(TicketTask.uuid == first_uuid))
-    assert canceled_at is not None
+async def _read_need(db, task_uuid: str) -> TicketTask:
+    """The need as committed, read afresh rather than from the session's copy."""
+    return await db.scalar(
+        select(TicketTask).where(TicketTask.uuid == task_uuid).execution_options(populate_existing=True)
+    )
 
 
 @pytest.mark.asyncio
-async def test_each_volunteer_hears_once_that_they_need_not_go(db):
-    """One notice per person, naming every need of theirs that closed — not one per need."""
-    first = await _need(db, quantity=5)
-    second = await _second_need(db, first, "搬家具")
-    ticket_uuid, first_uuid, second_uuid = str(first.ticket_uuid), str(first.uuid), str(second.uuid)
-    both = await _volunteer(db, "兩筆都接")
-    one = await _volunteer(db, "只接一筆")
-    both_uuid, one_uuid = str(both.uuid), str(one.uuid)
-    await _claim(db, both, first_uuid)
-    await _claim(db, both, second_uuid)
-    await _claim(db, one, second_uuid)
-    requester = await _requester_of(db, first_uuid)
+@pytest.mark.parametrize("quantity", [5, None])
+async def test_stopping_recruitment_closes_the_need_at_its_headcount(db, quantity):
+    """The need is fulfilled at its headcount and marked as stopped by hand; its siblings carry on.
 
-    await stop_recruiting(db, actor=requester, ticket_uuid=ticket_uuid)
+    The quantity is cut to the people on it, even when the requester never gave one.
+    """
+    task = await _need(db, quantity=quantity)
+    await _second_need(db, task, "搬家具")
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
+    for name in ("甲", "乙"):
+        await _claim(db, await _volunteer(db, name), task_uuid)
+    requester = await _requester_of(db, task_uuid)
 
-    [to_both] = await _notices(db, both_uuid, "ticket_recruiting_stopped")
-    # Needs are named in the order they were filed, then by name; both were filed in this
-    # test's one transaction, so the name decides.
-    assert to_both.title == "你承接的「搬家具」、「清淤」已經取消"
-    assert to_both.body == "需要清淤人力　建立者停止招募了，不用前往了。"
-    [to_one] = await _notices(db, one_uuid, "ticket_recruiting_stopped")
-    assert to_one.title == "你承接的「搬家具」已經取消"
+    await stop_recruiting(db, actor=requester, task_uuid=task_uuid)
+
+    stopped = await _read_need(db, task_uuid)
+    assert (stopped.status, stopped.quantity) == ("fulfilled", 2)
+    assert stopped.recruiting_stopped_at is not None
+    assert stopped.completed_at is not None
+    assert (await _statuses(db, ticket_uuid))["搬家具"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_everyone_on_the_need_hears_it_stopped_and_still_goes(db):
+    """One notice per person on it. They stay on it, so it tells them to go as planned."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    first, second = await _volunteer(db, "甲"), await _volunteer(db, "乙")
+    volunteer_uuids = [str(first.uuid), str(second.uuid)]
+    await _claim(db, first, task_uuid)
+    await _claim(db, second, task_uuid)
+    requester = await _requester_of(db, task_uuid)
+    requester_uuid = str(requester.uuid)
+
+    await stop_recruiting(db, actor=requester, task_uuid=task_uuid)
+
+    for volunteer_uuid in volunteer_uuids:
+        [notice] = await _notices(db, volunteer_uuid, "task_recruiting_stopped")
+        assert notice.title == "「清淤」已停止招募"
+        assert notice.body == "需要清淤人力　建單者已停止招募，你仍在名單上，時間到請照常前往。"
+        assert notice.priority == "medium"
+    assert await _notices(db, requester_uuid, "task_recruiting_stopped") == []
+    assert await _claims(db, task_uuid) == 2
 
 
 @pytest.mark.asyncio
 async def test_only_someone_who_may_edit_the_ticket_can_stop_it(db):
-    """ticket.edit on the ticket: a volunteer cannot call off someone else's request."""
+    """ticket.edit on the need's ticket: a volunteer cannot call off someone else's need."""
     task = await _need(db, quantity=5)
-    ticket_uuid = str(task.ticket_uuid)
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
+    await _claim(db, await _volunteer(db), task_uuid)
     stranger = User(name="路人")
     db.add(stranger)
     await db.flush()
     stranger = await _may_edit_own_tickets(db, stranger)
 
     with pytest.raises(HTTPException) as exc:
-        await stop_recruiting(db, actor=stranger, ticket_uuid=ticket_uuid)
+        await stop_recruiting(db, actor=stranger, task_uuid=task_uuid)
 
     assert exc.value.status_code == 403
     assert await _statuses(db, ticket_uuid) == {"清淤": "pending"}
 
 
 @pytest.mark.asyncio
-async def test_a_ticket_with_nothing_open_changes_nothing(db):
-    """Stopping twice, or after everything was done, is a quiet no-op."""
-    task = await _need(db, quantity=5, status="fulfilled")
-    ticket_uuid, task_uuid = str(task.ticket_uuid), str(task.uuid)
+async def test_a_need_nobody_claimed_cannot_be_stopped(db):
+    """With nobody to keep there is nothing to stop: the requester deletes such a need instead."""
+    task = await _need(db, quantity=5)
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
     requester = await _requester_of(db, task_uuid)
 
-    stopped = await stop_recruiting(db, actor=requester, ticket_uuid=ticket_uuid)
+    with pytest.raises(ValueError, match="Nobody has claimed this task"):
+        await stop_recruiting(db, actor=requester, task_uuid=task_uuid)
 
-    assert stopped == []
-    assert await _statuses(db, ticket_uuid) == {"清淤": "fulfilled"}
+    assert await _statuses(db, ticket_uuid) == {"清淤": "pending"}
 
 
 @pytest.mark.asyncio
-async def test_a_deleted_ticket_cannot_be_stopped(db):
-    """A deleted ticket is gone, like everywhere else."""
-    task = await _need(db, quantity=5)
-    ticket_uuid, task_uuid = str(task.ticket_uuid), str(task.uuid)
+@pytest.mark.parametrize("status", ["fulfilled", "canceled"])
+async def test_a_need_no_longer_open_cannot_be_stopped(db, status):
+    """Stopping twice, or once the need filled or was called off, is refused."""
+    task = await _need(db, quantity=5, status=status)
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
     requester = await _requester_of(db, task_uuid)
-    ticket = await db.get(Tickets, task.ticket_uuid)
-    ticket.delete_at = datetime.now(UTC)
+
+    with pytest.raises(ValueError, match="Task is no longer open"):
+        await stop_recruiting(db, actor=requester, task_uuid=task_uuid)
+
+    assert await _statuses(db, ticket_uuid) == {"清淤": status}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("deleted", ["task", "ticket"])
+async def test_a_deleted_need_cannot_be_stopped(db, deleted):
+    """A deleted need, or a need of a deleted ticket, is gone, like everywhere else."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    requester = await _requester_of(db, task_uuid)
+    row = task if deleted == "task" else await db.get(Tickets, task.ticket_uuid)
+    row.delete_at = datetime.now(UTC)
     await db.flush()
 
-    with pytest.raises(ValueError, match="Ticket not found"):
-        await stop_recruiting(db, actor=requester, ticket_uuid=ticket_uuid)
+    with pytest.raises(ValueError, match="Ticket task not found"):
+        await stop_recruiting(db, actor=requester, task_uuid=task_uuid)
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_need_takes_nobody_more(db):
+    """Its quantity is now its headcount, so a late volunteer finds it full."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    await _claim(db, await _volunteer(db, "甲"), task_uuid)
+    late = await _volunteer(db, "晚到")
+    requester = await _requester_of(db, task_uuid)
+    await stop_recruiting(db, actor=requester, task_uuid=task_uuid)
+
+    with pytest.raises(ValueError, match="Task is full"):
+        await _claim(db, late, task_uuid)
 
 
 # --- the per-task notices speak Chinese, not enum values (spec Q22) ---

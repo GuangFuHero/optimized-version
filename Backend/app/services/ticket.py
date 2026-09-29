@@ -46,7 +46,6 @@ MAX_DISASTER_DETAIL_KEY_LENGTH = 100
 # A task in one of these states takes no more volunteers: done, or called off. Note the task
 # vocabulary spells it `canceled`, unlike the ticket-level `cancelled` below.
 CLOSED_TASK_STATUSES = frozenset({"fulfilled", "canceled"})
-OPEN_TASK_STATUSES = frozenset({"pending", "in_progress"})
 # A ticket in one of these states takes no more volunteers on any of its tasks, whatever
 # each task's own status says: update_ticket closes the ticket alone and leaves them pending.
 CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
@@ -707,10 +706,11 @@ async def list_my_claims(
 ) -> list[tuple[TaskAssignment, TicketTask, Tickets]]:
     """Every task `actor` is assigned to, with the task and its ticket — 「我承接的」 (spec Q16).
 
-    Newest claim first, unpaged: one volunteer's claims stay few. A canceled or fulfilled task
-    stays listed, since seeing that is how the volunteer learns not to go; a deleted task or
-    ticket drops off. No capability check: these are the caller's own rows, and each ticket
-    is still masked per field by TicketType like anywhere else.
+    Newest claim first, unpaged: one volunteer's claims stay few. A fulfilled task stays listed,
+    since its volunteers still go, and so does a canceled one, since seeing that is how they
+    learn not to; a deleted task or ticket drops off. No capability check: these are the
+    caller's own rows, and each ticket is still masked per field by TicketType like anywhere
+    else.
     """
     rows = await db.execute(
         select(TaskAssignment, TicketTask, Tickets)
@@ -726,72 +726,52 @@ async def list_my_claims(
     return [tuple(row) for row in rows.all()]
 
 
-async def stop_recruiting(db: AsyncSession, *, actor: User, ticket_uuid: str) -> list[TicketTask]:
-    """Close every open need on a ticket at once — the requester's 「停止招募」 (spec Q17/Q21).
+async def stop_recruiting(db: AsyncSession, *, actor: User, task_uuid: str) -> TicketTask:
+    """Stop recruiting for one need — the requester's 「停止招募」 (spec Q39).
 
-    ticket.edit on the ticket, as for any edit to it. Pending and in-progress tasks become
-    canceled in one transaction, so a failure never leaves half the ticket open; a task
-    already fulfilled keeps that outcome. The ticket itself stays listed.
+    ticket.edit on the need's ticket, as for any edit to it, checked before the locks. The need
+    becomes fulfilled with its quantity cut to the people already on it — a need that never had
+    one gets that count too — and recruiting_stopped_at records that it was stopped by hand, so
+    it never reopens (spec Q40): to recruit again, the requester opens another need. A need
+    nobody claimed has no one to keep, so it is refused: the requester deletes it instead. Nor
+    can a need that is no longer open be stopped.
 
-    Everyone who had claimed one of those tasks hears once that they need not go, naming each
-    of their needs — rather than once per task, as update_ticket_task would. Returns the tasks
-    it canceled: none when nothing was open, which makes a second call a quiet no-op.
+    Everyone on the need hears, once it has committed, that it stopped and that they still go.
+    Returns the need.
     """
-    ticket = await ticket_repository.get_by_uuid_active(db, ticket_uuid)
+    unlocked = await ticket_task_repository.get_by_uuid_active(db, task_uuid)
+    ticket = await ticket_repository.get_by_uuid_active(db, unlocked.ticket_uuid) if unlocked else None
     if not ticket:
-        raise ValueError("Ticket not found")
+        raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
-    ticket_title = ticket.title
-    actor_uid = actor.uuid
 
-    tasks = list(
-        (
-            await db.scalars(
-                select(TicketTask)
-                .where(
-                    TicketTask.ticket_uuid == ticket_uuid,
-                    TicketTask.delete_at.is_(None),
-                    TicketTask.status.in_(OPEN_TASK_STATUSES),
-                )
-                # Several rows are locked here; a fixed order means two stops on the same ticket
-                # queue behind each other instead of each holding a row the other waits for.
-                .order_by(TicketTask.uuid)
-                .with_for_update()
-            )
-        ).all()
-    )
-    if not tasks:
-        return []
+    ticket, task = await _lock_ticket_and_task(db, task_uuid=task_uuid)
+    if task.status in CLOSED_TASK_STATUSES or ticket.status in CLOSED_TICKET_STATUSES:
+        raise ValueError("Task is no longer open")
+    claimants = [str(a.actor_uuid) for a in await task_assignment_repository.list_by_task(db, task_uuid)]
+    if not claimants:
+        raise ValueError("Nobody has claimed this task")
     now = datetime.now(UTC)
-    for task in tasks:
-        task.status = "canceled"
-        task.canceled_at = now
-    claims = await db.execute(
-        select(TaskAssignment.actor_uuid, TicketTask.task_name)
-        .join(TicketTask, TicketTask.uuid == TaskAssignment.task_uuid)
-        .where(TaskAssignment.task_uuid.in_([task.uuid for task in tasks]))
-        .order_by(TicketTask.created_at, TicketTask.task_name)
-    )
-    needs_by_person: dict[str, list[str]] = {}
-    for person, task_name in claims.all():
-        needs_by_person.setdefault(str(person), []).append(task_name)
+    task.status = "fulfilled"
+    task.quantity = len(claimants)
+    task.completed_at = now
+    task.recruiting_stopped_at = now
+    task_id, task_name, ticket_title, actor_uid = task.uuid, task.task_name, ticket.title, actor.uuid
     await db.commit()
 
-    for person, task_names in needs_by_person.items():
-        await NotificationService.dispatch(
-            db,
-            event_type="ticket_recruiting_stopped",
-            title=f"你承接的{'、'.join(f'「{name}」' for name in task_names)}已經取消",
-            body=f"{ticket_title}　建立者停止招募了，不用前往了。",
-            priority="high",
-            actor_uuid=actor_uid,
-            ref_type="ticket",
-            ref_uuid=ticket_uuid,
-            explicit_recipients=[person],
-        )
-    for task in tasks:
-        await db.refresh(task)
-    return tasks
+    await NotificationService.dispatch(
+        db,
+        event_type="task_recruiting_stopped",
+        title=f"「{task_name}」已停止招募",
+        body=f"{ticket_title}　建單者已停止招募，你仍在名單上，時間到請照常前往。",
+        priority="medium",
+        actor_uuid=actor_uid,
+        ref_type="ticket_task",
+        ref_uuid=task_id,
+        explicit_recipients=claimants,
+    )
+    await db.refresh(task)
+    return task
 
 
 async def _lock_ticket_and_task(
@@ -860,8 +840,8 @@ async def _lock_task_with_room(
 def _task_status_notice(task_name: str, status: str) -> tuple[str, str, str]:
     """Title, body and priority telling a task's volunteers its status changed.
 
-    Canceled is the one change a volunteer must not miss, so it is worded and weighted like
-    stop_recruiting's notice; any other state is named in the site's words.
+    Canceled is the one change a volunteer must not miss, so it says outright that they need
+    not go, at high priority; any other state is named in the site's words.
     """
     if status == "canceled":
         return f"你承接的「{task_name}」已經取消", f"「{task_name}」已取消，不用前往了。", "high"
