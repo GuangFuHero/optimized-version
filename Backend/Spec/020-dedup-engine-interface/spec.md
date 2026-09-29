@@ -6,7 +6,7 @@
 由 plan Phase 2 實作；Phase 1 的程式在 Phase 2 期間逐步改寫。§4 介面仍待與 Chi 確認（plan Task 0）。
 **Depends on**: `Spec/019-dedup-fast-layer/spec.md`（PR #46 / #59，未合併）
 **Stacked on**: `feat/dedup-station-fast-layer`（#59，已合進 `3f97468f8`，含 main 的站點指派 #58）→ `feat/dedup-fast-layer`（#46）→ `main`
-**Decisions**: `decisions.md`（ADR-286~306；現行架構以 ADR-304 為準）
+**Decisions**: `decisions.md`（ADR-286~307；現行架構以 ADR-304 為準）
 
 ## 概述
 
@@ -159,7 +159,7 @@ class DedupEngine(Protocol):
 ### 後端怎麼呼叫（保護措施）
 
 1. 在 SAVEPOINT 內呼叫，結束後一律 rollback 該 SAVEPOINT（engine 就算誤寫也不會留下）；呼叫後若 `pg_current_xact_id_if_assigned()` 從無變有（表示 engine 寫過），記 error 並當作沒有疑似重複。
-2. `asyncio.wait_for(..., ENGINE_TIMEOUT_S)`（預設 2 秒）；逾時或任何例外 → 記 log、當作沒有疑似重複（fail-open）、reload actor。
+2. `asyncio.wait_for(..., ENGINE_TIMEOUT_S)`（2 秒，ADR-307）；逾時或任何例外 → 記 log、當作沒有疑似重複（fail-open）、reload actor。
 3. 丟掉 `related_kind` 與 `draft_ref` 種類不符的結果（記 warning），避免寫出錯誤的配對卡。
 4. 丟掉已確認（帶 `acknowledgedDuplicateOf`）的草稿上的結果（ADR-296：確認後不再提示）。
 
@@ -257,7 +257,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 4. **唯讀**：呼叫前後 `pg_current_xact_id_if_assigned()` 都是 NULL（Postgres 只在第一次寫入時配 transaction id，能抓到被 autoflush 寫出、之後又被 rollback 的寫入）；session 無 new／dirty／deleted；SAVEPOINT rollback 後各表筆數不變。
 5. `evidence` 可 `json.dumps`，不含送出的文字原文。
 6. 草稿選填欄位全空不拋錯。
-7. 效能：在測試 DB 放 500 筆鄰近候選，`check` 在時限內（暫定 200 ms，待 Task 0）。
+7. 效能（ADR-307）：全表 20,000 筆開著的任務、半徑內 500 筆，送出帶 5 個任務的新開單，`check` 三次取最快 < 200 ms。
 8. `version` 格式；golden：固定 DB 資料的輸出與 golden 一致且版本相符。
 
 ### 後端整合測試
@@ -271,7 +271,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 
 ## 9. 延後討論
 
-- **contract test 的效能門檻與 `ENGINE_TIMEOUT_S`**（Task 0 問 Chi 能否達到，後端拍板，ADR-306）。
+- ~~contract test 的效能門檻與 `ENGINE_TIMEOUT_S`~~：已依實測定案（ADR-307）；Chi 在 Task 0 仍可提意見。
 - **離線 harness**：engine 需要 DB 後，Chi 的離線回測要有對應的資料庫或替身，由 Chi 決定。
 
 ---
@@ -282,3 +282,4 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 - **ADR-300~303（2026-09-29）**：Chi 把單位改成任務；原計畫把後端的快照與 repository 改成任務層級。
 - **ADR-304（2026-09-29）**：為避免每次改單位都要改後端，候選查詢與比對單位整個歸 engine；本文件以此為準。
 - **ADR-305（2026-09-29，Task 24 Docker 驗證）**：發現候選查詢從未用到空間 index（cast 的 typmod 對不上、站點無 centroid index），在本票修正。
+- **ADR-306／307（2026-09-29）**：`app/dedup_engine/` 裡歸後端的部分（registry、守門測試、時限）；依延遲實測定效能門檻、逾時維持 2 秒。

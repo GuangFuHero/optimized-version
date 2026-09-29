@@ -1,6 +1,6 @@
 # 020 去重引擎介面 — Implementation Plan
 
-**進度（2026-09-29）**：Phase 1（Task 1~14）完成並通過 Docker 驗證（`Backend/DEDUP_ENGINE_020_VERIFICATION.md`，Phase 1 版）。合進 Chi 的任務層級更新與 main（merge `af2ca1d95`）。**Phase 2（ADR-304）Task 16~23 完成**，每個 commit 的全套件皆綠（T19 1655、T20 1661、T21 1676、T22 1676、T23 1610 passed，0 failed）。**Task 24 完成（2026-09-29，本機與容器皆 1612 passed；驗證中發現並修正 ADR-305，報告 `Backend/DEDUP_ENGINE_020_VERIFICATION.md`）。剩 Task 0（與 Chi 確認合約、效能門檻、逾時秒數）**。前端不在後端範圍，§「交給前端的 API 變更」為交接說明。
+**進度（2026-09-29）**：Phase 1（Task 1~14）完成並通過 Docker 驗證（`Backend/DEDUP_ENGINE_020_VERIFICATION.md`，Phase 1 版）。合進 Chi 的任務層級更新與 main（merge `af2ca1d95`）。**Phase 2（ADR-304）Task 16~23 完成**，每個 commit 的全套件皆綠（T19 1655、T20 1661、T21 1676、T22 1676、T23 1610 passed，0 failed）。**Task 24 完成（2026-09-29，本機與容器皆 1612 passed；驗證中發現並修正 ADR-305，報告 `Backend/DEDUP_ENGINE_020_VERIFICATION.md`）。Task 25（延遲實測、效能門檻 ADR-307）完成。剩 Task 0（與 Chi 確認合約；效能門檻與逾時已定案，聽他意見）**。前端不在後端範圍，§「交給前端的 API 變更」為交接說明。
 
 **Goal:** 把 Spec 019 的去重快層包成「演算法可獨立迭代」的後端服務：Chi 只動 `app/dedup_engine/`，
 後端只依賴 `contract.py`；提示改由 `createTicket` / `createStation` 兩段式帶出，拿掉獨立的 dedup API。
@@ -88,7 +88,7 @@ export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/
 
 - [ ] 把 spec §3（快照欄位、`Candidate`）、§4（`Match`、`RetrievalSpec`、`DedupEngine`）給 Chi 看
 - [ ] 確認他的離線 harness 能改吃 `TicketSnapshot` / `StationSnapshot` / `Candidate`（spec §2 第 5 條）
-- [ ] 問 Chi contract test 的效能門檻能否達到（暫定 200 ms / 500 筆；後端拍板，ADR-306）
+- [ ] 讓 Chi 知道效能門檻與逾時已依實測定案（ADR-307：全表 2 萬、半徑內 500、5 個任務、200 ms；逾時 2 秒），聽他的意見
 - [ ] 有任何欄位調整：先改 spec §3／§4 再往下做
 
 ---
@@ -1153,6 +1153,15 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
 - [x] `docker compose -p dedup020verify2 -f <scratchpad compose> down -v`；手動起的容器 `docker rm -f`；刪 `dedup020verify2_app-network`；刪 image `dedup020-backend:verify2`
 - [x] 確認 `backend-db-1`、`backend-redis-1` 仍在跑、沒被重建
 - [x] 改寫 `Backend/DEDUP_ENGINE_020_VERIFICATION.md` 為 Phase 2 版（24.1~24.4 的實際輸出：passed 數、SQL 查詢結果、HTTP 回應、效能數字），回報使用者。**不自行開 PR**
+
+## Task 25: 延遲實測與效能門檻（ADR-307，2026-09-29）
+
+**Files:** `tests/dedup_engine/test_contract.py`、`Backend/DEDUP_LATENCY_2026-09-29.md`（未追蹤）
+
+- [x] 隔離 Docker stack 上量 `createTicket`：有 dedup 與完全跳過 dedup 的對照組相減；全表 2 萬／10 萬、半徑內 0／50／500／2000、1／5 個任務、照樣建立兩趟
+- [x] contract test 第 7 項改為全表 20,000、半徑內 500、5 個任務、200 ms（背景資料用純 SQL、固定亂數種子、範圍避開 HERE）
+- [x] 突變：cast 改回 `Geography()` → 670 ms，測試失敗；還原後通過
+- [x] `ENGINE_TIMEOUT_S` 維持 2 秒（ADR-307）
 
 ## 交給前端的 API 變更（後端不負責實作）
 

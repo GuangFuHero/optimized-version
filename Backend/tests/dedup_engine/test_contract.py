@@ -40,8 +40,12 @@ from app.models.ticket_task import TicketTask
 pytestmark = pytest.mark.asyncio
 
 ENGINES = [FastEngine()]
-PERF_BUDGET_MS = 200  # provisional (spec §9, plan Task 0)
+# Item 7 (ADR-307): a table big enough that a query unable to use its index shows, a crowded
+# spot, and a ticket carrying several tasks (the engine checks each one).
+PERF_BUDGET_MS = 200
+PERF_TABLE_ROWS = 20_000
 PERF_CANDIDATES = 500
+PERF_TASKS = 5
 NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
 HERE = GeoPoint(121.5601, 23.6701)
 MARK = "⟦MARK-7f3a⟧"
@@ -193,20 +197,64 @@ async def test_empty_optional_fields(db, engine):
         await engine.check(db, submission, NOW)
 
 
+async def _far_open_tasks(db, n: int) -> None:
+    """`n` open tickets with one task each, spread over Taiwan and away from HERE (plain SQL: fast)."""
+    owner = User(name=f"contract-bg-{uuid_mod.uuid4().hex[:6]}")
+    db.add(owner)
+    await db.flush()
+    await db.execute(text("SELECT setseed(0.307)"))
+    await db.execute(
+        text(
+            "CREATE TEMP TABLE far ON COMMIT DROP AS SELECT gen_random_uuid() AS u, i, "
+            "ST_SetSRID(ST_MakePoint(120.1 + random() * 1.3, 22.0 + random() * 1.5), 4326) AS g "
+            "FROM generate_series(1, :n) i"
+        ),
+        {"n": n},
+    )
+    await db.execute(
+        text("INSERT INTO base_geometries (uuid, property_name, geometry) SELECT u, 'request', g FROM far")
+    )
+    await db.execute(
+        text(
+            "INSERT INTO tickets (uuid, title, contact_name, status, priority, visibility) "
+            "SELECT u, '遠處 ' || i, '李', 'pending', 'high', 'public' FROM far"
+        )
+    )
+    await db.execute(
+        text(
+            "INSERT INTO ticket_tasks (uuid, ticket_uuid, task_type, task_name, status, source, "
+            "is_duplicate, moderation_status, visibility, created_by) "
+            "SELECT gen_random_uuid(), u, 'rescue', '清淤 ' || i, "
+            "'pending', 'user', false, 'pending_review', 'public', :owner FROM far"
+        ),
+        {"owner": owner.uuid},
+    )
+
+
 async def test_fast_enough(db, engine):
-    """Item 7: PERF_CANDIDATES nearby open tasks checked within the budget (best of three)."""
+    """Item 7 (ADR-307): PERF_CANDIDATES nearby among PERF_TABLE_ROWS, PERF_TASKS drafts, within budget.
+
+    Best of three. The far rows keep a query that cannot use its index from passing on a small table.
+    """
+    await _far_open_tasks(db, PERF_TABLE_ROWS)
     await _world(db, tickets=PERF_CANDIDATES // 5, tasks_per_ticket=5)
     await db.commit()
-    submission = NewTicket(
-        ticket=TicketDraft(location=HERE, title="淹水"),
-        tasks=(TaskDraft(task_type="rescue", task_name="一樓淹水需要抽水機0", task_description="水深及膝"),),
+    for table in ("base_geometries", "tickets", "ticket_tasks"):
+        await db.execute(text(f"ANALYZE {table}"))
+    await db.commit()
+    drafts = tuple(
+        TaskDraft(task_type="rescue", task_name=f"一樓淹水需要抽水機{i}", task_description="水深及膝")
+        for i in range(PERF_TASKS)
     )
+    submission = NewTicket(ticket=TicketDraft(location=HERE, title="淹水"), tasks=drafts)
     best = math.inf
     for _ in range(3):
         start = time.perf_counter()
         await engine.check(db, submission, NOW)
         best = min(best, (time.perf_counter() - start) * 1000)
-    assert best < PERF_BUDGET_MS, f"{best:.0f} ms for {PERF_CANDIDATES} candidates"
+    assert best < PERF_BUDGET_MS, (
+        f"{best:.0f} ms for {PERF_TASKS} drafts, {PERF_CANDIDATES} candidates among {PERF_TABLE_ROWS}"
+    )
 
 
 def test_version_format(engine):
