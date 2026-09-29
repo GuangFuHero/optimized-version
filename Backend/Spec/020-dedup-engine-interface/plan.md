@@ -994,45 +994,45 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 **Files:** `app/dedup_engine/contract.py`、`tests/dedup_engine/test_contract_types.py`、`test_core_isolation.py`
 
-- [ ] `TicketDraft`、`TaskDraft`、`StationDraft`、`NewTicket`／`NewTask`／`NewStation`、`Suspect`、async `DedupEngine`（spec §2~§4）；`CONTRACT_VERSION = 2`
-- [ ] 移除 `TicketSnapshot`、`StationSnapshot`、`Candidate`、`Match`、`RetrievalSpec`
-- [ ] 隔離守衛改為：engine 可 import `sqlalchemy`、`geoalchemy2`、`app.models`；仍禁止 `app.services`、`app.graphql`、`app.api`、`app.repositories`
-- [ ] 測試：frozen、草稿必填欄位、草稿不含個資欄位（`contact_phone` 除外）
+- [x] `TicketDraft`、`TaskDraft`、`StationDraft`、`NewTicket`／`NewTask`／`NewStation`、`Suspect`、async `DedupEngine`（spec §2~§4）；`CONTRACT_VERSION = 2`
+- [x] 移除 `TicketSnapshot`、`StationSnapshot`、`Candidate`、`Match`、`RetrievalSpec`
+- [x] 隔離守衛改為：engine 可 import `sqlalchemy`、`geoalchemy2`、`app.models`；仍禁止 `app.services`、`app.graphql`、`app.api`、`app.repositories`
+- [x] 測試：frozen、草稿必填欄位、草稿不含個資欄位（`contact_phone` 除外）
 
 ## Task 17: fast-v2（任務層級候選＋計分，搬進 engine）
 
 **Files:** `app/dedup_engine/candidates.py`（新）、`fast.py`、`CHANGELOG.md`、`tests/dedup_engine/*`、golden
 
-- [ ] `candidates.py`：任務候選（019 條件：任務非 fulfilled／canceled、未刪；工單未刪、非 cancelled；距離取工單；`NewTask` 排除同單）、站點候選（019 條件）；由 `app/repositories/dedup_repository.py` 的 `nearby_open_rows` 移入並改寫
-- [ ] `fast.py`：`check` 對 `NewTicket` 的每個任務、`NewTask` 的任務、`NewStation` 各回最多一個 `Suspect`；`score` 算指定的一對；公式與參數不變（`measure`／`combine` 沿用）
-- [ ] `version = "fast-v2"`；CHANGELOG：比對單位改任務、候選查詢歸 engine
-- [ ] golden 改在測試 DB 上以固定資料產生；regen 腳本「輸出變了但沒升版就拒絕」的規則不變
-- [ ] 測試：Chi 的決定 1~3、completed／cancelled 工單、距離與 019 SQL 一致
+- [x] `candidates.py`：任務候選（019 條件：任務非 fulfilled／canceled、未刪；工單未刪、非 cancelled；距離取工單；`NewTask` 排除同單）、站點候選（019 條件）；由 `app/repositories/dedup_repository.py` 的 `nearby_open_rows` 移入並改寫
+- [x] `fast.py`：`check` 對 `NewTicket` 的每個任務、`NewTask` 的任務、`NewStation` 各回最多一個 `Suspect`；`score` 算指定的一對；公式與參數不變（`measure`／`combine` 沿用）
+- [x] `version = "fast-v2"`；CHANGELOG：比對單位改任務、候選查詢歸 engine
+- [x] golden 改在測試 DB 上以固定資料產生；regen 腳本「輸出變了但沒升版就拒絕」的規則不變
+- [x] 測試：Chi 的決定 1~3、completed／cancelled 工單、距離與 019 SQL 一致
 
 ## Task 18: contract test（DB 版）
 
 **Files:** `tests/dedup_engine/test_contract.py`
 
-- [ ] spec §8 的 8 條，對 `FastEngine` 參數化；**唯讀**：呼叫前後 `pg_current_xact_id_if_assigned()` 皆為 NULL、`session.new／dirty／deleted` 皆空、SAVEPOINT rollback 後列數不變（只看 session 與列數抓不到 autoflush 後被 rollback 的寫入，實作時以突變測試確認）
-- [ ] 效能：500 筆鄰近候選（暫定 200 ms，待 Task 0）
+- [x] spec §8 的 8 條，對 `FastEngine` 參數化；**唯讀**：呼叫前後 `pg_current_xact_id_if_assigned()` 皆為 NULL、`session.new／dirty／deleted` 皆空、SAVEPOINT rollback 後列數不變（只看 session 與列數抓不到 autoflush 後被 rollback 的寫入，實作時以突變測試確認）
+- [x] 效能：500 筆鄰近候選（暫定 200 ms，待 Task 0）
 
 ## Task 19: 後端呼叫 engine 的保護措施
 
 **Files:** `app/services/dedup.py`、`app/services/dedup_snapshot.py`、`app/repositories/dedup_repository.py`、`tests/test_dedup_engine_service.py`、`tests/test_dedup_snapshot.py`
 
-- [ ] `dedup_snapshot.py` 改為「驗證過的 input → 草稿」（電話 E.164 正規化，失敗給 None）
-- [ ] `check_submission(db, *, submission, acknowledged, actor, now)`：SAVEPOINT＋rollback、`wait_for(ENGINE_TIMEOUT_S=2)`、例外／逾時 fail-open 並 reload actor、丟掉種類不符與已確認草稿的結果；呼叫後 transaction id 從無變有 → 記 error、當作沒有疑似重複
-- [ ] `record_hint_shown(suspect)`、`record_acknowledged(draft_ref, created_uuid, related)`（用 `engine.score`）
-- [ ] ~~repository 移除候選查詢~~ → **延到 Task 23**：Phase 1 的 `find_match` 到 Task 21 前仍在用（2026-09-29 實作時調整）
-- [ ] 任務草稿（`task_draft`）移到 Task 20：它需要 Task 20 的 `TaskFields`
-- [ ] 測試：逾時、例外、會寫入的 stub 被 rollback、種類不符被丟、確認過濾、寫入不含送出原文
+- [x] `dedup_snapshot.py` 改為「驗證過的 input → 草稿」（電話 E.164 正規化，失敗給 None）
+- [x] `check_submission(db, *, submission, acknowledged, actor, now)`：SAVEPOINT＋rollback、`wait_for(ENGINE_TIMEOUT_S=2)`、例外／逾時 fail-open 並 reload actor、丟掉種類不符與已確認草稿的結果；呼叫後 transaction id 從無變有 → 記 error、當作沒有疑似重複
+- [x] `record_hint_shown(suspect)`、`record_acknowledged(draft_ref, created_uuid, related)`（用 `engine.score`）
+- [x] ~~repository 移除候選查詢~~ → **延到 Task 23**：Phase 1 的 `find_match` 到 Task 21 前仍在用（2026-09-29 實作時調整）
+- [x] ~~任務草稿（`task_draft`）~~ 移到 Task 20：它需要 Task 20 的 `TaskFields`
+- [x] 測試：逾時、例外、會寫入的 stub 被 rollback、種類不符被丟、確認過濾、寫入不含送出原文
 
 ## Task 20: 任務的 validate／insert 拆分
 
 **Files:** `app/services/ticket.py`、`tests/test_create_split.py`
 
-- [ ] `validate_ticket_task(...)`（不要求工單已存在，給新開單用）、`insert_ticket_task(db, *, actor, ticket_uuid, fields)`（flush 不 commit）
-- [ ] `create_ticket_task` 簽章與行為不變
+- [x] `validate_ticket_task(...)`（不要求工單已存在，給新開單用）、`insert_ticket_task(db, *, actor, ticket_uuid, fields)`（flush 不 commit）
+- [x] `create_ticket_task` 簽章與行為不變
 
 ## Task 21: 兩段式編排
 
@@ -1042,9 +1042,9 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 > `SubmissionCreated`／`SubmissionHeld`，與 Phase 1 的 `submit_ticket`／`submit_station` 並存到 Task 22 切換 GraphQL、
 > Task 23 刪除舊的；任務以 `TaskSubmission`（含各自的 `acknowledged_duplicate_of`）傳入。
 
-- [ ] `submit_ticket(..., tasks, acknowledged)`：驗證全部 → `check_submission(NewTicket)` → 有疑似重複：各寫 `hint_shown`、回 `Suspected(suspects)`、零寫入；否則工單＋任務同一 transaction，確認的草稿各寫配對卡
-- [ ] `submit_ticket_task(..., ticket_uuid, draft, acknowledged_duplicate_of)`、`submit_station` 改走 `check_submission`
-- [ ] 測試：部分命中整筆不建；確認綁草稿（重排仍正確）；全放棄＝零寫入；atomic；無權限在比對前失敗；站點仍發通知
+- [x] `submit_ticket(..., tasks, acknowledged)`：驗證全部 → `check_submission(NewTicket)` → 有疑似重複：各寫 `hint_shown`、回 `Suspected(suspects)`、零寫入；否則工單＋任務同一 transaction，確認的草稿各寫配對卡
+- [x] `submit_ticket_task(..., ticket_uuid, draft, acknowledged_duplicate_of)`、`submit_station` 改走 `check_submission`
+- [x] 測試：部分命中整筆不建；確認綁草稿（重排仍正確）；全放棄＝零寫入；atomic；無權限在比對前失敗；站點仍發通知
 
 ## Task 22: GraphQL
 
@@ -1054,17 +1054,94 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 > 避免 geo↔tickets 互相 import）；`createTicket` 的工單層確認改放在 `CreateTicketInput.acknowledgedDuplicateOf`（spec §5.1），
 > 不再是 mutation 參數；GraphQL 測試的 stub 同時蓋掉 `_ENGINE` 與 `_SUBMISSION_ENGINE`。
 
-- [ ] 通用 `DuplicatesSuspected { suspects: [DuplicateSuspect] }`；`CreateTicketTaskDraft`、`CreateTicketInput.tasks`／`acknowledgedDuplicateOf`、`TicketCreated { ticket, tasks }`
-- [ ] `createTicketTask(input, acknowledgedDuplicateOf)` 回 `CreateTicketTaskResult`；`createStation` 改回通用型別
-- [ ] 既有 `createTicketTask` 測試改走 union；`test_create_dedup.py` 改為任務層級（真 engine）；SDL 守門更新
+- [x] 通用 `DuplicatesSuspected { suspects: [DuplicateSuspect] }`；`CreateTicketTaskDraft`、`CreateTicketInput.tasks`／`acknowledgedDuplicateOf`、`TicketCreated { ticket, tasks }`
+- [x] `createTicketTask(input, acknowledgedDuplicateOf)` 回 `CreateTicketTaskResult`；`createStation` 改回通用型別
+- [x] 既有 `createTicketTask` 測試改走 union；`test_create_dedup.py` 改為任務層級（真 engine）；SDL 守門更新
 
 ## Task 23: 收尾
 
-- [ ] 移除 Phase 1 殘留（快照型別、`SnapshotEngine`、`fast.py` 的 v1 engine（`measure`／`combine` 等公式保留）、`registry.get_engine`、`dedup_repository` 的候選查詢、`dedup_snapshot` 的快照 builder、Phase 1 service 函式、`DuplicateStationSuspected`、v1 golden 與 `scripts/regen_dedup_golden.py`）；`fast_v2.py` 併回 `fast.py`、`get_submission_engine` 改名 `get_engine`；legacy 守門補上
-- [ ] 改寫「交給前端的 API 變更」為最終版本
-- [ ] ruff、全套件、覆蓋率
+- [x] 移除 Phase 1 殘留（快照型別、`SnapshotEngine`、`fast.py` 的 v1 engine（`measure`／`combine` 等公式保留）、`registry.get_engine`、`dedup_repository` 的候選查詢、`dedup_snapshot` 的快照 builder、Phase 1 service 函式、`DuplicateStationSuspected`、v1 golden 與 `scripts/regen_dedup_golden.py`）；`fast_v2.py` 併回 `fast.py`、`get_submission_engine` 改名 `get_engine`；legacy 守門補上
+- [x] 改寫「交給前端的 API 變更」為最終版本
+- [x] ruff、全套件、覆蓋率
 
 ## Task 24: Docker 完整驗證（重跑 Task 14，情境改為任務層級）
+
+環境作法同 Task 14（獨立 stack、scratchpad compose、不動 `backend-db-1`／`backend-redis-1`）。
+比對單位從工單改為任務：工單本身不比對，疑似重複的 `relatedKind` 是 `ticket_task` 或 `station`，
+配對卡與 audit 的 `entity_kind` 相同，`engine_version='fast-v2'`。
+
+### 24.1 本機收尾
+
+- [ ] `uv run pytest tests -q`：不比 Task 23 的 1610 passed 少，0 failed
+- [ ] `COVERAGE_CORE=sysmon uv run pytest --cov=app/dedup_engine --cov=app/services/dedup --cov=app/services/dedup_submission --cov=app/services/dedup_snapshot tests -q`：≥ 80%
+- [ ] `uv run alembic heads` 單一 head
+- [ ] `ruff==0.11.0 check` 與 `ruff format --check` 在本票改動的檔案上乾淨
+
+### 24.2 從零建立
+
+- [ ] `DOCKER_BUILDKIT=0 docker build -t dedup020-backend:verify2 .`（tag 與 Phase 1 分開，避免誤用舊 image）
+- [ ] `-p dedup020verify2` ＋ scratchpad compose 起 db（`disaster-postgres-h3:16-3.4`）、redis、backend（`image:`，不用 `build:`；對外 port 用 8011）
+- [ ] 全新 volume：`alembic upgrade head` 乾淨；`downgrade -1` → `upgrade head` 再走一次
+- [ ] seed：`docker exec -e PYTHONPATH=/app <backend> python scripts/seed_rbac.py`
+
+### 24.3 容器裡跑全套件
+
+- [ ] backend 容器內對 stack 的 db 跑 `pytest tests -q`，結果與 24.1 一致；不一致先比 `pip freeze`（image 不吃 `uv.lock`）
+- [ ] `TEST_REDIS_URL` 指向 stack 自己的 redis，不碰 host 的 6379（enerlyzer 的）
+
+### 24.4 實際打 API
+
+作法同 14.4：`docker cp` 腳本進 backend 容器、`docker exec` 打 `localhost:8000`，帳號以 ORM 腳本直接建。
+每一條都記下 HTTP 回應與相關表的查詢結果（`tickets`、`ticket_tasks`、`stations`、`duplicate_pairs`、`dedup_audit_events` 的列數差）。
+
+**新開單（`createTicket` ＋ `tasks`）**
+
+- [ ] 先建工單 A 含任務 a1。在旁邊送工單 B，含兩個任務：b0 與 a1 內容相同、b1 內容無關
+  → `DuplicatesSuspected`，只有一個 suspect：`draftRef="task:0"`、`relatedKind="ticket_task"`、`relatedUuid`=a1、`relatedTicketUuid`=A；
+  DB 沒有新工單與新任務；`hint_shown` 一筆（`entity_kind='ticket_task'`）
+- [ ] 同一份 input 在 b0 填 `acknowledgedDuplicateOf`=a1 再送 → `TicketCreated`，`tasks` 有兩個；
+  `duplicate_pairs` 一筆（`entity_kind='ticket_task'`、`dup_ignored`、`engine_version='fast-v2'`）；audit 有 `ignored_by_submitter`
+- [ ] 確認綁草稿：第二次送出時把 b0、b1 的順序對調（確認仍掛在 b0 上）→ 照樣建立，配對卡對到 b0 建出的任務
+- [ ] 放棄單一任務：第二次送出拿掉 b0 → 只建工單＋b1，無配對卡
+- [ ] 工單不含任務（`tasks=[]`）→ 直接 `TicketCreated`，無 dedup 列（engine 不比工單本身）
+
+**替既有的單加任務（`createTicketTask`）**
+
+- [ ] 對另一張單 C 加一個與 a1 相同的任務 → `DuplicatesSuspected`（`draftRef="task:0"`、`relatedUuid`=a1），無新任務
+- [ ] 帶 `acknowledgedDuplicateOf`=a1 再送 → `TicketTaskCreated`，有配對卡
+- [ ] 對工單 A 自己再加一個與 a1 相同的任務 → 直接建立（同一張單的任務不算重複）
+
+**候選條件（019）**
+
+- [ ] a1 改成 fulfilled／canceled，或工單 A 改成 cancelled／軟刪 → 同內容送出不再命中
+- [ ] 工單 A 為 completed、任務仍開著 → 仍會命中（候選條件只排除 cancelled 工單）
+
+**站點（`createStation`）**
+
+- [ ] 同 14.4 站點一輪：`DuplicatesSuspected`（`draftRef="station"`、`relatedKind="station"`）→ 確認後 `StationCreated`、配對卡 `entity_kind='station'`、有發 `resource_station_updated` 通知
+
+**權限、批次、fail-open、個資**
+
+- [ ] 無 `ticket.add` 的帳號 → 403，回應不含 `DuplicatesSuspected`；`createTicketTask` 無權限同樣如此
+- [ ] 批次匯入（工單、站點各一個含重複列的檔）→ 全部照常建立，無任何 dedup 列（ADR-299）
+- [ ] fail-open（例外）：以 stub engine 在 `check` 拋錯 → 照常建立、log 有 fail-open 訊息、無 `MissingGreenlet`
+- [ ] fail-open（逾時）：stub engine `check` 睡超過 `ENGINE_TIMEOUT_S` → 約 2 秒後照常建立
+- [ ] engine 寫入防護：stub engine 在 `check` 裡 insert 一列 → 該列不存在（SAVEPOINT rollback）、log 有 error、照常建立
+- [ ] 查 audit／pair 的 JSON：不含任何送出的標題、任務名稱、描述原文（ADR-295，用 MARK 字串驗）
+
+stub engine 的三條：用環境變數或啟動腳本在容器內替換 `registry._ENGINE` 後起一個獨立的 uvicorn（port 8002），不改 image、不進 repo。
+
+**效能與並發**
+
+- [ ] `EXPLAIN ANALYZE` 任務候選查詢（`open_tasks_near`）與站點候選查詢：都使用 `ix_base_geometries_geography`
+- [ ] 灌 500 筆鄰近開放任務，量 `createTicket`（含 1 個任務）的回應時間，記錄數字（門檻待 Task 0，這裡只記錄不判定）
+- [ ] 並發：20 個請求同時對同一地點建單（各含任務），無 500、無外洩 SQL 的錯誤訊息
+
+### 24.5 清理與回報
+
+- [ ] `docker compose -p dedup020verify2 -f <scratchpad compose> down -v`；手動起的容器 `docker rm -f`；刪 `dedup020verify2_app-network`；刪 image `dedup020-backend:verify2`
+- [ ] 確認 `backend-db-1`、`backend-redis-1` 仍在跑、沒被重建
+- [ ] 改寫 `Backend/DEDUP_ENGINE_020_VERIFICATION.md` 為 Phase 2 版（24.1~24.4 的實際輸出：passed 數、SQL 查詢結果、HTTP 回應、效能數字），回報使用者。**不自行開 PR**
 
 ## 交給前端的 API 變更（後端不負責實作）
 
