@@ -1013,7 +1013,7 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 **Files:** `tests/dedup_engine/test_contract.py`
 
-- [ ] spec §8 的 8 條，對 `FastEngine` 參數化；**唯讀**：呼叫後 `session.new／dirty／deleted` 皆空，且 SAVEPOINT rollback 後列數不變
+- [ ] spec §8 的 8 條，對 `FastEngine` 參數化；**唯讀**：呼叫前後 `pg_current_xact_id_if_assigned()` 皆為 NULL、`session.new／dirty／deleted` 皆空、SAVEPOINT rollback 後列數不變（只看 session 與列數抓不到 autoflush 後被 rollback 的寫入，實作時以突變測試確認）
 - [ ] 效能：500 筆鄰近候選（暫定 200 ms，待 Task 0）
 
 ## Task 19: 後端呼叫 engine 的保護措施
@@ -1021,9 +1021,10 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 **Files:** `app/services/dedup.py`、`app/services/dedup_snapshot.py`、`app/repositories/dedup_repository.py`、`tests/test_dedup_engine_service.py`、`tests/test_dedup_snapshot.py`
 
 - [ ] `dedup_snapshot.py` 改為「驗證過的 input → 草稿」（電話 E.164 正規化，失敗給 None）
-- [ ] `check_submission(db, *, submission, acknowledged, actor, now)`：SAVEPOINT＋rollback、`wait_for(ENGINE_TIMEOUT_S=2)`、例外／逾時 fail-open 並 reload actor、丟掉種類不符與已確認草稿的結果
+- [ ] `check_submission(db, *, submission, acknowledged, actor, now)`：SAVEPOINT＋rollback、`wait_for(ENGINE_TIMEOUT_S=2)`、例外／逾時 fail-open 並 reload actor、丟掉種類不符與已確認草稿的結果；呼叫後 transaction id 從無變有 → 記 error、當作沒有疑似重複
 - [ ] `record_hint_shown(suspect)`、`record_acknowledged(draft_ref, created_uuid, related)`（用 `engine.score`）
-- [ ] repository 移除候選查詢，只留配對卡與 audit
+- [ ] ~~repository 移除候選查詢~~ → **延到 Task 23**：Phase 1 的 `find_match` 到 Task 21 前仍在用（2026-09-29 實作時調整）
+- [ ] 任務草稿（`task_draft`）移到 Task 20：它需要 Task 20 的 `TaskFields`
 - [ ] 測試：逾時、例外、會寫入的 stub 被 rollback、種類不符被丟、確認過濾、寫入不含送出原文
 
 ## Task 20: 任務的 validate／insert 拆分
@@ -1051,7 +1052,7 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 ## Task 23: 收尾
 
-- [ ] 移除 Phase 1 殘留（快照型別、後端候選查詢、`DuplicateStationSuspected`）；legacy 守門補上
+- [ ] 移除 Phase 1 殘留（快照型別、`SnapshotEngine`、`fast.py` 的 v1 engine（`measure`／`combine` 等公式保留）、`registry.get_engine`、`dedup_repository` 的候選查詢、`dedup_snapshot` 的快照 builder、Phase 1 service 函式、`DuplicateStationSuspected`、v1 golden 與 `scripts/regen_dedup_golden.py`）；`fast_v2.py` 併回 `fast.py`、`get_submission_engine` 改名 `get_engine`；legacy 守門補上
 - [ ] 改寫「交給前端的 API 變更」為最終版本
 - [ ] ruff、全套件、覆蓋率
 

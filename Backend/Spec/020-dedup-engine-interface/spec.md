@@ -156,7 +156,7 @@ class DedupEngine(Protocol):
 
 ### 後端怎麼呼叫（保護措施）
 
-1. 在 SAVEPOINT 內呼叫，結束後一律 rollback 該 SAVEPOINT（engine 就算誤寫也不會留下）。
+1. 在 SAVEPOINT 內呼叫，結束後一律 rollback 該 SAVEPOINT（engine 就算誤寫也不會留下）；呼叫後若 `pg_current_xact_id_if_assigned()` 從無變有（表示 engine 寫過），記 error 並當作沒有疑似重複。
 2. `asyncio.wait_for(..., ENGINE_TIMEOUT_S)`（預設 2 秒）；逾時或任何例外 → 記 log、當作沒有疑似重複（fail-open）、reload actor。
 3. 丟掉 `related_kind` 與 `draft_ref` 種類不符的結果（記 warning），避免寫出錯誤的配對卡。
 4. 丟掉已確認（帶 `acknowledgedDuplicateOf`）的草稿上的結果（ADR-296：確認後不再提示）。
@@ -249,7 +249,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 1. `similarity ∈ [0,1]`；每個 `draft_ref` 最多一個 `Suspect`；`related_kind` 與 `draft_ref` 同種類。
 2. 同輸入（含 DB 資料與 `now`）→ 同輸出。
 3. DB 無候選 → `check` 回空。
-4. **唯讀**：呼叫後 session 無 new／dirty／deleted 物件，且在 SAVEPOINT rollback 後 DB 沒有新列。
+4. **唯讀**：呼叫前後 `pg_current_xact_id_if_assigned()` 都是 NULL（Postgres 只在第一次寫入時配 transaction id，能抓到被 autoflush 寫出、之後又被 rollback 的寫入）；session 無 new／dirty／deleted；SAVEPOINT rollback 後各表筆數不變。
 5. `evidence` 可 `json.dumps`，不含送出的文字原文。
 6. 草稿選填欄位全空不拋錯。
 7. 效能：在測試 DB 放 500 筆鄰近候選，`check` 在時限內（暫定 200 ms，待 Task 0）。
