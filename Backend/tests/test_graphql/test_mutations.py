@@ -870,7 +870,8 @@ async def test_update_ticket_takes_no_status(client, coordinator_auth, sample_ti
     )
 
     body = resp.json()
-    assert body.get("errors") and body.get("data") is None, body
+    errors = body.get("errors", [])
+    assert any("'status' is not defined by type 'UpdateTicketInput'" in e["message"] for e in errors), body
     async with test_db() as db:
         assert (await db.get(Tickets, uuid.UUID(sample_ticket))).status == "pending"
 
