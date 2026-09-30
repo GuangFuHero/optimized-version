@@ -386,6 +386,23 @@ async def client(db_session, redis):
     del app.state.redis
 
 
+@pytest_asyncio.fixture
+async def fresh_app_engine():
+    """Empty the app's own engine pool around a test that posts to /graphql through `client`.
+
+    The GraphQL context opens its session through `get_db()` directly, not through the
+    dependency `client` overrides, so it draws on the app engine's pool. A connection left
+    there by another test belongs to that test's event loop and fails in any other —
+    tests/test_graphql/conftest.py disposes the pool before each of its tests. Done afterwards
+    too, so the test leaves nothing behind for the next.
+    """
+    from app.db.session import engine as app_engine
+
+    await app_engine.dispose()
+    yield
+    await app_engine.dispose()
+
+
 @pytest.fixture
 def capture_email():
     """Override get_email_sender with a capturing double; exposes `.last_code`."""

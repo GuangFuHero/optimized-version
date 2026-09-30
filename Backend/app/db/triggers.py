@@ -51,6 +51,10 @@ AUDITED_TABLES = [
     # Feature 018: the per-ticket answers. An edit flipping "person trapped" from no to yes is
     # exactly what a timeline has to show, and ADR-124's missing trail is the mistake not to repeat.
     "ticket_disaster_details",
+
+    # Feature 019: who asked to become back-office staff, and who decided. Approving one hands
+    # out a role, so it gets the same trail as the role grants it produces.
+    "role_requests",
 ]
 
 # PL/pgSQL function that serializes row mutations into JSONB, redacting password_hash

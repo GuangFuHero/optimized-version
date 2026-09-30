@@ -83,6 +83,15 @@ class Perm(StrEnum):
     USER_EDIT = "user.edit"
     USER_DELETE = "user.delete"
 
+    # Role requests (feature 019): a citizen asks to become back-office staff and a super admin
+    # decides. `add` belongs to the citizen alone — anyone already holding a back-office identity
+    # is turned away by the service, so no other role carries it (the ADR-097 baseline test
+    # lists it as an exception). Its own key rather than a reuse of rbac.assign: rbac.* is
+    # super_admin-only governance that can never be delegated (ADR-061), while deciding
+    # applications is a job a super admin may want to hand to someone at runtime.
+    ROLE_REQUEST_ADD = "role_request.add"
+    ROLE_REQUEST_REVIEW = "role_request.review"
+
     # Team Management
     TEAM_VIEW = "team.view"
     TEAM_EDIT = "team.edit"
