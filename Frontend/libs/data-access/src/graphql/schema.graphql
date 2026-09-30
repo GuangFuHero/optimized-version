@@ -165,6 +165,29 @@ input CreateCrowdSourcingInput {
   distanceFromGeometry: Float = null
 }
 
+input CreateHelpRequestInput {
+  """At most 200 characters"""
+  title: String!
+  description: String = null
+
+  """
+  GeoJSON Point for the location where help is needed — [longitude, latitude]
+  """
+  geometry: GeoJSON!
+
+  """Who to ask for at the place"""
+  contactName: String!
+
+  """Phone number or LINE ID, as the person typed it"""
+  contactPhone: String = null
+
+  """The address as typed goes in `landmarkNote`, with `floor` and `room`"""
+  secondaryLocation: SecondaryLocationInput = null
+
+  """At least one need"""
+  tasks: [HelpRequestTaskInput!]!
+}
+
 input CreateStationInput {
   """GeoJSON Point — must be a valid Point within lon/lat bounds"""
   geometry: GeoJSON!
@@ -394,12 +417,26 @@ input GenerateBriefingInput {
 """GeoJSON geometry object (RFC 7946)"""
 scalar GeoJSON
 
+input HelpRequestTaskInput {
+  """Category: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String!
+
+  """What is needed, at most 200 characters"""
+  taskName: String!
+  taskDescription: String = null
+
+  """People or units needed, at least 1; omit when not known"""
+  quantity: Int = null
+}
+
 type Mutation {
   createStation(input: CreateStationInput!): StationType!
   attachStationPhoto(stationUuid: UUID!, url: String!): PhotoType!
   detachStationPhoto(uuid: UUID!): Boolean!
   updateStation(uuid: UUID!, input: UpdateStationInput!): StationType!
   deleteStation(uuid: UUID!): Boolean!
+  assignStationToTeam(stationUuid: UUID!, teamUuid: UUID!): StationType!
+  unassignStation(stationUuid: UUID!): StationType!
   createClosureArea(input: CreateClosureAreaInput!): ClosureAreaType!
   updateClosureArea(uuid: UUID!, input: UpdateClosureAreaInput!): ClosureAreaType!
   deleteClosureArea(uuid: UUID!): Boolean!
@@ -407,18 +444,20 @@ type Mutation {
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
   createTicket(input: CreateTicketInput!): TicketType!
+  createHelpRequest(input: CreateHelpRequestInput!): TicketType!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
   setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!
   reviewTicket(uuid: UUID!, verificationStatus: String!, reviewNote: String = null): TicketType!
   deleteTicket(uuid: UUID!): Boolean!
   createTicketTask(input: CreateTicketTaskInput!): TicketTaskType!
   updateTicketTask(uuid: UUID!, input: UpdateTicketTaskInput!): TicketTaskType!
+  deleteTicketTask(uuid: UUID!): Boolean!
   createTaskProperty(input: CreateTaskPropertyInput!): TaskPropertyType!
   updateTaskProperty(uuid: UUID!, input: UpdateTaskPropertyInput!): TaskPropertyType!
   assignTaskActor(taskUuid: UUID!, actorUuid: UUID = null, role: String = null): TaskAssignmentType!
   updateTaskAssignment(uuid: UUID!, input: UpdateTaskAssignmentInput!): TaskAssignmentType!
   unassignTaskActor(uuid: UUID!): Boolean!
-  stopRecruiting(ticketUuid: UUID!): [TicketTaskType!]!
+  stopRecruiting(taskUuid: UUID!): TicketTaskType!
   upsertStationPropertyConfig(stationType: String!, input: UpsertPropertyConfigInput!): StationPropertyConfigType!
   upsertTaskPropertyConfig(taskType: String!, input: UpsertPropertyConfigInput!): TaskPropertyConfigType!
   upsertTicketPropertyConfig(input: UpsertTicketPropertyConfigInput!): TicketPropertyConfigType!
@@ -441,6 +480,21 @@ type Mutation {
   assignZoneToTeam(input: ZoneTeamAssignmentInput!): ZoneAssignmentType!
   removeZoneFromTeam(input: ZoneTeamAssignmentInput!): Boolean!
   deleteWorkZone(uuid: UUID!): Boolean!
+  submitRoleRequest(input: SubmitRoleRequestInput!): RoleRequestType!
+  withdrawRoleRequest(uuid: UUID!): RoleRequestType!
+}
+
+type MyRoleRequestsType {
+  """Holds a role beyond `user`: the entry offers 前往後台 instead of applying"""
+  hasBackofficeIdentity: Boolean!
+
+  """
+  May send an application now: no back-office identity, none pending, not paused
+  """
+  canApply: Boolean!
+
+  """Newest first"""
+  requests: [RoleRequestType!]!
 }
 
 """One of the caller's claims, with the need and the ticket it is for"""
@@ -481,7 +535,7 @@ type PhotoType {
 }
 
 type Query {
-  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
   station(uuid: UUID!): StationType
   closureAreas(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): ClosureAreaConnection!
   closureArea(uuid: UUID!): ClosureAreaType
@@ -506,6 +560,7 @@ type Query {
     """
     zoom: Float = null
   ): TicketType
+  myTickets: [TicketType!]!
   ticketTasks(ticketUuid: String!, status: String = null, q: String = null, skip: Int! = 0, limit: Int! = 50): [TicketTaskType!]!
   myTaskAssignments: [MyTaskAssignmentType!]!
   taskProperties(taskUuid: String!): [TaskPropertyType!]!
@@ -524,6 +579,35 @@ type Query {
   workZones(skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
   workZone(uuid: UUID!): WorkZoneType
   zonesByTeam(teamUuid: UUID!, skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
+  myRoleRequests: MyRoleRequestsType!
+}
+
+enum RoleRequestRole {
+  government
+  ngo
+  data_auditor
+}
+
+enum RoleRequestStatus {
+  pending
+  approved
+  rejected
+  withdrawn
+}
+
+type RoleRequestType {
+  uuid: UUID!
+  requestedRole: RoleRequestRole!
+  reason: String!
+  contact: String
+  status: RoleRequestStatus!
+
+  """The reviewer's reply, if any"""
+  reviewNote: String
+  createdAt: DateTime!
+
+  """When it was approved, rejected or withdrawn"""
+  closedAt: DateTime
 }
 
 input SecondaryLocationInput {
@@ -776,6 +860,11 @@ type StationType {
   updatedAt: DateTime
 
   """
+  The team that runs this station, or null when unassigned (ADR-285). Public: which organisation runs a station is not protected. Only the team's uuid, name and type show — never its members.
+  """
+  assignedTeam: AssignedTeamType
+
+  """
   Station contact name — masked unless the caller holds station.view_pii here
   """
   contactName: String
@@ -792,6 +881,12 @@ type StationType {
   photos: [PhotoType!]!
   secondaryLocation: SecondaryLocationType
   properties: [StationPropertyType!]!
+}
+
+input SubmitRoleRequestInput {
+  requestedRole: RoleRequestRole!
+  reason: String!
+  contact: String = null
 }
 
 type SuggestableFieldType {
@@ -971,7 +1066,9 @@ type TicketTaskType {
   """Number of people or units needed — null means unspecified"""
   quantity: Int
 
-  """Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'"""
+  """
+  Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or its requester stopped recruiting — the people on it still go), or 'canceled'. Moves only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion
+  """
   status: String!
 
   """Origin of this task: 'user' or 'official'"""
@@ -982,6 +1079,11 @@ type TicketTaskType {
 
   """Review state: 'pending_review', 'approved', or 'rejected'"""
   moderationStatus: String!
+
+  """
+  When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back
+  """
+  recruitingStoppedAt: DateTime
   createdAt: DateTime
   updatedAt: DateTime
 
@@ -1007,7 +1109,7 @@ type TicketTaskType {
   properties: [TaskPropertyType!]!
 
   """
-  Everyone who claimed this task. Empty to a caller without ticket.view_pii on the parent ticket — assignedCount stays public, and a caller's own claim is myAssignment
+  Everyone who claimed this task. Empty to a caller without ticket.view_history on the parent ticket — assignedCount stays public, and a caller's own claim is myAssignment
   """
   assignments: [TaskAssignmentType!]!
 
@@ -1209,11 +1311,6 @@ input UpdateTaskPropertyInput {
 }
 
 input UpdateTicketInput {
-  """
-  New lifecycle state — must follow valid transitions (e.g. pending → in_progress)
-  """
-  status: String = null
-
   """Updated urgency: 'low', 'medium', 'high', or 'critical'"""
   priority: String = null
   title: String = null
@@ -1245,11 +1342,6 @@ input UpdateTicketInput {
 }
 
 input UpdateTicketTaskInput {
-  """
-  New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'
-  """
-  status: String = null
-
   """Updated progress description — pass null to clear"""
   progressNote: String
 

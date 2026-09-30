@@ -185,6 +185,22 @@ export type CreateCrowdSourcingInput = {
   stationUuid: Scalars['String']['input'];
 };
 
+export type CreateHelpRequestInput = {
+  /** Who to ask for at the place */
+  contactName: Scalars['String']['input'];
+  /** Phone number or LINE ID, as the person typed it */
+  contactPhone?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** GeoJSON Point for the location where help is needed — [longitude, latitude] */
+  geometry: Scalars['GeoJSON']['input'];
+  /** The address as typed goes in `landmarkNote`, with `floor` and `room` */
+  secondaryLocation?: InputMaybe<SecondaryLocationInput>;
+  /** At least one need */
+  tasks: Array<HelpRequestTaskInput>;
+  /** At most 200 characters */
+  title: Scalars['String']['input'];
+};
+
 export type CreateStationInput = {
   comment?: InputMaybe<Scalars['String']['input']>;
   /** Optional station contact email */
@@ -350,8 +366,19 @@ export type GenerateBriefingInput = {
   templateUuid?: InputMaybe<Scalars['UUID']['input']>;
 };
 
+export type HelpRequestTaskInput = {
+  /** People or units needed, at least 1; omit when not known */
+  quantity?: InputMaybe<Scalars['Int']['input']>;
+  taskDescription?: InputMaybe<Scalars['String']['input']>;
+  /** What is needed, at most 200 characters */
+  taskName: Scalars['String']['input'];
+  /** Category: 'rescue', 'supply', 'medical', or 'hr' */
+  taskType: Scalars['String']['input'];
+};
+
 export type Mutation = {
   __typename?: 'Mutation';
+  assignStationToTeam: StationType;
   assignTaskActor: TaskAssignmentType;
   assignZoneToTeam: ZoneAssignmentType;
   attachStationPhoto: PhotoType;
@@ -359,6 +386,7 @@ export type Mutation = {
   createBriefingTemplate: BriefingTemplateType;
   createClosureArea: ClosureAreaType;
   createCrowdSourcing: CrowdSourcingType;
+  createHelpRequest: TicketType;
   createStation: StationType;
   createStationProperty: StationPropertyType;
   createStationSuggestion: StationSuggestionType;
@@ -372,6 +400,7 @@ export type Mutation = {
   deleteClosureArea: Scalars['Boolean']['output'];
   deleteStation: Scalars['Boolean']['output'];
   deleteTicket: Scalars['Boolean']['output'];
+  deleteTicketTask: Scalars['Boolean']['output'];
   deleteWorkZone: Scalars['Boolean']['output'];
   detachStationPhoto: Scalars['Boolean']['output'];
   generateBriefing: BriefingType;
@@ -381,7 +410,9 @@ export type Mutation = {
   reviewTicket: TicketType;
   setAnnouncementActive: AnnouncementType;
   setTicketDisasterDetails: Array<TicketDisasterDetailType>;
-  stopRecruiting: Array<TicketTaskType>;
+  stopRecruiting: TicketTaskType;
+  submitRoleRequest: RoleRequestType;
+  unassignStation: StationType;
   unassignTaskActor: Scalars['Boolean']['output'];
   updateAnnouncement: AnnouncementType;
   updateBriefing: BriefingType;
@@ -398,6 +429,12 @@ export type Mutation = {
   upsertStationPropertyConfig: StationPropertyConfigType;
   upsertTaskPropertyConfig: TaskPropertyConfigType;
   upsertTicketPropertyConfig: TicketPropertyConfigType;
+  withdrawRoleRequest: RoleRequestType;
+};
+
+export type MutationAssignStationToTeamArgs = {
+  stationUuid: Scalars['UUID']['input'];
+  teamUuid: Scalars['UUID']['input'];
 };
 
 export type MutationAssignTaskActorArgs = {
@@ -429,6 +466,10 @@ export type MutationCreateClosureAreaArgs = {
 
 export type MutationCreateCrowdSourcingArgs = {
   input: CreateCrowdSourcingInput;
+};
+
+export type MutationCreateHelpRequestArgs = {
+  input: CreateHelpRequestInput;
 };
 
 export type MutationCreateStationArgs = {
@@ -483,6 +524,10 @@ export type MutationDeleteTicketArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+export type MutationDeleteTicketTaskArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
 export type MutationDeleteWorkZoneArgs = {
   uuid: Scalars['UUID']['input'];
 };
@@ -527,7 +572,15 @@ export type MutationSetTicketDisasterDetailsArgs = {
 };
 
 export type MutationStopRecruitingArgs = {
-  ticketUuid: Scalars['UUID']['input'];
+  taskUuid: Scalars['UUID']['input'];
+};
+
+export type MutationSubmitRoleRequestArgs = {
+  input: SubmitRoleRequestInput;
+};
+
+export type MutationUnassignStationArgs = {
+  stationUuid: Scalars['UUID']['input'];
 };
 
 export type MutationUnassignTaskActorArgs = {
@@ -607,6 +660,20 @@ export type MutationUpsertTicketPropertyConfigArgs = {
   input: UpsertTicketPropertyConfigInput;
 };
 
+export type MutationWithdrawRoleRequestArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MyRoleRequestsType = {
+  __typename?: 'MyRoleRequestsType';
+  /** May send an application now: no back-office identity, none pending, not paused */
+  canApply: Scalars['Boolean']['output'];
+  /** Holds a role beyond `user`: the entry offers 前往後台 instead of applying */
+  hasBackofficeIdentity: Scalars['Boolean']['output'];
+  /** Newest first */
+  requests: Array<RoleRequestType>;
+};
+
 /** One of the caller's claims, with the need and the ticket it is for */
 export type MyTaskAssignmentType = {
   __typename?: 'MyTaskAssignmentType';
@@ -650,7 +717,9 @@ export type Query = {
   closureArea?: Maybe<ClosureAreaType>;
   closureAreas: ClosureAreaConnection;
   disasterTypes: Array<DisasterTypeType>;
+  myRoleRequests: MyRoleRequestsType;
   myTaskAssignments: Array<MyTaskAssignmentType>;
+  myTickets: Array<TicketType>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
   stationSuggestions: Array<StationSuggestionType>;
@@ -724,12 +793,14 @@ export type QueryStationSuggestionsArgs = {
 };
 
 export type QueryStationsArgs = {
+  assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
   operationalStatus?: InputMaybe<StationOperationalStatus>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
   stationType?: InputMaybe<Scalars['String']['input']>;
+  unassignedOnly?: Scalars['Boolean']['input'];
 };
 
 export type QuerySuggestableFieldsArgs = {
@@ -786,6 +857,37 @@ export type QueryZonesByTeamArgs = {
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
   teamUuid: Scalars['UUID']['input'];
+};
+
+export const RoleRequestRole = {
+  DataAuditor: 'data_auditor',
+  Government: 'government',
+  Ngo: 'ngo',
+} as const;
+
+export type RoleRequestRole =
+  (typeof RoleRequestRole)[keyof typeof RoleRequestRole];
+export const RoleRequestStatus = {
+  Approved: 'approved',
+  Pending: 'pending',
+  Rejected: 'rejected',
+  Withdrawn: 'withdrawn',
+} as const;
+
+export type RoleRequestStatus =
+  (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
+export type RoleRequestType = {
+  __typename?: 'RoleRequestType';
+  /** When it was approved, rejected or withdrawn */
+  closedAt?: Maybe<Scalars['DateTime']['output']>;
+  contact?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  reason: Scalars['String']['output'];
+  requestedRole: RoleRequestRole;
+  /** The reviewer's reply, if any */
+  reviewNote?: Maybe<Scalars['String']['output']>;
+  status: RoleRequestStatus;
+  uuid: Scalars['UUID']['output'];
 };
 
 export type SecondaryLocationInput = {
@@ -936,6 +1038,8 @@ export type StationSuggestionType = {
 
 export type StationType = {
   __typename?: 'StationType';
+  /** The team that runs this station, or null when unassigned (ADR-285). Public: which organisation runs a station is not protected. Only the team's uuid, name and type show — never its members. */
+  assignedTeam?: Maybe<AssignedTeamType>;
   /** Internal admin comment, not shown to the public */
   comment?: Maybe<Scalars['String']['output']>;
   /** Station contact email — masked unless the caller holds station.view_pii here */
@@ -980,6 +1084,12 @@ export type StationType = {
   verificationStatus?: Maybe<Scalars['String']['output']>;
   /** Who can see this station: 'public' or 'restricted' */
   visibility?: Maybe<Scalars['String']['output']>;
+};
+
+export type SubmitRoleRequestInput = {
+  contact?: InputMaybe<Scalars['String']['input']>;
+  reason: Scalars['String']['input'];
+  requestedRole: RoleRequestRole;
 };
 
 export type SuggestableFieldType = {
@@ -1114,7 +1224,7 @@ export type TicketPropertyConfigType = {
 export type TicketTaskType = {
   __typename?: 'TicketTaskType';
   assignedCount: Scalars['Int']['output'];
-  /** Everyone who claimed this task. Empty to a caller without ticket.view_pii on the parent ticket — assignedCount stays public, and a caller's own claim is myAssignment */
+  /** Everyone who claimed this task. Empty to a caller without ticket.view_history on the parent ticket — assignedCount stays public, and a caller's own claim is myAssignment */
   assignments: Array<TaskAssignmentType>;
   completedCount: Scalars['Int']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1130,11 +1240,13 @@ export type TicketTaskType = {
   properties: Array<TaskPropertyType>;
   /** Number of people or units needed — null means unspecified */
   quantity?: Maybe<Scalars['Int']['output']>;
+  /** When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back */
+  recruitingStoppedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Moderator's notes explaining the review decision. Null to a caller without ticket.view_detail on the parent ticket */
   reviewNote?: Maybe<Scalars['String']['output']>;
   /** Origin of this task: 'user' or 'official' */
   source: Scalars['String']['output'];
-  /** Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled' */
+  /** Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or its requester stopped recruiting — the people on it still go), or 'canceled'. Moves only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion */
   status: Scalars['String']['output'];
   /** Detailed task instructions or context. Null to a caller without ticket.view_detail on the parent ticket */
   taskDescription?: Maybe<Scalars['String']['output']>;
@@ -1295,8 +1407,6 @@ export type UpdateTicketInput = {
   reviewNote?: InputMaybe<Scalars['String']['input']>;
   /** Replace the ticket's street address and space detail, creating it if the ticket was filed without one. A whole-input replacement, not a patch — omitted members are written as null */
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
-  /** New lifecycle state — must follow valid transitions (e.g. pending → in_progress) */
-  status?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   /** Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed' */
   verificationStatus?: InputMaybe<Scalars['String']['input']>;
@@ -1309,8 +1419,6 @@ export type UpdateTicketTaskInput = {
   progressNote?: InputMaybe<Scalars['String']['input']>;
   /** Moderator's review notes — pass null to clear */
   reviewNote?: InputMaybe<Scalars['String']['input']>;
-  /** New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled' */
-  status?: InputMaybe<Scalars['String']['input']>;
   /** Updated visibility: 'public', 'restricted', or 'internal' */
   visibility?: InputMaybe<Visibility>;
 };
