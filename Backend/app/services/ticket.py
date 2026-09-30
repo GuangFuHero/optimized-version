@@ -59,12 +59,8 @@ TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
 TICKET_TITLE_MAX_LENGTH = 200
 TASK_NAME_MAX_LENGTH = 200
 
-# What a notice calls each state — the site's own words (Frontend ticket/status.ts and the
-# task detail panel), never the enum. An unknown value falls through as itself, so a new
-# state shows up rather than vanishing.
-TASK_STATUS_LABELS = {
-    "pending": "待處理", "in_progress": "處理中", "fulfilled": "已完成", "canceled": "已取消",
-}
+# What a notice calls each review outcome — the site's own words, never the enum. An unknown
+# value falls through as itself, so a new one shows up rather than vanishing.
 MODERATION_STATUS_LABELS = {"pending_review": "待審核", "approved": "已通過", "rejected": "已退回"}
 
 
@@ -565,40 +561,29 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
 
     TicketTask carries no team_uuid, so only `own`/`all` scope can match it.
 
-    `completed_at` / `canceled_at` are maintained here, not by the caller — see below for
-    why each is cleared as well as set.
+    A task's status is not editable (spec Q41): it moves only through the actions that own it —
+    a claim filling it, a release reopening it, the requester stopping recruitment, a deletion —
+    each of which keeps its timestamps and sends its notice. An edit that could set it would
+    reopen a need its requester stopped, or close one silently; `changes` naming it is refused.
     """
+    if "status" in changes:
+        raise ValueError(
+            "A task's status changes only by claiming, releasing, stopping recruitment or deleting"
+        )
     task = await ticket_task_repository.get_by_uuid_active(db, uuid)
     if not task:
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
 
     old_mod = task.moderation_status
-    old_status = task.status
     old_dup = task.is_duplicate
     task_id = task.uuid
     task_name = task.task_name
     task_created_by = str(task.created_by)
 
-    obj_in = dict(changes)
-    new_status = obj_in.get("status")
-    if new_status is not None and new_status != old_status:
-        # Each timestamp records when the task entered that state, and is cleared when it
-        # leaves. Clearing matters because analytics plots a task on the day its timestamp
-        # gives: a re-opened task keeping a stale completed_at still reads as finished.
-        if new_status == "fulfilled":
-            obj_in["completed_at"] = datetime.now(UTC)
-        elif old_status == "fulfilled":
-            obj_in["completed_at"] = None
-        if new_status == "canceled":
-            obj_in["canceled_at"] = datetime.now(UTC)
-        elif old_status == "canceled":
-            obj_in["canceled_at"] = None
-
     actor_uid = actor.uuid
-    updated_task = await ticket_task_repository.update(db, db_obj=task, obj_in=obj_in)
+    updated_task = await ticket_task_repository.update(db, db_obj=task, obj_in=changes)
     mod_status = updated_task.moderation_status
-    exec_status = updated_task.status
 
     # 1. 審核狀態變更通知 (High)
     if "moderation_status" in changes and changes["moderation_status"] != old_mod:
@@ -617,24 +602,7 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
             explicit_recipients=list(recipients),
         )
 
-    # 2. 任務執行狀態變更通知 (Medium；取消為 High，見 _task_status_notice)
-    if "status" in changes and changes["status"] != old_status:
-        assignments = await task_assignment_repository.list_by_task(db, str(task_id))
-        recipients = {str(a.actor_uuid) for a in assignments}
-        title, body, priority = _task_status_notice(task_name, exec_status)
-        await NotificationService.dispatch(
-            db,
-            event_type="ticket_task_status_update",
-            title=title,
-            body=body,
-            priority=priority,
-            actor_uuid=actor_uid,
-            ref_type="ticket_task",
-            ref_uuid=task_id,
-            explicit_recipients=list(recipients),
-        )
-
-    # 3. 重複工單標記通知 (Medium)
+    # 2. 重複工單標記通知 (Medium)
     if ("is_duplicate" in changes and changes["is_duplicate"] and not old_dup) or (
         "dedup_group_id" in changes and changes["dedup_group_id"]
     ):
@@ -929,18 +897,6 @@ async def _claim_count(db: AsyncSession, task_uuid) -> int:
     return await db.scalar(
         select(func.count()).select_from(TaskAssignment).where(TaskAssignment.task_uuid == task_uuid)
     )
-
-
-def _task_status_notice(task_name: str, status: str) -> tuple[str, str, str]:
-    """Title, body and priority telling a task's volunteers its status changed.
-
-    Canceled is the one change a volunteer must not miss, so it says outright that they need
-    not go, at high priority; any other state is named in the site's words.
-    """
-    if status == "canceled":
-        return f"你承接的「{task_name}」已經取消", f"「{task_name}」已取消，不用前往了。", "high"
-    label = TASK_STATUS_LABELS.get(status, status)
-    return f"工單進度更新：{task_name}", f"工單任務「{task_name}」狀態已變更為【{label}】。", "medium"
 
 
 async def _notify_claim(

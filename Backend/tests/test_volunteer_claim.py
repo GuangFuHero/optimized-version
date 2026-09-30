@@ -722,7 +722,7 @@ async def test_a_place_on_a_deleted_need_can_still_be_given_back(db):
     assert await _claims(db, task_uuid) == 0
 
 
-# --- the per-task notices speak Chinese, not enum values (spec Q22) ---
+# --- editing a need (spec Q22, Q41) ---
 
 
 async def _claimed_by_one(db) -> tuple[str, str, User]:
@@ -736,28 +736,18 @@ async def _claimed_by_one(db) -> tuple[str, str, User]:
 
 
 @pytest.mark.asyncio
-async def test_canceling_a_need_tells_its_volunteers_they_need_not_go(db):
-    """The one change a volunteer must not miss reads like the stop-recruiting notice."""
-    task_uuid, volunteer_uuid, requester = await _claimed_by_one(db)
+async def test_an_edit_cannot_move_a_needs_status(db):
+    """Only claiming, giving back, stopping recruitment and deleting move it (spec Q41).
 
-    await update_ticket_task(db, actor=requester, uuid=task_uuid, changes={"status": "canceled"})
+    An edit could otherwise reopen a need its requester stopped, or close one without the notice
+    the action that closes it sends.
+    """
+    task_uuid, _, requester = await _claimed_by_one(db)
 
-    [notice] = await _notices(db, volunteer_uuid, "ticket_task_status_update")
-    assert notice.title == "你承接的「清淤」已經取消"
-    assert notice.body == "「清淤」已取消，不用前往了。"
-    assert notice.priority == "high"  # same weight as stop_recruiting's 不用前往了
+    with pytest.raises(ValueError, match="A task's status changes only by claiming"):
+        await update_ticket_task(db, actor=requester, uuid=task_uuid, changes={"status": "fulfilled"})
 
-
-@pytest.mark.asyncio
-async def test_other_status_changes_name_the_status_in_chinese(db):
-    """「處理中」, not 【in_progress】: the reader is a volunteer, not the database."""
-    task_uuid, volunteer_uuid, requester = await _claimed_by_one(db)
-
-    await update_ticket_task(db, actor=requester, uuid=task_uuid, changes={"status": "in_progress"})
-
-    [notice] = await _notices(db, volunteer_uuid, "ticket_task_status_update")
-    assert notice.body == "工單任務「清淤」狀態已變更為【處理中】。"
-    assert notice.priority == "medium"
+    assert (await _state(db, task_uuid))[0] == "pending"
 
 
 @pytest.mark.asyncio
