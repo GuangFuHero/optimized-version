@@ -276,6 +276,23 @@ async def create_help_request(
     return ticket
 
 
+async def list_my_tickets(db: AsyncSession, *, actor: User) -> list[Tickets]:
+    """The tickets `actor` filed — 「我的任務 › 我建立的」 (spec Q16/Q17).
+
+    Newest first and unpaged: one person files few, which is also why `created_by` carries no
+    index (Q17). Every status is listed, since following a ticket to completion is what the list
+    is for; a deleted ticket drops off. No capability check: these are the caller's own tickets,
+    each still masked per field by TicketType like anywhere else. `created_by` is the person, so
+    the list is the same whichever identity they act as.
+    """
+    rows = await db.scalars(
+        select(Tickets)
+        .where(Tickets.created_by == str(actor.uuid), Tickets.delete_at.is_(None))
+        .order_by(Tickets.created_at.desc(), Tickets.uuid.desc())
+    )
+    return list(rows.all())
+
+
 async def update_ticket(
     db: AsyncSession, *, actor: User, uuid: str, changes: dict,
     secondary_location: dict | None = None,

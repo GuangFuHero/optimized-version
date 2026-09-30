@@ -152,6 +152,18 @@ class RequestQuery:
                 return None
         return TicketType.from_model(m, coarse_resolution=coarse_resolution(zoom))
 
+    @strawberry.field
+    async def my_tickets(self, info: strawberry.types.Info) -> list[TicketType]:
+        """The tickets the caller filed, newest first — 「我的任務 › 我建立的」 (spec Q16/Q17).
+
+        Sign-in only, no capability: every row is the caller's own ticket. Every status is
+        listed; deleted tickets drop off. Each ticket's `tasks` carry the quantity, status and
+        headcount its progress is counted from, and its fields follow the same per-field rules
+        as anywhere else.
+        """
+        tickets = await ticket_service.list_my_tickets(info.context["db"], actor=require_authenticated(info))
+        return [TicketType.from_model(ticket) for ticket in tickets]
+
 
 @strawberry.type
 class TicketTaskQuery:
