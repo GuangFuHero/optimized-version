@@ -175,8 +175,13 @@ class TicketTaskQuery:
         properties (ADR-079/080). 2–50 characters; outside that range raises. The
         description only counts when the caller may read it (ADR-281) — the parent
         ticket's detail decides, the same one that decides the task fields.
+
+        A deleted ticket lists no needs, whatever their own rows say: deleteTicket takes a
+        ticket's needs with it now, but tickets deleted before it did left theirs live.
         """
         await check_permission(info, Perm.TICKET_VIEW)
+        if not await ticket_repository.get_by_uuid_active(info.context["db"], ticket_uuid):
+            return []
         public_only = (
             normalize_query(q) is not None
             and not await ticket_detail_visible(info, ticket_uuid)
@@ -213,7 +218,12 @@ class TicketTaskQuery:
         """List all active properties for a given task UUID.
 
         Requires ticket.view permission (public — Guest may call this). Checkpoint 1 only.
+        A deleted need, or a need of a deleted ticket, has none to show.
         """
         await check_permission(info, Perm.TICKET_VIEW)
-        items = await task_property_repository.list_by_task(info.context["db"], task_uuid)
+        db = info.context["db"]
+        task = await ticket_task_repository.get_by_uuid_active(db, task_uuid)
+        if not task or not await ticket_repository.get_by_uuid_active(db, task.ticket_uuid):
+            return []
+        items = await task_property_repository.list_by_task(db, task_uuid)
         return [TaskPropertyType.from_model(p) for p in items]

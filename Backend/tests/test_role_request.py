@@ -51,6 +51,7 @@ async def _citizen(db, name: str = "申請人") -> User:
     """A signed-in account holding only the platform `user` role, as registration leaves it."""
     user = User(name=name)
     db.add(user)
+    await db.flush()  # assigns the uuid; the session does not autoflush, as the app's does not
     role = await _role(db, "user", {Perm.ROLE_REQUEST_ADD: "all"})
     db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
     await db.flush()
@@ -80,6 +81,7 @@ async def _reviewer(db) -> User:
     """An account acting as super_admin with role_request.review, as the seed gives it."""
     reviewer = User(name="超級管理員")
     db.add(reviewer)
+    await db.flush()  # assigns the uuid, as in _citizen
     super_admin = await _role(db, "super_admin", {Perm.ROLE_REQUEST_REVIEW: "all"})
     db.add(UserRoleAssign(user_uuid=reviewer.uuid, role_uuid=super_admin.uuid))
     await db.flush()

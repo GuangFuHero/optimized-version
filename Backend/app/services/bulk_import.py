@@ -515,7 +515,7 @@ async def _write_task(
         return match.uuid
 
     creating = {**(task_on_create or {}), **task_fields}
-    task = await ticket_service.create_ticket_task(
+    task = await ticket_service.import_ticket_task(
         db, actor=actor, ticket_uuid=ticket_uuid, task_type=task_type, task_name=task_name,
         task_description=creating.get("task_description"),
         quantity=creating.get("task_quantity"),

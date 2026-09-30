@@ -201,10 +201,10 @@ class TicketTaskMutation:
     async def create_ticket_task(
         self, info: strawberry.types.Info, input: CreateTicketTaskInput
     ) -> TicketTaskType:
-        """Create a new task (rescue, HR, supply, etc.) under an existing ticket.
+        """Add a need (rescue, HR, supply, etc.) to an existing ticket — the site's 再加一件.
 
-        Verifies the parent ticket exists. Requires ticket.add permission (checkpoint 1
-        only — matches prior behavior, which did not scope-check against the parent ticket).
+        Requires ticket.edit on the ticket: a signed-in citizen adds to their own ticket only.
+        A completed ticket is open again once it has the new need; a deleted one takes none.
         Returns the created TicketTaskType.
         """
         task = await ticket_service.create_ticket_task(

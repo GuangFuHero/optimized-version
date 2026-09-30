@@ -218,13 +218,24 @@ async def schema_has_role(name: str) -> bool:
         await engine.dispose()
 
 
+def _session_factory(engine):
+    """Sessions that flush only when told to, as the app's do (app/db/session.py).
+
+    An autoflushing session writes whatever it holds before every query, so an action that changed
+    a need and worked out the ticket's status without flushing first would get the right status
+    here and the wrong one in production. `expire_on_commit` stays True, stricter than the app's
+    False: read what you still need off an ORM object before anything commits.
+    """
+    return sessionmaker(engine, class_=AsyncSession, expire_on_commit=True, autoflush=False)
+
+
 @pytest_asyncio.fixture
 async def db():
     """Fresh schema per test, UNSEEDED (for model/repo/service/gate unit tests). Wipes the test DB."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
         await _rebuild_public_schema(conn)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
+    factory = _session_factory(engine)
     async with factory() as session:
         yield session
     await engine.dispose()
@@ -236,7 +247,7 @@ async def db_session():
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
         await _rebuild_public_schema(conn)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
+    factory = _session_factory(engine)
     async with factory() as session:
         session.add(Role(name="user", kind="platform"))
         seed_disaster_types(session)
