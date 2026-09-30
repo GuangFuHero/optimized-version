@@ -192,8 +192,9 @@ class TicketTaskQuery:
         """The needs the caller claimed, newest first — 「我的任務 › 我承接的」 (spec Q16).
 
         Sign-in only, no capability: every row is the caller's own claim. Canceled and
-        fulfilled needs stay listed; deleted ones drop off. Each ticket is masked per field
-        as anywhere else — claiming does not unlock the requester's contact details.
+        fulfilled needs stay listed; deleted ones drop off. Each ticket follows the same
+        per-field rules as anywhere else: claiming changes nothing, and since ADR-286 anyone
+        signed in reads the requester's contact details anyway.
         """
         rows = await ticket_service.list_my_claims(info.context["db"], actor=require_authenticated(info))
         return [

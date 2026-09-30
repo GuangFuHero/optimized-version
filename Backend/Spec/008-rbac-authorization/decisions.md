@@ -1221,6 +1221,56 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
   「站點例外」而不是刪掉。
 - 文件與註解要同步：`scripts/seed_rbac.py:153-155` 的「`zone`, never `team`」、`RBAC_RESOURCE_ROLE_MATRIX.md`。
 
+#### ADR-286 通報單的聯絡方式開放給所有登入者；承接名單改由 `ticket.view_history` 把關
+> **狀態：ACCEPTED（2026-09-30）。** 規則由團隊於 2026-09-28 確認；範圍與做法由使用者於同日拍板
+> （志工承接流程 spec Q36）。
+
+**白話**：登入的人都看得到求助者的聯絡方式，訪客仍然遮罩；誰承接了哪筆需求，仍然只有建單者與協調者看得到。
+
+**Context**：一般帳號的 `ticket.view_pii` 是 `own`，看到的聯絡人是遮罩（王◯◯、09*****678），承接之後也不
+解鎖，志工到了現場不知道找誰。團隊 2026-09-28 確認：所有登入的人都看得到聯絡方式，不限承接者；訪客仍遮罩。
+
+同一個能力還把關了三樣東西：兩個檢傷欄位 `person_trapped_reported`／`immediate_danger_reported`（ADR-254）、
+任務的承接名單 `assignments`（每筆承接的帳號 uuid）、時間軸的 PII 層（Spec 016）與匯出的聯絡欄位。地址不在
+其中：ADR-281 已把它移到 `ticket.view_detail`。
+
+**Decision**：
+
+1. **每個角色**的 `ticket.view_pii` 都是 `all`：`user` 由 `own`、team `admin`／`member` 由 `zone` 改過來，
+   `data_auditor`、`super_admin` 本來就是。做法同 ADR-281 對 `view_detail`：仍是 capability＋scope，要收回只要在
+   `/admin/rbac` 縮 scope，不必改程式。team 角色一起改，因為同一時間只有一個身分生效（ADR-097），team 身分不能
+   看得比一般帳號少。不進 `PUBLIC_PERMS`，訪客照舊遮罩。
+2. **兩個檢傷欄位跟著公開**：當初遮起來，是因為「只有能據以行動的人需要」（`graphql/tickets/types.py` 的
+   `person_trapped_reported`）；志工現在就是要據以行動的人。
+3. **承接名單改由 `ticket.view_history` 把關**，不再跟著 `view_pii`。`createdBy`（`view_detail`，登入即可見）
+   加上公開的聯絡人姓名，已經能把帳號對到真名；承接名單若也公開，任何登入者都能追出某位志工接了哪些需求、
+   何時接，等於志工行蹤外露。`view_history` 保有 `view_pii` 原本的分級（`user` `own`、team `zone`、稽核與超管
+   `all`，ADR-128），而時間軸本來就會把承接人顯示成名字（ADR-143），所以不新增能力。前台沒有任何查詢讀
+   `assignments`，畫面不受影響。
+4. **既有資料庫**：seed 是 additive bootstrap（ADR-055），另以資料 migration `65c5196498fb` 把仍停在舊預設值的
+   grant——`user` 的 `own`、`admin`／`member` 的 `zone`——改為 `all`。runtime 已被改成其他值的 grant、個人
+   grant、seed 沒定義的角色都不動。downgrade 把這三個角色的 `all` 改回舊預設值。
+
+**不受影響**：時間軸要先有 `ticket.view_history`（一般帳號 `own`），一般帳號本來就只看得到自己單的時間軸，而
+自己的單原本就有 `view_pii`；匯出要 `ticket.export`，一般帳號沒有；地址自 ADR-281 起由 `view_detail` 把關。
+
+**取代關係**：
+
+- 志工承接流程 spec Q12「承接後維持遮罩」作廢。
+- ADR-128「時間軸的分級與 `view_pii` 完全一致」對通報單不再成立（站點照舊）：時間軸維持原分級，`view_pii`
+  放寬。`tests/test_history_permissions.py` 的 mirror 測試改為只比對站點。
+- ADR-281 ➕「聯絡資料與兩個檢傷欄位維持 `ticket.view_pii`（一般帳號 `own`）」：能力照舊是兩個，「在哪裡」與
+  「找誰」仍分開，但 `own` 改為 `all`。
+
+**後果**：
+
+- 註冊即可登入，所以聯絡方式等於對任何願意註冊的人公開。這是規則本身的內容。日後若要收緊（例如只在緊急期
+  開放），在 `/admin/rbac` 把 `user` 縮回 `own` 即可；但那樣承接者也會看不到，要另外設計「承接即解鎖」。
+- 承接名單的可見性從此綁在時間軸的能力上：日後放寬 `ticket.view_history` 時要一併考慮承接名單。
+  `tests/test_seed_rbac.py::test_who_claimed_a_need_stays_with_the_requester_and_coordinators` 會擋下。
+- GraphQL 測試的角色（`tests/test_graphql/conftest.py`）補上 `ticket.view_history`，比照 seed。
+- 文件同步：`RBAC_RESOURCE_ROLE_MATRIX.md` 的 `ticket.view_pii` 列與「PII 遮罩」一段。
+
 ---
 
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
