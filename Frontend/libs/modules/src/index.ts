@@ -98,7 +98,7 @@ export {
   TaskMatchDeleteConfirmDialog,
   useTaskMatches,
 } from './ticket';
-export { NeedClaimProvider } from './ticket/needs';
+export { BriefingPlaceholder, NeedClaimProvider } from './ticket/needs';
 export type {
   TaskMatchLogAction,
   TaskMatchLogEntry,
