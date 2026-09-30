@@ -14,6 +14,7 @@ import {
 } from '@rescue-frontend/ui';
 
 import { GuangFuBrandIcon } from '../../brand';
+import { SitePortalSwitch, type SitePortalEntry } from '../../role-request';
 import {
   SiteHeaderSearchInput,
   SiteHeaderSearchInputFallback,
@@ -64,6 +65,8 @@ interface SiteTopNavBarProps {
   isAuthenticated?: boolean;
   userName?: string;
   userImage?: string;
+  /** Which back-office entry sits beside the badge (`useSitePortalEntry`, run once in the shell). */
+  portalEntry?: SitePortalEntry;
   onSignIn?: () => void;
   onSignOut?: () => void;
 }
@@ -72,6 +75,7 @@ export function SiteTopNavBar({
   isAuthenticated = false,
   userName,
   userImage,
+  portalEntry = 'none',
   onSignIn,
   onSignOut,
 }: SiteTopNavBarProps) {
@@ -107,6 +111,7 @@ export function SiteTopNavBar({
           島嶼守望
         </Typography>
         <SiteRealmBadge />
+        <SitePortalSwitch entry={portalEntry} />
       </Stack>
 
       <Box

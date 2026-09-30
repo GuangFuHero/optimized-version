@@ -2,8 +2,11 @@
 
 import { Suspense, type ReactNode } from 'react';
 
+import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
+
 import { Icons } from '@rescue-frontend/ui';
 
+import { BACK_OFFICE_HREF, type SitePortalEntry } from '../../role-request';
 import type { SidebarResolvedContent } from '../sidebar';
 import { SidebarPanel } from '../sidebar';
 import { useSiteRouteState } from '../../route';
@@ -24,6 +27,7 @@ function buildSiteSidebarContent(
   isAuthenticated?: boolean,
   onSignIn?: () => void,
   onSignOut?: () => void,
+  portalEntry: SitePortalEntry = 'none',
 ): SidebarResolvedContent {
   return {
     navigationItems: SITE_MODULES.map((target) => {
@@ -38,16 +42,30 @@ function buildSiteSidebarContent(
         path: createSiteHref(target, state),
       };
     }),
-    footerActions: isAuthenticated
-      ? []
-      : [
-          {
-            id: 'login',
-            label: '登入',
-            icon: <PersonIcon />,
-            onClick: onSignIn,
-          },
-        ],
+    // The foot of the menu as the prototype orders it (`site-shell.jsx:588-598`): the back-office
+    // entry, which a phone's top bar has no room for, then 登入 for a guest.
+    footerActions: [
+      ...(portalEntry === 'backOffice'
+        ? [
+            {
+              id: 'back-office',
+              label: '前往後台',
+              icon: <SwapHorizRoundedIcon />,
+              path: BACK_OFFICE_HREF,
+            },
+          ]
+        : []),
+      ...(isAuthenticated
+        ? []
+        : [
+            {
+              id: 'login',
+              label: '登入',
+              icon: <PersonIcon />,
+              onClick: onSignIn,
+            },
+          ]),
+    ],
   };
 }
 
@@ -62,11 +80,17 @@ interface SiteSidebarProps {
   showCloseButton?: boolean;
   onClose?: () => void;
   onSignOut?: () => void;
+  /**
+   * The back-office entry at the foot of the menu. Only the phone's menu drawer is given one: on a
+   * desktop the top bar carries it, and the prototype shows it once.
+   */
+  portalEntry?: SitePortalEntry;
 }
 
 function SiteSidebarConnected(props: SiteSidebarProps) {
   const { module, state } = useSiteRouteState();
-  const { isAuthenticated, onSignIn, onSignOut, ...panelProps } = props;
+  const { isAuthenticated, onSignIn, onSignOut, portalEntry, ...panelProps } =
+    props;
 
   return (
     <SidebarPanel
@@ -76,6 +100,7 @@ function SiteSidebarConnected(props: SiteSidebarProps) {
         isAuthenticated,
         onSignIn,
         onSignOut,
+        portalEntry,
       )}
       {...panelProps}
     />
@@ -83,7 +108,8 @@ function SiteSidebarConnected(props: SiteSidebarProps) {
 }
 
 function SiteSidebarFallback(props: SiteSidebarProps) {
-  const { isAuthenticated, onSignIn, onSignOut, ...panelProps } = props;
+  const { isAuthenticated, onSignIn, onSignOut, portalEntry, ...panelProps } =
+    props;
 
   return (
     <SidebarPanel
@@ -93,6 +119,7 @@ function SiteSidebarFallback(props: SiteSidebarProps) {
         isAuthenticated,
         onSignIn,
         onSignOut,
+        portalEntry,
       )}
       {...panelProps}
     />

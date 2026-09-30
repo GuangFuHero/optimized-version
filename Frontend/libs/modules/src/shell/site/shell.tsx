@@ -11,6 +11,7 @@ import { displayTextSize, getRescueColorScheme } from '@rescue-frontend/ui';
 import { LAYOUT_DIMENSIONS } from '../layout';
 import { GuangFuBrandIcon } from '../../brand';
 import { SiteMapRouteProvider } from '../../map/site/use-site-map-route-state';
+import { useSitePortalEntry } from '../../role-request';
 import { SiteRouteProvider } from '../../route/use-site-route-state';
 import { SiteMobileTopNavBar } from './mobile-top-navbar';
 import { SiteSidebar } from './sidebar';
@@ -43,6 +44,8 @@ export function SiteShell({
   const rescue = getRescueColorScheme(useTheme());
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  // 前往後台 / 申請成為後台人員: asked once here, shown in the top bar or the phone's menu.
+  const portalEntry = useSitePortalEntry(isAuthenticated);
   const bodyMinHeight = `calc(100dvh - ${LAYOUT_DIMENSIONS.desktopTopNavBarHeight}px)`;
   const desktopSidebarWidth = desktopSidebarOpen
     ? SITE_EXPANDED_SIDEBAR_WIDTH
@@ -111,6 +114,7 @@ export function SiteShell({
           isAuthenticated={isAuthenticated}
           userName={userName}
           userImage={userImage}
+          portalEntry={portalEntry}
           onSignIn={onSignIn}
           onSignOut={onSignOut}
         />
@@ -211,6 +215,7 @@ export function SiteShell({
           showCloseButton
           onClose={() => setMobileDrawerOpen(false)}
           onSignOut={onSignOut}
+          portalEntry={portalEntry}
         />
       </Drawer>
     </Box>
