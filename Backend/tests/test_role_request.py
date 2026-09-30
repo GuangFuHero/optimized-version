@@ -92,6 +92,22 @@ async def _reject(db, reviewer: User, request_uuid, note: str | None = None):
     return await role_request.reject(db, actor=reviewer, request_uuid=request_uuid, note=note)
 
 
+async def _approve(db, reviewer: User, request_uuid, note: str | None = None):
+    """Approve an application as `reviewer`, refreshed first for the same reason as in _submit."""
+    await refresh_actor(db, reviewer)
+    return await role_request.approve(db, actor=reviewer, request_uuid=request_uuid, note=note)
+
+
+async def _platform_roles(db, user_uuid) -> list[str]:
+    """Names of the platform roles the account holds, sorted."""
+    names = await db.execute(
+        select(Role.name)
+        .join(UserRoleAssign, UserRoleAssign.role_uuid == Role.uuid)
+        .where(UserRoleAssign.user_uuid == user_uuid, UserRoleAssign.team_uuid.is_(None))
+    )
+    return sorted(names.scalars().all())
+
+
 @pytest.mark.asyncio
 async def test_a_citizen_who_never_applied_may_apply(db):
     """The entry offers 申請成為後台人員 and the drawer opens on an empty form."""
@@ -487,3 +503,169 @@ async def test_the_review_list_is_oldest_first_and_names_the_applicant(db, statu
 
     assert [entry.applicant_name for entry in entries] == applicants
     assert all(entry.request.reason == REASON for entry in entries)
+
+
+_NOT_OPEN_YET = "Approving government and NGO applications is not available yet"
+
+
+@pytest.mark.asyncio
+async def test_an_approved_data_auditor_keeps_user_beside_the_new_role(db):
+    """Q3 (2026-09-28): approval adds `data_auditor` and leaves `user`, so nothing signs them out."""
+    reviewer = await _reviewer(db)
+    auditor_role = await _role(db, "data_auditor", {})
+    citizen = await _citizen(db)
+    reviewer_uuid, auditor_role_uuid, citizen_uuid = reviewer.uuid, auditor_role.uuid, citizen.uuid
+    request = await _submit(db, citizen, "data_auditor")
+
+    approved = await _approve(db, reviewer, request.uuid, note="  歡迎加入資料檢核  ")
+
+    assert approved.status == "approved"
+    assert (approved.reviewed_by, approved.review_note) == (reviewer_uuid, "歡迎加入資料檢核")
+    assert approved.granted_role_uuid == auditor_role_uuid
+    assert approved.closed_at is not None
+    assert await _platform_roles(db, citizen_uuid) == ["data_auditor", "user"]
+    state = await _state(db, citizen)
+    assert (state.has_backoffice_identity, state.can_apply) == (True, False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("requested_role", ["government", "ngo"])
+async def test_a_government_or_ngo_application_cannot_be_approved_yet(db, requested_role):
+    """Q2 (2026-09-28): which team they join waits on the designer and Carol. It stays pending."""
+    reviewer = await _reviewer(db)
+    citizen = await _citizen(db)
+    citizen_uuid = citizen.uuid
+    request = await _submit(db, citizen, requested_role)
+    request_uuid = request.uuid
+
+    with pytest.raises(ValueError, match=f"^{_NOT_OPEN_YET}$"):
+        await _approve(db, reviewer, request_uuid)
+    [still] = (await _state(db, citizen)).requests
+    assert still.status == "pending"
+    assert await _platform_roles(db, citizen_uuid) == ["user"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["approved", "rejected", "withdrawn"])
+async def test_a_closed_application_cannot_be_approved(db, status):
+    """A decision, once made, stands; so does a withdrawal. The back office answers 409."""
+    reviewer = await _reviewer(db)
+    await _role(db, "data_auditor", {})
+    citizen = await _citizen(db)
+    request = await _submit(db, citizen)
+    request_uuid = request.uuid
+    request.status = status  # arranging state only
+    await db.commit()
+
+    with pytest.raises(role_request.RoleRequestConflictError, match="^Role request is no longer pending$"):
+        await _approve(db, reviewer, request_uuid)
+    [still] = (await _state(db, citizen)).requests
+    assert still.status == status
+
+
+@pytest.mark.asyncio
+async def test_approving_an_application_that_does_not_exist_is_not_found(db):
+    """The back office answers 404."""
+    reviewer = await _reviewer(db)
+
+    with pytest.raises(role_request.RoleRequestNotFoundError, match="^Role request not found$"):
+        await _approve(db, reviewer, uuid.uuid4())
+
+
+@pytest.mark.asyncio
+async def test_only_a_reviewer_can_approve(db):
+    """Above all not the applicant: approving your own application would be self-service."""
+    await _role(db, "data_auditor", {})
+    citizen = await _citizen(db)
+    citizen_uuid = citizen.uuid
+    request = await _submit(db, citizen)
+    request_uuid = request.uuid
+
+    with pytest.raises(HTTPException) as refused:
+        await _approve(db, citizen, request_uuid)
+    assert refused.value.status_code == 403
+    assert await _platform_roles(db, citizen_uuid) == ["user"]
+
+
+@pytest.mark.asyncio
+async def test_the_applicant_hears_they_were_approved(db):
+    """Q6, in the prototype's words: nothing was taken away, so there is no need to sign in again."""
+    reviewer = await _reviewer(db)
+    await _role(db, "data_auditor", {})
+    citizen = await _citizen(db)
+    citizen_uuid = citizen.uuid
+    request = await _submit(db, citizen, "data_auditor")
+    request_uuid = request.uuid
+
+    await _approve(db, reviewer, request_uuid)
+
+    [notice] = await _notices(db, "role_request_approved")
+    assert notice.recipient_uuid == citizen_uuid
+    assert (notice.ref_type, notice.ref_uuid) == ("role_request", request_uuid)
+    assert notice.title == "你的「資料檢核員」申請通過了"
+    assert (notice.body, notice.priority) == ("右上角會出現「前往後台」，不需要重新登入。", "high")
+
+
+@pytest.mark.asyncio
+async def test_an_approval_and_a_withdrawal_sent_together_settle_one_way(db):
+    """Q10: whichever reaches the row first wins and the other is refused; nothing is half done.
+
+    Both lock the row FOR UPDATE, so the later one waits for the earlier to commit and then
+    finds it no longer pending. Either way the grant and the status agree: approved means
+    data_auditor was granted in the same commit, withdrawn means it never was.
+    """
+    await _role(db, "data_auditor", {})
+    reviewer = await _reviewer(db)
+    citizen = await _citizen(db)
+    reviewer_uuid, citizen_uuid = str(reviewer.uuid), str(citizen.uuid)
+    request = await _submit(db, citizen)
+    request_uuid = request.uuid
+
+    engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
+    sessions = [sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)() for engine in engines]
+    try:
+
+        async def acting(session, user_uuid, identity) -> User:
+            actor = await session.get(User, user_uuid)
+            actor.active_identity = identity
+            return actor
+
+        async def approve(session):
+            actor = await acting(session, reviewer_uuid, reviewer.active_identity)
+            await role_request.approve(session, actor=actor, request_uuid=request_uuid, note=None)
+
+        async def withdraw(session):
+            actor = await acting(session, citizen_uuid, citizen.active_identity)
+            await role_request.withdraw(session, actor=actor, request_uuid=request_uuid)
+
+        outcomes = await asyncio.gather(approve(sessions[0]), withdraw(sessions[1]), return_exceptions=True)
+    finally:
+        for session in sessions:
+            await session.close()
+        for engine in engines:
+            await engine.dispose()
+
+    refused = [outcome for outcome in outcomes if isinstance(outcome, role_request.RoleRequestConflictError)]
+    assert len(refused) == 1, f"expected exactly one refusal, got {outcomes}"
+    db.expire_all()  # the other sessions changed the row; read it afresh
+    [final] = (await _state(db, citizen)).requests
+    granted = "data_auditor" in await _platform_roles(db, citizen_uuid)
+    assert (final.status, granted) in {("approved", True), ("withdrawn", False)}
+
+
+@pytest.mark.asyncio
+async def test_an_applicant_who_already_became_a_data_auditor_is_not_granted_twice(db):
+    """Between applying and approval an admin may have granted the role another way."""
+    reviewer = await _reviewer(db)
+    auditor_role = await _role(db, "data_auditor", {})
+    citizen = await _citizen(db)
+    auditor_role_uuid, citizen_uuid = auditor_role.uuid, citizen.uuid
+    request = await _submit(db, citizen)
+    request_uuid = request.uuid
+    db.add(UserRoleAssign(user_uuid=citizen_uuid, role_uuid=auditor_role_uuid))
+    await db.commit()
+
+    approved = await _approve(db, reviewer, request_uuid)
+
+    assert approved.status == "approved"
+    assert await _platform_roles(db, citizen_uuid) == ["data_auditor", "user"]

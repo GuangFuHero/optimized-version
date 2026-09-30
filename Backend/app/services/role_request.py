@@ -4,7 +4,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,7 @@ from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope
 from app.core.security import resolve_scope
 from app.models.auth import User
+from app.models.rbac import UserRoleAssign
 from app.models.role_request import (
     CONTACT_MAX_LENGTH,
     REASON_MAX_LENGTH,
@@ -20,6 +22,7 @@ from app.models.role_request import (
     RoleRequest,
 )
 from app.repositories.active_identity_repository import active_identity_repository
+from app.repositories.auth_repository import role_repository
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 from app.services.notification_resolver import NotificationRecipientResolver
@@ -32,6 +35,12 @@ ROLE_LABELS = {"government": "政府單位人員", "ngo": "社福團體人員", 
 
 # Q6: what a turned-down applicant reads when the reviewer left no reply (wg-bridge.js).
 _REJECTED_WITHOUT_REPLY = "你原本的權限沒有任何改變，可以再送一次申請。"
+# Q6: what an approved data auditor reads. Approval adds an identity, so nobody is signed out.
+_APPROVED_DATA_AUDITOR = "右上角會出現「前往後台」，不需要重新登入。"
+
+# The one application that can be approved yet (Q2). The requested role and the platform role
+# it grants share the name, unlike `government` / `ngo`, which name a type of team.
+_DATA_AUDITOR = "data_auditor"
 
 
 class RoleRequestNotFoundError(ValueError):
@@ -201,6 +210,58 @@ async def reject(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, note
         event_type="role_request_rejected",
         title=f"你的「{label}」申請沒有通過",
         body=note or _REJECTED_WITHOUT_REPLY,
+        actor_uuid=reviewer_uuid,
+        ref_type="role_request",
+        ref_uuid=request_uuid,
+        explicit_recipients=[applicant_uuid],
+    )
+    # dispatch() commits, which expires `request` again.
+    await db.refresh(request)
+    return request
+
+
+async def approve(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, note: str | None) -> RoleRequest:
+    """Grant what a pending application asked for and tell the applicant (Q3, Q6).
+
+    Only a data auditor can be approved yet: which team a government or NGO applicant joins
+    waits on the designer and Carol (Q2, 2026-09-28), so those are refused and stay pending.
+    Approval *adds* the platform `data_auditor` grant beside `user` rather than calling
+    `assign_role`, which would replace it (Q3): the site acts as `user` (Q15), and an added
+    identity signs nobody out, since ADR-096 refuses only one that is gone. The grant and the
+    new status are one commit, so a withdrawal racing this one finds both or neither.
+    """
+    await require_scope(actor, Perm.ROLE_REQUEST_REVIEW, db)
+    note = _checked_note(note)
+    reviewer_uuid = actor.uuid  # read before the commit expires `actor`
+    request = await _lock_pending(db, request_uuid)
+    if request.requested_role != _DATA_AUDITOR:
+        raise ValueError("Approving government and NGO applications is not available yet")
+    role = await role_repository.get_by_name(db, _DATA_AUDITOR)
+    if role is None:
+        raise RuntimeError("The data_auditor role is missing: run scripts/seed_rbac.py")
+    applicant_uuid, role_uuid = request.created_by, role.uuid
+    # Nothing to add if an admin granted the role another way since the application was sent.
+    await db.execute(
+        insert(UserRoleAssign)
+        .values(user_uuid=applicant_uuid, role_uuid=role_uuid, team_uuid=None, role_kind="platform")
+        .on_conflict_do_nothing(
+            index_elements=["user_uuid", "role_uuid"], index_where=text("team_uuid IS NULL")
+        )
+    )
+    request.status = "approved"
+    request.reviewed_by = reviewer_uuid
+    request.review_note = note
+    request.granted_role_uuid = role_uuid
+    request.closed_at = datetime.now(UTC)
+    label = ROLE_LABELS[request.requested_role]
+    await db.commit()
+
+    await NotificationService.dispatch(
+        db,
+        event_type="role_request_approved",
+        title=f"你的「{label}」申請通過了",
+        body=_APPROVED_DATA_AUDITOR,
+        priority="high",
         actor_uuid=reviewer_uuid,
         ref_type="role_request",
         ref_uuid=request_uuid,

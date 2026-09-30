@@ -7,7 +7,6 @@ request only: never an identity they do not hold, and nothing stored changes.
 """
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import delete, select, text
 
 from app.core.permissions import Perm
@@ -56,23 +55,6 @@ async def _auditor(db, redis) -> tuple[str, str, dict]:
     account_uuid, auditor_uuid = str(account.uuid), str(auditor_role.uuid)
     await db.commit()
     return account_uuid, auditor_uuid, await auth_headers_for(redis, account_uuid, auditor_uuid)
-
-
-@pytest_asyncio.fixture
-async def fresh_app_engine():
-    """Empty the app's own engine pool around a GraphQL request.
-
-    The GraphQL context opens its session through `get_db()` directly, not through the
-    dependency the `client` fixture overrides, so it draws on the app engine's pool. A
-    connection left there by another test belongs to that test's event loop and fails in any
-    other — tests/test_graphql/conftest.py disposes the pool before each of its tests. Done
-    afterwards too, so this test leaves nothing behind for the next.
-    """
-    from app.db.session import engine as app_engine
-
-    await app_engine.dispose()
-    yield
-    await app_engine.dispose()
 
 
 async def _active_role(client, headers: dict) -> str:

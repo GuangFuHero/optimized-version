@@ -1,4 +1,4 @@
-"""Back-office review of role requests: list the applications, turn one down (Spec/019).
+"""Back-office review of role requests: list the applications, approve or turn one down (Spec/019).
 
 Mounted under /admin like the rest of the back office. The list is gated at the route by
 role_request.review (checkpoint 1, like GET /admin/users); a decision stays thin (ADR-014)
@@ -48,6 +48,33 @@ async def list_role_requests(
     ]
 
 
+def _refusal(err: ValueError) -> HTTPException:
+    """The status a decision's refusal answers with (Spec/019): 404, 409, else 422."""
+    if isinstance(err, RoleRequestNotFoundError):
+        code = status.HTTP_404_NOT_FOUND
+    elif isinstance(err, RoleRequestConflictError):
+        code = status.HTTP_409_CONFLICT
+    else:
+        code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    return HTTPException(status_code=code, detail=str(err))
+
+
+@router.post("/role-requests/{request_uuid}/approve", response_model=RoleRequestResponse)
+async def approve_role_request(
+    request_uuid: UUID,
+    body: RoleRequestDecision,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Grant a pending data auditor application; government and NGO ones are refused for now."""
+    try:
+        return await role_request_service.approve(
+            db, actor=current_user, request_uuid=request_uuid, note=body.note
+        )
+    except ValueError as err:
+        raise _refusal(err) from err
+
+
 @router.post("/role-requests/{request_uuid}/reject", response_model=RoleRequestResponse)
 async def reject_role_request(
     request_uuid: UUID,
@@ -57,13 +84,8 @@ async def reject_role_request(
 ):
     """Turn a pending application down. The applicant is told, with the note if there is one."""
     try:
-        request = await role_request_service.reject(
+        return await role_request_service.reject(
             db, actor=current_user, request_uuid=request_uuid, note=body.note
         )
-    except RoleRequestNotFoundError as err:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
-    except RoleRequestConflictError as err:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
     except ValueError as err:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)) from err
-    return request
+        raise _refusal(err) from err

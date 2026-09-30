@@ -15,6 +15,7 @@ from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.role_request import RoleRequest
 from tests.conftest import auth_headers_for
+from tests.test_site_realm import FILE, HELP_REQUEST, SITE
 
 URL = "/api/v1/admin/role-requests"
 REASON = "我是光復鄉公所民政課，要協助檢查重複通報"
@@ -41,10 +42,12 @@ async def _account(db, name: str, role_name: str, grants: tuple[Perm, ...] = ())
     return ids
 
 
-async def _application(db, applicant_uuid: str, status: str = "pending") -> str:
+async def _application(
+    db, applicant_uuid: str, status: str = "pending", requested_role: str = "data_auditor"
+) -> str:
     """An application on file, arranged directly: submitting is the GraphQL side's business."""
     request = RoleRequest(
-        requested_role="data_auditor",
+        requested_role=requested_role,
         reason=REASON,
         contact="03-8701234",
         status=status,
@@ -133,3 +136,68 @@ async def test_a_refusal_carries_the_status_that_says_why(client, db_session, re
     assert response.status_code == expected, response.text
     if detail is not None:
         assert response.json()["detail"] == detail
+
+
+async def _data_auditor_role(db) -> None:
+    """The role an approved data auditor is granted, as the seed creates it."""
+    db.add(Role(name="data_auditor", kind="platform"))
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_approving_returns_the_approved_application(client, db_session, redis):
+    """The back office gets the closed application back."""
+    applicant_uuid, _ = await _account(db_session, "王小明", "user")
+    request_uuid = await _application(db_session, applicant_uuid)
+    await _data_auditor_role(db_session)
+    headers = await _reviewer_headers(db_session, redis)
+
+    response = await client.post(f"{URL}/{request_uuid}/approve", json={}, headers=headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["uuid"], body["status"]) == (request_uuid, "approved")
+    assert body["closed_at"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("requested_role", ["government", "ngo"])
+async def test_a_government_or_ngo_application_is_not_approved_yet(client, db_session, redis, requested_role):
+    """Q2 placeholder: refused in the service's words, and the application stays pending."""
+    applicant_uuid, _ = await _account(db_session, "王小明", "user")
+    request_uuid = await _application(db_session, applicant_uuid, requested_role=requested_role)
+    headers = await _reviewer_headers(db_session, redis)
+
+    response = await client.post(f"{URL}/{request_uuid}/approve", json={}, headers=headers)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "Approving government and NGO applications is not available yet"
+
+
+@pytest.mark.asyncio
+async def test_an_approved_applicant_carries_on_with_the_token_they_have(
+    client, db_session, redis, fresh_app_engine
+):
+    """Q3: approval adds an identity rather than replacing one, so nobody is signed out.
+
+    The applicant's token keeps working, their identities now include data_auditor for the
+    back office's 前往後台, and the site still files a help request for them.
+    """
+    applicant_uuid, user_role_uuid = await _account(db_session, "王小明", "user", (Perm.TICKET_ADD,))
+    applicant = await auth_headers_for(redis, applicant_uuid, user_role_uuid)
+    request_uuid = await _application(db_session, applicant_uuid)
+    await _data_auditor_role(db_session)
+    reviewer = await _reviewer_headers(db_session, redis)
+
+    approved = await client.post(f"{URL}/{request_uuid}/approve", json={}, headers=reviewer)
+    me = await client.get("/api/v1/users/me", headers=applicant)
+    filed = await client.post(
+        "/graphql",
+        json={"query": FILE, "variables": {"input": HELP_REQUEST}},
+        headers={**applicant, **SITE},
+    )
+
+    assert approved.status_code == 200, approved.text
+    assert me.status_code == 200, me.text
+    assert {identity["role"] for identity in me.json()["identities"]} == {"user", "data_auditor"}
+    assert "errors" not in filed.json(), filed.json()
