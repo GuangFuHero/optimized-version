@@ -47,17 +47,22 @@ def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resourc
     return decided[key]
 
 
-def ticket_pii_visible(info: strawberry.types.Info, ticket_uuid: str):
-    """Whether the caller holds ticket.view_pii on this ticket, decided once per request.
+def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str):
+    """Whether the caller holds ticket.view_history on this ticket, decided once per request.
 
-    ticket_detail_visible for the task side of PII: a task's `assignments` name the accounts
-    of the volunteers going, which is the requester's and the coordinators' business, like
-    the contact fields TicketType._pii_visible guards on the ticket itself.
+    Gates a task's `assignments`, which name the accounts of the volunteers going: the
+    requester's and the coordinators' business. They followed ticket.view_pii until ADR-286
+    opened contact details to anyone signed in; with the requester's name and `createdBy` both
+    open, an open claimant list would let anyone follow a volunteer from need to need. So they
+    follow the timeline instead, which kept view_pii's old tiering — and already names who
+    took and who dropped a task (ADR-143).
     """
-    decided = info.context["_ticket_pii_visible"]
+    decided = info.context["_ticket_history_visible"]
     key = str(ticket_uuid)
     if key not in decided:
-        decided[key] = asyncio.ensure_future(_decide_ticket_scope(info, Perm.TICKET_VIEW_PII, key, None))
+        decided[key] = asyncio.ensure_future(
+            _decide_ticket_scope(info, Perm.TICKET_VIEW_HISTORY, key, None)
+        )
     return decided[key]
 
 
@@ -312,13 +317,13 @@ class TicketTaskType:
 
     @strawberry.field(
         description=(
-            "Everyone who claimed this task. Empty to a caller without ticket.view_pii on the "
+            "Everyone who claimed this task. Empty to a caller without ticket.view_history on the "
             "parent ticket — assignedCount stays public, and a caller's own claim is myAssignment"
         )
     )
     async def assignments(self, info: strawberry.types.Info) -> list[TaskAssignmentType]:
         """The accounts going: the requester's and the coordinators' to see, not the public's."""
-        if not await ticket_pii_visible(info, self.ticket_uuid):
+        if not await ticket_history_visible(info, self.ticket_uuid):
             return []
         return await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
 
@@ -752,8 +757,8 @@ class TicketType:
         already on the public map, while a ticket's is the reporter's own home. Gated on
         ticket.view_detail, beside the exact point, rather than ADR-268's ticket.view_pii
         (ADR-281): the address and the point name the same house, and the team's rule is
-        that signing in shows it — `view_pii` is `own` for a plain account, which left a
-        signed-in volunteer the pin but not the door.
+        that signing in shows it — `view_pii` was `own` for a plain account then (ADR-286
+        opened it later), which left a signed-in volunteer the pin but not the door.
         """
         if not await self._detail_visible(info):
             return None

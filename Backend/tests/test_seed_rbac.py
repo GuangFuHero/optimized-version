@@ -134,3 +134,32 @@ def test_station_assign_goes_to_super_admin_and_every_team_role():
         if Perm.STATION_ASSIGN in spec["permissions"]
     }
     assert holders == {"super_admin": "all", "admin": "all", "member": "all"}
+
+
+def test_every_role_sees_who_to_call():
+    """ADR-286: a requester's contact details, and the two triage answers, to anyone signed in.
+
+    Volunteers could not reach the person they were going to help. Every role holds it at `all`,
+    not only `user`: one identity is active at a time (ADR-097), and a team identity must not
+    see less than a citizen. Guests stay masked — view_pii is not a public capability.
+    """
+    from app.core.permissions import Perm
+    from scripts.seed_rbac import ROLES_DATA
+
+    scopes = {spec["name"]: spec["permissions"].get(Perm.TICKET_VIEW_PII) for spec in ROLES_DATA}
+    assert scopes == dict.fromkeys(("user", "data_auditor", "super_admin", "admin", "member"), "all")
+
+
+def test_who_claimed_a_need_stays_with_the_requester_and_coordinators():
+    """ADR-286: a need's claimant list follows ticket.view_history, which keeps the old tiering.
+
+    With contact details open, a requester's name ties their account to a person; were the
+    claimant list open as well, anyone signed in could follow a volunteer from need to need.
+    """
+    from app.core.permissions import Perm
+    from scripts.seed_rbac import ROLES_DATA
+
+    scopes = {spec["name"]: spec["permissions"].get(Perm.TICKET_VIEW_HISTORY) for spec in ROLES_DATA}
+    assert scopes == {
+        "user": "own", "data_auditor": "all", "super_admin": "all", "admin": "zone", "member": "zone",
+    }
