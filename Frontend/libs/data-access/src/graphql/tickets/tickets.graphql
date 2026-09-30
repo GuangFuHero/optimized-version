@@ -201,6 +201,39 @@ mutation ClaimNeed($taskUuid: UUID!) {
   }
 }
 
+# 我的任務 › 我承接的 (ticket/my-claims): the needs the caller claimed, newest first, deleted ones left
+# out. What a volunteer needs on the day: where, whom to call, and whether they may still give the
+# place back (`recruitingStoppedAt`, spec Q46).
+query MyTaskAssignments {
+  myTaskAssignments {
+    assignment {
+      uuid
+      assignedAt
+    }
+    task {
+      uuid
+      taskName
+      recruitingStoppedAt
+    }
+    ticket {
+      uuid
+      title
+      contactName
+      contactPhone
+      secondaryLocation {
+        county
+        city
+        lane
+        alley
+        no
+        buildingSection
+        floor
+        room
+      }
+    }
+  }
+}
+
 mutation CreateTaskProperty($input: CreateTaskPropertyInput!) {
   createTaskProperty(input: $input) {
     uuid

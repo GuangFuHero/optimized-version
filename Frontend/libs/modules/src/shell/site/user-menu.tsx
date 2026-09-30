@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import {
   Avatar,
   ButtonBase,
@@ -13,6 +14,8 @@ import {
   Typography,
 } from '@mui/material';
 import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+
+import { MyTasksDrawer } from '../../ticket/my-claims/my-tasks-drawer';
 
 const { color, radius, shadow, spacing, motion } = designTokens;
 
@@ -35,6 +38,14 @@ export function SiteUserMenu({
   const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
+  // The drawer rides with the menu that opens it, so no page has to host it: it is there on every
+  // page the menu is, the phone's top bar included.
+  const [myTasksOpen, setMyTasksOpen] = useState(false);
+
+  const handleOpenMyTasks = () => {
+    setAnchorEl(null);
+    setMyTasksOpen(true);
+  };
 
   // const handleOpenSecurity = () => {
   //   setAnchorEl(null);
@@ -118,11 +129,19 @@ export function SiteUserMenu({
           <PersonIcon sx={{ fontSize: 18 }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>帳號安全</Typography>
         </MenuItem> */}
+        <MenuItem onClick={handleOpenMyTasks} sx={{ gap: 1 }}>
+          <AssignmentRoundedIcon sx={{ fontSize: 18 }} />
+          <Typography sx={{ fontSize: displayTextSize[14] }}>
+            我的任務
+          </Typography>
+        </MenuItem>
         <MenuItem onClick={handleSignOut} sx={{ gap: 1 }}>
           <PersonIcon sx={{ fontSize: 18 }} />
           <Typography sx={{ fontSize: displayTextSize[14] }}>登出</Typography>
         </MenuItem>
       </Menu>
+
+      <MyTasksDrawer open={myTasksOpen} onClose={() => setMyTasksOpen(false)} />
     </>
   );
 }
