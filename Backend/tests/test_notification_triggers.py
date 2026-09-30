@@ -96,7 +96,8 @@ async def test_task_assignment_triggers_notification(mock_actor):
 
     mock_assignment = TaskAssignment(task_uuid=task_id, actor_uuid=target_assignee_id, status="accepted")
     # db.scalar serves, in order: the need's ticket uuid, the ticket and the need (each locked
-    # FOR UPDATE, ticket first), then the claim count.
+    # FOR UPDATE, ticket first), then the claim count. Working out the ticket's status afterwards
+    # is patched out: this test is about the notices.
     mock_ticket = Tickets(title="物資需求", created_by=str(uuid.uuid4()))
     mock_db.scalar = AsyncMock(side_effect=[mock_task.ticket_uuid, mock_ticket, mock_task, 0])
 
@@ -127,6 +128,7 @@ async def test_task_assignment_triggers_notification(mock_actor):
             new_callable=AsyncMock,
             return_value=SimpleNamespace(created_by=None, team_uuid=None, geometry=None),
         ),
+        patch("app.services.ticket.recompute_ticket_status", new_callable=AsyncMock),
         patch("app.services.ticket.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch,
     ):
         await ticket_service.assign_task_actor(

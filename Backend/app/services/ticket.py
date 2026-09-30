@@ -47,8 +47,10 @@ MAX_DISASTER_DETAIL_KEY_LENGTH = 100
 # A task in one of these states takes no more volunteers: done, or called off. Note the task
 # vocabulary spells it `canceled`, unlike the ticket-level `cancelled` below.
 CLOSED_TASK_STATUSES = frozenset({"fulfilled", "canceled"})
-# A ticket in one of these states takes no more volunteers on any of its tasks, whatever
-# each task's own status says: update_ticket closes the ticket alone and leaves them pending.
+# A ticket in one of these states takes no more volunteers on any of its tasks, whatever each
+# task's own status says. Now that a ticket's status is worked out from its needs (spec Q44) and
+# only deleting it cancels it, that matters only for tickets closed by hand before then, whose
+# needs were left pending.
 CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
 
 # The kinds of help a need can ask for — the values `CreateTicketTaskInput.taskType` documents
@@ -730,10 +732,11 @@ async def assign_task_actor(
     someone else (spec Q38, reversing d847624): to send more, they open another need. A task
     without one has no cap, as the requester never said how many. The claim that brings a task
     to its `quantity` marks it fulfilled in the same commit (spec Q37): it has everyone it asked
-    for, and they still go — fulfilled is not "done". The need's ticket and then the need are
-    locked FOR UPDATE from the count to the commit (_lock_ticket_and_task), so two people racing
-    for the last place cannot both get it. Authorization runs first, so a caller who will be
-    refused never takes the locks. A task whose ticket was deleted is gone with it.
+    for, and they still go — fulfilled is not "done". The ticket's status is worked out again in
+    the same commit (spec Q44). The need's ticket and then the need are locked FOR UPDATE from
+    the count to the commit (_lock_ticket_and_task), so two people racing for the last place
+    cannot both get it. Authorization runs first, so a caller who will be refused never takes
+    the locks. A task whose ticket was deleted is gone with it.
 
     Three notices go out: the assignee hears they were assigned (dispatch() drops it for a
     self-signup), the requester hears who is coming, and when this claim fills the need,
@@ -779,6 +782,8 @@ async def assign_task_actor(
         if fills:
             task.status = "fulfilled"
             task.completed_at = datetime.now(UTC)
+        await db.flush()
+        await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
         await db.commit()
     except IntegrityError as exc:
         # Concurrent duplicate lost the race to uq_assignment_task_actor (PR #24 [10]) —
@@ -846,7 +851,8 @@ async def stop_recruiting(db: AsyncSession, *, actor: User, task_uuid: str) -> T
     it never reopens (spec Q40) and its list is final: nobody on it can give their place back
     (spec Q46, unassign_task_actor). To recruit again, the requester opens another need. A need
     nobody claimed has no one to keep, so it is refused: the requester deletes it instead. Nor
-    can a need that is no longer open be stopped.
+    can a need that is no longer open be stopped. The ticket's status is worked out again, and
+    all of it commits once (spec Q44).
 
     Everyone on the need hears, once it has committed, that it stopped and that they still go.
     Returns the need.
@@ -868,6 +874,8 @@ async def stop_recruiting(db: AsyncSession, *, actor: User, task_uuid: str) -> T
     task.quantity = len(claimants)
     task.completed_at = now
     task.recruiting_stopped_at = now
+    await db.flush()
+    await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
     task_id, task_name, ticket_title, actor_uid = task.uuid, task.task_name, ticket.title, actor.uuid
     await db.commit()
 
@@ -929,20 +937,22 @@ async def _lock_task_with_room(
     commits. The quantity cap binds everyone, a coordinator assigning someone else included
     (spec Q38).
 
-    A fulfilled need that has as many people as it asked for says it is full rather than closed —
-    filled by claims (spec Q37), or stopped by its requester with the quantity cut to the
-    headcount — so the site shows 已滿, not 已結束. A fulfilled need with room left, like a
-    canceled one, is no longer open.
+    A need that has as many people as it asked for says it is full rather than closed — filled
+    by claims (spec Q37), or stopped by its requester with the quantity cut to the headcount —
+    so the site shows 已滿, not 已結束. Its ticket's status is checked after the count too:
+    filling a ticket's last open need completes the ticket (spec Q44), and whoever comes next
+    should still hear the need is full. A canceled need is no longer open whatever its count,
+    and so is a need with room left that is fulfilled or on a closed ticket.
     """
     ticket, task = await _lock_ticket_and_task(db, task_uuid=task_uuid)
-    if task.status == "canceled" or ticket.status in CLOSED_TICKET_STATUSES:
+    if task.status == "canceled":
         raise ValueError("Task is no longer open")
     if await task_assignment_repository.get_by_task_and_actor(db, task_uuid, target_actor):
         raise ValueError("Actor already assigned to this task")
     claimed = await _claim_count(db, task_uuid)
     if task.quantity is not None and claimed >= task.quantity:
         raise ValueError("Task is full")
-    if task.status in CLOSED_TASK_STATUSES:
+    if task.status in CLOSED_TASK_STATUSES or ticket.status in CLOSED_TICKET_STATUSES:
         raise ValueError("Task is no longer open")
     return ticket, task, claimed
 
@@ -1004,7 +1014,8 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
     """Remove a task assignment. The assignee can remove their own, coordinators can remove any.
 
     Authorization first; then the need's ticket and the need are locked like a claim locks them
-    (_lock_ticket_and_task), and the removal commits once.
+    (_lock_ticket_and_task), and the removal commits once, with the ticket's status worked out
+    again (spec Q44).
 
     Once the requester stopped recruiting by hand, the need's list is final and no place on it
     can be given back, by anyone (spec Q46): those on it may already have done the work, or were
@@ -1019,7 +1030,7 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
     await require_scope(
         actor, Perm.TICKET_ASSIGN, db, resource=await _assignment_scope_target(db, assignment)
     )
-    _, task = await _lock_ticket_and_task(db, task_uuid=str(assignment.task_uuid), live_only=False)
+    ticket, task = await _lock_ticket_and_task(db, task_uuid=str(assignment.task_uuid), live_only=False)
     if task.recruiting_stopped_at is not None:
         raise ValueError("Recruiting has stopped for this task")
     removed = await db.scalar(
@@ -1039,6 +1050,8 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
     ):
         task.status = "pending"
         task.completed_at = None
+    await db.flush()
+    await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
     await db.commit()
 
 
