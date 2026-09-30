@@ -320,12 +320,14 @@ async def unassign_user_role(
     Guard: refuses to drop the last super_admin (ADR-032/056). 404 if the user, the role,
     or the assignment itself does not exist.
 
-    **A platform role cannot be unassigned at all** (ADR-185). A user holds at most one —
-    every platform grant replaces the previous one (`admin_service.assign_role`, and
-    `user_repository.assign_role` since ADR-184) — so removing it always leaves the account
-    with no platform identity, which resolves to zero grants even while they still hold team
-    roles. Spec/010 §7's "回去原有登入狀態" is reached by logging back in onto the platform
-    identity, so an account without one cannot get there.
+    **A platform role cannot be unassigned at all** (ADR-185). It was decided while a user held
+    exactly one — every platform grant replaced the previous one — so removing it always left
+    the account with no platform identity, which resolves to zero grants even while they still
+    hold team roles. Spec/010 §7's "回去原有登入狀態" is reached by logging back in onto the
+    platform identity, so an account without one cannot get there. Since Spec/019 an account
+    may hold `user` beside one other platform role (an approved data auditor, a bootstrapped
+    super admin); the refusal still covers both, and whether to lift it for the role beside
+    `user` is a back-office decision not yet made.
 
     Demotion is an `assign_role` to the lesser role, which replaces in one step. That is what
     the error points the caller at. Revoking a *team* identity is unaffected: it names its
