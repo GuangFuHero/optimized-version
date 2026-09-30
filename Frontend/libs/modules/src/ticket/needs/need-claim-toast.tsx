@@ -1,10 +1,14 @@
 'use client';
 
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { Box, ButtonBase, Portal, Snackbar, Typography } from '@mui/material';
+import Link from 'next/link';
 
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
+
+import { BRIEFING_HREF } from './briefing';
 
 const { color, radius, shadow } = designTokens;
 
@@ -20,8 +24,8 @@ interface NeedClaimToastProps {
  * a dialog closing reads the same whether it worked or broke. Six seconds, as there — long enough
  * to read.
  *
- * The prototype's two ways onward, 看行前資訊 and 查看我的任務, need the briefing page and the
- * my-tasks drawer, which do not exist yet; they join this toast when those do (Q30).
+ * One way onward, as in the prototype: 看行前資訊, the moment a volunteer starts thinking about
+ * what to bring (Q49). 我的任務 is a tap away in the account menu.
  */
 export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps) {
   return (
@@ -70,7 +74,7 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
               已承接{'　'}
               {needName}
             </Typography>
-            {/* Q13's words, until the briefing page exists to point at. */}
+            {/* Q13's words, until the briefing page has more to offer than saying so. */}
             <Typography
               sx={{
                 mt: 0.25,
@@ -81,6 +85,20 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
             >
               出發前請先跟現場聯絡人確認。
             </Typography>
+            {/* Bordered but not filled, on a line of its own and 44px tall, away from 關閉: a tap
+                meant to close must not carry the volunteer off the page they just claimed on
+                (prototype site-actions.jsx:692-715). */}
+            <RowAction
+              LinkComponent={Link}
+              href={BRIEFING_HREF}
+              label={
+                <>
+                  看行前資訊
+                  <ChevronRightRoundedIcon sx={{ fontSize: 14 }} />
+                </>
+              }
+              sx={{ mt: 1.5, minHeight: 44 }}
+            />
           </Box>
           <ButtonBase
             aria-label="關閉"
