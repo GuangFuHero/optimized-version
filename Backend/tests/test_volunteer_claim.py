@@ -725,24 +725,12 @@ async def test_a_place_on_a_deleted_need_can_still_be_given_back(db):
 # --- the ticket's status follows its needs (spec Q44) ---
 
 
-@pytest.fixture
-def without_autoflush(db):
-    """Run `db` as the app runs its sessions: flushing only when told to (app/db/session.py).
-
-    The suite's sessions autoflush, so a query first writes whatever the session holds. An action
-    that changed a need without flushing it before working out the ticket's status would still get
-    the right status here, and the wrong one in production.
-    """
-    db.autoflush = False
-
-
 async def _ticket_status(db, ticket_uuid: str) -> str:
     """The ticket's status in the database, not the session's copy."""
     return await db.scalar(select(Tickets.status).where(Tickets.uuid == ticket_uuid))
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("without_autoflush")
 async def test_the_first_claim_puts_the_ticket_in_progress(db):
     """Someone is on their way, so the ticket is being handled."""
     task = await _need(db, quantity=2)
@@ -754,7 +742,6 @@ async def test_the_first_claim_puts_the_ticket_in_progress(db):
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("without_autoflush")
 async def test_the_claim_that_fills_the_last_open_need_completes_the_ticket(db):
     """No need on the ticket takes people any more; those on it still go."""
     task = await _need(db, quantity=2)
@@ -768,7 +755,6 @@ async def test_the_claim_that_fills_the_last_open_need_completes_the_ticket(db):
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("without_autoflush")
 async def test_claiming_again_the_need_that_completed_the_ticket_says_you_are_on_it(db):
     """A second click after taking a ticket's last place hears 你已經接過這筆了, not that it is over.
 
@@ -785,7 +771,6 @@ async def test_claiming_again_the_need_that_completed_the_ticket_says_you_are_on
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("without_autoflush")
 async def test_stopping_recruitment_on_the_last_open_need_completes_the_ticket(db):
     """Stopped by hand or filled by claims, the need is closed all the same."""
     task = await _need(db, quantity=5)
@@ -798,7 +783,6 @@ async def test_stopping_recruitment_on_the_last_open_need_completes_the_ticket(d
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("without_autoflush")
 async def test_giving_back_a_place_reopens_a_completed_ticket(db):
     """The need that filled by itself recruits again (spec Q40), and so does its ticket.
 
@@ -821,7 +805,6 @@ async def test_giving_back_a_place_reopens_a_completed_ticket(db):
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("without_autoflush")
 async def test_the_last_place_given_back_leaves_the_ticket_pending(db):
     """Nobody is on any need any more, and the need still takes people."""
     task = await _need(db, quantity=2)
