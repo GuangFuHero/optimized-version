@@ -52,15 +52,18 @@ ROLES_DATA = [
             Perm.STATION_EDIT: "own",
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",      # help-request board is public (ADR-027)
-            Perm.TICKET_VIEW_PII: "own",  # only your own request's contact info; others masked
+            # ADR-286: anyone signed in may call the requester — contact details and the two
+            # triage answers. Volunteers could not reach the person they were going to help.
+            Perm.TICKET_VIEW_PII: "all",
             # ADR-281: signing in is what unlocks the exact point, the address and the free
             # text — the team's rule since 2026-07 (訪客看區域、登入看精確). `all` rather than
             # hard-coded "logged in" so it can be narrowed here or at /admin/rbac, e.g. to
             # `own` once the volunteer flow can hand out detail on sign-up instead.
             Perm.TICKET_VIEW_DETAIL: "all",
-            # ADR-128: the timeline mirrors view_pii's tiering exactly. `own` is what makes
-            # Notion's front-of-house requirement real — a requester following their own
-            # ticket's progress — without exposing anyone else's.
+            # ADR-128: `own` is what makes Notion's front-of-house requirement real — a
+            # requester following their own ticket's progress — without exposing anyone else's.
+            # It kept view_pii's old tiering when ADR-286 opened view_pii, and it now also gates
+            # who claimed a need: the requester sees who is coming, other citizens do not.
             Perm.TICKET_VIEW_HISTORY: "own",
             Perm.STATION_VIEW_HISTORY: "own",
             Perm.TICKET_ADD: "all",
@@ -152,10 +155,9 @@ ROLES_DATA = [
             Perm.STATION_REVIEW: "team",
             Perm.STATION_ASSIGN: "all",  # ADR-285: gov-only at runtime (require_gov_team)
             Perm.TICKET_VIEW: "all",
-            Perm.TICKET_VIEW_PII: "zone",
-            # ADR-281: `all`, not `zone` like the contact details beside it. Every signed-in
-            # account already reads the exact point (see `user`), and a team identity that
-            # saw less than the citizen one would lose it on switching (ADR-097).
+            # ADR-286/ADR-281: `all`, like every signed-in account (see `user`) — a team
+            # identity that saw less than the citizen one would lose it on switching (ADR-097).
+            Perm.TICKET_VIEW_PII: "all",
             Perm.TICKET_VIEW_DETAIL: "all",
             # ADR-128: a ticket's timeline is `zone`, never `team` — tickets carry no team_uuid,
             # so in_scope()'s TEAM branch can never match one and `team` would be an
@@ -204,11 +206,11 @@ ROLES_DATA = [
             Perm.STATION_DELETE: "own",
             Perm.STATION_ASSIGN: "all",  # ADR-285: gov-only at runtime (require_gov_team)
             Perm.TICKET_VIEW: "all",
-            Perm.TICKET_VIEW_PII: "zone",
+            Perm.TICKET_VIEW_PII: "all",  # ADR-286, see the admin role above
             Perm.TICKET_VIEW_DETAIL: "all",  # ADR-281, see the admin role above
             # ADR-128: field workers need the timeline for the resources they actually work
-            # — who took a task, who dropped it — so each matches its view_pii: tickets at
-            # `zone`, stations at `team` (ADR-285).
+            # — who took a task, who dropped it — tickets at `zone`, stations at `team`
+            # (ADR-285). The ticket side is also who claimed a need (ADR-286).
             Perm.TICKET_VIEW_HISTORY: "zone",
             Perm.STATION_VIEW_HISTORY: "team",
             Perm.TICKET_ADD: "all",

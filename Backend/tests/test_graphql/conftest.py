@@ -80,6 +80,8 @@ async def _ensure_db():
         await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW_PII, "own")
         # Every seeded role holds this at `all` (ADR-281): signing in shows the exact place.
         await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW_DETAIL, "all")
+        # Who claimed a need follows the timeline's tiering (ADR-286), as the seed grants it.
+        await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW_HISTORY, "own")
         await _grant(db, login_role, perm_cache, Perm.TICKET_ADD, "all")
         await _grant(db, login_role, perm_cache, Perm.TICKET_EDIT, "own")
         await _grant(db, login_role, perm_cache, Perm.TICKET_DELETE, "own")
@@ -102,6 +104,7 @@ async def _ensure_db():
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW_PII, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW_DETAIL, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW_HISTORY, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_ADD, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_DELETE, "all")

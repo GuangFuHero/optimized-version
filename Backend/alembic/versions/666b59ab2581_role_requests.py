@@ -1,7 +1,7 @@
 """add role_requests (feature 019: a citizen applies to become back-office staff)
 
 Revision ID: 666b59ab2581
-Revises: e3b8f1a6c2d7
+Revises: 65c5196498fb
 Create Date: 2026-09-27 12:00:00.000000
 
 One row per application. A partial unique index keeps at most one `pending` row per applicant
@@ -23,7 +23,7 @@ from app.db.triggers import get_audit_trigger_sql
 
 # revision identifiers, used by Alembic.
 revision: str = "666b59ab2581"
-down_revision: str | Sequence[str] | None = "e3b8f1a6c2d7"
+down_revision: str | Sequence[str] | None = "65c5196498fb"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

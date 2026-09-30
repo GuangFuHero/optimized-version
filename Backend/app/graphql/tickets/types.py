@@ -47,17 +47,22 @@ def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resourc
     return decided[key]
 
 
-def ticket_pii_visible(info: strawberry.types.Info, ticket_uuid: str):
-    """Whether the caller holds ticket.view_pii on this ticket, decided once per request.
+def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str):
+    """Whether the caller holds ticket.view_history on this ticket, decided once per request.
 
-    ticket_detail_visible for the task side of PII: a task's `assignments` name the accounts
-    of the volunteers going, which is the requester's and the coordinators' business, like
-    the contact fields TicketType._pii_visible guards on the ticket itself.
+    Gates a task's `assignments`, which name the accounts of the volunteers going: the
+    requester's and the coordinators' business. They followed ticket.view_pii until ADR-286
+    opened contact details to anyone signed in; with the requester's name and `createdBy` both
+    open, an open claimant list would let anyone follow a volunteer from need to need. So they
+    follow the timeline instead, which kept view_pii's old tiering — and already names who
+    took and who dropped a task (ADR-143).
     """
-    decided = info.context["_ticket_pii_visible"]
+    decided = info.context["_ticket_history_visible"]
     key = str(ticket_uuid)
     if key not in decided:
-        decided[key] = asyncio.ensure_future(_decide_ticket_scope(info, Perm.TICKET_VIEW_PII, key, None))
+        decided[key] = asyncio.ensure_future(
+            _decide_ticket_scope(info, Perm.TICKET_VIEW_HISTORY, key, None)
+        )
     return decided[key]
 
 
@@ -228,7 +233,11 @@ class TicketTaskType:
     )
     status: str = strawberry.field(
         default="pending",
-        description="Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'",
+        description=(
+            "Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or "
+            "its requester stopped recruiting — the people on it still go), or 'canceled'. Moves "
+            "only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion"
+        ),
     )
     source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
     visibility: str = strawberry.field(
@@ -237,6 +246,14 @@ class TicketTaskType:
     moderation_status: str = strawberry.field(
         default="pending_review",
         description="Review state: 'pending_review', 'approved', or 'rejected'",
+    )
+    recruiting_stopped_at: datetime | None = strawberry.field(
+        default=None,
+        description=(
+            "When the requester stopped recruiting for this need by hand (stopRecruiting); null if "
+            "they never did — a need that filled by itself is fulfilled with no such time. Once "
+            "set, nobody on the need can give their place back"
+        ),
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -300,13 +317,13 @@ class TicketTaskType:
 
     @strawberry.field(
         description=(
-            "Everyone who claimed this task. Empty to a caller without ticket.view_pii on the "
+            "Everyone who claimed this task. Empty to a caller without ticket.view_history on the "
             "parent ticket — assignedCount stays public, and a caller's own claim is myAssignment"
         )
     )
     async def assignments(self, info: strawberry.types.Info) -> list[TaskAssignmentType]:
         """The accounts going: the requester's and the coordinators' to see, not the public's."""
-        if not await ticket_pii_visible(info, self.ticket_uuid):
+        if not await ticket_history_visible(info, self.ticket_uuid):
             return []
         return await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
 
@@ -357,6 +374,7 @@ class TicketTaskType:
             source=m.source,
             visibility=m.visibility,
             moderation_status=m.moderation_status,
+            recruiting_stopped_at=m.recruiting_stopped_at,
             created_at=m.created_at,
             updated_at=m.updated_at,
             _task_description_raw=m.task_description,
@@ -419,12 +437,8 @@ class CreateHelpRequestInput:
 
 @strawberry.input
 class UpdateTicketTaskInput:
-    """Input for updating a ticket task's status, visibility, or review notes."""
+    """Input for updating a ticket task's moderation status, visibility, or notes — not its status."""
 
-    status: str | None = strawberry.field(
-        default=None,
-        description="New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'",
-    )
     progress_note: str | None = strawberry.field(
         default=strawberry.UNSET, description="Updated progress description — pass null to clear"
     )
@@ -743,8 +757,8 @@ class TicketType:
         already on the public map, while a ticket's is the reporter's own home. Gated on
         ticket.view_detail, beside the exact point, rather than ADR-268's ticket.view_pii
         (ADR-281): the address and the point name the same house, and the team's rule is
-        that signing in shows it — `view_pii` is `own` for a plain account, which left a
-        signed-in volunteer the pin but not the door.
+        that signing in shows it — `view_pii` was `own` for a plain account then (ADR-286
+        opened it later), which left a signed-in volunteer the pin but not the door.
         """
         if not await self._detail_visible(info):
             return None
@@ -867,12 +881,11 @@ class CreateTicketInput:
 
 @strawberry.input
 class UpdateTicketInput:
-    """Input for updating a ticket's status, priority, or review notes."""
+    """Input for updating a ticket's priority, content, address, or review notes.
 
-    status: str | None = strawberry.field(
-        default=None,
-        description="New lifecycle state — must follow valid transitions (e.g. pending → in_progress)",
-    )
+    There is no `status`: a ticket's status is worked out from its needs.
+    """
+
     priority: str | None = strawberry.field(
         default=None, description="Updated urgency: 'low', 'medium', 'high', or 'critical'"
     )

@@ -1,16 +1,22 @@
-"""Who sees who claimed a need (spec Q7/Q14).
+"""Who sees who claimed a need (spec Q7/Q14, ADR-286).
 
 `assignedCount` stays public — it is what a volunteer decides "is there room?" on. The list
 of `assignments`, which names each volunteer's account, follows the parent ticket's
-`ticket.view_pii`: the requester and coordinators see who is coming, nobody else does. Every
-signed-in caller gets `myAssignment`, their own claim, which is all the site needs to show
-"已承接" and to release it.
+`ticket.view_history`: the requester and coordinators see who is coming, nobody else does —
+not even the signed-in citizens who, since ADR-286, may read the requester's contact details.
+Every signed-in caller gets `myAssignment`, their own claim, which is all the site needs to
+show "已承接" and to release it.
 """
+
+import uuid
 
 import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
+from sqlalchemy import select
 
+from app.core.permissions import Perm
+from app.models.rbac import Permission, Role, RolePermissionAssign
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
@@ -28,6 +34,38 @@ query($ticketUuid: String!) {
 CLAIM = """
 mutation($taskUuid: UUID!) { assignTaskActor(taskUuid: $taskUuid) { uuid } }
 """
+
+CONTACT_AND_CLAIMS = """
+query($uuid: UUID!) {
+    ticket(uuid: $uuid) { contactName tasks { assignedCount assignments { actorUuid } } }
+}
+"""
+
+
+async def _citizen_since_adr_286(redis) -> str:
+    """A signed-in citizen granted as the seed grants one since ADR-286; returns their token.
+
+    view_pii `all` (anyone signed in may call the requester), view_history `own`.
+    """
+    async with test_db() as db:
+        role = Role(name=f"citizen-{uuid.uuid4().hex[:8]}", kind="platform")
+        db.add(role)
+        await db.flush()
+        for perm, scope in (
+            (Perm.TICKET_VIEW, "all"),
+            (Perm.TICKET_VIEW_DETAIL, "all"),
+            (Perm.TICKET_VIEW_PII, "all"),
+            (Perm.TICKET_VIEW_HISTORY, "own"),
+        ):
+            permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
+            if permission is None:
+                permission = Permission(key=perm.value)
+                db.add(permission)
+                await db.flush()
+            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
+        role_name = role.name
+    _, token = await _create_user_with_role(redis, role_name)
+    return token
 
 
 async def _need_filed_by(requester_uuid: str) -> tuple[str, str]:
@@ -114,8 +152,31 @@ async def test_a_volunteer_sees_their_own_claim(client, redis):
 
 
 @pytest.mark.asyncio
+async def test_a_citizen_who_may_call_the_requester_still_does_not_see_who_is_coming(client, redis):
+    """ADR-286 split the two: contact details open to anyone signed in, the claimant list not.
+
+    The requester's name in full, beside `createdBy`, ties an account to a person; an open list
+    would let anyone signed in follow a volunteer from need to need.
+    """
+    ticket_uuid, *_ = await _claimed_need(client, redis)
+    citizen_token = await _citizen_since_adr_286(redis)
+
+    res = await client.post(
+        "/graphql", json={"query": CONTACT_AND_CLAIMS, "variables": {"uuid": ticket_uuid}},
+        headers=auth_header(citizen_token),
+    )
+
+    assert "errors" not in res.json(), res.json()
+    ticket = res.json()["data"]["ticket"]
+    assert ticket["contactName"] == "王小姐"
+    [task] = ticket["tasks"]
+    assert task["assignedCount"] == 1
+    assert task["assignments"] == []
+
+
+@pytest.mark.asyncio
 async def test_the_requester_sees_who_is_coming(client, redis):
-    """ticket.view_pii `own`: the requester sees the claims on their own ticket."""
+    """ticket.view_history `own`: the requester sees the claims on their own ticket."""
     ticket_uuid, volunteer_uuid, _, requester_token, _ = await _claimed_need(client, redis)
 
     task = await _claims_seen(client, ticket_uuid, requester_token)
@@ -126,7 +187,7 @@ async def test_the_requester_sees_who_is_coming(client, redis):
 
 @pytest.mark.asyncio
 async def test_a_coordinator_sees_who_is_coming(client, redis, coordinator_auth):
-    """ticket.view_pii `all`: a coordinator sees every claim."""
+    """ticket.view_history `all`: a coordinator sees every claim."""
     ticket_uuid, volunteer_uuid, *_ = await _claimed_need(client, redis)
     _, coordinator_token = coordinator_auth
 

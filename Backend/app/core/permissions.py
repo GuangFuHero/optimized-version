@@ -24,15 +24,16 @@ class Perm(StrEnum):
     # ADR-281: everything that places the reporter or tells their story in their own words —
     # the exact point, the street address, the free text, the photos, the review notes, who
     # filed it. Not a reuse of ticket.view (public, ADR-027) nor of ticket.view_pii (contact
-    # details and triage answers, role-scoped): the seed grants this one to every role at
-    # `all`, so today it reads "signed in", but it stays a scope an admin can narrow at
+    # details and triage answers — who to call, not where): the seed grants this one to every
+    # role at `all`, so today it reads "signed in", but it stays a scope an admin can narrow at
     # runtime. Without it the point comes back as the centre of an H3 cell (app/db/h3.py).
     TICKET_VIEW_DETAIL = "ticket.view_detail"
     # Feature 016 (ADR-127): the change timeline is its own capability, not a reuse of
     # audit.view — that key is auditor-only, while the requirement is that a requester can
     # follow their own ticket. Not a reuse of ticket.view either: that one is in
     # PUBLIC_PERMS, so sharing it would put staff names and review timings in front of
-    # anonymous visitors. Scoped like view_pii, since it exposes the same order of detail.
+    # anonymous visitors. Scoped as view_pii was before ADR-286 opened contact details to
+    # anyone signed in: the timeline names people, and it also gates who claimed a need.
     TICKET_VIEW_HISTORY = "ticket.view_history"
     TICKET_ADD = "ticket.add"
     TICKET_EDIT = "ticket.edit"

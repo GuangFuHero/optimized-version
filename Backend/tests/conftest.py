@@ -73,6 +73,27 @@ if _XDIST_WORKER:
 _CODE_RE = re.compile(r"\b(\d{6})\b")
 
 
+def pytest_collection_finish(session) -> None:
+    """Stop a run whose collection split one test directory into two nodes.
+
+    pytest 9 decides a fixture's visibility by node object, not node id (`_matchfactories` in
+    _pytest/fixtures.py). Given `tests/test_graphql/a.py tests/b.py tests/test_graphql/c.py`
+    it builds a second `test_graphql` node for `c.py`, so that directory's conftest — the
+    autouse `setup_db`, its own `client` — never reaches `c.py`, which silently falls back to
+    the `client` below. What surfaces is a missing role or "Future attached to a different
+    loop", nowhere near the cause.
+    """
+    seen: dict[str, pytest.Directory] = {}
+    for item in session.items:
+        for node in item.listchain():
+            if isinstance(node, pytest.Directory) and seen.setdefault(node.nodeid, node) is not node:
+                raise pytest.UsageError(
+                    f"{node.nodeid} was collected as two separate nodes, so its conftest fixtures "
+                    "would reach only some of its tests. List the files of one directory next to "
+                    "each other, or pass the directory itself."
+                )
+
+
 # The extensions live in a schema of their own, installed once per database, because the `db` and
 # `db_session` fixtures drop `public` for every test. With the extensions in `public` each drop took
 # about 1,600 extension objects with it (postgis 900, postgis_raster 500) and each test put them

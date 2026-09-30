@@ -362,6 +362,14 @@
 
 **否決「匯入繞過狀態機」的理由**：開一個繞過業務規則的後門，而且是從一個沒有人逐筆看的路徑進去。
 
+**2026-09-28 修訂（ticket 的 status 部分取代上面的 Decision）**：單的狀態改成由底下的需求自動算
+（`app/services/ticket_status.py`），`update_ticket` 不再收 status，`VALID_TRANSITIONS` 也刪了——畫面上已經
+不能手動改單的狀態。匯入跟著改：ticket 的 `status` 欄變成唯讀，匯出照樣帶、匯入完全不讀，也不驗值（純字串），
+所以格子裡填什麼都不會讓該列失敗。上面「否決匯入忽略 status 欄」的顧慮仍在（在 Excel 改了狀態匯回，不生效也不報錯），
+但照上面「匯入能做的事和 UI 能做的事完全一致」的原則，UI 不能改，匯入也就不該能改；而且狀態會隨承接、釋出自動變動，
+若改成「跟現值不同就讓該列失敗」，稍舊的匯出檔匯回會大量誤報。處理方式跟其他唯讀欄（`verification_status`、
+`created_at`）一致。
+
 ---
 
 ### ADR-123 座標用 `latitude` / `longitude` 兩欄，新增列必填
@@ -443,7 +451,7 @@
 - `low` / `medium` / `high` / `critical` 這組字彙在 codebase 裡**只存在於 GraphQL 的 description 文字**（`app/graphql/tickets/types.py:327/476/499`），沒有 enum、沒有常數、沒有 CHECK 約束。
 - `create_ticket` / `update_ticket` 都不驗它（`app/services/ticket.py:70`）。
 
-對照之下另外兩個看起來相似的欄位都有真值來源，本票直接接上、沒有發明東西：`visibility` 接 `app/graphql/shared.py:9` 的 `Visibility` enum，ticket `status` 接 `VALID_TRANSITIONS` 的 keys。
+對照之下另外兩個看起來相似的欄位都有真值來源，本票直接接上、沒有發明東西：`visibility` 接 `app/graphql/shared.py:9` 的 `Visibility` enum，ticket `status` 接 `VALID_TRANSITIONS` 的 keys（2026-09-28 起 status 改成唯讀純字串，見 ADR-122 修訂）。
 
 **Decision**：`priority` 的 `ColumnSpec` 維持 `data_type="String"`，匯入不驗。
 

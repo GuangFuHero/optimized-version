@@ -43,11 +43,16 @@ class TicketTask(Base, UUIDPKMixin, TimestampMixin):
     visibility: Mapped[str] = mapped_column(String(50), default="public")
     review_note: Mapped[str | None] = mapped_column(String)
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
-    # Set when `status` becomes 'fulfilled'/'canceled', cleared if it leaves again (see
-    # services/ticket.py::update_ticket_task). Analytics needs the moment a task left the
-    # queue; `updated_at` can't say, since it moves on every edit.
+    # Set when `status` becomes 'fulfilled'/'canceled', cleared if it leaves again — by the
+    # actions that move it (services/ticket.py: the claim that fills the task, the release that
+    # reopens it, stop_recruiting; deleting a task sets canceled_at). Analytics needs the moment
+    # a task left the queue; `updated_at` can't say, since it moves on every edit.
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set when the requester stops recruiting (services/ticket.py::stop_recruiting). The task is
+    # fulfilled either way; this says it was stopped by hand rather than filled by claims, which
+    # decides what giving a place back does to it (spec Q39/Q40).
+    recruiting_stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Keyword-search column (ADR-079/081). progress_note and review_note are excluded:
     # operational notes accumulate contact details and ad-hoc coordination text.
