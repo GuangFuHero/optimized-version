@@ -42,8 +42,22 @@ describe('readMyClaims', () => {
         claimedAt: '承接於 9/30 14:05',
         address: '花蓮縣光復鄉佛祖街89號 1F',
         contact: '王小姐 · 0912-345-678',
+        recruitingStopped: false,
       },
     ]);
+  });
+
+  it('knows a need its requester stopped by hand, whose list is final (Q46)', () => {
+    const stopped = {
+      ...row(),
+      task: {
+        uuid: 'need-1',
+        taskName: '清淤',
+        recruitingStoppedAt: '2026-09-30T09:00:00Z',
+      },
+    };
+
+    expect(readMyClaims([stopped])[0].recruitingStopped).toBe(true);
   });
 
   it('keeps the order it came in, newest first as the server sends it', () => {

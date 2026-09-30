@@ -1967,6 +1967,15 @@ export type ClaimNeedMutation = {
   };
 };
 
+export type ReleaseClaimMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type ReleaseClaimMutation = {
+  __typename?: 'Mutation';
+  unassignTaskActor: boolean;
+};
+
 export type MyTaskAssignmentsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type MyTaskAssignmentsQuery = {
@@ -4352,6 +4361,48 @@ export const ClaimNeedDocument = {
     },
   ],
 } as unknown as DocumentNode<ClaimNeedMutation, ClaimNeedMutationVariables>;
+export const ReleaseClaimDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'ReleaseClaim' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'unassignTaskActor' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  ReleaseClaimMutation,
+  ReleaseClaimMutationVariables
+>;
 export const MyTaskAssignmentsDocument = {
   kind: 'Document',
   definitions: [

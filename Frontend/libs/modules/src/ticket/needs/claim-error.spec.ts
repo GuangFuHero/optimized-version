@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { claimErrorMessage } from './claim-error';
+import { claimErrorMessage, releaseErrorMessage } from './claim-error';
 
 /** A refused `assignTaskActor`, as urql hands it over: the backend's message is the contract. */
 function refused(message: string) {
@@ -45,5 +45,33 @@ describe('claimErrorMessage', () => {
 
   it('falls back to a plain failure for anything it does not know, masked faults included', () => {
     expect(claimErrorMessage(refused('Unexpected error.'))).toBe('承接失敗，請稍後再試一次。');
+  });
+});
+
+describe('releaseErrorMessage', () => {
+  it('says the list is final once the requester stopped recruiting (Q46)', () => {
+    expect(releaseErrorMessage(refused('Recruiting has stopped for this task'))).toBe(
+      '建單者已停止招募，名單已固定，無法釋出。',
+    );
+  });
+
+  it('says the place was given back already — e.g. from another tab', () => {
+    expect(releaseErrorMessage(refused('Task assignment not found'))).toBe('這個名額已經釋出了。');
+  });
+
+  it('tells a lapsed session from a missing permission, as a claim does', () => {
+    expect(releaseErrorMessage(refused('401: Could not validate credentials'))).toBe(
+      '登入已過期，請重新登入後再試一次。',
+    );
+    expect(releaseErrorMessage(refused('403: Permission Denied.'))).toBe(
+      '你的帳號沒有釋出名額的權限。',
+    );
+  });
+
+  it('blames the connection, or falls back to a plain failure', () => {
+    expect(releaseErrorMessage({ networkError: new TypeError('Failed to fetch') })).toBe(
+      '連線失敗，請確認網路後再試一次。',
+    );
+    expect(releaseErrorMessage(refused('Unexpected error.'))).toBe('釋出失敗，請稍後再試一次。');
   });
 });

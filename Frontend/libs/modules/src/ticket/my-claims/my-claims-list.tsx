@@ -1,26 +1,35 @@
 'use client';
 
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
+import PersonRemoveRoundedIcon from '@mui/icons-material/PersonRemoveRounded';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
-import { useQuery } from 'urql';
+import { useState } from 'react';
+import { useMutation, useQuery } from 'urql';
 
-import { MyTaskAssignmentsDocument } from '@rescue-frontend/data-access';
+import {
+  MyTaskAssignmentsDocument,
+  ReleaseClaimDocument,
+} from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 
 import { useSiteRouteState } from '../../route';
 import { BRIEFING_HREF } from '../needs/briefing';
+import { releaseErrorMessage } from '../needs/claim-error';
+import { announceTicketChanged } from '../ticket-changes';
 import {
   myClaimTicketHref,
   openClaimedTicket,
   readMyClaims,
   type MyClaim,
 } from './my-claims';
+import { ReleaseClaimDialog } from './release-claim-dialog';
 
 const { color, radius, typography } = designTokens;
 
@@ -139,10 +148,13 @@ function BriefingDepartureBar({ onLeave }: MyClaimsListProps) {
 function MyClaimRow({
   claim,
   onOpen,
+  onRelease,
 }: {
   claim: MyClaim;
   /** 查看: a link to the ticket, which may be taken over to select it in place. */
   onOpen: (event: MouseEvent<HTMLElement>) => void;
+  /** 釋出名額: asks first (spec Q48). */
+  onRelease: () => void;
 }) {
   return (
     <Box
@@ -203,7 +215,10 @@ function MyClaimRow({
       {claim.contact ? (
         <DetailLine icon={<PersonRoundedIcon />}>{claim.contact}</DetailLine>
       ) : null}
-      <Stack direction="row" sx={{ mt: 1.5, gap: 1, flexWrap: 'wrap' }}>
+      <Stack
+        direction="row"
+        sx={{ mt: 1.5, gap: 1, flexWrap: 'wrap', alignItems: 'center' }}
+      >
         <RowAction
           LinkComponent={Link}
           href={myClaimTicketHref(claim.ticketUuid)}
@@ -211,6 +226,31 @@ function MyClaimRow({
           label="查看"
           aria-label={`查看：${claim.ticketTitle}`}
         />
+        {/* On the row, not in a menu: someone who cannot go must find where to say so, or nobody
+            shows up (prototype site-actions.jsx:1883-1886). Where the requester stopped recruiting
+            the list is final, and the line says why there is no button (spec Q46, Q50). */}
+        {claim.recruitingStopped ? (
+          <Stack
+            direction="row"
+            sx={{
+              gap: 0.5,
+              alignItems: 'center',
+              color: color.fg.neutral.muted,
+            }}
+          >
+            <LockRoundedIcon sx={{ fontSize: 14 }} />
+            <Typography sx={{ fontSize: displayTextSize[12], lineHeight: 1.5 }}>
+              建單者已停止招募，名單已固定
+            </Typography>
+          </Stack>
+        ) : (
+          <RowAction
+            icon={<PersonRemoveRoundedIcon sx={{ fontSize: 14 }} />}
+            label="釋出名額"
+            onClick={onRelease}
+            aria-label={`釋出名額：${claim.needName}・${claim.ticketTitle}`}
+          />
+        )}
       </Stack>
     </Box>
   );
@@ -239,11 +279,26 @@ function Notice({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
 /** 我承接的: the needs the viewer claimed, newest first (spec Q16). */
 export function MyClaimsList({ onLeave }: MyClaimsListProps) {
   const route = useSiteRouteState();
-  const [{ data, fetching, error }] = useQuery({
+  const [{ data, fetching, error }, reloadClaims] = useQuery({
     query: MyTaskAssignmentsDocument,
     requestPolicy: 'network-only',
     context: MY_CLAIMS_QUERY_CONTEXT,
   });
+  const [, executeRelease] = useMutation(ReleaseClaimDocument);
+  // Open is kept apart from what is being confirmed, so the dialog keeps its content while it
+  // fades out — as the claim confirmation does.
+  const [releaseOpen, setReleaseOpen] = useState(false);
+  const [releasing, setReleasing] = useState<MyClaim | null>(null);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const claims = data ? readMyClaims(data.myTaskAssignments) : [];
+  // After a refusal the list reloads: a place already gone, or on a need stopped meanwhile, has
+  // nothing left to confirm.
+  const current = releasing
+    ? claims.find((claim) => claim.assignmentUuid === releasing.assignmentUuid)
+    : undefined;
+  const settled = Boolean(releasing) && (!current || current.recruitingStopped);
 
   const openTicket = (event: MouseEvent<HTMLElement>, ticketUuid: string) => {
     const opening = openClaimedTicket(route, ticketUuid);
@@ -257,6 +312,53 @@ export function MyClaimsList({ onLeave }: MyClaimsListProps) {
     onLeave();
   };
 
+  const requestRelease = (claim: MyClaim) => {
+    setReleaseError(null);
+    setReleasing(claim);
+    setReleaseOpen(true);
+  };
+
+  const confirmRelease = async () => {
+    if (!releasing) {
+      return;
+    }
+
+    setSubmitting(true);
+    setReleaseError(null);
+
+    try {
+      const result = await executeRelease({ uuid: releasing.assignmentUuid });
+
+      // Answered either way: the place went back, or the need had changed under the volunteer.
+      // Both this list and every view of the ticket behind the drawer read it again.
+      if (!result.error?.networkError) {
+        announceTicketChanged(releasing.ticketUuid);
+        reloadClaims({ requestPolicy: 'network-only' });
+      }
+
+      if (result.error) {
+        setReleaseError(releaseErrorMessage(result.error));
+        return;
+      }
+
+      setReleaseOpen(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const dialog = (
+    <ReleaseClaimDialog
+      open={releaseOpen}
+      claim={releasing}
+      error={releaseError}
+      submitting={submitting}
+      settled={settled}
+      onCancel={() => setReleaseOpen(false)}
+      onConfirm={() => void confirmRelease()}
+    />
+  );
+
   if (!data) {
     return fetching || !error ? (
       <Notice>載入中…</Notice>
@@ -265,19 +367,20 @@ export function MyClaimsList({ onLeave }: MyClaimsListProps) {
     );
   }
 
-  const claims = readMyClaims(data.myTaskAssignments);
-
   if (claims.length === 0) {
     return (
-      <Notice
-        icon={
-          <VolunteerActivismRoundedIcon
-            sx={{ fontSize: 28, color: color.fg.neutral.muted }}
-          />
-        }
-      >
-        你還沒有承接任何任務。在地圖或列表上找一筆需求，按「接這筆」。
-      </Notice>
+      <>
+        <Notice
+          icon={
+            <VolunteerActivismRoundedIcon
+              sx={{ fontSize: 28, color: color.fg.neutral.muted }}
+            />
+          }
+        >
+          你還沒有承接任何任務。在地圖或列表上找一筆需求，按「接這筆」。
+        </Notice>
+        {dialog}
+      </>
     );
   }
 
@@ -289,8 +392,10 @@ export function MyClaimsList({ onLeave }: MyClaimsListProps) {
           key={claim.assignmentUuid}
           claim={claim}
           onOpen={(event) => openTicket(event, claim.ticketUuid)}
+          onRelease={() => requestRelease(claim)}
         />
       ))}
+      {dialog}
     </Stack>
   );
 }

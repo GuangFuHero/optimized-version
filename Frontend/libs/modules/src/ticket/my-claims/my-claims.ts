@@ -31,6 +31,11 @@ export interface MyClaim {
   claimedAt: string | null;
   address: string | null;
   contact: string | null;
+  /**
+   * Its requester stopped recruiting by hand: the list is final, and no place on it can be given
+   * back (Q46). One that filled by itself can, and then recruits again (Q40).
+   */
+  recruitingStopped: boolean;
 }
 
 // Numbers only: `en-US` spells each part as digits, where `zh-TW` would add 上午／下午.
@@ -82,6 +87,7 @@ export function readMyClaims(rows: readonly MyTaskAssignmentRow[]): MyClaim[] {
     claimedAt: formatClaimedAt(assignment.assignedAt),
     address: formatTicketAddress(ticket.secondaryLocation),
     contact: formatContact(ticket.contactName, ticket.contactPhone),
+    recruitingStopped: task.recruitingStoppedAt != null,
   }));
 }
 

@@ -201,6 +201,12 @@ mutation ClaimNeed($taskUuid: UUID!) {
   }
 }
 
+# The caller gives their place on a need back (the assignment's uuid, `myAssignment.uuid`). Refused
+# once the requester stopped recruiting (spec Q46); a need that filled by itself reopens (Q40).
+mutation ReleaseClaim($uuid: UUID!) {
+  unassignTaskActor(uuid: $uuid)
+}
+
 # 我的任務 › 我承接的 (ticket/my-claims): the needs the caller claimed, newest first, deleted ones left
 # out. What a volunteer needs on the day: where, whom to call, and whether they may still give the
 # place back (`recruitingStoppedAt`, spec Q46).
