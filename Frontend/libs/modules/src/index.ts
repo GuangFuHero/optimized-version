@@ -73,7 +73,11 @@ export type {
 } from './point-share';
 
 export { AdminLayout } from './shell';
-export { SiteShell } from './shell/site';
+export {
+  SiteActionDrawer,
+  SiteShell,
+  type SiteActionDrawerProps,
+} from './shell/site';
 
 export {
   StationCreateDrawer,
