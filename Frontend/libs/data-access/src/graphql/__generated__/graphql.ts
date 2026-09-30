@@ -1728,6 +1728,26 @@ export type CreateCrowdSourcingMutation = {
   };
 };
 
+export type MyRoleRequestsQueryVariables = Exact<{ [key: string]: never }>;
+
+export type MyRoleRequestsQuery = {
+  __typename?: 'Query';
+  myRoleRequests: {
+    __typename?: 'MyRoleRequestsType';
+    hasBackofficeIdentity: boolean;
+    canApply: boolean;
+    requests: Array<{
+      __typename?: 'RoleRequestType';
+      uuid: string;
+      requestedRole: RoleRequestRole;
+      status: RoleRequestStatus;
+      reviewNote?: string | null;
+      createdAt: any;
+      closedAt?: any | null;
+    }>;
+  };
+};
+
 export type TicketFieldsFragment = {
   __typename?: 'TicketType';
   uuid: string;
@@ -3093,6 +3113,65 @@ export const CreateCrowdSourcingDocument = {
   CreateCrowdSourcingMutation,
   CreateCrowdSourcingMutationVariables
 >;
+export const MyRoleRequestsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'MyRoleRequests' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'myRoleRequests' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'hasBackofficeIdentity' },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'canApply' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'requests' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'requestedRole' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'status' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'reviewNote' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'createdAt' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'closedAt' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<MyRoleRequestsQuery, MyRoleRequestsQueryVariables>;
 export const GetTicketsDocument = {
   kind: 'Document',
   definitions: [
