@@ -974,12 +974,7 @@ async def test_update_ticket_task_progress_note(client, coordinator_auth, sample
 
 @pytest.mark.asyncio
 async def test_update_ticket_task_no_longer_takes_a_status(client, coordinator_auth, sample_ticket_task):
-    """A task's status moves only through claims, releases, stopRecruiting and deletion (spec Q41).
-
-    The input is written into the document rather than passed as a variable: a variable the
-    schema rejects comes back masked as "Unexpected error.", while a document it rejects names
-    the field.
-    """
+    """A task's status moves only through claims, releases, stopRecruiting and deletion (spec Q41)."""
     _, token = coordinator_auth
     query = (
         'mutation($uuid: UUID!) { updateTicketTask(uuid: $uuid, input: {status: "fulfilled"}) { uuid } }'

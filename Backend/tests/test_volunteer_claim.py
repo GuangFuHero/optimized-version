@@ -722,6 +722,120 @@ async def test_a_place_on_a_deleted_need_can_still_be_given_back(db):
     assert await _claims(db, task_uuid) == 0
 
 
+# --- the ticket's status follows its needs (spec Q44) ---
+
+
+@pytest.fixture
+def without_autoflush(db):
+    """Run `db` as the app runs its sessions: flushing only when told to (app/db/session.py).
+
+    The suite's sessions autoflush, so a query first writes whatever the session holds. An action
+    that changed a need without flushing it before working out the ticket's status would still get
+    the right status here, and the wrong one in production.
+    """
+    db.autoflush = False
+
+
+async def _ticket_status(db, ticket_uuid: str) -> str:
+    """The ticket's status in the database, not the session's copy."""
+    return await db.scalar(select(Tickets.status).where(Tickets.uuid == ticket_uuid))
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("without_autoflush")
+async def test_the_first_claim_puts_the_ticket_in_progress(db):
+    """Someone is on their way, so the ticket is being handled."""
+    task = await _need(db, quantity=2)
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
+
+    await _claim(db, await _volunteer(db), task_uuid)
+
+    assert await _ticket_status(db, ticket_uuid) == "in_progress"
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("without_autoflush")
+async def test_the_claim_that_fills_the_last_open_need_completes_the_ticket(db):
+    """No need on the ticket takes people any more; those on it still go."""
+    task = await _need(db, quantity=2)
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
+    first, second = await _volunteer(db, "甲"), await _volunteer(db, "乙")
+
+    await _claim(db, first, task_uuid)
+    await _claim(db, second, task_uuid)
+
+    assert await _ticket_status(db, ticket_uuid) == "completed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("without_autoflush")
+async def test_claiming_again_the_need_that_completed_the_ticket_says_you_are_on_it(db):
+    """A second click after taking a ticket's last place hears 你已經接過這筆了, not that it is over.
+
+    Being on the need already is checked before the ticket's status, which that claim completed.
+    """
+    task = await _need(db, quantity=1)
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
+    volunteer = await _volunteer(db)
+    await _claim(db, volunteer, task_uuid)
+    assert await _ticket_status(db, ticket_uuid) == "completed"
+
+    with pytest.raises(ValueError, match="Actor already assigned to this task"):
+        await _claim(db, volunteer, task_uuid)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("without_autoflush")
+async def test_stopping_recruitment_on_the_last_open_need_completes_the_ticket(db):
+    """Stopped by hand or filled by claims, the need is closed all the same."""
+    task = await _need(db, quantity=5)
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
+    await _claim(db, await _volunteer(db), task_uuid)
+
+    await stop_recruiting(db, actor=await _requester_of(db, task_uuid), task_uuid=task_uuid)
+
+    assert await _ticket_status(db, ticket_uuid) == "completed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("without_autoflush")
+async def test_giving_back_a_place_reopens_a_completed_ticket(db):
+    """The need that filled by itself recruits again (spec Q40), and so does its ticket.
+
+    Reopening the need alone would not do: a need of a completed ticket takes nobody (spec Q28).
+    """
+    task = await _need(db, quantity=2)
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
+    first, second = await _volunteer(db, "甲"), await _volunteer(db, "乙")
+    late = await _volunteer(db, "補上")
+    await _claim(db, first, task_uuid)
+    assignment_uuid = str((await _claim(db, second, task_uuid)).uuid)
+    assert await _ticket_status(db, ticket_uuid) == "completed"
+    await refresh_actor(db, second)
+
+    await unassign_task_actor(db, actor=second, uuid=assignment_uuid)
+
+    assert await _ticket_status(db, ticket_uuid) == "in_progress"
+    await _claim(db, late, task_uuid)
+    assert await _claims(db, task_uuid) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("without_autoflush")
+async def test_the_last_place_given_back_leaves_the_ticket_pending(db):
+    """Nobody is on any need any more, and the need still takes people."""
+    task = await _need(db, quantity=2)
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
+    volunteer = await _volunteer(db)
+    assignment_uuid = str((await _claim(db, volunteer, task_uuid)).uuid)
+    assert await _ticket_status(db, ticket_uuid) == "in_progress"
+    await refresh_actor(db, volunteer)
+
+    await unassign_task_actor(db, actor=volunteer, uuid=assignment_uuid)
+
+    assert await _ticket_status(db, ticket_uuid) == "pending"
+
+
 # --- editing a need (spec Q22, Q41) ---
 
 
