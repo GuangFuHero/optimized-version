@@ -65,6 +65,8 @@
 
 ### ADR-069 active identity 為 per-session，簽在 access token 的 `act` claim；預設為 platform 身分，記憶由前端保存
 
+> **第 4 點部分被 019/ADR-290 修改**：一人可能持有 `user` 加一個其他平台身分（019/ADR-288），預設身分改為 `user`（持有時），超管也一樣；要用後台權限得明確切換。
+
 **白話**：手機上可以用志工身分、筆電上同時用管理員身分，互不干擾。當前身分寫在登入憑證裡改不了。下次登入時，各裝置各自記得自己上次用哪個身分。
 
 **Context**：per-session vs per-user。per-user（存 `users.active_identity`）的致命問題是同一個人在兩個裝置上同時工作時身分會互相踩到。
@@ -305,6 +307,8 @@ ADR-068 改版正是採用了括號裡被否決的那條路。缺陷消失，**a
 
 ### ADR-097 team 角色必須自給自足；補上 `station.contribute`
 
+> **2026-09-30（019/ADR-289）**：前台請求帶 `X-WG-Realm: site`，該次請求改用此人持有的 `user` 授權。這**不是**本條否決的「市民基底」：沒有權限聯集，一次請求仍只用一個身分，後台身分的權限不受影響。本條的自給自足要求照舊。
+
 **白話**：切到志工身分後，不該連「回報站點物資」這種每個市民都能做的事都做不了。
 
 **Context**：完整身分切換曝出一個**既有的 seed 缺陷**。比對 `scripts/seed_rbac.py` 的授予表：
@@ -445,6 +449,8 @@ switch-identity             → 200   ← 沒擋，而且新 token 打 /users/me
 
 ### ADR-184 platform 授予一律「取代」，且預設身分查詢必須有確定性排序
 
+> **部分被 019/ADR-290 修改**：決定 1 改成「取代其他平台角色，但保留 `user`」；本條擔心的「超管以一般 `user` 登入」現在是刻意的行為（登入一律先落在 `user`）。決定 2 的排序改成 `user` 排第一，其後照舊依名稱、uuid。
+
 **白話**：`bootstrap_admin.py` 加 `super_admin` 時沒有移除既有的 `user`，所以被 bootstrap 過的帳號有**兩個** platform 角色。而 `default_for_user` 沒有 `ORDER BY`，於是「預設身分」變成看索引先回哪一筆——一個被 bootstrap 成超管的人，可能以一般 `user` 身分登入。
 
 **Context**：ADR-069 第 4 點宣稱「每人恰有一個 platform 身分（同 kind 取代保證）」。`admin_service.assign_role` 確實取代，但 `user_repository.assign_role`（bootstrap 專用）是 `ON CONFLICT DO NOTHING` 的單純插入，不取代。唯一索引是 *(user, role) WHERE team_uuid IS NULL*，管的是「同一個角色不重複」，不是「只有一個 platform 角色」。
@@ -462,6 +468,8 @@ switch-identity             → 200   ← 沒擋，而且新 token 打 /users/me
 ---
 
 ### ADR-185 platform 角色只能「取代」，不能「撤除」
+
+> **2026-09-30（019/ADR-288）**：本條以「每人至多一個平台角色」為前提。019 之後一人可以持有 `user` 加一個其他平台角色，規則本身沒改，但結果是申請通過的 `data_auditor` 無法透過 API 收回。要不要對「`user` 以外的那一個」放寬，留給後台決定。
 
 **白話**：撤掉一個人的 platform 角色，一定會讓他變成「沒有任何 platform 身分」——因為他本來就只有一個。這種帳號即使還在團隊裡，也會解析出**零權限**。降級的正確做法是 assign 到較小的角色，一步取代。
 

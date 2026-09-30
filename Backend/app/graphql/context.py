@@ -5,7 +5,7 @@ from starlette.requests import Request
 
 from app.core.permissions import PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
-from app.core.security import get_current_user, get_db
+from app.core.security import REALM_HEADER, get_current_user, get_db
 from app.graphql.loaders import build_loaders
 from app.models.auth import User
 from app.services.authz import require_scope
@@ -43,7 +43,11 @@ async def get_context(request: Request):
         if token:
             # redis comes from app.state because this path bypasses FastAPI's dependency
             # injection — get_current_user needs it to check the token's session (ADR-102).
-            user = await get_current_user(db=db, token=token, redis=request.app.state.redis)
+            # For the same reason the site's realm header is handed over here (Spec/019 Q15).
+            user = await get_current_user(
+                db=db, token=token, redis=request.app.state.redis,
+                realm=request.headers.get(REALM_HEADER),
+            )
         yield {
             "db": db, "user": user, "loaders": build_loaders(db), "_rbac_cache": {},
             # ticket uuid -> Task[bool]; see app/graphql/tickets/types.py:ticket_detail_visible.

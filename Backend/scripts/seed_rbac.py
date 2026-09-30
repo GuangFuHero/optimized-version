@@ -9,10 +9,10 @@ identity is active per request, platform roles included. Every switchable, actio
 must therefore stand on its own — see ADR-097 and the station.contribute grants below.
 
 Only capabilities with a real enforcement point today (station/map/ticket/dynamic_field/
-user/team/work_zone/audit/rbac/announcement/pre_departure/project) are actually granted
-below; the rest of the Perm catalog (ticket.export/ai_duplicate) is registered as a
-Permission row so it exists ahead of the feature that will enforce it, but isn't wired
-into any role yet.
+user/team/work_zone/audit/rbac/announcement/pre_departure/project/role_request) are
+actually granted below; the rest of the Perm catalog (ticket.export/ai_duplicate) is
+registered as a Permission row so it exists ahead of the feature that will enforce it, but
+isn't wired into any role yet.
 """
 
 import asyncio
@@ -70,6 +70,8 @@ ROLES_DATA = [
             Perm.TICKET_EDIT: "own",
             Perm.TICKET_DELETE: "own",
             Perm.TICKET_ASSIGN: "own",    # volunteer self-signup (see app/services/ticket.py)
+            # Feature 019: the 申請成為後台人員 entry exists for this account only.
+            Perm.ROLE_REQUEST_ADD: "all",
         },
     },
     {
@@ -114,6 +116,7 @@ ROLES_DATA = [
                 Perm.PREDEP_VIEW, Perm.PREDEP_PUBLISH, Perm.PREDEP_EDIT, Perm.PREDEP_DELETE,
                 Perm.USER_VIEW, Perm.USER_ADD, Perm.USER_EDIT, Perm.USER_DELETE,
                 Perm.RBAC_VIEW, Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
+                Perm.ROLE_REQUEST_REVIEW,
                 Perm.TEAM_VIEW, Perm.TEAM_EDIT, Perm.TEAM_MEMBER_MANAGE,
                 Perm.ZONE_VIEW, Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN, Perm.ZONE_DELETE,
                 Perm.PROJECT_VIEW, Perm.PROJECT_EDIT,
@@ -130,8 +133,8 @@ ROLES_DATA = [
     # a gov team's `team` widens to `all` in resolve_scope (GOV_TEAM_WIDENED_PERMS). Zone
     # operations and station assignment are gov-only: `_require_gov_zone_authority` /
     # `require_gov_team` enforce it. NGO admins hold these capabilities in the seed (NGO
-    # members hold station.assign) but are rejected with 403 at the service layer. GOV_TEAM_ONLY_PERMS in app/core/permissions.py
-    # mirrors this for display—keep in lockstep.
+    # members hold station.assign) but are rejected with 403 at the service layer.
+    # GOV_TEAM_ONLY_PERMS in app/core/permissions.py mirrors this for display—keep in lockstep.
     {
         # Team coordinator: full operations on the team's tickets (zone) and stations (team)
         # + team-member management + zone drawing/assignment + station assignment (gov).
