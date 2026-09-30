@@ -42,6 +42,11 @@ export interface RowActionProps extends Omit<ButtonBaseProps, 'color'> {
   icon?: ReactNode;
   label: ReactNode;
   tone?: RowActionTone;
+  /**
+   * Makes it a link rather than a button, as ButtonBase does; pass `LinkComponent` for the
+   * router's own link.
+   */
+  href?: string;
 }
 
 export function RowAction({

@@ -73,7 +73,11 @@ export type {
 } from './point-share';
 
 export { AdminLayout } from './shell';
-export { SiteShell } from './shell/site';
+export {
+  SiteActionDrawer,
+  SiteShell,
+  type SiteActionDrawerProps,
+} from './shell/site';
 
 export {
   StationCreateDrawer,
@@ -94,7 +98,7 @@ export {
   TaskMatchDeleteConfirmDialog,
   useTaskMatches,
 } from './ticket';
-export { NeedClaimProvider } from './ticket/needs';
+export { BriefingPlaceholder, NeedClaimProvider } from './ticket/needs';
 export type {
   TaskMatchLogAction,
   TaskMatchLogEntry,
