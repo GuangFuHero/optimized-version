@@ -3,10 +3,12 @@ import {
   applyBackendAuthResponseCookies,
   resolveBackendAuthTokenAsync,
 } from '../../../lib/server-backend-auth';
+import { SITE_REALM_HEADERS } from '../../../lib/site-realm';
 import { NextResponse, type NextRequest } from 'next/server';
 
 function buildForwardHeaders(request: NextRequest, accessToken?: string) {
-  const headers = new Headers();
+  // Every browser-side GraphQL request of the site comes through here.
+  const headers = new Headers(SITE_REALM_HEADERS);
   const contentType = request.headers.get('content-type');
   const accept = request.headers.get('accept');
 
