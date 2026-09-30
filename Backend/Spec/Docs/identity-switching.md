@@ -88,14 +88,15 @@ flowchart LR
     Q -- "沒有" --> DF
     RS -- "身分已被撤銷" --> DF
     RS -- "解得出來" --> USE["用它"]
-    DF["default_for_user()<br/><b>team_uuid IS NULL 的那筆 = 平台身分</b>"]
+    DF["default_for_user()<br/><b>平台身分裡優先取 user</b>"]
     DF -- "一筆都沒有" --> NONE["零權限<br/><i>刻意不退回任何 team 身分</i>"]
 ```
 
 - 客戶端可在 OAuth2 form 的 `scope` 欄位帶上它記得的身分（ADR-069）
 - 帶了但該身分已被撤銷時**不報錯**，退回預設；回應會說明最後落在哪個身分，客戶端因此看得出自己的記憶過期了（ADR-205）
-- `default_for_user()` 取 `team_uuid IS NULL` 的那筆。註冊時給 `user`，之後每次授予平台角色是**取代**而非新增，所以正常帳號恰好一筆
+- `default_for_user()` 在平台身分（`team_uuid IS NULL`）裡**優先取 `user`**，超管也一樣；其餘依名稱、uuid 排序（019/ADR-290）。功能 019 之後一人可能持有 `user` 加一個其他平台身分：申請通過的資料檢核員、`bootstrap_admin` 設的超管（019/ADR-288、290）。要用後台權限就明確切換
 - 一筆都沒有時回 `None`（零權限），**刻意不退回任何 team 身分**——把人放到他沒有選擇的 team 身分上，正是 ADR-096 否決的「無聲降級」
+- 前台的請求帶 `X-WG-Realm: site` 時，**該次請求**改用此人持有的 `user`，token 與 session 都不變（019/ADR-289）；所以在後台切成什麼身分，都不影響前台
 
 ---
 

@@ -12,6 +12,10 @@
   一人 = 一 platform 角色 + **任意多個** team 角色，每個 team 一個。
   **任一時刻只有一個身分生效**，由 access token 的 `act` claim 指定（010/ADR-068/069）。
   `users.team_uuid` 已刪除；組織歸屬讀的是當前身分的 team（`team.type ∈ {gov, ngo}`）。
+- **每個帳號都有 `user`，前台一律用它（功能 019）**：申請通過的資料檢核員、`bootstrap_admin` 設的超管同時持有
+  `user` 和另一個平台角色（019/ADR-288、290）。登入一律先落在 `user`，超管也一樣；要用後台權限得先切換身分。
+  前台請求帶 `X-WG-Realm: site`，該次請求改用此人持有的 `user`（019/ADR-289）——所以本表 `user` 那一欄就是
+  每個登入者在前台的權限。
 - **合併規則**：**當前身分內**的 grant 取聯集、**最寬勝**、無 deny（ADR-018/021 + 010/ADR-074）。
   跨身分**不**聯集——`super_admin` 切到團隊身分時是真的降權，本表下方每一列都要理解成
   「持有該角色**並且正以該角色行動**時」的權限。
@@ -198,6 +202,18 @@
 
 > `rbac.view`（feature 009 #25：`/admin/rbac` 唯讀面的 checkpoint-1 gate）只有 super_admin；`rbac.*` 全是 super_admin 專屬治理，不委派給其他角色。
 
+### 後台人員申請 Role Request（功能 019）
+
+| capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
+|---|---|---|---|---|---|---|
+| role_request.add | — | all | — | — | — | — |
+| role_request.review | — | — | — | all | — | — |
+
+> `role_request.add` 只給 `user`：資格寫在程式裡（只持有平台 `user`、沒有任何其他身分的帳號才能申請），有後台
+> 身分的人本來就不能申請，所以不發給其他角色；ADR-097 的回歸測試把它列為「只屬於一般民眾」的例外。在
+> `/admin/rbac` 收回 `user` 的 `role_request.add` 就是暫停開放申請；已送出的申請照樣可以撤回（撤回只看是不是本人）。
+> 理由與聯絡方式只有申請人本人與持有 `role_request.review` 的人看得到（019/ADR-287）。
+
 ## 補充說明
 
 ### 公開白名單（`PUBLIC_PERMS`，`app/core/permissions.py`）
@@ -228,4 +244,4 @@
 （`ticket.export` 自功能 015 起已授予；`audit.view` 自功能 016 起首次真正被 enforcement 消費；`pre_departure.*` 自功能 007 起已接上 enforcement，並補上原本沒有的 `pre_departure.delete`。）
 
 ### 相關 ADR
-ADR-018（union）、ADR-019（兩軸/一人一 team，**身分部分被 010/ADR-068 取代**）、010/ADR-068·073·074（多 team 身分切換）、010/ADR-097（team 角色必須自給自足，`station.contribute`）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）、ADR-285（站點改為手動指派給單一 team，不跟 zone）。
+ADR-018（union）、ADR-019（兩軸/一人一 team，**身分部分被 010/ADR-068 取代**）、010/ADR-068·073·074（多 team 身分切換）、010/ADR-097（team 角色必須自給自足，`station.contribute`）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）、ADR-285（站點改為手動指派給單一 team，不跟 zone）、019/ADR-287～290（申請成為後台人員、通過是新增身分、前台固定 `user`、登入先落在 `user`）。
