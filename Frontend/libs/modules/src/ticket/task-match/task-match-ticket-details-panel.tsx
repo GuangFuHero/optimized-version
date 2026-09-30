@@ -385,7 +385,7 @@ export function TaskMatchTicketDetailsPanel({
   }, [taskData?.ticketTasks, ticket?.tasks]);
 
   // The same tasks, as needs a volunteer can claim. Who claimed them is not shown: without
-  // ticket.view_pii `assignments` comes back empty, and `assignedCount` is what everyone gets.
+  // ticket.view_history `assignments` comes back empty, and `assignedCount` is what everyone gets.
   const needs = useMemo(
     () => readTicketNeeds(ticketData?.ticket ?? null),
     [ticketData?.ticket],

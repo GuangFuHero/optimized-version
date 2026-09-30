@@ -39,7 +39,7 @@ fragment TicketTaskFields on TicketTaskType {
 
 # What a need's claim button is decided on (ticket/needs/need-claim.ts): a volunteer claims a need,
 # not a ticket (PUB-PS-140). `myAssignment` is null to a guest and to anyone who has not claimed it;
-# `assignedCount` is public, the claimants themselves are not (`assignments` needs ticket.view_pii).
+# `assignedCount` is public; the claimants are not (`assignments` needs ticket.view_history).
 fragment TicketNeedFields on TicketTaskType {
   uuid
   taskName

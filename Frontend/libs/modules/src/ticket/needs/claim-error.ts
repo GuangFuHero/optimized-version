@@ -12,7 +12,8 @@ export interface ClaimError {
 /** `assign_task_actor`'s refusals (backend `services/ticket.py`), word for word. */
 const REFUSALS: Record<string, string> = {
   'Task is full': '這筆需求剛好額滿了。',
-  // A canceled or fulfilled need, or any need of a completed or cancelled ticket.
+  // A canceled need, or one with room left that is fulfilled or on a completed or cancelled ticket:
+  // a full need says 'Task is full' whatever its ticket's status (`_lock_task_with_room`).
   'Task is no longer open': '這筆需求已經結束了。',
   'Actor already assigned to this task': '你已經接過這筆了。',
   // The need was deleted, or its ticket was.

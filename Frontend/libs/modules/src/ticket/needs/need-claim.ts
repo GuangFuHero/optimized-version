@@ -36,28 +36,24 @@ export function resolveNeedClaim(
   need: TicketNeed,
   viewer: { isAuthenticated: boolean; ticketStatus?: string | null },
 ): NeedClaim {
-  // Closed first, over the viewer's own claim: 「不用去了」matters more than「我接過」. A need's own
-  // status wins over its ticket's, and closing a ticket leaves its needs pending (the backend's
-  // `update_ticket`), so a withdrawn or finished ticket closes them here — as the backend's claim
-  // check does. Task statuses spell it `canceled` (one l), unlike a ticket's `cancelled`.
-  if (need.status === 'canceled') {
+  // Called off first, over the viewer's own claim: 「不用去了」matters more than「我接過」. Deleting a
+  // need or its ticket cancels it (Q43), and neither will come back once the backend's queries all
+  // leave deleted ones out. Task statuses spell it `canceled` (one l), unlike a ticket's `cancelled`.
+  if (need.status === 'canceled' || viewer.ticketStatus === 'cancelled') {
     return { kind: 'canceled', label: '已取消', action: null };
   }
 
-  if (need.status === 'fulfilled') {
-    return { kind: 'fulfilled', label: '已完成', action: null };
-  }
-
-  if (viewer.ticketStatus === 'cancelled') {
-    return { kind: 'canceled', label: '已取消', action: null };
-  }
-
-  if (viewer.ticketStatus === 'completed') {
-    return { kind: 'fulfilled', label: '已完成', action: null };
-  }
-
+  // Then the viewer's own claim, even on a need that has since filled or stopped recruiting: they
+  // are among the people it has, and still go (Q26).
   if (need.myAssignment) {
     return { kind: 'mine', label: '已承接', action: null };
+  }
+
+  // Filled by claims or stopped by its requester (Q37, Q39) — not 已完成, since nobody on it has gone
+  // yet (Q42). A ticket's status follows its needs (Q44), so a completed one has none open; one
+  // closed by hand before then left its needs pending, and the backend's claim check refuses them.
+  if (need.status === 'fulfilled' || viewer.ticketStatus === 'completed') {
+    return { kind: 'fulfilled', label: '已滿足需求', action: null };
   }
 
   if (isNeedFull(need)) {
@@ -87,12 +83,13 @@ export function formatNeedQuota(need: TicketNeed, kind: NeedClaimKind): NeedQuot
 
   const count = `${need.assignedCount}/${quantity}`;
 
-  // Full can mean over-subscribed (a coordinator sent more): the count says so, the bar stays full.
+  // Full can mean over-sent, from before coordinators were capped too (Q38): the count says so, the
+  // bar stays full.
   if (isNeedFull(need)) {
     return { text: `${count} 已滿`, fraction: 1 };
   }
 
-  // A need that is called off or done is missing nobody, however few went.
+  // A need that is called off or has its people is missing nobody, however few went.
   if (kind === 'canceled' || kind === 'fulfilled') {
     return { text: count, fraction: need.assignedCount / quantity };
   }
