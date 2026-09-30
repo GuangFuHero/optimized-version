@@ -172,20 +172,22 @@ async def create_ticket(
 
 
 def _validate_help_request_task(task: dict) -> None:
-    """Refuse a need the public site could not have meant.
-
-    `create_ticket_task` checks none of this and lets the column limit raise a database error
-    the client only sees as "Unexpected error.". A zero quantity would read as full the moment
-    it was filed (`_lock_task_with_room`).
-    """
+    """Refuse a need the public site could not have meant: its kind, a name, and its size."""
     if task["task_type"] not in TASK_TYPES:
         raise ValueError(f"Unknown task type: {task['task_type']}")
-    name = task["task_name"]
-    if not name.strip():
+    if not task["task_name"].strip():
         raise ValueError("task_name is required")
-    if len(name) > TASK_NAME_MAX_LENGTH:
+    _validate_need_size(task["task_name"], task.get("quantity"))
+
+
+def _validate_need_size(task_name: str, quantity: int | None) -> None:
+    """Refuse a name its column cannot hold, or a quantity that asks for nobody.
+
+    Past the column's limit the database raises an error the client only sees as "Unexpected
+    error."; a zero quantity would read as full the moment it was filed (`_lock_task_with_room`).
+    """
+    if len(task_name) > TASK_NAME_MAX_LENGTH:
         raise ValueError(f"task_name must be at most {TASK_NAME_MAX_LENGTH} characters")
-    quantity = task.get("quantity")
     if quantity is not None and quantity < 1:
         raise ValueError("quantity must be at least 1")
 
@@ -536,24 +538,77 @@ async def create_ticket_task(
     visibility: str,
     route_uuid: str | None,
 ) -> TicketTask:
-    """Create a task under a ticket (checkpoint 1 only — no scope check against the parent)."""
-    await require_scope(actor, Perm.TICKET_ADD, db)
-    if not await ticket_repository.get_by_uuid_active(db, ticket_uuid):
+    """Add a need to a ticket — createTicketTask, the site's 「再加一件」 among others.
+
+    ticket.edit on the ticket (team decision 2026-09-28), checked before the lock: for a signed-in
+    citizen that means their own ticket only, while back-office roles keep their ticket.edit's
+    reach. A ticket cancelled by hand before statuses were derived takes no need, since cancelled
+    is final and nobody could claim it. The name and quantity are checked before anything is
+    written; the rest is _add_need.
+    """
+    ticket = await ticket_repository.get_by_uuid_active(db, ticket_uuid)
+    if not ticket:
         raise ValueError("Ticket not found")
-    return await ticket_task_repository.create(
-        db,
-        obj_in={
-            "ticket_uuid": ticket_uuid,
-            "task_type": task_type,
-            "task_name": task_name,
-            "task_description": task_description,
-            "quantity": quantity,
-            "source": source,
-            "visibility": visibility,
-            "route_uuid": route_uuid,
-            "created_by": str(actor.uuid),
-        },
+    await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
+    if ticket.status == "cancelled":
+        raise ValueError("Ticket is no longer open")
+    _validate_need_size(task_name, quantity)
+    need = {
+        "task_type": task_type, "task_name": task_name, "task_description": task_description,
+        "quantity": quantity, "source": source, "visibility": visibility, "route_uuid": route_uuid,
+    }
+    return await _add_need(db, actor=actor, ticket_uuid=ticket_uuid, need=need)
+
+
+async def import_ticket_task(
+    db: AsyncSession,
+    *,
+    actor: User,
+    ticket_uuid: str,
+    task_type: str,
+    task_name: str,
+    task_description: str | None,
+    quantity: int | None,
+    source: str,
+    visibility: str,
+    route_uuid: str | None,
+) -> TicketTask:
+    """Add a need for a bulk import row (ADR-120).
+
+    ticket.add alone, the rule createTicketTask had before 2026-09-28: who may import what is the
+    back office's to decide, not the public site's. The row's columns were checked by the import
+    itself (bulk_columns); the rest is _add_need.
+    """
+    await require_scope(actor, Perm.TICKET_ADD, db)
+    need = {
+        "task_type": task_type, "task_name": task_name, "task_description": task_description,
+        "quantity": quantity, "source": source, "visibility": visibility, "route_uuid": route_uuid,
+    }
+    return await _add_need(db, actor=actor, ticket_uuid=ticket_uuid, need=need)
+
+
+async def _add_need(db: AsyncSession, *, actor: User, ticket_uuid: str, need: dict) -> TicketTask:
+    """Lock the ticket, add the need, work the ticket's status out, and commit once.
+
+    The ticket is locked first, the order every writer keeps, and read again under the lock, so a
+    ticket deleted meanwhile takes no need. A completed ticket takes one and is open again (spec
+    Q20): left completed, it would turn away every claim on the need (_lock_task_with_room).
+    """
+    ticket = await db.scalar(
+        select(Tickets)
+        .where(Tickets.uuid == ticket_uuid)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
+    if ticket is None or ticket.delete_at is not None:
+        raise ValueError("Ticket not found")
+    task = await ticket_task_repository.add(
+        db, obj_in={"ticket_uuid": ticket_uuid, **need, "created_by": str(actor.uuid)}
+    )
+    await recompute_ticket_status(db, ticket_uuid=ticket_uuid)
+    await db.commit()
+    await db.refresh(task)
+    return task
 
 
 async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, changes: dict) -> TicketTask:
