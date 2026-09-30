@@ -26,7 +26,13 @@ from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import ticket as ticket_service
 from app.services.authz import refresh_actor
-from app.services.ticket import assign_task_actor, stop_recruiting, unassign_task_actor, update_ticket_task
+from app.services.ticket import (
+    assign_task_actor,
+    stop_recruiting,
+    unassign_task_actor,
+    update_task_assignment,
+    update_ticket_task,
+)
 from tests.conftest import TEST_DB_URL, acting_as
 
 
@@ -720,6 +726,36 @@ async def test_a_place_on_a_deleted_need_can_still_be_given_back(db):
     await unassign_task_actor(db, actor=volunteer, uuid=assignment_uuid)
 
     assert await _claims(db, task_uuid) == 0
+
+
+# --- changing a claim (spec Q47) ---
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("deleted", ["task", "ticket"])
+async def test_a_claim_on_a_deleted_need_stays_as_it_was(db, deleted):
+    """Kept as the record of who was on the need when it went, a claim on it is not changed after.
+
+    As when claiming or stopping it, the need is not found. Giving the place back still works
+    (test_a_place_on_a_deleted_need_can_still_be_given_back).
+    """
+    task = await _need(db, quantity=5)
+    task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
+    volunteer = await _volunteer(db)
+    assignment_uuid = str((await _claim(db, volunteer, task_uuid)).uuid)
+    model, row_uuid = (TicketTask, task_uuid) if deleted == "task" else (Tickets, ticket_uuid)
+    row = await db.get(model, row_uuid)
+    row.delete_at = datetime.now(UTC)
+    await db.flush()
+    await refresh_actor(db, volunteer)
+
+    with pytest.raises(ValueError, match="Ticket task not found"):
+        await update_task_assignment(
+            db, actor=volunteer, uuid=assignment_uuid, changes={"status": "en_route"}
+        )
+
+    status = await db.scalar(select(TaskAssignment.status).where(TaskAssignment.uuid == assignment_uuid))
+    assert status == "accepted"
 
 
 # --- the ticket's status follows its needs (spec Q44) ---

@@ -1058,11 +1058,20 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
 async def update_task_assignment(
     db: AsyncSession, *, actor: User, uuid: str, changes: dict
 ) -> TaskAssignment:
-    """Update a task assignment's status/role. Assignee updates own (=own), coordinator any (=all)."""
+    """Update a task assignment's status/role. Assignee updates own (=own), coordinator any (=all).
+
+    Not once the need or its ticket is deleted (spec Q47): the claims on it are kept as the record
+    of who was on it when it went, and stay as they were then. The need is not found, as for a
+    claim or a stop; giving the place back still works (unassign_task_actor). Checked after
+    authorization, so a caller who may not change the claim cannot tell whether it was deleted.
+    """
     assignment = await task_assignment_repository.get_by_uuid(db, uuid)
     if not assignment:
         raise ValueError("Task assignment not found")
     await require_scope(
         actor, Perm.TICKET_ASSIGN, db, resource=await _assignment_scope_target(db, assignment)
     )
+    task = await ticket_task_repository.get_by_uuid_active(db, assignment.task_uuid)
+    if not task or not await ticket_repository.get_by_uuid_active(db, task.ticket_uuid):
+        raise ValueError("Ticket task not found")
     return await task_assignment_repository.update(db, db_obj=assignment, obj_in=changes)
