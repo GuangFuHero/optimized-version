@@ -24,6 +24,7 @@ import {
   stripClaimReturn,
   type ClaimReturn,
 } from './claim-return';
+import { DeleteNeedDialog, useDeleteNeed } from './delete-need-dialog';
 import { resolveNeedClaim } from './need-claim';
 import { NeedClaimDialog, type NeedClaimTarget } from './need-claim-dialog';
 import { NeedClaimToast } from './need-claim-toast';
@@ -48,6 +49,8 @@ interface NeedClaimContextValue {
   ticketShown: (ticketUuid: string) => void;
   /** Ask the ticket's requester to confirm stopping recruitment for one of its needs (Q39). */
   requestStopRecruiting: (ticketUuid: string, needUuid: string) => void;
+  /** Ask the ticket's requester to confirm deleting one of its needs (B's S5). */
+  requestDeleteNeed: (ticketUuid: string, needUuid: string) => void;
   /** The signed-in account's uuid, to tell a ticket's requester by; null for a guest. */
   viewerId: string | null;
 }
@@ -57,8 +60,8 @@ const NeedClaimContext = createContext<NeedClaimContextValue | null>(null);
 interface NeedClaimProviderProps {
   children: ReactNode;
   /**
-   * Hears a ticket as it stands after a claim, a release or a stop — its needs and its status —
-   * for a view keeping its own copy: the list's rows, the map's pins.
+   * Hears a ticket as it stands after a claim, a release, a stop or a deletion — its needs and its
+   * status — for a view keeping its own copy: the list's rows, the map's pins.
    */
   onTicketReloaded?: (ticketUuid: string, ticket: ReloadedTicket) => void;
 }
@@ -67,8 +70,8 @@ interface NeedClaimProviderProps {
  * The one place a page's claim buttons claim through — the drawer's rows, its footer and the list's
  * lines — so every entry point gets the same confirmation (Q9), the same words for a refusal and
  * the same word of success, and one reload that every view of the ticket hears. A guest's button
- * goes through here too, to sign in and come back to the ticket, and so does a requester's 停止招募
- * from a row's ⋯ (Q39), with a confirmation of its own.
+ * goes through here too, to sign in and come back to the ticket, and so do a requester's 停止招募
+ * (Q39) and 刪除這筆需求 (B's S5) from a row's ⋯, each with a confirmation of its own.
  */
 export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProviderProps) {
   const router = useRouter();
@@ -144,6 +147,7 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
   );
 
   const stopRecruiting = useStopRecruiting(reloadTicket);
+  const deleteNeed = useDeleteNeed(reloadTicket);
 
   const confirmClaim = useCallback(async () => {
     if (!target) {
@@ -244,9 +248,17 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
       requestSignIn: sessionStatus === 'unauthenticated' ? sendToSignIn : null,
       ticketShown: setShownTicketUuid,
       requestStopRecruiting: stopRecruiting.request,
+      requestDeleteNeed: deleteNeed.request,
       viewerId,
     }),
-    [requestClaim, sendToSignIn, sessionStatus, stopRecruiting.request, viewerId],
+    [
+      requestClaim,
+      sendToSignIn,
+      sessionStatus,
+      stopRecruiting.request,
+      deleteNeed.request,
+      viewerId,
+    ],
   );
 
   return (
@@ -262,6 +274,7 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
       />
       <NeedClaimToast open={toast.open} needName={toast.needName} onClose={closeToast} />
       <StopRecruitingDialog {...stopRecruiting.dialogProps} />
+      <DeleteNeedDialog {...deleteNeed.dialogProps} />
     </NeedClaimContext.Provider>
   );
 }

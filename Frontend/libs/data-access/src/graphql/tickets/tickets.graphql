@@ -230,6 +230,14 @@ mutation StopRecruiting($taskUuid: UUID!) {
   }
 }
 
+# The requester deletes one need (B's S5, team decision 2026-09-28): any need not deleted yet, a
+# filled or stopped one included. It is gone from every query after, its ticket's status is worked
+# out again, and everyone on it hears they need not go. Refused with 'Ticket task not found' once
+# the need or its ticket is deleted already.
+mutation DeleteTicketTask($uuid: UUID!) {
+  deleteTicketTask(uuid: $uuid)
+}
+
 # 我的任務 › 我承接的 (ticket/my-claims): the needs the caller claimed, newest first, deleted ones left
 # out. What a volunteer needs on the day: where, whom to call, and whether they may still give the
 # place back (`recruitingStoppedAt`, spec Q46).

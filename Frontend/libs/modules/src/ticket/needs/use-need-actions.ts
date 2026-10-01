@@ -18,13 +18,13 @@ interface NeedActionsTicket {
 
 /**
  * What the ⋯ at the end of a need's row offers. Nothing unless the viewer filed the ticket — the
- * one place that is decided, for whatever the menu gains (B's 「刪除這筆需求」 joins it here).
+ * one place that is decided, for whatever the menu gains.
  */
 export function useNeedActions(
   need: TicketNeed,
   { ticketUuid, ticketStatus, ticketCreatedBy }: NeedActionsTicket,
 ): NeedAction[] {
-  const { viewerId, requestStopRecruiting } = useNeedClaim();
+  const { viewerId, requestStopRecruiting, requestDeleteNeed } = useNeedClaim();
 
   if (!isTicketRequester(ticketCreatedBy, viewerId)) {
     return [];
@@ -38,6 +38,14 @@ export function useNeedActions(
       onSelect: () => requestStopRecruiting(ticketUuid, need.uuid),
     });
   }
+
+  // Any need it still shows can go, a filled or stopped one included (B's S5): the requester's
+  // plans can change after people signed up. Last, as what takes something away for good.
+  actions.push({
+    label: '刪除這筆需求',
+    tone: 'danger',
+    onSelect: () => requestDeleteNeed(ticketUuid, need.uuid),
+  });
 
   return actions;
 }

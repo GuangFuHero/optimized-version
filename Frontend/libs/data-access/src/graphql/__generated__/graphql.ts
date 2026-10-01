@@ -2042,6 +2042,15 @@ export type StopRecruitingMutation = {
   stopRecruiting: { __typename?: 'TicketTaskType'; uuid: string };
 };
 
+export type DeleteTicketTaskMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type DeleteTicketTaskMutation = {
+  __typename?: 'Mutation';
+  deleteTicketTask: boolean;
+};
+
 export type MyTaskAssignmentsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type MyTaskAssignmentsQuery = {
@@ -4818,6 +4827,48 @@ export const StopRecruitingDocument = {
 } as unknown as DocumentNode<
   StopRecruitingMutation,
   StopRecruitingMutationVariables
+>;
+export const DeleteTicketTaskDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'DeleteTicketTask' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'deleteTicketTask' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  DeleteTicketTaskMutation,
+  DeleteTicketTaskMutationVariables
 >;
 export const MyTaskAssignmentsDocument = {
   kind: 'Document',

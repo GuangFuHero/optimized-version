@@ -1,6 +1,6 @@
 /**
  * What a ticket's requester can do to one of its needs, from the ⋯ at the end of the need's row
- * (spec Q45): stop recruiting for it, and — once B's S5 lands — delete it. Nobody else gets the ⋯.
+ * (spec Q45): stop recruiting for it, and delete it (B's S5). Nobody else gets the ⋯.
  */
 
 import type { TicketNeed } from './need-claim';

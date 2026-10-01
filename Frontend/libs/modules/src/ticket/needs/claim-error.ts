@@ -1,7 +1,8 @@
 /**
  * What a volunteer reads when a claim, or giving a place back, is refused — and a requester, when
- * stopping recruitment is. The backend's messages are contract — only a `ValueError` or an
- * `HTTPException` reaches the client unmasked (backend `graphql/schema.py`).
+ * stopping recruitment, adding a need or deleting one is. The backend's messages are contract —
+ * only a `ValueError` or an `HTTPException` reaches the client unmasked (backend
+ * `graphql/schema.py`).
  */
 
 /** The parts of urql's `CombinedError` this reads. */
@@ -96,6 +97,16 @@ const ADD_NEED_WORDS: RefusalWords = {
   fallback: '加不上去，請稍後再試一次。',
 };
 
+/**
+ * `delete_ticket_task`'s refusals — a requester's 「刪除這筆需求」 (B's S5). Its one refusal of its
+ * own, a need deleted already, is no failure to them: see `isNeedAlreadyGone`.
+ */
+const DELETE_NEED_WORDS: RefusalWords = {
+  refusals: {},
+  forbidden: '只有建這張單的人可以刪除。',
+  fallback: '刪除失敗，請稍後再試一次。',
+};
+
 export function claimErrorMessage(error: ClaimError): string {
   return refusalMessage(error, CLAIM_WORDS);
 }
@@ -110,4 +121,16 @@ export function stopRecruitingErrorMessage(error: ClaimError): string {
 
 export function addNeedErrorMessage(error: ClaimError): string {
   return refusalMessage(error, ADD_NEED_WORDS);
+}
+
+/**
+ * Whether a refused delete found the need gone already — deleted from another tab, or with its
+ * ticket. What the requester asked for has happened, so the confirmation just closes.
+ */
+export function isNeedAlreadyGone(error: ClaimError): boolean {
+  return error.graphQLErrors?.[0]?.message === 'Ticket task not found';
+}
+
+export function deleteNeedErrorMessage(error: ClaimError): string {
+  return refusalMessage(error, DELETE_NEED_WORDS);
 }

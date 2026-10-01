@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   addNeedErrorMessage,
   claimErrorMessage,
+  deleteNeedErrorMessage,
+  isNeedAlreadyGone,
   releaseErrorMessage,
   stopRecruitingErrorMessage,
 } from './claim-error';
@@ -145,6 +147,38 @@ describe('addNeedErrorMessage', () => {
     );
     expect(addNeedErrorMessage(refused('Unexpected error.'))).toBe(
       '加不上去，請稍後再試一次。',
+    );
+  });
+});
+
+describe('isNeedAlreadyGone', () => {
+  it('reads a refusal for a need deleted already — from another tab, or with its ticket — as done', () => {
+    expect(isNeedAlreadyGone(refused('Ticket task not found'))).toBe(true);
+  });
+
+  it('does not read any other refusal, or a lost connection, as done', () => {
+    expect(isNeedAlreadyGone(refused('403: Permission Denied.'))).toBe(false);
+    expect(isNeedAlreadyGone(refused('Unexpected error.'))).toBe(false);
+    expect(isNeedAlreadyGone({ networkError: new TypeError('Failed to fetch') })).toBe(false);
+  });
+});
+
+describe('deleteNeedErrorMessage', () => {
+  it('says only its requester may delete it, and tells a lapsed session apart', () => {
+    expect(deleteNeedErrorMessage(refused('403: Permission Denied.'))).toBe(
+      '只有建這張單的人可以刪除。',
+    );
+    expect(deleteNeedErrorMessage(refused('401: Could not validate credentials'))).toBe(
+      '登入已過期，請重新登入後再試一次。',
+    );
+  });
+
+  it('blames the connection, or falls back to a plain failure', () => {
+    expect(deleteNeedErrorMessage({ networkError: new TypeError('Failed to fetch') })).toBe(
+      '連線失敗，請確認網路後再試一次。',
+    );
+    expect(deleteNeedErrorMessage(refused('Unexpected error.'))).toBe(
+      '刪除失敗，請稍後再試一次。',
     );
   });
 });
