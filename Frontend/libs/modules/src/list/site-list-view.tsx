@@ -28,11 +28,7 @@ import {
   useStationReports,
 } from '../station/report';
 import { NeedClaimProvider } from '../ticket/needs';
-import {
-  createTaskMatchTicketDetailOverrides,
-  TaskMatchDeleteConfirmDialog,
-  useTaskMatches,
-} from '../ticket/task-match';
+import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
 import { usePaginatedRescueMapMarkers } from '../map/site';
 import { SiteListRow } from './site-list-row';
 
@@ -44,19 +40,15 @@ const { color } = designTokens;
  * 前台列表模組：與地圖共用路由狀態與篩選邏輯，支援維度切換、子分類篩選與詳情雙向綁定。
  */
 export function SiteListView() {
-  const { data: session, status: authStatus } = useSession();
+  const { status: authStatus } = useSession();
   const { module, state, replace } = useSiteRouteState();
   const { reportsByStationId, submitStationReport } = useStationReports();
-  const { getTaskMatchState, deleteMatchSheet } = useTaskMatches();
   const isAuthenticated = authStatus === 'authenticated';
-  const currentUserId =
-    session?.user && 'id' in session.user ? (session.user.id ?? null) : null;
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const {
     markers: sourceMarkers,
     isFetching,
     hasFetchedOnce,
-    dismissMarker,
     hasNextPage,
     loadNextPage,
     loadTicketMarker,
@@ -97,8 +89,6 @@ export function SiteListView() {
   // modal, and MUI hid the rest of the page — the list, the detail panel — from screen readers.
   const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
   const [reportStation, setReportStation] =
-    useState<RescueMapMarkerItem | null>(null);
-  const [pendingDeleteTask, setPendingDeleteTask] =
     useState<RescueMapMarkerItem | null>(null);
   const [shareTarget, setShareTarget] = useState<PointShareTarget | null>(null);
 
@@ -217,20 +207,12 @@ export function SiteListView() {
     );
   };
 
-  const createTicketDetailOverrides = (marker: RescueMapMarkerItem) => {
-    const taskMatchState = getTaskMatchState(marker);
-    const canDeleteMatchSheet =
-      Boolean(currentUserId) && marker.ticketMeta?.createdBy === currentUserId;
-
-    return createTaskMatchTicketDetailOverrides({
+  const createTicketDetailOverrides = (marker: RescueMapMarkerItem) =>
+    createTaskMatchTicketDetailOverrides({
       marker,
-      state: taskMatchState,
       isAuthenticated,
-      canDeleteMatchSheet,
-      onDeleteMatchSheet: () => setPendingDeleteTask(marker),
       onShare: () => openPointShare(marker),
     });
-  };
 
   const view = (
     <Box
@@ -326,42 +308,22 @@ export function SiteListView() {
             </Stack>
           ) : (
             <Stack spacing={1.5}>
-              {controller.markers.map((marker) => {
-                const taskMatchState =
-                  marker.detailType === 'ticket'
-                    ? getTaskMatchState(marker)
-                    : undefined;
-
-                return (
-                  <SiteListRow
-                    key={marker.id}
-                    marker={marker}
-                    active={marker.id === controller.selectedMarkerId}
-                    latestReport={reportsByStationId[marker.id]?.[0]}
-                    taskMatchState={taskMatchState}
-                    isAuthenticated={isAuthenticated}
-                    canDeleteMatchSheet={
-                      marker.detailType === 'ticket' &&
-                      Boolean(currentUserId) &&
-                      marker.ticketMeta?.createdBy === currentUserId
-                    }
-                    onSelect={() => controller.setSelectedMarkerId(marker.id)}
-                    onShare={() => openPointShare(marker)}
-                    onSuggestUpdate={
-                      marker.detailType === 'station'
-                        ? () => setReportStation(marker)
-                        : undefined
-                    }
-                    onDeleteMatchSheet={
-                      marker.detailType === 'ticket'
-                        && Boolean(currentUserId) &&
-                          marker.ticketMeta?.createdBy === currentUserId
-                        ? () => setPendingDeleteTask(marker)
-                        : undefined
-                    }
-                  />
-                );
-              })}
+              {controller.markers.map((marker) => (
+                <SiteListRow
+                  key={marker.id}
+                  marker={marker}
+                  active={marker.id === controller.selectedMarkerId}
+                  latestReport={reportsByStationId[marker.id]?.[0]}
+                  isAuthenticated={isAuthenticated}
+                  onSelect={() => controller.setSelectedMarkerId(marker.id)}
+                  onShare={() => openPointShare(marker)}
+                  onSuggestUpdate={
+                    marker.detailType === 'station'
+                      ? () => setReportStation(marker)
+                      : undefined
+                  }
+                />
+              ))}
               <Box ref={loadMoreRef} sx={{ height: 1 }} />
               {isFetching ? (
                 <Typography
@@ -533,22 +495,6 @@ export function SiteListView() {
 
           submitStationReport(reportStation, values);
           closeReportDrawer();
-        }}
-      />
-      <TaskMatchDeleteConfirmDialog
-        open={Boolean(pendingDeleteTask)}
-        task={pendingDeleteTask}
-        onCancel={() => setPendingDeleteTask(null)}
-        onConfirm={() => {
-          if (!pendingDeleteTask) {
-            return;
-          }
-
-          dismissMarker(deleteMatchSheet(pendingDeleteTask));
-          if (controller.selectedMarkerId === pendingDeleteTask.id) {
-            controller.setSelectedMarkerId(undefined);
-          }
-          setPendingDeleteTask(null);
         }}
       />
       <PointShareDrawer

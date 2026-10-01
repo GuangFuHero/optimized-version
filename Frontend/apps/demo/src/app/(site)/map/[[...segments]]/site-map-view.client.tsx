@@ -26,7 +26,6 @@ import {
   SiteStationReportDrawer,
   StationCreateDrawer,
   StationReportHistoryPanel,
-  TaskMatchDeleteConfirmDialog,
   useCreatedTicketMarker,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
@@ -34,7 +33,6 @@ import {
   useSiteMapViewportState,
   useSiteMapViewportStore,
   useStationReports,
-  useTaskMatches,
   type PointShareTarget,
   type RescueMapControllerValue,
   type RescueMapDraftPoint,
@@ -334,20 +332,16 @@ function SiteMapViewportDataLayer({
   onOpenShareTarget: (target: PointShareTarget) => void;
   onReplaceRouteState: (next: SiteRouteState) => void;
 }) {
-  const { data: session, status: authStatus } = useSession();
+  const { status: authStatus } = useSession();
   const viewportState = useSiteMapViewportState();
   const viewportStore = useSiteMapViewportStore();
   const liveDataStore = useSiteMapLiveData(baseRouteState);
   const liveDataSnapshot = useSiteMapLiveDataSnapshot(liveDataStore);
-  const { getTaskMatchState, deleteMatchSheet } = useTaskMatches();
   const isAuthenticated = authStatus === 'authenticated';
-  const currentUserId = session?.user?.id ?? null;
   const mergedRouteState = useMemo<SiteRouteState>(
     () => mergeRouteStateWithViewport(baseRouteState, viewportState),
     [baseRouteState, viewportState],
   );
-  const [pendingDeleteTask, setPendingDeleteTask] =
-    useState<RescueMapMarkerItem | null>(null);
   // A blank spot tapped on the map, for 請求協助 there (spec S3). Not while 「＋」 is open: its pin
   // in the middle is then the point being placed, and a second one would confuse the two.
   const [draftPoint, setDraftPoint] = useState<RescueMapDraftPoint | null>(
@@ -472,28 +466,13 @@ function SiteMapViewportDataLayer({
   ]);
 
   const createTicketDetailOverrides = useCallback(
-    (marker: RescueMapMarkerItem) => {
-      const taskMatchState = getTaskMatchState(marker);
-      const canDeleteMatchSheet =
-        Boolean(currentUserId) &&
-        marker.ticketMeta?.createdBy === currentUserId;
-
-      return createTaskMatchTicketDetailOverrides({
+    (marker: RescueMapMarkerItem) =>
+      createTaskMatchTicketDetailOverrides({
         marker,
-        state: taskMatchState,
         isAuthenticated,
-        canDeleteMatchSheet,
-        onDeleteMatchSheet: () => setPendingDeleteTask(marker),
         onShare: () => onOpenShareTarget(createCurrentPointShareTarget(marker)),
-      });
-    },
-    [
-      currentUserId,
-      createCurrentPointShareTarget,
-      getTaskMatchState,
-      isAuthenticated,
-      onOpenShareTarget,
-    ],
+      }),
+    [createCurrentPointShareTarget, isAuthenticated, onOpenShareTarget],
   );
 
   const renderControls = useCallback(
@@ -577,26 +556,6 @@ function SiteMapViewportDataLayer({
         stationDetailSecondaryAction={stationDetailSecondaryAction}
         stationPendingCorrectionCount={stationPendingCorrectionCount}
         stationDetailTabPanels={stationDetailTabPanels}
-      />
-      <TaskMatchDeleteConfirmDialog
-        open={Boolean(pendingDeleteTask)}
-        task={pendingDeleteTask}
-        onCancel={() => setPendingDeleteTask(null)}
-        onConfirm={() => {
-          if (!pendingDeleteTask) {
-            return;
-          }
-
-          liveDataStore.dismissMarker(deleteMatchSheet(pendingDeleteTask));
-          onReplaceRouteState({
-            ...baseRouteState,
-            selectedMarkerId:
-              baseRouteState.selectedMarkerId === pendingDeleteTask.id
-                ? undefined
-                : baseRouteState.selectedMarkerId,
-          });
-          setPendingDeleteTask(null);
-        }}
       />
     </NeedClaimProvider>
   );

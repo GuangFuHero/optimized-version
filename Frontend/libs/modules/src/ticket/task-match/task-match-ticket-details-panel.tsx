@@ -47,7 +47,6 @@ const DETAIL_QUERY_CONTEXT = { suspense: false } as const;
 interface TicketPhotoItem {
   uuid: string;
   url: string;
-  createdBy?: string | null;
   createdAt?: string | null;
 }
 
@@ -331,7 +330,6 @@ export function TaskMatchTicketDetailsPanel({
       (ticket?.photos ?? []).map((photo) => ({
         uuid: photo.uuid,
         url: photo.url,
-        createdBy: photo.createdBy,
         createdAt: photo.createdAt?.toString() ?? null,
       })),
     [ticket?.photos],
@@ -767,13 +765,11 @@ export function TaskMatchTicketDetailsPanel({
                 bgcolor: detailPalette.sectionSurface,
               }}
             />
+            {/* No 上傳者: all there is to show is the account's uuid, which tells a reader nothing
+                and ties the photo to an account — who claimed what is not shown either (spec Q36). */}
             <DetailRow
               label="照片建立時間"
               value={formatDateTime(activePhoto.createdAt)}
-            />
-            <DetailRow
-              label="上傳者"
-              value={activePhoto.createdBy?.trim() || '未提供'}
             />
           </Stack>
         ) : (
