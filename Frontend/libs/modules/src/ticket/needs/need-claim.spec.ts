@@ -73,16 +73,15 @@ describe('resolveNeedClaim', () => {
     ).toEqual(claimed);
   });
 
-  it('closes a need that was called off, and says so over the viewer’s own claim', () => {
+  it('leaves a cancelled need or ticket to the backend: cancelling is deleting now (Q43)', () => {
+    // A deleted need or ticket is never returned. Only rows left from before could still read so,
+    // and the backend refuses a claim on them.
     const mine = { myAssignment: { uuid: 'assignment-1' } };
+    const withdrawn = { isAuthenticated: true, ticketStatus: 'cancelled' };
 
-    expect(resolveNeedClaim(need({ status: 'canceled' }), SIGNED_IN)).toEqual({
-      kind: 'canceled',
-      label: '已取消',
-      action: null,
-    });
-    // 「不用去了」outranks「我接過」— a volunteer who claimed it must not read it as still on.
-    expect(resolveNeedClaim(need({ ...mine, status: 'canceled' }), SIGNED_IN).kind).toBe('canceled');
+    expect(resolveNeedClaim(need({ status: 'canceled' }), SIGNED_IN).kind).toBe('open');
+    expect(resolveNeedClaim(need(), withdrawn).kind).toBe('open');
+    expect(resolveNeedClaim(need(mine), withdrawn).kind).toBe('mine');
   });
 
   it('calls a need that has its people fulfilled, not done — nobody on it has gone yet', () => {
@@ -95,15 +94,12 @@ describe('resolveNeedClaim', () => {
     ).toEqual(fulfilled);
   });
 
-  it('closes the needs of a ticket withdrawn or with none open, as the backend refuses them', () => {
-    // A ticket's status follows its needs now (Q44) and only deleting it cancels it (Q43), but one
-    // closed by hand before then left its needs pending: the ticket's own status still decides.
+  it('closes the needs of a ticket with none open, as the backend refuses them', () => {
+    // A ticket's status follows its needs now (Q44), but one closed by hand before then left its
+    // needs pending: the ticket's own status still decides.
     const mine = { myAssignment: { uuid: 'assignment-1' } };
-    const withdrawn = { isAuthenticated: true, ticketStatus: 'cancelled' };
     const completed = { isAuthenticated: true, ticketStatus: 'completed' };
 
-    expect(resolveNeedClaim(need(), withdrawn).kind).toBe('canceled');
-    expect(resolveNeedClaim(need(mine), withdrawn).kind).toBe('canceled');
     expect(resolveNeedClaim(need(), completed)).toEqual({
       kind: 'fulfilled',
       label: '已滿足需求',
@@ -145,10 +141,10 @@ describe('formatNeedQuota', () => {
     });
   });
 
-  it('stops asking for people once a need is called off or has its people', () => {
+  it('stops asking for people once a need has its people', () => {
+    // Stopped by its requester at 1 of 3 (Q39): it is missing nobody, however few went.
     const halfway = need({ quantity: 3, assignedCount: 1 });
 
-    expect(formatNeedQuota(halfway, 'canceled')).toEqual({ text: '1/3', fraction: 1 / 3 });
     expect(formatNeedQuota(halfway, 'fulfilled')).toEqual({ text: '1/3', fraction: 1 / 3 });
   });
 });
@@ -176,8 +172,8 @@ describe('formatNeedHeadcount', () => {
   });
 
   it('stops asking for people once the need closed under the dialog', () => {
-    // A refused claim reloads the need (Q29), and a canceled one is missing nobody.
-    expect(formatNeedHeadcount(need({ quantity: 3, assignedCount: 1 }), 'canceled')).toBe(
+    // A refused claim reloads the need (Q29), and one stopped by its requester is missing nobody.
+    expect(formatNeedHeadcount(need({ quantity: 3, assignedCount: 1 }), 'fulfilled')).toBe(
       '目前 1/3 人',
     );
   });

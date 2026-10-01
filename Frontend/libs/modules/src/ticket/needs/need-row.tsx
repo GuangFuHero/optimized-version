@@ -45,7 +45,7 @@ export function NeedRow({
   const actions = useNeedActions(need, { ticketUuid, ticketStatus, ticketCreatedBy });
   const claim = resolveNeedClaim(need, { ticketStatus, isAuthenticated });
   const quota = formatNeedQuota(need, claim.kind);
-  const closed = claim.kind === 'canceled' || claim.kind === 'fulfilled';
+  const closed = claim.kind === 'fulfilled';
   const full = !closed && isNeedFull(need);
   const TypeIcon = needTypeIcon(need.taskType);
 
@@ -58,7 +58,7 @@ export function NeedRow({
           claim.kind === 'mine' ? color.brand.secondary.default : color.border.default
         }`,
         bgcolor: full ? color.bg.success.subtle : color.bg.neutral.default,
-        // Still listed, so a volunteer who claimed it sees it was called off — but set back.
+        // Still listed, but set back: it has its people, and there is no place left to take (Q42).
         opacity: closed ? 0.6 : 1,
       }}
     >

@@ -46,7 +46,7 @@ export function NeedLine({
   const actions = useNeedActions(need, { ticketUuid, ticketStatus, ticketCreatedBy });
   const claim = resolveNeedClaim(need, { ticketStatus, isAuthenticated });
   const quota = formatNeedQuota(need, claim.kind);
-  const closed = claim.kind === 'canceled' || claim.kind === 'fulfilled';
+  const closed = claim.kind === 'fulfilled';
   const full = !closed && isNeedFull(need);
   const TypeIcon = needTypeIcon(need.taskType);
 

@@ -15,7 +15,7 @@ export interface TicketNeed {
   myAssignment?: { uuid: string } | null;
 }
 
-export type NeedClaimKind = 'canceled' | 'fulfilled' | 'mine' | 'full' | 'guest' | 'open';
+export type NeedClaimKind = 'fulfilled' | 'mine' | 'full' | 'guest' | 'open';
 
 export interface NeedClaim {
   kind: NeedClaimKind;
@@ -36,14 +36,11 @@ export function resolveNeedClaim(
   need: TicketNeed,
   viewer: { isAuthenticated: boolean; ticketStatus?: string | null },
 ): NeedClaim {
-  // Called off first, over the viewer's own claim: 「不用去了」matters more than「我接過」. Deleting a
-  // need or its ticket cancels it (Q43), and neither will come back once the backend's queries all
-  // leave deleted ones out. Task statuses spell it `canceled` (one l), unlike a ticket's `cancelled`.
-  if (need.status === 'canceled' || viewer.ticketStatus === 'cancelled') {
-    return { kind: 'canceled', label: '已取消', action: null };
-  }
+  // No 已取消: a need or ticket is cancelled only by deleting it now, and nothing deleted is ever
+  // returned (Q43). One cancelled by hand before then reads as any other, and the backend refuses
+  // a claim on it.
 
-  // Then the viewer's own claim, even on a need that has since filled or stopped recruiting: they
+  // First the viewer's own claim, even on a need that has since filled or stopped recruiting: they
   // are among the people it has, and still go (Q26).
   if (need.myAssignment) {
     return { kind: 'mine', label: '已承接', action: null };
@@ -89,8 +86,8 @@ export function formatNeedQuota(need: TicketNeed, kind: NeedClaimKind): NeedQuot
     return { text: `${count} 已滿`, fraction: 1 };
   }
 
-  // A need that is called off or has its people is missing nobody, however few went.
-  if (kind === 'canceled' || kind === 'fulfilled') {
+  // A need that has its people is missing nobody, however few went.
+  if (kind === 'fulfilled') {
     return { text: count, fraction: need.assignedCount / quantity };
   }
 
@@ -118,7 +115,7 @@ export function formatNeedHeadcount(need: TicketNeed, kind: NeedClaimKind): stri
     return `${count}，已滿`;
   }
 
-  if (kind === 'canceled' || kind === 'fulfilled') {
+  if (kind === 'fulfilled') {
     return count;
   }
 
