@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 
 from app.core.permissions import Perm
 from app.models.auth import User
+from app.models.photo import Photo
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
@@ -205,3 +206,110 @@ async def test_someone_who_may_not_file_tickets_is_refused(db):
 
     assert refused.value.status_code == 403
     assert await _tickets_filed(db) == 0
+
+
+async def _photos_of(db, ticket_uuid) -> list[Photo]:
+    """In the order the ticket's photo loader reads them (`loaders.py`)."""
+    rows = await db.execute(
+        select(Photo).where(Photo.ref_uuid == ticket_uuid).order_by(Photo.created_at, Photo.uuid)
+    )
+    return list(rows.scalars().all())
+
+
+async def _photos_stored(db) -> int:
+    return await db.scalar(select(func.count()).select_from(Photo))
+
+
+def _links(count: int) -> list[str]:
+    return [f"https://duk.tw/scene{n}.jpg" for n in range(1, count + 1)]
+
+
+@pytest.mark.asyncio
+async def test_a_request_keeps_its_photo_links_in_the_order_given(db):
+    """Links only, never files (TM-IMG-101): each is a photo of the ticket, filed by the citizen.
+
+    Filed in one transaction the photos share one `now()`, and the loader breaks the tie on
+    uuid — random, as it was for the needs. Five links, so passing by luck is 1 in 120.
+    """
+    citizen = await _citizen(db)
+    citizen_uuid = str(citizen.uuid)
+    links = _links(5)
+
+    ticket = await create_help_request(db, actor=citizen, **_request(photo_urls=links))
+
+    photos = await _photos_of(db, ticket.uuid)
+    assert [p.url for p in photos] == links
+    assert {(p.ref_type, str(p.created_by)) for p in photos} == {("geometry", citizen_uuid)}
+
+
+@pytest.mark.asyncio
+async def test_a_photo_link_is_stored_as_checked(db):
+    """Stripped as `normalize_photo_url` returns it, and a repeated link kept (TM-IMG-125)."""
+    citizen = await _citizen(db)
+
+    ticket = await create_help_request(
+        db,
+        actor=citizen,
+        **_request(photo_urls=["  https://duk.tw/a.jpg ", "https://duk.tw/a.jpg"]),
+    )
+
+    assert [p.url for p in await _photos_of(db, ticket.uuid)] == [
+        "https://duk.tw/a.jpg",
+        "https://duk.tw/a.jpg",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("photo_urls", [None, []], ids=["left-out", "empty"])
+async def test_a_request_without_photos_is_filed_as_before(db, photo_urls):
+    """Photos are optional (「現場照片（選填）」)."""
+    citizen = await _citizen(db)
+
+    await create_help_request(db, actor=citizen, **_request(photo_urls=photo_urls))
+
+    assert await _tickets_filed(db) == 1
+    assert await _photos_stored(db) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("bad_link", "message"),
+    [
+        ("http://duk.tw/a.jpg", "^Photo url must be an https:// URL with a host$"),
+        ("   ", "^Photo url is required$"),
+        ("https://duk.tw/" + "a" * 500, "^Photo url must be at most 500 characters$"),
+    ],
+    ids=["http", "blank", "too-long"],
+)
+async def test_one_bad_photo_link_refuses_the_whole_request(db, bad_link, message):
+    """Checked before anything is written: no ticket, no needs, not the good link before it."""
+    citizen = await _citizen(db)
+
+    with pytest.raises(ValueError, match=message):
+        await create_help_request(
+            db, actor=citizen, **_request(photo_urls=["https://duk.tw/good.jpg", bad_link])
+        )
+
+    assert await _tickets_filed(db) == 0
+    assert await _photos_stored(db) == 0
+
+
+@pytest.mark.asyncio
+async def test_more_than_ten_photo_links_are_refused(db):
+    """Ten at most, the site's own limit (使用者 2026-10-01; the prototype's TK_PHOTO_MAX)."""
+    citizen = await _citizen(db)
+
+    with pytest.raises(ValueError, match="^At most 10 photos are allowed$"):
+        await create_help_request(db, actor=citizen, **_request(photo_urls=_links(11)))
+
+    assert await _tickets_filed(db) == 0
+
+
+@pytest.mark.asyncio
+async def test_ten_photo_links_are_allowed(db):
+    """The limit itself still files."""
+    citizen = await _citizen(db)
+
+    ticket = await create_help_request(db, actor=citizen, **_request(photo_urls=_links(10)))
+
+    assert len(await _photos_of(db, ticket.uuid)) == 10

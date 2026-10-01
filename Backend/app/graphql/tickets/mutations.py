@@ -65,9 +65,9 @@ class RequestMutation:
     async def create_help_request(
         self, info: strawberry.types.Info, input: CreateHelpRequestInput
     ) -> TicketType:
-        """File a citizen's request for help and its needs in one transaction (請求協助).
+        """File a citizen's request for help, its needs and photo links in one transaction (請求協助).
 
-        Requires ticket.add. Nothing is written unless every need is valid; see
+        Requires ticket.add. Nothing is written unless every need and photo link is valid; see
         app/services/ticket.py::create_help_request for the rules.
         """
         ticket = await ticket_service.create_help_request(
@@ -88,6 +88,7 @@ class RequestMutation:
                 }
                 for task in input.tasks
             ],
+            photo_urls=input.photo_urls,
         )
         return TicketType.from_model(ticket)
 

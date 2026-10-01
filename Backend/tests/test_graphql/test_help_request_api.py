@@ -94,3 +94,43 @@ async def test_the_needs_come_back_in_the_order_they_were_listed(client, redis):
 
     assert "errors" not in res.json(), res.json()
     assert [t["taskName"] for t in res.json()["data"]["createHelpRequest"]["tasks"]] == names
+
+
+FILE_WITH_PHOTOS = """
+mutation($input: CreateHelpRequestInput!) {
+  createHelpRequest(input: $input) { photos { url } }
+}
+"""
+
+
+@pytest.mark.asyncio
+async def test_photo_links_filed_with_a_request_come_back_as_its_photos(client, redis):
+    """「現場照片（選填）」 (spec S8): the requester sees them on the ticket, in the order given."""
+    _, token = await _create_user_with_role(redis, "Login User")
+    links = ["https://duk.tw/one.jpg", "https://duk.tw/two.jpg"]
+
+    res = await client.post(
+        "/graphql",
+        json={"query": FILE_WITH_PHOTOS, "variables": {"input": _input(photoUrls=links)}},
+        headers=auth_header(token),
+    )
+
+    assert "errors" not in res.json(), res.json()
+    assert res.json()["data"]["createHelpRequest"]["photos"] == [{"url": link} for link in links]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_photo_link_says_why(client, redis):
+    """`normalize_photo_url`'s reason reaches the client as written, and nothing is filed."""
+    _, token = await _create_user_with_role(redis, "Login User")
+
+    res = await client.post(
+        "/graphql",
+        json={
+            "query": FILE_WITH_PHOTOS,
+            "variables": {"input": _input(photoUrls=["http://duk.tw/one.jpg"])},
+        },
+        headers=auth_header(token),
+    )
+
+    assert [e["message"] for e in res.json()["errors"]] == ["Photo url must be an https:// URL with a host"]

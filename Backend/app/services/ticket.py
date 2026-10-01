@@ -20,6 +20,7 @@ from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.repositories.auth_repository import user_repository
 from app.repositories.geo_repository import secondary_location_repository
+from app.repositories.photo_repository import photo_repository
 from app.repositories.tickets_repository import (
     task_assignment_repository,
     task_property_repository,
@@ -31,6 +32,7 @@ from app.services.authz import require_scope
 from app.services.geo_validation import normalize_contact_fields, validate_point
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
+from app.services.photo import normalize_photo_url
 from app.services.ticket_status import recompute_ticket_status
 
 # Size limits for `set_ticket_disaster_details` (ADR-267). ADR-092 leaves the vocabulary
@@ -60,6 +62,9 @@ TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
 # `tickets.title` and `ticket_tasks.task_name` are both String(200).
 TICKET_TITLE_MAX_LENGTH = 200
 TASK_NAME_MAX_LENGTH = 200
+# Photo links a citizen may file with a request — the site's own limit, the same number its
+# form stops at (spec S8, 使用者 2026-10-01; the prototype's TK_PHOTO_MAX in wg-photos.jsx).
+HELP_REQUEST_PHOTO_MAX = 10
 
 # What a notice calls each review outcome — the site's own words, never the enum. An unknown
 # value falls through as itself, so a new one shows up rather than vanishing.
@@ -194,6 +199,19 @@ def _validate_need_size(task_name: str, quantity: int | None) -> None:
         raise ValueError("quantity must be at least 1")
 
 
+def _checked_photo_links(photo_urls: list[str] | None) -> list[str]:
+    """The photo links of a request as they will be stored, or refuse them all.
+
+    Links only — the platform keeps no image (TM-IMG-101). Each goes through
+    `normalize_photo_url`, as a station's photo does, and the checked string is the one stored;
+    a link repeated is kept, as the site's form lets it be (TM-IMG-125).
+    """
+    links = photo_urls or []
+    if len(links) > HELP_REQUEST_PHOTO_MAX:
+        raise ValueError(f"At most {HELP_REQUEST_PHOTO_MAX} photos are allowed")
+    return [normalize_photo_url(link) for link in links]
+
+
 async def create_help_request(
     db: AsyncSession,
     *,
@@ -205,8 +223,9 @@ async def create_help_request(
     contact_phone: str | None,
     secondary_location: dict | None,
     tasks: list[dict],
+    photo_urls: list[str] | None = None,
 ) -> Tickets:
-    """File a citizen's request for help: the ticket and every need on it, in one commit.
+    """File a citizen's request for help: the ticket, every need and photo link, in one commit.
 
     The public site's 「請求協助」 (spec note/help-request-spec.md, D1). `create_ticket` followed
     by one `create_ticket_task` per need commits each step on its own, so a failure part-way
@@ -216,6 +235,9 @@ async def create_help_request(
     The site never asks how urgent a request is or who may see it: priority is `medium` and
     visibility `public`, and staff adjust both afterwards. The ticket's own `task_type` is the
     first need's, as the admin form sets it.
+
+    Photo links (「現場照片（選填）」, spec S8) become the ticket's photos, read back by
+    `TicketType.photos` and withheld from whoever cannot see the ticket's detail.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
     if not title.strip():
@@ -224,10 +246,11 @@ async def create_help_request(
         raise ValueError(f"title must be at most {TICKET_TITLE_MAX_LENGTH} characters")
     if not tasks:
         raise ValueError("At least one task is required")
-    # Every need is checked before anything is written, so one bad need refuses the request
-    # rather than leaving the ones before it filed.
+    # Every need and photo link is checked before anything is written, so one bad one refuses
+    # the request rather than leaving the ones before it filed.
     for task in tasks:
         _validate_help_request_task(task)
+    photo_links = _checked_photo_links(photo_urls)
     validate_point(geometry, entity="Ticket")
     contacts = normalize_contact_fields(
         {"contact_name": contact_name, "contact_email": None, "contact_phone": contact_phone},
@@ -268,6 +291,19 @@ async def create_help_request(
                 # One transaction means one `now()` for every need, and the tasks loader
                 # breaks that tie on uuid — random. A microsecond apart keeps them in the order
                 # the requester listed them (第 1 件、第 2 件…) on the database's own clock.
+                "created_at": func.now() + timedelta(microseconds=position),
+            },
+        )
+    for position, url in enumerate(photo_links):
+        await photo_repository.add(
+            db,
+            obj_in={
+                # 'geometry': the ticket's base_geometries row, which the photo loader reads.
+                "ref_uuid": str(ticket.uuid),
+                "ref_type": "geometry",
+                "url": url,
+                "created_by": creator,
+                # As for the needs: the loader sorts on created_at, then uuid.
                 "created_at": func.now() + timedelta(microseconds=position),
             },
         )
