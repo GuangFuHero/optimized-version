@@ -1,7 +1,15 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import {
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useMutation } from 'urql';
 
 import {
@@ -22,15 +30,18 @@ import {
   type HelpRequestForm,
   type PickedPoint,
 } from './help-request-form';
-import { onOpenHelpRequest } from './open-help-request';
+import {
+  buildHelpSignInHref,
+  readHelpReturn,
+  stripHelpReturn,
+} from './help-return';
+import { onOpenHelpRequest, type HelpRequestSeed } from './open-help-request';
 
 /** Near enough to see the street the new ticket is on. */
 const NEW_TICKET_ZOOM = 16;
 
 interface HelpRequestHostProps {
   isAuthenticated: boolean;
-  /** Sends a guest to sign in and back to this page (the shell's own). */
-  onSignIn?: () => void;
 }
 
 interface Opening {
@@ -46,15 +57,53 @@ interface FiledTicket {
 }
 
 /**
- * 請求協助, kept once in the site shell so every page has it, and opened through
- * `openHelpRequest`. It also does what follows a ticket filed (Q12): the drawer closes, the map
- * and the list are handed the new ticket, the page turns to tickets with it selected, and a toast
- * says it went through.
+ * Opens the drawer again for a guest back from signing in (`help=`, spec Q5). Read once, from the
+ * router: on the way back the page renders before the address changes, and the map rewrites the
+ * address without it soon after — as A's claim does (`NeedClaimProvider`). Kept in its own
+ * component, under its own Suspense, so that reading the query does not turn a page without one
+ * into a client-only page.
  */
-export function HelpRequestHost({
-  isAuthenticated,
-  onSignIn,
-}: HelpRequestHostProps) {
+function HelpRequestReturn({
+  onReturn,
+}: {
+  onReturn: (seed: HelpRequestSeed | null) => void;
+}) {
+  const searchParams = useSearchParams();
+  const { status } = useSession();
+  const [helpReturn] = useState(() => readHelpReturn(searchParams));
+  const handled = useRef(false);
+
+  useEffect(() => {
+    if (!helpReturn || handled.current || status === 'loading') {
+      return;
+    }
+
+    handled.current = true;
+
+    // Off the address either way, so a reload or a copied link does not open it again. A guest
+    // here did not sign in — the link came some other way — and has nothing to reopen.
+    const address = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const withoutHelp = stripHelpReturn(address);
+
+    if (withoutHelp !== address) {
+      window.history.replaceState(window.history.state, '', withoutHelp);
+    }
+
+    if (status === 'authenticated') {
+      onReturn(helpReturn.seed);
+    }
+  }, [helpReturn, onReturn, status]);
+
+  return null;
+}
+
+/**
+ * 請求協助, kept once in the site shell so every page has it, and opened through
+ * `openHelpRequest` — or by itself for a guest back from signing in (Q5). It also does what
+ * follows a ticket filed (Q12): the drawer closes, the map and the list are handed the new ticket,
+ * the page turns to tickets with it selected, and a toast says it went through.
+ */
+export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   const router = useRouter();
   const pathname = usePathname();
   const siteRoute = useSiteRouteState();
@@ -69,18 +118,26 @@ export function HelpRequestHost({
   const [toastOpen, setToastOpen] = useState(false);
   const [filed, setFiled] = useState<FiledTicket | null>(null);
 
-  useEffect(
-    () =>
-      onOpenHelpRequest((seed) => {
-        setOpening((current) => ({
-          id: (current?.id ?? 0) + 1,
-          seed: seed ? { ...seed, source: 'seed' } : null,
-        }));
-        setSubmitError(null);
-        setOpen(true);
-      }),
-    [],
-  );
+  const openDrawer = useCallback((seed: HelpRequestSeed | null) => {
+    setOpening((current) => ({
+      id: (current?.id ?? 0) + 1,
+      seed: seed ? { ...seed, source: 'seed' } : null,
+    }));
+    setSubmitError(null);
+    setOpen(true);
+  }, []);
+
+  useEffect(() => onOpenHelpRequest(openDrawer), [openDrawer]);
+
+  /** To sign in and back here with the drawer to open again, at the same point if it had one. */
+  const signIn = () => {
+    const seed = opening?.seed
+      ? { lat: opening.seed.lat, lng: opening.seed.lng }
+      : null;
+
+    setOpen(false);
+    router.push(buildHelpSignInHref(window.location, seed));
+  };
 
   /**
    * The ticket, selected, on tickets with no filter that could hide it: where the person is, on the
@@ -171,13 +228,13 @@ export function HelpRequestHost({
           submitting={submitting}
           submitError={submitError}
           onClose={() => setOpen(false)}
-          onSignIn={() => {
-            setOpen(false);
-            onSignIn?.();
-          }}
+          onSignIn={signIn}
           onSubmit={(form) => void submit(form)}
         />
       ) : null}
+      <Suspense fallback={null}>
+        <HelpRequestReturn onReturn={openDrawer} />
+      </Suspense>
       <SiteToast
         open={toastOpen}
         title="你的求助單已送出"

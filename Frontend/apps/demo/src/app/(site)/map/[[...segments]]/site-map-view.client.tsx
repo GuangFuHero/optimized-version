@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
@@ -19,15 +18,14 @@ import {
   dedupeMarkersById,
   hasRescueMapDetailItem,
   Map,
+  MapRequestHelpButton,
   NeedClaimProvider,
   PointShareDrawer,
-  SITE_FALLBACK_DATA_TYPE,
   SiteMapControls,
   SiteStationReportDrawer,
   StationCreateDrawer,
   StationReportHistoryPanel,
   TaskMatchDeleteConfirmDialog,
-  TicketCreateDrawer,
   useCreatedTicketMarker,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
@@ -38,7 +36,6 @@ import {
   useTaskMatches,
   type PointShareTarget,
   type RescueMapControllerValue,
-  type RescueMapDataType,
   type RescueMapMarkerItem,
   type SiteRouteState,
 } from '@rescue-frontend/modules';
@@ -55,25 +52,14 @@ const DEFAULT_MAP_METADATA = {
 };
 const DEFAULT_CREATE_CENTER: [number, number] = [23.884, 121.0];
 
-function getCreateAccent(dataType: RescueMapDataType) {
-  if (dataType === 'ticket') {
-    return {
-      solid: color.bg.primary.default,
-      soft: color.bg.primary.subtle,
-      text: color.brand.primary.subtle,
-      border: color.border.accent,
-      hover: primitives.color.orange[100],
-    };
-  }
-
-  return {
-    solid: color.brand.secondary.default,
-    soft: color.bg.secondary.subtle,
-    text: color.brand.secondary.subtle,
-    border: color.brand.secondary.default,
-    hover: primitives.color.blue[100],
-  };
-}
+// 「＋」 adds stations only: a request for help is filed through 請求協助, from the shell (spec Q4).
+const CREATE_ACCENT = {
+  solid: color.brand.secondary.default,
+  soft: color.bg.secondary.subtle,
+  text: color.brand.secondary.subtle,
+  border: color.brand.secondary.default,
+  hover: primitives.color.blue[100],
+};
 
 function ControlChip({
   label,
@@ -131,18 +117,14 @@ function ControlChip({
 
 function SiteMapCreateDock({
   active,
-  dataType,
   onToggle,
   onCreateStation,
-  onCreateTicket,
 }: {
   active: boolean;
-  dataType: RescueMapDataType;
   onToggle: () => void;
   onCreateStation: () => void;
-  onCreateTicket: () => void;
 }) {
-  const accent = getCreateAccent(dataType);
+  const accent = CREATE_ACCENT;
 
   return (
     <Box
@@ -164,29 +146,16 @@ function SiteMapCreateDock({
       >
         <Zoom in={active}>
           <Box>
-            {dataType === 'station' ? (
-              <ControlChip
-                label="新增站點"
-                active
-                icon={<PlaceRoundedIcon sx={{ fontSize: 18 }} />}
-                toneSoft={accent.soft}
-                toneText={accent.text}
-                toneBorder={accent.border}
-                toneHover={accent.hover}
-                onClick={onCreateStation}
-              />
-            ) : (
-              <ControlChip
-                label="新增任務"
-                active
-                icon={<AssignmentRoundedIcon sx={{ fontSize: 18 }} />}
-                toneSoft={accent.soft}
-                toneText={accent.text}
-                toneBorder={accent.border}
-                toneHover={accent.hover}
-                onClick={onCreateTicket}
-              />
-            )}
+            <ControlChip
+              label="新增站點"
+              active
+              icon={<PlaceRoundedIcon sx={{ fontSize: 18 }} />}
+              toneSoft={accent.soft}
+              toneText={accent.text}
+              toneBorder={accent.border}
+              toneHover={accent.hover}
+              onClick={onCreateStation}
+            />
           </Box>
         </Zoom>
         <Fab
@@ -217,14 +186,8 @@ function SiteMapCreateDock({
   );
 }
 
-function SiteMapCenterPin({
-  open,
-  dataType,
-}: {
-  open: boolean;
-  dataType: RescueMapDataType;
-}) {
-  const accent = getCreateAccent(dataType);
+function SiteMapCenterPin({ open }: { open: boolean }) {
+  const accent = CREATE_ACCENT;
 
   return (
     <Box
@@ -352,7 +315,6 @@ function SiteMapViewportDataLayer({
   onMapRouteStateChange,
   onToggleCreateMode,
   onOpenCreateStation,
-  onOpenCreateTicket,
   onOpenReport,
   onOpenShareTarget,
   onReplaceRouteState,
@@ -366,7 +328,6 @@ function SiteMapViewportDataLayer({
   onMapRouteStateChange: (next: SiteRouteState) => void;
   onToggleCreateMode: () => void;
   onOpenCreateStation: () => void;
-  onOpenCreateTicket: () => void;
   onOpenReport: (marker: RescueMapMarkerItem) => void;
   onOpenShareTarget: (target: PointShareTarget) => void;
   onReplaceRouteState: (next: SiteRouteState) => void;
@@ -487,17 +448,15 @@ function SiteMapViewportDataLayer({
     (controller: RescueMapControllerValue) => (
       <>
         <SiteMapControls controller={controller} />
-        <SiteMapCenterPin
-          open={createModeActive}
-          dataType={controller.dataType ?? SITE_FALLBACK_DATA_TYPE}
-        />
+        <SiteMapCenterPin open={createModeActive} />
+        {/* A phone's 請求協助 (spec S2); set aside while 「＋」 is open, whose 新增站點 reaches
+            the middle of a 390px screen. */}
+        {createModeActive ? null : <MapRequestHelpButton />}
         {isAuthenticated ? (
           <SiteMapCreateDock
             active={createModeActive}
-            dataType={controller.dataType ?? SITE_FALLBACK_DATA_TYPE}
             onToggle={onToggleCreateMode}
             onCreateStation={onOpenCreateStation}
-            onCreateTicket={onOpenCreateTicket}
           />
         ) : null}
       </>
@@ -506,7 +465,6 @@ function SiteMapViewportDataLayer({
       createModeActive,
       isAuthenticated,
       onOpenCreateStation,
-      onOpenCreateTicket,
       onToggleCreateMode,
     ],
   );
@@ -594,7 +552,6 @@ function SiteMapScene({
   reportsByStationId,
   onToggleCreateMode,
   onOpenCreateStation,
-  onOpenCreateTicket,
   onOpenReport,
   onOpenShareTarget,
 }: {
@@ -605,7 +562,6 @@ function SiteMapScene({
   >['reportsByStationId'];
   onToggleCreateMode: () => void;
   onOpenCreateStation: () => void;
-  onOpenCreateTicket: () => void;
   onOpenReport: (marker: RescueMapMarkerItem) => void;
   onOpenShareTarget: (target: PointShareTarget) => void;
 }) {
@@ -632,7 +588,6 @@ function SiteMapScene({
       onMapRouteStateChange={handleMapRouteStateChange}
       onToggleCreateMode={onToggleCreateMode}
       onOpenCreateStation={onOpenCreateStation}
-      onOpenCreateTicket={onOpenCreateTicket}
       onOpenReport={onOpenReport}
       onOpenShareTarget={onOpenShareTarget}
       onReplaceRouteState={mapRoute.replace}
@@ -642,15 +597,11 @@ function SiteMapScene({
 
 function SiteMapCreatePanels({
   stationDrawerOpen,
-  ticketDrawerOpen,
   onCloseStationDrawer,
-  onCloseTicketDrawer,
   onCreatedMarker,
 }: {
   stationDrawerOpen: boolean;
-  ticketDrawerOpen: boolean;
   onCloseStationDrawer: () => void;
-  onCloseTicketDrawer: () => void;
   onCreatedMarker: (marker: RescueMapMarkerItem) => void;
 }) {
   const viewportState = useSiteMapViewportState();
@@ -671,33 +622,24 @@ function SiteMapCreatePanels({
   );
 
   return (
-    <>
-      <StationCreateDrawer
-        open={stationDrawerOpen}
-        onClose={onCloseStationDrawer}
-        initialPosition={currentDraftPosition}
-        onCreatedMarker={onCreatedMarker}
-        onLocationChange={handleDraftLocationChange}
-      />
-      <TicketCreateDrawer
-        open={ticketDrawerOpen}
-        onClose={onCloseTicketDrawer}
-        initialPosition={currentDraftPosition}
-        onCreatedMarker={onCreatedMarker}
-        onLocationChange={handleDraftLocationChange}
-      />
-    </>
+    <StationCreateDrawer
+      open={stationDrawerOpen}
+      onClose={onCloseStationDrawer}
+      initialPosition={currentDraftPosition}
+      onCreatedMarker={onCreatedMarker}
+      onLocationChange={handleDraftLocationChange}
+    />
   );
 }
 
 function SiteMapViewContent() {
+  const mapRoute = useSiteMapRouteState();
   const { reportsByStationId, submitStationReport } = useStationReports();
   const [createdMarkers, setCreatedMarkers] = useState<
     readonly RescueMapMarkerItem[]
   >([]);
   const [createModeActive, setCreateModeActive] = useState(false);
   const [stationDrawerOpen, setStationDrawerOpen] = useState(false);
-  const [ticketDrawerOpen, setTicketDrawerOpen] = useState(false);
   const [reportStation, setReportStation] =
     useState<RescueMapMarkerItem | null>(null);
   const [shareTarget, setShareTarget] = useState<PointShareTarget | null>(null);
@@ -712,15 +654,9 @@ function SiteMapViewContent() {
     setCreateModeActive(false);
   };
 
-  const openCreateMode = (dataType: 'station' | 'ticket') => {
+  const openCreateStation = () => {
     setCreateModeActive(true);
-
-    if (dataType === 'station') {
-      setStationDrawerOpen(true);
-      return;
-    }
-
-    setTicketDrawerOpen(true);
+    setStationDrawerOpen(true);
   };
 
   const closeReportDrawer = () => {
@@ -737,14 +673,12 @@ function SiteMapViewContent() {
           setCreateModeActive((current) => {
             if (current) {
               setStationDrawerOpen(false);
-              setTicketDrawerOpen(false);
             }
 
             return !current;
           })
         }
-        onOpenCreateStation={() => openCreateMode('station')}
-        onOpenCreateTicket={() => openCreateMode('ticket')}
+        onOpenCreateStation={openCreateStation}
         onOpenReport={setReportStation}
         onOpenShareTarget={setShareTarget}
       />
@@ -764,20 +698,23 @@ function SiteMapViewContent() {
       />
       <SiteMapCreatePanels
         stationDrawerOpen={stationDrawerOpen}
-        ticketDrawerOpen={ticketDrawerOpen}
         onCloseStationDrawer={() => {
           setStationDrawerOpen(false);
-          resetCreateFlow();
-        }}
-        onCloseTicketDrawer={() => {
-          setTicketDrawerOpen(false);
           resetCreateFlow();
         }}
         onCreatedMarker={(marker) => {
           setCreatedMarkers((current) => [marker, ...current]);
           setStationDrawerOpen(false);
-          setTicketDrawerOpen(false);
           resetCreateFlow();
+          // Made from tickets too (「＋」 is there on both), where a station does not show and would
+          // look lost: turn to stations, with no filter to hide it, and open it (spec S2).
+          mapRoute.replace({
+            ...mapRoute.state,
+            dataType: 'station',
+            subDataTypes: undefined,
+            search: undefined,
+            selectedMarkerId: marker.id,
+          });
         }}
       />
       <PointShareDrawer

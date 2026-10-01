@@ -2,11 +2,14 @@
 
 import { Suspense, type ReactNode } from 'react';
 
+import HandshakeRoundedIcon from '@mui/icons-material/HandshakeRounded';
+
 import { Icons } from '@rescue-frontend/ui';
 
 import type { SidebarResolvedContent } from '../sidebar';
 import { SidebarPanel } from '../sidebar';
 import { useSiteRouteState } from '../../route';
+import { openHelpRequest } from '../../ticket/help-request/open-help-request';
 import { SITE_MODULES } from '../../route/constants';
 import { SITE_MODULE_META } from '../../route/module-meta';
 import { createSiteHref } from '../../route/serialize';
@@ -24,6 +27,7 @@ function buildSiteSidebarContent(
   isAuthenticated?: boolean,
   onSignIn?: () => void,
   onSignOut?: () => void,
+  onClose?: () => void,
 ): SidebarResolvedContent {
   return {
     navigationItems: SITE_MODULES.map((target) => {
@@ -38,16 +42,30 @@ function buildSiteSidebarContent(
         path: createSiteHref(target, state),
       };
     }),
-    footerActions: isAuthenticated
-      ? []
-      : [
-          {
-            id: 'login',
-            label: '登入',
-            icon: <PersonIcon />,
-            onClick: onSignIn,
-          },
-        ],
+    footerActions: [
+      // First at the foot (prototype site-shell.jsx:588-590), and for guests too: the drawer asks
+      // them to sign in before sending, not before starting. The phone's menu shuts first, or it
+      // would sit open under the drawer.
+      {
+        id: 'request-help',
+        label: '請求協助',
+        icon: <HandshakeRoundedIcon />,
+        onClick: () => {
+          onClose?.();
+          openHelpRequest();
+        },
+      },
+      ...(isAuthenticated
+        ? []
+        : [
+            {
+              id: 'login',
+              label: '登入',
+              icon: <PersonIcon />,
+              onClick: onSignIn,
+            },
+          ]),
+    ],
   };
 }
 
@@ -76,6 +94,7 @@ function SiteSidebarConnected(props: SiteSidebarProps) {
         isAuthenticated,
         onSignIn,
         onSignOut,
+        panelProps.onClose,
       )}
       {...panelProps}
     />
@@ -93,6 +112,7 @@ function SiteSidebarFallback(props: SiteSidebarProps) {
         isAuthenticated,
         onSignIn,
         onSignOut,
+        panelProps.onClose,
       )}
       {...panelProps}
     />

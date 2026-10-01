@@ -13,6 +13,7 @@ import { GuangFuBrandIcon } from '../../brand';
 import { SiteMapRouteProvider } from '../../map/site/use-site-map-route-state';
 import { SiteRouteProvider } from '../../route/use-site-route-state';
 import { HelpRequestHost } from '../../ticket/help-request/help-request-host';
+import { MobileRequestHelpFab } from '../../ticket/help-request/mobile-request-help';
 import { SiteMobileTopNavBar } from './mobile-top-navbar';
 import { SiteSidebar } from './sidebar';
 import { SiteTopNavBar } from './top-navbar';
@@ -215,8 +216,11 @@ export function SiteShell({
         />
       </Drawer>
 
+      {/* The map has its own, clear of its 「＋」 (`MapRequestHelpButton`). */}
+      {pathname.startsWith('/map') ? null : <MobileRequestHelpFab />}
+
       {/* Inside the route providers: once a ticket is filed it turns the page to it. */}
-      <HelpRequestHost isAuthenticated={isAuthenticated} onSignIn={onSignIn} />
+      <HelpRequestHost isAuthenticated={isAuthenticated} />
     </Box>
   );
 
