@@ -20,6 +20,7 @@ import {
   Map,
   MapRequestHelpButton,
   NeedClaimProvider,
+  PlaceHereAction,
   PointShareDrawer,
   SiteMapControls,
   SiteStationReportDrawer,
@@ -36,6 +37,7 @@ import {
   useTaskMatches,
   type PointShareTarget,
   type RescueMapControllerValue,
+  type RescueMapDraftPoint,
   type RescueMapMarkerItem,
   type SiteRouteState,
 } from '@rescue-frontend/modules';
@@ -346,6 +348,56 @@ function SiteMapViewportDataLayer({
   );
   const [pendingDeleteTask, setPendingDeleteTask] =
     useState<RescueMapMarkerItem | null>(null);
+  // A blank spot tapped on the map, for 請求協助 there (spec S3). Not while 「＋」 is open: its pin
+  // in the middle is then the point being placed, and a second one would confuse the two.
+  const [draftPoint, setDraftPoint] = useState<RescueMapDraftPoint | null>(
+    null,
+  );
+  const selectedMarkerId = baseRouteState.selectedMarkerId;
+
+  const handleMapClick = useCallback(
+    ([lat, lng]: [number, number]) => {
+      if (!createModeActive) {
+        setDraftPoint({ lat, lng });
+      }
+    },
+    [createModeActive],
+  );
+
+  // Let go once a pin or cell is opened — left standing, it would read as belonging to it — and
+  // once 「＋」 opens.
+  useEffect(() => {
+    if (selectedMarkerId || createModeActive) {
+      setDraftPoint(null);
+    }
+  }, [createModeActive, selectedMarkerId]);
+
+  useEffect(() => {
+    if (!draftPoint) {
+      return;
+    }
+
+    const letGoOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDraftPoint(null);
+      }
+    };
+
+    window.addEventListener('keydown', letGoOnEscape);
+    return () => window.removeEventListener('keydown', letGoOnEscape);
+  }, [draftPoint]);
+
+  const draftPointAction = useMemo(
+    () =>
+      draftPoint ? (
+        <PlaceHereAction
+          point={draftPoint}
+          onPlaced={() => setDraftPoint(null)}
+        />
+      ) : null,
+    [draftPoint],
+  );
+
   // A ticket made here stays on the map until the view fetches it too; from then on the fetched
   // one, being fresher, is the one shown.
   const visibleMarkers = useMemo(
@@ -516,6 +568,10 @@ function SiteMapViewportDataLayer({
         viewportStore={viewportStore}
         isAuthenticated={isAuthenticated}
         renderControls={renderControls}
+        onMapClick={handleMapClick}
+        draftPoint={draftPoint}
+        onDraftPointChange={setDraftPoint}
+        draftPointAction={draftPointAction}
         ticketDetailOverrides={createTicketDetailOverrides}
         stationDetailAction={stationDetailAction}
         stationDetailSecondaryAction={stationDetailSecondaryAction}

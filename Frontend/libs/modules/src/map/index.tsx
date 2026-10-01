@@ -30,6 +30,7 @@ import type {
   RescueMapClosureArea,
   RescueMapControllerValue,
   RescueMapDetailItem,
+  RescueMapDraftPoint,
   RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapRouteState,
@@ -174,6 +175,15 @@ interface MapProps {
   previewMarker?: RescueMapMarkerItem | null;
   /** 覆寫地圖互動游標。 */
   cursor?: string;
+  /**
+   * A point picked on the map, marked by a crosshair that drags (the site's 「在這裡新增」).
+   * Moving the map by hand lets it go, through `onDraftPointChange(null)`.
+   */
+  draftPoint?: RescueMapDraftPoint | null;
+  /** The crosshair dragged to a new point, or let go (`null`) as the map is moved by hand. */
+  onDraftPointChange?: (point: RescueMapDraftPoint | null) => void;
+  /** Floats above the crosshair — what to do with the point. */
+  draftPointAction?: ReactNode;
   /** 封閉區域疊圖資料。 */
   closureAreas?: readonly RescueMapClosureArea[];
   /** 以 external store 提供視角狀態，避免拖動時將 viewport 更新擴散到整個 React tree。 */
@@ -196,6 +206,9 @@ export const Map = memo(function Map({
   onMapClick,
   previewMarker,
   cursor,
+  draftPoint,
+  onDraftPointChange,
+  draftPointAction,
   closureAreas,
   viewportStore,
   isAuthenticated = false,
@@ -336,6 +349,9 @@ export const Map = memo(function Map({
             layoutKey={detailOpen ? 'detail-open' : 'detail-closed'}
             showScale={showScale}
             viewportStore={viewportStore}
+            draftPoint={draftPoint}
+            onDraftPointChange={onDraftPointChange}
+            draftPointAction={draftPointAction}
           />
           {renderControls ? (
             renderControls(controller)

@@ -48,6 +48,12 @@ export interface RescueMapViewportStoreSnapshot {
   bbox?: RescueMapBoundingBox;
 }
 
+/** A point picked on the map, held until it is used or let go (`Map`'s `draftPoint`). */
+export interface RescueMapDraftPoint {
+  lat: number;
+  lng: number;
+}
+
 export interface RescueMapViewportStoreLike {
   getSnapshot: () => RescueMapViewportStoreSnapshot;
   subscribe: (listener: () => void) => () => void;

@@ -38,6 +38,7 @@ export type {
   RescueMapBaseLayer,
   RescueMapControllerValue,
   RescueMapDataType,
+  RescueMapDraftPoint,
   RescueMapMarkerItem,
   RescueMapOverlayLayer,
   RescueMapRouteState,
@@ -101,7 +102,7 @@ export {
   useTaskMatches,
 } from './ticket';
 export { BriefingPlaceholder, NeedClaimProvider } from './ticket/needs';
-export { MapRequestHelpButton } from './ticket/help-request';
+export { MapRequestHelpButton, PlaceHereAction } from './ticket/help-request';
 export type {
   TaskMatchLogAction,
   TaskMatchLogEntry,
