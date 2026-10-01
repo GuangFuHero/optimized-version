@@ -20,6 +20,7 @@ import { SiteRouteProvider } from '../../route/use-site-route-state';
 import { HelpRequestHost } from '../../ticket/help-request/help-request-host';
 import { MobileRequestHelpFab } from '../../ticket/help-request/mobile-request-help';
 import { SiteMobileTopNavBar } from './mobile-top-navbar';
+import { PageHelpDialog, usePageHelp } from './page-help';
 import { SiteSidebar } from './sidebar';
 import { SiteTopNavBar } from './top-navbar';
 
@@ -61,6 +62,9 @@ export function SiteShell({
     setMobileDrawerOpen(false);
     setRoleRequestOpen(true);
   };
+  // 這一頁怎麼用 on a phone, from the menu's row: the desktop's ？ holds its own (spec S9).
+  const pageHelp = usePageHelp();
+  const [pageHelpOpen, setPageHelpOpen] = useState(false);
   const bodyMinHeight = `calc(100dvh - ${LAYOUT_DIMENSIONS.desktopTopNavBarHeight}px)`;
   const desktopSidebarWidth = desktopSidebarOpen
     ? SITE_EXPANDED_SIDEBAR_WIDTH
@@ -233,8 +237,24 @@ export function SiteShell({
           onSignOut={onSignOut}
           portalEntry={portalEntry}
           onApplyRoleRequest={openRoleRequest}
+          pageHelp={
+            pageHelp
+              ? {
+                  fresh: pageHelp.fresh,
+                  onOpen: () => {
+                    pageHelp.markSeen();
+                    setPageHelpOpen(true);
+                  },
+                }
+              : undefined
+          }
         />
       </Drawer>
+
+      <PageHelpDialog
+        open={pageHelpOpen}
+        onClose={() => setPageHelpOpen(false)}
+      />
 
       <RoleRequestDrawer
         open={roleRequestOpen}

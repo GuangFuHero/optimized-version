@@ -20,6 +20,7 @@ import {
   SiteHeaderSearchInput,
   SiteHeaderSearchInputFallback,
 } from './header-search-input';
+import { PageHelpButton } from './page-help';
 import { SiteUserMenu } from './user-menu';
 
 const { color, typography } = designTokens;
@@ -137,6 +138,8 @@ export function SiteTopNavBar({
         sx={{ alignItems: 'center', justifySelf: 'end' }}
       >
         <RequestHelpButton />
+        {/* The site's pages have no title to sit beside, so here (spec S9). */}
+        <PageHelpButton ringColor={palette.frame} />
         {isAuthenticated ? (
           <SiteUserMenu
             userName={userName}
