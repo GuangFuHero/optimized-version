@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 
-import { SiteShell } from '@rescue-frontend/modules';
+import { SessionExpiredNotice, SiteShell } from '@rescue-frontend/modules';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 
@@ -40,14 +40,17 @@ export function PortalSiteShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <SiteShell
-      isAuthenticated={isAuthenticated}
-      userName={session?.user?.name ?? undefined}
-      userImage={session?.user?.image ?? undefined}
-      onSignIn={handleSignIn}
-      onSignOut={handleSignOut}
-    >
-      {children}
-    </SiteShell>
+    <>
+      <SiteShell
+        isAuthenticated={isAuthenticated}
+        userName={session?.user?.name ?? undefined}
+        userImage={session?.user?.image ?? undefined}
+        onSignIn={handleSignIn}
+        onSignOut={handleSignOut}
+      >
+        {children}
+      </SiteShell>
+      <SessionExpiredNotice />
+    </>
   );
 }

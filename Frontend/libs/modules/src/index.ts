@@ -78,7 +78,11 @@ export type {
 export { BackOfficePlaceholder } from './role-request';
 
 // The browser's half of the session-expiry handling; the pure half is `@rescue-frontend/modules/session`.
-export { sessionExpiryFetch } from './session/end-expired-session';
+export {
+  sessionExpiryFetch,
+  sessionStorageOrNull,
+} from './session/end-expired-session';
+export { SessionExpiredNotice } from './session/session-expired-notice';
 
 export { AdminLayout } from './shell';
 export {

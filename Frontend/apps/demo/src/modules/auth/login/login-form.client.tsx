@@ -3,9 +3,14 @@
 import { Alert, Stack } from '@mui/material';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { startTransition } from 'react';
+import { startTransition, useEffect, useState } from 'react';
 
-import { AuthFormError, LoginForm } from '@rescue-frontend/modules';
+import {
+  AuthFormError,
+  LoginForm,
+  sessionStorageOrNull,
+} from '@rescue-frontend/modules';
+import { takeSessionExpired } from '@rescue-frontend/modules/session';
 import { messageForCode } from '../api/error-messages';
 import { withCallbackUrl } from './callback-url';
 import { resolveHashedCredentialAsync } from './credentials';
@@ -66,9 +71,22 @@ export default function () {
   const callbackUrl =
     requestedCallbackUrl ?? (audience === 'admin' ? '/admin/map' : '/map');
   const authErrorMessage = resolveAuthErrorMessage(searchParams.get('error'));
+  // Sent here by a page only a signed-in person sees (帳號安全) after the session ended there: the
+  // site shell's notice never got to say why (note/session-expiry-spec.md Q6).
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  useEffect(() => {
+    if (takeSessionExpired(sessionStorageOrNull())) {
+      setSessionExpired(true);
+    }
+  }, []);
 
   return (
     <Stack spacing={2}>
+      {sessionExpired ? (
+        <Alert severity="warning">你的登入狀態已失效，請重新登入。</Alert>
+      ) : null}
+
       {authErrorMessage ? (
         <Alert severity="error">{authErrorMessage}</Alert>
       ) : null}

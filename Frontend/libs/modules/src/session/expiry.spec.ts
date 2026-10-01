@@ -4,9 +4,35 @@ import {
   isSessionExpired,
   isSessionExpiredResponse,
   markSessionExpired,
+  reloginHref,
   takeSessionExpired,
   type FlagStorage,
 } from './expiry';
+
+describe('reloginHref', () => {
+  it('comes back to the page the person is on', () => {
+    expect(reloginHref({ pathname: '/list', search: '' })).toBe(
+      '/login?callbackUrl=%2Flist',
+    );
+  });
+
+  it('keeps what the address says about the page, encoded so it stays one parameter', () => {
+    expect(
+      reloginHref({
+        pathname: '/map/ticket/1b2c',
+        search: '?claim=9f&status=open',
+      }),
+    ).toBe(
+      '/login?callbackUrl=%2Fmap%2Fticket%2F1b2c%3Fclaim%3D9f%26status%3Dopen',
+    );
+  });
+
+  it('comes back to the front page from there', () => {
+    expect(reloginHref({ pathname: '/', search: '' })).toBe(
+      '/login?callbackUrl=%2F',
+    );
+  });
+});
 
 /** sessionStorage as far as the flag uses it. */
 function memoryStorage(): FlagStorage {

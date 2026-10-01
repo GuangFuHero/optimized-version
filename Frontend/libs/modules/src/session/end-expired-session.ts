@@ -11,7 +11,8 @@ export function isSigningOutHere(): boolean {
   return signingOutHere;
 }
 
-function sessionStorageOrNull(): Storage | null {
+/** The tab's sessionStorage, or none where the browser refuses it (blocked site data). */
+export function sessionStorageOrNull(): Storage | null {
   try {
     return window.sessionStorage;
   } catch {

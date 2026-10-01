@@ -32,6 +32,18 @@ export function isSessionExpired({
   return refreshFailed || (sentToken && backendStatus === 401);
 }
 
+/**
+ * The login page, set to come back here afterwards: path and query, which carry the page's state
+ * (the open ticket, A's `claim=`, B's `help=`). Read from `window.location` in a handler, not
+ * while rendering (A's `a4ee3ea`).
+ */
+export function reloginHref({
+  pathname,
+  search,
+}: Pick<Location, 'pathname' | 'search'>): string {
+  return `/login?callbackUrl=${encodeURIComponent(`${pathname}${search}`)}`;
+}
+
 /** The browser's side: did the proxy mark this response? */
 export function isSessionExpiredResponse(
   headers: Pick<Headers, 'get'>,
