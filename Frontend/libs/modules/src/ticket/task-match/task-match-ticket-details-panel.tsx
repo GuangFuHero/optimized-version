@@ -25,6 +25,7 @@ import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
 import { AddNeedPanel, useCanAddNeed } from '../help-request/add-need-panel';
 import { NeedRow, readTicketNeeds } from '../needs';
+import { PhotoThumb } from '../photos';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
@@ -48,7 +49,6 @@ const DETAIL_QUERY_CONTEXT = { suspense: false } as const;
 interface TicketPhotoItem {
   uuid: string;
   url: string;
-  createdAt?: string | null;
 }
 
 interface TicketTaskPropertyItem {
@@ -314,7 +314,6 @@ export function TaskMatchTicketDetailsPanel({
       context: DETAIL_QUERY_CONTEXT,
     });
   const [activeTaskIndex, setActiveTaskIndex] = useState(0);
-  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
 
   const ticket = useMemo(() => {
     if (!ticketData?.ticket) {
@@ -332,7 +331,6 @@ export function TaskMatchTicketDetailsPanel({
       (ticket?.photos ?? []).map((photo) => ({
         uuid: photo.uuid,
         url: photo.url,
-        createdAt: photo.createdAt?.toString() ?? null,
       })),
     [ticket?.photos],
   );
@@ -396,11 +394,9 @@ export function TaskMatchTicketDetailsPanel({
   const canAddNeed = useCanAddNeed({ ticketStatus, ticketCreatedBy });
 
   const activeTask = tasks[activeTaskIndex] ?? null;
-  const activePhoto = photos[activePhotoIndex] ?? null;
 
   useEffect(() => {
     setActiveTaskIndex(0);
-    setActivePhotoIndex(0);
   }, [marker.id]);
 
   useEffect(() => {
@@ -408,12 +404,6 @@ export function TaskMatchTicketDetailsPanel({
       tasks.length === 0 ? 0 : Math.min(current, tasks.length - 1),
     );
   }, [tasks.length]);
-
-  useEffect(() => {
-    setActivePhotoIndex((current) =>
-      photos.length === 0 ? 0 : Math.min(current, photos.length - 1),
-    );
-  }, [photos.length]);
 
   const handlePreviousTask = () => {
     setActiveTaskIndex((current) =>
@@ -424,18 +414,6 @@ export function TaskMatchTicketDetailsPanel({
   const handleNextTask = () => {
     setActiveTaskIndex((current) =>
       tasks.length === 0 ? 0 : (current + 1) % tasks.length,
-    );
-  };
-
-  const handlePreviousPhoto = () => {
-    setActivePhotoIndex((current) =>
-      photos.length === 0 ? 0 : (current - 1 + photos.length) % photos.length,
-    );
-  };
-
-  const handleNextPhoto = () => {
-    setActivePhotoIndex((current) =>
-      photos.length === 0 ? 0 : (current + 1) % photos.length,
     );
   };
 
@@ -749,37 +727,23 @@ export function TaskMatchTicketDetailsPanel({
       <SectionCard
         title={`現場照片${photos.length > 0 ? ` (${photos.length})` : ''}`}
         icon={<PhotoLibraryRoundedIcon sx={{ fontSize: 18 }} />}
-        action={
-          <CarouselControls
-            index={activePhotoIndex}
-            total={photos.length}
-            onPrevious={handlePreviousPhoto}
-            onNext={handleNextPhoto}
-          />
-        }
       >
-        {activePhoto ? (
-          <Stack spacing={1.25}>
-            <Box
-              component="img"
-              src={activePhoto.url}
-              alt={`現場照片 ${activePhotoIndex + 1}`}
-              sx={{
-                width: '100%',
-                maxHeight: 240,
-                objectFit: 'cover',
-                borderRadius: 2.5,
-                border: `1px solid ${detailPalette.border}`,
-                bgcolor: detailPalette.sectionSurface,
-              }}
-            />
-            {/* No 上傳者: all there is to show is the account's uuid, which tells a reader nothing
-                and ties the photo to an account — who claimed what is not shown either (spec Q36). */}
-            <DetailRow
-              label="照片建立時間"
-              value={formatDateTime(activePhoto.createdAt)}
-            />
-          </Stack>
+        {/* All at once, as thumbnails that open the image itself (prototype site-detail.jsx:353;
+            B's S8), and each failing on its own into a card with its link. No 上傳者 or time:
+            the one is an account's uuid, which tells a reader nothing and ties the photo to an
+            account (spec Q36). */}
+        {photos.length > 0 ? (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+              gap: 1,
+            }}
+          >
+            {photos.map((photo, index) => (
+              <PhotoThumb key={photo.uuid} url={photo.url} index={index} linksOut />
+            ))}
+          </Box>
         ) : (
           <Box
             sx={{

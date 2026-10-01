@@ -186,6 +186,11 @@ input CreateHelpRequestInput {
 
   """At least one need"""
   tasks: [HelpRequestTaskInput!]!
+
+  """
+  Scene photos as links to images kept elsewhere — the platform stores no image. At most 10, each an https:// URL of at most 500 characters
+  """
+  photoUrls: [String!] = null
 }
 
 input CreateStationInput {

@@ -18,6 +18,7 @@ import { Badge, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { LocationPicker } from '../../map/components/location-picker';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
+import { PhotoLinkEditor } from '../photos';
 import {
   emptyHelpRequestForm,
   emptyNeed,
@@ -469,6 +470,16 @@ function HelpRequestFormDrawer({
           value={form.description}
           onChange={(event) => set('description')(event.target.value)}
           placeholder="例：巷子窄，小貨車進不來。阿嬤一個人住，早上九點到下午三點都在家。"
+        />
+
+        {/* Last, after the notes and for the same reason: extra, not the frame. First, and someone
+            with no photo yet stops here before saying what they need (prototype
+            site-actions.jsx:1751-1763; spec S8). */}
+        <PhotoLinkEditor
+          value={form.photoUrls}
+          onChange={set('photoUrls')}
+          label="現場照片（選填）"
+          hint="志工出發前看得到。平台不保管照片，只記下網址"
         />
 
         {touched && missing.length ? (

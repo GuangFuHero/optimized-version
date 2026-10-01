@@ -193,6 +193,8 @@ export type CreateHelpRequestInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   /** GeoJSON Point for the location where help is needed — [longitude, latitude] */
   geometry: Scalars['GeoJSON']['input'];
+  /** Scene photos as links to images kept elsewhere — the platform stores no image. At most 10, each an https:// URL of at most 500 characters */
+  photoUrls?: InputMaybe<Array<Scalars['String']['input']>>;
   /** The address as typed goes in `landmarkNote`, with `floor` and `room` */
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** At least one need */
