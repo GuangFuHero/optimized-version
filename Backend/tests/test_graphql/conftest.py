@@ -191,6 +191,34 @@ async def _create_user_with_role(redis, role_name: str) -> tuple[str, str]:
         return str(user.uuid), token
 
 
+async def _citizen_since_adr_286(redis) -> str:
+    """A signed-in citizen granted as the seed grants one since ADR-286; returns their token.
+
+    view_pii `all` (anyone signed in may call the requester), view_history `own`, assign `own`
+    (claiming a need). Login User keeps view_pii at `own`, which the masking tests rely on.
+    """
+    async with test_db() as db:
+        role = Role(name=f"citizen-{uuid_mod.uuid4().hex[:8]}", kind="platform")
+        db.add(role)
+        await db.flush()
+        for perm, scope in (
+            (Perm.TICKET_VIEW, "all"),
+            (Perm.TICKET_VIEW_DETAIL, "all"),
+            (Perm.TICKET_VIEW_PII, "all"),
+            (Perm.TICKET_VIEW_HISTORY, "own"),
+            (Perm.TICKET_ASSIGN, "own"),
+        ):
+            permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
+            if permission is None:
+                permission = Permission(key=perm.value)
+                db.add(permission)
+                await db.flush()
+            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
+        role_name = role.name
+    _, token = await _create_user_with_role(redis, role_name)
+    return token
+
+
 @pytest_asyncio.fixture
 async def coordinator_auth(redis):
     """Return (user_uuid, token) for a user with Field Coordinator permissions."""

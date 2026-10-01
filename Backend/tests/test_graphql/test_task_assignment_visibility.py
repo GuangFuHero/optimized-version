@@ -8,18 +8,13 @@ Every signed-in caller gets `myAssignment`, their own claim, which is all the si
 show "已承接" and to release it.
 """
 
-import uuid
-
 import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
-from sqlalchemy import select
 
-from app.core.permissions import Perm
-from app.models.rbac import Permission, Role, RolePermissionAssign
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
-from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
+from tests.test_graphql.conftest import _citizen_since_adr_286, _create_user_with_role, auth_header, test_db
 
 TASK_CLAIMS = """
 query($ticketUuid: String!) {
@@ -40,32 +35,6 @@ query($uuid: UUID!) {
     ticket(uuid: $uuid) { contactName tasks { assignedCount assignments { actorUuid } } }
 }
 """
-
-
-async def _citizen_since_adr_286(redis) -> str:
-    """A signed-in citizen granted as the seed grants one since ADR-286; returns their token.
-
-    view_pii `all` (anyone signed in may call the requester), view_history `own`.
-    """
-    async with test_db() as db:
-        role = Role(name=f"citizen-{uuid.uuid4().hex[:8]}", kind="platform")
-        db.add(role)
-        await db.flush()
-        for perm, scope in (
-            (Perm.TICKET_VIEW, "all"),
-            (Perm.TICKET_VIEW_DETAIL, "all"),
-            (Perm.TICKET_VIEW_PII, "all"),
-            (Perm.TICKET_VIEW_HISTORY, "own"),
-        ):
-            permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
-            if permission is None:
-                permission = Permission(key=perm.value)
-                db.add(permission)
-                await db.flush()
-            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
-        role_name = role.name
-    _, token = await _create_user_with_role(redis, role_name)
-    return token
 
 
 async def _need_filed_by(requester_uuid: str) -> tuple[str, str]:

@@ -3,7 +3,8 @@
 One row per claim, carrying the claim, the need and its ticket, so the drawer can show
 「在哪裡、聯絡誰」 without a query per row. Newest first, no paging. A need that was canceled
 or fulfilled stays on the list — that is how the volunteer learns 不用去了 — while one whose
-task or ticket was deleted drops off. The ticket keeps its usual masking.
+task or ticket was deleted drops off. Whom to call follows `ticket.view_pii` as anywhere else:
+since ADR-286 every signed-in volunteer reads it in full, and a claim adds nothing to it.
 """
 
 from datetime import UTC, datetime
@@ -15,7 +16,7 @@ from sqlalchemy import update
 
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
-from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
+from tests.test_graphql.conftest import _citizen_since_adr_286, _create_user_with_role, auth_header, test_db
 
 MY_CLAIMS = """
 query {
@@ -134,8 +135,25 @@ async def test_a_claim_on_a_deleted_need_or_ticket_drops_off(client, redis, dele
 
 
 @pytest.mark.asyncio
-async def test_the_ticket_keeps_its_contact_masking(client, redis):
-    """Claiming does not unlock the requester's contact details (spec Q12, still masked)."""
+async def test_a_volunteer_sees_whom_to_call(client, redis):
+    """「聯絡誰」 is what the list is for: with the seed's grants (ADR-286), it reads in full."""
+    requester_uuid, _ = await _create_user_with_role(redis, "Login User")
+    volunteer_token = await _citizen_since_adr_286(redis)
+    tasks = await _ticket_with_needs(requester_uuid, "需要清淤人力", ["清淤"])
+    await _claim(client, volunteer_token, tasks["清淤"])
+
+    [row] = (await _my_claims(client, volunteer_token))["data"]["myTaskAssignments"]
+
+    assert row["ticket"]["contactName"] == "王小姐"
+
+
+@pytest.mark.asyncio
+async def test_claiming_alone_unlocks_no_contact_details(client, redis):
+    """The list masks as `ticket.view_pii` says, and a claim adds nothing to it (ADR-286).
+
+    Login User holds view_pii at `own`, as `user` would again if /admin/rbac narrowed it: the
+    volunteer on the way is then masked too, since 承接即解鎖 was never built.
+    """
     requester_uuid, _ = await _create_user_with_role(redis, "Login User")
     _, volunteer_token = await _create_user_with_role(redis, "Login User")
     tasks = await _ticket_with_needs(requester_uuid, "需要清淤人力", ["清淤"])
