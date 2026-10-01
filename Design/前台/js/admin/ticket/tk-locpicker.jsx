@@ -63,14 +63,34 @@
     }, [value && value.lat, value && value.lng]);
 
     const ring = invalid ? "var(--color-bg-danger)" : "var(--color-border-default)";
+    const hintPill = { position: "absolute", left: 10, bottom: 10, zIndex: 500, display: "inline-flex",
+      alignItems: "center", gap: 6, height: 28, padding: "0 11px", borderRadius: "var(--radius-full)",
+      background: "var(--color-bg-neutral-default)", boxShadow: "var(--shadow-sm)",
+      font: "var(--font-data-300)", color: "var(--color-fg-neutral-subtle)", whiteSpace: "nowrap",
+      /* 不吃點擊 —— 它壓在地圖上，會蓋掉左下角那一塊可點的地圖。 */
+      pointerEvents: "none" };
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ position: "relative", height, borderRadius: "var(--radius-md)", overflow: "hidden", border: `${invalid ? 1.5 : 1}px solid ${ring}`, background: "var(--color-bg-neutral-sunken)" }}>
           <div ref={elRef} style={{ position: "absolute", inset: 0, cursor: value ? "grab" : "crosshair" }}></div>
-          {(status === "locating" || !value) && (
-            <div style={{ position: "absolute", left: 10, bottom: 10, zIndex: 500, display: "inline-flex", alignItems: "center", gap: 6, height: 28, padding: "0 11px", borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-default)", boxShadow: "var(--shadow-sm)", font: "var(--font-data-300)", color: "var(--color-fg-neutral-subtle)", whiteSpace: "nowrap" }}>
+          {/* 🔴 2026-09-18 Sucre：「新增任務單時可以跟 Google Map 一樣手動移動那個地標嗎？
+              有的時候點位跟現有任務單很相近，就很難點到那個位置開單，我想說可以點旁邊移過去。」
+
+              **它本來就可以拖。** `L.marker(..., { draggable: true })` ＋ dragend 一直都在
+              （見上面的大頭針同步）。壞的是**沒有任何地方講**：這顆提示膠囊原本只在
+              `!value` 時出現，大頭針一放上去就消失，於是「可以拖」這件事沒有人告訴使用者。
+
+              所以這裡不是加功能，是把既有功能講出來 —— 有大頭針時換一句話繼續顯示。
+              🔒 不要改成 hover 才出現的 tooltip：現場是手機，沒有 hover。 */}
+          {(status === "locating" || !value) ? (
+            <div style={hintPill}>
               <Icon n={status === "locating" ? "LoaderCircle" : "MapPin"} s={13} c="var(--color-fg-neutral-muted)" />
               {status === "locating" ? "正在取得目前定位…" : "點地圖任一處放置大頭針"}
+            </div>
+          ) : (
+            <div style={hintPill}>
+              <Icon n="Move" s={13} c="var(--color-fg-neutral-muted)" />
+              可拖曳大頭針微調，或點地圖其他位置
             </div>
           )}
         </div>
