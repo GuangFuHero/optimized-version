@@ -221,6 +221,16 @@ mutation ReleaseClaim($uuid: UUID!) {
   unassignTaskActor(uuid: $uuid)
 }
 
+# The requester stops recruiting for one need (spec Q39): the people on it stay and still go, its
+# quantity drops to their count, and nobody else can claim it. Refused for a need nobody claimed or
+# one no longer open. Only the uuid is asked: the cache does not key needs, so the ticket is read
+# again either way.
+mutation StopRecruiting($taskUuid: UUID!) {
+  stopRecruiting(taskUuid: $taskUuid) {
+    uuid
+  }
+}
+
 # 我的任務 › 我承接的 (ticket/my-claims): the needs the caller claimed, newest first, deleted ones left
 # out. What a volunteer needs on the day: where, whom to call, and whether they may still give the
 # place back (`recruitingStoppedAt`, spec Q46).
