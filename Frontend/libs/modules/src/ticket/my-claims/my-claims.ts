@@ -39,7 +39,7 @@ export interface MyClaim {
 }
 
 // Numbers only: `en-US` spells each part as digits, where `zh-TW` would add 上午／下午.
-const CLAIMED_AT_FORMAT = new Intl.DateTimeFormat('en-US', {
+const TAIWAN_TIME_FORMAT = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Asia/Taipei',
   month: 'numeric',
   day: 'numeric',
@@ -49,10 +49,13 @@ const CLAIMED_AT_FORMAT = new Intl.DateTimeFormat('en-US', {
 });
 
 /**
- * When the need was claimed, in Taiwan time whatever the device's zone, without the year: the
- * list is of claims still to be kept (spec Q50).
+ * A moment as 「9/30 14:05」, in Taiwan time whatever the device's zone, without the year — for a
+ * list of what is still going on: claims to keep, requests filed (B's 我建立的). Null for a missing
+ * or broken time.
  */
-export function formatClaimedAt(iso: string | null | undefined): string | null {
+export function formatTaiwanTime(
+  iso: string | null | undefined,
+): string | null {
   const time = iso ? new Date(iso) : null;
 
   if (!time || Number.isNaN(time.getTime())) {
@@ -60,13 +63,20 @@ export function formatClaimedAt(iso: string | null | undefined): string | null {
   }
 
   const parts = Object.fromEntries(
-    CLAIMED_AT_FORMAT.formatToParts(time).map((part) => [
+    TAIWAN_TIME_FORMAT.formatToParts(time).map((part) => [
       part.type,
       part.value,
     ]),
   );
 
-  return `承接於 ${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
+  return `${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+/** When the need was claimed (spec Q50). */
+export function formatClaimedAt(iso: string | null | undefined): string | null {
+  const time = formatTaiwanTime(iso);
+
+  return time ? `承接於 ${time}` : null;
 }
 
 /** Name and number as the claim confirmation joins them (`need-claim-dialog.tsx`). */

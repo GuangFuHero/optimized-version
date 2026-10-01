@@ -2090,6 +2090,24 @@ export type MyTaskAssignmentsQuery = {
   }>;
 };
 
+export type MyTicketsQueryVariables = Exact<{ [key: string]: never }>;
+
+export type MyTicketsQuery = {
+  __typename?: 'Query';
+  myTickets: Array<{
+    __typename?: 'TicketType';
+    uuid: string;
+    title: string;
+    status: string;
+    createdAt?: any | null;
+    tasks: Array<{
+      __typename?: 'TicketTaskType';
+      uuid: string;
+      status: string;
+    }>;
+  }>;
+};
+
 export type CreateTaskPropertyMutationVariables = Exact<{
   input: CreateTaskPropertyInput;
 }>;
@@ -4993,6 +5011,48 @@ export const MyTaskAssignmentsDocument = {
   MyTaskAssignmentsQuery,
   MyTaskAssignmentsQueryVariables
 >;
+export const MyTicketsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'MyTickets' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'myTickets' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'tasks' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'status' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<MyTicketsQuery, MyTicketsQueryVariables>;
 export const CreateTaskPropertyDocument = {
   kind: 'Document',
   definitions: [

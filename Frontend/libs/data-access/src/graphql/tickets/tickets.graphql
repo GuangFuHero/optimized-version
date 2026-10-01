@@ -272,6 +272,22 @@ query MyTaskAssignments {
   }
 }
 
+# 我的任務 › 我建立的 (ticket/help-request, B's S6): the tickets the caller filed, newest first, every
+# status, deleted ones left out. Each is read for how far it got (spec Q16): its status, and its
+# needs' statuses to count how many have their people.
+query MyTickets {
+  myTickets {
+    uuid
+    title
+    status
+    createdAt
+    tasks {
+      uuid
+      status
+    }
+  }
+}
+
 mutation CreateTaskProperty($input: CreateTaskPropertyInput!) {
   createTaskProperty(input: $input) {
     uuid
