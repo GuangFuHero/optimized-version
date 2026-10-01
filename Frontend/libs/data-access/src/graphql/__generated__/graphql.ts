@@ -2051,6 +2051,15 @@ export type DeleteTicketTaskMutation = {
   deleteTicketTask: boolean;
 };
 
+export type DeleteTicketMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type DeleteTicketMutation = {
+  __typename?: 'Mutation';
+  deleteTicket: boolean;
+};
+
 export type MyTaskAssignmentsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type MyTaskAssignmentsQuery = {
@@ -4887,6 +4896,48 @@ export const DeleteTicketTaskDocument = {
 } as unknown as DocumentNode<
   DeleteTicketTaskMutation,
   DeleteTicketTaskMutationVariables
+>;
+export const DeleteTicketDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'DeleteTicket' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'deleteTicket' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  DeleteTicketMutation,
+  DeleteTicketMutationVariables
 >;
 export const MyTaskAssignmentsDocument = {
   kind: 'Document',

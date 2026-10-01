@@ -393,11 +393,21 @@ function SiteMapViewportDataLayer({
     [draftPoint],
   );
 
+  // Tickets found gone since — deleted (B's S7). The live data drops them itself; one made here is
+  // dropped here, or it would stand in for the fetched one it was waiting for.
+  const [goneTicketIds, setGoneTicketIds] = useState<readonly string[]>([]);
+
   // A ticket made here stays on the map until the view fetches it too; from then on the fetched
   // one, being fresher, is the one shown.
   const visibleMarkers = useMemo(
-    () => dedupeMarkersById([...liveDataSnapshot.markers, ...createdMarkers]),
-    [createdMarkers, liveDataSnapshot.markers],
+    () =>
+      dedupeMarkersById([
+        ...liveDataSnapshot.markers,
+        ...createdMarkers.filter(
+          (marker) => !goneTicketIds.includes(marker.id),
+        ),
+      ]),
+    [createdMarkers, goneTicketIds, liveDataSnapshot.markers],
   );
 
   const createCurrentPointShareTarget = useCallback(
@@ -477,11 +487,20 @@ function SiteMapViewportDataLayer({
   );
 
   // A claim, a release or a stop can change a ticket's status, which its pin shows; the next fetch
-  // would bring it, but the person who did it should not have to wait for one.
+  // would bring it, but the person who did it should not have to wait for one. A ticket found gone
+  // (null — deleted, B's S7) loses its pin, and with it the selection, so its drawer shuts.
   const showReloadedTicketStatus = useCallback(
-    (ticketUuid: string, { ticketStatus }: ReloadedTicket) => {
-      if (ticketStatus) {
-        liveDataStore.replaceTicketStatus(ticketUuid, ticketStatus);
+    (ticketUuid: string, reloaded: ReloadedTicket | null) => {
+      if (!reloaded) {
+        liveDataStore.dismissMarker(ticketUuid);
+        setGoneTicketIds((current) =>
+          current.includes(ticketUuid) ? current : [...current, ticketUuid],
+        );
+        return;
+      }
+
+      if (reloaded.ticketStatus) {
+        liveDataStore.replaceTicketStatus(ticketUuid, reloaded.ticketStatus);
       }
     },
     [liveDataStore],

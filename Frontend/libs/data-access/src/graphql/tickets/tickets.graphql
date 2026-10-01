@@ -238,6 +238,13 @@ mutation DeleteTicketTask($uuid: UUID!) {
   deleteTicketTask(uuid: $uuid)
 }
 
+# The requester deletes the whole ticket (B's S7, team decision 2026-09-28): it is cancelled and
+# gone from every query after, every need on it goes with it, and everyone on them hears once that
+# they need not go. Refused with 'Ticket not found' once it is deleted already.
+mutation DeleteTicket($uuid: UUID!) {
+  deleteTicket(uuid: $uuid)
+}
+
 # 我的任務 › 我承接的 (ticket/my-claims): the needs the caller claimed, newest first, deleted ones left
 # out. What a volunteer needs on the day: where, whom to call, and whether they may still give the
 # place back (`recruitingStoppedAt`, spec Q46).

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
@@ -27,7 +27,7 @@ import {
   StationReportHistoryPanel,
   useStationReports,
 } from '../station/report';
-import { NeedClaimProvider } from '../ticket/needs';
+import { NeedClaimProvider, type ReloadedTicket } from '../ticket/needs';
 import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
 import { usePaginatedRescueMapMarkers } from '../map/site';
 import { SiteListRow } from './site-list-row';
@@ -80,6 +80,22 @@ export function SiteListView() {
         ? unlistedMarker
         : null),
     [controller.markers, controller.selectedMarkerId, unlistedMarker],
+  );
+
+  // A ticket found gone (deleted, B's S7) leaves the list — and, opened from a link past the loaded
+  // pages, its looked-up copy too: the selection then has nothing left to show, and its drawer
+  // shuts the way a ticket filtered out does.
+  const showReloadedTicket = useCallback(
+    (ticketUuid: string, reloaded: ReloadedTicket | null) => {
+      if (!reloaded) {
+        setUnlistedMarker((current) =>
+          current?.id === ticketUuid ? null : current,
+        );
+      }
+
+      replaceTicket(ticketUuid, reloaded);
+    },
+    [replaceTicket],
   );
 
   const [displayMarker, setDisplayMarker] =
@@ -508,5 +524,5 @@ export function SiteListView() {
   // The list keeps its own copy of each ticket — its needs, and its status on the row's badge — so
   // a claim, a release or a stop made in a row or in the drawer is reported back here to update
   // that ticket's row.
-  return <NeedClaimProvider onTicketReloaded={replaceTicket}>{view}</NeedClaimProvider>;
+  return <NeedClaimProvider onTicketReloaded={showReloadedTicket}>{view}</NeedClaimProvider>;
 }

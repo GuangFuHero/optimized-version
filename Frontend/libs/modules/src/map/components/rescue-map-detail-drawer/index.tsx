@@ -23,6 +23,7 @@ export type RescueMapTicketDetailOverrides = Partial<
   Pick<
     TicketDetailDrawerProps,
     | 'summaryLine'
+    | 'headerActions'
     | 'detailsPane'
     | 'content'
     | 'footerActions'

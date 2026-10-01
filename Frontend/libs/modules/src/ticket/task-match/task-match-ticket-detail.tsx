@@ -6,6 +6,7 @@ import { Icons } from '@rescue-frontend/ui';
 import type { RescueMapTicketDetailOverrides } from '../../map/components/rescue-map-detail-drawer';
 import type { RescueMapMarkerItem } from '../../map/types';
 import { NeedClaimFooter } from '../needs';
+import { TicketActionsMenu } from '../needs/ticket-actions-menu';
 import type { TicketDetailFooterActionItem } from '../ticket-detail';
 import { TaskMatchTicketDetailsPanel } from './task-match-ticket-details-panel';
 
@@ -40,6 +41,14 @@ export function createTaskMatchTicketDetailOverrides({
   onShare,
 }: TaskMatchTicketDetailOptions): RescueMapTicketDetailOverrides {
   return {
+    // The requester's ⋯ — 刪除整張單 (B's S7) — at the top, where the team put it (2026-09-28).
+    headerActions: (
+      <TicketActionsMenu
+        ticketUuid={marker.id}
+        ticketTitle={marker.title}
+        ticketCreatedBy={marker.ticketMeta?.createdBy}
+      />
+    ),
     // 詳情 only, as on a station. The prototype's 操作紀錄 has nothing behind it anyone may read: the
     // ticket's history needs ticket.view_history, kept from the site so as not to show who claimed
     // what (spec Q36).

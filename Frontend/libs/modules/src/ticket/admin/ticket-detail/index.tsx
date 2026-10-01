@@ -101,6 +101,8 @@ export interface TicketDetailHeaderProps {
   title: string;
   summaryLine?: string;
   closeAction?: TicketDetailCloseActionProps;
+  /** Beside the close button, before it — the public site's ⋯ for a ticket's requester. */
+  actions?: ReactNode;
 }
 
 export interface TicketDetailTabsProps {
@@ -121,6 +123,8 @@ export interface TicketDetailDrawerProps {
   title?: string;
   summaryLine?: string;
   closeAction?: TicketDetailCloseActionProps;
+  /** See `TicketDetailHeaderProps.actions`. */
+  headerActions?: ReactNode;
   tabs?: readonly TicketDetailTabItem[];
   detailsPane?: TicketDetailDetailsPaneProps;
   content?: ReactNode;
@@ -245,6 +249,7 @@ export function TicketDetailHeader({
   title,
   summaryLine,
   closeAction = createDefaultCloseAction(),
+  actions,
 }: TicketDetailHeaderProps) {
   return (
     <Stack
@@ -273,28 +278,34 @@ export function TicketDetailHeader({
         >
           {title}
         </Typography>
-        <ButtonBase
-          disableRipple
-          aria-label={closeAction.ariaLabel ?? 'Close'}
-          onClick={closeAction.onClick}
-          sx={{
-            width: 40,
-            height: 40,
-            mt: -1,
-            borderRadius: '999px',
-            color: ticketDetailPalette.summary,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+        <Stack
+          direction="row"
+          sx={{ flexShrink: 0, alignItems: 'center', gap: 0.5 }}
         >
-          <TicketDetailIconSlot
-            icon={closeAction.icon}
-            width={16}
-            height={16}
-            color={ticketDetailPalette.summary}
-          />
-        </ButtonBase>
+          {actions}
+          <ButtonBase
+            disableRipple
+            aria-label={closeAction.ariaLabel ?? 'Close'}
+            onClick={closeAction.onClick}
+            sx={{
+              width: 40,
+              height: 40,
+              mt: -1,
+              borderRadius: '999px',
+              color: ticketDetailPalette.summary,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <TicketDetailIconSlot
+              icon={closeAction.icon}
+              width={16}
+              height={16}
+              color={ticketDetailPalette.summary}
+            />
+          </ButtonBase>
+        </Stack>
       </Box>
       {summaryLine ? (
         <Typography
@@ -768,6 +779,7 @@ export function TicketDetailDrawer({
   title = '事件詳情',
   summaryLine,
   closeAction = createDefaultCloseAction(),
+  headerActions,
   tabs = createDefaultTabs(),
   detailsPane = createDefaultDetailsPane(),
   content,
@@ -792,6 +804,7 @@ export function TicketDetailDrawer({
           title={title}
           summaryLine={summaryLine}
           closeAction={closeAction}
+          actions={headerActions}
         />
       }
       tabs={<TicketDetailTabs items={tabs} variant={tabsVariant} />}

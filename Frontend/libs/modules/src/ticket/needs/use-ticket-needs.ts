@@ -36,6 +36,38 @@ export interface ReloadedTicket {
 }
 
 /**
+ * What reading a ticket again found: the ticket as it stands, the ticket gone, or no answer to go
+ * by. Only the second may take it off a page (B's S7): a dropped connection is not a deletion.
+ */
+export type TicketReload =
+  | { kind: 'found'; ticket: ReloadedTicket }
+  | { kind: 'gone' }
+  | { kind: 'unanswered' };
+
+/**
+ * `GetTicket` read again, as urql answers it. The server answers a deleted ticket — or one past
+ * the caller's reach — with null, not with an error (`ticket` in `graphql/tickets/queries.py`), so
+ * a null that came with no error is the one sign it is gone.
+ */
+export function readReloadedTicket(result: {
+  data?: GetTicketQuery;
+  error?: unknown;
+}): TicketReload {
+  if (result.error || !result.data) {
+    return { kind: 'unanswered' };
+  }
+
+  const { ticket } = result.data;
+
+  return ticket
+    ? {
+        kind: 'found',
+        ticket: { needs: readTicketNeeds(ticket), ticketStatus: readTicketStatus(ticket) },
+      }
+    : { kind: 'gone' };
+}
+
+/**
  * A ticket's needs and its status, from the same `GetTicket` the detail panel runs — urql shares
  * one request between them, so the drawer footer does not fetch the ticket twice.
  */

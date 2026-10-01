@@ -4,7 +4,9 @@ import {
   addNeedErrorMessage,
   claimErrorMessage,
   deleteNeedErrorMessage,
+  deleteTicketErrorMessage,
   isNeedAlreadyGone,
+  isTicketAlreadyGone,
   releaseErrorMessage,
   stopRecruitingErrorMessage,
 } from './claim-error';
@@ -178,6 +180,38 @@ describe('deleteNeedErrorMessage', () => {
       '連線失敗，請確認網路後再試一次。',
     );
     expect(deleteNeedErrorMessage(refused('Unexpected error.'))).toBe(
+      '刪除失敗，請稍後再試一次。',
+    );
+  });
+});
+
+describe('isTicketAlreadyGone', () => {
+  it('reads a refusal for a ticket deleted already — from another tab — as done', () => {
+    expect(isTicketAlreadyGone(refused('Ticket not found'))).toBe(true);
+  });
+
+  it('does not read any other refusal, or a lost connection, as done', () => {
+    expect(isTicketAlreadyGone(refused('403: Permission Denied.'))).toBe(false);
+    expect(isTicketAlreadyGone(refused('Unexpected error.'))).toBe(false);
+    expect(isTicketAlreadyGone({ networkError: new TypeError('Failed to fetch') })).toBe(false);
+  });
+});
+
+describe('deleteTicketErrorMessage', () => {
+  it('says only its requester may delete it, and tells a lapsed session apart', () => {
+    expect(deleteTicketErrorMessage(refused('403: Permission Denied.'))).toBe(
+      '只有建這張單的人可以刪除。',
+    );
+    expect(deleteTicketErrorMessage(refused('401: Could not validate credentials'))).toBe(
+      '登入已過期，請重新登入後再試一次。',
+    );
+  });
+
+  it('blames the connection, or falls back to a plain failure', () => {
+    expect(deleteTicketErrorMessage({ networkError: new TypeError('Failed to fetch') })).toBe(
+      '連線失敗，請確認網路後再試一次。',
+    );
+    expect(deleteTicketErrorMessage(refused('Unexpected error.'))).toBe(
       '刪除失敗，請稍後再試一次。',
     );
   });

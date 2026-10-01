@@ -25,13 +25,13 @@ import {
   type ClaimReturn,
 } from './claim-return';
 import { DeleteNeedDialog, useDeleteNeed } from './delete-need-dialog';
+import { DeleteTicketDialog, useDeleteTicket } from './delete-ticket-dialog';
 import { resolveNeedClaim } from './need-claim';
 import { NeedClaimDialog, type NeedClaimTarget } from './need-claim-dialog';
 import { NeedClaimToast } from './need-claim-toast';
 import { StopRecruitingDialog, useStopRecruiting } from './stop-recruiting-dialog';
 import {
-  readTicketNeeds,
-  readTicketStatus,
+  readReloadedTicket,
   TICKET_NEEDS_QUERY_CONTEXT,
   type ReloadedTicket,
 } from './use-ticket-needs';
@@ -51,6 +51,8 @@ interface NeedClaimContextValue {
   requestStopRecruiting: (ticketUuid: string, needUuid: string) => void;
   /** Ask the ticket's requester to confirm deleting one of its needs (B's S5). */
   requestDeleteNeed: (ticketUuid: string, needUuid: string) => void;
+  /** Ask the ticket's requester to confirm deleting the whole ticket (B's S7). */
+  requestDeleteTicket: (ticketUuid: string) => void;
   /** The signed-in account's uuid, to tell a ticket's requester by; null for a guest. */
   viewerId: string | null;
 }
@@ -61,9 +63,11 @@ interface NeedClaimProviderProps {
   children: ReactNode;
   /**
    * Hears a ticket as it stands after a claim, a release, a stop or a deletion — its needs and its
-   * status — for a view keeping its own copy: the list's rows, the map's pins.
+   * status — for a view keeping its own copy: the list's rows, the map's pins. Null when the
+   * ticket turned out gone — deleted (B's S7) — for the view to take it off; never for a request
+   * that failed, which says nothing about the ticket.
    */
-  onTicketReloaded?: (ticketUuid: string, ticket: ReloadedTicket) => void;
+  onTicketReloaded?: (ticketUuid: string, ticket: ReloadedTicket | null) => void;
 }
 
 /**
@@ -71,7 +75,8 @@ interface NeedClaimProviderProps {
  * lines — so every entry point gets the same confirmation (Q9), the same words for a refusal and
  * the same word of success, and one reload that every view of the ticket hears. A guest's button
  * goes through here too, to sign in and come back to the ticket, and so do a requester's 停止招募
- * (Q39) and 刪除這筆需求 (B's S5) from a row's ⋯, each with a confirmation of its own.
+ * (Q39) and 刪除這筆需求 (B's S5) from a row's ⋯, and 刪除整張單 (S7) from the drawer's, each with
+ * a confirmation of its own.
  */
 export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProviderProps) {
   const router = useRouter();
@@ -114,7 +119,8 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
    * Ask the server for the ticket again. The mutation returns the assignment, not the need, so
    * nothing in its result tells the cache that `assignedCount` and `myAssignment` changed — nor
    * the ticket's status, which follows its needs. The drawer and this dialog read the answer from
-   * the cache; the list and the map keep their own copies, so they are told.
+   * the cache; the list and the map keep their own copies, so they are told — that it is gone too,
+   * when it is. A request that failed tells them nothing.
    */
   const reloadTicket = useCallback(
     async (ticketUuid: string): Promise<ReloadedTicket | null> => {
@@ -125,13 +131,13 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
           { ...TICKET_NEEDS_QUERY_CONTEXT, requestPolicy: 'network-only' },
         )
         .toPromise();
-      const ticket = result.data?.ticket;
+      const reload = readReloadedTicket(result);
 
-      if (!ticket) {
+      if (reload.kind === 'unanswered') {
         return null;
       }
 
-      const reloaded = { needs: readTicketNeeds(ticket), ticketStatus: readTicketStatus(ticket) };
+      const reloaded = reload.kind === 'found' ? reload.ticket : null;
       onTicketReloaded?.(ticketUuid, reloaded);
 
       return reloaded;
@@ -148,6 +154,7 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
 
   const stopRecruiting = useStopRecruiting(reloadTicket);
   const deleteNeed = useDeleteNeed(reloadTicket);
+  const deleteTicket = useDeleteTicket(reloadTicket);
 
   const confirmClaim = useCallback(async () => {
     if (!target) {
@@ -249,6 +256,7 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
       ticketShown: setShownTicketUuid,
       requestStopRecruiting: stopRecruiting.request,
       requestDeleteNeed: deleteNeed.request,
+      requestDeleteTicket: deleteTicket.request,
       viewerId,
     }),
     [
@@ -257,6 +265,7 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
       sessionStatus,
       stopRecruiting.request,
       deleteNeed.request,
+      deleteTicket.request,
       viewerId,
     ],
   );
@@ -275,6 +284,7 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
       <NeedClaimToast open={toast.open} needName={toast.needName} onClose={closeToast} />
       <StopRecruitingDialog {...stopRecruiting.dialogProps} />
       <DeleteNeedDialog {...deleteNeed.dialogProps} />
+      <DeleteTicketDialog {...deleteTicket.dialogProps} />
     </NeedClaimContext.Provider>
   );
 }

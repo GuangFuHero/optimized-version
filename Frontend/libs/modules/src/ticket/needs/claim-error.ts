@@ -98,10 +98,11 @@ const ADD_NEED_WORDS: RefusalWords = {
 };
 
 /**
- * `delete_ticket_task`'s refusals — a requester's 「刪除這筆需求」 (B's S5). Its one refusal of its
- * own, a need deleted already, is no failure to them: see `isNeedAlreadyGone`.
+ * `delete_ticket_task`'s and `delete_ticket`'s refusals — a requester's 「刪除這筆需求」 (B's S5)
+ * and 「刪除整張單」 (S7). The one refusal of their own, the thing deleted already, is no failure to
+ * them: see `isNeedAlreadyGone` and `isTicketAlreadyGone`.
  */
-const DELETE_NEED_WORDS: RefusalWords = {
+const DELETE_WORDS: RefusalWords = {
   refusals: {},
   forbidden: '只有建這張單的人可以刪除。',
   fallback: '刪除失敗，請稍後再試一次。',
@@ -132,5 +133,14 @@ export function isNeedAlreadyGone(error: ClaimError): boolean {
 }
 
 export function deleteNeedErrorMessage(error: ClaimError): string {
-  return refusalMessage(error, DELETE_NEED_WORDS);
+  return refusalMessage(error, DELETE_WORDS);
+}
+
+/** Whether a refused delete found the whole ticket gone already — deleted from another tab. */
+export function isTicketAlreadyGone(error: ClaimError): boolean {
+  return error.graphQLErrors?.[0]?.message === 'Ticket not found';
+}
+
+export function deleteTicketErrorMessage(error: ClaimError): string {
+  return refusalMessage(error, DELETE_WORDS);
 }

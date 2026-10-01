@@ -206,10 +206,17 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   /**
    * Swap in one ticket as it stands after a claim, a release or a stop — its needs and its status,
    * on the row's badge — so its row agrees with the detail drawer without reloading every page of
-   * the list.
+   * the list. A ticket found gone (null — deleted, B's S7) leaves the list.
    */
   const replaceTicket = useCallback(
-    (ticketUuid: string, { needs, ticketStatus }: ReloadedTicket) => {
+    (ticketUuid: string, reloaded: ReloadedTicket | null) => {
+      if (!reloaded) {
+        dismissMarker(ticketUuid);
+        return;
+      }
+
+      const { needs, ticketStatus } = reloaded;
+
       setSourceMarkers((current) =>
         current.map((marker) => {
           if (marker.id !== ticketUuid) {
@@ -222,7 +229,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
         }),
       );
     },
-    [],
+    [dismissMarker],
   );
 
   /**
