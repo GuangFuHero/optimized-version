@@ -689,9 +689,34 @@
     };
   }
 
+  /* 🔴 2026-09-25：後台互助地圖勾了「前台可見」的區域（經 wg-bridge）。
+     危險區併進封閉區域；其他區域另成「標示區域」一層。
+     `readPublicZones()` 回 null＝後台從沒開過，就只有上面兩筆靜態封閉區域。 */
+  function readBridgeZones() {
+    const B = window.WGBridge;
+    const list = B && B.readPublicZones ? B.readPublicZones() : null;
+    return Array.isArray(list) ? list : [];
+  }
+  function mapWorkZoneToOverlay(z) {
+    if (!z || !Array.isArray(z.ring) || z.ring.length < 3) return null;
+    return {
+      id: 'wz-' + z.id, label: z.name, status: z.kind === 'hazard' ? 'closed' : 'open',
+      informationSource: '後台互助地圖', comment: z.note || '', color: z.color || null,
+      kind: z.kind, polygons: [[z.ring]],
+    };
+  }
+
   /** 對應 GetClosureAreas。 */
   function queryClosureAreas() {
-    const items = CLOSURE_AREAS.map(mapClosureAreaToOverlay).filter(Boolean);
+    const items = CLOSURE_AREAS.map(mapClosureAreaToOverlay)
+      .concat(readBridgeZones().filter((z) => z.kind === 'hazard').map(mapWorkZoneToOverlay))
+      .filter(Boolean);
+    return { items, pageInfo: { totalCount: items.length, hasNextPage: false, hasPreviousPage: false } };
+  }
+
+  /** 前台可見的非危險區域（志工休息區等）。⚠️ 後端尚無對應 query。 */
+  function queryPublicZones() {
+    const items = readBridgeZones().filter((z) => z.kind !== 'hazard').map(mapWorkZoneToOverlay).filter(Boolean);
     return { items, pageInfo: { totalCount: items.length, hasNextPage: false, hasPreviousPage: false } };
   }
 
@@ -731,7 +756,158 @@
     return { floor: f, unit: un };
   }
 
-  /** 把一批 marker 分進建築的格子。
+  /** marker 在哪一層。回 null 代表放不進任何分區（沒填樓層／訪客被遮）。
+   *
+   *  🔴 2026-09-20 Sucre：「即使是建築物也只有樓層，因為這個是唯一可以掌握的。」
+   *     矩陣退場之後，**戶／室不再是結構**，只是任務單上的一行自由文字。
+   *     所以這裡只看 `floor`，不再要求 `room` 解析得出數字 ——
+   *     原本 `markerCellOf` 會把「3 樓、戶別寫『之1』」的單丟進未定位，
+   *     那是矩陣需要座標才有的限制，現在沒有理由再擋。 */
+  /* 🔴 2026-09-21 ERD 查核：`secondary_locations.floor` 與 `room` **都是 string**。
+     （來源：GuangFuHero/optimized-version @ main · Backend/Spec/Docs/er-diagram.md）
+     原本這裡寫 `typeof f !== 'number'` —— 接上正式資料的那一刻**每一張單都會落到
+     「未定位」**，因為後端給的是字串。mock 把 floor 存成數字，所以本地看不出來。
+
+     後端把樓層當自由文字是對的（「B1」「三樓」「頂樓加蓋」都寫得進去），
+     代價是前端要自己正規化。**解析不出來的不猜**，落到未定位，原字保留顯示 —— 
+     把「頂樓加蓋」硬塞到 12 樓，比放進未定位危險得多。 */
+  const CJK_DIGIT = { '零': 0, '○': 0, '〇': 0, '一': 1, '二': 2, '兩': 2, '三': 3, '四': 4,
+    '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+  function cjkToInt(t) {
+    if (t === '十') return 10;
+    const i = t.indexOf('十');
+    if (i === -1) {
+      let n = 0;
+      for (const ch of t) { if (!(ch in CJK_DIGIT)) return null; n = n * 10 + CJK_DIGIT[ch]; }
+      return n;
+    }
+    const tens = i === 0 ? 1 : CJK_DIGIT[t[0]];
+    const ones = i === t.length - 1 ? 0 : CJK_DIGIT[t[i + 1]];
+    if (tens == null || ones == null) return null;
+    return tens * 10 + ones;
+  }
+
+  /** 把 `secondary_locations.floor` 的自由文字解析成樓層數（地下為負）。
+   *  解析不出來回 null ＝ 放不進任何分區，**不是猜一個最接近的**。 */
+  function parseFloorToken(raw) {
+    if (raw == null) return null;
+    if (typeof raw === 'number') return (isFinite(raw) && raw !== 0) ? raw : null; // 相容 mock
+    let t = String(raw).trim();
+    if (!t) return null;
+    t = t.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+    const below = /^(b|B|地下|負|-)/.test(t);
+    t = t.replace(/^(b|B|地下|負|-)\s*/, '').replace(/^第\s*/, '');
+    let n = null;
+    const ar = t.match(/^\d+/);
+    if (ar) n = parseInt(ar[0], 10);
+    else {
+      const cj = t.match(/^[零○〇一二三四五六七八九十兩]+/);
+      if (cj) n = cjkToInt(cj[0]);
+    }
+    if (n == null || !isFinite(n) || n <= 0) return null;
+    return below ? -n : n;
+  }
+
+  function markerFloorOf(marker) {
+    const m = marker && marker.ticketMeta;
+    if (!m) return null;
+    return parseFloorToken(m.floor);
+  }
+
+  /** 樓層的原字（給未定位那一疊顯示用）。解析失敗時使用者至少看得到他填了什麼。 */
+  function markerFloorLabelOf(marker) {
+    const m = marker && marker.ticketMeta;
+    if (!m || m.floor == null) return null;
+    const t = String(m.floor).trim();
+    return t || null;
+  }
+
+  /** 戶別＝任務單上的自由文字，系統不假裝它是結構。
+   *  回 null 代表沒填 —— 呼叫端要畫成「未填戶別」，不是留白。 */
+  function markerUnitLabel(marker) {
+    const m = marker && marker.ticketMeta;
+    if (!m || m.room == null) return null;
+    const t = String(m.room).trim();
+    return t || null;
+  }
+
+  /** 文字正規化：全形→半形、去空白、轉大寫。比對分區名稱用。 */
+  function normSeg(t) {
+    return String(t == null ? '' : t)
+      .replace(/[０-９Ａ-Ｚａ-ｚ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+      .replace(/\s+/g, '').toUpperCase();
+  }
+  /** 分區名稱長得像樓層嗎（`3F`／`12`／`B1`）？只有這種才允許數字模糊比對。 */
+  const FLOORISH = /^B?\d+F?$/;
+
+  /** 這張單屬於哪一個分區。回 null ＝ 放不進去（未定位）。
+   *
+   *  🔒 比對分兩層：
+   *    1. **字面相符**（正規化後）—— 分區叫「第1節車廂」，單上也寫「第 1 節車廂」。
+   *    2. 分區名稱長得像樓層時，才允許**數字相符** —— 讓「3」「3F」「三樓」對到「3F」。
+   *  第 2 層刻意只對樓層開放：否則「第一節車廂」會被解析成 1，跟「1F」撞在一起。 */
+  function segmentOfMarker(building, marker) {
+    const m = marker && marker.ticketMeta;
+    if (!m || m.floor == null) return null;
+    const raw = String(m.floor).trim();
+    if (!raw) return null;
+    const segs = window.WGBridge ? window.WGBridge.buildingSegments(building) : [];
+    const rn = normSeg(raw);
+    for (const name of segs) if (normSeg(name) === rn) return name;
+    const n = parseFloorToken(raw);
+    if (n == null) return null;
+    for (const name of segs) {
+      if (FLOORISH.test(normSeg(name)) && parseFloorToken(name) === n) return name;
+    }
+    return null;
+  }
+
+  /** 把一批 marker 分進建築的各個分區。
+   *
+   *  🔒 回傳一定含 `unplaced` —— 對不到任何分區的單。**呼叫端不准把它藏起來。**
+   *     災害發生在前、後台開分區在後，所以一定會有一批舊單對不上；
+   *     開啟之後也仍然有人說不出自己在哪一區。那一疊是還沒被放進任何分區的求助。 */
+  function groupMarkersBySegment(building, markers) {
+    const bySegment = {};
+    const unplaced = [];
+    (markers || []).forEach((mk) => {
+      if (!mk || mk.detailType !== 'ticket') return;
+      const seg = segmentOfMarker(building, mk);
+      if (!seg) { unplaced.push(mk); return; }
+      (bySegment[seg] || (bySegment[seg] = [])).push(mk);
+    });
+    return { bySegment, unplaced };
+  }
+
+  /** ⚠️ 2026-09-25 起沒有呼叫端了（分區改成自由文字，見 `groupMarkersBySegment`）。
+   *  保留只是為了讓「曾經只認樓層數字」這件事留下痕跡；不要再接新的呼叫端。
+   *
+   *  把一批 marker 分進建築的各個樓層。
+   *
+   *  🔒 回傳一定含 `unplaced` —— 沒填樓層的單。**呼叫端不准把它藏起來。**
+   *     災害發生在前、後台輸入建築結構在後，所以一定會有一批舊單沒有樓層；
+   *     開啟之後也仍然有人不知道自己在幾樓（代填的鄰居、不確定門牌的）。
+   *     那一疊是還沒被放進任何分區的求助，藏起來的話畫面看起來很完整而實際上漏了人。 */
+  function groupMarkersByFloor(building, markers) {
+    const byFloor = {};
+    const unplaced = [];
+    (markers || []).forEach((mk) => {
+      if (!mk || mk.detailType !== 'ticket') return;
+      const f = markerFloorOf(mk);
+      if (f === null) { unplaced.push(mk); return; }
+      /* 超出後台輸入的範圍（舊單寫 15 樓、但這棟只有 12 樓）＝ 放不進去，
+         不是硬塞到最近的一層。硬塞會讓畫面顯示一個不存在的位置。 */
+      const ok = f > 0 ? f <= (building.floorsAbove || 0) : -f <= (building.floorsBelow || 0);
+      if (!ok) { unplaced.push(mk); return; }
+      (byFloor[f] || (byFloor[f] = [])).push(mk);
+    });
+    return { byFloor, unplaced };
+  }
+
+  /** ⚠️ **2026-09-20 起沒有呼叫端了**（矩陣退場，改用上面的 `groupMarkersByFloor`）。
+   *  保留只是為了讓「曾經有過矩陣」這件事在程式碼裡留下痕跡；不要再接新的呼叫端。
+   *
+   *  把一批 marker 分進建築的格子。
    *
    *  🔒 回傳一定含 `unplaced` —— 沒填樓層／戶室的單。**呼叫端不准把它藏起來。**
    *     災害發生在前、後台輸入建築結構在後，所以一定會有一批舊單沒有戶室；
@@ -792,8 +968,10 @@
   window.SiteData = {
     STATIONS, TICKETS, CLOSURE_AREAS,
     mapStationToMarker, mapTicketToMarker, mapClosureAreaToOverlay, dedupeMarkersById,
-    queryMarkers, queryClosureAreas,
+    queryMarkers, queryClosureAreas, queryPublicZones,
     groupMarkersByGridCell, snapToHexGridCenter, GUEST_GRID_DIAMETER_M,
     GUEST_CAN_SEE_MATRIX, markerCellOf, groupMarkersIntoBuilding, queryBuildingMarkers,
+    markerFloorOf, markerFloorLabelOf, markerUnitLabel, groupMarkersByFloor, parseFloorToken,
+    segmentOfMarker, groupMarkersBySegment,
   };
 })();

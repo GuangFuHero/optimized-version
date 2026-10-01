@@ -200,7 +200,7 @@
   function useSiteMapLiveData(state, isAuthenticated) {
     /* 自己送出新單後要立刻重查，否則要等下次篩選變動才看得到自己那一筆。 */
     const bridgeVersion = window.WGBridge.useBridgeVersion();
-    const [snapshot, setSnapshot] = useState({ markers: [], closureAreas: [], isFetching: true, hasFetchedOnce: false, totalCount: 0 });
+    const [snapshot, setSnapshot] = useState({ markers: [], closureAreas: [], publicZones: [], isFetching: true, hasFetchedOnce: false, totalCount: 0 });
     const subSignature = (state.subDataTypes || []).join('|');
     useEffect(() => {
       let cancelled = false;
@@ -213,7 +213,7 @@
           skip: 0, limit: 200, isAuthenticated,
         });
         setSnapshot({
-          markers: result.items, closureAreas: D.queryClosureAreas().items,
+          markers: result.items, closureAreas: D.queryClosureAreas().items, publicZones: D.queryPublicZones().items,
           isFetching: false, hasFetchedOnce: true, totalCount: result.pageInfo.totalCount,
         });
       }, 260);
@@ -592,17 +592,29 @@
       const L = window.L, layer = overlayLayerRef.current;
       if (!L || !layer) return;
       layer.clearLayers();
+      /* 🔴 2026-09-25 Sucre：危險區是橘白斜紋（危險角錐的顏色）。
+         封閉區域本來就是「危險地帶與暫時封鎖範圍」，所以整層一起換，前後台同一個樣子。 */
+      const H = window.WGHazard;
+      if (H) H.ensure();
       const closureConfig = R.OVERLAY_LAYER_CONFIG['closure-areas'];
       const strokeColor = resolveCssToken(closureConfig.color);
       const fillColor = resolveCssToken(closureConfig.fillColor);
       controller.closureAreas.forEach((area) => {
         area.polygons.forEach((rings) => {
-          L.polygon(rings, {
+          L.polygon(rings, H ? H.polygonStyle() : {
             color: strokeColor, weight: 2, opacity: 0.9, fillColor, fillOpacity: 0.18, dashArray: '6 4',
-          }).bindTooltip(area.label + ' · ' + (area.comment || ''), { direction: 'top' }).addTo(layer);
+          }).bindTooltip(area.label + (area.comment ? ' · ' + area.comment : ''), { direction: 'top' }).addTo(layer);
         });
       });
-    }, [controller.closureAreas]);
+      /* 標示區域（志工休息區等）：實心淡色，用後台給的顏色。不帶責任單位。 */
+      (controller.publicZones || []).forEach((area) => {
+        const col = area.color || resolveCssToken(R.OVERLAY_LAYER_CONFIG['public-zones'].color);
+        area.polygons.forEach((rings) => {
+          L.polygon(rings, { color: col, weight: 2, opacity: 0.9, fillColor: col, fillOpacity: 0.16 })
+            .bindTooltip(area.label + (area.comment ? ' · ' + area.comment : ''), { direction: 'top' }).addTo(layer);
+        });
+      });
+    }, [controller.closureAreas, controller.publicZones]);
 
     // 選取時平移至標記
     useEffect(() => {
@@ -727,12 +739,10 @@
             <SiteDataTypeToggle value={dataType} onChange={controller.setDataType} />
             <SiteSubTypeFilter dataType={dataType} selected={controller.subDataTypes} pinned={pinned}
               onToggle={controller.toggleSubDataType} onTogglePinned={togglePinned} />
-            {/* 桌機展開成帶字的兩段切換 —— 有空間就把「我現在在哪一種看法」講出來。 */}
-            {window.SiteViewSwitch ? (
-              <SiteControlSurface style={{ padding: 3 }}>
-                <SiteViewSwitch module="map" state={controller.routeState} />
-              </SiteControlSurface>
-            ) : null}
+            {/* 🔒 2026-09-21 Sucre：「電腦版左邊已經有檢視模式了」——
+                桌機不再於地圖上重複一顆「地圖 ⇄ 列表」。
+                側欄「檢視模式」永遠在畫面上、永遠同一個位置，圖上那顆只是第二個真相。
+                手機才需要（側欄收在漢堡抽屜裡，切一次看法要先開抽屜）。 */}
           </div>
           <SitePinnedFilterRow items={pinnedOptions} selected={controller.subDataTypes} onToggle={controller.toggleSubDataType} />
         </div>
@@ -868,7 +878,7 @@
     }), [myClaims, sourceMarkers, siteTickets]);
     const controller = useRescueMapController({
       routeState: state, onRouteStateChange: replace, sourceMarkers,
-      closureAreas: live.closureAreas, filterMarkersByBbox: false,
+      closureAreas: live.closureAreas, publicZones: live.publicZones, filterMarkersByBbox: false,
     });
 
     /* ⚠️ 這一段一定要在 `controller` 宣告**之後**。
@@ -1006,6 +1016,23 @@
       () => D.queryBuildingMarkers(buildingOpen, { isAuthenticated: session.isAuthenticated }),
       [buildingOpen, session.isAuthenticated, bridgeVersion]);
 
+
+    /* 🔴 2026-09-21：詳情面板的「上一張／下一張」。
+       用 `selectedBuilding` 而不是 `buildingOpen` —— 分區抽屜已經關掉了，
+       但使用者仍然在同一棟的脈絡裡，前後移動要繼續有效。
+       順序走 `buildingTicketOrder`，與分區清單同一個來源。 */
+    const ticketSiblings = useMemo(() => {
+      if (!selectedBuilding || !selectedMarker || !window.buildingTicketOrder) return undefined;
+      const all = D.queryBuildingMarkers(selectedBuilding, { isAuthenticated: session.isAuthenticated });
+      const order = window.buildingTicketOrder(selectedBuilding, all, getTaskMatchState);
+      const i = order.findIndex((m) => m.id === selectedMarker.id);
+      if (i === -1) return undefined;
+      const go = (j) => () => controller.setSelectedMarkerId(order[j].id);
+      return { index: i, total: order.length,
+        onPrev: i > 0 ? go(i - 1) : undefined,
+        onNext: i < order.length - 1 ? go(i + 1) : undefined };
+    }, [selectedBuilding, selectedMarker, session.isAuthenticated, bridgeVersion, getTaskMatchState]);
+
     const openShare = (marker) => setShareTarget(createPointShareTarget({ marker, module, state, origin: window.location.origin + window.location.pathname }));
     const detailProps = selectedMarker ? {
       marker: selectedMarker,
@@ -1025,6 +1052,7 @@
          沒開就是 null，詳情面板照原本的單張單流程走，什麼都不多出來。 */
       building: selectedBuilding,
       onOpenBuilding: selectedBuilding ? () => setBuildingOpen(selectedBuilding) : undefined,
+      siblings: ticketSiblings,
     } : null;
 
     const drawerWidth = R.RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH;
@@ -1126,7 +1154,7 @@
           <SiteTicketCreateDrawer isAuthenticated={session.isAuthenticated} viewerId={session.userId}
             seedLandmark={seedLandmark} seedCell={seedCell}
             onClose={() => { setNewTicketOpen(false); setSeedLandmark(null); setSeedCell(null); }}
-            onSignIn={() => { setNewTicketOpen(false); window.location.hash = '#/sign-in'; }}
+            onSignIn={() => { setNewTicketOpen(false); window.SiteAuth.goSignIn(); }}
             onSubmit={(values) => {
               const ticket = createSiteTicket({ ...values, userId: session.userId });
               setNewTicketOpen(false);

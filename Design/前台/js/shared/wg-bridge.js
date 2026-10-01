@@ -61,6 +61,13 @@
           如果讓格子從已存在的單反推長出來，沒被撐到的範圍會看起來像「不存在」，
           而不是「沒消息」，使用者會把白格讀成「這戶沒事」。火災現場那是會害死人的誤讀。 */
     buildings: 'wg.bridge.buildings',
+    /* 🔴 2026-09-25 Sucre：「劃分區域預設為後台可見，但他可以勾選前台可見。」
+       後台互助地圖把**勾了前台可見**的區域寫到這裡，前台地圖讀。
+       只寫前台需要的欄位（名稱、類型、範圍、顏色、備註），**不寫責任單位與任務單歸屬** ——
+       那是後台的派工資訊。
+       ⚠️ 後端的 `work_zones` 沒有「是否公開」欄位（ERD 2026-08-27 讀過），正式版要開欄位。
+       `null`＝後台從沒開過，前台就只畫既有的封閉區域。 */
+    publicZones: 'wg.bridge.publicZones',
   };
   var EVENT = 'wg:bridge';
 
@@ -137,7 +144,9 @@
       createdAt: stamp(now), updatedMin: 0,
       desc: input.desc || '',
       fields: {},
-      photos: [],
+      /* TM-IMG-101：只存網址字串，不存圖片檔。
+         前台貼的圖直接進任務單，後台看得到（TM-IMG-137）—— 這裡不過濾、不改寫網址。 */
+      photos: Array.isArray(input.photos) ? input.photos : [],
       tasks: rows.map(function (t, i) {
         return {
           id: 'K-' + seq + '-' + (i + 1),
@@ -372,7 +381,8 @@
     var onStorage = function (e) {
       if (!e.key || e.key === KEYS.tickets || e.key === KEYS.matches
         || e.key === KEYS.notices || e.key === KEYS.stationReports
-        || e.key === KEYS.roleRequests || e.key === KEYS.buildings) fn();
+        || e.key === KEYS.roleRequests || e.key === KEYS.buildings
+        || e.key === KEYS.publicZones) fn();
     };
     window.addEventListener(EVENT, onCustom);
     window.addEventListener('storage', onStorage);
@@ -456,6 +466,15 @@
     return Array.isArray(m) && m.indexOf(cellKey(floor, unit)) !== -1;
   }
 
+  /** 這一棟的分區名稱清單（由上而下的顯示順序）。
+   *  沒存過 `segments` 的舊資料 → 用樓層數產生，行為與改版前一致。 */
+  function buildingSegments(b) {
+    if (b && Array.isArray(b.segments) && b.segments.length) return b.segments.slice();
+    return buildingFloors(b || {}).map(function (f) {
+      return f < 0 ? ('B' + (-f)) : (String(f) + 'F');
+    });
+  }
+
   function createBuilding(input) {
     var all = readBuildings();
     var addr = input.address || '';
@@ -468,6 +487,16 @@
       floorsBelow: Math.max(0, parseInt(input.floorsBelow, 10) || 0),
       unitsPerFloor: Math.max(1, parseInt(input.unitsPerFloor, 10) || 1),
       missingCells: Array.isArray(input.missingCells) ? input.missingCells.slice() : [],
+      /* 🔴 2026-09-25 Sucre：「直立樓層的樓層不是固定的，應該要可以自己寫上，
+         例如第一節車廂第二節車廂。」
+         ERD 查證：`secondary_locations.floor` 是 **string, nullable** —— 「第 1 節車廂」
+         本來就寫得進去。全 schema 沒有任何 zone／area／section 欄位可以掛
+         （`work_zones` 是團隊轄區，與 tickets 無關），所以分區名稱只能靠 floor 這行字。
+         → 分區是一串**自由文字**，不是樓層數字。`floorsAbove/Below` 仍然存著，
+           只用來產生預設值與相容舊資料。 */
+      segments: Array.isArray(input.segments) && input.segments.length
+        ? input.segments.map(function (x) { return String(x).trim(); }).filter(Boolean)
+        : null,
       lat: (typeof input.lat === 'number') ? input.lat : null,
       lng: (typeof input.lng === 'number') ? input.lng : null,
       /* TODO(2026-09-12)：哪個後台角色能開這個開關**尚未裁示**。
@@ -519,10 +548,20 @@
       /* 頂樓兩戶打通、B1 只有 2 格是車位以外的空間 —— 都是編的，只為了讓
          「不存在的格子」在畫面上真的出現，否則永遠測不到那個狀態。 */
       missingCells: ['12-5', '12-6', '-1-3', '-1-4', '-1-5', '-1-6'],
+      segments: null,   // null ＝ 用樓層數產生（B1、1F…12F）
       lat: 23.6675, lng: 121.4223,
       createdBy: null,
       createdAt: stamp(new Date()),
     }];
+  }
+
+  /* ── 前台可見的區域（互助地圖 → 前台地圖）──────────────────────────── */
+  function readPublicZones() {
+    var list = readRaw(KEYS.publicZones, null);
+    return Array.isArray(list) ? list : null;
+  }
+  function writePublicZones(list) {
+    writeRaw(KEYS.publicZones, Array.isArray(list) ? list : []);
   }
 
   /** 清空（給 demo 重置用）。 */
@@ -549,7 +588,9 @@
     readBuildings: readBuildings, buildingById: buildingById, buildingForAddress: buildingForAddress,
     createBuilding: createBuilding, updateBuilding: updateBuilding, toggleCellMissing: toggleCellMissing,
     cellKey: cellKey, buildingFloors: buildingFloors, floorLabel: floorLabel, unitLabel: unitLabel,
+    buildingSegments: buildingSegments,
     isCellMissing: isCellMissing,
+    readPublicZones: readPublicZones, writePublicZones: writePublicZones,
     subscribe: subscribe, useBridgeVersion: useBridgeVersion, reset: reset,
   };
 })();

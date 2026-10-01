@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登入 /login · 島嶼守望 Wan Guard</title>
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/primitives.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/semantic.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/typography.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/motion.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/base.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
+<link rel="stylesheet" href="js/site/site.css?v=20260921c">
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
+<script src="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/_ds_bundle.js"></script>
+
+<script src="js/shared/wg-bridge.js?v=20260921c"></script>
+<script src="js/site/site-route.js?v=20260921c"></script>
+<!-- site-controls.jsx 提供 WGIcon，必須排在其他 jsx 之前 -->
+<script type="text/babel" src="js/site/site-controls.jsx?v=20260921c" data-presets="react"></script>
+<!-- 全站橫幅（EA-FEAT-001）：登入頁也是前台的一頁 -->
+<script src="js/admin/announce/an-data.js?v=20260921c"></script>
+<script type="text/babel" src="js/admin/announce/an-banner.jsx?v=20260921c" data-presets="react"></script>
+<!-- 身份清單的唯一真相來源在 site-shell.jsx 的 SITE_PERSONAS ——
+     登入頁不用它的版面，但要用它那份身份與 writeSitePersona，不要另開一份 -->
+<script type="text/babel" src="js/site/site-shell.jsx?v=20260921c" data-presets="react"></script>
+<!-- site-auth.js 是導覽與身份寫入（三支前台頁也載入這一支）；.jsx 是畫面，只有這一頁載入 -->
+<script src="js/site/site-auth.js?v=20260921c"></script>
+<script type="text/babel" src="js/site/site-auth.jsx?v=20260921c" data-presets="react"></script>
+
+<script type="text/babel" data-presets="react">
+/* /login — 對應 apps/demo/src/app/(auth)/login/page.tsx（含 forgot-password、reset-password
+ * 兩頁，在原型裡是同一支的三個畫面，用這一頁自己的 hash 切）。
+ *
+ * 🔒 這一頁**不套 SiteShell** —— repo 的 (auth) 路由群組也沒有前台外殼。
+ *    登入頁上放側欄與搜尋框，等於邀請還沒登入的人去點他現在不該點的東西。
+ */
+ReactDOM.createRoot(document.getElementById('root')).render(<SiteAuthPage />);
+</script>
+</body>
+</html>

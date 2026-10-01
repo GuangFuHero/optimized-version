@@ -236,14 +236,23 @@
     },
   };
 
-  const RESCUE_MAP_OVERLAY_LAYER_ORDER = ['closure-areas', 'routes', 'secondary-locations'];
-  const DEFAULT_RESCUE_MAP_OVERLAY_LAYERS = ['closure-areas'];
+  /* 🔴 2026-09-25：新增 `public-zones`（後台互助地圖勾了「前台可見」的非危險區域，例如志工休息區）。
+     危險區仍歸 `closure-areas`，並改畫橘白斜紋（js/shared/wg-hazard.js）。
+     預設開著 —— 後台特地勾了前台可見，就是要人看到。 */
+  const RESCUE_MAP_OVERLAY_LAYER_ORDER = ['closure-areas', 'public-zones', 'routes', 'secondary-locations'];
+  const DEFAULT_RESCUE_MAP_OVERLAY_LAYERS = ['closure-areas', 'public-zones'];
   /* color 改綁 DS 語意 token（原 repo 為硬編 #b45309 / #2563eb / #0f766e）。 */
   const OVERLAY_LAYER_CONFIG = {
     'closure-areas': {
       label: '封閉區域', description: '危險地帶與暫時封鎖範圍', icon: 'Ban',
       color: 'var(--color-bg-warning-hover)', fillColor: 'var(--color-bg-warning)', tone: 'warning',
       sourceLabel: 'closure_areas.geometry via base_geometries',
+    },
+    /* 🚨 圖層名稱「標示區域」與說明文字是我取的，未經裁示。 */
+    'public-zones': {
+      label: '標示區域', description: '志工休息區、集合點等由後台標示的範圍', icon: 'MapPinned',
+      color: 'var(--color-fg-success)', tone: 'success',
+      sourceLabel: 'work_zones（前台可見）',
     },
     routes: {
       label: '路線', description: '巡查路線與任務動線', icon: 'Route',

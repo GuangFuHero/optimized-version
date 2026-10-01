@@ -59,18 +59,14 @@
     },
   };
 
-  // EA-AB-152（裁示 D-7「發布時可以選擇時效」）
-  // ⚠️ 預設 24 小時是我取的，比照 MAP-ZD-152（危險區）。D-7 沒有指定預設值。
-  window.AN_TTL_OPTIONS = [
-    { h: 1, label: "1 小時" },
-    { h: 3, label: "3 小時" },
-    { h: 6, label: "6 小時" },
-    { h: 12, label: "12 小時" },
-    { h: 24, label: "24 小時" },
-    { h: 72, label: "3 天" },
-    { h: 0, label: "不自動到期" },
-  ];
-  window.AN_TTL_DEFAULT = 24;
+  // 🔒 2026-09-19：**時效整組拔掉**（後端 PR 沒有做這個功能）。
+  //    公告從此只有兩種消失方式：**有人手動關**，或**被下一則取代**。
+  //
+  //    ⚠️ 這是有代價的，別當成沒發生：時效本來就是為了擋「警報解除後沒人
+  //    記得回來關」（表 26 情境舉例三整段在講這件事）。D-12「每個頻道最多
+  //    一則」只能部分緩解 —— 災害結束後若沒人再發新的，那句警告會一直掛著。
+  //    若日後後端補上到期欄位，要還原的是：AN_TTL_OPTIONS / expiresAt /
+  //    anPrune / anExtend / anLeft / expire 與 extend 兩種事件。
 
   // ── 字數（EA-AB-121）──────────────────────────────────────────────────
   // [...s] 依 Unicode 字符切，不是 s.length（後者會把 emoji 算成 2）。
@@ -87,19 +83,19 @@
     return [
       // 啟用中：前台一則、後台一則 —— 這是上限，不是巧合
       { id: "A-01", realm: "site", text: "大平村上游土石流警報，志工請暫停前往，改由中正路集結",
-        active: true, by: "吳政憲", at: now - 26 * 60000, expiresAt: now + 22 * 3600000,
+        active: true, by: "吳政憲", at: now - 26 * 60000,
         events: [ev(now - 26 * 60000, "吳政憲", "publish")] },
       { id: "A-02", realm: "admin", text: "今日 18:00 前需回報各隊在場人數，未回報者由縣府直接致電",
-        active: true, by: "吳政憲", at: now - 95 * 60000, expiresAt: now + 5 * 3600000,
+        active: true, by: "吳政憲", at: now - 95 * 60000,
         events: [ev(now - 95 * 60000, "吳政憲", "publish")] },
       { id: "A-03", realm: "site", text: "光復車站臨時接駁已恢復，班距 20 分鐘",
-        active: false, by: "林承翰", at: now - 3 * 86400000, expiresAt: null,
+        active: false, by: "林承翰", at: now - 3 * 86400000,
         events: [ev(now - 3 * 86400000, "林承翰", "publish"),
                  ev(now - 2 * 86400000, "林承翰", "close")] },
       { id: "A-04", realm: "both", text: "馬太鞍溪水位回落，一級開設調整為二級",
-        active: false, by: "林承翰", at: now - 5 * 86400000, expiresAt: now - 4 * 86400000,
+        active: false, by: "林承翰", at: now - 5 * 86400000,
         events: [ev(now - 5 * 86400000, "林承翰", "publish"),
-                 ev(now - 4 * 86400000, "系統", "expire")] },
+                 ev(now - 4 * 86400000, "林承翰", "close")] },
     ];
   }
 
@@ -126,26 +122,13 @@
     return () => { window.removeEventListener(EVT, on); window.removeEventListener("storage", onStorage); };
   };
 
-  // ── 到期（EA-AB-152 / EA-AB-163）────────────────────────────────────────
-  // 到期與被人關掉，事後看紀錄必須分得出來 —— 所以 kind 是 expire 不是 close。
-  window.anPrune = function () {
-    const now = Date.now();
-    const list = window.anRead();
-    let hit = false;
-    const next = list.map((a) => {
-      if (a.active && a.expiresAt && a.expiresAt <= now) {
-        hit = true;
-        return { ...a, active: false,
-          events: [...a.events, { at: a.expiresAt, actor: "系統", kind: "expire", note: "" }] };
-      }
-      return a;
-    });
-    if (hit) window.anWrite(next);
-    return hit;
-  };
+  // 2026-09-19：anPrune 保留成 no-op，讓舊的呼叫點（可能還在別的分支）不會炸。
+  // 沒有時效之後沒有東西需要定期清 —— 呼叫它不做任何事。
+  window.anPrune = function () { return false; };
 
   // ── 查詢 ────────────────────────────────────────────────────────────────
-  function live(a) { return a.active && (!a.expiresAt || a.expiresAt > Date.now()); }
+  // 2026-09-19：沒有時效之後，「還在顯示」就只剩 active 一個條件。
+  function live(a) { return !!a.active; }
 
   // 某個場域現在顯示的那一則 —— **最多一則**（D-12），沒有就是 null。
   // 「同時」那一則同時佔用兩個頻道的位置。
@@ -185,8 +168,11 @@
   window.AN_EVENT_LABEL = {
     publish:   { label: "發布", icon: "Megaphone", tone: "primary" },
     close:     { label: "手動關閉", icon: "CircleSlash", tone: "neutral" },
-    expire:    { label: "時效到期", icon: "Timer", tone: "neutral" },
-    extend:    { label: "延長時效", icon: "TimerReset", tone: "neutral" },
+    // 2026-09-19：expire／extend 兩種事件隨時效一起拔掉。
+    // ⚠️ 字典**保留**這兩個 key —— 舊資料的歷史紀錄裡還有它們，
+    //    拿掉會讓時間軸上那幾筆變成沒有標籤的空白列。
+    expire:    { label: "時效到期（已停用）", icon: "Timer", tone: "neutral" },
+    extend:    { label: "延長時效（已停用）", icon: "TimerReset", tone: "neutral" },
     // EA-AB-158：「被新公告取代」與「有人手動關掉」在事後必須分得出來 ——
     // 前者是發布新公告的副作用，後者是一個獨立的判斷。混在一起就查不出
     // 那則警告到底是誰決定要撤的。
@@ -212,14 +198,14 @@
   // 這條不變式由這裡維持：寫入新的同時關掉舊的，是同一個動作。
   // ⚠️ 正式版必須在同一個 transaction 內 —— 中途失敗會留下「舊的關了、新的沒發出去」
   //    的空窗，在災害中那是最糟的狀態。見 validation.md B-10。
-  window.anPublish = function (realm, text, ttlHours, by) {
+  // 2026-09-19：拿掉 ttlHours 參數。
+  window.anPublish = function (realm, text, by) {
     const kill = new Set(window.anClashing(realm).map((a) => a.id));
     const list = window.anRead();
     const now = Date.now();
     const item = {
       id: "A-" + String(now).slice(-6),
       realm, text: String(text).trim(), active: true, by, at: now,
-      expiresAt: ttlHours ? now + ttlHours * 3600000 : null,
       events: [{ at: now, actor: by, kind: "publish", note: "" }],
     };
     const now2 = Date.now();
@@ -239,24 +225,10 @@
       : a));
   };
 
-  // EA-AB-153：到期前可延長。
-  window.anExtend = function (id, hours, by) {
-    window.anWrite(window.anRead().map((a) => a.id === id
-      ? { ...a, expiresAt: (a.expiresAt || Date.now()) + hours * 3600000,
-          events: [...a.events, { at: Date.now(), actor: by, kind: "extend", note: `＋${hours} 小時` }] }
-      : a));
-  };
 
   // ── 顯示用小工具 ────────────────────────────────────────────────────────
   window.anClock = function (ms) {
     if (!ms) return "—";
     return new Date(ms).toLocaleString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-  };
-  window.anLeft = function (ms) {
-    if (!ms) return "不自動到期";
-    const d = ms - Date.now();
-    if (d <= 0) return "已到期";
-    const h = Math.floor(d / 3600000), m = Math.floor((d % 3600000) / 60000);
-    return h ? `剩 ${h} 小時 ${m} 分` : `剩 ${m} 分`;
   };
 })();

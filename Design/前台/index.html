@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Wan Guard 原型總覽</title>
+<link rel="icon" href="assets/logo/mark.svg">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/primitives.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/semantic.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/typography.css">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--color-bg-neutral-subtle,#f6f6f4);color:var(--color-fg-neutral-default,#111);font-family:var(--font-body,system-ui,sans-serif)}
+  main{max-width:880px;margin:0 auto;padding:40px 16px 64px}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  header img{width:40px;height:40px}
+  h1{font-size:24px;margin:0}
+  .sub{color:var(--color-fg-neutral-muted,#666);margin:0 0 32px;font-size:14px}
+  h2{font-size:14px;letter-spacing:.04em;color:var(--color-fg-neutral-muted,#666);margin:32px 0 12px;font-weight:600}
+  ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  a{display:block;padding:16px;border-radius:12px;background:var(--color-bg-neutral-default,#fff);border:1px solid var(--color-border-default,#e5e5e5);text-decoration:none;color:inherit;transition:border-color .15s,transform .15s}
+  a:hover{border-color:var(--color-brand-primary-default,#E3791E);transform:translateY(-1px)}
+  a b{display:block;font-size:16px;margin-bottom:4px}
+  a span{font-size:13px;color:var(--color-fg-neutral-muted,#666)}
+  footer{margin-top:40px;font-size:12px;color:var(--color-fg-neutral-muted,#888)}
+</style>
+</head>
+<body>
+<main>
+  <header><img src="assets/logo/mark.svg" alt=""><h1>島嶼守望 Wan Guard · 原型</h1></header>
+  <p class="sub">設計原型預覽，資料皆為假資料。每次推上 GitHub main 會自動更新。</p>
+
+  <h2>前台 Site</h2>
+  <ul>
+    <li><a href="前台地圖 Site Map.html"><b>救災地圖</b><span>/map</span></a></li>
+    <li><a href="前台列表 Site List.html"><b>救災列表</b><span>/list</span></a></li>
+    <li><a href="前台行前資訊 Site Briefing.html"><b>志工行前資訊</b><span>/brief</span></a></li>
+    <li><a href="登入 Login.html"><b>登入</b><span>/login</span></a></li>
+    <li><a href="公開救災地圖 Public Rescue Map.html"><b>公開救災地圖</b><span>Public Rescue Map</span></a></li>
+  </ul>
+
+  <h2>後台 Manager</h2>
+  <ul>
+    <li><a href="總覽儀表板 Dashboard.html"><b>總覽儀表板</b><span>Dashboard</span></a></li>
+    <li><a href="任務管理 Ticket Management.html"><b>任務管理</b><span>Ticket Management</span></a></li>
+    <li><a href="資源站點管理 Resource Station v2.html"><b>資源站點管理 v2</b><span>Resource Station v2</span></a></li>
+    <li><a href="成員管理 Member Management.html"><b>成員管理</b><span>Member Management</span></a></li>
+    <li><a href="緊急公告 Emergency Announcements.html"><b>緊急公告</b><span>Emergency Announcements</span></a></li>
+    <li><a href="志工行前資訊 Volunteer Briefing.html"><b>志工行前資訊（編輯）</b><span>Volunteer Briefing</span></a></li>
+    <li><a href="互助地圖 Mutual Aid Map.html"><b>互助地圖</b><span>Mutual Aid Map</span></a></li>
+    <li><a href="資源站管理 Resource Station.html"><b>資源站管理（舊版）</b><span>Resource Station v1</span></a></li>
+  </ul>
+
+  <footer>Prototype · not for production</footer>
+</main>
+</body>
+</html>

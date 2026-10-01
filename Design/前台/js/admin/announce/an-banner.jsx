@@ -49,9 +49,11 @@
       if (!window.anSubscribe) return;
       const refresh = () => setList(window.anActive(realm));
       const off = window.anSubscribe(refresh);          // 關閉即刻生效（EA-AB-151）
-      const tick = setInterval(() => { window.anPrune(); refresh(); }, 1000);  // 到期（EA-AB-152）
+      /* 2026-09-19：時效拔掉後不再需要每秒掃到期。
+         橫幅的更新完全由 anSubscribe 推（發布／關閉／取代都會觸發）。 */
+      const tick = null;
       refresh();
-      return () => { off(); clearInterval(tick); };
+      return () => { off(); tick && clearInterval(tick); };
     }, [realm]);
 
     React.useEffect(() => { if (list.length < 2) setOpen(false); }, [list.length]);

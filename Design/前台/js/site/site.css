@@ -225,3 +225,54 @@ button { font-family: inherit; }
      84 → 104（FAB 高 52 ＋ 下緣間距 16 ＋ 一列的呼吸 36）。 */
   .wg-site-list-scroll { padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)) !important; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 登入／忘記密碼／重設密碼（site-auth.jsx，2026-09-21）
+ *
+ * 為什麼版面寫在 CSS 而不是 inline style：主視覺要在 768px 以下整塊消失，
+ * 而 inline style 的優先度比媒體查詢高（同一份檔頭已經吃過這個教訓一次）。
+ * ═══════════════════════════════════════════════════════════════════════ */
+.wg-auth {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-neutral-subtle);
+}
+.wg-auth__grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.wg-auth__panel {
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--space-4); padding: var(--space-8) var(--space-4); overflow-y: auto;
+}
+.wg-auth__head {
+  width: 100%; max-width: 440px; display: flex; align-items: center;
+  justify-content: space-between; gap: var(--space-3);
+}
+
+/* 手機不顯示主視覺 —— 那塊在 390px 上只會把表單推到第二屏。 */
+.wg-auth__hero { display: none; }
+
+@media (min-width: 900px) {
+  .wg-auth__grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+  .wg-auth__hero {
+    position: relative; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: space-between;
+    gap: var(--space-8); padding: var(--space-12) var(--space-8);
+    background: var(--color-fg-neutral-default);
+  }
+  /* 品牌與出口在 hero 裡就有了，表單上方那一列收起來，不要出現兩次。 */
+  .wg-auth__head { display: none; }
+  .wg-auth__panel { justify-content: center; }
+}
+.wg-auth__hero-glow {
+  position: absolute; inset: 0; pointer-events: none;
+  /* 品牌橘的低透明度光暈。⚠️ rgba() 吃不進 CSS 變數，所以這裡是 --prim-color-orange-400
+     (#E3791E) 的字面值 —— DS 自己的 --prim-shadow-* 也是同一個做法。 */
+  background: radial-gradient(circle at 22% 78%,
+    rgba(227, 121, 30, 0.38) 0%, rgba(227, 121, 30, 0.10) 34%, rgba(227, 121, 30, 0) 64%);
+}
+.wg-auth__hero-brand { position: relative; display: flex; align-items: center; gap: var(--space-3); }
+.wg-auth__hero-exit {
+  position: relative; align-self: flex-start; display: inline-flex; align-items: center;
+  gap: var(--space-2); min-height: 44px; text-decoration: none;
+  font: 700 var(--fs-14)/1.2 var(--font-latin); color: var(--prim-color-blue-200);
+}

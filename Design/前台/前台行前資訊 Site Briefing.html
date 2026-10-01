@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>志工行前資訊 /brief · 島嶼守望 Wan Guard</title>
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/primitives.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/semantic.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/typography.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/motion.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/base.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
+<link rel="stylesheet" href="js/site/site.css?v=20260919a">
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
+<script src="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/_ds_bundle.js"></script>
+
+<script src="js/shared/wg-bridge.js?v=20260919a"></script>
+<script src="js/site/site-route.js?v=20260919a"></script>
+<!-- site-controls.jsx 提供 WGIcon 與 useSiteRouteState，必須排在其他 jsx 之前 -->
+<script type="text/babel" src="js/site/site-controls.jsx?v=20260919a" data-presets="react"></script>
+<!-- 全站橫幅（EA-FEAT-001） -->
+<script src="js/admin/announce/an-data.js?v=20260919a"></script>
+<script type="text/babel" src="js/admin/announce/an-banner.jsx?v=20260919a" data-presets="react"></script>
+<!-- 2026-09-27：每一頁的「？」頁面說明 -->
+<script type="text/babel" src="js/shared/wg-help.jsx?v=20260927a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-shell.jsx?v=20260919a" data-presets="react"></script>
+<!-- 登入入口的落點（2026-09-21）。UI 在 登入 Login.html，這一支只有導覽與身份寫入 -->
+<script src="js/site/site-auth.js?v=20260919a"></script>
+<script type="text/babel" src="js/site/site-notify.jsx?v=20260919a" data-presets="react"></script>
+<!-- 行前資訊（VB-FEAT-001）：與後台載入同一支資料層與同一支呈現元件 -->
+<script src="js/admin/brief/vb-data.js?v=20260919a"></script>
+<script type="text/babel" src="js/admin/brief/vb-view.jsx?v=20260919a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-brief.jsx?v=20260919a" data-presets="react"></script>
+
+<script type="text/babel" data-presets="react">
+/* /brief — 靜態內容頁。
+ * 與 /map、/list 不同，這一頁**沒有路由狀態**（沒有圖層、篩選、選取的標記），
+ * 所以不用 useSiteRouteState —— 只給 SiteShell 一份預設 state，讓側欄那兩個
+ * 連結（地圖／列表）點過去有合理的落點。 */
+function SiteBriefingPage() {
+  const [session] = useSitePersona();
+  const state = { dataType: 'station', subDataTypes: [] };
+  return (
+    <SiteShell module="brief" state={state} search=""
+      onSearchChange={(value) => {
+        /* 這一頁沒有東西可搜。在這裡打字的人要找的是站點或任務 —— 帶他過去，
+           而不是讓輸入框看起來壞掉。 */
+        const v = (value || '').trim();
+        if (v) window.location.href = encodeURI('前台列表 Site List.html') + '#/list/station?search=' + encodeURIComponent(v);
+      }}
+      isAuthenticated={session.isAuthenticated} platformRole={session.platformRole} userName={session.userName}
+      onSignIn={() => window.SiteAuth.goSignIn()}
+      onSignOut={() => window.SiteAuth.signOutHere()}>
+      <SiteBriefingView />
+    </SiteShell>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<SiteBriefingPage />);
+</script>
+</body>
+</html>

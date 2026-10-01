@@ -281,7 +281,7 @@
     );
   }
 
-  function TicketDetail({ marker, taskMatch, isAuthenticated, viewerId, canDeleteMatchSheet, onClaimNeed, onDeleteMatchSheet, onShare, building, onOpenBuilding }) {
+  function TicketDetail({ marker, taskMatch, isAuthenticated, viewerId, canDeleteMatchSheet, onClaimNeed, onDeleteMatchSheet, onShare, building, onOpenBuilding, siblings }) {
     const [tab, setTab] = useState('details');
     useEffect(() => { setTab('details'); }, [marker.id]);
     const tk = marker.ticketMeta || {};
@@ -316,7 +316,8 @@
 
         <div style={{ padding: '0 var(--space-6)', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           <Badge tone={R.getTicketStatusTone(tk.status)} variant="solid">{marker.label}</Badge>
-          {tk.priority === 'high' ? <Badge tone="danger" variant="subtle">高優先</Badge> : null}
+          {tk.priority === 'critical' ? <Badge tone="danger" variant="solid">最高優先</Badge>
+            : tk.priority === 'high' ? <Badge tone="warning" variant="subtle">高優先</Badge> : null}
           <Badge tone={TASK_MATCH_TONES[taskMatch.status]} variant="subtle">{TASK_MATCH_LABELS[taskMatch.status]}</Badge>
         </div>
 
@@ -348,6 +349,30 @@
                 <InfoRow label="任務說明" value={(tk.reviewNote && tk.reviewNote.trim()) || marker.subtitle} icon="FileText" />
               )}
               <InfoRow label="任務類型" value={(tk.taskType && tk.taskType.trim()) || '未提供'} icon="Tag" />
+
+              {/* 現場照片（TM-FEAT-010）
+                  🚨 TM-FEAT-003 AC-03：photos 與 original free text、review notes、
+                     creator identity、raw contact 同一組 —— **不對未登入訪客開放**。
+                     所以這一段跟著 `masked` 走，與「任務說明」「現場聯絡人」同一道閘。
+                  ⚠️ 正式版這道遮蔽是後端的事（見 site-data.js 檔頭）：未登入時
+                     ticketMeta 裡根本不該有 photos，不能只靠這裡不 render。 */}
+              {masked ? null : (() => {
+                const pics = window.tkPhotoList ? window.tkPhotoList(tk.photos) : [];
+                if (!pics.length || !window.TKPhotoThumb) return null;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                    <span style={{ font: '700 var(--fs-12)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-muted)' }}>
+                      現場照片（{pics.length}）
+                    </span>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 'var(--space-2)' }}>
+                      {pics.map((p, i) => (
+                        <window.TKPhotoThumb key={p.url + ':' + i} photo={p} index={i}
+                          onOpen={(x) => window.open(x.url, '_blank', 'noopener,noreferrer')} />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* AC-03：raw contact details 不對訪客開放。
                   未登入時 ticketMeta 裡根本沒有這幾個欄位（遮在資料層）。 */}
@@ -397,8 +422,28 @@
                       <Button variant="secondary" onClick={onOpenBuilding}
                         startIcon={<WGIcon n="Building2" s={16} />}
                         style={{ marginTop: 'var(--space-2)', width: '100%' }}>
-                        查看整棟（{building.floorsAbove} 層 {building.unitsPerFloor} 戶）
+                        查看整棟（{window.WGBridge ? window.WGBridge.buildingSegments(building).length : 0} 個分區）
                       </Button>
+                    ) : null}
+                    {/* 🔴 2026-09-21 Sucre：「點開 ticket 卡片後又突然跳出去，然後再回來」。
+                        同一棟裡連看好幾張單是常態（家屬掃尋人單、志工看同一層的需求），
+                        每看一張就回列表再點一張，是把一件事拆成三個動作。
+                        🔒 前後只在**同一棟**裡移動，而且照分區清單當下的排序走 ——
+                           兩邊順序不一樣的話，「下一張」會變成瞬間移動。 */}
+                    {siblings && siblings.total > 1 ? (
+                      <div style={{ marginTop: 'var(--space-2)', display: 'flex',
+                        alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <Button variant="ghost" size="sm" disabled={!siblings.onPrev}
+                          onClick={siblings.onPrev} startIcon={<WGIcon n="ChevronLeft" s={16} />}
+                          style={{ flex: 1, minHeight: 44 }}>上一張</Button>
+                        <span style={{ flexShrink: 0, font: '400 var(--fs-12)/1.4 var(--font-data)',
+                          color: 'var(--color-fg-neutral-muted)' }}>
+                          {siblings.index + 1} / {siblings.total}
+                        </span>
+                        <Button variant="ghost" size="sm" disabled={!siblings.onNext}
+                          onClick={siblings.onNext} endIcon={<WGIcon n="ChevronRight" s={16} />}
+                          style={{ flex: 1, minHeight: 44 }}>下一張</Button>
+                      </div>
                     ) : null}
                   </>
                 )
@@ -486,8 +531,10 @@
                 display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                 <Badge tone={R.getTicketStatusTone(m.ticketMeta && m.ticketMeta.status)} variant="subtle">{m.label}</Badge>
-                {m.ticketMeta && m.ticketMeta.priority === 'high'
-                  ? <Badge tone="danger" variant="subtle">高優先</Badge> : null}
+                {m.ticketMeta && m.ticketMeta.priority === 'critical'
+                  ? <Badge tone="danger" variant="solid">最高優先</Badge>
+                  : m.ticketMeta && m.ticketMeta.priority === 'high'
+                  ? <Badge tone="warning" variant="subtle">高優先</Badge> : null}
               </div>
               <div style={{ font: '400 var(--fs-14)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-default)' }}>{m.title}</div>
               <div style={{ font: '400 var(--fs-12)/1.5 var(--font-data)', color: 'var(--color-fg-neutral-subtle)' }}>{m.subtitle}</div>

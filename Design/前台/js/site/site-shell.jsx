@@ -408,7 +408,7 @@
     );
   }
 
-  function SiteTopNavBar({ isAuthenticated, userName, platformRole, viewerId, search, onSearchChange, onSignIn, onSignOut }) {
+  function SiteTopNavBar({ module, isAuthenticated, userName, platformRole, viewerId, search, onSearchChange, onSignIn, onSignOut }) {
     return (
       <header style={{ height: LAYOUT.topNavBarHeight, display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr) auto',
         alignItems: 'center', columnGap: 'var(--space-6)', padding: '0 var(--space-6)',
@@ -424,6 +424,8 @@
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', justifySelf: 'end' }}>
           <SiteRequestHelpButton variant="topbar" />
+          {/* 2026-09-27：「這一頁怎麼用」。前台沒有頁面標題，所以放在頂欄右側、鈴鐺左邊。 */}
+          {window.WGPageHelp ? <window.WGPageHelp pageKey={'site:' + module} align="right" size={36} /> : null}
           {/* 通知（2026-09-10）。未載入 site-notify.jsx 的頁面不會壞掉，只是沒有鈴鐺。
               位置在人名選單左邊，與後台頂欄同一個位置 —— 兩邊的人是同一批。 */}
           {window.SiteNotifyBell ? <window.SiteNotifyBell viewerId={viewerId} onOpenTicket={openSiteTicket} /> : null}
@@ -433,7 +435,7 @@
     );
   }
 
-  function SiteMobileTopNavBar({ onMenuClick, isAuthenticated, userName, viewerId, search, onSearchChange, onSignIn, onSignOut }) {
+  function SiteMobileTopNavBar({ module, onMenuClick, isAuthenticated, userName, viewerId, search, onSearchChange, onSignIn, onSignOut }) {
     /* 搜尋在手機是**展開式**：平常只佔一顆 44px 的圖示鈕，按下才換成整列輸入框。
      *
      * ⚠️ 先前手機**完全沒有搜尋** —— `SiteHeaderSearchInput` 只掛在桌機的 SiteTopNavBar，
@@ -494,6 +496,7 @@
         </button>
         {/* 手機頂欄現在有五樣：漢堡、品牌、搜尋、通知、人名。
             品牌那格是 `minWidth: 0` 的彈性欄，所以擠得下（390px 已實測）。 */}
+        {/* 「這一頁怎麼用」在手機放進漢堡選單 —— 頂欄多一顆 36px 會把事件名稱擠到壓住搜尋鈕（390px 實測） */}
         {window.SiteNotifyBell ? <window.SiteNotifyBell viewerId={viewerId} onOpenTicket={openSiteTicket} /> : null}
         <div style={{ flexShrink: 0 }}>
           <SiteUserMenu isAuthenticated={isAuthenticated} userName={userName} onSignIn={onSignIn} onSignOut={onSignOut} />
@@ -588,6 +591,8 @@
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
           {/* 請求協助在行動版頂欄同樣塞不下，掛側欄第一順位（桌機由頂欄負責）。 */}
           <SiteRequestHelpButton variant="sidebar" collapsed={collapsed} />
+          {/* 2026-09-27：手機的「這一頁怎麼用」（桌機在頂欄右側）。只在抽屜裡出現。 */}
+          {showCloseButton && window.WGPageHelp ? <window.WGPageHelp pageKey={'site:' + module} variant="row" /> : null}
           {/* 行動版頂欄放不下切換按鈕，改掛這裡（桌機由頂欄負責，不重複出現）。 */}
           {showPortalSwitch ? (
             <React.Fragment>
@@ -637,11 +642,11 @@
         background: 'var(--color-bg-neutral-subtle)' }}>
         <div style={{ gridColumn: '1 / -1', gridRow: 1, position: 'relative', zIndex: 3 }}>
           {isMobile ? (
-            <SiteMobileTopNavBar onMenuClick={() => setDrawerOpen(true)} isAuthenticated={isAuthenticated}
+            <SiteMobileTopNavBar module={module} onMenuClick={() => setDrawerOpen(true)} isAuthenticated={isAuthenticated}
               userName={userName} viewerId={shellSession.userId} search={search} onSearchChange={onSearchChange}
               onSignIn={onSignIn} onSignOut={onSignOut} />
           ) : (
-            <SiteTopNavBar isAuthenticated={isAuthenticated} userName={userName} platformRole={platformRole}
+            <SiteTopNavBar module={module} isAuthenticated={isAuthenticated} userName={userName} platformRole={platformRole}
               viewerId={shellSession.userId} search={search}
               onSearchChange={onSearchChange} onSignIn={onSignIn} onSignOut={onSignOut} />
           )}
@@ -745,5 +750,5 @@
     SiteViewSwitch,
     SiteRequestHelpButton, SiteMobileHelpFab, OPEN_TICKET_EVENT, openSiteTicket,
     STATION_REPORTS_EVENT, openStationReportsDrawer,
-    ROLE_ELEVATION_EVENT, openRoleElevationDrawer, takeOpenOnLoad, SitePersonaList, useSitePersona, SITE_PERSONAS, NEW_TICKET_EVENT, openNewTicketDrawer, SITE_TICKET_ENTRY_LABEL, MY_TASKS_EVENT, openMyTasksDrawer, SiteShell, SiteSidebar, SiteTopNavBar, SiteHeaderSearchInput, SitePortalSwitch, SiteRealmBadge, BrandLockup, SITE_LAYOUT: LAYOUT, MODULE_PAGES });
+    ROLE_ELEVATION_EVENT, openRoleElevationDrawer, takeOpenOnLoad, SitePersonaList, useSitePersona, SITE_PERSONAS, SITE_PERSONA_KEY, writeSitePersona, NEW_TICKET_EVENT, openNewTicketDrawer, SITE_TICKET_ENTRY_LABEL, MY_TASKS_EVENT, openMyTasksDrawer, SiteShell, SiteSidebar, SiteTopNavBar, SiteHeaderSearchInput, SitePortalSwitch, SiteRealmBadge, BrandLockup, SITE_LAYOUT: LAYOUT, MODULE_PAGES });
 })();
