@@ -15,6 +15,7 @@ import {
 
 import { GuangFuBrandIcon } from '../../brand';
 import { SitePortalSwitch, type SitePortalEntry } from '../../role-request';
+import { RequestHelpButton } from '../../ticket/help-request/request-help-button';
 import {
   SiteHeaderSearchInput,
   SiteHeaderSearchInputFallback,
@@ -135,6 +136,7 @@ export function SiteTopNavBar({
         spacing={1.5}
         sx={{ alignItems: 'center', justifySelf: 'end' }}
       >
+        <RequestHelpButton />
         {isAuthenticated ? (
           <SiteUserMenu
             userName={userName}

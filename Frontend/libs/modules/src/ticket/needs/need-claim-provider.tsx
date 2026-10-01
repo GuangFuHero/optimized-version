@@ -16,6 +16,7 @@ import { useClient, useMutation } from 'urql';
 
 import { ClaimNeedDocument, GetTicketDocument } from '@rescue-frontend/data-access';
 
+import { onTicketChanged } from '../ticket-changes';
 import { claimErrorMessage } from './claim-error';
 import {
   buildClaimSignInHref,
@@ -116,6 +117,13 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
       return { needs, ticketStatus: readTicketStatus(ticket) };
     },
     [client, onTicketNeedsChange],
+  );
+
+  // Changed from outside this page too — a place given back in 我的任務, which lives in the
+  // account menu — and then this page's views of the ticket read it again the same way.
+  useEffect(
+    () => onTicketChanged((ticketUuid) => void reloadTicket(ticketUuid)),
+    [reloadTicket],
   );
 
   const confirmClaim = useCallback(async () => {

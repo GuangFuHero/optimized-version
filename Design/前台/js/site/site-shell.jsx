@@ -685,7 +685,64 @@
     );
   }
 
+  /* ── 地圖 ⇄ 列表：不必進漢堡包 ────────────────────────────────────────
+   *
+   * 🔴 2026-09-18 Sucre：「列表呈現有辦法不要進入漢堡包？例如在任務的標籤頁時，
+   *    有個按鈕可以點下去變成列表？」
+   *
+   * 他指出的是一個**層級錯置**：地圖與列表是「同一份內容的兩種看法」
+   * （2026-08-22 的資訊層級 L1，高頻互切），而漢堡包裝的是**低頻的跨模組導覽**。
+   * 把高頻的切換塞進低頻的抽屜，等於每次換看法都要開關一次抽屜。
+   * 側欄那一份「檢視模式」保留（收合側欄時仍需要入口），但它不該是唯一的路。
+   *
+   * 🔒 它不是第三個維度按鈕。畫面上已經有「站點 ⇄ 任務」（看**什麼**），
+   *    這一顆是「地圖 ⇄ 列表」（**怎麼看**）。兩個并排成兩組分段控制會讓人
+   *    分不出哪個是哪個 —— 所以手機只給一顆純圖示按鈕（與旁邊的篩選／圖層
+   *    同一種形狀），桌機才展開成帶字的兩段切換。
+   *
+   * 🔒 一律走 moduleHref：它會把維度／篩選／選取狀態接進網址（`PUB-PS-102`
+   *    兩頁共用同一份篩選狀態）。直接 `location.href = '...html'` 會把使用者
+   *    篩好的條件全部丟掉。 */
+  function SiteViewSwitch({ module, state, compact }) {
+    const other = module === 'map' ? 'list' : 'map';
+
+    if (compact) {
+      return (
+        <a href={moduleHref(other, state)} aria-label={'切換到' + MODULE_META[other].label}
+          style={{ width: 44, height: 44, display: 'grid', placeItems: 'center', textDecoration: 'none',
+            borderRadius: 'var(--radius-full)', color: 'var(--color-fg-neutral-subtle)' }}>
+          <WGIcon n={MODULE_META[other].icon} s={18} />
+        </a>
+      );
+    }
+
+    return (
+      <div role="group" aria-label="檢視模式" style={{ display: 'inline-flex', alignItems: 'center', gap: 2,
+        padding: 2, borderRadius: 'var(--radius-full)', background: 'var(--color-bg-neutral-sunken)' }}>
+        {R.SITE_MODULES.map((target) => {
+          const on = target === module;
+          /* 目前這一頁 render 成 span 而不是 a —— 連到自己的連結是假出口，
+             按下去什麼都沒發生，使用者會以為壞了。 */
+          const inner = (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px',
+              borderRadius: 'var(--radius-full)', whiteSpace: 'nowrap',
+              background: on ? 'var(--color-bg-neutral-default)' : 'transparent',
+              boxShadow: on ? 'var(--shadow-sm)' : 'none',
+              font: '500 var(--fs-13)/1.2 var(--font-body)',
+              color: on ? 'var(--color-fg-neutral-default)' : 'var(--color-fg-neutral-subtle)' }}>
+              <WGIcon n={MODULE_META[target].icon} s={16} />{MODULE_META[target].label}
+            </span>
+          );
+          return on
+            ? <span key={target} aria-current="page">{inner}</span>
+            : <a key={target} href={moduleHref(target, state)} style={{ textDecoration: 'none' }}>{inner}</a>;
+        })}
+      </div>
+    );
+  }
+
   Object.assign(window, {
+    SiteViewSwitch,
     SiteRequestHelpButton, SiteMobileHelpFab, OPEN_TICKET_EVENT, openSiteTicket,
     STATION_REPORTS_EVENT, openStationReportsDrawer,
     ROLE_ELEVATION_EVENT, openRoleElevationDrawer, takeOpenOnLoad, SitePersonaList, useSitePersona, SITE_PERSONAS, NEW_TICKET_EVENT, openNewTicketDrawer, SITE_TICKET_ENTRY_LABEL, MY_TASKS_EVENT, openMyTasksDrawer, SiteShell, SiteSidebar, SiteTopNavBar, SiteHeaderSearchInput, SitePortalSwitch, SiteRealmBadge, BrandLockup, SITE_LAYOUT: LAYOUT, MODULE_PAGES });

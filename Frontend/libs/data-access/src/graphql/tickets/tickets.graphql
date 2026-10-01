@@ -127,6 +127,8 @@ query GetTicket($uuid: UUID!) {
       buildingSection
       floor
       room
+      # The address as typed on the site's 請求協助, when the parts above are empty (spec D4).
+      landmarkNote
     }
     photos {
       uuid
@@ -175,6 +177,18 @@ mutation CreateTicket($input: CreateTicketInput!) {
   }
 }
 
+# 請求協助 (ticket/help-request): the ticket and every need on it in one go — nothing is written
+# unless all of it is. Answered with what the map and the list make their markers of, so the new
+# ticket shows on both without asking the server again.
+mutation CreateHelpRequest($input: CreateHelpRequestInput!) {
+  createHelpRequest(input: $input) {
+    ...TicketFields
+    tasks {
+      ...TicketNeedFields
+    }
+  }
+}
+
 mutation UpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
   updateTicket(uuid: $uuid, input: $input) {
     ...TicketFields
@@ -198,6 +212,46 @@ mutation ClaimNeed($taskUuid: UUID!) {
   assignTaskActor(taskUuid: $taskUuid) {
     uuid
     taskUuid
+  }
+}
+
+# The caller gives their place on a need back (the assignment's uuid, `myAssignment.uuid`). Refused
+# once the requester stopped recruiting (spec Q46); a need that filled by itself reopens (Q40).
+mutation ReleaseClaim($uuid: UUID!) {
+  unassignTaskActor(uuid: $uuid)
+}
+
+# 我的任務 › 我承接的 (ticket/my-claims): the needs the caller claimed, newest first, deleted ones left
+# out. What a volunteer needs on the day: where, whom to call, and whether they may still give the
+# place back (`recruitingStoppedAt`, spec Q46).
+query MyTaskAssignments {
+  myTaskAssignments {
+    assignment {
+      uuid
+      assignedAt
+    }
+    task {
+      uuid
+      taskName
+      recruitingStoppedAt
+    }
+    ticket {
+      uuid
+      title
+      contactName
+      contactPhone
+      secondaryLocation {
+        county
+        city
+        lane
+        alley
+        no
+        buildingSection
+        floor
+        room
+        landmarkNote
+      }
+    }
   }
 }
 
