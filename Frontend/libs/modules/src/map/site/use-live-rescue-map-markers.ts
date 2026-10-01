@@ -14,13 +14,14 @@ import { fetchExchange, type CombinedError } from 'urql';
 
 import type { RescueMapMarkerItem } from '../types';
 import type { SiteRouteState } from '../../route/types';
-import type { TicketNeed } from '../../ticket/needs/need-claim';
+import type { ReloadedTicket } from '../../ticket/needs/use-ticket-needs';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
 import { onTicketCreated } from '../../ticket/ticket-changes';
 import {
   dedupeMarkersById,
   mapStationToMarker,
   mapTicketToMarker,
+  withTicketStatus,
 } from './markers';
 
 const IMPERATIVE_QUERY_CONTEXT = {
@@ -203,15 +204,22 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   }, [hasNextPage, isFetching, loadPage, loadedCount]);
 
   /**
-   * Swap in one ticket's needs as they stand after a claim, so its row agrees with the detail
-   * drawer without reloading every page of the list.
+   * Swap in one ticket as it stands after a claim, a release or a stop — its needs and its status,
+   * on the row's badge — so its row agrees with the detail drawer without reloading every page of
+   * the list.
    */
-  const replaceTicketNeeds = useCallback(
-    (ticketUuid: string, needs: readonly TicketNeed[]) => {
+  const replaceTicket = useCallback(
+    (ticketUuid: string, { needs, ticketStatus }: ReloadedTicket) => {
       setSourceMarkers((current) =>
-        current.map((marker) =>
-          marker.id === ticketUuid ? { ...marker, needs } : marker,
-        ),
+        current.map((marker) => {
+          if (marker.id !== ticketUuid) {
+            return marker;
+          }
+
+          const withNeeds = { ...marker, needs };
+
+          return ticketStatus ? withTicketStatus(withNeeds, ticketStatus) : withNeeds;
+        }),
       );
     },
     [],
@@ -244,6 +252,6 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     hasNextPage,
     loadNextPage,
     loadTicketMarker,
-    replaceTicketNeeds,
+    replaceTicket,
   };
 }

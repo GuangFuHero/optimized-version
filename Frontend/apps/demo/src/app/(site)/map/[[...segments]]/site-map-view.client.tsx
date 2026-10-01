@@ -34,6 +34,7 @@ import {
   useSiteMapViewportStore,
   useStationReports,
   type PointShareTarget,
+  type ReloadedTicket,
   type RescueMapControllerValue,
   type RescueMapDraftPoint,
   type RescueMapMarkerItem,
@@ -475,6 +476,17 @@ function SiteMapViewportDataLayer({
     [createCurrentPointShareTarget, isAuthenticated, onOpenShareTarget],
   );
 
+  // A claim, a release or a stop can change a ticket's status, which its pin shows; the next fetch
+  // would bring it, but the person who did it should not have to wait for one.
+  const showReloadedTicketStatus = useCallback(
+    (ticketUuid: string, { ticketStatus }: ReloadedTicket) => {
+      if (ticketStatus) {
+        liveDataStore.replaceTicketStatus(ticketUuid, ticketStatus);
+      }
+    },
+    [liveDataStore],
+  );
+
   const renderControls = useCallback(
     (controller: RescueMapControllerValue) => (
       <>
@@ -536,8 +548,8 @@ function SiteMapViewportDataLayer({
 
   return (
     // The drawer's claim buttons claim through this. The map keeps no copy of the needs (its popups
-    // offer no claiming), so there is nothing to tell after a claim.
-    <NeedClaimProvider>
+    // offer no claiming), only each ticket's status.
+    <NeedClaimProvider onTicketReloaded={showReloadedTicketStatus}>
       <Map
         markers={visibleMarkers}
         closureAreas={liveDataSnapshot.closureAreas}

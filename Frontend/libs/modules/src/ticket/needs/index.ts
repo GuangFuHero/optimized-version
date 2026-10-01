@@ -10,3 +10,4 @@ export {
 } from './need-claim';
 export type { NeedClaim, NeedClaimKind, NeedQuota, TicketNeed } from './need-claim';
 export { readTicketNeeds, useTicketNeeds } from './use-ticket-needs';
+export type { ReloadedTicket } from './use-ticket-needs';

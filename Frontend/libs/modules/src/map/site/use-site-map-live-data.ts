@@ -25,6 +25,7 @@ import {
   mapStationToMarker,
   mapTicketToMarker,
   toBoundsInput,
+  withTicketStatus,
 } from './markers';
 import { useSiteMapViewportStore } from './use-site-map-viewport-state';
 
@@ -54,6 +55,8 @@ export interface SiteMapLiveDataStore {
   dismissMarker: (markerId: string) => void;
   getSnapshot: () => SiteMapLiveDataSnapshot;
   replaceData: (next: SiteMapLiveDataSnapshot) => void;
+  /** A ticket's status read again after a change on it, shown until the next fetch. */
+  replaceTicketStatus: (ticketUuid: string, status: string) => void;
   setFetching: (isFetching: boolean) => void;
   subscribe: (listener: () => void) => () => void;
 }
@@ -175,6 +178,18 @@ export function createSiteMapLiveDataStore(
     getSnapshot: () => snapshot,
     replaceData: (next) => {
       commit(next);
+    },
+    // Through `commit`, whose signature carries each marker's label: a ticket not on the map, or
+    // already showing this status, tells nobody.
+    replaceTicketStatus: (ticketUuid, status) => {
+      commit({
+        ...snapshot,
+        markers: snapshot.markers.map((marker) =>
+          marker.id === ticketUuid && marker.detailType === 'ticket'
+            ? withTicketStatus(marker, status)
+            : marker,
+        ),
+      });
     },
     setFetching: (isFetching) => {
       commit({

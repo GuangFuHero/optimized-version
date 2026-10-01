@@ -24,7 +24,7 @@ import {
   stripClaimReturn,
   type ClaimReturn,
 } from './claim-return';
-import { resolveNeedClaim, type TicketNeed } from './need-claim';
+import { resolveNeedClaim } from './need-claim';
 import { NeedClaimDialog, type NeedClaimTarget } from './need-claim-dialog';
 import { NeedClaimToast } from './need-claim-toast';
 import { StopRecruitingDialog, useStopRecruiting } from './stop-recruiting-dialog';
@@ -32,6 +32,7 @@ import {
   readTicketNeeds,
   readTicketStatus,
   TICKET_NEEDS_QUERY_CONTEXT,
+  type ReloadedTicket,
 } from './use-ticket-needs';
 
 interface NeedClaimContextValue {
@@ -55,8 +56,11 @@ const NeedClaimContext = createContext<NeedClaimContextValue | null>(null);
 
 interface NeedClaimProviderProps {
   children: ReactNode;
-  /** Hears a ticket's needs as they stand after a claim — for a view keeping its own copy. */
-  onTicketNeedsChange?: (ticketUuid: string, needs: TicketNeed[]) => void;
+  /**
+   * Hears a ticket as it stands after a claim, a release or a stop — its needs and its status —
+   * for a view keeping its own copy: the list's rows, the map's pins.
+   */
+  onTicketReloaded?: (ticketUuid: string, ticket: ReloadedTicket) => void;
 }
 
 /**
@@ -66,7 +70,7 @@ interface NeedClaimProviderProps {
  * goes through here too, to sign in and come back to the ticket, and so does a requester's 停止招募
  * from a row's ⋯ (Q39), with a confirmation of its own.
  */
-export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimProviderProps) {
+export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProviderProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, status: sessionStatus } = useSession();
@@ -105,12 +109,12 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
 
   /**
    * Ask the server for the ticket again. The mutation returns the assignment, not the need, so
-   * nothing in its result tells the cache that `assignedCount` and `myAssignment` changed. The
-   * drawer and this dialog read the answer from the cache; the list keeps its own copy, so it is
-   * told.
+   * nothing in its result tells the cache that `assignedCount` and `myAssignment` changed — nor
+   * the ticket's status, which follows its needs. The drawer and this dialog read the answer from
+   * the cache; the list and the map keep their own copies, so they are told.
    */
   const reloadTicket = useCallback(
-    async (ticketUuid: string) => {
+    async (ticketUuid: string): Promise<ReloadedTicket | null> => {
       const result = await client
         .query(
           GetTicketDocument,
@@ -124,12 +128,12 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
         return null;
       }
 
-      const needs = readTicketNeeds(ticket);
-      onTicketNeedsChange?.(ticketUuid, needs);
+      const reloaded = { needs: readTicketNeeds(ticket), ticketStatus: readTicketStatus(ticket) };
+      onTicketReloaded?.(ticketUuid, reloaded);
 
-      return { needs, ticketStatus: readTicketStatus(ticket) };
+      return reloaded;
     },
-    [client, onTicketNeedsChange],
+    [client, onTicketReloaded],
   );
 
   // Changed from outside this page too — a place given back in 我的任務, which lives in the

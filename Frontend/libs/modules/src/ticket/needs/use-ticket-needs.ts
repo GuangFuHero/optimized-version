@@ -27,6 +27,15 @@ export function readTicketStatus(ticket: GetTicketQuery['ticket']): string | nul
 }
 
 /**
+ * A ticket read again after something changed on it: its needs, and its own status, which the
+ * backend works out from them (spec Q44).
+ */
+export interface ReloadedTicket {
+  needs: TicketNeed[];
+  ticketStatus: string | null;
+}
+
+/**
  * A ticket's needs and its status, from the same `GetTicket` the detail panel runs — urql shares
  * one request between them, so the drawer footer does not fetch the ticket twice.
  */

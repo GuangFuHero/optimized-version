@@ -52,7 +52,7 @@ export function SiteListView() {
     hasNextPage,
     loadNextPage,
     loadTicketMarker,
-    replaceTicketNeeds,
+    replaceTicket,
   } = usePaginatedRescueMapMarkers(state);
 
   const controller = useRescueMapController({
@@ -505,9 +505,8 @@ export function SiteListView() {
     </Box>
   );
 
-  // The list keeps its own copy of each ticket's needs, so a claim made in a row or in the drawer
-  // is reported back here to update that ticket's row.
-  return (
-    <NeedClaimProvider onTicketNeedsChange={replaceTicketNeeds}>{view}</NeedClaimProvider>
-  );
+  // The list keeps its own copy of each ticket — its needs, and its status on the row's badge — so
+  // a claim, a release or a stop made in a row or in the drawer is reported back here to update
+  // that ticket's row.
+  return <NeedClaimProvider onTicketReloaded={replaceTicket}>{view}</NeedClaimProvider>;
 }
