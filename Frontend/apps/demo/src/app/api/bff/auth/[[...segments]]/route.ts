@@ -71,7 +71,8 @@ function toRequestLike(request: NextRequest) {
 
 /**
  * The session a request sent its token with, kept for the error path: a 401 from the backend then
- * means that session has ended elsewhere (note/session-expiry-spec.md).
+ * means that session has ended elsewhere (note/session-expiry-spec.md), and any other refusal must
+ * still hand back the token pair a refresh may have just rotated.
  */
 const sentAuthByRequest = new WeakMap<NextRequest, ResolvedBackendAuth>();
 
@@ -333,16 +334,22 @@ async function handlePostAsync(
   } catch (error) {
     const response = errorResponse(error);
     const sentAuth = sentAuthByRequest.get(request);
-    const expired =
-      sentAuth !== undefined &&
-      isSessionExpired({
-        refreshFailed: false,
-        sentToken: true,
-        backendStatus: response.status,
-      });
 
+    if (!sentAuth) {
+      return response;
+    }
+
+    const expired = isSessionExpired({
+      refreshFailed: false,
+      sentToken: true,
+      backendStatus: response.status,
+    });
+
+    // The session goes back with a refusal too. A refresh just before the call rotated the token
+    // pair, and an error answered without it left the spent refresh token in the cookie: the next
+    // refresh replayed it, and the backend revoked the session (seen 10-01).
     return expired
       ? expireSessionResponse(response, toRequestLike(request), sentAuth)
-      : response;
+      : applyBackendAuthResponseCookies(response, sentAuth);
   }
 }
