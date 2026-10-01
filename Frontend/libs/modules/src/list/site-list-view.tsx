@@ -279,10 +279,7 @@ export function SiteListView() {
             selected={controller.subDataTypes}
             onToggle={controller.toggleSubDataType}
           />
-          {/* 與地圖頁同一顆（2026-09-18）。兩頁都要有，否則從列表回地圖又得開漢堡選單。 */}
-          <Box sx={{ display: { mobile: 'none', tablet: 'flex' } }}>
-            <SiteViewSwitch module="list" variant="segmented" />
-          </Box>
+          {/* 與地圖頁同一顆（2026-09-18），只在手機：平板以上的側欄已經有地圖與列表（2026-09-21）。 */}
           <SiteControlSurface
             sx={{
               display: { mobile: 'grid', tablet: 'none' },
@@ -291,7 +288,7 @@ export function SiteListView() {
               placeItems: 'center',
             }}
           >
-            <SiteViewSwitch module="list" variant="icon" />
+            <SiteViewSwitch module="list" />
           </SiteControlSurface>
           <Typography sx={{ ml: 'auto', fontSize: displayTextSize[13], color: color.fg.neutral.subtle }}>
             共 {controller.markers.length} 筆
