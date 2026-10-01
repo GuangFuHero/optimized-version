@@ -1,7 +1,7 @@
 /**
- * What a volunteer reads when a claim, or giving a place back, is refused. The backend's messages
- * are contract — only a `ValueError` or an `HTTPException` reaches the client unmasked (backend
- * `graphql/schema.py`).
+ * What a volunteer reads when a claim, or giving a place back, is refused — and a requester, when
+ * stopping recruitment is. The backend's messages are contract — only a `ValueError` or an
+ * `HTTPException` reaches the client unmasked (backend `graphql/schema.py`).
  */
 
 /** The parts of urql's `CombinedError` this reads. */
@@ -69,10 +69,29 @@ const RELEASE_WORDS: RefusalWords = {
   fallback: '釋出失敗，請稍後再試一次。',
 };
 
+/** `stop_recruiting`'s refusals. */
+const STOP_RECRUITING_WORDS: RefusalWords = {
+  refusals: {
+    // Filled by a claim since the row was read, or stopped already from another tab.
+    'Task is no longer open': '這筆需求已經湊齊或停止招募了。',
+    // The last person on it gave the place back meanwhile: with no one to keep, it can only be
+    // deleted (Q39).
+    'Nobody has claimed this task': '目前沒有人承接這筆需求，無法停止招募。',
+    // The need was deleted, or its ticket was.
+    'Ticket task not found': '找不到這筆需求，可能已經被刪除。',
+  },
+  forbidden: '你的帳號沒有停止招募的權限。',
+  fallback: '停止招募失敗，請稍後再試一次。',
+};
+
 export function claimErrorMessage(error: ClaimError): string {
   return refusalMessage(error, CLAIM_WORDS);
 }
 
 export function releaseErrorMessage(error: ClaimError): string {
   return refusalMessage(error, RELEASE_WORDS);
+}
+
+export function stopRecruitingErrorMessage(error: ClaimError): string {
+  return refusalMessage(error, STOP_RECRUITING_WORDS);
 }

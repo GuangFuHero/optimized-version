@@ -464,6 +464,7 @@ export function TaskMatchTicketDetailsPanel({
                   need={need}
                   ticketUuid={marker.id}
                   ticketStatus={ticketStatus}
+                  ticketCreatedBy={ticket?.createdBy ?? marker.ticketMeta?.createdBy}
                   isAuthenticated={isAuthenticated}
                 />
               ))}

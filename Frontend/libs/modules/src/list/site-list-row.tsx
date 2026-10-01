@@ -214,6 +214,7 @@ export function SiteListRow({
               need={need}
               ticketUuid={marker.id}
               ticketStatus={marker.ticketMeta?.status}
+              ticketCreatedBy={marker.ticketMeta?.createdBy}
               isAuthenticated={isAuthenticated}
               divider={index > 0}
             />

@@ -5,6 +5,7 @@ import { Box, Stack, Typography } from '@mui/material';
 import { Badge, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { formatTicketTypeLabel } from '../status';
+import { NeedActionsMenu } from './need-actions-menu';
 import {
   formatNeedQuota,
   isNeedFull,
@@ -14,6 +15,7 @@ import {
 import { NeedClaimButton } from './need-claim-button';
 import { useNeedClaim } from './need-claim-provider';
 import { NeedProgressBar, needTypeIcon } from './need-parts';
+import { useNeedActions } from './use-need-actions';
 
 const { color, radius, typography } = designTokens;
 
@@ -22,6 +24,8 @@ interface NeedRowProps {
   ticketUuid: string;
   /** The parent ticket's status: a withdrawn or finished ticket closes every need on it. */
   ticketStatus?: string | null;
+  /** The ticket's `createdBy`: its requester gets a ⋯ with what they can do to the need. */
+  ticketCreatedBy?: string | null;
   isAuthenticated: boolean;
 }
 
@@ -30,8 +34,15 @@ interface NeedRowProps {
  * A ticket with two needs gets two buttons — never one that picks for the volunteer (prototype
  * `NeedRow`, `Design/前台/js/site/site-detail.jsx:99-136`).
  */
-export function NeedRow({ need, ticketUuid, ticketStatus, isAuthenticated }: NeedRowProps) {
+export function NeedRow({
+  need,
+  ticketUuid,
+  ticketStatus,
+  ticketCreatedBy,
+  isAuthenticated,
+}: NeedRowProps) {
   const { requestClaim, requestSignIn } = useNeedClaim();
+  const actions = useNeedActions(need, { ticketUuid, ticketStatus, ticketCreatedBy });
   const claim = resolveNeedClaim(need, { ticketStatus, isAuthenticated });
   const quota = formatNeedQuota(need, claim.kind);
   const closed = claim.kind === 'canceled' || claim.kind === 'fulfilled';
@@ -68,6 +79,9 @@ export function NeedRow({ need, ticketUuid, ticketStatus, isAuthenticated }: Nee
         <Badge tone="neutral" variant="subtle">
           {formatTicketTypeLabel(need.taskType)}
         </Badge>
+        {/* Top right, where a card keeps its menu, apart from the claim button below (spec Q51).
+            Pulled into the row's padding, so its 36px target does not make the line taller. */}
+        <NeedActionsMenu needName={need.taskName} items={actions} sx={{ my: -1, mr: -1 }} />
       </Stack>
 
       <Stack direction="row" sx={{ mt: 1, alignItems: 'center', gap: 1.5 }}>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { claimErrorMessage, releaseErrorMessage } from './claim-error';
+import { claimErrorMessage, releaseErrorMessage, stopRecruitingErrorMessage } from './claim-error';
 
 /** A refused `assignTaskActor`, as urql hands it over: the backend's message is the contract. */
 function refused(message: string) {
@@ -73,5 +73,43 @@ describe('releaseErrorMessage', () => {
       '連線失敗，請確認網路後再試一次。',
     );
     expect(releaseErrorMessage(refused('Unexpected error.'))).toBe('釋出失敗，請稍後再試一次。');
+  });
+});
+
+describe('stopRecruitingErrorMessage', () => {
+  it('says the need has its people already — filled meanwhile, or stopped from another tab', () => {
+    expect(stopRecruitingErrorMessage(refused('Task is no longer open'))).toBe(
+      '這筆需求已經湊齊或停止招募了。',
+    );
+  });
+
+  it('says nobody is on the need any more — the last of them gave the place back meanwhile', () => {
+    expect(stopRecruitingErrorMessage(refused('Nobody has claimed this task'))).toBe(
+      '目前沒有人承接這筆需求，無法停止招募。',
+    );
+  });
+
+  it('says the need is gone when it, or its ticket, was deleted', () => {
+    expect(stopRecruitingErrorMessage(refused('Ticket task not found'))).toBe(
+      '找不到這筆需求，可能已經被刪除。',
+    );
+  });
+
+  it('tells a lapsed session from a missing permission, as a claim does', () => {
+    expect(stopRecruitingErrorMessage(refused('401: Could not validate credentials'))).toBe(
+      '登入已過期，請重新登入後再試一次。',
+    );
+    expect(stopRecruitingErrorMessage(refused('403: Permission Denied.'))).toBe(
+      '你的帳號沒有停止招募的權限。',
+    );
+  });
+
+  it('blames the connection, or falls back to a plain failure', () => {
+    expect(stopRecruitingErrorMessage({ networkError: new TypeError('Failed to fetch') })).toBe(
+      '連線失敗，請確認網路後再試一次。',
+    );
+    expect(stopRecruitingErrorMessage(refused('Unexpected error.'))).toBe(
+      '停止招募失敗，請稍後再試一次。',
+    );
   });
 });

@@ -27,6 +27,7 @@ import {
 import { resolveNeedClaim, type TicketNeed } from './need-claim';
 import { NeedClaimDialog, type NeedClaimTarget } from './need-claim-dialog';
 import { NeedClaimToast } from './need-claim-toast';
+import { StopRecruitingDialog, useStopRecruiting } from './stop-recruiting-dialog';
 import {
   readTicketNeeds,
   readTicketStatus,
@@ -44,6 +45,10 @@ interface NeedClaimContextValue {
   requestSignIn: ((ticketUuid: string, needUuid: string) => void) | null;
   /** Said by a ticket's drawer once it is up (`NeedClaimFooter`), for the offer below to wait on. */
   ticketShown: (ticketUuid: string) => void;
+  /** Ask the ticket's requester to confirm stopping recruitment for one of its needs (Q39). */
+  requestStopRecruiting: (ticketUuid: string, needUuid: string) => void;
+  /** The signed-in account's uuid, to tell a ticket's requester by; null for a guest. */
+  viewerId: string | null;
 }
 
 const NeedClaimContext = createContext<NeedClaimContextValue | null>(null);
@@ -58,12 +63,20 @@ interface NeedClaimProviderProps {
  * The one place a page's claim buttons claim through — the drawer's rows, its footer and the list's
  * lines — so every entry point gets the same confirmation (Q9), the same words for a refusal and
  * the same word of success, and one reload that every view of the ticket hears. A guest's button
- * goes through here too, to sign in and come back to the ticket.
+ * goes through here too, to sign in and come back to the ticket, and so does a requester's 停止招募
+ * from a row's ⋯ (Q39), with a confirmation of its own.
  */
 export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimProviderProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { status: sessionStatus } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
+  // The account's uuid — the app's auth options put it there; this library's session type does
+  // not know the field.
+  const sessionUser = session?.user;
+  const viewerId =
+    sessionUser && 'id' in sessionUser && typeof sessionUser.id === 'string'
+      ? sessionUser.id
+      : null;
   const client = useClient();
   const [, executeClaim] = useMutation(ClaimNeedDocument);
   // Open is kept apart from what is being confirmed, so the dialog keeps its content while it
@@ -125,6 +138,8 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
     () => onTicketChanged((ticketUuid) => void reloadTicket(ticketUuid)),
     [reloadTicket],
   );
+
+  const stopRecruiting = useStopRecruiting(reloadTicket);
 
   const confirmClaim = useCallback(async () => {
     if (!target) {
@@ -224,8 +239,10 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
       requestClaim,
       requestSignIn: sessionStatus === 'unauthenticated' ? sendToSignIn : null,
       ticketShown: setShownTicketUuid,
+      requestStopRecruiting: stopRecruiting.request,
+      viewerId,
     }),
-    [requestClaim, sendToSignIn, sessionStatus],
+    [requestClaim, sendToSignIn, sessionStatus, stopRecruiting.request, viewerId],
   );
 
   return (
@@ -240,6 +257,7 @@ export function NeedClaimProvider({ children, onTicketNeedsChange }: NeedClaimPr
         onConfirm={() => void confirmClaim()}
       />
       <NeedClaimToast open={toast.open} needName={toast.needName} onClose={closeToast} />
+      <StopRecruitingDialog {...stopRecruiting.dialogProps} />
     </NeedClaimContext.Provider>
   );
 }
