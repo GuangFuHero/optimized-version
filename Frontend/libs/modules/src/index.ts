@@ -100,14 +100,6 @@ export {
   TicketCreateDrawer,
   TicketDetailDrawer,
   createTaskMatchTicketDetailOverrides,
-  TaskMatchDeleteConfirmDialog,
-  useTaskMatches,
 } from './ticket';
 export { BriefingPlaceholder, NeedClaimProvider } from './ticket/needs';
 export { MapRequestHelpButton, PlaceHereAction } from './ticket/help-request';
-export type {
-  TaskMatchLogAction,
-  TaskMatchLogEntry,
-  TaskMatchState,
-  TaskMatchStatus,
-} from './ticket/task-match';

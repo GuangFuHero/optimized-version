@@ -1,7 +1,6 @@
 'use client';
 
 import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
 import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
 import LockRoundedIcon from '@mui/icons-material/LockRounded';
@@ -19,7 +18,6 @@ import {
 import { getStationTypeIcon } from '../station/type-options';
 import { NeedLine } from '../ticket/needs';
 import { getTicketStatusTone } from '../ticket/status';
-import type { TaskMatchState } from '../ticket/task-match';
 
 const { color, radius, shadow, spacing, motion } = designTokens;
 
@@ -27,13 +25,10 @@ interface SiteListRowProps {
   marker: RescueMapMarkerItem;
   active: boolean;
   latestReport?: StationReportRecord;
-  taskMatchState?: TaskMatchState;
   isAuthenticated?: boolean;
-  canDeleteMatchSheet?: boolean;
   onSelect: () => void;
   onShare?: () => void;
   onSuggestUpdate?: () => void;
-  onDeleteMatchSheet?: () => void;
 }
 
 const ICON_SIZE = 18;
@@ -50,20 +45,15 @@ export function SiteListRow({
   marker,
   active,
   latestReport,
-  taskMatchState,
   isAuthenticated = false,
-  canDeleteMatchSheet = false,
   onSelect,
   onShare,
   onSuggestUpdate,
-  onDeleteMatchSheet,
 }: SiteListRowProps) {
   const isStation = marker.detailType === 'station';
   const TypeIcon = isStation
     ? getStationTypeIcon(marker.stationMeta?.type)
     : AssignmentRoundedIcon;
-  const taskDeleteDisabled =
-    !canDeleteMatchSheet || taskMatchState?.status === 'deleted';
   const needs = marker.detailType === 'ticket' ? (marker.needs ?? []) : [];
 
   return (
@@ -222,7 +212,7 @@ export function SiteListRow({
         </Box>
       ) : null}
 
-      {onShare || onSuggestUpdate || taskMatchState ? (
+      {onShare || onSuggestUpdate ? (
         <Stack
           direction="row"
           sx={{
@@ -255,17 +245,6 @@ export function SiteListRow({
               disabled={!isAuthenticated}
               onClick={onSuggestUpdate}
               aria-label={`建議修改 ${marker.title}`}
-            />
-          ) : null}
-
-          {taskMatchState && onDeleteMatchSheet && canDeleteMatchSheet ? (
-            <RowAction
-              icon={<DeleteOutlineRoundedIcon sx={ACTION_ICON} />}
-              label="刪除媒合單"
-              tone="danger"
-              disabled={taskDeleteDisabled}
-              onClick={onDeleteMatchSheet}
-              aria-label={`刪除媒合單 ${marker.title}`}
             />
           ) : null}
         </Stack>

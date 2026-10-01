@@ -133,7 +133,6 @@ query GetTicket($uuid: UUID!) {
     photos {
       uuid
       url
-      createdBy
       createdAt
     }
     tasks {

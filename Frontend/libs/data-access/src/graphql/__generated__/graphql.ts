@@ -1904,7 +1904,6 @@ export type GetTicketQuery = {
           __typename?: 'PhotoType';
           uuid: string;
           url: string;
-          createdBy: string;
           createdAt?: any | null;
         }>;
         tasks: Array<
@@ -3875,10 +3874,6 @@ export const GetTicketDocument = {
                     selections: [
                       { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'url' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'createdBy' },
-                      },
                       {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'createdAt' },
