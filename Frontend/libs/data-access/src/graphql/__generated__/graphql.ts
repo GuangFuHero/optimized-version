@@ -1740,12 +1740,22 @@ export type MyRoleRequestsQuery = {
       __typename?: 'RoleRequestType';
       uuid: string;
       requestedRole: RoleRequestRole;
+      reason: string;
       status: RoleRequestStatus;
       reviewNote?: string | null;
       createdAt: any;
       closedAt?: any | null;
     }>;
   };
+};
+
+export type SubmitRoleRequestMutationVariables = Exact<{
+  input: SubmitRoleRequestInput;
+}>;
+
+export type SubmitRoleRequestMutation = {
+  __typename?: 'Mutation';
+  submitRoleRequest: { __typename?: 'RoleRequestType'; uuid: string };
 };
 
 export type TicketFieldsFragment = {
@@ -3147,6 +3157,10 @@ export const MyRoleRequestsDocument = {
                       },
                       {
                         kind: 'Field',
+                        name: { kind: 'Name', value: 'reason' },
+                      },
+                      {
+                        kind: 'Field',
                         name: { kind: 'Name', value: 'status' },
                       },
                       {
@@ -3172,6 +3186,60 @@ export const MyRoleRequestsDocument = {
     },
   ],
 } as unknown as DocumentNode<MyRoleRequestsQuery, MyRoleRequestsQueryVariables>;
+export const SubmitRoleRequestDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'SubmitRoleRequest' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'input' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'SubmitRoleRequestInput' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'submitRoleRequest' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'input' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SubmitRoleRequestMutation,
+  SubmitRoleRequestMutationVariables
+>;
 export const GetTicketsDocument = {
   kind: 'Document',
   definitions: [

@@ -8,10 +8,18 @@ query MyRoleRequests {
     requests {
       uuid
       requestedRole
+      reason
       status
       reviewNote
       createdAt
       closedAt
     }
+  }
+}
+
+# The drawer refetches MyRoleRequests afterwards: graphcache cannot key a type by `uuid` alone.
+mutation SubmitRoleRequest($input: SubmitRoleRequestInput!) {
+  submitRoleRequest(input: $input) {
+    uuid
   }
 }
