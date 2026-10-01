@@ -44,8 +44,10 @@ export type {
 } from './map/types';
 
 export {
+  dedupeMarkersById,
   SiteMapControls,
   SiteMapRouteProvider,
+  useCreatedTicketMarker,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   usePaginatedRescueMapMarkers,

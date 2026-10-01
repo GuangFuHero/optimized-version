@@ -16,6 +16,7 @@ import type { RescueMapMarkerItem } from '../types';
 import type { SiteRouteState } from '../../route/types';
 import type { TicketNeed } from '../../ticket/needs/need-claim';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
+import { onTicketCreated } from '../../ticket/ticket-changes';
 import {
   dedupeMarkersById,
   mapStationToMarker,
@@ -156,6 +157,30 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
     setDismissedMarkerIds([]);
     void loadPage(0, false);
   }, [loadPage]);
+
+  // A ticket filed through 請求協助 is the newest there is, so it goes first, where the first page
+  // would put it. Not into stations, nor past a status filter: changing either reloads the list.
+  useEffect(() => {
+    if (activeDataType !== 'ticket' || ticketStatus) {
+      return;
+    }
+
+    return onTicketCreated((ticket) => {
+      const marker = mapTicketToMarker(ticket);
+
+      if (!marker) {
+        return;
+      }
+
+      const needs = ticket.tasks.map((task) =>
+        useFragment(TicketNeedFieldsFragmentDoc, task),
+      );
+
+      setSourceMarkers((current) =>
+        dedupeMarkersById([{ ...marker, needs }, ...current]),
+      );
+    });
+  }, [activeDataType, ticketStatus]);
 
   const markers = useMemo(() => {
     const dismissedIdSet = new Set(dismissedMarkerIds);

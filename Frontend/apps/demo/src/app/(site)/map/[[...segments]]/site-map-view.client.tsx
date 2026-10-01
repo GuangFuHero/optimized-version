@@ -16,6 +16,7 @@ import { designTokens } from '@rescue-frontend/ui';
 import {
   createPointShareTarget,
   createTaskMatchTicketDetailOverrides,
+  dedupeMarkersById,
   hasRescueMapDetailItem,
   Map,
   NeedClaimProvider,
@@ -27,6 +28,7 @@ import {
   StationReportHistoryPanel,
   TaskMatchDeleteConfirmDialog,
   TicketCreateDrawer,
+  useCreatedTicketMarker,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   useSiteMapRouteState,
@@ -383,8 +385,10 @@ function SiteMapViewportDataLayer({
   );
   const [pendingDeleteTask, setPendingDeleteTask] =
     useState<RescueMapMarkerItem | null>(null);
+  // A ticket made here stays on the map until the view fetches it too; from then on the fetched
+  // one, being fresher, is the one shown.
   const visibleMarkers = useMemo(
-    () => [...createdMarkers, ...liveDataSnapshot.markers],
+    () => dedupeMarkersById([...liveDataSnapshot.markers, ...createdMarkers]),
     [createdMarkers, liveDataSnapshot.markers],
   );
 
@@ -697,6 +701,12 @@ function SiteMapViewContent() {
   const [reportStation, setReportStation] =
     useState<RescueMapMarkerItem | null>(null);
   const [shareTarget, setShareTarget] = useState<PointShareTarget | null>(null);
+
+  // Filed through 請求協助, which lives in the site shell: it turns the page to the ticket in the
+  // same render, so the ticket has to be among the markers by then.
+  useCreatedTicketMarker((marker) => {
+    setCreatedMarkers((current) => [marker, ...current]);
+  });
 
   const resetCreateFlow = () => {
     setCreateModeActive(false);

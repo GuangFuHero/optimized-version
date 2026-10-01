@@ -39,4 +39,30 @@ describe('formatTicketAddress', () => {
       '光復鄉中正路 2F',
     );
   });
+
+  it('reads the address as typed on the site when none of the street was split out (D4)', () => {
+    // 請求協助 takes the address as one line, into `landmarkNote` (help-request spec Q7).
+    expect(
+      formatTicketAddress({
+        landmarkNote: ' 花蓮縣光復鄉中山路100號 ',
+        floor: '3樓',
+        room: '302室',
+      }),
+    ).toBe('花蓮縣光復鄉中山路100號 3樓 302室');
+  });
+
+  it('keeps to the split street when there is one, the note being only a hint for the way in', () => {
+    expect(
+      formatTicketAddress({
+        city: '光復鄉',
+        lane: '中正路',
+        no: '31號',
+        landmarkNote: '廟的右邊',
+      }),
+    ).toBe('光復鄉中正路31號');
+  });
+
+  it('has nothing to say for a note of only spaces', () => {
+    expect(formatTicketAddress({ landmarkNote: '  ' })).toBeNull();
+  });
 });

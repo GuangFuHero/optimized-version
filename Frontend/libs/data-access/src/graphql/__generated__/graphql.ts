@@ -1859,6 +1859,7 @@ export type GetTicketQuery = {
           buildingSection?: string | null;
           floor?: string | null;
           room?: string | null;
+          landmarkNote?: string | null;
         } | null;
         photos: Array<{
           __typename?: 'PhotoType';
@@ -1917,6 +1918,24 @@ export type CreateTicketMutation = {
   createTicket: { __typename?: 'TicketType' } & {
     ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
   };
+};
+
+export type CreateHelpRequestMutationVariables = Exact<{
+  input: CreateHelpRequestInput;
+}>;
+
+export type CreateHelpRequestMutation = {
+  __typename?: 'Mutation';
+  createHelpRequest: {
+    __typename?: 'TicketType';
+    tasks: Array<
+      { __typename?: 'TicketTaskType' } & {
+        ' $fragmentRefs'?: {
+          TicketNeedFieldsFragment: TicketNeedFieldsFragment;
+        };
+      }
+    >;
+  } & { ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment } };
 };
 
 export type UpdateTicketMutationVariables = Exact<{
@@ -2009,6 +2028,7 @@ export type MyTaskAssignmentsQuery = {
         buildingSection?: string | null;
         floor?: string | null;
         room?: string | null;
+        landmarkNote?: string | null;
       } | null;
     };
   }>;
@@ -3627,6 +3647,10 @@ export const GetTicketDocument = {
                       },
                       { kind: 'Field', name: { kind: 'Name', value: 'floor' } },
                       { kind: 'Field', name: { kind: 'Name', value: 'room' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'landmarkNote' },
+                      },
                     ],
                   },
                 },
@@ -4020,6 +4044,139 @@ export const CreateTicketDocument = {
 } as unknown as DocumentNode<
   CreateTicketMutation,
   CreateTicketMutationVariables
+>;
+export const CreateHelpRequestDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'CreateHelpRequest' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'input' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'CreateHelpRequestInput' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'createHelpRequest' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'input' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'TicketFields' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'tasks' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'FragmentSpread',
+                        name: { kind: 'Name', value: 'TicketNeedFields' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'verificationStatus' },
+          },
+          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'TicketNeedFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'TicketTaskType' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'assignedCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'myAssignment' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CreateHelpRequestMutation,
+  CreateHelpRequestMutationVariables
 >;
 export const UpdateTicketDocument = {
   kind: 'Document',
@@ -4504,6 +4661,10 @@ export const MyTaskAssignmentsDocument = {
                             {
                               kind: 'Field',
                               name: { kind: 'Name', value: 'room' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'landmarkNote' },
                             },
                           ],
                         },

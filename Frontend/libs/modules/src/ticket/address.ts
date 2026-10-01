@@ -17,6 +17,11 @@ export interface TicketAddressParts {
   floor?: string | null;
   /** '302' or '樓梯間' alike, so no 室 is added either. */
   room?: string | null;
+  /**
+   * A hint for finding the way in, on a ticket filed in the back office. On one filed through the
+   * site's 請求協助 it is the whole address as typed, none of it split out (help-request spec Q7).
+   */
+  landmarkNote?: string | null;
 }
 
 /**
@@ -29,10 +34,12 @@ export function formatTicketAddress(location: TicketAddressParts | null | undefi
   }
 
   const part = (value?: string | null) => value?.trim() ?? '';
-  // A Chinese street address is one continuous string (backend ADR-155) — no separators.
-  const street = [location.county, location.city, location.lane, location.alley, location.no]
-    .map(part)
-    .join('');
+  // A Chinese street address is one continuous string (backend ADR-155) — no separators. With no
+  // part of it split out, the address is the one the site's 請求協助 took as typed (spec D4).
+  const street =
+    [location.county, location.city, location.lane, location.alley, location.no]
+      .map(part)
+      .join('') || part(location.landmarkNote);
   const line = [street, part(location.buildingSection), part(location.floor), part(location.room)]
     .filter(Boolean)
     .join(' ');

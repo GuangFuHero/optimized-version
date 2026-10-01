@@ -12,6 +12,7 @@ import { LAYOUT_DIMENSIONS } from '../layout';
 import { GuangFuBrandIcon } from '../../brand';
 import { SiteMapRouteProvider } from '../../map/site/use-site-map-route-state';
 import { SiteRouteProvider } from '../../route/use-site-route-state';
+import { HelpRequestHost } from '../../ticket/help-request/help-request-host';
 import { SiteMobileTopNavBar } from './mobile-top-navbar';
 import { SiteSidebar } from './sidebar';
 import { SiteTopNavBar } from './top-navbar';
@@ -213,6 +214,9 @@ export function SiteShell({
           onSignOut={onSignOut}
         />
       </Drawer>
+
+      {/* Inside the route providers: once a ticket is filed it turns the page to it. */}
+      <HelpRequestHost isAuthenticated={isAuthenticated} onSignIn={onSignIn} />
     </Box>
   );
 

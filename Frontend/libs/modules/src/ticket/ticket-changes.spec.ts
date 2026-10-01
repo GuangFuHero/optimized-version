@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { announceTicketChanged, onTicketChanged } from './ticket-changes';
+import {
+  announceTicketChanged,
+  announceTicketCreated,
+  onTicketChanged,
+  onTicketCreated,
+  type CreatedTicket,
+} from './ticket-changes';
 
 describe('ticket changes', () => {
   it('tells everyone listening which ticket changed', () => {
@@ -25,5 +31,44 @@ describe('ticket changes', () => {
     announceTicketChanged('ticket-1');
 
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('ticket created', () => {
+  // Opaque here: what matters is that every listener gets the very ticket the server answered with.
+  const ticket = { tasks: [] } as unknown as CreatedTicket;
+
+  it('hands the new ticket itself to everyone listening, as no view holds it yet', () => {
+    const map = vi.fn();
+    const list = vi.fn();
+    const stopMap = onTicketCreated(map);
+    const stopList = onTicketCreated(list);
+
+    announceTicketCreated(ticket);
+
+    expect(map).toHaveBeenCalledWith(ticket);
+    expect(list).toHaveBeenCalledWith(ticket);
+    stopMap();
+    stopList();
+  });
+
+  it('stops telling a listener that has gone', () => {
+    const listener = vi.fn();
+    const stop = onTicketCreated(listener);
+
+    stop();
+    announceTicketCreated(ticket);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('is not word that a ticket changed: there is nothing yet to reload', () => {
+    const changed = vi.fn();
+    const stop = onTicketChanged(changed);
+
+    announceTicketCreated(ticket);
+
+    expect(changed).not.toHaveBeenCalled();
+    stop();
   });
 });

@@ -127,6 +127,8 @@ query GetTicket($uuid: UUID!) {
       buildingSection
       floor
       room
+      # The address as typed on the site's 請求協助, when the parts above are empty (spec D4).
+      landmarkNote
     }
     photos {
       uuid
@@ -172,6 +174,18 @@ query GetTicketTasks(
 mutation CreateTicket($input: CreateTicketInput!) {
   createTicket(input: $input) {
     ...TicketFields
+  }
+}
+
+# 請求協助 (ticket/help-request): the ticket and every need on it in one go — nothing is written
+# unless all of it is. Answered with what the map and the list make their markers of, so the new
+# ticket shows on both without asking the server again.
+mutation CreateHelpRequest($input: CreateHelpRequestInput!) {
+  createHelpRequest(input: $input) {
+    ...TicketFields
+    tasks {
+      ...TicketNeedFields
+    }
   }
 }
 
@@ -235,6 +249,7 @@ query MyTaskAssignments {
         buildingSection
         floor
         room
+        landmarkNote
       }
     }
   }

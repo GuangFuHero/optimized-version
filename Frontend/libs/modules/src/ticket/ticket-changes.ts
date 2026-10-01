@@ -5,8 +5,14 @@
  * whole app, with no React tree to share.
  */
 
+import type { CreateHelpRequestMutation } from '@rescue-frontend/data-access';
+
 const channel = new EventTarget();
 const TICKET_CHANGED = 'ticket-changed';
+const TICKET_CREATED = 'ticket-created';
+
+/** A ticket just filed, as `createHelpRequest` answers: its fields and its needs. */
+export type CreatedTicket = CreateHelpRequestMutation['createHelpRequest'];
 
 export function announceTicketChanged(ticketUuid: string): void {
   channel.dispatchEvent(
@@ -24,4 +30,24 @@ export function onTicketChanged(
   channel.addEventListener(TICKET_CHANGED, handle);
 
   return () => channel.removeEventListener(TICKET_CHANGED, handle);
+}
+
+/**
+ * Word that a ticket was just filed (請求協助, in the site shell). No view holds it yet, so there
+ * is nothing to reload: the ticket itself goes with the word, for the map and the list to add.
+ */
+export function announceTicketCreated(ticket: CreatedTicket): void {
+  channel.dispatchEvent(new CustomEvent(TICKET_CREATED, { detail: ticket }));
+}
+
+/** Listen for it; returns what stops listening, for an effect's cleanup. */
+export function onTicketCreated(
+  listener: (ticket: CreatedTicket) => void,
+): () => void {
+  const handle = (event: Event) =>
+    listener((event as CustomEvent<CreatedTicket>).detail);
+
+  channel.addEventListener(TICKET_CREATED, handle);
+
+  return () => channel.removeEventListener(TICKET_CREATED, handle);
 }

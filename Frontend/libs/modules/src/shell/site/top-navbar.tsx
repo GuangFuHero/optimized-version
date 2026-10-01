@@ -14,6 +14,7 @@ import {
 } from '@rescue-frontend/ui';
 
 import { GuangFuBrandIcon } from '../../brand';
+import { RequestHelpButton } from '../../ticket/help-request/request-help-button';
 import {
   SiteHeaderSearchInput,
   SiteHeaderSearchInputFallback,
@@ -127,6 +128,7 @@ export function SiteTopNavBar({
         spacing={1.5}
         sx={{ alignItems: 'center', justifySelf: 'end' }}
       >
+        <RequestHelpButton />
         {isAuthenticated ? (
           <SiteUserMenu
             userName={userName}
