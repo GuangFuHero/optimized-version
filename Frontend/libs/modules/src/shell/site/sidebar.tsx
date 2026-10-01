@@ -2,6 +2,7 @@
 
 import { Suspense, type ReactNode } from 'react';
 
+import HandshakeRoundedIcon from '@mui/icons-material/HandshakeRounded';
 import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 
@@ -12,6 +13,7 @@ import type { SidebarMenuItemData } from '../admin/components/sidebar-menu-item'
 import type { SidebarResolvedContent } from '../sidebar';
 import { SidebarPanel } from '../sidebar';
 import { useSiteRouteState } from '../../route';
+import { openHelpRequest } from '../../ticket/help-request/open-help-request';
 import { SITE_MODULES } from '../../route/constants';
 import { SITE_MODULE_META } from '../../route/module-meta';
 import { createSiteHref } from '../../route/serialize';
@@ -61,6 +63,7 @@ function buildSiteSidebarContent(
   onSignOut?: () => void,
   portalEntry: SitePortalEntry = 'none',
   onApplyRoleRequest?: () => void,
+  onClose?: () => void,
 ): SidebarResolvedContent {
   return {
     navigationItems: SITE_MODULES.map((target) => {
@@ -75,9 +78,21 @@ function buildSiteSidebarContent(
         path: createSiteHref(target, state),
       };
     }),
-    // The foot of the menu as the prototype orders it (`site-shell.jsx:588-598`): the back-office
-    // entry, which a phone's top bar has no room for, then 登入 for a guest.
     footerActions: [
+      // First at the foot (prototype site-shell.jsx:588-590), and for guests too: the drawer asks
+      // them to sign in before sending, not before starting. The phone's menu shuts first, or it
+      // would sit open under the drawer.
+      {
+        id: 'request-help',
+        label: '請求協助',
+        icon: <HandshakeRoundedIcon />,
+        onClick: () => {
+          onClose?.();
+          openHelpRequest();
+        },
+      },
+      // Then, as the prototype orders it (`site-shell.jsx:588-598`), the back-office entry, which a
+      // phone's top bar has no room for, then 登入 for a guest.
       ...portalFooterActions(portalEntry, onApplyRoleRequest),
       ...(isAuthenticated
         ? []
@@ -134,6 +149,7 @@ function SiteSidebarConnected(props: SiteSidebarProps) {
         onSignOut,
         portalEntry,
         onApplyRoleRequest,
+        panelProps.onClose,
       )}
       {...panelProps}
     />
@@ -160,6 +176,7 @@ function SiteSidebarFallback(props: SiteSidebarProps) {
         onSignOut,
         portalEntry,
         onApplyRoleRequest,
+        panelProps.onClose,
       )}
       {...panelProps}
     />

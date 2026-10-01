@@ -2034,6 +2034,15 @@ export type ReleaseClaimMutation = {
   unassignTaskActor: boolean;
 };
 
+export type StopRecruitingMutationVariables = Exact<{
+  taskUuid: Scalars['UUID']['input'];
+}>;
+
+export type StopRecruitingMutation = {
+  __typename?: 'Mutation';
+  stopRecruiting: { __typename?: 'TicketTaskType'; uuid: string };
+};
+
 export type MyTaskAssignmentsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type MyTaskAssignmentsQuery = {
@@ -4763,6 +4772,57 @@ export const ReleaseClaimDocument = {
 } as unknown as DocumentNode<
   ReleaseClaimMutation,
   ReleaseClaimMutationVariables
+>;
+export const StopRecruitingDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'StopRecruiting' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'taskUuid' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'stopRecruiting' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'taskUuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'taskUuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  StopRecruitingMutation,
+  StopRecruitingMutationVariables
 >;
 export const MyTaskAssignmentsDocument = {
   kind: 'Document',

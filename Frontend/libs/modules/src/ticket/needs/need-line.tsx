@@ -4,6 +4,7 @@ import { Box, Stack, Typography } from '@mui/material';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
+import { NeedActionsMenu } from './need-actions-menu';
 import {
   formatNeedQuota,
   isNeedFull,
@@ -13,6 +14,7 @@ import {
 import { NeedClaimButton } from './need-claim-button';
 import { useNeedClaim } from './need-claim-provider';
 import { NeedProgressBar, needTypeIcon } from './need-parts';
+import { useNeedActions } from './use-need-actions';
 
 const { color, typography } = designTokens;
 
@@ -21,6 +23,8 @@ interface NeedLineProps {
   ticketUuid: string;
   /** The parent ticket's status: a withdrawn or finished ticket closes every need on it. */
   ticketStatus?: string | null;
+  /** The ticket's `createdBy`: its requester gets a ⋯ with what they can do to the need. */
+  ticketCreatedBy?: string | null;
   isAuthenticated: boolean;
   /** A hairline above it — every line of a card but the first. */
   divider?: boolean;
@@ -34,10 +38,12 @@ export function NeedLine({
   need,
   ticketUuid,
   ticketStatus,
+  ticketCreatedBy,
   isAuthenticated,
   divider = false,
 }: NeedLineProps) {
   const { requestClaim, requestSignIn } = useNeedClaim();
+  const actions = useNeedActions(need, { ticketUuid, ticketStatus, ticketCreatedBy });
   const claim = resolveNeedClaim(need, { ticketStatus, isAuthenticated });
   const quota = formatNeedQuota(need, claim.kind);
   const closed = claim.kind === 'canceled' || claim.kind === 'fulfilled';
@@ -109,15 +115,17 @@ export function NeedLine({
         )}
       </Box>
 
-      {/* Kept at the card's right edge, in line with the card's other actions below it. */}
-      <Box sx={{ ml: 'auto', flexShrink: 0 }}>
+      {/* Kept at the card's right edge, in line with the card's other actions below it — the
+          requester's ⋯ last, pulled into the padding so its glyph lines up with them (spec Q51). */}
+      <Stack direction="row" sx={{ ml: 'auto', flexShrink: 0, alignItems: 'center', gap: 0.5 }}>
         <NeedClaimButton
           claim={claim}
           needName={need.taskName}
           onClaim={() => requestClaim(ticketUuid, need.uuid)}
           onSignIn={requestSignIn ? () => requestSignIn(ticketUuid, need.uuid) : undefined}
         />
-      </Box>
+        <NeedActionsMenu needName={need.taskName} items={actions} sx={{ mr: -1 }} />
+      </Stack>
     </Stack>
   );
 }

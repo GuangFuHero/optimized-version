@@ -178,7 +178,8 @@ export function NeedDraftRow({
               onChange={(event) =>
                 onChange({ ...row, quantity: event.target.value })
               }
-              placeholder="幾個／幾人"
+              // 「幾個／幾人」 does not fit the narrow column; the label still says what is meant.
+              placeholder="數量"
               slotProps={{
                 htmlInput: {
                   min: 1,
