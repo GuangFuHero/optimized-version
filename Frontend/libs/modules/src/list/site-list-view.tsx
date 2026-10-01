@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
 import { useSession } from 'next-auth/react';
@@ -25,11 +24,6 @@ import { SiteDataTypeToggle } from '../route/controls/data-type-toggle';
 import { SiteControlSurface } from '../route/controls/control-surface';
 import { SiteSubTypeFilter } from '../route/controls/sub-type-filter';
 import { SiteViewSwitch } from '../route/controls/view-switch';
-import {
-  SiteStationReportDrawer,
-  StationReportHistoryPanel,
-  useStationReports,
-} from '../station/report';
 import { NeedClaimProvider, type ReloadedTicket } from '../ticket/needs';
 import { createTaskMatchTicketDetailOverrides } from '../ticket/task-match';
 import { usePaginatedRescueMapMarkers } from '../map/site';
@@ -45,7 +39,6 @@ const { color } = designTokens;
 export function SiteListView() {
   const { status: authStatus } = useSession();
   const { module, state, replace } = useSiteRouteState();
-  const { reportsByStationId, submitStationReport } = useStationReports();
   const isAuthenticated = authStatus === 'authenticated';
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const {
@@ -107,8 +100,6 @@ export function SiteListView() {
   // The phone's drawer opens on a phone only. Hidden by CSS on a wider screen, it was still an open
   // modal, and MUI hid the rest of the page — the list, the detail panel — from screen readers.
   const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
-  const [reportStation, setReportStation] =
-    useState<RescueMapMarkerItem | null>(null);
   const [shareTarget, setShareTarget] = useState<PointShareTarget | null>(null);
 
   useEffect(() => {
@@ -234,10 +225,6 @@ export function SiteListView() {
     controller.setSelectedMarkerId(undefined);
   };
 
-  const closeReportDrawer = () => {
-    setReportStation(null);
-  };
-
   const openPointShare = (marker: RescueMapMarkerItem) => {
     setShareTarget(
       createPointShareTarget({
@@ -352,15 +339,9 @@ export function SiteListView() {
                   key={marker.id}
                   marker={marker}
                   active={marker.id === controller.selectedMarkerId}
-                  latestReport={reportsByStationId[marker.id]?.[0]}
                   isAuthenticated={isAuthenticated}
                   onSelect={() => controller.setSelectedMarkerId(marker.id)}
                   onShare={() => openPointShare(marker)}
-                  onSuggestUpdate={
-                    marker.detailType === 'station'
-                      ? () => setReportStation(marker)
-                      : undefined
-                  }
                 />
               ))}
               <Box ref={loadMoreRef} sx={{ height: 1 }} />
@@ -412,37 +393,12 @@ export function SiteListView() {
                 ? createTicketDetailOverrides(displayMarker)
                 : undefined
             }
-            stationAction={
-              displayMarker?.detailType === 'station'
-                ? {
-                    label: '建議修改',
-                    icon: <EditNoteRoundedIcon />,
-                    onClick: () => setReportStation(displayMarker),
-                  }
-                : undefined
-            }
             stationSecondaryAction={
               displayMarker?.detailType === 'station'
                 ? {
                     label: '分享',
                     icon: <ShareRoundedIcon />,
                     onClick: () => openPointShare(displayMarker),
-                  }
-                : undefined
-            }
-            stationPendingCorrectionCount={
-              displayMarker?.detailType === 'station'
-                ? (reportsByStationId[displayMarker.id]?.length ?? 0)
-                : undefined
-            }
-            stationTabPanels={
-              displayMarker?.detailType === 'station'
-                ? {
-                    pendingCorrections: (
-                      <StationReportHistoryPanel
-                        reports={reportsByStationId[displayMarker.id] ?? []}
-                      />
-                    ),
                   }
                 : undefined
             }
@@ -485,15 +441,6 @@ export function SiteListView() {
               ? createTicketDetailOverrides(displayMarker)
               : undefined
           }
-          stationAction={
-            displayMarker?.detailType === 'station'
-              ? {
-                  label: '建議修改',
-                  icon: <EditNoteRoundedIcon />,
-                  onClick: () => setReportStation(displayMarker),
-                }
-              : undefined
-          }
           stationSecondaryAction={
             displayMarker?.detailType === 'station'
               ? {
@@ -503,39 +450,9 @@ export function SiteListView() {
                 }
               : undefined
           }
-          stationPendingCorrectionCount={
-            displayMarker?.detailType === 'station'
-              ? (reportsByStationId[displayMarker.id]?.length ?? 0)
-              : undefined
-          }
-          stationTabPanels={
-            displayMarker?.detailType === 'station'
-              ? {
-                  pendingCorrections: (
-                    <StationReportHistoryPanel
-                      reports={reportsByStationId[displayMarker.id] ?? []}
-                    />
-                  ),
-                }
-              : undefined
-          }
         />
       </Drawer>
 
-      <SiteStationReportDrawer
-        open={Boolean(reportStation)}
-        station={reportStation}
-        reports={reportStation ? reportsByStationId[reportStation.id] : []}
-        onClose={closeReportDrawer}
-        onSubmit={(values) => {
-          if (!reportStation) {
-            return;
-          }
-
-          submitStationReport(reportStation, values);
-          closeReportDrawer();
-        }}
-      />
       <PointShareDrawer
         open={Boolean(shareTarget)}
         target={shareTarget}

@@ -10,7 +10,6 @@ import { StationDetailDrawer } from '../../../station';
 import type {
   StationDetailActionProps,
   StationDetailTabId,
-  StationDetailTabPanels,
 } from '../../../station/station-detail';
 import { TicketDetailDrawer } from '../../../ticket';
 import { formatTicketTypeLabel } from '../../../ticket/status';
@@ -44,10 +43,7 @@ interface RescueMapDetailDrawerProps {
   /** 只影響訪客提示文案（「登入後可看」），不決定遮不遮 —— 遮在後端。 */
   isAuthenticated?: boolean;
   ticketDetailOverrides?: RescueMapTicketDetailOverrides;
-  stationAction?: StationDetailActionProps;
   stationSecondaryAction?: StationDetailActionProps;
-  stationPendingCorrectionCount?: number;
-  stationTabPanels?: StationDetailTabPanels;
 }
 
 const DetailsIcon = Icons.details;

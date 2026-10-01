@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box, ButtonBase, Fab, Stack, Typography, Zoom } from '@mui/material';
@@ -23,9 +22,7 @@ import {
   PlaceHereAction,
   PointShareDrawer,
   SiteMapControls,
-  SiteStationReportDrawer,
   StationCreateDrawer,
-  StationReportHistoryPanel,
   syncDocumentMetadata,
   useCreatedTicketMarker,
   useSiteMapLiveData,
@@ -33,7 +30,6 @@ import {
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,
-  useStationReports,
   type PointShareTarget,
   type ReloadedTicket,
   type RescueMapControllerValue,
@@ -270,24 +266,18 @@ function SiteMapViewportDataLayer({
   baseRouteState,
   createdMarkers,
   createModeActive,
-  reportsByStationId,
   onMapRouteStateChange,
   onToggleCreateMode,
   onOpenCreateStation,
-  onOpenReport,
   onOpenShareTarget,
   onReplaceRouteState,
 }: {
   baseRouteState: SiteRouteState;
   createdMarkers: readonly RescueMapMarkerItem[];
   createModeActive: boolean;
-  reportsByStationId: ReturnType<
-    typeof useStationReports
-  >['reportsByStationId'];
   onMapRouteStateChange: (next: SiteRouteState) => void;
   onToggleCreateMode: () => void;
   onOpenCreateStation: () => void;
-  onOpenReport: (marker: RescueMapMarkerItem) => void;
   onOpenShareTarget: (target: PointShareTarget) => void;
   onReplaceRouteState: (next: SiteRouteState) => void;
 }) {
@@ -489,15 +479,6 @@ function SiteMapViewportDataLayer({
     ],
   );
 
-  const stationDetailAction = useCallback(
-    (marker: RescueMapMarkerItem) => ({
-      label: '建議修改',
-      icon: <EditNoteRoundedIcon />,
-      onClick: () => onOpenReport(marker),
-    }),
-    [onOpenReport],
-  );
-
   const stationDetailSecondaryAction = useCallback(
     (marker: RescueMapMarkerItem) => ({
       label: '分享',
@@ -505,22 +486,6 @@ function SiteMapViewportDataLayer({
       onClick: () => onOpenShareTarget(createCurrentPointShareTarget(marker)),
     }),
     [createCurrentPointShareTarget, onOpenShareTarget],
-  );
-
-  const stationPendingCorrectionCount = useCallback(
-    (marker: RescueMapMarkerItem) => reportsByStationId[marker.id]?.length ?? 0,
-    [reportsByStationId],
-  );
-
-  const stationDetailTabPanels = useCallback(
-    (marker: RescueMapMarkerItem) => ({
-      pendingCorrections: (
-        <StationReportHistoryPanel
-          reports={reportsByStationId[marker.id] ?? []}
-        />
-      ),
-    }),
-    [reportsByStationId],
   );
 
   return (
@@ -541,10 +506,7 @@ function SiteMapViewportDataLayer({
         onDraftPointChange={setDraftPoint}
         draftPointAction={draftPointAction}
         ticketDetailOverrides={createTicketDetailOverrides}
-        stationDetailAction={stationDetailAction}
         stationDetailSecondaryAction={stationDetailSecondaryAction}
-        stationPendingCorrectionCount={stationPendingCorrectionCount}
-        stationDetailTabPanels={stationDetailTabPanels}
       />
     </NeedClaimProvider>
   );
@@ -553,20 +515,14 @@ function SiteMapViewportDataLayer({
 function SiteMapScene({
   createdMarkers,
   createModeActive,
-  reportsByStationId,
   onToggleCreateMode,
   onOpenCreateStation,
-  onOpenReport,
   onOpenShareTarget,
 }: {
   createdMarkers: readonly RescueMapMarkerItem[];
   createModeActive: boolean;
-  reportsByStationId: ReturnType<
-    typeof useStationReports
-  >['reportsByStationId'];
   onToggleCreateMode: () => void;
   onOpenCreateStation: () => void;
-  onOpenReport: (marker: RescueMapMarkerItem) => void;
   onOpenShareTarget: (target: PointShareTarget) => void;
 }) {
   const mapRoute = useSiteMapRouteState();
@@ -588,11 +544,9 @@ function SiteMapScene({
       baseRouteState={mapRoute.state}
       createdMarkers={createdMarkers}
       createModeActive={createModeActive}
-      reportsByStationId={reportsByStationId}
       onMapRouteStateChange={handleMapRouteStateChange}
       onToggleCreateMode={onToggleCreateMode}
       onOpenCreateStation={onOpenCreateStation}
-      onOpenReport={onOpenReport}
       onOpenShareTarget={onOpenShareTarget}
       onReplaceRouteState={mapRoute.replace}
     />
@@ -638,14 +592,11 @@ function SiteMapCreatePanels({
 
 function SiteMapViewContent() {
   const mapRoute = useSiteMapRouteState();
-  const { reportsByStationId, submitStationReport } = useStationReports();
   const [createdMarkers, setCreatedMarkers] = useState<
     readonly RescueMapMarkerItem[]
   >([]);
   const [createModeActive, setCreateModeActive] = useState(false);
   const [stationDrawerOpen, setStationDrawerOpen] = useState(false);
-  const [reportStation, setReportStation] =
-    useState<RescueMapMarkerItem | null>(null);
   const [shareTarget, setShareTarget] = useState<PointShareTarget | null>(null);
 
   // Filed through 請求協助, which lives in the site shell: it turns the page to the ticket in the
@@ -663,16 +614,11 @@ function SiteMapViewContent() {
     setStationDrawerOpen(true);
   };
 
-  const closeReportDrawer = () => {
-    setReportStation(null);
-  };
-
   return (
     <>
       <SiteMapScene
         createdMarkers={createdMarkers}
         createModeActive={createModeActive}
-        reportsByStationId={reportsByStationId}
         onToggleCreateMode={() =>
           setCreateModeActive((current) => {
             if (current) {
@@ -683,22 +629,7 @@ function SiteMapViewContent() {
           })
         }
         onOpenCreateStation={openCreateStation}
-        onOpenReport={setReportStation}
         onOpenShareTarget={setShareTarget}
-      />
-      <SiteStationReportDrawer
-        open={Boolean(reportStation)}
-        station={reportStation}
-        reports={reportStation ? reportsByStationId[reportStation.id] : []}
-        onClose={closeReportDrawer}
-        onSubmit={(values) => {
-          if (!reportStation) {
-            return;
-          }
-
-          submitStationReport(reportStation, values);
-          closeReportDrawer();
-        }}
       />
       <SiteMapCreatePanels
         stationDrawerOpen={stationDrawerOpen}
