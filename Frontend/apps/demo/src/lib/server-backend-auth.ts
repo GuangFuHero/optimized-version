@@ -44,6 +44,8 @@ interface CookieOptions {
 
 interface ResolvedBackendAuth {
   token: BackendAuthToken | null;
+  /** There was a session, its access token could not be refreshed, and it has been cleared. */
+  refreshFailed: boolean;
   responseCookies: Array<{
     name: string;
     value: string;
@@ -238,12 +240,13 @@ export async function resolveBackendAuthTokenAsync(
   })) as BackendAuthToken | null;
 
   if (!token) {
-    return { token: null, responseCookies: [] };
+    return { token: null, refreshFailed: false, responseCookies: [] };
   }
 
   if (hasUsableAccessToken(token)) {
     return {
       token,
+      refreshFailed: false,
       responseCookies: [],
     };
   }
@@ -253,16 +256,42 @@ export async function resolveBackendAuthTokenAsync(
   if (!hasUsableAccessToken(refreshedToken)) {
     return {
       token: null,
+      refreshFailed: true,
       responseCookies: createClearedSessionCookies(request, secureCookies),
     };
   }
 
   return {
     token: refreshedToken,
+    refreshFailed: false,
     responseCookies: await createPersistedSessionCookiesAsync(
       request,
       refreshedToken,
       secureCookies,
+    ),
+  };
+}
+
+/**
+ * The same session once the backend has refused its token with a 401: ended elsewhere (另一台裝置
+ * 「登出所有裝置」, an admin, an identity removed — backend ADR-096). Cleared the way a failed
+ * refresh clears it, so the next request goes as a guest.
+ */
+export function expireBackendAuth(
+  request: RequestLike,
+  resolvedAuth: ResolvedBackendAuth,
+): ResolvedBackendAuth {
+  const requestHeaders =
+    request.headers instanceof Headers
+      ? request.headers
+      : new Headers(request.headers);
+
+  return {
+    ...resolvedAuth,
+    token: null,
+    responseCookies: createClearedSessionCookies(
+      request,
+      shouldUseSecureCookies(requestHeaders),
     ),
   };
 }
