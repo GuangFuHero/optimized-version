@@ -84,6 +84,18 @@ const STOP_RECRUITING_WORDS: RefusalWords = {
   fallback: '停止招募失敗，請稍後再試一次。',
 };
 
+/** `create_ticket_task`'s refusals — a requester's 「再加一件」 (B's S4). */
+const ADD_NEED_WORDS: RefusalWords = {
+  refusals: {
+    // Deleted while the requester was adding to it, from another tab or by a coordinator.
+    'Ticket not found': '這張單已經刪除了。',
+    // A ticket cancelled by hand before statuses were derived: final, nobody could claim more.
+    'Ticket is no longer open': '這張單已經關閉，不能再加。',
+  },
+  forbidden: '只有建這張單的人可以加。',
+  fallback: '加不上去，請稍後再試一次。',
+};
+
 export function claimErrorMessage(error: ClaimError): string {
   return refusalMessage(error, CLAIM_WORDS);
 }
@@ -94,4 +106,8 @@ export function releaseErrorMessage(error: ClaimError): string {
 
 export function stopRecruitingErrorMessage(error: ClaimError): string {
   return refusalMessage(error, STOP_RECRUITING_WORDS);
+}
+
+export function addNeedErrorMessage(error: ClaimError): string {
+  return refusalMessage(error, ADD_NEED_WORDS);
 }

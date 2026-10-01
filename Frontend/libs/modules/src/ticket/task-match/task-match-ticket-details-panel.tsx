@@ -23,6 +23,7 @@ import {
 import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
 import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
+import { AddNeedPanel, useCanAddNeed } from '../help-request/add-need-panel';
 import { NeedRow, readTicketNeeds } from '../needs';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
 
@@ -391,6 +392,9 @@ export function TaskMatchTicketDetailsPanel({
     [ticketData?.ticket],
   );
   const ticketStatus = ticket?.status ?? marker.ticketMeta?.status;
+  const ticketCreatedBy = ticket?.createdBy ?? marker.ticketMeta?.createdBy;
+  // Its requester can add one more need (B's S4), even to a ticket left with none.
+  const canAddNeed = useCanAddNeed({ ticketStatus, ticketCreatedBy });
 
   const activeTask = tasks[activeTaskIndex] ?? null;
   const activePhoto = photos[activePhotoIndex] ?? null;
@@ -445,7 +449,7 @@ export function TaskMatchTicketDetailsPanel({
       ) : null}
 
       {/* First, as in the prototype (site-detail.jsx:330-332): what a volunteer came to decide. */}
-      {needs.length > 0 || isTicketFetching ? (
+      {needs.length > 0 || isTicketFetching || canAddNeed ? (
         <SectionCard
           title={needs.length > 0 ? `需求（${needs.length} 筆）` : '需求'}
           icon={<VolunteerActivismRoundedIcon sx={{ fontSize: 18 }} />}
@@ -464,16 +468,19 @@ export function TaskMatchTicketDetailsPanel({
                   need={need}
                   ticketUuid={marker.id}
                   ticketStatus={ticketStatus}
-                  ticketCreatedBy={ticket?.createdBy ?? marker.ticketMeta?.createdBy}
+                  ticketCreatedBy={ticketCreatedBy}
                   isAuthenticated={isAuthenticated}
                 />
               ))}
             </Stack>
           ) : (
             <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
-              載入需求中...
+              {isTicketFetching ? '載入需求中...' : '這張單目前沒有需求。'}
             </Typography>
           )}
+          {canAddNeed ? (
+            <AddNeedPanel ticketUuid={marker.id} needCount={needs.length} />
+          ) : null}
         </SectionCard>
       ) : null}
 

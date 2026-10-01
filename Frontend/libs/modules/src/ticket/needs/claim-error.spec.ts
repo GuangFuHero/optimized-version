@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { claimErrorMessage, releaseErrorMessage, stopRecruitingErrorMessage } from './claim-error';
+import {
+  addNeedErrorMessage,
+  claimErrorMessage,
+  releaseErrorMessage,
+  stopRecruitingErrorMessage,
+} from './claim-error';
 
 /** A refused `assignTaskActor`, as urql hands it over: the backend's message is the contract. */
 function refused(message: string) {
@@ -110,6 +115,36 @@ describe('stopRecruitingErrorMessage', () => {
     );
     expect(stopRecruitingErrorMessage(refused('Unexpected error.'))).toBe(
       '停止招募失敗，請稍後再試一次。',
+    );
+  });
+});
+
+describe('addNeedErrorMessage', () => {
+  it('says the request is gone when it was deleted while the requester was adding to it', () => {
+    expect(addNeedErrorMessage(refused('Ticket not found'))).toBe('這張單已經刪除了。');
+  });
+
+  it('says a request closed by hand takes nothing more', () => {
+    expect(addNeedErrorMessage(refused('Ticket is no longer open'))).toBe(
+      '這張單已經關閉，不能再加。',
+    );
+  });
+
+  it('says only its requester may add to it, and tells a lapsed session apart', () => {
+    expect(addNeedErrorMessage(refused('403: Permission Denied.'))).toBe(
+      '只有建這張單的人可以加。',
+    );
+    expect(addNeedErrorMessage(refused('401: Could not validate credentials'))).toBe(
+      '登入已過期，請重新登入後再試一次。',
+    );
+  });
+
+  it('blames the connection, or falls back to a plain failure', () => {
+    expect(addNeedErrorMessage({ networkError: new TypeError('Failed to fetch') })).toBe(
+      '連線失敗，請確認網路後再試一次。',
+    );
+    expect(addNeedErrorMessage(refused('Unexpected error.'))).toBe(
+      '加不上去，請稍後再試一次。',
     );
   });
 });

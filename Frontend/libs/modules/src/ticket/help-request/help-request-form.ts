@@ -3,7 +3,10 @@
  * `SiteTicketCreateDrawer`, `site-actions.jsx:1424-1765`; spec note/help-request-spec.md Q6–Q13).
  */
 
-import type { CreateHelpRequestInput } from '@rescue-frontend/data-access';
+import type {
+  CreateHelpRequestInput,
+  HelpRequestTaskInput,
+} from '@rescue-frontend/data-access';
 
 import type { PickedPoint } from '../../map/components/location-picker/types';
 
@@ -201,10 +204,27 @@ export function toHelpRequestInput(
       floor: textOrNull(form.floor),
       room: textOrNull(form.room),
     },
-    tasks: chosenNeeds(form.needs).map(({ row, option }) => ({
-      taskType: option.kind,
-      taskName: row.name.trim() || option.label,
-      quantity: readQuantity(row.quantity),
-    })),
+    tasks: form.needs.flatMap((row) => {
+      const need = toNeedInput(row);
+      return need ? [need] : [];
+    }),
+  };
+}
+
+/**
+ * One need as the server takes it, from the drawer or from 「再加一件」 alike; null until a kind is
+ * chosen. Named by the choice when nothing was typed (Q9).
+ */
+export function toNeedInput(row: NeedDraft): HelpRequestTaskInput | null {
+  const option = getNeedOption(row.need);
+
+  if (!option) {
+    return null;
+  }
+
+  return {
+    taskType: option.kind,
+    taskName: row.name.trim() || option.label,
+    quantity: readQuantity(row.quantity),
   };
 }
