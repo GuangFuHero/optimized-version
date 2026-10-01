@@ -36,6 +36,7 @@ import {
   stripHelpReturn,
 } from './help-return';
 import { onOpenHelpRequest, type HelpRequestSeed } from './open-help-request';
+import { submitErrorMessage } from './submit-error';
 
 /** Near enough to see the street the new ticket is on. */
 const NEW_TICKET_ZOOM = 16;
@@ -190,9 +191,9 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
       });
       const ticket = result.data?.createHelpRequest;
 
-      // The server's own words are English and about fields; what was typed stays for another try.
+      // What was typed stays for another try.
       if (!ticket) {
-        setSubmitError('送出失敗，請稍後再試一次。');
+        setSubmitError(submitErrorMessage(result.error));
         return;
       }
 
