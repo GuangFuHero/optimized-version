@@ -5,9 +5,62 @@ import {
   isSessionExpiredResponse,
   markSessionExpired,
   reloginHref,
+  shouldReloadForSignOut,
   takeSessionExpired,
   type FlagStorage,
 } from './expiry';
+
+describe('shouldReloadForSignOut', () => {
+  it('reloads a tab whose session another tab signed out', () => {
+    expect(
+      shouldReloadForSignOut({
+        previous: 'authenticated',
+        current: 'unauthenticated',
+        signingOutHere: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('leaves the signing-out tab to its own reload', () => {
+    expect(
+      shouldReloadForSignOut({
+        previous: 'authenticated',
+        current: 'unauthenticated',
+        signingOutHere: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('leaves a guest arriving alone: loading is not a sign-out', () => {
+    expect(
+      shouldReloadForSignOut({
+        previous: 'loading',
+        current: 'unauthenticated',
+        signingOutHere: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('waits out a session being read again', () => {
+    expect(
+      shouldReloadForSignOut({
+        previous: 'authenticated',
+        current: 'loading',
+        signingOutHere: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('leaves a guest tab alone when another tab signs in: it holds nothing private', () => {
+    expect(
+      shouldReloadForSignOut({
+        previous: 'unauthenticated',
+        current: 'authenticated',
+        signingOutHere: false,
+      }),
+    ).toBe(false);
+  });
+});
 
 describe('reloginHref', () => {
   it('comes back to the page the person is on', () => {

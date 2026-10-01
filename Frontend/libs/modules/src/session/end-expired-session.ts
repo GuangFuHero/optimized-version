@@ -11,6 +11,14 @@ export function isSigningOutHere(): boolean {
   return signingOutHere;
 }
 
+/**
+ * Say so before signing out here — 登出 from the menu, or an ended session — so the watch on
+ * the session (`shouldReloadForSignOut`) leaves this tab to its own reload instead of adding one.
+ */
+export function markSigningOutHere(): void {
+  signingOutHere = true;
+}
+
 /** The tab's sessionStorage, or none where the browser refuses it (blocked site data). */
 export function sessionStorageOrNull(): Storage | null {
   try {
@@ -31,7 +39,7 @@ export async function endExpiredSession(): Promise<void> {
     return;
   }
 
-  signingOutHere = true;
+  markSigningOutHere();
   markSessionExpired(sessionStorageOrNull());
 
   try {

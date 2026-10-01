@@ -1,8 +1,14 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
-import { SessionExpiredNotice, SiteShell } from '@rescue-frontend/modules';
+import {
+  isSigningOutHere,
+  markSigningOutHere,
+  SessionExpiredNotice,
+  SiteShell,
+} from '@rescue-frontend/modules';
+import { shouldReloadForSignOut } from '@rescue-frontend/modules/session';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 
@@ -13,8 +19,28 @@ export function PortalSiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+  const previousStatus = useRef(status);
+
+  // Signed out in another tab — from its menu, or because its session ended — and next-auth has
+  // told this one. Reload as handleSignOut does, without a notice (note/session-expiry-spec.md Q7).
+  useEffect(() => {
+    const previous = previousStatus.current;
+    previousStatus.current = status;
+
+    if (
+      shouldReloadForSignOut({
+        previous,
+        current: status,
+        signingOutHere: isSigningOutHere(),
+      })
+    ) {
+      window.location.reload();
+    }
+  }, [status]);
 
   const handleSignOut = () => {
+    // Its own reload below; the watch above must not add another.
+    markSigningOutHere();
     void (async () => {
       try {
         await logoutAsync();

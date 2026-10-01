@@ -44,6 +44,32 @@ export function reloginHref({
   return `/login?callbackUrl=${encodeURIComponent(`${pathname}${search}`)}`;
 }
 
+/** next-auth's `useSession().status`, spelled out so this file stays import-free. */
+export type SessionStatus = 'authenticated' | 'unauthenticated' | 'loading';
+
+/**
+ * Another tab signed out — on its own, or because its session ended — and next-auth told this one
+ * (its sign-out broadcast, or a refetch on focus): reload, so urql's cache stops showing what the
+ * signed-in person could see (`note/session-expiry-spec.md` Q7). Only from `authenticated`:
+ * `loading` is a page still reading its session, not a sign-out.
+ */
+export function shouldReloadForSignOut({
+  previous,
+  current,
+  signingOutHere,
+}: {
+  previous: SessionStatus;
+  current: SessionStatus;
+  /** This tab started the sign-out and reloads by itself. */
+  signingOutHere: boolean;
+}): boolean {
+  return (
+    previous === 'authenticated' &&
+    current === 'unauthenticated' &&
+    !signingOutHere
+  );
+}
+
 /** The browser's side: did the proxy mark this response? */
 export function isSessionExpiredResponse(
   headers: Pick<Headers, 'get'>,

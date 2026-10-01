@@ -79,6 +79,8 @@ export { BackOfficePlaceholder } from './role-request';
 
 // The browser's half of the session-expiry handling; the pure half is `@rescue-frontend/modules/session`.
 export {
+  isSigningOutHere,
+  markSigningOutHere,
   sessionExpiryFetch,
   sessionStorageOrNull,
 } from './session/end-expired-session';
