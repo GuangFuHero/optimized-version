@@ -75,6 +75,8 @@ export type {
   PointShareTarget,
 } from './point-share';
 
+export { BackOfficePlaceholder } from './role-request';
+
 export { AdminLayout } from './shell';
 export {
   SiteActionDrawer,

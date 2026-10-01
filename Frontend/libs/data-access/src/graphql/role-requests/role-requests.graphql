@@ -1,0 +1,32 @@
+# 申請成為後台人員 (Backend Spec/019). One query answers both which entry the site shows —
+# 前往後台 or 申請成為後台人員 — and what the application drawer lists. Read live, not from the
+# session: approving an application adds an identity while the session lives on.
+query MyRoleRequests {
+  myRoleRequests {
+    hasBackofficeIdentity
+    canApply
+    requests {
+      uuid
+      requestedRole
+      reason
+      status
+      reviewNote
+      createdAt
+      closedAt
+    }
+  }
+}
+
+# The drawer refetches MyRoleRequests afterwards: graphcache cannot key a type by `uuid` alone.
+mutation SubmitRoleRequest($input: SubmitRoleRequestInput!) {
+  submitRoleRequest(input: $input) {
+    uuid
+  }
+}
+
+# Only the applicant's own, only while pending; the drawer then refetches MyRoleRequests too.
+mutation WithdrawRoleRequest($uuid: UUID!) {
+  withdrawRoleRequest(uuid: $uuid) {
+    uuid
+  }
+}

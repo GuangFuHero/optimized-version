@@ -3,9 +3,13 @@
 import { Suspense, type ReactNode } from 'react';
 
 import HandshakeRoundedIcon from '@mui/icons-material/HandshakeRounded';
+import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
+import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 
 import { Icons } from '@rescue-frontend/ui';
 
+import { BACK_OFFICE_HREF, type SitePortalEntry } from '../../role-request';
+import type { SidebarMenuItemData } from '../admin/components/sidebar-menu-item';
 import type { SidebarResolvedContent } from '../sidebar';
 import { SidebarPanel } from '../sidebar';
 import { useSiteRouteState } from '../../route';
@@ -17,6 +21,36 @@ import type { SiteModule, SiteRouteState } from '../../route/types';
 
 const PersonIcon = Icons.person;
 
+/** The menu's back-office entry: a link to the back office, or a button that opens the application. */
+function portalFooterActions(
+  portalEntry: SitePortalEntry,
+  onApplyRoleRequest?: () => void,
+): SidebarMenuItemData[] {
+  if (portalEntry === 'backOffice') {
+    return [
+      {
+        id: 'back-office',
+        label: '前往後台',
+        icon: <SwapHorizRoundedIcon />,
+        path: BACK_OFFICE_HREF,
+      },
+    ];
+  }
+
+  if (portalEntry === 'apply') {
+    return [
+      {
+        id: 'apply-back-office',
+        label: '申請成為後台人員',
+        icon: <VerifiedRoundedIcon />,
+        onClick: onApplyRoleRequest,
+      },
+    ];
+  }
+
+  return [];
+}
+
 /**
  * 依目前模組與路由狀態建立側欄內容。
  * 各模組連結以 {@link createSiteHref} 帶上現有狀態，切換時保留篩選與詳情。
@@ -27,6 +61,8 @@ function buildSiteSidebarContent(
   isAuthenticated?: boolean,
   onSignIn?: () => void,
   onSignOut?: () => void,
+  portalEntry: SitePortalEntry = 'none',
+  onApplyRoleRequest?: () => void,
   onClose?: () => void,
 ): SidebarResolvedContent {
   return {
@@ -55,6 +91,9 @@ function buildSiteSidebarContent(
           openHelpRequest();
         },
       },
+      // Then, as the prototype orders it (`site-shell.jsx:588-598`), the back-office entry, which a
+      // phone's top bar has no room for, then 登入 for a guest.
+      ...portalFooterActions(portalEntry, onApplyRoleRequest),
       ...(isAuthenticated
         ? []
         : [
@@ -80,11 +119,25 @@ interface SiteSidebarProps {
   showCloseButton?: boolean;
   onClose?: () => void;
   onSignOut?: () => void;
+  /**
+   * The back-office entry at the foot of the menu. Only the phone's menu drawer is given one: on a
+   * desktop the top bar carries it, and the prototype shows it once.
+   */
+  portalEntry?: SitePortalEntry;
+  /** 申請成為後台人員 in the menu: opens the application drawer, which the shell holds. */
+  onApplyRoleRequest?: () => void;
 }
 
 function SiteSidebarConnected(props: SiteSidebarProps) {
   const { module, state } = useSiteRouteState();
-  const { isAuthenticated, onSignIn, onSignOut, ...panelProps } = props;
+  const {
+    isAuthenticated,
+    onSignIn,
+    onSignOut,
+    portalEntry,
+    onApplyRoleRequest,
+    ...panelProps
+  } = props;
 
   return (
     <SidebarPanel
@@ -94,6 +147,8 @@ function SiteSidebarConnected(props: SiteSidebarProps) {
         isAuthenticated,
         onSignIn,
         onSignOut,
+        portalEntry,
+        onApplyRoleRequest,
         panelProps.onClose,
       )}
       {...panelProps}
@@ -102,7 +157,14 @@ function SiteSidebarConnected(props: SiteSidebarProps) {
 }
 
 function SiteSidebarFallback(props: SiteSidebarProps) {
-  const { isAuthenticated, onSignIn, onSignOut, ...panelProps } = props;
+  const {
+    isAuthenticated,
+    onSignIn,
+    onSignOut,
+    portalEntry,
+    onApplyRoleRequest,
+    ...panelProps
+  } = props;
 
   return (
     <SidebarPanel
@@ -112,6 +174,8 @@ function SiteSidebarFallback(props: SiteSidebarProps) {
         isAuthenticated,
         onSignIn,
         onSignOut,
+        portalEntry,
+        onApplyRoleRequest,
         panelProps.onClose,
       )}
       {...panelProps}

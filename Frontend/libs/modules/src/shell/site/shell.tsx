@@ -11,6 +11,11 @@ import { displayTextSize, getRescueColorScheme } from '@rescue-frontend/ui';
 import { LAYOUT_DIMENSIONS } from '../layout';
 import { GuangFuBrandIcon } from '../../brand';
 import { SiteMapRouteProvider } from '../../map/site/use-site-map-route-state';
+import {
+  RoleRequestDrawer,
+  sitePortalEntry,
+  useMyRoleRequests,
+} from '../../role-request';
 import { SiteRouteProvider } from '../../route/use-site-route-state';
 import { HelpRequestHost } from '../../ticket/help-request/help-request-host';
 import { MobileRequestHelpFab } from '../../ticket/help-request/mobile-request-help';
@@ -45,6 +50,17 @@ export function SiteShell({
   const rescue = getRescueColorScheme(useTheme());
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  // 前往後台 / 申請成為後台人員: asked once here, shown in the top bar or the phone's menu, and
+  // the application drawer the latter opens.
+  const { myRoleRequests, refetch: refetchRoleRequests } =
+    useMyRoleRequests(isAuthenticated);
+  const portalEntry = sitePortalEntry(isAuthenticated, myRoleRequests);
+  const [roleRequestOpen, setRoleRequestOpen] = useState(false);
+  const openRoleRequest = () => {
+    // From the phone's menu: the menu gives way to the drawer rather than sit under it.
+    setMobileDrawerOpen(false);
+    setRoleRequestOpen(true);
+  };
   const bodyMinHeight = `calc(100dvh - ${LAYOUT_DIMENSIONS.desktopTopNavBarHeight}px)`;
   const desktopSidebarWidth = desktopSidebarOpen
     ? SITE_EXPANDED_SIDEBAR_WIDTH
@@ -113,6 +129,8 @@ export function SiteShell({
           isAuthenticated={isAuthenticated}
           userName={userName}
           userImage={userImage}
+          portalEntry={portalEntry}
+          onApplyRoleRequest={openRoleRequest}
           onSignIn={onSignIn}
           onSignOut={onSignOut}
         />
@@ -213,8 +231,17 @@ export function SiteShell({
           showCloseButton
           onClose={() => setMobileDrawerOpen(false)}
           onSignOut={onSignOut}
+          portalEntry={portalEntry}
+          onApplyRoleRequest={openRoleRequest}
         />
       </Drawer>
+
+      <RoleRequestDrawer
+        open={roleRequestOpen}
+        onClose={() => setRoleRequestOpen(false)}
+        myRoleRequests={myRoleRequests}
+        onSubmitted={refetchRoleRequests}
+      />
 
       {/* The map has its own, clear of its 「＋」 (`MapRequestHelpButton`). */}
       {pathname.startsWith('/map') ? null : <MobileRequestHelpFab />}
