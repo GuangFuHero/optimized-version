@@ -68,6 +68,8 @@ export {
   PointShareDrawer,
   resolvePointShareTargetFromRoute,
   resolvePointShareTargetFromState,
+  SITE_LIST_METADATA,
+  syncDocumentMetadata,
 } from './point-share';
 export type {
   PointShareChannel,

@@ -26,6 +26,7 @@ import {
   SiteStationReportDrawer,
   StationCreateDrawer,
   StationReportHistoryPanel,
+  syncDocumentMetadata,
   useCreatedTicketMarker,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
@@ -237,49 +238,6 @@ function SiteMapCenterPin({ open }: { open: boolean }) {
   );
 }
 
-function ensureHeadMeta(
-  selector: string,
-  attributes: Record<string, string>,
-): HTMLMetaElement {
-  let element = document.head.querySelector<HTMLMetaElement>(selector);
-
-  if (!element) {
-    element = document.createElement('meta');
-    Object.entries(attributes).forEach(([name, value]) => {
-      element?.setAttribute(name, value);
-    });
-    document.head.appendChild(element);
-  }
-
-  return element;
-}
-
-function syncDocumentMetadata(target: PointShareTarget | null) {
-  const title = target?.title ?? DEFAULT_MAP_METADATA.title;
-  const description = target?.description ?? DEFAULT_MAP_METADATA.description;
-  const url = target?.url ?? window.location.href;
-
-  document.title = title;
-  ensureHeadMeta('meta[name="description"]', {
-    name: 'description',
-  }).setAttribute('content', description);
-  ensureHeadMeta('meta[property="og:title"]', {
-    property: 'og:title',
-  }).setAttribute('content', title);
-  ensureHeadMeta('meta[property="og:description"]', {
-    property: 'og:description',
-  }).setAttribute('content', description);
-  ensureHeadMeta('meta[property="og:url"]', {
-    property: 'og:url',
-  }).setAttribute('content', url);
-  ensureHeadMeta('meta[name="twitter:title"]', {
-    name: 'twitter:title',
-  }).setAttribute('content', title);
-  ensureHeadMeta('meta[name="twitter:description"]', {
-    name: 'twitter:description',
-  }).setAttribute('content', description);
-}
-
 function getSubDataTypesSignature(state: SiteRouteState): string {
   return (state.subDataTypes ?? []).join(',');
 }
@@ -441,7 +399,7 @@ function SiteMapViewportDataLayer({
   ]);
 
   useEffect(() => {
-    syncDocumentMetadata(metadataTarget);
+    syncDocumentMetadata(metadataTarget, DEFAULT_MAP_METADATA);
   }, [metadataTarget]);
 
   useEffect(() => {

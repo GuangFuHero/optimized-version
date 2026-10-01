@@ -13,7 +13,10 @@ import { useRescueMapController } from '../map/hooks/use-rescue-map-controller';
 import type { RescueMapMarkerItem } from '../map/types';
 import {
   createPointShareTarget,
+  pointForMetadata,
   PointShareDrawer,
+  SITE_LIST_METADATA,
+  syncDocumentMetadata,
   type PointShareTarget,
 } from '../point-share';
 import { SITE_FALLBACK_DATA_TYPE } from '../route';
@@ -119,6 +122,29 @@ export function SiteListView() {
       setDetailOpen(false);
     }
   }, [controller.selectedMarkerId, selectedMarker]);
+
+  // The tab's title and the share tags name what is open, as on the map (point-share's
+  // document-metadata.ts): picking a card here changes only `?id=`, which the server's
+  // generateMetadata never sees.
+  useEffect(() => {
+    const point = pointForMetadata(controller.selectedMarkerId, selectedMarker);
+
+    if (point === 'reading') {
+      return;
+    }
+
+    syncDocumentMetadata(
+      point
+        ? createPointShareTarget({
+            marker: point,
+            module,
+            state,
+            origin: window.location.origin,
+          })
+        : null,
+      SITE_LIST_METADATA,
+    );
+  }, [controller.selectedMarkerId, module, selectedMarker, state]);
 
   useEffect(() => {
     const selectedId = controller.selectedMarkerId;
