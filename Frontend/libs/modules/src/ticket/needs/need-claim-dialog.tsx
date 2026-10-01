@@ -28,6 +28,7 @@ import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { formatTicketAddress } from '../address';
 import { formatNeedHeadcount, resolveNeedClaim } from './need-claim';
+import { readNeedDialog } from './need-dialog';
 import { readTicketNeeds, TICKET_NEEDS_QUERY_CONTEXT } from './use-ticket-needs';
 
 const { color, radius, shadow } = designTokens;
@@ -91,6 +92,12 @@ export function NeedClaimDialog({
   // After a refused claim the reload may show the need full or closed: then there is nothing to
   // confirm, and the way out is to close (Q29).
   const settled = Boolean(claim) && claim?.action !== 'claim';
+  // Or gone, which the box says, and then nothing beneath it says again.
+  const dialog = readNeedDialog({
+    found: Boolean(need && fields && claim),
+    fetching,
+    refusal: error,
+  });
   const address = formatTicketAddress(ticket?.secondaryLocation);
   const contact = [fields?.contactName?.trim(), fields?.contactPhone?.trim()]
     .filter(Boolean)
@@ -168,7 +175,7 @@ export function NeedClaimDialog({
             ) : (
               <Typography sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13] }}>
                 {/* Deleted between the tap and the load: say so rather than load forever. */}
-                {fetching ? '載入中...' : '找不到這筆需求，可能已經被刪除。'}
+                {dialog.box === 'loading' ? '載入中...' : '找不到這筆需求，可能已經被刪除。'}
               </Typography>
             )}
           </Box>
@@ -179,7 +186,7 @@ export function NeedClaimDialog({
             去不了的話請到「我的任務 › 我承接的」釋出名額，讓建立者有機會補人。
           </Typography>
 
-          {error ? <Alert severity="error">{error}</Alert> : null}
+          {dialog.refusal ? <Alert severity="error">{dialog.refusal}</Alert> : null}
         </Stack>
       </DialogContent>
 
@@ -198,7 +205,7 @@ export function NeedClaimDialog({
             color: color.fg.neutral.subtle,
           }}
         >
-          {settled ? '關閉' : '取消'}
+          {settled || dialog.box === 'gone' ? '關閉' : '取消'}
         </Button>
         <Button
           onClick={onConfirm}

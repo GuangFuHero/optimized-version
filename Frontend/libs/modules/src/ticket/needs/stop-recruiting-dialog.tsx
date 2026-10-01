@@ -29,6 +29,7 @@ import { stopRecruitingErrorMessage } from './claim-error';
 import { canStopRecruiting } from './need-actions';
 import { formatNeedHeadcount, resolveNeedClaim } from './need-claim';
 import type { NeedClaimTarget } from './need-claim-dialog';
+import { readNeedDialog } from './need-dialog';
 import {
   readTicketNeeds,
   TICKET_NEEDS_QUERY_CONTEXT,
@@ -163,6 +164,12 @@ export function StopRecruitingDialog({
   // After a refused stop the reload may show the need filled, stopped or with nobody left on it:
   // then there is nothing to confirm, and the way out is to close.
   const settled = need !== null && !canStopRecruiting(need, fields?.status);
+  // Or gone, which the box says, and then nothing beneath it says again.
+  const dialog = readNeedDialog({
+    found: Boolean(need && fields),
+    fetching,
+    refusal: error,
+  });
   const headcount = need
     ? formatNeedHeadcount(
         need,
@@ -248,7 +255,9 @@ export function StopRecruitingDialog({
                 }}
               >
                 {/* Deleted between the tap and the load: say so rather than load forever. */}
-                {fetching ? '載入中...' : '找不到這筆需求，可能已經被刪除。'}
+                {dialog.box === 'loading'
+                  ? '載入中...'
+                  : '找不到這筆需求，可能已經被刪除。'}
               </Typography>
             )}
           </Box>
@@ -265,7 +274,9 @@ export function StopRecruitingDialog({
             </Typography>
           ) : null}
 
-          {error ? <Alert severity="error">{error}</Alert> : null}
+          {dialog.refusal ? (
+            <Alert severity="error">{dialog.refusal}</Alert>
+          ) : null}
         </Stack>
       </DialogContent>
 
@@ -284,7 +295,7 @@ export function StopRecruitingDialog({
             color: color.fg.neutral.subtle,
           }}
         >
-          {settled ? '關閉' : '取消'}
+          {settled || dialog.box === 'gone' ? '關閉' : '取消'}
         </Button>
         {/* The brand's fill, not the prototype's red: stopping is how a need ends once it has its
             people, not something taken away. Red is for deleting one (spec Q51). */}
