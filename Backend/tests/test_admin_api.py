@@ -152,6 +152,28 @@ async def test_list_users_returns_role_info(client, db_session, redis):
 
 
 @pytest.mark.asyncio
+async def test_list_users_shows_the_back_office_role_over_user(client, db_session, redis):
+    """`platform_role` is the role besides `user` when there is one, `user` otherwise.
+
+    It used to be whichever sorted first by name. That happened to put `data_auditor` and
+    `super_admin` before `user`, but a platform role created at runtime (`/admin/rbac/roles`)
+    named after `user` would have been hidden behind it.
+    """
+    admin_uuid = await _make_super_admin(db_session)
+    lead_uuid = await _make_plain_user(db_session, name="Lead")
+    await _grant_platform(db_session, lead_uuid, "user", "volunteer_lead")
+    citizen_uuid = await _make_plain_user(db_session, name="Citizen")
+    await _grant_platform(db_session, citizen_uuid, "user")
+
+    resp = await client.get("/api/v1/admin/users", headers=await _auth_header(redis, admin_uuid))
+
+    assert resp.status_code == 200
+    rows = {row["uuid"]: row for row in resp.json()}
+    assert rows[lead_uuid]["platform_role"] == "volunteer_lead"
+    assert rows[citizen_uuid]["platform_role"] == "user"
+
+
+@pytest.mark.asyncio
 async def test_assign_role_replaces_existing_platform_role(client, db_session, redis):
     """Assigning a new platform role removes the user's prior platform-kind assignment."""
     admin_uuid = await _make_super_admin(db_session)
@@ -205,6 +227,142 @@ async def test_assign_role_allows_demotion_when_another_super_admin_exists(clien
         headers=await _auth_header(redis, admin_uuid),
     )
     assert resp.status_code == 200, resp.json()
+
+
+async def _grant_platform(db, user_uuid: str, *role_names: str) -> None:
+    """Give `user_uuid` these platform roles, creating any that do not exist yet."""
+    for name in role_names:
+        role_uuid = await _make_role(db, name=name, kind="platform")
+        db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=role_uuid))
+    await db.commit()
+
+
+async def _platform_roles(db, user_uuid: str) -> set[str]:
+    """The names of the platform roles `user_uuid` holds now."""
+    return set(
+        (
+            await db.execute(
+                select(Role.name)
+                .join(UserRoleAssign, UserRoleAssign.role_uuid == Role.uuid)
+                .where(UserRoleAssign.user_uuid == user_uuid, UserRoleAssign.team_uuid.is_(None))
+            )
+        ).scalars()
+    )
+
+
+async def _assign(client, headers: dict, target_uuid: str, role_name: str):
+    return await client.post(
+        f"/api/v1/admin/users/{target_uuid}/role", json={"role_name": role_name}, headers=headers
+    )
+
+
+async def _second_super_admin(db) -> None:
+    """Another super_admin, so demoting the first one leaves the platform administered."""
+    super_admin_role = (await db.execute(select(Role).where(Role.name == "super_admin"))).scalar_one()
+    other = User(name="Second Admin")
+    db.add(other)
+    await db.flush()
+    db.add(UserRoleAssign(user_uuid=other.uuid, role_uuid=super_admin_role.uuid))
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_assign_role_keeps_user_when_granting_super_admin(client, db_session, redis):
+    """`user` stays beside the new role: the site acts as it and a login starts on it (ADR-290).
+
+    It used to be replaced like any other platform role, which left a super admin made here with
+    no `user` to act as, so on the site they kept every super_admin permission (019 Known gaps).
+    """
+    admin_uuid = await _make_super_admin(db_session)
+    target_uuid = await _make_plain_user(db_session, name="Promoted")
+    await _grant_platform(db_session, target_uuid, "user")
+
+    resp = await _assign(client, await _auth_header(redis, admin_uuid), target_uuid, "super_admin")
+
+    assert resp.status_code == 200, resp.json()
+    assert await _platform_roles(db_session, target_uuid) == {"user", "super_admin"}
+
+
+@pytest.mark.asyncio
+async def test_assign_role_replaces_the_other_back_office_role_and_keeps_user(client, db_session, redis):
+    """Besides `user` an account holds at most one platform role: the new one replaces the old."""
+    admin_uuid = await _make_super_admin(db_session)
+    target_uuid = await _make_plain_user(db_session, name="Auditor Promoted")
+    await _grant_platform(db_session, target_uuid, "user", "data_auditor")
+
+    resp = await _assign(client, await _auth_header(redis, admin_uuid), target_uuid, "super_admin")
+
+    assert resp.status_code == 200, resp.json()
+    assert await _platform_roles(db_session, target_uuid) == {"user", "super_admin"}
+
+
+@pytest.mark.asyncio
+async def test_assigning_user_demotes_a_super_admin(client, db_session, redis):
+    """Assigning `user` takes the other platform role away — the way down ADR-185 points to.
+
+    Every account holds `user` since ADR-290, so this used to find `user` already held and
+    return without touching super_admin: the demotion answered 200 and changed nothing.
+    """
+    admin_uuid = await _make_super_admin(db_session)
+    await _second_super_admin(db_session)
+    target_uuid = await _make_plain_user(db_session, name="Stepping Down")
+    await _grant_platform(db_session, target_uuid, "user", "super_admin")
+
+    resp = await _assign(client, await _auth_header(redis, admin_uuid), target_uuid, "user")
+
+    assert resp.status_code == 200, resp.json()
+    assert await _platform_roles(db_session, target_uuid) == {"user"}
+
+
+@pytest.mark.asyncio
+async def test_assigning_user_takes_a_data_auditor_back(client, db_session, redis):
+    """An approved data auditor (019/ADR-288) can be taken back.
+
+    ADR-185 refuses to unassign a platform role, so there was no other way to.
+    """
+    admin_uuid = await _make_super_admin(db_session)
+    target_uuid = await _make_plain_user(db_session, name="Former Auditor")
+    await _grant_platform(db_session, target_uuid, "user", "data_auditor")
+
+    resp = await _assign(client, await _auth_header(redis, admin_uuid), target_uuid, "user")
+
+    assert resp.status_code == 200, resp.json()
+    assert await _platform_roles(db_session, target_uuid) == {"user"}
+
+
+@pytest.mark.asyncio
+async def test_assigning_user_to_the_last_super_admin_is_refused(client, db_session, redis):
+    """Demoting to `user` goes through the same last-super_admin guard (ADR-032)."""
+    admin_uuid = await _make_super_admin(db_session)
+    await _grant_platform(db_session, admin_uuid, "user")
+    super_admin_role = (await db_session.execute(select(Role).where(Role.name == "super_admin"))).scalar_one()
+    # Acting as super_admin: a token naming no identity starts on `user` (ADR-290).
+    headers = await auth_headers_for(redis, admin_uuid, super_admin_role)
+
+    resp = await _assign(client, headers, admin_uuid, "user")
+
+    assert resp.status_code == 409, resp.json()
+    assert await _platform_roles(db_session, admin_uuid) == {"user", "super_admin"}
+
+
+@pytest.mark.asyncio
+async def test_promotion_leaves_a_session_acting_as_user_signed_in(client, db_session, redis):
+    """Promotion leaves `user` in place, so a token acting as it stays valid.
+
+    ADR-096 ends only an identity that is gone. Promotion used to delete `user` and so sign the
+    person out, which 010 accepted at the time.
+    """
+    admin_uuid = await _make_super_admin(db_session)
+    target_uuid = await _make_plain_user(db_session, name="Signed In")
+    await _grant_platform(db_session, target_uuid, "user")
+    user_role = (await db_session.execute(select(Role).where(Role.name == "user"))).scalar_one()
+    target_headers = await auth_headers_for(redis, target_uuid, user_role)
+
+    resp = await _assign(client, await _auth_header(redis, admin_uuid), target_uuid, "super_admin")
+    assert resp.status_code == 200, resp.json()
+
+    me = await client.get("/api/v1/users/me", headers=target_headers)
+    assert me.status_code == 200, me.json()
 
 
 @pytest.mark.asyncio
