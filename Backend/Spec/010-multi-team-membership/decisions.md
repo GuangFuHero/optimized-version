@@ -293,6 +293,7 @@ ADR-068 改版正是採用了括號裡被否決的那條路。缺陷消失，**a
 
 - **新增**身分（加入一個新 team）→ 當前 `act` 不受影響 → **不登出**。
 - **提權**（`user` → `super_admin`、`member` → `admin`）→ **會登出**，因為 `assign_role` 是先刪後加（`app/services/admin.py:97-101`），舊那列消失了。這個副作用**已知並接受**：規則單一、無例外、好推理，且提權不頻繁，重新登入後馬上以新身分回來。
+  > **2026-10-01（019/ADR-294）**：平台角色的提權（`user` → `super_admin`／`data_auditor`）**不再登出**：`assign_role` 改成保留 `user`，以 `user` 行動的 token 照常有效。降級時被拿掉的那個身分照本條失效。team 角色（`member` → `admin`）不受影響，仍是先刪後加、會登出。
 - team 被軟刪除 → 該 team 的身分失效 → 登出（驗證需檢查 `Team.delete_at IS NULL`）。
 
 **⚠️ 實作上的硬性約束**：**`act` 的驗證必須在 `rotate()` 之前**。`rotate()` 一執行就燒掉舊 refresh token（`app/repositories/session_repository.py:80` 宣告 `refresh_used:` 旗標），驗證放在它之後會變成「token 燒了卻不發新的」，使用者的重試會被判定為 token 重放而遭 `revoke_session`。這與 `Spec/013` 程式碼審查抓到的 H1 是同一個失效模式，不得重蹈。
@@ -470,6 +471,8 @@ switch-identity             → 200   ← 沒擋，而且新 token 打 /users/me
 ### ADR-185 platform 角色只能「取代」，不能「撤除」
 
 > **2026-09-30（019/ADR-288）**：本條以「每人至多一個平台角色」為前提。019 之後一人可以持有 `user` 加一個其他平台角色，規則本身沒改，但結果是申請通過的 `data_auditor` 無法透過 API 收回。要不要對「`user` 以外的那一個」放寬，留給後台決定。
+>
+> **2026-10-01（019/ADR-294）**：本條不改，改的是它指的那條路。`assign_role` 改成保留 `user` 後，「指派 `user`」就會拿掉另一個平台角色，所以降級超管、收回資料檢核員都走 `POST /admin/users/{uuid}/role {"role_name": "user"}`。在此之前，ADR-290 讓每個人都有 `user`，這個呼叫會因為「已持有」直接回 200、什麼都沒改。
 
 **白話**：撤掉一個人的 platform 角色，一定會讓他變成「沒有任何 platform 身分」——因為他本來就只有一個。這種帳號即使還在團隊裡，也會解析出**零權限**。降級的正確做法是 assign 到較小的角色，一步取代。
 

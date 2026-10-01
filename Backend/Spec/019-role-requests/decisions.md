@@ -1,7 +1,8 @@
 # Decisions: 019 Role Requests
 
 Numbering continues the repo-wide ADR sequence. ADR-286 was the last one taken when these were written
-(2026-09-30); flows A and B start their next ADRs at 291.
+(2026-09-30); flows A and B start their next ADRs at 291. ADR-294 was added on 2026-10-01; flow A holds
+ADR-291 to ADR-293.
 
 ---
 
@@ -88,10 +89,12 @@ claim a task on the site. The team decided on 2026-09-28 that this must not happ
 **Consequences**:
 ➕ Approval never signs anyone out and never takes away a site permission.
 ➖ `admin_service.assign_role` still replaces, so using the old endpoint to make someone a data auditor removes
-their `user`. The back office should stop using it for this.
+their `user`. The back office should stop using it for this. **Resolved by ADR-294 (2026-10-01).**
 ➖ ADR-185 refuses to unassign any platform role, and was written when "the platform role" was the only one.
 With two, it means an approved `data_auditor` cannot be taken back through the API. Left to the back office.
-➖ `GET /admin/users` → `platform_role` shows only one of the two; `identities` lists both.
+**Resolved by ADR-294: assigning `user` takes it back.**
+➖ `GET /admin/users` → `platform_role` shows only one of the two; `identities` lists both. **ADR-294 makes it
+the one besides `user`.**
 
 ---
 
@@ -189,4 +192,77 @@ hold one — ADR-184 made that script replace `user` so a bootstrapped super adm
 as one need the extra step.
 ➖ `admin_service.assign_role` still replaces `user`, so a super admin made through
 `POST /admin/users/{uuid}/role` holds no `user`. On the site they then keep the super_admin identity (ADR-289
-decision 2) and land on it at login. Left to the back office, which owns that endpoint.
+decision 2) and land on it at login. Left to the back office, which owns that endpoint. **Resolved by ADR-294
+(2026-10-01).**
+
+---
+
+### ADR-294 The back office's `assign_role` keeps `user`; assigning `user` takes the other platform role back
+
+> **Status: ACCEPTED (2026-10-01).** Chosen by the product owner on 2026-10-01, once the gaps left by ADR-288
+> and ADR-290 turned out to include a demotion that did nothing.
+
+**In plain words**: an account always keeps the ordinary-user identity, plus at most one other platform role.
+Making someone a super admin or a data auditor in the back office no longer takes `user` away or signs them
+out. Assigning `user` is how a super admin is demoted and how an approved data auditor is taken back.
+
+**Context**: `admin_service.assign_role` (`POST /api/v1/admin/users/{uuid}/role`) replaced every platform role
+the account held with the new one (ADR-019, ADR-032). Since ADR-290 every account holds `user`, and that broke
+it three ways:
+
+1. Making someone a super admin or a data auditor deleted their `user`. On the site they then kept the
+   back-office identity, since ADR-289 had no `user` to switch to, and landed on it at login.
+2. Demoting did nothing. Assigning `user` to a super admin found `user` already held and returned before
+   removing anything: the API answered 200 and the account stayed a super admin. ADR-185 names exactly this
+   assignment as the way to demote, because it refuses to unassign a platform role.
+3. An approved data auditor (ADR-288) could not be taken back: unassigning is refused (ADR-185) and assigning
+   `user` did nothing.
+
+Separately, `GET /api/v1/admin/users` reported as `platform_role` the first platform identity by role name.
+That was the back-office one only because `data_auditor` and `super_admin` sort before `user`. A platform
+role created at runtime (`POST /api/v1/admin/rbac/roles`) whose name sorts after `user`, such as
+`volunteer_lead`, would have shown as `user`.
+
+**Options**:
+
+- Keep the endpoint and let ADR-185 unassign the platform role besides `user`. Rejected: demoting through
+  `assign_role` would stay broken, and the back office would have two ways to change a platform role.
+- **Give `assign_role` the rule approval and `bootstrap_admin` already follow** (chosen).
+
+**Decision**:
+
+1. Assigning a platform role removes the platform roles the account holds **except `user` and the role being
+   assigned**, then grants the role if it is not held yet:
+
+   | Holds | Assigned | Result |
+   |---|---|---|
+   | `user` | `super_admin` | `user`, `super_admin` |
+   | `user`, `data_auditor` | `super_admin` | `user`, `super_admin` |
+   | `user`, `super_admin` (another super admin exists) | `user` | `user` |
+   | `user`, `data_auditor` | `user` | `user` |
+   | `user`, `super_admin` (the only super admin) | `user` | 409 `Cannot remove the last super_admin` |
+   | the role already, and nothing else to remove | that role | unchanged, 200 |
+
+2. The last-super-admin guard (ADR-032) applies whenever `super_admin` is among the roles removed, so it covers
+   demoting to `user` as well.
+3. An account without `user` is not given one here. The ADR-290 migration and registration grant it, and
+   `bootstrap_admin` does not add it either.
+4. `platform_role` in `GET /api/v1/admin/users` is the platform role besides `user` if the account holds one,
+   otherwise `user`. `identities` still lists every identity.
+
+**Amends**:
+
+- ADR-019 / ADR-032 "assigning replaces the role of the same kind": every platform role except `user`.
+- 010/ADR-096's accepted side effect "promotion signs the person out": a token acting as `user` stays valid,
+  because `user` is no longer deleted. A token acting as a removed role is still refused, as ADR-096 says.
+- ADR-185's "demote by assigning a smaller role" works again and also takes a data auditor back. ADR-185's own
+  rule — a platform role cannot be unassigned — is unchanged.
+
+**Consequences**:
+➕ The back office, approval (ADR-288) and `bootstrap_admin` (ADR-290) follow one rule: `user` plus at most one
+other platform role.
+➕ Demoting and taking back a data auditor go through the endpoint the back office already has.
+➕ Promotion no longer signs anyone out. Since ADR-290 they would have come back on `user` anyway; now they
+switch to the new identity when they need it.
+➖ Removing a back-office role is spelled "assign `user`". A back-office screen should label it as removing the
+role; an admin looking for "remove" will not think of "assign".

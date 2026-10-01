@@ -2,10 +2,11 @@
 
 **Date**: 2026-09-30
 **Feature**: 019-role-requests
-**Status**: Backend implemented (`feat/role-request`); site UI not started
+**Status**: Backend implemented (`feat/role-request`); site UI implemented (`feat/site-role-request`, in
+`feat/site-revamp` since 2026-10-01); back-office role assignment fixed by ADR-294 (2026-10-01)
 **Depends on**: `Spec/010-multi-team-membership` (identities, `act` claim, identity switching),
 `Spec/009-rbac-runtime-management` (capabilities editable at runtime)
-**Decisions**: `decisions.md` in this folder (ADR-287 to ADR-290)
+**Decisions**: `decisions.md` in this folder (ADR-287 to ADR-290, ADR-294)
 
 ## Overview
 
@@ -161,8 +162,8 @@ Only a `data_auditor` application can be approved. In one transaction, `approve`
 3. marks the application `approved` with `reviewed_by`, `review_note`, `granted_role_uuid` and `closed_at`;
 4. commits once, then notifies the applicant.
 
-It does **not** call `admin_service.assign_role`, which replaces the platform role and would remove `user`.
-The applicant keeps `user`, so the access token they hold stays valid (ADR-096 signs out only an identity
+It does **not** call `admin_service.assign_role`, which removed `user` until ADR-294 and still replaces any
+other platform role the account holds. The applicant keeps `user`, so the access token they hold stays valid (ADR-096 signs out only an identity
 that is gone): no sign-out, no re-login. Their `identities` now list `data_auditor` for the back office.
 
 ## Notifications
@@ -192,18 +193,24 @@ does not change when one does.
   `default_for_user` puts `user` first, so a fresh login — password, SSO, registration, or a refresh that
   names no identity — lands on `user`, super admins included.
 
-## Site integration (not built yet)
+## Site integration
+
+Built in `Frontend/libs/modules/src/role-request/` (2026-10-01).
+
 
 - Add `X-WG-Realm: site` to every request the site sends: the `/api/graphql` proxy
   (`Frontend/apps/demo/src/app/api/graphql/route.ts`) and the server-side client that calls the backend
-  directly (`Frontend/apps/demo/src/lib/urql-rsc.ts`). The whole app is the site today (`/admin` redirects).
+  directly (`Frontend/apps/demo/src/lib/urql-rsc.ts`). The whole app is the site today (`/admin` is a placeholder).
   **Back-office pages must reach the backend on a path that does not add the header**, or every back-office
   request would act as `user`.
 - Entry button: signed out, neither is shown; `hasBackofficeIdentity` → 前往後台 (to a "back office in
   preparation" page at `/admin`); otherwise 申請成為後台人員, which opens the application drawer.
 - Drawer: the form when nothing is pending; the pending card (with 撤回申請) when one is; the last rejected
   card with its reply above the form. Withdrawn applications show no card. Withdrawing asks first:
-  撤回後這筆申請會取消，要再申請得重新填寫。
+  撤回後這筆申請會取消，要再申請得重新填寫。 A refused withdrawal keeps its reason in that dialog while the
+  drawer reloads behind it. Once the account holds a back-office identity — approved while the drawer was
+  open — the drawer says so instead of showing the form, since `canApply` is then false without applications
+  being paused.
 
 ## Operations
 
@@ -215,14 +222,18 @@ does not change when one does.
 - Super admins land on `user` after logging in. Scripts and HTTP collections that call admin endpoints must
   switch identity first (see [API](#api)).
 
-## Known gaps (back office, not this feature)
+## Back-office role assignment (ADR-294)
 
-- `admin_service.assign_role` (`POST /admin/users/{uuid}/role`) still replaces the platform role, so assigning
-  `super_admin` there removes `user`. Only `bootstrap_admin` keeps it.
-- ADR-185 refuses to unassign any platform role, so `data_auditor` cannot be taken back through the API once
-  approved.
-- `AdminUserListItem.platform_role` (`GET /admin/users`) shows only the first platform identity; `identities`
-  has them all.
+These were known gaps until 2026-10-01; ADR-294 closes them in the back office's existing endpoints.
+
+- `POST /api/v1/admin/users/{uuid}/role` (`admin_service.assign_role`) keeps `user`. Assigning a platform role
+  replaces the other one the account holds, so an account has `user` plus at most one other platform role —
+  the same rule as approval and `bootstrap_admin`. Promotion no longer signs anyone out.
+- Assigning `user` removes the other platform role. That is how to demote a super admin and how to take back an
+  approved data auditor (ADR-185 still refuses to unassign a platform role). Demoting the only super admin
+  answers 409 `Cannot remove the last super_admin`. Before ADR-294 this call answered 200 and changed nothing.
+- `GET /api/v1/admin/users` → `platform_role` is the platform role besides `user` if there is one, otherwise
+  `user`. `identities` lists them all.
 
 ## Tests
 
@@ -236,3 +247,4 @@ does not change when one does.
 | `tests/test_migration_backfill_user_role.py` | The backfill, from a database stopped at `666b59ab2581` |
 | `tests/test_bootstrap_admin.py` | `bootstrap_admin` keeps `user` and replaces any other platform role |
 | `tests/test_seed_rbac.py` | The two capabilities' seed grants; the ADR-097 citizen-only exception |
+| `tests/test_admin_api.py` | ADR-294: `assign_role` keeps `user`, assigning `user` demotes or takes a data auditor back, the last-super-admin guard on that path, promotion keeps a `user` session, `platform_role` |

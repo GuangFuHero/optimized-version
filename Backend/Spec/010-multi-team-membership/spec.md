@@ -151,6 +151,7 @@ POST /auth/switch-identity { role_uuid, team_uuid? }
 
 - **新增**身分 → 不登出。
 - **提權**（`user`→`super_admin`）→ **會登出**，因為 `assign_role` 是先刪後加。已知並接受。
+  **（2026-10-01 019/ADR-294 起不再登出：`assign_role` 保留 `user`。）**
 - team 被軟刪除 → 登出。
 
 > ⚠️ **`act` 驗證必須在 `rotate()` 之前**。`rotate()` 一執行就燒掉舊 refresh token（`app/repositories/session_repository.py:80`），驗證放在它之後會導致「token 燒了卻不發新的」，重試被判定為重放而遭 `revoke_session`。與 `Spec/013` 審查抓到的 H1 同一失效模式。

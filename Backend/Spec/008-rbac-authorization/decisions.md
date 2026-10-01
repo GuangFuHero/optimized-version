@@ -174,6 +174,7 @@
 #### ADR-032 一人一角色（每種 kind）由 use-case 層強制，非 DB 約束；最後一個 super_admin 禁止被踢
 
 > **部分被 019/ADR-288、ADR-290 修改**：一人可以同時持有 `user` 加一個其他平台角色（申請通過的資料檢核員、`bootstrap_admin` 設的超管），前台一律用 `user`（019/ADR-289）。「同 kind 只留一個」對 `user` 不再成立；`admin_service.assign_role` 本身沒改，照舊取代。
+> **2026-10-01 再被 019/ADR-294 修改**：`admin_service.assign_role` 也改成保留 `user`，只取代另一個平台角色；指派 `user` 等於拿掉另一個（把超管降級、收回資料檢核員）。最後一個 super_admin 的保護照舊，降成 `user` 也會擋（409）。
 
 **Context**：T117 的「指派角色」端點要決定：(1) 使用者已有同 kind（platform/team）角色時，新指派要怎麼處理；(2) 如果要拿掉的剛好是全平台唯一的 `super_admin`，會造成沒有人能再指派角色的鎖死局面（沒有 UI 路徑能恢復）。
 **Decision**：`app/services/admin/assign_role.py` 在指派新角色前，查詢並刪除該使用者「同 kind」的既有角色指派（一人一 platform role + 一 team role，ADR-019 的落地方式，見 `app/models/rbac.py:UserRoleAssign` docstring——刻意不做 DB unique 約束，因為「同 kind 只能一個」是一個會隨業務演進的政策，不是資料完整性不變量）。指派 platform 角色前，若目標使用者目前持有 `super_admin` 且新角色不是 `super_admin`，會先數一次「扣掉這個人之後還剩幾個 super_admin」，`0` 就整個操作失敗（`AdminConflictError` → HTTP 409）。找不到使用者/角色是 `AdminNotFoundError`（404）；team 角色要求先有 `users.team_uuid` 是 `AdminConflictError`（409，**已於 010/ADR-072 移除**——授予 team 角色本身就是入隊，不再有「要先屬於某 team」的前置條件；現在這個端點一律拒收 team 角色，改走 `POST /admin/teams/{uuid}/members`）——這兩個型別都是 `ValueError` 的子類別（`app/services/admin/errors.py`），沿用既有 use-case 層「拋 `ValueError` 表示網域層失敗」的慣例（例如 `app/services/station/update.py` 的 `"Station not found"`），只是額外分兩個子類別讓 REST endpoint 能分別對應到不同的 HTTP 狀態碼，而不是每個 domain 錯誤都回一律的 400。
