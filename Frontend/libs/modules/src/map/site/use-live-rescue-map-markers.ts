@@ -14,6 +14,7 @@ import { fetchExchange, type CombinedError } from 'urql';
 
 import type { RescueMapMarkerItem } from '../types';
 import type { SiteRouteState } from '../../route/types';
+import { sessionExpiryFetch } from '../../session/end-expired-session';
 import type { ReloadedTicket } from '../../ticket/needs/use-ticket-needs';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
 import { onTicketCreated } from '../../ticket/ticket-changes';
@@ -38,6 +39,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
         runtime: 'client',
         url: '/api/graphql',
         exchanges: [fetchExchange],
+        fetch: sessionExpiryFetch,
         requestPolicy: 'network-only',
         suspense: false,
       }),

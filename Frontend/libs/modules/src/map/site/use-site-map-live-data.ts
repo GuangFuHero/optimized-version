@@ -17,6 +17,7 @@ import type {
   RescueMapMarkerItem,
 } from '../types';
 import type { SiteRouteState } from '../../route/types';
+import { sessionExpiryFetch } from '../../session/end-expired-session';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
 import {
   closureAreasSignature,
@@ -216,6 +217,7 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
         runtime: 'client',
         url: '/api/graphql',
         exchanges: [fetchExchange],
+        fetch: sessionExpiryFetch,
         requestPolicy: 'network-only',
         suspense: false,
       }),

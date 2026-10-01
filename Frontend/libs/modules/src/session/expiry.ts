@@ -31,3 +31,41 @@ export function isSessionExpired({
 }: SessionExpiryInput): boolean {
   return refreshFailed || (sentToken && backendStatus === 401);
 }
+
+/** The browser's side: did the proxy mark this response? */
+export function isSessionExpiredResponse(
+  headers: Pick<Headers, 'get'>,
+): boolean {
+  return headers.get(SESSION_HEADER) === SESSION_EXPIRED;
+}
+
+/** sessionStorage as far as the flag uses it. */
+export type FlagStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+const EXPIRED_FLAG_KEY = 'wg.sessionExpired';
+
+/**
+ * Leaves word for the page that loads after the reload, so it can say why the person is a guest
+ * now. Without storage (a private window, blocked site data) the notice is skipped, nothing else.
+ */
+export function markSessionExpired(storage: FlagStorage | null): void {
+  try {
+    storage?.setItem(EXPIRED_FLAG_KEY, '1');
+  } catch {
+    // No notice then; the sign-out itself does not depend on it.
+  }
+}
+
+/** Reads the word once: the notice is for the first page after the reload, not every one after. */
+export function takeSessionExpired(storage: FlagStorage | null): boolean {
+  try {
+    if (storage?.getItem(EXPIRED_FLAG_KEY) !== '1') {
+      return false;
+    }
+
+    storage.removeItem(EXPIRED_FLAG_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
