@@ -24,6 +24,10 @@ import { createSiteHref } from '../../route/serialize';
 import { useSiteRouteState } from '../../route/use-site-route-state';
 import { SiteToast } from '../../shell/site/site-toast';
 import { announceTicketCreated } from '../ticket-changes';
+import {
+  clearHelpRequestDraft,
+  sessionDraftStorage,
+} from './help-request-draft';
 import { HelpRequestDrawer } from './help-request-drawer';
 import {
   toHelpRequestInput,
@@ -112,6 +116,14 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   // Only on the map, whose zoom the new ticket is shown at, unless that is too far out.
   const mapViewport = useContext(SiteMapViewportStoreContext);
   const [, createHelpRequest] = useMutation(CreateHelpRequestDocument);
+  const { data: session } = useSession();
+  // The account's uuid, as `NeedClaimProvider` reads it: the app's auth options put it there; this
+  // library's session type does not know the field.
+  const sessionUser = session?.user;
+  const userId =
+    sessionUser && 'id' in sessionUser && typeof sessionUser.id === 'string'
+      ? sessionUser.id
+      : null;
   const [opening, setOpening] = useState<Opening | null>(null);
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -203,6 +215,11 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
         needCount: ticket.tasks.length,
       };
 
+      // Filed: nothing is left to bring back the next time it opens (S10).
+      if (userId) {
+        clearHelpRequestDraft(sessionDraftStorage(), userId);
+      }
+
       setOpen(false);
       // Handed over before the page turns to it, in the same render: the map drops a selection it
       // cannot find among its markers.
@@ -226,6 +243,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
           open={open}
           seed={opening.seed}
           isAuthenticated={isAuthenticated}
+          userId={userId}
           submitting={submitting}
           submitError={submitError}
           onClose={() => setOpen(false)}

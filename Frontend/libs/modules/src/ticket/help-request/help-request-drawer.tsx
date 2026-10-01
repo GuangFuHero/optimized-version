@@ -12,13 +12,19 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Badge, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { LocationPicker } from '../../map/components/location-picker';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
 import { PhotoLinkEditor } from '../photos';
+import {
+  clearHelpRequestDraft,
+  readHelpRequestDraft,
+  sessionDraftStorage,
+  writeHelpRequestDraft,
+} from './help-request-draft';
 import {
   emptyHelpRequestForm,
   emptyNeed,
@@ -48,6 +54,8 @@ interface HelpRequestDrawerProps {
   /** A point picked on the main map to start from; without one the drawer asks the device (Q6). */
   seed: PickedPoint | null;
   isAuthenticated: boolean;
+  /** The signed-in account, whose draft the form is kept as in this tab (spec S10). */
+  userId: string | null;
   submitting: boolean;
   /** Said in the drawer, which stays open with everything as typed. */
   submitError: string | null;
@@ -60,12 +68,14 @@ interface HelpRequestDrawerProps {
 /**
  * 請求協助 (prototype `SiteTicketCreateDrawer`, `Design/前台/js/site/site-actions.jsx:1424-1765`):
  * a resident says where and what they need. Mounted afresh for each opening (`HelpRequestHost`
- * keys it), so a form starts empty and a point from the map is there before the first render.
+ * keys it), so a form starts from what was left unsent in this tab, or else empty with a point from
+ * the map there before the first render.
  */
 export function HelpRequestDrawer({
   open,
   seed,
   isAuthenticated,
+  userId,
   submitting,
   submitError,
   onClose,
@@ -86,6 +96,7 @@ export function HelpRequestDrawer({
     <HelpRequestFormDrawer
       open={open}
       seed={seed}
+      userId={userId}
       submitting={submitting}
       submitError={submitError}
       onClose={onClose}
@@ -192,17 +203,34 @@ function FieldNote({
 function HelpRequestFormDrawer({
   open,
   seed,
+  userId,
   submitting,
   submitError,
   onClose,
   onSubmit,
 }: Omit<HelpRequestDrawerProps, 'isAuthenticated' | 'onSignIn'>) {
-  const [form, setForm] = useState<HelpRequestForm>(() =>
-    emptyHelpRequestForm(seed),
+  // Read once, for this opening. A draft comes back whole, its point too, over one from the map:
+  // its title and address were written for its own point (spec S10).
+  const [draft] = useState(() =>
+    userId ? readHelpRequestDraft(sessionDraftStorage(), userId) : null,
   );
+  const [form, setForm] = useState<HelpRequestForm>(
+    () => draft ?? emptyHelpRequestForm(seed),
+  );
+  const [restored, setRestored] = useState(draft !== null);
+  // 清空重填 remounts the fields too: the small map looks for the device again, and what was typed
+  // into the photo box goes.
+  const [round, setRound] = useState(0);
   // Marked red only after a first try to send, not while it is still being filled in (Q12).
   const [touched, setTouched] = useState(false);
   const formRef = useRef<HTMLDivElement | null>(null);
+
+  // Not once closed: what is left of the form then was sent, or let go of on 取消.
+  useEffect(() => {
+    if (open && userId) {
+      writeHelpRequestDraft(sessionDraftStorage(), userId, form);
+    }
+  }, [form, open, userId]);
 
   const missing = findMissingFields(form);
   const missingKeys = new Set(missing.map((field) => field.key));
@@ -247,6 +275,23 @@ function HelpRequestFormDrawer({
     onSubmit(form);
   };
 
+  /** 取消 lets go of what was typed; ✕, the scrim and Escape only put it away for later (S10). */
+  const cancel = () => {
+    if (userId) {
+      clearHelpRequestDraft(sessionDraftStorage(), userId);
+    }
+
+    onClose();
+  };
+
+  /** As a fresh opening would be — at the map's point, if it was opened at one. */
+  const startOver = () => {
+    setForm(emptyHelpRequestForm(seed));
+    setRestored(false);
+    setTouched(false);
+    setRound((current) => current + 1);
+  };
+
   return (
     <SiteActionDrawer
       open={open}
@@ -255,7 +300,7 @@ function HelpRequestFormDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button variant="outlined" onClick={onClose} sx={{ flex: 1 }}>
+          <Button variant="outlined" onClick={cancel} sx={{ flex: 1 }}>
             取消
           </Button>
           <Button
@@ -269,7 +314,28 @@ function HelpRequestFormDrawer({
         </>
       }
     >
-      <Stack ref={formRef} spacing={3}>
+      <Stack key={round} ref={formRef} spacing={3}>
+        {/* Back after signing in again, the drawer opens already filled in: without a word it could
+            pass for one already sent. */}
+        {restored ? (
+          <Alert
+            severity="info"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={startOver}
+                // On a phone the words wrap instead: a button broken over two lines reads as two.
+                sx={{ whiteSpace: 'nowrap' }}
+              >
+                清空重填
+              </Button>
+            }
+          >
+            已填回你上次還沒送出的內容。
+          </Alert>
+        ) : null}
+
         {hasRescueNeed(form.needs) ? (
           <Alert severity="error">
             <AlertTitle>請先撥打 119</AlertTitle>
