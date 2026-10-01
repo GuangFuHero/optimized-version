@@ -18,11 +18,14 @@ import {
   verifyAsync,
   verifyContactAsync,
 } from '@rescue-frontend/data-access';
+import { isSessionExpired } from '@rescue-frontend/modules/session';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import {
   applyBackendAuthResponseCookies,
+  expireSessionResponse,
   resolveBackendAuthTokenAsync,
+  type ResolvedBackendAuth,
 } from '../../../../../lib/server-backend-auth';
 import { withClientIpAsync } from '../../../../../lib/client-ip';
 
@@ -57,25 +60,48 @@ async function parseJsonBodyAsync<T>(request: NextRequest) {
   return (await request.json()) as T;
 }
 
-async function requireAccessTokenAsync(request: NextRequest) {
-  const resolvedAuth = await resolveBackendAuthTokenAsync({
+function toRequestLike(request: NextRequest) {
+  return {
     cookies: {
       getAll: () => request.cookies.getAll(),
     },
     headers: request.headers,
-  });
+  };
+}
+
+/**
+ * The session a request sent its token with, kept for the error path: a 401 from the backend then
+ * means that session has ended elsewhere (note/session-expiry-spec.md).
+ */
+const sentAuthByRequest = new WeakMap<NextRequest, ResolvedBackendAuth>();
+
+async function requireAccessTokenAsync(request: NextRequest) {
+  const resolvedAuth = await resolveBackendAuthTokenAsync(
+    toRequestLike(request),
+  );
 
   if (!resolvedAuth.token?.accessToken) {
     const unauthorizedResponse = jsonResponse({ detail: '未登入或登入已失效' }, 401);
+    // A session whose refresh failed has ended; a guest's 401 ends nothing.
+    const expired = isSessionExpired({
+      refreshFailed: resolvedAuth.refreshFailed,
+      sentToken: false,
+      backendStatus: 401,
+    });
 
     return {
       accessToken: undefined,
-      response: applyBackendAuthResponseCookies(
-        unauthorizedResponse,
-        resolvedAuth,
-      ),
+      response: expired
+        ? expireSessionResponse(
+            unauthorizedResponse,
+            toRequestLike(request),
+            resolvedAuth,
+          )
+        : applyBackendAuthResponseCookies(unauthorizedResponse, resolvedAuth),
     };
   }
+
+  sentAuthByRequest.set(request, resolvedAuth);
 
   return {
     accessToken: resolvedAuth.token.accessToken,
@@ -305,6 +331,18 @@ async function handlePostAsync(
         );
     }
   } catch (error) {
-    return errorResponse(error);
+    const response = errorResponse(error);
+    const sentAuth = sentAuthByRequest.get(request);
+    const expired =
+      sentAuth !== undefined &&
+      isSessionExpired({
+        refreshFailed: false,
+        sentToken: true,
+        backendStatus: response.status,
+      });
+
+    return expired
+      ? expireSessionResponse(response, toRequestLike(request), sentAuth)
+      : response;
   }
 }

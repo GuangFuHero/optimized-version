@@ -3,6 +3,10 @@ import {
   resolveGraphqlUrl,
   type ITokenPair,
 } from '@rescue-frontend/data-access';
+import {
+  SESSION_EXPIRED,
+  SESSION_HEADER,
+} from '@rescue-frontend/modules/session';
 import { encode, getToken, type JWT } from 'next-auth/jwt';
 import { cookies, headers } from 'next/headers';
 import type { NextResponse } from 'next/server';
@@ -42,7 +46,7 @@ interface CookieOptions {
   maxAge?: number;
 }
 
-interface ResolvedBackendAuth {
+export interface ResolvedBackendAuth {
   token: BackendAuthToken | null;
   /** There was a session, its access token could not be refreshed, and it has been cleared. */
   refreshFailed: boolean;
@@ -277,7 +281,7 @@ export async function resolveBackendAuthTokenAsync(
  * 「登出所有裝置」, an admin, an identity removed — backend ADR-096). Cleared the way a failed
  * refresh clears it, so the next request goes as a guest.
  */
-export function expireBackendAuth(
+function expireBackendAuth(
   request: RequestLike,
   resolvedAuth: ResolvedBackendAuth,
 ): ResolvedBackendAuth {
@@ -309,6 +313,24 @@ export function applyBackendAuthResponseCookies(
   }
 
   return response;
+}
+
+/**
+ * Answers for a session that has ended (`isSessionExpired`): marks the response for the browser,
+ * which signs out and reloads as a guest, and clears the session. Status and body stay as they are
+ * (note/session-expiry-spec.md).
+ */
+export function expireSessionResponse(
+  response: NextResponse,
+  request: RequestLike,
+  resolvedAuth: ResolvedBackendAuth,
+) {
+  response.headers.set(SESSION_HEADER, SESSION_EXPIRED);
+
+  return applyBackendAuthResponseCookies(
+    response,
+    expireBackendAuth(request, resolvedAuth),
+  );
 }
 
 export async function getServerBackendAccessTokenAsync() {

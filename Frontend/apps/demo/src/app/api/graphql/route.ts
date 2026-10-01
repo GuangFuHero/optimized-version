@@ -1,15 +1,11 @@
 import { getBackendGraphqlUrl } from '../../../lib/server-backend-auth';
 import {
   applyBackendAuthResponseCookies,
-  expireBackendAuth,
+  expireSessionResponse,
   resolveBackendAuthTokenAsync,
 } from '../../../lib/server-backend-auth';
 import { SITE_REALM_HEADERS } from '../../../lib/site-realm';
-import {
-  isSessionExpired,
-  SESSION_EXPIRED,
-  SESSION_HEADER,
-} from '@rescue-frontend/modules/session';
+import { isSessionExpired } from '@rescue-frontend/modules/session';
 import { NextResponse, type NextRequest } from 'next/server';
 
 function buildForwardHeaders(request: NextRequest, accessToken?: string) {
@@ -65,24 +61,15 @@ async function forwardGraphqlRequestAsync(request: NextRequest) {
         response.headers.get('content-type') ?? 'application/json',
     },
   });
-  // Marked so the browser can sign out and reload as a guest; the status and body go through as
-  // they are (note/session-expiry-spec.md).
   const expired = isSessionExpired({
     refreshFailed: resolvedAuth.refreshFailed,
     sentToken: Boolean(resolvedAuth.token?.accessToken),
     backendStatus: response.status,
   });
 
-  if (!expired) {
-    return applyBackendAuthResponseCookies(proxiedResponse, resolvedAuth);
-  }
-
-  proxiedResponse.headers.set(SESSION_HEADER, SESSION_EXPIRED);
-
-  return applyBackendAuthResponseCookies(
-    proxiedResponse,
-    expireBackendAuth(requestLike, resolvedAuth),
-  );
+  return expired
+    ? expireSessionResponse(proxiedResponse, requestLike, resolvedAuth)
+    : applyBackendAuthResponseCookies(proxiedResponse, resolvedAuth);
 }
 
 export async function GET(request: NextRequest) {
