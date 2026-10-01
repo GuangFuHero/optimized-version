@@ -24,6 +24,7 @@ describe('roleRequestDrawerView', () => {
 
     expect(
       roleRequestDrawerView({
+        hasBackofficeIdentity: false,
         canApply: false,
         requests: [pending, row('rejected')],
       }),
@@ -37,7 +38,11 @@ describe('roleRequestDrawerView', () => {
     const rejected = row('rejected', { reviewNote: '請附上單位證明後再申請' });
 
     expect(
-      roleRequestDrawerView({ canApply: true, requests: [rejected] }),
+      roleRequestDrawerView({
+        hasBackofficeIdentity: false,
+        canApply: true,
+        requests: [rejected],
+      }),
     ).toEqual({
       kind: 'form',
       lastRejected: rejected,
@@ -48,6 +53,7 @@ describe('roleRequestDrawerView', () => {
   it('shows no card for a withdrawal, even with an older rejection behind it (Q10)', () => {
     expect(
       roleRequestDrawerView({
+        hasBackofficeIdentity: false,
         canApply: true,
         requests: [row('withdrawn'), row('rejected')],
       }),
@@ -55,7 +61,13 @@ describe('roleRequestDrawerView', () => {
   });
 
   it('shows a plain form to someone who never applied', () => {
-    expect(roleRequestDrawerView({ canApply: true, requests: [] })).toEqual({
+    expect(
+      roleRequestDrawerView({
+        hasBackofficeIdentity: false,
+        canApply: true,
+        requests: [],
+      }),
+    ).toEqual({
       kind: 'form',
       lastRejected: null,
       paused: false,
@@ -63,10 +75,50 @@ describe('roleRequestDrawerView', () => {
   });
 
   it('says applications are paused when nothing waits and applying is switched off', () => {
-    expect(roleRequestDrawerView({ canApply: false, requests: [] })).toEqual({
+    expect(
+      roleRequestDrawerView({
+        hasBackofficeIdentity: false,
+        canApply: false,
+        requests: [],
+      }),
+    ).toEqual({
       kind: 'form',
       lastRejected: null,
       paused: true,
     });
+  });
+
+  it('shows the approval and no form once the applicant holds a back-office identity', () => {
+    const approved = row('approved');
+
+    expect(
+      roleRequestDrawerView({
+        hasBackofficeIdentity: true,
+        canApply: false,
+        requests: [approved, row('rejected')],
+      }),
+    ).toEqual({ kind: 'granted', approved });
+  });
+
+  it('shows no approval card to someone given the identity without applying for it', () => {
+    expect(
+      roleRequestDrawerView({
+        hasBackofficeIdentity: true,
+        canApply: false,
+        requests: [row('withdrawn')],
+      }),
+    ).toEqual({ kind: 'granted', approved: null });
+  });
+
+  it('keeps a waiting application in view after an identity came another way, so it can be withdrawn', () => {
+    const pending = row('pending');
+
+    expect(
+      roleRequestDrawerView({
+        hasBackofficeIdentity: true,
+        canApply: false,
+        requests: [pending],
+      }),
+    ).toEqual({ kind: 'pending', pending });
   });
 });

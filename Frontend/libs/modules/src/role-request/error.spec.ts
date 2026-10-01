@@ -44,4 +44,22 @@ describe('roleRequestErrorMessage', () => {
       '送出失敗，請稍後再試一次。',
     );
   });
+
+  it("puts a withdrawal's refusals in the site's words", () => {
+    expect(
+      roleRequestErrorMessage(refusal('Role request is no longer pending')),
+    ).toBe('這筆申請已經不在審核中，不能撤回。');
+    expect(roleRequestErrorMessage(refusal('Role request not found'))).toBe(
+      '找不到這筆申請。',
+    );
+  });
+
+  it('falls back to what the caller was doing', () => {
+    expect(
+      roleRequestErrorMessage(
+        refusal('Unexpected error.'),
+        '撤回失敗，請稍後再試一次。',
+      ),
+    ).toBe('撤回失敗，請稍後再試一次。');
+  });
 });

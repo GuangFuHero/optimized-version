@@ -15,6 +15,7 @@ import { useMutation } from 'urql';
 
 import {
   SubmitRoleRequestDocument,
+  WithdrawRoleRequestDocument,
   type MyRoleRequestsQuery,
 } from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
@@ -32,6 +33,7 @@ import {
   type RoleRequestFormValues,
 } from './form';
 import { RoleRequestCard } from './role-request-card';
+import { WithdrawRoleRequestDialog } from './withdraw-role-request-dialog';
 
 const { color, radius } = designTokens;
 
@@ -46,14 +48,18 @@ interface RoleRequestDrawerProps {
   open: boolean;
   onClose: () => void;
   myRoleRequests: MyRoleRequestsQuery['myRoleRequests'] | null;
-  /** Read the applications again once one is sent: the drawer then shows it waiting. */
+  /**
+   * Read the applications again once one is sent or withdrawn: the drawer then shows it waiting,
+   * or the form again.
+   */
   onSubmitted: () => void;
 }
 
 /**
  * 申請成為後台人員 (prototype `RoleElevationDrawer`, `Design/前台/js/site/site-actions.jsx:157-265`):
- * the application waiting for review, or the form under the last rejection. What it shows is
- * `roleRequestDrawerView`'s decision; the form's rules are `validateRoleRequestForm`'s.
+ * the application waiting for review, which can be withdrawn (Q10), or the form under the last
+ * rejection. What it shows is `roleRequestDrawerView`'s decision; the form's rules are
+ * `validateRoleRequestForm`'s.
  */
 export function RoleRequestDrawer({
   open,
@@ -67,6 +73,14 @@ export function RoleRequestDrawer({
   const [{ fetching: submitting }, submitRoleRequest] = useMutation(
     SubmitRoleRequestDocument,
   );
+  // Open is kept apart from the application being withdrawn, so the dialog can tell whether that
+  // one still waits after a refusal's reload.
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawing, setWithdrawing] = useState<string | null>(null);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const [{ fetching: withdrawSubmitting }, withdrawRoleRequest] = useMutation(
+    WithdrawRoleRequestDocument,
+  );
   const roleLabelId = useId();
 
   // Each opening starts from an empty form, as the prototype does.
@@ -75,6 +89,8 @@ export function RoleRequestDrawer({
       setValues(EMPTY_FORM);
       setTouched(false);
       setSubmitError(null);
+      setWithdrawOpen(false);
+      setWithdrawError(null);
     }
   }, [open]);
 
@@ -83,18 +99,87 @@ export function RoleRequestDrawer({
   }
 
   const view = roleRequestDrawerView(myRoleRequests);
+  const stillWaiting =
+    view.kind === 'pending' && view.pending.uuid === withdrawing;
+
+  const requestWithdraw = (uuid: string) => {
+    setWithdrawError(null);
+    setWithdrawing(uuid);
+    setWithdrawOpen(true);
+  };
+
+  const confirmWithdraw = async () => {
+    if (!withdrawing) {
+      return;
+    }
+
+    setWithdrawError(null);
+    const result = await withdrawRoleRequest({ uuid: withdrawing });
+
+    if (result.error) {
+      setWithdrawError(
+        roleRequestErrorMessage(result.error, '撤回失敗，請稍後再試一次。'),
+      );
+    } else {
+      setWithdrawOpen(false);
+    }
+
+    // Either way: the drawer goes back to the form, or shows what the application became instead.
+    onSubmitted();
+  };
+
+  // Outside the views below: after a refusal the reload may switch the view under it, and the
+  // reason must stay in sight until the applicant closes it.
+  const withdrawDialog = (
+    <WithdrawRoleRequestDialog
+      open={withdrawOpen}
+      error={withdrawError}
+      submitting={withdrawSubmitting}
+      // Only after a refusal: a success reloads too, as the dialog fades out, and 取消 must not
+      // turn into 關閉 on the way.
+      settled={Boolean(withdrawError) && !stillWaiting}
+      onCancel={() => setWithdrawOpen(false)}
+      onConfirm={() => void confirmWithdraw()}
+    />
+  );
 
   if (view.kind === 'pending') {
     return (
-      <SiteActionDrawer open={open} title={TITLE} onClose={onClose}>
-        <Stack spacing={2}>
-          <Alert severity="info">
-            <AlertTitle>你已經有一筆申請在審核中</AlertTitle>
-            同一時間只能有一筆申請。要改申請別的身分，請等這一筆有結果。
-          </Alert>
-          <RoleRequestCard request={view.pending} />
-        </Stack>
-      </SiteActionDrawer>
+      <>
+        <SiteActionDrawer open={open} title={TITLE} onClose={onClose}>
+          <Stack spacing={2}>
+            <Alert severity="info">
+              <AlertTitle>你已經有一筆申請在審核中</AlertTitle>
+              同一時間只能有一筆申請。要改申請別的身分，請等這一筆有結果。
+            </Alert>
+            <RoleRequestCard request={view.pending} />
+            <Button
+              variant="outlined"
+              onClick={() => requestWithdraw(view.pending.uuid)}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              撤回申請
+            </Button>
+          </Stack>
+        </SiteActionDrawer>
+        {withdrawDialog}
+      </>
+    );
+  }
+
+  if (view.kind === 'granted') {
+    return (
+      <>
+        <SiteActionDrawer open={open} title={TITLE} onClose={onClose}>
+          <Stack spacing={2}>
+            <Alert severity="success">
+              你已經有後台身分，可以從「前往後台」進入。
+            </Alert>
+            {view.approved ? <RoleRequestCard request={view.approved} /> : null}
+          </Stack>
+        </SiteActionDrawer>
+        {withdrawDialog}
+      </>
     );
   }
 
@@ -123,7 +208,7 @@ export function RoleRequestDrawer({
     onSubmitted();
   };
 
-  return (
+  const formDrawer = (
     <SiteActionDrawer
       open={open}
       title={TITLE}
@@ -252,6 +337,13 @@ export function RoleRequestDrawer({
         {submitError ? <Alert severity="error">{submitError}</Alert> : null}
       </Stack>
     </SiteActionDrawer>
+  );
+
+  return (
+    <>
+      {formDrawer}
+      {withdrawDialog}
+    </>
   );
 }
 

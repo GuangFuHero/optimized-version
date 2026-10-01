@@ -1,7 +1,8 @@
 /**
- * What an applicant reads when an application is refused. The backend's messages are contract — only
- * a `ValueError` or an `HTTPException` reaches the client unmasked (backend `graphql/schema.py`) —
- * so this maps them word for word, as `ticket/needs/claim-error.ts` does for claims.
+ * What an applicant reads when sending or withdrawing an application is refused. The backend's
+ * messages are contract — only a `ValueError` or an `HTTPException` reaches the client unmasked
+ * (backend `graphql/schema.py`) — so this maps them word for word, as `ticket/needs/claim-error.ts`
+ * does for claims.
  */
 
 /** The parts of urql's `CombinedError` this reads. */
@@ -10,7 +11,7 @@ export interface RoleRequestError {
   graphQLErrors?: ReadonlyArray<{ message: string }>;
 }
 
-/** `role_request.submit`'s refusals (backend `services/role_request.py`), word for word. */
+/** `submit`'s and `withdraw`'s refusals (backend `services/role_request.py`), word for word. */
 const REFUSALS: Record<string, string> = {
   'You already have a pending request': '你已經有一筆申請在審核中。',
   'Only an account without a back-office identity can apply':
@@ -18,6 +19,10 @@ const REFUSALS: Record<string, string> = {
   'Reason is required': '請填寫申請理由。',
   'Reason must be at most 500 characters': '申請理由最多 500 字。',
   'Contact must be at most 100 characters': '聯絡方式最多 100 字。',
+  // Decided by a reviewer, or withdrawn in another tab, before this withdrawal arrived.
+  'Role request is no longer pending': '這筆申請已經不在審核中，不能撤回。',
+  // Not this account's: another tab signed in as someone else since the list was read.
+  'Role request not found': '找不到這筆申請。',
 };
 
 /** An `HTTPException` reads "<status>: <detail>"; the status is the part to trust. */
@@ -27,7 +32,11 @@ const HTTP_REFUSALS: Record<string, string> = {
   '403': '目前暫停開放申請。',
 };
 
-export function roleRequestErrorMessage(error: RoleRequestError): string {
+/** `fallback` names what failed when the backend's message is not one this knows. */
+export function roleRequestErrorMessage(
+  error: RoleRequestError,
+  fallback = '送出失敗，請稍後再試一次。',
+): string {
   if (error.networkError) {
     return '連線失敗，請確認網路後再試一次。';
   }
@@ -38,6 +47,6 @@ export function roleRequestErrorMessage(error: RoleRequestError): string {
   return (
     REFUSALS[message] ??
     (status ? HTTP_REFUSALS[status] : undefined) ??
-    '送出失敗，請稍後再試一次。'
+    fallback
   );
 }
