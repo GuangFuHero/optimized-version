@@ -1758,6 +1758,15 @@ export type SubmitRoleRequestMutation = {
   submitRoleRequest: { __typename?: 'RoleRequestType'; uuid: string };
 };
 
+export type WithdrawRoleRequestMutationVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type WithdrawRoleRequestMutation = {
+  __typename?: 'Mutation';
+  withdrawRoleRequest: { __typename?: 'RoleRequestType'; uuid: string };
+};
+
 export type TicketFieldsFragment = {
   __typename?: 'TicketType';
   uuid: string;
@@ -3239,6 +3248,54 @@ export const SubmitRoleRequestDocument = {
 } as unknown as DocumentNode<
   SubmitRoleRequestMutation,
   SubmitRoleRequestMutationVariables
+>;
+export const WithdrawRoleRequestDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'WithdrawRoleRequest' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'withdrawRoleRequest' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  WithdrawRoleRequestMutation,
+  WithdrawRoleRequestMutationVariables
 >;
 export const GetTicketsDocument = {
   kind: 'Document',

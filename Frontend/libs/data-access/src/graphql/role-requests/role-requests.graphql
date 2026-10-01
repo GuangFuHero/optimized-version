@@ -23,3 +23,10 @@ mutation SubmitRoleRequest($input: SubmitRoleRequestInput!) {
     uuid
   }
 }
+
+# Only the applicant's own, only while pending; the drawer then refetches MyRoleRequests too.
+mutation WithdrawRoleRequest($uuid: UUID!) {
+  withdrawRoleRequest(uuid: $uuid) {
+    uuid
+  }
+}
