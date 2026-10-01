@@ -4,6 +4,7 @@ import {
   type ITokenPair,
 } from '@rescue-frontend/data-access';
 import {
+  createSharedRefresh,
   SESSION_EXPIRED,
   SESSION_HEADER,
 } from '@rescue-frontend/modules/session';
@@ -84,6 +85,27 @@ function hasUsableAccessToken(token: BackendAuthToken) {
   );
 }
 
+// How long a refreshed pair is handed to requests that still carry the spent refresh token.
+const SHARED_REFRESH_REUSE_MS = 30_000;
+const SHARED_REFRESH_KEY = '__wanguardSharedBackendRefresh';
+
+type SharedRefresh = (refreshToken: string) => Promise<ITokenPair>;
+
+/**
+ * One refresh per refresh token for the GraphQL proxy, the BFF and next-auth alike: the backend
+ * revokes a session whose refresh token is used twice (`createSharedRefresh`). Kept on
+ * `globalThis` because each route handler may load its own copy of this module.
+ */
+const sharedRefresh: SharedRefresh = ((
+  globalThis as unknown as Record<string, SharedRefresh | undefined>
+)[SHARED_REFRESH_KEY] ??= createSharedRefresh(
+  // /auth/refresh is rate-limited per caller, and refreshes fire on their own schedule as access
+  // tokens age out — unattributed, they would all pile onto this container's allowance.
+  (refreshToken) =>
+    withClientIpAsync(() => refreshAsync({ refresh_token: refreshToken })),
+  { reuseForMs: SHARED_REFRESH_REUSE_MS },
+));
+
 export async function refreshBackendAuthTokenAsync(
   token: BackendAuthToken,
 ): Promise<BackendAuthToken> {
@@ -95,11 +117,7 @@ export async function refreshBackendAuthTokenAsync(
   }
 
   try {
-    // /auth/refresh is rate-limited per caller, and refreshes fire on their own schedule as access
-    // tokens age out — unattributed, they would all pile onto this container's allowance.
-    const refreshedTokenPair = await withClientIpAsync(() =>
-      refreshAsync({ refresh_token: token.refreshToken as string }),
-    );
+    const refreshedTokenPair = await sharedRefresh(token.refreshToken);
 
     return applyTokenPairToBackendAuthToken(token, refreshedTokenPair);
   } catch {
