@@ -7,6 +7,8 @@ import type { RescueMapTicketDetailOverrides } from '../../map/components/rescue
 import type { RescueMapMarkerItem } from '../../map/types';
 import { NeedClaimFooter } from '../needs';
 import { TicketActionsMenu } from '../needs/ticket-actions-menu';
+import { TicketPriorityBadge } from '../priority-badge';
+import { getTicketPriorityBadge } from '../status';
 import type { TicketDetailFooterActionItem } from '../ticket-detail';
 import { TaskMatchTicketDetailsPanel } from './task-match-ticket-details-panel';
 
@@ -40,6 +42,8 @@ export function createTaskMatchTicketDetailOverrides({
   isAuthenticated,
   onShare,
 }: TaskMatchTicketDetailOptions): RescueMapTicketDetailOverrides {
+  const priority = marker.ticketMeta?.priority;
+
   return {
     // The requester's ⋯ — 刪除整張單 (B's S7) — at the top, where the team put it (2026-09-28).
     headerActions: (
@@ -49,6 +53,11 @@ export function createTaskMatchTicketDetailOverrides({
         ticketCreatedBy={marker.ticketMeta?.createdBy}
       />
     ),
+    // How urgent, under the title as the prototype has it (2026-09-21). Below high there is no
+    // badge, and no row for one: the header stays as it was.
+    headerBadges: getTicketPriorityBadge(priority) ? (
+      <TicketPriorityBadge priority={priority} />
+    ) : undefined,
     // 詳情 only, as on a station. The prototype's 操作紀錄 has nothing behind it anyone may read: the
     // ticket's history needs ticket.view_history, kept from the site so as not to show who claimed
     // what (spec Q36).

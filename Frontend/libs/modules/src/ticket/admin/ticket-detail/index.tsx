@@ -103,6 +103,8 @@ export interface TicketDetailHeaderProps {
   closeAction?: TicketDetailCloseActionProps;
   /** Beside the close button, before it — the public site's ⋯ for a ticket's requester. */
   actions?: ReactNode;
+  /** Under the title — the public site's 最高優先／高優先. */
+  badges?: ReactNode;
 }
 
 export interface TicketDetailTabsProps {
@@ -125,6 +127,8 @@ export interface TicketDetailDrawerProps {
   closeAction?: TicketDetailCloseActionProps;
   /** See `TicketDetailHeaderProps.actions`. */
   headerActions?: ReactNode;
+  /** See `TicketDetailHeaderProps.badges`. */
+  headerBadges?: ReactNode;
   tabs?: readonly TicketDetailTabItem[];
   detailsPane?: TicketDetailDetailsPaneProps;
   content?: ReactNode;
@@ -250,13 +254,15 @@ export function TicketDetailHeader({
   summaryLine,
   closeAction = createDefaultCloseAction(),
   actions,
+  badges,
 }: TicketDetailHeaderProps) {
   return (
     <Stack
       sx={{
         borderBottom: `1px solid ${ticketDetailPalette.frameBorder}`,
         px: 2.5,
-        height: 75,
+        // A title that wraps leaves no room for badges in the fixed height: with them, it grows.
+        ...(badges ? { minHeight: 75, py: 1.5 } : { height: 75 }),
         justifyContent: 'center',
       }}
     >
@@ -307,6 +313,11 @@ export function TicketDetailHeader({
           </ButtonBase>
         </Stack>
       </Box>
+      {badges ? (
+        <Stack direction="row" sx={{ mt: 0.75, gap: 1, flexWrap: 'wrap' }}>
+          {badges}
+        </Stack>
+      ) : null}
       {summaryLine ? (
         <Typography
           sx={{
@@ -780,6 +791,7 @@ export function TicketDetailDrawer({
   summaryLine,
   closeAction = createDefaultCloseAction(),
   headerActions,
+  headerBadges,
   tabs = createDefaultTabs(),
   detailsPane = createDefaultDetailsPane(),
   content,
@@ -805,6 +817,7 @@ export function TicketDetailDrawer({
           summaryLine={summaryLine}
           closeAction={closeAction}
           actions={headerActions}
+          badges={headerBadges}
         />
       }
       tabs={<TicketDetailTabs items={tabs} variant={tabsVariant} />}

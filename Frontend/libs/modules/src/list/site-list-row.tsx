@@ -17,6 +17,7 @@ import {
 } from '../station/report';
 import { getStationTypeIcon } from '../station/type-options';
 import { NeedLine } from '../ticket/needs';
+import { TicketPriorityBadge } from '../ticket/priority-badge';
 import { getTicketStatusTone } from '../ticket/status';
 
 const { color, radius, shadow, spacing, motion } = designTokens;
@@ -122,6 +123,11 @@ export function SiteListRow({
                 >
                   {marker.title}
                 </Typography>
+                {/* How urgent, beside the title as the prototype has it (2026-09-21). */}
+                <TicketPriorityBadge
+                  priority={marker.ticketMeta?.priority}
+                  high="solid"
+                />
                 {/* 官方認定：只有官方站點掛 chip，非官方不掛。 */}
                 {isStation && marker.stationMeta?.isOfficial ? (
                   <Badge tone="secondary" variant="subtle">

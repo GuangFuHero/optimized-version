@@ -113,7 +113,8 @@ function formatPriorityLabel(value?: string | null) {
     case 'high':
       return '高';
     case 'critical':
-      return '緊急';
+      // As its badge reads (prototype 2026-09-21).
+      return '最高優先';
     default:
       return value;
   }

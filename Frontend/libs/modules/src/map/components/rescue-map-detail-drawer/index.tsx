@@ -24,6 +24,7 @@ export type RescueMapTicketDetailOverrides = Partial<
     TicketDetailDrawerProps,
     | 'summaryLine'
     | 'headerActions'
+    | 'headerBadges'
     | 'detailsPane'
     | 'content'
     | 'footerActions'

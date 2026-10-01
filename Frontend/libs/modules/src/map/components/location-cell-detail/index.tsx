@@ -10,6 +10,7 @@ import {
   Icons,
 } from '@rescue-frontend/ui';
 
+import { TicketPriorityBadge } from '../../../ticket/priority-badge';
 import { getTicketStatusTone } from '../../../ticket/status';
 import { describeLocationCellSpan } from '../../location-cells';
 import type { RescueMapLocationCell } from '../../types';
@@ -160,11 +161,7 @@ export function LocationCellDetail({
               >
                 {member.label}
               </Badge>
-              {member.ticketMeta?.priority === 'high' ? (
-                <Badge tone="danger" variant="subtle">
-                  高優先
-                </Badge>
-              ) : null}
+              <TicketPriorityBadge priority={member.ticketMeta?.priority} />
             </Stack>
             <Typography
               sx={{
