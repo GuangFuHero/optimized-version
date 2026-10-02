@@ -57,7 +57,7 @@ interface RoleRequestDrawerProps {
 
 /**
  * 申請成為後台人員 (prototype `RoleElevationDrawer`, `Design/前台/js/site/site-actions.jsx:157-265`):
- * the application waiting for review, which can be withdrawn (Q10), or the form under the last
+ * the application waiting for review, which can be withdrawn, or the form under the last
  * rejection. What it shows is `roleRequestDrawerView`'s decision; the form's rules are
  * `validateRoleRequestForm`'s.
  */

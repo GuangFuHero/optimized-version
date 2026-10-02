@@ -44,7 +44,7 @@ export async function endExpiredSession(): Promise<void> {
   markSessionExpired(sessionStorageOrNull());
 
   try {
-    // Clears next-auth's own view of the session and tells the other tabs (S4).
+    // Clears next-auth's own view of the session and tells the other tabs, which reload as guests.
     await signOut({ redirect: false });
   } finally {
     window.location.reload();

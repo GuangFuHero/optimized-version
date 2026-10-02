@@ -10,7 +10,8 @@ import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 const { color } = designTokens;
 
 /**
- * The back office until it is rebuilt (Spec/019 Q12): where 前往後台 leads. It says so and offers
+ * The back office until it is rebuilt — the old `/admin` pages are to be replaced wholesale, so none
+ * of them is shown meanwhile: where 前往後台 leads. It says so and offers
  * the way back. Laid out like the briefing placeholder (`ticket/needs/briefing.tsx`).
  */
 export function BackOfficePlaceholder() {

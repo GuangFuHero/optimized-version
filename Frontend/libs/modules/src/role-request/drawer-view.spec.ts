@@ -50,7 +50,7 @@ describe('roleRequestDrawerView', () => {
     });
   });
 
-  it('shows no card for a withdrawal, even with an older rejection behind it (Q10)', () => {
+  it('shows no card for a withdrawal, even with an older rejection behind it', () => {
     expect(
       roleRequestDrawerView({
         hasBackofficeIdentity: false,

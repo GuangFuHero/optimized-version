@@ -17,7 +17,8 @@ export type RoleRequestDrawerView =
  *   say, which a failed withdrawal's reload reveals. Nothing is left to apply for, and `canApply`
  *   being false then does not mean paused;
  * - otherwise the form, under the last application if it was rejected, so its reply is read before
- *   the same thing is sent again (AC-RE-107). A withdrawn one shows no card (Q10);
+ *   the same thing is sent again (AC-RE-107). A withdrawn one shows no card: the applicant took it
+ *   back themselves, so there is nothing for them to read;
  * - `paused` when a super admin has switched applying off (`canApply` with nothing waiting).
  */
 export function roleRequestDrawerView({
