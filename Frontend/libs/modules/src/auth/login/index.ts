@@ -2,6 +2,7 @@ export {
   AuthField,
   AuthFooterLinks,
   AuthIdentityToggle,
+  AuthPasswordField,
   AuthReturnHint,
   AuthShell,
   LoginForm,
@@ -15,6 +16,7 @@ export {
   type AuthIdentityType,
 } from './utils/identity-validation';
 export {
+  newPasswordFieldProblems,
   newPasswordProblem,
   newPasswordText,
   normalizePassword,

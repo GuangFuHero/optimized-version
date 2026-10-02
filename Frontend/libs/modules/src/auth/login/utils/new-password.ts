@@ -43,3 +43,22 @@ export function newPasswordProblem(
 
   return null;
 }
+
+/**
+ * The same rule, said under the field it is about: a short password under the first, a second entry
+ * that differs under the second (design `site-auth.jsx` `ResetView`).
+ */
+export function newPasswordFieldProblems(
+  password: string,
+  confirm: string,
+): { password?: string; confirm?: string } {
+  const problem = newPasswordProblem(password, confirm);
+
+  if (!problem) {
+    return {};
+  }
+
+  return problem === newPasswordText.mismatch
+    ? { confirm: problem }
+    : { password: problem };
+}

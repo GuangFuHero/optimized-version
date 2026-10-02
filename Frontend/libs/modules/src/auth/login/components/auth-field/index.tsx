@@ -8,11 +8,11 @@ import {
   Typography,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import type { HTMLInputTypeAttribute, ReactNode } from 'react';
+import type { HTMLAttributes, HTMLInputTypeAttribute, ReactNode } from 'react';
 
 import { getAuthColorScheme } from '../../theme/auth-theme';
 
-interface AuthFieldProps {
+export interface AuthFieldProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -20,6 +20,8 @@ interface AuthFieldProps {
   placeholder?: string;
   type?: HTMLInputTypeAttribute;
   autoComplete?: string;
+  /** The keyboard a phone opens: `numeric` for a code. */
+  inputMode?: HTMLAttributes<HTMLInputElement>['inputMode'];
   helperText?: ReactNode;
   disabled?: boolean;
   endAdornment?: ReactNode;
@@ -33,6 +35,7 @@ export function AuthField({
   placeholder,
   type = 'text',
   autoComplete,
+  inputMode,
   helperText,
   disabled,
   endAdornment,
@@ -62,6 +65,7 @@ export function AuthField({
           placeholder={placeholder}
           type={type}
           autoComplete={autoComplete}
+          inputProps={{ inputMode }}
           disabled={disabled}
           endAdornment={endAdornment}
           notched={false}

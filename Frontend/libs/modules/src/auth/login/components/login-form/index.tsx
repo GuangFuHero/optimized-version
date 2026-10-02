@@ -1,10 +1,6 @@
 'use client';
 
-import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
-import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
 import { Alert, Box, Button, Link, Stack, Typography } from '@mui/material';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
 import { useTheme } from '@mui/material/styles';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -22,6 +18,7 @@ import {
 import { newPasswordProblem, newPasswordText } from '../../utils/new-password';
 import { AuthField } from '../auth-field';
 import { AuthIdentityToggle } from '../auth-identity-toggle';
+import { AuthPasswordField } from '../auth-password-field';
 import { AuthProviderButton } from '../auth-provider-button';
 
 const { color, radius, shadow } = designTokens;
@@ -79,8 +76,6 @@ const loginFormText = {
   displayNameRequiredMessage: '請輸入顯示名稱',
   passwordRequiredMessage: '請輸入密碼',
   dividerLabel: '或',
-  hidePasswordLabel: '隱藏密碼',
-  showPasswordLabel: '顯示密碼',
   actionFailedMessage: '操作失敗，請稍後再試',
   loginFailedMessage: '登入失敗，請確認帳號或密碼',
   registerFailedMessage: '註冊失敗，請稍後再試',
@@ -114,7 +109,6 @@ export function LoginForm({
   successMessage,
 }: LoginFormProps) {
   const authPalette = getAuthColorScheme(useTheme());
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | undefined>();
   const [submissionSuccess, setSubmissionSuccess] = useState<
     string | undefined
@@ -315,7 +309,7 @@ export function LoginForm({
           },
         }}
         render={({ field, fieldState }) => (
-          <AuthField
+          <AuthPasswordField
             label={loginFormText.passwordLabel}
             value={field.value ?? ''}
             onChange={field.onChange}
@@ -324,35 +318,11 @@ export function LoginForm({
                 ? newPasswordText.placeholder
                 : loginFormText.passwordPlaceholder
             }
-            type={isPasswordVisible ? 'text' : 'password'}
             autoComplete={
               mode === 'register' ? 'new-password' : 'current-password'
             }
             disabled={isSubmitting}
             errorText={fieldState.error?.message}
-            endAdornment={
-              <InputAdornment position="end">
-                <IconButton
-                  type="button"
-                  edge="end"
-                  disabled={isSubmitting}
-                  onClick={() => setIsPasswordVisible((current) => !current)}
-                  aria-label={
-                    isPasswordVisible
-                      ? loginFormText.hidePasswordLabel
-                      : loginFormText.showPasswordLabel
-                  }
-                  sx={{ p: 0.5 }}
-                >
-                  {/* What a press does: the open eye shows the password, the crossed one hides it. */}
-                  {isPasswordVisible ? (
-                    <VisibilityOffRoundedIcon />
-                  ) : (
-                    <VisibilityRoundedIcon />
-                  )}
-                </IconButton>
-              </InputAdornment>
-            }
           />
         )}
       />

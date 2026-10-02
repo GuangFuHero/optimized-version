@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  newPasswordFieldProblems,
   newPasswordProblem,
   newPasswordText,
   normalizePassword,
@@ -49,5 +50,23 @@ describe('newPasswordProblem', () => {
       mismatch: '兩次輸入的密碼不一樣',
       placeholder: '至少 8 個字元',
     });
+  });
+});
+
+describe('newPasswordFieldProblems', () => {
+  it('puts a short password under the password field', () => {
+    expect(newPasswordFieldProblems('abc1234', 'abc1234')).toEqual({
+      password: newPasswordText.tooShort,
+    });
+  });
+
+  it('puts a second entry that differs under the second field', () => {
+    expect(newPasswordFieldProblems('abcd1234', 'abcd1235')).toEqual({
+      confirm: newPasswordText.mismatch,
+    });
+  });
+
+  it('marks nothing when both are right', () => {
+    expect(newPasswordFieldProblems('abcd1234', ' abcd1234 ')).toEqual({});
   });
 });
