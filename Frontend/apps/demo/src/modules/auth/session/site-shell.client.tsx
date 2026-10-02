@@ -8,15 +8,17 @@ import {
   SessionExpiredNotice,
   SiteShell,
 } from '@rescue-frontend/modules';
-import { shouldReloadForSignOut } from '@rescue-frontend/modules/session';
-import { usePathname, useRouter } from 'next/navigation';
+import {
+  reloginHref,
+  shouldReloadForSignOut,
+} from '@rescue-frontend/modules/session';
+import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 
 import { logoutAsync } from '../api/client';
 
 export function PortalSiteShell({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession();
-  const pathname = usePathname();
   const router = useRouter();
   const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
   const previousStatus = useRef(status);
@@ -56,13 +58,10 @@ export function PortalSiteShell({ children }: { children: ReactNode }) {
     })();
   };
 
+  // From `window.location`, not `usePathname()`: the map rewrites its path in place
+  // (`replaceState`), and the router's pathname stays a bare `/map`.
   const handleSignIn = () => {
-    const currentUrl =
-      typeof window === 'undefined'
-        ? pathname
-        : `${pathname}${window.location.search}`;
-
-    router.push(`/login?callbackUrl=${encodeURIComponent(currentUrl)}`);
+    router.push(reloginHref(window.location));
   };
 
   return (
