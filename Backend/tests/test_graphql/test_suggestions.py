@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 
-from app.models.station_property import StationProperty
+from app.models.station_property import StationProperty, StationUpdateSuggestion
 from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
 
 # ---------------------------------------------------------------------------
@@ -48,12 +48,6 @@ query($uuid: UUID!) {
         suggestedFields { targetUuid fieldName proposedValues suggestionCount comments }
         suggestionMerges { uuid status }
     }
-}
-"""
-
-LIST_SUGGESTIONS = """
-query($status: String) {
-    stationSuggestions(status: $status) { uuid status fieldName }
 }
 """
 
@@ -250,10 +244,16 @@ async def test_merge_decides_every_suggestion_on_a_field_and_leaves_others_pendi
 
     await _merge(client, auditor_token, sample_station, [_decide(sample_station, "name", approve=False)])
 
-    rows = (await _gql(client, auditor_token, LIST_SUGGESTIONS, {"status": "rejected"}))["data"]
     view = (await _gql(client, auditor_token, REVIEW_VIEW, {"uuid": sample_station}))["data"]["station"]
     assert view["pendingSuggestedFields"] == ["op_hour"]
-    assert sum(1 for r in rows["stationSuggestions"] if r["fieldName"] == "name") >= 2
+    async with test_db() as db:
+        statuses = (await db.execute(
+            select(StationUpdateSuggestion.status).where(
+                StationUpdateSuggestion.target_uuid == sample_station,
+                StationUpdateSuggestion.field_name == "name",
+            )
+        )).scalars().all()
+    assert statuses == ["rejected", "rejected"]
 
 
 @pytest.mark.asyncio
@@ -351,6 +351,24 @@ async def test_revoke_skips_a_property_deleted_since_the_merge(
 
 
 @pytest.mark.asyncio
+async def test_revoke_refused_for_a_merge_that_only_rejected(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """A merge that changed nothing has nothing to undo, so it stays applied."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, user_token, "station", sample_station, "op_hour", "24h")
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "op_hour", approve=False),
+    ]))["data"]["mergeStationSuggestions"]
+
+    body = await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
+    assert "Nothing to revoke" in body["errors"][0]["message"]
+    view = (await _gql(client, auditor_token, REVIEW_VIEW, {"uuid": sample_station}))["data"]["station"]
+    assert view["suggestionMerges"][0]["status"] == "applied"
+
+
+@pytest.mark.asyncio
 async def test_revoke_denied_for_reviewer_without_station_revoke(
     client, coordinator_auth, login_user_auth, sample_station
 ):
@@ -419,6 +437,15 @@ async def test_resubmitting_a_field_updates_your_own_suggestion(
 
     view = (await _gql(client, auditor_token, REVIEW_VIEW, {"uuid": sample_station}))["data"]["station"]
     assert view["suggestedFields"][0]["proposedValues"] == ["A2"]
+
+
+@pytest.mark.asyncio
+async def test_many_submits_in_a_row_keep_working(client, redis, login_user_auth, sample_station):
+    """The upsert keeps matching its partial index after Postgres switches to a generic plan."""
+    tokens = [login_user_auth[1], (await _create_user_with_role(redis, "Login User"))[1]]
+    for i in range(8):
+        body = await _create(client, tokens[i % 2], "station", sample_station, "name", f"N{i}")
+        assert "errors" not in body, (i, body)
 
 
 @pytest.mark.asyncio
@@ -501,20 +528,3 @@ async def test_stations_filter_has_pending_suggestions(
 
     listed = (await _gql(client, None, queue, {}))["data"]["stations"]["items"]
     assert sample_station in {s["uuid"] for s in listed}
-
-
-@pytest.mark.asyncio
-async def test_list_suggestions_filters_by_status(
-    client, coordinator_auth, login_user_auth, sample_station
-):
-    """The review queue lists pending suggestions for an admin."""
-    _, user_token = login_user_auth
-    _, admin_token = coordinator_auth
-    await _create(client, user_token, "station", sample_station, "name", "Queued name")
-
-    resp = await client.post("/graphql", json={
-        "query": LIST_SUGGESTIONS, "variables": {"status": "pending"},
-    }, headers=auth_header(admin_token))
-    items = resp.json()["data"]["stationSuggestions"]
-    assert len(items) >= 1
-    assert all(s["status"] == "pending" for s in items)

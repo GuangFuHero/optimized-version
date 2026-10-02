@@ -306,6 +306,8 @@
 
 > **部分被 ADR-285 取代**：站點不再由地理決定管轄，改為手動指派給單一 team（`stations.team_uuid`）；ticket/task 仍走 zone。
 
+> **部分被 ADR-286 取代**：`data_auditor` 不再是純唯讀，持有 `station.review` 與 `station.revoke`（`all`）；其餘寫入能力照舊沒有。
+
 > **狀態:ACCEPTED 並已落地驗證（2026-07-09,`pytest` 367 passed、`ruff` 乾淨)。** 本條整合 2026-07-08/09 對照 `Docs/rbac-permissions-design.md`(v1.1)+ `Dashboard.md` §3~§7 後的修正,並取代 ADR-048 的 scope 部分。
 >
 > **落地內容**:`permissions.py` 移除 `DASHBOARD_*`;`rbac_scopes.py` 移除 `Scope.GOV`/`NGO`(留 none/own/team/zone/all,team 僅團隊管理用);`models/geo.py` + migration `2f9a1c7b6e04` drop `base_geometries.team_uuid`;`services/{station,ticket,closure_area}.py` 建立時不再寫 team_uuid;`seed_rbac.py` 角色重寫成 super_admin/data_auditor/user(平台)+ admin/member(團隊),廢除 gov_manager/ngo_manager;新增 `graphql/masking.py`(移植 PR #23 遮罩)+ `tickets/types.py` PII resolver 從 null 改遮罩(zone 判定改吃 geometry);測試:移除 `test_team_scope.py`(team-geo 已退場)、`test_rbac_scopes.py`/`test_authz.py` 的 team/gov/ngo 案例改 zone、`test_query_rbac.py` PII 斷言改遮罩、新增 `test_masking.py`。
@@ -1220,6 +1222,42 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
   `test_team_roles_never_get_team_scope_on_a_geo_resource` 是釘住 ADR-128 的守門測試，會直接擋住本條，要改成
   「站點例外」而不是刪掉。
 - 文件與註解要同步：`scripts/seed_rbac.py:153-155` 的「`zone`, never `team`」、`RBAC_RESOURCE_ROLE_MATRIX.md`。
+
+---
+
+#### ADR-286 `data_auditor` 可審核與撤銷站點修改建議（推翻 ADR-049「稽核員只讀」）
+
+> **狀態：ACCEPTED（2026-10-01）。** PR #57 review（jujuyuzu）指出 seed 已發出這兩個能力、但與 ADR-049 矛盾，使用者決定保留並補記本條。
+
+**白話**：稽核員仍然不能直接改站點，但可以決定群眾的修改建議，也可以把任何一次決定撤回。
+
+**Context**：ADR-049 拿掉 `data_auditor` 的 `station.review`，理由是「稽核員只讀」。修改建議改成合併制之後
+（一次決定某欄位的全部待審建議、寫入審核者的值、記下前後值），需要一個平台層、不受 team 指派限制的角色：
+
+- 決定建議：未指派的站點與民眾建的站，原本只有 super_admin 與 gov 能審（ADR-285 決策 7）。
+- 撤銷合併：審錯了要能還原。撤銷是監督動作，不該只有 super_admin 做得到。
+
+**Decision**：
+
+1. `data_auditor` 持有 `station.review=all` 與新的 `station.revoke=all`。`station.revoke` 只發給 `data_auditor`
+   與 super_admin；team 角色只能審、不能撤。
+2. 其餘寫入能力照舊沒有：不能新增、編輯、刪除站點，不能提出建議（無 `station.contribute`），不能匯入。
+3. 合併的寫入範圍受限：只能寫「有待審建議」的欄位（其他欄位是 `station.edit` 的事），每次合併在
+   `station_suggestion_merges` 記下前後值，兩張表都有 audit trigger。
+
+**取代關係**：
+
+- ADR-049「`data_auditor` 拿掉 `station.review`」與 seed 角色矩陣中「`data_auditor`：唯讀……**無** review」。
+- ADR-097（Spec 010）的例外理由「`data_auditor` 不持有寫入能力」改為「不持有市民能力」；例外本身不變，
+  因為 `data_auditor` 仍沒有 `station.contribute` 等市民能力。
+
+**後果**：
+
+➖ 審核者可以把有待審建議的欄位改成任何值（合併寫入的是審核者自己的值，不必是建議值）。這是合併制的設計，
+   對每個審核者都一樣；稽核員因 `all` 而影響範圍最大。由前後值紀錄、audit log 與撤銷兜底。
+◾ 不另加「審核者不得決定自己提出建議的欄位」：`data_auditor` 沒有 `station.contribute`，提不出建議，
+   這條只會限制到 team admin 與 super_admin，暫不需要。
+◾ Spec 015「`data_auditor` 不能匯入」照舊。
 
 ---
 

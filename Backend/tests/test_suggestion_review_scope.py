@@ -1,13 +1,13 @@
-"""Scope checks for merging station_property suggestions (ADR-285).
+"""Scope checks for merging and reading station suggestions as a `station.review=team` reviewer.
 
-A merge is scope-checked against the station, so a `station.review=team` reviewer reaches
-property suggestions on stations assigned to its team and gets a 404 on any other team's.
-Service-level (not GraphQL) so it uses the root conftest, not the test_graphql one.
+Both are checked against the station, so the reviewer reaches its own team's stations only.
 """
 
 import os
 
 os.environ["ENV"] = "testing"
+
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -16,6 +16,7 @@ from shapely.geometry import Point
 from sqlalchemy import select
 
 from app.core.permissions import Perm
+from app.graphql.geo.types import _can_review_suggestions
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
@@ -131,3 +132,19 @@ async def test_team_reviewer_is_404_for_property_suggestion_on_another_teams_sta
         )
 
     assert exc.value.status_code == 404
+
+
+@pytest.mark.parametrize("on_own_station", [True, False])
+@pytest.mark.asyncio
+async def test_team_reviewer_sees_pooled_suggestions_only_where_it_can_merge(db, on_own_station):
+    """The pooled view is scope-checked like a merge, so other teams' suggestions stay hidden."""
+    reviewer, prop, _suggestion = await _team_reviewer_with_property_suggestion(
+        db, on_own_station=on_own_station
+    )
+    station = await db.get(Station, prop.station_uuid)
+    view = SimpleNamespace(
+        created_by=station.created_by, _team_uuid_raw=station.team_uuid, _geometry_raw=station.geometry
+    )
+    info = SimpleNamespace(context={"user": reviewer, "db": db, "_rbac_cache": {}})
+
+    assert await _can_review_suggestions(info, view) is on_own_station

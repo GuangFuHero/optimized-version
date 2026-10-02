@@ -9,7 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, literal_column, select, update
+from sqlalchemy import func, literal_column, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,7 +85,9 @@ async def create_station_suggestion(
             )
             .on_conflict_do_update(
                 index_elements=["created_by", "target_uuid", "field_name"],
-                index_where=StationUpdateSuggestion.status == "pending",
+                # A bound 'pending' stops matching the partial index once Postgres caches a generic
+                # plan, so the predicate is literal SQL.
+                index_where=text("status = 'pending'"),
                 set_={"new_value": value, "comment": comment, "updated_at": func.now()},
             )
             .returning(StationUpdateSuggestion.uuid, literal_column("xmax = 0"))
@@ -202,6 +204,8 @@ async def revoke_station_suggestion_merge(
     await db.refresh(merge)
     if merge.status != "applied":
         raise ValueError(f"Merge already {merge.status}")
+    if not merge.changes:
+        raise ValueError("Nothing to revoke: this merge applied no changes")
     actor_uid = str(actor.uuid)
 
     # A property deleted since the merge has nothing left to restore, so only live targets revert.
@@ -312,8 +316,8 @@ async def _revoke_target(db: AsyncSession, station: Station, change: dict):
 
 def _check_length(**fields: str | None) -> None:
     """Refuse free text over _MAX_TEXT characters."""
-    for name, text in fields.items():
-        if text is not None and len(text) > _MAX_TEXT:
+    for name, value in fields.items():
+        if value is not None and len(value) > _MAX_TEXT:
             raise ValueError(f"'{name}' must be at most {_MAX_TEXT} characters")
 
 

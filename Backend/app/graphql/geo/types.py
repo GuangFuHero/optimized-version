@@ -26,15 +26,25 @@ from app.graphql.tickets.types import PhotoType
 from app.graphql.work_zone.types import AssignedTeamType
 
 
-async def _can_review_suggestions(info: strawberry.types.Info) -> bool:
-    """Whether the caller holds station.review at any scope. Never raises: a denial reads as []."""
+async def _can_review_suggestions(info: strawberry.types.Info, station: "StationType") -> bool:
+    """Whether the caller holds station.review over this station, as a merge requires.
+
+    Never raises: a denial reads as [].
+    """
     user = info.context["user"]
     if user is None:
         return False
     scope = await resolve_scope(
         user, Perm.STATION_REVIEW, info.context["db"], cache=info.context["_rbac_cache"]
     )
-    return scope != Scope.NONE
+    if scope == Scope.NONE:
+        return False
+    if scope == Scope.ALL:
+        return True
+    resource = SimpleNamespace(
+        created_by=station.created_by, team_uuid=station._team_uuid_raw, geometry=station._geometry_raw
+    )
+    return await in_scope(scope, actor=user, resource=resource, db=info.context["db"])
 
 
 async def _pending_suggested_fields(info: strawberry.types.Info, station_uuid, target_uuid) -> list[str]:
@@ -228,11 +238,11 @@ class StationType:
 
     @strawberry.field(
         description="Pending suggestions on this station and its properties, pooled per field; "
-        "empty without station.review"
+        "empty without station.review over this station"
     )
     async def suggested_fields(self, info: strawberry.types.Info) -> list[SuggestedFieldType]:
         """Group every pending suggestion by field, without saying who made which."""
-        if not await _can_review_suggestions(info):
+        if not await _can_review_suggestions(info, self):
             return []
         rows = await info.context["loaders"]["pending_suggestions_by_station"].load(str(self.uuid))
         grouped: dict[tuple[str, str], list] = {}
@@ -250,11 +260,12 @@ class StationType:
         ]
 
     @strawberry.field(
-        description="Merges applied to this station, newest first; empty without station.review"
+        description="Merges applied to this station, newest first; empty without station.review "
+        "over this station"
     )
     async def suggestion_merges(self, info: strawberry.types.Info) -> list[StationSuggestionMergeType]:
         """Resolve the merge history, which is what a revoke targets."""
-        if not await _can_review_suggestions(info):
+        if not await _can_review_suggestions(info, self):
             return []
         return await info.context["loaders"]["suggestion_merges_by_station"].load(str(self.uuid))
 

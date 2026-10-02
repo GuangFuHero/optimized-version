@@ -88,10 +88,12 @@ ROLES_DATA = [
             # and the raw audit payload.
             Perm.TICKET_VIEW_HISTORY: "all",
             Perm.STATION_VIEW_HISTORY: "all",
-            # ADR-111: oversight reads the whole platform, so its export reaches everything.
-            # No import counterpart — this role has no write path anywhere else either.
+            # Oversight reads the whole platform, so its export reaches everything. It gets no
+            # import, because its only writes are deciding and undoing station suggestions.
             Perm.STATION_EXPORT: "all",
             Perm.TICKET_EXPORT: "all",
+            # A reversal of the read-only auditor (ADR-286): a merge can only write a field
+            # someone suggested, and every merge records its before values so it can be undone.
             Perm.STATION_REVIEW: "all",
             Perm.STATION_REVOKE: "all",
         },
