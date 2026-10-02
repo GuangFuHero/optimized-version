@@ -19,7 +19,7 @@ describe('formatRequestProgress', () => {
     expect(formatRequestProgress('in_progress', [open])).toBe('1 件事還缺人');
   });
 
-  it('counts the needs that have their people apart from those still short (Q16)', () => {
+  it('counts the needs that have their people apart from those still short', () => {
     expect(formatRequestProgress('in_progress', [full, open, open])).toBe(
       '3 件事：1 件已滿、2 件還缺人',
     );
@@ -77,7 +77,7 @@ describe('readMyRequests', () => {
     ]);
   });
 
-  it('keeps the order the server sends — newest first (Q17)', () => {
+  it('keeps the order the server sends — newest first', () => {
     const rows = [row({ uuid: 'newer' }), row({ uuid: 'older' })];
 
     expect(readMyRequests(rows).map((request) => request.ticketUuid)).toEqual([

@@ -50,7 +50,7 @@ const DEFAULT_MAP_METADATA = {
 };
 const DEFAULT_CREATE_CENTER: [number, number] = [23.884, 121.0];
 
-// 「＋」 adds stations only: a request for help is filed through 請求協助, from the shell (spec Q4).
+// 「＋」 adds stations only: a request for help is filed through 請求協助, from the shell.
 const CREATE_ACCENT = {
   solid: color.brand.secondary.default,
   soft: color.bg.secondary.subtle,
@@ -291,7 +291,7 @@ function SiteMapViewportDataLayer({
     () => mergeRouteStateWithViewport(baseRouteState, viewportState),
     [baseRouteState, viewportState],
   );
-  // A blank spot tapped on the map, for 請求協助 there (spec S3). Not while 「＋」 is open: its pin
+  // A blank spot tapped on the map, for 請求協助 there. Not while 「＋」 is open: its pin
   // in the middle is then the point being placed, and a second one would confuse the two.
   const [draftPoint, setDraftPoint] = useState<RescueMapDraftPoint | null>(
     null,
@@ -341,7 +341,7 @@ function SiteMapViewportDataLayer({
     [draftPoint],
   );
 
-  // Tickets found gone since — deleted (B's S7). The live data drops them itself; one made here is
+  // Tickets found gone since — deleted. The live data drops them itself; one made here is
   // dropped here, or it would stand in for the fetched one it was waiting for.
   const [goneTicketIds, setGoneTicketIds] = useState<readonly string[]>([]);
 
@@ -436,7 +436,7 @@ function SiteMapViewportDataLayer({
 
   // A claim, a release or a stop can change a ticket's status, which its pin shows; the next fetch
   // would bring it, but the person who did it should not have to wait for one. A ticket found gone
-  // (null — deleted, B's S7) loses its pin, and with it the selection, so its drawer shuts.
+  // (null — deleted) loses its pin, and with it the selection, so its drawer shuts.
   const showReloadedTicketStatus = useCallback(
     (ticketUuid: string, reloaded: ReloadedTicket | null) => {
       if (!reloaded) {
@@ -459,7 +459,7 @@ function SiteMapViewportDataLayer({
       <>
         <SiteMapControls controller={controller} />
         <SiteMapCenterPin open={createModeActive} />
-        {/* A phone's 請求協助 (spec S2); set aside while 「＋」 is open, whose 新增站點 reaches
+        {/* A phone's 請求協助; set aside while 「＋」 is open, whose 新增站點 reaches
             the middle of a 390px screen. */}
         {createModeActive ? null : <MapRequestHelpButton />}
         {isAuthenticated ? (
@@ -642,7 +642,7 @@ function SiteMapViewContent() {
           setStationDrawerOpen(false);
           resetCreateFlow();
           // Made from tickets too (「＋」 is there on both), where a station does not show and would
-          // look lost: turn to stations, with no filter to hide it, and open it (spec S2).
+          // look lost: turn to stations, with no filter to hide it, and open it.
           mapRoute.replace({
             ...mapRoute.state,
             dataType: 'station',

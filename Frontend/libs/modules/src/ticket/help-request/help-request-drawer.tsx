@@ -51,10 +51,10 @@ const MAX_LENGTH = {
 
 interface HelpRequestDrawerProps {
   open: boolean;
-  /** A point picked on the main map to start from; without one the drawer asks the device (Q6). */
+  /** A point picked on the main map to start from; without one the drawer asks the device. */
   seed: PickedPoint | null;
   isAuthenticated: boolean;
-  /** The signed-in account, whose draft the form is kept as in this tab (spec S10). */
+  /** The signed-in account, whose draft the form is kept as in this tab. */
   userId: string | null;
   submitting: boolean;
   /** Said in the drawer, which stays open with everything as typed. */
@@ -210,7 +210,7 @@ function HelpRequestFormDrawer({
   onSubmit,
 }: Omit<HelpRequestDrawerProps, 'isAuthenticated' | 'onSignIn'>) {
   // Read once, for this opening. A draft comes back whole, its point too, over one from the map:
-  // its title and address were written for its own point (spec S10).
+  // its title and address were written for its own point.
   const [draft] = useState(() =>
     userId ? readHelpRequestDraft(sessionDraftStorage(), userId) : null,
   );
@@ -221,7 +221,7 @@ function HelpRequestFormDrawer({
   // 清空重填 remounts the fields too: the small map looks for the device again, and what was typed
   // into the photo box goes.
   const [round, setRound] = useState(0);
-  // Marked red only after a first try to send, not while it is still being filled in (Q12).
+  // Marked red only after a first try to send, not while it is still being filled in.
   const [touched, setTouched] = useState(false);
   const formRef = useRef<HTMLDivElement | null>(null);
 
@@ -275,7 +275,7 @@ function HelpRequestFormDrawer({
     onSubmit(form);
   };
 
-  /** 取消 lets go of what was typed; ✕, the scrim and Escape only put it away for later (S10). */
+  /** 取消 lets go of what was typed; ✕, the scrim and Escape only put it away for later. */
   const cancel = () => {
     if (userId) {
       clearHelpRequestDraft(sessionDraftStorage(), userId);
@@ -540,7 +540,7 @@ function HelpRequestFormDrawer({
 
         {/* Last, after the notes and for the same reason: extra, not the frame. First, and someone
             with no photo yet stops here before saying what they need (prototype
-            site-actions.jsx:1751-1763; spec S8). */}
+            site-actions.jsx:1751-1763). */}
         <PhotoLinkEditor
           value={form.photoUrls}
           onChange={set('photoUrls')}

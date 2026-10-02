@@ -6,7 +6,7 @@ import { useNeedClaim } from './need-claim-provider';
 
 interface TicketActionsTicket {
   ticketUuid: string;
-  /** The ticket's `createdBy`: only its requester gets anything (spec 2026-09-28). */
+  /** The ticket's `createdBy`: only its requester gets anything. */
   ticketCreatedBy?: string | null;
 }
 
@@ -24,7 +24,7 @@ export function useTicketActions({
     return [];
   }
 
-  // Any ticket it still shows can go, a completed one included (B's S7).
+  // Any ticket it still shows can go, a completed one included.
   return [
     {
       label: '刪除整張單',
@@ -35,7 +35,7 @@ export function useTicketActions({
 }
 
 /**
- * The ⋯ at the top of a ticket's drawer, beside its close button (team decision 2026-09-28). The
+ * The ⋯ at the top of a ticket's drawer, beside its close button, where the team put it. The
  * need rows' menu, given the ticket's title for its accessible name; nothing at all for anyone but
  * the requester.
  */

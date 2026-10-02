@@ -53,7 +53,7 @@ interface DeleteTicketDialogProps {
 }
 
 /**
- * The whole-ticket delete confirmation's state, and what its buttons do (B's S7). Hosted by the
+ * The whole-ticket delete confirmation's state, and what its buttons do. Hosted by the
  * page's `NeedClaimProvider`, next to deleting one need, so the reload after it reaches every view
  * of the ticket — which, finding it gone, takes it off the list or the map and shuts its drawer.
  */
@@ -137,8 +137,8 @@ export function useDeleteTicket(
 }
 
 /**
- * One look before the requester deletes their whole ticket (B's S7; team decision 2026-09-28:
- * its needs go with it and the people on them hear). Same shape as deleting one need, in the same
+ * One look before the requester deletes their whole ticket (as the team decided, its needs go
+ * with it and the people on them hear). Same shape as deleting one need, in the same
  * red; no design of its own exists — the prototype's 刪除媒合單 kept the ticket listed.
  *
  * It reads the ticket itself, like the other confirmations, so a refusal's reload lands here too.

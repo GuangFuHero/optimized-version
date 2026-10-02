@@ -1,7 +1,7 @@
 /**
- * 「再加一件需要的幫忙」: a requester adding one more need to their request, from its detail drawer
- * (spec S4; Q14, Q20 and Q24 as revised 2026-09-28). The backend's `createTicketTask` holds the
- * same rule — ticket.edit on the ticket — this only decides who is offered it.
+ * 「再加一件需要的幫忙」: a requester adding one more need to their request, from its detail drawer.
+ * The backend's `createTicketTask` holds the same rule — ticket.edit on the ticket — this only
+ * decides who is offered it.
  */
 
 import type { CreateTicketTaskInput } from '@rescue-frontend/data-access';

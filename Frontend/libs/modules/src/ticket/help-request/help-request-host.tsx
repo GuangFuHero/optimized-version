@@ -62,7 +62,7 @@ interface FiledTicket {
 }
 
 /**
- * Opens the drawer again for a guest back from signing in (`help=`, spec Q5). Read once, from the
+ * Opens the drawer again for a guest back from signing in (`help=`). Read once, from the
  * router: on the way back the page renders before the address changes, and the map rewrites the
  * address without it soon after — as A's claim does (`NeedClaimProvider`). Kept in its own
  * component, under its own Suspense, so that reading the query does not turn a page without one
@@ -104,8 +104,8 @@ function HelpRequestReturn({
 
 /**
  * 請求協助, kept once in the site shell so every page has it, and opened through
- * `openHelpRequest` — or by itself for a guest back from signing in (Q5). It also does what
- * follows a ticket filed (Q12): the drawer closes, the map and the list are handed the new ticket,
+ * `openHelpRequest` — or by itself for a guest back from signing in. It also does what
+ * follows a ticket filed: the drawer closes, the map and the list are handed the new ticket,
  * the page turns to tickets with it selected, and a toast says it went through.
  */
 export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
@@ -215,7 +215,7 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
         needCount: ticket.tasks.length,
       };
 
-      // Filed: nothing is left to bring back the next time it opens (S10).
+      // Filed: nothing is left to bring back the next time it opens.
       if (userId) {
         clearHelpRequestDraft(sessionDraftStorage(), userId);
       }

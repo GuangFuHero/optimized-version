@@ -1,5 +1,5 @@
 /**
- * 這一頁怎麼用 (prototype `Design/前台/js/shared/wg-help.jsx`; spec S9): what each page of the site
+ * 這一頁怎麼用 (prototype `Design/前台/js/shared/wg-help.jsx`): what each page of the site
  * is for, kept in one place so the words change here and nowhere else. A page without an entry
  * gets no ？ at all.
  */
@@ -20,7 +20,7 @@ export interface PageHelp {
  * The designer's drafts (`wg-help.jsx:101-115`), read against the site as it is and approved by the
  * team on 2026-10-01: 在這裡新增 and 「＋」 came after the drafts, and a guest is kept from a
  * ticket's address and photos as well as its point (backend ADR-281), on the list too.
- * 回報站點資訊有誤 is left out until flow E sends a station correction to the server (#57).
+ * 回報站點資訊有誤 is left out: the site has no way to send a station correction yet (#57).
  */
 export const SITE_PAGE_HELP: Record<SitePageHelpKey, PageHelp> = {
   'site:map': {

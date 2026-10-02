@@ -35,8 +35,8 @@ interface MyRequestsListProps {
 
 /**
  * One filed request, read for how far it got (prototype `site-actions.jsx:1802-1838`): the
- * ticket's status as the list and the map show it, and a line counting its needs (spec Q16). No
- * ticket number: here it is a uuid, which tells a requester nothing (as A's spec Q50).
+ * ticket's status as the list and the map show it, and a line counting its needs. No
+ * ticket number: here it is a uuid, which tells a requester nothing, and 我承接的 shows none either.
  */
 function MyRequestRow({
   request,
@@ -144,7 +144,7 @@ function NoticeText({ children }: { children: ReactNode }) {
   );
 }
 
-/** 我建立的: the requests the viewer filed, newest first, every status (spec Q16, Q17). */
+/** 我建立的: the requests the viewer filed, newest first, every status. */
 export function MyRequestsList({ onLeave }: MyRequestsListProps) {
   const route = useSiteRouteState();
   const [{ data, fetching, error }] = useQuery({

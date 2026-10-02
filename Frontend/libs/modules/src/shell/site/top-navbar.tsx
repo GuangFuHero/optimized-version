@@ -138,7 +138,7 @@ export function SiteTopNavBar({
         sx={{ alignItems: 'center', justifySelf: 'end' }}
       >
         <RequestHelpButton />
-        {/* The site's pages have no title to sit beside, so here (spec S9). */}
+        {/* The site's pages have no title to sit beside, so here. */}
         <PageHelpButton ringColor={palette.frame} />
         {isAuthenticated ? (
           <SiteUserMenu

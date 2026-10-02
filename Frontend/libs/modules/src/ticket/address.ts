@@ -19,7 +19,7 @@ export interface TicketAddressParts {
   room?: string | null;
   /**
    * A hint for finding the way in, on a ticket filed in the back office. On one filed through the
-   * site's 請求協助 it is the whole address as typed, none of it split out (help-request spec Q7).
+   * site's 請求協助 it is the whole address as typed, none of it split out.
    */
   landmarkNote?: string | null;
 }
@@ -35,7 +35,7 @@ export function formatTicketAddress(location: TicketAddressParts | null | undefi
 
   const part = (value?: string | null) => value?.trim() ?? '';
   // A Chinese street address is one continuous string (backend ADR-155) — no separators. With no
-  // part of it split out, the address is the one the site's 請求協助 took as typed (spec D4).
+  // part of it split out, the address is the one the site's 請求協助 took as typed.
   const street =
     [location.county, location.city, location.lane, location.alley, location.no]
       .map(part)

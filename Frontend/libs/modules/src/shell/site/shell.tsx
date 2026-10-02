@@ -62,7 +62,7 @@ export function SiteShell({
     setMobileDrawerOpen(false);
     setRoleRequestOpen(true);
   };
-  // 這一頁怎麼用 on a phone, from the menu's row: the desktop's ？ holds its own (spec S9).
+  // 這一頁怎麼用 on a phone, from the menu's row: the desktop's ？ holds its own.
   const pageHelp = usePageHelp();
   const [pageHelpOpen, setPageHelpOpen] = useState(false);
   const bodyMinHeight = `calc(100dvh - ${LAYOUT_DIMENSIONS.desktopTopNavBarHeight}px)`;

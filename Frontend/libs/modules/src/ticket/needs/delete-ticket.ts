@@ -1,5 +1,5 @@
 /**
- * What the requester reads before deleting their whole ticket (B's S7): the 「刪除整張單」 of the
+ * What the requester reads before deleting their whole ticket: the 「刪除整張單」 of the
  * ⋯ at the top of its drawer.
  */
 
@@ -11,7 +11,7 @@ export function formatTicketNeedCount(count: number): string {
 }
 
 /**
- * The confirmation's explanation (team decision 2026-09-28: its needs go with it, and the people
+ * The confirmation's explanation (as the team decided: its needs go with it, and the people
  * on them hear). Who will hear is not counted: one volunteer may be on two of its needs and hears
  * once (`delete_ticket`), while each need only knows its own headcount.
  */

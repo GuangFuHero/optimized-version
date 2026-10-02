@@ -20,7 +20,7 @@ interface PlaceHereActionProps {
 /**
  * Above the crosshair of a point picked on the map: 在這裡新增 opens 請求協助 there, the drawer's
  * map starting from the point rather than the device's location (prototype
- * `site-map.jsx:1046-1077`, spec Q4/Q6). Guests see it too: they are stopped before sending, not
+ * `site-map.jsx:1046-1077`). Guests see it too: they are stopped before sending, not
  * before starting.
  */
 export function PlaceHereAction({ point, onPlaced }: PlaceHereActionProps) {

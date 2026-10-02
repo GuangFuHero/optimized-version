@@ -34,8 +34,8 @@ interface AddNeedPanelProps {
 }
 
 /**
- * 「再加一件需要的幫忙」 at the foot of a ticket's needs, for its requester (spec S4): one need at a
- * time, in the same row the drawer files them with (Q15). Added, it shows up in the list above — the
+ * 「再加一件需要的幫忙」 at the foot of a ticket's needs, for its requester: one need at a
+ * time, in the same row the drawer files them with. Added, it shows up in the list above — the
  * word that it went through — as every view of the ticket reloads it.
  */
 export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {

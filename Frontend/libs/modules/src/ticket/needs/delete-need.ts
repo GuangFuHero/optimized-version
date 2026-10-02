@@ -1,5 +1,5 @@
 /**
- * What the requester reads before deleting one of their ticket's needs (B's S5): the 「刪除這筆需求」
+ * What the requester reads before deleting one of their ticket's needs: the 「刪除這筆需求」
  * of the need's ⋯, next to 停止招募.
  */
 

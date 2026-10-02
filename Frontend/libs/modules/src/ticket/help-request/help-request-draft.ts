@@ -1,5 +1,5 @@
 /**
- * 請求協助 as it is being filled in, kept in this tab for the person filling it (spec S10): the
+ * 請求協助 as it is being filled in, kept in this tab for the person filling it: the
  * form is long, and is lost whole when the site reloads as a guest on a sign-in that ran out, or
  * when a sign-out in another tab turns the drawer into the guest one. Keyed by the account, so
  * someone else signing in to the same tab does not see it. Gone when it is sent, or on 取消.

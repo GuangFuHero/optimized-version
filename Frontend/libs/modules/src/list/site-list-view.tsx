@@ -78,7 +78,7 @@ export function SiteListView() {
     [controller.markers, controller.selectedMarkerId, unlistedMarker],
   );
 
-  // A ticket found gone (deleted, B's S7) leaves the list — and, opened from a link past the loaded
+  // A ticket found gone (deleted) leaves the list — and, opened from a link past the loaded
   // pages, its looked-up copy too: the selection then has nothing left to show, and its drawer
   // shuts the way a ticket filtered out does.
   const showReloadedTicket = useCallback(

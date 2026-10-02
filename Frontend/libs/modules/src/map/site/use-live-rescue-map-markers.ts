@@ -208,7 +208,7 @@ export function usePaginatedRescueMapMarkers(state?: SiteRouteState) {
   /**
    * Swap in one ticket as it stands after a claim, a release or a stop — its needs and its status,
    * on the row's badge — so its row agrees with the detail drawer without reloading every page of
-   * the list. A ticket found gone (null — deleted, B's S7) leaves the list.
+   * the list. A ticket found gone (null — deleted) leaves the list.
    */
   const replaceTicket = useCallback(
     (ticketUuid: string, reloaded: ReloadedTicket | null) => {

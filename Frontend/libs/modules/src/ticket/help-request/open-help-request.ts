@@ -1,6 +1,6 @@
 /**
  * Opens 請求協助 from anywhere: the top bar's button, and later the sidebar, the phone's buttons and
- * the map's crosshair (S2, S3). The drawer is kept once, in the site shell (`HelpRequestHost`), so
+ * the map's crosshair. The drawer is kept once, in the site shell (`HelpRequestHost`), so
  * it is there on every page; whoever opens it may sit far from it, with no React tree to share —
  * as with `ticket-changes.ts`.
  */

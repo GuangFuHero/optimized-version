@@ -13,7 +13,7 @@ describe('canAddNeed', () => {
     );
   });
 
-  it('lets them add to a completed one too, which then opens again (Q20, as revised)', () => {
+  it('lets them add to a completed one too, which then opens again', () => {
     expect(canAddNeed({ ...requester, ticketStatus: 'completed' })).toBe(true);
   });
 
@@ -21,7 +21,7 @@ describe('canAddNeed', () => {
     expect(canAddNeed({ ...requester, ticketStatus: 'cancelled' })).toBe(false);
   });
 
-  it('offers nothing to anyone else, guests included (revised Q14, Q21)', () => {
+  it('offers nothing to anyone else, guests included', () => {
     expect(
       canAddNeed({
         ticketCreatedBy: 'user-1',

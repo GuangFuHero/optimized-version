@@ -1,6 +1,6 @@
 /**
  * 請求協助: what a resident fills in, and the `createHelpRequest` input it becomes (prototype
- * `SiteTicketCreateDrawer`, `site-actions.jsx:1424-1765`; spec note/help-request-spec.md Q6–Q13).
+ * `SiteTicketCreateDrawer`, `site-actions.jsx:1424-1765`).
  */
 
 import type {
@@ -22,14 +22,17 @@ export type SiteNeedValue =
 
 export interface SiteNeedOption {
   value: SiteNeedValue;
-  /** In a resident's words; also the need's name when they type no description (Q9). */
+  /** In a resident's words; also the need's name when they type no description. */
   label: string;
   /** The need's `taskType`. A resident is never asked to pick 人力 or 物資: that means nothing to them. */
   kind: 'hr' | 'supply' | 'rescue';
   hint: string;
 }
 
-/** The prototype's six (`site-actions.jsx:1151-1158`). Which one was picked is not stored (Q9). */
+/**
+ * The prototype's six (`site-actions.jsx:1151-1158`). Which one was picked is not stored: nothing
+ * filters needs by it yet, and a ticket's need has no field for it.
+ */
 export const SITE_NEED_OPTIONS: readonly SiteNeedOption[] = [
   {
     value: 'cleanup',
@@ -100,7 +103,7 @@ export interface HelpRequestForm {
   contactPhone: string;
   needs: NeedDraft[];
   description: string;
-  /** Links to scene photos kept elsewhere, each checked as it was added (spec S8). Optional. */
+  /** Links to scene photos kept elsewhere, each checked as it was added. Optional. */
   photoUrls: string[];
 }
 
@@ -143,7 +146,7 @@ function chosenNeeds(needs: readonly NeedDraft[]) {
 
 /**
  * What still has to be filled in, in the form's order from the top, so the first is the one to
- * scroll to (Q12). At least one need is required (Q13).
+ * scroll to. At least one need is required.
  */
 export function findMissingFields(form: HelpRequestForm): MissingField[] {
   const missing: MissingField[] = [];
@@ -167,7 +170,10 @@ export function findMissingFields(form: HelpRequestForm): MissingField[] {
   return missing;
 }
 
-/** Someone trapped or hurt: the form then says to call 119 first, and sets no flag (Q12). */
+/**
+ * Someone trapped or hurt: the form then says to call 119 first, and sets no flag — as in the
+ * prototype, it asks nothing about how dangerous it is.
+ */
 export function hasRescueNeed(needs: readonly NeedDraft[]): boolean {
   return chosenNeeds(needs).some(({ option }) => option.kind === 'rescue');
 }
@@ -201,7 +207,7 @@ export function toHelpRequestInput(
     geometry: { type: 'Point', coordinates: [landmark.lng, landmark.lat] },
     contactName: form.contactName.trim(),
     contactPhone: textOrNull(form.contactPhone),
-    // The address is one line of free text; the backend parses none of it (Q7).
+    // The address is one line of free text; the backend parses none of it.
     secondaryLocation: {
       landmarkNote: form.address.trim(),
       floor: textOrNull(form.floor),
@@ -217,7 +223,7 @@ export function toHelpRequestInput(
 
 /**
  * One need as the server takes it, from the drawer or from 「再加一件」 alike; null until a kind is
- * chosen. Named by the choice when nothing was typed (Q9).
+ * chosen. Named by the choice when nothing was typed.
  */
 export function toNeedInput(row: NeedDraft): HelpRequestTaskInput | null {
   const option = getNeedOption(row.need);

@@ -94,7 +94,7 @@ function HintPill({
 /**
  * Where help is needed, marked on a small map (prototype `LocationPicker`,
  * `Design/前台/js/admin/ticket/tk-locpicker.jsx`). With no point to start from it asks the device
- * once; after that only 用目前定位 asks again and overwrites a point marked by hand (spec Q6).
+ * once; after that only 用目前定位 asks again and overwrites a point marked by hand.
  */
 export function LocationPicker({
   value,
@@ -149,7 +149,7 @@ export function LocationPicker({
   useEffect(() => {
     mountedRef.current = true;
 
-    // Opened from a button, there is no point yet: start from where the person is (Q6).
+    // Opened from a button, there is no point yet: start from where the person is.
     if (!initialValueRef.current) {
       locate(false);
     }

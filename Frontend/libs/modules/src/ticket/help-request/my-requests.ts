@@ -1,5 +1,5 @@
 /**
- * 我的任務 › 我建立的 (B's S6): the requests the viewer filed, read for how far each got (spec Q16)
+ * 我的任務 › 我建立的: the requests the viewer filed, read for how far each got
  * — every status, a finished one included, since this is the record of what they asked for and
  * what came of it, not a to-do list (prototype `useMyCreatedTickets`, `site-actions.jsx:596-607`).
  */
@@ -36,7 +36,7 @@ const OPEN_NEED_STATUSES = new Set(['pending', 'in_progress']);
 const DONE = '這張單已經完成，不再需要人手。';
 
 /**
- * How far a request got, by its needs (Q16): how many have their people — filled, or stopped by
+ * How far a request got, by its needs: how many have their people — filled, or stopped by
  * the requester — and how many are still short. A need called off before deleting existed counts
  * for neither. A request with no open need needs nobody more; a completed ticket has none, and
  * one cancelled by hand before statuses were derived is over too.
@@ -69,7 +69,7 @@ export function formatRequestProgress(
   return `${open + full} 件事：${full} 件已滿、${open} 件還缺人`;
 }
 
-/** In the order the server sends them — newest first (Q17). */
+/** In the order the server sends them — newest first. */
 export function readMyRequests(rows: readonly MyTicketRow[]): MyRequest[] {
   return rows.map((row) => {
     const createdAt = formatTaiwanTime(row.createdAt);

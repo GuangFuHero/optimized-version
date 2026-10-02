@@ -50,7 +50,7 @@ interface DeleteNeedDialogProps {
 }
 
 /**
- * The delete confirmation's state, and what its buttons do (B's S5). Hosted by the page's
+ * The delete confirmation's state, and what its buttons do. Hosted by the page's
  * `NeedClaimProvider` next to stop-recruiting, so the ⋯ of a drawer row and of a list line open the
  * one dialog, and the reload after it reaches every view of the ticket.
  */
@@ -150,9 +150,9 @@ function DetailLine({
 }
 
 /**
- * One look before the requester deletes a need (B's S5): it goes for good, everyone on it hears
+ * One look before the requester deletes a need: it goes for good, everyone on it hears
  * they need not go, and the last open need takes the ticket to 已完成 with it. Same shape as the
- * stop-recruiting confirmation, in the red F5 kept for deleting; no design of its own exists.
+ * stop-recruiting confirmation, in the red kept for deleting; no design of its own exists.
  *
  * It reads the ticket itself, like the other confirmations, so a refusal's reload lands here too.
  */

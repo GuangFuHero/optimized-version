@@ -13,7 +13,7 @@ import { openHelpRequest } from './open-help-request';
  * rescue wording or siren: most who need help need hands, not a rescue team.
  *
  * Only its icon from 768 to 899px: with 申請成為後台人員 on the left and 這一頁怎麼用 beside it,
- * the words leave the search box between them nothing to type in (spec S9).
+ * the words leave the search box between them nothing to type in.
  */
 export function RequestHelpButton() {
   return (

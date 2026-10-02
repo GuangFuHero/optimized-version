@@ -35,7 +35,7 @@ interface PhotoLinkEditorProps {
 }
 
 /**
- * Scene photos on a form (prototype `TKPhotoLinkEditor`, `wg-photos.jsx`; spec S8): a link is
+ * Scene photos on a form (prototype `TKPhotoLinkEditor`, `wg-photos.jsx`): a link is
  * pasted, never a file — there is no file picker here, and there will not be (TM-IMG-102).
  * Under it, always, the one warning there is no technical answer to (TM-IMG-141), and the way to
  * get a link for a photo, opening in a new tab so the form being filled stays (TM-IMG-132).

@@ -22,7 +22,7 @@ import { PageHelpIcon } from './page-help';
 
 const PersonIcon = Icons.person;
 
-/** 這一頁怎麼用 in the phone's menu, which its top bar has no room for (spec S9). */
+/** 這一頁怎麼用 in the phone's menu, which its top bar has no room for. */
 interface SiteMenuPageHelp {
   /** Not opened on this device yet: the row's ？ carries a dot. */
   fresh: boolean;

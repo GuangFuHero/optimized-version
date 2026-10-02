@@ -30,7 +30,7 @@ describe('buildHelpSignInHref', () => {
     expect(back.searchParams.get('help')).toBe('1');
   });
 
-  it('keeps the whole map address, which the site rewrites in place (S1 found only /map kept)', () => {
+  it('keeps the whole map address, which the site rewrites in place, not just /map', () => {
     const back = callbackOf(
       buildHelpSignInHref(
         { pathname: '/map/osm-direct/ticket/@23.67,121.42,15z', search: '' },
@@ -41,7 +41,7 @@ describe('buildHelpSignInHref', () => {
     expect(back.pathname).toBe('/map/osm-direct/ticket/@23.67,121.42,15z');
   });
 
-  it('carries the point picked on the map, so it comes back with them (Q5)', () => {
+  it('carries the point picked on the map, so it comes back with them', () => {
     const back = callbackOf(
       buildHelpSignInHref(
         { pathname: '/map', search: '' },

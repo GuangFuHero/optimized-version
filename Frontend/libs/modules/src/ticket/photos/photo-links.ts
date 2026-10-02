@@ -1,5 +1,5 @@
 /**
- * Scene photos as links (spec S8; prototype `Design/前台/js/shared/wg-photos.jsx`, TM-FEAT-010):
+ * Scene photos as links (prototype `Design/前台/js/shared/wg-photos.jsx`, TM-FEAT-010):
  * the platform keeps no image, only a link to one kept elsewhere (TM-IMG-101). One source for the
  * rules, so the request form and the ticket's drawer cannot drift into two ways of failing.
  */

@@ -40,8 +40,8 @@ describe('formatTicketAddress', () => {
     );
   });
 
-  it('reads the address as typed on the site when none of the street was split out (D4)', () => {
-    // 請求協助 takes the address as one line, into `landmarkNote` (help-request spec Q7).
+  it('reads the address as typed on the site when none of the street was split out', () => {
+    // 請求協助 takes the address as one line, into `landmarkNote`.
     expect(
       formatTicketAddress({
         landmarkNote: ' 花蓮縣光復鄉中山路100號 ',

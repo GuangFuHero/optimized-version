@@ -90,7 +90,7 @@ describe('hasRescueNeed', () => {
 });
 
 describe('toHelpRequestInput', () => {
-  it('sends the photo links in the order they were added (spec S8)', () => {
+  it('sends the photo links in the order they were added', () => {
     const photoUrls = ['https://duk.tw/b.jpg', 'https://duk.tw/a.jpg'];
 
     expect(toHelpRequestInput(filledForm({ photoUrls })).photoUrls).toEqual(
@@ -109,7 +109,7 @@ describe('toHelpRequestInput', () => {
     });
   });
 
-  it('puts the typed address in landmarkNote with floor and room beside it (Q7)', () => {
+  it('puts the typed address in landmarkNote with floor and room beside it', () => {
     expect(
       toHelpRequestInput(
         filledForm({ address: ' 中山路100號 ', floor: ' 3樓 ', room: '302室' }),
@@ -166,7 +166,7 @@ describe('toHelpRequestInput', () => {
     ]);
   });
 
-  it('names a need by its choice when no description was typed (Q9)', () => {
+  it('names a need by its choice when no description was typed', () => {
     const input = toHelpRequestInput(
       filledForm({ needs: [{ need: 'care', name: '  ', quantity: '' }] }),
     );

@@ -1,6 +1,6 @@
 /**
  * The way back for a guest who pressed 請求協助: to sign in, then to the page they were on with the
- * drawer open again, and the point they picked on the map with it (spec Q5). `help=1` without a
+ * drawer open again, and the point they picked on the map with it. `help=1` without a
  * point, `help=<lat>,<lng>` with one. Built as A's claim does (`needs/claim-return.ts`).
  */
 

@@ -64,7 +64,7 @@ export function MobileRequestHelpFab() {
 /**
  * The map's, at the middle of its foot: the right corner holds the map's 「＋」. Floating, not the
  * prototype's bar along the bottom — that bar was there because pinned filters sat at the bottom
- * then, and here they sit at the top (spec S2, decided 2026-10-01).
+ * then, and here they sit at the top.
  */
 export function MapRequestHelpButton() {
   return (

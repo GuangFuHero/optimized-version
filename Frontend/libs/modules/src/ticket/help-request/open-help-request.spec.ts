@@ -13,7 +13,7 @@ describe('openHelpRequest', () => {
     stop();
   });
 
-  it('carries the point picked on the map, for the drawer to start from (Q6)', () => {
+  it('carries the point picked on the map, for the drawer to start from', () => {
     const host = vi.fn();
     const stop = onOpenHelpRequest(host);
 
