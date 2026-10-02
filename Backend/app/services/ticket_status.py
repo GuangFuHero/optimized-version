@@ -28,9 +28,9 @@ async def recompute_ticket_status(db: AsyncSession, *, ticket_uuid: str) -> None
     """Set the ticket's status from its needs; flush, never commit.
 
     Call it inside the action's transaction, after flushing the changes to the needs; the action
-    commits once, at the end. Callers lock the ticket row before any of its needs (the lock order
-    agreed between flows A and B). The row is locked again here — a no-op when already held — so
-    a caller that forgot still cannot race another.
+    commits once, at the end. Callers lock the ticket row before any of its needs (ADR-291's lock
+    order). The row is locked again here — a no-op when already held — so a caller that forgot
+    still cannot race another.
     """
     ticket = await db.scalar(select(Tickets).where(Tickets.uuid == ticket_uuid).with_for_update())
     # Cancelled means the requester deleted the ticket, and it stays that way. A ticket cancelled
