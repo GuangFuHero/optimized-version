@@ -45,7 +45,7 @@ export function createTaskMatchTicketDetailOverrides({
   const priority = marker.ticketMeta?.priority;
 
   return {
-    // The requester's ⋯ — 刪除整張單 — at the top, where the team put it (2026-09-28).
+    // The requester's ⋯ — 刪除整張單 — at the top, where the team put it.
     headerActions: (
       <TicketActionsMenu
         ticketUuid={marker.id}
