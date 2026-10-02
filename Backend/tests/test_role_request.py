@@ -262,7 +262,7 @@ async def _notices(db, event_type: str) -> list[Notification]:
 
 @pytest.mark.asyncio
 async def test_reviewers_hear_of_a_new_application(db):
-    """Q9: everyone holding role_request.review is told, so the back office need not be polled."""
+    """ADR-287: everyone holding role_request.review is told, so the back office need not be polled."""
     reviewer = await _reviewer(db)
     citizen = await _citizen(db, "王小明")
     reviewer_uuid, citizen_uuid = reviewer.uuid, citizen.uuid
@@ -293,7 +293,7 @@ async def test_no_one_can_apply_while_applying_is_switched_off(db):
 
 @pytest.mark.asyncio
 async def test_a_withdrawn_application_frees_the_applicant_to_apply_again(db):
-    """Q10: the drawer goes back to the form at once, with no cooldown."""
+    """ADR-287: the drawer goes back to the form at once, with no cooldown."""
     citizen = await _citizen(db)
     first = await _submit(db, citizen, "data_auditor")
 
@@ -344,7 +344,7 @@ async def test_a_closed_application_cannot_be_withdrawn(db, status):
 
 @pytest.mark.asyncio
 async def test_withdrawing_tells_no_one(db):
-    """Q10: the reviewers keep the notice of the application, and nothing further is sent."""
+    """ADR-287: the reviewers keep the notice of the application, and nothing further is sent."""
     await _reviewer(db)
     citizen = await _citizen(db)
     request = await _submit(db, citizen)
@@ -467,7 +467,7 @@ async def test_only_a_reviewer_can_reject(db):
     ],
 )
 async def test_the_applicant_hears_they_were_turned_down(db, note, body):
-    """Q6, in the prototype's words (wg-bridge.js): the reply if there is one, else reassurance."""
+    """ADR-287, in the prototype's words (wg-bridge.js): the reply if there is one, else reassurance."""
     reviewer = await _reviewer(db)
     citizen = await _citizen(db)
     citizen_uuid = citizen.uuid
@@ -512,7 +512,7 @@ _NOT_OPEN_YET = "Approving government and NGO applications is not available yet"
 
 @pytest.mark.asyncio
 async def test_an_approved_data_auditor_keeps_user_beside_the_new_role(db):
-    """Q3 (2026-09-28): approval adds `data_auditor` and leaves `user`, so nothing signs them out."""
+    """ADR-288: approval adds `data_auditor` and leaves `user`, so nothing signs them out."""
     reviewer = await _reviewer(db)
     auditor_role = await _role(db, "data_auditor", {})
     citizen = await _citizen(db)
@@ -533,7 +533,7 @@ async def test_an_approved_data_auditor_keeps_user_beside_the_new_role(db):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("requested_role", ["government", "ngo"])
 async def test_a_government_or_ngo_application_cannot_be_approved_yet(db, requested_role):
-    """Q2 (2026-09-28): which team they join waits on the designer and Carol. It stays pending."""
+    """ADR-288: which team they join is not decided yet, so it stays pending."""
     reviewer = await _reviewer(db)
     citizen = await _citizen(db)
     citizen_uuid = citizen.uuid
@@ -591,7 +591,7 @@ async def test_only_a_reviewer_can_approve(db):
 
 @pytest.mark.asyncio
 async def test_the_applicant_hears_they_were_approved(db):
-    """Q6, in the prototype's words: nothing was taken away, so there is no need to sign in again."""
+    """ADR-288, in the prototype's words: nothing was taken away, so there is no need to sign in again."""
     reviewer = await _reviewer(db)
     await _role(db, "data_auditor", {})
     citizen = await _citizen(db)
@@ -610,7 +610,7 @@ async def test_the_applicant_hears_they_were_approved(db):
 
 @pytest.mark.asyncio
 async def test_an_approval_and_a_withdrawal_sent_together_settle_one_way(db):
-    """Q10: whichever reaches the row first wins and the other is refused; nothing is half done.
+    """ADR-287: whichever reaches the row first wins and the other is refused; nothing is half done.
 
     Both lock the row FOR UPDATE, so the later one waits for the earlier to commit and then
     finds it no longer pending. Either way the grant and the status agree: approved means

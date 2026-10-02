@@ -125,7 +125,7 @@ async def _verified_user_holding(db, email: str, *role_names: str) -> str:
 
 @pytest.mark.asyncio
 async def test_bootstrap_keeps_user_beside_super_admin(db):
-    """Spec/019 Q15/Q16: the site acts as `user`, and a login starts on it, super admins included.
+    """ADR-289/290: the site acts as `user`, and a login starts on it, super admins included.
 
     ADR-184 had this script replace `user` so that a bootstrapped super admin could not log
     in as a plain `user`. That is now the point: the back office switches to super_admin on

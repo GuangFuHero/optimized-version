@@ -117,10 +117,11 @@ async def test_login_falls_back_when_the_remembered_identity_is_gone(client, db_
 
 
 async def test_login_prefers_user_over_every_other_platform_role(client, db_session):
-    """Spec/019 Q16: whoever holds `user` starts on it, super admins included (2026-09-30).
+    """ADR-290: whoever holds `user` starts on it, super admins included (2026-09-30).
 
-    An approved data auditor keeps `user` beside `data_auditor`, and Q17 gives a super admin
-    `user` too; both of those names sort before it. The back office switches on purpose.
+    An approved data auditor keeps `user` beside `data_auditor`, and the backfill (migration
+    15370be54155) gives a super admin `user` too; both of those names sort before it. The back
+    office switches on purpose.
     """
     user_uuid, platform_role, _, _ = await _account_with_two_identities(db_session)
     for name in ("data_auditor", "super_admin"):

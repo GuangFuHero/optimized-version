@@ -261,7 +261,7 @@ async def _require_live_session(redis, payload: dict) -> None:
         raise _credentials_exception()
 
 
-# The header, and the one value of it, by which the site marks its requests (Spec/019 Q15).
+# The header, and the one value of it, by which the site marks its requests (ADR-289).
 REALM_HEADER = "X-WG-Realm"
 SITE_REALM = "site"
 
@@ -281,11 +281,11 @@ async def get_current_user(
     the user is signed out and comes back on their platform identity.
 
     A request the site marks with `realm` = `site` then acts as the caller's `user` grant
-    instead, for that request alone (Spec/019 Q15): everyone signed in has the same
-    permissions on the site, and switching identity is a back-office matter (team decision,
-    2026-09-28). It applies only after the token's own identity has been checked, so a
+    instead, for that request alone (ADR-289): everyone signed in has the same
+    permissions on the site, and switching identity is a back-office matter. It applies only
+    after the token's own identity has been checked, so a
     revoked one still 401s, and an account holding no `user` grant keeps the token's identity
-    (Q17). Neither the token nor the session changes.
+    (ADR-289 decision 2). Neither the token nor the session changes.
 
     `redis` and `realm` are ordinary parameters rather than read off the request, because the
     GraphQL context calls this function directly instead of through FastAPI and has to supply

@@ -1,4 +1,4 @@
-"""Spec/019 Q17: the backfill gives every account the `user` grant the site acts as.
+"""ADR-290: the backfill gives every account the `user` grant the site acts as.
 
 Built the way tests/test_migration_legacy_disaster_data.py is: stop before the backfill, write
 the accounts a deployed database holds, upgrade to head, and read what came out. Every other

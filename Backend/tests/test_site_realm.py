@@ -1,4 +1,4 @@
-"""The site acts as the caller's own `user` grant, marked by X-WG-Realm: site (Spec/019 Q15–Q17).
+"""The site acts as the caller's own `user` grant, marked by X-WG-Realm: site (ADR-289, ADR-290).
 
 The team decided on 2026-09-28 that everyone signed in has the same permissions on the site —
 those of `user` — and that which identity someone acts as is a back-office matter. A request
@@ -34,7 +34,7 @@ HELP_REQUEST = {
 
 
 async def _auditor(db, redis) -> tuple[str, str, dict]:
-    """An approved data auditor acting as data_auditor, holding `user` beside it (Q3).
+    """An approved data auditor acting as data_auditor, holding `user` beside it (ADR-288).
 
     `user` may file a help request and `data_auditor` may not, as in the seed. Returns
     (user uuid, data_auditor role uuid, headers acting as data_auditor).
@@ -111,7 +111,7 @@ async def test_what_the_site_changes_is_recorded_under_user(client, db_session, 
 
 
 async def test_an_account_without_user_keeps_its_identity(client, db_session, redis):
-    """Q17: the marker only ever picks a grant the caller holds. It never hands one out."""
+    """ADR-289: the marker only ever picks a grant the caller holds. It never hands one out."""
     super_admin = Role(name="super_admin", kind="platform")
     account = User(name="超級管理員")
     db_session.add_all([super_admin, account])

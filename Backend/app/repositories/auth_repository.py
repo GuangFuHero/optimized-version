@@ -118,7 +118,7 @@ class UserRepository(GenericRepository[User]):
         **Replaces whatever platform role the user already held, except `user`** (ADR-184, as
         Spec/019 amends it). The back office has one platform role per account besides `user`,
         which `admin_service.assign_role` keeps the same way (019/ADR-294). `user` stays: the
-        site acts as it (Q15) and a login starts on it (Q16), super admins included. ADR-184
+        site acts as it (ADR-289) and a login starts on it (ADR-290), super admins included. ADR-184
         replaced it so that a bootstrapped super admin could not log in as a plain `user`;
         that is now intended, and the back office switches to super_admin on purpose. Without
         `user`, a super admin would browse the site with every permission.

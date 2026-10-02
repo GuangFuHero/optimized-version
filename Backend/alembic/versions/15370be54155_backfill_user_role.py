@@ -1,10 +1,10 @@
-"""backfill the `user` platform grant (feature 019 Q17: the site acts as `user`)
+"""backfill the `user` platform grant (ADR-290: the site acts as `user`)
 
 Revision ID: 15370be54155
 Revises: 666b59ab2581
 Create Date: 2026-09-30 12:00:00.000000
 
-A request from the site acts as the caller's own `user` grant (Q15), and the permission
+A request from the site acts as the caller's own `user` grant (ADR-289), and the permission
 engine only ever reads grants an account actually holds. Registration grants `user`, but a
 later platform grant used to *replace* it (`assign_role`, and `bootstrap_admin` through
 `user_repository.assign_role` since ADR-184), so a super admin set up that way — and anyone
@@ -15,7 +15,7 @@ Nothing is granted when there is no `user` role yet: on a fresh database the see
 the migrations, and registration grants `user` from then on.
 
 Downgrade removes nothing. It cannot tell a `user` grant added here from one granted since —
-an approved data auditor keeps `user` beside `data_auditor` (Q3) — and taking `user` away
+an approved data auditor keeps `user` beside `data_auditor` (ADR-288) — and taking `user` away
 from an account that should hold it would lock it out of the site.
 """
 

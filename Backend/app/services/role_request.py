@@ -33,12 +33,12 @@ _ONE_PENDING_INDEX = "uq_role_requests_one_pending"
 # The applicant-facing names, as the application form shows them (site-actions.jsx).
 ROLE_LABELS = {"government": "政府單位人員", "ngo": "社福團體人員", "data_auditor": "資料檢核員"}
 
-# Q6: what a turned-down applicant reads when the reviewer left no reply (wg-bridge.js).
+# What a turned-down applicant reads when the reviewer left no reply (ADR-287; wg-bridge.js).
 _REJECTED_WITHOUT_REPLY = "你原本的權限沒有任何改變，可以再送一次申請。"
-# Q6: what an approved data auditor reads. Approval adds an identity, so nobody is signed out.
+# What an approved data auditor reads. Approval adds an identity, so nobody is signed out (ADR-288).
 _APPROVED_DATA_AUDITOR = "右上角會出現「前往後台」，不需要重新登入。"
 
-# The one application that can be approved yet (Q2). The requested role and the platform role
+# The one application that can be approved yet (ADR-288). The requested role and the platform role
 # it grants share the name, unlike `government` / `ngo`, which name a type of team.
 _DATA_AUDITOR = "data_auditor"
 
@@ -132,7 +132,7 @@ async def submit(
             raise
         raise ValueError("You already have a pending request") from exc
 
-    # Q9: tell whoever can decide it. The back office that shows this does not exist yet, but
+    # Tell whoever can decide it (ADR-287). The back office that shows this does not exist yet, but
     # the notice is written now so nothing on the server has to change when it does.
     reviewers = await NotificationRecipientResolver.resolve_permission(db, Perm.ROLE_REQUEST_REVIEW.value)
     await NotificationService.dispatch(
@@ -171,7 +171,7 @@ async def _lock_pending(
 
 
 async def withdraw(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID) -> RoleRequest:
-    """Take back one's own pending application (Q10). Nobody is told.
+    """Take back one's own pending application (ADR-287). Nobody is told.
 
     Asks only that the application is the caller's, not for role_request.add: pausing
     applications stops new ones and must not strand one already sent.
@@ -221,12 +221,12 @@ async def reject(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, note
 
 
 async def approve(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, note: str | None) -> RoleRequest:
-    """Grant what a pending application asked for and tell the applicant (Q3, Q6).
+    """Grant what a pending application asked for and tell the applicant (ADR-288).
 
     Only a data auditor can be approved yet: which team a government or NGO applicant joins
-    waits on the designer and Carol (Q2, 2026-09-28), so those are refused and stay pending.
+    is still to be decided, so those are refused and stay pending.
     Approval *adds* the platform `data_auditor` grant beside `user` rather than calling
-    `assign_role`, which would replace it (Q3): the site acts as `user` (Q15), and an added
+    `assign_role`, which would replace it: the site acts as `user` (ADR-289), and an added
     identity signs nobody out, since ADR-096 refuses only one that is gone. The grant and the
     new status are one commit, so a withdrawal racing this one finds both or neither.
     """
@@ -278,7 +278,7 @@ async def list_for_review(
     """Applications oldest first, so whoever applied first is reviewed first (2026-09-29).
 
     The caller gates this on role_request.review: reason and contact are the applicant's own
-    words and often name their unit and phone number (Q11).
+    words and often name their unit and phone number (ADR-287).
     """
     query = select(RoleRequest, User.name).join(User, User.uuid == RoleRequest.created_by)
     if status is not None:

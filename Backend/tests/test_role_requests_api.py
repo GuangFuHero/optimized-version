@@ -67,7 +67,7 @@ async def _reviewer_headers(db, redis) -> dict:
 
 @pytest.mark.asyncio
 async def test_the_review_list_shows_what_a_reviewer_decides_on(client, db_session, redis):
-    """The applicant's own words and name — which only a reviewer may read (Q11)."""
+    """The applicant's own words and name — which only a reviewer may read (ADR-287)."""
     applicant_uuid, _ = await _account(db_session, "王小明", "user")
     request_uuid = await _application(db_session, applicant_uuid)
     headers = await _reviewer_headers(db_session, redis)
@@ -163,7 +163,7 @@ async def test_approving_returns_the_approved_application(client, db_session, re
 @pytest.mark.asyncio
 @pytest.mark.parametrize("requested_role", ["government", "ngo"])
 async def test_a_government_or_ngo_application_is_not_approved_yet(client, db_session, redis, requested_role):
-    """Q2 placeholder: refused in the service's words, and the application stays pending."""
+    """ADR-288 placeholder: refused in the service's words, and the application stays pending."""
     applicant_uuid, _ = await _account(db_session, "王小明", "user")
     request_uuid = await _application(db_session, applicant_uuid, requested_role=requested_role)
     headers = await _reviewer_headers(db_session, redis)
@@ -178,7 +178,7 @@ async def test_a_government_or_ngo_application_is_not_approved_yet(client, db_se
 async def test_an_approved_applicant_carries_on_with_the_token_they_have(
     client, db_session, redis, fresh_app_engine
 ):
-    """Q3: approval adds an identity rather than replacing one, so nobody is signed out.
+    """ADR-288: approval adds an identity rather than replacing one, so nobody is signed out.
 
     The applicant's token keeps working, their identities now include data_auditor for the
     back office's 前往後台, and the site still files a help request for them.

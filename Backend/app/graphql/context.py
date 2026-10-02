@@ -43,7 +43,7 @@ async def get_context(request: Request):
         if token:
             # redis comes from app.state because this path bypasses FastAPI's dependency
             # injection — get_current_user needs it to check the token's session (ADR-102).
-            # For the same reason the site's realm header is handed over here (Spec/019 Q15).
+            # For the same reason the site's realm header is handed over here (ADR-289).
             user = await get_current_user(
                 db=db, token=token, redis=request.app.state.redis,
                 realm=request.headers.get(REALM_HEADER),

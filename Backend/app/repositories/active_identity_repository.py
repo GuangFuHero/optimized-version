@@ -84,9 +84,9 @@ class ActiveIdentityRepository:
         """The identity a fresh login lands on: `user` if held, else a platform identity (ADR-069).
 
         An account may hold more than one platform grant since Spec/019: an approved data
-        auditor keeps `user` beside `data_auditor` (Q3), and Q17's backfill gave `user` to
-        every account, super admins included. Whoever holds `user` starts on it (Q16,
-        2026-09-30) — the least of what they hold — and the back office switches to anything
+        auditor keeps `user` beside `data_auditor` (ADR-288), and migration 15370be54155 gave
+        `user` to every account, super admins included. Whoever holds `user` starts on it
+        (ADR-290) — the least of what they hold — and the back office switches to anything
         more on purpose. After that, `ORDER BY` names and uuids so the answer is stable between
         reads rather than whichever row the partial unique index happened to return first.
 
@@ -109,9 +109,9 @@ class ActiveIdentityRepository:
         return _to_identity(row) if row else None
 
     async def site_identity(self, db: AsyncSession, user_uuid: str) -> ActiveIdentity | None:
-        """The `user` grant a request from the site acts as (Spec/019 Q15), or None if not held.
+        """The `user` grant a request from the site acts as (ADR-289), or None if not held.
 
-        None leaves the caller on the token's identity (Q17): the site only ever picks a grant
+        None leaves the caller on the token's identity (ADR-289 decision 2): the site only ever picks a grant
         the caller holds, and never hands one out.
         """
         row = (
