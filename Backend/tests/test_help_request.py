@@ -296,7 +296,7 @@ async def test_one_bad_photo_link_refuses_the_whole_request(db, bad_link, messag
 
 @pytest.mark.asyncio
 async def test_more_than_ten_photo_links_are_refused(db):
-    """Ten at most, the site's own limit (使用者 2026-10-01; the prototype's TK_PHOTO_MAX)."""
+    """Ten at most, the site's own limit (the prototype's TK_PHOTO_MAX)."""
     citizen = await _citizen(db)
 
     with pytest.raises(ValueError, match="^At most 10 photos are allowed$"):

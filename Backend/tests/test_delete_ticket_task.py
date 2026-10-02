@@ -196,7 +196,7 @@ async def test_deleting_the_last_open_need_completes_the_ticket(db):
 
 @pytest.mark.asyncio
 async def test_deleting_every_need_completes_the_ticket(db):
-    """A ticket whose needs were all deleted has nothing open either (spec: 含全部刪光)."""
+    """A ticket whose needs were all deleted has nothing open either."""
     ticket = await _ticket(db)
     ticket_uuid = str(ticket.uuid)
     task_uuid = str((await _need(db, ticket)).uuid)
