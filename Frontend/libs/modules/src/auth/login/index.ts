@@ -1,5 +1,6 @@
 export {
   AuthFooterLinks,
+  AuthReturnHint,
   AuthShell,
   LoginForm,
   RegisterForm,
@@ -16,3 +17,4 @@ export {
   newPasswordText,
   normalizePassword,
 } from './utils/new-password';
+export { returnHint, signedInMessage } from './utils/return-hint';

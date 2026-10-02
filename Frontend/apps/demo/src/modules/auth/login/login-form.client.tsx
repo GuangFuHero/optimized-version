@@ -8,8 +8,10 @@ import { startTransition, useEffect, useState } from 'react';
 import {
   AuthFormError,
   authHref,
+  AuthReturnHint,
   LoginForm,
   sessionStorageOrNull,
+  signedInMessage,
 } from '@rescue-frontend/modules';
 import { takeSessionExpired } from '@rescue-frontend/modules/session';
 import { messageForCode } from '../api/error-messages';
@@ -131,6 +133,7 @@ export default function () {
             router.replace(result?.url ?? callbackUrl, { scroll: false });
           });
         }}
+        successMessage={signedInMessage(requestedCallbackUrl)}
         secondaryActionLabel="註冊帳號"
         onForgotPasswordAsync={() => {
           startTransition(() => {
@@ -151,6 +154,8 @@ export default function () {
           });
         }}
       />
+
+      <AuthReturnHint />
     </Stack>
   );
 }

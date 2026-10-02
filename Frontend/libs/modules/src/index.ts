@@ -2,6 +2,7 @@ export {
   AuthFooterLinks,
   AuthFormError,
   authHref,
+  AuthReturnHint,
   AuthShell,
   LoginForm,
   RegisterForm,
@@ -9,6 +10,7 @@ export {
   newPasswordText,
   normalizeIdentityValue,
   normalizePassword,
+  signedInMessage,
   validateIdentityValue,
 } from './auth/login';
 export type { AuthIdentityType } from './auth/login';
