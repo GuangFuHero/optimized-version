@@ -100,6 +100,8 @@ export interface HelpRequestForm {
   contactPhone: string;
   needs: NeedDraft[];
   description: string;
+  /** Links to scene photos kept elsewhere, each checked as it was added (spec S8). Optional. */
+  photoUrls: string[];
 }
 
 export function emptyHelpRequestForm(
@@ -115,6 +117,7 @@ export function emptyHelpRequestForm(
     contactPhone: '',
     needs: [emptyNeed()],
     description: '',
+    photoUrls: [],
   };
 }
 
@@ -208,6 +211,7 @@ export function toHelpRequestInput(
       const need = toNeedInput(row);
       return need ? [need] : [];
     }),
+    photoUrls: form.photoUrls,
   };
 }
 

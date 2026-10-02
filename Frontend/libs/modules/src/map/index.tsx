@@ -9,10 +9,7 @@ import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Box, Drawer, GlobalStyles, useMediaQuery } from '@mui/material';
 import dynamic from 'next/dynamic';
 
-import type {
-  StationDetailActionProps,
-  StationDetailTabPanels,
-} from '../station/station-detail';
+import type { StationDetailActionProps } from '../station/station-detail';
 import { rescueMapMarkerStyles } from './components/map-marker';
 import {
   RescueMapDetailDrawer,
@@ -151,22 +148,10 @@ interface MapProps {
   ticketDetailOverrides?: (
     marker: RescueMapMarkerItem,
   ) => RescueMapTicketDetailOverrides | undefined;
-  /** 自訂站點詳情主要操作，前台可用於站點資訊更新建議。 */
-  stationDetailAction?: (
-    marker: RescueMapMarkerItem,
-  ) => StationDetailActionProps | undefined;
   /** 自訂站點詳情次要操作，例如分享。 */
   stationDetailSecondaryAction?: (
     marker: RescueMapMarkerItem,
   ) => StationDetailActionProps | undefined;
-  /** 自訂站點詳情分頁內容，例如前台站點評論／待處理建議。 */
-  stationDetailTabPanels?: (
-    marker: RescueMapMarkerItem,
-  ) => StationDetailTabPanels | undefined;
-  /** 自訂站點待處理建議數。 */
-  stationPendingCorrectionCount?: (
-    marker: RescueMapMarkerItem,
-  ) => number | undefined;
   /** 是否顯示比例尺。 */
   showScale?: boolean;
   /** 點擊地圖空白處時回傳經緯度。 */
@@ -198,10 +183,7 @@ export const Map = memo(function Map({
   onRouteStateChange,
   renderControls,
   ticketDetailOverrides,
-  stationDetailAction,
   stationDetailSecondaryAction,
-  stationDetailTabPanels,
-  stationPendingCorrectionCount,
   showScale = false,
   onMapClick,
   previewMarker,
@@ -393,24 +375,9 @@ export const Map = memo(function Map({
                   ? ticketDetailOverrides?.(displayMarker)
                   : undefined
               }
-              stationAction={
-                displayMarker?.detailType === 'station'
-                  ? stationDetailAction?.(displayMarker)
-                  : undefined
-              }
               stationSecondaryAction={
                 displayMarker?.detailType === 'station'
                   ? stationDetailSecondaryAction?.(displayMarker)
-                  : undefined
-              }
-              stationPendingCorrectionCount={
-                displayMarker?.detailType === 'station'
-                  ? stationPendingCorrectionCount?.(displayMarker)
-                  : undefined
-              }
-              stationTabPanels={
-                displayMarker?.detailType === 'station'
-                  ? stationDetailTabPanels?.(displayMarker)
                   : undefined
               }
             />
@@ -449,24 +416,9 @@ export const Map = memo(function Map({
               ? ticketDetailOverrides?.(displayMarker)
               : undefined
           }
-          stationAction={
-            displayMarker?.detailType === 'station'
-              ? stationDetailAction?.(displayMarker)
-              : undefined
-          }
           stationSecondaryAction={
             displayMarker?.detailType === 'station'
               ? stationDetailSecondaryAction?.(displayMarker)
-              : undefined
-          }
-          stationPendingCorrectionCount={
-            displayMarker?.detailType === 'station'
-              ? stationPendingCorrectionCount?.(displayMarker)
-              : undefined
-          }
-          stationTabPanels={
-            displayMarker?.detailType === 'station'
-              ? stationDetailTabPanels?.(displayMarker)
               : undefined
           }
         />

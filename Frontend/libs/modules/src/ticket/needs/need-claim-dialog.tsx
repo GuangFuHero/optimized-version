@@ -180,11 +180,15 @@ export function NeedClaimDialog({
             )}
           </Box>
 
-          <Typography
-            sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13], lineHeight: 1.6 }}
-          >
-            去不了的話請到「我的任務 › 我承接的」釋出名額，讓建立者有機會補人。
-          </Typography>
+          {/* With the need there only, as the stop confirmation keeps its explanation: gone, or
+              still loading, there is no place to give back. */}
+          {dialog.box === 'need' ? (
+            <Typography
+              sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13], lineHeight: 1.6 }}
+            >
+              去不了的話請到「我的任務 › 我承接的」釋出名額，讓建立者有機會補人。
+            </Typography>
+          ) : null}
 
           {dialog.refusal ? <Alert severity="error">{dialog.refusal}</Alert> : null}
         </Stack>

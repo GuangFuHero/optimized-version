@@ -18,8 +18,38 @@ import { SITE_MODULES } from '../../route/constants';
 import { SITE_MODULE_META } from '../../route/module-meta';
 import { createSiteHref } from '../../route/serialize';
 import type { SiteModule, SiteRouteState } from '../../route/types';
+import { PageHelpIcon } from './page-help';
 
 const PersonIcon = Icons.person;
+
+/** 這一頁怎麼用 in the phone's menu, which its top bar has no room for (spec S9). */
+interface SiteMenuPageHelp {
+  /** Not opened on this device yet: the row's ？ carries a dot. */
+  fresh: boolean;
+  onOpen: () => void;
+}
+
+/** The row, when the page has help: the menu shuts first, as for 請求協助. */
+function pageHelpFooterActions(
+  pageHelp: SiteMenuPageHelp | undefined,
+  onClose?: () => void,
+): SidebarMenuItemData[] {
+  if (!pageHelp) {
+    return [];
+  }
+
+  return [
+    {
+      id: 'page-help',
+      label: '這一頁怎麼用',
+      icon: <PageHelpIcon fresh={pageHelp.fresh} />,
+      onClick: () => {
+        onClose?.();
+        pageHelp.onOpen();
+      },
+    },
+  ];
+}
 
 /** The menu's back-office entry: a link to the back office, or a button that opens the application. */
 function portalFooterActions(
@@ -64,6 +94,7 @@ function buildSiteSidebarContent(
   portalEntry: SitePortalEntry = 'none',
   onApplyRoleRequest?: () => void,
   onClose?: () => void,
+  pageHelp?: SiteMenuPageHelp,
 ): SidebarResolvedContent {
   return {
     navigationItems: SITE_MODULES.map((target) => {
@@ -91,8 +122,9 @@ function buildSiteSidebarContent(
           openHelpRequest();
         },
       },
-      // Then, as the prototype orders it (`site-shell.jsx:588-598`), the back-office entry, which a
-      // phone's top bar has no room for, then 登入 for a guest.
+      // Then, as the prototype orders it (`site-shell.jsx:588-598`), 這一頁怎麼用 and the
+      // back-office entry, which a phone's top bar has no room for, then 登入 for a guest.
+      ...pageHelpFooterActions(pageHelp, onClose),
       ...portalFooterActions(portalEntry, onApplyRoleRequest),
       ...(isAuthenticated
         ? []
@@ -126,6 +158,8 @@ interface SiteSidebarProps {
   portalEntry?: SitePortalEntry;
   /** 申請成為後台人員 in the menu: opens the application drawer, which the shell holds. */
   onApplyRoleRequest?: () => void;
+  /** 這一頁怎麼用 at the foot of the menu: like the back-office entry, the phone's menu only. */
+  pageHelp?: SiteMenuPageHelp;
 }
 
 function SiteSidebarConnected(props: SiteSidebarProps) {
@@ -136,6 +170,7 @@ function SiteSidebarConnected(props: SiteSidebarProps) {
     onSignOut,
     portalEntry,
     onApplyRoleRequest,
+    pageHelp,
     ...panelProps
   } = props;
 
@@ -150,6 +185,7 @@ function SiteSidebarConnected(props: SiteSidebarProps) {
         portalEntry,
         onApplyRoleRequest,
         panelProps.onClose,
+        pageHelp,
       )}
       {...panelProps}
     />
@@ -163,6 +199,7 @@ function SiteSidebarFallback(props: SiteSidebarProps) {
     onSignOut,
     portalEntry,
     onApplyRoleRequest,
+    pageHelp,
     ...panelProps
   } = props;
 
@@ -177,6 +214,7 @@ function SiteSidebarFallback(props: SiteSidebarProps) {
         portalEntry,
         onApplyRoleRequest,
         panelProps.onClose,
+        pageHelp,
       )}
       {...panelProps}
     />

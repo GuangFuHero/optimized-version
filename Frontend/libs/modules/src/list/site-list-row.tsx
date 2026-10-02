@@ -1,9 +1,7 @@
 'use client';
 
 import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
 import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
-import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import ShieldRoundedIcon from '@mui/icons-material/Shield';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
@@ -11,10 +9,6 @@ import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { Badge, designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
-import {
-  createStationReportSummary,
-  type StationReportRecord,
-} from '../station/report';
 import { getStationTypeIcon } from '../station/type-options';
 import { NeedLine } from '../ticket/needs';
 import { TicketPriorityBadge } from '../ticket/priority-badge';
@@ -25,11 +19,9 @@ const { color, radius, shadow, spacing, motion } = designTokens;
 interface SiteListRowProps {
   marker: RescueMapMarkerItem;
   active: boolean;
-  latestReport?: StationReportRecord;
   isAuthenticated?: boolean;
   onSelect: () => void;
   onShare?: () => void;
-  onSuggestUpdate?: () => void;
 }
 
 const ICON_SIZE = 18;
@@ -45,11 +37,9 @@ const ACTION_ICON = { fontSize: 14 } as const;
 export function SiteListRow({
   marker,
   active,
-  latestReport,
   isAuthenticated = false,
   onSelect,
   onShare,
-  onSuggestUpdate,
 }: SiteListRowProps) {
   const isStation = marker.detailType === 'station';
   const TypeIcon = isStation
@@ -169,35 +159,6 @@ export function SiteListRow({
             </Typography>
           </Box>
         </Stack>
-
-        {latestReport ? (
-          <Box
-            sx={{
-              mt: `${spacing[3]}px`,
-              px: `${spacing[3]}px`,
-              py: '6px',
-              borderRadius: `${radius.sm}px`,
-              // One colour regardless of the report's severity. We had this branching on tone, and
-              // the designer ruled against it on 2026-09-17: the list shows the fields that exist,
-              // it does not add a signal the data model has no concept of. Severity belongs in the
-              // summary text, which `createStationReportSummary` already carries.
-              bgcolor: color.bg.warning.subtle,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: displayTextSize[12],
-                lineHeight: 1.5,
-                color: color.fg.neutral.default,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              最新建議：{createStationReportSummary(latestReport)}
-            </Typography>
-          </Box>
-        ) : null}
       </ButtonBase>
 
       {/* Claiming is per need, never per ticket (PUB-PS-140): each need is its own line with its own
@@ -218,7 +179,7 @@ export function SiteListRow({
         </Box>
       ) : null}
 
-      {onShare || onSuggestUpdate ? (
+      {onShare ? (
         <Stack
           direction="row"
           sx={{
@@ -228,31 +189,12 @@ export function SiteListRow({
             gap: `${spacing[2]}px`,
           }}
         >
-          {onShare ? (
-            <RowAction
-              icon={<ShareRoundedIcon sx={ACTION_ICON} />}
-              label="分享"
-              onClick={onShare}
-              aria-label={`分享 ${marker.title}`}
-            />
-          ) : null}
-
-          {/* 回報要登入 —— /list 與 /map 要一致。 */}
-          {onSuggestUpdate ? (
-            <RowAction
-              icon={
-                isAuthenticated ? (
-                  <EditNoteRoundedIcon sx={ACTION_ICON} />
-                ) : (
-                  <LockRoundedIcon sx={ACTION_ICON} />
-                )
-              }
-              label={isAuthenticated ? '修改建議' : '登入後可建議'}
-              disabled={!isAuthenticated}
-              onClick={onSuggestUpdate}
-              aria-label={`建議修改 ${marker.title}`}
-            />
-          ) : null}
+          <RowAction
+            icon={<ShareRoundedIcon sx={ACTION_ICON} />}
+            label="分享"
+            onClick={onShare}
+            aria-label={`分享 ${marker.title}`}
+          />
         </Stack>
       ) : null}
     </Box>

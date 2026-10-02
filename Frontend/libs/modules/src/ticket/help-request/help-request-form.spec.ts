@@ -21,6 +21,7 @@ function filledForm(overrides: Partial<HelpRequestForm> = {}): HelpRequestForm {
     contactPhone: '',
     needs: [{ need: 'cleanup', name: '', quantity: '' }],
     description: '',
+    photoUrls: [],
     ...overrides,
   };
 }
@@ -89,6 +90,18 @@ describe('hasRescueNeed', () => {
 });
 
 describe('toHelpRequestInput', () => {
+  it('sends the photo links in the order they were added (spec S8)', () => {
+    const photoUrls = ['https://duk.tw/b.jpg', 'https://duk.tw/a.jpg'];
+
+    expect(toHelpRequestInput(filledForm({ photoUrls })).photoUrls).toEqual(
+      photoUrls,
+    );
+  });
+
+  it('starts a form with no photos: they are optional', () => {
+    expect(emptyHelpRequestForm().photoUrls).toEqual([]);
+  });
+
   it('sends the point as GeoJSON, longitude first', () => {
     expect(toHelpRequestInput(filledForm()).geometry).toEqual({
       type: 'Point',
