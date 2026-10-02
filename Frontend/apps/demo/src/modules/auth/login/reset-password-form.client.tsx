@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
 import {
+  authHref,
   newPasswordProblem,
   newPasswordText,
   normalizeIdentityValue,
@@ -23,6 +24,8 @@ function readInitialIdentityType(value: string | null): AuthIdentityType {
 export default function ResetPasswordFormClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // The page the sign-in should end on, carried back to login (or round again for a new code).
+  const callbackUrl = searchParams.get('callbackUrl');
   const [identityType, setIdentityType] = useState<AuthIdentityType>(() =>
     readInitialIdentityType(searchParams.get('type')),
   );
@@ -74,7 +77,7 @@ export default function ResetPasswordFormClient() {
       setSuccessMessage('密碼已更新，正在返回登入頁。');
 
       startTransition(() => {
-        router.replace('/login', { scroll: false });
+        router.replace(authHref('/login', { callbackUrl }), { scroll: false });
       });
     } catch (error) {
       setErrorMessage(
@@ -185,7 +188,9 @@ export default function ResetPasswordFormClient() {
         variant="text"
         onClick={() => {
           startTransition(() => {
-            router.push('/forgot-password', { scroll: false });
+            router.push(authHref('/forgot-password', { callbackUrl }), {
+              scroll: false,
+            });
           });
         }}
       >

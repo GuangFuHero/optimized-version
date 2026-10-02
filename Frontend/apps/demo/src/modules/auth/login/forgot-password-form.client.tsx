@@ -1,10 +1,11 @@
 'use client';
 
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
 import {
+  authHref,
   normalizeIdentityValue,
   validateIdentityValue,
   type AuthIdentityType,
@@ -15,6 +16,8 @@ import { AuthActionCard } from '../shared/auth-action-card';
 
 export default function ForgotPasswordFormClient() {
   const router = useRouter();
+  // The page the sign-in should end on, carried through the reset and back to login.
+  const callbackUrl = useSearchParams().get('callbackUrl');
   const [identityType, setIdentityType] = useState<AuthIdentityType>('email');
   const [identity, setIdentity] = useState('');
   const [errorMessage, setErrorMessage] = useState<string>();
@@ -149,9 +152,10 @@ export default function ForgotPasswordFormClient() {
 
           startTransition(() => {
             router.push(
-              `/reset-password?type=${identityType}&value=${encodeURIComponent(
-                normalizedIdentity,
-              )}`,
+              authHref('/reset-password', {
+                callbackUrl,
+                identity: { type: identityType, value: normalizedIdentity },
+              }),
               { scroll: false },
             );
           });
@@ -164,7 +168,9 @@ export default function ForgotPasswordFormClient() {
         variant="text"
         onClick={() => {
           startTransition(() => {
-            router.push('/login', { scroll: false });
+            router.push(authHref('/login', { callbackUrl }), {
+              scroll: false,
+            });
           });
         }}
       >

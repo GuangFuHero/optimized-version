@@ -14,14 +14,17 @@ import { startTransition, useState } from 'react';
 import {
   type AuthIdentityType,
 } from '@rescue-frontend/data-access';
-import { AuthFormError, RegisterForm } from '@rescue-frontend/modules';
+import {
+  AuthFormError,
+  authHref,
+  RegisterForm,
+} from '@rescue-frontend/modules';
 import {
   registerAsync,
   resendVerificationAsync,
   verifyAsync,
 } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
-import { withCallbackUrl } from './callback-url';
 import { createHashedCredentialAsync } from './credentials';
 
 const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
@@ -268,9 +271,10 @@ export default function RegisterFormClient() {
       secondaryActionLabel="返回登入"
       onSecondaryAction={() => {
         startTransition(() => {
-          router.push(withCallbackUrl('/login', requestedCallbackUrl), {
-            scroll: false,
-          });
+          router.push(
+            authHref('/login', { callbackUrl: requestedCallbackUrl }),
+            { scroll: false },
+          );
         });
       }}
     />

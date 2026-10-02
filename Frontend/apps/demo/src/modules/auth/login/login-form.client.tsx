@@ -7,12 +7,12 @@ import { startTransition, useEffect, useState } from 'react';
 
 import {
   AuthFormError,
+  authHref,
   LoginForm,
   sessionStorageOrNull,
 } from '@rescue-frontend/modules';
 import { takeSessionExpired } from '@rescue-frontend/modules/session';
 import { messageForCode } from '../api/error-messages';
-import { withCallbackUrl } from './callback-url';
 import { resolveHashedCredentialAsync } from './credentials';
 
 const LOGIN_FALLBACK_MESSAGE = '登入失敗，請確認帳號或密碼。';
@@ -66,7 +66,7 @@ export default function () {
   const searchParams = useSearchParams();
   const audience = searchParams.get('audience');
   // Set by the page that sent the user here — a guest's 「登入後接」 among them — and kept if they
-  // register instead.
+  // register instead, or go through a forgotten password.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
   const callbackUrl =
     requestedCallbackUrl ?? (audience === 'admin' ? '/admin/map' : '/map');
@@ -134,14 +134,20 @@ export default function () {
         secondaryActionLabel="註冊帳號"
         onForgotPasswordAsync={() => {
           startTransition(() => {
-            router.push('/forgot-password', { scroll: false });
+            router.push(
+              authHref('/forgot-password', {
+                callbackUrl: requestedCallbackUrl,
+              }),
+              { scroll: false },
+            );
           });
         }}
         onSecondaryAction={() => {
           startTransition(() => {
-            router.push(withCallbackUrl('/register', requestedCallbackUrl), {
-              scroll: false,
-            });
+            router.push(
+              authHref('/register', { callbackUrl: requestedCallbackUrl }),
+              { scroll: false },
+            );
           });
         }}
       />
