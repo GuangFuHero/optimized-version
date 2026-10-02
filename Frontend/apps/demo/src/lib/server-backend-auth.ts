@@ -335,8 +335,8 @@ export function applyBackendAuthResponseCookies(
 
 /**
  * Answers for a session that has ended (`isSessionExpired`): marks the response for the browser,
- * which signs out and reloads as a guest, and clears the session. Status and body stay as they are
- * (note/session-expiry-spec.md).
+ * which signs out and reloads as a guest, and clears the session. Status and body stay as they are:
+ * the `x-wg-session` header is the whole of the mark.
  */
 export function expireSessionResponse(
   response: NextResponse,

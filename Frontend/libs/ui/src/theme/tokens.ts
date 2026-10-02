@@ -5,7 +5,7 @@ import type { M3ColorScheme, RescueColorMode } from './m3-color-scheme';
 /**
  * Scrim stops for the login hero. The photograph underneath needs the text side darkened and its
  * top edge lifted; these two take the hue from tokens and keep the tuned alpha ramp. The phone has
- * no hero, so no scrim of its own (`note/login-page-spec.md` Q8).
+ * no hero, so no scrim of its own.
  */
 const scrimDark = (alpha: number) => withAlpha(dt.primitives.color.neutral[900], alpha);
 const scrimLight = (alpha: number) => withAlpha(dt.primitives.color.neutral.white, alpha);

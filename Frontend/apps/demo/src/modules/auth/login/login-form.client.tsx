@@ -74,7 +74,7 @@ export default function () {
     requestedCallbackUrl ?? (audience === 'admin' ? '/admin/map' : '/map');
   const authErrorMessage = resolveAuthErrorMessage(searchParams.get('error'));
   // Sent here by a page only a signed-in person sees (帳號安全) after the session ended there: the
-  // site shell's notice never got to say why (note/session-expiry-spec.md Q6).
+  // site shell's notice never got to say why, so this page does.
   const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {

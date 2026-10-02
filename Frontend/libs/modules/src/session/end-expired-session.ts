@@ -29,8 +29,9 @@ export function sessionStorageOrNull(): Storage | null {
 }
 
 /**
- * The proxy says the session has ended: sign out and reload where the person is, now a guest
- * (`note/session-expiry-spec.md` Q3). A reload, not client-side navigation: urql's cache lives in
+ * The proxy says the session has ended: sign out and reload where the person is, now a guest — as
+ * signing out does, rather than sending them to the login page. A reload, not client-side
+ * navigation: urql's cache lives in
  * the page and must not go on showing what the signed-in person could see. Runs once per tab,
  * however many requests come back marked at the same time.
  */

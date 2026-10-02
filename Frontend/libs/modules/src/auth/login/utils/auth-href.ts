@@ -11,7 +11,7 @@ export type AuthPage =
  * A link between the sign-in pages that keeps `?callbackUrl=` — the page the sign-in should end on —
  * whichever way the person goes: to register, or through a forgotten password and back. A's
  * 「登入後接」 and B's 請求協助 put the ticket, the claim and the help form in it; dropping it on
- * the way sent them to a bare `/map` (`note/login-page-spec.md` Q10). The reset page also needs the
+ * the way sent them to a bare `/map`. The reset page also needs the
  * account the code went to.
  */
 export function authHref(

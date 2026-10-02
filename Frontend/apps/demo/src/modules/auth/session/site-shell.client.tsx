@@ -24,7 +24,7 @@ export function PortalSiteShell({ children }: { children: ReactNode }) {
   const previousStatus = useRef(status);
 
   // Signed out in another tab — from its menu, or because its session ended — and next-auth has
-  // told this one. Reload as handleSignOut does, without a notice (note/session-expiry-spec.md Q7).
+  // told this one. Reload as handleSignOut does, without a notice: that is for the tab it ended in.
   useEffect(() => {
     const previous = previousStatus.current;
     previousStatus.current = status;

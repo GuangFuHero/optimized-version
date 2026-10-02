@@ -19,8 +19,8 @@ const { color, radius, shadow } = designTokens;
 const GAP_BELOW_TOP_BAR = 12;
 
 /**
- * Why the person is suddenly a guest, on the first page after `endExpiredSession`'s reload
- * (`note/session-expiry-spec.md` Q6, Q11): at the top, under the top bar, until closed — a toast
+ * Why the person is suddenly a guest, on the first page after `endExpiredSession`'s reload: at the
+ * top, under the top bar, until closed — a toast
  * that leaves by itself would leave them guessing. Looks as `SiteToast` does; kept apart from it,
  * which sits at the foot and times out.
  */

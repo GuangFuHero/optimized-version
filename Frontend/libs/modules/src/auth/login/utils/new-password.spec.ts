@@ -44,7 +44,7 @@ describe('newPasswordProblem', () => {
     expect(newPasswordProblem('abc', 'abd')).toBe(newPasswordText.tooShort);
   });
 
-  it('has the words agreed for every place a password is set (spec Q14)', () => {
+  it('has the same words for every place a password is set', () => {
     expect(newPasswordText).toEqual({
       tooShort: '密碼至少 8 個字元',
       mismatch: '兩次輸入的密碼不一樣',

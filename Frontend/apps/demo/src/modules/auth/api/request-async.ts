@@ -52,7 +52,7 @@ export async function requestFrontendJsonAsync<T>(
   input: string,
   init?: RequestInit,
 ) {
-  // A session ended elsewhere signs out and reloads as a guest (note/session-expiry-spec.md).
+  // A session ended elsewhere signs out and reloads as a guest (`sessionExpiryFetch`).
   const response = await sessionExpiryFetch(input, {
     ...init,
     headers: {

@@ -1,6 +1,8 @@
 /**
  * The one rule for a password someone sets — on register, reset, change, or a first password on an
- * account that signed up through Google or LINE (`note/login-page-spec.md` Q2, Q3, Q14).
+ * account that signed up through Google or LINE. Eight characters is the design's number for reset,
+ * taken for all four (2026-10-02) so the same password is not turned down in one place and taken
+ * in another.
  *
  * Only the browser can hold it: the password is hashed before it leaves (`credentials.ts`), so the
  * backend sees 64 hex characters whatever was typed, and its `min_length=6` only stops a caller that

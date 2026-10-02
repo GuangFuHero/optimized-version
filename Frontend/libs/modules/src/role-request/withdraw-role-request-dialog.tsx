@@ -27,7 +27,7 @@ interface WithdrawRoleRequestDialogProps {
 }
 
 /**
- * One look before an application waiting for review is taken back (spec Q10): it cannot be undone,
+ * One look before an application waiting for review is taken back: it cannot be undone,
  * and sending it again means filling the form in again. Same shape as the site's other
  * confirmations (`NeedClaimDialog`).
  */

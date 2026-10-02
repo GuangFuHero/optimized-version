@@ -24,7 +24,7 @@ export default function PortalUrqlClientProvider({
       runtime: 'client',
       url: '/api/graphql',
       exchanges: createUrqlExchanges(ssr),
-      // A session that ended elsewhere signs out and reloads as a guest (note/session-expiry-spec.md).
+      // A session that ended elsewhere signs out and reloads as a guest (`sessionExpiryFetch`).
       fetch: sessionExpiryFetch,
       suspense: true,
     });

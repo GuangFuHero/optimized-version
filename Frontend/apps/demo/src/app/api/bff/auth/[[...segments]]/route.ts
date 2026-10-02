@@ -71,7 +71,7 @@ function toRequestLike(request: NextRequest) {
 
 /**
  * The session a request sent its token with, kept for the error path: a 401 from the backend then
- * means that session has ended elsewhere (note/session-expiry-spec.md), and any other refusal must
+ * means that session has ended elsewhere, and any other refusal must
  * still hand back the token pair a refresh may have just rotated.
  */
 const sentAuthByRequest = new WeakMap<NextRequest, ResolvedBackendAuth>();

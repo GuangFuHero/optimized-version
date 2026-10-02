@@ -1,8 +1,7 @@
 /**
  * When a signed-in session has ended without the person signing out: revoked elsewhere (另一台裝置
  * 「登出所有裝置」, an admin's sign-out, an identity removed — backend ADR-096) or past its refresh.
- * The GraphQL proxy decides and marks the response; the browser reads the mark
- * (`note/session-expiry-spec.md`).
+ * The GraphQL proxy decides and marks the response; the browser reads the mark.
  *
  * Pure and import-free: the server route and the browser both use it.
  */
@@ -50,7 +49,7 @@ export type SessionStatus = 'authenticated' | 'unauthenticated' | 'loading';
 /**
  * Another tab signed out — on its own, or because its session ended — and next-auth told this one
  * (its sign-out broadcast, or a refetch on focus): reload, so urql's cache stops showing what the
- * signed-in person could see (`note/session-expiry-spec.md` Q7). Only from `authenticated`:
+ * signed-in person could see. Only from `authenticated`:
  * `loading` is a page still reading its session, not a sign-out.
  */
 export function shouldReloadForSignOut({
@@ -87,7 +86,8 @@ export interface UnauthorizedCheck {
 
 /**
  * A refusal for want of a valid sign-in, for the words an error shows when the proxy's mark did not
- * end the session first (spec Q9, S7). It comes two ways:
+ * end the session first — a fallback: the mark normally gets there before any error shows. It
+ * comes two ways:
  * - the backend's GraphQL context turns down a token it cannot validate with an HTTP 401
  *   (`get_context`, backend `graphql/context.py`), whose `{ detail }` body urql cannot read as
  *   GraphQL: it hands over a `networkError` with the `response` beside it, so this must be asked

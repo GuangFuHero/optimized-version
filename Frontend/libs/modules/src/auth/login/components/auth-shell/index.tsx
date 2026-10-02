@@ -34,7 +34,7 @@ const authShellText = {
 const MAP_HREF = '/map';
 
 /**
- * The sign-in pages' frame (`note/login-page-spec.md` Q5, Q7, Q8; design `site.css` `.wg-auth`).
+ * The sign-in pages' frame (design `site.css` `.wg-auth`, `site-auth.jsx` `AuthHero`).
  * From 900px: the hero on the left — brand, what signing in is for, and the way to the map — over
  * the Figma photograph the design only stood in for. Below that the hero would push the form to a
  * second screen, so the phone gets no hero: the brand and the way to the map sit in a row above the
