@@ -1,8 +1,7 @@
 # Decisions: 019 Role Requests
 
 Numbering continues the repo-wide ADR sequence. ADR-286 was the last one taken when these were written
-(2026-09-30); flows A and B start their next ADRs at 291. ADR-294 was added on 2026-10-01; flow A holds
-ADR-291 to ADR-293.
+(2026-09-30). ADR-291 to ADR-293 are in `Spec/020-volunteer-claim`; ADR-294 was added here on 2026-10-01.
 
 ---
 
