@@ -333,7 +333,7 @@ async def test_a_closed_application_cannot_be_withdrawn(db, status):
     citizen = await _citizen(db)
     request = await _submit(db, citizen)
     request_uuid = request.uuid
-    request.status = status  # arranging state only: approval arrives in C-B6
+    request.status = status  # arranging state only: how it was closed is not under test
     await db.commit()
 
     with pytest.raises(ValueError, match="^Role request is no longer pending$"):
@@ -425,7 +425,7 @@ async def test_a_closed_application_cannot_be_rejected(db, status):
     citizen = await _citizen(db)
     request = await _submit(db, citizen)
     request_uuid = request.uuid
-    request.status = status  # arranging state only: approval arrives in C-B6
+    request.status = status  # arranging state only: how it was closed is not under test
     await db.commit()
 
     with pytest.raises(role_request.RoleRequestConflictError, match="^Role request is no longer pending$"):

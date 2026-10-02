@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.conftest import _ADMIN_DB_URL, TEST_DB_URL
 
-# role_requests (C-B1): the last revision before the backfill.
+# role_requests (feature 019): the last revision before the backfill.
 _BEFORE = "666b59ab2581"
 
 _DB_NAME = f"{TEST_DB_URL.rsplit('/', 1)[-1]}_backfill"
