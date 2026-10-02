@@ -1,8 +1,8 @@
 # Decisions: 020 Volunteer Claim
 
-Flow A of the site revamp: a volunteer claims one need of a request, not the whole request, and a
-request's owner can stop recruiting for one need. Numbering continues the repo-wide ADR sequence: flow A
-holds ADR-291 to ADR-293 (flow C took ADR-287 to ADR-290 and ADR-294; flow B starts at ADR-295).
+Part of the site revamp: a volunteer claims one need of a request, not the whole request, and a
+request's owner can stop recruiting for one need. Numbering continues the repo-wide ADR sequence: this
+spec holds ADR-291 to ADR-293 (`Spec/019-role-requests` holds ADR-287 to ADR-290 and ADR-294).
 
 The rules below were set by the team on 2026-09-28 and by the product owner between 2026-09-26 and
 2026-09-30.
@@ -16,14 +16,14 @@ Terms: a **request** is a `tickets` row; a **need** is one of its `ticket_tasks`
 ### ADR-291 A need takes people up to its quantity, from anyone, and the claim that fills it fulfils it
 
 > **Status: ACCEPTED (2026-10-01).** Rules decided by the team on 2026-09-28. That the cap binds
-> coordinators too was the product owner's call the same day, against flow A's proposal to keep their
+> coordinators too was the product owner's call the same day, against a proposal to keep their
 > over-assignment; the order of the checks was settled on 2026-09-30.
 
 **In plain words**: a need that asks for 3 people takes 3, whether they sign up themselves or a coordinator
 sends them. The third claim marks it fulfilled: it has everyone it asked for, and they still go. If one of
 them gives the place back, the need recruits again.
 
-**Context**: Before this flow, a claim (`assign_task_actor`) checked nothing but duplicates. A need asking
+**Context**: Before this ADR, a claim (`assign_task_actor`) checked nothing but duplicates. A need asking
 for 3 people took a fourth and a fifth; a fulfilled or cancelled need, and any need of a closed request,
 could still be claimed. HC's `d847624` (2026-06-08) let a coordinator assign people past the quantity on
 purpose. "Fulfilled" was set by hand through `updateTicketTask`, so a full need read as open until someone
@@ -88,9 +88,9 @@ fills (`TicketTaskType.myAssignment`).
 enough"). The 3 stay on it and still go; nobody else can claim it; none of the 3 can give the place back.
 It cannot be undone: to recruit again, add another need.
 
-**Context**: The site prototype had a whole-request 「刪除媒合單」 that closed every need at once. Flow A first
-built it as `stopRecruiting(ticketUuid)`, which cancelled every open need of a request. On 2026-09-28 the
-team ruled that stopping is per need, that cancelling means deleting (flow B's `deleteTicketTask` and
+**Context**: The site prototype had a whole-request 「刪除媒合單」 that closed every need at once. It was
+first built as `stopRecruiting(ticketUuid)`, which cancelled every open need of a request. On 2026-09-28 the
+team ruled that stopping is per need, that cancelling means deleting (`deleteTicketTask` and
 `deleteTicket`), and that a request's status follows its needs.
 
 **Decision**:
@@ -130,9 +130,9 @@ this column.
 
 ### ADR-293 A need's status moves only through the actions that own it; a deleted need's claims stay put
 
-> **Status: ACCEPTED (2026-10-01).** The first part was agreed by the team with flows A and B on 2026-09-28;
-> the guard inside the service was the product owner's call on 2026-09-30. The second part was decided on
-> 2026-09-30, after flow B found the gap while checking that deleted rows stay hidden.
+> **Status: ACCEPTED (2026-10-01).** The first part was agreed by the team on 2026-09-28; the guard inside
+> the service was the product owner's call on 2026-09-30. The second part was decided on 2026-09-30, after
+> the gap turned up while checking that deleted rows stay hidden.
 
 **In plain words**: nobody sets a need's status by hand any more. A need is fulfilled when it fills or is
 stopped, reopens when a place frees, and is cancelled when it is deleted. Once a need is deleted, the claims
@@ -141,15 +141,15 @@ on it are kept unchanged, as the record of who was on it.
 **Context**: `updateTicketTask` took a `status`, so a need could be set to anything, `in_progress` included,
 each change sending its own notice (`_task_status_notice`). With ADR-291 and ADR-292 in place, such an edit
 could reopen a need its owner stopped, or close one without telling anyone. Separately, deleting a need or a
-request (flow B) keeps its claims as a record, but `updateTaskAssignment` could still change their `status`
-and `role`.
+request (`delete_ticket_task`, `delete_ticket`) keeps its claims as a record, but `updateTaskAssignment`
+could still change their `status` and `role`.
 
 **Decision**:
 
 1. **A need's status is `pending`, `fulfilled` or `canceled`.** `in_progress` is gone for needs; a request
    keeps it. Only these change a need's status, each sending its own notice and keeping its own timestamps:
    a claim (filling it, ADR-291), giving a place back (reopening it, ADR-291), stopping recruitment
-   (ADR-292), and deletion (flow B).
+   (ADR-292), and deletion (`delete_ticket_task`, `delete_ticket`).
 2. **`UpdateTicketTaskInput` has no `status`**, and `update_ticket_task` raises `ValueError` if `changes`
    names one. The repository's `update` writes whatever it is given, so without the guard an internal
    caller, such as an import, could still bypass the rule. The status notices, `_task_status_notice`,
@@ -164,8 +164,7 @@ and `role`.
 ➕ Every change of a need's status comes with its notice and its timestamps; none can happen silently.
 ➕ The record of who was on a deleted need stays as it was when the need went.
 ➖ The back office cannot mark a need done by hand. "Done" has no state: volunteers do not report progress
-in this flow.
-➖ Needs still carrying a status from before (`scripts/seed_mock_scenarios.sql` has `in_progress` and
-`completed`) are not migrated. The claim check takes both as open, like `pending`; working out a
-request's status (`OPEN_NEED_STATUSES`) counts `in_progress` as open but not `completed`. Reset or migrate
-such data before relying on either.
+on the site.
+➖ Needs still carrying a status from before (`in_progress`, `completed`) are not migrated. The claim check
+takes both as open, like `pending`; working out a request's status (`OPEN_NEED_STATUSES`) counts
+`in_progress` as open but not `completed`. Reset or migrate such data before relying on either.
