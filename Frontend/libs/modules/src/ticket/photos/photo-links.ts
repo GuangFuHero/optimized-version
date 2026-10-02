@@ -4,7 +4,7 @@
  * rules, so the request form and the ticket's drawer cannot drift into two ways of failing.
  */
 
-/** Links one request may carry — the backend's `HELP_REQUEST_PHOTO_MAX` (使用者 2026-10-01). */
+/** Links one request may carry — the backend's `HELP_REQUEST_PHOTO_MAX`. */
 export const PHOTO_LINK_MAX = 10;
 
 /** `photos.url` is String(500); a longer link is refused there, the whole request with it. */
