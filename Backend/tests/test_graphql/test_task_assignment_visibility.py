@@ -1,4 +1,4 @@
-"""Who sees who claimed a need (spec Q7/Q14, ADR-286).
+"""Who sees who claimed a need (ADR-286).
 
 `assignedCount` stays public — it is what a volunteer decides "is there room?" on. The list
 of `assignments`, which names each volunteer's account, follows the parent ticket's

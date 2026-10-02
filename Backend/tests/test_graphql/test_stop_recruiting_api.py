@@ -1,4 +1,4 @@
-"""GraphQL surface of 停止招募, one need at a time (spec Q39).
+"""GraphQL surface of 停止招募, one need at a time (ADR-292).
 
 The rules — what closes, who hears, who may — are pinned at the service layer in
 tests/test_volunteer_claim.py; these only prove the mutation is wired to them.

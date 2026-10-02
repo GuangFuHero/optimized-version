@@ -50,9 +50,9 @@ MAX_DISASTER_DETAIL_KEY_LENGTH = 100
 # vocabulary spells it `canceled`, unlike the ticket-level `cancelled` below.
 CLOSED_TASK_STATUSES = frozenset({"fulfilled", "canceled"})
 # A ticket in one of these states takes no more volunteers on any of its tasks, whatever each
-# task's own status says. Now that a ticket's status is worked out from its needs (spec Q44) and
-# only deleting it cancels it, that matters only for tickets closed by hand before then, whose
-# needs were left pending.
+# task's own status says. Now that a ticket's status is worked out from its needs and only
+# deleting it cancels it, that matters only for tickets closed by hand before then, whose needs
+# were left pending.
 CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
 
 # The kinds of help a need can ask for — the values `CreateTicketTaskInput.taskType` documents
@@ -63,7 +63,7 @@ TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
 TICKET_TITLE_MAX_LENGTH = 200
 TASK_NAME_MAX_LENGTH = 200
 # Photo links a citizen may file with a request — the site's own limit, the same number its
-# form stops at (spec S8, 使用者 2026-10-01; the prototype's TK_PHOTO_MAX in wg-photos.jsx).
+# form stops at (the prototype's TK_PHOTO_MAX in wg-photos.jsx).
 HELP_REQUEST_PHOTO_MAX = 10
 
 # What a notice calls each review outcome — the site's own words, never the enum. An unknown
@@ -227,16 +227,15 @@ async def create_help_request(
 ) -> Tickets:
     """File a citizen's request for help: the ticket, every need and photo link, in one commit.
 
-    The public site's 「請求協助」 (spec note/help-request-spec.md, D1). `create_ticket` followed
-    by one `create_ticket_task` per need commits each step on its own, so a failure part-way
-    leaves a ticket with some of its needs missing and a retry files a second ticket. Here
-    nothing is written unless all of it is.
+    The public site's 「請求協助」. `create_ticket` followed by one `create_ticket_task` per need
+    commits each step on its own, so a failure part-way leaves a ticket with some of its needs
+    missing and a retry files a second ticket. Here nothing is written unless all of it is.
 
     The site never asks how urgent a request is or who may see it: priority is `medium` and
     visibility `public`, and staff adjust both afterwards. The ticket's own `task_type` is the
     first need's, as the admin form sets it.
 
-    Photo links (「現場照片（選填）」, spec S8) become the ticket's photos, read back by
+    Photo links (「現場照片（選填）」) become the ticket's photos, read back by
     `TicketType.photos` and withheld from whoever cannot see the ticket's detail.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
@@ -313,10 +312,10 @@ async def create_help_request(
 
 
 async def list_my_tickets(db: AsyncSession, *, actor: User) -> list[Tickets]:
-    """The tickets `actor` filed — 「我的任務 › 我建立的」 (spec Q16/Q17).
+    """The tickets `actor` filed — 「我的任務 › 我建立的」.
 
     Newest first and unpaged: one person files few, which is also why `created_by` carries no
-    index (Q17). Every status is listed, since following a ticket to completion is what the list
+    index. Every status is listed, since following a ticket to completion is what the list
     is for; a deleted ticket drops off. No capability check: these are the caller's own tickets,
     each still masked per field by TicketType like anywhere else. `created_by` is the person, so
     the list is the same whichever identity they act as.
@@ -646,8 +645,8 @@ async def _add_need(db: AsyncSession, *, actor: User, ticket_uuid: str, need: di
     """Lock the ticket, add the need, work the ticket's status out, and commit once.
 
     The ticket is locked first, the order every writer keeps, and read again under the lock, so a
-    ticket deleted meanwhile takes no need. A completed ticket takes one and is open again (spec
-    Q20): left completed, it would turn away every claim on the need (_lock_task_with_room).
+    ticket deleted meanwhile takes no need. A completed ticket takes one and is open again: left
+    completed, it would turn away every claim on the need (_lock_task_with_room).
     """
     ticket = await db.scalar(
         select(Tickets)
@@ -671,7 +670,7 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
 
     TicketTask carries no team_uuid, so only `own`/`all` scope can match it.
 
-    A task's status is not editable (spec Q41): it moves only through the actions that own it —
+    A task's status is not editable (ADR-293): it moves only through the actions that own it —
     a claim filling it, a release reopening it, the requester stopping recruitment, a deletion —
     each of which keeps its timestamps and sends its notice. An edit that could set it would
     reopen a need its requester stopped, or close one silently; `changes` naming it is refused.
@@ -782,11 +781,11 @@ async def assign_task_actor(
     A fulfilled or canceled task takes nobody, nor does a task of a completed or cancelled
     ticket. A volunteer claims a need, not a ticket (PUB-PS-140), and a task with a `quantity`
     takes nobody more once it has that many people — not even from a coordinator assigning
-    someone else (spec Q38, reversing d847624): to send more, they open another need. A task
+    someone else (ADR-291, reversing d847624): to send more, they open another need. A task
     without one has no cap, as the requester never said how many. The claim that brings a task
-    to its `quantity` marks it fulfilled in the same commit (spec Q37): it has everyone it asked
+    to its `quantity` marks it fulfilled in the same commit (ADR-291): it has everyone it asked
     for, and they still go — fulfilled is not "done". The ticket's status is worked out again in
-    the same commit (spec Q44). The need's ticket and then the need are locked FOR UPDATE from
+    the same commit. The need's ticket and then the need are locked FOR UPDATE from
     the count to the commit (_lock_ticket_and_task), so two people racing for the last place
     cannot both get it. Authorization runs first, so a caller who will be refused never takes
     the locks. A task whose ticket was deleted is gone with it.
@@ -873,7 +872,7 @@ async def assign_task_actor(
 async def list_my_claims(
     db: AsyncSession, *, actor: User
 ) -> list[tuple[TaskAssignment, TicketTask, Tickets]]:
-    """Every task `actor` is assigned to, with the task and its ticket — 「我承接的」 (spec Q16).
+    """Every task `actor` is assigned to, with the task and its ticket — 「我承接的」.
 
     Newest claim first, unpaged: one volunteer's claims stay few. A fulfilled task stays listed,
     since its volunteers still go, and so does a canceled one, since seeing that is how they
@@ -896,16 +895,16 @@ async def list_my_claims(
 
 
 async def stop_recruiting(db: AsyncSession, *, actor: User, task_uuid: str) -> TicketTask:
-    """Stop recruiting for one need — the requester's 「停止招募」 (spec Q39).
+    """Stop recruiting for one need — the requester's 「停止招募」 (ADR-292).
 
     ticket.edit on the need's ticket, as for any edit to it, checked before the locks. The need
     becomes fulfilled with its quantity cut to the people already on it — a need that never had
     one gets that count too — and recruiting_stopped_at records that it was stopped by hand, so
-    it never reopens (spec Q40) and its list is final: nobody on it can give their place back
-    (spec Q46, unassign_task_actor). To recruit again, the requester opens another need. A need
-    nobody claimed has no one to keep, so it is refused: the requester deletes it instead. Nor
-    can a need that is no longer open be stopped. The ticket's status is worked out again, and
-    all of it commits once (spec Q44).
+    it never reopens and its list is final: nobody on it can give their place back
+    (unassign_task_actor). To recruit again, the requester opens another need. A need nobody
+    claimed has no one to keep, so it is refused: the requester deletes it instead. Nor can a
+    need that is no longer open be stopped. The ticket's status is worked out again, and all of
+    it commits once.
 
     Everyone on the need hears, once it has committed, that it stopped and that they still go.
     Returns the need.
@@ -950,7 +949,7 @@ async def stop_recruiting(db: AsyncSession, *, actor: User, task_uuid: str) -> T
 async def _lock_ticket_and_task(
     db: AsyncSession, *, task_uuid: str, live_only: bool = True
 ) -> tuple[Tickets, TicketTask]:
-    """Lock a need's ticket, then the need, FOR UPDATE: the order agreed for writes (spec Q44).
+    """Lock a need's ticket, then the need, FOR UPDATE: the order agreed for writes (ADR-291).
 
     A ticket's status is worked out from all of its needs (recompute_ticket_status), so whatever
     changes a need holds its ticket as well, and taking the two in one fixed order makes writers
@@ -988,14 +987,14 @@ async def _lock_task_with_room(
 
     Returns the ticket, the need and the need's count. The locks are held until the caller
     commits. The quantity cap binds everyone, a coordinator assigning someone else included
-    (spec Q38).
+    (ADR-291).
 
     A need that has as many people as it asked for says it is full rather than closed — filled
-    by claims (spec Q37), or stopped by its requester with the quantity cut to the headcount —
-    so the site shows 已滿, not 已結束. Its ticket's status is checked after the count too:
-    filling a ticket's last open need completes the ticket (spec Q44), and whoever comes next
-    should still hear the need is full. A canceled need is no longer open whatever its count,
-    and so is a need with room left that is fulfilled or on a closed ticket.
+    by claims, or stopped by its requester with the quantity cut to the headcount — so the site
+    shows 已滿, not 已結束. Its ticket's status is checked after the count too: filling a
+    ticket's last open need completes the ticket, and whoever comes next should still hear the
+    need is full. A canceled need is no longer open whatever its count, and so is a need with
+    room left that is fulfilled or on a closed ticket.
     """
     ticket, task = await _lock_ticket_and_task(db, task_uuid=task_uuid)
     if task.status == "canceled":
@@ -1068,14 +1067,14 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
 
     Authorization first; then the need's ticket and the need are locked like a claim locks them
     (_lock_ticket_and_task), and the removal commits once, with the ticket's status worked out
-    again (spec Q44).
+    again.
 
     Once the requester stopped recruiting by hand, the need's list is final and no place on it
-    can be given back, by anyone (spec Q46): those on it may already have done the work, or were
+    can be given back, by anyone (ADR-292): those on it may already have done the work, or were
     enough, and the site cannot tell — a freed place would leave room to refill a need its
     requester closed. Any other place can be, a deleted need's included. A need that filled by
-    itself recruits again once a place frees up (spec Q40), with no notice to anyone, as with
-    any release (spec Q18).
+    itself recruits again once a place frees up (ADR-291), with no notice to anyone, as with
+    any release.
     """
     assignment = await task_assignment_repository.get_by_uuid(db, uuid)
     if not assignment:
@@ -1095,7 +1094,7 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
         raise ValueError("Task assignment not found")
     # Fulfilled but not stopped by hand (refused above) means it filled by itself; reopen it once
     # there is room again. An over-subscribed need from before the cap bound coordinators
-    # (spec Q38) can still be full after losing one, and stays fulfilled.
+    # (ADR-291) can still be full after losing one, and stays fulfilled.
     if (
         task.status == "fulfilled"
         and task.quantity is not None
@@ -1113,7 +1112,7 @@ async def update_task_assignment(
 ) -> TaskAssignment:
     """Update a task assignment's status/role. Assignee updates own (=own), coordinator any (=all).
 
-    Not once the need or its ticket is deleted (spec Q47): the claims on it are kept as the record
+    Not once the need or its ticket is deleted (ADR-293): the claims on it are kept as the record
     of who was on it when it went, and stay as they were then. The need is not found, as for a
     claim or a stop; giving the place back still works (unassign_task_actor). Checked after
     authorization, so a caller who may not change the claim cannot tell whether it was deleted.

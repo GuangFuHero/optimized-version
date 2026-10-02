@@ -105,7 +105,7 @@ async def test_a_full_need_cannot_be_claimed(db):
 
 @pytest.mark.asyncio
 async def test_a_coordinator_cannot_send_more_than_the_need_asks_for(db):
-    """A full need is full for a coordinator too: to send more, open another need (spec Q38).
+    """A full need is full for a coordinator too: to send more, open another need (ADR-291).
 
     Reverses d847624, which let a coordinator who could see the ground knowingly over-subscribe.
     """
@@ -266,7 +266,7 @@ async def test_two_volunteers_racing_for_the_last_place_get_one_claim(db, monkey
     assert await _claims(db, task_uuid) == 1
 
 
-# --- the lock order every writer keeps: the ticket, then its need (spec Q44) ---
+# --- the lock order every writer keeps: the ticket, then its need (ADR-291) ---
 
 
 async def _waits_for_the_ticket(ticket_uuid: str, action) -> None:
@@ -335,7 +335,7 @@ async def test_a_release_waits_for_whoever_holds_the_ticket(db):
     assert await _claims(db, task_uuid) == 0
 
 
-# --- a need that has everyone it asked for stops recruiting by itself (spec Q37) ---
+# --- a need that has everyone it asked for stops recruiting by itself (ADR-291) ---
 
 
 async def _state(db, task_uuid: str) -> tuple[str, datetime | None]:
@@ -375,7 +375,7 @@ async def test_a_need_without_a_quantity_never_fills_up(db):
     assert await _state(db, task_uuid) == ("pending", None)
 
 
-# --- who hears about a claim (spec Q18; prototype site-actions.jsx:473-496) ---
+# --- who hears about a claim (ADR-291; prototype site-actions.jsx:473-496) ---
 
 
 async def _notices(db, recipient: str, event_type: str) -> list[Notification]:
@@ -494,7 +494,7 @@ async def test_a_need_without_a_quantity_never_fills(db):
     assert [n.body for n in requester_notices] == ["需要清淤人力　目前 1 人", "需要清淤人力　目前 2 人"]
 
 
-# --- the requester stops recruiting for one need (spec Q39) ---
+# --- the requester stops recruiting for one need (ADR-292) ---
 
 
 async def _may_edit_own_tickets(db, user: User) -> User:
@@ -666,7 +666,7 @@ async def test_a_stopped_need_takes_nobody_more(db):
         await _claim(db, late, task_uuid)
 
 
-# --- giving a place back (spec Q40, Q46) ---
+# --- giving a place back (ADR-291, ADR-292) ---
 
 
 @pytest.mark.asyncio
@@ -728,7 +728,7 @@ async def test_a_place_on_a_deleted_need_can_still_be_given_back(db):
     assert await _claims(db, task_uuid) == 0
 
 
-# --- changing a claim (spec Q47) ---
+# --- changing a claim (ADR-293) ---
 
 
 @pytest.mark.asyncio
@@ -758,7 +758,7 @@ async def test_a_claim_on_a_deleted_need_stays_as_it_was(db, deleted):
     assert status == "accepted"
 
 
-# --- the ticket's status follows its needs (spec Q44) ---
+# --- the ticket's status follows its needs ---
 
 
 async def _ticket_status(db, ticket_uuid: str) -> str:
@@ -820,9 +820,9 @@ async def test_stopping_recruitment_on_the_last_open_need_completes_the_ticket(d
 
 @pytest.mark.asyncio
 async def test_giving_back_a_place_reopens_a_completed_ticket(db):
-    """The need that filled by itself recruits again (spec Q40), and so does its ticket.
+    """The need that filled by itself recruits again (ADR-291), and so does its ticket.
 
-    Reopening the need alone would not do: a need of a completed ticket takes nobody (spec Q28).
+    Reopening the need alone would not do: a need of a completed ticket takes nobody (ADR-291).
     """
     task = await _need(db, quantity=2)
     task_uuid, ticket_uuid = str(task.uuid), str(task.ticket_uuid)
@@ -855,7 +855,7 @@ async def test_the_last_place_given_back_leaves_the_ticket_pending(db):
     assert await _ticket_status(db, ticket_uuid) == "pending"
 
 
-# --- editing a need (spec Q22, Q41) ---
+# --- editing a need (ADR-293) ---
 
 
 async def _claimed_by_one(db) -> tuple[str, str, User]:
@@ -870,7 +870,7 @@ async def _claimed_by_one(db) -> tuple[str, str, User]:
 
 @pytest.mark.asyncio
 async def test_an_edit_cannot_move_a_needs_status(db):
-    """Only claiming, giving back, stopping recruitment and deleting move it (spec Q41).
+    """Only claiming, giving back, stopping recruitment and deleting move it (ADR-293).
 
     An edit could otherwise reopen a need its requester stopped, or close one without the notice
     the action that closes it sends.

@@ -1,4 +1,4 @@
-"""「我的任務 › 我承接的」: every need the caller claimed, with where to go (spec Q16).
+"""「我的任務 › 我承接的」: every need the caller claimed, with where to go.
 
 One row per claim, carrying the claim, the need and its ticket, so the drawer can show
 「在哪裡、聯絡誰」 without a query per row. Newest first, no paging. A need that was canceled

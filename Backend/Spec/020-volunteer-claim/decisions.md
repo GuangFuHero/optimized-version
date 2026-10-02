@@ -5,8 +5,7 @@ request's owner can stop recruiting for one need. Numbering continues the repo-w
 holds ADR-291 to ADR-293 (flow C took ADR-287 to ADR-290 and ADR-294; flow B starts at ADR-295).
 
 The rules below were set by the team on 2026-09-28 and by the product owner between 2026-09-26 and
-2026-09-30. Comments in `app/services/ticket.py` and in flow A's tests cite them as "spec Q37" and so on;
-the table at the end maps those numbers to the rules here.
+2026-09-30.
 
 Terms: a **request** is a `tickets` row; a **need** is one of its `ticket_tasks` rows, with an optional
 `quantity` of people; a **claim** is a `task_assignments` row linking a person to a need. The site says
@@ -170,31 +169,3 @@ in this flow.
 `completed`) are not migrated. The claim check takes both as open, like `pending`; working out a
 request's status (`OPEN_NEED_STATUSES`) counts `in_progress` as open but not `completed`. Reset or migrate
 such data before relying on either.
-
----
-
-## Spec numbers cited in code
-
-Flow A's working spec numbered its decisions Q1, Q2 and so on. These are the ones the backend's comments
-and tests cite, with where each now stands. Flow B's tests (`test_help_request_api.py`,
-`test_add_ticket_task.py`) cite flow B's own spec, whose numbers are unrelated.
-
-| Number | Rule | Where |
-|---|---|---|
-| Q5 | A claim is refused on a fulfilled or cancelled need; a need pending review can be claimed | ADR-291 |
-| Q7 | `TicketTaskType.myAssignment` is the viewer's own claim (null to a guest); who claimed a need (`assignments`) is restricted | ADR-286 |
-| Q12 | Claiming did not unlock the owner's contact details | overturned by ADR-286 |
-| Q16 | `myTaskAssignments`: the caller's claims with their need and request, newest first, unpaged; deleted needs and requests left out, fulfilled ones listed | `list_my_claims` |
-| Q18 | Notices: the owner on every claim, named after the person going; everyone on a need when it fills; none when a place is given back | ADR-291 |
-| Q22 | Status-change notices in Chinese | superseded by Q41 (ADR-293) |
-| Q28 | A need of a completed or cancelled request takes nobody | ADR-291 |
-| Q36 | Contact details open to everyone signed in | ADR-286 |
-| Q37 | The claim that fills a need fulfils it; the order of the claim checks | ADR-291 |
-| Q38 | The quantity caps coordinators too (reverses `d847624`) | ADR-291 |
-| Q39 | Stopping recruitment, per need | ADR-292 |
-| Q40 | Giving a place back reopens a need that filled by itself | ADR-291 |
-| Q41 | A need's status moves only through claims, releases, stopping and deletion | ADR-293 |
-| Q43 | Cancelling a need or a request means deleting it (flow B) | flow B |
-| Q44 | A request's status follows its needs (flow B); lock the request, then the need | ADR-291 (lock order) |
-| Q46 | No place can be given back on a stopped need | ADR-292 |
-| Q47 | A deleted need's claims cannot be changed | ADR-293 |

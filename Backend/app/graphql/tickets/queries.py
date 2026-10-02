@@ -154,7 +154,7 @@ class RequestQuery:
 
     @strawberry.field
     async def my_tickets(self, info: strawberry.types.Info) -> list[TicketType]:
-        """The tickets the caller filed, newest first — 「我的任務 › 我建立的」 (spec Q16/Q17).
+        """The tickets the caller filed, newest first — 「我的任務 › 我建立的」.
 
         Sign-in only, no capability: every row is the caller's own ticket. Every status is
         listed; deleted tickets drop off. Each ticket's `tasks` carry the quantity, status and
@@ -206,7 +206,7 @@ class TicketTaskQuery:
 
     @strawberry.field
     async def my_task_assignments(self, info: strawberry.types.Info) -> list[MyTaskAssignmentType]:
-        """The needs the caller claimed, newest first — 「我的任務 › 我承接的」 (spec Q16).
+        """The needs the caller claimed, newest first — 「我的任務 › 我承接的」.
 
         Sign-in only, no capability: every row is the caller's own claim. Canceled and
         fulfilled needs stay listed; deleted ones drop off. Each ticket follows the same

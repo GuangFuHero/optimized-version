@@ -974,7 +974,7 @@ async def test_update_ticket_task_progress_note(client, coordinator_auth, sample
 
 @pytest.mark.asyncio
 async def test_update_ticket_task_no_longer_takes_a_status(client, coordinator_auth, sample_ticket_task):
-    """A task's status moves only through claims, releases, stopRecruiting and deletion (spec Q41)."""
+    """A task's status moves only through claims, releases, stopRecruiting and deletion (ADR-293)."""
     _, token = coordinator_auth
     query = (
         'mutation($uuid: UUID!) { updateTicketTask(uuid: $uuid, input: {status: "fulfilled"}) { uuid } }'
@@ -1245,7 +1245,7 @@ async def test_a_coordinator_cannot_over_subscribe(
     coordinator_auth,
     sample_ticket_task,
 ):
-    """quantity=3 task takes three people and turns away a fourth, even a coordinator's (spec Q38).
+    """quantity=3 task takes three people and turns away a fourth, even a coordinator's (ADR-291).
 
     Reverses d847624, which let a coordinator knowingly send more: to send more, open another need.
     """
