@@ -21,9 +21,9 @@ interface MyTasksDrawerProps {
 
 /**
  * 我的任務 (prototype `MyTasksDrawer`, `site-actions.jsx:1765-1896`): one entry in the account menu,
- * one tab per side of the same thing — 我建立的 (B's S6), read for how far each request got, and
- * 我承接的, for keeping the promise. As in the prototype, 我建立的 comes first and every opening
- * starts there. With a single tab there would be nothing to choose, so no tab bar (spec Q50).
+ * one tab per side of the same thing — 我建立的, read for how far each request got, and 我承接的,
+ * for keeping the promise. As in the prototype, 我建立的 comes first and every opening starts
+ * there. With a single tab there would be nothing to choose, so no tab bar.
  */
 export function MyTasksDrawer({ open, onClose }: MyTasksDrawerProps) {
   const tabs: MyTasksTab[] = [

@@ -116,7 +116,7 @@ export function NeedLine({
       </Box>
 
       {/* Kept at the card's right edge, in line with the card's other actions below it — the
-          requester's ⋯ last, pulled into the padding so its glyph lines up with them (spec Q51). */}
+          requester's ⋯ last, pulled into the padding so its glyph lines up with them. */}
       <Stack direction="row" sx={{ ml: 'auto', flexShrink: 0, alignItems: 'center', gap: 0.5 }}>
         <NeedClaimButton
           claim={claim}

@@ -390,7 +390,7 @@ export function TaskMatchTicketDetailsPanel({
   );
   const ticketStatus = ticket?.status ?? marker.ticketMeta?.status;
   const ticketCreatedBy = ticket?.createdBy ?? marker.ticketMeta?.createdBy;
-  // Its requester can add one more need (B's S4), even to a ticket left with none.
+  // Its requester can add one more need, even to a ticket left with none.
   const canAddNeed = useCanAddNeed({ ticketStatus, ticketCreatedBy });
 
   const activeTask = tasks[activeTaskIndex] ?? null;
@@ -728,10 +728,9 @@ export function TaskMatchTicketDetailsPanel({
         title={`現場照片${photos.length > 0 ? ` (${photos.length})` : ''}`}
         icon={<PhotoLibraryRoundedIcon sx={{ fontSize: 18 }} />}
       >
-        {/* All at once, as thumbnails that open the image itself (prototype site-detail.jsx:353;
-            B's S8), and each failing on its own into a card with its link. No 上傳者 or time:
-            the one is an account's uuid, which tells a reader nothing and ties the photo to an
-            account (spec Q36). */}
+        {/* All at once, as thumbnails that open the image itself (prototype site-detail.jsx:353),
+            and each failing on its own into a card with its link. No 上傳者 or time: the one is an
+            account's uuid, which tells a reader nothing and ties the photo to an account. */}
         {photos.length > 0 ? (
           <Box
             sx={{

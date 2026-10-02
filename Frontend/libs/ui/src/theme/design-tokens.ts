@@ -397,9 +397,7 @@ export const semanticTypographyMobile = {
  * rather than round it into either, the product owner added the step (2026-09-18). Its phone size
  * had to land strictly between 23 and 26 to keep the ladder monotonic, so 24 or 25. 25 was chosen
  * because 22 mostly sits beside 20-step text, and 23 vs 24 on a phone is a 1px difference nobody
- * reads as hierarchy. So this table is AHEAD of `site.css` until the designer adds `--fs-22` there;
- * the step is listed with the other code-ahead-of-design items in
- * `note/design-system-decisions.md`.
+ * reads as hierarchy. So this table is AHEAD of `site.css` until the designer adds `--fs-22` there.
  *
  * ## How to use it
  *

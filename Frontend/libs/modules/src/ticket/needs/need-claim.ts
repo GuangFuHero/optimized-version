@@ -37,18 +37,18 @@ export function resolveNeedClaim(
   viewer: { isAuthenticated: boolean; ticketStatus?: string | null },
 ): NeedClaim {
   // No 已取消: a need or ticket is cancelled only by deleting it now, and nothing deleted is ever
-  // returned (Q43). One cancelled by hand before then reads as any other, and the backend refuses
-  // a claim on it.
+  // returned. One cancelled by hand before then reads as any other, and the backend refuses a claim
+  // on it.
 
   // First the viewer's own claim, even on a need that has since filled or stopped recruiting: they
-  // are among the people it has, and still go (Q26).
+  // are among the people it has, and still go.
   if (need.myAssignment) {
     return { kind: 'mine', label: '已承接', action: null };
   }
 
-  // Filled by claims or stopped by its requester (Q37, Q39) — not 已完成, since nobody on it has gone
-  // yet (Q42). A ticket's status follows its needs (Q44), so a completed one has none open; one
-  // closed by hand before then left its needs pending, and the backend's claim check refuses them.
+  // Filled by claims or stopped by its requester — not 已完成, since nobody on it has gone yet. A
+  // ticket's status follows its needs, so a completed one has none open; one closed by hand before
+  // then left its needs pending, and the backend's claim check refuses them.
   if (need.status === 'fulfilled' || viewer.ticketStatus === 'completed') {
     return { kind: 'fulfilled', label: '已滿足需求', action: null };
   }
@@ -80,8 +80,8 @@ export function formatNeedQuota(need: TicketNeed, kind: NeedClaimKind): NeedQuot
 
   const count = `${need.assignedCount}/${quantity}`;
 
-  // Full can mean over-sent, from before coordinators were capped too (Q38): the count says so, the
-  // bar stays full.
+  // Full can mean over-sent, from before coordinators were capped too (backend ADR-291): the count
+  // says so, the bar stays full.
   if (isNeedFull(need)) {
     return { text: `${count} 已滿`, fraction: 1 };
   }

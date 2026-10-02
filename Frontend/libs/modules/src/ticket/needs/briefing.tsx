@@ -7,13 +7,13 @@ const { color } = designTokens;
 
 /**
  * Where a volunteer reads, before going, how to get there, what to bring and whom to find
- * (prototype `BRIEFING_HREF`, `site-actions.jsx:1925-1941`). The claim toast (Q49) and the top of
- * 我的任務 › 我承接的 (Q10) both lead here.
+ * (prototype `BRIEFING_HREF`, `site-actions.jsx:1925-1941`). The claim toast and the top of
+ * 我的任務 › 我承接的 both lead here.
  */
 export const BRIEFING_HREF = '/briefing';
 
 /**
- * The briefing page until its content is designed (Q13): it says so, and sends the volunteer to
+ * The briefing page until its content is designed: it says so, and sends the volunteer to
  * the one person who knows — the contact on the ticket.
  */
 export function BriefingPlaceholder() {

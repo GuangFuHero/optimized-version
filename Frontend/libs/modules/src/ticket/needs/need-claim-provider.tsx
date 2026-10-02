@@ -47,11 +47,11 @@ interface NeedClaimContextValue {
   requestSignIn: ((ticketUuid: string, needUuid: string) => void) | null;
   /** Said by a ticket's drawer once it is up (`NeedClaimFooter`), for the offer below to wait on. */
   ticketShown: (ticketUuid: string) => void;
-  /** Ask the ticket's requester to confirm stopping recruitment for one of its needs (Q39). */
+  /** Ask the ticket's requester to confirm stopping recruitment for one of its needs. */
   requestStopRecruiting: (ticketUuid: string, needUuid: string) => void;
-  /** Ask the ticket's requester to confirm deleting one of its needs (B's S5). */
+  /** Ask the ticket's requester to confirm deleting one of its needs. */
   requestDeleteNeed: (ticketUuid: string, needUuid: string) => void;
-  /** Ask the ticket's requester to confirm deleting the whole ticket (B's S7). */
+  /** Ask the ticket's requester to confirm deleting the whole ticket. */
   requestDeleteTicket: (ticketUuid: string) => void;
   /** The signed-in account's uuid, to tell a ticket's requester by; null for a guest. */
   viewerId: string | null;
@@ -64,7 +64,7 @@ interface NeedClaimProviderProps {
   /**
    * Hears a ticket as it stands after a claim, a release, a stop or a deletion — its needs and its
    * status — for a view keeping its own copy: the list's rows, the map's pins. Null when the
-   * ticket turned out gone — deleted (B's S7) — for the view to take it off; never for a request
+   * ticket turned out gone — deleted — for the view to take it off; never for a request
    * that failed, which says nothing about the ticket.
    */
   onTicketReloaded?: (ticketUuid: string, ticket: ReloadedTicket | null) => void;
@@ -72,11 +72,10 @@ interface NeedClaimProviderProps {
 
 /**
  * The one place a page's claim buttons claim through — the drawer's rows, its footer and the list's
- * lines — so every entry point gets the same confirmation (Q9), the same words for a refusal and
- * the same word of success, and one reload that every view of the ticket hears. A guest's button
- * goes through here too, to sign in and come back to the ticket, and so do a requester's 停止招募
- * (Q39) and 刪除這筆需求 (B's S5) from a row's ⋯, and 刪除整張單 (S7) from the drawer's, each with
- * a confirmation of its own.
+ * lines — so every entry point gets the same confirmation, the same words for a refusal and the
+ * same word of success, and one reload that every view of the ticket hears. A guest's button goes
+ * through here too, to sign in and come back to the ticket, and so do a requester's 停止招募 and
+ * 刪除這筆需求 from a row's ⋯, and 刪除整張單 from the drawer's, each with a confirmation of its own.
  */
 export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProviderProps) {
   const router = useRouter();
@@ -169,7 +168,7 @@ export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProvi
     try {
       const result = await executeClaim({ taskUuid: needUuid });
       // Either way: a refusal usually means the need changed under the volunteer — filled up,
-      // closed — and the dialog and every button should now say so (Q29).
+      // closed — and the dialog and every button should now say so.
       const reloaded = await reloadTicket(ticketUuid);
 
       if (result.error) {

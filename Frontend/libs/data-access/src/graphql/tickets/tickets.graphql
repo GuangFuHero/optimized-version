@@ -127,7 +127,7 @@ query GetTicket($uuid: UUID!) {
       buildingSection
       floor
       room
-      # The address as typed on the site's 請求協助, when the parts above are empty (spec D4).
+      # The address as typed on the site's 請求協助, when the parts above are empty.
       landmarkNote
     }
     photos {
@@ -215,12 +215,12 @@ mutation ClaimNeed($taskUuid: UUID!) {
 }
 
 # The caller gives their place on a need back (the assignment's uuid, `myAssignment.uuid`). Refused
-# once the requester stopped recruiting (spec Q46); a need that filled by itself reopens (Q40).
+# once the requester stopped recruiting; a need that filled by itself reopens.
 mutation ReleaseClaim($uuid: UUID!) {
   unassignTaskActor(uuid: $uuid)
 }
 
-# The requester stops recruiting for one need (spec Q39): the people on it stay and still go, its
+# The requester stops recruiting for one need: the people on it stay and still go, its
 # quantity drops to their count, and nobody else can claim it. Refused for a need nobody claimed or
 # one no longer open. Only the uuid is asked: the cache does not key needs, so the ticket is read
 # again either way.
@@ -230,7 +230,7 @@ mutation StopRecruiting($taskUuid: UUID!) {
   }
 }
 
-# The requester deletes one need (B's S5, team decision 2026-09-28): any need not deleted yet, a
+# The requester deletes one need (team decision 2026-09-28): any need not deleted yet, a
 # filled or stopped one included. It is gone from every query after, its ticket's status is worked
 # out again, and everyone on it hears they need not go. Refused with 'Ticket task not found' once
 # the need or its ticket is deleted already.
@@ -238,7 +238,7 @@ mutation DeleteTicketTask($uuid: UUID!) {
   deleteTicketTask(uuid: $uuid)
 }
 
-# The requester deletes the whole ticket (B's S7, team decision 2026-09-28): it is cancelled and
+# The requester deletes the whole ticket (team decision 2026-09-28): it is cancelled and
 # gone from every query after, every need on it goes with it, and everyone on them hears once that
 # they need not go. Refused with 'Ticket not found' once it is deleted already.
 mutation DeleteTicket($uuid: UUID!) {
@@ -247,7 +247,7 @@ mutation DeleteTicket($uuid: UUID!) {
 
 # 我的任務 › 我承接的 (ticket/my-claims): the needs the caller claimed, newest first, deleted ones left
 # out. What a volunteer needs on the day: where, whom to call, and whether they may still give the
-# place back (`recruitingStoppedAt`, spec Q46).
+# place back (`recruitingStoppedAt`).
 query MyTaskAssignments {
   myTaskAssignments {
     assignment {
@@ -279,9 +279,9 @@ query MyTaskAssignments {
   }
 }
 
-# 我的任務 › 我建立的 (ticket/help-request, B's S6): the tickets the caller filed, newest first, every
-# status, deleted ones left out. Each is read for how far it got (spec Q16): its status, and its
-# needs' statuses to count how many have their people.
+# 我的任務 › 我建立的 (ticket/help-request): the tickets the caller filed, newest first, every
+# status, deleted ones left out. Each is read for how far it got: its status, and its needs'
+# statuses to count how many have their people.
 query MyTickets {
   myTickets {
     uuid

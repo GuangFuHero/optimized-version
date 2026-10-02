@@ -33,7 +33,7 @@ export interface MyClaim {
   contact: string | null;
   /**
    * Its requester stopped recruiting by hand: the list is final, and no place on it can be given
-   * back (Q46). One that filled by itself can, and then recruits again (Q40).
+   * back. One that filled by itself can, and then recruits again.
    */
   recruitingStopped: boolean;
 }
@@ -72,7 +72,7 @@ export function formatTaiwanTime(
   return `${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
-/** When the need was claimed (spec Q50). */
+/** When the need was claimed. */
 export function formatClaimedAt(iso: string | null | undefined): string | null {
   const time = formatTaiwanTime(iso);
 
@@ -87,7 +87,7 @@ function formatContact(
   return [name?.trim(), phone?.trim()].filter(Boolean).join(' · ') || null;
 }
 
-/** In the order the server sends them — newest claim first (spec Q16). */
+/** In the order the server sends them — newest claim first. */
 export function readMyClaims(rows: readonly MyTaskAssignmentRow[]): MyClaim[] {
   return rows.map(({ assignment, task, ticket }) => ({
     assignmentUuid: assignment.uuid,
@@ -103,7 +103,7 @@ export function readMyClaims(rows: readonly MyTaskAssignmentRow[]): MyClaim[] {
 
 /**
  * Where 查看 takes the volunteer: the ticket on the list, whose drawer opens even when the ticket
- * is past the pages loaded (F3a). The map would first have to find it in its view.
+ * is past the pages loaded. The map would first have to find it in its view.
  */
 export function myClaimTicketHref(ticketUuid: string): string {
   return createSiteHref('list', {

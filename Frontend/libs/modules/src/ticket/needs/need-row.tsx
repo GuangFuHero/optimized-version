@@ -58,7 +58,7 @@ export function NeedRow({
           claim.kind === 'mine' ? color.brand.secondary.default : color.border.default
         }`,
         bgcolor: full ? color.bg.success.subtle : color.bg.neutral.default,
-        // Still listed, but set back: it has its people, and there is no place left to take (Q42).
+        // Still listed, but set back: it has its people, and there is no place left to take.
         opacity: closed ? 0.6 : 1,
       }}
     >
@@ -79,7 +79,7 @@ export function NeedRow({
         <Badge tone="neutral" variant="subtle">
           {formatTicketTypeLabel(need.taskType)}
         </Badge>
-        {/* Top right, where a card keeps its menu, apart from the claim button below (spec Q51).
+        {/* Top right, where a card keeps its menu, apart from the claim button below.
             Pulled into the row's padding, so its 36px target does not make the line taller. */}
         <NeedActionsMenu needName={need.taskName} items={actions} sx={{ my: -1, mr: -1 }} />
       </Stack>

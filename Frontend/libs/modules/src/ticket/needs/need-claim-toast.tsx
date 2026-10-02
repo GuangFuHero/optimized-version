@@ -25,7 +25,7 @@ interface NeedClaimToastProps {
  * to read.
  *
  * One way onward, as in the prototype: 看行前資訊, the moment a volunteer starts thinking about
- * what to bring (Q49). 我的任務 is a tap away in the account menu.
+ * what to bring. 我的任務 is a tap away in the account menu.
  */
 export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps) {
   return (
@@ -74,7 +74,7 @@ export function NeedClaimToast({ open, needName, onClose }: NeedClaimToastProps)
               已承接{'　'}
               {needName}
             </Typography>
-            {/* Q13's words, until the briefing page has more to offer than saying so. */}
+            {/* What the briefing page says too (`BriefingPlaceholder`), until it has more to offer. */}
             <Typography
               sx={{
                 mt: 0.25,

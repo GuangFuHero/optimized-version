@@ -35,7 +35,8 @@ describe('resolveNeedClaim', () => {
     const full = { kind: 'full', label: '已滿', action: null };
 
     expect(resolveNeedClaim(need({ quantity: 3, assignedCount: 3 }), SIGNED_IN)).toEqual(full);
-    // Over-sent from before a coordinator was capped too (Q38, reversing d847624): still full.
+    // Over-sent from before a coordinator was capped too (backend ADR-291, reversing d847624):
+    // still full.
     expect(resolveNeedClaim(need({ quantity: 3, assignedCount: 4 }), SIGNED_IN)).toEqual(full);
   });
 
@@ -67,13 +68,13 @@ describe('resolveNeedClaim', () => {
     const mine = { myAssignment: { uuid: 'assignment-1' } };
 
     expect(resolveNeedClaim(need({ ...mine, assignedCount: 1 }), SIGNED_IN)).toEqual(claimed);
-    // Filled by the claims or stopped by its requester, and they still go (Q26).
+    // Filled by the claims or stopped by its requester, and they still go.
     expect(
       resolveNeedClaim(need({ ...mine, assignedCount: 3, status: 'fulfilled' }), SIGNED_IN),
     ).toEqual(claimed);
   });
 
-  it('leaves a cancelled need or ticket to the backend: cancelling is deleting now (Q43)', () => {
+  it('leaves a cancelled need or ticket to the backend: cancelling is deleting now', () => {
     // A deleted need or ticket is never returned. Only rows left from before could still read so,
     // and the backend refuses a claim on them.
     const mine = { myAssignment: { uuid: 'assignment-1' } };
@@ -88,15 +89,15 @@ describe('resolveNeedClaim', () => {
     const fulfilled = { kind: 'fulfilled', label: '已滿足需求', action: null };
 
     expect(resolveNeedClaim(need({ status: 'fulfilled' }), SIGNED_IN)).toEqual(fulfilled);
-    // Full too, as a fulfilled need now always is (Q37, Q39): its status says more than 已滿.
+    // Full too, as a fulfilled need now always is: its status says more than 已滿.
     expect(
       resolveNeedClaim(need({ status: 'fulfilled', quantity: 3, assignedCount: 3 }), SIGNED_IN),
     ).toEqual(fulfilled);
   });
 
   it('closes the needs of a ticket with none open, as the backend refuses them', () => {
-    // A ticket's status follows its needs now (Q44), but one closed by hand before then left its
-    // needs pending: the ticket's own status still decides.
+    // A ticket's status follows its needs now, but one closed by hand before then left its needs
+    // pending: the ticket's own status still decides.
     const mine = { myAssignment: { uuid: 'assignment-1' } };
     const completed = { isAuthenticated: true, ticketStatus: 'completed' };
 
@@ -105,7 +106,7 @@ describe('resolveNeedClaim', () => {
       label: '已滿足需求',
       action: null,
     });
-    // As on a fulfilled need, a volunteer still sees their own claim on a completed ticket (Q26).
+    // As on a fulfilled need, a volunteer still sees their own claim on a completed ticket.
     expect(resolveNeedClaim(need(mine), completed).kind).toBe('mine');
     expect(resolveNeedClaim(need(), { isAuthenticated: true, ticketStatus: 'in_progress' }).kind).toBe(
       'open',
@@ -126,8 +127,8 @@ describe('formatNeedQuota', () => {
       text: '3/3 已滿',
       fraction: 1,
     });
-    // Over-sent from before coordinators were capped (Q38): the count is the truth, the bar just
-    // stays full.
+    // Over-sent from before coordinators were capped (backend ADR-291): the count is the truth,
+    // the bar just stays full.
     expect(formatNeedQuota(need({ quantity: 3, assignedCount: 4 }), 'full')).toEqual({
       text: '4/3 已滿',
       fraction: 1,
@@ -142,7 +143,7 @@ describe('formatNeedQuota', () => {
   });
 
   it('stops asking for people once a need has its people', () => {
-    // Stopped by its requester at 1 of 3 (Q39): it is missing nobody, however few went.
+    // Stopped by its requester at 1 of 3: it is missing nobody, however few went.
     const halfway = need({ quantity: 3, assignedCount: 1 });
 
     expect(formatNeedQuota(halfway, 'fulfilled')).toEqual({ text: '1/3', fraction: 1 / 3 });
@@ -172,7 +173,7 @@ describe('formatNeedHeadcount', () => {
   });
 
   it('stops asking for people once the need closed under the dialog', () => {
-    // A refused claim reloads the need (Q29), and one stopped by its requester is missing nobody.
+    // A refused claim reloads the need, and one stopped by its requester is missing nobody.
     expect(formatNeedHeadcount(need({ quantity: 3, assignedCount: 1 }), 'fulfilled')).toBe(
       '目前 1/3 人',
     );

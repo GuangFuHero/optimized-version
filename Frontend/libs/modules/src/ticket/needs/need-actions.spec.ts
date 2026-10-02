@@ -37,7 +37,7 @@ describe('isTicketRequester', () => {
 });
 
 describe('canStopRecruiting', () => {
-  it('offers an open need with people on it (Q39)', () => {
+  it('offers an open need with people on it', () => {
     expect(canStopRecruiting(need(), 'in_progress')).toBe(true);
   });
 
@@ -47,7 +47,7 @@ describe('canStopRecruiting', () => {
     );
   });
 
-  it('does not offer a need that has its people, or was stopped already (Q37, Q39)', () => {
+  it('does not offer a need that has its people, or was stopped already', () => {
     expect(
       canStopRecruiting(
         need({ status: 'fulfilled', assignedCount: 5 }),
@@ -74,7 +74,7 @@ describe('canStopRecruiting', () => {
         'in_progress',
       ),
     ).toBe(true);
-    // Still pending at 3/1 (Q38): stopping it sets its quantity to the 3 on it.
+    // Still pending at 3/1: stopping it sets its quantity to the 3 on it.
     expect(
       canStopRecruiting(need({ quantity: 1, assignedCount: 3 }), 'in_progress'),
     ).toBe(true);

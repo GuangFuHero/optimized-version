@@ -1,6 +1,6 @@
 /**
- * What a ticket's requester can do to one of its needs, from the ⋯ at the end of the need's row
- * (spec Q45): stop recruiting for it, and delete it (B's S5). Nobody else gets the ⋯.
+ * What a ticket's requester can do to one of its needs, from the ⋯ at the end of the need's row:
+ * stop recruiting for it, and delete it. Nobody else gets the ⋯.
  */
 
 import type { TicketNeed } from './need-claim';
@@ -26,8 +26,8 @@ export function isTicketRequester(
 
 /**
  * Whether stopping recruitment for the need would go through — the backend's own checks
- * (`stop_recruiting`): the need and its ticket still open, and somebody on it to keep (Q39). A
- * need nobody claimed can only be deleted.
+ * (`stop_recruiting`): the need and its ticket still open, and somebody on it to keep. A need
+ * nobody claimed can only be deleted.
  */
 export function canStopRecruiting(
   need: TicketNeed,

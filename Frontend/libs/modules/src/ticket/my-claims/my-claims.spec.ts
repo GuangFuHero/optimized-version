@@ -48,7 +48,7 @@ describe('readMyClaims', () => {
     ]);
   });
 
-  it('knows a need its requester stopped by hand, whose list is final (Q46)', () => {
+  it('knows a need its requester stopped by hand, whose list is final', () => {
     const stopped = {
       ...row(),
       task: {

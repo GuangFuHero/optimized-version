@@ -45,7 +45,7 @@ export function createTaskMatchTicketDetailOverrides({
   const priority = marker.ticketMeta?.priority;
 
   return {
-    // The requester's ⋯ — 刪除整張單 (B's S7) — at the top, where the team put it (2026-09-28).
+    // The requester's ⋯ — 刪除整張單 — at the top, where the team put it (2026-09-28).
     headerActions: (
       <TicketActionsMenu
         ticketUuid={marker.id}
@@ -60,7 +60,7 @@ export function createTaskMatchTicketDetailOverrides({
     ) : undefined,
     // 詳情 only, as on a station. The prototype's 操作紀錄 has nothing behind it anyone may read: the
     // ticket's history needs ticket.view_history, kept from the site so as not to show who claimed
-    // what (spec Q36).
+    // what (backend ADR-286).
     tabs: [
       {
         id: 'details',

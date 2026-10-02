@@ -34,7 +34,7 @@ interface ReleaseClaimDialogProps {
 }
 
 /**
- * One look before a place goes back (spec Q48). Like the claim, it is a promise to the scene, and
+ * One look before a place goes back. Like the claim, it is a promise to the scene, and
  * once given back the place may be taken by someone else at once: nothing undoes it. Same shape as
  * the claim confirmation (`NeedClaimDialog`).
  */

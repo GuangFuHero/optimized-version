@@ -136,9 +136,9 @@ function DetailLine({
 }
 
 /**
- * One look before the requester stops recruiting for a need (spec Q39): nothing undoes it, and
- * everyone on the need hears. Same shape as the claim and release confirmations; no design of its
- * own exists — the prototype only had the whole-ticket 刪除媒合單 (spec Q51).
+ * One look before the requester stops recruiting for a need: nothing undoes it, and everyone on
+ * the need hears. Same shape as the claim and release confirmations; no design of its own exists —
+ * the prototype only had the whole-ticket 刪除媒合單.
  *
  * It reads the ticket itself, like the claim confirmation, so a refusal's reload lands here too.
  */
@@ -298,7 +298,7 @@ export function StopRecruitingDialog({
           {settled || dialog.box === 'gone' ? '關閉' : '取消'}
         </Button>
         {/* The brand's fill, not the prototype's red: stopping is how a need ends once it has its
-            people, not something taken away. Red is for deleting one (spec Q51). */}
+            people, not something taken away. Red is for deleting one. */}
         <Button
           onClick={onConfirm}
           disabled={submitting || !need || settled}

@@ -64,7 +64,7 @@ const CLAIM_WORDS: RefusalWords = {
 /** `unassign_task_actor`'s refusals. */
 const RELEASE_WORDS: RefusalWords = {
   refusals: {
-    // The requester stopped recruiting since the list was read: its people are fixed (Q46).
+    // The requester stopped recruiting since the list was read: its people are fixed.
     'Recruiting has stopped for this task':
       '建單者已停止招募，名單已固定，無法釋出。',
     // Given back already — from another tab, or by a coordinator.
@@ -80,7 +80,7 @@ const STOP_RECRUITING_WORDS: RefusalWords = {
     // Filled by a claim since the row was read, or stopped already from another tab.
     'Task is no longer open': '這筆需求已經湊齊或停止招募了。',
     // The last person on it gave the place back meanwhile: with no one to keep, it can only be
-    // deleted (Q39).
+    // deleted.
     'Nobody has claimed this task': '目前沒有人承接這筆需求，無法停止招募。',
     // The need was deleted, or its ticket was.
     'Ticket task not found': '找不到這筆需求，可能已經被刪除。',
@@ -89,7 +89,7 @@ const STOP_RECRUITING_WORDS: RefusalWords = {
   fallback: '停止招募失敗，請稍後再試一次。',
 };
 
-/** `create_ticket_task`'s refusals — a requester's 「再加一件」 (B's S4). */
+/** `create_ticket_task`'s refusals — a requester's 「再加一件」. */
 const ADD_NEED_WORDS: RefusalWords = {
   refusals: {
     // Deleted while the requester was adding to it, from another tab or by a coordinator.
@@ -102,9 +102,9 @@ const ADD_NEED_WORDS: RefusalWords = {
 };
 
 /**
- * `delete_ticket_task`'s and `delete_ticket`'s refusals — a requester's 「刪除這筆需求」 (B's S5)
- * and 「刪除整張單」 (S7). The one refusal of their own, the thing deleted already, is no failure to
- * them: see `isNeedAlreadyGone` and `isTicketAlreadyGone`.
+ * `delete_ticket_task`'s and `delete_ticket`'s refusals — a requester's 「刪除這筆需求」 and
+ * 「刪除整張單」. The one refusal of their own, the thing deleted already, is no failure to them:
+ * see `isNeedAlreadyGone` and `isTicketAlreadyGone`.
  */
 const DELETE_WORDS: RefusalWords = {
   refusals: {},

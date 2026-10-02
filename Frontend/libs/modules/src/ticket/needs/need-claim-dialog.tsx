@@ -66,7 +66,7 @@ function DetailLine({ icon, children }: { icon: ReactNode; children: ReactNode }
  * a stray tap costs someone who never shows up.
  *
  * It reads the ticket itself, so every entry point — a list line, a drawer row, the drawer footer
- * — shows the same facts, and a refused claim's reload lands here too (Q29).
+ * — shows the same facts, and a refused claim's reload lands here too.
  */
 export function NeedClaimDialog({
   open,
@@ -90,7 +90,7 @@ export function NeedClaimDialog({
     ? resolveNeedClaim(need, { ticketStatus: fields?.status, isAuthenticated: true })
     : null;
   // After a refused claim the reload may show the need full or closed: then there is nothing to
-  // confirm, and the way out is to close (Q29).
+  // confirm, and the way out is to close.
   const settled = Boolean(claim) && claim?.action !== 'claim';
   // Or gone, which the box says, and then nothing beneath it says again.
   const dialog = readNeedDialog({

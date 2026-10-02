@@ -25,7 +25,7 @@ interface NeedActionsMenuProps {
 }
 
 /**
- * The ⋯ at the end of a need's row: what the ticket's requester can do to that need (spec Q45).
+ * The ⋯ at the end of a need's row: what the ticket's requester can do to that need.
  * Nothing at all when there is nothing to do — never a ⋯ that opens onto an empty menu, and the
  * need's state decides that row by row.
  */

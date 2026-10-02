@@ -86,7 +86,7 @@ function DetailLine({
 /**
  * The next thing to do on this page, not a hint to dismiss (prototype `BriefingDepartureBar`,
  * `site-actions.jsx:1943-1963`). Only above claims: without one there is nowhere to go. Its second
- * line says what the page says until the briefing has content (Q13).
+ * line says what the page says until the briefing has content.
  */
 function BriefingDepartureBar({ onLeave }: MyClaimsListProps) {
   return (
@@ -143,7 +143,7 @@ function BriefingDepartureBar({ onLeave }: MyClaimsListProps) {
 /**
  * One claimed need, read for keeping the promise: which need, where, and whom to call (prototype
  * `site-actions.jsx:1851-1888`). A ticket with two needs claimed is two rows. No ticket number:
- * here it is a uuid, which tells a volunteer nothing (spec Q50).
+ * here it is a uuid, which tells a volunteer nothing.
  */
 function MyClaimRow({
   claim,
@@ -153,7 +153,7 @@ function MyClaimRow({
   claim: MyClaim;
   /** 查看: a link to the ticket, which may be taken over to select it in place. */
   onOpen: (event: MouseEvent<HTMLElement>) => void;
-  /** 釋出名額: asks first (spec Q48). */
+  /** 釋出名額: asks first. */
   onRelease: () => void;
 }) {
   return (
@@ -228,7 +228,7 @@ function MyClaimRow({
         />
         {/* On the row, not in a menu: someone who cannot go must find where to say so, or nobody
             shows up (prototype site-actions.jsx:1883-1886). Where the requester stopped recruiting
-            the list is final, and the line says why there is no button (spec Q46, Q50). */}
+            the list is final, and the line says why there is no button. */}
         {claim.recruitingStopped ? (
           <Stack
             direction="row"
@@ -276,7 +276,7 @@ function Notice({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
   );
 }
 
-/** 我承接的: the needs the viewer claimed, newest first (spec Q16). */
+/** 我承接的: the needs the viewer claimed, newest first. */
 export function MyClaimsList({ onLeave }: MyClaimsListProps) {
   const route = useSiteRouteState();
   const [{ data, fetching, error }, reloadClaims] = useQuery({

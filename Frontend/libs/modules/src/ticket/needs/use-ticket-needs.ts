@@ -28,7 +28,7 @@ export function readTicketStatus(ticket: GetTicketQuery['ticket']): string | nul
 
 /**
  * A ticket read again after something changed on it: its needs, and its own status, which the
- * backend works out from them (spec Q44).
+ * backend works out from them.
  */
 export interface ReloadedTicket {
   needs: TicketNeed[];
@@ -37,7 +37,7 @@ export interface ReloadedTicket {
 
 /**
  * What reading a ticket again found: the ticket as it stands, the ticket gone, or no answer to go
- * by. Only the second may take it off a page (B's S7): a dropped connection is not a deletion.
+ * by. Only the second may take it off a page: a dropped connection is not a deletion.
  */
 export type TicketReload =
   | { kind: 'found'; ticket: ReloadedTicket }

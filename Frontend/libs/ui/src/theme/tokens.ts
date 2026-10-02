@@ -354,7 +354,7 @@ const lightModuleColors = moduleColorPrimitives.light;
 const darkModuleColors = moduleColorPrimitives.dark;
 
 export const colorSchemes: Record<'light' | 'dark', M3ColorScheme> = {
-  // Derived from the design system via `bridge.ts` — see note/design-token-alignment-review.md.
+  // Derived from the design system via `bridge.ts`.
   // What this replaced: a hand-written scheme whose `primary` was the blue `#179BC6`, with
   // `primaryContainer` / `inversePrimary` / `surfaceTint` left holding the Material baseline
   // blue-violet a generator emits. The design system's primary is the orange `#E3791E`, so this
@@ -913,7 +913,7 @@ export const moduleColorSchemes: Record<
 };
 
 export const typography = {
-  // Derived from the design system (ADR pending — see note/design-token-alignment-review.md).
+  // Derived from the design system (`fontStack.body`).
   // The previous literal was `"Inter", "Roboto", "Helvetica Neue", Arial, sans-serif` — four faces
   // with no CJK coverage between them, so every Chinese glyph in the product fell through to
   // whatever the browser picked. Body copy is predominantly Chinese, hence the `body` role.

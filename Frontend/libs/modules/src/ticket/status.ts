@@ -18,7 +18,7 @@ const TICKET_STATUS_LABELS: Record<string, string> = {
   in_progress: '處理中',
   'in-progress': '處理中',
   processing: '處理中',
-  // A need's status, never a ticket's: it has everyone it asked for, who have yet to go (Q42).
+  // A need's status, never a ticket's: it has everyone it asked for, who have yet to go.
   fulfilled: '已滿足需求',
   completed: '已完成',
   resolved: '已完成',

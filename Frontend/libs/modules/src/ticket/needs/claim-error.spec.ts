@@ -64,7 +64,7 @@ describe('claimErrorMessage', () => {
 });
 
 describe('releaseErrorMessage', () => {
-  it('says the list is final once the requester stopped recruiting (Q46)', () => {
+  it('says the list is final once the requester stopped recruiting', () => {
     expect(releaseErrorMessage(refused('Recruiting has stopped for this task'))).toBe(
       '建單者已停止招募，名單已固定，無法釋出。',
     );
