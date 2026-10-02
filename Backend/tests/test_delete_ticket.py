@@ -1,4 +1,4 @@
-"""The requester deletes a whole ticket (team decision 2026-09-28, note/help-request-spec.md).
+"""The requester deletes a whole ticket.
 
 Service-level (root conftest). The ticket is cancelled and soft-deleted, and every need on it that
 is still there goes with it the way a single deleted need does (tests/test_delete_ticket_task.py).
@@ -178,7 +178,7 @@ async def test_a_need_deleted_earlier_is_left_as_it_was(db):
 
 @pytest.mark.asyncio
 async def test_the_people_on_its_needs_stay_recorded(db):
-    """Their claims are kept for the record; flow A's 「我承接的」 drops a deleted ticket by itself."""
+    """Their claims are kept (ADR-293); 「我承接的」 (myTaskAssignments) drops a deleted ticket itself."""
     ticket = await _ticket(db, status="in_progress")
     task_uuid = await _need(db, ticket, on_it=(await _person(db, "甲"), await _person(db, "乙")))
     requester = await _requester(db, ticket)
@@ -263,7 +263,7 @@ async def test_a_deleted_ticket_cannot_be_deleted_again(db):
         await _delete(db, requester, ticket_uuid)
 
 
-# --- the lock order every writer keeps: the ticket, then its needs (spec Q44) ---
+# --- the lock order every writer keeps: the ticket, then its needs (ADR-291) ---
 
 
 @pytest.mark.asyncio

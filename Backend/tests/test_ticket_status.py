@@ -1,12 +1,12 @@
-"""A ticket's status follows its needs (team decision 2026-09-28, note/help-request-spec.md).
+"""A ticket's status follows its needs.
 
 Service-level (root conftest): every action that changes a need calls `recompute_ticket_status` —
-claiming and releasing and stopping recruitment (flow A), deleting a need or a ticket and adding
-a need (flow B) — so the rules are pinned against it directly.
+claiming and releasing and stopping recruitment, deleting a need or a ticket and adding a need —
+so the rules are pinned against it directly.
 
 - pending: a need is still open and nobody is on any need.
 - in_progress: a need is still open and somebody is on some need, including one that has since
-  filled (decided 2026-09-28): people are on their way, so the ticket is being handled.
+  filled: people are on their way, so the ticket is being handled.
 - completed: no need is open, whether they filled or were deleted, all of them included.
 - cancelled: only the requester deleting the ticket gets there, and it stays there.
 
@@ -146,7 +146,7 @@ async def test_a_new_open_need_reopens_a_completed_ticket(db):
 
 @pytest.mark.asyncio
 async def test_volunteers_on_a_filled_need_keep_the_ticket_in_progress(db):
-    """5/5 on one need and 0/3 on another: people are on their way (decided 2026-09-28)."""
+    """5/5 on one need and 0/3 on another: people are on their way."""
     ticket = await _ticket(db, status="pending")
     await _need(db, ticket, status="fulfilled", claims=5)
     await _need(db, ticket)
@@ -181,8 +181,8 @@ async def test_it_leaves_the_commit_to_the_caller(db):
 async def test_a_need_still_marked_in_progress_counts_as_open(db):
     """A need still marked `in_progress` is open, not done.
 
-    Needs lose that status in flow A's rework, with no data migration: until then, and on rows
-    written before it, such a need is still taking people and must not complete the ticket.
+    Needs no longer get that status (ADR-293), with no data migration: on rows written before,
+    such a need is still taking people and must not complete the ticket.
     """
     ticket = await _ticket(db, status="pending")
     await _need(db, ticket, status="in_progress", claims=1)

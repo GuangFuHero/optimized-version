@@ -1,4 +1,4 @@
-"""A ticket's status, worked out from its needs (team decision 2026-09-28).
+"""A ticket's status, worked out from its needs.
 
 Nobody sets a ticket's status by hand any more: every action that changes a need — claiming,
 releasing, stopping recruitment, deleting a need or the ticket, adding a need — calls
@@ -9,8 +9,8 @@ releasing, stopping recruitment, deleting a need or the ticket, adding a need �
 - completed: no need is open — filled, stopped or deleted, every one of them.
 - cancelled: the requester deleted the ticket; it is never recomputed again.
 
-Its own module so flow A (claims, in services/ticket.py) and flow B (deleting and adding needs)
-can both call it without either reshaping the other's file.
+Its own module so the claim actions and the deleting and adding of needs can all call the one rule
+without either reshaping the other's code.
 """
 
 from sqlalchemy import select
@@ -19,8 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
 
-# The need statuses that still take volunteers. Needs lose `in_progress` in flow A's rework, with
-# no data migration; until then, and on rows written before it, it still means "open".
+# The need statuses that still take volunteers. Needs no longer get `in_progress` (ADR-293), with
+# no data migration; on rows written before that, it still means "open".
 OPEN_NEED_STATUSES = frozenset({"pending", "in_progress"})
 
 

@@ -1,4 +1,4 @@
-"""GraphQL surface of 「我的任務 › 我建立的」 (spec Q16/Q17).
+"""GraphQL surface of 「我的任務 › 我建立的」.
 
 The rules — whose tickets, in what order, which ones — are pinned at the service layer in
 tests/test_my_tickets.py; these only prove the query is wired to them and carries what the list

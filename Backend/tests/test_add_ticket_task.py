@@ -1,4 +1,4 @@
-"""Adding a need to a ticket that already exists (team decision 2026-09-28, note/help-request-spec.md).
+"""Adding a need to a ticket that already exists.
 
 Service-level (root conftest). `create_ticket_task` is what createTicketTask calls — the site's
 「再加一件」 among others. Since 2026-09-28 it takes ticket.edit on that ticket rather than ticket.add
@@ -8,7 +8,7 @@ again; a deleted one takes none.
 
 Bulk import adds its needs through `import_ticket_task`, which keeps the rule it had (ticket.add):
 who may import what is the back office's to decide. Both work the ticket's status out afterwards,
-because a completed ticket turns away every claim (flow A), so a need added to it must reopen it.
+because a completed ticket turns away every claim (ADR-291), so a need added to it must reopen it.
 
 Each ticket starts somewhere other than where the test expects it, so a no-op cannot pass.
 """
@@ -184,7 +184,7 @@ async def test_a_coordinator_can_add_to_anyones_ticket(db):
     assert await _needs(db, ticket_uuid) == 2
 
 
-# --- the ticket's status follows (spec Q20) ---
+# --- the ticket's status follows ---
 
 
 @pytest.mark.asyncio
@@ -267,7 +267,7 @@ async def test_a_need_the_site_would_misread_is_refused(db, name, quantity, mess
     assert await _needs(db, ticket_uuid) == 0
 
 
-# --- the lock order every writer keeps: the ticket first (spec Q44) ---
+# --- the lock order every writer keeps: the ticket first (ADR-291) ---
 
 
 @pytest.mark.asyncio

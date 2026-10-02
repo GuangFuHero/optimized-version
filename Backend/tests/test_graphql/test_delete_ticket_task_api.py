@@ -1,4 +1,4 @@
-"""GraphQL surface of 刪除這筆需求 (team decision 2026-09-28).
+"""GraphQL surface of 刪除這筆需求.
 
 The rules — what a deleted need becomes, who hears, who may — are pinned at the service layer in
 tests/test_delete_ticket_task.py; these only prove the mutation is wired to them.

@@ -1,4 +1,4 @@
-"""GraphQL surface of 請求協助 (spec note/help-request-spec.md, D1).
+"""GraphQL surface of 請求協助.
 
 The rules — what is filed, what is refused — are pinned at the service layer in
 tests/test_help_request.py; these only prove the mutation is wired to them.
@@ -53,7 +53,7 @@ async def test_a_citizen_files_a_help_request_through_graphql(client, redis):
 
 @pytest.mark.asyncio
 async def test_a_guest_cannot_file_a_help_request(client):
-    """Sign-in first: the site shows a guest why before any form (spec Q5)."""
+    """Sign-in first: the site shows a guest why before any form."""
     res = await client.post("/graphql", json={"query": FILE, "variables": {"input": _input()}})
 
     assert [e["message"] for e in res.json()["errors"]] == ["401: Could not validate credentials"]
@@ -105,7 +105,7 @@ mutation($input: CreateHelpRequestInput!) {
 
 @pytest.mark.asyncio
 async def test_photo_links_filed_with_a_request_come_back_as_its_photos(client, redis):
-    """「現場照片（選填）」 (spec S8): the requester sees them on the ticket, in the order given."""
+    """「現場照片（選填）」: the requester sees them on the ticket, in the order given."""
     _, token = await _create_user_with_role(redis, "Login User")
     links = ["https://duk.tw/one.jpg", "https://duk.tw/two.jpg"]
 

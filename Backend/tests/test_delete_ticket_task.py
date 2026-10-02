@@ -1,4 +1,4 @@
-"""The requester deletes one need of their ticket (team decision 2026-09-28, note/help-request-spec.md).
+"""The requester deletes one need of their ticket.
 
 Service-level (root conftest). A deleted need is canceled and soft-deleted in one go: nobody sees
 it again and it cannot come back. Any need not already deleted can go, one that has everyone it
@@ -166,7 +166,7 @@ async def test_a_need_that_has_its_people_can_be_deleted_too(db, stopped_by_hand
 
 @pytest.mark.asyncio
 async def test_the_people_on_a_deleted_need_stay_recorded(db):
-    """Their claims are kept for the record; flow A's 「我承接的」 drops a deleted need by itself."""
+    """Their claims are kept (ADR-293); 「我承接的」 (myTaskAssignments) drops a deleted need itself."""
     ticket = await _ticket(db, status="in_progress")
     task_uuid = str((await _need(db, ticket, claims=("甲", "乙"))).uuid)
     await _need(db, ticket, "搬家具")
@@ -320,7 +320,7 @@ async def test_a_need_of_a_deleted_ticket_cannot_be_deleted(db):
     assert (await _read_need(db, task_uuid)).status == "pending"
 
 
-# --- the lock order every writer keeps: the ticket, then its need (spec Q44) ---
+# --- the lock order every writer keeps: the ticket, then its need (ADR-291) ---
 
 
 @pytest.mark.asyncio

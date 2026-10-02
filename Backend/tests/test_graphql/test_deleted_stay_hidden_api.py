@@ -1,4 +1,4 @@
-"""A deleted ticket or need is gone from every query (team decision 2026-09-28, spec H6).
+"""A deleted ticket or need is gone from every query.
 
 The site shows what the API returns: a deleted need that still came back would read as one to
 claim. Deleting a ticket deletes its needs with it (services/ticket.py delete_ticket), but a ticket

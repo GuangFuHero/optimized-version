@@ -1,9 +1,9 @@
 """A citizen asks for help from the public site: one ticket and its needs, filed at once.
 
 Service-level (root conftest): the rules live in `create_help_request`, so that is where they
-are observed (spec note/help-request-spec.md, D1). The prototype's form requires at least one
-need (正典 TM-FEAT-004 AC-01), and a half-filed request — a ticket with some of its needs
-missing — is the failure this function exists to rule out.
+are observed. The prototype's form requires at least one need (正典 TM-FEAT-004 AC-01), and a
+half-filed request — a ticket with some of its needs missing — is the failure this function
+exists to rule out.
 """
 
 import os
