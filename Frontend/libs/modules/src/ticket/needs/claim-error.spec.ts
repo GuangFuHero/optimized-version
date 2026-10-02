@@ -52,6 +52,12 @@ describe('claimErrorMessage', () => {
     );
   });
 
+  it('reads an HTTP 401, which urql hands over as a network error, as a lapsed session', () => {
+    expect(
+      claimErrorMessage({ networkError: new Error('Unauthorized'), response: { status: 401 } }),
+    ).toBe('登入已過期，請重新登入後再試一次。');
+  });
+
   it('falls back to a plain failure for anything it does not know, masked faults included', () => {
     expect(claimErrorMessage(refused('Unexpected error.'))).toBe('承接失敗，請稍後再試一次。');
   });

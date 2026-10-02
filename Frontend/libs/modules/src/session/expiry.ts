@@ -77,6 +77,31 @@ export function isSessionExpiredResponse(
   return headers.get(SESSION_HEADER) === SESSION_EXPIRED;
 }
 
+/** The parts of urql's `CombinedError` this looks at. */
+export interface UnauthorizedCheck {
+  /** Not read: an HTTP 401 and a dropped connection both have one; only `response` tells them apart. */
+  networkError?: unknown;
+  response?: { status?: number };
+  graphQLErrors?: ReadonlyArray<{ message: string }>;
+}
+
+/**
+ * A refusal for want of a valid sign-in, for the words an error shows when the proxy's mark did not
+ * end the session first (spec Q9, S7). It comes two ways:
+ * - the backend's GraphQL context turns down a token it cannot validate with an HTTP 401
+ *   (`get_context`, backend `graphql/context.py`), whose `{ detail }` body urql cannot read as
+ *   GraphQL: it hands over a `networkError` with the `response` beside it, so this must be asked
+ *   before a `networkError` is taken for a dropped connection;
+ * - a request sent on as a guest reaches a resolver that needs a person (`require_authenticated`),
+ *   whose `HTTPException` reads "401: <detail>" (Starlette's `__str__`) in the GraphQL errors.
+ */
+export function isUnauthorizedError(error: UnauthorizedCheck): boolean {
+  return (
+    error.response?.status === 401 ||
+    /^401:/.test(error.graphQLErrors?.[0]?.message ?? '')
+  );
+}
+
 /** sessionStorage as far as the flag uses it. */
 export type FlagStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 

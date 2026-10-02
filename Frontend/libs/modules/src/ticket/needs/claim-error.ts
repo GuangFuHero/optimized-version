@@ -5,9 +5,12 @@
  * `graphql/schema.py`).
  */
 
+import { isUnauthorizedError } from '../../session/expiry';
+
 /** The parts of urql's `CombinedError` this reads. */
 export interface ClaimError {
   networkError?: unknown;
+  response?: { status?: number };
   graphQLErrors?: ReadonlyArray<{ message: string }>;
 }
 
@@ -22,6 +25,11 @@ interface RefusalWords {
 }
 
 function refusalMessage(error: ClaimError, words: RefusalWords): string {
+  // Before the connection: an HTTP 401 comes as a `networkError` too (`isUnauthorizedError`).
+  if (isUnauthorizedError(error)) {
+    return '登入已過期，請重新登入後再試一次。';
+  }
+
   if (error.networkError) {
     return '連線失敗，請確認網路後再試一次。';
   }
@@ -33,10 +41,6 @@ function refusalMessage(error: ClaimError, words: RefusalWords): string {
 
   if (words.refusals[message]) {
     return words.refusals[message];
-  }
-
-  if (status === '401') {
-    return '登入已過期，請重新登入後再試一次。';
   }
 
   return status === '403' ? words.forbidden : words.fallback;

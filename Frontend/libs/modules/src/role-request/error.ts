@@ -5,9 +5,12 @@
  * does for claims.
  */
 
+import { isUnauthorizedError } from '../session/expiry';
+
 /** The parts of urql's `CombinedError` this reads. */
 export interface RoleRequestError {
   networkError?: unknown;
+  response?: { status?: number };
   graphQLErrors?: ReadonlyArray<{ message: string }>;
 }
 
@@ -27,7 +30,6 @@ const REFUSALS: Record<string, string> = {
 
 /** An `HTTPException` reads "<status>: <detail>"; the status is the part to trust. */
 const HTTP_REFUSALS: Record<string, string> = {
-  '401': '登入已過期，請重新登入後再試一次。',
   // role_request.add revoked from `user` at /admin/rbac: a super admin paused applications.
   '403': '目前暫停開放申請。',
 };
@@ -37,6 +39,11 @@ export function roleRequestErrorMessage(
   error: RoleRequestError,
   fallback = '送出失敗，請稍後再試一次。',
 ): string {
+  // Before the connection: an HTTP 401 comes as a `networkError` too (`isUnauthorizedError`).
+  if (isUnauthorizedError(error)) {
+    return '登入已過期，請重新登入後再試一次。';
+  }
+
   if (error.networkError) {
     return '連線失敗，請確認網路後再試一次。';
   }

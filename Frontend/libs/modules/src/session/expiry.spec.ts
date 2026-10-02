@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isSessionExpired,
   isSessionExpiredResponse,
+  isUnauthorizedError,
   markSessionExpired,
   reloginHref,
   shouldReloadForSignOut,
@@ -210,6 +211,53 @@ describe('isSessionExpired', () => {
         refreshFailed: false,
         sentToken: false,
         backendStatus: 401,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('isUnauthorizedError', () => {
+  it('reads an HTTP 401, which urql hands over as a network error', () => {
+    expect(
+      isUnauthorizedError({
+        networkError: new Error('Unauthorized'),
+        response: { status: 401 },
+      }),
+    ).toBe(true);
+  });
+
+  it('reads a refusal in the GraphQL errors, as an `HTTPException`\'s "401: <detail>"', () => {
+    expect(
+      isUnauthorizedError({
+        graphQLErrors: [{ message: '401: Could not validate credentials' }],
+      }),
+    ).toBe(true);
+  });
+
+  it('does not read a dropped connection as one: there is no response', () => {
+    expect(
+      isUnauthorizedError({ networkError: new TypeError('Failed to fetch') }),
+    ).toBe(false);
+  });
+
+  it('does not read a 403 as one: signed in, just not allowed', () => {
+    expect(
+      isUnauthorizedError({
+        graphQLErrors: [{ message: '403: Permission denied' }],
+      }),
+    ).toBe(false);
+    expect(
+      isUnauthorizedError({
+        networkError: new Error('Forbidden'),
+        response: { status: 403 },
+      }),
+    ).toBe(false);
+  });
+
+  it('does not read a 401 somewhere inside a message', () => {
+    expect(
+      isUnauthorizedError({
+        graphQLErrors: [{ message: 'Room 401 is full' }],
       }),
     ).toBe(false);
   });

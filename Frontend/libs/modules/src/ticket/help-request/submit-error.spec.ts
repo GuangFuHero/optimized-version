@@ -17,6 +17,15 @@ describe('submitErrorMessage', () => {
     );
   });
 
+  it('reads an HTTP 401, which urql hands over as a network error, as a sign-in that ran out', () => {
+    expect(
+      submitErrorMessage({
+        networkError: new Error('Unauthorized'),
+        response: { status: 401 },
+      }),
+    ).toBe('登入已過期，請重新登入後再試一次。');
+  });
+
   it('says only that it failed for every other refusal, whose words are about fields', () => {
     expect(submitErrorMessage(refusal('Unexpected error.'))).toBe(
       '送出失敗，請稍後再試一次。',

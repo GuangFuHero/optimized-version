@@ -45,6 +45,15 @@ describe('roleRequestErrorMessage', () => {
     );
   });
 
+  it('reads an HTTP 401, which urql hands over as a network error, as a sign-in that ran out', () => {
+    expect(
+      roleRequestErrorMessage({
+        networkError: new Error('Unauthorized'),
+        response: { status: 401 },
+      }),
+    ).toBe('登入已過期，請重新登入後再試一次。');
+  });
+
   it("puts a withdrawal's refusals in the site's words", () => {
     expect(
       roleRequestErrorMessage(refusal('Role request is no longer pending')),
