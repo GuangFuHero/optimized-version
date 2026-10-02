@@ -467,7 +467,7 @@ async def review_ticket(
 
 
 async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
-    """Delete a whole ticket — the requester's 「刪除整張單」 (team decision 2026-09-28).
+    """Delete a whole ticket — the requester's 「刪除整張單」.
 
     ticket.delete, checked before the locks. Any ticket not already deleted can go. It is
     cancelled and soft-deleted — a disaster help-request is never destroyed, only hidden, and the
@@ -539,7 +539,7 @@ def _mark_need_deleted(task: TicketTask, now: datetime) -> None:
 
 
 async def delete_ticket_task(db: AsyncSession, *, actor: User, uuid: str) -> None:
-    """Delete one need — the requester's 「刪除這筆需求」 (team decision 2026-09-28).
+    """Delete one need — the requester's 「刪除這筆需求」.
 
     ticket.delete on the need's ticket, as for deleting the whole ticket, checked before the
     locks: for a signed-in citizen that means their own ticket, whoever added the need. Any need
@@ -594,7 +594,7 @@ async def create_ticket_task(
 ) -> TicketTask:
     """Add a need to a ticket — createTicketTask, the site's 「再加一件」 among others.
 
-    ticket.edit on the ticket (team decision 2026-09-28), checked before the lock: for a signed-in
+    ticket.edit on the ticket, as the team decided, checked before the lock: for a signed-in
     citizen that means their own ticket only, while back-office roles keep their ticket.edit's
     reach. A ticket cancelled by hand before statuses were derived takes no need, since cancelled
     is final and nobody could claim it. The name and quantity are checked before anything is
