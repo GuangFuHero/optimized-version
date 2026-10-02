@@ -1,3 +1,4 @@
+export { AuthField } from './auth-field';
 export { AuthFooterLinks } from './auth-footer-links';
 export { AuthIdentityToggle } from './auth-identity-toggle';
 export { AuthReturnHint } from './auth-return-hint';

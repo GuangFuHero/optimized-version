@@ -1,4 +1,5 @@
 export {
+  AuthField,
   AuthFooterLinks,
   AuthIdentityToggle,
   AuthReturnHint,
