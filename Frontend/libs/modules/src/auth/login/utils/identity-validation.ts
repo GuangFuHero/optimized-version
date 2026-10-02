@@ -61,8 +61,11 @@ export function validateIdentityValue(
   }
 
   if (identityType === 'email') {
-    return validateEmailAddress(trimmedValue) ? true : '請輸入有效的電子郵件';
+    return validateEmailAddress(trimmedValue) ? true : '電子郵件格式不正確';
   }
 
-  return validatePhoneNumber(trimmedValue) ? true : '請輸入有效的手機號碼';
+  // The form no longer shows the accepted shapes beforehand (design `site-auth.jsx`), so this says them.
+  return validatePhoneNumber(trimmedValue)
+    ? true
+    : '手機號碼格式不正確（09 開頭十碼，或 +886 格式）';
 }

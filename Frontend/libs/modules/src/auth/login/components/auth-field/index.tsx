@@ -1,10 +1,8 @@
 'use client';
 
 import {
-  Box,
   FormControl,
   FormHelperText,
-  Link,
   OutlinedInput,
   Stack,
   Typography,
@@ -16,11 +14,8 @@ import { getAuthColorScheme } from '../../theme/auth-theme';
 
 interface AuthFieldProps {
   label: string;
-  labelHelperText?: ReactNode;
   value: string;
   onChange: (value: string) => void;
-  labelActionLabel?: string;
-  onLabelAction?: () => void;
   errorText?: ReactNode;
   placeholder?: string;
   type?: HTMLInputTypeAttribute;
@@ -32,11 +27,8 @@ interface AuthFieldProps {
 
 export function AuthField({
   label,
-  labelHelperText,
   value,
   onChange,
-  labelActionLabel,
-  onLabelAction,
   errorText,
   placeholder,
   type = 'text',
@@ -50,69 +42,18 @@ export function AuthField({
 
   return (
     <Stack spacing={0.5} sx={{ width: '100%' }}>
-      <Box
+      <Typography
+        component="div"
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 2,
+          color: authPalette.textSecondary,
+          fontSize: 12,
+          lineHeight: '16px',
+          fontWeight: 600,
+          letterSpacing: '0.6px',
         }}
       >
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: 0.75,
-            minWidth: 0,
-          }}
-        >
-          <Typography
-            component="div"
-            sx={{
-              color: authPalette.textSecondary,
-              fontSize: 12,
-              lineHeight: '16px',
-              fontWeight: 600,
-              letterSpacing: '0.6px',
-            }}
-          >
-            {label}
-          </Typography>
-          {labelHelperText ? (
-            <Typography
-              component="div"
-              sx={{
-                color: authPalette.textMuted,
-                fontSize: 11,
-                lineHeight: '16px',
-                fontWeight: 500,
-                letterSpacing: '0.2px',
-              }}
-            >
-              {labelHelperText}
-            </Typography>
-          ) : null}
-        </Box>
-
-        {labelActionLabel ? (
-          <Link
-            component="button"
-            type="button"
-            underline="none"
-            onClick={onLabelAction}
-            sx={{
-              color: authPalette.warmLink,
-              fontSize: 10,
-              lineHeight: '12px',
-              fontWeight: 700,
-              letterSpacing: '0.8px',
-              cursor: 'pointer',
-            }}
-          >
-            {labelActionLabel}
-          </Link>
-        ) : null}
-      </Box>
+        {label}
+      </Typography>
 
       <FormControl fullWidth error={Boolean(errorText)}>
         <OutlinedInput

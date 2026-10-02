@@ -2,6 +2,7 @@ export {
   AuthFooterLinks,
   AuthFormError,
   authHref,
+  AuthIdentityToggle,
   AuthReturnHint,
   AuthShell,
   LoginForm,

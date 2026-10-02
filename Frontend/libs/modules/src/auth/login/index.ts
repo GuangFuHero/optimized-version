@@ -1,5 +1,6 @@
 export {
   AuthFooterLinks,
+  AuthIdentityToggle,
   AuthReturnHint,
   AuthShell,
   LoginForm,

@@ -2,13 +2,7 @@
 
 import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
-import {
-  Box,
-  Button,
-  CircularProgress,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Alert, Box, Button, Link, Stack, Typography } from '@mui/material';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import { useTheme } from '@mui/material/styles';
@@ -16,7 +10,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { getAuthColorScheme } from '../../theme/auth-theme';
 import { AuthFormError } from '../../utils/auth-form-error';
@@ -27,6 +21,7 @@ import {
 } from '../../utils/identity-validation';
 import { newPasswordProblem, newPasswordText } from '../../utils/new-password';
 import { AuthField } from '../auth-field';
+import { AuthIdentityToggle } from '../auth-identity-toggle';
 import { AuthProviderButton } from '../auth-provider-button';
 
 const { color, radius, shadow } = designTokens;
@@ -65,18 +60,19 @@ const defaultProviderActions: readonly AuthProviderAction[] = [
 ];
 
 const loginFormText = {
+  loginTitle: '登入',
+  loginDescription: '用 Email 或手機號碼登入。還沒有帳號可以直接註冊。',
+  // The design has no register screen: these two are ours, passed to the designer to look over.
+  registerTitle: '註冊帳號',
+  registerDescription: '用 Email 或手機號碼註冊，收到驗證碼後完成啟用。',
   emailLabel: '電子郵件',
   emailPlaceholder: 'name@example.com',
   phoneLabel: '手機號碼',
   phonePlaceholder: '0912345678',
-  accountTypeLabel: '登入方式',
-  registerAccountTypeLabel: '註冊方式',
-  emailToggleLabel: 'Email',
-  phoneToggleLabel: '手機號碼',
   displayNameLabel: '顯示名稱',
   displayNamePlaceholder: '請輸入顯示名稱',
   passwordLabel: '密碼',
-  passwordPlaceholder: '請輸入密碼..',
+  passwordPlaceholder: '輸入密碼',
   forgotPasswordLabel: '忘記密碼？',
   smsActionLabel: '透過簡訊驗證登入',
   emailRequiredMessage: '請輸入電子郵件',
@@ -90,8 +86,9 @@ const loginFormText = {
   registerFailedMessage: '註冊失敗，請稍後再試',
   registerSuccessMessage: '註冊請求已送出，請依驗證流程完成帳號啟用。',
   loginSubmitLabel: '登入',
+  loginSubmittingLabel: '登入中⋯',
   registerSubmitLabel: '註冊',
-  phoneHelperText: '支援 09 開頭或 +886 格式',
+  registerSubmittingLabel: '註冊中⋯',
 } as const;
 
 function resolveIdentityFieldCopy(identityType: AuthIdentityType) {
@@ -99,12 +96,10 @@ function resolveIdentityFieldCopy(identityType: AuthIdentityType) {
     ? {
         label: loginFormText.emailLabel,
         placeholder: loginFormText.emailPlaceholder,
-        autoComplete: 'email',
       }
     : {
         label: loginFormText.phoneLabel,
         placeholder: loginFormText.phonePlaceholder,
-        autoComplete: 'tel',
       };
 }
 
@@ -222,6 +217,33 @@ export function LoginForm({
     >
       {/* <LoginAudienceSwitch disabled={isSubmitting} /> */}
 
+      <Stack spacing={0.5}>
+        <Typography
+          component="h2"
+          sx={{
+            color: color.fg.neutral.default,
+            fontSize: displayTextSize[20],
+            lineHeight: 1.3,
+            fontWeight: 700,
+          }}
+        >
+          {mode === 'login'
+            ? loginFormText.loginTitle
+            : loginFormText.registerTitle}
+        </Typography>
+        <Typography
+          sx={{
+            color: color.fg.neutral.subtle,
+            fontSize: displayTextSize[13],
+            lineHeight: 1.6,
+          }}
+        >
+          {mode === 'login'
+            ? loginFormText.loginDescription
+            : loginFormText.registerDescription}
+        </Typography>
+      </Stack>
+
       {mode === 'register' ? (
         <Controller
           name="name"
@@ -245,71 +267,16 @@ export function LoginForm({
         />
       ) : null}
 
-      <Stack spacing={0.5}>
-        <Typography
-          component="div"
-          sx={{
-            color: authPalette.textSecondary,
-            fontSize: 12,
-            lineHeight: '16px',
-            fontWeight: 600,
-            letterSpacing: '0.6px',
-          }}
-        >
-          {mode === 'login'
-            ? loginFormText.accountTypeLabel
-            : loginFormText.registerAccountTypeLabel}
-        </Typography>
-        <Stack
-          direction="row"
-          spacing={0.5}
-          sx={{
-            p: 0.5,
-            borderRadius: '18px',
-            border: `1px solid ${authPalette.fieldBorder}`,
-            bgcolor: authPalette.fieldBackground,
-          }}
-        >
-          {(['email', 'phone'] as const).map((value) => {
-            const active = identityType === value;
-
-            return (
-              <Button
-                key={value}
-                type="button"
-                fullWidth
-                disabled={isSubmitting}
-                onClick={() => {
-                  setIdentityType(value);
-                  resetField('identity');
-                  setSubmissionError(undefined);
-                  setSubmissionSuccess(undefined);
-                }}
-                sx={{
-                  minHeight: 40,
-                  borderRadius: '14px',
-                  bgcolor: active ? '#D8F2FF' : 'transparent',
-                  border: active
-                    ? '1px solid #8ED8F8'
-                    : '1px solid transparent',
-                  color: authPalette.textPrimary,
-                  fontSize: 13,
-                  lineHeight: '16px',
-                  fontWeight: 700,
-                  letterSpacing: '0.6px',
-                  '&:hover': {
-                    bgcolor: active ? '#D8F2FF' : '#EEF3F8',
-                  },
-                }}
-              >
-                {value === 'email'
-                  ? loginFormText.emailToggleLabel
-                  : loginFormText.phoneToggleLabel}
-              </Button>
-            );
-          })}
-        </Stack>
-      </Stack>
+      <AuthIdentityToggle
+        value={identityType}
+        disabled={isSubmitting}
+        onChange={(value) => {
+          setIdentityType(value);
+          resetField('identity');
+          setSubmissionError(undefined);
+          setSubmissionSuccess(undefined);
+        }}
+      />
 
       <Controller
         name="identity"
@@ -320,15 +287,11 @@ export function LoginForm({
         render={({ field, fieldState }) => (
           <AuthField
             label={identityFieldCopy.label}
-            labelHelperText={
-              identityType === 'phone'
-                ? loginFormText.phoneHelperText
-                : undefined
-            }
             value={field.value ?? ''}
             onChange={field.onChange}
             placeholder={identityFieldCopy.placeholder}
-            autoComplete={identityFieldCopy.autoComplete}
+            // `username`, not `email`/`tel`: password managers pair it with the password field.
+            autoComplete="username"
             disabled={isSubmitting}
             errorText={fieldState.error?.message}
           />
@@ -366,18 +329,6 @@ export function LoginForm({
               mode === 'register' ? 'new-password' : 'current-password'
             }
             disabled={isSubmitting}
-            labelActionLabel={
-              onForgotPasswordAsync && !isSubmitting
-                ? loginFormText.forgotPasswordLabel
-                : undefined
-            }
-            onLabelAction={
-              onForgotPasswordAsync && !isSubmitting
-                ? () => {
-                    void runAction(onForgotPasswordAsync);
-                  }
-                : undefined
-            }
             errorText={fieldState.error?.message}
             endAdornment={
               <InputAdornment position="end">
@@ -393,10 +344,11 @@ export function LoginForm({
                   }
                   sx={{ p: 0.5 }}
                 >
+                  {/* What a press does: the open eye shows the password, the crossed one hides it. */}
                   {isPasswordVisible ? (
-                    <VisibilityRoundedIcon />
-                  ) : (
                     <VisibilityOffRoundedIcon />
+                  ) : (
+                    <VisibilityRoundedIcon />
                   )}
                 </IconButton>
               </InputAdornment>
@@ -405,32 +357,35 @@ export function LoginForm({
         )}
       />
 
-      {submissionError ? (
-        <Typography
-          role="alert"
+      {onForgotPasswordAsync ? (
+        <Link
+          component="button"
+          type="button"
+          underline="always"
+          disabled={isSubmitting}
+          onClick={() => {
+            void runAction(onForgotPasswordAsync);
+          }}
           sx={{
-            color: 'error.main',
-            fontSize: 13,
-            lineHeight: '20px',
-            fontWeight: 600,
+            alignSelf: 'flex-start',
+            minHeight: 44,
+            color: color.brand.primary.subtle,
+            fontSize: displayTextSize[13],
+            lineHeight: 1.2,
+            fontWeight: 700,
+            '&:disabled': { cursor: 'default', opacity: 0.6 },
           }}
         >
-          {submissionError}
-        </Typography>
+          {loginFormText.forgotPasswordLabel}
+        </Link>
+      ) : null}
+
+      {submissionError ? (
+        <Alert severity="error">{submissionError}</Alert>
       ) : null}
 
       {submissionSuccess ? (
-        <Typography
-          role="status"
-          sx={{
-            color: '#2F6B2F',
-            fontSize: 13,
-            lineHeight: '20px',
-            fontWeight: 600,
-          }}
-        >
-          {submissionSuccess}
-        </Typography>
+        <Alert severity="success">{submissionSuccess}</Alert>
       ) : null}
 
       <Button
@@ -453,13 +408,13 @@ export function LoginForm({
           },
         }}
       >
-        {isSubmitting ? (
-          <CircularProgress size={18} color="inherit" />
-        ) : mode === 'login' ? (
-          loginFormText.loginSubmitLabel
-        ) : (
-          loginFormText.registerSubmitLabel
-        )}
+        {mode === 'login'
+          ? isSubmitting
+            ? loginFormText.loginSubmittingLabel
+            : loginFormText.loginSubmitLabel
+          : isSubmitting
+            ? loginFormText.registerSubmittingLabel
+            : loginFormText.registerSubmitLabel}
       </Button>
 
       {secondaryActionLabel && onSecondaryAction ? (
@@ -519,44 +474,45 @@ export function LoginForm({
       ) : null}
 
       {shouldShowProviderActions ? (
-        <Stack spacing={2} sx={{ pt: 1 }}>
-          <Stack direction="row" sx={{ width: '100%', alignItems: 'center' }}>
+        <Stack spacing={2}>
+          <Stack
+            direction="row"
+            spacing={1.5}
+            sx={{ width: '100%', alignItems: 'center' }}
+          >
             <Box
-              sx={{
-                flex: 1,
-                borderTop: `1px solid ${authPalette.fieldBorder}`,
-              }}
+              sx={{ flex: 1, borderTop: `1px solid ${color.border.default}` }}
             />
-            <Box sx={{ px: 2 }}>
-              <Typography
-                variant="overline"
-                sx={{
-                  color: authPalette.textSecondary,
-                  fontWeight: 700,
-                  letterSpacing: '0.1em',
-                }}
-              >
-                {loginFormText.dividerLabel}
-              </Typography>
-            </Box>
-            <Box
+            <Typography
               sx={{
-                flex: 1,
-                borderTop: `1px solid ${authPalette.fieldBorder}`,
+                color: color.fg.neutral.muted,
+                fontSize: displayTextSize[11],
+                lineHeight: 1.4,
               }}
+            >
+              {loginFormText.dividerLabel}
+            </Typography>
+            <Box
+              sx={{ flex: 1, borderTop: `1px solid ${color.border.default}` }}
             />
           </Stack>
 
-          <Stack spacing={1}>
+          {/* Side by side as designed, from 600px: on a phone the two labels break onto a second
+              line, so there they stack. The brand marks stay, as Google's sign-in button rules ask. */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
             {resolvedProviderActions.map((action) => (
-              <AuthProviderButton
+              <Box
                 key={`${action.provider}-${action.label}`}
-                provider={action.provider}
-                label={action.label}
-                onClick={action.onClick}
-                disabled={action.disabled}
-                icon={action.icon}
-              />
+                sx={{ flex: 1, minWidth: 0 }}
+              >
+                <AuthProviderButton
+                  provider={action.provider}
+                  label={action.label}
+                  onClick={action.onClick}
+                  disabled={action.disabled}
+                  icon={action.icon}
+                />
+              </Box>
             ))}
           </Stack>
         </Stack>
