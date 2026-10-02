@@ -41,19 +41,40 @@ def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resourc
     decided = info.context["_ticket_detail_visible"]
     key = str(ticket_uuid)
     if key not in decided:
-        decided[key] = asyncio.ensure_future(_decide_ticket_detail(info, key, resource))
+        decided[key] = asyncio.ensure_future(
+            _decide_ticket_scope(info, Perm.TICKET_VIEW_DETAIL, key, resource)
+        )
     return decided[key]
 
 
-async def _decide_ticket_detail(info: strawberry.types.Info, ticket_uuid: str, resource) -> bool:
+def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str):
+    """Whether the caller holds ticket.view_history on this ticket, decided once per request.
+
+    Gates a task's `assignments`, which name the accounts of the volunteers going: the
+    requester's and the coordinators' business. They followed ticket.view_pii until ADR-286
+    opened contact details to anyone signed in; with the requester's name and `createdBy` both
+    open, an open claimant list would let anyone follow a volunteer from need to need. So they
+    follow the timeline instead, which kept view_pii's old tiering — and already names who
+    took and who dropped a task (ADR-143).
+    """
+    decided = info.context["_ticket_history_visible"]
+    key = str(ticket_uuid)
+    if key not in decided:
+        decided[key] = asyncio.ensure_future(
+            _decide_ticket_scope(info, Perm.TICKET_VIEW_HISTORY, key, None)
+        )
+    return decided[key]
+
+
+async def _decide_ticket_scope(
+    info: strawberry.types.Info, perm: Perm, ticket_uuid: str, resource
+) -> bool:
     """resolve_scope + in_scope, like _compute_pii_visible. Never raises: denial is withholding."""
     user = info.context["user"]
     if user is None:
         return False
     db = info.context["db"]
-    scope = await resolve_scope(
-        user, Perm.TICKET_VIEW_DETAIL, db, cache=info.context["_rbac_cache"]
-    )
+    scope = await resolve_scope(user, perm, db, cache=info.context["_rbac_cache"])
     if scope == Scope.NONE:
         return False
     if scope == Scope.ALL:
@@ -212,7 +233,11 @@ class TicketTaskType:
     )
     status: str = strawberry.field(
         default="pending",
-        description="Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'",
+        description=(
+            "Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or "
+            "its requester stopped recruiting — the people on it still go), or 'canceled'. Moves "
+            "only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion"
+        ),
     )
     source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
     visibility: str = strawberry.field(
@@ -221,6 +246,14 @@ class TicketTaskType:
     moderation_status: str = strawberry.field(
         default="pending_review",
         description="Review state: 'pending_review', 'approved', or 'rejected'",
+    )
+    recruiting_stopped_at: datetime | None = strawberry.field(
+        default=None,
+        description=(
+            "When the requester stopped recruiting for this need by hand (stopRecruiting); null if "
+            "they never did — a need that filled by itself is fulfilled with no such time. Once "
+            "set, nobody on the need can give their place back"
+        ),
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -282,10 +315,26 @@ class TicketTaskType:
         """Resolve structured properties (skills, cargo type, etc.) for this task."""
         return await info.context["loaders"]["task_properties_by_task"].load(str(self.uuid))
 
-    @strawberry.field
+    @strawberry.field(
+        description=(
+            "Everyone who claimed this task. Empty to a caller without ticket.view_history on the "
+            "parent ticket — assignedCount stays public, and a caller's own claim is myAssignment"
+        )
+    )
     async def assignments(self, info: strawberry.types.Info) -> list[TaskAssignmentType]:
-        """Resolve actors (volunteers, responders) assigned to this task."""
+        """The accounts going: the requester's and the coordinators' to see, not the public's."""
+        if not await ticket_history_visible(info, self.ticket_uuid):
+            return []
         return await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
+
+    @strawberry.field(description="The caller's own claim on this task. Null to a guest or a non-claimant")
+    async def my_assignment(self, info: strawberry.types.Info) -> TaskAssignmentType | None:
+        """What the site shows as 已承接, and the uuid 釋出名額 (unassignTaskActor) releases."""
+        user = info.context["user"]
+        if user is None:
+            return None
+        rows = await info.context["loaders"]["task_assignments_by_task"].load(str(self.uuid))
+        return next((a for a in rows if str(a.actor_uuid) == str(user.uuid)), None)
 
     @strawberry.field
     async def assigned_count(self, info: strawberry.types.Info) -> int:
@@ -325,6 +374,7 @@ class TicketTaskType:
             source=m.source,
             visibility=m.visibility,
             moderation_status=m.moderation_status,
+            recruiting_stopped_at=m.recruiting_stopped_at,
             created_at=m.created_at,
             updated_at=m.updated_at,
             _task_description_raw=m.task_description,
@@ -354,13 +404,48 @@ class CreateTicketTaskInput:
 
 
 @strawberry.input
-class UpdateTicketTaskInput:
-    """Input for updating a ticket task's status, visibility, or review notes."""
+class HelpRequestTaskInput:
+    """One need on a help request filed from the public site."""
 
-    status: str | None = strawberry.field(
-        default=None,
-        description="New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'",
+    task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
+    task_name: str = strawberry.field(description="What is needed, at most 200 characters")
+    task_description: str | None = None
+    quantity: int | None = strawberry.field(
+        default=None, description="People or units needed, at least 1; omit when not known"
     )
+
+
+@strawberry.input
+class CreateHelpRequestInput:
+    """A citizen's request for help: the ticket and its first needs, filed together."""
+
+    title: str = strawberry.field(description="At most 200 characters")
+    description: str | None = None
+    geometry: GeoJSON = strawberry.field(
+        description="GeoJSON Point for the location where help is needed — [longitude, latitude]"
+    )
+    contact_name: str = strawberry.field(description="Who to ask for at the place")
+    contact_phone: str | None = strawberry.field(
+        default=None, description="Phone number or LINE ID, as the person typed it"
+    )
+    secondary_location: SecondaryLocationInput | None = strawberry.field(
+        default=None,
+        description="The address as typed goes in `landmarkNote`, with `floor` and `room`",
+    )
+    tasks: list[HelpRequestTaskInput] = strawberry.field(description="At least one need")
+    photo_urls: list[str] | None = strawberry.field(
+        default=None,
+        description=(
+            "Scene photos as links to images kept elsewhere — the platform stores no image. "
+            "At most 10, each an https:// URL of at most 500 characters"
+        ),
+    )
+
+
+@strawberry.input
+class UpdateTicketTaskInput:
+    """Input for updating a ticket task's moderation status, visibility, or notes — not its status."""
+
     progress_note: str | None = strawberry.field(
         default=strawberry.UNSET, description="Updated progress description — pass null to clear"
     )
@@ -679,8 +764,8 @@ class TicketType:
         already on the public map, while a ticket's is the reporter's own home. Gated on
         ticket.view_detail, beside the exact point, rather than ADR-268's ticket.view_pii
         (ADR-281): the address and the point name the same house, and the team's rule is
-        that signing in shows it — `view_pii` is `own` for a plain account, which left a
-        signed-in volunteer the pin but not the door.
+        that signing in shows it — `view_pii` was `own` for a plain account then (ADR-286
+        opened it later), which left a signed-in volunteer the pin but not the door.
         """
         if not await self._detail_visible(info):
             return None
@@ -733,6 +818,15 @@ class TicketType:
             _created_by_raw=m.created_by,
             _coarse_resolution=coarse_resolution,
         )
+
+
+@strawberry.type(description="One of the caller's claims, with the need and the ticket it is for")
+class MyTaskAssignmentType:
+    """A row of 「我的任務 › 我承接的」: what I claimed, which need, and where to go."""
+
+    assignment: TaskAssignmentType
+    task: TicketTaskType
+    ticket: TicketType
 
 
 @strawberry.type
@@ -794,12 +888,11 @@ class CreateTicketInput:
 
 @strawberry.input
 class UpdateTicketInput:
-    """Input for updating a ticket's status, priority, or review notes."""
+    """Input for updating a ticket's priority, content, address, or review notes.
 
-    status: str | None = strawberry.field(
-        default=None,
-        description="New lifecycle state — must follow valid transitions (e.g. pending → in_progress)",
-    )
+    There is no `status`: a ticket's status is worked out from its needs.
+    """
+
     priority: str | None = strawberry.field(
         default=None, description="Updated urgency: 'low', 'medium', 'high', or 'critical'"
     )

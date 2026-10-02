@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 from tests.test_graphql.conftest import auth_header
 
@@ -849,41 +850,30 @@ async def test_create_ticket_rejects_blank_contact_name(client, coordinator_auth
 
 
 @pytest.mark.asyncio
-async def test_update_ticket_valid_transition(client, coordinator_auth):
-    """Hypothesis: valid status transitions are accepted by the API.
+async def test_update_ticket_takes_no_status(client, coordinator_auth, sample_ticket):
+    """A ticket's status is worked out from its needs, so `updateTicket` has no way to set it.
 
-    Test case: pending → in_progress → completed each return the new status.
+    `in_progress` is a move the old state machine allowed from `pending`, so only a missing
+    field can explain the refusal.
     """
+    from tests.test_graphql.conftest import test_db
+
     _, token = coordinator_auth
-    headers = auth_header(token)
 
     resp = await client.post(
         "/graphql",
         json={
-            "query": CREATE_TICKET,
-            "variables": {
-                "input": {
-                    "title": "Transition test",
-                    "geometry": POINT_TAIPEI,
-                    "contactName": "Bob",
-                    "taskType": "hr",
-                }
-            },
+            "query": UPDATE_TICKET,
+            "variables": {"uuid": sample_ticket, "input": {"status": "in_progress"}},
         },
-        headers=headers,
+        headers=auth_header(token),
     )
-    ticket_uuid = resp.json()["data"]["createTicket"]["uuid"]
 
-    for _, to_status in [("pending", "in_progress"), ("in_progress", "completed")]:
-        resp = await client.post(
-            "/graphql",
-            json={
-                "query": UPDATE_TICKET,
-                "variables": {"uuid": ticket_uuid, "input": {"status": to_status}},
-            },
-            headers=headers,
-        )
-        assert resp.json()["data"]["updateTicket"]["status"] == to_status
+    body = resp.json()
+    errors = body.get("errors", [])
+    assert any("'status' is not defined by type 'UpdateTicketInput'" in e["message"] for e in errors), body
+    async with test_db() as db:
+        assert (await db.get(Tickets, uuid.UUID(sample_ticket))).status == "pending"
 
 
 @pytest.mark.asyncio
@@ -901,7 +891,7 @@ async def test_update_ticket_no_permission_edit(
             "query": UPDATE_TICKET,
             "variables": {
                 "uuid": sample_ticket,
-                "input": {"status": "in_progress"},
+                "input": {"priority": "low"},
             },
         },
         headers=auth_header(login_token),
@@ -968,21 +958,36 @@ async def test_create_ticket_task_unknown_ticket(client, coordinator_auth):
 
 
 @pytest.mark.asyncio
-async def test_update_ticket_task_status(client, coordinator_auth, sample_ticket_task):
-    """Hypothesis: updateTicketTask status update is persisted and returned.
-
-    Test case: update sample_ticket_task to in_progress → response reflects new status.
-    """
+async def test_update_ticket_task_progress_note(client, coordinator_auth, sample_ticket_task):
+    """An edit to a task is persisted and returned — here its progress note."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
             "query": UPDATE_TICKET_TASK,
-            "variables": {"uuid": sample_ticket_task, "input": {"status": "in_progress"}},
+            "variables": {"uuid": sample_ticket_task, "input": {"progressNote": "已派兩人前往"}},
         },
         headers=auth_header(token),
     )
-    assert resp.json()["data"]["updateTicketTask"]["status"] == "in_progress"
+    assert resp.json()["data"]["updateTicketTask"]["progressNote"] == "已派兩人前往"
+
+
+@pytest.mark.asyncio
+async def test_update_ticket_task_no_longer_takes_a_status(client, coordinator_auth, sample_ticket_task):
+    """A task's status moves only through claims, releases, stopRecruiting and deletion (ADR-293)."""
+    _, token = coordinator_auth
+    query = (
+        'mutation($uuid: UUID!) { updateTicketTask(uuid: $uuid, input: {status: "fulfilled"}) { uuid } }'
+    )
+    resp = await client.post(
+        "/graphql",
+        json={"query": query, "variables": {"uuid": sample_ticket_task}},
+        headers=auth_header(token),
+    )
+    errors = resp.json()["errors"]
+    assert any(
+        "Field 'status' is not defined by type 'UpdateTicketTaskInput'" in e["message"] for e in errors
+    ), errors
 
 
 @pytest.mark.asyncio
@@ -1023,7 +1028,7 @@ async def test_update_ticket_task_blocks_non_owner(client, login_user_auth, samp
         "/graphql",
         json={
             "query": UPDATE_TICKET_TASK,
-            "variables": {"uuid": sample_ticket_task, "input": {"status": "in_progress"}},
+            "variables": {"uuid": sample_ticket_task, "input": {"progressNote": "路過順便改"}},
         },
         headers=auth_header(token),
     )
@@ -1234,20 +1239,27 @@ async def test_duplicate_assignment_rejected(
 
 
 @pytest.mark.asyncio
-async def test_over_subscription_allowed(
+async def test_a_coordinator_cannot_over_subscribe(
     client,
     redis,
     coordinator_auth,
     sample_ticket_task,
 ):
-    """quantity=3 task accepts more than 3 people — no capacity cap."""
+    """quantity=3 task takes three people and turns away a fourth, even a coordinator's (ADR-291).
+
+    Reverses d847624, which let a coordinator knowingly send more: to send more, open another need.
+    """
     from tests.test_graphql.conftest import _create_user_with_role
 
     _, token = coordinator_auth
-    for _ in range(4):
+    for _ in range(3):
         actor_uuid, _ignore = await _create_user_with_role(redis, "Login User")
         body = await _assign(client, token, sample_ticket_task, actor_uuid=actor_uuid)
         assert "errors" not in body, body
+
+    extra_uuid, _ignore = await _create_user_with_role(redis, "Login User")
+    body = await _assign(client, token, sample_ticket_task, actor_uuid=extra_uuid)
+    assert any("Task is full" in e["message"] for e in body["errors"]), body
 
 
 @pytest.mark.asyncio

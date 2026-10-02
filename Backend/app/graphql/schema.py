@@ -15,6 +15,8 @@ from app.graphql.config.mutations import PropertyConfigMutation
 from app.graphql.config.queries import PropertyConfigQuery
 from app.graphql.geo.mutations import GeoMutation, StationPropertyMutation
 from app.graphql.geo.queries import GeoQuery
+from app.graphql.role_requests.mutations import RoleRequestMutation
+from app.graphql.role_requests.queries import RoleRequestQuery
 from app.graphql.suggestions.mutations import SuggestionMutation
 from app.graphql.suggestions.queries import SuggestionQuery
 from app.graphql.tickets.mutations import RequestMutation, TicketTaskMutation
@@ -30,12 +32,12 @@ _logger = logging.getLogger("app.graphql")
 
 
 @strawberry.type
-class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, BriefingQuery, SuggestionQuery, WorkZoneQuery):  # noqa: E501
+class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, BriefingQuery, SuggestionQuery, WorkZoneQuery, RoleRequestQuery):  # noqa: E501
     """Root query type composing all domain query mixins."""
 
 
 @strawberry.type
-class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, BriefingMutation, SuggestionMutation, WorkZoneMutation):  # noqa: E501
+class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, BriefingMutation, SuggestionMutation, WorkZoneMutation, RoleRequestMutation):  # noqa: E501
     """Root mutation type composing all domain mutation mixins."""
 
 
@@ -55,7 +57,9 @@ def _should_mask(error: GraphQLError) -> bool:
       named exceptions (`AdminNotFoundError`, `RbacConflictError`, ...) all subclass it.
     - `HTTPException` — "Permission Denied." / "Not Found." from authz.py and context.py.
     - `original_error is None` — graphql-core's own input coercion ("not a valid value").
-      Raised before any resolver runs, so there is nothing server-side in it to leak.
+      Raised before any resolver runs, so there is nothing server-side in it to leak. A
+      variable's coercion error arrives wrapped in a second GraphQLError, and is judged by
+      what it wraps.
 
     **Anything else must be a ValueError to reach the client.** A new custom exception class
     that does not subclass it will silently become "Unexpected error.".
@@ -77,6 +81,10 @@ def _is_expected(error: GraphQLError) -> bool:
     never be logged as if it were a crash, and vice versa.
     """
     original = error.original_error
+    # A bad variable (an unknown field, a value its scalar rejects) is reported as a
+    # GraphQLError wrapping the coercion error (graphql-core's `coerce_variable_values`).
+    while isinstance(original, GraphQLError):
+        original = original.original_error
     if original is None:
         # graphql-core's own input coercion, raised before any resolver runs.
         return True

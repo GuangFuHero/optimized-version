@@ -144,7 +144,7 @@ CSV 與 XLSX 雙向（ADR-115）。CSV 匯出帶 UTF-8 BOM，XLSX 把電話、�
 |---|---|
 | `uuid` | 唯讀 |
 | `description`, `priority`, `disaster_type` | 新增 + 更新（`priority` 不驗值——ADR-126） |
-| `status` | 更新（走狀態機，ADR-122）；新增時忽略——`create_ticket` 一律寫 `"pending"`（`app/services/ticket.py:99`） |
+| `status` | 唯讀——單的狀態由底下的需求自動算，匯入不讀也不驗（ADR-122 的 2026-09-28 修訂） |
 | `title` | 僅新增（比對鍵，ADR-108） |
 | `contact_name`, `contact_email`, `contact_phone` | 僅新增；`contact_phone` 同時是比對鍵。匯出時逐筆遮罩（ADR-109） |
 | `latitude`, `longitude` | 僅新增，且新增時必填——**`UpdateTicketInput` 沒有 geometry**，求助單的位置建立後就固定了 |

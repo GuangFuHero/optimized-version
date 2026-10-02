@@ -26,13 +26,13 @@ from tests.test_graphql.conftest import auth_header, test_db
 
 UPDATE_TICKET = """
 mutation($uuid: UUID!, $input: UpdateTicketInput!) {
-    updateTicket(uuid: $uuid, input: $input) { uuid status }
+    updateTicket(uuid: $uuid, input: $input) { uuid priority }
 }
 """
 
 UPDATE_TICKET_TASK = """
 mutation($uuid: UUID!, $input: UpdateTicketTaskInput!) {
-    updateTicketTask(uuid: $uuid, input: $input) { uuid status }
+    updateTicketTask(uuid: $uuid, input: $input) { uuid moderationStatus }
 }
 """
 
@@ -133,13 +133,13 @@ async def test_zone_scope_grants_edit_on_a_ticket_inside_the_assigned_zone(
         "/graphql",
         json={
             "query": UPDATE_TICKET,
-            "variables": {"uuid": ticket_uuid, "input": {"status": "in_progress"}},
+            "variables": {"uuid": ticket_uuid, "input": {"priority": "high"}},
         },
         headers=auth_header(editor_token),
     )
     body = resp.json()
     assert "errors" not in body, body
-    assert body["data"]["updateTicket"]["status"] == "in_progress"
+    assert body["data"]["updateTicket"]["priority"] == "high"
 
 
 @pytest.mark.asyncio
@@ -152,7 +152,7 @@ async def test_zone_scope_404s_for_a_ticket_outside_the_assigned_zone(client, re
         "/graphql",
         json={
             "query": UPDATE_TICKET,
-            "variables": {"uuid": ticket_uuid, "input": {"status": "in_progress"}},
+            "variables": {"uuid": ticket_uuid, "input": {"priority": "high"}},
         },
         headers=auth_header(editor_token),
     )
@@ -194,13 +194,13 @@ async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, re
         "/graphql",
         json={
             "query": UPDATE_TICKET_TASK,
-            "variables": {"uuid": task_uuid, "input": {"status": "in_progress"}},
+            "variables": {"uuid": task_uuid, "input": {"moderationStatus": "approved"}},
         },
         headers=auth_header(editor_token),
     )
     body = resp.json()
     assert "errors" not in body, body
-    assert body["data"]["updateTicketTask"]["status"] == "in_progress"
+    assert body["data"]["updateTicketTask"]["moderationStatus"] == "approved"
 
 
 @pytest.mark.asyncio
@@ -214,7 +214,7 @@ async def test_zone_scope_404s_task_under_ticket_outside_zone(client, redis, tea
         "/graphql",
         json={
             "query": UPDATE_TICKET_TASK,
-            "variables": {"uuid": task_uuid, "input": {"status": "in_progress"}},
+            "variables": {"uuid": task_uuid, "input": {"moderationStatus": "approved"}},
         },
         headers=auth_header(editor_token),
     )
@@ -239,7 +239,7 @@ async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, redis
         "/graphql",
         json={
             "query": UPDATE_TICKET,
-            "variables": {"uuid": ticket_uuid, "input": {"status": "in_progress"}},
+            "variables": {"uuid": ticket_uuid, "input": {"priority": "high"}},
         },
         headers=auth_header(editor_token),
     )
@@ -260,7 +260,7 @@ async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, redis
         "/graphql",
         json={
             "query": UPDATE_TICKET,
-            "variables": {"uuid": ticket_uuid, "input": {"status": "completed"}},
+            "variables": {"uuid": ticket_uuid, "input": {"priority": "critical"}},
         },
         headers=auth_header(editor_token),
     )
@@ -277,7 +277,7 @@ async def test_zone_scope_denies_a_team_with_no_zone_assignment_at_all(client, r
         "/graphql",
         json={
             "query": UPDATE_TICKET,
-            "variables": {"uuid": ticket_uuid, "input": {"status": "in_progress"}},
+            "variables": {"uuid": ticket_uuid, "input": {"priority": "high"}},
         },
         headers=auth_header(editor_token),
     )

@@ -24,15 +24,16 @@ class Perm(StrEnum):
     # ADR-281: everything that places the reporter or tells their story in their own words —
     # the exact point, the street address, the free text, the photos, the review notes, who
     # filed it. Not a reuse of ticket.view (public, ADR-027) nor of ticket.view_pii (contact
-    # details and triage answers, role-scoped): the seed grants this one to every role at
-    # `all`, so today it reads "signed in", but it stays a scope an admin can narrow at
+    # details and triage answers — who to call, not where): the seed grants this one to every
+    # role at `all`, so today it reads "signed in", but it stays a scope an admin can narrow at
     # runtime. Without it the point comes back as the centre of an H3 cell (app/db/h3.py).
     TICKET_VIEW_DETAIL = "ticket.view_detail"
     # Feature 016 (ADR-127): the change timeline is its own capability, not a reuse of
     # audit.view — that key is auditor-only, while the requirement is that a requester can
     # follow their own ticket. Not a reuse of ticket.view either: that one is in
     # PUBLIC_PERMS, so sharing it would put staff names and review timings in front of
-    # anonymous visitors. Scoped like view_pii, since it exposes the same order of detail.
+    # anonymous visitors. Scoped as view_pii was before ADR-286 opened contact details to
+    # anyone signed in: the timeline names people, and it also gates who claimed a need.
     TICKET_VIEW_HISTORY = "ticket.view_history"
     TICKET_ADD = "ticket.add"
     TICKET_EDIT = "ticket.edit"
@@ -81,6 +82,15 @@ class Perm(StrEnum):
     USER_ADD = "user.add"
     USER_EDIT = "user.edit"
     USER_DELETE = "user.delete"
+
+    # Role requests (feature 019): a citizen asks to become back-office staff and a super admin
+    # decides. `add` belongs to the citizen alone — anyone already holding a back-office identity
+    # is turned away by the service, so no other role carries it (the ADR-097 baseline test
+    # lists it as an exception). Its own key rather than a reuse of rbac.assign: rbac.* is
+    # super_admin-only governance that can never be delegated (ADR-061), while deciding
+    # applications is a job a super admin may want to hand to someone at runtime.
+    ROLE_REQUEST_ADD = "role_request.add"
+    ROLE_REQUEST_REVIEW = "role_request.review"
 
     # Team Management
     TEAM_VIEW = "team.view"
