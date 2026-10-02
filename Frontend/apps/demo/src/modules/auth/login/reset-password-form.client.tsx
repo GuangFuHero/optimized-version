@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
 import {
+  newPasswordProblem,
+  newPasswordText,
   normalizeIdentityValue,
   validateIdentityValue,
   type AuthIdentityType,
@@ -45,13 +47,10 @@ export default function ResetPasswordFormClient() {
       return;
     }
 
-    if (password.trim().length < 6) {
-      setErrorMessage('新密碼至少需要 6 個字元');
-      return;
-    }
+    const passwordProblem = newPasswordProblem(password, confirmPassword);
 
-    if (password !== confirmPassword) {
-      setErrorMessage('兩次輸入的新密碼不一致');
+    if (passwordProblem) {
+      setErrorMessage(passwordProblem);
       return;
     }
 
@@ -152,6 +151,7 @@ export default function ResetPasswordFormClient() {
       <TextField
         label="新密碼"
         type="password"
+        placeholder={newPasswordText.placeholder}
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         disabled={isSubmitting}

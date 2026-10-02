@@ -11,3 +11,8 @@ export {
   validateIdentityValue,
   type AuthIdentityType,
 } from './utils/identity-validation';
+export {
+  newPasswordProblem,
+  newPasswordText,
+  normalizePassword,
+} from './utils/new-password';

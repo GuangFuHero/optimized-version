@@ -5,7 +5,10 @@ export {
   AuthShell,
   LoginForm,
   RegisterForm,
+  newPasswordProblem,
+  newPasswordText,
   normalizeIdentityValue,
+  normalizePassword,
   validateIdentityValue,
 } from './auth/login';
 export type { AuthIdentityType } from './auth/login';

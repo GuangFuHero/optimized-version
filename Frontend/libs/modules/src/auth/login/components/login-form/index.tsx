@@ -23,6 +23,7 @@ import {
   validateIdentityValue,
   type AuthIdentityType,
 } from '../../utils/identity-validation';
+import { newPasswordProblem, newPasswordText } from '../../utils/new-password';
 import { AuthField } from '../auth-field';
 import { AuthProviderButton } from '../auth-provider-button';
 
@@ -334,17 +335,32 @@ export function LoginForm({
         name="password"
         control={control}
         rules={{
-          validate: (value) =>
-            value.trim().length > 0 || loginFormText.passwordRequiredMessage,
+          // Registering sets a password, so it meets the rule every new password does; signing in
+          // only needs one typed.
+          validate: (value) => {
+            if (value.trim().length === 0) {
+              return loginFormText.passwordRequiredMessage;
+            }
+
+            return mode === 'register'
+              ? (newPasswordProblem(value) ?? true)
+              : true;
+          },
         }}
         render={({ field, fieldState }) => (
           <AuthField
             label={loginFormText.passwordLabel}
             value={field.value ?? ''}
             onChange={field.onChange}
-            placeholder={loginFormText.passwordPlaceholder}
+            placeholder={
+              mode === 'register'
+                ? newPasswordText.placeholder
+                : loginFormText.passwordPlaceholder
+            }
             type={isPasswordVisible ? 'text' : 'password'}
-            autoComplete="current-password"
+            autoComplete={
+              mode === 'register' ? 'new-password' : 'current-password'
+            }
             disabled={isSubmitting}
             labelActionLabel={
               onForgotPasswordAsync && !isSubmitting
