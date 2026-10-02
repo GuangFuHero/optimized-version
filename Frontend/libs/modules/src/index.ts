@@ -1,5 +1,4 @@
 export {
-  AuthBrandHeader,
   AuthFooterLinks,
   AuthFormError,
   authHref,

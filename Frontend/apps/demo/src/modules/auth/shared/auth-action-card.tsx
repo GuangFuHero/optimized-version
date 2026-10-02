@@ -3,12 +3,17 @@
 import { Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+
+const { color, radius, shadow } = designTokens;
+
 interface AuthActionCardProps {
   title: string;
   description: string;
   children: ReactNode;
 }
 
+/** The card of 忘記密碼 and 重設密碼, the same surface as the login form's (design `AuthCard`). */
 export function AuthActionCard({
   title,
   description,
@@ -19,30 +24,30 @@ export function AuthActionCard({
       spacing={2}
       sx={{
         width: '100%',
-        borderRadius: '32px',
-        border: '1px solid #DCC1B1',
+        borderRadius: `${radius.xl}px`,
+        border: `1px solid ${color.border.default}`,
         p: 3,
-        boxShadow: '0 1px 1px rgba(0, 0, 0, 0.05)',
-        bgcolor: '#FFFFFF',
+        boxShadow: shadow.sm,
+        bgcolor: color.bg.neutral.default,
       }}
     >
-      <Stack spacing={0.75} sx={{ px: 0.5 }}>
+      <Stack spacing={0.5}>
         <Typography
           component="h2"
           sx={{
-            fontSize: 24,
-            lineHeight: '32px',
+            fontSize: displayTextSize[20],
+            lineHeight: 1.3,
             fontWeight: 700,
-            color: '#241B19',
+            color: color.fg.neutral.default,
           }}
         >
           {title}
         </Typography>
         <Typography
           sx={{
-            fontSize: 14,
-            lineHeight: '22px',
-            color: '#6A5F5B',
+            fontSize: displayTextSize[13],
+            lineHeight: 1.6,
+            color: color.fg.neutral.subtle,
           }}
         >
           {description}

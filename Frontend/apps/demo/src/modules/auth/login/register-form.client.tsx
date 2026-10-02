@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  Alert,
-  Button,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Alert, Button, TextField } from '@mui/material';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
@@ -25,6 +19,7 @@ import {
   verifyAsync,
 } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
+import { AuthActionCard } from '../shared/auth-action-card';
 import { createHashedCredentialAsync } from './credentials';
 
 const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
@@ -157,26 +152,10 @@ export default function RegisterFormClient() {
 
   if (pendingRegistration) {
     return (
-      <Stack
-        spacing={2}
-        sx={{
-          width: '100%',
-          borderRadius: '32px',
-          border: '1px solid #DCC1B1',
-          p: 3,
-          boxShadow: '0 1px 1px rgba(0, 0, 0, 0.05)',
-          bgcolor: '#FFFFFF',
-        }}
+      <AuthActionCard
+        title="輸入驗證碼"
+        description={`驗證碼已寄送到 ${pendingRegistration.normalizedIdentity}`}
       >
-        <Stack spacing={0.75}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            輸入驗證碼
-          </Typography>
-          <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>
-            驗證碼已寄送到 {pendingRegistration.normalizedIdentity}
-          </Typography>
-        </Stack>
-
         <TextField
           label="驗證碼"
           value={verificationCode}
@@ -225,7 +204,7 @@ export default function RegisterFormClient() {
         >
           返回上一頁
         </Button>
-      </Stack>
+      </AuthActionCard>
     );
   }
 

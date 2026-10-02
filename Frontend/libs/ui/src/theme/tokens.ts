@@ -3,19 +3,19 @@ import { designTokens as dt, fontStack, withAlpha } from './design-tokens';
 import type { M3ColorScheme, RescueColorMode } from './m3-color-scheme';
 
 /**
- * Scrim stops for the login hero. The photograph underneath needs the text side darkened and the
- * form side lifted; these three take the hue from tokens and keep the tuned alpha ramp.
+ * Scrim stops for the login hero. The photograph underneath needs the text side darkened and its
+ * top edge lifted; these two take the hue from tokens and keep the tuned alpha ramp. The phone has
+ * no hero, so no scrim of its own (`note/login-page-spec.md` Q8).
  */
 const scrimDark = (alpha: number) => withAlpha(dt.primitives.color.neutral[900], alpha);
 const scrimLight = (alpha: number) => withAlpha(dt.primitives.color.neutral.white, alpha);
-const scrimPage = (alpha: number) => withAlpha(dt.color.bg.neutral.subtle, alpha);
 
 // The M3 role contract now lives in its own module so `bridge.ts` can name it without this
 // file and that one importing each other. Re-exported here so existing importers keep working.
 export type { M3ColorScheme, RescueColorMode } from './m3-color-scheme';
 
 export const moduleColorSchemeInventory = {
-  auth: ['authPalette', 'heroDesktopOverlay', 'heroMobileOverlay'],
+  auth: ['authPalette', 'heroDesktopOverlay'],
   adminShell: ['sidebarPalette', 'topNavBarPalette'],
   adminPanels: [
     'inviteSideSheetPalette',
@@ -47,7 +47,6 @@ export interface AuthColorScheme {
   info: string;
   error: string;
   heroDesktopOverlay: string;
-  heroMobileOverlay: string;
 }
 
 export interface SidebarColorScheme {
@@ -455,10 +454,6 @@ export const moduleColorSchemes: Record<
         `linear-gradient(90deg, ${scrimDark(0.26)} 0%, ${scrimDark(0.12)} 34%, ${scrimDark(0.04)} 58%, ${scrimDark(0)} 100%)`,
         `linear-gradient(180deg, ${scrimLight(0.05)} 0%, ${scrimLight(0)} 18%, ${scrimDark(0.12)} 100%)`,
       ].join(', '),
-      heroMobileOverlay: [
-        `radial-gradient(circle at 50% 22%, ${scrimLight(0.34)} 0%, ${scrimLight(0.12)} 30%, ${scrimLight(0)} 62%)`,
-        `linear-gradient(180deg, ${scrimPage(0.54)} 0%, ${scrimPage(0.74)} 42%, ${scrimPage(0.9)} 100%)`,
-      ].join(', '),
     },
     adminShell: {
       sidebar: {
@@ -698,10 +693,6 @@ export const moduleColorSchemes: Record<
         'radial-gradient(circle at 18% 74%, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0.42) 28%, rgba(0, 0, 0, 0) 62%)',
         'linear-gradient(90deg, rgba(8, 10, 12, 0.42) 0%, rgba(8, 10, 12, 0.2) 38%, rgba(8, 10, 12, 0.08) 62%, rgba(8, 10, 12, 0) 100%)',
         'linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 18%, rgba(0, 0, 0, 0.18) 100%)',
-      ].join(', '),
-      heroMobileOverlay: [
-        'radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 30%, rgba(255, 255, 255, 0) 62%)',
-        'linear-gradient(180deg, rgba(17, 20, 23, 0.48) 0%, rgba(17, 20, 23, 0.68) 42%, rgba(17, 20, 23, 0.9) 100%)',
       ].join(', '),
     },
     adminShell: {

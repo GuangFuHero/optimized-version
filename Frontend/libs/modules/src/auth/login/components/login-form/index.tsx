@@ -16,6 +16,8 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 
+import { designTokens } from '@rescue-frontend/ui';
+
 import { getAuthColorScheme } from '../../theme/auth-theme';
 import { AuthFormError } from '../../utils/auth-form-error';
 import {
@@ -26,6 +28,8 @@ import {
 import { newPasswordProblem, newPasswordText } from '../../utils/new-password';
 import { AuthField } from '../auth-field';
 import { AuthProviderButton } from '../auth-provider-button';
+
+const { color, radius, shadow } = designTokens;
 
 type AuthAsyncAction = () => Promise<void> | void;
 type AuthFormMode = 'login' | 'register';
@@ -209,11 +213,11 @@ export function LoginForm({
       spacing={2}
       sx={{
         width: '100%',
-        borderRadius: '32px',
-        border: '1px solid #DCC1B1',
+        borderRadius: `${radius.xl}px`,
+        border: `1px solid ${color.border.default}`,
         p: 3,
-        boxShadow: '0 1px 1px rgba(0, 0, 0, 0.05)',
-        bgcolor: '#FFFFFF',
+        boxShadow: shadow.sm,
+        bgcolor: color.bg.neutral.default,
       }}
     >
       {/* <LoginAudienceSwitch disabled={isSubmitting} /> */}

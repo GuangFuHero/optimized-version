@@ -1,5 +1,4 @@
 export {
-  AuthBrandHeader,
   AuthFooterLinks,
   AuthShell,
   LoginForm,
