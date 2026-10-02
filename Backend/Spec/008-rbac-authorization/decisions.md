@@ -172,6 +172,10 @@
 **Consequences**：➕ admin API 的 team member 端點對 super_admin 可用，不用等 Phase 4 才補。➖ 沒有；`admin`（team 角色）維持 scope=team 不變，兩者不衝突（ADR-018 union）。
 
 #### ADR-032 一人一角色（每種 kind）由 use-case 層強制，非 DB 約束；最後一個 super_admin 禁止被踢
+
+> **部分被 019/ADR-288、ADR-290 修改**：一人可以同時持有 `user` 加一個其他平台角色（申請通過的資料檢核員、`bootstrap_admin` 設的超管），前台一律用 `user`（019/ADR-289）。「同 kind 只留一個」對 `user` 不再成立；`admin_service.assign_role` 本身沒改，照舊取代。
+> **2026-10-01 再被 019/ADR-294 修改**：`admin_service.assign_role` 也改成保留 `user`，只取代另一個平台角色；指派 `user` 等於拿掉另一個（把超管降級、收回資料檢核員）。最後一個 super_admin 的保護照舊，降成 `user` 也會擋（409）。
+
 **Context**：T117 的「指派角色」端點要決定：(1) 使用者已有同 kind（platform/team）角色時，新指派要怎麼處理；(2) 如果要拿掉的剛好是全平台唯一的 `super_admin`，會造成沒有人能再指派角色的鎖死局面（沒有 UI 路徑能恢復）。
 **Decision**：`app/services/admin/assign_role.py` 在指派新角色前，查詢並刪除該使用者「同 kind」的既有角色指派（一人一 platform role + 一 team role，ADR-019 的落地方式，見 `app/models/rbac.py:UserRoleAssign` docstring——刻意不做 DB unique 約束，因為「同 kind 只能一個」是一個會隨業務演進的政策，不是資料完整性不變量）。指派 platform 角色前，若目標使用者目前持有 `super_admin` 且新角色不是 `super_admin`，會先數一次「扣掉這個人之後還剩幾個 super_admin」，`0` 就整個操作失敗（`AdminConflictError` → HTTP 409）。找不到使用者/角色是 `AdminNotFoundError`（404）；team 角色要求先有 `users.team_uuid` 是 `AdminConflictError`（409，**已於 010/ADR-072 移除**——授予 team 角色本身就是入隊，不再有「要先屬於某 team」的前置條件；現在這個端點一律拒收 team 角色，改走 `POST /admin/teams/{uuid}/members`）——這兩個型別都是 `ValueError` 的子類別（`app/services/admin/errors.py`），沿用既有 use-case 層「拋 `ValueError` 表示網域層失敗」的慣例（例如 `app/services/station/update.py` 的 `"Station not found"`），只是額外分兩個子類別讓 REST endpoint 能分別對應到不同的 HTTP 狀態碼，而不是每個 domain 錯誤都回一律的 400。
 **Consequences**：➕ 不會有「所有人都被鎖在 RBAC 系統外面」的不可逆事故。➖ 目前只擋「最後一個 super_admin 被換掉」，沒有擋「刪除使用者本身」（因為目前沒有 admin API 刪除使用者的端點）——之後如果加，需要同樣的計數保護。
@@ -1220,6 +1224,55 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
   `test_team_roles_never_get_team_scope_on_a_geo_resource` 是釘住 ADR-128 的守門測試，會直接擋住本條，要改成
   「站點例外」而不是刪掉。
 - 文件與註解要同步：`scripts/seed_rbac.py:153-155` 的「`zone`, never `team`」、`RBAC_RESOURCE_ROLE_MATRIX.md`。
+
+#### ADR-286 通報單的聯絡方式開放給所有登入者；承接名單改由 `ticket.view_history` 把關
+> **狀態：ACCEPTED（2026-09-30）。** 規則由團隊於 2026-09-28 確認；範圍與做法由產品負責人於同日拍板。
+
+**白話**：登入的人都看得到求助者的聯絡方式，訪客仍然遮罩；誰承接了哪筆需求，仍然只有建單者與協調者看得到。
+
+**Context**：一般帳號的 `ticket.view_pii` 是 `own`，看到的聯絡人是遮罩（王◯◯、09*****678），承接之後也不
+解鎖，志工到了現場不知道找誰。團隊 2026-09-28 確認：所有登入的人都看得到聯絡方式，不限承接者；訪客仍遮罩。
+
+同一個能力還把關了三樣東西：兩個檢傷欄位 `person_trapped_reported`／`immediate_danger_reported`（ADR-254）、
+任務的承接名單 `assignments`（每筆承接的帳號 uuid）、時間軸的 PII 層（Spec 016）與匯出的聯絡欄位。地址不在
+其中：ADR-281 已把它移到 `ticket.view_detail`。
+
+**Decision**：
+
+1. **每個角色**的 `ticket.view_pii` 都是 `all`：`user` 由 `own`、team `admin`／`member` 由 `zone` 改過來，
+   `data_auditor`、`super_admin` 本來就是。做法同 ADR-281 對 `view_detail`：仍是 capability＋scope，要收回只要在
+   `/admin/rbac` 縮 scope，不必改程式。team 角色一起改，因為同一時間只有一個身分生效（ADR-097），team 身分不能
+   看得比一般帳號少。不進 `PUBLIC_PERMS`，訪客照舊遮罩。
+2. **兩個檢傷欄位跟著公開**：當初遮起來，是因為「只有能據以行動的人需要」（`graphql/tickets/types.py` 的
+   `person_trapped_reported`）；志工現在就是要據以行動的人。
+3. **承接名單改由 `ticket.view_history` 把關**，不再跟著 `view_pii`。`createdBy`（`view_detail`，登入即可見）
+   加上公開的聯絡人姓名，已經能把帳號對到真名；承接名單若也公開，任何登入者都能追出某位志工接了哪些需求、
+   何時接，等於志工行蹤外露。`view_history` 保有 `view_pii` 原本的分級（`user` `own`、team `zone`、稽核與超管
+   `all`，ADR-128），而時間軸本來就會把承接人顯示成名字（ADR-143），所以不新增能力。前台沒有任何查詢讀
+   `assignments`，畫面不受影響。
+4. **既有資料庫**：seed 是 additive bootstrap（ADR-055），另以資料 migration `65c5196498fb` 把仍停在舊預設值的
+   grant——`user` 的 `own`、`admin`／`member` 的 `zone`——改為 `all`。runtime 已被改成其他值的 grant、個人
+   grant、seed 沒定義的角色都不動。downgrade 把這三個角色的 `all` 改回舊預設值。
+
+**不受影響**：時間軸要先有 `ticket.view_history`（一般帳號 `own`），一般帳號本來就只看得到自己單的時間軸，而
+自己的單原本就有 `view_pii`；匯出要 `ticket.export`，一般帳號沒有；地址自 ADR-281 起由 `view_detail` 把關。
+
+**取代關係**：
+
+- 原本「承接之後聯絡方式仍維持遮罩」的規則作廢。
+- ADR-128「時間軸的分級與 `view_pii` 完全一致」對通報單不再成立（站點照舊）：時間軸維持原分級，`view_pii`
+  放寬。`tests/test_history_permissions.py` 的 mirror 測試改為只比對站點。
+- ADR-281 ➕「聯絡資料與兩個檢傷欄位維持 `ticket.view_pii`（一般帳號 `own`）」：能力照舊是兩個，「在哪裡」與
+  「找誰」仍分開，但 `own` 改為 `all`。
+
+**後果**：
+
+- 註冊即可登入，所以聯絡方式等於對任何願意註冊的人公開。這是規則本身的內容。日後若要收緊（例如只在緊急期
+  開放），在 `/admin/rbac` 把 `user` 縮回 `own` 即可；但那樣承接者也會看不到，要另外設計「承接即解鎖」。
+- 承接名單的可見性從此綁在時間軸的能力上：日後放寬 `ticket.view_history` 時要一併考慮承接名單。
+  `tests/test_seed_rbac.py::test_who_claimed_a_need_stays_with_the_requester_and_coordinators` 會擋下。
+- GraphQL 測試的角色（`tests/test_graphql/conftest.py`）補上 `ticket.view_history`，比照 seed。
+- 文件同步：`RBAC_RESOURCE_ROLE_MATRIX.md` 的 `ticket.view_pii` 列與「PII 遮罩」一段。
 
 ---
 

@@ -231,12 +231,11 @@ async def test_export_only_columns_are_writable_in_neither_direction(db):
 
 
 @pytest.mark.asyncio
-async def test_ticket_status_is_updatable_but_ignored_on_create(db):
-    """`create_ticket` always writes "pending", so a status column on a new row means nothing."""
+async def test_ticket_status_is_export_only(db):
+    """A ticket's status is worked out from its needs; the file shows it but never sets it."""
     column = _by_header(await ticket_columns(db, "rescue"), "status")
 
-    assert column.writable_on_create is False
-    assert column.writable_on_update is True
+    assert (column.writable_on_create, column.writable_on_update) == (False, False)
 
 
 @pytest.mark.asyncio

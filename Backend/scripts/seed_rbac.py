@@ -9,10 +9,10 @@ identity is active per request, platform roles included. Every switchable, actio
 must therefore stand on its own — see ADR-097 and the station.contribute grants below.
 
 Only capabilities with a real enforcement point today (station/map/ticket/dynamic_field/
-user/team/work_zone/audit/rbac/announcement/pre_departure/project) are actually granted
-below; the rest of the Perm catalog (ticket.export/ai_duplicate) is registered as a
-Permission row so it exists ahead of the feature that will enforce it, but isn't wired
-into any role yet.
+user/team/work_zone/audit/rbac/announcement/pre_departure/project/role_request) are
+actually granted below; the rest of the Perm catalog (ticket.export/ai_duplicate) is
+registered as a Permission row so it exists ahead of the feature that will enforce it, but
+isn't wired into any role yet.
 """
 
 import asyncio
@@ -52,21 +52,26 @@ ROLES_DATA = [
             Perm.STATION_EDIT: "own",
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",      # help-request board is public (ADR-027)
-            Perm.TICKET_VIEW_PII: "own",  # only your own request's contact info; others masked
+            # ADR-286: anyone signed in may call the requester — contact details and the two
+            # triage answers. Volunteers could not reach the person they were going to help.
+            Perm.TICKET_VIEW_PII: "all",
             # ADR-281: signing in is what unlocks the exact point, the address and the free
             # text — the team's rule since 2026-07 (訪客看區域、登入看精確). `all` rather than
             # hard-coded "logged in" so it can be narrowed here or at /admin/rbac, e.g. to
             # `own` once the volunteer flow can hand out detail on sign-up instead.
             Perm.TICKET_VIEW_DETAIL: "all",
-            # ADR-128: the timeline mirrors view_pii's tiering exactly. `own` is what makes
-            # Notion's front-of-house requirement real — a requester following their own
-            # ticket's progress — without exposing anyone else's.
+            # ADR-128: `own` is what makes Notion's front-of-house requirement real — a
+            # requester following their own ticket's progress — without exposing anyone else's.
+            # It kept view_pii's old tiering when ADR-286 opened view_pii, and it now also gates
+            # who claimed a need: the requester sees who is coming, other citizens do not.
             Perm.TICKET_VIEW_HISTORY: "own",
             Perm.STATION_VIEW_HISTORY: "own",
             Perm.TICKET_ADD: "all",
             Perm.TICKET_EDIT: "own",
             Perm.TICKET_DELETE: "own",
             Perm.TICKET_ASSIGN: "own",    # volunteer self-signup (see app/services/ticket.py)
+            # Feature 019: the 申請成為後台人員 entry exists for this account only.
+            Perm.ROLE_REQUEST_ADD: "all",
         },
     },
     {
@@ -111,6 +116,7 @@ ROLES_DATA = [
                 Perm.PREDEP_VIEW, Perm.PREDEP_PUBLISH, Perm.PREDEP_EDIT, Perm.PREDEP_DELETE,
                 Perm.USER_VIEW, Perm.USER_ADD, Perm.USER_EDIT, Perm.USER_DELETE,
                 Perm.RBAC_VIEW, Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
+                Perm.ROLE_REQUEST_REVIEW,
                 Perm.TEAM_VIEW, Perm.TEAM_EDIT, Perm.TEAM_MEMBER_MANAGE,
                 Perm.ZONE_VIEW, Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN, Perm.ZONE_DELETE,
                 Perm.PROJECT_VIEW, Perm.PROJECT_EDIT,
@@ -127,8 +133,8 @@ ROLES_DATA = [
     # a gov team's `team` widens to `all` in resolve_scope (GOV_TEAM_WIDENED_PERMS). Zone
     # operations and station assignment are gov-only: `_require_gov_zone_authority` /
     # `require_gov_team` enforce it. NGO admins hold these capabilities in the seed (NGO
-    # members hold station.assign) but are rejected with 403 at the service layer. GOV_TEAM_ONLY_PERMS in app/core/permissions.py
-    # mirrors this for display—keep in lockstep.
+    # members hold station.assign) but are rejected with 403 at the service layer.
+    # GOV_TEAM_ONLY_PERMS in app/core/permissions.py mirrors this for display—keep in lockstep.
     {
         # Team coordinator: full operations on the team's tickets (zone) and stations (team)
         # + team-member management + zone drawing/assignment + station assignment (gov).
@@ -149,10 +155,9 @@ ROLES_DATA = [
             Perm.STATION_REVIEW: "team",
             Perm.STATION_ASSIGN: "all",  # ADR-285: gov-only at runtime (require_gov_team)
             Perm.TICKET_VIEW: "all",
-            Perm.TICKET_VIEW_PII: "zone",
-            # ADR-281: `all`, not `zone` like the contact details beside it. Every signed-in
-            # account already reads the exact point (see `user`), and a team identity that
-            # saw less than the citizen one would lose it on switching (ADR-097).
+            # ADR-286/ADR-281: `all`, like every signed-in account (see `user`) — a team
+            # identity that saw less than the citizen one would lose it on switching (ADR-097).
+            Perm.TICKET_VIEW_PII: "all",
             Perm.TICKET_VIEW_DETAIL: "all",
             # ADR-128: a ticket's timeline is `zone`, never `team` — tickets carry no team_uuid,
             # so in_scope()'s TEAM branch can never match one and `team` would be an
@@ -201,11 +206,11 @@ ROLES_DATA = [
             Perm.STATION_DELETE: "own",
             Perm.STATION_ASSIGN: "all",  # ADR-285: gov-only at runtime (require_gov_team)
             Perm.TICKET_VIEW: "all",
-            Perm.TICKET_VIEW_PII: "zone",
+            Perm.TICKET_VIEW_PII: "all",  # ADR-286, see the admin role above
             Perm.TICKET_VIEW_DETAIL: "all",  # ADR-281, see the admin role above
             # ADR-128: field workers need the timeline for the resources they actually work
-            # — who took a task, who dropped it — so each matches its view_pii: tickets at
-            # `zone`, stations at `team` (ADR-285).
+            # — who took a task, who dropped it — tickets at `zone`, stations at `team`
+            # (ADR-285). The ticket side is also who claimed a need (ADR-286).
             Perm.TICKET_VIEW_HISTORY: "zone",
             Perm.STATION_VIEW_HISTORY: "team",
             Perm.TICKET_ADD: "all",

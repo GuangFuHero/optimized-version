@@ -8,6 +8,7 @@ import pytest
 
 from app.models.auth import User
 from app.models.rbac import Role
+from app.models.request import Tickets
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import admin as admin_service
@@ -94,6 +95,11 @@ async def test_task_assignment_triggers_notification(mock_actor):
     mock_task.ticket_uuid = str(uuid.uuid4())
 
     mock_assignment = TaskAssignment(task_uuid=task_id, actor_uuid=target_assignee_id, status="accepted")
+    # db.scalar serves, in order: the need's ticket uuid, the ticket and the need (each locked
+    # FOR UPDATE, ticket first), then the claim count. Working out the ticket's status afterwards
+    # is patched out: this test is about the notices.
+    mock_ticket = Tickets(title="物資需求", created_by=str(uuid.uuid4()))
+    mock_db.scalar = AsyncMock(side_effect=[mock_task.ticket_uuid, mock_ticket, mock_task, 0])
 
     with (
         patch("app.services.ticket.require_scope", new_callable=AsyncMock),
@@ -113,7 +119,7 @@ async def test_task_assignment_triggers_notification(mock_actor):
             return_value=None,
         ),
         patch(
-            "app.services.ticket.task_assignment_repository.create",
+            "app.services.ticket.task_assignment_repository.add",
             new_callable=AsyncMock,
             return_value=mock_assignment,
         ),
@@ -122,6 +128,7 @@ async def test_task_assignment_triggers_notification(mock_actor):
             new_callable=AsyncMock,
             return_value=SimpleNamespace(created_by=None, team_uuid=None, geometry=None),
         ),
+        patch("app.services.ticket.recompute_ticket_status", new_callable=AsyncMock),
         patch("app.services.ticket.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch,
     ):
         await ticket_service.assign_task_actor(
@@ -132,13 +139,17 @@ async def test_task_assignment_triggers_notification(mock_actor):
             role="志工配送員",
         )
 
-        mock_dispatch.assert_called_once()
-        call_kwargs = mock_dispatch.call_args.kwargs
+        # The assignee hears they were assigned; the requester hears someone is coming.
+        assert mock_dispatch.call_count == 2
+        call_kwargs = mock_dispatch.call_args_list[0].kwargs
         assert call_kwargs["event_type"] == "task_assignment_created"
         assert call_kwargs["priority"] == "high"
         assert call_kwargs["ref_type"] == "ticket_task"
         assert call_kwargs["ref_uuid"] == mock_task.uuid
         assert call_kwargs["explicit_recipients"] == [target_assignee_id]
+        requester_kwargs = mock_dispatch.call_args_list[1].kwargs
+        assert requester_kwargs["event_type"] == "task_claimed"
+        assert requester_kwargs["explicit_recipients"] == [str(mock_ticket.created_by)]
 
 
 @pytest.mark.asyncio
