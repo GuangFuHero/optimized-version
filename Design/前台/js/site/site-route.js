@@ -134,6 +134,27 @@
     return TICKET_STATUS_LABELS[n] || (v && v.trim()) || fallback;
   }
   function getTicketStatusTone(v) { return TICKET_STATUS_TONES[norm(v)] || 'neutral'; }
+  /** 前台顯示用的任務單狀態：把「後台生命週期」與「前台媒合」合起來看。
+   *
+   * 🔴 2026-09-27 Sucre 回報：「前台地圖已經媒合完成但地圖仍然顯示待處理」。
+   *    根因：marker 的標籤只讀 `ticket.status`（後台的生命週期，前台承接**不會**改它），
+   *    媒合狀態另存在 bridge，兩者從沒合起來。
+   *
+   * 🔒 只在畫面上推導，**不回寫 `ticket.status`** —— 人手到齊 ≠ 事情做完，
+   *    「已完成／已結案」仍只由後台決定。已結案、已取消的單以生命週期為準。
+   *
+   * @param status   ticket.status
+   * @param match    getTaskMatchState(marker) 的回傳（可省略）
+   * @returns {{label, tone, fromMatch}}
+   */
+  function resolveTicketDisplay(status, match) {
+    const q = normalizeTicketStatusForQuery(status);
+    const ended = q === 'completed' || q === 'cancelled';
+    if (!ended && match && match.status === 'matched') {
+      return { label: '媒合完成', tone: 'success', fromMatch: true };
+    }
+    return { label: formatTicketStatusLabel(status, '任務'), tone: getTicketStatusTone(status), fromMatch: false };
+  }
   function normalizeTicketStatusSelection(values) {
     return [...new Set((values || []).map(normalizeTicketStatusForQuery).filter(Boolean))];
   }
@@ -236,14 +257,23 @@
     },
   };
 
-  const RESCUE_MAP_OVERLAY_LAYER_ORDER = ['closure-areas', 'routes', 'secondary-locations'];
-  const DEFAULT_RESCUE_MAP_OVERLAY_LAYERS = ['closure-areas'];
+  /* 🔴 2026-09-25：新增 `public-zones`（後台互助地圖勾了「前台可見」的非危險區域，例如志工休息區）。
+     危險區仍歸 `closure-areas`，並改畫橘白斜紋（js/shared/wg-hazard.js）。
+     預設開著 —— 後台特地勾了前台可見，就是要人看到。 */
+  const RESCUE_MAP_OVERLAY_LAYER_ORDER = ['closure-areas', 'public-zones', 'routes', 'secondary-locations'];
+  const DEFAULT_RESCUE_MAP_OVERLAY_LAYERS = ['closure-areas', 'public-zones'];
   /* color 改綁 DS 語意 token（原 repo 為硬編 #b45309 / #2563eb / #0f766e）。 */
   const OVERLAY_LAYER_CONFIG = {
     'closure-areas': {
       label: '封閉區域', description: '危險地帶與暫時封鎖範圍', icon: 'Ban',
       color: 'var(--color-bg-warning-hover)', fillColor: 'var(--color-bg-warning)', tone: 'warning',
       sourceLabel: 'closure_areas.geometry via base_geometries',
+    },
+    /* 🚨 圖層名稱「標示區域」與說明文字是我取的，未經裁示。 */
+    'public-zones': {
+      label: '標示區域', description: '志工休息區、集合點等由後台標示的範圍', icon: 'MapPinned',
+      color: 'var(--color-fg-success)', tone: 'success',
+      sourceLabel: 'work_zones（前台可見）',
     },
     routes: {
       label: '路線', description: '巡查路線與任務動線', icon: 'Route',
@@ -424,7 +454,7 @@
     STATION_TYPE_OPTIONS, STATION_TYPE_ICONS, getStationTypeLabel,
     singleStationType, singleTicketStatus,
     STATION_STATUS_META, getStationStatusMeta, isWithinOpenHours, resolveStationAvailability,
-    TICKET_STATUS_OPTIONS, formatTicketStatusLabel, getTicketStatusTone,
+    TICKET_STATUS_OPTIONS, formatTicketStatusLabel, getTicketStatusTone, resolveTicketDisplay,
     normalizeTicketStatusSelection, matchesTicketStatusSelection,
     SITE_FALLBACK_BASE_LAYER, SITE_FALLBACK_DATA_TYPE, SITE_BASE_LAYERS, SITE_DATA_TYPES,
     SITE_MODULES, SITE_DATA_TYPE_LABELS, SITE_SUB_DATA_TYPE_OPTIONS, normalizeSiteSubDataTypes,

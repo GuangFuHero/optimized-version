@@ -1,0 +1,24 @@
+/* ==========================================================================
+ * Wan Guard 島嶼守望 — Spacing (4px grid)
+ * Mirror of the semantic --spacing-* tokens under the shorter --space-* name
+ * used throughout components and product code.
+ * ========================================================================== */
+
+:root {
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;   /* base small-block padding   */
+  --space-6:  24px;   /* default card / mobile gutter */
+  --space-8:  32px;   /* large-block padding        */
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* 12-column layout grid */
+  --grid-columns:       12;      /* @kind other */
+  --grid-gap:           24px;    /* @kind spacing */
+  --grid-container-max: 1200px;  /* @kind other */
+  --grid-container-pad: 24px;    /* @kind spacing */
+}

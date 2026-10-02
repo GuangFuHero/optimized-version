@@ -184,7 +184,7 @@
        「送出後被擋下」比「一開始就看得出不能送」差得多。 */
     if (pending) {
       return (
-        <ActionDrawer open={open} title="申請成為後台人員" onClose={onClose}>
+        <ActionDrawer open={open} title="申請管理權限" onClose={onClose}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             <Alert tone="info" title="你已經有一筆申請在審核中">
               同一時間只能有一筆申請。要改申請別的身分，請等這一筆有結果。
@@ -196,8 +196,8 @@
     }
 
     return (
-      <ActionDrawer open={open} title="申請成為後台人員"
-        subtitle="後台人員可以派工、審核資料、管理站點。送出後由超級管理員審核。"
+      <ActionDrawer open={open} title="申請管理權限"
+        subtitle="有管理權限的人可以派工、審核資料、管理站點。送出後由超級管理員審核。"
         onClose={onClose}
         footer={
           <React.Fragment>
@@ -246,9 +246,9 @@
           </div>
 
           <Field label="申請理由" required error={touched && !reason.trim() ? '必填' : undefined}
-            helper="寫清楚你的單位、職務，以及為什麼需要後台權限">
+            helper="寫清楚你的單位、職務，以及為什麼需要管理權限">
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
-              placeholder="例：我是光復鄉公所民政課，負責收容所名冊，需要在後台更新站點資訊。"
+              placeholder="例：我是光復鄉公所民政課，負責收容所名冊，需要在管理平台更新站點資訊。"
               style={textareaStyle}></textarea>
           </Field>
 
@@ -332,7 +332,7 @@
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             <Alert tone="info" title="目前還沒有審核流程">
-              建議已經送出並留下紀錄，但後台的審核介面尚未上線，所以狀態會一直停在「等待審核」。
+              建議已經送出並留下紀錄，但管理平台的審核介面尚未上線，所以狀態會一直停在「等待審核」。
             </Alert>
             {rows.map((r) => {
               const meta = REVIEW_META[r.review] || REVIEW_META.pending;
@@ -1436,6 +1436,9 @@
     const [contactName, setContactName] = useState('');
     const [contactPhone, setContactPhone] = useState('');
     const [desc, setDesc] = useState('');
+    /* 圖片連結（TM-FEAT-010 D-1）：平台不存圖片，只存網址。
+       🔒 這裡沒有「選擇檔案」，也不會有 —— 見 wg-photos.jsx 檔頭。 */
+    const [photos, setPhotos] = useState([]);
     /* lazy initializer：必須在第一次 render 前就有值，理由見上方註解。 */
     const [landmark, setLandmark] = useState(() => seedLandmark || null);
     const [needs, setNeeds] = useState([emptyNeed()]);
@@ -1501,6 +1504,7 @@
         contactName: contactName.trim(),
         contactPhone: contactPhone.trim(),
         desc: desc.trim(),
+        photos,
         priority: SITE_DEFAULT_PRIORITY,          // 前台不問，後台調整
         landmark,
         tasks: namedNeeds.map((n) => {
@@ -1743,6 +1747,19 @@
               placeholder="例：巷子窄，小貨車進不來。阿嬤一個人住，早上九點到下午三點都在家。"
               style={textareaStyle}></textarea>
           </Field>
+
+          {/* ── 照片 ───────────────────────────────────────────────────────
+           * 擺在最後，與「補充說明」同一個理由的延伸：它是**補充**，不是結構。
+           * 放前面的話，手上剛好有照片的人會先去傳圖，還沒傳的人會卡在這裡，
+           * 而真正要問的「你需要什麼幫忙」還沒問完。
+           *
+           * 🔒 民眾語言：不寫「圖片網址」當標題 —— 對災民來說那是一句技術話。
+           *    標題問的是「有照片嗎」，網址只是達成的手段，寫在下面的指引裡。 */}
+          {window.TKPhotoLinkEditor ? (
+            <window.TKPhotoLinkEditor value={photos} onChange={setPhotos}
+              label="現場照片（選填）"
+              hint="志工出發前看得到。平台不保管照片，只記下網址" />
+          ) : null}
 
           {touched && missing.length > 0 ? (
             <Alert tone="danger" title={'尚有 ' + missing.length + ' 項未完成'}>

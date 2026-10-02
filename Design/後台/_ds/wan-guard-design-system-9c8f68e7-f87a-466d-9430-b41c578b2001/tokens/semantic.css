@@ -1,0 +1,219 @@
+/* ==========================================================================
+ * Wanguard — Semantic Design Tokens
+ * Generated from semantic.tokens.json
+ * These tokens reference primitive values and carry design intent.
+ * Consume these in components — never use primitive tokens directly.
+ *
+ * Mode: light  (from $extensions.com.figma.modeName)
+ * ========================================================================== */
+
+:root {
+  /* ========================================================================
+   * COLOR
+   * ======================================================================== */
+
+  /* --------------------------------------------------------------------------
+   * Brand — Primary   (← orange palette)
+   * ------------------------------------------------------------------------ */
+  --color-brand-primary-default: var(--prim-color-orange-400);  /* #E3791E */
+  --color-brand-primary-subtle:  var(--prim-color-orange-600);  /* #9D4F11 */
+
+  /* --------------------------------------------------------------------------
+   * Brand — Secondary (← blue palette)
+   * ------------------------------------------------------------------------ */
+  --color-brand-secondary-default: var(--prim-color-blue-400);  /* #2592B9 */
+  --color-brand-secondary-subtle:  var(--prim-color-blue-600);  /* #18627E */
+
+  /* --------------------------------------------------------------------------
+   * Foreground  — text & icon colors
+   * ------------------------------------------------------------------------ */
+  --color-fg-on-primary:   var(--prim-color-neutral-black);  /* #111111 */
+  --color-fg-on-secondary: var(--prim-color-neutral-white);  /* #FFFFFF */
+  --color-fg-on-danger:    var(--prim-color-neutral-white);  /* #FFFFFF */
+  --color-fg-on-success:   var(--prim-color-neutral-white);  /* #FFFFFF */
+  --color-fg-on-warning:   var(--prim-color-neutral-black);  /* #111111 */
+  --color-fg-on-info:      var(--prim-color-neutral-white);  /* #FFFFFF */
+
+  --color-fg-danger:  var(--prim-color-red-700);     /* #B71C1C */
+  --color-fg-success: var(--prim-color-green-700);   /* #1B5E20 */
+  --color-fg-warning: var(--prim-color-amber-700);   /* #E65100 */
+  --color-fg-info:    var(--prim-color-blue-700);    /* #124A5F */
+  --color-fg-disable: var(--prim-color-neutral-500); /* #64748B */
+
+  --color-fg-neutral-default: var(--prim-color-neutral-900); /* #0F172A */
+  --color-fg-neutral-subtle:  var(--prim-color-neutral-700); /* #334155 */
+  --color-fg-neutral-muted:   var(--prim-color-neutral-400); /* #94A3B8 */
+
+  /* --------------------------------------------------------------------------
+   * Background — surface & fill colors
+   * ------------------------------------------------------------------------ */
+  --color-bg-primary:        var(--prim-color-orange-400); /* #E3791E */
+  --color-bg-primary-hover:  var(--prim-color-orange-500); /* #C46416 */
+  --color-bg-primary-subtle: var(--prim-color-orange-50);  /* #FDF3E9 */
+
+  --color-bg-secondary:        var(--prim-color-blue-400); /* #2592B9 */
+  --color-bg-secondary-hover:  var(--prim-color-blue-500); /* #1E7A9D */
+  --color-bg-secondary-subtle: var(--prim-color-blue-50);  /* #EEF7FB */
+
+  --color-bg-danger:        var(--prim-color-red-500);   /* #D32F2F */
+  --color-bg-danger-hover:  var(--prim-color-red-700);   /* #B71C1C */
+  --color-bg-danger-subtle: var(--prim-color-red-50);    /* #FFEBEE */
+
+  --color-bg-success:        var(--prim-color-green-500); /* #2E7D32 */
+  --color-bg-success-hover:  var(--prim-color-green-700); /* #1B5E20 */
+  --color-bg-success-subtle: var(--prim-color-green-50);  /* #E8F5E9 */
+
+  --color-bg-warning:        var(--prim-color-amber-500); /* #F57C00 */
+  --color-bg-warning-hover:  var(--prim-color-amber-700); /* #E65100 */
+  --color-bg-warning-subtle: var(--prim-color-amber-50);  /* #FFF3E0 */
+
+  --color-bg-info:        var(--prim-color-blue-400); /* #2592B9 */
+  --color-bg-info-hover:  var(--prim-color-blue-500); /* #1E7A9D */
+  --color-bg-info-subtle: var(--prim-color-blue-50);  /* #EEF7FB */
+
+  --color-bg-disable: var(--prim-color-neutral-200); /* #E2E8F0 */
+
+  --color-bg-neutral-default: var(--prim-color-neutral-white); /* #FFFFFF */
+  --color-bg-neutral-subtle:  var(--prim-color-neutral-50);    /* #F6FAFF */
+  --color-bg-neutral-sunken:  var(--prim-color-neutral-100);   /* #EDF2F7 */
+
+  /* --------------------------------------------------------------------------
+   * Border / Stroke
+   * ------------------------------------------------------------------------ */
+  --color-border-disable: var(--prim-color-neutral-500); /* #64748B */
+  --color-border-default: var(--prim-color-neutral-300); /* #CBD5E1 */
+  --color-border-accent:  var(--prim-color-orange-200);  /* #F5C08B */
+
+
+  /* ========================================================================
+   * SHADOW  (composite — expressed as box-shadow shorthand)
+   * ======================================================================== */
+  --shadow-sm: var(--prim-shadow-sm);  /* 0 1px 4px  rgba(227,121,30,.10) */
+  --shadow-md: var(--prim-shadow-md);  /* 0 4px 16px rgba(227,121,30,.15) */
+  --shadow-lg: var(--prim-shadow-lg);  /* 0 8px 32px rgba(227,121,30,.20) */
+
+
+  /* ========================================================================
+   * RADIUS
+   * ======================================================================== */
+  --radius-sm:   var(--prim-scale-6);    /*  6px */
+  --radius-md:   var(--prim-scale-12);   /* 12px */
+  --radius-lg:   var(--prim-scale-20);   /* 20px */
+  --radius-xl:   var(--prim-scale-32);   /* 32px */
+  --radius-full: var(--prim-scale-9999); /* 9999px — pill / circle */
+
+
+  /* ========================================================================
+   * SPACING  (semantic names → scale values)
+   * Naming: spacing-{t-shirt size}  where the number tracks Figma's key.
+   * ======================================================================== */
+  --spacing-1:  var(--prim-scale-4);   /*  4px */
+  --spacing-2:  var(--prim-scale-8);   /*  8px */
+  --spacing-3:  var(--prim-scale-12);  /* 12px */
+  --spacing-4:  var(--prim-scale-16);  /* 16px */
+  --spacing-6:  var(--prim-scale-24);  /* 24px */
+  --spacing-8:  var(--prim-scale-32);  /* 32px */
+  --spacing-12: var(--prim-scale-48);  /* 48px */
+  --spacing-16: var(--prim-scale-64);  /* 64px */
+  --spacing-20: var(--prim-scale-80);  /* 80px */
+  --spacing-24: var(--prim-scale-96);  /* 96px */
+
+
+  /* ========================================================================
+   * TYPOGRAPHY — Heading
+   * Each level bundles font-family · size · weight · line-height.
+   * ======================================================================== */
+
+  /* --- Heading 600 (≈ h4) --- */
+  --heading-600-font-family:  var(--prim-font-family-display);
+  --heading-600-font-size:    var(--prim-font-size-xl);         /* 20px */
+  --heading-600-font-weight:  var(--prim-font-weight-bold);     /* 700  */
+  --heading-600-line-height:  var(--prim-line-height-snug);     /* 1.4  */
+
+  /* --- Heading 700 (≈ h3) --- */
+  --heading-700-font-family:  var(--prim-font-family-display);
+  --heading-700-font-size:    var(--prim-font-size-2xl);        /* 24px */
+  --heading-700-font-weight:  var(--prim-font-weight-bold);     /* 700  */
+  --heading-700-line-height:  var(--prim-line-height-snug);     /* 1.4  */
+
+  /* --- Heading 800 (≈ h2) --- */
+  --heading-800-font-family:  var(--prim-font-family-display);
+  --heading-800-font-size:    var(--prim-font-size-3xl);        /* 30px */
+  --heading-800-font-weight:  var(--prim-font-weight-bold);     /* 700  */
+  --heading-800-line-height:  var(--prim-line-height-tight);    /* 1.2  */
+
+  /* --- Heading 900 (≈ h1) --- */
+  --heading-900-font-family:  var(--prim-font-family-display);
+  --heading-900-font-size:    var(--prim-font-size-4xl);        /* 36px */
+  --heading-900-font-weight:  var(--prim-font-weight-bold);     /* 700  */
+  --heading-900-line-height:  var(--prim-line-height-tight);    /* 1.2  */
+
+
+  /* ========================================================================
+   * TYPOGRAPHY — Body
+   * ======================================================================== */
+
+  /* --- Body 300 --- */
+  --body-300-font-family:  var(--prim-font-family-body);
+  --body-300-font-size:    var(--prim-font-size-sm);            /* 14px */
+  --body-300-font-weight:  var(--prim-font-weight-regular);     /* 400  */
+  --body-300-line-height:  var(--prim-line-height-normal);      /* 1.5  */
+
+  /* --- Body 400 --- */
+  --body-400-font-family:  var(--prim-font-family-body);
+  --body-400-font-size:    var(--prim-font-size-base);          /* 16px */
+  --body-400-font-weight:  var(--prim-font-weight-regular);     /* 400  */
+  --body-400-line-height:  var(--prim-line-height-normal);      /* 1.5  */
+
+  /* --- Body 500 --- */
+  --body-500-font-family:  var(--prim-font-family-body);
+  --body-500-font-size:    var(--prim-font-size-lg);            /* 18px */
+  --body-500-font-weight:  var(--prim-font-weight-regular);     /* 400  */
+  --body-500-line-height:  var(--prim-line-height-relaxed);     /* 1.75 */
+
+
+  /* ========================================================================
+   * TYPOGRAPHY — Label
+   * ======================================================================== */
+
+  /* --- Label 300 --- */
+  --label-300-font-family: var(--prim-font-family-latin);
+  --label-300-font-size:   var(--prim-font-size-xs);            /* 12px */
+  --label-300-font-weight: var(--prim-font-weight-regular);     /* 400  */
+  --label-300-line-height: var(--prim-line-height-normal);      /* 1.5  */
+
+  /* --- Label 400 --- */
+  --label-400-font-family: var(--prim-font-family-latin);
+  --label-400-font-size:   var(--prim-font-size-sm);            /* 14px */
+  --label-400-font-weight: var(--prim-font-weight-bold);        /* 700  */
+  --label-400-line-height: var(--prim-line-height-tight);       /* 1.2  */
+
+  /* --- Label 500 --- */
+  --label-500-font-family: var(--prim-font-family-latin);
+  --label-500-font-size:   var(--prim-font-size-base);          /* 16px */
+  --label-500-font-weight: var(--prim-font-weight-bold);        /* 700  */
+  --label-500-line-height: var(--prim-line-height-tight);       /* 1.2  */
+
+
+  /* ========================================================================
+   * TYPOGRAPHY — Data  (tabular / monospace-like numerals)
+   * ======================================================================== */
+
+  /* --- Data 300 --- */
+  --data-300-font-family:  var(--prim-font-family-data);
+  --data-300-font-size:    var(--prim-font-size-xs);            /* 12px */
+  --data-300-font-weight:  var(--prim-font-weight-regular);     /* 400  */
+  --data-300-line-height:  var(--prim-line-height-normal);      /* 1.5  */
+
+  /* --- Data 400 --- */
+  --data-400-font-family:  var(--prim-font-family-data);
+  --data-400-font-size:    var(--prim-font-size-sm);            /* 14px */
+  --data-400-font-weight:  var(--prim-font-weight-bold);        /* 700  */
+  --data-400-line-height:  var(--prim-line-height-tight);       /* 1.2  */
+
+  /* --- Data 500 --- */
+  --data-500-font-family:  var(--prim-font-family-data);
+  --data-500-font-size:    var(--prim-font-size-base);          /* 16px */
+  --data-500-font-weight:  var(--prim-font-weight-bold);        /* 700  */
+  --data-500-line-height:  var(--prim-line-height-tight);       /* 1.2  */
+}

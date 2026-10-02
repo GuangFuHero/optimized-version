@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/base.css">
 <link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
-<link rel="stylesheet" href="js/site/site.css?v=20260919a">
+<link rel="stylesheet" href="js/site/site.css?v=20260925b">
 <style id="__om-edit-overrides"></style>
 </head>
 <body>
@@ -32,22 +32,29 @@
 
 <!-- 前後台共用狀態橋接（2026-08-22）：民眾建立的任務單與接任務狀態，後台任務管理讀同一份 -->
 <!-- QR 產生器（vendored，不走 CDN）：分享面板的現場列印張貼用 -->
-<script src="js/vendor/qrcode.js?v=20260919a"></script>
-<script src="js/shared/wg-bridge.js?v=20260919a"></script>
-<script src="js/site/site-route.js?v=20260919a"></script>
-<script src="js/site/site-data.js?v=20260919a"></script>
-<script type="text/babel" src="js/site/site-controls.jsx?v=20260919a" data-presets="react"></script>
+<script src="js/vendor/qrcode.js?v=20260925b"></script>
+<script src="js/shared/wg-bridge.js?v=20260925b"></script>
+<script src="js/shared/wg-hazard.js?v=20260925b"></script>
+<script src="js/site/site-route.js?v=20260925b"></script>
+<script src="js/site/site-data.js?v=20260925b"></script>
+<script type="text/babel" src="js/site/site-controls.jsx?v=20260925b" data-presets="react"></script>
 <!-- 全站橫幅（EA-FEAT-001）：前台與後台共用同一支元件，realm 不同 -->
-<script src="js/admin/announce/an-data.js?v=20260919a"></script>
-<script type="text/babel" src="js/admin/announce/an-banner.jsx?v=20260919a" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-shell.jsx?v=20260919a" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-detail.jsx?v=20260919a" data-presets="react"></script>
+<script src="js/admin/announce/an-data.js?v=20260925b"></script>
+<script type="text/babel" src="js/admin/announce/an-banner.jsx?v=20260925b" data-presets="react"></script>
+<!-- 2026-09-27：每一頁的「？」頁面說明 -->
+<script type="text/babel" src="js/shared/wg-help.jsx?v=20260927a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-shell.jsx?v=20260925b" data-presets="react"></script>
+<!-- 登入入口的落點（2026-09-21）。UI 在 登入 Login.html，這一支只有導覽與身份寫入 -->
+<script src="js/site/site-auth.js?v=20260925b"></script>
+<!-- 圖片連結（TM-FEAT-010）。前台與後台共用這一支；要排在 site-detail.jsx 與 site-actions.jsx 之前 -->
+<script type="text/babel" src="js/shared/wg-photos.jsx?v=20260925b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-detail.jsx?v=20260925b" data-presets="react"></script>
 <!-- 地標選點：與後台建單共用同一支元件（2026-08-22）。必須排在 site-controls.jsx 之後 —— 它在載入當下就讀 window.WGIcon -->
-<script type="text/babel" src="js/admin/ticket/tk-locpicker.jsx?v=20260919a" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-actions.jsx?v=20260919a" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-building.jsx?v=20260919a" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-notify.jsx?v=20260919a" data-presets="react"></script>
-<script type="text/babel" src="js/site/site-map.jsx?v=20260919a" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-locpicker.jsx?v=20260925b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-actions.jsx?v=20260925b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-building.jsx?v=20260925b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-notify.jsx?v=20260925b" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-map.jsx?v=20260925b" data-presets="react"></script>
 
 <script type="text/babel" data-presets="react">
 /* /map — app route composition（對應 apps/demo/src/app/(site)/map/[[...segments]]/page.tsx）
@@ -63,8 +70,8 @@ function SiteMapPage() {
     <SiteShell module="map" state={route.state} search={route.state.search}
       onSearchChange={(value) => route.replace({ ...route.state, search: value || undefined })}
       isAuthenticated={session.isAuthenticated} platformRole={session.platformRole} userName={session.userName}
-      onSignIn={() => { /* 原型：登入由頂欄的身份切換器代表，見 SitePersonaSwitch */ }}
-      onSignOut={() => { /* 同上 */ }}>
+      onSignIn={() => window.SiteAuth.goSignIn()}
+      onSignOut={() => window.SiteAuth.signOutHere()}>
       <SiteMapView session={session} route={route} />
     </SiteShell>
   );

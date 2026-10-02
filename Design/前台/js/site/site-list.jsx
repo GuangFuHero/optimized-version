@@ -186,7 +186,10 @@
               color: 'var(--color-fg-neutral-default)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {marker.title}
             </span>
-            {tk.priority === 'high' ? <Badge tone="danger" variant="solid">高優先</Badge> : null}
+            {/* 🔴 2026-09-21：原本只判斷 === 'high'，ERD 的 tickets.priority 是四值
+                (low/medium/high/critical)，critical 比 high 更嚴重卻完全沒有呈現。 */}
+            {tk.priority === 'critical' ? <Badge tone="danger" variant="solid">最高優先</Badge>
+              : tk.priority === 'high' ? <Badge tone="warning" variant="solid">高優先</Badge> : null}
           </div>
           <div style={{ marginTop: 2, paddingLeft: 23, font: '400 var(--fs-12)/1.45 var(--font-body)',
             color: 'var(--color-fg-neutral-subtle)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -268,8 +271,10 @@
                     status 與開放時間合起來算（Sucre 2026-08-09），不是只印 status。 */}
                 {isStation && avail
                   ? <Badge tone={avail.tone} variant="solid">{avail.headline}</Badge>
-                  : <Badge tone={isStation ? 'secondary' : R.getTicketStatusTone(marker.ticketMeta && marker.ticketMeta.status)}
-                      variant={isStation ? 'subtle' : 'solid'}>{marker.label}</Badge>}
+                  : isStation
+                  ? <Badge tone="secondary" variant="subtle">{marker.label}</Badge>
+                  : (() => { const d = R.resolveTicketDisplay(marker.ticketMeta && marker.ticketMeta.status, taskMatch);
+                      return <Badge tone={d.tone} variant="solid">{d.label}</Badge>; })()}
               </div>
               <div style={{ marginTop: 4, font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-subtle)',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{marker.subtitle}</div>
@@ -552,6 +557,23 @@
       () => D.queryBuildingMarkers(buildingOpen, { isAuthenticated: session.isAuthenticated }),
       [buildingOpen, session.isAuthenticated, listBridgeVersion]);
 
+
+    /* 🔴 2026-09-21：詳情面板的「上一張／下一張」。
+       用 `selectedBuilding` 而不是 `buildingOpen` —— 分區抽屜已經關掉了，
+       但使用者仍然在同一棟的脈絡裡，前後移動要繼續有效。
+       順序走 `buildingTicketOrder`，與分區清單同一個來源。 */
+    const ticketSiblings = useMemo(() => {
+      if (!selectedBuilding || !selectedMarker || !window.buildingTicketOrder) return undefined;
+      const all = D.queryBuildingMarkers(selectedBuilding, { isAuthenticated: session.isAuthenticated });
+      const order = window.buildingTicketOrder(selectedBuilding, all, getTaskMatchState);
+      const i = order.findIndex((m) => m.id === selectedMarker.id);
+      if (i === -1) return undefined;
+      const go = (j) => () => controller.setSelectedMarkerId(order[j].id);
+      return { index: i, total: order.length,
+        onPrev: i > 0 ? go(i - 1) : undefined,
+        onNext: i < order.length - 1 ? go(i + 1) : undefined };
+    }, [selectedBuilding, selectedMarker, session.isAuthenticated, listBridgeVersion, getTaskMatchState]);
+
     const openShare = (marker) => setShareTarget(createPointShareTarget({ marker, module, state, origin: window.location.origin + window.location.pathname }));
 
     const detailProps = selectedMarker ? {
@@ -567,6 +589,7 @@
       onDeleteMatchSheet: () => setPendingDelete(selectedMarker),
       building: selectedBuilding,
       onOpenBuilding: selectedBuilding ? () => setBuildingOpen(selectedBuilding) : undefined,
+      siblings: ticketSiblings,
     } : null;
 
     const drawerWidth = R.RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH;
@@ -583,9 +606,10 @@
             <SiteDataTypeToggle value={dataType} onChange={controller.setDataType} />
             <SiteSubTypeFilter dataType={dataType} selected={controller.subDataTypes} pinned={pinned}
               onToggle={controller.toggleSubDataType} onTogglePinned={togglePinned} />
-            {/* 與 /map 同一顆（2026-09-18）。兩頁都要有，否則從列表回地圖又得開漢堡包。
-                手機用純圖示，桌機展開成帶字的兩段切換。 */}
-            {window.SiteViewSwitch ? <SiteViewSwitch module="list" state={state} compact={isMobile} /> : null}
+            {/* 與 /map 同一顆（2026-09-18）。**只有手機需要**（2026-09-21 Sucre）——
+                桌機側欄已經有「檢視模式」，工具列再放一顆是同一件事的第二個入口。
+                手機的側欄收在漢堡抽屜裡，所以那裡仍要這顆純圖示鈕。 */}
+            {isMobile && window.SiteViewSwitch ? <SiteViewSwitch module="list" state={state} compact /> : null}
             <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
               {/* 任務維度是需求為列，計數要數需求不是任務單，否則跟畫面上的列數對不起來 */}
               <span style={{ font: '400 var(--fs-13)/1.5 var(--font-data)', color: 'var(--color-fg-neutral-subtle)' }}>
@@ -702,7 +726,7 @@
           <SiteTicketCreateDrawer isAuthenticated={session.isAuthenticated} viewerId={session.userId}
             seedLandmark={seedLandmark} seedCell={seedCell}
             onClose={() => { setNewTicketOpen(false); setSeedLandmark(null); setSeedCell(null); }}
-            onSignIn={() => { setNewTicketOpen(false); window.location.hash = '#/sign-in'; }}
+            onSignIn={() => { setNewTicketOpen(false); window.SiteAuth.goSignIn(); }}
             onSubmit={(values) => {
               const ticket = createSiteTicket({ ...values, userId: session.userId });
               setNewTicketOpen(false);

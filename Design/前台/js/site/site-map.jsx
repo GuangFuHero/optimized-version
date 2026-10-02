@@ -36,11 +36,15 @@
     return 'Wrench';
   }
 
-  function createMapMarkerIcon(item, L, active) {
+  function createMapMarkerIcon(item, L, active, match) {
     const tone = item.detailType === 'station' ? 'station' : 'ticket';
+    /* 任務單的標籤要吃媒合狀態（2026-09-27），不能只印 ticket.status。 */
+    const label = item.detailType === 'ticket'
+      ? R.resolveTicketDisplay(item.ticketMeta && item.ticketMeta.status, match).label
+      : item.label;
     const html = '<div class="wg-marker-stack">'
       + '<div class="wg-marker wg-marker--' + tone + (active ? ' wg-marker--active' : '') + '">' + lucideSvg(markerGlyphName(item), 19) + '</div>'
-      + '<div class="wg-marker__label wg-marker__label--' + tone + '">' + escapeHtml(item.label) + '</div>'
+      + '<div class="wg-marker__label wg-marker__label--' + tone + '">' + escapeHtml(label) + '</div>'
       + '</div>';
     return L.divIcon({ className: 'wg-marker-wrapper', html, iconSize: [132, 58], iconAnchor: [66, 36], popupAnchor: [0, -30] });
   }
@@ -200,7 +204,7 @@
   function useSiteMapLiveData(state, isAuthenticated) {
     /* 自己送出新單後要立刻重查，否則要等下次篩選變動才看得到自己那一筆。 */
     const bridgeVersion = window.WGBridge.useBridgeVersion();
-    const [snapshot, setSnapshot] = useState({ markers: [], closureAreas: [], isFetching: true, hasFetchedOnce: false, totalCount: 0 });
+    const [snapshot, setSnapshot] = useState({ markers: [], closureAreas: [], publicZones: [], isFetching: true, hasFetchedOnce: false, totalCount: 0 });
     const subSignature = (state.subDataTypes || []).join('|');
     useEffect(() => {
       let cancelled = false;
@@ -213,7 +217,7 @@
           skip: 0, limit: 200, isAuthenticated,
         });
         setSnapshot({
-          markers: result.items, closureAreas: D.queryClosureAreas().items,
+          markers: result.items, closureAreas: D.queryClosureAreas().items, publicZones: D.queryPublicZones().items,
           isFetching: false, hasFetchedOnce: true, totalCount: result.pageInfo.totalCount,
         });
       }, 260);
@@ -371,7 +375,7 @@
   }
 
   /* ── Leaflet 畫布 ──────────────────────────────────────────────────────── */
-  function RescueMapCanvas({ controller, onSelectMarker, onOpenBuilding, buildingOpen, blankSpot }) {
+  function RescueMapCanvas({ controller, onSelectMarker, onOpenBuilding, buildingOpen, blankSpot, getTaskMatchState }) {
     const hostRef = useRef(null);
     const mapRef = useRef(null);
     const tileRef = useRef(null);
@@ -381,6 +385,9 @@
     const markerRefs = useRef(new Map());
     const selectRef = useRef(onSelectMarker);
     selectRef.current = onSelectMarker;
+    /* 同樣用 ref：媒合狀態一變，bridgeVersion 會讓 markers 重查、這支 effect 自然重跑。 */
+    const matchRef = useRef(getTaskMatchState);
+    matchRef.current = getTaskMatchState;
     /* 用 ref 而不是把它們放進 effect 的 deps —— 這支 effect 每次重跑都會
        重建所有 marker，而 callback 每次 render 都是新的 function。
        放進 deps 會讓地圖在每次父層 render 時整批重畫（marker 閃一下、
@@ -523,7 +530,8 @@
           : item.id === controller.selectedMarkerId;
         const icon = isBld ? createBuildingIcon(item, L, active)
           : isCell ? createCellIcon(item, L, active)
-          : createMapMarkerIcon(item, L, active);
+          : createMapMarkerIcon(item, L, active,
+              item.detailType === 'ticket' && matchRef.current ? matchRef.current(item) : undefined);
         const existing = markerRefs.current.get(item.id);
         if (existing) {
           existing.setIcon(icon);
@@ -592,17 +600,29 @@
       const L = window.L, layer = overlayLayerRef.current;
       if (!L || !layer) return;
       layer.clearLayers();
+      /* 🔴 2026-09-25 Sucre：危險區是橘白斜紋（危險角錐的顏色）。
+         封閉區域本來就是「危險地帶與暫時封鎖範圍」，所以整層一起換，前後台同一個樣子。 */
+      const H = window.WGHazard;
+      if (H) H.ensure();
       const closureConfig = R.OVERLAY_LAYER_CONFIG['closure-areas'];
       const strokeColor = resolveCssToken(closureConfig.color);
       const fillColor = resolveCssToken(closureConfig.fillColor);
       controller.closureAreas.forEach((area) => {
         area.polygons.forEach((rings) => {
-          L.polygon(rings, {
+          L.polygon(rings, H ? H.polygonStyle() : {
             color: strokeColor, weight: 2, opacity: 0.9, fillColor, fillOpacity: 0.18, dashArray: '6 4',
-          }).bindTooltip(area.label + ' · ' + (area.comment || ''), { direction: 'top' }).addTo(layer);
+          }).bindTooltip(area.label + (area.comment ? ' · ' + area.comment : ''), { direction: 'top' }).addTo(layer);
         });
       });
-    }, [controller.closureAreas]);
+      /* 標示區域（志工休息區等）：實心淡色，用後台給的顏色。不帶責任單位。 */
+      (controller.publicZones || []).forEach((area) => {
+        const col = area.color || resolveCssToken(R.OVERLAY_LAYER_CONFIG['public-zones'].color);
+        area.polygons.forEach((rings) => {
+          L.polygon(rings, { color: col, weight: 2, opacity: 0.9, fillColor: col, fillOpacity: 0.16 })
+            .bindTooltip(area.label + (area.comment ? ' · ' + area.comment : ''), { direction: 'top' }).addTo(layer);
+        });
+      });
+    }, [controller.closureAreas, controller.publicZones]);
 
     // 選取時平移至標記
     useEffect(() => {
@@ -727,12 +747,10 @@
             <SiteDataTypeToggle value={dataType} onChange={controller.setDataType} />
             <SiteSubTypeFilter dataType={dataType} selected={controller.subDataTypes} pinned={pinned}
               onToggle={controller.toggleSubDataType} onTogglePinned={togglePinned} />
-            {/* 桌機展開成帶字的兩段切換 —— 有空間就把「我現在在哪一種看法」講出來。 */}
-            {window.SiteViewSwitch ? (
-              <SiteControlSurface style={{ padding: 3 }}>
-                <SiteViewSwitch module="map" state={controller.routeState} />
-              </SiteControlSurface>
-            ) : null}
+            {/* 🔒 2026-09-21 Sucre：「電腦版左邊已經有檢視模式了」——
+                桌機不再於地圖上重複一顆「地圖 ⇄ 列表」。
+                側欄「檢視模式」永遠在畫面上、永遠同一個位置，圖上那顆只是第二個真相。
+                手機才需要（側欄收在漢堡抽屜裡，切一次看法要先開抽屜）。 */}
           </div>
           <SitePinnedFilterRow items={pinnedOptions} selected={controller.subDataTypes} onToggle={controller.toggleSubDataType} />
         </div>
@@ -868,7 +886,7 @@
     }), [myClaims, sourceMarkers, siteTickets]);
     const controller = useRescueMapController({
       routeState: state, onRouteStateChange: replace, sourceMarkers,
-      closureAreas: live.closureAreas, filterMarkersByBbox: false,
+      closureAreas: live.closureAreas, publicZones: live.publicZones, filterMarkersByBbox: false,
     });
 
     /* ⚠️ 這一段一定要在 `controller` 宣告**之後**。
@@ -1006,6 +1024,23 @@
       () => D.queryBuildingMarkers(buildingOpen, { isAuthenticated: session.isAuthenticated }),
       [buildingOpen, session.isAuthenticated, bridgeVersion]);
 
+
+    /* 🔴 2026-09-21：詳情面板的「上一張／下一張」。
+       用 `selectedBuilding` 而不是 `buildingOpen` —— 分區抽屜已經關掉了，
+       但使用者仍然在同一棟的脈絡裡，前後移動要繼續有效。
+       順序走 `buildingTicketOrder`，與分區清單同一個來源。 */
+    const ticketSiblings = useMemo(() => {
+      if (!selectedBuilding || !selectedMarker || !window.buildingTicketOrder) return undefined;
+      const all = D.queryBuildingMarkers(selectedBuilding, { isAuthenticated: session.isAuthenticated });
+      const order = window.buildingTicketOrder(selectedBuilding, all, getTaskMatchState);
+      const i = order.findIndex((m) => m.id === selectedMarker.id);
+      if (i === -1) return undefined;
+      const go = (j) => () => controller.setSelectedMarkerId(order[j].id);
+      return { index: i, total: order.length,
+        onPrev: i > 0 ? go(i - 1) : undefined,
+        onNext: i < order.length - 1 ? go(i + 1) : undefined };
+    }, [selectedBuilding, selectedMarker, session.isAuthenticated, bridgeVersion, getTaskMatchState]);
+
     const openShare = (marker) => setShareTarget(createPointShareTarget({ marker, module, state, origin: window.location.origin + window.location.pathname }));
     const detailProps = selectedMarker ? {
       marker: selectedMarker,
@@ -1025,6 +1060,7 @@
          沒開就是 null，詳情面板照原本的單張單流程走，什麼都不多出來。 */
       building: selectedBuilding,
       onOpenBuilding: selectedBuilding ? () => setBuildingOpen(selectedBuilding) : undefined,
+      siblings: ticketSiblings,
     } : null;
 
     const drawerWidth = R.RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH;
@@ -1036,7 +1072,8 @@
         transition: 'grid-template-columns var(--duration-base) var(--ease-out)' }}>
         <div style={{ gridColumn: 1, gridRow: 1, position: 'relative', minWidth: 0, minHeight: 0 }}>
           <RescueMapCanvas controller={controller} onSelectMarker={controller.setSelectedMarkerId}
-            onOpenBuilding={setBuildingOpen} buildingOpen={buildingOpen} blankSpot={blankSpot} />
+            onOpenBuilding={setBuildingOpen} buildingOpen={buildingOpen} blankSpot={blankSpot}
+            getTaskMatchState={getTaskMatchState} />
           <SiteMapControls controller={controller} isMobile={isMobile} />
         {/* 點地圖空白處浮出的動作泡泡。未登入也顯示 —— 擋在送出前，不擋在入口前。 */}
           {/* 十字準星：標出「剛剛點到的到底是哪一點」。
@@ -1126,7 +1163,7 @@
           <SiteTicketCreateDrawer isAuthenticated={session.isAuthenticated} viewerId={session.userId}
             seedLandmark={seedLandmark} seedCell={seedCell}
             onClose={() => { setNewTicketOpen(false); setSeedLandmark(null); setSeedCell(null); }}
-            onSignIn={() => { setNewTicketOpen(false); window.location.hash = '#/sign-in'; }}
+            onSignIn={() => { setNewTicketOpen(false); window.SiteAuth.goSignIn(); }}
             onSubmit={(values) => {
               const ticket = createSiteTicket({ ...values, userId: session.userId });
               setNewTicketOpen(false);

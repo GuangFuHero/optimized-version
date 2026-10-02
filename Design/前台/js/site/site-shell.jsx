@@ -45,19 +45,35 @@
    *
    * ⚠️ 這是**原型的展示裝置**，正式版沒有這個切換器。 */
   const SITE_PERSONA_KEY = 'wg.sitePersonaId';
+  /* `adminUserId`：這個人在**管理平台**的 id（`wg.personaId` 存的那個值），
+   *  沒有就是 null。2026-09-27 新增。
+   *
+   *  🔒 為什麼要這一欄，而不是照 `platformRole` 猜：
+   *  原本 `SitePortalSwitch` 是用「platformRole 是不是 ngo/gov/…」判斷能不能跨過去。
+   *  但那只說明他屬於某個團隊，**沒有說他是誰** —— 跨過去之後 `wg.personaId` 還是
+   *  上一次留下的值，他會變成另一個人。一個人跨平台仍然是同一個人，所以要指名。
+   *
+   *  ⚠️ 林佩珊原本寫 platformRole: 'ngo'，於是切換鈕對她是亮的、跨過去卻會變成別人。
+   *  她的設定是「民眾志工」不是團隊成員，這一版改回 general_user。 */
   const SITE_PERSONAS = [
     { id: 'usr-citizen-01', name: '王志豪', label: '民眾 · 建立者',
-      hint: '有自己建立的任務單', isAuthenticated: true, platformRole: 'general_user' },
+      hint: '有自己建立的任務單', isAuthenticated: true, platformRole: 'general_user', adminUserId: null },
     { id: 'usr-citizen-42', name: '林佩珊', label: '民眾 · 志工',
-      hint: '有承接紀錄，可釋出名額', isAuthenticated: true, platformRole: 'ngo' },
+      hint: '有承接紀錄，可釋出名額', isAuthenticated: true, platformRole: 'general_user', adminUserId: null },
+    /* 兩邊都有的人。她在管理平台是「壯闊台灣 · 管理員」（wg-event.js 的 u-huang），
+       所以登入後會自動被帶進管理平台 —— 除非他是從某一頁被擋下來的（回原地優先）。 */
+    { id: 'u-huang', name: '黃曉芳', label: '志工 · 兼管理員',
+      hint: '同時有壯闊台灣的管理員身份，登入後會自動進管理平台',
+      isAuthenticated: true, platformRole: 'ngo', adminUserId: 'u-huang' },
     { id: null, name: '未登入訪客', label: '未登入',
-      hint: '只能看，位置被遮成概略範圍', isAuthenticated: false, platformRole: 'general_user' },
+      hint: '只能看，位置被遮成概略範圍', isAuthenticated: false, platformRole: 'general_user', adminUserId: null },
   ];
   const readSitePersona = () => {
     let stored = null;
     try { stored = localStorage.getItem(SITE_PERSONA_KEY); } catch (e) {}
     /* 未登入那筆的 id 是 null，localStorage 存不了 null，所以用字串哨兵。 */
-    if (stored === 'guest') return SITE_PERSONAS[2];
+    /* ⚠️ 訪客那一筆的索引會隨 SITE_PERSONAS 增減而變，所以用 isAuthenticated 找，不要寫死索引。 */
+    if (stored === 'guest') return SITE_PERSONAS.find((p) => !p.isAuthenticated);
     return SITE_PERSONAS.find((p) => p.id === stored) || SITE_PERSONAS[0];
   };
   const writeSitePersona = (persona) => {
@@ -79,7 +95,8 @@
     }, []);
     return [
       { isAuthenticated: persona.isAuthenticated, userName: persona.name,
-        userId: persona.id, platformRole: persona.platformRole, personaLabel: persona.label },
+        userId: persona.id, platformRole: persona.platformRole, personaLabel: persona.label,
+        adminUserId: persona.adminUserId || null },
       (p) => { setPersona(p); writeSitePersona(p); },
     ];
   }
@@ -160,30 +177,46 @@
     );
   }
 
-  /* ── 前往後台 / 申請成為後台人員（IAM-FEAT-004 / IAM-PS-101、102、106）─────────
-   * 兩種狀態互斥，由 render 當下持有的平台角色決定，不快取（IAM-PS-106）：
-   *   有後台平台角色 → 「前往後台」，點下去後端自動換發後台憑證，使用者無感（IAM-PS-103）
-   *   只有 General User → 「申請成為後台人員」，導到角色升級申請（AC-FEAT-002），不做任何跨越
+  /* ── 前往管理平台 / 申請管理權限（IAM-FEAT-004 / IAM-PS-101、102、106）─────────
+   * 兩種狀態互斥，由 render 當下的身份決定，不快取（IAM-PS-106）：
+   *   有管理平台身份 → 「前往管理平台」，點下去自動換發憑證，使用者無感（IAM-PS-103）
+   *   沒有 → 「申請管理權限」，導到角色升級申請（AC-FEAT-002），不做任何跨越
    * 未登入者兩種都不顯示（IAM-PS-102 末句）。
+   *
+   * 🔒 命名（2026-09-27 裁示）：只有**同時擁有兩邊的人**會看到平台名稱。
+   *    管理那一側叫「管理平台」；使用者那一側**不取名字** —— 需要指稱它的時候
+   *    講「公開地圖」，因為那是他回去會看到的東西，不是一個分類名稱。
+   *    ⚠️ 不要用「使用者平台」：一般使用者看不懂，而且它隱含「管理平台的人不是
+   *    使用者」—— 後台那些人也在用這個系統。
    * 桌機放頂欄右側（UserMenu 左邊）；行動版頂欄只有 40px 塞不下，改掛在側欄抽屜底部。 */
-  const ADMIN_PORTAL_HOME = '任務管理 Ticket Management.html';
+  const ADMIN_PORTAL_HOME = '../後台/資源站點管理 Resource Station v2.html';  // 交付版：任務管理不在本次交付，暫指資源站點
   /* 🔴 2026-09-11：原本是 `'#/apply-admin'` —— 一條沒有任何東西接住的 hash。
      點下去畫面毫無變化，**而且把路由狀態洗掉**（維度與篩選都寫在 hash 裡），
      那個狀態下重整頁面會整個回到預設。改成開抽屜，不動網址。 */
   const ROLE_ELEVATION_EVENT = 'wg:site-role-elevation';
   const openRoleElevationDrawer = () => dispatchOrHandoff(ROLE_ELEVATION_EVENT, 'roleElevation');
-  const BACKOFFICE_ROLES = ['super_admin', 'government', 'ngo', 'data_auditor'];
-  const hasBackofficeRole = (platformRole) => BACKOFFICE_ROLES.includes(platformRole);
+  /** 跨到管理平台。原型：把管理平台的身份寫進 `wg.personaId`（wg-event.js 那把 key），
+   *  正式版是後端換發憑證，前端不會碰這個。
+   *  🔒 一定要寫 —— 不寫的話他跨過去會變成上一次留在那把 key 裡的人。 */
+  const enterAdminPortal = (adminUserId) => {
+    if (!adminUserId) return;
+    if (window.wgSetPersonaId) window.wgSetPersonaId(adminUserId);
+    else { try { localStorage.setItem('wg.personaId', adminUserId); } catch (e) {} }
+  };
 
-  /** 場域標籤：靜態，只回答「我現在在前台」。不可點，避免跟切換按鈕混淆。
-   *  未登入者也顯示 —— 這是狀態資訊，不是 IAM-PS-102 管的那顆控制項。 */
+  /** 場域標籤。
+   *  🔒 2026-09-27：**只對同時擁有兩邊的人顯示。**
+   *  一個只在手機上找水站的災民永遠不需要知道自己站在哪個平台上 ——
+   *  名字只在「兩邊並排」時才有意義，而只有跨得過去的人才有並排這件事。 */
   function SiteRealmBadge() {
+    const [session] = useSitePersona();
+    if (!session.adminUserId) return null;
     return (
-      <span title="你目前在前台公開頁面"
+      <span title="你目前在公開地圖，不是管理平台"
         style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 9px', flexShrink: 0,
           borderRadius: 'var(--radius-full)', background: 'var(--color-bg-neutral-sunken)',
           font: '700 var(--fs-12)/1.4 var(--font-latin)', color: 'var(--color-fg-neutral-subtle)', whiteSpace: 'nowrap' }}>
-        <WGIcon n="Globe" s={12} c="var(--color-fg-neutral-muted)" />公開頁面
+        <WGIcon n="Globe" s={12} c="var(--color-fg-neutral-muted)" />公開地圖
       </span>
     );
   }
@@ -288,17 +321,22 @@
     );
   }
 
-  function SitePortalSwitch({ isAuthenticated, platformRole, variant = 'topbar' }) {
+  function SitePortalSwitch({ isAuthenticated, variant = 'topbar' }) {
+    const [session] = useSitePersona();
     if (!isAuthenticated) return null;
-    const canCross = hasBackofficeRole(platformRole);
-    const label = canCross ? '前往後台' : '申請成為後台人員';
+    /* 🔒 用「他在管理平台是誰」判斷，不用 platformRole 猜 —— 見 SITE_PERSONAS 的註解。 */
+    const adminUserId = session.adminUserId;
+    const canCross = !!adminUserId;
+    const label = canCross ? '前往管理平台' : '申請管理權限';
     const icon = canCross ? 'ArrowLeftRight' : 'BadgeCheck';
-    /* 「前往後台」是跨頁，仍然是 <a>；「申請」是開抽屜，是 <button>。
+    /* 「前往管理平台」是跨頁，仍然是 <a>；「申請」是開抽屜，是 <button>。
        兩者長得一樣但語意不同 —— 用對元素，右鍵開新分頁與鍵盤行為才會正確。 */
     const asLink = canCross;
     const href = canCross ? encodeURI(ADMIN_PORTAL_HOME) : undefined;
     const Tag = asLink ? 'a' : 'button';
-    const extra = asLink ? { href: href } : { type: 'button', onClick: openRoleElevationDrawer };
+    const extra = asLink
+      ? { href: href, onClick: () => enterAdminPortal(adminUserId) }
+      : { type: 'button', onClick: openRoleElevationDrawer };
 
     if (variant === 'sidebar') {
       return (
@@ -309,7 +347,7 @@
       );
     }
     return (
-      <Tag {...extra} title={canCross ? '前往後台（不需再次登入）' : '送出成為後台人員的申請'}
+      <Tag {...extra} title={canCross ? '前往管理平台（不需再次登入）' : '送出管理權限的申請'}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 var(--space-3)',
           borderRadius: 'var(--radius-full)', textDecoration: 'none', whiteSpace: 'nowrap',
           border: '1px solid var(--color-border-default)', background: 'var(--color-bg-neutral-default)',
@@ -408,7 +446,7 @@
     );
   }
 
-  function SiteTopNavBar({ isAuthenticated, userName, platformRole, viewerId, search, onSearchChange, onSignIn, onSignOut }) {
+  function SiteTopNavBar({ module, isAuthenticated, userName, platformRole, viewerId, search, onSearchChange, onSignIn, onSignOut }) {
     return (
       <header style={{ height: LAYOUT.topNavBarHeight, display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr) auto',
         alignItems: 'center', columnGap: 'var(--space-6)', padding: '0 var(--space-6)',
@@ -417,13 +455,15 @@
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 0 }}>
           <BrandLockup />
           <SiteRealmBadge />
-          <SitePortalSwitch isAuthenticated={isAuthenticated} platformRole={platformRole} />
+          <SitePortalSwitch isAuthenticated={isAuthenticated} />
         </div>
         <div style={{ minWidth: 0, display: 'flex', justifyContent: 'center' }}>
           <SiteHeaderSearchInput value={search} onChange={onSearchChange} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', justifySelf: 'end' }}>
           <SiteRequestHelpButton variant="topbar" />
+          {/* 2026-09-27：「這一頁怎麼用」。前台沒有頁面標題，所以放在頂欄右側、鈴鐺左邊。 */}
+          {window.WGPageHelp ? <window.WGPageHelp pageKey={'site:' + module} align="right" size={36} /> : null}
           {/* 通知（2026-09-10）。未載入 site-notify.jsx 的頁面不會壞掉，只是沒有鈴鐺。
               位置在人名選單左邊，與後台頂欄同一個位置 —— 兩邊的人是同一批。 */}
           {window.SiteNotifyBell ? <window.SiteNotifyBell viewerId={viewerId} onOpenTicket={openSiteTicket} /> : null}
@@ -433,7 +473,7 @@
     );
   }
 
-  function SiteMobileTopNavBar({ onMenuClick, isAuthenticated, userName, viewerId, search, onSearchChange, onSignIn, onSignOut }) {
+  function SiteMobileTopNavBar({ module, onMenuClick, isAuthenticated, userName, viewerId, search, onSearchChange, onSignIn, onSignOut }) {
     /* 搜尋在手機是**展開式**：平常只佔一顆 44px 的圖示鈕，按下才換成整列輸入框。
      *
      * ⚠️ 先前手機**完全沒有搜尋** —— `SiteHeaderSearchInput` 只掛在桌機的 SiteTopNavBar，
@@ -494,6 +534,7 @@
         </button>
         {/* 手機頂欄現在有五樣：漢堡、品牌、搜尋、通知、人名。
             品牌那格是 `minWidth: 0` 的彈性欄，所以擠得下（390px 已實測）。 */}
+        {/* 「這一頁怎麼用」在手機放進漢堡選單 —— 頂欄多一顆 36px 會把事件名稱擠到壓住搜尋鈕（390px 實測） */}
         {window.SiteNotifyBell ? <window.SiteNotifyBell viewerId={viewerId} onOpenTicket={openSiteTicket} /> : null}
         <div style={{ flexShrink: 0 }}>
           <SiteUserMenu isAuthenticated={isAuthenticated} userName={userName} onSignIn={onSignIn} onSignOut={onSignOut} />
@@ -588,11 +629,13 @@
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
           {/* 請求協助在行動版頂欄同樣塞不下，掛側欄第一順位（桌機由頂欄負責）。 */}
           <SiteRequestHelpButton variant="sidebar" collapsed={collapsed} />
+          {/* 2026-09-27：手機的「這一頁怎麼用」（桌機在頂欄右側）。只在抽屜裡出現。 */}
+          {showCloseButton && window.WGPageHelp ? <window.WGPageHelp pageKey={'site:' + module} variant="row" /> : null}
           {/* 行動版頂欄放不下切換按鈕，改掛這裡（桌機由頂欄負責，不重複出現）。 */}
           {showPortalSwitch ? (
             <React.Fragment>
               <div style={{ height: 1, background: 'var(--color-border-default)', margin: '0 var(--space-2)' }}></div>
-              <SitePortalSwitch isAuthenticated={isAuthenticated} platformRole={platformRole} variant="sidebar" />
+              <SitePortalSwitch isAuthenticated={isAuthenticated} variant="sidebar" />
             </React.Fragment>
           ) : null}
           {!isAuthenticated ? (
@@ -637,11 +680,11 @@
         background: 'var(--color-bg-neutral-subtle)' }}>
         <div style={{ gridColumn: '1 / -1', gridRow: 1, position: 'relative', zIndex: 3 }}>
           {isMobile ? (
-            <SiteMobileTopNavBar onMenuClick={() => setDrawerOpen(true)} isAuthenticated={isAuthenticated}
+            <SiteMobileTopNavBar module={module} onMenuClick={() => setDrawerOpen(true)} isAuthenticated={isAuthenticated}
               userName={userName} viewerId={shellSession.userId} search={search} onSearchChange={onSearchChange}
               onSignIn={onSignIn} onSignOut={onSignOut} />
           ) : (
-            <SiteTopNavBar isAuthenticated={isAuthenticated} userName={userName} platformRole={platformRole}
+            <SiteTopNavBar module={module} isAuthenticated={isAuthenticated} userName={userName} platformRole={platformRole}
               viewerId={shellSession.userId} search={search}
               onSearchChange={onSearchChange} onSignIn={onSignIn} onSignOut={onSignOut} />
           )}
@@ -664,7 +707,7 @@
         </main>
         {/* 手機主動作：不讓「請求協助」被埋進漢堡選單。
             🔴 2026-09-11：漢堡**開著的時候要收起來** —— 它是 fixed 浮層，
-            會直接蓋在選單的「申請成為後台人員」那一列上，而且選單裡本來就有
+            會直接蓋在選單的「申請管理權限」那一列上，而且選單裡本來就有
             一顆「請求協助」。同一個動作在同一個畫面出現兩顆，近的那顆還蓋住別人。 */}
         {isMobile && !drawerOpen ? <SiteMobileHelpFab /> : null}
 
@@ -745,5 +788,5 @@
     SiteViewSwitch,
     SiteRequestHelpButton, SiteMobileHelpFab, OPEN_TICKET_EVENT, openSiteTicket,
     STATION_REPORTS_EVENT, openStationReportsDrawer,
-    ROLE_ELEVATION_EVENT, openRoleElevationDrawer, takeOpenOnLoad, SitePersonaList, useSitePersona, SITE_PERSONAS, NEW_TICKET_EVENT, openNewTicketDrawer, SITE_TICKET_ENTRY_LABEL, MY_TASKS_EVENT, openMyTasksDrawer, SiteShell, SiteSidebar, SiteTopNavBar, SiteHeaderSearchInput, SitePortalSwitch, SiteRealmBadge, BrandLockup, SITE_LAYOUT: LAYOUT, MODULE_PAGES });
+    ROLE_ELEVATION_EVENT, openRoleElevationDrawer, takeOpenOnLoad, SitePersonaList, useSitePersona, SITE_PERSONAS, SITE_PERSONA_KEY, writeSitePersona, enterAdminPortal, ADMIN_PORTAL_HOME, NEW_TICKET_EVENT, openNewTicketDrawer, SITE_TICKET_ENTRY_LABEL, MY_TASKS_EVENT, openMyTasksDrawer, SiteShell, SiteSidebar, SiteTopNavBar, SiteHeaderSearchInput, SitePortalSwitch, SiteRealmBadge, BrandLockup, SITE_LAYOUT: LAYOUT, MODULE_PAGES });
 })();
