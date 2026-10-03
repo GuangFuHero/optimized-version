@@ -57,7 +57,7 @@ services:
 
   frontend:
     build:
-      context: ./Frontend
+      context: ../Frontend
     environment:
       NEXTAUTH_URL: ${NEXTAUTH_URL}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
@@ -75,6 +75,8 @@ services:
       - backend
     ports:
       - "3000:3000"
+    networks:
+      - app-network
 
 networks:
   app-network:
