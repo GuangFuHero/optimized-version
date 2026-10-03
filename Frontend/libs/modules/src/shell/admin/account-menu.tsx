@@ -8,6 +8,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { useCurrentUser } from '@rescue-frontend/data-access/admin';
 
 import { Avatar, Badge, designTokens } from '@rescue-frontend/ui';
+import { ROLE_DISPLAY_NAMES } from '../../constants/roles';
 
 const { color, radius, shadow, typography, motion } = designTokens;
 
@@ -50,7 +51,9 @@ export function AccountMenu() {
           >
             {name}
             {identity?.role ? (
-              <Badge tone="primary">{identity.role}</Badge>
+              <Badge tone="primary">
+                {ROLE_DISPLAY_NAMES.get(identity.role) ?? identity.role}
+              </Badge>
             ) : null}
           </Box>
           {identity?.team ? (
