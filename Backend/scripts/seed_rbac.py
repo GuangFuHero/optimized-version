@@ -58,9 +58,8 @@ ROLES_DATA = [
             # hard-coded "logged in" so it can be narrowed here or at /admin/rbac, e.g. to
             # `own` once the volunteer flow can hand out detail on sign-up instead.
             Perm.TICKET_VIEW_DETAIL: "all",
-            # ADR-128: the timeline mirrors view_pii's tiering exactly. `own` is what makes
-            # Notion's front-of-house requirement real — a requester following their own
-            # ticket's progress — without exposing anyone else's.
+            # The timeline mirrors view_pii's tiering. `own` lets a requester follow their own
+            # ticket on the public site without exposing anyone else's.
             Perm.TICKET_VIEW_HISTORY: "own",
             Perm.STATION_VIEW_HISTORY: "own",
             Perm.TICKET_ADD: "all",
