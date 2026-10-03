@@ -1,6 +1,7 @@
 'use client';
 
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import { X } from 'lucide-react';
+
 import {
   Box,
   Drawer,
@@ -126,7 +127,7 @@ export function Sheet({
             onClick={onClose}
             sx={{ mt: '-4px', mr: '-8px', color: color.fg.neutral.subtle }}
           >
-            <CloseRoundedIcon sx={{ fontSize: 20 }} />
+            <Box component={X} sx={{ width: 20, height: 20 }} />
           </IconButton>
         </Stack>
         {headerContent ? <Box sx={{ mt: '12px' }}>{headerContent}</Box> : null}

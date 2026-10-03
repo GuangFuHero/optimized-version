@@ -1,4 +1,4 @@
-import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined';
+import { Building2 } from 'lucide-react';
 import { Box, Stack } from '@mui/material';
 import type { ReactNode } from 'react';
 
@@ -91,7 +91,11 @@ export function MapPin({ tone, icon, label, active = false }: MapPinProps) {
           '&:hover': active
             ? undefined
             : { transform: 'translateY(-2px) scale(1.06)' },
-          '& .MuiSvgIcon-root': { fontSize: 19 },
+          '& .MuiSvgIcon-root, & .lucide': {
+            width: 19,
+            height: 19,
+            fontSize: 19,
+          },
         }}
       >
         {icon}
@@ -211,7 +215,7 @@ export function MapBuildingMarker({
           '&:hover': active ? undefined : { transform: 'scale(1.04)' },
         }}
       >
-        <ApartmentOutlinedIcon sx={{ fontSize: 18 }} />
+        <Box component={Building2} sx={{ width: 18, height: 18 }} />
         <Box
           component="span"
           sx={{
@@ -311,7 +315,11 @@ export function MapStationSquare({
         boxShadow: '0 2px 7px rgba(15, 23, 42, 0.4)',
         color: color.fg.inverse,
         opacity: dimmed ? 0.3 : 1,
-        '& .MuiSvgIcon-root': { fontSize: 13 },
+        '& .MuiSvgIcon-root, & .lucide': {
+          width: 13,
+          height: 13,
+          fontSize: 13,
+        },
       }}
     >
       {icon}

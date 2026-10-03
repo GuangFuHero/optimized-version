@@ -1,6 +1,7 @@
 'use client';
 
-import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
+import { Map } from 'lucide-react';
+
 import { Box, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import Link from 'next/link';
@@ -149,7 +150,7 @@ export function AuthShell({ children }: AuthShellProps) {
             fontWeight: 700,
           }}
         >
-          <MapOutlinedIcon sx={{ fontSize: 16 }} />
+          <Box component={Map} sx={{ width: 16, height: 16 }} />
           {authShellText.heroExit}
         </Box>
       </Box>
@@ -215,7 +216,7 @@ export function AuthShell({ children }: AuthShellProps) {
               fontWeight: 700,
             }}
           >
-            <MapOutlinedIcon sx={{ fontSize: 16 }} />
+            <Box component={Map} sx={{ width: 16, height: 16 }} />
             {authShellText.phoneExit}
           </Box>
         </Box>

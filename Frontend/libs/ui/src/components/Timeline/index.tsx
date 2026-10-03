@@ -1,4 +1,4 @@
-import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
+import { ArrowRight } from 'lucide-react';
 import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 
@@ -79,7 +79,11 @@ export function Timeline({ items, emptyText = '尚無紀錄。' }: TimelineProps
                     borderRadius: `${radius.full}px`,
                     bgcolor: t.bg,
                     color: t.fg,
-                    '& .MuiSvgIcon-root': { fontSize: 14 },
+                    '& .MuiSvgIcon-root, & .lucide': {
+                      width: 14,
+                      height: 14,
+                      fontSize: 14,
+                    },
                   }}
                 >
                   {item.icon}
@@ -199,8 +203,9 @@ export function TimelineChange({ field, from, to }: TimelineChangeProps) {
       >
         {from ?? '—'}
       </Box>
-      <ArrowForwardRoundedIcon
-        sx={{ fontSize: 13, color: color.fg.neutral.muted }}
+      <Box
+        component={ArrowRight}
+        sx={{ width: 13, height: 13, color: color.fg.neutral.muted }}
       />
       <Box
         component="span"

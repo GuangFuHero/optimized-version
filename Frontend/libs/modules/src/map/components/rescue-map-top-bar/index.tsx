@@ -1,12 +1,21 @@
 'use client';
 
-import GestureOutlinedIcon from '@mui/icons-material/GestureOutlined';
-import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
-import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
-import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
-import PanToolAltOutlinedIcon from '@mui/icons-material/PanToolAltOutlined';
-import StraightenOutlinedIcon from '@mui/icons-material/StraightenOutlined';
-import { Box, ButtonBase, Stack, Typography } from '@mui/material';
+import {
+  Spline,
+  Grid2X2,
+  Layers,
+  Map,
+  MousePointer2,
+  Ruler,
+} from 'lucide-react';
+
+import {
+  Box,
+  ButtonBase,
+  Stack,
+  Typography,
+  type BoxProps,
+} from '@mui/material';
 import type { ReactNode } from 'react';
 
 import type { RescueMapControllerValue } from '../../types';
@@ -24,19 +33,21 @@ function ControlSurface({
   sx,
 }: {
   children: ReactNode;
-  sx?: Record<string, unknown>;
+  sx?: BoxProps['sx'];
 }) {
   return (
     <Box
-      sx={{
-        backdropFilter: 'blur(8px)',
-        bgcolor: color.bg.neutral.default,
-        border: `1px solid ${color.border.accent}`,
-        borderRadius: `${radius.full}px`,
-        boxShadow: shadow.sm,
-        color: color.fg.neutral.default,
-        ...sx,
-      }}
+      sx={[
+        {
+          backdropFilter: 'blur(8px)',
+          bgcolor: color.bg.neutral.default,
+          border: `1px solid ${color.border.accent}`,
+          borderRadius: `${radius.full}px`,
+          boxShadow: shadow.sm,
+          color: color.fg.neutral.default,
+        },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
     >
       {children}
     </Box>
@@ -90,18 +101,18 @@ function FloatingToolbar() {
       }}
     >
       <ToolbarButton
-        icon={<PanToolAltOutlinedIcon sx={{ fontSize: 18 }} />}
+        icon={<Box component={MousePointer2} sx={{ width: 18, height: 18 }} />}
         label="Pan"
       />
       <Box sx={{ display: { mobile: 'none', tablet: 'contents' } }}>
         <ToolbarDivider />
         <ToolbarButton
-          icon={<GestureOutlinedIcon sx={{ fontSize: 18 }} />}
+          icon={<Box component={Spline} sx={{ width: 18, height: 18 }} />}
           label="繪製區域"
         />
         <ToolbarDivider />
         <ToolbarButton
-          icon={<StraightenOutlinedIcon sx={{ fontSize: 18 }} />}
+          icon={<Box component={Ruler} sx={{ width: 18, height: 18 }} />}
           label="Measure"
         />
       </Box>
@@ -132,7 +143,7 @@ function LayerButton({ controller }: RescueMapTopBarProps) {
             : color.fg.neutral.subtle,
         }}
       >
-        <LayersOutlinedIcon sx={{ fontSize: 18 }} />
+        <Box component={Layers} sx={{ width: 18, height: 18 }} />
       </ButtonBase>
     </ControlSurface>
   );
@@ -192,11 +203,11 @@ function ViewToggle() {
     >
       <ViewToggleButton
         active
-        icon={<MapOutlinedIcon sx={{ fontSize: 14 }} />}
+        icon={<Box component={Map} sx={{ width: 14, height: 14 }} />}
         label="Map"
       />
       <ViewToggleButton
-        icon={<GridViewOutlinedIcon sx={{ fontSize: 14 }} />}
+        icon={<Box component={Grid2X2} sx={{ width: 14, height: 14 }} />}
         label="Grid"
       />
     </ControlSurface>

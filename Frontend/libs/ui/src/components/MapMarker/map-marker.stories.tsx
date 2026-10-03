@@ -1,7 +1,4 @@
-import AssignmentLateOutlinedIcon from '@mui/icons-material/AssignmentLateOutlined';
-import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
-import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
-import WaterDropOutlinedIcon from '@mui/icons-material/WaterDropOutlined';
+import { ClipboardX, Wrench, Package, Droplet } from 'lucide-react';
 import { Box, Stack, Typography } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
@@ -66,7 +63,7 @@ const meta = {
   component: MapPin,
   args: {
     tone: 'ticket',
-    icon: <BuildOutlinedIcon />,
+    icon: <Wrench />,
     label: '進行中',
     active: false,
   },
@@ -91,28 +88,15 @@ export const PinStates: Story = {
   render: () => (
     <>
       <Box>
-        <MapPin
-          tone="ticket"
-          icon={<AssignmentLateOutlinedIcon />}
-          label="緊急"
-        />
+        <MapPin tone="ticket" icon={<ClipboardX />} label="緊急" />
         <Caption>ticket</Caption>
       </Box>
       <Box>
-        <MapPin
-          tone="station"
-          icon={<WaterDropOutlinedIcon />}
-          label="飲用水"
-        />
+        <MapPin tone="station" icon={<Droplet />} label="飲用水" />
         <Caption>station</Caption>
       </Box>
       <Box>
-        <MapPin
-          tone="station"
-          icon={<Inventory2OutlinedIcon />}
-          label="物資站"
-          active
-        />
+        <MapPin tone="station" icon={<Package />} label="物資站" active />
         <Caption>active</Caption>
       </Box>
     </>
@@ -191,9 +175,9 @@ export const TicketDots: Story = {
 export const StationSquares: Story = {
   render: () => (
     <>
-      <MapStationSquare icon={<WaterDropOutlinedIcon />} />
-      <MapStationSquare icon={<Inventory2OutlinedIcon />} />
-      <MapStationSquare icon={<Inventory2OutlinedIcon />} dimmed />
+      <MapStationSquare icon={<Droplet />} />
+      <MapStationSquare icon={<Package />} />
+      <MapStationSquare icon={<Package />} dimmed />
     </>
   ),
 };

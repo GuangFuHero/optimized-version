@@ -36,7 +36,11 @@ export function EmptyState({
           borderRadius: `${radius.full}px`,
           bgcolor: color.bg.neutral.subtle,
           color: color.fg.neutral.muted,
-          '& .MuiSvgIcon-root': { fontSize: 26 },
+          '& .MuiSvgIcon-root, & .lucide': {
+            width: 26,
+            height: 26,
+            fontSize: 26,
+          },
         }}
       >
         {icon}

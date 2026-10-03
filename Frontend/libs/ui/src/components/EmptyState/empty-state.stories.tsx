@@ -1,5 +1,4 @@
-import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined';
-import SearchOffRoundedIcon from '@mui/icons-material/SearchOffRounded';
+import { Inbox, SearchX } from 'lucide-react';
 import { Button } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
@@ -9,7 +8,7 @@ const meta = {
   title: 'Components/EmptyState',
   component: EmptyState,
   args: {
-    icon: <SearchOffRoundedIcon />,
+    icon: <SearchX />,
     title: '沒有符合條件的任務',
     description: '試著放寬篩選條件，或清除搜尋關鍵字。',
   },
@@ -21,7 +20,7 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
 export const TitleOnly: Story = {
   args: {
-    icon: <InboxOutlinedIcon />,
+    icon: <Inbox />,
     title: '此範圍內沒有紀錄',
     description: undefined,
   },

@@ -1,10 +1,9 @@
 'use client';
 
+import { Plus, X, Trash2 } from 'lucide-react';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import {
   Alert,
   Box,
@@ -600,7 +599,7 @@ export function StationCreateDrawer({
                   color: stationCreatePalette.bodyText,
                 }}
               >
-                <CloseRoundedIcon sx={{ fontSize: 18 }} />
+                <Box component={X} sx={{ width: 18, height: 18 }} />
               </ButtonBase>
             </Box>
           </Stack>
@@ -945,7 +944,7 @@ export function StationCreateDrawer({
                         variant="outlined"
                         color="inherit"
                         onClick={() => removePhotoUrl(index)}
-                        startIcon={<DeleteOutlineRoundedIcon />}
+                        startIcon={<Trash2 />}
                         sx={{
                           flexShrink: 0,
                           alignSelf: { mobile: 'stretch', tablet: 'center' },
@@ -1008,7 +1007,7 @@ export function StationCreateDrawer({
                 </Typography>
                 <Button
                   variant="outlined"
-                  startIcon={<AddRoundedIcon />}
+                  startIcon={<Plus />}
                   onClick={appendPhotoUrl}
                   disabled={form.photoUrls.length >= MAX_STATION_PHOTO_URLS}
                   sx={{

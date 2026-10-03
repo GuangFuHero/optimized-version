@@ -47,7 +47,11 @@ export function SidebarItem({
         '&:hover': {
           bgcolor: active ? color.bg.primary.subtle : color.bg.neutral.sunken,
         },
-        '& .MuiSvgIcon-root': { fontSize: 22 },
+        '& .MuiSvgIcon-root, & .lucide': {
+          width: 22,
+          height: 22,
+          fontSize: 22,
+        },
         ...(active &&
           !collapsed && {
             '&::before': {

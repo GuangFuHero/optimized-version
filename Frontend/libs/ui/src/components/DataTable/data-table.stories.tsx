@@ -1,4 +1,4 @@
-import SearchOffRoundedIcon from '@mui/icons-material/SearchOffRounded';
+import { SearchX } from 'lucide-react';
 import { Box, Typography } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { createColumnHelper } from '@tanstack/react-table';
@@ -197,7 +197,7 @@ export const Empty: Story = {
       getRowId={(row) => row.id}
       empty={
         <EmptyState
-          icon={<SearchOffRoundedIcon />}
+          icon={<SearchX />}
           title="沒有符合條件的任務"
           description="試著放寬篩選條件。"
         />

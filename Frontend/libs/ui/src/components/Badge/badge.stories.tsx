@@ -1,7 +1,4 @@
-import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
-import PublicRoundedIcon from '@mui/icons-material/PublicRounded';
-import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded';
-import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
+import { CircleHelp, Globe, Clock, ShieldCheck } from 'lucide-react';
 import { Stack } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
@@ -63,13 +60,13 @@ export const Sizes: Story = {
 export const WithIcon: Story = {
   render: () => (
     <Stack direction="row" sx={{ gap: 1 }}>
-      <Badge tone="neutral" icon={<VerifiedUserOutlinedIcon />}>
+      <Badge tone="neutral" icon={<ShieldCheck />}>
         管理後台
       </Badge>
-      <Badge tone="neutral" icon={<PublicRoundedIcon />}>
+      <Badge tone="neutral" icon={<Globe />}>
         公開頁面
       </Badge>
-      <Badge tone="warning" size="lg" icon={<ScheduleRoundedIcon />}>
+      <Badge tone="warning" size="lg" icon={<Clock />}>
         逾時 3 小時
       </Badge>
     </Stack>
@@ -80,7 +77,7 @@ export const Pending: Story = {
   args: {
     variant: 'dashed',
     size: 'sm',
-    icon: <HelpOutlineRoundedIcon />,
+    icon: <CircleHelp />,
     children: '資料待確認',
     title: '聯絡方式變更流程待工程確認',
   },

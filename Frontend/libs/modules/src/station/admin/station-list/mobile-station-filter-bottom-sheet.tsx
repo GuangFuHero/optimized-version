@@ -1,10 +1,9 @@
 'use client';
 
+import { Check, X, SlidersHorizontal } from 'lucide-react';
+
 import { useState } from 'react';
 
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import {
   Badge,
   Box,
@@ -27,9 +26,9 @@ import {
   type StationFilterKey,
 } from './station-filters';
 
-const FilterIcon = TuneRoundedIcon;
-const CheckIcon = CheckRoundedIcon;
-const CloseIcon = CloseRoundedIcon;
+const FilterIcon = SlidersHorizontal;
+const CheckIcon = Check;
+const CloseIcon = X;
 
 type StationListPalette = ReturnType<
   typeof getRescueColorScheme
@@ -91,7 +90,9 @@ function FilterOptionButton({
       >
         {label}
       </Typography>
-      {selected ? <CheckIcon sx={{ width: 16, height: 16 }} /> : null}
+      {selected ? (
+        <Box component={CheckIcon} sx={{ width: 16, height: 16 }} />
+      ) : null}
     </ButtonBase>
   );
 }
@@ -99,7 +100,7 @@ function FilterOptionButton({
 export function MobileStationFilterBottomSheet() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const pathname = usePathname() ?? '/admin/stations';
+  const pathname = usePathname() ?? '/stations';
   const searchParams = useSearchParams();
   const rescueColorScheme = getRescueColorScheme(useTheme());
   const topNavBarPalette = rescueColorScheme.adminShell.topNavBar;
@@ -169,7 +170,7 @@ export function MobileStationFilterBottomSheet() {
             },
           }}
         >
-          <FilterIcon sx={{ width: 20, height: 20 }} />
+          <Box component={FilterIcon} sx={{ width: 20, height: 20 }} />
         </Badge>
       </ButtonBase>
 
@@ -276,7 +277,7 @@ export function MobileStationFilterBottomSheet() {
                   '&:hover': { bgcolor: stationListPalette.actionHover },
                 }}
               >
-                <CloseIcon sx={{ width: 20, height: 20 }} />
+                <Box component={CloseIcon} sx={{ width: 20, height: 20 }} />
               </ButtonBase>
             </Stack>
           </Box>

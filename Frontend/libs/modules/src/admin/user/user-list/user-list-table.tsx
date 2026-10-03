@@ -1,7 +1,9 @@
 'use client';
 
-import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded';
-import MoreHorizRoundedIcon from '@mui/icons-material/MoreHorizRounded';
+import { Box } from '@mui/material';
+
+import { ChevronDown, Ellipsis } from 'lucide-react';
+
 import {
   ButtonBase,
   MenuItem,
@@ -91,7 +93,8 @@ function RoleSelect({
   const palette = useUserListPalette();
 
   const handleChange = (event: SelectChangeEvent<UserRoleId>) => {
-    onRoleChange(userId, event.target.value as UserRoleId);
+    const selected = options.find((option) => option.id === event.target.value);
+    if (selected) onRoleChange(userId, selected.id);
   };
 
   return (
@@ -99,7 +102,7 @@ function RoleSelect({
       value={value}
       size="small"
       onChange={handleChange}
-      IconComponent={KeyboardArrowDownRoundedIcon}
+      IconComponent={ChevronDown}
       inputProps={{ 'aria-label': '變更使用者角色' }}
       sx={{
         width: '100%',
@@ -247,7 +250,7 @@ export function UserListTable({
                     color: palette.bodyText,
                   }}
                 >
-                  <MoreHorizRoundedIcon sx={{ fontSize: 18 }} />
+                  <Box component={Ellipsis} sx={{ width: 18, height: 18 }} />
                 </ButtonBase>
               </TableCell>
             </TableRow>

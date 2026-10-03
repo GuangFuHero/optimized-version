@@ -1,10 +1,9 @@
 'use client';
 
+import { Plus, X, Trash2 } from 'lucide-react';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import {
   Alert,
   Box,
@@ -760,7 +759,7 @@ export function TicketCreateDrawer({
                   color: ticketCreatePalette.bodyText,
                 }}
               >
-                <CloseRoundedIcon sx={{ fontSize: 18 }} />
+                <Box component={X} sx={{ width: 18, height: 18 }} />
               </ButtonBase>
             </Box>
           </Stack>
@@ -1018,7 +1017,7 @@ export function TicketCreateDrawer({
                         onClick={() => removeTask(task.id)}
                         sx={{ width: 28, height: 28, borderRadius: '999px' }}
                       >
-                        <DeleteOutlineRoundedIcon sx={{ fontSize: 18 }} />
+                        <Box component={Trash2} sx={{ width: 18, height: 18 }} />
                       </ButtonBase>
                     </Box>
                     <TextField
@@ -1127,7 +1126,7 @@ export function TicketCreateDrawer({
               ))}
               <Button
                 variant="outlined"
-                startIcon={<AddRoundedIcon />}
+                startIcon={<Plus />}
                 onClick={appendTask}
                 sx={{ alignSelf: 'flex-start', borderRadius: '999px' }}
               >
@@ -1206,7 +1205,7 @@ export function TicketCreateDrawer({
                         variant="outlined"
                         color="inherit"
                         onClick={() => removePhotoUrl(index)}
-                        startIcon={<DeleteOutlineRoundedIcon />}
+                        startIcon={<Trash2 />}
                         sx={{
                           flexShrink: 0,
                           alignSelf: { mobile: 'stretch', tablet: 'center' },
@@ -1269,7 +1268,7 @@ export function TicketCreateDrawer({
                 </Typography>
                 <Button
                   variant="outlined"
-                  startIcon={<AddRoundedIcon />}
+                  startIcon={<Plus />}
                   onClick={appendPhotoUrl}
                   disabled={form.photoUrls.length >= MAX_TICKET_PHOTO_URLS}
                   sx={{

@@ -1,6 +1,9 @@
 'use client';
 
-import ConstructionOutlinedIcon from '@mui/icons-material/ConstructionOutlined';
+import { Box } from '@mui/material';
+
+import { Hammer } from 'lucide-react';
+
 import { Stack, Typography } from '@mui/material';
 
 import { designTokens } from '@rescue-frontend/ui';
@@ -22,7 +25,7 @@ export function AdminPlaceholderPage() {
         color: color.fg.neutral.muted,
       }}
     >
-      <ConstructionOutlinedIcon sx={{ fontSize: 40 }} />
+      <Box component={Hammer} sx={{ width: 40, height: 40 }} />
       <Typography
         sx={{ ...typography.heading[600], color: color.fg.neutral.subtle }}
       >
