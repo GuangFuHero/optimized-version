@@ -26,7 +26,7 @@ export { AccountSecurityClient } from './auth/session/account-security.client';
 export { PortalAdminLayout } from './auth/session/authenticated-shell.client';
 export { PortalSiteShell } from './auth/session/site-shell.client';
 
-export { Providers } from './providers';
+export { ApplicationProviders, SiteProviders } from './providers';
 
 export {
   createSiteHref,
