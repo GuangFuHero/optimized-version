@@ -24,6 +24,7 @@ export { RegisterFormClient } from './auth/login/register-form.client';
 export { ResetPasswordFormClient } from './auth/login/reset-password-form.client';
 export { AccountSecurityClient } from './auth/session/account-security.client';
 export { PortalSiteShell } from './auth/session/site-shell.client';
+export { ROLE_DISPLAY_NAMES } from './auth/role-labels';
 
 export { ApplicationProviders, SiteProviders } from './providers';
 
