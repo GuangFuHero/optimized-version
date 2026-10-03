@@ -470,7 +470,7 @@ class BuildingMapType:
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
-    @strawberry.field(description="The building's floors, top floor first")
+    @strawberry.field(description="The building's floors, roof (RF) first")
     def floors(self) -> list[BuildingFloorType]:
         """Every floor label, with its areas plus '其他' where areas are configured."""
         floors = []

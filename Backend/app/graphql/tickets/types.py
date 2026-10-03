@@ -774,7 +774,7 @@ class CreateTicketInput:
         description=(
             "File the ticket inside this building map. Its point and address are copied onto "
             "the ticket, and secondaryLocation.floor (and room, on a floor with areas) must "
-            "match the building's floors"
+            "match the building's floors. Omit floor when the reporter doesn't know it"
         ),
     )
     contact_name: str = strawberry.field(description="Full name of the requester")

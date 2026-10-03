@@ -452,8 +452,9 @@ building_maps {
     jsonb floor_areas "default {}, floor label to area names, e.g. 1F: 閱覽室, 健身房"
 }
 base_geometries ||--|| building_maps : "inherits as"
-%% NOTE: polymorphic_identity = "building_map". A floor with areas also accepts 其他; a floor
-%% without areas takes a free-text room number. Checked on ticket create, not by the DB.
+%% NOTE: polymorphic_identity = "building_map". Every building also has RF, and a ticket may leave
+%% the floor empty when unknown. A floor with areas also accepts 其他; a floor without areas takes
+%% a free-text room number. Checked on ticket create (ADR-310), not by the DB.
 
 %% Inheritance: Station inherits from base_geometries
 stations {

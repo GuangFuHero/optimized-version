@@ -62,14 +62,15 @@ def _ticket_input(building_uuid, **location):
             "buildingMapUuid": building_uuid, "secondaryLocation": location}
 
 
-async def test_building_floors_are_listed_top_down_with_other_on_floors_with_areas(
+async def test_building_floors_are_listed_roof_first_with_other_on_floors_with_areas(
     client, coordinator_auth
 ):
-    """Floors run from the top floor down, and only floors with areas offer 其他, once."""
+    """Floors run from the roof down, and only floors with areas offer 其他, once."""
     _, token = coordinator_auth
     building = await _create_building(client, token)
 
     assert building["floors"] == [
+        {"label": "RF", "areas": []},
         {"label": "3F", "areas": []},
         {"label": "2F", "areas": ["閱覽室", "咖啡廳", "其他"]},
         {"label": "1F", "areas": ["閱覽室", "健身房", "其他"]},
@@ -161,14 +162,13 @@ async def test_ticket_in_building_copies_its_point_and_address(
 @pytest.mark.parametrize(("extra", "location", "message"), [
     ({"geometry": POINT}, {"floor": "1F", "room": "閱覽室"}, "Omit geometry"),
     ({}, {"floor": "9F"}, "Floor '9F' is not in this building"),
-    ({}, {}, "Floor 'None' is not in this building"),
     ({}, {"floor": "1F", "room": "咖啡廳"}, "must be one of"),
     ({}, {"floor": "1F"}, "must be one of"),
 ])
 async def test_ticket_in_building_rejects_a_place_outside_the_layout(
     client, coordinator_auth, login_user_auth, extra, location, message
 ):
-    """Geometry beside a building, a missing or unknown floor, or an unlisted area is refused."""
+    """Geometry beside a building, an unknown floor label, or an unlisted area is refused."""
     _, admin_token = coordinator_auth
     _, token = login_user_auth
     building = await _create_building(client, admin_token)
@@ -183,11 +183,13 @@ async def test_ticket_in_building_rejects_a_place_outside_the_layout(
     {"floor": "1F", "room": "其他", "victimSpace": "走廊盡頭"},
     {"floor": "3F", "room": "302"},
     {"floor": "B1"},
+    {"floor": "RF"},
+    {},
 ])
 async def test_ticket_in_building_accepts_other_and_free_text_rooms(
     client, coordinator_auth, login_user_auth, location
 ):
-    """其他 is always offered where areas exist, and a floor without areas takes any room."""
+    """其他 is offered where areas exist, other floors take any room, and RF or no floor is fine."""
     _, admin_token = coordinator_auth
     _, token = login_user_auth
     building = await _create_building(client, admin_token)

@@ -25,8 +25,8 @@ MAX_AREA_LENGTH = 20
 
 
 def floor_labels(above: int, below: int) -> list[str]:
-    """The building's floor labels, top floor first: 3F, 2F, 1F, B1, B2."""
-    return [f"{n}F" for n in range(above, 0, -1)] + [f"B{n}" for n in range(1, below + 1)]
+    """The building's floor labels, roof first: RF, 3F, 2F, 1F, B1, B2."""
+    return ["RF"] + [f"{n}F" for n in range(above, 0, -1)] + [f"B{n}" for n in range(1, below + 1)]
 
 
 def _validate_name(name: str) -> str:
@@ -138,7 +138,8 @@ async def place_ticket(
 ) -> tuple[dict, dict]:
     """Return a ticket's point and address: the building's, plus the reporter's floor and room.
 
-    Unlike dynamic-field configs, the layout is enforced, and `其他` keeps an unlisted space fileable.
+    The floor must be one of the building's or left out when unknown, and on a floor with areas the
+    room must be one of them or `其他`.
     """
     if geometry is not None:
         raise ValueError("Omit geometry when filing under a building map; its point is used")
@@ -147,7 +148,8 @@ async def place_ticket(
         raise ValueError("Building map not found")
     location = dict(location or {})
     floor = location.get("floor")
-    if floor not in floor_labels(building.floors_above_ground, building.floors_below_ground):
+    labels = floor_labels(building.floors_above_ground, building.floors_below_ground)
+    if floor is not None and floor not in labels:
         raise ValueError(f"Floor '{floor}' is not in this building")
     areas = (building.floor_areas or {}).get(floor) or []
     if areas and location.get("room") not in [*areas, OTHER_AREA]:
