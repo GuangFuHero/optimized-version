@@ -1,0 +1,29 @@
+{
+  "name": "@rescue-frontend/admin",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^9.0.0",
+    "@rescue-frontend/data-access": "workspace:*",
+    "@rescue-frontend/modules": "workspace:*",
+    "@rescue-frontend/ui": "workspace:*",
+    "next": "~16.1.6",
+    "next-auth": "^4.24.14",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "lucide-react": "^0.577.0",
+    "@tanstack/react-query": "^5.90.0",
+    "@mui/material-nextjs": "^9.0.1",
+    "sonner": "^2.0.7",
+    "urql": "^5.0.1"
+  },
+  "scripts": {
+    "typecheck": "next typegen && tsc --noEmit -p tsconfig.json",
+    "dev": "next dev --port 3001",
+    "build": "next build",
+    "start": "next start --port 3001",
+    "lint": "eslint ."
+  }
+}
