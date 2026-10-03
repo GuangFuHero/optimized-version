@@ -189,30 +189,6 @@ export function useBriefingTemplates(
   });
 }
 
-export const stationSuggestionsQuery = (
-  variables: documents.AdminStationSuggestionsQueryVariables = {},
-) =>
-  queryOptions({
-    queryKey: ['admin', 'suggestions', 'stationSuggestions', variables],
-    queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminStationSuggestionsDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
-  });
-
-export function useStationSuggestions(
-  variables: documents.AdminStationSuggestionsQueryVariables = {},
-  options: AdminQueryOptions = {},
-) {
-  return useQuery({
-    ...stationSuggestionsQuery(variables),
-    enabled: options.enabled,
-  });
-}
-
 export const stationPropertyConfigsQuery = (
   variables: documents.AdminStationPropertyConfigsQueryVariables,
 ) =>
@@ -799,24 +775,6 @@ export function useDeleteBriefingTemplate() {
         .then(graphqlResponseData),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'briefings'] }),
-  });
-}
-
-export function useReviewStationSuggestion() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (
-      variables: documents.AdminReviewStationSuggestionMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminReviewStationSuggestionDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'suggestions'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'stations'] }),
-      ]),
   });
 }
 
