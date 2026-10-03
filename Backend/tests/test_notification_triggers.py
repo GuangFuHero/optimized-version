@@ -142,6 +142,50 @@ async def test_task_assignment_triggers_notification(mock_actor):
 
 
 @pytest.mark.asyncio
+async def test_task_unassignment_triggers_notification(mock_actor):
+    """Verify unassign_task_actor sends a high task_assignment_removed notification to the removed person."""
+    mock_db = AsyncMock()
+    task_id = str(uuid.uuid4())
+    removed_id = str(uuid.uuid4())
+
+    mock_task = TicketTask(task_name="物資配送任務", created_by=str(mock_actor.uuid))
+    mock_task.uuid = uuid.UUID(task_id)
+    mock_assignment = TaskAssignment(task_uuid=task_id, actor_uuid=removed_id, status="en_route")
+
+    with (
+        patch("app.services.ticket.require_scope", new_callable=AsyncMock),
+        patch(
+            "app.services.ticket.task_assignment_repository.get_by_uuid",
+            new_callable=AsyncMock,
+            return_value=mock_assignment,
+        ),
+        patch(
+            "app.services.ticket._assignment_scope_target",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(created_by=removed_id, team_uuid=None, geometry=None),
+        ),
+        patch(
+            "app.services.ticket.ticket_task_repository.get_by_uuid_active",
+            new_callable=AsyncMock,
+            return_value=mock_task,
+        ),
+        patch("app.services.ticket.task_assignment_repository.remove", new_callable=AsyncMock) as mock_remove,
+        patch("app.services.ticket.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch,
+    ):
+        await ticket_service.unassign_task_actor(mock_db, actor=mock_actor, uuid=str(uuid.uuid4()))
+
+        mock_remove.assert_awaited_once()
+        mock_dispatch.assert_called_once()
+        call_kwargs = mock_dispatch.call_args.kwargs
+        assert call_kwargs["event_type"] == "task_assignment_removed"
+        assert call_kwargs["priority"] == "high"
+        assert call_kwargs["ref_type"] == "ticket_task"
+        assert call_kwargs["ref_uuid"] == task_id
+        assert call_kwargs["explicit_recipients"] == [removed_id]
+        assert "物資配送任務" in call_kwargs["title"]
+
+
+@pytest.mark.asyncio
 async def test_add_team_member_triggers_notification(mock_actor):
     """Verify add_team_member dispatches high team_member_added notification."""
     mock_db = AsyncMock()

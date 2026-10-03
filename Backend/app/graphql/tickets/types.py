@@ -185,6 +185,19 @@ class TaskAssignmentType:
         default=None, description="Timestamp when the status was last changed"
     )
 
+    @strawberry.field(
+        description=(
+            "Display name of the assigned person. Null to a caller without "
+            "ticket.view_detail on the parent ticket"
+        )
+    )
+    async def actor_name(self, info: strawberry.types.Info) -> str | None:
+        """The assignee's nickname, withheld exactly when the parent ticket's detail is."""
+        ticket_uuid = await info.context["loaders"]["ticket_uuid_by_task"].load(self.task_uuid)
+        if ticket_uuid is None or not await ticket_detail_visible(info, ticket_uuid):
+            return None
+        return await info.context["loaders"]["user_name_by_uuid"].load(self.actor_uuid)
+
     @classmethod
     def from_model(cls, m) -> "TaskAssignmentType":
         """Build from a SQLAlchemy model instance."""
