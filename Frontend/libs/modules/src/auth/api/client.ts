@@ -13,7 +13,7 @@ import type {
 
 import { requestFrontendJsonAsync } from './request-async';
 
-const AUTH_API_BASE_PATH = '/api/bff/auth';
+const AUTH_API_BASE_PATH = '/api/v1/auth';
 
 export async function getUserSaltAsync(value: string) {
   const response = await requestFrontendJsonAsync<{ salt_frontend: string }>(

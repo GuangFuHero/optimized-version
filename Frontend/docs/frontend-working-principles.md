@@ -16,6 +16,7 @@
 apps -> modules -> ui
 apps -> data-access
 modules -> data-access
+ui -> data-access (generated types only)
 ```
 
 補充：
@@ -41,7 +42,7 @@ modules -> data-access
 目前例子：
 
 - `apps/demo/src/app/api/graphql/route.ts`
-- `apps/demo/src/app/api/bff/auth/[[...segments]]/route.ts`
+- `apps/demo/src/app/api/v1/[...segments]/route.ts`
 - `apps/demo/src/app/(site)/map/[[...segments]]/*`
 - `apps/demo/src/modules/auth/session/*`
 
