@@ -10,7 +10,7 @@ import {
   createUrqlClient,
   createUrqlExchanges,
 } from '@rescue-frontend/data-access';
-import { sessionExpiryFetch } from './session';
+import { sessionExpiryFetch } from './session/end-expired-session';
 import { theme } from '@rescue-frontend/ui';
 
 function PortalUrqlClientProvider({ children }: { children: ReactNode }) {

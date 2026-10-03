@@ -15,7 +15,7 @@ import {
   normalizeIdentityValue,
   validateIdentityValue,
   type AuthIdentityType,
-} from './utils/identity-validation';
+} from './index';
 import { resetPasswordAsync } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
