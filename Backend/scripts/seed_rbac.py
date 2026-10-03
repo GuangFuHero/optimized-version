@@ -92,7 +92,7 @@ ROLES_DATA = [
             # import, because its only writes are deciding and undoing station suggestions.
             Perm.STATION_EXPORT: "all",
             Perm.TICKET_EXPORT: "all",
-            # A reversal of the read-only auditor (ADR-286): a merge can only write a field
+            # A reversal of the read-only auditor (ADR-300): a merge can only write a field
             # someone suggested, and every merge records its before values so it can be undone.
             Perm.STATION_REVIEW: "all",
             Perm.STATION_REVOKE: "all",

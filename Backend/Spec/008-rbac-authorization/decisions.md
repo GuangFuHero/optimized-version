@@ -306,7 +306,7 @@
 
 > **部分被 ADR-285 取代**：站點不再由地理決定管轄，改為手動指派給單一 team（`stations.team_uuid`）；ticket/task 仍走 zone。
 
-> **部分被 ADR-286 取代**：`data_auditor` 不再是純唯讀，持有 `station.review` 與 `station.revoke`（`all`）；其餘寫入能力照舊沒有。
+> **部分被 ADR-300 取代**：`data_auditor` 不再是純唯讀，持有 `station.review` 與 `station.revoke`（`all`）；其餘寫入能力照舊沒有。
 
 > **狀態:ACCEPTED 並已落地驗證（2026-07-09,`pytest` 367 passed、`ruff` 乾淨)。** 本條整合 2026-07-08/09 對照 `Docs/rbac-permissions-design.md`(v1.1)+ `Dashboard.md` §3~§7 後的修正,並取代 ADR-048 的 scope 部分。
 >
@@ -1225,7 +1225,7 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 ---
 
-#### ADR-286 `data_auditor` 可審核與撤銷站點修改建議（推翻 ADR-049「稽核員只讀」）
+#### ADR-300 `data_auditor` 可審核與撤銷站點修改建議（推翻 ADR-049「稽核員只讀」）
 
 > **狀態：ACCEPTED（2026-10-01）。** PR #57 review（jujuyuzu）指出 seed 已發出這兩個能力、但與 ADR-049 矛盾，使用者決定保留並補記本條。
 
