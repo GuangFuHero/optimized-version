@@ -44,6 +44,7 @@ export {
 };
 
 export { ApiError };
+export { createRestClient, responseData } from './openapi-client';
 
 export { getCurrentUserAsync, patchCurrentUserAsync };
 

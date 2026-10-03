@@ -1,6 +1,17 @@
-import { ArrowRight } from 'lucide-react';
+import {
+  ArrowRight,
+  History,
+  Plus,
+  Pencil,
+  Trash2,
+  RotateCcw,
+  UserPlus,
+  UserMinus,
+} from 'lucide-react';
 import { Box, Stack, Typography } from '@mui/material';
+import type { components } from '@rescue-frontend/data-access/openapi';
 import type { ReactNode } from 'react';
+import { z } from 'zod';
 
 import { designTokens } from '../../theme';
 
@@ -24,23 +35,47 @@ const TONES: Record<TimelineTone, { bg: string; fg: string }> = {
   danger: { bg: color.bg.danger.subtle, fg: color.fg.danger },
 };
 
-export interface TimelineItem {
-  id: string;
-  title: ReactNode;
-  time: ReactNode;
-  actor?: ReactNode;
-  tone?: TimelineTone;
-  icon?: ReactNode;
-  badges?: ReactNode;
-  content?: ReactNode;
-}
+export type TimelineItem = components['schemas']['HistoryEventResponse'];
+
+const EVENTS = [
+  { type: 'CREATED', label: '建立', tone: 'success', Icon: Plus },
+  { type: 'UPDATED', label: '更新', tone: 'neutral', Icon: Pencil },
+  { type: 'DELETED', label: '刪除', tone: 'danger', Icon: Trash2 },
+  { type: 'RESTORED', label: '還原', tone: 'success', Icon: RotateCcw },
+  { type: 'ASSIGNED', label: '指派', tone: 'primary', Icon: UserPlus },
+  { type: 'UNASSIGNED', label: '解除指派', tone: 'secondary', Icon: UserMinus },
+] as const;
+
+const ENTITY_LABELS = new Map([
+  ['ticket', '任務單'],
+  ['station', '站點'],
+  ['task', '任務'],
+  ['task_property', '任務資源'],
+  ['task_assignment', '任務指派'],
+  ['station_property', '站點資源'],
+  ['secondary_location', '位置'],
+]);
+
+const eventTime = new Intl.DateTimeFormat('zh-TW', {
+  timeZone: 'Asia/Taipei',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 export interface TimelineProps {
   items: readonly TimelineItem[];
+  showIcons?: boolean;
   emptyText?: ReactNode;
 }
 
-export function Timeline({ items, emptyText = '尚無紀錄。' }: TimelineProps) {
+export function Timeline({
+  items,
+  showIcons = false,
+  emptyText = '尚無紀錄。',
+}: TimelineProps) {
   if (!items.length) {
     return (
       <Typography
@@ -54,13 +89,15 @@ export function Timeline({ items, emptyText = '尚無紀錄。' }: TimelineProps
   return (
     <Box component="ol" sx={{ m: 0, p: 0, listStyle: 'none' }}>
       {items.map((item, index) => {
-        const t = TONES[item.tone ?? 'neutral'];
+        const event = EVENTS.find((event) => event.type === item.event_type);
+        const t = TONES[event?.tone ?? 'neutral'];
+        const Icon = event?.Icon ?? History;
         const last = index === items.length - 1;
 
         return (
           <Box
             component="li"
-            key={item.id}
+            key={`${item.entity}:${item.at}:${item.event_type}:${index}`}
             sx={{
               display: 'grid',
               gridTemplateColumns: '26px minmax(0, 1fr)',
@@ -68,7 +105,7 @@ export function Timeline({ items, emptyText = '尚無紀錄。' }: TimelineProps
             }}
           >
             <Stack sx={{ alignItems: 'center' }}>
-              {item.icon ? (
+              {showIcons ? (
                 <Box
                   sx={{
                     display: 'grid',
@@ -86,7 +123,7 @@ export function Timeline({ items, emptyText = '尚無紀錄。' }: TimelineProps
                     },
                   }}
                 >
-                  {item.icon}
+                  <Icon />
                 </Box>
               ) : (
                 <Box
@@ -130,9 +167,10 @@ export function Timeline({ items, emptyText = '尚無紀錄。' }: TimelineProps
                     color: color.fg.neutral.default,
                   }}
                 >
-                  {item.title}
+                  {event?.label ?? item.event_type}
+                  {' · '}
+                  {ENTITY_LABELS.get(item.entity) ?? item.entity}
                 </Typography>
-                {item.badges}
                 <Typography
                   sx={{
                     ml: 'auto',
@@ -141,18 +179,28 @@ export function Timeline({ items, emptyText = '尚無紀錄。' }: TimelineProps
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {item.time}
-                  {item.actor ? <> · {item.actor}</> : null}
+                  <time dateTime={item.at}>
+                    {eventTime.format(new Date(item.at))}
+                  </time>
+                  {' · '}
+                  {item.actor.name ??
+                    (item.actor.kind === 'system' ? '系統' : item.actor.kind)}
+                  {item.actor.is_removed ? '（已移除）' : null}
                 </Typography>
               </Stack>
-              {item.content ? (
+              {item.changes.length ? (
                 <Box
                   sx={{
                     ...typography.body[300],
                     color: color.fg.neutral.subtle,
                   }}
                 >
-                  {item.content}
+                  {item.changes.map((change, changeIndex) => (
+                    <TimelineChange
+                      key={`${change.field}:${changeIndex}`}
+                      change={change}
+                    />
+                  ))}
                 </Box>
               ) : null}
             </Stack>
@@ -164,55 +212,77 @@ export function Timeline({ items, emptyText = '尚無紀錄。' }: TimelineProps
 }
 
 export interface TimelineChangeProps {
-  field?: ReactNode;
-  from?: ReactNode;
-  to?: ReactNode;
+  change: components['schemas']['ChangeResponse'];
+  label?: ReactNode;
 }
+
+const changeValue = z
+  .union([
+    z.string(),
+    z.null().transform(() => '未設定'),
+    z.json().transform((value) => JSON.stringify(value)),
+  ])
+  .catch('未設定');
 
 const changeChipSx = {
   display: 'inline-flex',
   alignItems: 'center',
-  height: 22,
+  minHeight: 22,
+  maxWidth: '100%',
+  overflowWrap: 'anywhere',
   px: '9px',
   borderRadius: `${radius.md}px`,
   bgcolor: color.bg.neutral.subtle,
   ...typography.data[300],
 } as const;
 
-export function TimelineChange({ field, from, to }: TimelineChangeProps) {
+export function TimelineChange({
+  change,
+  label = change.field,
+}: TimelineChangeProps) {
   return (
     <Stack
       direction="row"
       sx={{ flexWrap: 'wrap', alignItems: 'center', gap: '7px', mt: '2px' }}
     >
-      {field ? (
+      {label ? (
         <Box
           component="span"
           sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
         >
-          {field}
+          {label}
         </Box>
       ) : null}
-      <Box
-        component="span"
-        sx={{
-          ...changeChipSx,
-          color: color.fg.neutral.muted,
-          textDecoration: 'line-through',
-        }}
-      >
-        {from ?? '—'}
-      </Box>
-      <Box
-        component={ArrowRight}
-        sx={{ width: 13, height: 13, color: color.fg.neutral.muted }}
-      />
-      <Box
-        component="span"
-        sx={{ ...changeChipSx, color: color.fg.neutral.default }}
-      >
-        {to ?? '—'}
-      </Box>
+      {change.changed ? (
+        <Typography
+          sx={{ ...typography.body[300], color: color.fg.neutral.muted }}
+        >
+          已變更，內容未公開
+        </Typography>
+      ) : (
+        <>
+          <Box
+            component="span"
+            sx={{
+              ...changeChipSx,
+              color: color.fg.neutral.muted,
+              textDecoration: 'line-through',
+            }}
+          >
+            {changeValue.parse(change.before)}
+          </Box>
+          <Box
+            component={ArrowRight}
+            sx={{ width: 13, height: 13, color: color.fg.neutral.muted }}
+          />
+          <Box
+            component="span"
+            sx={{ ...changeChipSx, color: color.fg.neutral.default }}
+          >
+            {changeValue.parse(change.after)}
+          </Box>
+        </>
+      )}
     </Stack>
   );
 }
