@@ -23,7 +23,6 @@ export { LoginFormClient } from './auth/login/login-form.client';
 export { RegisterFormClient } from './auth/login/register-form.client';
 export { ResetPasswordFormClient } from './auth/login/reset-password-form.client';
 export { AccountSecurityClient } from './auth/session/account-security.client';
-export { PortalAdminLayout } from './auth/session/authenticated-shell.client';
 export { PortalSiteShell } from './auth/session/site-shell.client';
 
 export { ApplicationProviders, SiteProviders } from './providers';
@@ -97,7 +96,7 @@ export type {
 
 export { BackOfficePlaceholder } from './role-request';
 export { AdminPlaceholderPage, AdminShell } from './shell';
-export type { AdminEvent, AdminShellProps, AdminUser } from './shell';
+export type { AdminShellProps } from './shell';
 
 // The browser's half of the session-expiry handling; the pure half is `@rescue-frontend/modules/session`.
 export {

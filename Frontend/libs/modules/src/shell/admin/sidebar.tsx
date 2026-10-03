@@ -10,7 +10,10 @@ import {
 
 import { Box, Divider, IconButton, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
+import { signOut } from 'next-auth/react';
 import { Fragment } from 'react';
+import { differenceInCalendarDays, parseISO } from 'date-fns';
+import { useProjectSettings } from '@rescue-frontend/data-access/admin';
 
 import {
   Badge,
@@ -24,26 +27,16 @@ import { ADMIN_NAV_SECTIONS, type AdminNavItem } from './nav';
 
 const { color, radius, typography, motion } = designTokens;
 
-export interface AdminEvent {
-  shortName: string;
-  name?: string;
-  day?: number;
-}
-
 interface AdminSidebarProps {
-  event: AdminEvent;
   collapsed: boolean;
   onToggle: () => void;
   activeId?: string;
-  onSignOut?: () => void;
 }
 
 export function AdminSidebar({
-  event,
   collapsed,
   onToggle,
   activeId,
-  onSignOut,
 }: AdminSidebarProps) {
   const renderItem = (item: AdminNavItem) => (
     <SidebarItem
@@ -73,7 +66,7 @@ export function AdminSidebar({
         transition: `width ${motion.transition.base}`,
       }}
     >
-      <EventHeader event={event} collapsed={collapsed} onToggle={onToggle} />
+      <EventHeader collapsed={collapsed} onToggle={onToggle} />
       <RealmBar collapsed={collapsed} />
 
       <Stack
@@ -135,7 +128,7 @@ export function AdminSidebar({
           icon={<LogOut />}
           label="登出"
           collapsed={collapsed}
-          onClick={onSignOut}
+          onClick={() => signOut({ callbackUrl: '/login?callbackUrl=/' })}
         />
       </Stack>
     </Box>
@@ -143,11 +136,19 @@ export function AdminSidebar({
 }
 
 function EventHeader({
-  event,
   collapsed,
   onToggle,
-}: Pick<AdminSidebarProps, 'event' | 'collapsed' | 'onToggle'>) {
-  const status = event.day == null ? null : `進行中 · 第 ${event.day} 天`;
+}: Pick<AdminSidebarProps, 'collapsed' | 'onToggle'>) {
+  const { data: settings, isPending, isError } = useProjectSettings();
+  const name =
+    settings?.name ??
+    (isPending ? '載入中…' : isError ? '無法載入專案' : '尚未設定專案');
+  const elapsedDays = settings?.started_at
+    ? differenceInCalendarDays(new Date(), parseISO(settings.started_at))
+    : -1;
+  const day =
+    Number.isFinite(elapsedDays) && elapsedDays >= 0 ? elapsedDays + 1 : null;
+  const status = day == null ? null : `進行中 · 第 ${day} 天`;
   const statusDot = (
     <Box
       component="span"
@@ -173,9 +174,7 @@ function EventHeader({
   if (collapsed) {
     return (
       <Stack
-        title={[event.name ?? event.shortName, status]
-          .filter(Boolean)
-          .join('　')}
+        title={[name, status].filter(Boolean).join('　')}
         sx={{
           alignItems: 'center',
           gap: '8px',
@@ -201,7 +200,7 @@ function EventHeader({
         <GuangFuBrandIcon width={36} height={26} />
         <Typography
           noWrap
-          title={event.name}
+          title={name}
           sx={{
             flex: 1,
             minWidth: 0,
@@ -210,7 +209,7 @@ function EventHeader({
             color: color.fg.neutral.default,
           }}
         >
-          {event.shortName}
+          {name}
         </Typography>
         {toggleButton}
       </Stack>
@@ -232,7 +231,7 @@ function EventHeader({
           >
             進行中
           </Box>
-          · 第 {event.day} 天
+          · 第 {day} 天
         </Stack>
       ) : null}
     </Box>
