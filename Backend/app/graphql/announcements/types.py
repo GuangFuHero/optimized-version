@@ -23,6 +23,15 @@ class AnnouncementMoveDirection(Enum):
     DOWN = "down"
 
 
+@strawberry.enum
+class AnnouncementPlacement(Enum):
+    """Which page shows an announcement: the admin site, the public site, or both."""
+
+    ADMIN_PAGE = "admin_page"
+    PUBLIC_PAGE = "public_page"
+    ALL = "all"
+
+
 @strawberry.type
 class AnnouncementType:
     """GraphQL type representing a site-wide announcement."""
@@ -30,6 +39,7 @@ class AnnouncementType:
     uuid: UUID
     content: str
     active: bool
+    placement: str = strawberry.field(description="admin_page, public_page, or all (both pages)")
     order: int | None = strawberry.field(
         default=None,
         description="Display position (1 = top) among active announcements; null when inactive",
@@ -44,7 +54,7 @@ class AnnouncementType:
     def from_model(cls, m) -> "AnnouncementType":
         """Build from a SQLAlchemy model instance (maps display_order → order)."""
         return cls(
-            uuid=m.uuid, content=m.content, active=m.active,
+            uuid=m.uuid, content=m.content, active=m.active, placement=m.placement,
             order=m.display_order, created_by=m.created_by,
             created_at=m.created_at, updated_at=m.updated_at,
         )
@@ -55,10 +65,16 @@ class CreateAnnouncementInput:
     """Input for creating an announcement (created active, appended at the bottom)."""
 
     content: str = strawberry.field(description="The announcement body text")
+    placement: AnnouncementPlacement = strawberry.field(
+        default=AnnouncementPlacement.ALL, description="Which page shows it; defaults to both"
+    )
 
 
 @strawberry.input
 class UpdateAnnouncementInput:
-    """Input for editing an announcement's content."""
+    """Input for editing an announcement's content and, optionally, its placement."""
 
     content: str = strawberry.field(description="The new announcement body text")
+    placement: AnnouncementPlacement | None = strawberry.field(
+        default=None, description="Which page shows it; omit to keep the current placement"
+    )

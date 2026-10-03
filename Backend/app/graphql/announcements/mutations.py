@@ -32,6 +32,7 @@ class AnnouncementMutation:
             info.context["db"],
             content=input.content,
             created_by=str(info.context["user"].uuid),
+            placement=input.placement.value,
         )
         return AnnouncementType.from_model(a)
 
@@ -39,13 +40,16 @@ class AnnouncementMutation:
     async def update_announcement(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateAnnouncementInput
     ) -> AnnouncementType:
-        """Edit an announcement's content. Requires announcement.edit."""
+        """Edit an announcement's content and, optionally, its placement. Requires announcement.edit."""
         await check_permission(info, Perm.ANN_EDIT)
         db = info.context["db"]
         a = await announcement_repository.get_by_uuid_active(db, uuid)
         if not a:
             raise ValueError("Announcement not found")
-        a = await announcement_repository.update(db, db_obj=a, obj_in={"content": input.content})
+        changes = {"content": input.content}
+        if input.placement is not None:
+            changes["placement"] = input.placement.value
+        a = await announcement_repository.update(db, db_obj=a, obj_in=changes)
         return AnnouncementType.from_model(a)
 
     @strawberry.mutation
