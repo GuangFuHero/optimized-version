@@ -13,16 +13,16 @@
 
 - browser 不直接保存 backend token。
 - client 端只呼叫 frontend domain：
-  - auth 類請求走 `/api/bff/auth/*`
+  - auth 類請求走 `/api/v1/auth/*`
   - GraphQL 請求走 `/api/graphql`
 - backend token 保存在 `next-auth` JWT session cookie，由 frontend server 代替 browser 呼叫 backend。
 
 關鍵實作：
 
-- `apps/demo/src/lib/auth-options.ts`
-- `apps/demo/src/lib/server-backend-auth.ts`
+- `libs/modules/src/server/auth-options.ts`
+- `libs/modules/src/server/server-backend-auth.ts`
 - `apps/demo/src/app/api/auth/[...nextauth]/route.ts`
-- `apps/demo/src/app/api/bff/auth/[[...segments]]/route.ts`
+- `apps/demo/src/app/api/v1/[...segments]/route.ts`
 - `apps/demo/src/app/api/graphql/route.ts`
 
 ## Session And Token Flow
@@ -51,7 +51,7 @@
 
 流程：
 
-1. client 先呼叫 `GET /api/bff/auth/salt/:value`
+1. client 先呼叫 `GET /api/v1/auth/salt/:value`
 2. browser 用回傳的 `salt_frontend` 做 PBKDF2
 3. client 呼叫 `signIn('credentials')`
 4. `CredentialsProvider.authorize()` 在 server 端呼叫 backend `/v1/auth/login`
@@ -96,30 +96,30 @@
 - `/account/security` 已實作並可用。
 - 前台使用者選單目前還沒有把「帳號安全」入口打開；頁面存在，但 UI 導航尚未串接。
 
-## Current BFF Auth Routes
+## Current auth API routes
 
 公開：
 
-- `GET /api/bff/auth/salt/:value`
-- `POST /api/bff/auth/register`
-- `POST /api/bff/auth/verify`
-- `POST /api/bff/auth/resend-verification`
-- `POST /api/bff/auth/forgot-password`
-- `POST /api/bff/auth/reset-password`
-- `POST /api/bff/auth/sso/google`
-- `POST /api/bff/auth/sso/line`
+- `GET /api/v1/auth/salt/:value`
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/verify`
+- `POST /api/v1/auth/resend-verification`
+- `POST /api/v1/auth/forgot-password`
+- `POST /api/v1/auth/reset-password`
+- `POST /api/v1/auth/sso/google`
+- `POST /api/v1/auth/sso/line`
 
 需登入：
 
-- `POST /api/bff/auth/logout`
-- `POST /api/bff/auth/logout-all`
-- `POST /api/bff/auth/change-password`
-- `POST /api/bff/auth/set-password`
-- `POST /api/bff/auth/contacts`
-- `POST /api/bff/auth/contacts/verify`
-- `POST /api/bff/auth/contacts/resend`
-- `POST /api/bff/auth/link/google`
-- `POST /api/bff/auth/link/line`
+- `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/logout-all`
+- `POST /api/v1/auth/change-password`
+- `POST /api/v1/auth/set-password`
+- `POST /api/v1/auth/contacts`
+- `POST /api/v1/auth/contacts/verify`
+- `POST /api/v1/auth/contacts/resend`
+- `POST /api/v1/auth/link/google`
+- `POST /api/v1/auth/link/line`
 
 補充：
 
@@ -128,7 +128,7 @@
 
 ## Account Security Features
 
-`apps/demo/src/modules/auth/session/account-security.client.tsx` 目前已實作：
+`libs/modules/src/auth/session/account-security.client.tsx` 目前已實作：
 
 - change password
 - set password
