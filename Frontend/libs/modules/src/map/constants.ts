@@ -1,8 +1,4 @@
-import AltRouteOutlinedIcon from '@mui/icons-material/AltRouteOutlined';
-import DoNotDisturbAltOutlinedIcon from '@mui/icons-material/DoNotDisturbAltOutlined';
-import FmdGoodOutlinedIcon from '@mui/icons-material/FmdGoodOutlined';
-import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
-import SatelliteAltOutlinedIcon from '@mui/icons-material/SatelliteAltOutlined';
+import { Route, Ban, MapPin, Map, Satellite } from 'lucide-react';
 import { designTokens } from '@rescue-frontend/ui';
 
 import type {
@@ -44,7 +40,7 @@ export const BASE_LAYER_CONFIG: Record<
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     tileSourceType: 'road',
     tileSource: 'osm-direct',
-    icon: MapOutlinedIcon,
+    icon: Map,
   },
   carto: {
     label: '街道地圖',
@@ -55,7 +51,7 @@ export const BASE_LAYER_CONFIG: Record<
     url: '/api/map/tile/road/carto/{z}/{x}/{y}',
     tileSourceType: 'road',
     tileSource: 'carto',
-    icon: MapOutlinedIcon,
+    icon: Map,
   },
   osm: {
     label: 'OSM 標準街道圖',
@@ -66,7 +62,7 @@ export const BASE_LAYER_CONFIG: Record<
     url: '/api/map/tile/road/osm/{z}/{x}/{y}',
     tileSourceType: 'road',
     tileSource: 'osm',
-    icon: MapOutlinedIcon,
+    icon: Map,
   },
   eox: {
     label: '衛星影像（EOX）',
@@ -78,7 +74,7 @@ export const BASE_LAYER_CONFIG: Record<
     url: '/api/map/tile/satellite/eox/{z}/{x}/{y}',
     tileSourceType: 'satellite',
     tileSource: 'eox',
-    icon: SatelliteAltOutlinedIcon,
+    icon: Satellite,
     licenseNote: '僅限非商業用途（CC BY-NC-SA 4.0）',
   },
   nasa_gibs: {
@@ -90,7 +86,7 @@ export const BASE_LAYER_CONFIG: Record<
     url: '/api/map/tile/satellite/nasa_gibs/{z}/{x}/{y}',
     tileSourceType: 'satellite',
     tileSource: 'nasa_gibs',
-    icon: SatelliteAltOutlinedIcon,
+    icon: Satellite,
   },
   nlsc: {
     label: '衛星影像（國土測繪中心）',
@@ -101,7 +97,7 @@ export const BASE_LAYER_CONFIG: Record<
     url: '/api/map/tile/satellite/nlsc/{z}/{x}/{y}',
     tileSourceType: 'satellite',
     tileSource: 'nlsc',
-    icon: SatelliteAltOutlinedIcon,
+    icon: Satellite,
     licenseNote: '禁止非商業再散布',
   },
   sinica: {
@@ -113,7 +109,7 @@ export const BASE_LAYER_CONFIG: Record<
     url: '/api/map/tile/satellite/sinica/{z}/{x}/{y}?layer=TAIWAN_MOSAIC',
     tileSourceType: 'satellite',
     tileSource: 'sinica',
-    icon: SatelliteAltOutlinedIcon,
+    icon: Satellite,
     licenseNote: '使用條款未確認，正式環境前需向中研院確認授權',
     hidden: true,
   },
@@ -136,7 +132,7 @@ export const OVERLAY_LAYER_CONFIG: Record<
     // 3.79:1. The orange-family text token that survives a white background is the primary
     // subtle tone (5.90:1), and closure areas are warm-toned either way.
     color: color.brand.primary.subtle,
-    icon: DoNotDisturbAltOutlinedIcon,
+    icon: Ban,
     sourceLabel: 'closure_areas.geometry via base_geometries',
   },
   routes: {
@@ -145,7 +141,7 @@ export const OVERLAY_LAYER_CONFIG: Record<
     // Rendered as label text in the layer panel, so it takes the subtle tone: the default blue
     // measures 3.56:1 on the panel's white surface.
     color: color.brand.secondary.subtle,
-    icon: AltRouteOutlinedIcon,
+    icon: Route,
     sourceLabel: 'routes via base_geometries',
     disabledReason: '尚無資料',
   },
@@ -153,7 +149,7 @@ export const OVERLAY_LAYER_CONFIG: Record<
     label: '次要位置',
     description: '地址與電線桿等輔助位置資訊',
     color: color.fg.success,
-    icon: FmdGoodOutlinedIcon,
+    icon: MapPin,
     sourceLabel: 'secondary_locations via base_geometries',
     disabledReason: '尚無資料',
   },

@@ -1,10 +1,68 @@
+export { AnnouncementBanner } from './components/AnnouncementBanner';
+export { Avatar } from './components/Avatar';
+export type { AvatarProps, AvatarTone } from './components/Avatar';
 export { Badge } from './components/Badge';
-export type { BadgeProps, BadgeTone, BadgeVariant } from './components/Badge';
+export type {
+  BadgeProps,
+  BadgeSize,
+  BadgeTone,
+  BadgeVariant,
+} from './components/Badge';
+export { CountBadge } from './components/CountBadge';
+export type { CountBadgeProps, CountBadgeTone } from './components/CountBadge';
+export { DataTable } from './components/DataTable';
+export type {
+  DataTableColumnMeta,
+  DataTableDensity,
+  DataTableFeatures,
+  DataTableProps,
+} from './components/DataTable';
+export { EmptyState } from './components/EmptyState';
+export type { EmptyStateProps } from './components/EmptyState';
 export { ListPagination } from './components/ListPagination';
 export type { ListPaginationProps } from './components/ListPagination';
+export {
+  MapBuildingMarker,
+  MapCellLabel,
+  MapClusterMarker,
+  MapCrosshair,
+  MapLocationPin,
+  MapPin,
+  MapStationSquare,
+  MapTicketDot,
+  MapZoneLabel,
+} from './components/MapMarker';
+export type {
+  MapBuildingMarkerProps,
+  MapCellLabelProps,
+  MapClusterMarkerProps,
+  MapMarkerTone,
+  MapPinProps,
+  MapStationSquareProps,
+  MapTicketDotProps,
+  MapTicketPriority,
+  MapZoneLabelProps,
+} from './components/MapMarker';
+export { MetadataTable } from './components/MetadataTable';
+export type {
+  MetadataRow,
+  MetadataTableLayout,
+  MetadataTableProps,
+} from './components/MetadataTable';
 export { RowAction } from './components/RowAction';
 export type { RowActionProps, RowActionTone } from './components/RowAction';
-export { getRescueColorScheme, Icons, theme } from './foundation';
+export { Sheet } from './components/Sheet';
+export type { SheetProps } from './components/Sheet';
+export { SidebarItem } from './components/SidebarItem';
+export type { SidebarItemProps } from './components/SidebarItem';
+export { Timeline, TimelineChange } from './components/Timeline';
+export type {
+  TimelineChangeProps,
+  TimelineItem,
+  TimelineProps,
+  TimelineTone,
+} from './components/Timeline';
+export { getRescueColorScheme, Icons, layoutSizes, theme } from './foundation';
 export {
   designExtensions,
   designTokens,

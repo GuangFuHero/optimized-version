@@ -1,10 +1,9 @@
 'use client';
 
+import { Plus, Upload, SlidersHorizontal } from 'lucide-react';
+
 import type { ReactNode } from 'react';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import FileUploadRoundedIcon from '@mui/icons-material/FileUploadRounded';
-import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -268,10 +267,10 @@ function StationListHeader({ onCreate }: { onCreate: () => void }) {
       </Stack>
 
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-        <HeaderButton icon={<FileUploadRoundedIcon />} label="匯出" />
-        <HeaderButton icon={<TuneRoundedIcon />} label="欄位設定" />
+        <HeaderButton icon={<Upload />} label="匯出" />
+        <HeaderButton icon={<SlidersHorizontal />} label="欄位設定" />
         <Box onClick={onCreate}>
-          <HeaderButton icon={<AddRoundedIcon />} label="新增站點" filled />
+          <HeaderButton icon={<Plus />} label="新增站點" filled />
         </Box>
       </Stack>
     </Box>
@@ -310,7 +309,9 @@ export function StationListPage() {
     <>
       <AdminListPageLayout
         canvasColor={stationListPalette.canvas}
-        header={<StationListHeader onCreate={() => setCreateDrawerOpen(true)} />}
+        header={
+          <StationListHeader onCreate={() => setCreateDrawerOpen(true)} />
+        }
         filterPanel={
           <FilterBar
             selectedStatus={activeFilters.status}
@@ -379,7 +380,10 @@ export function StationListPage() {
               </Typography>
               <ListPagination
                 page={1}
-                pageCount={Math.max(1, Math.ceil(filteredRows.length / pageSize))}
+                pageCount={Math.max(
+                  1,
+                  Math.ceil(filteredRows.length / pageSize),
+                )}
                 previousAriaLabel="上一頁站點"
                 nextAriaLabel="下一頁站點"
                 sx={{

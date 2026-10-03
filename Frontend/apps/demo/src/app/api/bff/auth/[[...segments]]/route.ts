@@ -26,8 +26,8 @@ import {
   expireSessionResponse,
   resolveBackendAuthTokenAsync,
   type ResolvedBackendAuth,
-} from '../../../../../lib/server-backend-auth';
-import { withClientIpAsync } from '../../../../../lib/client-ip';
+} from '@rescue-frontend/modules/server';
+import { withClientIpAsync } from '@rescue-frontend/modules/server';
 
 function resolveErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '請求失敗';

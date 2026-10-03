@@ -1,11 +1,9 @@
 'use client';
 
+import { Plus, Upload, UserCog, CircleAlert } from 'lucide-react';
+
 import { useState, type ReactNode } from 'react';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import FileUploadRoundedIcon from '@mui/icons-material/FileUploadRounded';
-import ManageAccountsRoundedIcon from '@mui/icons-material/ManageAccountsRounded';
-import PriorityHighRoundedIcon from '@mui/icons-material/PriorityHighRounded';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
 import { UserListIconSlot, useUserListPalette } from './user-list-primitives';
@@ -132,7 +130,7 @@ function ReviewNotice() {
       }}
     >
       <UserListIconSlot
-        icon={<PriorityHighRoundedIcon />}
+        icon={<CircleAlert />}
         size={18}
         color={palette.noticeAccent}
       />
@@ -153,7 +151,7 @@ function ReviewNotice() {
           目前有 2 筆待審核的角色變更。
         </Typography>
       </Box>
-      <HeaderButton label="全部審核" icon={<ManageAccountsRoundedIcon />} />
+      <HeaderButton label="全部審核" icon={<UserCog />} />
     </Box>
   );
 }
@@ -201,7 +199,7 @@ export function UserListPage() {
         }}
       >
         <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-          <ManageAccountsRoundedIcon sx={{ color: palette.heading }} />
+          <Box component={UserCog} sx={{ color: palette.heading }} />
           <Typography
             sx={{
               color: palette.heading,
@@ -214,8 +212,8 @@ export function UserListPage() {
           </Typography>
         </Stack>
         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-          <HeaderButton icon={<FileUploadRoundedIcon />} label="匯出" />
-          <HeaderButton icon={<AddRoundedIcon />} label="新增用戶" filled />
+          <HeaderButton icon={<Upload />} label="匯出" />
+          <HeaderButton icon={<Plus />} label="新增用戶" filled />
         </Stack>
       </Box>
 

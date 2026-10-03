@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getBackendApiBaseUrl } from '../../../../../../../../../lib/backend-api-url';
+import { getBackendApiBaseUrl } from '@rescue-frontend/modules/server';
 
 const TILE_CACHE_SECONDS = 60 * 60 * 24 * 7;
 const TILE_STALE_SECONDS = 60 * 60 * 24;
