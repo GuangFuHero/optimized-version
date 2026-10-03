@@ -245,31 +245,6 @@ query AdminBriefingTemplates($state: BriefingState, $tag: String) {
     updatedAt
   }
 }
-query AdminStationSuggestions(
-  $status: String
-  $targetUuid: String
-  $skip: Int = 0
-  $limit: Int = 50
-) {
-  stationSuggestions(
-    status: $status
-    targetUuid: $targetUuid
-    skip: $skip
-    limit: $limit
-  ) {
-    uuid
-    targetType
-    targetUuid
-    fieldName
-    newValue
-    comment
-    status
-    createdAt
-    updatedAt
-    reviewedBy
-    reviewNote
-  }
-}
 query AdminStationPropertyConfigs(
   $stationType: String!
   $includeInactive: Boolean = true
@@ -613,22 +588,6 @@ mutation AdminUpdateBriefingTemplate(
 }
 mutation AdminDeleteBriefingTemplate($uuid: UUID!) {
   deleteBriefingTemplate(uuid: $uuid)
-}
-mutation AdminReviewStationSuggestion(
-  $uuid: UUID!
-  $approve: Boolean!
-  $reviewNote: String
-) {
-  reviewStationSuggestion(
-    uuid: $uuid
-    approve: $approve
-    reviewNote: $reviewNote
-  ) {
-    uuid
-    targetUuid
-    status
-    reviewNote
-  }
 }
 mutation AdminUpsertStationPropertyConfig(
   $stationType: String!
