@@ -119,6 +119,7 @@ async def _ensure_db():
         db.add(content_role)
         await db.flush()
         await _grant(db, content_role, perm_cache, Perm.ANN_VIEW, "all")
+        await _grant(db, content_role, perm_cache, Perm.ANN_VIEW_ADMIN, "all")
         await _grant(db, content_role, perm_cache, Perm.ANN_PUBLISH, "all")
         await _grant(db, content_role, perm_cache, Perm.ANN_EDIT, "all")
         await _grant(db, content_role, perm_cache, Perm.ANN_DELETE, "all")

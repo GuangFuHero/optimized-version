@@ -1,4 +1,4 @@
-# 行前通知（briefings）— ADR 全集（ADR-259~262、ADR-273~275）
+# 資訊發布（公告、行前通知）— ADR 全集（ADR-259~262、ADR-273~275、ADR-309）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號從 259 起跳，避開 `Spec/018-ticket-disaster-fields/decisions.md` 已佔用但尚未合併的 ADR-244~258。
@@ -6,6 +6,7 @@
 ADR-259~262 源自 PR #49 第一輪 review；ADR-273~274 源自第二輪。
 273 起跳是避開 PR #50 已佔用的 ADR-263~272。
 ADR-275 源自 PR #48 第二輪 review——決策本身與行前通知無關，但它改的是本 PR 的 migration `c3f0a1b2d4e6`，所以記在這裡。
+ADR-309 是公告（緊急公告）的顯示位置，接在 ADR-308（前台／後台用語，Spec 006）之後編號。
 
 ---
 
@@ -191,3 +192,56 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 ➖ 本 PR 的 migration 因此多帶一個與行前通知無關的決策。替代方案是另開一支 revision 或另開一個
   PR，但兩者都違反本 repo「branch-local 的 revision 直接修改，不疊新的」的慣例。
 ➖ `downgrade()` 只還原欄位形狀，不還原資料——原本就沒有資料可還原。
+
+---
+
+### ADR-309 公告的顯示位置：後台、前台或兩邊，共用一條排序
+
+**白話**：每則公告多一個 `placement`，決定它出現在後台、前台還是兩邊；排序還是同一條，各頁只是把
+不屬於自己的那幾則濾掉。
+
+**Context**：公告原本只有一個讀者群，所有啟用中的公告都出現在同一份公開清單。現在要能發只給後台看的
+公告（例如協調會通知），也要能發只給前台看的。用語依 ADR-308：前台 = public，後台 = admin。
+
+**Decision**：
+
+- `announcements.placement` 是 `admin_page` / `public_page` / `all`（兩邊都顯示）。GraphQL 輸入用
+  `AnnouncementPlacement` enum 擋值，DB 欄位是自由字串，沿用 repo 其他欄位的做法。
+- 新增時不指定就是 `all`；migration 把既有公告回填成 `all`，所以它們照舊到處都看得到。
+- `announcements(placement:)` 預設 `PUBLIC_PAGE`，回傳 `public_page` 與 `all`；`ADMIN_PAGE` 回傳
+  `admin_page` 與 `all`；`ALL` 回傳全部。
+- 只要不是 `PUBLIC_PAGE`，呼叫端就要持有 `announcement.view_admin`（不在 `PUBLIC_PERMS`，匿名與沒有
+  grant 的帳號都是 403）。單筆 `announcement(uuid)` 讀到 `admin_page` 的公告時也一樣。
+- seed 把 `announcement.view_admin` 給 `data_auditor`、`super_admin`、團隊 `admin` 與 `member`；自行註冊
+  拿到的 `user` 沒有。
+- 發布或重新啟用 `admin_page` 公告時，通知只送給持有 `announcement.view_admin` 的帳號；其他 placement
+  照舊送給所有啟用中的帳號。
+
+```
+排序（全站一條）           匿名 → 前台               工作人員 → 後台
+ 1  all          停水通知      1 停水通知              1 停水通知
+ 2  admin_page   協調會                                2 協調會
+ 3  public_page  物資站搬遷    3 物資站搬遷
+ 4  all          道路封閉      4 道路封閉              4 道路封閉
+```
+
+**為什麼共用一條排序**：各頁照全站順序過濾，相對順序自然一致，`move`、`setAnnouncementActive`、
+`deleteAnnouncement` 一行都不用改。分頁排序得多一個排序欄位，維持連號的邏輯也要跑兩份。管理清單
+（`filter: ALL, placement: ALL`）看得到每一則，管理員在那裡排序就是排全站。
+
+**為什麼另開一個 capability**：任何人都能自己註冊並拿到 `user` 角色，所以只檢查登入擋不住外人，而協調會
+這類公告要留在工作人員之間。現有的兩個 key 都不合用：`announcement.view` 是公開的，`announcement.edit`
+只有 `super_admin` 有，團隊協調員會被擋在外面。
+
+**為什麼通知也要收窄**：通知內文帶公告的前 80 字。只擋讀取、通知照樣全站廣播的話，一般使用者還是會在
+通知裡看到內容。
+
+**Consequences**：
+➕ 既有的匿名呼叫結果不變，而且永遠拿不到 `admin_page` 的公告。
+➕ 排序、啟用、刪除的邏輯完全沒動。
+➕ 自行註冊的帳號讀不到 `admin_page` 公告，也收不到它的通知。
+◾ 不用 migration：部署時會跑 `seed_rbac.py`，它只補缺少的 grant，新 key 下次部署就會發給上述角色。
+➖ 單一頁面上的 `order` 會跳號（上例前台是 1、3、4）；前端要照 `order` 排序，不能把它當名次顯示。
+➖ 身分一次只有一個（ADR-097）：團隊成員切回個人的 `user` 身分時，看不到 `admin_page` 公告。在
+  `/admin/rbac` 新建的角色也要手動給這個 key。
+➖ 前端的 `/admin` 仍然只檢查登入。一般使用者打開時，後台公告的查詢會回 403，前端要把它當成空清單。

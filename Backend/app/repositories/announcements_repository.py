@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import Perm
 from app.infrastructure.repository.base import GenericRepository
 from app.models.announcement import Announcement
 from app.services.notification_resolver import NotificationRecipientResolver
@@ -25,14 +26,16 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         """Initialize with Announcement as the managed model."""
         super().__init__(Announcement)
 
-    async def list_announcements(self, db: AsyncSession, *, only_active: bool) -> list[Announcement]:
-        """List non-deleted announcements.
+    async def list_announcements(
+        self, db: AsyncSession, *, only_active: bool, placement: str = "all"
+    ) -> list[Announcement]:
+        """List non-deleted announcements placed on `placement` or "all", active ones by order.
 
-        only_active=True  → active rows ordered by display_order ASC.
-        only_active=False → all non-deleted rows: active first (by display_order),
-                            then inactive by created_at DESC.
+        placement="all" returns every row; only_active=False appends inactive rows, newest first.
         """
         query = select(self.model).where(self.model.delete_at.is_(None))
+        if placement != "all":
+            query = query.where(self.model.placement.in_((placement, "all")))
         if only_active:
             query = query.where(self.model.active.is_(True)).order_by(self.model.display_order.asc())
         else:
@@ -66,17 +69,28 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             if a.display_order is not None and a.display_order > removed:
                 a.display_order -= 1
 
-    async def create_at_end(self, db: AsyncSession, *, content: str, created_by: str) -> Announcement:
+    async def _recipients(self, db: AsyncSession, placement: str) -> list[str]:
+        """Who to notify: holders of announcement.view_admin for admin-page rows, else everyone."""
+        if placement == "admin_page":
+            return await NotificationRecipientResolver.resolve_permission(db, Perm.ANN_VIEW_ADMIN.value)
+        return await NotificationRecipientResolver.resolve_all_active(db)
+
+    async def create_at_end(
+        self, db: AsyncSession, *, content: str, created_by: str, placement: str = "all"
+    ) -> Announcement:
         """Create an active announcement appended at the bottom (largest order)."""
         live = await self._live_for_update(db)
         next_order = (live[-1].display_order + 1) if live else 1
-        obj = self.model(content=content, created_by=created_by, active=True, display_order=next_order)
+        obj = self.model(
+            content=content, created_by=created_by, placement=placement,
+            active=True, display_order=next_order,
+        )
         db.add(obj)
         await db.commit()
         await db.refresh(obj)
 
-        # 觸發 announcement_published 通知 (全站廣播)
-        recipients = await NotificationRecipientResolver.resolve_all_active(db)
+        # 觸發 announcement_published 通知
+        recipients = await self._recipients(db, placement)
         summary = content[:80] + ("..." if len(content) > 80 else "")
         await NotificationService.dispatch(
             db,
@@ -131,7 +145,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             await db.refresh(target)
 
             # 觸發 announcement_published 通知
-            recipients = await NotificationRecipientResolver.resolve_all_active(db)
+            recipients = await self._recipients(db, target.placement)
             summary = target.content[:80] + ("..." if len(target.content) > 80 else "")
             await NotificationService.dispatch(
                 db,

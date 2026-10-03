@@ -251,6 +251,7 @@ announcements {
     uuid created_by FK "FK to users"
     boolean active
     int display_order "nullable; non-null iff active and not deleted; unique among live (app-enforced)"
+    text placement "admin_page / public_page / all (both); default all; enum enforced in GraphQL, not DB"
     text content
     timestamp created_at
     timestamp updated_at
