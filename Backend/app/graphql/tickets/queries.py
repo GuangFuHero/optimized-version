@@ -11,6 +11,7 @@ from typing import Annotated
 from uuid import UUID
 
 import strawberry
+from sqlalchemy import select
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
@@ -27,6 +28,7 @@ from app.graphql.tickets.types import (
     TicketType,
     ticket_detail_visible,
 )
+from app.models.geo import BuildingMapTicketMap
 from app.models.request import Tickets
 from app.repositories.tickets_repository import (
     task_property_repository,
@@ -148,6 +150,31 @@ class RequestQuery:
             if user is None or not await in_scope(scope, actor=user, resource=m, db=db):
                 return None
         return TicketType.from_model(m, coarse_resolution=coarse_resolution(zoom))
+
+    @strawberry.field
+    async def building_map_tickets(
+        self, info: strawberry.types.Info, building_map_uuid: UUID, skip: int = 0, limit: int = 100,
+    ) -> list[TicketType]:
+        """List the tickets filed under a building map, newest first.
+
+        Only rows whose detail the caller may see are returned, because naming a ticket's
+        building reveals its exact location; an anonymous caller gets an empty list.
+        """
+        scope = await check_permission(info, Perm.TICKET_VIEW)
+        query = (
+            select(Tickets)
+            .join(BuildingMapTicketMap, BuildingMapTicketMap.ticket_uuid == Tickets.uuid)
+            .where(
+                BuildingMapTicketMap.building_map_uuid == building_map_uuid,
+                Tickets.delete_at.is_(None),
+                *scope_filter(scope, actor=info.context["user"], model=Tickets),
+                *await _detail_filters(info),
+            )
+            .order_by(Tickets.created_at.desc(), Tickets.uuid.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return [TicketType.from_model(m) for m in await info.context["db"].scalars(query)]
 
 
 @strawberry.type

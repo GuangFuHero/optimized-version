@@ -762,8 +762,20 @@ class CreateTicketInput:
 
     title: str
     description: str | None = None
-    geometry: GeoJSON = strawberry.field(
-        description="GeoJSON Point for the location where help is needed — [longitude, latitude]"
+    geometry: GeoJSON | None = strawberry.field(
+        default=None,
+        description=(
+            "GeoJSON Point for the location where help is needed — [longitude, latitude]. "
+            "Required unless buildingMapUuid is given, in which case it must be omitted"
+        ),
+    )
+    building_map_uuid: UUID | None = strawberry.field(
+        default=None,
+        description=(
+            "File the ticket inside this building map. Its point and address are copied onto "
+            "the ticket, and secondaryLocation.floor (and room, on a floor with areas) must "
+            "match the building's floors"
+        ),
     )
     contact_name: str = strawberry.field(description="Full name of the requester")
     contact_email: str | None = strawberry.field(default=None, description="Optional email for follow-up")

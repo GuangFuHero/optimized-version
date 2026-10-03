@@ -1,9 +1,10 @@
-"""SQLAlchemy models for geospatial entities: BaseGeometry, Station, and ClosureArea."""
+"""SQLAlchemy models for geospatial entities: BaseGeometry, Station, ClosureArea, and BuildingMap."""
 
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, String, func, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -39,6 +40,31 @@ class ClosureArea(BaseGeometry):
     __mapper_args__ = {
         "polymorphic_identity": "closure_area",
     }
+
+
+class BuildingMap(BaseGeometry):
+    """A building on the map whose tickets are filed by floor and area."""
+
+    __tablename__ = "building_maps"
+    uuid: Mapped[str] = mapped_column(ForeignKey("base_geometries.uuid"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    floors_above_ground: Mapped[int]
+    floors_below_ground: Mapped[int] = mapped_column(server_default="0")
+    # Floor label to its area names, e.g. {"1F": ["閱覽室"]}. A floor left out takes a free-text room number.
+    floor_areas: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
+
+    __mapper_args__ = {
+        "polymorphic_identity": "building_map",
+    }
+
+
+class BuildingMapTicketMap(Base):
+    """Which building map a ticket was filed under. The ticket is the key, so it has at most one."""
+
+    __tablename__ = "building_map_ticket_map"
+    ticket_uuid: Mapped[str] = mapped_column(ForeignKey("tickets.uuid"), primary_key=True)
+    building_map_uuid: Mapped[str] = mapped_column(ForeignKey("building_maps.uuid"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Station(BaseGeometry):
