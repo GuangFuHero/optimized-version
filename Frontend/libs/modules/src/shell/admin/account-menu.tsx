@@ -4,25 +4,18 @@ import { ChevronDown, LogOut, ArrowLeftRight } from 'lucide-react';
 
 import { Box, ButtonBase, Menu, MenuItem } from '@mui/material';
 import { useState } from 'react';
+import { signOut, useSession } from 'next-auth/react';
+import { useCurrentUser } from '@rescue-frontend/data-access/admin';
 
 import { Avatar, Badge, designTokens } from '@rescue-frontend/ui';
 
 const { color, radius, shadow, typography, motion } = designTokens;
 
-export interface AdminUser {
-  name: string;
-  image?: string;
-  roleLabel?: string;
-  identityLabel?: string;
-}
-
-export function AccountMenu({
-  user,
-  onSignOut,
-}: {
-  user: AdminUser;
-  onSignOut?: () => void;
-}) {
+export function AccountMenu() {
+  const { data: user } = useCurrentUser();
+  const { data: session } = useSession();
+  const name = user?.name ?? session?.user?.name ?? '';
+  const identity = user?.active_identity;
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
 
@@ -44,7 +37,7 @@ export function AccountMenu({
           '&:hover': { bgcolor: color.bg.neutral.subtle },
         }}
       >
-        <Avatar name={user.name} src={user.image} size={36} />
+        <Avatar name={name} src={session?.user?.image ?? undefined} size={36} />
         <Box sx={{ lineHeight: 1.25 }}>
           <Box
             sx={{
@@ -55,12 +48,12 @@ export function AccountMenu({
               color: color.fg.neutral.default,
             }}
           >
-            {user.name}
-            {user.roleLabel ? (
-              <Badge tone="primary">{user.roleLabel}</Badge>
+            {name}
+            {identity?.role ? (
+              <Badge tone="primary">{identity.role}</Badge>
             ) : null}
           </Box>
-          {user.identityLabel ? (
+          {identity?.team ? (
             <Box
               sx={{
                 display: 'flex',
@@ -71,7 +64,7 @@ export function AccountMenu({
               }}
             >
               <Box component={ArrowLeftRight} sx={{ width: 12, height: 12 }} />
-              {user.identityLabel}
+              {identity.team}
             </Box>
           ) : null}
         </Box>
@@ -109,7 +102,7 @@ export function AccountMenu({
         <MenuItem
           onClick={() => {
             setAnchorEl(null);
-            onSignOut?.();
+            void signOut({ callbackUrl: '/login?callbackUrl=/' });
           }}
           sx={{
             gap: '10px',
