@@ -55,6 +55,9 @@ class Perm(StrEnum):
     # ADR-285: hand a station to the one team that runs it (or take it back). Gov-only, like
     # work_zone.assign — see GOV_TEAM_ONLY_PERMS.
     STATION_ASSIGN = "station.assign"
+    # Undoing an applied suggestion merge is its own capability because team admins also hold
+    # station.review, and revoke is meant for platform-wide reviewers only.
+    STATION_REVOKE = "station.revoke"
     # Open crowd-sourcing: attach a property or submit a rating to ANY station (no ownership
     # check — deliberately capability-only, not scoped like station.edit=own). See station.py.
     STATION_CONTRIBUTE = "station.contribute"

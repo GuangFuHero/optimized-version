@@ -70,8 +70,8 @@ ROLES_DATA = [
         },
     },
     {
-        # Oversight only — no edit/review/make (ADR-049 / Docs/rbac-permissions-design.md §2.4).
-        # Sees all data incl. PII; reviews the audit trail (endpoint TBD, granted ahead).
+        # Oversight: sees all data incl. PII and the audit trail, and makes no edits of its own.
+        # The one write it holds is reviewing crowd-sourced station suggestions, and undoing that review.
         "name": "data_auditor",
         "kind": "platform",
         "permissions": {
@@ -88,10 +88,14 @@ ROLES_DATA = [
             # and the raw audit payload.
             Perm.TICKET_VIEW_HISTORY: "all",
             Perm.STATION_VIEW_HISTORY: "all",
-            # ADR-111: oversight reads the whole platform, so its export reaches everything.
-            # No import counterpart — this role has no write path anywhere else either.
+            # Oversight reads the whole platform, so its export reaches everything. It gets no
+            # import, because its only writes are deciding and undoing station suggestions.
             Perm.STATION_EXPORT: "all",
             Perm.TICKET_EXPORT: "all",
+            # A reversal of the read-only auditor (ADR-300): a merge can only write a field
+            # someone suggested, and every merge records its before values so it can be undone.
+            Perm.STATION_REVIEW: "all",
+            Perm.STATION_REVOKE: "all",
         },
     },
     {
@@ -102,7 +106,7 @@ ROLES_DATA = [
                 Perm.MAP_VIEW, Perm.MAP_ADD, Perm.MAP_EDIT, Perm.MAP_DELETE,
                 Perm.STATION_VIEW, Perm.STATION_VIEW_PII, Perm.STATION_VIEW_HISTORY,
                 Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
-                Perm.STATION_DELETE, Perm.STATION_REVIEW, Perm.STATION_ASSIGN,
+                Perm.STATION_DELETE, Perm.STATION_REVIEW, Perm.STATION_ASSIGN, Perm.STATION_REVOKE,
                 Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_VIEW_DETAIL,
                 Perm.TICKET_VIEW_HISTORY, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,

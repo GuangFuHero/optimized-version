@@ -85,6 +85,8 @@ async def _ensure_db():
         await _grant(db, login_role, perm_cache, Perm.TICKET_EDIT, "own")
         await _grant(db, login_role, perm_cache, Perm.TICKET_DELETE, "own")
         await _grant(db, login_role, perm_cache, Perm.TICKET_ASSIGN, "own")
+        # Every registered account can crowd-source station data, as the seeded `user` role can.
+        await _grant(db, login_role, perm_cache, Perm.STATION_CONTRIBUTE, "all")
 
         # Mirrors the old "FieldCoordinator_Map"/"FieldCoordinator_Request" policies
         # (all-scoped everywhere) using the new capability keys.
@@ -132,6 +134,15 @@ async def _ensure_db():
         await _grant(db, briefing_role, perm_cache, Perm.PREDEP_PUBLISH, "all")
         await _grant(db, briefing_role, perm_cache, Perm.PREDEP_EDIT, "all")
         await _grant(db, briefing_role, perm_cache, Perm.PREDEP_DELETE, "all")
+
+        # Data Auditor: reviews and revokes station suggestions everywhere, as the seeded
+        # `data_auditor` role does, but edits nothing directly.
+        auditor_role = Role(name="Data Auditor", kind="platform")
+        db.add(auditor_role)
+        await db.flush()
+        await _grant(db, auditor_role, perm_cache, Perm.STATION_VIEW, "all")
+        await _grant(db, auditor_role, perm_cache, Perm.STATION_REVIEW, "all")
+        await _grant(db, auditor_role, perm_cache, Perm.STATION_REVOKE, "all")
 
         await db.commit()
     await eng.dispose()
@@ -199,6 +210,12 @@ async def coordinator_auth(redis):
 async def login_user_auth(redis):
     """Return (user_uuid, token) for a user with Login User permissions."""
     return await _create_user_with_role(redis, "Login User")
+
+
+@pytest_asyncio.fixture
+async def auditor_auth(redis):
+    """Return (user_uuid, token) for a user who reviews and revokes station suggestions."""
+    return await _create_user_with_role(redis, "Data Auditor")
 
 
 @pytest_asyncio.fixture
