@@ -1,4 +1,4 @@
-import { sessionExpiryFetch } from '@rescue-frontend/modules';
+import { sessionExpiryFetch } from '../../session/end-expired-session';
 
 /**
  * Error carrying the BFF response status and the backend's stable error code.

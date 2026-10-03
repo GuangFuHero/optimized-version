@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 
+import { SiteShell } from '../../shell';
+import { SessionExpiredNotice } from '../../session/session-expired-notice';
 import {
   isSigningOutHere,
   markSigningOutHere,
-  SessionExpiredNotice,
-  SiteShell,
-} from '@rescue-frontend/modules';
+} from '../../session/end-expired-session';
 import {
   reloginHref,
   shouldReloadForSignOut,

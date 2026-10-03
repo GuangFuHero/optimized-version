@@ -12,7 +12,7 @@ import {
   AuthFormError,
   authHref,
   RegisterForm,
-} from '@rescue-frontend/modules';
+} from './index';
 import {
   registerAsync,
   resendVerificationAsync,
