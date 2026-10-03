@@ -38,6 +38,9 @@
 > `station_property_config` / `task_property_config` / the three new tables joined
 > AUDITED_TABLES at the same time — the two config tables had been unaudited since they
 > existed.
+> Building maps (2026-10-02): new `building_maps`, a `base_geometries` subtype (Geospatial
+> diagram), and the `building_map_ticket_map` join table (Tickets diagram); `building_maps`
+> joined AUDITED_TABLES.
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -48,6 +51,7 @@ something to point at without duplicating the full column list:
 | `users`                | Identity     | Geospatial, Tickets     |
 | `base_geometries`      | Geospatial   | Tickets                 |
 | `secondary_locations`  | Geospatial   | Tickets                 |
+| `building_maps`        | Geospatial   | Tickets                 |
 
 Note: `secondary_locations.pole_photo_uuid` is a FK to `photos` (home: Tickets), but —
 matching the original combined diagram — it's documented only as a column comment, not
@@ -437,6 +441,21 @@ closure_areas {
 }
 base_geometries ||--|| closure_areas : "inherits as"
 
+%% Inheritance: Building Map inherits from base_geometries. An admin pins the building once,
+%% and tickets inside it are filed by floor and area. Its address is its secondary_locations
+%% row, with building_section/floor/room always empty.
+building_maps {
+    uuid uuid PK, FK "PK is also FK to base_geometries"
+    string name "String(100), sidebar title e.g. 光復國小圖書館"
+    int floors_above_ground "1..200, labels 1F..nF"
+    int floors_below_ground "0..20, default 0, labels B1..Bn"
+    jsonb floor_areas "default {}, floor label to area names, e.g. 1F: 閱覽室, 健身房"
+}
+base_geometries ||--|| building_maps : "inherits as"
+%% NOTE: polymorphic_identity = "building_map". Every building also has RF, and a ticket may leave
+%% the floor empty when unknown. A floor with areas also accepts 其他; a floor without areas takes
+%% a free-text room number. Checked on ticket create (ADR-310), not by the DB.
+
 %% Inheritance: Station inherits from base_geometries
 stations {
     uuid uuid PK, FK "PK is also FK to base_geometries"
@@ -608,6 +627,9 @@ base_geometries {
 secondary_locations {
     uuid uuid PK
 }
+building_maps {
+    uuid uuid PK
+}
 
 %% ==========================
 %% Ticket Data
@@ -640,6 +662,17 @@ base_geometries ||--|| tickets : "inherits as general ticket"
 %% ticket_analytics compares two tickets' arrays with `=`, which is order-sensitive.
 %% NOTE: person_trapped_reported/immediate_danger_reported are NULL when nobody was asked;
 %% 'unknown' means they were asked and could not say. The two are different facts.
+
+%% Which building map a ticket was filed under. ticket_uuid is the PK, so a ticket belongs to
+%% at most one building; the ticket keeps its own copy of the building's point and address.
+building_map_ticket_map {
+    uuid ticket_uuid PK, FK "FK to tickets"
+    uuid building_map_uuid FK "FK to building_maps"
+    timestamp created_at
+}
+%% INDEX: ix_building_map_ticket_map_building_map_uuid (building_map_uuid)
+building_maps ||--o{ building_map_ticket_map : "files"
+tickets ||--o| building_map_ticket_map : "filed under"
 
 photos {
     uuid uuid PK

@@ -11,6 +11,7 @@ AUDITED_TABLES = [
     "base_geometries",
     "stations",
     "closure_areas",
+    "building_maps",
     "tickets",
 
     # Work assignment & routing

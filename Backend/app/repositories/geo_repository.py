@@ -1,11 +1,11 @@
-"""Repositories for stations, closure areas, station properties, and crowd sourcing."""
+"""Repositories for stations, closure areas, building maps, station properties, and crowd sourcing."""
 
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
 from app.infrastructure.repository.base import GenericRepository
-from app.models.geo import ClosureArea, Station
+from app.models.geo import BuildingMap, BuildingMapTicketMap, ClosureArea, Station
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import (
     CrowdSourcing,
@@ -188,6 +188,14 @@ class ClosureAreaRepository(GenericRepository[ClosureArea]):
         return await db.scalar(select(func.count()).select_from(query.subquery()))
 
 
+class BuildingMapRepository(ClosureAreaRepository):
+    """Repository for building maps, reusing the closure-area bbox list and count unchanged."""
+
+    def __init__(self):
+        """Initialize with BuildingMap as the managed model."""
+        GenericRepository.__init__(self, BuildingMap)
+
+
 class StationPropertyRepository(GenericRepository[StationProperty]):
     """Repository for station property queries."""
 
@@ -258,6 +266,8 @@ class SecondaryLocationRepository(GenericRepository[SecondaryLocation]):
 
 station_repository = StationRepository()
 closure_area_repository = ClosureAreaRepository()
+building_map_repository = BuildingMapRepository()
+building_map_ticket_repository = GenericRepository(BuildingMapTicketMap)
 station_property_repository = StationPropertyRepository()
 crowd_sourcing_repository = CrowdSourcingRepository()
 secondary_location_repository = SecondaryLocationRepository()

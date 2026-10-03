@@ -1,4 +1,4 @@
-"""GraphQL queries for stations and closure areas.
+"""GraphQL queries for stations, closure areas, and building maps.
 
 Read-checked per ADR-027/028: station.view/map.view are public (Guest gets Scope.ALL),
 authenticated callers get whatever scope their role grants, applied as a list-level
@@ -17,6 +17,8 @@ from app.core.search import normalize_query, search_timeout
 from app.graphql.context import check_permission
 from app.graphql.geo.types import (
     BoundsInput,
+    BuildingMapConnection,
+    BuildingMapType,
     ClosureAreaConnection,
     ClosureAreaType,
     StationConnection,
@@ -24,10 +26,14 @@ from app.graphql.geo.types import (
     StationType,
 )
 from app.graphql.shared import PageInfo
-from app.models.geo import ClosureArea, Station
+from app.models.geo import BuildingMap, ClosureArea, Station
 from app.models.station_property import StationProperty, StationUpdateSuggestion
 from app.models.team import Team
-from app.repositories.geo_repository import closure_area_repository, station_repository
+from app.repositories.geo_repository import (
+    building_map_repository,
+    closure_area_repository,
+    station_repository,
+)
 
 
 def _has_pending_suggestion():
@@ -54,7 +60,7 @@ def _has_pending_suggestion():
 
 @strawberry.type
 class GeoQuery:
-    """GraphQL queries for stations and closure areas."""
+    """GraphQL queries for stations, closure areas, and building maps."""
 
     @strawberry.field
     async def stations(
@@ -195,3 +201,46 @@ class GeoQuery:
             if user is None or not await in_scope(scope, actor=user, resource=m, db=db):
                 return None
         return ClosureAreaType.from_model(m)
+
+    @strawberry.field
+    async def building_maps(
+        self, info: strawberry.types.Info,
+        bounds: BoundsInput | None = None,
+        skip: int = 0, limit: int = 50,
+    ) -> BuildingMapConnection:
+        """List building maps within an optional geographic bounding box, paginated.
+
+        Requires map.view permission (public — Guest may call this).
+        """
+        db = info.context["db"]
+        scope = await check_permission(info, Perm.MAP_VIEW)
+        extra_filters = scope_filter(scope, actor=info.context["user"], model=BuildingMap)
+        total = await building_map_repository.count_active(db, bounds=bounds, extra_filters=extra_filters)
+        items = await building_map_repository.list_active(
+            db, bounds=bounds, skip=skip, limit=limit, extra_filters=extra_filters
+        )
+        return BuildingMapConnection(
+            items=[BuildingMapType.from_model(m) for m in items],
+            page_info=PageInfo(
+                total_count=total,
+                has_next_page=(skip + limit) < total,
+                has_previous_page=skip > 0,
+            ),
+        )
+
+    @strawberry.field
+    async def building_map(self, info: strawberry.types.Info, uuid: UUID) -> BuildingMapType | None:
+        """Fetch a single active building map by UUID.
+
+        Returns None if not found, soft-deleted, or outside the caller's scope.
+        """
+        db = info.context["db"]
+        scope = await check_permission(info, Perm.MAP_VIEW)
+        m = await building_map_repository.get_by_uuid_active(db, uuid)
+        if not m:
+            return None
+        if scope != Scope.ALL:
+            user = info.context["user"]
+            if user is None or not await in_scope(scope, actor=user, resource=m, db=db):
+                return None
+        return BuildingMapType.from_model(m)

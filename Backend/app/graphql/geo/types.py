@@ -1,4 +1,4 @@
-"""GraphQL types for stations, closure areas, and station properties."""
+"""GraphQL types for stations, closure areas, building maps, and station properties."""
 
 import asyncio
 import enum
@@ -24,6 +24,7 @@ from app.graphql.shared import (  # noqa: F401 -- the address types and their ma
 from app.graphql.suggestions.types import StationSuggestionMergeType, SuggestedFieldType
 from app.graphql.tickets.types import PhotoType
 from app.graphql.work_zone.types import AssignedTeamType
+from app.services.building_map import OTHER_AREA, floor_labels
 
 
 async def _can_review_suggestions(info: strawberry.types.Info, station: "StationType") -> bool:
@@ -436,6 +437,108 @@ class UpdateClosureAreaInput:
     status: str | None = None
     information_source: str | None = strawberry.UNSET
     comment: str | None = strawberry.UNSET
+
+
+# --- Building Map ---
+
+@strawberry.type
+class BuildingFloorType:
+    """One floor of a building map, and the areas a ticket on it picks from."""
+
+    label: str = strawberry.field(description="Floor label: '3F', '1F', 'B1'")
+    areas: list[str] = strawberry.field(
+        description=(
+            "Areas a ticket on this floor must pick from, ending with '其他' for an unlisted "
+            "space. Empty when the floor takes a free-text room number instead"
+        )
+    )
+
+
+@strawberry.type
+class BuildingMapType:
+    """GraphQL type for a building on the map whose tickets are filed by floor and area."""
+
+    uuid: UUID
+    name: str = strawberry.field(description="Building name shown on the map and in the sidebar")
+    geometry: GeoJSON | None = strawberry.field(
+        default=None, description="GeoJSON Point of the building — [longitude, latitude]"
+    )
+    floors_above_ground: int
+    floors_below_ground: int
+    floor_areas: strawberry.Private[dict]
+    created_by: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @strawberry.field(description="The building's floors, roof (RF) first")
+    def floors(self) -> list[BuildingFloorType]:
+        """Every floor label, with its areas plus '其他' where areas are configured."""
+        floors = []
+        for label in floor_labels(self.floors_above_ground, self.floors_below_ground):
+            areas = self.floor_areas.get(label, [])
+            floors.append(BuildingFloorType(label=label, areas=[*areas, OTHER_AREA] if areas else []))
+        return floors
+
+    @strawberry.field(description="The building's street address. Public, like a station's")
+    async def secondary_location(self, info: strawberry.types.Info) -> SecondaryLocationType | None:
+        """Resolve the building's address row."""
+        return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
+
+    @classmethod
+    def from_model(cls, m) -> "BuildingMapType":
+        """Build from a SQLAlchemy model instance."""
+        return cls(
+            uuid=m.uuid, name=m.name, geometry=geom_to_geojson(m.geometry),
+            floors_above_ground=m.floors_above_ground, floors_below_ground=m.floors_below_ground,
+            floor_areas=m.floor_areas or {}, created_by=m.created_by,
+            created_at=m.created_at, updated_at=m.updated_at,
+        )
+
+
+@strawberry.type
+class BuildingMapConnection:
+    """Paginated list of building maps with page metadata."""
+
+    items: list[BuildingMapType]
+    page_info: PageInfo
+
+
+@strawberry.input
+class BuildingFloorAreasInput:
+    """The areas of one floor, e.g. floor '1F' with areas ['閱覽室', '健身房']."""
+
+    floor: str = strawberry.field(description="Floor label: '3F', '1F', 'B1'")
+    areas: list[str] = strawberry.field(description="Area names, 1-20 characters each")
+
+
+@strawberry.input
+class CreateBuildingMapInput:
+    """Input for creating a building map."""
+
+    name: str = strawberry.field(description="Building name, e.g. '光復國小圖書館'")
+    geometry: GeoJSON = strawberry.field(description="GeoJSON Point — [longitude, latitude]")
+    secondary_location: SecondaryLocationInput = strawberry.field(
+        description="Street address. Leave buildingSection, floor and room empty"
+    )
+    floors_above_ground: int = strawberry.field(description="Floors from 1F up, 1-200")
+    floors_below_ground: int = strawberry.field(default=0, description="Basement floors, 0-20")
+    floor_areas: list[BuildingFloorAreasInput] = strawberry.field(
+        default_factory=list,
+        description="Areas per floor. A floor left out takes a free-text room number",
+    )
+
+
+@strawberry.input
+class UpdateBuildingMapInput:
+    """Input for updating a building map. Omitted fields are left unchanged."""
+
+    name: str | None = None
+    geometry: GeoJSON | None = None
+    floors_above_ground: int | None = None
+    floors_below_ground: int | None = None
+    floor_areas: list[BuildingFloorAreasInput] | None = strawberry.field(
+        default=None, description="Replaces every floor's areas when sent; [] clears them"
+    )
 
 
 # --- Station Property ---
