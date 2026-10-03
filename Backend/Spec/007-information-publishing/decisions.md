@@ -210,11 +210,15 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 - 新增時不指定就是 `all`；migration 把既有公告回填成 `all`，所以它們照舊到處都看得到。
 - `announcements(placement:)` 預設 `PUBLIC_PAGE`，回傳 `public_page` 與 `all`；`ADMIN_PAGE` 回傳
   `admin_page` 與 `all`；`ALL` 回傳全部。
-- 只要不是 `PUBLIC_PAGE`，呼叫端就必須登入（`require_authenticated`）。單筆 `announcement(uuid)` 讀到
-  `admin_page` 的公告時也一樣。
+- 只要不是 `PUBLIC_PAGE`，呼叫端就要持有 `announcement.view_admin`（不在 `PUBLIC_PERMS`，匿名與沒有
+  grant 的帳號都是 403）。單筆 `announcement(uuid)` 讀到 `admin_page` 的公告時也一樣。
+- seed 把 `announcement.view_admin` 給 `data_auditor`、`super_admin`、團隊 `admin` 與 `member`；自行註冊
+  拿到的 `user` 沒有。
+- 發布或重新啟用 `admin_page` 公告時，通知只送給持有 `announcement.view_admin` 的帳號；其他 placement
+  照舊送給所有啟用中的帳號。
 
 ```
-排序（全站一條）           匿名 → 前台               登入 → 後台
+排序（全站一條）           匿名 → 前台               工作人員 → 後台
  1  all          停水通知      1 停水通知              1 停水通知
  2  admin_page   協調會                                2 協調會
  3  public_page  物資站搬遷    3 物資站搬遷
@@ -225,12 +229,19 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 `deleteAnnouncement` 一行都不用改。分頁排序得多一個排序欄位，維持連號的邏輯也要跑兩份。管理清單
 （`filter: ALL, placement: ALL`）看得到每一則，管理員在那裡排序就是排全站。
 
-**為什麼「登入」就夠**：前端的 `/admin` 本身只檢查有沒有登入，後端沒有「後台使用者」這個概念。發布通知
-本來就送給所有啟用中的帳號，而他們都是登入者，所以每個收到通知的人都打得開那則公告。
+**為什麼另開一個 capability**：任何人都能自己註冊並拿到 `user` 角色，所以只檢查登入擋不住外人，而協調會
+這類公告要留在工作人員之間。現有的兩個 key 都不合用：`announcement.view` 是公開的，`announcement.edit`
+只有 `super_admin` 有，團隊協調員會被擋在外面。
+
+**為什麼通知也要收窄**：通知內文帶公告的前 80 字。只擋讀取、通知照樣全站廣播的話，一般使用者還是會在
+通知裡看到內容。
 
 **Consequences**：
 ➕ 既有的匿名呼叫結果不變，而且永遠拿不到 `admin_page` 的公告。
 ➕ 排序、啟用、刪除的邏輯完全沒動。
-◾ 通知不分 placement：發布任何一則都通知所有啟用中的帳號。
+➕ 自行註冊的帳號讀不到 `admin_page` 公告，也收不到它的通知。
+◾ 不用 migration：部署時會跑 `seed_rbac.py`，它只補缺少的 grant，新 key 下次部署就會發給上述角色。
 ➖ 單一頁面上的 `order` 會跳號（上例前台是 1、3、4）；前端要照 `order` 排序，不能把它當名次顯示。
-➖ 任何登入者都讀得到 `admin_page` 公告，包括一般使用者。日後若要收窄，再補一個 capability。
+➖ 身分一次只有一個（ADR-097）：團隊成員切回個人的 `user` 身分時，看不到 `admin_page` 公告。在
+  `/admin/rbac` 新建的角色也要手動給這個 key。
+➖ 前端的 `/admin` 仍然只檢查登入。一般使用者打開時，後台公告的查詢會回 403，前端要把它當成空清單。

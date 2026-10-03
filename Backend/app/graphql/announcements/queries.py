@@ -10,7 +10,7 @@ from app.graphql.announcements.types import (
     AnnouncementPlacement,
     AnnouncementType,
 )
-from app.graphql.context import check_permission, require_authenticated
+from app.graphql.context import check_permission
 from app.repositories.announcements_repository import announcement_repository
 
 
@@ -27,11 +27,11 @@ class AnnouncementQuery:
     ) -> list[AnnouncementType]:
         """List announcements shown on `placement`; only PUBLIC_PAGE (default) is open to guests.
 
-        ADMIN_PAGE and ALL (every placement) need a logged-in caller, and filter ALL (inactive
-        ones too) needs announcement.edit.
+        ADMIN_PAGE and ALL (every placement) need announcement.view_admin, and filter ALL
+        (inactive ones too) needs announcement.edit.
         """
         if placement is not AnnouncementPlacement.PUBLIC_PAGE:
-            require_authenticated(info)
+            await check_permission(info, Perm.ANN_VIEW_ADMIN)
         if filter is AnnouncementFilter.ALL:
             await check_permission(info, Perm.ANN_EDIT)
         items = await announcement_repository.list_announcements(
@@ -47,11 +47,12 @@ class AnnouncementQuery:
     ) -> AnnouncementType | None:
         """Fetch a single non-deleted announcement by UUID, or None if missing or soft-deleted.
 
-        Admin-page announcements need a logged-in caller, and inactive ones need announcement.edit.
+        Admin-page announcements need announcement.view_admin, and inactive ones need
+        announcement.edit.
         """
         m = await announcement_repository.get_by_uuid_active(info.context["db"], uuid)
         if m and m.placement == AnnouncementPlacement.ADMIN_PAGE.value:
-            require_authenticated(info)
+            await check_permission(info, Perm.ANN_VIEW_ADMIN)
         if m and not m.active:
             await check_permission(info, Perm.ANN_EDIT)
         return AnnouncementType.from_model(m) if m else None

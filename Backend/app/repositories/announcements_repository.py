@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import Perm
 from app.infrastructure.repository.base import GenericRepository
 from app.models.announcement import Announcement
 from app.services.notification_resolver import NotificationRecipientResolver
@@ -68,6 +69,12 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             if a.display_order is not None and a.display_order > removed:
                 a.display_order -= 1
 
+    async def _recipients(self, db: AsyncSession, placement: str) -> list[str]:
+        """Who to notify: holders of announcement.view_admin for admin-page rows, else everyone."""
+        if placement == "admin_page":
+            return await NotificationRecipientResolver.resolve_permission(db, Perm.ANN_VIEW_ADMIN.value)
+        return await NotificationRecipientResolver.resolve_all_active(db)
+
     async def create_at_end(
         self, db: AsyncSession, *, content: str, created_by: str, placement: str = "all"
     ) -> Announcement:
@@ -82,8 +89,8 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         await db.commit()
         await db.refresh(obj)
 
-        # 觸發 announcement_published 通知 (全站廣播)
-        recipients = await NotificationRecipientResolver.resolve_all_active(db)
+        # 觸發 announcement_published 通知
+        recipients = await self._recipients(db, placement)
         summary = content[:80] + ("..." if len(content) > 80 else "")
         await NotificationService.dispatch(
             db,
@@ -138,7 +145,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             await db.refresh(target)
 
             # 觸發 announcement_published 通知
-            recipients = await NotificationRecipientResolver.resolve_all_active(db)
+            recipients = await self._recipients(db, target.placement)
             summary = target.content[:80] + ("..." if len(target.content) > 80 else "")
             await NotificationService.dispatch(
                 db,
