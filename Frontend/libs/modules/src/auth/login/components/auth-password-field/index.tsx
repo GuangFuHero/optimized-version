@@ -1,7 +1,7 @@
 'use client';
 
-import VisibilityOffRoundedIcon from '@mui/icons-material/VisibilityOffRounded';
-import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
+import { EyeOff, Eye } from 'lucide-react';
+
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import { useState } from 'react';
@@ -29,7 +29,7 @@ export function AuthPasswordField(
             sx={{ p: 0.5 }}
           >
             {/* What a press does: the open eye shows the password, the crossed one hides it. */}
-            {visible ? <VisibilityOffRoundedIcon /> : <VisibilityRoundedIcon />}
+            {visible ? <EyeOff /> : <Eye />}
           </IconButton>
         </InputAdornment>
       }

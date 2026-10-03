@@ -1,5 +1,5 @@
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import { Box } from '@mui/material';
+import { Trash2, Pencil } from 'lucide-react';
 import { Stack } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
@@ -10,7 +10,7 @@ const meta = {
   component: RowAction,
   args: {
     label: '編輯',
-    icon: <EditOutlinedIcon sx={{ fontSize: 14 }} />,
+    icon: <Box component={Pencil} sx={{ width: 14, height: 14 }} />,
     tone: 'default',
     disabled: false,
   },
@@ -27,7 +27,7 @@ export const Danger: Story = {
   args: {
     tone: 'danger',
     label: '刪除',
-    icon: <DeleteOutlineRoundedIcon sx={{ fontSize: 14 }} />,
+    icon: <Box component={Trash2} sx={{ width: 14, height: 14 }} />,
   },
 };
 export const Disabled: Story = { args: { disabled: true } };
@@ -36,7 +36,7 @@ export const DisabledDanger: Story = {
     tone: 'danger',
     disabled: true,
     label: '刪除',
-    icon: <DeleteOutlineRoundedIcon sx={{ fontSize: 14 }} />,
+    icon: <Box component={Trash2} sx={{ width: 14, height: 14 }} />,
   },
 };
 
@@ -45,12 +45,12 @@ export const InARow: Story = {
     <Stack direction="row" sx={{ gap: 1 }}>
       <RowAction
         label="編輯"
-        icon={<EditOutlinedIcon sx={{ fontSize: 14 }} />}
+        icon={<Box component={Pencil} sx={{ width: 14, height: 14 }} />}
       />
       <RowAction
         tone="danger"
         label="刪除"
-        icon={<DeleteOutlineRoundedIcon sx={{ fontSize: 14 }} />}
+        icon={<Box component={Trash2} sx={{ width: 14, height: 14 }} />}
       />
     </Stack>
   ),

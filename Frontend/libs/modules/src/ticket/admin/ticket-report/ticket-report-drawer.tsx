@@ -1,10 +1,7 @@
 'use client';
 
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
-import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
-import PhotoCameraRoundedIcon from '@mui/icons-material/PhotoCameraRounded';
-import SendRoundedIcon from '@mui/icons-material/SendRounded';
+import { X, History, Link, Camera, Send } from 'lucide-react';
+
 import {
   Box,
   Button,
@@ -179,7 +176,7 @@ function ActionLogList({
               color: '#245C8C',
             }}
           >
-            <HistoryRoundedIcon sx={{ fontSize: 16 }} />
+            <Box component={History} sx={{ width: 16, height: 16 }} />
           </Box>
           <Stack spacing={0.35} sx={{ minWidth: 0 }}>
             <Typography
@@ -295,9 +292,7 @@ function ReportDetail({ report }: { report: TicketReportRecord }) {
           <Stack spacing={1}>
             {report.attachments.map((attachment) => {
               const AttachmentIcon =
-                attachment.type === 'photo'
-                  ? PhotoCameraRoundedIcon
-                  : LinkRoundedIcon;
+                attachment.type === 'photo' ? Camera : Link;
 
               return (
                 <Box
@@ -316,7 +311,10 @@ function ReportDetail({ report }: { report: TicketReportRecord }) {
                     overflowWrap: 'anywhere',
                   }}
                 >
-                  <AttachmentIcon sx={{ fontSize: 18, color: '#245C8C' }} />
+                  <Box
+                    component={AttachmentIcon}
+                    sx={{ width: 18, height: 18, color: '#245C8C' }}
+                  />
                   <Typography sx={{ fontSize: 13, lineHeight: '20px' }}>
                     {attachment.label}：{attachment.url}
                   </Typography>
@@ -438,7 +436,7 @@ export function TicketReportDrawer({
             </Typography>
           </Stack>
           <IconButton aria-label="關閉任務回報" onClick={onClose}>
-            <CloseRoundedIcon />
+            <X />
           </IconButton>
         </Box>
 
@@ -638,7 +636,7 @@ export function TicketReportDrawer({
               type="submit"
               form="ticket-report-form"
               variant="contained"
-              startIcon={<SendRoundedIcon />}
+              startIcon={<Send />}
               fullWidth
             >
               建立任務單並寫入日誌

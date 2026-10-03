@@ -1,11 +1,9 @@
 'use client';
 
+import { Check, X, Search, SlidersHorizontal } from 'lucide-react';
+
 import { useState } from 'react';
 
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
-import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import {
   Badge,
   Box,
@@ -33,10 +31,10 @@ import {
   type TicketFilterKey,
 } from './ticket-filters';
 
-const FilterIcon = TuneRoundedIcon;
-const CheckIcon = CheckRoundedIcon;
-const CloseIcon = CloseRoundedIcon;
-const SearchIcon = SearchRoundedIcon;
+const FilterIcon = SlidersHorizontal;
+const CheckIcon = Check;
+const CloseIcon = X;
+const SearchIcon = Search;
 
 function createHref(pathname: string, searchParams: URLSearchParams) {
   const nextQuery = searchParams.toString();
@@ -86,7 +84,9 @@ function FilterOptionButton({
       >
         {label}
       </Typography>
-      {selected ? <CheckIcon sx={{ width: 16, height: 16 }} /> : null}
+      {selected ? (
+        <Box component={CheckIcon} sx={{ width: 16, height: 16 }} />
+      ) : null}
     </ButtonBase>
   );
 }
@@ -94,7 +94,7 @@ function FilterOptionButton({
 export function MobileTicketFilterBottomSheet() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const pathname = usePathname() ?? '/admin/tickets';
+  const pathname = usePathname() ?? '/tickets';
   const searchParams = useSearchParams();
   const topNavBarPalette =
     getRescueColorScheme(useTheme()).adminShell.topNavBar;
@@ -177,7 +177,7 @@ export function MobileTicketFilterBottomSheet() {
             },
           }}
         >
-          <FilterIcon sx={{ width: 20, height: 20 }} />
+          <Box component={FilterIcon} sx={{ width: 20, height: 20 }} />
         </Badge>
       </ButtonBase>
 
@@ -282,7 +282,7 @@ export function MobileTicketFilterBottomSheet() {
                   '&:hover': { bgcolor: '#F6FAFF' },
                 }}
               >
-                <CloseIcon sx={{ width: 20, height: 20 }} />
+                <Box component={CloseIcon} sx={{ width: 20, height: 20 }} />
               </ButtonBase>
             </Stack>
           </Box>
@@ -306,7 +306,8 @@ export function MobileTicketFilterBottomSheet() {
                 inputProps={{ 'aria-label': '搜尋任務、編號或地址' }}
                 startAdornment={
                   <InputAdornment position="start">
-                    <SearchIcon
+                    <Box
+                      component={SearchIcon}
                       sx={{ width: 18, height: 18, color: '#564337' }}
                     />
                   </InputAdornment>

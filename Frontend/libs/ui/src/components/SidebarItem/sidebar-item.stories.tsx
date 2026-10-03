@@ -1,6 +1,4 @@
-import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
-import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
-import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
+import { ClipboardList, MapPin, LayoutDashboard } from 'lucide-react';
 import { Stack } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
@@ -10,7 +8,7 @@ const meta = {
   title: 'Components/SidebarItem',
   component: SidebarItem,
   args: {
-    icon: <SpaceDashboardOutlinedIcon />,
+    icon: <LayoutDashboard />,
     label: '總覽儀表板',
     active: false,
     collapsed: false,
@@ -38,18 +36,14 @@ export const Group: Story = {
   render: ({ collapsed }) => (
     <Stack sx={{ gap: '6px', alignItems: collapsed ? 'center' : 'stretch' }}>
       <SidebarItem
-        icon={<SpaceDashboardOutlinedIcon />}
+        icon={<LayoutDashboard />}
         label="總覽儀表板"
         collapsed={collapsed}
         active
       />
+      <SidebarItem icon={<MapPin />} label="互助地圖" collapsed={collapsed} />
       <SidebarItem
-        icon={<PlaceOutlinedIcon />}
-        label="互助地圖"
-        collapsed={collapsed}
-      />
-      <SidebarItem
-        icon={<AssignmentOutlinedIcon />}
+        icon={<ClipboardList />}
         label="任務管理"
         collapsed={collapsed}
       />

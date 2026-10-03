@@ -1,13 +1,16 @@
 'use client';
 
+import { Check, ChevronDown } from 'lucide-react';
+
 import { useMemo, useState, type MouseEvent } from 'react';
 
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import { Box, ButtonBase, Popover, Stack, Typography } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
-import { TicketListIconSlot, ticketListPalette } from './ticket-list-primitives';
+import {
+  TicketListIconSlot,
+  ticketListPalette,
+} from './ticket-list-primitives';
 import type {
   TicketListFilterBarProps,
   TicketListFilterItem,
@@ -16,7 +19,7 @@ import type {
 } from './types';
 
 const AiAnalysisIcon = Icons.aiAnalysis;
-const CheckIcon = CheckRoundedIcon;
+const CheckIcon = Check;
 
 function createDefaultFilters(): readonly TicketListFilterItem[] {
   return [
@@ -66,7 +69,10 @@ function FilterSelectorPill({
       >
         {label}
       </Typography>
-      <ExpandMoreRoundedIcon sx={{ width: 20, height: 20, color: 'inherit' }} />
+      <Box
+        component={ChevronDown}
+        sx={{ width: 20, height: 20, color: 'inherit' }}
+      />
     </ButtonBase>
   );
 }
@@ -117,7 +123,9 @@ function FilterPanelOption({
       >
         {label}
       </Typography>
-      {selected ? <CheckIcon sx={{ width: 17, height: 17 }} /> : null}
+      {selected ? (
+        <Box component={CheckIcon} sx={{ width: 17, height: 17 }} />
+      ) : null}
     </ButtonBase>
   );
 }

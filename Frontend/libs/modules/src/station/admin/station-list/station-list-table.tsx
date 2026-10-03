@@ -1,6 +1,9 @@
 'use client';
 
-import MoreHorizRoundedIcon from '@mui/icons-material/MoreHorizRounded';
+import { Box } from '@mui/material';
+
+import { Ellipsis } from 'lucide-react';
+
 import {
   ButtonBase,
   Table,
@@ -205,7 +208,7 @@ export function StationListTable({ rows }: StationListTableProps) {
                     color: stationListPalette.bodyText,
                   }}
                 >
-                  <MoreHorizRoundedIcon sx={{ fontSize: 18 }} />
+                  <Box component={Ellipsis} sx={{ width: 18, height: 18 }} />
                 </ButtonBase>
               </TableCell>
             </TableRow>
