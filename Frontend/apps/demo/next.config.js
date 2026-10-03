@@ -10,6 +10,16 @@ const nextConfig = {
   // Use this to set Nx-specific options
   // See: https://nx.dev/recipes/next/next-config-setup
   nx: {},
+  async redirects() {
+    return [
+      {
+        source: '/admin/:path*',
+        destination: `${process.env.ADMIN_APP_URL ?? 'http://localhost:3001'}/:path*`,
+        permanent: false,
+      },
+    ];
+  },
+
   transpilePackages: [
     '@rescue-frontend/ui',
     '@rescue-frontend/modules',

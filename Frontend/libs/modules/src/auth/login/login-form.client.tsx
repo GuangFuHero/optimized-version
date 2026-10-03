@@ -63,15 +63,17 @@ function resolveAuthErrorMessage(errorCode: string | null) {
   }
 }
 
-export function LoginFormClient() {
+export function LoginFormClient({
+  defaultCallbackUrl = '/map',
+}: {
+  defaultCallbackUrl?: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const audience = searchParams.get('audience');
   // Set by the page that sent the user here — a guest's 「登入後接」 among them — and kept if they
   // register instead, or go through a forgotten password.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
-  const callbackUrl =
-    requestedCallbackUrl ?? (audience === 'admin' ? '/admin/map' : '/map');
+  const callbackUrl = requestedCallbackUrl ?? defaultCallbackUrl;
   const authErrorMessage = resolveAuthErrorMessage(searchParams.get('error'));
   // Sent here by a page only a signed-in person sees (帳號安全) after the session ended there: the
   // site shell's notice never got to say why, so this page does.

@@ -279,7 +279,7 @@ function StationListHeader({ onCreate }: { onCreate: () => void }) {
 
 export function StationListPage() {
   const router = useRouter();
-  const pathname = usePathname() ?? '/admin/stations';
+  const pathname = usePathname() ?? '/stations';
   const searchParams = useSearchParams();
   const stationListPalette = useStationListColorScheme();
   const [rows, setRows] = useState<readonly StationListRow[]>(stationRows);

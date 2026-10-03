@@ -17,3 +17,8 @@ export {
 } from './server/server-backend-auth';
 
 export { SITE_REALM_HEADERS } from './server/site-realm';
+export { reverseGeocode } from './server/reverse-geocode';
+export {
+  createBackendGraphqlHandler,
+  createBackendRestHandler,
+} from './server/backend-proxy';

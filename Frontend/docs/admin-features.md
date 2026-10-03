@@ -4,20 +4,20 @@
 
 ## 路由現況
 
-`apps/demo/src/app/admin` 目前有以下頁面檔案：
+Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁面位於 `src/app/(portal)`，URL 不含 `/admin` prefix。Demo 的 `/admin/:path*` 會導向 admin app，部署時以 `ADMIN_APP_URL` 指定網址。
 
-- `/admin/map`
-- `/admin/stations`
-- `/admin/tickets`
-- `/admin/users`
+- `/dashboard`
+- `/map`
+- `/stations`
+- `/tickets`
+- `/users`
+- `/teams`
+- `/announcements`
+- `/briefings`
+- `/audit`
+- `/settings`
 
-但目前 `apps/demo/src/app/admin/layout.tsx` 會直接 `redirect('/map')`，因此整個 `/admin/*` route tree 實際上是停用狀態。
-
-結論：
-
-- admin 頁面與對應 modules 已經存在
-- admin 路由目前沒有對外開放
-- 若要啟用，第一步是先處理 `admin/layout.tsx` 的 redirect 與 auth gate
+`/` 導向 `/dashboard`。Portal layout 要求 NextAuth session；未登入時導向 `/login?callbackUrl=/`。Backend 負責各 API 的 permission checks。兩個 app 共用 document layout、基本 providers 和 server proxy handlers；各 app 保留自己的 query cache。
 
 ## 已存在的 Admin Modules
 
@@ -40,7 +40,7 @@
 
 ## 各頁面目前實作狀態
 
-### `/admin/map`
+### `/map`
 
 - `page.tsx` + `admin-map-page.client.tsx` 已存在
 - 使用 `@rescue-frontend/modules` 的 `Map`
@@ -48,34 +48,30 @@
 - 依賴 `StationCreateDrawer`、`TicketCreateDrawer`
 - 只有登入狀態會顯示建立 controls
 
-### `/admin/stations`
+### `/stations`
 
 - 已有 page 檔案
 - 對應的 reusable modules 位於 `station/admin/*`
 
-### `/admin/tickets`
+### `/tickets`
 
 - 已有 page 檔案
 - 對應的 reusable modules 位於 `ticket/admin/*`
 
-### `/admin/users`
+### `/users`
 
 - 已有 page 檔案
 - 對應的 reusable modules 位於 `admin/user/user-list`
 
 ## 目前缺口
 
-以 repo 現況來看，admin 主要缺口不是「完全沒模組」，而是：
-
-1. route tree 被 `admin/layout.tsx` 強制 redirect，功能無法實際進入
-2. admin 專用 auth shell / route guard 仍被註解
-3. 文件與實作之間曾混入大量「未來可能做」的規劃敘述，容易誤判哪些功能已存在
+部分列表與管理頁仍使用 demo 資料或 placeholder。`@rescue-frontend/data-access/admin` 已提供 TanStack Query hooks，REST 使用 generated OpenAPI types，GraphQL 使用 urql 與 The Guild typed documents。後續頁面可直接串接這些 hooks，共用 query client callback 會顯示 error toast。
 
 ## 建議閱讀順序
 
 若要接手 admin：
 
-1. 先看 `apps/demo/src/app/admin/layout.tsx`
+1. 先看 `apps/admin/src/app/(portal)/layout.tsx` 與 [admin README](../apps/admin/README.md)
 2. 再看 `libs/modules/src/shell/admin/*`
 3. 再看 `station/admin/*`、`ticket/admin/*`、`admin/user/*`
 4. 地圖相關則補看 `libs/modules/src/map/*`

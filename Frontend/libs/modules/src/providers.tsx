@@ -11,6 +11,9 @@ import {
   createUrqlExchanges,
 } from '@rescue-frontend/data-access';
 import { sessionExpiryFetch } from './session/end-expired-session';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createAdminQueryClient } from '@rescue-frontend/data-access/admin';
+import { Toaster, toast } from 'sonner';
 import { theme } from '@rescue-frontend/ui';
 
 function PortalUrqlClientProvider({ children }: { children: ReactNode }) {
@@ -37,7 +40,7 @@ function PortalUrqlClientProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function Providers({ children }: { children: ReactNode }) {
+export function ApplicationProviders({ children }: { children: ReactNode }) {
   return (
     <AppRouterCacheProvider>
       <SessionProvider>
@@ -48,9 +51,23 @@ export function Providers({ children }: { children: ReactNode }) {
           modeStorageKey="mui-mode-disabled"
           colorSchemeStorageKey="mui-color-scheme-disabled"
         >
-          <PortalUrqlClientProvider>{children}</PortalUrqlClientProvider>
+          {children}
+          <Toaster richColors closeButton />
         </ThemeProvider>
       </SessionProvider>
     </AppRouterCacheProvider>
+  );
+}
+
+export function SiteProviders({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(() =>
+    createAdminQueryClient((error) => toast.error(error.message)),
+  );
+  return (
+    <ApplicationProviders>
+      <QueryClientProvider client={queryClient}>
+        <PortalUrqlClientProvider>{children}</PortalUrqlClientProvider>
+      </QueryClientProvider>
+    </ApplicationProviders>
   );
 }

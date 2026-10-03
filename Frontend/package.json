@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
+    "dev": "nx run-many -t dev",
     "dev:demo": "nx dev demo",
     "build:demo": "nx build demo",
     "start:demo": "nx start demo",
@@ -19,7 +20,10 @@
     "reset": "nx reset",
     "codegen": "graphql-codegen --config libs/data-access/src/graphql/codegen.ts",
     "typecheck": "pnpm -r typecheck",
-    "dev:ui": "nx dev ui"
+    "dev:ui": "nx dev ui",
+    "dev:admin": "nx dev admin",
+    "build:admin": "nx build admin",
+    "start:admin": "nx start admin"
   },
   "private": true,
   "devDependencies": {

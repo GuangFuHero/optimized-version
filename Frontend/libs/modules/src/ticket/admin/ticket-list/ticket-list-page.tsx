@@ -177,7 +177,7 @@ function downloadOperationHistory(records: readonly TicketReportRecord[]) {
 
 export function TicketListPage() {
   const router = useRouter();
-  const pathname = usePathname() ?? '/admin/tickets';
+  const pathname = usePathname() ?? '/tickets';
   const searchParams = useSearchParams();
   const [rows, setRows] =
     useState<readonly TicketListRowItem[]>(initialTicketRows);
