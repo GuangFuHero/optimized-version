@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./server": "./src/server.ts",
-    "./admin": "./src/admin/index.ts"
+    "./admin": "./src/admin/index.ts",
+    "./openapi": "./src/rest/openapi.d.ts"
   },
   "dependencies": {
     "@graphql-typed-document-node/core": "^3.2.0",
@@ -13,9 +14,12 @@
     "graphql": "^16.13.2",
     "react": "^19.0.0",
     "urql": "^5.0.1",
-    "@tanstack/react-query": "^5.90.0"
+    "@tanstack/react-query": "^5.90.0",
+    "openapi-fetch": "^0.17.0",
+    "zod": "^4.3.6"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.lib.json"
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json",
+    "codegen:openapi": "jiti scripts/generate-openapi.ts"
   }
 }

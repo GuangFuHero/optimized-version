@@ -2,7 +2,7 @@
 
 import { Plus, X, Trash2 } from 'lucide-react';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   Alert,
@@ -19,16 +19,15 @@ import {
   Typography,
 } from '@mui/material';
 import { useSession } from 'next-auth/react';
-import { useMutation } from 'urql';
 
 import {
-  CreateTicketDocument,
-  CreateTicketTaskDocument,
-  TicketFieldsFragmentDoc,
-  useFragment,
+  useCreateTicket,
+  useCreateTicketTask,
   type CreateTicketTaskInput,
-} from '@rescue-frontend/data-access';
+  type AdminCreateTicketMutation,
+} from '@rescue-frontend/data-access/admin';
 
+import { reverseGeocodeResponse } from '../../../map/reverse-geocode';
 import type { RescueMapMarkerItem } from '../../../map/types';
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 import type { TicketListRowItem } from '../ticket-list/types';
@@ -37,7 +36,7 @@ import { designTokens } from '@rescue-frontend/ui';
 
 const { color } = designTokens;
 
-type TicketTaskTypeOption = 'rescue' | 'hr' | 'supply';
+type TicketTaskTypeOption = (typeof TICKET_TYPE_OPTIONS)[number]['value'];
 
 interface TaskDraft {
   id: string;
@@ -79,21 +78,7 @@ interface TicketCreateFormState {
   photoUrls: string[];
 }
 
-interface ReverseGeocodePayload {
-  address: string;
-  county: string;
-  city: string;
-  lane: string;
-  alley: string;
-  no: string;
-  floor: string;
-  room: string;
-}
-
-const TICKET_TYPE_OPTIONS: readonly {
-  value: TicketTaskTypeOption;
-  label: string;
-}[] = [
+const TICKET_TYPE_OPTIONS = [
   { value: 'rescue', label: '救援' },
   { value: 'hr', label: '人力' },
   { value: 'supply', label: '物資' },
@@ -225,24 +210,17 @@ function mapVerification(
   return 'unverified';
 }
 
-function buildTicketRow(input: {
-  uuid: string;
-  title: string;
-  taskType?: string | null;
-  description?: string | null;
-  status?: string | null;
-  priority?: string | null;
-  verificationStatus?: string | null;
-  createdAt?: string | null;
-  address: string;
-}): TicketListRowItem {
+function buildTicketRow(
+  input: AdminCreateTicketMutation['createTicket'],
+  address: string,
+): TicketListRowItem {
   return {
     id: input.uuid,
     code: `#${input.uuid.slice(0, 8).toUpperCase()}`,
     title: input.title,
     taskType: mapTaskTypeLabel(input.taskType ?? 'rescue'),
     disasterType: mapTaskTypeLabel(input.taskType ?? 'rescue'),
-    location: input.address || '未提供地址',
+    location: address || '未提供地址',
     status: mapStatus(input.status),
     priority: mapPriority(input.priority),
     verification: mapVerification(input.verificationStatus),
@@ -257,22 +235,10 @@ function buildTicketRow(input: {
   };
 }
 
-function buildTicketMarker(input: {
-  uuid: string;
-  title: string;
-  description?: string | null;
-  taskType?: string | null;
-  status?: string | null;
-  priority?: string | null;
-  verificationStatus?: string | null;
-  contactName?: string | null;
-  contactEmail?: string | null;
-  contactPhone?: string | null;
-  createdBy?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  position: [number, number];
-}): RescueMapMarkerItem {
+function buildTicketMarker(
+  input: AdminCreateTicketMutation['createTicket'],
+  position: RescueMapMarkerItem['position'],
+): RescueMapMarkerItem {
   const normalizedStatus = input.status?.trim().toLowerCase();
   const normalizedPriority = input.priority?.trim().toLowerCase();
   const inProgress =
@@ -292,22 +258,11 @@ function buildTicketMarker(input: {
       input.taskType?.trim() ||
       input.status ||
       '救災任務',
-    position: input.position,
+    position,
     label: input.status === 'in_progress' ? '處理中' : '待處理',
     variant: inProgress ? 'in-progress' : 'urgent-ticket',
     detailType: 'ticket',
-    ticketMeta: {
-      status: input.status,
-      priority: input.priority,
-      taskType: input.taskType,
-      contactName: input.contactName,
-      contactEmail: input.contactEmail,
-      contactPhone: input.contactPhone,
-      createdBy: input.createdBy,
-      verificationStatus: input.verificationStatus,
-      createdAt: input.createdAt,
-      updatedAt: input.updatedAt,
-    },
+    ticketMeta: input,
     requiredVolunteers: 1,
     matchedVolunteers: 0,
   };
@@ -325,7 +280,13 @@ function Section({
   return (
     <Stack spacing={1.5}>
       <Box>
-        <Typography sx={{ fontSize: 15, fontWeight: 800, color: color.fg.neutral.default }}>
+        <Typography
+          sx={{
+            fontSize: 15,
+            fontWeight: 800,
+            color: color.fg.neutral.default,
+          }}
+        >
           {title}
         </Typography>
         {description ? (
@@ -357,14 +318,12 @@ export function TicketCreateDrawer({
   const [tasks, setTasks] = useState<TaskDraft[]>([createInitialTaskDraft()]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
-  const [createTicketResult, createTicket] = useMutation(CreateTicketDocument);
-  const [, createTicketTask] = useMutation(CreateTicketTaskDocument);
+  const createTicket = useCreateTicket();
+  const createTicketTask = useCreateTicketTask();
   const { status: authStatus } = useSession();
   const reverseGeocodeRequestKeyRef = useRef<string | null>(null);
 
-  const isSubmitting = createTicketResult.fetching;
-  const derivedStatus = 'pending';
-  const derivedUpdatedAt = useMemo(() => formatNow(), [open]);
+  const isSubmitting = createTicket.isPending || createTicketTask.isPending;
 
   useEffect(() => {
     if (!open) {
@@ -401,7 +360,7 @@ export function TicketCreateDrawer({
           return;
         }
 
-        const payload = (await response.json()) as ReverseGeocodePayload;
+        const payload = reverseGeocodeResponse.parse(await response.json());
 
         setForm((current) => ({
           ...current,
@@ -596,108 +555,55 @@ export function TicketCreateDrawer({
       return;
     }
 
-    const ticketResult = await createTicket({
-      input: {
-        title: form.title.trim(),
-        description: form.description.trim() || undefined,
-        contactName: form.contactName.trim(),
-        contactPhone: form.contactPhone.trim() || undefined,
-        geometry: {
-          type: 'Point',
-          coordinates: [longitude, latitude],
+    try {
+      const ticketResult = await createTicket.mutateAsync({
+        input: {
+          title: form.title.trim(),
+          description: form.description.trim() || undefined,
+          contactName: form.contactName.trim(),
+          contactPhone: form.contactPhone.trim() || undefined,
+          geometry: {
+            type: 'Point',
+            coordinates: [longitude, latitude],
+          },
+          priority: 'medium',
+          taskType: form.taskType,
+          visibility: 'public',
+          // TODO: backend 目前 createTicket 還沒有 secondary location / 地址拆欄位。
+          // TODO: backend 目前也沒有 ticket photos 的建立 mutation。
         },
-        priority: 'medium',
-        taskType: form.taskType,
-        visibility: 'public',
-        // TODO: backend 目前 createTicket 還沒有 secondary location / 地址拆欄位。
-        // TODO: backend 目前也沒有 ticket photos 的建立 mutation。
-      },
-    });
+      });
 
-    if (ticketResult.error || !ticketResult.data?.createTicket) {
-      const errorMessage = ticketResult.error?.message ?? '新增任務失敗。';
+      const createdTicket = ticketResult.createTicket;
 
-      if (
-        errorMessage.includes('401') ||
-        errorMessage.includes('Could not validate credentials')
-      ) {
-        setSubmitError('登入狀態已失效，請重新登入後再試。');
-        return;
+      const taskInputs = tasks.map(
+        (task) =>
+          ({
+            ticketUuid: createdTicket.uuid,
+            taskType: task.taskType,
+            taskName: task.taskName.trim(),
+            taskDescription: task.taskDescription.trim() || undefined,
+            quantity: task.quantity ? Number(task.quantity) : undefined,
+            source: 'user',
+            visibility: 'public',
+            // TODO: backend 目前沒有 create task assignment mutation，
+            // actorUuid / assignedAt 先保留在前端 UI，暫不送出。
+          }) satisfies CreateTicketTaskInput,
+      );
+
+      for (const taskInput of taskInputs) {
+        await createTicketTask.mutateAsync({ input: taskInput });
       }
 
-      if (
-        errorMessage.includes('403') ||
-        errorMessage.includes('Permission Denied')
-      ) {
-        setSubmitError(
-          '目前帳號沒有建立任務的權限，請確認後端 RBAC 的 request:create 權限。',
-        );
-        return;
-      }
+      onCreated?.(buildTicketRow(createdTicket, form.address.trim()));
+      onCreatedMarker?.(
+        buildTicketMarker(createdTicket, [latitude, longitude]),
+      );
 
-      setSubmitError(errorMessage);
-      return;
+      handleClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '新增任務失敗。');
     }
-
-    const createdTicket = useFragment(
-      TicketFieldsFragmentDoc,
-      ticketResult.data.createTicket,
-    );
-
-    const taskInputs: CreateTicketTaskInput[] = tasks.map((task) => ({
-      ticketUuid: createdTicket.uuid,
-      taskType: task.taskType,
-      taskName: task.taskName.trim(),
-      taskDescription: task.taskDescription.trim() || undefined,
-      quantity: task.quantity ? Number(task.quantity) : undefined,
-      source: 'user',
-      visibility: 'public',
-      // TODO: backend 目前沒有 create task assignment mutation，
-      // actorUuid / assignedAt 先保留在前端 UI，暫不送出。
-    }));
-
-    for (const taskInput of taskInputs) {
-      const taskResult = await createTicketTask({ input: taskInput });
-
-      if (taskResult.error) {
-        setSubmitError(taskResult.error.message);
-        return;
-      }
-    }
-
-    onCreated?.(
-      buildTicketRow({
-        uuid: createdTicket.uuid,
-        title: createdTicket.title,
-        taskType: createdTicket.taskType,
-        description: createdTicket.description,
-        status: createdTicket.status,
-        priority: createdTicket.priority,
-        verificationStatus: createdTicket.verificationStatus,
-        createdAt: createdTicket.createdAt?.toString() ?? null,
-        address: form.address.trim(),
-      }),
-    );
-    onCreatedMarker?.(
-      buildTicketMarker({
-        uuid: createdTicket.uuid,
-        title: createdTicket.title,
-        description: createdTicket.description,
-        taskType: createdTicket.taskType,
-        status: createdTicket.status,
-        priority: createdTicket.priority,
-        verificationStatus: createdTicket.verificationStatus,
-        contactName: createdTicket.contactName,
-        contactEmail: createdTicket.contactEmail,
-        contactPhone: createdTicket.contactPhone,
-        createdBy: createdTicket.createdBy,
-        createdAt: createdTicket.createdAt?.toString() ?? null,
-        updatedAt: createdTicket.updatedAt?.toString() ?? null,
-        position: [latitude, longitude],
-      }),
-    );
-
-    handleClose();
   };
 
   return (
@@ -903,12 +809,11 @@ export function TicketCreateDrawer({
                 select
                 label="地址型態"
                 value={form.locationType}
-                onChange={(event) =>
-                  updateForm(
-                    'locationType',
-                    event.target.value as 'address' | 'pole',
-                  )
-                }
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === 'address' || value === 'pole')
+                    updateForm('locationType', value);
+                }}
                 fullWidth
                 size="small"
               >
@@ -1017,7 +922,10 @@ export function TicketCreateDrawer({
                         onClick={() => removeTask(task.id)}
                         sx={{ width: 28, height: 28, borderRadius: '999px' }}
                       >
-                        <Box component={Trash2} sx={{ width: 18, height: 18 }} />
+                        <Box
+                          component={Trash2}
+                          sx={{ width: 18, height: 18 }}
+                        />
                       </ButtonBase>
                     </Box>
                     <TextField
@@ -1025,8 +933,11 @@ export function TicketCreateDrawer({
                       label="類型"
                       value={task.taskType}
                       onChange={(event) => {
-                        const nextType = event.target
-                          .value as TicketTaskTypeOption;
+                        const selected = TICKET_TYPE_OPTIONS.find(
+                          (option) => option.value === event.target.value,
+                        );
+                        if (!selected) return;
+                        const nextType = selected.value;
                         updateTask(task.id, { taskType: nextType });
                         if (index === 0) {
                           updateForm('taskType', nextType);
