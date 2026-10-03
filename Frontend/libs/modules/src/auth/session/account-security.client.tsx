@@ -54,14 +54,24 @@ function SecuritySection({
   children: React.ReactNode;
 }) {
   return (
-    <Card sx={{ borderRadius: '24px', boxShadow: 'none', border: '1px solid #E5DDD8' }}>
+    <Card
+      sx={{
+        borderRadius: '24px',
+        boxShadow: 'none',
+        border: '1px solid #E5DDD8',
+      }}
+    >
       <CardContent sx={{ p: 3 }}>
         <Stack spacing={2.5}>
           <Stack spacing={0.75}>
-            <Typography sx={{ fontSize: 20, fontWeight: 700, color: '#241B19' }}>
+            <Typography
+              sx={{ fontSize: 20, fontWeight: 700, color: '#241B19' }}
+            >
               {title}
             </Typography>
-            <Typography sx={{ fontSize: 14, lineHeight: '22px', color: '#6A5F5B' }}>
+            <Typography
+              sx={{ fontSize: 14, lineHeight: '22px', color: '#6A5F5B' }}
+            >
               {description}
             </Typography>
           </Stack>
@@ -165,9 +175,8 @@ export function AccountSecurityClient({
     setSetPasswordSuccessMessage(undefined);
 
     try {
-      const createdPassword = await createHashedCredentialAsync(
-        setPasswordValue,
-      );
+      const createdPassword =
+        await createHashedCredentialAsync(setPasswordValue);
 
       await setPasswordAsync({
         password: createdPassword.hashedPassword,
@@ -199,7 +208,10 @@ export function AccountSecurityClient({
     setContactSuccess(undefined);
 
     try {
-      const normalizedIdentity = normalizeIdentityValue(contactType, contactValue);
+      const normalizedIdentity = normalizeIdentityValue(
+        contactType,
+        contactValue,
+      );
 
       await addContactAsync({
         type: contactType,
@@ -333,7 +345,9 @@ export function AccountSecurityClient({
             onChange={(event) => setNewPasswordConfirm(event.target.value)}
           />
 
-          {passwordError ? <Alert severity="error">{passwordError}</Alert> : null}
+          {passwordError ? (
+            <Alert severity="error">{passwordError}</Alert>
+          ) : null}
           {passwordSuccess ? (
             <Alert severity="success">{passwordSuccess}</Alert>
           ) : null}

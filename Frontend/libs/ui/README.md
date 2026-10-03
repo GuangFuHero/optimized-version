@@ -22,3 +22,5 @@ Keep only business-neutral UI building blocks here:
 - other reusable visual foundations with no domain-specific meaning
 
 Domain-owned reusable UI belongs in `@rescue-frontend/modules`, not this package.
+
+Data-aware visual components can import generated backend types from `@rescue-frontend/data-access` with `import type`. Queries, mutations, and business flows stay in modules or apps. `Timeline.items` takes backend `HistoryEventResponse` objects directly, and `TimelineChange.change` takes `ChangeResponse`. The component displays withheld changes without their values and keeps removed actors' names. It never displays raw audit payloads. Table rows, action slots, and other presentation props remain generic.
