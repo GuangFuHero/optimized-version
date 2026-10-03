@@ -1848,31 +1848,6 @@ export type AdminBriefingTemplatesQuery = {
   }>;
 };
 
-export type AdminStationSuggestionsQueryVariables = Exact<{
-  status?: InputMaybe<Scalars['String']['input']>;
-  targetUuid?: InputMaybe<Scalars['String']['input']>;
-  skip?: InputMaybe<Scalars['Int']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-export type AdminStationSuggestionsQuery = {
-  __typename?: 'Query';
-  stationSuggestions: Array<{
-    __typename?: 'StationSuggestionType';
-    uuid: string;
-    targetType: string;
-    targetUuid: string;
-    fieldName: string;
-    newValue: string;
-    comment?: string | null;
-    status: string;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    reviewedBy?: string | null;
-    reviewNote?: string | null;
-  }>;
-};
-
 export type AdminStationPropertyConfigsQueryVariables = Exact<{
   stationType: Scalars['String']['input'];
   includeInactive?: InputMaybe<Scalars['Boolean']['input']>;
@@ -2633,23 +2608,6 @@ export type AdminDeleteBriefingTemplateMutationVariables = Exact<{
 export type AdminDeleteBriefingTemplateMutation = {
   __typename?: 'Mutation';
   deleteBriefingTemplate: boolean;
-};
-
-export type AdminReviewStationSuggestionMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-  approve: Scalars['Boolean']['input'];
-  reviewNote?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-export type AdminReviewStationSuggestionMutation = {
-  __typename?: 'Mutation';
-  reviewStationSuggestion: {
-    __typename?: 'StationSuggestionType';
-    uuid: string;
-    targetUuid: string;
-    status: string;
-    reviewNote?: string | null;
-  };
 };
 
 export type AdminUpsertStationPropertyConfigMutationVariables = Exact<{
@@ -4210,111 +4168,6 @@ export const AdminBriefingTemplatesDocument = {
 } as unknown as DocumentNode<
   AdminBriefingTemplatesQuery,
   AdminBriefingTemplatesQueryVariables
->;
-export const AdminStationSuggestionsDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminStationSuggestions' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'status' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'targetUuid' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '0' },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'limit' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '50' },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'stationSuggestions' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'status' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'status' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'targetUuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'targetUuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'skip' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'skip' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'limit' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'limit' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'targetType' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'targetUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'fieldName' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'newValue' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'reviewedBy' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminStationSuggestionsQuery,
-  AdminStationSuggestionsQueryVariables
 >;
 export const AdminStationPropertyConfigsDocument = {
   kind: 'Document',
@@ -7321,95 +7174,6 @@ export const AdminDeleteBriefingTemplateDocument = {
 } as unknown as DocumentNode<
   AdminDeleteBriefingTemplateMutation,
   AdminDeleteBriefingTemplateMutationVariables
->;
-export const AdminReviewStationSuggestionDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminReviewStationSuggestion' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'approve' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'Boolean' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'reviewNote' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'reviewStationSuggestion' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'approve' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'approve' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'reviewNote' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'reviewNote' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'targetUuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminReviewStationSuggestionMutation,
-  AdminReviewStationSuggestionMutationVariables
 >;
 export const AdminUpsertStationPropertyConfigDocument = {
   kind: 'Document',
