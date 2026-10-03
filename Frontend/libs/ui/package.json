@@ -10,10 +10,12 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^9.0.0",
+    "@rescue-frontend/data-access": "workspace:*",
     "@tanstack/react-table": "^9.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "lucide-react": "^0.577.0"
+    "lucide-react": "^0.577.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@storybook/addon-docs": "10.6.0",

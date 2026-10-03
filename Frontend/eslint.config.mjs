@@ -30,7 +30,7 @@ export default [
             },
             {
               sourceTag: 'type:ui',
-              onlyDependOnLibsWithTags: [],
+              onlyDependOnLibsWithTags: ['type:data-access'],
             },
             {
               sourceTag: 'type:data-access',

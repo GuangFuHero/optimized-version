@@ -1,0 +1,1384 @@
+enum AccessStatus {
+  accessible
+  restricted
+  inaccessible
+  unknown
+}
+
+enum AnnouncementFilter {
+  ACTIVE
+  ALL
+}
+
+enum AnnouncementMoveDirection {
+  UP
+  DOWN
+}
+
+type AnnouncementType {
+  uuid: UUID!
+  content: String!
+  active: Boolean!
+
+  """
+  Display position (1 = top) among active announcements; null when inactive
+  """
+  order: Int
+
+  """UUID of the user who created this announcement"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type AssignedTeamType {
+  uuid: UUID!
+  name: String!
+  type: String!
+}
+
+input BoundsInput {
+  """South boundary latitude"""
+  minLat: Float!
+
+  """North boundary latitude"""
+  maxLat: Float!
+
+  """West boundary longitude"""
+  minLng: Float!
+
+  """East boundary longitude"""
+  maxLng: Float!
+}
+
+enum BriefingState {
+  BRIEFING
+  IN_FIELD
+  DEBRIEF
+}
+
+type BriefingTemplateType {
+  uuid: UUID!
+  content: String!
+
+  """Free-form categorization tags"""
+  tags: [String!]!
+
+  """Lifecycle phase: 'briefing', 'in_field', or 'debrief'"""
+  state: String!
+
+  """UUID of the user who created this template"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type BriefingType {
+  uuid: UUID!
+
+  """UUID of the source template, or null for ad-hoc briefings"""
+  templateUuid: UUID
+  content: String!
+
+  """Free-form categorization tags"""
+  tags: [String!]!
+
+  """Lifecycle phase: 'briefing', 'in_field', or 'debrief'"""
+  state: String!
+
+  """UUID of the user who created this briefing"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type ClosureAreaConnection {
+  items: [ClosureAreaType!]!
+  pageInfo: PageInfo!
+}
+
+type ClosureAreaType {
+  uuid: UUID!
+
+  """Internal polymorphic discriminator — always 'closure_area'"""
+  propertyName: String!
+
+  """GeoJSON Polygon or MultiPolygon marking the closed area"""
+  geometry: GeoJSON
+
+  """UUID of the user who reported this closure"""
+  createdBy: String
+
+  """Current closure status: 'dangerous', 'block'"""
+  status: String!
+
+  """Source of the closure report, e.g. agency name or URL"""
+  informationSource: String
+
+  """Additional notes about this closure"""
+  comment: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input CreateAnnouncementInput {
+  """The announcement body text"""
+  content: String!
+}
+
+input CreateBriefingTemplateInput {
+  """The template body text"""
+  content: String!
+
+  """Categorization tags"""
+  tags: [String!]! = []
+
+  """Lifecycle phase this template targets"""
+  state: BriefingState! = BRIEFING
+}
+
+input CreateClosureAreaInput {
+  """GeoJSON Polygon or MultiPolygon — must not be a Point"""
+  geometry: GeoJSON!
+
+  """Initial closure status: 'active', 'cleared', or 'unknown'"""
+  status: String!
+
+  """Source of the closure report, e.g. agency name or URL"""
+  informationSource: String = null
+  comment: String = null
+}
+
+input CreateCrowdSourcingInput {
+  """UUID of the station being rated"""
+  stationUuid: String!
+
+  """
+  UUID of the StationProperty being rated — null for a general station rating
+  """
+  itemUuid: String = null
+
+  """Rating value: 'up', 'neutral', or 'down'"""
+  rating: String!
+
+  """Distance in meters from the user to the station at time of submission"""
+  distanceFromGeometry: Float = null
+}
+
+input CreateStationInput {
+  """GeoJSON Point — must be a valid Point within lon/lat bounds"""
+  geometry: GeoJSON!
+
+  """Station category, e.g. 'shelter', 'supply', 'medical'"""
+  type: String = null
+  name: String = null
+  description: String = null
+
+  """Operating hours in free-text format"""
+  opHour: String = null
+
+  """Importance level for map rendering (0 = default)"""
+  level: Int! = 0
+  comment: String = null
+
+  """Data origin: 'user' (default) or 'official'"""
+  source: String! = "user"
+
+  """Visibility: 'public' (default), 'restricted', or 'internal'"""
+  visibility: Visibility! = public
+
+  """Optional station contact name"""
+  contactName: String = null
+
+  """Optional station contact email"""
+  contactEmail: String = null
+
+  """Optional station contact phone"""
+  contactPhone: String = null
+
+  """
+  Whether the station is open: 'active' (default), 'temporarily_closed', or 'permanently_closed'
+  """
+  operationalStatus: StationOperationalStatus! = active
+
+  """Optional secondary address or pole location to attach to this station"""
+  secondaryLocation: SecondaryLocationInput = null
+}
+
+input CreateStationPropertyInput {
+  """UUID of the station to attach this property to"""
+  stationUuid: String!
+
+  """Category: 'supply', 'service', or 'equipment'"""
+  propertyType: String!
+
+  """Specific item name matching the property config schema"""
+  propertyName: String!
+  quantity: Int = null
+
+  """Initial credibility weight [0.0–2.0], default 1.0"""
+  weightings: Float! = 1
+}
+
+input CreateStationSuggestionInput {
+  """'station' or 'station_property'"""
+  targetType: String!
+
+  """UUID of the station/property to change"""
+  targetUuid: UUID!
+
+  """Which field to change (see suggestableFields)"""
+  fieldName: String!
+
+  """Proposed new value as text"""
+  newValue: String!
+
+  """Why the change is suggested"""
+  comment: String = null
+}
+
+input CreateTaskPropertyInput {
+  """UUID of the task to attach this property to"""
+  taskUuid: String!
+
+  """Attribute key matching the task property config schema"""
+  propertyName: String!
+
+  """Value for the attribute"""
+  propertyValue: String!
+
+  """Number of units — null if not applicable"""
+  quantity: Int = null
+  comment: String = null
+}
+
+input CreateTicketInput {
+  title: String!
+  description: String = null
+
+  """
+  GeoJSON Point for the location where help is needed — [longitude, latitude]
+  """
+  geometry: GeoJSON!
+
+  """Full name of the requester"""
+  contactName: String!
+
+  """Optional email for follow-up"""
+  contactEmail: String = null
+
+  """Optional phone number for follow-up"""
+  contactPhone: String = null
+
+  """Urgency: 'low' (default), 'medium', 'high', or 'critical'"""
+  priority: String! = "low"
+
+  """Type of help: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String = null
+
+  """Visibility: 'public' (default), 'restricted', or 'internal'"""
+  visibility: Visibility! = public
+
+  """
+  Disaster type keys, e.g. ['flood', 'landslide']. Each must be an active key from `disasterTypes`; an unknown one is rejected rather than stored, because a ticket filed under a disaster that does not exist would show the reporter an empty form
+  """
+  disasterTypes: [String!] = null
+
+  """災民受困／無法自行離開. Omit when nobody was asked"""
+  personTrappedReported: TriState = null
+
+  """立即生命危險. Omit when nobody was asked"""
+  immediateDangerReported: TriState = null
+
+  """
+  Street address and space detail for where help is needed. New in feature 018 — before it, only stations could carry one, so the record that most needs a door number had nothing but a map pin
+  """
+  secondaryLocation: SecondaryLocationInput = null
+}
+
+input CreateTicketTaskInput {
+  """UUID of the ticket this task belongs to"""
+  ticketUuid: String!
+
+  """Category: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String!
+  taskName: String!
+  taskDescription: String = null
+
+  """Number of people or units needed"""
+  quantity: Int = null
+
+  """Origin: 'user' (default) or 'official'"""
+  source: String! = "user"
+
+  """Visibility: 'public' (default), 'restricted', or 'internal'"""
+  visibility: Visibility! = public
+
+  """Optional UUID of an associated route"""
+  routeUuid: String = null
+}
+
+input CreateWorkZoneInput {
+  name: String!
+
+  """GeoJSON Polygon or MultiPolygon — must not be a Point"""
+  geometry: GeoJSON!
+}
+
+type CrowdSourcingType {
+  uuid: UUID!
+
+  """UUID of the station being rated"""
+  stationUuid: String!
+
+  """UUID of the specific StationProperty being rated"""
+  itemUuid: String
+
+  """UUID of the user who submitted this rating"""
+  userUuid: String!
+
+  """Credibility score of the submitter at the time of submission"""
+  userCredibilityScore: Float!
+
+  """User-submitted rating: 'up', 'neutral', or 'down'"""
+  rating: String!
+
+  """
+  Distance in meters between the user's location and the station at submission time
+  """
+  distanceFromGeometry: Float
+  createdAt: DateTime
+}
+
+"""Date with time (isoformat)"""
+scalar DateTime
+
+type DisasterTypeType {
+  uuid: UUID!
+
+  """
+  Immutable lower-case English code, e.g. 'flood'. Referenced as a bare string by tickets and every field config, so it is never renamed — edit `label` instead
+  """
+  key: String!
+
+  """Display name, e.g. '水災'"""
+  label: String!
+
+  """False retires the type: no new writes, existing ones readable"""
+  isActive: Boolean!
+}
+
+enum FieldDataType {
+  text
+  long_text
+  number
+  boolean
+  single_select
+  multi_select
+}
+
+input GenerateBriefingInput {
+  """Source template UUID; null for an ad-hoc briefing"""
+  templateUuid: UUID = null
+
+  """Override content; defaults to the template's content"""
+  content: String = null
+
+  """Override tags; defaults to the template's tags"""
+  tags: [String!] = null
+
+  """Override phase; defaults to the template's state"""
+  state: BriefingState = null
+}
+
+"""GeoJSON geometry object (RFC 7946)"""
+scalar GeoJSON
+
+type Mutation {
+  createStation(input: CreateStationInput!): StationType!
+  attachStationPhoto(stationUuid: UUID!, url: String!): PhotoType!
+  detachStationPhoto(uuid: UUID!): Boolean!
+  updateStation(uuid: UUID!, input: UpdateStationInput!): StationType!
+  deleteStation(uuid: UUID!): Boolean!
+  assignStationToTeam(stationUuid: UUID!, teamUuid: UUID!): StationType!
+  unassignStation(stationUuid: UUID!): StationType!
+  createClosureArea(input: CreateClosureAreaInput!): ClosureAreaType!
+  updateClosureArea(uuid: UUID!, input: UpdateClosureAreaInput!): ClosureAreaType!
+  deleteClosureArea(uuid: UUID!): Boolean!
+  createStationProperty(input: CreateStationPropertyInput!): StationPropertyType!
+  updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
+  createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
+  createTicket(input: CreateTicketInput!): TicketType!
+  updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
+  setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!
+  reviewTicket(uuid: UUID!, verificationStatus: String!, reviewNote: String = null): TicketType!
+  deleteTicket(uuid: UUID!): Boolean!
+  createTicketTask(input: CreateTicketTaskInput!): TicketTaskType!
+  updateTicketTask(uuid: UUID!, input: UpdateTicketTaskInput!): TicketTaskType!
+  createTaskProperty(input: CreateTaskPropertyInput!): TaskPropertyType!
+  updateTaskProperty(uuid: UUID!, input: UpdateTaskPropertyInput!): TaskPropertyType!
+  assignTaskActor(taskUuid: UUID!, actorUuid: UUID = null, role: String = null): TaskAssignmentType!
+  updateTaskAssignment(uuid: UUID!, input: UpdateTaskAssignmentInput!): TaskAssignmentType!
+  unassignTaskActor(uuid: UUID!): Boolean!
+  upsertStationPropertyConfig(stationType: String!, input: UpsertPropertyConfigInput!): StationPropertyConfigType!
+  upsertTaskPropertyConfig(taskType: String!, input: UpsertPropertyConfigInput!): TaskPropertyConfigType!
+  upsertTicketPropertyConfig(input: UpsertTicketPropertyConfigInput!): TicketPropertyConfigType!
+  upsertDisasterType(input: UpsertDisasterTypeInput!): DisasterTypeType!
+  createAnnouncement(input: CreateAnnouncementInput!): AnnouncementType!
+  updateAnnouncement(uuid: UUID!, input: UpdateAnnouncementInput!): AnnouncementType!
+  moveAnnouncement(uuid: UUID!, direction: AnnouncementMoveDirection!): AnnouncementType!
+  setAnnouncementActive(uuid: UUID!, active: Boolean!): AnnouncementType!
+  deleteAnnouncement(uuid: UUID!): Boolean!
+  createBriefingTemplate(input: CreateBriefingTemplateInput!): BriefingTemplateType!
+  updateBriefingTemplate(uuid: UUID!, input: UpdateBriefingTemplateInput!): BriefingTemplateType!
+  deleteBriefingTemplate(uuid: UUID!): Boolean!
+  generateBriefing(input: GenerateBriefingInput!): BriefingType!
+  updateBriefing(uuid: UUID!, input: UpdateBriefingInput!): BriefingType!
+  deleteBriefing(uuid: UUID!): Boolean!
+  createStationSuggestion(input: CreateStationSuggestionInput!): StationSuggestionType!
+  reviewStationSuggestion(uuid: UUID!, approve: Boolean!, reviewNote: String = null): StationSuggestionType!
+  createWorkZone(input: CreateWorkZoneInput!): WorkZoneType!
+  updateWorkZone(uuid: UUID!, input: UpdateWorkZoneInput!): WorkZoneType!
+  assignZoneToTeam(input: ZoneTeamAssignmentInput!): ZoneAssignmentType!
+  removeZoneFromTeam(input: ZoneTeamAssignmentInput!): Boolean!
+  deleteWorkZone(uuid: UUID!): Boolean!
+}
+
+type PageInfo {
+  """Total number of matching records across all pages"""
+  totalCount: Int!
+
+  """True if there are more records after the current page"""
+  hasNextPage: Boolean!
+
+  """True if there are records before the current page"""
+  hasPreviousPage: Boolean!
+}
+
+type PhotoType {
+  uuid: UUID!
+
+  """UUID of the parent entity this photo is attached to"""
+  refUuid: String!
+
+  """
+  'geometry' (attached to a ticket or station) or 'pole' (attached to a secondary_location)
+  """
+  refType: String!
+
+  """Public URL of the uploaded photo"""
+  url: String!
+
+  """UUID of the user who uploaded this photo"""
+  createdBy: String!
+  createdAt: DateTime
+}
+
+type Query {
+  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  station(uuid: UUID!): StationType
+  closureAreas(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): ClosureAreaConnection!
+  closureArea(uuid: UUID!): ClosureAreaType
+  tickets(
+    bounds: BoundsInput = null
+    status: String = null
+    priority: String = null
+    q: String = null
+    skip: Int! = 0
+    limit: Int! = 50
+
+    """
+    Map zoom the result is for. Only affects a caller without ticket.view_detail: sets how coarse the H3 cell standing in for each point is — coarser as the map zooms out, never finer than resolution 8 whatever is sent
+    """
+    zoom: Float = null
+  ): TicketConnection!
+  ticket(
+    uuid: UUID!
+
+    """
+    Map zoom the result is for. Only affects a caller without ticket.view_detail: sets how coarse the H3 cell standing in for each point is — coarser as the map zooms out, never finer than resolution 8 whatever is sent
+    """
+    zoom: Float = null
+  ): TicketType
+  ticketTasks(ticketUuid: String!, status: String = null, q: String = null, skip: Int! = 0, limit: Int! = 50): [TicketTaskType!]!
+  taskProperties(taskUuid: String!): [TaskPropertyType!]!
+  stationPropertyConfigs(stationType: String!, includeInactive: Boolean! = false): [StationPropertyConfigType!]!
+  taskPropertyConfigs(taskType: String!, includeInactive: Boolean! = false): [TaskPropertyConfigType!]!
+  ticketPropertyConfigs(disasterTypes: [String!]!, includeInactive: Boolean! = false): [TicketPropertyConfigType!]!
+  disasterTypes(includeInactive: Boolean! = false): [DisasterTypeType!]!
+  announcements(filter: AnnouncementFilter! = ACTIVE): [AnnouncementType!]!
+  announcement(uuid: UUID!): AnnouncementType
+  briefingTemplates(state: BriefingState = null, tag: String = null): [BriefingTemplateType!]!
+  briefingTemplate(uuid: UUID!): BriefingTemplateType
+  briefings(state: BriefingState = null, tag: String = null): [BriefingType!]!
+  briefing(uuid: UUID!): BriefingType
+  suggestableFields(targetType: String!): [SuggestableFieldType!]!
+  stationSuggestions(status: String = null, targetUuid: String = null, skip: Int! = 0, limit: Int! = 50): [StationSuggestionType!]!
+  workZones(skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
+  workZone(uuid: UUID!): WorkZoneType
+  zonesByTeam(teamUuid: UUID!, skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
+}
+
+input SecondaryLocationInput {
+  """Type of secondary location: 'address' (default) or 'pole'"""
+  locationType: String! = "address"
+  county: String = null
+  city: String = null
+  lane: String = null
+  alley: String = null
+  no: String = null
+
+  """樓棟／區域, e.g. 'A棟'; leave empty if unknown"""
+  buildingSection: String = null
+
+  """Floor label: 'B1', '1F', 'RF'. Free text on purpose"""
+  floor: String = null
+
+  """房號／空間, e.g. '302', '樓梯間'"""
+  room: String = null
+
+  """空間描述, e.g. '三房兩廳'"""
+  spaceDescription: String = null
+
+  """求救者所在空間, e.g. '主臥衣櫃'"""
+  victimSpace: String = null
+
+  """Whether the space can be entered right now"""
+  accessStatus: AccessStatus = null
+
+  """地標補充 — entrance, landmark, building, which side of the road"""
+  landmarkNote: String = null
+  poleId: String = null
+  poleType: String = null
+  poleNote: String = null
+}
+
+type SecondaryLocationType {
+  uuid: UUID!
+
+  """UUID of the parent station or ticket this location belongs to"""
+  geometryUuid: String!
+
+  """Type of secondary location: 'address' or 'pole'"""
+  locationType: String!
+  county: String
+  city: String
+  lane: String
+  alley: String
+  no: String
+
+  """樓棟／區域, e.g. 'A棟', '東翼'"""
+  buildingSection: String
+
+  """Floor label as spoken: 'B1', '1F', 'RF' — never coerced to a number"""
+  floor: String
+
+  """房號／空間, e.g. '302', '樓梯間'"""
+  room: String
+
+  """空間描述, e.g. '三房兩廳'"""
+  spaceDescription: String
+
+  """求救者所在空間, e.g. '主臥衣櫃'"""
+  victimSpace: String
+
+  """
+  Whether the space can be entered: 'accessible', 'restricted', 'inaccessible', 'unknown'. A current observation, not a safety certification
+  """
+  accessStatus: String
+
+  """地標補充 — how to find the entrance when coordinates are not enough"""
+  landmarkNote: String
+
+  """Utility pole identifier (only set when location_type is 'pole')"""
+  poleId: String
+
+  """
+  Type of utility pole, e.g. '電線桿' (electricity pole), '電話線桿' (telephone pole)
+  """
+  poleType: String
+
+  """Additional notes about the pole location"""
+  poleNote: String
+}
+
+type StationConnection {
+  items: [StationType!]!
+  pageInfo: PageInfo!
+}
+
+enum StationOperationalStatus {
+  active
+  temporarily_closed
+  permanently_closed
+}
+
+type StationPropertyConfigType {
+  uuid: UUID!
+
+  """
+  The station type this config applies to, or 'all' for universal properties
+  """
+  stationType: String!
+
+  """The property key this config defines, e.g. 'water', 'food_ration'"""
+  propertyName: String!
+
+  """Which control the form renders for this field"""
+  dataType: FieldDataType!
+
+  """
+  Allowed values for single_select / multi_select, e.g. ['available', 'depleted']
+  """
+  enumOptions: [String!]
+
+  """Unit suffix for a number field, e.g. 'cm'; null otherwise"""
+  unit: String
+
+  """Disaster types this field is enabled for; empty means every type"""
+  disasterTypes: [String!]!
+
+  """Display text; null when no custom label has been set"""
+  label: String
+
+  """Text to render: the label, falling back to property_name"""
+  displayLabel: String!
+
+  """Field order within the form"""
+  sortOrder: Int!
+
+  """Whether the field is in use"""
+  isActive: Boolean!
+}
+
+type StationPropertyType {
+  uuid: UUID!
+
+  """UUID of the parent station this property belongs to"""
+  stationUuid: String!
+
+  """Category of this property, e.g. 'supply', 'service', 'equipment'"""
+  propertyType: String!
+
+  """Specific item name, e.g. 'water', 'food_ration', 'medical_kit'"""
+  propertyName: String!
+
+  """Available quantity — null means unknown"""
+  quantity: Int
+  comment: String
+
+  """Review state: 'pending', 'verified', or 'rejected'"""
+  status: String!
+
+  """
+  Credibility weight applied during score aggregation [0.0–2.0], default 1.0
+  """
+  weightings: Float!
+
+  """UUID of the user who added this property"""
+  createdBy: String
+  createdAt: DateTime
+  crowdSourcings: [CrowdSourcingType!]!
+}
+
+type StationSuggestionType {
+  uuid: UUID!
+
+  """What the suggestion targets: 'station' or 'station_property'"""
+  targetType: String!
+
+  """UUID of the targeted station/property"""
+  targetUuid: String!
+  fieldName: String!
+
+  """Proposed value, stored as text"""
+  newValue: String!
+
+  """Why the user suggests this change"""
+  comment: String
+
+  """'pending', 'approved', or 'rejected'"""
+  status: String!
+
+  """Admin's note recorded when approving/rejecting"""
+  reviewNote: String
+
+  """UUID of the admin who decided"""
+  reviewedBy: String
+
+  """UUID of the user who made the suggestion"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type StationType {
+  uuid: UUID!
+
+  """Internal polymorphic discriminator — always 'station'"""
+  propertyName: String!
+
+  """
+  GeoJSON geometry — Point for a station location, Polygon/MultiPolygon for an area
+  """
+  geometry: GeoJSON
+
+  """UUID of the user who created this station"""
+  createdBy: String
+
+  """Station category, e.g. 'shelter', 'supply', 'medical'"""
+  type: String
+  name: String
+  description: String
+
+  """Operating hours in free-text format, e.g. '09:00–18:00' or '24h'"""
+  opHour: String
+
+  """Importance level used for map rendering priority (0 = default)"""
+  level: Int!
+
+  """Internal admin comment, not shown to the public"""
+  comment: String
+
+  """Data source of this record: 'user' or 'official'"""
+  source: String
+
+  """Who can see this station: 'public' or 'restricted'"""
+  visibility: String
+
+  """Review state: 'unverified', 'ai_verified', or 'human_verified'"""
+  verificationStatus: String
+
+  """True if this station has been flagged as a duplicate entry"""
+  isDuplicate: Boolean!
+
+  """True if this is a temporary station (e.g. emergency shelter)"""
+  isTemporary: Boolean!
+
+  """True if this station is operated by a government or official body"""
+  isOfficial: Boolean!
+
+  """
+  Whether the station is open: 'active', 'temporarily_closed', or 'permanently_closed'
+  """
+  operationalStatus: String!
+
+  """When operational_status last changed"""
+  statusChangedAt: DateTime
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """
+  The team that runs this station, or null when unassigned (ADR-285). Public: which organisation runs a station is not protected. Only the team's uuid, name and type show — never its members.
+  """
+  assignedTeam: AssignedTeamType
+
+  """
+  Station contact name — masked unless the caller holds station.view_pii here
+  """
+  contactName: String
+
+  """
+  Station contact email — masked unless the caller holds station.view_pii here
+  """
+  contactEmail: String
+
+  """
+  Station contact phone — masked unless the caller holds station.view_pii here
+  """
+  contactPhone: String
+  photos: [PhotoType!]!
+  secondaryLocation: SecondaryLocationType
+  properties: [StationPropertyType!]!
+}
+
+type SuggestableFieldType {
+  fieldName: String!
+
+  """Input widget hint: 'string', 'integer', or 'enum'"""
+  dataType: String!
+
+  """Allowed values when data_type is 'enum', else null"""
+  enumOptions: [String!]
+}
+
+enum TaskAssignmentStatus {
+  accepted
+  en_route
+  completed
+}
+
+type TaskAssignmentType {
+  uuid: UUID!
+
+  """UUID of the task this assignment belongs to"""
+  taskUuid: String!
+
+  """UUID of the assigned user or group"""
+  actorUuid: String!
+
+  """Role in the task, e.g. 'lead', 'support'"""
+  role: String
+
+  """Work-completion state: 'accepted', 'en_route', or 'completed'"""
+  status: String!
+
+  """Timestamp when the assignment was created"""
+  assignedAt: DateTime
+
+  """Timestamp when the status was last changed"""
+  updatedAt: DateTime
+}
+
+type TaskPropertyConfigType {
+  uuid: UUID!
+
+  """The task type this config applies to"""
+  taskType: String!
+
+  """The property key this config defines"""
+  propertyName: String!
+
+  """Which control the form renders for this field"""
+  dataType: FieldDataType!
+
+  """Allowed values for single_select / multi_select"""
+  enumOptions: [String!]
+
+  """Unit suffix for a number field, e.g. 'cm'; null otherwise"""
+  unit: String
+
+  """Disaster types this field is enabled for; empty means every type"""
+  disasterTypes: [String!]!
+
+  """Display text; null when no custom label has been set"""
+  label: String
+
+  """Text to render: the label, falling back to property_name"""
+  displayLabel: String!
+
+  """Field order within the form"""
+  sortOrder: Int!
+
+  """Whether the field is in use"""
+  isActive: Boolean!
+}
+
+enum TaskPropertyStatus {
+  pending
+  fulfilled
+}
+
+type TaskPropertyType {
+  uuid: UUID!
+
+  """UUID of the parent ticket task"""
+  taskUuid: String!
+
+  """Structured attribute key, e.g. 'skill_required', 'cargo_type'"""
+  propertyName: String!
+
+  """Value for the attribute, e.g. 'medical_first_aid', 'food'"""
+  propertyValue: String!
+
+  """Number of units required — null means not applicable"""
+  quantity: Int
+
+  """Fulfillment state: 'pending' or 'fulfilled'"""
+  status: String
+  createdAt: DateTime
+
+  """
+  Optional notes about this property. Null to a caller without ticket.view_detail on the parent ticket
+  """
+  comment: String
+}
+
+type TicketConnection {
+  items: [TicketType!]!
+  pageInfo: PageInfo!
+}
+
+input TicketDisasterDetailInput {
+  """The field key from `ticketPropertyConfigs`"""
+  propertyName: String!
+
+  """
+  Selected values. One entry for a single-valued field, several for multi_select, [] to clear the field
+  """
+  values: [String!]!
+}
+
+type TicketDisasterDetailType {
+  uuid: UUID!
+
+  """The field key, matching a `ticketPropertyConfigs` entry"""
+  propertyName: String!
+
+  """
+  One selected value. Numbers arrive as strings — the config's dataType says how to read it
+  """
+  value: String!
+}
+
+type TicketPropertyConfigType {
+  uuid: UUID!
+
+  """The immutable field key, e.g. 'water_depth_cm', 'access_blocked'"""
+  propertyName: String!
+
+  """Which control the form renders for this field"""
+  dataType: FieldDataType!
+
+  """Allowed values for single_select / multi_select"""
+  enumOptions: [String!]
+
+  """Unit suffix for a number field, e.g. 'cm', 'mm'"""
+  unit: String
+
+  """Disaster type keys this field is enabled for; empty means every type"""
+  disasterTypes: [String!]!
+
+  """Display text; null when no custom label has been set"""
+  label: String
+
+  """Text to render: the label, falling back to property_name"""
+  displayLabel: String!
+
+  """
+  Guidance shown under the field, including safety limits such as 「不可為了量測進入危險區」. Render it — some of these tell a reporter not to take a risk
+  """
+  hint: String
+
+  """Whether the field is in use"""
+  isActive: Boolean!
+}
+
+type TicketTaskType {
+  uuid: UUID!
+
+  """UUID of the parent ticket this task belongs to"""
+  ticketUuid: String!
+
+  """Category of task: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String!
+
+  """Short name summarising the task"""
+  taskName: String!
+
+  """Number of people or units needed — null means unspecified"""
+  quantity: Int
+
+  """Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'"""
+  status: String!
+
+  """Origin of this task: 'user' or 'official'"""
+  source: String!
+
+  """Who can see this task: 'public', 'restricted', or 'internal'"""
+  visibility: String!
+
+  """Review state: 'pending_review', 'approved', or 'rejected'"""
+  moderationStatus: String!
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """
+  Detailed task instructions or context. Null to a caller without ticket.view_detail on the parent ticket
+  """
+  taskDescription: String
+
+  """
+  Current progress update written by the assignee. Null to a caller without ticket.view_detail on the parent ticket
+  """
+  progressNote: String
+
+  """
+  Moderator's notes explaining the review decision. Null to a caller without ticket.view_detail on the parent ticket
+  """
+  reviewNote: String
+
+  """
+  UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket
+  """
+  createdBy: String
+  properties: [TaskPropertyType!]!
+  assignments: [TaskAssignmentType!]!
+  assignedCount: Int!
+  completedCount: Int!
+  progress: Float
+}
+
+type TicketType {
+  uuid: UUID!
+
+  """Internal polymorphic discriminator — always 'request'"""
+  propertyName: String!
+
+  """Short subject line describing the request"""
+  title: String!
+
+  """Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled'"""
+  status: String!
+
+  """Urgency level: 'low', 'medium', 'high', or 'critical'"""
+  priority: String!
+
+  """Type of help needed: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String
+
+  """Who can see this ticket: 'public', 'restricted', or 'internal'"""
+  visibility: String
+
+  """
+  Review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'
+  """
+  verificationStatus: String
+
+  """
+  Disaster type keys this ticket is filed under, e.g. ['flood', 'landslide']. Plural because one incident is routinely two disasters at once. Drives which fields `ticketPropertyConfigs` returns for it
+  """
+  disasterTypes: [String!]!
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """
+  GeoJSON Point indicating where help is needed. To a caller without ticket.view_detail here, the centre of the H3 cell the point falls in — at most resolution 8 (about 1 km across), coarser when `zoom` asks for it
+  """
+  geometry: GeoJSON
+
+  """
+  The H3 cell `geometry` stands in for, as its hex index (e.g. '884ba0a511fffff'), when the caller is shown the coarse location; null when `geometry` is the exact point. Tickets sharing a value share a location on the map — group by it, and draw the cell from it (h3-js `cellToBoundary`); its resolution is in the index
+  """
+  locationCell: String
+
+  """
+  The reporter's own account. Null to a caller without ticket.view_detail here — free text can name a door number the address field withholds
+  """
+  description: String
+
+  """
+  Moderator's notes about the verification decision. Null to a caller without ticket.view_detail here
+  """
+  reviewNote: String
+
+  """
+  UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here
+  """
+  createdBy: String
+
+  """
+  Requester full name — masked unless the caller holds ticket.view_pii here
+  """
+  contactName: String
+
+  """Follow-up email — masked unless the caller holds ticket.view_pii here"""
+  contactEmail: String
+
+  """Follow-up phone — masked unless the caller holds ticket.view_pii here"""
+  contactPhone: String
+
+  """
+  Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. What the person said, not a professional assessment
+  """
+  personTrappedReported: String
+
+  """
+  Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. Not a triage grade and not a risk classification
+  """
+  immediateDangerReported: String
+
+  """
+  Photos attached to this ticket. Empty to a caller without ticket.view_detail here
+  """
+  photos: [PhotoType!]!
+  tasks: [TicketTaskType!]!
+
+  """
+  Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address
+  """
+  secondaryLocation: SecondaryLocationType
+  disasterDetails: [TicketDisasterDetailType!]!
+}
+
+enum TriState {
+  yes
+  no
+  unknown
+}
+
+scalar UUID
+
+input UpdateAnnouncementInput {
+  """The new announcement body text"""
+  content: String!
+}
+
+input UpdateBriefingInput {
+  """New body text"""
+  content: String = null
+
+  """Replacement tag list"""
+  tags: [String!] = null
+
+  """New lifecycle phase"""
+  state: BriefingState = null
+}
+
+input UpdateBriefingTemplateInput {
+  """New body text"""
+  content: String = null
+
+  """Replacement tag list"""
+  tags: [String!] = null
+
+  """New lifecycle phase"""
+  state: BriefingState = null
+}
+
+input UpdateClosureAreaInput {
+  geometry: GeoJSON = null
+  status: String = null
+  informationSource: String
+  comment: String
+}
+
+input UpdateStationInput {
+  """New GeoJSON Point — replaces existing geometry if provided"""
+  geometry: GeoJSON = null
+  type: String
+  name: String
+  description: String
+  opHour: String
+
+  """Updated importance level"""
+  level: Int = null
+  comment: String
+
+  """Updated visibility: 'public', 'restricted', or 'internal'"""
+  visibility: Visibility = null
+
+  """
+  Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed'
+  """
+  operationalStatus: StationOperationalStatus = null
+  contactName: String
+  contactEmail: String
+  contactPhone: String
+}
+
+input UpdateStationPropertyInput {
+  quantity: Int
+
+  """New review state: 'pending', 'verified', or 'rejected'"""
+  status: String = null
+
+  """Updated credibility weight [0.0–2.0]"""
+  weightings: Float = null
+}
+
+input UpdateTaskAssignmentInput {
+  """New work-completion state"""
+  status: TaskAssignmentStatus = null
+
+  """Updated role, e.g. 'lead' or 'support' — pass null to clear"""
+  role: String
+}
+
+input UpdateTaskPropertyInput {
+  """Updated attribute value"""
+  propertyValue: String = null
+
+  """Updated number of units — pass null to clear"""
+  quantity: Int
+
+  """Updated fulfillment state"""
+  status: TaskPropertyStatus = null
+
+  """Updated notes — pass null to clear"""
+  comment: String
+}
+
+input UpdateTicketInput {
+  """
+  New lifecycle state — must follow valid transitions (e.g. pending → in_progress)
+  """
+  status: String = null
+
+  """Updated urgency: 'low', 'medium', 'high', or 'critical'"""
+  priority: String = null
+  title: String = null
+  description: String
+
+  """Moderator's review notes — pass null to clear"""
+  reviewNote: String
+
+  """
+  Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'
+  """
+  verificationStatus: String = null
+
+  """
+  Disaster type keys — pass [] or null to clear. Validated against `disasterTypes`
+  """
+  disasterTypes: [String!]
+
+  """災民受困／無法自行離開 — pass null to unset"""
+  personTrappedReported: TriState
+
+  """立即生命危險 — pass null to unset"""
+  immediateDangerReported: TriState
+
+  """
+  Replace the ticket's street address and space detail, creating it if the ticket was filed without one. A whole-input replacement, not a patch — omitted members are written as null
+  """
+  secondaryLocation: SecondaryLocationInput = null
+}
+
+input UpdateTicketTaskInput {
+  """
+  New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'
+  """
+  status: String = null
+
+  """Updated progress description — pass null to clear"""
+  progressNote: String
+
+  """Moderator's review notes — pass null to clear"""
+  reviewNote: String
+
+  """New review state: 'pending_review', 'approved', or 'rejected'"""
+  moderationStatus: String = null
+
+  """Updated visibility: 'public', 'restricted', or 'internal'"""
+  visibility: Visibility = null
+}
+
+input UpdateWorkZoneInput {
+  name: String
+  geometry: GeoJSON = null
+}
+
+input UpsertDisasterTypeInput {
+  """The code to create or update; normalized (trimmed, lower-cased)"""
+  key: String!
+
+  """Display name. Required when creating"""
+  label: String = null
+
+  """Set false to retire the type; there is no delete"""
+  isActive: Boolean = null
+}
+
+input UpsertPropertyConfigInput {
+  """The property key to create or update"""
+  propertyName: String!
+
+  """
+  Which control the form renders. Required when the field is being created; omit to leave an existing field's type untouched
+  """
+  dataType: FieldDataType = null
+
+  """
+  Allowed values for single_select / multi_select. Omit or pass null to leave the stored options untouched; pass [] to clear them
+  """
+  enumOptions: [String!] = null
+
+  """
+  Unit suffix for a number field, e.g. 'cm'. Omit or pass null to leave the stored unit untouched; pass "" to clear it
+  """
+  unit: String = null
+
+  """
+  Disaster types this field is enabled for; an empty list means every type, so [] sets that value rather than clearing the field. Omit to leave it untouched
+  """
+  disasterTypes: [String!] = null
+
+  """
+  Display text for the field. Omit or pass null to leave the stored label untouched; pass "" to clear it and fall back to the property name
+  """
+  label: String = null
+
+  """Field order in the form"""
+  sortOrder: Int = null
+
+  """Set false to retire the field without deleting its data"""
+  isActive: Boolean = null
+}
+
+input UpsertTicketPropertyConfigInput {
+  """The field key to create or update"""
+  propertyName: String!
+
+  """
+  Which control the form renders. Required when creating; omit to leave an existing field's type untouched
+  """
+  dataType: FieldDataType = null
+
+  """
+  Allowed values for single_select / multi_select. Omit or pass null to leave them untouched; pass [] to clear
+  """
+  enumOptions: [String!] = null
+
+  """
+  Unit suffix for a number field, e.g. 'cm', 'mm'. Omit or pass null to leave the stored unit untouched; pass "" to clear it
+  """
+  unit: String = null
+
+  """
+  Disaster type keys this field applies to; empty list means every type. Each must be an active key from `disasterTypes` — an unknown one is rejected, not stored
+  """
+  disasterTypes: [String!] = null
+
+  """
+  Display text for the field. Omit or pass null to leave the stored label untouched; pass "" to clear it and fall back to the property name
+  """
+  label: String = null
+
+  """
+  Guidance and safety text shown under the field. Omit or pass null to leave the stored hint untouched; pass "" to clear it
+  """
+  hint: String = null
+
+  """Set false to retire the field without deleting its values"""
+  isActive: Boolean = null
+}
+
+enum Visibility {
+  public
+  restricted
+  internal
+}
+
+type WorkZoneConnection {
+  items: [WorkZoneType!]!
+  pageInfo: PageInfo!
+}
+
+type WorkZoneType {
+  uuid: UUID!
+  name: String!
+
+  """GeoJSON Polygon or MultiPolygon marking the zone boundary"""
+  geometry: GeoJSON
+
+  """UUID of the gov user who drew this zone"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """Teams this zone has been delegated to"""
+  assignedTeams: [AssignedTeamType!]!
+}
+
+type ZoneAssignmentType {
+  zoneUuid: UUID!
+  teamUuid: UUID!
+  assignedAt: DateTime
+  assignedBy: String
+}
+
+input ZoneTeamAssignmentInput {
+  zoneUuid: UUID!
+  teamUuid: UUID!
+}

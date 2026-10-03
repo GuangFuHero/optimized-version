@@ -1,144 +1,115 @@
 'use client';
 
-import type {
-  IAuthIdentifierPayload,
-  IChangePasswordPayload,
-  IIdTokenPayload,
-  IPasswordResetPayload,
-  IRegisterPayload,
-  ISetPasswordPayload,
-  ITokenPair,
-  IVerifyPayload,
-} from '@rescue-frontend/data-access';
+import { createRestClient, responseData } from '@rescue-frontend/data-access';
+import type { components } from '@rescue-frontend/data-access/openapi';
 
-import { requestFrontendJsonAsync } from './request-async';
+import { sessionExpiryFetch } from '../../session/end-expired-session';
 
-const AUTH_API_BASE_PATH = '/api/v1/auth';
+const authApiClient = createRestClient(sessionExpiryFetch);
 
 export async function getUserSaltAsync(value: string) {
-  const response = await requestFrontendJsonAsync<{ salt_frontend: string }>(
-    `${AUTH_API_BASE_PATH}/salt/${encodeURIComponent(value)}`,
-  );
-
-  return response.salt_frontend;
+  const data = await authApiClient
+    .GET('/api/v1/auth/salt/{value}', { params: { path: { value } } })
+    .then(responseData);
+  return data.salt_frontend;
 }
 
-export function registerAsync(payload: IRegisterPayload) {
-  return requestFrontendJsonAsync<void>(`${AUTH_API_BASE_PATH}/register`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+export function registerAsync(
+  payload: components['schemas']['RegisterRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/register', { body: payload })
+    .then(() => undefined);
 }
 
-export function verifyAsync(payload: IVerifyPayload) {
-  return requestFrontendJsonAsync<ITokenPair>(`${AUTH_API_BASE_PATH}/verify`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+export function verifyAsync(payload: components['schemas']['VerifyRequest']) {
+  return authApiClient
+    .POST('/api/v1/auth/verify', { body: payload })
+    .then(responseData);
 }
 
-export function resendVerificationAsync(payload: IAuthIdentifierPayload) {
-  return requestFrontendJsonAsync<void>(
-    `${AUTH_API_BASE_PATH}/resend-verification`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+export function resendVerificationAsync(
+  payload: components['schemas']['ResendVerificationRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/resend-verification', { body: payload })
+    .then(() => undefined);
 }
 
-export function forgotPasswordAsync(payload: IAuthIdentifierPayload) {
-  return requestFrontendJsonAsync<void>(
-    `${AUTH_API_BASE_PATH}/forgot-password`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+export function forgotPasswordAsync(
+  payload: components['schemas']['ForgotPasswordRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/forgot-password', { body: payload })
+    .then(() => undefined);
 }
 
-export function resetPasswordAsync(payload: IPasswordResetPayload) {
-  return requestFrontendJsonAsync<void>(
-    `${AUTH_API_BASE_PATH}/reset-password`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+export function resetPasswordAsync(
+  payload: components['schemas']['ResetPasswordRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/reset-password', { body: payload })
+    .then(() => undefined);
 }
 
 export function logoutAsync() {
-  return requestFrontendJsonAsync<void>(`${AUTH_API_BASE_PATH}/logout`, {
-    method: 'POST',
-  });
+  return authApiClient.POST('/api/v1/auth/logout').then(() => undefined);
 }
 
 export function logoutAllAsync() {
-  return requestFrontendJsonAsync<void>(`${AUTH_API_BASE_PATH}/logout-all`, {
-    method: 'POST',
-  });
+  return authApiClient.POST('/api/v1/auth/logout-all').then(() => undefined);
 }
 
-export function changePasswordAsync(payload: IChangePasswordPayload) {
-  return requestFrontendJsonAsync<void>(
-    `${AUTH_API_BASE_PATH}/change-password`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+export function changePasswordAsync(
+  payload: components['schemas']['ChangePasswordRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/change-password', { body: payload })
+    .then(() => undefined);
 }
 
-export function setPasswordAsync(payload: ISetPasswordPayload) {
-  return requestFrontendJsonAsync<void>(`${AUTH_API_BASE_PATH}/set-password`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+export function setPasswordAsync(
+  payload: components['schemas']['SetPasswordRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/set-password', { body: payload })
+    .then(() => undefined);
 }
 
-export function addContactAsync(payload: IAuthIdentifierPayload) {
-  return requestFrontendJsonAsync<void>(`${AUTH_API_BASE_PATH}/contacts`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+export function addContactAsync(
+  payload: components['schemas']['AddContactRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/contacts', { body: payload })
+    .then(() => undefined);
 }
 
-export function verifyContactAsync(payload: IVerifyPayload) {
-  return requestFrontendJsonAsync<void>(
-    `${AUTH_API_BASE_PATH}/contacts/verify`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+export function verifyContactAsync(
+  payload: components['schemas']['VerifyContactRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/contacts/verify', { body: payload })
+    .then(() => undefined);
 }
 
-export function resendContactAsync(payload: IAuthIdentifierPayload) {
-  return requestFrontendJsonAsync<void>(
-    `${AUTH_API_BASE_PATH}/contacts/resend`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+export function resendContactAsync(
+  payload: components['schemas']['AddContactRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/contacts/resend', { body: payload })
+    .then(() => undefined);
 }
 
-export function googleSsoAsync(payload: IIdTokenPayload) {
-  return requestFrontendJsonAsync<ITokenPair>(
-    `${AUTH_API_BASE_PATH}/sso/google`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+export function googleSsoAsync(
+  payload: components['schemas']['IdTokenRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/sso/google', { body: payload })
+    .then(responseData);
 }
 
-export function lineSsoAsync(payload: IIdTokenPayload) {
-  return requestFrontendJsonAsync<ITokenPair>(
-    `${AUTH_API_BASE_PATH}/sso/line`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+export function lineSsoAsync(payload: components['schemas']['IdTokenRequest']) {
+  return authApiClient
+    .POST('/api/v1/auth/sso/line', { body: payload })
+    .then(responseData);
 }
