@@ -6,17 +6,15 @@ import { Box, IconButton, Stack, Typography } from '@mui/material';
 
 import { designTokens, layoutSizes } from '@rescue-frontend/ui';
 
-import { AccountMenu, type AdminUser } from './account-menu';
+import { AccountMenu } from './account-menu';
 
 const { color, typography } = designTokens;
 
 interface AdminHeaderProps {
   title?: string;
-  user: AdminUser;
-  onSignOut?: () => void;
 }
 
-export function AdminHeader({ title, user, onSignOut }: AdminHeaderProps) {
+export function AdminHeader({ title }: AdminHeaderProps) {
   return (
     <Box
       component="header"
@@ -49,7 +47,7 @@ export function AdminHeader({ title, user, onSignOut }: AdminHeaderProps) {
         <IconButton aria-label="通知" sx={{ color: color.fg.neutral.subtle }}>
           <Box component={Bell} sx={{ width: 22, height: 22 }} />
         </IconButton>
-        <AccountMenu user={user} onSignOut={onSignOut} />
+        <AccountMenu />
       </Stack>
     </Box>
   );
