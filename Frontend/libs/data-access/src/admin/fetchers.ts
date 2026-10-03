@@ -6,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import type { paths } from '../rest/openapi';
+import type { components, paths } from '../rest/openapi';
 import { adminRestClient } from './client';
 import { responseData } from '../rest/openapi-client';
 import type { AdminQueryOptions } from './graphql-fetchers';
@@ -56,10 +56,12 @@ export function useTeams(options: AdminQueryOptions = {}) {
   return useQuery({ ...teamsQuery(), enabled: options.enabled });
 }
 
+export type ProjectSettings = components['schemas']['ProjectSettingsResponse'];
+
 export const projectSettingsQuery = () =>
   queryOptions({
     queryKey: ['admin', 'settings', 'ProjectSettings'],
-    queryFn: ({ signal }) =>
+    queryFn: ({ signal }): Promise<ProjectSettings> =>
       adminRestClient
         .GET('/api/v1/admin/project-settings', { signal })
         .then(responseData),
