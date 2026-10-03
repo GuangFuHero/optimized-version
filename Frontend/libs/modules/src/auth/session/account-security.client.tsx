@@ -19,7 +19,7 @@ import {
   normalizeIdentityValue,
   validateIdentityValue,
   type AuthIdentityType,
-} from '../login/utils/identity-validation';
+} from '../login';
 import {
   addContactAsync,
   changePasswordAsync,

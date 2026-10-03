@@ -10,9 +10,9 @@ import {
   authHref,
   AuthReturnHint,
   LoginForm,
-  sessionStorageOrNull,
   signedInMessage,
-} from '@rescue-frontend/modules';
+} from './index';
+import { sessionStorageOrNull } from '../../session/end-expired-session';
 import { takeSessionExpired } from '@rescue-frontend/modules/session';
 import { messageForCode } from '../api/error-messages';
 import { resolveHashedCredentialAsync } from './credentials';

@@ -1,6 +1,6 @@
 'use client';
 
-import { normalizePassword } from '@rescue-frontend/modules';
+import { normalizePassword } from './index';
 
 import { getUserSaltAsync } from '../api/client';
 
