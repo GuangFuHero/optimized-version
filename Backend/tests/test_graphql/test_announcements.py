@@ -35,6 +35,30 @@ mutation($uuid: UUID!, $active: Boolean!) {
 
 DELETE = "mutation($uuid: UUID!) { deleteAnnouncement(uuid: $uuid) }"
 
+CREATE_PLACED = """
+mutation($content: String!, $placement: AnnouncementPlacement!) {
+  createAnnouncement(input: {content: $content, placement: $placement}) { uuid placement }
+}
+"""
+
+LIST_PLACED = """
+query($placement: AnnouncementPlacement!) {
+  announcements(placement: $placement) { uuid }
+}
+"""
+
+LIST_DEFAULT = "{ announcements { uuid } }"
+
+GET_ONE = "query($uuid: UUID!) { announcement(uuid: $uuid) { uuid } }"
+
+UPDATE = """
+mutation($uuid: UUID!, $content: String!, $placement: AnnouncementPlacement) {
+  updateAnnouncement(uuid: $uuid, input: {content: $content, placement: $placement}) {
+    content placement
+  }
+}
+"""
+
 
 async def _post(client, query, variables, token=None):
     headers = auth_header(token) if token else {}
@@ -127,3 +151,53 @@ async def test_delete_requires_permission_and_removes(client, content_admin_auth
 
     admin_all = await _post(client, LIST, {"filter": "ALL"}, admin_token)
     assert all(x["uuid"] != a["uuid"] for x in admin_all["data"]["announcements"])
+
+
+async def _create_placed(client, token, content, placement):
+    body = await _post(client, CREATE_PLACED, {"content": content, "placement": placement}, token)
+    assert "errors" not in body, body
+    return body["data"]["createAnnouncement"]["uuid"]
+
+
+async def _listed(client, mine, query, variables=None, token=None):
+    body = await _post(client, query, variables or {}, token)
+    assert "errors" not in body, body
+    return {x["uuid"] for x in body["data"]["announcements"]} & mine
+
+
+@pytest.mark.asyncio
+async def test_placement_controls_which_page_lists_it(client, content_admin_auth, login_user_auth):
+    """Each page lists its own placement plus "all"; admin-page rows need a logged-in caller."""
+    _, admin_token = content_admin_auth
+    _, user_token = login_user_auth
+    admin_only = await _create_placed(client, admin_token, "admin only", "ADMIN_PAGE")
+    public_only = await _create_placed(client, admin_token, "public only", "PUBLIC_PAGE")
+    both = (await _create(client, admin_token, "both"))["uuid"]
+    mine = {admin_only, public_only, both}
+
+    assert await _listed(client, mine, LIST_DEFAULT) == {public_only, both}
+    assert await _listed(
+        client, mine, LIST_PLACED, {"placement": "ADMIN_PAGE"}, user_token
+    ) == {admin_only, both}
+    assert await _listed(client, mine, LIST_PLACED, {"placement": "ALL"}, user_token) == mine
+
+    assert (await _post(client, LIST_PLACED, {"placement": "ADMIN_PAGE"})).get("errors")
+    assert (await _post(client, GET_ONE, {"uuid": admin_only})).get("errors")
+    public_get = await _post(client, GET_ONE, {"uuid": public_only})
+    assert public_get["data"]["announcement"]["uuid"] == public_only
+
+
+@pytest.mark.asyncio
+async def test_update_changes_placement(client, content_admin_auth):
+    """Updating placement moves an announcement off the public page; omitting it keeps it."""
+    _, token = content_admin_auth
+    a = await _create_placed(client, token, "moving", "PUBLIC_PAGE")
+
+    moved = await _post(client, UPDATE, {"uuid": a, "content": "moving", "placement": "ADMIN_PAGE"}, token)
+    assert "errors" not in moved, moved
+    assert moved["data"]["updateAnnouncement"] == {"content": "moving", "placement": "admin_page"}
+    assert await _listed(client, {a}, LIST_DEFAULT) == set()
+
+    kept = await _post(client, UPDATE, {"uuid": a, "content": "edited"}, token)
+    assert "errors" not in kept, kept
+    assert kept["data"]["updateAnnouncement"] == {"content": "edited", "placement": "admin_page"}

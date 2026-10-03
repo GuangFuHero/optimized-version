@@ -1,4 +1,4 @@
-# 行前通知（briefings）— ADR 全集（ADR-259~262、ADR-273~275）
+# 資訊發布（公告、行前通知）— ADR 全集（ADR-259~262、ADR-273~275、ADR-309）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號從 259 起跳，避開 `Spec/018-ticket-disaster-fields/decisions.md` 已佔用但尚未合併的 ADR-244~258。
@@ -6,6 +6,7 @@
 ADR-259~262 源自 PR #49 第一輪 review；ADR-273~274 源自第二輪。
 273 起跳是避開 PR #50 已佔用的 ADR-263~272。
 ADR-275 源自 PR #48 第二輪 review——決策本身與行前通知無關，但它改的是本 PR 的 migration `c3f0a1b2d4e6`，所以記在這裡。
+ADR-309 是公告（緊急公告）的顯示位置，接在 ADR-308（前台／後台用語，Spec 006）之後編號。
 
 ---
 
@@ -191,3 +192,45 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 ➖ 本 PR 的 migration 因此多帶一個與行前通知無關的決策。替代方案是另開一支 revision 或另開一個
   PR，但兩者都違反本 repo「branch-local 的 revision 直接修改，不疊新的」的慣例。
 ➖ `downgrade()` 只還原欄位形狀，不還原資料——原本就沒有資料可還原。
+
+---
+
+### ADR-309 公告的顯示位置：後台、前台或兩邊，共用一條排序
+
+**白話**：每則公告多一個 `placement`，決定它出現在後台、前台還是兩邊；排序還是同一條，各頁只是把
+不屬於自己的那幾則濾掉。
+
+**Context**：公告原本只有一個讀者群，所有啟用中的公告都出現在同一份公開清單。現在要能發只給後台看的
+公告（例如協調會通知），也要能發只給前台看的。用語依 ADR-308：前台 = public，後台 = admin。
+
+**Decision**：
+
+- `announcements.placement` 是 `admin_page` / `public_page` / `all`（兩邊都顯示）。GraphQL 輸入用
+  `AnnouncementPlacement` enum 擋值，DB 欄位是自由字串，沿用 repo 其他欄位的做法。
+- 新增時不指定就是 `all`；migration 把既有公告回填成 `all`，所以它們照舊到處都看得到。
+- `announcements(placement:)` 預設 `PUBLIC_PAGE`，回傳 `public_page` 與 `all`；`ADMIN_PAGE` 回傳
+  `admin_page` 與 `all`；`ALL` 回傳全部。
+- 只要不是 `PUBLIC_PAGE`，呼叫端就必須登入（`require_authenticated`）。單筆 `announcement(uuid)` 讀到
+  `admin_page` 的公告時也一樣。
+
+```
+排序（全站一條）           匿名 → 前台               登入 → 後台
+ 1  all          停水通知      1 停水通知              1 停水通知
+ 2  admin_page   協調會                                2 協調會
+ 3  public_page  物資站搬遷    3 物資站搬遷
+ 4  all          道路封閉      4 道路封閉              4 道路封閉
+```
+
+**為什麼共用一條排序**：各頁照全站順序過濾，相對順序自然一致，`move`、`setAnnouncementActive`、
+`deleteAnnouncement` 一行都不用改。分頁排序得多一個排序欄位，維持連號的邏輯也要跑兩份。管理清單
+（`filter: ALL, placement: ALL`）看得到每一則，管理員在那裡排序就是排全站。
+
+**為什麼「登入」就夠**：前端的 `/admin` 本身只檢查有沒有登入，後端沒有「後台使用者」這個概念。發布通知
+本來就送給所有啟用中的帳號，而他們都是登入者，所以每個收到通知的人都打得開那則公告。
+
+**Consequences**：
+➕ 既有的匿名呼叫結果不變，而且永遠拿不到 `admin_page` 的公告。
+➕ 排序、啟用、刪除的邏輯完全沒動。
+◾ 通知不分 placement：發布任何一則都通知所有啟用中的帳號。
+➖ 單一頁面上的 `order` 會跳號（上例前台是 1、3、4）；前端要照 `order` 排序，不能把它當名次顯示。
+➖ 任何登入者都讀得到 `admin_page` 公告，包括一般使用者。日後若要收窄，再補一個 capability。
