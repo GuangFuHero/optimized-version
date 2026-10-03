@@ -1,11 +1,20 @@
 export {
-  AuthBrandHeader,
+  AuthField,
   AuthFooterLinks,
   AuthFormError,
+  authHref,
+  AuthIdentityToggle,
+  AuthPasswordField,
+  AuthReturnHint,
   AuthShell,
   LoginForm,
   RegisterForm,
+  newPasswordFieldProblems,
+  newPasswordProblem,
+  newPasswordText,
   normalizeIdentityValue,
+  normalizePassword,
+  signedInMessage,
   validateIdentityValue,
 } from './auth/login';
 export type { AuthIdentityType } from './auth/login';
@@ -33,18 +42,22 @@ export type {
 export { SiteListView } from './list';
 
 export { Map, readRescueMapMarkers } from './map';
+export { hasRescueMapDetailItem } from './map/location-cells';
 export type {
   RescueMapBaseLayer,
   RescueMapControllerValue,
   RescueMapDataType,
+  RescueMapDraftPoint,
   RescueMapMarkerItem,
   RescueMapOverlayLayer,
   RescueMapRouteState,
 } from './map/types';
 
 export {
+  dedupeMarkersById,
   SiteMapControls,
   SiteMapRouteProvider,
+  useCreatedTicketMarker,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   usePaginatedRescueMapMarkers,
@@ -64,6 +77,8 @@ export {
   PointShareDrawer,
   resolvePointShareTargetFromRoute,
   resolvePointShareTargetFromState,
+  SITE_LIST_METADATA,
+  syncDocumentMetadata,
 } from './point-share';
 export type {
   PointShareChannel,
@@ -71,31 +86,31 @@ export type {
   PointShareTarget,
 } from './point-share';
 
-export { AdminLayout } from './shell';
-export { SiteShell } from './shell/site';
+export { BackOfficePlaceholder } from './role-request';
 
+// The browser's half of the session-expiry handling; the pure half is `@rescue-frontend/modules/session`.
 export {
-  StationCreateDrawer,
-  StationDetailDrawer,
-  SiteStationReportDrawer,
-  StationReportHistoryPanel,
-  useStationReports,
-} from './station';
-export type {
-  StationReportFormValues,
-  StationReportRecord,
-} from './station/report';
+  isSigningOutHere,
+  markSigningOutHere,
+  sessionExpiryFetch,
+  sessionStorageOrNull,
+} from './session/end-expired-session';
+export { SessionExpiredNotice } from './session/session-expired-notice';
+
+export { AdminLayout } from './shell';
+export {
+  SiteActionDrawer,
+  SiteShell,
+  type SiteActionDrawerProps,
+} from './shell/site';
+
+export { StationCreateDrawer, StationDetailDrawer } from './station';
 
 export {
   TicketCreateDrawer,
   TicketDetailDrawer,
   createTaskMatchTicketDetailOverrides,
-  TaskMatchDeleteConfirmDialog,
-  useTaskMatches,
 } from './ticket';
-export type {
-  TaskMatchLogAction,
-  TaskMatchLogEntry,
-  TaskMatchState,
-  TaskMatchStatus,
-} from './ticket/task-match';
+export { BriefingPlaceholder, NeedClaimProvider } from './ticket/needs';
+export type { ReloadedTicket } from './ticket/needs';
+export { MapRequestHelpButton, PlaceHereAction } from './ticket/help-request';

@@ -34,6 +34,10 @@ import type { RescueMapMarkerItem } from '../../../map/types';
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 import type { TicketListRowItem } from '../ticket-list/types';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color } = designTokens;
+
 type TicketTaskTypeOption = 'rescue' | 'hr' | 'supply';
 
 interface TaskDraft {
@@ -100,16 +104,16 @@ const DETAIL_WIDTH = { mobile: '100vw', tablet: 460, desktop: 520 };
 const MAX_TICKET_PHOTO_URLS = 10;
 
 const ticketCreatePalette = {
-  surface: '#FFFFFF',
-  sectionSurface: '#F6FAFF',
-  border: '#D7E3F0',
-  heading: '#0F3F75',
-  bodyText: '#39516B',
-  primary: '#179BC6',
-  primaryHover: '#127EA6',
-  primaryText: '#FFFFFF',
-  secondaryText: '#245C8C',
-  secondaryBorder: '#BFD0DD',
+  surface: color.bg.neutral.default,
+  sectionSurface: color.bg.neutral.subtle,
+  border: color.border.default,
+  heading: color.fg.neutral.default,
+  bodyText: color.fg.neutral.subtle,
+  primary: color.brand.secondary.default,
+  primaryHover: color.bg.secondary.hover,
+  primaryText: color.fg.onSecondary,
+  secondaryText: color.brand.secondary.subtle,
+  secondaryBorder: color.border.default,
 };
 
 function isValidHttpUrl(value: string) {
@@ -322,7 +326,7 @@ function Section({
   return (
     <Stack spacing={1.5}>
       <Box>
-        <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#151C22' }}>
+        <Typography sx={{ fontSize: 15, fontWeight: 800, color: color.fg.neutral.default }}>
           {title}
         </Typography>
         {description ? (
@@ -768,7 +772,7 @@ export function TicketCreateDrawer({
             sx={{
               p: 2,
               borderTop: `1px solid ${ticketCreatePalette.border}`,
-              bgcolor: '#F6FAFF',
+              bgcolor: color.bg.neutral.subtle,
             }}
           >
             <Button
@@ -992,7 +996,7 @@ export function TicketCreateDrawer({
                   sx={{
                     p: 1.5,
                     borderRadius: 3,
-                    bgcolor: '#FFFFFF',
+                    bgcolor: color.bg.neutral.default,
                     border: `1px solid ${ticketCreatePalette.border}`,
                   }}
                 >
@@ -1227,14 +1231,14 @@ export function TicketCreateDrawer({
                             objectFit: 'cover',
                             borderRadius: 2,
                             border: `1px solid ${ticketCreatePalette.border}`,
-                            bgcolor: '#EAF2FB',
+                            bgcolor: color.bg.secondary.subtle,
                           }}
                         />
                       ) : (
                         <Typography
                           sx={{
                             fontSize: 12,
-                            color: '#A53B2A',
+                            color: color.fg.danger,
                             lineHeight: 1.6,
                           }}
                         >

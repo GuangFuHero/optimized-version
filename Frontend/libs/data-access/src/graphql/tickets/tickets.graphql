@@ -2,6 +2,8 @@ fragment TicketFields on TicketType {
   uuid
   propertyName
   geometry
+  # H3 cell `geometry` stands in for when the caller only gets a region (ADR-281); null = exact.
+  locationCell
   title
   description
   contactName
@@ -35,6 +37,21 @@ fragment TicketTaskFields on TicketTaskType {
   updatedAt
 }
 
+# What a need's claim button is decided on (ticket/needs/need-claim.ts): a volunteer claims a need,
+# not a ticket (PUB-PS-140). `myAssignment` is null to a guest and to anyone who has not claimed it;
+# `assignedCount` is public; the claimants are not (`assignments` needs ticket.view_history).
+fragment TicketNeedFields on TicketTaskType {
+  uuid
+  taskName
+  taskType
+  quantity
+  status
+  assignedCount
+  myAssignment {
+    uuid
+  }
+}
+
 # ─── Queries ────────────────────────────────────────────────
 
 query GetTickets(
@@ -43,6 +60,7 @@ query GetTickets(
   $priority: String
   $skip: Int = 0
   $limit: Int = 50
+  $zoom: Float
 ) {
   tickets(
     bounds: $bounds
@@ -50,6 +68,7 @@ query GetTickets(
     priority: $priority
     skip: $skip
     limit: $limit
+    zoom: $zoom
   ) {
     items {
       ...TicketFields
@@ -62,17 +81,63 @@ query GetTickets(
   }
 }
 
+# The site list's page of tickets, each with the needs its rows claim. The map keeps GetTickets:
+# it has no claim buttons, so it has no use for the needs.
+query GetTicketsWithNeeds(
+  $bounds: BoundsInput
+  $status: String
+  $priority: String
+  $skip: Int = 0
+  $limit: Int = 50
+  $zoom: Float
+) {
+  tickets(
+    bounds: $bounds
+    status: $status
+    priority: $priority
+    skip: $skip
+    limit: $limit
+    zoom: $zoom
+  ) {
+    items {
+      ...TicketFields
+      tasks {
+        ...TicketNeedFields
+      }
+    }
+    pageInfo {
+      totalCount
+      hasNextPage
+      hasPreviousPage
+    }
+  }
+}
+
 query GetTicket($uuid: UUID!) {
   ticket(uuid: $uuid) {
     ...TicketFields
+    # Where a volunteer is going, for the claim confirmation. Null without an address, and to a
+    # caller without ticket.view_detail.
+    secondaryLocation {
+      county
+      city
+      lane
+      alley
+      no
+      buildingSection
+      floor
+      room
+      # The address as typed on the site's 請求協助, when the parts above are empty.
+      landmarkNote
+    }
     photos {
       uuid
       url
-      createdBy
       createdAt
     }
     tasks {
       ...TicketTaskFields
+      ...TicketNeedFields
     }
   }
 }
@@ -100,13 +165,6 @@ query GetTicketTasks(
       comment
       createdAt
     }
-    assignments {
-      uuid
-      taskUuid
-      actorUuid
-      role
-      assignedAt
-    }
   }
 }
 
@@ -115,6 +173,18 @@ query GetTicketTasks(
 mutation CreateTicket($input: CreateTicketInput!) {
   createTicket(input: $input) {
     ...TicketFields
+  }
+}
+
+# 請求協助 (ticket/help-request): the ticket and every need on it in one go — nothing is written
+# unless all of it is. Answered with what the map and the list make their markers of, so the new
+# ticket shows on both without asking the server again.
+mutation CreateHelpRequest($input: CreateHelpRequestInput!) {
+  createHelpRequest(input: $input) {
+    ...TicketFields
+    tasks {
+      ...TicketNeedFields
+    }
   }
 }
 
@@ -133,6 +203,94 @@ mutation CreateTicketTask($input: CreateTicketTaskInput!) {
 mutation UpdateTicketTask($uuid: UUID!, $input: UpdateTicketTaskInput!) {
   updateTicketTask(uuid: $uuid, input: $input) {
     ...TicketTaskFields
+  }
+}
+
+# The caller claims a need for themselves: no actorUuid means self-signup (ticket.assign: own).
+mutation ClaimNeed($taskUuid: UUID!) {
+  assignTaskActor(taskUuid: $taskUuid) {
+    uuid
+    taskUuid
+  }
+}
+
+# The caller gives their place on a need back (the assignment's uuid, `myAssignment.uuid`). Refused
+# once the requester stopped recruiting; a need that filled by itself reopens.
+mutation ReleaseClaim($uuid: UUID!) {
+  unassignTaskActor(uuid: $uuid)
+}
+
+# The requester stops recruiting for one need: the people on it stay and still go, its
+# quantity drops to their count, and nobody else can claim it. Refused for a need nobody claimed or
+# one no longer open. Only the uuid is asked: the cache does not key needs, so the ticket is read
+# again either way.
+mutation StopRecruiting($taskUuid: UUID!) {
+  stopRecruiting(taskUuid: $taskUuid) {
+    uuid
+  }
+}
+
+# The requester deletes one need: any need not deleted yet, a filled or stopped one included. It is
+# gone from every query after, its ticket's status is worked out again, and everyone on it hears they
+# need not go. Refused with 'Ticket task not found' once the need or its ticket is deleted already.
+mutation DeleteTicketTask($uuid: UUID!) {
+  deleteTicketTask(uuid: $uuid)
+}
+
+# The requester deletes the whole ticket: it is cancelled and gone from every query after, every need
+# on it goes with it, and everyone on them hears once that they need not go. Refused with 'Ticket not
+# found' once it is deleted already.
+mutation DeleteTicket($uuid: UUID!) {
+  deleteTicket(uuid: $uuid)
+}
+
+# 我的任務 › 我承接的 (ticket/my-claims): the needs the caller claimed, newest first, deleted ones left
+# out. What a volunteer needs on the day: where, whom to call, and whether they may still give the
+# place back (`recruitingStoppedAt`).
+query MyTaskAssignments {
+  myTaskAssignments {
+    assignment {
+      uuid
+      assignedAt
+    }
+    task {
+      uuid
+      taskName
+      recruitingStoppedAt
+    }
+    ticket {
+      uuid
+      title
+      contactName
+      contactPhone
+      secondaryLocation {
+        county
+        city
+        lane
+        alley
+        no
+        buildingSection
+        floor
+        room
+        landmarkNote
+      }
+    }
+  }
+}
+
+# 我的任務 › 我建立的 (ticket/help-request): the tickets the caller filed, newest first, every
+# status, deleted ones left out. Each is read for how far it got: its status, and its needs'
+# statuses to count how many have their people.
+query MyTickets {
+  myTickets {
+    uuid
+    title
+    status
+    createdAt
+    tasks {
+      uuid
+      status
+    }
   }
 }
 

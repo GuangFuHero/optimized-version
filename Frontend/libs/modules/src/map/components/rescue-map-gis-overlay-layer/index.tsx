@@ -1,9 +1,14 @@
-type ReactLeafletModule = typeof import('react-leaflet');
+import { designTokens } from '@rescue-frontend/ui';
+
 import type {
   RescueMapAdministrativeArea,
   RescueMapClosureArea,
   RescueMapTaskHeatZone,
 } from '../../types';
+
+type ReactLeafletModule = typeof import('react-leaflet');
+
+const { color, primitives } = designTokens;
 
 interface RescueMapGisOverlayLayerProps {
   Circle: ReactLeafletModule['Circle'];
@@ -18,8 +23,8 @@ function getClosureAreaStyle(status: string) {
 
   if (normalizedStatus === 'dangerous' || normalizedStatus === 'active') {
     return {
-      color: '#c2410c',
-      fillColor: '#f97316',
+      color: color.fg.warning,
+      fillColor: color.bg.warning.default,
       fillOpacity: 0.18,
       opacity: 0.84,
       weight: 2,
@@ -29,8 +34,8 @@ function getClosureAreaStyle(status: string) {
 
   if (normalizedStatus === 'block') {
     return {
-      color: '#b91c1c',
-      fillColor: '#ef4444',
+      color: color.fg.danger,
+      fillColor: color.bg.danger.default,
       fillOpacity: 0.14,
       opacity: 0.78,
       weight: 2,
@@ -39,8 +44,8 @@ function getClosureAreaStyle(status: string) {
   }
 
   return {
-    color: '#9a3412',
-    fillColor: '#fdba74',
+    color: color.brand.primary.subtle,
+    fillColor: primitives.color.orange[200],
     fillOpacity: 0.12,
     opacity: 0.72,
     weight: 2,
@@ -62,8 +67,8 @@ export function RescueMapGisOverlayLayer({
           key={area.id}
           positions={area.points}
           pathOptions={{
-            color: '#2563eb',
-            fillColor: '#60a5fa',
+            color: color.brand.secondary.subtle,
+            fillColor: color.brand.secondary.default,
             fillOpacity: 0.14,
             opacity: 0.72,
             weight: 2,
@@ -77,8 +82,14 @@ export function RescueMapGisOverlayLayer({
           center={zone.center}
           radius={zone.radius}
           pathOptions={{
-            color: zone.intensity === 'high' ? '#dc2626' : '#f97316',
-            fillColor: zone.intensity === 'high' ? '#ef4444' : '#fb923c',
+            color:
+              zone.intensity === 'high'
+                ? color.fg.danger
+                : color.fg.warning,
+            fillColor:
+              zone.intensity === 'high'
+                ? color.bg.danger.default
+                : color.bg.warning.default,
             fillOpacity: zone.intensity === 'high' ? 0.22 : 0.16,
             opacity: zone.intensity === 'high' ? 0.62 : 0.48,
             weight: 1,

@@ -3,6 +3,11 @@ import {
   resolveGraphqlUrl,
   type ITokenPair,
 } from '@rescue-frontend/data-access';
+import {
+  createSharedRefresh,
+  SESSION_EXPIRED,
+  SESSION_HEADER,
+} from '@rescue-frontend/modules/session';
 import { encode, getToken, type JWT } from 'next-auth/jwt';
 import { cookies, headers } from 'next/headers';
 import type { NextResponse } from 'next/server';
@@ -42,8 +47,10 @@ interface CookieOptions {
   maxAge?: number;
 }
 
-interface ResolvedBackendAuth {
+export interface ResolvedBackendAuth {
   token: BackendAuthToken | null;
+  /** There was a session, its access token could not be refreshed, and it has been cleared. */
+  refreshFailed: boolean;
   responseCookies: Array<{
     name: string;
     value: string;
@@ -78,6 +85,27 @@ function hasUsableAccessToken(token: BackendAuthToken) {
   );
 }
 
+// How long a refreshed pair is handed to requests that still carry the spent refresh token.
+const SHARED_REFRESH_REUSE_MS = 30_000;
+const SHARED_REFRESH_KEY = '__wanguardSharedBackendRefresh';
+
+type SharedRefresh = (refreshToken: string) => Promise<ITokenPair>;
+
+/**
+ * One refresh per refresh token for the GraphQL proxy, the BFF and next-auth alike: the backend
+ * revokes a session whose refresh token is used twice (`createSharedRefresh`). Kept on
+ * `globalThis` because each route handler may load its own copy of this module.
+ */
+const sharedRefresh: SharedRefresh = ((
+  globalThis as unknown as Record<string, SharedRefresh | undefined>
+)[SHARED_REFRESH_KEY] ??= createSharedRefresh(
+  // /auth/refresh is rate-limited per caller, and refreshes fire on their own schedule as access
+  // tokens age out — unattributed, they would all pile onto this container's allowance.
+  (refreshToken) =>
+    withClientIpAsync(() => refreshAsync({ refresh_token: refreshToken })),
+  { reuseForMs: SHARED_REFRESH_REUSE_MS },
+));
+
 export async function refreshBackendAuthTokenAsync(
   token: BackendAuthToken,
 ): Promise<BackendAuthToken> {
@@ -89,11 +117,7 @@ export async function refreshBackendAuthTokenAsync(
   }
 
   try {
-    // /auth/refresh is rate-limited per caller, and refreshes fire on their own schedule as access
-    // tokens age out — unattributed, they would all pile onto this container's allowance.
-    const refreshedTokenPair = await withClientIpAsync(() =>
-      refreshAsync({ refresh_token: token.refreshToken as string }),
-    );
+    const refreshedTokenPair = await sharedRefresh(token.refreshToken);
 
     return applyTokenPairToBackendAuthToken(token, refreshedTokenPair);
   } catch {
@@ -238,12 +262,13 @@ export async function resolveBackendAuthTokenAsync(
   })) as BackendAuthToken | null;
 
   if (!token) {
-    return { token: null, responseCookies: [] };
+    return { token: null, refreshFailed: false, responseCookies: [] };
   }
 
   if (hasUsableAccessToken(token)) {
     return {
       token,
+      refreshFailed: false,
       responseCookies: [],
     };
   }
@@ -253,16 +278,42 @@ export async function resolveBackendAuthTokenAsync(
   if (!hasUsableAccessToken(refreshedToken)) {
     return {
       token: null,
+      refreshFailed: true,
       responseCookies: createClearedSessionCookies(request, secureCookies),
     };
   }
 
   return {
     token: refreshedToken,
+    refreshFailed: false,
     responseCookies: await createPersistedSessionCookiesAsync(
       request,
       refreshedToken,
       secureCookies,
+    ),
+  };
+}
+
+/**
+ * The same session once the backend has refused its token with a 401: ended elsewhere (另一台裝置
+ * 「登出所有裝置」, an admin, an identity removed — backend ADR-096). Cleared the way a failed
+ * refresh clears it, so the next request goes as a guest.
+ */
+function expireBackendAuth(
+  request: RequestLike,
+  resolvedAuth: ResolvedBackendAuth,
+): ResolvedBackendAuth {
+  const requestHeaders =
+    request.headers instanceof Headers
+      ? request.headers
+      : new Headers(request.headers);
+
+  return {
+    ...resolvedAuth,
+    token: null,
+    responseCookies: createClearedSessionCookies(
+      request,
+      shouldUseSecureCookies(requestHeaders),
     ),
   };
 }
@@ -280,6 +331,24 @@ export function applyBackendAuthResponseCookies(
   }
 
   return response;
+}
+
+/**
+ * Answers for a session that has ended (`isSessionExpired`): marks the response for the browser,
+ * which signs out and reloads as a guest, and clears the session. Status and body stay as they are:
+ * the `x-wg-session` header is the whole of the mark.
+ */
+export function expireSessionResponse(
+  response: NextResponse,
+  request: RequestLike,
+  resolvedAuth: ResolvedBackendAuth,
+) {
+  response.headers.set(SESSION_HEADER, SESSION_EXPIRED);
+
+  return applyBackendAuthResponseCookies(
+    response,
+    expireBackendAuth(request, resolvedAuth),
+  );
 }
 
 export async function getServerBackendAccessTokenAsync() {

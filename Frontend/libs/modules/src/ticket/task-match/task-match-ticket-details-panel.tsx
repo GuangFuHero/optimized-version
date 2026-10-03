@@ -7,8 +7,8 @@ import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import ImageRoundedIcon from '@mui/icons-material/ImageRounded';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import PeopleAltRoundedIcon from '@mui/icons-material/PeopleAltRounded';
 import PhotoLibraryRoundedIcon from '@mui/icons-material/PhotoLibraryRounded';
+import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
 import { Alert, Box, ButtonBase, Chip, Stack, Typography } from '@mui/material';
 import { useQuery } from 'urql';
 
@@ -20,18 +20,27 @@ import {
   useFragment,
 } from '@rescue-frontend/data-access';
 
+import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
+import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
-import { formatTicketStatusLabel } from '../status';
+import { AddNeedPanel, useCanAddNeed } from '../help-request/add-need-panel';
+import { NeedRow, readTicketNeeds } from '../needs';
+import { PhotoThumb } from '../photos';
+import { formatTicketStatusLabel, formatTicketTypeLabel } from '../status';
+
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+
+const { color } = designTokens;
 
 const detailPalette = {
-  surface: '#FFFFFF',
-  sectionSurface: '#F6FAFF',
-  border: '#D7E3F0',
-  heading: '#17324D',
-  text: '#1F2B37',
-  muted: '#5D7288',
-  accent: '#1F5C7A',
-  accentSoft: '#EAF2FB',
+  surface: color.bg.neutral.default,
+  sectionSurface: color.bg.neutral.subtle,
+  border: color.border.default,
+  heading: color.fg.neutral.default,
+  text: color.fg.neutral.default,
+  muted: color.fg.neutral.muted,
+  accent: color.brand.secondary.subtle,
+  accentSoft: color.bg.secondary.subtle,
 };
 
 // 詳情面板自行顯示載入狀態，停用 suspense 避免整頁因抓取任務資料而閃爍重渲染。
@@ -40,8 +49,6 @@ const DETAIL_QUERY_CONTEXT = { suspense: false } as const;
 interface TicketPhotoItem {
   uuid: string;
   url: string;
-  createdBy?: string | null;
-  createdAt?: string | null;
 }
 
 interface TicketTaskPropertyItem {
@@ -52,13 +59,6 @@ interface TicketTaskPropertyItem {
   status?: string | null;
   comment?: string | null;
   createdAt?: string | null;
-}
-
-interface TicketTaskAssignmentItem {
-  uuid: string;
-  actorUuid: string;
-  role?: string | null;
-  assignedAt?: string | null;
 }
 
 interface TicketTaskDetailItem {
@@ -76,7 +76,6 @@ interface TicketTaskDetailItem {
   createdAt?: string | null;
   updatedAt?: string | null;
   properties: TicketTaskPropertyItem[];
-  assignments: TicketTaskAssignmentItem[];
 }
 
 function formatDateTime(value?: string | null) {
@@ -99,27 +98,6 @@ function formatDateTime(value?: string | null) {
   }).format(date);
 }
 
-function formatTicketTypeLabel(value?: string | null) {
-  if (!value) {
-    return '未提供';
-  }
-
-  const normalized = value.trim().toLowerCase();
-
-  switch (normalized) {
-    case 'rescue':
-      return '救援';
-    case 'hr':
-      return '人力';
-    case 'supply':
-      return '物資';
-    case 'medical':
-      return '醫療';
-    default:
-      return value;
-  }
-}
-
 function formatPriorityLabel(value?: string | null) {
   if (!value) {
     return '未提供';
@@ -135,7 +113,8 @@ function formatPriorityLabel(value?: string | null) {
     case 'high':
       return '高';
     case 'critical':
-      return '緊急';
+      // As its badge reads (prototype 2026-09-21).
+      return '最高優先';
     default:
       return value;
   }
@@ -196,7 +175,7 @@ function SectionCard({
           <Typography
             sx={{
               color: detailPalette.heading,
-              fontSize: 15,
+              fontSize: displayTextSize[15],
               lineHeight: '22px',
               fontWeight: 800,
             }}
@@ -223,7 +202,7 @@ function DetailRow({
       <Typography
         sx={{
           color: detailPalette.muted,
-          fontSize: 12,
+          fontSize: displayTextSize[12],
           lineHeight: '18px',
           fontWeight: 700,
         }}
@@ -234,7 +213,7 @@ function DetailRow({
         <Typography
           sx={{
             color: detailPalette.text,
-            fontSize: 14,
+            fontSize: displayTextSize[14],
             lineHeight: '21px',
           }}
         >
@@ -260,7 +239,7 @@ function CarouselControls({
 }) {
   if (total <= 1) {
     return (
-      <Typography sx={{ color: detailPalette.muted, fontSize: 12 }}>
+      <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12] }}>
         {total === 0 ? '0 / 0' : '1 / 1'}
       </Typography>
     );
@@ -283,7 +262,7 @@ function CarouselControls({
       >
         <ChevronLeftRoundedIcon sx={{ fontSize: 18 }} />
       </ButtonBase>
-      <Typography sx={{ color: detailPalette.muted, fontSize: 12, minWidth: 44, textAlign: 'center' }}>
+      <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12], minWidth: 44, textAlign: 'center' }}>
         {index + 1} / {total}
       </Typography>
       <ButtonBase
@@ -307,9 +286,15 @@ function CarouselControls({
 
 export function TaskMatchTicketDetailsPanel({
   marker,
+  isAuthenticated = false,
 }: {
   marker: RescueMapMarkerItem;
+  isAuthenticated?: boolean;
 }) {
+  // The backend withheld this ticket's detail (ADR-281): the point is a cell centre, and the
+  // free text, notes and photos came back empty. Rows for them are left out rather than shown as
+  // 「未提供」— that would claim the reporter wrote nothing, which is not what happened.
+  const coarse = Boolean(marker.locationCell);
   const [{ data: ticketData, fetching: isTicketFetching, error: ticketError }] =
     useQuery({
       query: GetTicketDocument,
@@ -329,7 +314,6 @@ export function TaskMatchTicketDetailsPanel({
       context: DETAIL_QUERY_CONTEXT,
     });
   const [activeTaskIndex, setActiveTaskIndex] = useState(0);
-  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
 
   const ticket = useMemo(() => {
     if (!ticketData?.ticket) {
@@ -347,8 +331,6 @@ export function TaskMatchTicketDetailsPanel({
       (ticket?.photos ?? []).map((photo) => ({
         uuid: photo.uuid,
         url: photo.url,
-        createdBy: photo.createdBy,
-        createdAt: photo.createdAt?.toString() ?? null,
       })),
     [ticket?.photos],
   );
@@ -396,23 +378,25 @@ export function TaskMatchTicketDetailsPanel({
             comment: property.comment,
             createdAt: property.createdAt?.toString() ?? null,
           })) ?? [],
-        assignments:
-          detailedTask?.assignments.map((assignment) => ({
-            uuid: assignment.uuid,
-            actorUuid: assignment.actorUuid,
-            role: assignment.role,
-            assignedAt: assignment.assignedAt?.toString() ?? null,
-          })) ?? [],
       };
     });
   }, [taskData?.ticketTasks, ticket?.tasks]);
 
+  // The same tasks, as needs a volunteer can claim. Who claimed them is not shown: without
+  // ticket.view_history `assignments` comes back empty, and `assignedCount` is what everyone gets.
+  const needs = useMemo(
+    () => readTicketNeeds(ticketData?.ticket ?? null),
+    [ticketData?.ticket],
+  );
+  const ticketStatus = ticket?.status ?? marker.ticketMeta?.status;
+  const ticketCreatedBy = ticket?.createdBy ?? marker.ticketMeta?.createdBy;
+  // Its requester can add one more need, even to a ticket left with none.
+  const canAddNeed = useCanAddNeed({ ticketStatus, ticketCreatedBy });
+
   const activeTask = tasks[activeTaskIndex] ?? null;
-  const activePhoto = photos[activePhotoIndex] ?? null;
 
   useEffect(() => {
     setActiveTaskIndex(0);
-    setActivePhotoIndex(0);
   }, [marker.id]);
 
   useEffect(() => {
@@ -420,12 +404,6 @@ export function TaskMatchTicketDetailsPanel({
       tasks.length === 0 ? 0 : Math.min(current, tasks.length - 1),
     );
   }, [tasks.length]);
-
-  useEffect(() => {
-    setActivePhotoIndex((current) =>
-      photos.length === 0 ? 0 : Math.min(current, photos.length - 1),
-    );
-  }, [photos.length]);
 
   const handlePreviousTask = () => {
     setActiveTaskIndex((current) =>
@@ -439,18 +417,6 @@ export function TaskMatchTicketDetailsPanel({
     );
   };
 
-  const handlePreviousPhoto = () => {
-    setActivePhotoIndex((current) =>
-      photos.length === 0 ? 0 : (current - 1 + photos.length) % photos.length,
-    );
-  };
-
-  const handleNextPhoto = () => {
-    setActivePhotoIndex((current) =>
-      photos.length === 0 ? 0 : (current + 1) % photos.length,
-    );
-  };
-
   return (
     <Stack spacing={2}>
       {ticketError || taskError ? (
@@ -459,11 +425,53 @@ export function TaskMatchTicketDetailsPanel({
         </Alert>
       ) : null}
 
+      {/* First, as in the prototype (site-detail.jsx:330-332): what a volunteer came to decide. */}
+      {needs.length > 0 || isTicketFetching || canAddNeed ? (
+        <SectionCard
+          title={needs.length > 0 ? `需求（${needs.length} 筆）` : '需求'}
+          icon={<VolunteerActivismRoundedIcon sx={{ fontSize: 18 }} />}
+        >
+          {/* Under the title, not beside it: on a phone the two squeezed each other onto two lines. */}
+          {needs.length > 1 ? (
+            <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12], lineHeight: 1.5 }}>
+              一筆一筆接，可以接多筆
+            </Typography>
+          ) : null}
+          {needs.length > 0 ? (
+            <Stack spacing={1}>
+              {needs.map((need) => (
+                <NeedRow
+                  key={need.uuid}
+                  need={need}
+                  ticketUuid={marker.id}
+                  ticketStatus={ticketStatus}
+                  ticketCreatedBy={ticketCreatedBy}
+                  isAuthenticated={isAuthenticated}
+                />
+              ))}
+            </Stack>
+          ) : (
+            <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
+              {isTicketFetching ? '載入需求中...' : '這張單目前沒有需求。'}
+            </Typography>
+          )}
+          {canAddNeed ? (
+            <AddNeedPanel ticketUuid={marker.id} needCount={needs.length} />
+          ) : null}
+        </SectionCard>
+      ) : null}
+
+      {coarse ? (
+        <LocationPrivacyNotice isAuthenticated={isAuthenticated}>
+          為保護求助者，這裡只顯示<b>概略區塊</b>與結構化資訊。精確位置、狀況描述與照片不會對外公開。
+        </LocationPrivacyNotice>
+      ) : null}
+
       <SectionCard title="任務單摘要" icon={<InfoOutlinedIcon sx={{ fontSize: 18 }} />}>
         <Typography
           sx={{
             color: detailPalette.muted,
-            fontSize: 12,
+            fontSize: displayTextSize[12],
             lineHeight: '19px',
           }}
         >
@@ -488,14 +496,32 @@ export function TaskMatchTicketDetailsPanel({
               .filter(Boolean)
               .join(' / ') || '未提供'}
           />
-          <DetailRow
-            label="座標"
-            value={`緯度 ${marker.position[0].toFixed(6)} / 經度 ${marker.position[1].toFixed(6)}`}
-          />
-          <DetailRow
-            label="任務單說明"
-            value={ticket?.description?.trim() || marker.subtitle}
-          />
+          {marker.locationCell ? (
+            <DetailRow
+              label="位置"
+              value={
+                <Stack spacing={0.25}>
+                  <Typography sx={{ color: detailPalette.text, fontSize: displayTextSize[14], lineHeight: '21px' }}>
+                    概略區塊（{describeLocationCellSpan(marker.locationCell)}範圍）
+                  </Typography>
+                  <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12], lineHeight: '19px' }}>
+                    同一區塊內的求助會顯示在一起，看不出是哪一戶
+                  </Typography>
+                </Stack>
+              }
+            />
+          ) : (
+            <DetailRow
+              label="座標"
+              value={`緯度 ${marker.position[0].toFixed(6)} / 經度 ${marker.position[1].toFixed(6)}`}
+            />
+          )}
+          {coarse ? null : (
+            <DetailRow
+              label="任務單說明"
+              value={ticket?.description?.trim() || marker.subtitle}
+            />
+          )}
           <Box
             sx={{
               display: 'flex',
@@ -513,11 +539,13 @@ export function TaskMatchTicketDetailsPanel({
               label={`子任務 ${tasks.length} 張`}
               sx={{ bgcolor: detailPalette.accentSoft, color: detailPalette.accent }}
             />
-            <Chip
-              size="small"
-              label={`照片 ${photos.length} 張`}
-              sx={{ bgcolor: detailPalette.accentSoft, color: detailPalette.accent }}
-            />
+            {coarse ? null : (
+              <Chip
+                size="small"
+                label={`照片 ${photos.length} 張`}
+                sx={{ bgcolor: detailPalette.accentSoft, color: detailPalette.accent }}
+              />
+            )}
           </Box>
           <DetailRow
             label="建立時間"
@@ -543,7 +571,7 @@ export function TaskMatchTicketDetailsPanel({
         }
       >
         {isTicketFetching || isTaskFetching ? (
-          <Typography sx={{ color: detailPalette.muted, fontSize: 13 }}>
+          <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
             載入子任務資料中...
           </Typography>
         ) : activeTask ? (
@@ -559,7 +587,7 @@ export function TaskMatchTicketDetailsPanel({
               <Typography
                 sx={{
                   color: detailPalette.heading,
-                  fontSize: 16,
+                  fontSize: displayTextSize[16],
                   lineHeight: '24px',
                   fontWeight: 800,
                 }}
@@ -577,12 +605,18 @@ export function TaskMatchTicketDetailsPanel({
                 <Chip
                   size="small"
                   label={formatTicketTypeLabel(activeTask.taskType)}
-                  sx={{ bgcolor: '#E8F5FB', color: '#005579' }}
+                  sx={{
+                    bgcolor: color.bg.secondary.subtle,
+                    color: color.brand.secondary.subtle,
+                  }}
                 />
                 <Chip
                   size="small"
                   label={formatTicketStatusLabel(activeTask.status)}
-                  sx={{ bgcolor: '#FFF3E8', color: '#9A4D00' }}
+                  sx={{
+                    bgcolor: color.bg.primary.subtle,
+                    color: color.brand.primary.subtle,
+                  }}
                 />
                 <Chip
                   size="small"
@@ -591,32 +625,36 @@ export function TaskMatchTicketDetailsPanel({
                       ? `需求數量 ${activeTask.quantity}`
                       : '需求數量未提供'
                   }
-                  sx={{ bgcolor: '#EEF3F7', color: '#43505C' }}
-                />
-                <Chip
-                  size="small"
-                  label={`已指派 ${activeTask.assignments.length} 筆`}
-                  sx={{ bgcolor: '#EEF3F7', color: '#43505C' }}
+                  sx={{
+                    bgcolor: color.bg.neutral.sunken,
+                    color: color.fg.neutral.subtle,
+                  }}
                 />
               </Box>
             </Box>
 
-            <DetailRow
-              label="子任務說明"
-              value={activeTask.taskDescription?.trim() || '未提供'}
-            />
+            {coarse ? null : (
+              <DetailRow
+                label="子任務說明"
+                value={activeTask.taskDescription?.trim() || '未提供'}
+              />
+            )}
             <DetailRow
               label="審核狀態"
               value={formatModerationStatusLabel(activeTask.moderationStatus)}
             />
-            <DetailRow
-              label="進度備註"
-              value={activeTask.progressNote?.trim() || '未提供'}
-            />
-            <DetailRow
-              label="審核備註"
-              value={activeTask.reviewNote?.trim() || '未提供'}
-            />
+            {coarse ? null : (
+              <>
+                <DetailRow
+                  label="進度備註"
+                  value={activeTask.progressNote?.trim() || '未提供'}
+                />
+                <DetailRow
+                  label="審核備註"
+                  value={activeTask.reviewNote?.trim() || '未提供'}
+                />
+              </>
+            )}
             <DetailRow
               label="建立時間"
               value={formatDateTime(activeTask.createdAt)}
@@ -633,7 +671,7 @@ export function TaskMatchTicketDetailsPanel({
               <Typography
                 sx={{
                   color: detailPalette.heading,
-                  fontSize: 13,
+                  fontSize: displayTextSize[13],
                   lineHeight: '20px',
                   fontWeight: 800,
                 }}
@@ -652,10 +690,10 @@ export function TaskMatchTicketDetailsPanel({
                         border: `1px solid ${detailPalette.border}`,
                       }}
                     >
-                      <Typography sx={{ color: detailPalette.text, fontSize: 13, fontWeight: 700 }}>
+                      <Typography sx={{ color: detailPalette.text, fontSize: displayTextSize[13], fontWeight: 700 }}>
                         {property.propertyName}
                       </Typography>
-                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: 12 }}>
+                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
                         {property.propertyValue}
                         {property.quantity !== null && property.quantity !== undefined
                           ? ` / 數量 ${property.quantity}`
@@ -663,7 +701,7 @@ export function TaskMatchTicketDetailsPanel({
                         {property.status ? ` / 狀態 ${property.status}` : ''}
                       </Typography>
                       {property.comment?.trim() ? (
-                        <Typography sx={{ mt: 0.75, color: detailPalette.text, fontSize: 12 }}>
+                        <Typography sx={{ mt: 0.75, color: detailPalette.text, fontSize: displayTextSize[12] }}>
                           {property.comment}
                         </Typography>
                       ) : null}
@@ -671,107 +709,40 @@ export function TaskMatchTicketDetailsPanel({
                   ))}
                 </Stack>
               ) : (
-                <Typography sx={{ mt: 1, color: detailPalette.muted, fontSize: 12 }}>
+                <Typography sx={{ mt: 1, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
                   此子任務目前沒有額外屬性資料。
-                </Typography>
-              )}
-            </Box>
-
-            <Box
-              sx={{
-                p: 1.5,
-                borderRadius: 2.5,
-                bgcolor: detailPalette.sectionSurface,
-                border: `1px solid ${detailPalette.border}`,
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <PeopleAltRoundedIcon sx={{ color: detailPalette.accent, fontSize: 18 }} />
-                <Typography
-                  sx={{
-                    color: detailPalette.heading,
-                    fontSize: 13,
-                    lineHeight: '20px',
-                    fontWeight: 800,
-                  }}
-                >
-                  指派紀錄
-                </Typography>
-              </Box>
-              {activeTask.assignments.length > 0 ? (
-                <Stack spacing={1} sx={{ mt: 1.25 }}>
-                  {activeTask.assignments.map((assignment) => (
-                    <Box
-                      key={assignment.uuid}
-                      sx={{
-                        p: 1.25,
-                        borderRadius: 2,
-                        bgcolor: detailPalette.surface,
-                        border: `1px solid ${detailPalette.border}`,
-                      }}
-                    >
-                      <Typography sx={{ color: detailPalette.text, fontSize: 13, fontWeight: 700 }}>
-                        {assignment.role?.trim() || '未指定角色'}
-                      </Typography>
-                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: 12 }}>
-                        接案者 UUID：{assignment.actorUuid}
-                      </Typography>
-                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: 12 }}>
-                        指派時間：{formatDateTime(assignment.assignedAt)}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Stack>
-              ) : (
-                <Typography sx={{ mt: 1, color: detailPalette.muted, fontSize: 12 }}>
-                  此子任務目前沒有指派紀錄。
                 </Typography>
               )}
             </Box>
           </Stack>
         ) : (
-          <Typography sx={{ color: detailPalette.muted, fontSize: 13 }}>
+          <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
             這張任務單目前沒有子任務。
           </Typography>
         )}
       </SectionCard>
 
+      {/* Withheld with the location — a scene photo can show the house number (AC-03). */}
+      {coarse ? null : (
       <SectionCard
         title={`現場照片${photos.length > 0 ? ` (${photos.length})` : ''}`}
         icon={<PhotoLibraryRoundedIcon sx={{ fontSize: 18 }} />}
-        action={
-          <CarouselControls
-            index={activePhotoIndex}
-            total={photos.length}
-            onPrevious={handlePreviousPhoto}
-            onNext={handleNextPhoto}
-          />
-        }
       >
-        {activePhoto ? (
-          <Stack spacing={1.25}>
-            <Box
-              component="img"
-              src={activePhoto.url}
-              alt={`現場照片 ${activePhotoIndex + 1}`}
-              sx={{
-                width: '100%',
-                maxHeight: 240,
-                objectFit: 'cover',
-                borderRadius: 2.5,
-                border: `1px solid ${detailPalette.border}`,
-                bgcolor: detailPalette.sectionSurface,
-              }}
-            />
-            <DetailRow
-              label="照片建立時間"
-              value={formatDateTime(activePhoto.createdAt)}
-            />
-            <DetailRow
-              label="上傳者"
-              value={activePhoto.createdBy?.trim() || '未提供'}
-            />
-          </Stack>
+        {/* All at once, as thumbnails that open the image itself (prototype site-detail.jsx:353),
+            and each failing on its own into a card with its link. No 上傳者 or time: the one is an
+            account's uuid, which tells a reader nothing and ties the photo to an account. */}
+        {photos.length > 0 ? (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+              gap: 1,
+            }}
+          >
+            {photos.map((photo, index) => (
+              <PhotoThumb key={photo.uuid} url={photo.url} index={index} linksOut />
+            ))}
+          </Box>
         ) : (
           <Box
             sx={{
@@ -783,13 +754,14 @@ export function TaskMatchTicketDetailsPanel({
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <ImageRoundedIcon sx={{ color: detailPalette.muted, fontSize: 18 }} />
-              <Typography sx={{ color: detailPalette.muted, fontSize: 13 }}>
+              <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
                 這張任務單目前沒有照片。
               </Typography>
             </Box>
           </Box>
         )}
       </SectionCard>
+      )}
     </Stack>
   );
 }

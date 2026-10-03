@@ -1,10 +1,17 @@
 'use client';
 
-import { Alert, Button, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Button, Stack } from '@mui/material';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
 import {
+  AuthField,
+  authHref,
+  AuthIdentityToggle,
+  AuthPasswordField,
+  AuthReturnHint,
+  newPasswordFieldProblems,
+  newPasswordText,
   normalizeIdentityValue,
   validateIdentityValue,
   type AuthIdentityType,
@@ -18,9 +25,25 @@ function readInitialIdentityType(value: string | null): AuthIdentityType {
   return value === 'phone' ? 'phone' : 'email';
 }
 
+/** What is wrong with each field, said under it (design `site-auth.jsx` `ResetView`). */
+interface FieldErrors {
+  identity?: string;
+  code?: string;
+  password?: string;
+  confirm?: string;
+}
+
+/**
+ * 重設密碼. From 忘記密碼 the address carries the account the code went to, so the page does not ask
+ * for it again; opened on its own it does, since the backend needs it.
+ */
 export default function ResetPasswordFormClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // The page the sign-in should end on, carried back to login (or round again for a new code).
+  const callbackUrl = searchParams.get('callbackUrl');
+  const accountGiven =
+    searchParams.get('type') !== null && searchParams.get('value') !== null;
   const [identityType, setIdentityType] = useState<AuthIdentityType>(() =>
     readInitialIdentityType(searchParams.get('type')),
   );
@@ -28,36 +51,39 @@ export default function ResetPasswordFormClient() {
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [errorMessage, setErrorMessage] = useState<string>();
-  const [successMessage, setSuccessMessage] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const goToLogin = () => {
+    startTransition(() => {
+      router.push(authHref('/login', { callbackUrl }), { scroll: false });
+    });
+  };
+
+  /** A field's own error goes as it is edited; the others stay until the next try. */
+  const clearError = (field: keyof FieldErrors) => {
+    setFieldErrors((current) => ({ ...current, [field]: undefined }));
+    setErrorMessage(undefined);
+  };
 
   async function handleSubmitAsync() {
-    const validation = validateIdentityValue(identityType, identity);
+    const identityValidation = validateIdentityValue(identityType, identity);
+    const errors: FieldErrors = {
+      identity: identityValidation === true ? undefined : identityValidation,
+      code: code.trim() ? undefined : '請輸入驗證碼',
+      ...newPasswordFieldProblems(password, confirmPassword),
+    };
 
-    if (validation !== true) {
-      setErrorMessage(validation);
-      return;
-    }
+    setFieldErrors(errors);
 
-    if (code.trim().length < 4) {
-      setErrorMessage('請輸入有效驗證碼');
-      return;
-    }
-
-    if (password.trim().length < 6) {
-      setErrorMessage('新密碼至少需要 6 個字元');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setErrorMessage('兩次輸入的新密碼不一致');
+    if (Object.values(errors).some(Boolean)) {
       return;
     }
 
     setIsSubmitting(true);
     setErrorMessage(undefined);
-    setSuccessMessage(undefined);
 
     try {
       const normalizedIdentity = normalizeIdentityValue(identityType, identity);
@@ -72,11 +98,7 @@ export default function ResetPasswordFormClient() {
         salt_frontend: saltFrontend,
       });
 
-      setSuccessMessage('密碼已更新，正在返回登入頁。');
-
-      startTransition(() => {
-        router.replace('/login', { scroll: false });
-      });
+      setDone(true);
     } catch (error) {
       setErrorMessage(
         resolveAuthErrorMessage(error, '重設密碼失敗，請稍後再試。'),
@@ -86,111 +108,129 @@ export default function ResetPasswordFormClient() {
     }
   }
 
+  if (done) {
+    return (
+      <Stack spacing={2}>
+        <AuthActionCard title="密碼已重設" description="用新密碼登入就可以了。">
+          <Button
+            variant="contained"
+            onClick={goToLogin}
+            sx={{ minHeight: 44, borderRadius: '999px' }}
+          >
+            回到登入
+          </Button>
+        </AuthActionCard>
+
+        <AuthReturnHint />
+      </Stack>
+    );
+  }
+
   return (
-    <AuthActionCard
-      title="重設密碼"
-      description="輸入驗證碼與新密碼，完成後會使用新的加密憑證登入。"
-    >
-      <Stack spacing={1}>
-        <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#6A5F5B' }}>
-          驗證方式
-        </Typography>
-        <Stack
-          direction="row"
-          spacing={0.5}
-          sx={{
-            p: 0.5,
-            borderRadius: '18px',
-            border: '1px solid #D6CBC6',
-            bgcolor: '#F8F5F2',
+    <Stack spacing={2}>
+      <AuthActionCard
+        title="重設密碼"
+        description={`輸入${identityType === 'phone' ? '手機' : 'Email'}收到的驗證碼與新密碼，完成後請用新密碼登入。`}
+      >
+        {accountGiven ? null : (
+          <>
+            <AuthIdentityToggle
+              value={identityType}
+              disabled={isSubmitting}
+              onChange={(value) => {
+                setIdentityType(value);
+                setIdentity('');
+                clearError('identity');
+              }}
+            />
+            <AuthField
+              label={identityType === 'email' ? '電子郵件' : '手機號碼'}
+              placeholder={
+                identityType === 'email' ? 'name@example.com' : '0912345678'
+              }
+              autoComplete="username"
+              value={identity}
+              onChange={(value) => {
+                setIdentity(value);
+                clearError('identity');
+              }}
+              errorText={fieldErrors.identity}
+              disabled={isSubmitting}
+            />
+          </>
+        )}
+
+        <AuthField
+          label="驗證碼"
+          placeholder="6 位數字"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          value={code}
+          onChange={(value) => {
+            setCode(value);
+            clearError('code');
+          }}
+          errorText={fieldErrors.code}
+          disabled={isSubmitting}
+        />
+
+        <AuthPasswordField
+          label="新密碼"
+          placeholder={newPasswordText.placeholder}
+          autoComplete="new-password"
+          value={password}
+          onChange={(value) => {
+            setPassword(value);
+            clearError('password');
+          }}
+          errorText={fieldErrors.password}
+          disabled={isSubmitting}
+        />
+
+        <AuthPasswordField
+          label="再次輸入新密碼"
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={(value) => {
+            setConfirmPassword(value);
+            clearError('confirm');
+          }}
+          errorText={fieldErrors.confirm}
+          disabled={isSubmitting}
+        />
+
+        {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
+
+        <Button
+          variant="contained"
+          disabled={isSubmitting}
+          onClick={() => {
+            void handleSubmitAsync();
+          }}
+          sx={{ minHeight: 44, borderRadius: '999px' }}
+        >
+          {isSubmitting ? '處理中⋯' : '設定新密碼'}
+        </Button>
+
+        <Button
+          variant="text"
+          onClick={() => {
+            startTransition(() => {
+              router.push(authHref('/forgot-password', { callbackUrl }), {
+                scroll: false,
+              });
+            });
           }}
         >
-          {(['email', 'phone'] as const).map((value) => {
-            const active = identityType === value;
+          重新取得驗證碼
+        </Button>
 
-            return (
-              <Button
-                key={value}
-                fullWidth
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => setIdentityType(value)}
-                sx={{
-                  minHeight: 40,
-                  borderRadius: '14px',
-                  bgcolor: active ? '#D8F2FF' : 'transparent',
-                  border: active
-                    ? '1px solid #8ED8F8'
-                    : '1px solid transparent',
-                  color: '#241B19',
-                  fontSize: 13,
-                  fontWeight: 700,
-                }}
-              >
-                {value === 'email' ? 'Email' : '手機號碼'}
-              </Button>
-            );
-          })}
-        </Stack>
-      </Stack>
+        <Button variant="text" onClick={goToLogin}>
+          回到登入
+        </Button>
+      </AuthActionCard>
 
-      <TextField
-        label={identityType === 'email' ? '電子郵件' : '手機號碼'}
-        value={identity}
-        onChange={(event) => setIdentity(event.target.value)}
-        disabled={isSubmitting}
-      />
-
-      <TextField
-        label="驗證碼"
-        placeholder="請輸入 6 碼驗證碼"
-        value={code}
-        onChange={(event) => setCode(event.target.value)}
-        disabled={isSubmitting}
-      />
-
-      <TextField
-        label="新密碼"
-        type="password"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        disabled={isSubmitting}
-      />
-
-      <TextField
-        label="再次輸入新密碼"
-        type="password"
-        value={confirmPassword}
-        onChange={(event) => setConfirmPassword(event.target.value)}
-        disabled={isSubmitting}
-      />
-
-      {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
-      {successMessage ? (
-        <Alert severity="success">{successMessage}</Alert>
-      ) : null}
-
-      <Button
-        variant="contained"
-        disabled={isSubmitting}
-        onClick={() => {
-          void handleSubmitAsync();
-        }}
-        sx={{ minHeight: 44, borderRadius: '999px' }}
-      >
-        更新密碼
-      </Button>
-
-      <Button
-        variant="text"
-        onClick={() => {
-          startTransition(() => {
-            router.push('/forgot-password', { scroll: false });
-          });
-        }}
-      >
-        重新取得驗證碼
-      </Button>
-    </AuthActionCard>
+      <AuthReturnHint />
+    </Stack>
   );
 }

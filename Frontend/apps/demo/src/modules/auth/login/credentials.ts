@@ -1,5 +1,7 @@
 'use client';
 
+import { normalizePassword } from '@rescue-frontend/modules';
+
 import { getUserSaltAsync } from '../api/client';
 
 function toHexString(bytes: Uint8Array) {
@@ -19,9 +21,10 @@ async function hashPasswordWithFrontendSalt(
   }
 
   const encoder = new TextEncoder();
+  // Every password goes through here, set or checked, so each is hashed the same way.
   const passwordKey = await subtleCrypto.importKey(
     'raw',
-    encoder.encode(password),
+    encoder.encode(normalizePassword(password)),
     'PBKDF2',
     false,
     ['deriveBits'],

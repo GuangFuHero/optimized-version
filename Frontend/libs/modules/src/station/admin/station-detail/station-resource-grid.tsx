@@ -2,6 +2,8 @@
 
 import { Box, Typography } from '@mui/material';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { useStationDetailColorScheme } from './constants';
 import { StationDetailIconSlot } from './station-detail-primitives';
 import type { StationResourceItem } from './types';
@@ -42,8 +44,8 @@ export function StationResourceTile({ item }: StationResourceTileProps) {
         <Typography
           sx={{
             color: stationDetailPalette.bodyText,
-            fontSize: 10,
-            lineHeight: '12px',
+            fontSize: displayTextSize[10],
+            lineHeight: 1.2,
             fontWeight: 700,
             letterSpacing: '0.8px',
           }}
@@ -53,7 +55,7 @@ export function StationResourceTile({ item }: StationResourceTileProps) {
         <Typography
           sx={{
             color: stationDetailPalette.heading,
-            fontSize: 20,
+            fontSize: displayTextSize[20],
             lineHeight: '28px',
             fontWeight: 600,
           }}

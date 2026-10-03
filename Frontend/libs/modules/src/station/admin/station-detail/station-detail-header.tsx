@@ -2,7 +2,7 @@
 
 import { Box, ButtonBase, Typography } from '@mui/material';
 
-import { Icons } from '@rescue-frontend/ui';
+import { displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { useStationDetailColorScheme } from './constants';
 import { StationDetailIconSlot } from './station-detail-primitives';
@@ -51,8 +51,8 @@ export function StationDetailHeader({
         <Typography
           sx={{
             color: stationDetailPalette.heading,
-            fontSize: 14,
-            lineHeight: '16px',
+            fontSize: displayTextSize[14],
+            lineHeight: 1.14,
             fontWeight: 600,
             letterSpacing: '1.4px',
             textTransform: 'uppercase',

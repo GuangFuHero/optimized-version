@@ -6,31 +6,35 @@ import 'react-leaflet-cluster/dist/assets/MarkerCluster.Default.css';
 
 import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { Box, Drawer, GlobalStyles } from '@mui/material';
+import { Box, Drawer, GlobalStyles, useMediaQuery } from '@mui/material';
 import dynamic from 'next/dynamic';
 
-import type {
-  StationDetailActionProps,
-  StationDetailTabPanels,
-} from '../station/station-detail';
+import type { StationDetailActionProps } from '../station/station-detail';
 import { rescueMapMarkerStyles } from './components/map-marker';
 import {
   RescueMapDetailDrawer,
   type RescueMapTicketDetailOverrides,
 } from './components/rescue-map-detail-drawer';
-import { RescueMapFloatingActions } from './components/rescue-map-floating-actions';
 import { RescueMapLayerPanel } from './components/rescue-map-layer-panel';
 import { RescueMapStatusMessage } from './components/rescue-map-status-message';
 import { RescueMapTopBar } from './components/rescue-map-top-bar';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from './constants';
+import { designTokens, displayTextSizeCss, withAlpha } from '@rescue-frontend/ui';
+
 import { useRescueMapController } from './hooks/use-rescue-map-controller';
+import { buildLocationCells } from './location-cells';
 import type {
   RescueMapClosureArea,
   RescueMapControllerValue,
+  RescueMapDetailItem,
+  RescueMapDraftPoint,
+  RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapRouteState,
   RescueMapViewportStoreLike,
 } from './types';
+
+const { color, primitives, radius, shadow } = designTokens;
 
 const RescueMapCanvas = dynamic(
   () =>
@@ -49,7 +53,7 @@ const MAP_STATIC_GLOBAL_STYLES = {
     fontFamily: 'Inter, system-ui, sans-serif',
   },
   '.leaflet-control-attribution': {
-    backgroundColor: 'rgba(255,255,255,0.76)',
+    backgroundColor: withAlpha(color.bg.neutral.default, 0.8),
     backdropFilter: 'blur(3px)',
   },
   '.leaflet-control-zoom': {
@@ -67,39 +71,67 @@ const MAP_STATIC_GLOBAL_STYLES = {
     display: 'grid',
     placeItems: 'center',
     borderRadius: '999px',
-    border: '3px solid rgba(255, 255, 255, 0.94)',
-    boxShadow: '0 10px 20px rgba(21, 28, 34, 0.22)',
+    border: `3px solid ${color.bg.neutral.default}`,
+    boxShadow: shadow.lg,
     fontWeight: 800,
     lineHeight: 1,
   },
   '.map-marker-cluster--small': {
     width: 42,
     height: 42,
-    fontSize: 13,
+    ...displayTextSizeCss(13),
   },
   '.map-marker-cluster--medium': {
     width: 50,
     height: 50,
-    fontSize: 14,
+    ...displayTextSizeCss(14),
   },
   '.map-marker-cluster--large': {
     width: 58,
     height: 58,
-    fontSize: 15,
+    ...displayTextSizeCss(15),
   },
   '.map-marker-cluster--ticket': {
-    color: '#4C2200',
-    background:
-      'linear-gradient(180deg, rgba(245, 176, 109, 0.98) 0%, rgba(227, 121, 30, 0.98) 100%)',
+    color: color.fg.onPrimary,
+    background: `linear-gradient(180deg, ${primitives.color.orange[200]} 0%, ${color.bg.primary.default} 100%)`,
   },
   '.map-marker-cluster--station': {
-    color: '#F5FAFF',
-    background:
-      'linear-gradient(180deg, rgba(82, 173, 213, 0.98) 0%, rgba(0, 102, 133, 0.98) 100%)',
+    // Light-to-mid gradient, mirroring the ticket cluster above. It used to run blue-300 → blue-600,
+    // which no label colour survives: black hits 2.78:1 at the dark end, white 2.20:1 at the light
+    // end. Ending on `secondary` keeps the whole sweep readable with the black label (5.30:1 at the
+    // darkest point).
+    color: color.fg.onSecondary,
+    background: `linear-gradient(180deg, ${primitives.color.blue[200]} 0%, ${color.brand.secondary.default} 100%)`,
   },
   '.map-marker-cluster__count': {
     display: 'block',
     transform: 'translateY(0.5px)',
+  },
+  // 訪客概略區塊中央的數量（ADR-281）。沒有容器、沒有描邊、沒有陰影 —— 對比全由六角形的
+  // 填色負責（見 rescue-map-canvas 的 getLocationCellFill）。設計 2026-09-18：白字。
+  '.map-location-cell-wrapper': {
+    background: 'transparent',
+    border: 'none',
+  },
+  '.map-location-cell': {
+    display: 'flex',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: 4,
+    whiteSpace: 'nowrap',
+    color: color.fg.inverse,
+    fontWeight: 800,
+    lineHeight: 1,
+    transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+  '.map-location-cell__count': displayTextSizeCss(24),
+  '.map-location-cell__unit': displayTextSizeCss(14),
+  // 選取由六角形自己加粗、加深表達；數字只放大，不換色 —— 換色會讓人以為是另一種狀態。
+  '.map-location-cell--active': {
+    transform: 'scale(1.12)',
+  },
+  '.map-location-cell-wrapper:hover .map-location-cell': {
+    transform: 'scale(1.06)',
   },
 } as const;
 
@@ -116,22 +148,10 @@ interface MapProps {
   ticketDetailOverrides?: (
     marker: RescueMapMarkerItem,
   ) => RescueMapTicketDetailOverrides | undefined;
-  /** 自訂站點詳情主要操作，前台可用於站點資訊更新建議。 */
-  stationDetailAction?: (
-    marker: RescueMapMarkerItem,
-  ) => StationDetailActionProps | undefined;
   /** 自訂站點詳情次要操作，例如分享。 */
   stationDetailSecondaryAction?: (
     marker: RescueMapMarkerItem,
   ) => StationDetailActionProps | undefined;
-  /** 自訂站點詳情分頁內容，例如前台站點評論／待處理建議。 */
-  stationDetailTabPanels?: (
-    marker: RescueMapMarkerItem,
-  ) => StationDetailTabPanels | undefined;
-  /** 自訂站點待處理建議數。 */
-  stationPendingCorrectionCount?: (
-    marker: RescueMapMarkerItem,
-  ) => number | undefined;
   /** 是否顯示比例尺。 */
   showScale?: boolean;
   /** 點擊地圖空白處時回傳經緯度。 */
@@ -140,10 +160,21 @@ interface MapProps {
   previewMarker?: RescueMapMarkerItem | null;
   /** 覆寫地圖互動游標。 */
   cursor?: string;
+  /**
+   * A point picked on the map, marked by a crosshair that drags (the site's 「在這裡新增」).
+   * Moving the map by hand lets it go, through `onDraftPointChange(null)`.
+   */
+  draftPoint?: RescueMapDraftPoint | null;
+  /** The crosshair dragged to a new point, or let go (`null`) as the map is moved by hand. */
+  onDraftPointChange?: (point: RescueMapDraftPoint | null) => void;
+  /** Floats above the crosshair — what to do with the point. */
+  draftPointAction?: ReactNode;
   /** 封閉區域疊圖資料。 */
   closureAreas?: readonly RescueMapClosureArea[];
   /** 以 external store 提供視角狀態，避免拖動時將 viewport 更新擴散到整個 React tree。 */
   viewportStore?: RescueMapViewportStoreLike;
+  /** 只用於訪客提示文案（「登入後可看」）；遮不遮由後端決定。 */
+  isAuthenticated?: boolean;
 }
 
 export const Map = memo(function Map({
@@ -152,16 +183,17 @@ export const Map = memo(function Map({
   onRouteStateChange,
   renderControls,
   ticketDetailOverrides,
-  stationDetailAction,
   stationDetailSecondaryAction,
-  stationDetailTabPanels,
-  stationPendingCorrectionCount,
   showScale = false,
   onMapClick,
   previewMarker,
   cursor,
+  draftPoint,
+  onDraftPointChange,
+  draftPointAction,
   closureAreas,
   viewportStore,
+  isAuthenticated = false,
 }: MapProps = {}) {
   const controller = useRescueMapController({
     routeState,
@@ -172,12 +204,19 @@ export const Map = memo(function Map({
     filterMarkersByBbox: false,
   });
 
-  const selectedMarker = useMemo(
+  // 訪客的概略區塊不在 markers 裡（見 buildLocationCells），但一樣可以被選取、開詳情。
+  const locationCells = useMemo(
+    () => buildLocationCells(controller.markers),
+    [controller.markers],
+  );
+  const selectedMarker = useMemo<RescueMapDetailItem | null>(
     () =>
       controller.markers.find(
         (marker) => marker.id === controller.selectedMarkerId,
-      ) ?? null,
-    [controller.markers, controller.selectedMarkerId],
+      ) ??
+      locationCells.find((cell) => cell.id === controller.selectedMarkerId) ??
+      null,
+    [controller.markers, controller.selectedMarkerId, locationCells],
   );
   const isTicketTone = controller.dataType === 'ticket';
   const globalStyles = useMemo(
@@ -186,16 +225,23 @@ export const Map = memo(function Map({
       ...MAP_STATIC_GLOBAL_STYLES,
       '.leaflet-control-scale-line': {
         padding: '2px 8px',
+        // Leaflet's own chrome stays off the display scale — `site.css` pins the scale line,
+        // attribution and tooltip to raw px. It is map furniture, not content to be read at arm's
+        // length, and it has to fit Leaflet's fixed control geometry.
         fontSize: 11,
         fontWeight: 700,
-        color: '#151c22',
+        color: color.fg.neutral.default,
         lineHeight: '16px',
-        background: isTicketTone ? '#F5E2D7' : '#E8F5FB',
+        background: isTicketTone
+          ? color.bg.primary.subtle
+          : color.bg.secondary.subtle,
         backdropFilter: 'blur(6px)',
         border: 'none',
-        borderTop: `5px solid ${isTicketTone ? '#F37C0E' : '#006493'}`,
-        borderRadius: '0 0 12px 12px',
-        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
+        borderTop: `5px solid ${
+          isTicketTone ? color.bg.primary.default : color.brand.secondary.default
+        }`,
+        borderRadius: `0 0 ${radius.md}px ${radius.md}px`,
+        boxShadow: shadow.sm,
       },
     }),
     [isTicketTone],
@@ -203,8 +249,11 @@ export const Map = memo(function Map({
 
   // 保留最後選取的標記，讓行動版抽屜在關閉動畫期間仍有內容可渲染。
   const [displayMarker, setDisplayMarker] =
-    useState<RescueMapMarkerItem | null>(selectedMarker);
+    useState<RescueMapDetailItem | null>(selectedMarker);
   const [detailOpen, setDetailOpen] = useState(Boolean(selectedMarker));
+  // The phone's drawer opens on a phone only. Hidden by CSS on a wider screen, it was still an open
+  // modal, and MUI hid the rest of the page — the map, the detail panel — from screen readers.
+  const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
 
   useEffect(() => {
     if (selectedMarker) {
@@ -234,6 +283,11 @@ export const Map = memo(function Map({
     controller.setSelectedMarkerId(marker.id);
   };
 
+  const handleLocationCellClick = (cell: RescueMapLocationCell) => {
+    controller.closeLayerPanel();
+    controller.setSelectedMarkerId(cell.id);
+  };
+
   return (
     <>
       <Box
@@ -253,7 +307,7 @@ export const Map = memo(function Map({
           position: 'relative',
           isolation: 'isolate',
           overflow: 'hidden',
-          bgcolor: '#d3dbe3',
+          bgcolor: color.bg.neutral.sunken,
         }}
       >
         <GlobalStyles styles={globalStyles} />
@@ -270,30 +324,28 @@ export const Map = memo(function Map({
           <RescueMapCanvas
             controller={controller}
             onMarkerClick={handleMarkerClick}
+            onLocationCellClick={handleLocationCellClick}
             previewMarker={previewMarker}
             cursor={cursor}
             onMapClick={onMapClick}
             layoutKey={detailOpen ? 'detail-open' : 'detail-closed'}
             showScale={showScale}
             viewportStore={viewportStore}
+            draftPoint={draftPoint}
+            onDraftPointChange={onDraftPointChange}
+            draftPointAction={draftPointAction}
           />
           {renderControls ? (
             renderControls(controller)
           ) : (
-            <>
-              <RescueMapTopBar controller={controller} />
-              <Box
-                sx={{
-                  display: { mobile: 'none', tablet: 'block' },
-                }}
-              >
-                <RescueMapFloatingActions />
-              </Box>
-            </>
+            <RescueMapTopBar controller={controller} />
           )}
         </Box>
 
         <Box
+          // Collapsed, the panel still holds the last detail — nothing clears it now that the phone's
+          // drawer stays shut here — so keep it out of reach of the keyboard and screen readers.
+          inert={!detailOpen}
           sx={{
             gridColumn: 2,
             gridRow: 1,
@@ -316,29 +368,16 @@ export const Map = memo(function Map({
             <RescueMapDetailDrawer
               marker={displayMarker}
               onClose={closeDetail}
+              onSelectMarker={controller.setSelectedMarkerId}
+              isAuthenticated={isAuthenticated}
               ticketDetailOverrides={
                 displayMarker?.detailType === 'ticket'
                   ? ticketDetailOverrides?.(displayMarker)
                   : undefined
               }
-              stationAction={
-                displayMarker?.detailType === 'station'
-                  ? stationDetailAction?.(displayMarker)
-                  : undefined
-              }
               stationSecondaryAction={
                 displayMarker?.detailType === 'station'
                   ? stationDetailSecondaryAction?.(displayMarker)
-                  : undefined
-              }
-              stationPendingCorrectionCount={
-                displayMarker?.detailType === 'station'
-                  ? stationPendingCorrectionCount?.(displayMarker)
-                  : undefined
-              }
-              stationTabPanels={
-                displayMarker?.detailType === 'station'
-                  ? stationDetailTabPanels?.(displayMarker)
                   : undefined
               }
             />
@@ -348,7 +387,7 @@ export const Map = memo(function Map({
       <RescueMapLayerPanel controller={controller} />
       <Drawer
         anchor="right"
-        open={detailOpen}
+        open={detailOpen && isPhone}
         onClose={closeDetail}
         ModalProps={{ keepMounted: true }}
         slotProps={{
@@ -370,29 +409,16 @@ export const Map = memo(function Map({
         <RescueMapDetailDrawer
           marker={displayMarker}
           onClose={closeDetail}
+          onSelectMarker={controller.setSelectedMarkerId}
+          isAuthenticated={isAuthenticated}
           ticketDetailOverrides={
             displayMarker?.detailType === 'ticket'
               ? ticketDetailOverrides?.(displayMarker)
               : undefined
           }
-          stationAction={
-            displayMarker?.detailType === 'station'
-              ? stationDetailAction?.(displayMarker)
-              : undefined
-          }
           stationSecondaryAction={
             displayMarker?.detailType === 'station'
               ? stationDetailSecondaryAction?.(displayMarker)
-              : undefined
-          }
-          stationPendingCorrectionCount={
-            displayMarker?.detailType === 'station'
-              ? stationPendingCorrectionCount?.(displayMarker)
-              : undefined
-          }
-          stationTabPanels={
-            displayMarker?.detailType === 'station'
-              ? stationDetailTabPanels?.(displayMarker)
               : undefined
           }
         />

@@ -3,39 +3,42 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box, ButtonBase, Fab, Stack, Typography, Zoom } from '@mui/material';
 import { useSession } from 'next-auth/react';
 
+import { designTokens } from '@rescue-frontend/ui';
+
 import {
   createPointShareTarget,
   createTaskMatchTicketDetailOverrides,
+  dedupeMarkersById,
+  hasRescueMapDetailItem,
   Map,
+  MapRequestHelpButton,
+  NeedClaimProvider,
+  PlaceHereAction,
   PointShareDrawer,
-  SITE_FALLBACK_DATA_TYPE,
   SiteMapControls,
-  SiteStationReportDrawer,
   StationCreateDrawer,
-  StationReportHistoryPanel,
-  TaskMatchDeleteConfirmDialog,
-  TicketCreateDrawer,
+  syncDocumentMetadata,
+  useCreatedTicketMarker,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
   useSiteMapRouteState,
   useSiteMapViewportState,
   useSiteMapViewportStore,
-  useStationReports,
-  useTaskMatches,
   type PointShareTarget,
+  type ReloadedTicket,
   type RescueMapControllerValue,
-  type RescueMapDataType,
+  type RescueMapDraftPoint,
   type RescueMapMarkerItem,
   type SiteRouteState,
 } from '@rescue-frontend/modules';
+
+const { color, primitives, shadow } = designTokens;
 
 export function SiteMapView() {
   return <SiteMapViewContent />;
@@ -47,25 +50,14 @@ const DEFAULT_MAP_METADATA = {
 };
 const DEFAULT_CREATE_CENTER: [number, number] = [23.884, 121.0];
 
-function getCreateAccent(dataType: RescueMapDataType) {
-  if (dataType === 'ticket') {
-    return {
-      solid: '#E3791E',
-      soft: '#FFF1E5',
-      text: '#9A4D00',
-      border: 'rgba(227, 121, 30, 0.26)',
-      hover: '#FFE4CC',
-    };
-  }
-
-  return {
-    solid: '#006493',
-    soft: '#E8F5FB',
-    text: '#005579',
-    border: 'rgba(0, 100, 147, 0.24)',
-    hover: '#D7ECF8',
-  };
-}
+// 「＋」 adds stations only: a request for help is filed through 請求協助, from the shell.
+const CREATE_ACCENT = {
+  solid: color.brand.secondary.default,
+  soft: color.bg.secondary.subtle,
+  text: color.brand.secondary.subtle,
+  border: color.brand.secondary.default,
+  hover: primitives.color.blue[100],
+};
 
 function ControlChip({
   label,
@@ -94,14 +86,22 @@ function ControlChip({
         height: 38,
         px: 1.5,
         borderRadius: '999px',
-        border: `1px solid ${active ? (toneBorder ?? '#DCC1B1') : '#DCC1B1'}`,
-        bgcolor: active ? (toneSoft ?? '#FFF1E5') : '#F6FAFF',
-        color: active ? (toneText ?? '#7A3E00') : '#151C22',
+        border: `1px solid ${
+          active ? (toneBorder ?? color.border.accent) : color.border.accent
+        }`,
+        bgcolor: active
+          ? (toneSoft ?? color.bg.primary.subtle)
+          : color.bg.neutral.default,
+        color: active
+          ? (toneText ?? color.brand.primary.subtle)
+          : color.fg.neutral.default,
         display: 'inline-flex',
         alignItems: 'center',
         gap: 0.75,
         '&:hover': {
-          bgcolor: active ? (toneHover ?? toneSoft ?? '#FFF1E5') : '#EEF4FA',
+          bgcolor: active
+            ? (toneHover ?? toneSoft ?? color.bg.primary.subtle)
+            : color.bg.neutral.subtle,
         },
       }}
     >
@@ -115,18 +115,14 @@ function ControlChip({
 
 function SiteMapCreateDock({
   active,
-  dataType,
   onToggle,
   onCreateStation,
-  onCreateTicket,
 }: {
   active: boolean;
-  dataType: RescueMapDataType;
   onToggle: () => void;
   onCreateStation: () => void;
-  onCreateTicket: () => void;
 }) {
-  const accent = getCreateAccent(dataType);
+  const accent = CREATE_ACCENT;
 
   return (
     <Box
@@ -148,29 +144,16 @@ function SiteMapCreateDock({
       >
         <Zoom in={active}>
           <Box>
-            {dataType === 'station' ? (
-              <ControlChip
-                label="新增站點"
-                active
-                icon={<PlaceRoundedIcon sx={{ fontSize: 18 }} />}
-                toneSoft={accent.soft}
-                toneText={accent.text}
-                toneBorder={accent.border}
-                toneHover={accent.hover}
-                onClick={onCreateStation}
-              />
-            ) : (
-              <ControlChip
-                label="新增任務"
-                active
-                icon={<AssignmentRoundedIcon sx={{ fontSize: 18 }} />}
-                toneSoft={accent.soft}
-                toneText={accent.text}
-                toneBorder={accent.border}
-                toneHover={accent.hover}
-                onClick={onCreateTicket}
-              />
-            )}
+            <ControlChip
+              label="新增站點"
+              active
+              icon={<PlaceRoundedIcon sx={{ fontSize: 18 }} />}
+              toneSoft={accent.soft}
+              toneText={accent.text}
+              toneBorder={accent.border}
+              toneHover={accent.hover}
+              onClick={onCreateStation}
+            />
           </Box>
         </Zoom>
         <Fab
@@ -180,13 +163,13 @@ function SiteMapCreateDock({
             width: 48,
             height: 48,
             minHeight: 48,
-            bgcolor: active ? accent.soft : '#FFFFFF',
-            color: active ? accent.text : '#151C22',
-            border: `1px solid ${active ? accent.border : 'rgba(227, 121, 30, 0.22)'}`,
-            boxShadow: '0 12px 24px rgba(21, 28, 34, 0.16)',
+            bgcolor: active ? accent.soft : color.bg.neutral.default,
+            color: active ? accent.text : color.fg.neutral.default,
+            border: `1px solid ${active ? accent.border : color.border.accent}`,
+            boxShadow: shadow.lg,
             pointerEvents: 'auto',
             '&:hover': {
-              bgcolor: active ? accent.hover : '#FFF8F3',
+              bgcolor: active ? accent.hover : color.bg.primary.subtle,
             },
           }}
         >
@@ -201,14 +184,8 @@ function SiteMapCreateDock({
   );
 }
 
-function SiteMapCenterPin({
-  open,
-  dataType,
-}: {
-  open: boolean;
-  dataType: RescueMapDataType;
-}) {
-  const accent = getCreateAccent(dataType);
+function SiteMapCenterPin({ open }: { open: boolean }) {
+  const accent = CREATE_ACCENT;
 
   return (
     <Box
@@ -229,13 +206,15 @@ function SiteMapCenterPin({
               height: 44,
               borderRadius: '999px',
               bgcolor: accent.solid,
-              border: '2px solid rgba(255,255,255,0.94)',
-              boxShadow: '0 12px 24px rgba(21, 28, 34, 0.2)',
+              border: `2px solid ${color.bg.neutral.default}`,
+              boxShadow: shadow.lg,
               display: 'grid',
               placeItems: 'center',
             }}
           >
-            <PlaceRoundedIcon sx={{ fontSize: 20, color: '#FFFFFF' }} />
+            <PlaceRoundedIcon
+              sx={{ fontSize: 20, color: color.fg.onSecondary }}
+            />
           </Box>
           <Box
             sx={{
@@ -244,58 +223,15 @@ function SiteMapCenterPin({
               mt: '-8px',
               bgcolor: accent.solid,
               transform: 'rotate(45deg)',
-              borderBottom: '2px solid rgba(255,255,255,0.94)',
-              borderRight: '2px solid rgba(255,255,255,0.94)',
-              boxShadow: '6px 6px 14px rgba(21, 28, 34, 0.12)',
+              borderBottom: `2px solid ${color.bg.neutral.default}`,
+              borderRight: `2px solid ${color.bg.neutral.default}`,
+              boxShadow: shadow.md,
             }}
           />
         </Stack>
       </Zoom>
     </Box>
   );
-}
-
-function ensureHeadMeta(
-  selector: string,
-  attributes: Record<string, string>,
-): HTMLMetaElement {
-  let element = document.head.querySelector<HTMLMetaElement>(selector);
-
-  if (!element) {
-    element = document.createElement('meta');
-    Object.entries(attributes).forEach(([name, value]) => {
-      element?.setAttribute(name, value);
-    });
-    document.head.appendChild(element);
-  }
-
-  return element;
-}
-
-function syncDocumentMetadata(target: PointShareTarget | null) {
-  const title = target?.title ?? DEFAULT_MAP_METADATA.title;
-  const description = target?.description ?? DEFAULT_MAP_METADATA.description;
-  const url = target?.url ?? window.location.href;
-
-  document.title = title;
-  ensureHeadMeta('meta[name="description"]', {
-    name: 'description',
-  }).setAttribute('content', description);
-  ensureHeadMeta('meta[property="og:title"]', {
-    property: 'og:title',
-  }).setAttribute('content', title);
-  ensureHeadMeta('meta[property="og:description"]', {
-    property: 'og:description',
-  }).setAttribute('content', description);
-  ensureHeadMeta('meta[property="og:url"]', {
-    property: 'og:url',
-  }).setAttribute('content', url);
-  ensureHeadMeta('meta[name="twitter:title"]', {
-    name: 'twitter:title',
-  }).setAttribute('content', title);
-  ensureHeadMeta('meta[name="twitter:description"]', {
-    name: 'twitter:description',
-  }).setAttribute('content', description);
 }
 
 function getSubDataTypesSignature(state: SiteRouteState): string {
@@ -330,46 +266,96 @@ function SiteMapViewportDataLayer({
   baseRouteState,
   createdMarkers,
   createModeActive,
-  reportsByStationId,
   onMapRouteStateChange,
   onToggleCreateMode,
   onOpenCreateStation,
-  onOpenCreateTicket,
-  onOpenReport,
   onOpenShareTarget,
   onReplaceRouteState,
 }: {
   baseRouteState: SiteRouteState;
   createdMarkers: readonly RescueMapMarkerItem[];
   createModeActive: boolean;
-  reportsByStationId: ReturnType<
-    typeof useStationReports
-  >['reportsByStationId'];
   onMapRouteStateChange: (next: SiteRouteState) => void;
   onToggleCreateMode: () => void;
   onOpenCreateStation: () => void;
-  onOpenCreateTicket: () => void;
-  onOpenReport: (marker: RescueMapMarkerItem) => void;
   onOpenShareTarget: (target: PointShareTarget) => void;
   onReplaceRouteState: (next: SiteRouteState) => void;
 }) {
-  const { data: session, status: authStatus } = useSession();
+  const { status: authStatus } = useSession();
   const viewportState = useSiteMapViewportState();
   const viewportStore = useSiteMapViewportStore();
   const liveDataStore = useSiteMapLiveData(baseRouteState);
   const liveDataSnapshot = useSiteMapLiveDataSnapshot(liveDataStore);
-  const { getTaskMatchState, claimTask, deleteMatchSheet } = useTaskMatches();
   const isAuthenticated = authStatus === 'authenticated';
-  const currentUserId = session?.user?.id ?? null;
   const mergedRouteState = useMemo<SiteRouteState>(
     () => mergeRouteStateWithViewport(baseRouteState, viewportState),
     [baseRouteState, viewportState],
   );
-  const [pendingDeleteTask, setPendingDeleteTask] =
-    useState<RescueMapMarkerItem | null>(null);
+  // A blank spot tapped on the map, for 請求協助 there. Not while 「＋」 is open: its pin
+  // in the middle is then the point being placed, and a second one would confuse the two.
+  const [draftPoint, setDraftPoint] = useState<RescueMapDraftPoint | null>(
+    null,
+  );
+  const selectedMarkerId = baseRouteState.selectedMarkerId;
+
+  const handleMapClick = useCallback(
+    ([lat, lng]: [number, number]) => {
+      if (!createModeActive) {
+        setDraftPoint({ lat, lng });
+      }
+    },
+    [createModeActive],
+  );
+
+  // Let go once a pin or cell is opened — left standing, it would read as belonging to it — and
+  // once 「＋」 opens.
+  useEffect(() => {
+    if (selectedMarkerId || createModeActive) {
+      setDraftPoint(null);
+    }
+  }, [createModeActive, selectedMarkerId]);
+
+  useEffect(() => {
+    if (!draftPoint) {
+      return;
+    }
+
+    const letGoOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDraftPoint(null);
+      }
+    };
+
+    window.addEventListener('keydown', letGoOnEscape);
+    return () => window.removeEventListener('keydown', letGoOnEscape);
+  }, [draftPoint]);
+
+  const draftPointAction = useMemo(
+    () =>
+      draftPoint ? (
+        <PlaceHereAction
+          point={draftPoint}
+          onPlaced={() => setDraftPoint(null)}
+        />
+      ) : null,
+    [draftPoint],
+  );
+
+  // Tickets found gone since — deleted. The live data drops them itself; one made here is
+  // dropped here, or it would stand in for the fetched one it was waiting for.
+  const [goneTicketIds, setGoneTicketIds] = useState<readonly string[]>([]);
+
+  // A ticket made here stays on the map until the view fetches it too; from then on the fetched
+  // one, being fresher, is the one shown.
   const visibleMarkers = useMemo(
-    () => [...createdMarkers, ...liveDataSnapshot.markers],
-    [createdMarkers, liveDataSnapshot.markers],
+    () =>
+      dedupeMarkersById([
+        ...liveDataSnapshot.markers,
+        ...createdMarkers.filter(
+          (marker) => !goneTicketIds.includes(marker.id),
+        ),
+      ]),
+    [createdMarkers, goneTicketIds, liveDataSnapshot.markers],
   );
 
   const createCurrentPointShareTarget = useCallback(
@@ -403,7 +389,7 @@ function SiteMapViewportDataLayer({
   ]);
 
   useEffect(() => {
-    syncDocumentMetadata(metadataTarget);
+    syncDocumentMetadata(metadataTarget, DEFAULT_MAP_METADATA);
   }, [metadataTarget]);
 
   useEffect(() => {
@@ -415,8 +401,10 @@ function SiteMapViewportDataLayer({
       return;
     }
 
-    const hasSelectedMarker = visibleMarkers.some(
-      (marker) => marker.id === baseRouteState.selectedMarkerId,
+    // A guest's location cell is selectable too, and is not a marker of its own.
+    const hasSelectedMarker = hasRescueMapDetailItem(
+      visibleMarkers,
+      baseRouteState.selectedMarkerId,
     );
 
     if (hasSelectedMarker) {
@@ -437,47 +425,48 @@ function SiteMapViewportDataLayer({
   ]);
 
   const createTicketDetailOverrides = useCallback(
-    (marker: RescueMapMarkerItem) => {
-      const taskMatchState = getTaskMatchState(marker);
-      const canDeleteMatchSheet =
-        Boolean(currentUserId) &&
-        marker.ticketMeta?.createdBy === currentUserId;
-
-      return createTaskMatchTicketDetailOverrides({
+    (marker: RescueMapMarkerItem) =>
+      createTaskMatchTicketDetailOverrides({
         marker,
-        state: taskMatchState,
         isAuthenticated,
-        canDeleteMatchSheet,
-        onClaimTask: () => claimTask(marker),
-        onDeleteMatchSheet: () => setPendingDeleteTask(marker),
         onShare: () => onOpenShareTarget(createCurrentPointShareTarget(marker)),
-      });
+      }),
+    [createCurrentPointShareTarget, isAuthenticated, onOpenShareTarget],
+  );
+
+  // A claim, a release or a stop can change a ticket's status, which its pin shows; the next fetch
+  // would bring it, but the person who did it should not have to wait for one. A ticket found gone
+  // (null — deleted) loses its pin, and with it the selection, so its drawer shuts.
+  const showReloadedTicketStatus = useCallback(
+    (ticketUuid: string, reloaded: ReloadedTicket | null) => {
+      if (!reloaded) {
+        liveDataStore.dismissMarker(ticketUuid);
+        setGoneTicketIds((current) =>
+          current.includes(ticketUuid) ? current : [...current, ticketUuid],
+        );
+        return;
+      }
+
+      if (reloaded.ticketStatus) {
+        liveDataStore.replaceTicketStatus(ticketUuid, reloaded.ticketStatus);
+      }
     },
-    [
-      claimTask,
-      currentUserId,
-      createCurrentPointShareTarget,
-      getTaskMatchState,
-      isAuthenticated,
-      onOpenShareTarget,
-    ],
+    [liveDataStore],
   );
 
   const renderControls = useCallback(
     (controller: RescueMapControllerValue) => (
       <>
         <SiteMapControls controller={controller} />
-        <SiteMapCenterPin
-          open={createModeActive}
-          dataType={controller.dataType ?? SITE_FALLBACK_DATA_TYPE}
-        />
+        <SiteMapCenterPin open={createModeActive} />
+        {/* A phone's 請求協助; set aside while 「＋」 is open, whose 新增站點 reaches
+            the middle of a 390px screen. */}
+        {createModeActive ? null : <MapRequestHelpButton />}
         {isAuthenticated ? (
           <SiteMapCreateDock
             active={createModeActive}
-            dataType={controller.dataType ?? SITE_FALLBACK_DATA_TYPE}
             onToggle={onToggleCreateMode}
             onCreateStation={onOpenCreateStation}
-            onCreateTicket={onOpenCreateTicket}
           />
         ) : null}
       </>
@@ -486,18 +475,8 @@ function SiteMapViewportDataLayer({
       createModeActive,
       isAuthenticated,
       onOpenCreateStation,
-      onOpenCreateTicket,
       onToggleCreateMode,
     ],
-  );
-
-  const stationDetailAction = useCallback(
-    (marker: RescueMapMarkerItem) => ({
-      label: '建議修改',
-      icon: <EditNoteRoundedIcon />,
-      onClick: () => onOpenReport(marker),
-    }),
-    [onOpenReport],
   );
 
   const stationDetailSecondaryAction = useCallback(
@@ -509,24 +488,10 @@ function SiteMapViewportDataLayer({
     [createCurrentPointShareTarget, onOpenShareTarget],
   );
 
-  const stationPendingCorrectionCount = useCallback(
-    (marker: RescueMapMarkerItem) => reportsByStationId[marker.id]?.length ?? 0,
-    [reportsByStationId],
-  );
-
-  const stationDetailTabPanels = useCallback(
-    (marker: RescueMapMarkerItem) => ({
-      pendingCorrections: (
-        <StationReportHistoryPanel
-          reports={reportsByStationId[marker.id] ?? []}
-        />
-      ),
-    }),
-    [reportsByStationId],
-  );
-
   return (
-    <>
+    // The drawer's claim buttons claim through this. The map keeps no copy of the needs (its popups
+    // offer no claiming), only each ticket's status.
+    <NeedClaimProvider onTicketReloaded={showReloadedTicketStatus}>
       <Map
         markers={visibleMarkers}
         closureAreas={liveDataSnapshot.closureAreas}
@@ -534,56 +499,30 @@ function SiteMapViewportDataLayer({
         onRouteStateChange={onMapRouteStateChange}
         showScale
         viewportStore={viewportStore}
+        isAuthenticated={isAuthenticated}
         renderControls={renderControls}
+        onMapClick={handleMapClick}
+        draftPoint={draftPoint}
+        onDraftPointChange={setDraftPoint}
+        draftPointAction={draftPointAction}
         ticketDetailOverrides={createTicketDetailOverrides}
-        stationDetailAction={stationDetailAction}
         stationDetailSecondaryAction={stationDetailSecondaryAction}
-        stationPendingCorrectionCount={stationPendingCorrectionCount}
-        stationDetailTabPanels={stationDetailTabPanels}
       />
-      <TaskMatchDeleteConfirmDialog
-        open={Boolean(pendingDeleteTask)}
-        task={pendingDeleteTask}
-        onCancel={() => setPendingDeleteTask(null)}
-        onConfirm={() => {
-          if (!pendingDeleteTask) {
-            return;
-          }
-
-          liveDataStore.dismissMarker(deleteMatchSheet(pendingDeleteTask));
-          onReplaceRouteState({
-            ...baseRouteState,
-            selectedMarkerId:
-              baseRouteState.selectedMarkerId === pendingDeleteTask.id
-                ? undefined
-                : baseRouteState.selectedMarkerId,
-          });
-          setPendingDeleteTask(null);
-        }}
-      />
-    </>
+    </NeedClaimProvider>
   );
 }
 
 function SiteMapScene({
   createdMarkers,
   createModeActive,
-  reportsByStationId,
   onToggleCreateMode,
   onOpenCreateStation,
-  onOpenCreateTicket,
-  onOpenReport,
   onOpenShareTarget,
 }: {
   createdMarkers: readonly RescueMapMarkerItem[];
   createModeActive: boolean;
-  reportsByStationId: ReturnType<
-    typeof useStationReports
-  >['reportsByStationId'];
   onToggleCreateMode: () => void;
   onOpenCreateStation: () => void;
-  onOpenCreateTicket: () => void;
-  onOpenReport: (marker: RescueMapMarkerItem) => void;
   onOpenShareTarget: (target: PointShareTarget) => void;
 }) {
   const mapRoute = useSiteMapRouteState();
@@ -605,12 +544,9 @@ function SiteMapScene({
       baseRouteState={mapRoute.state}
       createdMarkers={createdMarkers}
       createModeActive={createModeActive}
-      reportsByStationId={reportsByStationId}
       onMapRouteStateChange={handleMapRouteStateChange}
       onToggleCreateMode={onToggleCreateMode}
       onOpenCreateStation={onOpenCreateStation}
-      onOpenCreateTicket={onOpenCreateTicket}
-      onOpenReport={onOpenReport}
       onOpenShareTarget={onOpenShareTarget}
       onReplaceRouteState={mapRoute.replace}
     />
@@ -619,15 +555,11 @@ function SiteMapScene({
 
 function SiteMapCreatePanels({
   stationDrawerOpen,
-  ticketDrawerOpen,
   onCloseStationDrawer,
-  onCloseTicketDrawer,
   onCreatedMarker,
 }: {
   stationDrawerOpen: boolean;
-  ticketDrawerOpen: boolean;
   onCloseStationDrawer: () => void;
-  onCloseTicketDrawer: () => void;
   onCreatedMarker: (marker: RescueMapMarkerItem) => void;
 }) {
   const viewportState = useSiteMapViewportState();
@@ -648,54 +580,38 @@ function SiteMapCreatePanels({
   );
 
   return (
-    <>
-      <StationCreateDrawer
-        open={stationDrawerOpen}
-        onClose={onCloseStationDrawer}
-        initialPosition={currentDraftPosition}
-        onCreatedMarker={onCreatedMarker}
-        onLocationChange={handleDraftLocationChange}
-      />
-      <TicketCreateDrawer
-        open={ticketDrawerOpen}
-        onClose={onCloseTicketDrawer}
-        initialPosition={currentDraftPosition}
-        onCreatedMarker={onCreatedMarker}
-        onLocationChange={handleDraftLocationChange}
-      />
-    </>
+    <StationCreateDrawer
+      open={stationDrawerOpen}
+      onClose={onCloseStationDrawer}
+      initialPosition={currentDraftPosition}
+      onCreatedMarker={onCreatedMarker}
+      onLocationChange={handleDraftLocationChange}
+    />
   );
 }
 
 function SiteMapViewContent() {
-  const { reportsByStationId, submitStationReport } = useStationReports();
+  const mapRoute = useSiteMapRouteState();
   const [createdMarkers, setCreatedMarkers] = useState<
     readonly RescueMapMarkerItem[]
   >([]);
   const [createModeActive, setCreateModeActive] = useState(false);
   const [stationDrawerOpen, setStationDrawerOpen] = useState(false);
-  const [ticketDrawerOpen, setTicketDrawerOpen] = useState(false);
-  const [reportStation, setReportStation] =
-    useState<RescueMapMarkerItem | null>(null);
   const [shareTarget, setShareTarget] = useState<PointShareTarget | null>(null);
+
+  // Filed through 請求協助, which lives in the site shell: it turns the page to the ticket in the
+  // same render, so the ticket has to be among the markers by then.
+  useCreatedTicketMarker((marker) => {
+    setCreatedMarkers((current) => [marker, ...current]);
+  });
 
   const resetCreateFlow = () => {
     setCreateModeActive(false);
   };
 
-  const openCreateMode = (dataType: 'station' | 'ticket') => {
+  const openCreateStation = () => {
     setCreateModeActive(true);
-
-    if (dataType === 'station') {
-      setStationDrawerOpen(true);
-      return;
-    }
-
-    setTicketDrawerOpen(true);
-  };
-
-  const closeReportDrawer = () => {
-    setReportStation(null);
+    setStationDrawerOpen(true);
   };
 
   return (
@@ -703,52 +619,37 @@ function SiteMapViewContent() {
       <SiteMapScene
         createdMarkers={createdMarkers}
         createModeActive={createModeActive}
-        reportsByStationId={reportsByStationId}
         onToggleCreateMode={() =>
           setCreateModeActive((current) => {
             if (current) {
               setStationDrawerOpen(false);
-              setTicketDrawerOpen(false);
             }
 
             return !current;
           })
         }
-        onOpenCreateStation={() => openCreateMode('station')}
-        onOpenCreateTicket={() => openCreateMode('ticket')}
-        onOpenReport={setReportStation}
+        onOpenCreateStation={openCreateStation}
         onOpenShareTarget={setShareTarget}
-      />
-      <SiteStationReportDrawer
-        open={Boolean(reportStation)}
-        station={reportStation}
-        reports={reportStation ? reportsByStationId[reportStation.id] : []}
-        onClose={closeReportDrawer}
-        onSubmit={(values) => {
-          if (!reportStation) {
-            return;
-          }
-
-          submitStationReport(reportStation, values);
-          closeReportDrawer();
-        }}
       />
       <SiteMapCreatePanels
         stationDrawerOpen={stationDrawerOpen}
-        ticketDrawerOpen={ticketDrawerOpen}
         onCloseStationDrawer={() => {
           setStationDrawerOpen(false);
-          resetCreateFlow();
-        }}
-        onCloseTicketDrawer={() => {
-          setTicketDrawerOpen(false);
           resetCreateFlow();
         }}
         onCreatedMarker={(marker) => {
           setCreatedMarkers((current) => [marker, ...current]);
           setStationDrawerOpen(false);
-          setTicketDrawerOpen(false);
           resetCreateFlow();
+          // Made from tickets too (「＋」 is there on both), where a station does not show and would
+          // look lost: turn to stations, with no filter to hide it, and open it.
+          mapRoute.replace({
+            ...mapRoute.state,
+            dataType: 'station',
+            subDataTypes: undefined,
+            search: undefined,
+            selectedMarkerId: marker.id,
+          });
         }}
       />
       <PointShareDrawer
