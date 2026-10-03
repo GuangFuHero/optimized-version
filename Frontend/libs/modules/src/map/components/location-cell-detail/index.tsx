@@ -1,6 +1,7 @@
 'use client';
 
-import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
+import { Hexagon } from 'lucide-react';
+
 import { Box, ButtonBase, IconButton, Stack, Typography } from '@mui/material';
 
 import {
@@ -92,7 +93,7 @@ export function LocationCellDetail({
             color: color.brand.primary.subtle,
           }}
         >
-          <HexagonOutlinedIcon sx={{ fontSize: 20 }} />
+          <Box component={Hexagon} sx={{ width: 20, height: 20 }} />
         </Box>
         <Box sx={{ minWidth: 0 }}>
           <Typography

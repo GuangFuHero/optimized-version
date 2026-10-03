@@ -1,4 +1,4 @@
-import type { ElementType } from 'react';
+import type { LucideIcon } from 'lucide-react';
 
 import type { TicketNeed } from '../ticket/needs/need-claim';
 
@@ -68,7 +68,7 @@ export interface RescueMapBaseLayerConfig {
   attributionApiPath?: string;
   tileSourceType: RescueMapTileSourceType;
   tileSource: RescueMapTileSource;
-  icon: ElementType;
+  icon: LucideIcon;
   /** 授權限制提示，例如非商用或條款未確認；會顯示於圖層面板。 */
   licenseNote?: string;
   /** 暫時從圖層面板與可選清單中隱藏，但設定保留。 */
@@ -79,7 +79,7 @@ export interface RescueMapOverlayLayerConfig {
   label: string;
   description: string;
   color: string;
-  icon: ElementType;
+  icon: LucideIcon;
   sourceLabel?: string;
   disabledReason?: string;
 }

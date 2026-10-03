@@ -1,10 +1,13 @@
 'use client';
 
-import KeyboardDoubleArrowLeftRoundedIcon from '@mui/icons-material/KeyboardDoubleArrowLeftRounded';
-import KeyboardDoubleArrowRightRoundedIcon from '@mui/icons-material/KeyboardDoubleArrowRightRounded';
-import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
-import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
-import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
+import {
+  ChevronsLeft,
+  ChevronsRight,
+  LogOut,
+  ArrowLeftRight,
+  ShieldCheck,
+} from 'lucide-react';
+
 import { Box, Divider, IconButton, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import { Fragment } from 'react';
@@ -129,7 +132,7 @@ export function AdminSidebar({
           (section) => section.items.map(renderItem),
         )}
         <SidebarItem
-          icon={<LogoutOutlinedIcon />}
+          icon={<LogOut />}
           label="登出"
           collapsed={collapsed}
           onClick={onSignOut}
@@ -163,11 +166,7 @@ function EventHeader({
       onClick={onToggle}
       sx={{ color: color.fg.neutral.default, borderRadius: `${radius.sm}px` }}
     >
-      {collapsed ? (
-        <KeyboardDoubleArrowRightRoundedIcon />
-      ) : (
-        <KeyboardDoubleArrowLeftRoundedIcon />
-      )}
+      {collapsed ? <ChevronsRight /> : <ChevronsLeft />}
     </IconButton>
   );
 
@@ -261,7 +260,7 @@ function RealmBar({ collapsed }: { collapsed: boolean }) {
             borderRadius: `${radius.sm}px`,
           }}
         >
-          <SwapHorizRoundedIcon sx={{ fontSize: 18 }} />
+          <Box component={ArrowLeftRight} sx={{ width: 18, height: 18 }} />
         </IconButton>
       </Box>
     );
@@ -279,8 +278,9 @@ function RealmBar({ collapsed }: { collapsed: boolean }) {
       }}
     >
       <Badge tone="neutral" title="你目前在管理後台">
-        <VerifiedUserOutlinedIcon
-          sx={{ fontSize: 12, color: color.fg.neutral.muted }}
+        <Box
+          component={ShieldCheck}
+          sx={{ width: 12, height: 12, color: color.fg.neutral.muted }}
         />
         管理後台
       </Badge>
@@ -299,7 +299,7 @@ function RealmBar({ collapsed }: { collapsed: boolean }) {
         }}
       >
         回到前台
-        <SwapHorizRoundedIcon sx={{ fontSize: 13 }} />
+        <Box component={ArrowLeftRight} sx={{ width: 13, height: 13 }} />
       </Box>
     </Stack>
   );

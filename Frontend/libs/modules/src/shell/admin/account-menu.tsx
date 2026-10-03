@@ -1,8 +1,7 @@
 'use client';
 
-import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
-import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
-import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
+import { ChevronDown, LogOut, ArrowLeftRight } from 'lucide-react';
+
 import { Box, ButtonBase, Menu, MenuItem } from '@mui/material';
 import { useState } from 'react';
 
@@ -71,14 +70,16 @@ export function AccountMenu({
                 color: color.fg.neutral.muted,
               }}
             >
-              <SwapHorizRoundedIcon sx={{ fontSize: 12 }} />
+              <Box component={ArrowLeftRight} sx={{ width: 12, height: 12 }} />
               {user.identityLabel}
             </Box>
           ) : null}
         </Box>
-        <ExpandMoreRoundedIcon
+        <Box
+          component={ChevronDown}
           sx={{
-            fontSize: 16,
+            width: 16,
+            height: 16,
             color: color.fg.neutral.muted,
             transform: open ? 'rotate(180deg)' : 'none',
           }}
@@ -118,7 +119,7 @@ export function AccountMenu({
             color: color.fg.neutral.default,
           }}
         >
-          <LogoutOutlinedIcon sx={{ fontSize: 17 }} />
+          <Box component={LogOut} sx={{ width: 17, height: 17 }} />
           登出
         </MenuItem>
       </Menu>

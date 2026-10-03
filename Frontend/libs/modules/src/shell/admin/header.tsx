@@ -1,6 +1,7 @@
 'use client';
 
-import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
+import { Bell } from 'lucide-react';
+
 import { Box, IconButton, Stack, Typography } from '@mui/material';
 
 import { designTokens, layoutSizes } from '@rescue-frontend/ui';
@@ -46,7 +47,7 @@ export function AdminHeader({ title, user, onSignOut }: AdminHeaderProps) {
         sx={{ ml: 'auto', alignItems: 'center', gap: '16px' }}
       >
         <IconButton aria-label="通知" sx={{ color: color.fg.neutral.subtle }}>
-          <NotificationsNoneOutlinedIcon sx={{ fontSize: 22 }} />
+          <Box component={Bell} sx={{ width: 22, height: 22 }} />
         </IconButton>
         <AccountMenu user={user} onSignOut={onSignOut} />
       </Stack>

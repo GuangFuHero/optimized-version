@@ -1,4 +1,4 @@
-import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
+import { CircleHelp } from 'lucide-react';
 import { Box } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
@@ -51,7 +51,7 @@ export const Split: Story = {
       {
         label: '最後盤點',
         value: (
-          <Badge variant="dashed" size="sm" icon={<HelpOutlineRoundedIcon />}>
+          <Badge variant="dashed" size="sm" icon={<CircleHelp />}>
             等後端開欄位
           </Badge>
         ),

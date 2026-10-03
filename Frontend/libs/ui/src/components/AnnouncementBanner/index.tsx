@@ -1,4 +1,4 @@
-import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
+import { Megaphone } from 'lucide-react';
 import { Box } from '@mui/material';
 import type { ReactNode } from 'react';
 
@@ -24,7 +24,10 @@ export function AnnouncementBanner({ children }: { children: ReactNode }) {
         fontWeight: 700,
       }}
     >
-      <CampaignOutlinedIcon sx={{ fontSize: 17, flexShrink: 0 }} />
+      <Box
+        component={Megaphone}
+        sx={{ width: 17, height: 17, flexShrink: 0 }}
+      />
       <Box
         component="span"
         sx={{

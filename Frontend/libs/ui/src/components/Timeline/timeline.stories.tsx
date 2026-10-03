@@ -1,6 +1,4 @@
-import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
-import DoNotDisturbOnOutlinedIcon from '@mui/icons-material/DoNotDisturbOnOutlined';
-import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
+import { Megaphone, CircleMinus, ArrowLeftRight } from 'lucide-react';
 import { Box } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
@@ -56,7 +54,7 @@ export const Icons: Story = {
         time: '09/28 18:00',
         actor: '林承翰',
         tone: 'danger',
-        icon: <CampaignOutlinedIcon />,
+        icon: <Megaphone />,
         badges: <Badge tone="success">仍在顯示</Badge>,
         content: '今日 18:00 前需回報各隊在場人數，未回報者由縣府直接致電',
       },
@@ -65,14 +63,14 @@ export const Icons: Story = {
         title: '取代',
         time: '09/28 12:10',
         actor: '林承翰',
-        icon: <SwapHorizRoundedIcon />,
+        icon: <ArrowLeftRight />,
       },
       {
         id: '1',
         title: '關閉',
         time: '09/27 21:30',
         actor: '陳怡君',
-        icon: <DoNotDisturbOnOutlinedIcon />,
+        icon: <CircleMinus />,
       },
     ],
   },
