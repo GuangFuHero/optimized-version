@@ -82,6 +82,8 @@ ROLES_DATA = [
             Perm.TICKET_VIEW_DETAIL: "all",
             Perm.USER_VIEW: "all",
             Perm.AUDIT_VIEW: "all",
+            # Every staff role reads admin-page announcements; the self-registered `user` doesn't.
+            Perm.ANN_VIEW_ADMIN: "all",
             # ADR-130: audit.view is no longer the ticket into the timeline (that is
             # *.view_history), but it still unlocks its top two tiers — the review columns
             # and the raw audit payload.
@@ -110,7 +112,8 @@ ROLES_DATA = [
                 Perm.TICKET_VIEW_HISTORY, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
                 Perm.FIELD_VIEW, Perm.FIELD_ADD, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
-                Perm.ANN_VIEW, Perm.ANN_PUBLISH, Perm.ANN_EDIT, Perm.ANN_DELETE,
+                Perm.ANN_VIEW, Perm.ANN_VIEW_ADMIN, Perm.ANN_PUBLISH, Perm.ANN_EDIT,
+                Perm.ANN_DELETE,
                 Perm.PREDEP_VIEW, Perm.PREDEP_PUBLISH, Perm.PREDEP_EDIT, Perm.PREDEP_DELETE,
                 Perm.USER_VIEW, Perm.USER_ADD, Perm.USER_EDIT, Perm.USER_DELETE,
                 Perm.RBAC_VIEW, Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
@@ -170,6 +173,7 @@ ROLES_DATA = [
             Perm.TICKET_REVIEW: "zone",
             Perm.TEAM_VIEW: "team",
             Perm.TEAM_MEMBER_MANAGE: "team",
+            Perm.ANN_VIEW_ADMIN: "all",  # see data_auditor above
             Perm.ZONE_VIEW: "all",
             Perm.ZONE_ADD: "all",
             Perm.ZONE_EDIT: "all",
@@ -216,6 +220,7 @@ ROLES_DATA = [
             Perm.TICKET_DELETE: "own",
             Perm.TICKET_ASSIGN: "own",
             Perm.TEAM_VIEW: "team",
+            Perm.ANN_VIEW_ADMIN: "all",  # see data_auditor above
         },
     },
 ]

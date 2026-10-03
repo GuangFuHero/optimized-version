@@ -5,9 +5,14 @@ to the UUIDs each test creates and check relative ordering rather than absolute 
 Strict contiguity of display_order is covered by tests/test_announcements_repository.py.
 """
 
-import pytest
+from uuid import UUID
 
-from tests.test_graphql.conftest import auth_header
+import pytest
+from sqlalchemy import select
+
+from app.models.notification import Notification
+from tests.test_graphql.conftest import _create_user_with_role, auth_header
+from tests.test_graphql.conftest import test_db as _test_db
 
 CREATE = """
 mutation($content: String!) {
@@ -165,26 +170,51 @@ async def _listed(client, mine, query, variables=None, token=None):
     return {x["uuid"] for x in body["data"]["announcements"]} & mine
 
 
+async def _notified(ref_uuid):
+    async with _test_db() as db:
+        rows = await db.execute(
+            select(Notification.recipient_uuid).where(Notification.ref_uuid == UUID(ref_uuid))
+        )
+        return {str(u) for u in rows.scalars()}
+
+
 @pytest.mark.asyncio
-async def test_placement_controls_which_page_lists_it(client, content_admin_auth, login_user_auth):
-    """Each page lists its own placement plus "all"; admin-page rows need a logged-in caller."""
-    _, admin_token = content_admin_auth
-    _, user_token = login_user_auth
-    admin_only = await _create_placed(client, admin_token, "admin only", "ADMIN_PAGE")
-    public_only = await _create_placed(client, admin_token, "public only", "PUBLIC_PAGE")
-    both = (await _create(client, admin_token, "both"))["uuid"]
+async def test_placement_controls_which_page_lists_it(client, content_admin_auth):
+    """Each page lists its own placement plus "all", and guests read public-page rows."""
+    _, token = content_admin_auth
+    admin_only = await _create_placed(client, token, "admin only", "ADMIN_PAGE")
+    public_only = await _create_placed(client, token, "public only", "PUBLIC_PAGE")
+    both = (await _create(client, token, "both"))["uuid"]
     mine = {admin_only, public_only, both}
 
     assert await _listed(client, mine, LIST_DEFAULT) == {public_only, both}
     assert await _listed(
-        client, mine, LIST_PLACED, {"placement": "ADMIN_PAGE"}, user_token
+        client, mine, LIST_PLACED, {"placement": "ADMIN_PAGE"}, token
     ) == {admin_only, both}
-    assert await _listed(client, mine, LIST_PLACED, {"placement": "ALL"}, user_token) == mine
+    assert await _listed(client, mine, LIST_PLACED, {"placement": "ALL"}, token) == mine
 
-    assert (await _post(client, LIST_PLACED, {"placement": "ADMIN_PAGE"})).get("errors")
-    assert (await _post(client, GET_ONE, {"uuid": admin_only})).get("errors")
     public_get = await _post(client, GET_ONE, {"uuid": public_only})
     assert public_get["data"]["announcement"]["uuid"] == public_only
+
+
+@pytest.mark.asyncio
+async def test_admin_page_needs_view_admin(client, redis, content_admin_auth, login_user_auth):
+    """Guests and plain accounts can't read admin-page rows or get notified of them; staff can."""
+    _, admin_token = content_admin_auth
+    user_uuid, user_token = login_user_auth
+    staff_uuid, staff_token = await _create_user_with_role(redis, "Content Admin")
+    admin_only = await _create_placed(client, admin_token, "admin only", "ADMIN_PAGE")
+
+    for token in (None, user_token):
+        assert (await _post(client, LIST_PLACED, {"placement": "ADMIN_PAGE"}, token)).get("errors")
+        assert (await _post(client, LIST_PLACED, {"placement": "ALL"}, token)).get("errors")
+        assert (await _post(client, GET_ONE, {"uuid": admin_only}, token)).get("errors")
+    staff_get = await _post(client, GET_ONE, {"uuid": admin_only}, staff_token)
+    assert staff_get["data"]["announcement"]["uuid"] == admin_only
+
+    notified = await _notified(admin_only)
+    assert staff_uuid in notified
+    assert user_uuid not in notified
 
 
 @pytest.mark.asyncio

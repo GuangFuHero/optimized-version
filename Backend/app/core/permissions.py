@@ -112,6 +112,9 @@ class Perm(StrEnum):
 
     # Emergency Announcement
     ANN_VIEW = "announcement.view"
+    # Reads announcements placed on the admin page. Kept apart from announcement.view, which
+    # is public, so staff notices stay away from self-registered accounts.
+    ANN_VIEW_ADMIN = "announcement.view_admin"
     ANN_PUBLISH = "announcement.publish"
     ANN_EDIT = "announcement.edit"
     ANN_DELETE = "announcement.delete"

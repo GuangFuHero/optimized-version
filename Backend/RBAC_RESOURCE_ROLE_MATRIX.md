@@ -172,6 +172,7 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | announcement.view | all（公開） | all（公開） | all（公開） | all | all（公開） | all（公開） |
+| announcement.view_admin | — | — | all | all | all | all |
 | announcement.publish | — | — | — | all | — | — |
 | announcement.edit | — | — | — | all | — | — |
 | announcement.delete | — | — | — | all | — | — |
