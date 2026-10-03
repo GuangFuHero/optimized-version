@@ -33,6 +33,7 @@ from app.graphql.tickets.types import (
     TicketTaskType,
 )
 from app.graphql.work_zone.types import AssignedTeamType
+from app.models.auth import User
 from app.models.geo import BaseGeometry
 from app.models.photo import Photo
 from app.models.request import Tickets
@@ -132,6 +133,7 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
                 order_by=(TaskAssignment.assigned_at, TaskAssignment.uuid),
             )
         ),
+        "user_name_by_uuid": DataLoader(load_fn=_make_user_name_by_uuid_loader(db)),
         "teams_by_zone": DataLoader(load_fn=_make_teams_by_zone_loader(db)),
         "team_by_uuid": DataLoader(load_fn=_make_team_by_uuid_loader(db)),
         # The three below serve the ticket.view_detail boundary (ADR-281): the ticket a task
@@ -277,6 +279,17 @@ def _make_ticket_uuid_by_task_loader(db: AsyncSession):
         ).all()
         by_task = {str(task_uuid): str(ticket_uuid) for task_uuid, ticket_uuid in rows}
         return [by_task.get(str(uuid)) for uuid in task_uuids]
+
+    return load_fn
+
+
+def _make_user_name_by_uuid_loader(db: AsyncSession):
+    """Batch-load display names for task assignees."""
+
+    async def load_fn(user_uuids: list[str]) -> list[str | None]:
+        rows = (await db.execute(select(User.uuid, User.name).where(User.uuid.in_(user_uuids)))).all()
+        by_uuid = {str(uuid): name for uuid, name in rows}
+        return [by_uuid.get(str(uuid)) for uuid in user_uuids]
 
     return load_fn
 

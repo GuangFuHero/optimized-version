@@ -263,7 +263,7 @@ users ||--o{ announcements : "authors"
 %% always drops the actor from it, so nobody is notified of their own action.
 %% type values: announcement_published, zone_assigned, zone_unassigned, team_member_added,
 %%   ticket_task_status_update, ticket_task_moderation_update, task_assignment_created,
-%%   resource_station_updated, dedup_flag_ticket, dedup_flag_station
+%%   task_assignment_removed, resource_station_updated, dedup_flag_ticket, dedup_flag_station
 notifications {
     uuid uuid PK
     uuid recipient_uuid FK "FK to users, ON DELETE CASCADE"

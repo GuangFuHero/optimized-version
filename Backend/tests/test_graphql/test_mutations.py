@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 
 import pytest
 
+from app.models.auth import User
 from app.models.ticket_task import TicketTask
 from tests.test_graphql.conftest import auth_header
+from tests.test_graphql.conftest import test_db as open_db
 
 # ---------------------------------------------------------------------------
 # GraphQL query strings
@@ -1374,6 +1376,34 @@ async def test_unassign_removes_assignment(
     )
     task = next(t for t in resp.json()["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task)
     assert task["assignedCount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_assignment_actor_name_gated(
+    client,
+    login_user_auth,
+    sample_ticket,
+    sample_ticket_task,
+):
+    """A signed-in caller sees the assignee's name; an anonymous one gets null."""
+    user_uuid, token = login_user_auth
+    await _assign(client, token, sample_ticket_task)
+    async with open_db() as db:
+        name = (await db.get(User, user_uuid)).name
+    query = {
+        "query": "query($t: String!) { ticketTasks(ticketUuid: $t) { uuid assignments { actorName } } }",
+        "variables": {"t": sample_ticket},
+    }
+
+    signed_in = (await client.post("/graphql", json=query, headers=auth_header(token))).json()
+    anonymous = (await client.post("/graphql", json=query)).json()
+
+    def names(body):
+        task = next(t for t in body["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task)
+        return [a["actorName"] for a in task["assignments"]]
+
+    assert names(signed_in) == [name]
+    assert names(anonymous) == [None]
 
 
 @pytest.mark.asyncio

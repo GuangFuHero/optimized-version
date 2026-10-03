@@ -537,14 +537,34 @@ async def assign_task_actor(
 
 
 async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> None:
-    """Remove a task assignment. The assignee can remove their own, coordinators can remove any."""
+    """Remove a task assignment and notify the removed person.
+
+    The assignee can remove their own, coordinators can remove any.
+    """
     assignment = await task_assignment_repository.get_by_uuid(db, uuid)
     if not assignment:
         raise ValueError("Task assignment not found")
     await require_scope(
         actor, Perm.TICKET_ASSIGN, db, resource=await _assignment_scope_target(db, assignment)
     )
+    removed_actor = str(assignment.actor_uuid)
+    task = await ticket_task_repository.get_by_uuid_active(db, assignment.task_uuid)
+    task_name = task.task_name if task else ""
+    task_id = assignment.task_uuid
+    actor_uid = actor.uuid
     await task_assignment_repository.remove(db, uuid=uuid)
+    # 觸發 task_assignment_removed 通知 (High)
+    await NotificationService.dispatch(
+        db,
+        event_type="task_assignment_removed",
+        title=f"任務指派已取消：{task_name}",
+        body=f"您已被移出工單任務「{task_name}」。",
+        priority="high",
+        actor_uuid=actor_uid,
+        ref_type="ticket_task",
+        ref_uuid=task_id,
+        explicit_recipients=[removed_actor],
+    )
 
 
 async def update_task_assignment(
