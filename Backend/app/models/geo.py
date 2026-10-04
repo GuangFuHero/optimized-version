@@ -1,9 +1,9 @@
-"""SQLAlchemy models for geospatial entities: BaseGeometry, Station, and ClosureArea."""
+"""SQLAlchemy models for geospatial entities: BaseGeometry, Station, and the map areas."""
 
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, String, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -18,7 +18,7 @@ class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
     geometry = mapped_column(Geometry("GEOMETRY", srid=4326))
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"))
     # No `team_uuid` here (ADR-049, 乙): a ticket's jurisdiction is decided by geography —
-    # whether its point falls inside a WorkZone polygon assigned to a team (`zone` scope).
+    # whether its point falls inside a TeamZone polygon assigned to a team (`zone` scope).
     # Stations are the exception and carry their own `team_uuid` (ADR-285).
 
     __mapper_args__ = {
@@ -27,18 +27,34 @@ class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
     }
 
 
-class ClosureArea(BaseGeometry):
-    """ORM model for a road or area closure with status and source information."""
+class AreaPolygon(BaseGeometry):
+    """A drawn map area; its geometry is always a Polygon or MultiPolygon, checked on write."""
 
-    __tablename__ = "closure_areas"
+    __tablename__ = "area_polygons"
     uuid: Mapped[str] = mapped_column(ForeignKey("base_geometries.uuid"), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(100))
+    note: Mapped[str | None] = mapped_column(String)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+
+    __mapper_args__ = {"polymorphic_abstract": True}
+
+
+class HazardousZone(AreaPolygon):
+    """危險區: a no-entry area that is always public and never has a team."""
+
+    __tablename__ = "hazardous_zones"
+    uuid: Mapped[str] = mapped_column(ForeignKey("area_polygons.uuid"), primary_key=True)
     status: Mapped[str] = mapped_column(String(50))
     information_source: Mapped[str | None] = mapped_column(String)
-    comment: Mapped[str | None] = mapped_column(String)
 
-    __mapper_args__ = {
-        "polymorphic_identity": "closure_area",
-    }
+    # Loaded inline so a query on AreaPolygon also fetches `status`; async code cannot lazy-load it.
+    __mapper_args__ = {"polymorphic_identity": "hazardous_zone", "polymorphic_load": "inline"}
+
+
+class MarkZone(AreaPolygon):
+    """標示區: a marker area with no team; it has no columns of its own, so it has no table."""
+
+    __mapper_args__ = {"polymorphic_identity": "mark_zone"}
 
 
 class Station(BaseGeometry):
@@ -63,7 +79,7 @@ class Station(BaseGeometry):
     is_official: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), nullable=True)
     # The one team that runs this station, assigned by hand; null = unassigned (ADR-285). This is
-    # what `team` scope compares against for stations, instead of the WorkZone geometry tickets use.
+    # what `team` scope compares against for stations, instead of the TeamZone geometry tickets use.
     team_uuid: Mapped[str | None] = mapped_column(
         ForeignKey("teams.uuid", ondelete="SET NULL"), nullable=True, index=True
     )

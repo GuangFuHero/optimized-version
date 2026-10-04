@@ -1,4 +1,4 @@
-"""GraphQL types for stations, closure areas, and station properties."""
+"""GraphQL types for stations, hazardous zones, and station properties."""
 
 import asyncio
 import enum
@@ -11,6 +11,7 @@ import strawberry
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
+from app.graphql.area.types import AssignedTeamType
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import (  # noqa: F401 -- the address types and their mapper are
@@ -23,7 +24,6 @@ from app.graphql.shared import (  # noqa: F401 -- the address types and their ma
 )
 from app.graphql.suggestions.types import StationSuggestionMergeType, SuggestedFieldType
 from app.graphql.tickets.types import PhotoType
-from app.graphql.work_zone.types import AssignedTeamType
 
 
 async def _can_review_suggestions(info: strawberry.types.Info, station: "StationType") -> bool:
@@ -170,7 +170,7 @@ class StationType:
         Neither raises — a denial renders as a *masked* contact field, not a GraphQL
         field-level error. Per-role scope: guest -> not visible; own -> own station;
         team -> a station assigned to my team (ADR-285; a gov team resolves to all);
-        zone -> station's location inside my team's WorkZone; all -> everything.
+        zone -> station's location inside my team's TeamZone; all -> everything.
         """
         user = info.context["user"]
         if user is None:
@@ -364,78 +364,53 @@ class UpdateStationInput:
     contact_phone: str | None = strawberry.UNSET
 
 
-# --- Closure Area ---
+# --- Hazardous Zone ---
 
 @strawberry.type
-class ClosureAreaType:
-    """GraphQL type representing a road or area closure."""
+class HazardousZoneType:
+    """危險區: a no-entry map area. It is always public and never has a team."""
 
     uuid: UUID
     property_name: str = strawberry.field(
-        description="Internal polymorphic discriminator — always 'closure_area'"
+        description="Internal polymorphic discriminator — always 'hazardous_zone'"
     )
+    name: str | None = None
     geometry: GeoJSON | None = strawberry.field(
-        default=None, description="GeoJSON Polygon or MultiPolygon marking the closed area"
+        default=None, description="GeoJSON Polygon or MultiPolygon marking the zone"
     )
     created_by: str | None = strawberry.field(
-        default=None, description="UUID of the user who reported this closure"
+        default=None, description="UUID of the user who drew this zone"
     )
     status: str = strawberry.field(
-        default="", description="Current closure status: 'dangerous', 'block'"
+        default="", description="Current hazard status, e.g. 'dangerous', 'block'"
     )
     information_source: str | None = strawberry.field(
         default=None,
-        description="Source of the closure report, e.g. agency name or URL",
+        description="Source of the hazard report, e.g. agency name or URL",
     )
-    comment: str | None = strawberry.field(
-        default=None, description="Additional notes about this closure"
+    note: str | None = strawberry.field(
+        default=None, description="Additional notes about this zone"
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
     @classmethod
-    def from_model(cls, m) -> "ClosureAreaType":
+    def from_model(cls, m) -> "HazardousZoneType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, property_name=m.property_name,
+            uuid=m.uuid, property_name=m.property_name, name=m.name,
             geometry=geom_to_geojson(m.geometry), created_by=m.created_by,
             status=m.status, information_source=m.information_source,
-            comment=m.comment, created_at=m.created_at, updated_at=m.updated_at,
+            note=m.note, created_at=m.created_at, updated_at=m.updated_at,
         )
 
 
 @strawberry.type
-class ClosureAreaConnection:
-    """Paginated list of closure areas with page metadata."""
+class HazardousZoneConnection:
+    """Paginated list of hazardous zones with page metadata."""
 
-    items: list[ClosureAreaType]
+    items: list[HazardousZoneType]
     page_info: PageInfo
-
-
-@strawberry.input
-class CreateClosureAreaInput:
-    """Input for creating a new closure area."""
-
-    geometry: GeoJSON = strawberry.field(
-        description="GeoJSON Polygon or MultiPolygon — must not be a Point"
-    )
-    status: str = strawberry.field(
-        description="Initial closure status: 'active', 'cleared', or 'unknown'"
-    )
-    information_source: str | None = strawberry.field(
-        default=None, description="Source of the closure report, e.g. agency name or URL"
-    )
-    comment: str | None = None
-
-
-@strawberry.input
-class UpdateClosureAreaInput:
-    """Input for updating an existing closure area. UNSET fields are left unchanged."""
-
-    geometry: GeoJSON | None = None
-    status: str | None = None
-    information_source: str | None = strawberry.UNSET
-    comment: str | None = strawberry.UNSET
 
 
 # --- Station Property ---

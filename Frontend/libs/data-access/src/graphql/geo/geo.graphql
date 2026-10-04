@@ -25,13 +25,14 @@ fragment StationFields on StationType {
   updatedAt
 }
 
-fragment ClosureAreaFields on ClosureAreaType {
+fragment ClosureAreaFields on HazardousZoneType {
   uuid
   propertyName
+  name
   geometry
   status
   informationSource
-  comment
+  note
   createdBy
   createdAt
   updatedAt
@@ -92,7 +93,7 @@ query GetClosureAreas(
   $skip: Int = 0
   $limit: Int = 50
 ) {
-  closureAreas(bounds: $bounds, skip: $skip, limit: $limit) {
+  hazardousZones(bounds: $bounds, skip: $skip, limit: $limit) {
     items {
       ...ClosureAreaFields
     }
@@ -103,7 +104,7 @@ query GetClosureAreas(
 }
 
 query GetClosureArea($uuid: UUID!) {
-  closureArea(uuid: $uuid) {
+  hazardousZone(uuid: $uuid) {
     ...ClosureAreaFields
   }
 }

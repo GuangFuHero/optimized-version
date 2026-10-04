@@ -1,6 +1,6 @@
 """Coverage for the parity-gap mutations added in the ADR-049 catalog audit.
 
-- delete_ticket / delete_closure_area: SOFT delete (sets delete_at; row hidden from active
+- delete_ticket / delete_area: SOFT delete (sets delete_at; row hidden from active
   queries afterwards, not physically removed).
 - review_ticket: verification_status is gated by ticket.review, separate from ticket.edit.
 """
@@ -19,11 +19,11 @@ mutation($uuid: UUID!, $vs: String!) {
     reviewTicket(uuid: $uuid, verificationStatus: $vs) { uuid verificationStatus }
 }
 """
-CREATE_CLOSURE = """
-mutation($input: CreateClosureAreaInput!) { createClosureArea(input: $input) { uuid } }
+CREATE_AREA = """
+mutation($input: CreateAreaInput!) { createArea(input: $input) { uuid } }
 """
-DELETE_CLOSURE = "mutation($uuid: UUID!) { deleteClosureArea(uuid: $uuid) }"
-GET_CLOSURE = "query($uuid: UUID!) { closureArea(uuid: $uuid) { uuid } }"
+DELETE_AREA = "mutation($uuid: UUID!) { deleteArea(uuid: $uuid) }"
+GET_HAZARD = "query($uuid: UUID!) { hazardousZone(uuid: $uuid) { uuid } }"
 
 _POINT = {"type": "Point", "coordinates": [121.5, 25.0]}
 _POLY = {
@@ -110,31 +110,31 @@ async def test_review_ticket_requires_ticket_review(client, coordinator_auth, lo
 
 
 @pytest.mark.asyncio
-async def test_delete_closure_area_is_soft(client, coordinator_auth):
-    """A deleted closure area soft-deletes: it no longer resolves afterwards."""
+async def test_delete_area_is_soft(client, coordinator_auth):
+    """A deleted hazardous zone soft-deletes: it no longer resolves afterwards."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
-            "query": CREATE_CLOSURE,
-            "variables": {"input": {"geometry": _POLY, "status": "dangerous"}},
+            "query": CREATE_AREA,
+            "variables": {"input": {"type": "hazardous_zone", "geometry": _POLY, "status": "dangerous"}},
         },
         headers=auth_header(token),
     )
-    closure_uuid = resp.json()["data"]["createClosureArea"]["uuid"]
+    area_uuid = resp.json()["data"]["createArea"]["uuid"]
 
     resp = await client.post(
         "/graphql",
-        json={"query": DELETE_CLOSURE, "variables": {"uuid": closure_uuid}},
+        json={"query": DELETE_AREA, "variables": {"uuid": area_uuid}},
         headers=auth_header(token),
     )
     body = resp.json()
     assert "errors" not in body, body
-    assert body["data"]["deleteClosureArea"] is True
+    assert body["data"]["deleteArea"] is True
 
     resp = await client.post(
         "/graphql",
-        json={"query": GET_CLOSURE, "variables": {"uuid": closure_uuid}},
+        json={"query": GET_HAZARD, "variables": {"uuid": area_uuid}},
         headers=auth_header(token),
     )
-    assert resp.json()["data"]["closureArea"] is None
+    assert resp.json()["data"]["hazardousZone"] is None

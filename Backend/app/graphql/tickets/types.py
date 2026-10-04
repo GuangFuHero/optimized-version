@@ -580,7 +580,7 @@ class TicketType:
 
         Neither raises — a denial renders as a *masked* contact field, not a GraphQL
         field-level error. Per-role scope: guest → not visible (no capability); own → own
-        ticket; zone → ticket's location inside my team's WorkZone; all → everything.
+        ticket; zone → ticket's location inside my team's TeamZone; all → everything.
         """
         user = info.context["user"]
         if user is None:

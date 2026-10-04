@@ -22,12 +22,8 @@ def validate_point(geojson: dict, *, entity: str = "Station") -> None:
         raise ValueError("Invalid coordinates")
 
 
-def validate_polygon(geojson: dict, *, entity: str = "Closure area") -> None:
-    """Raise ValueError if geojson is not a Polygon or MultiPolygon.
-
-    `entity` names the caller's domain in the error message (default kept for the
-    existing closure_area callers; work_zone passes "Work zone" — Phase 4/T119).
-    """
+def validate_polygon(geojson: dict, *, entity: str = "Area") -> None:
+    """Raise ValueError if geojson is not a Polygon or MultiPolygon; `entity` names it in the message."""
     geom = shape(geojson)
     if geom.geom_type not in ("Polygon", "MultiPolygon"):
         raise ValueError(f"{entity} geometry must be Polygon or MultiPolygon")

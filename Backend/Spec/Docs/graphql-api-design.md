@@ -4,7 +4,7 @@
 
 ## Overview
 
-GraphQL endpoint at `/graphql` serves map domain data (stations, closure areas, tickets, station properties, crowdsourcing). Auth (register/login/profile) stays as REST at `/api/v1`. Same JWT token works for both.
+GraphQL endpoint at `/graphql` serves map domain data (stations, map areas, tickets, station properties, crowdsourcing). Auth (register/login/profile) stays as REST at `/api/v1`. Same JWT token works for both.
 
 ## Operations (6 queries + 10 mutations)
 
@@ -14,8 +14,9 @@ GraphQL endpoint at `/graphql` serves map domain data (stations, closure areas, 
 |---|----------|------|---------|----------|
 | Q1 | `stations` | `bounds?` { minLat, maxLat, minLng, maxLng }, `propertyName?`, `skip=0`, `limit=50` | `StationConnection` | US1/US2/US5 |
 | Q2 | `station` | `uuid` | `StationType \| null` | US1/US5 |
-| Q3 | `closureAreas` | `bounds?`, `skip=0`, `limit=50` | `ClosureAreaConnection` | US7 |
-| Q4 | `closureArea` | `uuid` | `ClosureAreaType \| null` | US7 |
+| Q3 | `hazardousZones` | `bounds?`, `skip=0`, `limit=50` | `HazardousZoneConnection` | US7 |
+| Q4 | `hazardousZone` | `uuid` | `HazardousZoneType \| null` | US7 |
+| Q3a | `areas` | `bounds?`, `includePrivate=false` (needs `work_zone.view`), `skip=0`, `limit=50` | `AreaConnection` (public areas only by default; no team data) | ADR-311 |
 | Q5 | `tickets` | `bounds?`, `status?`, `priority?`, `skip=0`, `limit=50` | `TicketConnection` | US2 |
 | Q6 | `ticket` | `uuid` | `TicketType \| null` | US2 |
 
@@ -28,8 +29,8 @@ GraphQL endpoint at `/graphql` serves map domain data (stations, closure areas, 
 | M1 | `createStation` | `input: CreateStationInput` { propertyName, geometry (GeoJSON Point), address fields?, opHour?, level?, comment? } | `map` / `create` | US4 |
 | M2 | `updateStation` | `uuid`, `input: UpdateStationInput` { all optional } | `map` / `edit` → scope `own`/`all` | US4 |
 | M3 | `deleteStation` | `uuid` | `map` / `delete` | Spec clarification |
-| M4 | `createClosureArea` | `input: CreateClosureAreaInput` { geometry (GeoJSON Polygon/MultiPolygon), status, informationSource?, comment? } | `map` / `create` | US7 |
-| M5 | `updateClosureArea` | `uuid`, `input: UpdateClosureAreaInput` { status?, comment?, geometry? } | `map` / `edit` → scope `own`/`all` | US7 |
+| M4 | `createArea` | `input: CreateAreaInput` { type (hazardous_zone\|team_zone\|mark_zone), geometry (GeoJSON Polygon/MultiPolygon), name?, note?, isPublic?, teamUuid (team_zone only, required), status (hazardous_zone only, required), informationSource? } | `work_zone.add` + gov team | ADR-311 |
+| M5 | `updateArea` / `deleteArea` / `promoteMarkZone` | `uuid`, `input: UpdateAreaInput` { name?, geometry?, note?, isPublic?, status?, informationSource? } | `work_zone.edit` / `work_zone.delete` + gov team | ADR-311 |
 | M6 | `createStationProperty` | `input: CreateStationPropertyInput` { stationUuid, propertyType, propertyName, quantity?, weightings? } | `map` / `create` | US5 |
 | M7 | `updateStationProperty` | `uuid`, `input: UpdateStationPropertyInput` { quantity?, status?, weightings? } | `map` / `edit` → scope `own`/`all` | US5 |
 | M8 | `createCrowdSourcing` | `input: CreateCrowdSourcingInput` { stationUuid, itemUuid, rating (up\|neutral\|down), distanceFromGeometry? } | `map` / `create` | Spec clarification |
@@ -52,7 +53,7 @@ Nested collections (`StationType.properties`/`secondaryLocation`, `StationProper
 
 ### Geometry Type Validation
 - **Station**: must be `Point`. Reject with "Station geometry must be a Point"
-- **Closure Area**: must be `Polygon` or `MultiPolygon`. Reject with "Closure area geometry must be a Polygon or MultiPolygon"
+- **Map area** (all three kinds): must be `Polygon` or `MultiPolygon`. Reject with "Area geometry must be Polygon or MultiPolygon"
 - **Ticket**: any geometry type
 
 ### Ticket Status State Machine
@@ -94,10 +95,10 @@ app/graphql/
 ## Test Plan (~52 tests, 4 files)
 
 ### test_queries.py (18 tests)
-Station queries (8), closure area queries (4), ticket queries (6)
+Station queries (8), hazardous zone queries (4), ticket queries (6)
 
 ### test_mutations.py (27 tests)
-Station mutations (11), closure area mutations (4), station property mutations (3), crowdsourcing (4), ticket mutations (5)
+Station mutations (11), hazardous zone mutations (4), station property mutations (3), crowdsourcing (4), ticket mutations (5)
 
 ### test_edge_cases.py (7 tests)
 GeoJSON roundtrip, invalid GeoJSON, empty bounds, unicode, multiple queries, endpoint accessible

@@ -32,17 +32,19 @@ QUERY_STATION = """
 query($uuid: UUID!) { station(uuid: $uuid) { uuid propertyName } }
 """
 
-CREATE_CLOSURE_AREA = """
-mutation($input: CreateClosureAreaInput!) {
-    createClosureArea(input: $input) { uuid status geometry }
+CREATE_AREA = """
+mutation($input: CreateAreaInput!) {
+    createArea(input: $input) { uuid type isPublic geometry }
 }
 """
 
-UPDATE_CLOSURE_AREA = """
-mutation($uuid: UUID!, $input: UpdateClosureAreaInput!) {
-    updateClosureArea(uuid: $uuid, input: $input) { uuid status }
+UPDATE_AREA = """
+mutation($uuid: UUID!, $input: UpdateAreaInput!) {
+    updateArea(uuid: $uuid, input: $input) { uuid }
 }
 """
+
+QUERY_HAZARD_STATUS = "query($uuid: UUID!) { hazardousZone(uuid: $uuid) { status } }"
 
 CREATE_STATION_PROPERTY = """
 mutation($input: CreateStationPropertyInput!) {
@@ -392,20 +394,21 @@ async def test_delete_station_excluded_from_queries(client, coordinator_auth):
 
 
 # ============================================================================
-# Closure area mutations (4 tests)
+# Hazardous zone mutations (4 tests)
 # ============================================================================
 
 
 @pytest.mark.asyncio
-async def test_create_closure_area(client, coordinator_auth):
-    """Coordinator creates a closure area with a polygon."""
+async def test_create_hazardous_zone(client, coordinator_auth):
+    """Coordinator creates a hazardous zone with a polygon, and it is public."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
-            "query": CREATE_CLOSURE_AREA,
+            "query": CREATE_AREA,
             "variables": {
                 "input": {
+                    "type": "hazardous_zone",
                     "geometry": POLYGON_TAIPEI,
                     "status": "blocked",
                 }
@@ -413,21 +416,23 @@ async def test_create_closure_area(client, coordinator_auth):
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["createClosureArea"]
+    data = resp.json()["data"]["createArea"]
     assert data["uuid"] is not None
-    assert data["status"] == "blocked"
+    assert data["type"] == "hazardous_zone"
+    assert data["isPublic"] is True
 
 
 @pytest.mark.asyncio
-async def test_create_closure_area_multipolygon(client, coordinator_auth):
-    """MultiPolygon geometry is accepted for closure areas."""
+async def test_create_hazardous_zone_multipolygon(client, coordinator_auth):
+    """MultiPolygon geometry is accepted for hazardous zones."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
-            "query": CREATE_CLOSURE_AREA,
+            "query": CREATE_AREA,
             "variables": {
                 "input": {
+                    "type": "hazardous_zone",
                     "geometry": MULTIPOLYGON,
                     "status": "blocked",
                 }
@@ -435,20 +440,21 @@ async def test_create_closure_area_multipolygon(client, coordinator_auth):
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["createClosureArea"]
+    data = resp.json()["data"]["createArea"]
     assert data["uuid"] is not None
 
 
 @pytest.mark.asyncio
-async def test_create_closure_area_rejects_point(client, coordinator_auth):
-    """Point geometry is rejected for closure areas."""
+async def test_create_area_rejects_point(client, coordinator_auth):
+    """Point geometry is rejected for map areas."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
-            "query": CREATE_CLOSURE_AREA,
+            "query": CREATE_AREA,
             "variables": {
                 "input": {
+                    "type": "hazardous_zone",
                     "geometry": POINT_TAIPEI,
                     "status": "blocked",
                 }
@@ -461,22 +467,25 @@ async def test_create_closure_area_rejects_point(client, coordinator_auth):
 
 
 @pytest.mark.asyncio
-async def test_update_closure_area(client, coordinator_auth, sample_closure_area):
-    """Coordinator updates a closure area's status."""
+async def test_update_hazardous_zone(client, coordinator_auth, sample_hazardous_zone):
+    """Coordinator updates a hazardous zone's status."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
-            "query": UPDATE_CLOSURE_AREA,
+            "query": UPDATE_AREA,
             "variables": {
-                "uuid": sample_closure_area,
+                "uuid": sample_hazardous_zone,
                 "input": {"status": "cleared"},
             },
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["updateClosureArea"]
-    assert data["status"] == "cleared"
+    assert "errors" not in resp.json(), resp.json()
+    resp = await client.post(
+        "/graphql", json={"query": QUERY_HAZARD_STATUS, "variables": {"uuid": sample_hazardous_zone}}
+    )
+    assert resp.json()["data"]["hazardousZone"]["status"] == "cleared"
 
 
 # ============================================================================

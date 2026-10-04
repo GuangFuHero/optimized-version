@@ -31,7 +31,7 @@ async def test_geojson_point_roundtrip(client, coordinator_auth):
 
 @pytest.mark.asyncio
 async def test_geojson_polygon_roundtrip(client, coordinator_auth):
-    """Create closure area with Polygon, query back, verify type."""
+    """Create a hazardous zone with a Polygon, query it back, verify the type."""
     _, token = coordinator_auth
     polygon = {
         "type": "Polygon",
@@ -41,21 +41,22 @@ async def test_geojson_polygon_roundtrip(client, coordinator_auth):
         ]],
     }
     res = await client.post("/graphql", json={
-        "query": """mutation($input: CreateClosureAreaInput!) {
-            createClosureArea(input: $input) { uuid geometry }
+        "query": """mutation($input: CreateAreaInput!) {
+            createArea(input: $input) { uuid geometry }
         }""",
         "variables": {"input": {
+            "type": "hazardous_zone",
             "geometry": polygon,
             "status": "blocked",
         }},
     }, headers=auth_header(token))
-    data = res.json()["data"]["createClosureArea"]
+    data = res.json()["data"]["createArea"]
     created_uuid = data["uuid"]
 
     res = await client.post("/graphql", json={
-        "query": f'{{ closureArea(uuid: "{created_uuid}") {{ geometry }} }}',
+        "query": f'{{ hazardousZone(uuid: "{created_uuid}") {{ geometry }} }}',
     })
-    geom = res.json()["data"]["closureArea"]["geometry"]
+    geom = res.json()["data"]["hazardousZone"]["geometry"]
     assert geom["type"] == "Polygon"
     assert len(geom["coordinates"][0]) >= 4
 
@@ -116,8 +117,8 @@ async def test_unicode_in_fields(client, coordinator_auth):
 
 
 @pytest.mark.asyncio
-async def test_multiple_queries_one_request(client, sample_station, sample_closure_area):
-    """Verify both stations and closureAreas queries work in the same session.
+async def test_multiple_queries_one_request(client, sample_station, sample_hazardous_zone):
+    """Verify both stations and hazardousZones queries work in the same session.
 
     NOTE: AsyncSession does not support concurrent operations, so we issue
     the two queries as separate requests rather than combining them in a single
@@ -127,14 +128,14 @@ async def test_multiple_queries_one_request(client, sample_station, sample_closu
         "query": """{ stations { items { uuid } pageInfo { totalCount } } }""",
     })
     res2 = await client.post("/graphql", json={
-        "query": """{ closureAreas { items { uuid } pageInfo { totalCount } } }""",
+        "query": """{ hazardousZones { items { uuid } pageInfo { totalCount } } }""",
     })
     data1 = res1.json()["data"]
     data2 = res2.json()["data"]
     assert "stations" in data1
-    assert "closureAreas" in data2
+    assert "hazardousZones" in data2
     assert data1["stations"]["pageInfo"]["totalCount"] >= 1
-    assert data2["closureAreas"]["pageInfo"]["totalCount"] >= 1
+    assert data2["hazardousZones"]["pageInfo"]["totalCount"] >= 1
 
 
 @pytest.mark.asyncio
