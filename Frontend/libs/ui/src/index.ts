@@ -44,6 +44,8 @@ export type {
   MapZoneLabelProps,
 } from './components/MapMarker';
 export { MetadataTable } from './components/MetadataTable';
+export { Markdown } from './components/Markdown';
+export type { MarkdownProps } from './components/Markdown';
 export type {
   MetadataRow,
   MetadataTableLayout,
