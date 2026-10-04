@@ -12,7 +12,9 @@ export type CheckboxProps = {
 };
 
 export function useCheckboxes(articleId: string) {
-  return useLocalStorage<z.infer<typeof checkboxStateSchema>>(
+  const [checkboxes, setCheckboxes] = useLocalStorage<
+    z.infer<typeof checkboxStateSchema>
+  >(
     localStorageKeys.articleCheckboxes(articleId),
     {},
     {
@@ -20,6 +22,8 @@ export function useCheckboxes(articleId: string) {
       deserializer: (value) => checkboxStateSchema.parse(JSON.parse(value)),
     },
   );
+
+  return { checkboxes, setCheckboxes };
 }
 
 export function useCheckbox({
@@ -27,7 +31,7 @@ export function useCheckbox({
   checkboxId,
   defaultChecked = false,
 }: CheckboxProps) {
-  const [checkboxes, setCheckboxes] = useCheckboxes(articleId);
+  const { checkboxes, setCheckboxes } = useCheckboxes(articleId);
   const checkbox = checkboxes[checkboxId];
   const setCheckbox = useCallback(
     (value: boolean) => {
