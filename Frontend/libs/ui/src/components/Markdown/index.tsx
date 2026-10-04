@@ -1,27 +1,33 @@
+'use client';
+
 import { Box, type BoxProps } from '@mui/material';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeSlug from 'rehype-slug';
-import remarkCjkFriendly from 'remark-cjk-friendly/parseOnly';
 import remarkCjkFriendlyGfmStrikethrough from 'remark-cjk-friendly-gfm-strikethrough/parseOnly';
+import remarkCjkFriendly from 'remark-cjk-friendly/parseOnly';
 import remarkGfm from 'remark-gfm';
 
 import { designTokens } from '../../theme';
+import { rehypeCheckboxKey } from './rehype-plugins/checkbox-key';
+import { Checkbox } from './checkbox';
 
 const { color, focusRing, radius, typography } = designTokens;
 
 const markdownComponents = {
-  input: ({ checked, type, className }) => (
-    <input type={type} className={className} defaultChecked={checked} />
-  ),
-  table: ({ children, className }) => (
-    <Box sx={{ overflowX: 'auto', my: '16px' }}>
-      <table className={className}>{children}</table>
-    </Box>
-  ),
+  table: ({ children, className, node: _, ...props }) => {
+    return (
+      <Box sx={{ overflowX: 'auto', my: '16px' }}>
+        <table className={className} {...props}>
+          {children}
+        </table>
+      </Box>
+    );
+  },
 } satisfies Components;
 
 export interface MarkdownProps {
   source: string;
+  articleId?: string;
   components?: Components;
   className?: string;
   sx?: BoxProps['sx'];
@@ -29,6 +35,7 @@ export interface MarkdownProps {
 
 export function Markdown({
   source,
+  articleId,
   components,
   className,
   sx = [],
@@ -122,35 +129,41 @@ export function Markdown({
             position: 'relative',
             listStyle: 'none',
             ml: '-1.15em',
-            pl: '30px',
-            py: '10px',
+            my: 0,
+            pl: '34px',
+            py: '14px',
             minHeight: 44,
+            fontSize: 16,
           },
-          '& input[type="checkbox"]': {
+          '& .task-list-item > ul, & .task-list-item > ol': {
+            mt: '8px',
+          },
+          '& .task-list-item input[type="checkbox"]': {
             appearance: 'none',
             WebkitAppearance: 'none',
             position: 'absolute',
             left: 0,
-            top: 'calc(10px + (1.85em - 20px) / 2)',
+            top: 'calc(14px + (1.85em - 22px) / 2)',
             m: 0,
-            width: 20,
-            height: 20,
+            width: 22,
+            height: 22,
+            boxSizing: 'border-box',
             font: 'inherit',
-            borderRadius: '5px',
+            borderRadius: '6px',
             border: `1.5px solid ${color.border.default}`,
             bgcolor: color.bg.neutral.default,
             cursor: 'pointer',
           },
-          '& input[type="checkbox"]:checked': {
+          '& .task-list-item input[type="checkbox"]:checked': {
             bgcolor: color.brand.secondary.default,
             borderColor: color.brand.secondary.default,
             '&::after': {
               content: '""',
               position: 'absolute',
-              left: 6,
-              top: 2,
-              width: 4,
-              height: 9,
+              left: 7,
+              top: 3,
+              width: 5,
+              height: 10,
               border: `solid ${color.fg.inverse}`,
               borderWidth: '0 2px 2px 0',
               transform: 'rotate(45deg)',
@@ -169,10 +182,23 @@ export function Markdown({
           remarkCjkFriendly,
           remarkCjkFriendlyGfmStrikethrough,
         ]}
-        rehypePlugins={[rehypeSlug]}
+        rehypePlugins={[rehypeSlug, rehypeCheckboxKey]}
         skipHtml
         components={{
           ...markdownComponents,
+          input: ({ node, checked: markdownChecked, ...props }) => {
+            const checkboxId = String(node?.properties['data-task-key']);
+            if (props.type !== 'checkbox' || !articleId || !checkboxId)
+              return <input {...props} />;
+
+            return (
+              <Checkbox
+                articleId={articleId}
+                checkboxId={checkboxId}
+                {...props}
+              />
+            );
+          },
           ...components,
         }}
       >
