@@ -14,8 +14,6 @@
     "@tanstack/react-table": "^9.2.4",
     "hast-util-to-text": "^4.0.2",
     "lucide-react": "^0.577.0",
-    "mdast-util-to-hast": "^13.2.1",
-    "mdast-util-to-string": "^4.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

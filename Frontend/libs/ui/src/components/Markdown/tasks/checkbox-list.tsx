@@ -1,7 +1,4 @@
-import {
-  type PropsWithChildren,
-  useEffect
-} from 'react';
+import { type PropsWithChildren, useEffect } from 'react';
 import { useCheckboxes } from './hooks';
 
 export function CheckboxList({
