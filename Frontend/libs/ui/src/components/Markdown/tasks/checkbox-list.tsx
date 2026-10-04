@@ -6,7 +6,7 @@ export function CheckboxList({
   checkboxKeys,
   children,
 }: PropsWithChildren<{ articleId: string; checkboxKeys: string[] }>) {
-  const [, setCheckboxes] = useCheckboxes(articleId);
+  const { setCheckboxes } = useCheckboxes(articleId);
 
   useEffect(() => {
     const keys = new Set(checkboxKeys);
