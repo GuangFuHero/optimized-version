@@ -9,7 +9,7 @@ import remarkGfm from 'remark-gfm';
 
 import { designTokens } from '../../theme';
 import { rehypeCheckboxKey } from './rehype-plugins/checkbox-key';
-import { Checkbox } from './checkbox';
+import { taskComponents } from './tasks/renderers';
 
 const { color, focusRing, radius, typography } = designTokens;
 
@@ -138,6 +138,10 @@ export function Markdown({
           '& .task-list-item > ul, & .task-list-item > ol': {
             mt: '8px',
           },
+          '& [data-task-key][data-task-checked="true"]': {
+            color: color.fg.neutral.muted,
+            '& a': { color: 'inherit' },
+          },
           '& .task-list-item input[type="checkbox"]': {
             appearance: 'none',
             WebkitAppearance: 'none',
@@ -186,19 +190,8 @@ export function Markdown({
         skipHtml
         components={{
           ...markdownComponents,
-          input: ({ node, checked: markdownChecked, ...props }) => {
-            const checkboxId = String(node?.properties['data-task-key']);
-            if (props.type !== 'checkbox' || !articleId || !checkboxId)
-              return <input {...props} />;
-
-            return (
-              <Checkbox
-                articleId={articleId}
-                checkboxId={checkboxId}
-                {...props}
-              />
-            );
-          },
+          // Do not apply custom task components if no articleId
+          ...(articleId ? taskComponents(articleId) : {}),
           ...components,
         }}
       >
