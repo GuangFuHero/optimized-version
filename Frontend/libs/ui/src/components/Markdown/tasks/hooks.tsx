@@ -1,11 +1,7 @@
-import {
-  useCallback,
-  useEffect
-} from 'react';
+import { useCallback, useEffect } from 'react';
 import { useLocalStorage } from 'usehooks-ts';
 import z from 'zod';
 import { localStorageKeys } from '../../../constant/local-storage-keys';
-
 
 const checkboxStateSchema = z.record(z.string(), z.boolean());
 

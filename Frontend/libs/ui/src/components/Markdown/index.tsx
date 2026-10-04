@@ -14,15 +14,11 @@ import { taskComponents } from './tasks/renderers';
 const { color, focusRing, radius, typography } = designTokens;
 
 const markdownComponents = {
-  table: ({ children, className, node: _, ...props }) => {
-    return (
-      <Box sx={{ overflowX: 'auto', my: '16px' }}>
-        <table className={className} {...props}>
-          {children}
-        </table>
-      </Box>
-    );
-  },
+  table: ({ children, className }) => (
+    <Box sx={{ overflowX: 'auto', my: '16px' }}>
+      <table className={className}>{children}</table>
+    </Box>
+  ),
 } satisfies Components;
 
 export interface MarkdownProps {
@@ -190,8 +186,7 @@ export function Markdown({
         skipHtml
         components={{
           ...markdownComponents,
-          // Do not apply custom task components if no articleId
-          ...(articleId ? taskComponents(articleId) : {}),
+          ...taskComponents(articleId ?? ''),
           ...components,
         }}
       >
