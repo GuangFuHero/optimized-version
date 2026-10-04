@@ -110,7 +110,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Briefing: Story = {};
+export const Briefing: Story = { args: { articleId: 'briefing' } };
 
 export const Formatting: Story = {
   args: {
