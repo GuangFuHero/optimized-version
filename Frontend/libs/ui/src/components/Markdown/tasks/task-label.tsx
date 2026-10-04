@@ -1,6 +1,4 @@
-import {
-  type PropsWithChildren
-} from 'react';
+import { type PropsWithChildren } from 'react';
 import { CheckboxProps, useCheckbox } from './hooks';
 
 export function TaskLabel({
