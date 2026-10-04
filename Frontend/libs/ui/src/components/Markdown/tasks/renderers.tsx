@@ -1,9 +1,16 @@
-import { type Components } from 'react-markdown';
+import type { ComponentType, PropsWithChildren } from 'react';
+import type { Components, ExtraProps } from 'react-markdown';
 import { z } from 'zod';
 
 import { Checkbox } from './checkbox';
 import { CheckboxList } from './checkbox-list';
 import { TaskLabel } from './task-label';
+
+type TaskComponents = Components &
+  Record<
+    'task-list' | 'task-label',
+    ComponentType<PropsWithChildren<ExtraProps>>
+  >;
 
 export const taskComponents = (articleId: string) =>
   ({
@@ -53,4 +60,4 @@ export const taskComponents = (articleId: string) =>
         />
       );
     },
-  }) satisfies Components;
+  }) satisfies TaskComponents;
