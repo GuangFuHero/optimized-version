@@ -9,7 +9,8 @@ that are available:
     text      = trigram similarity of name + description       skipped if either side has none
 
 A missing signal leaves the average instead of scoring 0, so an empty optional field never
-pushes a candidate below the threshold. `combine` is the formula the offline tuning harness uses.
+pushes a candidate below the threshold. `combine` and `text_similarity` are also what the offline
+evaluation tool (`tools/dedup_eval/`) scores with, so tuning there scores exactly as here.
 
 The unit is a ticket task (Spec 019, 2026-09-29): each task draft is compared with open tasks
 nearby and gets at most one suspect; the ticket itself is not compared. Adding a task to an
@@ -224,7 +225,7 @@ class FastEngine:
             distance_m=distance_m,
             age_min=_age_min(task.created_at, now),
             same_category=draft.task_type == task.task_type if draft.task_type and task.task_type else None,
-            text_similarity=_text_similarity(
+            text_similarity=text_similarity(
                 (draft.task_name, draft.task_description), (task.task_name, task.task_description)
             ),
         )
@@ -254,7 +255,7 @@ class FastEngine:
             distance_m=distance_m,
             age_min=_age_min(station.created_at, now),
             same_category=draft.type == station.type if draft.type and station.type else None,
-            text_similarity=_text_similarity(
+            text_similarity=text_similarity(
                 (draft.name, draft.description), (station.name, station.description)
             ),
         )
@@ -277,7 +278,7 @@ def _text(first: str | None, second: str | None) -> str:
     return " ".join(part for part in parts if part).strip()
 
 
-def _text_similarity(
+def text_similarity(
     mine: tuple[str | None, str | None], theirs: tuple[str | None, str | None]
 ) -> float | None:
     """Trigram similarity of the two texts, or None when either side has none."""

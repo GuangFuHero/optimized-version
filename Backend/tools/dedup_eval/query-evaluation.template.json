@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "dataset_id": "replace-with-dataset-id",
+  "queries": [
+    {
+      "query_id": "replace-with-query-id",
+      "event_group": "replace-with-disaster-or-incident-group",
+      "query_ticket": {
+        "ticket_id": "new-ticket-id",
+        "created_at": "2026-07-30T12:00:00+08:00",
+        "task_type": null,
+        "title": null,
+        "description": null
+      },
+      "retrieval": {
+        "was_executed": true,
+        "fail_open_reason": null,
+        "candidate_ids": ["candidate-a", "candidate-b"]
+      },
+      "candidates": [
+        {
+          "ticket_id": "candidate-a",
+          "distance_m": 42.0,
+          "age_min": 8.0,
+          "task_type": "supply",
+          "title": null,
+          "description": null,
+          "text_similarity": null
+        },
+        {
+          "ticket_id": "candidate-b",
+          "distance_m": 18.0,
+          "age_min": 12.0,
+          "task_type": null
+        }
+      ],
+      "ground_truth": {
+        "adjudication_complete": false,
+        "confirmed_duplicate_candidate_ids": [],
+        "rejected_candidate_ids": []
+      },
+      "provisional_expectation": {
+        "class": "unknown",
+        "duplicate_candidate_ids": [],
+        "source": "unlabeled collection",
+        "legacy_expected_behavior": null
+      },
+      "observed_hint_behavior": {
+        "hint_was_shown": null,
+        "hinted_candidate_id": null,
+        "outcome": "not_observed"
+      }
+    }
+  ]
+}
