@@ -1,6 +1,4 @@
-import {
-  type InputHTMLAttributes
-} from 'react';
+import { type InputHTMLAttributes } from 'react';
 import { CheckboxProps, useCheckbox } from './hooks';
 
 export function Checkbox({
@@ -26,5 +24,3 @@ export function Checkbox({
     />
   );
 }
-
-
