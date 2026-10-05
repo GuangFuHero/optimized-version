@@ -2,6 +2,49 @@
   "cases": {
     "add_task_to_a_missing_ticket": [],
     "add_task_to_the_flood_ticket": [],
+    "add_task_to_the_same_phone_ticket": [
+      {
+        "draft_ref": "task:0",
+        "evidence": {
+          "components": [
+            {
+              "name": "distance",
+              "passed": true,
+              "score": 0.5001,
+              "weight": 2.0
+            },
+            {
+              "name": "time",
+              "passed": true,
+              "score": 0.9904,
+              "weight": 0.5
+            },
+            {
+              "name": "task_type",
+              "passed": true,
+              "score": 1.0,
+              "weight": 0.5
+            },
+            {
+              "name": "text",
+              "passed": true,
+              "score": 1.0,
+              "weight": 1.0
+            },
+            {
+              "name": "phone",
+              "passed": true,
+              "score": 1.0,
+              "weight": 0.1
+            }
+          ]
+        },
+        "related_kind": "ticket_task",
+        "related_ticket_uuid": "00000000-0000-0000-0000-000000000014",
+        "related_uuid": "00000000-0000-0000-0000-000000000106",
+        "similarity": 0.848856
+      }
+    ],
     "new_station": [
       {
         "draft_ref": "station",
@@ -34,8 +77,52 @@
       }
     ],
     "new_station_other_type": [],
+    "new_ticket_different_phone": [],
     "new_ticket_far_away": [],
     "new_ticket_no_tasks": [],
+    "new_ticket_same_phone": [
+      {
+        "draft_ref": "task:0",
+        "evidence": {
+          "components": [
+            {
+              "name": "distance",
+              "passed": true,
+              "score": 0.5001,
+              "weight": 2.0
+            },
+            {
+              "name": "time",
+              "passed": true,
+              "score": 0.9904,
+              "weight": 0.5
+            },
+            {
+              "name": "task_type",
+              "passed": true,
+              "score": 1.0,
+              "weight": 0.5
+            },
+            {
+              "name": "text",
+              "passed": true,
+              "score": 1.0,
+              "weight": 1.0
+            },
+            {
+              "name": "phone",
+              "passed": true,
+              "score": 1.0,
+              "weight": 0.1
+            }
+          ]
+        },
+        "related_kind": "ticket_task",
+        "related_ticket_uuid": "00000000-0000-0000-0000-000000000014",
+        "related_uuid": "00000000-0000-0000-0000-000000000106",
+        "similarity": 0.848856
+      }
+    ],
     "new_ticket_three_tasks": [
       {
         "draft_ref": "task:0",
@@ -108,6 +195,7 @@
         "similarity": 0.992984
       }
     ],
+    "new_ticket_without_phone": [],
     "score_closed_task": {
       "draft_ref": "task:0",
       "evidence": {
@@ -143,6 +231,41 @@
       "related_uuid": "00000000-0000-0000-0000-000000000105",
       "similarity": 0.998802
     },
+    "score_different_phone": {
+      "draft_ref": "task:0",
+      "evidence": {
+        "components": [
+          {
+            "name": "distance",
+            "passed": true,
+            "score": 0.5001,
+            "weight": 2.0
+          },
+          {
+            "name": "time",
+            "passed": true,
+            "score": 0.9904,
+            "weight": 0.5
+          },
+          {
+            "name": "task_type",
+            "passed": true,
+            "score": 1.0,
+            "weight": 0.5
+          },
+          {
+            "name": "text",
+            "passed": true,
+            "score": 1.0,
+            "weight": 1.0
+          }
+        ]
+      },
+      "related_kind": "ticket_task",
+      "related_ticket_uuid": "00000000-0000-0000-0000-000000000014",
+      "related_uuid": "00000000-0000-0000-0000-000000000106",
+      "similarity": 0.748856
+    },
     "score_far_task": {
       "draft_ref": "task:2",
       "evidence": {
@@ -177,7 +300,83 @@
       "related_ticket_uuid": "00000000-0000-0000-0000-000000000012",
       "related_uuid": "00000000-0000-0000-0000-000000000103",
       "similarity": 0.300636
+    },
+    "score_same_phone": {
+      "draft_ref": "task:0",
+      "evidence": {
+        "components": [
+          {
+            "name": "distance",
+            "passed": true,
+            "score": 0.5001,
+            "weight": 2.0
+          },
+          {
+            "name": "time",
+            "passed": true,
+            "score": 0.9904,
+            "weight": 0.5
+          },
+          {
+            "name": "task_type",
+            "passed": true,
+            "score": 1.0,
+            "weight": 0.5
+          },
+          {
+            "name": "text",
+            "passed": true,
+            "score": 1.0,
+            "weight": 1.0
+          },
+          {
+            "name": "phone",
+            "passed": true,
+            "score": 1.0,
+            "weight": 0.1
+          }
+        ]
+      },
+      "related_kind": "ticket_task",
+      "related_ticket_uuid": "00000000-0000-0000-0000-000000000014",
+      "related_uuid": "00000000-0000-0000-0000-000000000106",
+      "similarity": 0.848856
+    },
+    "score_without_phone": {
+      "draft_ref": "task:0",
+      "evidence": {
+        "components": [
+          {
+            "name": "distance",
+            "passed": true,
+            "score": 0.5001,
+            "weight": 2.0
+          },
+          {
+            "name": "time",
+            "passed": true,
+            "score": 0.9904,
+            "weight": 0.5
+          },
+          {
+            "name": "task_type",
+            "passed": true,
+            "score": 1.0,
+            "weight": 0.5
+          },
+          {
+            "name": "text",
+            "passed": true,
+            "score": 1.0,
+            "weight": 1.0
+          }
+        ]
+      },
+      "related_kind": "ticket_task",
+      "related_ticket_uuid": "00000000-0000-0000-0000-000000000014",
+      "related_uuid": "00000000-0000-0000-0000-000000000106",
+      "similarity": 0.748856
     }
   },
-  "version": "fast-v2"
+  "version": "fast-v3"
 }

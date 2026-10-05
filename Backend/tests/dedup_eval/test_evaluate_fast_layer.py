@@ -3,7 +3,13 @@
 import pytest
 
 from app.dedup_engine.fast import TITLE_MAX_CHARS, text_similarity
-from tools.dedup_eval.evaluate_fast_layer import Parameters, evaluate, score_candidate, text_signal_for
+from tools.dedup_eval.evaluate_fast_layer import (
+    Parameters,
+    evaluate,
+    score_candidate,
+    text_signal_for,
+    validate_dataset,
+)
 
 
 def _query(query_id, query_type, candidates, confirmed, rejected):
@@ -133,3 +139,54 @@ def test_retrieval_miss_counts_against_recall():
     assert metrics["candidate_retrieval_recall"] == 0
     assert metrics["top_1_recall"] == 0
     assert metrics["duplicate_hint_recall"] == 0
+
+
+def test_the_same_phone_adds_the_engines_bonus():
+    """`same_contact_phone: true` adds `phone_bonus` on top, as `combine` does in production."""
+    query = {"query_ticket": {"task_type": "supply"}}
+    parameters = Parameters(100, 10, 1, 1, 1, 1, 0.5)
+    assert parameters.phone_bonus == pytest.approx(0.10)
+
+    plain, signals = score_candidate(query, _candidate("c", 100, 10), parameters)
+    assert signals["phone_bonus"] is None
+    bonus, signals = score_candidate(query, _candidate("c", 100, 10, same_contact_phone=True), parameters)
+    assert signals["phone_bonus"] == 1.0
+    assert bonus == pytest.approx(plain + 0.10)
+
+    zero = Parameters(100, 10, 1, 1, 1, 1, 0.5, 0.0)
+    assert score_candidate(query, _candidate("c", 100, 10, same_contact_phone=True), zero)[0] == plain
+
+
+@pytest.mark.parametrize("same", [False, None], ids=["different", "null"])
+def test_a_different_or_null_phone_changes_nothing(same):
+    """Never a penalty; a dataset without the field scores as before."""
+    query = {"query_ticket": {"task_type": "supply"}}
+    parameters = Parameters(100, 10, 1, 1, 1, 1, 0.5)
+    assert score_candidate(query, _candidate("c", 100, 10, same_contact_phone=same), parameters) == (
+        score_candidate(query, _candidate("c", 100, 10), parameters)
+    )
+
+
+def test_the_phone_bonus_can_turn_a_miss_into_a_hint():
+    """The bonus applies before the threshold, so it moves query-level recall."""
+    dataset = {
+        "queries": [
+            _query("q", "supply", [_candidate("dup", 100, 10, same_contact_phone=True)], ["dup"], []),
+        ]
+    }
+    without = evaluate(dataset, Parameters(100, 10, 1, 1, 1, 1, 0.7, 0.0), "confirmed")["metrics"]
+    with_bonus = evaluate(dataset, Parameters(100, 10, 1, 1, 1, 1, 0.7, 0.10), "confirmed")["metrics"]
+    assert without["duplicate_hint_recall"] == 0
+    assert with_bonus["duplicate_hint_recall"] == 1
+
+
+def test_same_contact_phone_must_be_a_boolean_or_null():
+    """A string like "yes" is a dataset error, not a silent no-bonus."""
+    dataset = {
+        "schema_version": 1,
+        "queries": [_query("q", "supply", [_candidate("c", 1, 1, same_contact_phone="yes")], [], ["c"])],
+    }
+    with pytest.raises(ValueError, match="same_contact_phone"):
+        validate_dataset(dataset, "confirmed")
+    dataset["queries"][0]["candidates"][0]["same_contact_phone"] = None
+    validate_dataset(dataset, "confirmed")

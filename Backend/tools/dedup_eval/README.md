@@ -19,7 +19,10 @@ task_type_signal = 1（相同）/ 0（不同）/ 不計入（任一邊沒有）
 text_signal      = fast.text_similarity((title, description), …) / 不計入（任一邊沒文字）
 
 similarity = Σ(signal × weight) / Σ(這次可用 signal 的 weight)
+if same_contact_phone 為 true：similarity = min(1, similarity + phone_bonus)
 ```
+
+電話是純加分（fast-v3）：候選帶 `same_contact_phone: true`（兩張單都有電話、只留數字後相同）才加 `phone_bonus`，不算進加權平均；`false`、`null` 或沒有這個欄位都完全不影響分數，所以舊資料集照跑，結果跟沒有電話時一樣。`score_candidate` 回傳的 `phone_bonus` 欄位在有加分時是 1.0，沒加分是 `null`。
 
 `title`、`description` 對應任務的 `task_name`、`task_description`。候選也可以直接帶算好的 `text_similarity`（0–1），有的話優先使用。舊的 pair fixture 雖然有 title／description，預設不帶入，要看文字的效果得明確加上 `--legacy-include-text`。
 
@@ -51,7 +54,8 @@ similarity = Σ(signal × weight) / Σ(這次可用 signal 的 weight)
 在 `Backend/` 底下：
 
 ```bash
-# 只重播一組參數（順序：D_HALF,T_HALF,D_WEIGHT,T_WEIGHT,TYPE_WEIGHT,TEXT_WEIGHT,THRESHOLD）
+# 只重播一組參數（順序：D_HALF,T_HALF,D_WEIGHT,T_WEIGHT,TYPE_WEIGHT,TEXT_WEIGHT,THRESHOLD[,PHONE_BONUS]）
+# 第 8 個值可省略，省略時用 engine 的 phone_bonus（0.10）
 uv run python -m tools.dedup_eval.evaluate_fast_layer path/to/dataset.json --evaluate 200,360,2,0.5,0.5,1,0.8
 
 # grid search
@@ -62,7 +66,7 @@ uv run python -m tools.dedup_eval.evaluate_fast_layer path/to/dedup-test-cases.j
   --legacy-fixtures --label-set provisional --top 10
 ```
 
-grid 用 `--distance-half-m`、`--time-half-min`、四個 `--*-weight`（`--text-weight` 預設只有 `1`，就是 engine 現在的值）和 `--hint-threshold`，各自傳入逗號分隔的數列。排序規則是先讓 `duplicate_hint_recall` 最大，再依序壓低 `false_hint_rate`、`wrong_top_hint_rate`。資料要切 train／validation 時，必須按 `event_group` 整組切，不能讓同一個事件的相似單分到兩邊。
+grid 用 `--distance-half-m`、`--time-half-min`、四個 `--*-weight`（`--text-weight` 預設只有 `1`，就是 engine 現在的值）、`--hint-threshold` 和 `--phone-bonus`（預設只有 engine 的 `0.10`），各自傳入逗號分隔的數列。排序規則是先讓 `duplicate_hint_recall` 最大，再依序壓低 `false_hint_rate`、`wrong_top_hint_rate`。資料要切 train／validation 時，必須按 `event_group` 整組切，不能讓同一個事件的相似單分到兩邊。
 
 repo 外的腳本要 import 這個工具時，把 `Backend/` 和 `Backend/tools/dedup_eval/` 加進 `sys.path`，並用這個 Backend 的 uv 環境來跑。
 

@@ -16,6 +16,8 @@ from app.dedup_engine.fast import (
     Signals,
     combine,
     max_hint_distance_m,
+    phone_key,
+    same_contact_phone,
 )
 
 # Harness parameters minus the text signal, so its output is directly comparable.
@@ -37,11 +39,12 @@ def test_defaults_are_the_grid_search_values():
     assert (p.distance_half_m, p.time_half_min) == (200.0, 360.0)
     assert (p.distance_weight, p.time_weight, p.task_type_weight, p.text_weight) == (2.0, 0.5, 0.5, 1.0)
     assert (p.hint_threshold, p.component_baseline) == (0.8, 0.5)
+    assert p.phone_bonus == 0.10
 
 
-def test_station_parameters_are_the_ticket_parameters_without_time():
-    """A station's age says nothing about duplication; nothing else differs."""
-    assert FastParameters(time_weight=0.0) == STATION_PARAMETERS
+def test_station_parameters_are_the_ticket_parameters_without_time_or_phone():
+    """A station's age says nothing about duplication; the phone bonus was researched on tickets only."""
+    assert FastParameters(time_weight=0.0, phone_bonus=0.0) == STATION_PARAMETERS
 
 
 # --- the formula (combine) -------------------------------------------------------------
@@ -115,17 +118,79 @@ def test_a_zero_time_weight_drops_the_time_component():
     assert [c["name"] for c in components] == ["distance", "task_type", "text"]
 
 
+# --- the phone bonus (fast-v3) ---------------------------------------------------------
+
+
+def test_the_same_phone_adds_the_bonus_outside_the_average():
+    """+0.10 on top of the weighted average, reported as its own component."""
+    plain, plain_components = combine(_signals(text_similarity=0.5), TICKET_PARAMETERS)
+    bonus, components = combine(_signals(text_similarity=0.5, same_contact_phone=True), TICKET_PARAMETERS)
+    assert bonus == pytest.approx(plain + 0.10, abs=1e-12)
+    assert components[:-1] == plain_components
+    assert components[-1] == {"name": "phone", "score": 1.0, "weight": 0.10, "passed": True}
+
+
+@pytest.mark.parametrize("same", [False, None], ids=["different", "missing"])
+def test_a_different_or_missing_phone_changes_nothing(same):
+    """Never a penalty, and no component either."""
+    assert combine(_signals(same_contact_phone=same), TICKET_PARAMETERS) == combine(
+        _signals(), TICKET_PARAMETERS
+    )
+
+
+def test_the_bonus_is_capped_at_one():
+    """A perfect pair stays 1.0."""
+    perfect = _signals(distance_m=0.0, age_min=0.0, text_similarity=1.0, same_contact_phone=True)
+    assert combine(perfect, TICKET_PARAMETERS)[0] == 1.0
+
+
+def test_stations_get_no_phone_bonus():
+    """`phone_bonus` is 0 for stations, so the same phone adds nothing and reports nothing."""
+    with_phone = combine(_signals(text_similarity=0.5, same_contact_phone=True), STATION_PARAMETERS)
+    assert with_phone == combine(_signals(text_similarity=0.5), STATION_PARAMETERS)
+
+
+@pytest.mark.parametrize(
+    ("raw", "key"),
+    [
+        ("+886912345678", "886912345678"),  # E.164, as the backend sends the submission's
+        ("0912-345-678", "886912345678"),  # as typed into tickets.contact_phone
+        ("+886 912 345 678", "886912345678"),
+        ("12-34", "1234"),  # not a valid number: bare digits
+        ("", None),
+        (None, None),
+        ("無", None),
+    ],
+)
+def test_phone_key(raw, key):
+    """Both sides are compared as digits after E.164, so stored and submitted forms agree."""
+    assert phone_key(raw) == key
+
+
+def test_same_contact_phone():
+    """None when either side has no phone, else whether the keys match."""
+    assert same_contact_phone("+886912345678", "0912 345 678") is True
+    assert same_contact_phone("+886912345678", "0922000111") is False
+    assert same_contact_phone(None, "0912345678") is None
+    assert same_contact_phone("+886912345678", "") is None
+
+
 # --- the hint boundary -----------------------------------------------------------------
 
 
 def test_the_hint_boundary_is_where_a_perfect_candidate_scores_exactly_the_threshold():
-    """`max_hint_distance_m` is the exact inverse of the formula."""
+    """`max_hint_distance_m` is the exact inverse of the formula, with the phone bonus earned."""
     boundary = max_hint_distance_m(TICKET_PARAMETERS)
-    assert boundary == pytest.approx(147.3931188332412, abs=1e-9)
-    perfect = _signals(distance_m=boundary, age_min=0.0, text_similarity=1.0)
+    assert boundary == pytest.approx(-200 * math.log2(0.4), abs=1e-9)  # 264.4 m; 147.4 m without the bonus
+    perfect = _signals(distance_m=boundary, age_min=0.0, text_similarity=1.0, same_contact_phone=True)
     assert combine(perfect, TICKET_PARAMETERS)[0] == pytest.approx(TICKET_PARAMETERS.hint_threshold)
-    beyond = _signals(distance_m=boundary + 1, age_min=0.0, text_similarity=1.0)
+    beyond = _signals(distance_m=boundary + 1, age_min=0.0, text_similarity=1.0, same_contact_phone=True)
     assert combine(beyond, TICKET_PARAMETERS)[0] < TICKET_PARAMETERS.hint_threshold
+
+
+def test_without_the_bonus_the_boundary_is_fast_v2s():
+    """With `phone_bonus` 0 the boundary is the fast-v1/v2 one."""
+    assert max_hint_distance_m(FastParameters(phone_bonus=0.0)) == pytest.approx(147.3931188332412, abs=1e-9)
 
 
 def test_the_boundary_is_widest_when_every_signal_is_available():
@@ -140,7 +205,7 @@ def test_the_boundary_is_widest_when_every_signal_is_available():
     [
         (FastParameters(distance_weight=0.0), math.inf),  # distance can never rule anything out
         (FastParameters(hint_threshold=0.5), math.inf),  # the other three alone reach 0.5
-        (FastParameters(hint_threshold=1.0), 0.0),  # only distance 0 is perfect
+        (FastParameters(hint_threshold=1.1), 0.0),  # even distance 0 plus the bonus falls short
     ],
 )
 def test_degenerate_parameters_give_a_degenerate_boundary(parameters, expected):

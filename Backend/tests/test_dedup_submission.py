@@ -353,5 +353,5 @@ async def test_end_to_end_with_fast_v2(db, monkeypatch):
     assert isinstance(filed, SubmissionCreated)
     await db.rollback()
     pair = (await db.execute(select(DuplicatePair))).scalar_one()
-    assert (pair.entity_kind, pair.engine_version) == ("ticket_task", "fast-v2")
+    assert (pair.entity_kind, pair.engine_version) == ("ticket_task", FastEngine.version)
     assert float(pair.similarity) >= 0.8

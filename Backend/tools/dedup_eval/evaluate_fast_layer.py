@@ -46,12 +46,16 @@ SIGNAL_KEYS = {
     "time": "time_signal",
     "task_type": "task_type_signal",
     "text": "text_signal",
+    "phone": "phone_bonus",
 }
 
 
 @dataclass(frozen=True)
 class Parameters:
-    """One point of the grid. Field names and meaning are `FastParameters`'."""
+    """One point of the grid. Field names and meaning are `FastParameters`'.
+
+    `phone_bonus` comes last with the engine's default, so the 7-value form still works.
+    """
 
     distance_half_m: float
     time_half_min: float
@@ -60,6 +64,7 @@ class Parameters:
     task_type_weight: float
     text_weight: float
     hint_threshold: float
+    phone_bonus: float = FastParameters.phone_bonus
 
     def to_fast(self) -> FastParameters:
         """The engine's parameter object for the same values."""
@@ -74,6 +79,7 @@ PARAMETER_FIELDS = (
     "task_type_weight",
     "text_weight",
     "hint_threshold",
+    "phone_bonus",
 )
 
 
@@ -98,6 +104,8 @@ def score_candidate(
     """The engine's similarity for one pair, and each signal's 0–1 score (None = not counted).
 
     Signal scores are `combine`'s breakdown, rounded to 4 places; the similarity is not rounded.
+    `phone_bonus` is 1.0 when the bonus was added. A candidate without `same_contact_phone`
+    (or with null) earns no bonus, exactly like a pair where either side has no phone.
     """
     query_type = query["query_ticket"].get("task_type")
     candidate_type = candidate.get("task_type")
@@ -106,6 +114,7 @@ def score_candidate(
         age_min=candidate["age_min"],
         same_category=None if query_type is None or candidate_type is None else query_type == candidate_type,
         text_similarity=text_signal_for(query["query_ticket"], candidate),
+        same_contact_phone=candidate.get("same_contact_phone"),
     )
     similarity, components = combine(signals, parameters.to_fast())
     breakdown: dict[str, float | None] = dict.fromkeys(SIGNAL_KEYS.values())
@@ -257,6 +266,11 @@ def validate_dataset(dataset: dict[str, Any], label_set: str) -> None:  # noqa: 
                 value = candidate.get(key)
                 if not isinstance(value, int | float) or value < 0:
                     raise ValueError(f"{query_id}/{candidate['ticket_id']}: {key} must be >= 0")
+            same_phone = candidate.get("same_contact_phone")
+            if same_phone is not None and not isinstance(same_phone, bool):
+                raise ValueError(
+                    f"{query_id}/{candidate['ticket_id']}: same_contact_phone must be true, false or null"
+                )
             precomputed = candidate.get("text_similarity")
             if precomputed is not None and (
                 not isinstance(precomputed, int | float) or not 0 <= precomputed <= 1
@@ -386,6 +400,7 @@ def parameter_grid(args: argparse.Namespace) -> Iterable[Parameters]:
         args.task_type_weight,
         args.text_weight,
         args.hint_threshold,
+        args.phone_bonus,
     ):
         parameters = Parameters(*values)
         weights = (
@@ -451,19 +466,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--hint-threshold", type=parse_number_list, default=[0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
     )
+    parser.add_argument(
+        "--phone-bonus",
+        type=parse_number_list,
+        default=[FastParameters.phone_bonus],
+        help="phone bonus value(s); default is the engine's. Irrelevant without same_contact_phone: true.",
+    )
     parser.add_argument("--top", type=int, default=10)
     parser.add_argument(
         "--evaluate",
-        metavar="D_HALF,T_HALF,D_WEIGHT,T_WEIGHT,TYPE_WEIGHT,TEXT_WEIGHT,THRESHOLD",
-        help="evaluate one parameter set instead of grid-searching",
+        metavar="D_HALF,T_HALF,D_WEIGHT,T_WEIGHT,TYPE_WEIGHT,TEXT_WEIGHT,THRESHOLD[,PHONE_BONUS]",
+        help="evaluate one parameter set instead of grid-searching; PHONE_BONUS defaults to the engine's",
     )
     return parser
 
 
 def _evaluate_one(dataset: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     values = parse_number_list(args.evaluate)
-    if len(values) != len(PARAMETER_FIELDS):
-        raise ValueError(f"--evaluate requires exactly {len(PARAMETER_FIELDS)} comma-separated values")
+    if len(values) not in (len(PARAMETER_FIELDS) - 1, len(PARAMETER_FIELDS)):
+        count = len(PARAMETER_FIELDS)
+        raise ValueError(f"--evaluate requires {count - 1} or {count} comma-separated values")
     parameters = Parameters(*values)
     return {
         "dataset_id": dataset.get("dataset_id"),

@@ -156,15 +156,18 @@ async def test_one_named_task_ignores_status_and_radius_but_not_deletion(db):
         assert await candidates.task_with_distance(db, task_uuid=uuid, at=HERE) is None
 
 
-async def test_ticket_location(db):
-    """A live ticket's point; None for deleted, missing or malformed."""
+async def test_ticket_anchor(db):
+    """A live ticket's point and phone as stored; None for deleted, missing or malformed."""
     owner = await _owner(db)
-    live = await _ticket(db, owner, east_deg=DEG_100M)
+    live = await _ticket(db, owner, east_deg=DEG_100M, contact_phone="0912-345-678")
+    no_phone = await _ticket(db, owner)
     deleted = await _ticket(db, owner, delete_at=NOW)
-    location = await candidates.ticket_location(db, str(live.uuid))
-    assert (location.lon, location.lat) == pytest.approx((HERE.lon + DEG_100M, HERE.lat))
+    anchor = await candidates.ticket_anchor(db, str(live.uuid))
+    assert (anchor.location.lon, anchor.location.lat) == pytest.approx((HERE.lon + DEG_100M, HERE.lat))
+    assert anchor.contact_phone == "0912-345-678"
+    assert (await candidates.ticket_anchor(db, str(no_phone.uuid))).contact_phone is None
     for uuid in (str(deleted.uuid), str(uuid_mod.uuid4()), "nope"):
-        assert await candidates.ticket_location(db, uuid) is None
+        assert await candidates.ticket_anchor(db, uuid) is None
 
 
 async def test_open_stations_follow_the_station_rules(db):

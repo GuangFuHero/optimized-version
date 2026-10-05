@@ -25,7 +25,8 @@
           "task_type": "supply",
           "title": null,
           "description": null,
-          "text_similarity": null
+          "text_similarity": null,
+          "same_contact_phone": null
         },
         {
           "ticket_id": "candidate-b",

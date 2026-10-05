@@ -1,4 +1,4 @@
-"""Fixed database contents and submissions whose fast-v2 outputs are pinned (ADR-297, ADR-304).
+"""Fixed database contents and submissions whose fast-layer outputs are pinned (ADR-297, ADR-304).
 
 Everything is deterministic: fixed uuids, fixed timestamps relative to NOW. Add cases freely;
 changing or removing one changes the golden file and so needs a version bump.
@@ -40,6 +40,10 @@ def _u(n: int) -> uuid_mod.UUID:
 
 OWNER = _u(1)
 T_FLOOD, T_DONE, T_FAR, T_CANCELLED = _u(10), _u(11), _u(12), _u(13)
+# fast-v3's phone cases, 2 km west of everything else: a task 200 m from PHONE_SPOT scores 0.75
+# on its own, so only the phone bonus can lift it to the threshold.
+T_PHONE, T_PHONE_NEIGHBOUR = _u(14), _u(15)
+PHONE_SPOT = GeoPoint(HERE.lon - DEG_100M * 22, HERE.lat)
 
 
 async def seed(db) -> None:
@@ -83,6 +87,8 @@ async def seed(db) -> None:
             ticket(T_DONE, DEG_100M * 0.5, status="completed"),
             ticket(T_FAR, DEG_100M * 3),
             ticket(T_CANCELLED, 0.0, status="cancelled"),
+            ticket(T_PHONE, -DEG_100M * 20, contact_phone="0912-345-678"),  # as typed
+            ticket(T_PHONE_NEIGHBOUR, -DEG_100M * 22, contact_phone="+886 912 345 678"),
         ]
     )
     await db.flush()
@@ -96,6 +102,7 @@ async def seed(db) -> None:
             task(_u(103), T_FAR, 5),
             task(_u(104), T_CANCELLED, 5),
             task(_u(105), T_FLOOD, 5, status="fulfilled"),
+            task(_u(106), T_PHONE, 5),
         ]
     )
     db.add(
@@ -134,10 +141,21 @@ CASES: dict[str, Any] = {
         )
     ),
     "new_station_other_type": NewStation(station=StationDraft(location=HERE, name="光復國小", type="supply")),
+    "new_ticket_same_phone": NewTicket(
+        ticket=TicketDraft(location=PHONE_SPOT, title="x", contact_phone="+886912345678"), tasks=(PUMP,)
+    ),
+    "new_ticket_different_phone": NewTicket(
+        ticket=TicketDraft(location=PHONE_SPOT, title="x", contact_phone="+886922000111"), tasks=(PUMP,)
+    ),
+    "new_ticket_without_phone": NewTicket(ticket=TicketDraft(location=PHONE_SPOT, title="x"), tasks=(PUMP,)),
+    "add_task_to_the_same_phone_ticket": NewTask(ticket_uuid=str(T_PHONE_NEIGHBOUR), task=PUMP),
 }
 SCORED = {
     "score_far_task": ("new_ticket_three_tasks", "task:2", "ticket_task", str(_u(103))),
     "score_closed_task": ("new_ticket_three_tasks", "task:0", "ticket_task", str(_u(105))),
+    "score_same_phone": ("new_ticket_same_phone", "task:0", "ticket_task", str(_u(106))),
+    "score_different_phone": ("new_ticket_different_phone", "task:0", "ticket_task", str(_u(106))),
+    "score_without_phone": ("new_ticket_without_phone", "task:0", "ticket_task", str(_u(106))),
 }
 
 

@@ -81,6 +81,10 @@
                 "minimum": 0,
                 "maximum": 1,
                 "description": "Optional precomputed pg_trgm similarity against the query ticket; overrides title/description when present."
+              },
+              "same_contact_phone": {
+                "type": ["boolean", "null"],
+                "description": "Optional. true when both tickets have a contact phone and they are the same number (digits only); false when both have one and they differ; null or absent when either side has none. Only true earns the phone bonus."
               }
             },
             "additionalProperties": false

@@ -1,6 +1,7 @@
-"""fast-v2: task-level fast layer on the ADR-304 contract, against real PostGIS.
+"""The task-level fast layer on the ADR-304 contract, against real PostGIS.
 
-The formula is fast-v1's (tests/dedup_engine/test_fast.py pins it); these cover what changed:
+The formula is fast-v1's plus fast-v3's phone bonus (tests/dedup_engine/test_fast.py pins it);
+these cover what changed:
 the unit is a task, candidates come from the engine's own queries, and each draft gets at most
 one suspect.
 """
@@ -220,8 +221,91 @@ async def test_check_writes_nothing(db):
 
 
 def test_version_and_radius():
-    """fast-v2; the radius is fast-v1's boundary per kind, with the rounding margin."""
+    """fast-v3; the radius is the hint boundary per kind (phone bonus included), with the rounding margin."""
     engine = FastEngine()
-    assert engine.version == "fast-v2"
+    assert engine.version == "fast-v3"
     assert engine.radius_m("ticket_task") == pytest.approx(max_hint_distance_m(TICKET_PARAMETERS) * 1.1)
     assert engine.radius_m("station") == pytest.approx(max_hint_distance_m(STATION_PARAMETERS) * 1.1)
+    assert engine.radius_m("ticket_task") == pytest.approx(290.8, abs=0.1)
+    assert engine.radius_m("station") == pytest.approx(136.7, abs=0.1)
+
+
+# --- fast-v3: the same contact phone is a pure bonus -------------------------------------
+
+PHONE_E164 = "+886912345678"
+
+
+def _new_ticket_with_phone(phone, *tasks, east_deg=0.0) -> NewTicket:
+    location = GeoPoint(HERE.lon + east_deg, HERE.lat)
+    return NewTicket(
+        ticket=TicketDraft(location=location, title="民生街淹水", contact_phone=phone), tasks=tuple(tasks)
+    )
+
+
+async def _a_task_200m_away(db, owner, phone):
+    """Same need, 200 m away: 0.75 on its own, so only the phone bonus can lift it to the threshold."""
+    ticket = await _ticket(db, owner, east_deg=DEG_100M * 2, contact_phone=phone)
+    return await _task(db, owner, ticket, minutes_ago=5.0)
+
+
+async def test_the_same_phone_lifts_a_farther_task_over_the_threshold(db):
+    """E.164 on the submission and the number as typed in the table still count as the same."""
+    owner = await _owner(db)
+    theirs = await _a_task_200m_away(db, owner, "0912-345-678")
+    engine = FastEngine()
+
+    (suspect,) = await engine.check(db, _new_ticket_with_phone(PHONE_E164, PUMP), NOW)
+    assert suspect.related_uuid == theirs
+    assert suspect.evidence["components"][-1] == {
+        "name": "phone",
+        "score": 1.0,
+        "weight": 0.1,
+        "passed": True,
+    }
+    assert "912" not in json.dumps(suspect.evidence)  # no phone number in evidence (ADR-295)
+
+    without = await engine.check(db, _new_ticket_with_phone(None, PUMP), NOW)
+    assert without == []
+    scored = await engine.score(db, _new_ticket_with_phone(None, PUMP), "task:0", "ticket_task", theirs, NOW)
+    assert suspect.similarity == pytest.approx(scored.similarity + 0.1)
+
+
+@pytest.mark.parametrize("theirs", ["0922-000-111", None], ids=["different", "missing"])
+async def test_a_different_or_missing_phone_is_never_a_penalty(db, theirs):
+    """Only an equal pair earns the bonus; anything else scores exactly as without phones."""
+    owner = await _owner(db)
+    task = await _a_task_200m_away(db, owner, theirs)
+    engine = FastEngine()
+
+    assert await engine.check(db, _new_ticket_with_phone(PHONE_E164, PUMP), NOW) == []
+    with_phone = await engine.score(
+        db, _new_ticket_with_phone(PHONE_E164, PUMP), "task:0", "ticket_task", task, NOW
+    )
+    no_phone = await engine.score(db, _new_ticket_with_phone(None, PUMP), "task:0", "ticket_task", task, NOW)
+    assert with_phone.similarity == no_phone.similarity
+    assert "phone" not in [c["name"] for c in with_phone.evidence["components"]]
+
+
+async def test_adding_a_task_uses_its_tickets_phone(db):
+    """NewTask: the phone is the existing ticket's, read by the engine."""
+    owner = await _owner(db)
+    theirs = await _a_task_200m_away(db, owner, "0912345678")
+    mine = await _ticket(db, owner, contact_phone="+886 912 345 678")
+
+    (suspect,) = await FastEngine().check(db, NewTask(ticket_uuid=str(mine.uuid), task=PUMP), NOW)
+    assert suspect.related_uuid == theirs
+    assert suspect.evidence["components"][-1]["name"] == "phone"
+
+
+async def test_the_bonus_applies_before_the_best_candidate_is_picked(db):
+    """A same-phone candidate can outrank a nearer one without the phone."""
+    owner = await _owner(db)
+    await _task(db, owner, await _ticket(db, owner, east_deg=DEG_100M * 0.5), minutes_ago=5.0)
+    same_phone = await _task(
+        db,
+        owner,
+        await _ticket(db, owner, east_deg=DEG_100M * 0.6, contact_phone="0912345678"),
+        minutes_ago=5.0,
+    )
+    (suspect,) = await FastEngine().check(db, _new_ticket_with_phone(PHONE_E164, PUMP), NOW)
+    assert suspect.related_uuid == same_phone

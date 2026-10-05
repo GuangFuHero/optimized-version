@@ -1,4 +1,4 @@
-"""The fast layer (current version: fast-v2) — rule-based dedup at task level.
+"""The fast layer (current version: fast-v3) — rule-based dedup at task level.
 
 Each signal is normalised to 0–1 and the similarity is their weighted average over the signals
 that are available:
@@ -9,25 +9,39 @@ that are available:
     text      = trigram similarity of name + description       skipped if either side has none
 
 A missing signal leaves the average instead of scoring 0, so an empty optional field never
-pushes a candidate below the threshold. `combine` and `text_similarity` are also what the offline
-evaluation tool (`tools/dedup_eval/`) scores with, so tuning there scores exactly as here.
+pushes a candidate below the threshold.
+
+Then a pure bonus (fast-v3): when both tickets have a contact phone and the two are the same
+number, `phone_bonus` is added (capped at 1). A different or missing phone changes nothing:
+different people often report the same need, and many leave the phone out, so neither is
+evidence of a different need. The bonus is applied to every candidate before the best one is
+picked and the threshold checked.
+
+`combine` and `text_similarity` are also what the offline evaluation tool (`tools/dedup_eval/`)
+scores with, so tuning there scores exactly as here.
 
 The unit is a ticket task (Spec 019, 2026-09-29): each task draft is compared with open tasks
 nearby and gets at most one suspect; the ticket itself is not compared. Adding a task to an
 existing ticket searches from that ticket and skips its own tasks. Stations are compared as
-stations, without the time signal. Candidates come from `candidates.py` (read-only, ADR-304).
+stations, without the time signal or the phone bonus. Candidates come from `candidates.py`
+(read-only, ADR-304).
 
 ⚠️ 參數是暫定值，不是建議值：13 筆手寫 fixture 的 grid search 第一名，沒有正式資料的
-ground truth；`text_weight` 與 `component_baseline` 沒跑過 grid。見 CHANGELOG.md。
+ground truth；`text_weight` 與 `component_baseline` 沒跑過 grid。`phone_bonus` 0.10 來自 2025 光復
+舊平台資料 100 筆人工裁決的 proxy backtest（5-fold）。見 CHANGELOG.md。
 """
 
+import contextlib
+import functools
 import math
+import re
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.normalize import normalize_phone
 from app.dedup_engine import candidates
 from app.dedup_engine.contract import (
     GeoPoint,
@@ -52,11 +66,12 @@ TITLE_MAX_CHARS = 200
 DESCRIPTION_MAX_CHARS = 2000
 # Float rounding must not drop a candidate that scores exactly on the threshold.
 RETRIEVAL_SAFETY_FACTOR = 1.1
+_NON_DIGIT = re.compile(r"\D")
 
 
 @dataclass(frozen=True)
 class FastParameters:
-    """Tuning knobs for fast-v1."""
+    """Tuning knobs. `phone_bonus` is added on top of the weighted average, not averaged in."""
 
     distance_half_m: float = 200.0
     time_half_min: float = 360.0
@@ -66,11 +81,13 @@ class FastParameters:
     text_weight: float = 1.0
     hint_threshold: float = 0.8
     component_baseline: float = 0.5
+    phone_bonus: float = 0.10
 
 
 TICKET_PARAMETERS = FastParameters()
-# A station's age says nothing about whether it duplicates one being registered now.
-STATION_PARAMETERS = replace(TICKET_PARAMETERS, time_weight=0.0)
+# A station's age says nothing about whether it duplicates one being registered now. The phone
+# bonus was only researched on tickets.
+STATION_PARAMETERS = replace(TICKET_PARAMETERS, time_weight=0.0, phone_bonus=0.0)
 
 
 @dataclass(frozen=True)
@@ -81,10 +98,14 @@ class Signals:
     age_min: float
     same_category: bool | None
     text_similarity: float | None
+    same_contact_phone: bool | None = None
 
 
 def combine(signals: Signals, p: FastParameters) -> tuple[float, list[dict[str, Any]]]:
-    """The weighted average over available signals, and the per-signal breakdown.
+    """The weighted average over available signals plus the phone bonus, and the breakdown.
+
+    The bonus shows up as a "phone" component (score 1.0, weight = the bonus) only when it was
+    added; it is never part of the average.
 
     Raises:
         ValueError: when no available signal has positive weight.
@@ -105,16 +126,20 @@ def combine(signals: Signals, p: FastParameters) -> tuple[float, list[dict[str, 
         {"name": name, "score": round(score, 4), "weight": weight, "passed": score >= p.component_baseline}
         for name, score, weight in parts
     ]
+    if signals.same_contact_phone and p.phone_bonus > 0:
+        similarity = min(1.0, similarity + p.phone_bonus)
+        components.append({"name": "phone", "score": 1.0, "weight": p.phone_bonus, "passed": True})
     return similarity, components
 
 
 def max_hint_distance_m(p: FastParameters) -> float:
     """The distance past which no candidate can reach `hint_threshold`.
 
-    Every other signal is taken at 1.0. Solving the formula for distance, with W the sum of
-    all four weights:
+    Every other signal is taken at 1.0 and the phone bonus as earned, so the weighted average
+    only has to reach `threshold − phone_bonus`. Solving the formula for distance, with W the
+    sum of all four weights:
 
-        d_signal = 1 + W · (threshold − 1) / distance_weight
+        d_signal = 1 + W · (threshold − phone_bonus − 1) / distance_weight
         distance = −distance_half_m · log2(d_signal)
 
     All four weights give the widest boundary: a missing signal shrinks W and tightens it.
@@ -124,7 +149,8 @@ def max_hint_distance_m(p: FastParameters) -> float:
     total_weight = p.distance_weight + p.time_weight + p.task_type_weight + p.text_weight
     if p.distance_weight <= 0 or total_weight <= 0:
         return math.inf
-    required_signal = 1 + total_weight * (p.hint_threshold - 1) / p.distance_weight
+    needed_average = p.hint_threshold - max(p.phone_bonus, 0.0)
+    required_signal = 1 + total_weight * (needed_average - 1) / p.distance_weight
     if required_signal <= 0:
         return math.inf
     if required_signal >= 1:
@@ -135,7 +161,7 @@ def max_hint_distance_m(p: FastParameters) -> float:
 class FastEngine:
     """The task-level fast layer as a `DedupEngine`."""
 
-    version = "fast-v2"
+    version = "fast-v3"
 
     def __init__(self, parameters: dict[RelatedKind, FastParameters] | None = None):
         """Use the shipped per-kind parameters unless others are given."""
@@ -154,13 +180,13 @@ class FastEngine:
             best = self._best_station(submission.station, rows, now)
             return [best] if best else []
 
-        drafts, at, exclude = await self._task_context(db, submission)
+        drafts, at, phone, exclude = await self._task_context(db, submission)
         if not drafts or at is None:
             return []
         rows = await candidates.open_tasks_near(
             db, at=at, radius_m=self.radius_m("ticket_task"), exclude_ticket_uuid=exclude
         )
-        suspects = (self._best_task(task_ref(i), draft, rows, now) for i, draft in enumerate(drafts))
+        suspects = (self._best_task(task_ref(i), draft, phone, rows, now) for i, draft in enumerate(drafts))
         return [s for s in suspects if s is not None]
 
     async def score(
@@ -185,29 +211,36 @@ class FastEngine:
             )
             return None if found is None else self._station_suspect(submission.station, *found, now)
 
-        drafts, at, _ = await self._task_context(db, submission)
+        drafts, at, phone, _ = await self._task_context(db, submission)
         index = int(draft_ref.partition(":")[2])
         if at is None or index >= len(drafts):
             return None
         found = await candidates.task_with_distance(db, task_uuid=related_uuid, at=at)
-        return None if found is None else self._task_suspect(draft_ref, drafts[index], *found, now)
+        return None if found is None else self._task_suspect(draft_ref, drafts[index], phone, *found, now)
 
     async def _task_context(
         self, db: AsyncSession, submission: NewTicket | NewTask
-    ) -> tuple[tuple[TaskDraft, ...], GeoPoint | None, str | None]:
-        """The task drafts, where to search from, and which ticket's tasks to skip."""
+    ) -> tuple[tuple[TaskDraft, ...], GeoPoint | None, str | None, str | None]:
+        """The task drafts, where to search from, the submitting ticket's phone, and which ticket to skip."""
         if isinstance(submission, NewTicket):
-            return submission.tasks, submission.ticket.location, None
-        at = await candidates.ticket_location(db, submission.ticket_uuid)
-        return (submission.task,), at, submission.ticket_uuid
+            return submission.tasks, submission.ticket.location, submission.ticket.contact_phone, None
+        anchor = await candidates.ticket_anchor(db, submission.ticket_uuid)
+        if anchor is None:
+            return (submission.task,), None, None, submission.ticket_uuid
+        return (submission.task,), anchor.location, anchor.contact_phone, submission.ticket_uuid
 
     def _best_task(
-        self, draft_ref: str, draft: TaskDraft, rows: list[tuple[TicketTask, Tickets, float]], now: datetime
+        self,
+        draft_ref: str,
+        draft: TaskDraft,
+        phone: str | None,
+        rows: list[tuple[TicketTask, Tickets, float]],
+        now: datetime,
     ) -> Suspect | None:
         threshold = self._parameters["ticket_task"].hint_threshold
         hits = [
             s
-            for s in (self._task_suspect(draft_ref, draft, *row, now) for row in rows)
+            for s in (self._task_suspect(draft_ref, draft, phone, *row, now) for row in rows)
             if s.similarity >= threshold
         ]
         return min(hits, key=lambda s: (-s.similarity, s.related_uuid), default=None)
@@ -216,6 +249,7 @@ class FastEngine:
         self,
         draft_ref: str,
         draft: TaskDraft,
+        phone: str | None,
         task: TicketTask,
         ticket: Tickets,
         distance_m: float,
@@ -228,6 +262,7 @@ class FastEngine:
             text_similarity=text_similarity(
                 (draft.task_name, draft.task_description), (task.task_name, task.task_description)
             ),
+            same_contact_phone=same_contact_phone(phone, ticket.contact_phone),
         )
         similarity, components = combine(signals, self._parameters["ticket_task"])
         return Suspect(
@@ -284,3 +319,24 @@ def text_similarity(
     """Trigram similarity of the two texts, or None when either side has none."""
     a, b = _text(*mine), _text(*theirs)
     return set_similarity(trigrams(a), trigrams(b)) if a and b else None
+
+
+@functools.lru_cache(maxsize=4096)  # pure; the submission's phone is parsed once per candidate otherwise
+def phone_key(phone: str | None) -> str | None:
+    """A phone's comparison form: its digits, after E.164 when it parses; None when it has none.
+
+    The submission's phone arrives in E.164 (`+886912345678`), but `tickets.contact_phone` is
+    stored as typed (`0912-345-678`), so both sides go through the backend's own E.164 parser
+    first. Anything the parser rejects falls back to its bare digits.
+    """
+    if not phone:
+        return None
+    with contextlib.suppress(ValueError):
+        phone = normalize_phone(phone)
+    return _NON_DIGIT.sub("", phone) or None
+
+
+def same_contact_phone(mine: str | None, theirs: str | None) -> bool | None:
+    """Whether two phones are the same number; None when either side has none."""
+    a, b = phone_key(mine), phone_key(theirs)
+    return None if a is None or b is None else a == b

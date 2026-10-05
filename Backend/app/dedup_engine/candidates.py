@@ -1,11 +1,12 @@
-"""Candidate queries for fast-v2 (ADR-304): read-only, owned by the engine.
+"""Candidate queries for the fast layer (ADR-304): read-only, owned by the engine.
 
 What counts as an open candidate is Spec 019's (2026-09-29, task level):
 
 - A task is a candidate while it is neither fulfilled nor canceled and not deleted, under a
   ticket that is not deleted and not cancelled. A `completed` ticket stays in — it can take a
   new task — and cancelling a ticket does not cancel its tasks, hence the ticket check.
-- A task has no location of its own: distance is measured from its ticket.
+- A task has no location of its own: distance is measured from its ticket, and its contact
+  phone is its ticket's (the whole `Tickets` row comes back with each task).
 - A station is a candidate while it is not deleted, is active or temporarily closed, and is not
   a temporary station past its expiry. `stations.geometry` is a generic GEOMETRY column, so it
   is measured from its centroid.
@@ -15,6 +16,7 @@ Nothing here writes: the backend runs the engine inside a savepoint it always ro
 
 import uuid as _uuid
 from datetime import datetime
+from typing import NamedTuple
 
 from geoalchemy2 import Geography
 from sqlalchemy import cast, func, or_, select
@@ -61,18 +63,27 @@ def _is_uuid(value: str) -> bool:
     return True
 
 
-async def ticket_location(db: AsyncSession, ticket_uuid: str) -> GeoPoint | None:
-    """Where a live ticket is, or None if it is missing, deleted or has no point."""
+class TicketAnchor(NamedTuple):
+    """What a task added to an existing ticket is compared from: the ticket's point and phone."""
+
+    location: GeoPoint
+    contact_phone: str | None
+
+
+async def ticket_anchor(db: AsyncSession, ticket_uuid: str) -> TicketAnchor | None:
+    """Where a live ticket is and its contact phone, or None if it is missing, deleted or has no point."""
     if not _is_uuid(ticket_uuid):
         return None
     row = (
         await db.execute(
-            select(func.ST_X(Tickets.geometry), func.ST_Y(Tickets.geometry)).where(
+            select(func.ST_X(Tickets.geometry), func.ST_Y(Tickets.geometry), Tickets.contact_phone).where(
                 Tickets.uuid == ticket_uuid, Tickets.delete_at.is_(None), Tickets.geometry.isnot(None)
             )
         )
     ).first()
-    return None if row is None or row[0] is None else GeoPoint(float(row[0]), float(row[1]))
+    if row is None or row[0] is None:
+        return None
+    return TicketAnchor(GeoPoint(float(row[0]), float(row[1])), row[2])
 
 
 async def open_tasks_near(

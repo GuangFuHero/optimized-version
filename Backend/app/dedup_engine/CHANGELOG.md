@@ -11,6 +11,67 @@ accepted on.
 
 ---
 
+## fast-v3 — 2026-10-05
+
+fast-v2 plus one rule: the same contact phone is a pure bonus (`fast.py`).
+
+> Pending confirmation with Carol (team) before shipping.
+
+### What changed from fast-v2
+
+1. **Same contact phone adds +0.10.** For a ticket-task pair, when both the submission's ticket
+   and the candidate task's ticket have a contact phone and they are the same number, the
+   similarity is `min(1, weighted average + phone_bonus)`. Otherwise it is unchanged: a different
+   or missing phone is never a penalty. The bonus applies to every candidate before the top-1
+   pick and the threshold check, and in `score` (acknowledged pairs) too. Evidence gets a
+   `phone` component (score 1.0, weight = the bonus) and never the numbers (ADR-295).
+2. **Where the phones come from.** `NewTicket`: the draft's `contact_phone` (E.164 from the
+   backend). `NewTask`: the existing ticket's `contact_phone`, read by the engine
+   (`candidates.ticket_anchor`). Candidate: its ticket's `contact_phone`, already in the row
+   `candidates.open_tasks_near` returns. `tickets.contact_phone` is stored as typed, so both
+   sides are compared as digits after the backend's E.164 parser (`app.core.normalize`), falling
+   back to bare digits for numbers it rejects (`fast.phone_key`).
+3. **Stations get no bonus** (`phone_bonus` 0.0): it was only researched on tickets.
+4. **Retrieval radius grows.** With the bonus, a farther candidate can reach the threshold, so
+   the boundary is solved for `hint_threshold − phone_bonus`: ticket tasks 162.1 m → 290.8 m.
+   Stations are unchanged.
+
+The "same creator" bonus is deferred: it needs a contract field and a backend change agreed with
+popo, and the old data has no operator id to validate it.
+
+Golden: regenerated; fast-v2's cases are unchanged, and new cases cover same / different /
+missing phone for `check` and `score`, and adding a task to a ticket with the same phone.
+
+### Parameters
+
+| Parameter | Ticket task | Station | Source |
+|---|---|---|---|
+| `distance_half_m` | 200 | 200 | fast-v1 |
+| `time_half_min` | 360 | 360 | fast-v1 |
+| `distance_weight` | 2.0 | 2.0 | fast-v1 |
+| `time_weight` | 0.5 | **0.0** | fast-v1 |
+| `task_type_weight` | 0.5 | 0.5 | fast-v1 |
+| `text_weight` | 1.0 | 1.0 | fast-v1 |
+| `hint_threshold` | 0.8 | 0.8 | fast-v1 |
+| `component_baseline` | 0.5 | 0.5 | fast-v1 |
+| `phone_bonus` | **0.10** | **0.0** | proxy backtest below; stations not researched |
+| retrieval radius | **290.8 m** | 136.7 m | derived from `hint_threshold − phone_bonus`, × 1.1 |
+
+### Backtest
+
+Proxy backtest on the same data as fast-v2 (source: `phone_bonus.py`, 5-fold, research variant
+B, phone equality on digits only):
+
+| Threshold | Precision | Recall | Hint rate | Hint rate, older record still open |
+|---|---|---|---|---|
+| **0.80** | 16/19 | 16/54 | 30/292 | 13/292 |
+| fast-v2 at 0.80, for comparison | 9/10 | 9/54 | 16/292 | 8/292 |
+
+5-fold shows a trade: more duplicates caught for slightly lower precision. fast-v2's notes on
+reading these numbers apply unchanged.
+
+---
+
 ## fast-v2 — 2026-09-29
 
 Task-level fast layer on the ADR-304 contract (`fast.py`, candidates in `candidates.py`).
