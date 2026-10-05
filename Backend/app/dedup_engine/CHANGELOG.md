@@ -37,7 +37,38 @@ Golden: `tests/dedup_engine/golden/fast.json`, computed on fixed database conten
 
 ### Backtest
 
-待 Chi 補（任務層級的資料集與指標）。
+Proxy backtest on the 2025 Guangfu old platform's `human_resources` backup of 2026-02-08:
+355 clean records, 292 with trusted coordinates. Each record is one ticket with one task (the
+role name and notes play `task_name` and `task_description`). Each record is a query against all
+earlier records: 42,486 pairs. 100 pairs adjudicated (80 from early hints, 20 from a
+missed-duplicate sample), relabelled 2026-10-03: 54 duplicate, 46 distinct. Only the top-1 hint a
+submitter sees is counted.
+
+| Threshold | Precision | Recall | Hint rate |
+|---|---|---|---|
+| **0.80 (shipped)** | 9/10 | 9/54 | 16/292 |
+| 0.70 | 19/27 | 19/54 | 46/292 |
+| 0.65 | 25/40 | 25/54 | 70/292 |
+
+A parameter scan with 5-fold validation kept the shipped parameters.
+
+Read with these notes:
+
+1. **Recall is low by construction.** For 45 of the 54 duplicates, the older record was already
+   completed (the old platform closed a request once fully staffed) before the newer one came
+   in. Production compares open tasks only, so it should not hint those. Only 9 pairs test missed
+   duplicates; 4/9 were hinted at 0.80 — direction only.
+2. **The hint rate overstates production.** Pairs were not filtered to records still open;
+   counting only pairs whose older record was still open, the hint rate is 8/292.
+3. **One task per ticket.** Per-task suspects on multi-task tickets and adding a task to an
+   existing ticket are not exercised.
+4. **Coordinates are Google geocodes** of the original addresses (rooftop or range-interpolated
+   only), not points users placed, and labelled pairs skew close in distance and time. The
+   retrieval radius and `distance_half_m` stay as shipped.
+5. **Labels answer "same need or not"** regardless of the older record's status. Pairs come from
+   early hints and a suspicious-pair sample, so these are not population rates.
+
+Reproduce with `tools/dedup_eval/`; the data stays off the repo.
 
 ---
 
@@ -83,8 +114,9 @@ Spec 019's `score_candidate` and fast-v1's `combine` (max difference 0.0).
 
 ### Backtest
 
-待 Chi 補：資料集名稱、門檻 0.80 下的 precision / recall、提示率。
+Same proxy backtest as fast-v2 (in that data every ticket has exactly one task, so fast-v1 and
+fast-v2 score every pair identically): at 0.80, precision 9/10, recall 9/54, hint rate 16/292.
+See fast-v2 for the notes.
 
-Spec 019's PR #46 reported, on 292 geocoded 2025 Guangfu tickets with 100 human verdicts,
-counting only the one hint a submitter sees: at 0.80, 7 of 8 hints right but 7/26 duplicates
-hinted; at 0.65, 18/26 hinted, 19 of 37 hints wrong, ~24% of submissions see a hint.
+PR #46's earlier figures (7 of 8 hints right, 7/26 duplicates hinted at 0.80) used the labels
+before the 2026-10-03 relabel and are superseded.
