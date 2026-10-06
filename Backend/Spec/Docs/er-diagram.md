@@ -38,6 +38,10 @@
 > `station_property_config` / `task_property_config` / the three new tables joined
 > AUDITED_TABLES at the same time — the two config tables had been unaudited since they
 > existed.
+> 互助地圖 area types (ADR-311, 2026-10-04): `closure_areas` became `hazardous_zones` and the
+> standalone `work_zones` became `team_zones`, both joined-table children of a new
+> `area_polygons` table under `base_geometries`. 標示區 (`mark_zone`) is a third kind with no
+> table of its own, and `team_zone_assign.zone_uuid` now points at `team_zones`.
 
 Tables that are owned by one diagram but referenced from another appear there as a
 PK-only stub (name + `uuid PK` only, no other columns) so relationship arrows have
@@ -47,6 +51,7 @@ something to point at without duplicating the full column list:
 |------------------------|--------------|--------------------------|
 | `users`                | Identity     | Geospatial, Tickets     |
 | `base_geometries`      | Geospatial   | Tickets                 |
+| `team_zones`           | Geospatial   | Identity                |
 | `secondary_locations`  | Geospatial   | Tickets                 |
 
 Note: `secondary_locations.pole_photo_uuid` is a FK to `photos` (home: Tickets), but —
@@ -176,7 +181,7 @@ permissions ||--o{ user_permission_assign : "granted to user"
 teams ||--o{ user_permission_assign : "scopes the grant"
 
 %% --------------------------
-%% 2a. Teams & Work Zones (ADR-021/049; ADR-019's one-team-per-user rule superseded by ADR-073)
+%% 2a. Teams & Team Zones (ADR-021/049; ADR-019's one-team-per-user rule superseded by ADR-073)
 %% --------------------------
 %% Organisation (gov/ngo). Membership is NOT a column on users any more — a person belongs
 %% to a team by holding a team-kind grant naming it, so one person can be in several
@@ -192,27 +197,18 @@ teams {
     timestamp delete_at "nullable"
 }
 
-%% Geographic jurisdiction polygon; gov draws them and assigns to teams (ADR-021/049).
-work_zones {
+%% Stub — full definition (責任區, a child of area_polygons) in the Geospatial diagram below
+team_zones {
     uuid uuid PK
-    string name "String(100)"
-    blob geometry "MultiPolygon, SRID 4326, nullable"
-    uuid created_by FK "nullable, FK to users"
-    timestamp created_at
-    timestamp updated_at
-    timestamp delete_at "nullable"
 }
-%% INDEX: ix_work_zones_geometry ON work_zones USING GIST (geometry) -- every `zone` scope check
-%% is an ST_Contains against this column, so it must not sequentially scan.
-users ||--o{ work_zones : "draws"
 
-%% Team ↔ work zone assignment. A team's `zone` scope = resources whose geometry falls
-%% inside a work zone assigned to it (ST_Contains, ADR-028). Geo resources are NOT
-%% org-owned: base_geometries has NO team_uuid — jurisdiction is purely geographic (ADR-049).
+%% Team ↔ team zone assignment. A team's `zone` scope = resources whose geometry falls
+%% inside a team zone assigned to it (ST_Contains, ADR-028). Only team_zones can be assigned,
+%% so a hazardous or mark zone never grants scope (ADR-311).
 team_zone_assign {
     uuid uuid PK
     uuid team_uuid FK "FK to teams, indexed"
-    uuid zone_uuid FK "FK to work_zones, indexed"
+    uuid zone_uuid FK "FK to team_zones, indexed"
     timestamp created_at "when the delegation was made"
     uuid assigned_by FK "FK to users, who delegated it"
 }
@@ -220,7 +216,7 @@ team_zone_assign {
 %% created_at/assigned_by are denormalised from audit_logs for cheap display; audit_logs
 %% remains the source of truth for delegation history, including removals.
 teams ||--o{ team_zone_assign : "assigned zones"
-work_zones ||--o{ team_zone_assign : "assigned to teams"
+team_zones ||--o{ team_zone_assign : "assigned to teams"
 users ||--o{ team_zone_assign : "assigned by"
 
 %% ==========================
@@ -366,7 +362,7 @@ disaster_types {
 
 ## 2. Geospatial & Stations
 
-Base geometries, secondary locations, closure areas, stations, station properties,
+Base geometries, secondary locations, map areas (hazardous / team / mark zones), stations, station properties,
 crowd-sourced ratings, and the user-suggestion → admin-review queue for station edits.
 `users` appears below as a PK-only stub for `created_by`/`user_uuid` references — full
 definition in the Identity diagram above.
@@ -428,14 +424,31 @@ secondary_locations {
 %% null without it (ADR-268).
 base_geometries ||--|| secondary_locations : "has secondary location"
 
-%% Inheritance: Closure Area inherits from base_geometries
-closure_areas {
+%% Inheritance: a drawn map area (ADR-311). Its geometry, on base_geometries, is always a
+%% Polygon or MultiPolygon, checked on write. Zone-scope checks use the base_geometries GIST index.
+area_polygons {
     uuid uuid PK, FK "PK is also FK to base_geometries"
-    string status "dangerous/block/etc"
-    string information_source
-    string comment
+    string name "String(100), nullable"
+    string note "nullable"
+    boolean is_public "default false; always true for hazardous_zone"
 }
-base_geometries ||--|| closure_areas : "inherits as"
+base_geometries ||--|| area_polygons : "inherits as"
+
+%% 危險區: a no-entry area, always public, never has a team.
+hazardous_zones {
+    uuid uuid PK, FK "PK is also FK to area_polygons"
+    string status "String(50), dangerous/block/etc"
+    string information_source "nullable"
+}
+area_polygons ||--|| hazardous_zones : "inherits as"
+
+%% 責任區: the only area team_zone_assign can point at (see the Identity diagram).
+team_zones {
+    uuid uuid PK, FK "PK is also FK to area_polygons"
+}
+area_polygons ||--|| team_zones : "inherits as"
+%% 標示區 (property_name 'mark_zone') has no table: it has no columns beyond area_polygons.
+%% A mark zone can be promoted to a hazardous zone; no other change of kind exists.
 
 %% Inheritance: Station inherits from base_geometries
 stations {

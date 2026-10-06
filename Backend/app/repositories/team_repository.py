@@ -1,10 +1,11 @@
-"""Repositories for Team, WorkZone, and TeamZoneAssign (RBAC v1 §2B, Phase 4/T119)."""
+"""Repositories for Team, TeamZone, and TeamZoneAssign (RBAC v1 §2B, Phase 4/T119)."""
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
+from app.repositories.geo_repository import AreaRepository
 
 
 class TeamRepository(GenericRepository[Team]):
@@ -24,33 +25,17 @@ class TeamRepository(GenericRepository[Team]):
         return (await db.execute(query)).scalars().all()
 
 
-class WorkZoneRepository(GenericRepository[WorkZone]):
-    """Repository for WorkZone CRUD (pure, ADR-015 — orchestration lives in the use-case)."""
+class TeamZoneRepository(AreaRepository):
+    """Repository for TeamZone; bbox listing comes from AreaRepository (ADR-015: no orchestration here)."""
 
     def __init__(self):
-        """Initialize with WorkZone as the managed model."""
-        super().__init__(WorkZone)
-
-    async def list_all(self, db: AsyncSession, *, skip: int = 0, limit: int = 50) -> list[WorkZone]:
-        """List non-deleted work zones, newest first."""
-        query = (
-            select(self.model)
-            .where(self.model.delete_at.is_(None))
-            .order_by(self.model.created_at.desc())
-            .offset(skip)
-            .limit(limit)
-        )
-        return (await db.execute(query)).scalars().all()
-
-    async def count_all(self, db: AsyncSession) -> int:
-        """Count non-deleted work zones."""
-        query = select(func.count()).select_from(self.model).where(self.model.delete_at.is_(None))
-        return await db.scalar(query) or 0
+        """Initialize with TeamZone as the managed model."""
+        super().__init__(TeamZone)
 
     async def list_by_team(
         self, db: AsyncSession, *, team_uuid: str, skip: int = 0, limit: int = 50
-    ) -> list[WorkZone]:
-        """List the non-deleted work zones assigned to `team_uuid`, newest first."""
+    ) -> list[TeamZone]:
+        """List the non-deleted team zones assigned to `team_uuid`, newest first."""
         query = (
             select(self.model)
             .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == self.model.uuid)
@@ -62,7 +47,7 @@ class WorkZoneRepository(GenericRepository[WorkZone]):
         return (await db.execute(query)).scalars().all()
 
     async def count_by_team(self, db: AsyncSession, *, team_uuid: str) -> int:
-        """Count the non-deleted work zones assigned to `team_uuid`."""
+        """Count the non-deleted team zones assigned to `team_uuid`."""
         query = (
             select(func.count())
             .select_from(self.model)
@@ -73,7 +58,7 @@ class WorkZoneRepository(GenericRepository[WorkZone]):
 
 
 class TeamZoneAssignRepository(GenericRepository[TeamZoneAssign]):
-    """Repository for the team<->work_zone assignment junction table."""
+    """Repository for the team<->team zone assignment junction table."""
 
     def __init__(self):
         """Initialize with TeamZoneAssign as the managed model."""
@@ -109,5 +94,5 @@ class TeamZoneAssignRepository(GenericRepository[TeamZoneAssign]):
 
 
 team_repository = TeamRepository()
-work_zone_repository = WorkZoneRepository()
+team_zone_repository = TeamZoneRepository()
 team_zone_assign_repository = TeamZoneAssignRepository()

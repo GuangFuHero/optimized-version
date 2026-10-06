@@ -117,7 +117,7 @@ async def entity_exists(db: AsyncSession, *, entity: str, uuid: str | UUID):
     checkpoint 2 — `require_scope` decides `own`/`zone` by reading its `created_by` and
     `geometry`.
     """
-    # Station, not BaseGeometry: the base table also holds tickets and closure areas, so
+    # Station, not BaseGeometry: the base table also holds tickets and map areas, so
     # querying it would happily return a ticket for /history/stations/{uuid}.
     model = Tickets if entity == TICKET else Station
     result = await db.execute(select(model).where(model.uuid == str(uuid)))

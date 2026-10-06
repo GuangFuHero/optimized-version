@@ -8,7 +8,7 @@
 -- PR12-ready:tickets.disaster_type / task_assignments.status 用條件式 DO 區塊,
 --   欄位存在才寫入 → 部署 PR#11/#12 前後跑同一檔案皆可。
 -- UUID 前綴:users=c…、A站=a…、B站=b…、tickets=d…、tasks=e…、assignments=f…、
---   teams=1…、work_zones=2…、team_zone_assign=3… (可重跑自清)
+--   teams=1…、team_zones=2…、team_zone_assign=3… (可重跑自清)
 -- 登入:全部 37 人,密碼 Mock1234!(salt_frontend=mockdata12345678;
 --   前端送出的 password=PBKDF2-HMAC-SHA256('Mock1234!', salt_frontend, 100000)
 --   =8c0aefb55114ef12e444543df20424fd9adff2bccfc861a6456386411f6a274c,直接打 API 時用這個值)
@@ -22,14 +22,21 @@
 BEGIN;
 
 -- 0. 清除既有 seed(依前綴,可重跑)
--- team_zone_assign 先清(引用 teams/work_zones/users),再清 work_zones(引用 users),
+-- team_zone_assign 先清,再由子表往上清地圖區域(hazardous_zones/team_zones → area_polygons → base_geometries);
 -- 最後(user_role_assign 清完後)才能清 teams,否則 user_role_assign.team_uuid FK 會擋刪除。
+CREATE TEMP TABLE _seed_areas ON COMMIT DROP AS
+  SELECT uuid FROM base_geometries
+   WHERE property_name IN ('hazardous_zone', 'team_zone', 'mark_zone')
+     AND (uuid::text LIKE '20000000-%' OR created_by::text LIKE 'c0000000-%');
 DELETE FROM team_zone_assign
  WHERE uuid::text LIKE '30000000-%'
-    OR zone_uuid::text LIKE '20000000-%'
+    OR zone_uuid IN (SELECT uuid FROM _seed_areas)
     OR team_uuid::text LIKE '10000000-%'
     OR assigned_by::text LIKE 'c0000000-%';
-DELETE FROM work_zones WHERE uuid::text LIKE '20000000-%' OR created_by::text LIKE 'c0000000-%';
+DELETE FROM hazardous_zones WHERE uuid IN (SELECT uuid FROM _seed_areas);
+DELETE FROM team_zones WHERE uuid IN (SELECT uuid FROM _seed_areas);
+DELETE FROM area_polygons WHERE uuid IN (SELECT uuid FROM _seed_areas);
+DELETE FROM base_geometries WHERE uuid IN (SELECT uuid FROM _seed_areas);
 DELETE FROM task_assignments WHERE uuid::text LIKE 'f0000000-%' OR task_uuid::text LIKE 'e0000000-%';
 DELETE FROM task_properties WHERE task_uuid::text LIKE 'e0000000-%';
 DELETE FROM ticket_tasks WHERE uuid::text LIKE 'e0000000-%';
@@ -633,17 +640,22 @@ INSERT INTO task_assignments (uuid, task_uuid, actor_uuid, role, assigned_at) VA
  ('f0000000-0000-4000-8000-000000000046','e0000000-0000-4000-8000-000000000051','c0000000-0000-4000-8000-000000000031','volunteer','2025-10-03 16:39+08'),
  ('f0000000-0000-4000-8000-000000000047','e0000000-0000-4000-8000-000000000051','c0000000-0000-4000-8000-000000000029','volunteer','2025-10-03 16:39+08');
 
--- 6. WORK ZONES — 每個情境一個,官方帳號劃設(work_zones.created_by),涵蓋該情境站點/tickets 座標範圍。
--- geometry 欄位是 Geometry("MULTIPOLYGON", srid=4326)(見 app/models/team.py),故用 ST_Multi 包住
--- ST_MakeEnvelope 產生的 polygon,型別才吃得下。
-INSERT INTO work_zones (uuid, name, geometry, created_by) VALUES
- ('20000000-0000-4000-8000-000000000001','花蓮光復救災範圍',
-  ST_Multi(ST_MakeEnvelope(121.35,23.48,121.47,23.76,4326)),'c0000000-0000-4000-8000-000000000025'),
- ('20000000-0000-4000-8000-000000000002','宜蘭冬山救災範圍',
-  ST_Multi(ST_MakeEnvelope(121.70,24.60,121.82,24.76,4326)),'c0000000-0000-4000-8000-000000000037');
+-- 6. TEAM ZONES(責任區)— 每個情境一個,官方帳號劃設,涵蓋該情境站點/tickets 座標範圍。
+-- 區域是 base_geometries → area_polygons → team_zones 三層繼承,三張表都要寫;預設不在前台顯示。
+INSERT INTO base_geometries (uuid, property_name, geometry, created_by) VALUES
+ ('20000000-0000-4000-8000-000000000001','team_zone',
+  ST_MakeEnvelope(121.35,23.48,121.47,23.76,4326),'c0000000-0000-4000-8000-000000000025'),
+ ('20000000-0000-4000-8000-000000000002','team_zone',
+  ST_MakeEnvelope(121.70,24.60,121.82,24.76,4326),'c0000000-0000-4000-8000-000000000037');
+INSERT INTO area_polygons (uuid, name) VALUES
+ ('20000000-0000-4000-8000-000000000001','花蓮光復救災範圍'),
+ ('20000000-0000-4000-8000-000000000002','宜蘭冬山救災範圍');
+INSERT INTO team_zones (uuid) VALUES
+ ('20000000-0000-4000-8000-000000000001'),
+ ('20000000-0000-4000-8000-000000000002');
 
 -- 7. TEAM ZONE ASSIGN — 每個情境的 zone 委派給一個同情境 NGO team;assigned_by 是劃設該 zone 的官方帳號
--- (與 app/services/work_zone.py 的真實服務層行為一致)。
+-- (與 app/services/area.py 的真實服務層行為一致)。
 INSERT INTO team_zone_assign (uuid, team_uuid, zone_uuid, assigned_by) VALUES
  ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
   '20000000-0000-4000-8000-000000000001','c0000000-0000-4000-8000-000000000025'),

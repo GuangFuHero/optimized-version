@@ -1261,13 +1261,49 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 ---
 
+#### ADR-311 互助地圖三種區域：`area_polygons` 繼承樹、危險區恆公開、三種區域同一道閘門
+
+> **狀態：ACCEPTED（2026-10-04）。** 互助地圖區域類型 ticket（Sucre 2026-09-27 裁定三種區域）。
+
+**白話**：地圖上畫的區域分三種——危險區、責任區、標示區，全部放進同一棵表繼承樹。危險區一律公開；
+責任區與標示區有一個「前台可見」開關。三種都只有 super_admin 與 gov team 能畫。
+
+**Context**：原本危險區是 `closure_areas`（`base_geometries` 的子表），責任區是獨立的 `work_zones`。
+標示區不存在，沒有團隊的責任區與標示區分不出來，兩張表都沒有前台可見欄位。危險區的寫入用 `map.add/edit/delete`，
+只有 super_admin 持有。
+
+**Decision**：
+
+1. 新增 `area_polygons`（`base_geometries` 的 joined-table 子表，欄位 `name`/`note`/`is_public`），幾何只收
+   Polygon / MultiPolygon，由唯一的寫入服務 `app/services/area.py` 檢查。
+2. `closure_areas` → `hazardous_zones`、`work_zones` → `team_zones`，皆為 `area_polygons` 的子表；
+   `closure_areas.comment` 併入 `area_polygons.note`。
+3. 標示區（`mark_zone`）只是一個多型身分，沒有自己的表——它沒有 `area_polygons` 以外的欄位。
+4. `team_zone_assign.zone_uuid` 改指向 `team_zones`：只有責任區能掛團隊，標示區與危險區不可能擴大任何 team 的
+   `zone` scope。責任區建立時必須帶一個團隊（與第一筆指派同一次 commit），且不能移除最後一個團隊；一區可多隊。
+5. 危險區 `is_public` 恆為 true：建立時強制、更新時拒絕關閉、`hazardousZones` 不依此過濾。責任區與標示區預設 false。
+6. 唯一的類型轉換是標示區 → 危險區（`promoteMarkZone`，保留 uuid/名稱/備註並轉為公開）；沒有反向或其他轉換。
+7. 三種區域的寫入都走 `work_zone.*` + `_require_gov_zone_authority`；`map.add/edit/delete` 刪除（`map.view` 保留給公開讀取）。
+8. 公開讀取 `areas(bounds)` 只回傳 `is_public` 的區域，型別上沒有任何團隊欄位；`includePrivate: true` 需要 `work_zone.view`。
+
+**取代關係**：BE-028 的 `closure_areas` 與 DATA-005 的 `work_zones` 表；`map.add/edit/delete` 三個能力。
+
+**後果**：
+
+➕ 一個 `areas(bounds)` 查詢就能畫出公開地圖上所有區域；三種區域共用一套寫入與 bbox 程式。
+➖ `scope_filter` 的 ZONE 分支必須把 zone 取別名：zone 與被過濾的資料列共用 `base_geometries`，不取別名時
+   EXISTS 會關聯到資料列自己，而每個幾何都包含自己。
+◾ 本次 migration 不保留區域資料：本地只有 `seed_mock_scenarios.sql` 載入的假資料。
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|
 | none | `false()`（防禦性；CP1 應已先擋掉） | — |
 | own | `resource.created_by == actor.uuid` | — |
 | team | `resource.<team 邊界欄位> == actor 當前身分的 team`（預設欄位 `team_uuid`；`Team` 宣告 `uuid`）。用於團隊成員管理，以及**站點**（`stations.team_uuid`，ADR-285；gov team 身分視同 `all`）。不套用在其他 geo 資源 | active identity（010/ADR-074）、`__team_scope_attr__`（ADR-053） |
-| zone | `ST_Contains(actor 當前身分那個 team 被指派的 WorkZone, resource.geometry)` | `work_zones`+`team_zone_assign`（ADR-049/052） |
+| zone | `ST_Contains(actor 當前身分那個 team 被指派的 TeamZone, resource.geometry)` | `team_zones`+`team_zone_assign`（ADR-049/052/311） |
 | all | 全域 | — |
 
 最寬勝：`all > zone > team > own > none`（見 `app/core/rbac_scopes.py:WIDTH`）。gov/ngo scope 已於 ADR-049 退場——組織身分改由 team 的 `type` 表達，不進 scope。

@@ -111,7 +111,7 @@ class NotificationRecipientResolver:
         """Resolve all Gov staff plus the admins of the team the station is assigned to (Q8, ADR-285).
 
         Stations left the zone model (ADR-285): which team runs a station is its `team_uuid`,
-        not whose work zone its point falls in, so the zone's team is not told. An unassigned
+        not whose team zone its point falls in, so the zone's team is not told. An unassigned
         station, or one whose team was deleted, notifies Gov only.
         """
         recipients: set[str] = set()

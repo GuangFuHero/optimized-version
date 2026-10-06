@@ -17,7 +17,7 @@ from app.core.security import create_access_token
 from app.db.session import Base
 from app.main import app
 from app.models.auth import User
-from app.models.geo import ClosureArea, Station
+from app.models.geo import HazardousZone, Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.station_property import StationProperty
@@ -97,9 +97,9 @@ async def _ensure_db():
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_DELETE, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_REVIEW, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.STATION_CONTRIBUTE, "all")
-        await _grant(db, coordinator_role, perm_cache, Perm.MAP_ADD, "all")
-        await _grant(db, coordinator_role, perm_cache, Perm.MAP_EDIT, "all")
-        await _grant(db, coordinator_role, perm_cache, Perm.MAP_DELETE, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.ZONE_ADD, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.ZONE_EDIT, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.ZONE_DELETE, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.FIELD_VIEW, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.FIELD_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW, "all")
@@ -253,18 +253,18 @@ async def sample_station(coordinator_auth):
 
 
 @pytest_asyncio.fixture
-async def sample_closure_area(coordinator_auth):
-    """Seed a polygon closure area and return its UUID string."""
+async def sample_hazardous_zone(coordinator_auth):
+    """Seed a polygon hazardous zone and return its UUID string."""
     user_uuid, _ = coordinator_auth
     async with test_db() as db:
-        area = ClosureArea(
+        area = HazardousZone(
             geometry=from_shape(Polygon([
                 (121.49, 24.99), (121.51, 24.99), (121.51, 25.01),
                 (121.49, 25.01), (121.49, 24.99),
             ]), srid=4326),
             created_by=user_uuid,
-            status="blocked", information_source="test",
-            comment="Test closure area",
+            status="blocked", information_source="test", is_public=True,
+            note="Test hazardous zone",
         )
         db.add(area)
         await db.flush()
