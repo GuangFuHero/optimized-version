@@ -44,10 +44,12 @@ async def _require_gov_zone_authority(db: AsyncSession, actor: User) -> None:
 
 
 def _check_fields(kind: str, changes: dict) -> None:
-    """Refuse fields the area's kind does not have; a hazardous zone always stays public."""
+    """Refuse fields the area's kind does not have. A hazardous zone stays public and keeps a status."""
     if kind == "hazardous_zone":
         if changes.get("is_public") is False:
             raise ValueError("A hazardous zone is always public")
+        if "status" in changes and not (changes["status"] or "").strip():
+            raise ValueError("A hazardous zone needs a status")
     elif changes.get("status") is not None or changes.get("information_source") is not None:
         raise ValueError("Only a hazardous zone has a status or information source")
 
@@ -71,10 +73,8 @@ async def create_area(
     validate_polygon(geometry, entity="Area")
     if (team_uuid is None) == (kind == "team_zone"):
         raise ValueError("A team zone needs a team, and only a team zone takes one")
-    _check_fields(kind, fields)
+    _check_fields(kind, {"status": None} | fields)
     if kind == "hazardous_zone":
-        if not fields.get("status"):
-            raise ValueError("A hazardous zone needs a status")
         fields["is_public"] = True
 
     obj_in = {key: value for key, value in fields.items() if value is not None}
@@ -144,6 +144,7 @@ async def promote_mark_zone(
         raise ValueError("Only a mark zone can be promoted to a hazardous zone")
     await require_scope(actor, Perm.ZONE_EDIT, db, resource=area)
     await _require_gov_zone_authority(db, actor)
+    _check_fields("hazardous_zone", {"status": status})
 
     area_uuid = area.uuid
     await db.execute(

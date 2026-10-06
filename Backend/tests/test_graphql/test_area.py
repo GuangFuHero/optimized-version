@@ -50,6 +50,8 @@ mutation($uuid: UUID!, $input: PromoteMarkZoneInput!) {
 }
 """
 
+HAZARD_STATUS = "query($uuid: UUID!) { hazardousZone(uuid: $uuid) { status } }"
+
 ASSIGN_ZONE = """
 mutation($input: ZoneTeamAssignmentInput!) { assignZoneToTeam(input: $input) { zoneUuid } }
 """
@@ -688,6 +690,46 @@ async def test_only_a_hazardous_zone_takes_a_status(client, redis):
         client, gov_token, {"input": {"type": "mark_zone", "geometry": ZONE_POLYGON, "status": "blocked"}}
     )
     assert "Only a hazardous zone has a status" in _errors(mark), mark
+
+
+@pytest.mark.asyncio
+async def test_a_hazardous_zone_status_cannot_be_blank(client, redis):
+    """Create, update and promote all refuse a blank status, and the stored status stays."""
+    gov_token = await _make_gov_user(redis)
+
+    hazard = {"type": "hazardous_zone", "geometry": ZONE_POLYGON}
+
+    blank = await _create(client, gov_token, {"input": {**hazard, "status": "  "}})
+    assert "A hazardous zone needs a status" in _errors(blank), blank
+
+    body = await _create(client, gov_token, {"input": {**hazard, "status": "blocked"}})
+    hazard_uuid = body["data"]["createArea"]["uuid"]
+    cleared = await client.post(
+        "/graphql",
+        json={"query": UPDATE_AREA, "variables": {"uuid": hazard_uuid, "input": {"status": ""}}},
+        headers=auth_header(gov_token),
+    )
+    assert "A hazardous zone needs a status" in _errors(cleared.json()), cleared.json()
+    stored = await client.post("/graphql", json={"query": HAZARD_STATUS, "variables": {"uuid": hazard_uuid}})
+    assert stored.json()["data"]["hazardousZone"]["status"] == "blocked"
+
+    mark = await _create(
+        client, gov_token, {"input": {"type": "mark_zone", "geometry": _square(135.0, 35.0)}}
+    )
+    mark_uuid = mark["data"]["createArea"]["uuid"]
+    promoted = await client.post(
+        "/graphql",
+        json={"query": PROMOTE, "variables": {"uuid": mark_uuid, "input": {"status": ""}}},
+        headers=auth_header(gov_token),
+    )
+    assert "A hazardous zone needs a status" in _errors(promoted.json()), promoted.json()
+    admin_map = await client.post(
+        "/graphql",
+        json={"query": AREAS, "variables": {"bounds": _box(135.0, 35.0), "includePrivate": True}},
+        headers=auth_header(gov_token),
+    )
+    items = {i["uuid"]: i for i in admin_map.json()["data"]["areas"]["items"]}
+    assert items[mark_uuid]["type"] == "mark_zone"
 
 
 @pytest.mark.asyncio
