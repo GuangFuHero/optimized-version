@@ -26,6 +26,17 @@ describe('submitErrorMessage', () => {
     ).toBe('登入已過期，請重新登入後再試一次。');
   });
 
+  it('says what to fix when the form let through a need without a quantity, or too many', () => {
+    for (const kind of ['hr', 'supply', 'medical']) {
+      expect(
+        submitErrorMessage(refusal(`quantity is required for a ${kind} task`)),
+      ).toBe('每項需求都要填數量（人員受困除外）。');
+    }
+    expect(submitErrorMessage(refusal('At most 20 tasks are allowed'))).toBe(
+      '一次最多 20 項需求。',
+    );
+  });
+
   it('says only that it failed for every other refusal, whose words are about fields', () => {
     expect(submitErrorMessage(refusal('Unexpected error.'))).toBe(
       '送出失敗，請稍後再試一次。',

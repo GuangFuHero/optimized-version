@@ -134,6 +134,12 @@ describe('addNeedErrorMessage', () => {
     expect(addNeedErrorMessage(refused('Ticket not found'))).toBe('這張單已經刪除了。');
   });
 
+  it('asks for the quantity the panel let through, but for a rescue', () => {
+    expect(
+      addNeedErrorMessage(refused('quantity is required for a supply task')),
+    ).toBe('每項需求都要填數量（人員受困除外）。');
+  });
+
   it('says a request closed by hand takes nothing more', () => {
     expect(addNeedErrorMessage(refused('Ticket is no longer open'))).toBe(
       '這張單已經關閉，不能再加。',

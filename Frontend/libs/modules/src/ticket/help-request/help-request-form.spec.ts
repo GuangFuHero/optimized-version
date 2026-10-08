@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  canAddNeedRow,
   emptyHelpRequestForm,
   emptyNeed,
   findMissingFields,
   hasRescueNeed,
+  isQuantityMissing,
+  MAX_NEEDS,
   SITE_NEED_OPTIONS,
   toHelpRequestInput,
   type HelpRequestForm,
@@ -19,7 +22,7 @@ function filledForm(overrides: Partial<HelpRequestForm> = {}): HelpRequestForm {
     room: '',
     contactName: '王小姐',
     contactPhone: '',
-    needs: [{ need: 'cleanup', name: '', quantity: '' }],
+    needs: [{ need: 'cleanup', name: '', quantity: '2' }],
     description: '',
     photoUrls: [],
     ...overrides,
@@ -65,10 +68,70 @@ describe('findMissingFields', () => {
     expect(
       findMissingFields(
         filledForm({
-          needs: [emptyNeed(), { need: 'supplies', name: '', quantity: '' }],
+          needs: [emptyNeed(), { need: 'supplies', name: '', quantity: '1' }],
         }),
       ),
     ).toEqual([]);
+  });
+
+  it('asks how many for every chosen need but a rescue (backend QUANTITY_REQUIRED_TASK_TYPES)', () => {
+    const missing = findMissingFields(
+      filledForm({
+        needs: [
+          { need: 'cleanup', name: '', quantity: '' },
+          { need: 'supplies', name: '', quantity: ' ' },
+          { need: 'rescue', name: '', quantity: '' },
+        ],
+      }),
+    );
+
+    expect(missing).toEqual([{ key: 'quantity', label: '需求的數量' }]);
+  });
+
+  it('asks for the quantity once a kind is chosen, after asking for one at all', () => {
+    expect(
+      findMissingFields(
+        filledForm({
+          needs: [{ need: 'rescue', name: '', quantity: '' }, emptyNeed()],
+        }),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('isQuantityMissing', () => {
+  it('flags a chosen need left without a quantity, a rescue excepted', () => {
+    expect(isQuantityMissing({ need: 'cleanup', name: '', quantity: '' })).toBe(
+      true,
+    );
+    expect(
+      isQuantityMissing({ need: 'supplies', name: '', quantity: ' ' }),
+    ).toBe(true);
+    expect(isQuantityMissing({ need: 'rescue', name: '', quantity: '' })).toBe(
+      false,
+    );
+    expect(isQuantityMissing({ need: 'repair', name: '', quantity: '3' })).toBe(
+      false,
+    );
+  });
+
+  it('leaves a row nobody chose a kind for to the need check', () => {
+    expect(isQuantityMissing(emptyNeed())).toBe(false);
+  });
+});
+
+describe('canAddNeedRow', () => {
+  const rows = (count: number) =>
+    Array.from({ length: count }, () => ({
+      need: 'cleanup' as const,
+      name: '',
+      quantity: '1',
+    }));
+
+  it('offers another row up to the most one request takes (backend HELP_REQUEST_NEED_MAX)', () => {
+    expect(MAX_NEEDS).toBe(20);
+    expect(canAddNeedRow(rows(MAX_NEEDS - 1))).toBe(true);
+    expect(canAddNeedRow(rows(MAX_NEEDS))).toBe(false);
   });
 });
 
@@ -168,17 +231,17 @@ describe('toHelpRequestInput', () => {
 
   it('names a need by its choice when no description was typed', () => {
     const input = toHelpRequestInput(
-      filledForm({ needs: [{ need: 'care', name: '  ', quantity: '' }] }),
+      filledForm({ needs: [{ need: 'care', name: '  ', quantity: '1' }] }),
     );
 
     expect(input.tasks[0].taskName).toBe('陪同／照顧');
   });
 
-  it('leaves an unknown quantity unknown, and never asks for fewer than one', () => {
+  it("leaves a rescue's unknown quantity unknown, and never asks for fewer than one", () => {
     const quantities = toHelpRequestInput(
       filledForm({
         needs: [
-          { need: 'cleanup', name: '', quantity: ' ' },
+          { need: 'rescue', name: '', quantity: ' ' },
           { need: 'cleanup', name: '', quantity: '0' },
           { need: 'cleanup', name: '', quantity: '2.5' },
         ],

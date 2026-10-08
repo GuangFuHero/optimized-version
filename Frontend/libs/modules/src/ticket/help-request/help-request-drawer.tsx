@@ -26,10 +26,13 @@ import {
   writeHelpRequestDraft,
 } from './help-request-draft';
 import {
+  canAddNeedRow,
   emptyHelpRequestForm,
   emptyNeed,
   findMissingFields,
   hasRescueNeed,
+  isQuantityMissing,
+  MAX_NEEDS,
   type HelpRequestForm,
   type PickedPoint,
 } from './help-request-form';
@@ -491,30 +494,39 @@ function HelpRequestFormDrawer({
           {isMissing('needs') ? (
             <FieldNote error>請至少選一項你需要的幫忙</FieldNote>
           ) : null}
-          {form.needs.map((row, index) => (
-            <NeedDraftRow
-              // A row has no id of its own; removing one re-keys those after it, which only
-              // remounts their two text boxes.
-              key={index}
-              row={row}
-              index={index}
-              showIndex={form.needs.length > 1}
-              canRemove={form.needs.length > 1}
-              invalid={isMissing('needs') && !row.need}
-              onChange={(next) =>
-                set('needs')(
-                  form.needs.map((current, at) =>
-                    at === index ? next : current,
-                  ),
-                )
-              }
-              onRemove={() =>
-                set('needs')(form.needs.filter((_, at) => at !== index))
-              }
-            />
-          ))}
-          {/* Offered only once the last one has its kind: not a blank second row up front. */}
-          {lastNeed?.need ? (
+          <Stack data-field="quantity" spacing={1.5}>
+            {form.needs.map((row, index) => (
+              <NeedDraftRow
+                // A row has no id of its own; removing one re-keys those after it, which only
+                // remounts their two text boxes.
+                key={index}
+                row={row}
+                index={index}
+                showIndex={form.needs.length > 1}
+                canRemove={form.needs.length > 1}
+                invalid={isMissing('needs') && !row.need}
+                quantityMissing={
+                  isMissing('quantity') && isQuantityMissing(row)
+                }
+                onChange={(next) =>
+                  set('needs')(
+                    form.needs.map((current, at) =>
+                      at === index ? next : current,
+                    ),
+                  )
+                }
+                onRemove={() =>
+                  set('needs')(form.needs.filter((_, at) => at !== index))
+                }
+              />
+            ))}
+          </Stack>
+          {/* Offered only once the last one has its kind: not a blank second row up front. At the
+              most one request files, said instead — 「再加一件」 on the ticket takes the rest. */}
+          {lastNeed?.need && !canAddNeedRow(form.needs) ? (
+            <FieldNote>一次最多 {MAX_NEEDS} 項，送出後可以在單上再加</FieldNote>
+          ) : null}
+          {lastNeed?.need && canAddNeedRow(form.needs) ? (
             <ButtonBase
               onClick={() => set('needs')([...form.needs, emptyNeed()])}
               sx={{
