@@ -175,6 +175,23 @@ async def test_a_government_or_ngo_application_is_not_approved_yet(client, db_se
 
 
 @pytest.mark.asyncio
+async def test_an_applicant_made_a_super_admin_meanwhile_is_not_approved(client, db_session, redis):
+    """Approving would leave a third platform role (ADR-294), so the state is wrong: 409."""
+    applicant_uuid, _ = await _account(db_session, "王小明", "user")
+    request_uuid = await _application(db_session, applicant_uuid)
+    await _data_auditor_role(db_session)
+    headers = await _reviewer_headers(db_session, redis)
+    super_admin = (await db_session.execute(select(Role).where(Role.name == "super_admin"))).scalar_one()
+    db_session.add(UserRoleAssign(user_uuid=uuid.UUID(applicant_uuid), role_uuid=super_admin.uuid))
+    await db_session.commit()
+
+    response = await client.post(f"{URL}/{request_uuid}/approve", json={}, headers=headers)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "The applicant has another back-office identity now"
+
+
+@pytest.mark.asyncio
 async def test_an_approved_applicant_carries_on_with_the_token_they_have(
     client, db_session, redis, fresh_app_engine
 ):

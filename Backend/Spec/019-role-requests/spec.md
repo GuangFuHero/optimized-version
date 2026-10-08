@@ -57,6 +57,7 @@ them by number.
 | Rule | Where it is enforced |
 |---|---|
 | Only an account whose identities are exactly the platform `user` may apply. Any other platform role, or any team role, counts as a back-office identity (AC-RE-101). | `services/role_request.py:_has_backoffice_identity` |
+| Approval checks again: an applicant who has since gained a back-office identity other than `data_auditor` is refused with 409, and the application stays pending (ADR-288). | `approve`, after `_lock_pending` |
 | At most one pending application per account, whatever it asks for (AC-RE-106). Two tabs submitting at once still leave one. | Partial unique index `uq_role_requests_one_pending`; the service turns only that index's violation into a 409 |
 | A rejected or withdrawn applicant may apply again at once (AC-RE-107). | No check needed: neither state is `pending` |
 | Only the applicant can withdraw, and only while pending. Anyone else's application is reported as not found, so its existence is not given away. | `withdraw` looks the row up by uuid **and** `created_by` |
@@ -143,6 +144,7 @@ REST fields are snake_case: `uuid`, `requested_role`, `reason`, `contact`, `stat
 | 403 | Caller does not hold `role_request.review` **as the identity they are acting as** | `Permission Denied.` |
 | 404 | No such application | `Role request not found` |
 | 409 | It has already left `pending` | `Role request is no longer pending` |
+| 409 | Approving, when the applicant has since become a super admin or joined a team | `The applicant has another back-office identity now` |
 | 422 | Note over 500 characters | `Note must be at most 500 characters` |
 | 422 | Approving a `government` or `ngo` application | `Approving government and NGO applications is not available yet` |
 | 422 | `status` query value outside the four statuses | FastAPI's validation error list |
@@ -157,10 +159,12 @@ A super admin logs in as `user` (ADR-290), so the list answers 403 until they sw
 Only a `data_auditor` application can be approved. In one transaction, `approve`:
 
 1. checks `role_request.review`, then locks the application and checks it is still `pending`;
-2. inserts the platform grant `data_auditor` for the applicant — `ON CONFLICT DO NOTHING`, since an admin may
+2. checks the applicant holds no back-office identity besides `data_auditor`, which may have turned up since
+   they applied; one who does is refused with 409 and nothing changes;
+3. inserts the platform grant `data_auditor` for the applicant — `ON CONFLICT DO NOTHING`, since an admin may
    have granted it another way since the application was sent;
-3. marks the application `approved` with `reviewed_by`, `review_note`, `granted_role_uuid` and `closed_at`;
-4. commits once, then notifies the applicant.
+4. marks the application `approved` with `reviewed_by`, `review_note`, `granted_role_uuid` and `closed_at`;
+5. commits once, then notifies the applicant.
 
 It does **not** call `admin_service.assign_role`, which removed `user` until ADR-294 and still replaces any
 other platform role the account holds. The applicant keeps `user`, so the access token they hold stays valid (ADR-096 signs out only an identity

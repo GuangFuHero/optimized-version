@@ -48,7 +48,11 @@ class RoleRequestNotFoundError(ValueError):
 
 
 class RoleRequestConflictError(ValueError):
-    """The application has already left `pending`. REST answers 409."""
+    """The application cannot be decided as asked. REST answers 409.
+
+    It has already left `pending`, or its applicant has gained another back-office identity since
+    sending it.
+    """
 
 
 @dataclass
@@ -89,17 +93,16 @@ def _checked_application(requested_role: str, reason: str, contact: str | None) 
     return reason, contact
 
 
-async def _has_backoffice_identity(db: AsyncSession, user_uuid) -> bool:
+async def _has_backoffice_identity(db: AsyncSession, user_uuid, *, besides: str | None = None) -> bool:
     """True if the account holds anything beyond the platform `user` role (AC-RE-101).
 
     Any other platform role, or any team role at all: a team identity already opens the back
-    office, and joining a team goes by invitation rather than through this form.
+    office, and joining a team goes by invitation rather than through this form. `besides` leaves
+    one more platform role out of the count, for approval to ask what else turned up meanwhile.
     """
+    plain = {DEFAULT_PLATFORM_ROLE, besides}
     identities = await active_identity_repository.list_for_user(db, str(user_uuid))
-    return any(
-        identity.team_uuid is not None or identity.role_name != DEFAULT_PLATFORM_ROLE
-        for identity in identities
-    )
+    return any(identity.team_uuid is not None or identity.role_name not in plain for identity in identities)
 
 
 async def submit(
@@ -229,6 +232,11 @@ async def approve(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, not
     `assign_role`, which would replace it: the site acts as `user` (ADR-289), and an added
     identity signs nobody out, since ADR-096 refuses only one that is gone. The grant and the
     new status are one commit, so a withdrawal racing this one finds both or neither.
+
+    Days can pass between sending and deciding. An applicant who has since become a super admin,
+    or joined a team, is refused and the application stays pending for the reviewer to reject:
+    granting would leave a third platform role (ADR-294) or a team identity beside it, and an
+    account holding either could not have applied (AC-RE-101).
     """
     await require_scope(actor, Perm.ROLE_REQUEST_REVIEW, db)
     note = _checked_note(note)
@@ -236,10 +244,13 @@ async def approve(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, not
     request = await _lock_pending(db, request_uuid)
     if request.requested_role != _DATA_AUDITOR:
         raise ValueError("Approving government and NGO applications is not available yet")
+    applicant_uuid = request.created_by
+    if await _has_backoffice_identity(db, applicant_uuid, besides=_DATA_AUDITOR):
+        raise RoleRequestConflictError("The applicant has another back-office identity now")
     role = await role_repository.get_by_name(db, _DATA_AUDITOR)
     if role is None:
         raise RuntimeError("The data_auditor role is missing: run scripts/seed_rbac.py")
-    applicant_uuid, role_uuid = request.created_by, role.uuid
+    role_uuid = role.uuid
     # Nothing to add if an admin granted the role another way since the application was sent.
     await db.execute(
         insert(UserRoleAssign)
