@@ -65,6 +65,9 @@ TASK_NAME_MAX_LENGTH = 200
 # Photo links a citizen may file with a request — the site's own limit, the same number its
 # form stops at (the prototype's TK_PHOTO_MAX in wg-photos.jsx).
 HELP_REQUEST_PHOTO_MAX = 10
+# Needs a request may be filed with at once. The prototype sets no limit; without one, a single
+# request could file thousands. Needs added later, one 「再加一件」 at a time, are not counted.
+HELP_REQUEST_NEED_MAX = 20
 
 # What a notice calls each review outcome — the site's own words, never the enum. An unknown
 # value falls through as itself, so a new one shows up rather than vanishing.
@@ -245,6 +248,8 @@ async def create_help_request(
         raise ValueError(f"title must be at most {TICKET_TITLE_MAX_LENGTH} characters")
     if not tasks:
         raise ValueError("At least one task is required")
+    if len(tasks) > HELP_REQUEST_NEED_MAX:
+        raise ValueError(f"At most {HELP_REQUEST_NEED_MAX} tasks are allowed")
     # Every need and photo link is checked before anything is written, so one bad one refuses
     # the request rather than leaving the ones before it filed.
     for task in tasks:

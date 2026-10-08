@@ -144,6 +144,35 @@ async def test_a_request_without_any_need_is_refused_and_nothing_is_filed(db):
     assert await _tickets_filed(db) == 0
 
 
+def _needs(count: int) -> list[dict]:
+    """`count` valid needs, each named apart."""
+    return [
+        {"task_type": "supply", "task_name": f"物資 {n}", "task_description": None, "quantity": 1}
+        for n in range(count)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_more_than_twenty_needs_are_refused_and_nothing_is_filed(db):
+    """Without a limit, one request could file thousands of needs at once."""
+    citizen = await _citizen(db)
+
+    with pytest.raises(ValueError, match="^At most 20 tasks are allowed$"):
+        await create_help_request(db, actor=citizen, **_request(tasks=_needs(21)))
+
+    assert await _tickets_filed(db) == 0
+
+
+@pytest.mark.asyncio
+async def test_twenty_needs_are_allowed(db):
+    """The limit itself is allowed."""
+    citizen = await _citizen(db)
+
+    ticket = await create_help_request(db, actor=citizen, **_request(tasks=_needs(20)))
+
+    assert len(await _needs_of(db, ticket.uuid)) == 20
+
+
 GOOD_NEED = {"task_type": "hr", "task_name": "清淤人力", "task_description": None, "quantity": 3}
 
 

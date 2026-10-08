@@ -432,7 +432,7 @@ class CreateHelpRequestInput:
         default=None,
         description="The address as typed goes in `landmarkNote`, with `floor` and `room`",
     )
-    tasks: list[HelpRequestTaskInput] = strawberry.field(description="At least one need")
+    tasks: list[HelpRequestTaskInput] = strawberry.field(description="At least one need, at most 20")
     photo_urls: list[str] | None = strawberry.field(
         default=None,
         description=(
