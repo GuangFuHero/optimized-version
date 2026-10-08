@@ -16,9 +16,9 @@ the trigger is created here, the same way b3f1c07d2a95 did for the dynamic-field
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from alembic import op
 from app.db.triggers import get_audit_trigger_sql
 
 # revision identifiers, used by Alembic.

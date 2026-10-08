@@ -10,7 +10,6 @@ import os
 os.environ["ENV"] = "testing"
 
 import pytest
-from scripts.seed_rbac import ROLES_DATA
 from sqlalchemy import select
 
 from app.core.permissions import PUBLIC_PERMS, Perm
@@ -19,6 +18,7 @@ from app.core.security import resolve_scope
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.team import Team
+from scripts.seed_rbac import ROLES_DATA
 from tests.conftest import acting_as
 
 HISTORY_PERMS = (Perm.TICKET_VIEW_HISTORY, Perm.STATION_VIEW_HISTORY)

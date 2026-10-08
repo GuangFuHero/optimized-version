@@ -12,7 +12,6 @@ existing need was stopped this way — the old 停止招募 canceled needs rathe
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -24,7 +23,9 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Add the nullable recruiting_stopped_at column."""
-    op.add_column('ticket_tasks', sa.Column('recruiting_stopped_at', sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        'ticket_tasks', sa.Column('recruiting_stopped_at', sa.DateTime(timezone=True), nullable=True)
+    )
 
 
 def downgrade() -> None:
