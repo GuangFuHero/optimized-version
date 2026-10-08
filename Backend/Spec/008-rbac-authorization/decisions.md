@@ -1258,6 +1258,12 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
    （`rejected`）也被所有人看到。時間軸本來就把它放在稽核層（Spec 016）。跟承接名單一樣交給 `view_history`：
    建單者看自己的、team 看責任區、稽核與超管看全部，其他人拿 null。每個 seed 角色的 `ticket.edit` 範圍都在
    `view_history` 範圍內，所以會審核需求的人讀得到自己設的值。
+6. **`tickets` 列表裡的聯絡方式另要 `ticket.view_history`**（2026-10-08 補，#61 review）。單張 `ticket` 照第 1
+   點，登入就看得到；但列表一頁一頁翻，等於把所有求助者的電話交給任何新帳號。所以列表裡的 `contactName`／
+   `contactEmail`／`contactPhone` 與兩個檢傷欄位，除了 `view_pii` 還要 `view_history`（建單者、責任區的 team、
+   稽核與超管），其他登入者在列表看到遮罩、點進單才看到完整的。`myTickets`、`myTaskAssignments` 不受影響
+   （自己的單、自己承接的單）。同時列表一頁最多 200 筆（前台地圖一次要 200，`TICKET_LIST_MAX_LIMIT`）。
+   前台的詳情抽屜與承接確認框都用單張 `ticket` 查詢，看得到電話；地圖標記帶的是列表的值，只當備用。
 
 **不受影響**：時間軸要先有 `ticket.view_history`（一般帳號 `own`），一般帳號本來就只看得到自己單的時間軸，而
 自己的單原本就有 `view_pii`；匯出要 `ticket.export`，一般帳號沒有；地址自 ADR-281 起由 `view_detail` 把關。
@@ -1274,6 +1280,7 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 - 註冊即可登入，所以聯絡方式等於對任何願意註冊的人公開。這是規則本身的內容。日後若要收緊（例如只在緊急期
   開放），在 `/admin/rbac` 把 `user` 縮回 `own` 即可；但那樣承接者也會看不到，要另外設計「承接即解鎖」。
+  第 6 點只擋「從列表整批撈」：一張一張點開仍然拿得到。若要再擋，下一步是單張查詢的限流或記錄誰看了誰的電話。
 - 承接名單的可見性從此綁在時間軸的能力上：日後放寬 `ticket.view_history` 時要一併考慮承接名單。
   `tests/test_seed_rbac.py::test_who_claimed_a_need_stays_with_the_requester_and_coordinators` 會擋下。
 - GraphQL 測試的角色（`tests/test_graphql/conftest.py`）補上 `ticket.view_history`，比照 seed。
