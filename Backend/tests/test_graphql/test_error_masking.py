@@ -146,10 +146,12 @@ async def test_an_unknown_input_field_is_not_masked(client):
 
     What went wrong is the caller's own input, found before any resolver runs, so the
     message is safe and it is the only thing that tells the caller which field to drop.
+    graphql-core 3.2 and 3.3 word it differently; both name the field and the input type.
     """
     body = await _post(client, UPDATE_STATION, {"uuid": str(uuid4()), "input": {"bogus": 1}})
     assert "errors" in body, body
-    assert "Field 'bogus' is not defined by type 'UpdateStationInput'" in body["errors"][0]["message"], body
+    message = body["errors"][0]["message"]
+    assert "'bogus'" in message and "'UpdateStationInput'" in message, body
 
 
 @pytest.mark.asyncio

@@ -871,7 +871,8 @@ async def test_update_ticket_takes_no_status(client, coordinator_auth, sample_ti
 
     body = resp.json()
     errors = body.get("errors", [])
-    assert any("'status' is not defined by type 'UpdateTicketInput'" in e["message"] for e in errors), body
+    # graphql-core 3.2 and 3.3 word this differently; both name the field and the input type.
+    assert any("'status'" in e["message"] and "'UpdateTicketInput'" in e["message"] for e in errors), body
     async with test_db() as db:
         assert (await db.get(Tickets, uuid.UUID(sample_ticket))).status == "pending"
 
@@ -985,8 +986,9 @@ async def test_update_ticket_task_no_longer_takes_a_status(client, coordinator_a
         headers=auth_header(token),
     )
     errors = resp.json()["errors"]
+    # graphql-core 3.2 and 3.3 word this differently; both name the field and the input type.
     assert any(
-        "Field 'status' is not defined by type 'UpdateTicketTaskInput'" in e["message"] for e in errors
+        "'status'" in e["message"] and "'UpdateTicketTaskInput'" in e["message"] for e in errors
     ), errors
 
 
