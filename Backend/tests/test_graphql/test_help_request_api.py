@@ -113,7 +113,9 @@ async def test_the_needs_come_back_in_the_order_they_were_listed(client, redis):
         "/graphql",
         json={
             "query": FILE,
-            "variables": {"input": _input(tasks=[{"taskType": "hr", "taskName": n} for n in names])},
+            "variables": {
+                "input": _input(tasks=[{"taskType": "hr", "taskName": n, "quantity": 1} for n in names])
+            },
         },
         headers=auth_header(token),
     )

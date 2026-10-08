@@ -68,6 +68,13 @@ remembered to change it.
    - when a claim fills a need, everyone already on it hears it is complete (`task_full`, medium,
      titled `「{need}」已經湊齊人了`);
    - giving a place back, and the reopening it may cause, send nothing.
+7. **Every need but a rescue says how many** (added 2026-10-08, after #61 review; the product owner's
+   call). A need without a quantity never fills, so its request never completes on its own. `hr`,
+   `supply` and `medical` needs are refused without one (`QUANTITY_REQUIRED_TASK_TYPES`): filing a help
+   request, adding a need (the site's 「再加一件」 and the back office share `createTicketTask`), and a bulk
+   import, whose preview fails the row before its ticket is written. A `rescue` need may leave it out —
+   whoever is trapped does not know how many it takes, and the design leaves rescues out of the 缺額
+   count — and then has no cap, as point 1 says. Needs filed before this keep their null quantity.
 
 **Consequences**:
 ➕ "Full" and "fulfilled" are kept by the backend, not by someone remembering to set them.
@@ -75,6 +82,13 @@ remembered to change it.
 fills (`TicketTaskType.myAssignment`).
 ➖ A coordinator cannot over-staff a need any more; the back office has to add another need.
 ➖ Needs over-staffed before the cap keep their extra people; the cap only stops new claims.
+➖ How a request ends is derived, with no close action of its own (the product owner, 2026-10-08, after
+#61 review asked how the back office closes one). It completes once none of its needs is open: each filled,
+stopped (ADR-292) or deleted. Two cases need a hand: a rescue need, or one from before point 7, has no
+quantity and never fills, so its owner or a coordinator stops recruiting once enough people are on it, or
+deletes it if nobody is; and a request filed with no need at all (only the back office's `createTicket`
+can) stays `pending` until a need is added or the request is deleted, which cancels it. Deleting needs
+and requests takes `ticket.delete`: team admins hold it for their zone, members for their own only.
 
 ---
 

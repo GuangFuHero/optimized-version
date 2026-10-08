@@ -391,6 +391,17 @@ async def _plan_tickets(
         if match.kind == AMBIGUOUS:
             errors.append(_ambiguous_error(line, match.candidates, "title"))
 
+        # Any need but a rescue must say how many (ADR-291 point 7). A row whose ticket is not
+        # in the database yet adds a need for certain, so it fails here, before its ticket is
+        # written; one attaching to a ticket that is may match a need it has, and is left to
+        # import_ticket_task.
+        if (
+            match.kind != MATCHED
+            and task_type in ticket_service.QUANTITY_REQUIRED_TASK_TYPES
+            and not (row.get("task_quantity") or "").strip()
+        ):
+            errors.append(_error(line, "task_quantity", "救援以外的需求都要填人數"))
+
         # A ticket key repeated inside one file is one ticket on several lines, one per task
         # (ADR-120) — not a duplicate. The first line creates it; the rest attach to it, and
         # the writer resolves the uuid once it exists.

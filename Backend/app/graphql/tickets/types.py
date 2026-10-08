@@ -246,7 +246,11 @@ class TicketTaskType:
     task_type: str = strawberry.field(description="Category of task: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str = strawberry.field(description="Short name summarising the task")
     quantity: int | None = strawberry.field(
-        default=None, description="Number of people or units needed — null means unspecified"
+        default=None,
+        description=(
+            "Number of people or units needed. Null means unspecified and uncapped: a rescue need "
+            "may leave it out, and needs filed before every other kind had to give one"
+        ),
     )
     status: str = strawberry.field(
         default="pending",
@@ -422,7 +426,12 @@ class CreateTicketTaskInput:
     task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str
     task_description: str | None = None
-    quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
+    quantity: int | None = strawberry.field(
+        default=None,
+        description=(
+            "People or units needed, at least 1; required except for a 'rescue' task, which may omit it"
+        ),
+    )
     source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
     visibility: Visibility = strawberry.field(
         default=Visibility.public,
@@ -441,7 +450,10 @@ class HelpRequestTaskInput:
     task_name: str = strawberry.field(description="What is needed, at most 200 characters")
     task_description: str | None = None
     quantity: int | None = strawberry.field(
-        default=None, description="People or units needed, at least 1; omit when not known"
+        default=None,
+        description=(
+            "People or units needed, at least 1; required except for a 'rescue' need, which may omit it"
+        ),
     )
 
 
