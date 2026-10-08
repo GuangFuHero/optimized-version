@@ -224,7 +224,7 @@
 ### PII 遮罩（ADR-049）
 `ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩；登入者（user、team admin/member、data_auditor、super_admin）一律 all（ADR-286，原本 user→own、team→zone）。
 
-任務的承接名單（`assignments`，誰承接了哪筆需求）**不**跟著 `view_pii`，改看 `ticket.view_history`（user→own、team→zone、data_auditor/super_admin→all）：建單者與協調者看得到，其他登入者看不到（ADR-286）。
+任務的承接名單（`assignments`，誰承接了哪筆需求）**不**跟著 `view_pii`，改看 `ticket.view_history`（user→own、team→zone、data_auditor/super_admin→all）：建單者與協調者看得到，其他登入者看不到（ADR-286）。需求的審核狀態（`moderationStatus`）同樣看 `ticket.view_history`，沒有的人拿 null（ADR-286 第 5 點）。
 
 ### 異動時間軸的四層可見度（ADR-127~130，功能 016）
 `*.view_history` 是**進入時間軸的門票**，它決定看得到「哪些資源」的歷史；`audit.view` 決定看得到「多深」。同一個時間軸依 caller 權限分四層揭露：

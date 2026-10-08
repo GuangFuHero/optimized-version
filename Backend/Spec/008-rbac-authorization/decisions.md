@@ -1253,6 +1253,11 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 4. **既有資料庫**：seed 是 additive bootstrap（ADR-055），另以資料 migration `65c5196498fb` 把仍停在舊預設值的
    grant——`user` 的 `own`、`admin`／`member` 的 `zone`——改為 `all`。runtime 已被改成其他值的 grant、個人
    grant、seed 沒定義的角色都不動。downgrade 把這三個角色的 `all` 改回舊預設值。
+5. **需求的審核狀態 `TicketTaskType.moderationStatus` 也由 `ticket.view_history` 把關**（2026-10-08 補）。它原本
+   是公開欄位，訪客也拿得到；民眾建的需求預設都是 `pending_review`，對外看起來每一筆都「待審核」，後台退回
+   （`rejected`）也被所有人看到。時間軸本來就把它放在稽核層（Spec 016）。跟承接名單一樣交給 `view_history`：
+   建單者看自己的、team 看責任區、稽核與超管看全部，其他人拿 null。每個 seed 角色的 `ticket.edit` 範圍都在
+   `view_history` 範圍內，所以會審核需求的人讀得到自己設的值。
 
 **不受影響**：時間軸要先有 `ticket.view_history`（一般帳號 `own`），一般帳號本來就只看得到自己單的時間軸，而
 自己的單原本就有 `view_pii`；匯出要 `ticket.export`，一般帳號沒有；地址自 ADR-281 起由 `view_detail` 把關。

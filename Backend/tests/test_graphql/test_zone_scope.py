@@ -32,7 +32,7 @@ mutation($uuid: UUID!, $input: UpdateTicketInput!) {
 
 UPDATE_TICKET_TASK = """
 mutation($uuid: UUID!, $input: UpdateTicketTaskInput!) {
-    updateTicketTask(uuid: $uuid, input: $input) { uuid moderationStatus }
+    updateTicketTask(uuid: $uuid, input: $input) { uuid }
 }
 """
 
@@ -200,7 +200,10 @@ async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, re
     )
     body = resp.json()
     assert "errors" not in body, body
-    assert body["data"]["updateTicketTask"]["moderationStatus"] == "approved"
+    # Read back from the row: this editor holds ticket.edit only, and reading the status back
+    # through GraphQL takes ticket.view_history, which is not what this test is about.
+    async with test_db() as db:
+        assert (await db.get(TicketTask, task_uuid)).moderation_status == "approved"
 
 
 @pytest.mark.asyncio

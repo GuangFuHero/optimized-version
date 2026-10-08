@@ -243,10 +243,6 @@ class TicketTaskType:
     visibility: str = strawberry.field(
         default="public", description="Who can see this task: 'public', 'restricted', or 'internal'"
     )
-    moderation_status: str = strawberry.field(
-        default="pending_review",
-        description="Review state: 'pending_review', 'approved', or 'rejected'",
-    )
     recruiting_stopped_at: datetime | None = strawberry.field(
         default=None,
         description=(
@@ -266,6 +262,7 @@ class TicketTaskType:
     _progress_note_raw: strawberry.Private[str | None] = None
     _review_note_raw: strawberry.Private[str | None] = None
     _created_by_raw: strawberry.Private[str | None] = None
+    _moderation_status_raw: strawberry.Private[str] = "pending_review"
 
     def _detail_visible(self, info: strawberry.types.Info):
         return ticket_detail_visible(info, self.ticket_uuid)
@@ -309,6 +306,22 @@ class TicketTaskType:
     async def created_by(self, info: strawberry.types.Info) -> str | None:
         """Return the author's uuid, or null when the caller is out of detail scope."""
         return self._created_by_raw if await self._detail_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "Review state: 'pending_review', 'approved', or 'rejected'. Null to a caller without "
+            "ticket.view_history on the parent ticket"
+        )
+    )
+    async def moderation_status(self, info: strawberry.types.Info) -> str | None:
+        """The back office's verdict on the need: the requester's and the coordinators' to see.
+
+        Every need a citizen files starts as pending_review, so shown to everyone it reads as
+        "not to be trusted yet", and a rejection tells the public what staff decided. The
+        timeline keeps it in its audit layer; here it follows ticket.view_history, as the claimant
+        list does, so whoever can review the need can still read it back.
+        """
+        return self._moderation_status_raw if await ticket_history_visible(info, self.ticket_uuid) else None
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list[TaskPropertyType]:
@@ -373,7 +386,6 @@ class TicketTaskType:
             status=m.status,
             source=m.source,
             visibility=m.visibility,
-            moderation_status=m.moderation_status,
             recruiting_stopped_at=m.recruiting_stopped_at,
             created_at=m.created_at,
             updated_at=m.updated_at,
@@ -381,6 +393,7 @@ class TicketTaskType:
             _progress_note_raw=m.progress_note,
             _review_note_raw=m.review_note,
             _created_by_raw=m.created_by,
+            _moderation_status_raw=m.moderation_status,
         )
 
 
