@@ -3,9 +3,11 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 
 import {
+  clearAllHelpRequestDrafts,
   isSigningOutHere,
   markSigningOutHere,
   SessionExpiredNotice,
+  sessionStorageOrNull,
   SiteShell,
 } from '@rescue-frontend/modules';
 import {
@@ -43,6 +45,10 @@ export function PortalSiteShell({ children }: { children: ReactNode }) {
   const handleSignOut = () => {
     // Its own reload below; the watch above must not add another.
     markSigningOutHere();
+    // The person chose to leave, maybe on a shared device: no half-filled 請求協助 (address,
+    // phone) is left in the tab for whoever uses it next. First, before the backend is asked:
+    // closing a slow tab must not keep it. A session that ended keeps its draft.
+    clearAllHelpRequestDrafts(sessionStorageOrNull());
     void (async () => {
       try {
         await logoutAsync();
