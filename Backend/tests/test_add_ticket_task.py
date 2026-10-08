@@ -103,11 +103,11 @@ async def _add(db, actor: User, ticket_uuid: str, *, name: str = "搬家具", qu
     return str(task.uuid)
 
 
-async def _import(db, actor: User, ticket_uuid: str) -> str:
+async def _import(db, actor: User, ticket_uuid: str, *, quantity: int | None = 3) -> str:
     """Add a need the way a bulk import does."""
     task = await ticket_service.import_ticket_task(
         db, actor=actor, ticket_uuid=ticket_uuid, task_type="hr", task_name="搬家具",
-        task_description=None, quantity=3, source="import", visibility="public", route_uuid=None,
+        task_description=None, quantity=quantity, source="import", visibility="public", route_uuid=None,
     )
     return str(task.uuid)
 
@@ -332,3 +332,20 @@ async def test_an_import_reopens_a_completed_ticket_too(db):
     await _import(db, importer, ticket_uuid)
 
     assert await _ticket_status(db, ticket_uuid) == "pending"
+
+
+@pytest.mark.asyncio
+async def test_an_import_takes_no_need_for_nobody_either(db):
+    """A zero quantity reads as full at once, whoever adds it.
+
+    The import's preview refuses such a row first (`task_quantity`'s minimum in bulk_columns);
+    this is the backstop for a caller that skips the preview.
+    """
+    ticket = await _ticket(db)
+    ticket_uuid = str(ticket.uuid)
+    importer = await _stranger(db, Perm.TICKET_ADD, "all")
+
+    with pytest.raises(ValueError, match="quantity must be at least 1"):
+        await _import(db, importer, ticket_uuid, quantity=0)
+
+    assert await _needs(db, ticket_uuid) == 0

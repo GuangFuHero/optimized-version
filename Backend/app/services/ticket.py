@@ -631,9 +631,11 @@ async def import_ticket_task(
 
     ticket.add alone, the rule createTicketTask had before 2026-09-28: who may import what is the
     back office's to decide, not the public site's. The row's columns were checked by the import
-    itself (bulk_columns); the rest is _add_need.
+    itself (bulk_columns); the name and quantity are checked again here, as for any need, in case
+    a caller skips that. The rest is _add_need.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
+    _validate_need_size(task_name, quantity)
     need = {
         "task_type": task_type, "task_name": task_name, "task_description": task_description,
         "quantity": quantity, "source": source, "visibility": visibility, "route_uuid": route_uuid,

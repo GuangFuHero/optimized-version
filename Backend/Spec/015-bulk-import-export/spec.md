@@ -150,7 +150,7 @@ CSV 與 XLSX 雙向（ADR-115）。CSV 匯出帶 UTF-8 BOM，XLSX 把電話、�
 | `latitude`, `longitude` | 僅新增，且新增時必填——**`UpdateTicketInput` 沒有 geometry**，求助單的位置建立後就固定了 |
 | `visibility`, `task_type` | 僅新增 |
 | `task_name` | 僅新增（task 層的比對鍵） |
-| `task_description`, `task_quantity` | 僅新增——**`UpdateTicketTaskInput` 沒有這兩個欄位**（它只收 status / progress_note / review_note / moderation_status / visibility） |
+| `task_description`, `task_quantity` | 僅新增——**`UpdateTicketTaskInput` 沒有這兩個欄位**（它只收 status / progress_note / review_note / moderation_status / visibility）。`task_quantity` 留空表示不限人數，有填就至少 1：0 或負數的需求誰接都顯示已滿，預覽就讓那一列失敗、整列不寫入 |
 | `verification_status`, `review_note`, `created_at` | 唯讀 |
 
 ### 動態欄位

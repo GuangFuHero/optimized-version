@@ -85,6 +85,9 @@ class ColumnSpec:
     # `StringDataRightTruncation` that no per-row handler catches (ADR-241). Mirrors the rule
     # `normalize_contact_fields` already states: check the width here, not at the database.
     max_length: int | None = None
+    # The least an INTEGER cell may hold. Checked at preview, so the row fails before anything is
+    # written: caught later, its ticket would already be committed without the need.
+    min_value: int | None = None
 
 
 def _readonly(column: ColumnSpec) -> ColumnSpec:
@@ -160,7 +163,8 @@ TICKET_COLUMNS: tuple[ColumnSpec, ...] = (
     _create_only(_c("task_type", max_length=50)),
     _create_only(_c("task_name", required_on_create=True, max_length=200)),
     _create_only(_c("task_description", TEXT)),
-    _create_only(_c("task_quantity", INTEGER)),
+    # At least 1, as for any need (`_validate_need_size`): with 0 every claim reads as full.
+    _create_only(_c("task_quantity", INTEGER, min_value=1)),
     _readonly(_c("verification_status")),
     _readonly(_c("review_note", TEXT)),
     _readonly(_c("created_at", TIMESTAMP)),
