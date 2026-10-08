@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isRefreshRefused,
   isSessionExpired,
   isSessionExpiredResponse,
   isUnauthorizedError,
@@ -151,6 +152,29 @@ describe('the expired flag across the reload', () => {
   it('is skipped when the storage throws', () => {
     expect(() => markSessionExpired(throwingStorage)).not.toThrow();
     expect(takeSessionExpired(throwingStorage)).toBe(false);
+  });
+});
+
+describe('isRefreshRefused', () => {
+  it('reads a 401 as the backend refusing the refresh token: revoked, replayed, identity gone', () => {
+    expect(isRefreshRefused(401)).toBe(true);
+  });
+
+  it('reads a malformed request as refused too: the same token would fail again', () => {
+    expect(isRefreshRefused(400)).toBe(true);
+    expect(isRefreshRefused(422)).toBe(true);
+  });
+
+  it('does not read a rate limit as refused: it is checked before the token is touched', () => {
+    expect(isRefreshRefused(429)).toBe(false);
+  });
+
+  it('does not read a server error or a dropped connection as refused', () => {
+    for (const status of [500, 502, 503, 504]) {
+      expect(isRefreshRefused(status)).toBe(false);
+    }
+
+    expect(isRefreshRefused(undefined)).toBe(false);
   });
 });
 

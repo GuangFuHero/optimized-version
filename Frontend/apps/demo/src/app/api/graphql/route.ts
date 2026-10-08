@@ -2,6 +2,7 @@ import { getBackendGraphqlUrl } from '../../../lib/server-backend-auth';
 import {
   applyBackendAuthResponseCookies,
   expireSessionResponse,
+  refreshUnavailableResponse,
   resolveBackendAuthTokenAsync,
 } from '../../../lib/server-backend-auth';
 import { SITE_REALM_HEADERS } from '../../../lib/site-realm';
@@ -37,6 +38,11 @@ async function forwardGraphqlRequestAsync(request: NextRequest) {
     headers: request.headers,
   };
   const resolvedAuth = await resolveBackendAuthTokenAsync(requestLike);
+
+  if (resolvedAuth.refreshUnavailable) {
+    return refreshUnavailableResponse();
+  }
+
   const backendGraphqlUrl = new URL(getBackendGraphqlUrl());
 
   backendGraphqlUrl.search = request.nextUrl.search;

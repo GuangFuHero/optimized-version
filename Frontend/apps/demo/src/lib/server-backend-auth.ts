@@ -5,12 +5,13 @@ import {
 } from '@rescue-frontend/data-access';
 import {
   createSharedRefresh,
+  isRefreshRefused,
   SESSION_EXPIRED,
   SESSION_HEADER,
 } from '@rescue-frontend/modules/session';
 import { encode, getToken, type JWT } from 'next-auth/jwt';
 import { cookies, headers } from 'next/headers';
-import type { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { withClientIpAsync } from './client-ip';
 
@@ -28,7 +29,7 @@ export interface BackendAuthToken extends JWT {
   tokenType?: string;
   expiresIn?: number;
   accessTokenExpiresAt?: number;
-  authError?: 'RefreshAccessTokenError';
+  authError?: 'RefreshAccessTokenError' | 'RefreshUnavailable';
 }
 
 interface RequestLike {
@@ -51,6 +52,13 @@ export interface ResolvedBackendAuth {
   token: BackendAuthToken | null;
   /** There was a session, its access token could not be refreshed, and it has been cleared. */
   refreshFailed: boolean;
+  /**
+   * There was a session and its access token is due, but `/auth/refresh` asked to wait or did not
+   * answer (`isRefreshRefused`). The session is kept as it is, and the request is not sent: as a
+   * guest or with the old access token, the backend's answer would read as a sign-out. It is
+   * answered `refreshUnavailableResponse()`, and the next request tries the refresh again.
+   */
+  refreshUnavailable: boolean;
   responseCookies: Array<{
     name: string;
     value: string;
@@ -120,12 +128,24 @@ export async function refreshBackendAuthTokenAsync(
     const refreshedTokenPair = await sharedRefresh(token.refreshToken);
 
     return applyTokenPairToBackendAuthToken(token, refreshedTokenPair);
-  } catch {
+  } catch (error) {
     return {
       ...token,
-      authError: 'RefreshAccessTokenError',
+      authError: isRefreshRefused(refreshErrorStatus(error))
+        ? 'RefreshAccessTokenError'
+        : 'RefreshUnavailable',
     };
   }
+}
+
+/** The status `/auth/refresh` answered with (`ApiError.status`); none when it never answered. */
+function refreshErrorStatus(error: unknown): number | undefined {
+  return typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    typeof error.status === 'number'
+    ? error.status
+    : undefined;
 }
 
 function shouldUseSecureCookies(requestHeaders: Headers) {
@@ -262,23 +282,39 @@ export async function resolveBackendAuthTokenAsync(
   })) as BackendAuthToken | null;
 
   if (!token) {
-    return { token: null, refreshFailed: false, responseCookies: [] };
+    return {
+      token: null,
+      refreshFailed: false,
+      refreshUnavailable: false,
+      responseCookies: [],
+    };
   }
 
   if (hasUsableAccessToken(token)) {
     return {
       token,
       refreshFailed: false,
+      refreshUnavailable: false,
       responseCookies: [],
     };
   }
 
   const refreshedToken = await refreshBackendAuthTokenAsync(token);
 
+  if (refreshedToken.authError === 'RefreshUnavailable') {
+    return {
+      token: null,
+      refreshFailed: false,
+      refreshUnavailable: true,
+      responseCookies: [],
+    };
+  }
+
   if (!hasUsableAccessToken(refreshedToken)) {
     return {
       token: null,
       refreshFailed: true,
+      refreshUnavailable: false,
       responseCookies: createClearedSessionCookies(request, secureCookies),
     };
   }
@@ -286,6 +322,7 @@ export async function resolveBackendAuthTokenAsync(
   return {
     token: refreshedToken,
     refreshFailed: false,
+    refreshUnavailable: false,
     responseCookies: await createPersistedSessionCookiesAsync(
       request,
       refreshedToken,
@@ -348,6 +385,17 @@ export function expireSessionResponse(
   return applyBackendAuthResponseCookies(
     response,
     expireBackendAuth(request, resolvedAuth),
+  );
+}
+
+/**
+ * Answers a request whose session could not be refreshed just now (`refreshUnavailable`), with the
+ * session left as it is. The site reads a 503 as a dropped connection: 「連線失敗，請…再試一次」.
+ */
+export function refreshUnavailableResponse() {
+  return NextResponse.json(
+    { detail: '暫時無法確認登入狀態，請稍後再試一次。' },
+    { status: 503 },
   );
 }
 

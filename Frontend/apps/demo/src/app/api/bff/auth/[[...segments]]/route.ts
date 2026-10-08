@@ -24,6 +24,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import {
   applyBackendAuthResponseCookies,
   expireSessionResponse,
+  refreshUnavailableResponse,
   resolveBackendAuthTokenAsync,
   type ResolvedBackendAuth,
 } from '../../../../../lib/server-backend-auth';
@@ -80,6 +81,10 @@ async function requireAccessTokenAsync(request: NextRequest) {
   const resolvedAuth = await resolveBackendAuthTokenAsync(
     toRequestLike(request),
   );
+
+  if (resolvedAuth.refreshUnavailable) {
+    return { accessToken: undefined, response: refreshUnavailableResponse() };
+  }
 
   if (!resolvedAuth.token?.accessToken) {
     const unauthorizedResponse = jsonResponse({ detail: '未登入或登入已失效' }, 401);
