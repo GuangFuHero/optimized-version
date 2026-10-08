@@ -57,7 +57,8 @@ CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
 
 # The kinds of help a need can ask for — the values `CreateTicketTaskInput.taskType` documents
 # and `chart_render` labels. Enforced only by `create_help_request`; `create_ticket_task`
-# still stores whatever it is sent.
+# still stores whatever it is sent. The site's GraphQL input lists them as `NeedKind`
+# (graphql/tickets/types.py): keep the two in step.
 TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
 # `tickets.title` and `ticket_tasks.task_name` are both String(200).
 TICKET_TITLE_MAX_LENGTH = 200

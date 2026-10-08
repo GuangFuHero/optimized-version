@@ -103,6 +103,21 @@ class TaskPropertyStatus(enum.Enum):
     fulfilled = "fulfilled"
 
 
+@strawberry.enum
+class NeedKind(enum.Enum):
+    """What a need filed from the site asks for: `TASK_TYPES` in app/services/ticket.py.
+
+    An enum on the site's input only, so an unknown value is refused before the resolver runs and
+    the SDL lists the four. `createTicketTask` keeps a String, as its service stores whatever it
+    is sent (see `TASK_TYPES`).
+    """
+
+    rescue = "rescue"
+    supply = "supply"
+    medical = "medical"
+    hr = "hr"
+
+
 @strawberry.type
 class PhotoType:
     """GraphQL type representing a photo attached to a station or ticket."""
@@ -420,7 +435,7 @@ class CreateTicketTaskInput:
 class HelpRequestTaskInput:
     """One need on a help request filed from the public site."""
 
-    task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
+    task_type: NeedKind = strawberry.field(description="What the need asks for")
     task_name: str = strawberry.field(description="What is needed, at most 200 characters")
     task_description: str | None = None
     quantity: int | None = strawberry.field(
