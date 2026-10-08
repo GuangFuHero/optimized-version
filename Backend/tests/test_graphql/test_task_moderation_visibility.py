@@ -1,10 +1,11 @@
-"""Who sees a need's moderation status.
+"""Who sees a need's moderation status, and who sets it.
 
 The back office's verdict on a need (`pending_review`, `approved`, `rejected`) is
 the requester's and the coordinators' to see, like the list of who claimed it (ADR-286): it
 follows the parent ticket's `ticket.view_history`. Every need a citizen files starts as
 `pending_review`, so shown to the public it would read as "not to be trusted yet" on all of
-them, and a rejection would tell everyone what staff decided.
+them, and a rejection would tell everyone what staff decided. Setting it takes ticket.review,
+which no citizen holds (ADR-312; the service-level rules are in tests/test_ticket_review_rights.py).
 """
 
 import pytest
@@ -73,3 +74,24 @@ async def test_a_coordinator_reads_back_the_verdict(client, redis, coordinator_a
     _, coordinator_token = coordinator_auth
 
     assert await _moderation_seen(client, ticket_uuid, coordinator_token) == "rejected"
+
+
+APPROVE = """
+mutation($uuid: UUID!) { updateTicketTask(uuid: $uuid, input: {moderationStatus: "approved"}) { uuid } }
+"""
+
+
+@pytest.mark.asyncio
+async def test_a_requester_cannot_approve_their_own_need(client, redis):
+    """Their ticket.edit `own` does not reach the back office's verdict (ADR-312)."""
+    _, task_uuid, requester_token = await _filed_need(redis)
+
+    res = await client.post(
+        "/graphql",
+        json={"query": APPROVE, "variables": {"uuid": task_uuid}},
+        headers=auth_header(requester_token),
+    )
+
+    assert any("Permission Denied." in e["message"] for e in res.json().get("errors", [])), res.json()
+    async with db_ctx() as db:
+        assert (await db.get(TicketTask, task_uuid)).moderation_status == "pending_review"

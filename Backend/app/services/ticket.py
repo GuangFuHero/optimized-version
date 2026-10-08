@@ -74,6 +74,24 @@ HELP_REQUEST_NEED_MAX = 20
 # value falls through as itself, so a new one shows up rather than vanishing.
 MODERATION_STATUS_LABELS = {"pending_review": "待審核", "approved": "已通過", "rejected": "已退回"}
 
+# What a review decides on a ticket or a need (ADR-312): the back office's to write, under
+# ticket.review, never the requester's, whose ticket.edit `own` covers the rest of what they filed.
+REVIEW_FIELDS = frozenset({"moderation_status", "review_note"})
+
+
+async def _require_edit_or_review(db: AsyncSession, actor: User, fields, resource) -> None:
+    """ticket.review for the review fields among `fields`, ticket.edit for any other (ADR-312).
+
+    A data auditor reviews without holding ticket.edit, so a change made only of review fields
+    asks for ticket.review alone; one with both kinds asks for both. No field at all asks for
+    ticket.edit, as an edit always did.
+    """
+    reviewing = REVIEW_FIELDS & set(fields)
+    if reviewing:
+        await require_scope(actor, Perm.TICKET_REVIEW, db, resource=resource)
+    if not reviewing or set(fields) - REVIEW_FIELDS:
+        await require_scope(actor, Perm.TICKET_EDIT, db, resource=resource)
+
 
 async def _task_scope_target(db: AsyncSession, task: TicketTask) -> SimpleNamespace:
     """Scope target for a ticket task (ADR-052, direction B).
@@ -338,10 +356,12 @@ async def update_ticket(
     db: AsyncSession, *, actor: User, uuid: str, changes: dict,
     secondary_location: dict | None = None,
 ) -> Tickets:
-    """Update a ticket (checkpoint 1 ticket.edit, then checkpoint 2 against the loaded ticket).
+    """Update a ticket, checked against the loaded ticket.
 
-    `changes` is the already-diffed field dict. It never carries `status`: a ticket's status
-    is worked out from its needs (`ticket_status.recompute_ticket_status`), not set by hand.
+    ticket.edit for what the requester wrote; ticket.review for `review_note`, which is the back
+    office's (ADR-312). `changes` is the already-diffed field dict. It never carries `status`: a
+    ticket's status is worked out from its needs (`ticket_status.recompute_ticket_status`), not
+    set by hand.
 
     `secondary_location` replaces the ticket's address, creating the row if the ticket was
     filed without one (ADR-268). Create-only would mean a mistyped door number stays wrong
@@ -350,7 +370,8 @@ async def update_ticket(
     ticket = await ticket_repository.get_by_uuid_active(db, uuid)
     if not ticket:
         raise ValueError("Ticket not found")
-    await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
+    fields = set(changes) | ({"secondary_location"} if secondary_location is not None else set())
+    await _require_edit_or_review(db, actor, fields, ticket)
     if secondary_location is not None:
         await _replace_secondary_location(db, str(ticket.uuid), secondary_location)
 
@@ -674,9 +695,11 @@ async def _add_need(db: AsyncSession, *, actor: User, ticket_uuid: str, need: di
 
 
 async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, changes: dict) -> TicketTask:
-    """Update a ticket task (checkpoint 1 ticket.edit, then checkpoint 2 against the task).
+    """Update a ticket task, checked against the task.
 
-    TicketTask carries no team_uuid, so only `own`/`all` scope can match it.
+    ticket.edit for what was filed; ticket.review for `moderation_status` and `review_note`, the
+    back office's verdict, which a requester's ticket.edit `own` must not reach (ADR-312). A need
+    borrows its ticket's location, so `zone` reaches it (_task_scope_target).
 
     A task's status is not editable (ADR-293): it moves only through the actions that own it —
     a claim filling it, a release reopening it, the requester stopping recruitment, a deletion —
@@ -690,7 +713,7 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     task = await ticket_task_repository.get_by_uuid_active(db, uuid)
     if not task:
         raise ValueError("Ticket task not found")
-    await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
+    await _require_edit_or_review(db, actor, changes, await _task_scope_target(db, task))
 
     old_mod = task.moderation_status
     old_dup = task.is_duplicate

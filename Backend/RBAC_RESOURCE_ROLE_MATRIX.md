@@ -104,11 +104,13 @@
 | ticket.edit | — | own | — | all | zone | zone |
 | ticket.delete | — | own | — | all | zone | own |
 | ticket.assign | — | own | — | all | zone | own |
-| ticket.review | — | — | — | all | zone | — |
+| **ticket.review** | — | — | all | all | zone | zone |
 | ticket.export | — | — | all | all | zone | — |
 | ticket.import | — | — | — | all | all | — |
 
-> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
+> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，除了審核之外全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
+
+> **審核（ADR-312）**：`ticket.review` 管「後台對單與需求的判斷」——單的 `verificationStatus`（`reviewTicket`）、單與需求的 `reviewNote`、需求的 `moderationStatus`。`updateTicket`／`updateTicketTask` 帶到這些欄位就要 `ticket.review`，其他欄位照舊要 `ticket.edit`；只改審核欄位時只要 `ticket.review`，所以沒有 `ticket.edit` 的 `data_auditor` 也能審核。一般使用者沒有 `ticket.review`，改不了自己單的審核結果。
 
 ### 使用者 User
 

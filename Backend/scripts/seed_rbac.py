@@ -94,9 +94,12 @@ ROLES_DATA = [
             Perm.TICKET_VIEW_HISTORY: "all",
             Perm.STATION_VIEW_HISTORY: "all",
             # ADR-111: oversight reads the whole platform, so its export reaches everything.
-            # No import counterpart — this role has no write path anywhere else either.
+            # No import counterpart — reviewing below is the only thing this role writes.
             Perm.STATION_EXPORT: "all",
             Perm.TICKET_EXPORT: "all",
+            # ADR-312: a data auditor reviews every ticket and need — the moderation status and
+            # review notes — without the ticket.edit that would let them rewrite what was filed.
+            Perm.TICKET_REVIEW: "all",
         },
     },
     {
@@ -217,6 +220,8 @@ ROLES_DATA = [
             Perm.TICKET_EDIT: "zone",
             Perm.TICKET_DELETE: "own",
             Perm.TICKET_ASSIGN: "own",
+            # ADR-312: field workers review the tickets and needs in their zone, as admins do.
+            Perm.TICKET_REVIEW: "zone",
             Perm.TEAM_VIEW: "team",
         },
     },

@@ -1279,6 +1279,36 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 - GraphQL 測試的角色（`tests/test_graphql/conftest.py`）補上 `ticket.view_history`，比照 seed。
 - 文件同步：`RBAC_RESOURCE_ROLE_MATRIX.md` 的 `ticket.view_pii` 列與「PII 遮罩」一段。
 
+#### ADR-312 審核單與需求只看 `ticket.review`；團隊 member 與資料檢核員也有
+> **狀態：ACCEPTED（2026-10-08）。** 產品負責人於 #61 review 時拍板：審核是後台的事，資料檢核員要能審核所有
+> 單與需求，團隊 member 也要能審核。
+
+**白話**：民眾改不了自己單的審核結果；後台的團隊 admin、member 審核自己責任區的單與需求，資料檢核員與超管審
+核全部。
+
+**Context**：單的 `verification_status` 早就拆成 `reviewTicket`、要 `ticket.review`（見上方 `review_ticket`
+那一段）。但需求的 `moderation_status`、單與需求的 `review_note` 仍走 `updateTicket`／`updateTicketTask`，只查
+`ticket.edit`。一般帳號對自己的單有 `ticket.edit` `own`，所以能把自己的需求標成 `approved`、在自己的單上寫審
+核備註。另一頭，`ticket.review` 只有 admin（zone）與 super_admin（all），team member 能審核只是因為它有
+`ticket.edit` `zone`，資料檢核員則完全不能審核。
+
+**Decision**：
+
+1. **審核欄位只看 `ticket.review`**：`updateTicket` 的 `reviewNote`、`updateTicketTask` 的 `moderationStatus`
+   與 `reviewNote`（`services/ticket.py:REVIEW_FIELDS`）。一次改動只帶審核欄位時只查 `ticket.review`；也帶其他
+   欄位時兩個都查；沒帶審核欄位時照舊只查 `ticket.edit`。scope 檢查對象不變：單看單本身，需求借單的位置
+   （ADR-052）。
+2. **seed 補授**：team `member` `ticket.review` `zone`（同 admin），`data_auditor` `ticket.review` `all`。seed 是
+   additive bootstrap（ADR-055），既有資料庫重跑 seed 就會補上，不需要資料 migration。`user` 不授。
+3. `data_auditor` 從此有一個寫入能力：審核。它仍沒有 `ticket.edit`，改不了單與需求的內容。
+
+**後果**：
+
+- ➕ 審核結果只有後台改得了，`reviewNote` 也一樣。
+- ➕ 資料檢核員能審核所有單與需求，team member 審核自己責任區的。
+- ➖ `tests/test_seed_rbac.py` 對 `data_auditor` 的「oversight only、沒有任何寫入」說明改為「除了審核」。
+- ➖ 前台若曾讓建單者寫 `reviewNote`，現在會被拒（目前前台沒有這種畫面）。
+
 ---
 
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）

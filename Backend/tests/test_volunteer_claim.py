@@ -883,12 +883,32 @@ async def test_an_edit_cannot_move_a_needs_status(db):
     assert (await _state(db, task_uuid))[0] == "pending"
 
 
+async def _reviewer(db) -> User:
+    """Act with ticket.review `all`, as the seed gives a data auditor (ADR-312)."""
+    user = User(name="資料檢核員")
+    role = Role(name=f"reviewer-{uuidlib.uuid4().hex[:8]}", kind="platform")
+    db.add_all([user, role])
+    await db.flush()
+    permission = (
+        await db.execute(select(Permission).where(Permission.key == Perm.TICKET_REVIEW.value))
+    ).scalar_one_or_none()
+    if permission is None:
+        permission = Permission(key=Perm.TICKET_REVIEW.value)
+        db.add(permission)
+        await db.flush()
+    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
+    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
+    await db.flush()
+    return acting_as(user, role)
+
+
 @pytest.mark.asyncio
 async def test_moderation_changes_name_the_outcome_in_chinese(db):
     """「已通過」, not 【approved】 — same words the site uses (待審核／已通過／已退回)."""
-    task_uuid, volunteer_uuid, requester = await _claimed_by_one(db)
+    task_uuid, volunteer_uuid, _ = await _claimed_by_one(db)
+    reviewer = await _reviewer(db)
 
-    await update_ticket_task(db, actor=requester, uuid=task_uuid, changes={"moderation_status": "approved"})
+    await update_ticket_task(db, actor=reviewer, uuid=task_uuid, changes={"moderation_status": "approved"})
 
     [notice] = await _notices(db, volunteer_uuid, "ticket_task_moderation_update")
     assert notice.body == "工單任務「清淤」審核狀態已變更為【已通過】。"
