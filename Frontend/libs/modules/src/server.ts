@@ -12,6 +12,7 @@ export {
   type ResolvedBackendAuth,
   getBackendGraphqlUrl,
   getServerBackendAccessTokenAsync,
+  refreshUnavailableResponse,
   resolveBackendAuthTokenAsync,
 } from './server/server-backend-auth';
 
