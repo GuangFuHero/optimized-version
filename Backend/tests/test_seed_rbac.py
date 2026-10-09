@@ -63,9 +63,9 @@ async def test_ensure_role_grant_never_overwrites_existing(db_session):
 
 # --- ADR-097: every actionable identity must stand on its own -----------------------------
 
-# Oversight by design: `data_auditor` writes nothing but reviews (ticket.review, ADR-312), so it
-# is a documented exception rather than a gap. Recorded here so the exception has to be renewed
-# deliberately if the role ever changes.
+# `data_auditor` is an oversight role with no citizen capabilities — its only writes are reviews
+# (ADR-300, ADR-312) — so it is a deliberate exception rather than a gap. Listing it here means
+# any change to that has to be made on purpose.
 _OVERSIGHT_ONLY_ROLES = {"data_auditor"}
 
 # The other way round: capabilities that only make sense for someone with no back-office

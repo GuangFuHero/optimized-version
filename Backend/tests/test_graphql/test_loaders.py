@@ -15,6 +15,7 @@ from app.models.geo import Station
 from app.models.photo import Photo
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
+from app.models.station_property import StationProperty, StationUpdateSuggestion
 from app.models.team import Team, TeamZoneAssign, WorkZone
 from tests.conftest import token_for
 from tests.test_graphql.conftest import auth_header
@@ -127,6 +128,48 @@ async def test_stations_photos_uses_single_batched_query(client, coordinator_aut
     assert sum(len(it["photos"]) for it in items) >= 6
     assert counter.count == 1, (
         f"expected 1 SELECT against photos, got {counter.count} (N+1 regression)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_pending_suggested_fields_use_single_batched_query(client, coordinator_auth):
+    """Pending field names across N stations and their properties cost one SELECT."""
+    user_uuid, _ = coordinator_auth
+
+    async with _test_db_ctx() as db:
+        for i in range(3):
+            station = Station(
+                geometry=from_shape(Point(121.7 + i * 0.001, 25.0), srid=4326), created_by=user_uuid
+            )
+            db.add(station)
+            await db.flush()
+            prop = StationProperty(
+                station_uuid=station.uuid, property_type="supply", property_name="water",
+                quantity=1, created_by=user_uuid,
+            )
+            db.add(prop)
+            await db.flush()
+            targets = (("station", station.uuid, "name"), ("station_property", prop.uuid, "quantity"))
+            for target_type, target, field in targets:
+                db.add(StationUpdateSuggestion(
+                    target_type=target_type, target_uuid=str(target), field_name=field,
+                    new_value="1", status="pending", created_by=user_uuid,
+                ))
+        await db.flush()
+
+    with _SelectCounter("station_update_suggestions") as counter:
+        resp = await client.post("/graphql", json={
+            "query": "query { stations(hasPendingSuggestions: true, limit: 500) "
+                     "{ items { pendingSuggestedFields properties { pendingSuggestedFields } } } }"
+        })
+
+    body = resp.json()
+    assert "errors" not in body, body
+    items = body["data"]["stations"]["items"]
+    assert sum(1 for it in items if it["pendingSuggestedFields"] == ["name"]) >= 3
+    # The queue filter's EXISTS rides in the count and list queries; the loader adds one more.
+    assert counter.count == 3, (
+        f"expected 3 statements naming station_update_suggestions, got {counter.count} (N+1 regression)"
     )
 
 

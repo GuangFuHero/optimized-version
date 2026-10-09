@@ -42,7 +42,7 @@
 |---|---|---|
 | **Guest** | （匿名，非 DB 角色） | `PUBLIC_PERMS` 白名單內的唯讀瀏覽 |
 | **user** | platform | 預設民眾：可瀏覽、可建立，只能動自己建的 |
-| **data_auditor** | platform | 稽核：全平台唯讀（含 PII、audit log），無 edit/make/review |
+| **data_auditor** | platform | 稽核：全平台可讀（含 PII、audit log）；寫入只有審核——站點修改建議（ADR-300）、單與需求（ADR-312）；無 edit/make |
 | **super_admin** | platform | 全能 |
 | **admin** | team | 團隊協調者：責任區內的通報單、指派給本隊的站點全操作 + 管團隊成員 + 畫/指派 zone + 指派站點（後兩者僅 gov） |
 | **member** | team | 團隊現場人員：責任區內的通報單、本隊的站點可編輯，無團隊管理、無 zone、無站點指派 |
@@ -71,7 +71,8 @@
 | station.contribute | — | all | — | all | all | all |
 | station.edit | — | own | — | all | team | team |
 | station.delete | — | own | — | all | team | own |
-| station.review | — | — | — | all | team | — |
+| station.review | — | — | all | all | team | — |
+| station.revoke | — | — | all | all | — | — |
 | **station.assign** | — | — | — | all | all（僅 gov） | all（僅 gov） |
 | station.export | — | — | all | all | team | — |
 | station.import | — | — | — | all | all | — |
