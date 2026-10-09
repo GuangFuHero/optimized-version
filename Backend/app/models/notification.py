@@ -31,7 +31,7 @@ class Notification(Base, UUIDPKMixin, TimestampMixin):
     type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        comment="通知類型 enum: zone_assigned, ticket_task_status_update...",
+        comment="通知類型；可能的值列在 Spec/Docs/er-diagram.md 的 notifications",
     )
     priority: Mapped[str] = mapped_column(
         String(20),
