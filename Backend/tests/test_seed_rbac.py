@@ -63,9 +63,9 @@ async def test_ensure_role_grant_never_overwrites_existing(db_session):
 
 # --- ADR-097: every actionable identity must stand on its own -----------------------------
 
-# Oversight-only by design: `data_auditor` holds no write capabilities at all, so it is a
-# documented exception rather than a gap. Recorded here so the exception has to be renewed
-# deliberately if the role ever changes.
+# `data_auditor` is an oversight role with no citizen capabilities — its only writes are reviews
+# (ADR-300, ADR-312) — so it is a deliberate exception rather than a gap. Listing it here means
+# any change to that has to be made on purpose.
 _OVERSIGHT_ONLY_ROLES = {"data_auditor"}
 
 # The other way round: capabilities that only make sense for someone with no back-office
@@ -188,4 +188,15 @@ def test_who_claimed_a_need_stays_with_the_requester_and_coordinators():
     scopes = {spec["name"]: spec["permissions"].get(Perm.TICKET_VIEW_HISTORY) for spec in ROLES_DATA}
     assert scopes == {
         "user": "own", "data_auditor": "all", "super_admin": "all", "admin": "zone", "member": "zone",
+    }
+
+
+def test_reviewing_tickets_and_needs_is_the_back_offices():
+    """ADR-312: a citizen cannot review even their own; members review their zone, auditors all."""
+    from app.core.permissions import Perm
+    from scripts.seed_rbac import ROLES_DATA
+
+    scopes = {spec["name"]: spec["permissions"].get(Perm.TICKET_REVIEW) for spec in ROLES_DATA}
+    assert scopes == {
+        "user": None, "data_auditor": "all", "super_admin": "all", "admin": "zone", "member": "zone",
     }

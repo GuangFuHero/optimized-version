@@ -55,6 +55,10 @@ AUDITED_TABLES = [
     # Feature 019: who asked to become back-office staff, and who decided. Approving one hands
     # out a role, so it gets the same trail as the role grants it produces.
     "role_requests",
+    # Crowd-sourced station suggestions and the merges that apply them, so every submit,
+    # review and revoke leaves a trail. Rows written before these triggers have none.
+    "station_update_suggestions",
+    "station_suggestion_merges",
 ]
 
 # PL/pgSQL function that serializes row mutations into JSONB, redacting password_hash

@@ -47,7 +47,7 @@ def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resourc
     return decided[key]
 
 
-def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str):
+def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str, resource=None):
     """Whether the caller holds ticket.view_history on this ticket, decided once per request.
 
     Gates a task's `assignments`, which name the accounts of the volunteers going: the
@@ -55,13 +55,15 @@ def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str):
     opened contact details to anyone signed in; with the requester's name and `createdBy` both
     open, an open claimant list would let anyone follow a volunteer from need to need. So they
     follow the timeline instead, which kept view_pii's old tiering — and already names who
-    took and who dropped a task (ADR-143).
+    took and who dropped a task (ADR-143). It also gates a need's moderation status and the
+    contact details in the `tickets` list (ADR-286 points 5 and 6). `resource` spares the loader
+    as in ticket_detail_visible.
     """
     decided = info.context["_ticket_history_visible"]
     key = str(ticket_uuid)
     if key not in decided:
         decided[key] = asyncio.ensure_future(
-            _decide_ticket_scope(info, Perm.TICKET_VIEW_HISTORY, key, None)
+            _decide_ticket_scope(info, Perm.TICKET_VIEW_HISTORY, key, resource)
         )
     return decided[key]
 
@@ -101,6 +103,21 @@ class TaskPropertyStatus(enum.Enum):
 
     pending = "pending"
     fulfilled = "fulfilled"
+
+
+@strawberry.enum
+class NeedKind(enum.Enum):
+    """What a need filed from the site asks for: `TASK_TYPES` in app/services/ticket.py.
+
+    An enum on the site's input only, so an unknown value is refused before the resolver runs and
+    the SDL lists the four. `createTicketTask` keeps a String, as its service stores whatever it
+    is sent (see `TASK_TYPES`).
+    """
+
+    rescue = "rescue"
+    supply = "supply"
+    medical = "medical"
+    hr = "hr"
 
 
 @strawberry.type
@@ -229,7 +246,11 @@ class TicketTaskType:
     task_type: str = strawberry.field(description="Category of task: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str = strawberry.field(description="Short name summarising the task")
     quantity: int | None = strawberry.field(
-        default=None, description="Number of people or units needed — null means unspecified"
+        default=None,
+        description=(
+            "Number of people or units needed. Null means unspecified and uncapped: a rescue need "
+            "may leave it out, and needs filed before every other kind had to give one"
+        ),
     )
     status: str = strawberry.field(
         default="pending",
@@ -242,10 +263,6 @@ class TicketTaskType:
     source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
     visibility: str = strawberry.field(
         default="public", description="Who can see this task: 'public', 'restricted', or 'internal'"
-    )
-    moderation_status: str = strawberry.field(
-        default="pending_review",
-        description="Review state: 'pending_review', 'approved', or 'rejected'",
     )
     recruiting_stopped_at: datetime | None = strawberry.field(
         default=None,
@@ -266,6 +283,7 @@ class TicketTaskType:
     _progress_note_raw: strawberry.Private[str | None] = None
     _review_note_raw: strawberry.Private[str | None] = None
     _created_by_raw: strawberry.Private[str | None] = None
+    _moderation_status_raw: strawberry.Private[str] = "pending_review"
 
     def _detail_visible(self, info: strawberry.types.Info):
         return ticket_detail_visible(info, self.ticket_uuid)
@@ -309,6 +327,22 @@ class TicketTaskType:
     async def created_by(self, info: strawberry.types.Info) -> str | None:
         """Return the author's uuid, or null when the caller is out of detail scope."""
         return self._created_by_raw if await self._detail_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "Review state: 'pending_review', 'approved', or 'rejected'. Null to a caller without "
+            "ticket.view_history on the parent ticket"
+        )
+    )
+    async def moderation_status(self, info: strawberry.types.Info) -> str | None:
+        """The back office's verdict on the need: the requester's and the coordinators' to see.
+
+        Every need a citizen files starts as pending_review, so shown to everyone it reads as
+        "not to be trusted yet", and a rejection tells the public what staff decided. The
+        timeline keeps it in its audit layer; here it follows ticket.view_history, as the claimant
+        list does, so whoever can review the need can still read it back.
+        """
+        return self._moderation_status_raw if await ticket_history_visible(info, self.ticket_uuid) else None
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list[TaskPropertyType]:
@@ -373,7 +407,6 @@ class TicketTaskType:
             status=m.status,
             source=m.source,
             visibility=m.visibility,
-            moderation_status=m.moderation_status,
             recruiting_stopped_at=m.recruiting_stopped_at,
             created_at=m.created_at,
             updated_at=m.updated_at,
@@ -381,6 +414,7 @@ class TicketTaskType:
             _progress_note_raw=m.progress_note,
             _review_note_raw=m.review_note,
             _created_by_raw=m.created_by,
+            _moderation_status_raw=m.moderation_status,
         )
 
 
@@ -392,7 +426,12 @@ class CreateTicketTaskInput:
     task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str
     task_description: str | None = None
-    quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
+    quantity: int | None = strawberry.field(
+        default=None,
+        description=(
+            "People or units needed, at least 1; required except for a 'rescue' task, which may omit it"
+        ),
+    )
     source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
     visibility: Visibility = strawberry.field(
         default=Visibility.public,
@@ -407,11 +446,14 @@ class CreateTicketTaskInput:
 class HelpRequestTaskInput:
     """One need on a help request filed from the public site."""
 
-    task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
+    task_type: NeedKind = strawberry.field(description="What the need asks for")
     task_name: str = strawberry.field(description="What is needed, at most 200 characters")
     task_description: str | None = None
     quantity: int | None = strawberry.field(
-        default=None, description="People or units needed, at least 1; omit when not known"
+        default=None,
+        description=(
+            "People or units needed, at least 1; required except for a 'rescue' need, which may omit it"
+        ),
     )
 
 
@@ -432,7 +474,7 @@ class CreateHelpRequestInput:
         default=None,
         description="The address as typed goes in `landmarkNote`, with `floor` and `room`",
     )
-    tasks: list[HelpRequestTaskInput] = strawberry.field(description="At least one need")
+    tasks: list[HelpRequestTaskInput] = strawberry.field(description="At least one need, at most 20")
     photo_urls: list[str] | None = strawberry.field(
         default=None,
         description=(
@@ -554,6 +596,9 @@ class TicketType:
     _immediate_danger_reported_raw: strawberry.Private[str | None] = None
     _geometry_raw: strawberry.Private[object | None] = None
     _pii_visible_task: strawberry.Private[object | None] = None
+    # Built by the `tickets` list: the contact fields then also need ticket.view_history (ADR-286
+    # point 6), so page after page of rows is not everyone's phone book.
+    _listed: strawberry.Private[bool] = False
     # Backing the ticket.view_detail resolvers (ADR-281). `_created_by_raw` also feeds both
     # scope checks — `own` is decided on it whether or not the caller may read it.
     _geometry_geojson: strawberry.Private[dict | None] = None
@@ -666,6 +711,10 @@ class TicketType:
         Neither raises — a denial renders as a *masked* contact field, not a GraphQL
         field-level error. Per-role scope: guest → not visible (no capability); own → own
         ticket; zone → ticket's location inside my team's WorkZone; all → everything.
+
+        A row of the `tickets` list also needs ticket.view_history on it (ADR-286 point 6):
+        anyone signed in still reads the contact on the ticket they open, while the list shows it
+        only to the requester and the coordinators.
         """
         user = info.context["user"]
         if user is None:
@@ -675,26 +724,44 @@ class TicketType:
         )
         if scope == Scope.NONE:
             return False
-        if scope == Scope.ALL:
-            return True
         resource = SimpleNamespace(created_by=self._created_by_raw, geometry=self._geometry_raw)
-        return await in_scope(scope, actor=user, resource=resource, db=info.context["db"])
+        db = info.context["db"]
+        if scope != Scope.ALL and not await in_scope(scope, actor=user, resource=resource, db=db):
+            return False
+        if self._listed:
+            return await ticket_history_visible(info, str(self.uuid), resource)
+        return True
 
-    @strawberry.field(description="Requester full name — masked unless the caller holds ticket.view_pii here")
+    @strawberry.field(
+        description=(
+            "Requester full name — masked unless the caller holds ticket.view_pii here, and in "
+            "the `tickets` list ticket.view_history too"
+        )
+    )
     async def contact_name(self, info: strawberry.types.Info) -> str | None:
         """Return the contact name raw if in scope, otherwise masked (王◯◯ / John S.)."""
         if await self._pii_visible(info):
             return self._contact_name_raw
         return mask_name(self._contact_name_raw)
 
-    @strawberry.field(description="Follow-up email — masked unless the caller holds ticket.view_pii here")
+    @strawberry.field(
+        description=(
+            "Follow-up email — masked unless the caller holds ticket.view_pii here, and in the "
+            "`tickets` list ticket.view_history too"
+        )
+    )
     async def contact_email(self, info: strawberry.types.Info) -> str | None:
         """Return the contact email raw if in scope, otherwise masked (j***@***.com)."""
         if await self._pii_visible(info):
             return self._contact_email_raw
         return mask_email(self._contact_email_raw)
 
-    @strawberry.field(description="Follow-up phone — masked unless the caller holds ticket.view_pii here")
+    @strawberry.field(
+        description=(
+            "Follow-up phone — masked unless the caller holds ticket.view_pii here, and in the "
+            "`tickets` list ticket.view_history too"
+        )
+    )
     async def contact_phone(self, info: strawberry.types.Info) -> str | None:
         """Return the contact phone raw if in scope, otherwise masked (09*****678)."""
         if await self._pii_visible(info):
@@ -704,8 +771,8 @@ class TicketType:
     @strawberry.field(
         description=(
             "Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody "
-            "was asked — and also null to a caller without ticket.view_pii here. What the "
-            "person said, not a professional assessment"
+            "was asked — and also null to a caller without ticket.view_pii here (in the `tickets` "
+            "list, ticket.view_history too). What the person said, not a professional assessment"
         )
     )
     async def person_trapped_reported(self, info: strawberry.types.Info) -> str | None:
@@ -721,8 +788,8 @@ class TicketType:
     @strawberry.field(
         description=(
             "Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was "
-            "asked — and also null to a caller without ticket.view_pii here. Not a triage "
-            "grade and not a risk classification"
+            "asked — and also null to a caller without ticket.view_pii here (in the `tickets` "
+            "list, ticket.view_history too). Not a triage grade and not a risk classification"
         )
     )
     async def immediate_danger_reported(self, info: strawberry.types.Info) -> str | None:
@@ -787,12 +854,13 @@ class TicketType:
 
     @classmethod
     def from_model(
-        cls, m, *, coarse_resolution: int = COARSE_MAX_H3_RESOLUTION
+        cls, m, *, coarse_resolution: int = COARSE_MAX_H3_RESOLUTION, listed: bool = False
     ) -> "TicketType":
         """Build from a SQLAlchemy model instance.
 
         `coarse_resolution` is how coarse `geometry` is for a caller without detail — the
-        read queries pass their `zoom`-derived value; everything else gets the cap.
+        read queries pass their `zoom`-derived value; everything else gets the cap. `listed`
+        marks a row of the `tickets` list, whose contact fields take ticket.view_history too.
         """
         return cls(
             uuid=m.uuid,
@@ -817,6 +885,7 @@ class TicketType:
             _review_note_raw=m.review_note,
             _created_by_raw=m.created_by,
             _coarse_resolution=coarse_resolution,
+            _listed=listed,
         )
 
 

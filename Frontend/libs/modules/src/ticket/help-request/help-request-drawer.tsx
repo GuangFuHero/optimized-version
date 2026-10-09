@@ -12,7 +12,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import { Badge, designTokens, displayTextSize } from '@rescue-frontend/ui';
 
@@ -26,10 +26,13 @@ import {
   writeHelpRequestDraft,
 } from './help-request-draft';
 import {
+  canAddNeedRow,
   emptyHelpRequestForm,
   emptyNeed,
   findMissingFields,
   hasRescueNeed,
+  isQuantityMissing,
+  MAX_NEEDS,
   type HelpRequestForm,
   type PickedPoint,
 } from './help-request-form';
@@ -152,16 +155,22 @@ function GuestHelpRequestDrawer({
   );
 }
 
-/** A label above a control that is not a text field, with the same red mark for required. */
+/**
+ * A label above a control, with the same red mark for required: one that is not a text field, or
+ * one whose label is too long to float on its outline (named by `id` through `aria-labelledby`).
+ */
 function FieldLabel({
   children,
   required = false,
+  id,
 }: {
   children: ReactNode;
   required?: boolean;
+  id?: string;
 }) {
   return (
     <Typography
+      id={id}
       sx={{
         color: color.fg.neutral.default,
         fontSize: displayTextSize[14],
@@ -217,6 +226,7 @@ function HelpRequestFormDrawer({
   const [form, setForm] = useState<HelpRequestForm>(
     () => draft ?? emptyHelpRequestForm(seed),
   );
+  const notesLabelId = useId();
   const [restored, setRestored] = useState(draft !== null);
   // 清空重填 remounts the fields too: the small map looks for the device again, and what was typed
   // into the photo box goes.
@@ -484,30 +494,39 @@ function HelpRequestFormDrawer({
           {isMissing('needs') ? (
             <FieldNote error>請至少選一項你需要的幫忙</FieldNote>
           ) : null}
-          {form.needs.map((row, index) => (
-            <NeedDraftRow
-              // A row has no id of its own; removing one re-keys those after it, which only
-              // remounts their two text boxes.
-              key={index}
-              row={row}
-              index={index}
-              showIndex={form.needs.length > 1}
-              canRemove={form.needs.length > 1}
-              invalid={isMissing('needs') && !row.need}
-              onChange={(next) =>
-                set('needs')(
-                  form.needs.map((current, at) =>
-                    at === index ? next : current,
-                  ),
-                )
-              }
-              onRemove={() =>
-                set('needs')(form.needs.filter((_, at) => at !== index))
-              }
-            />
-          ))}
-          {/* Offered only once the last one has its kind: not a blank second row up front. */}
-          {lastNeed?.need ? (
+          <Stack data-field="quantity" spacing={1.5}>
+            {form.needs.map((row, index) => (
+              <NeedDraftRow
+                // A row has no id of its own; removing one re-keys those after it, which only
+                // remounts their two text boxes.
+                key={index}
+                row={row}
+                index={index}
+                showIndex={form.needs.length > 1}
+                canRemove={form.needs.length > 1}
+                invalid={isMissing('needs') && !row.need}
+                quantityMissing={
+                  isMissing('quantity') && isQuantityMissing(row)
+                }
+                onChange={(next) =>
+                  set('needs')(
+                    form.needs.map((current, at) =>
+                      at === index ? next : current,
+                    ),
+                  )
+                }
+                onRemove={() =>
+                  set('needs')(form.needs.filter((_, at) => at !== index))
+                }
+              />
+            ))}
+          </Stack>
+          {/* Offered only once the last one has its kind: not a blank second row up front. At the
+              most one request files, said instead — 「再加一件」 on the ticket takes the rest. */}
+          {lastNeed?.need && !canAddNeedRow(form.needs) ? (
+            <FieldNote>一次最多 {MAX_NEEDS} 項，送出後可以在單上再加</FieldNote>
+          ) : null}
+          {lastNeed?.need && canAddNeedRow(form.needs) ? (
             <ButtonBase
               onClick={() => set('needs')([...form.needs, emptyNeed()])}
               sx={{
@@ -528,15 +547,23 @@ function HelpRequestFormDrawer({
 
         {/* After the needs, and about the place and the person — not a box to pour everything
             into before learning it was to be split up (designer, 2026-09-11). */}
-        <TextField
-          label="還有什麼要讓志工知道的？（選填）"
-          fullWidth
-          multiline
-          minRows={2}
-          value={form.description}
-          onChange={(event) => set('description')(event.target.value)}
-          placeholder="例：巷子窄，小貨車進不來。阿嬤一個人住，早上九點到下午三點都在家。"
-        />
+        {/* Its label above, as in the prototype, not floating on the outline: that long a label
+            once showed with the outline running through it as the field took focus (2026-10-03). */}
+        <Stack spacing={1}>
+          <FieldLabel id={notesLabelId}>
+            還有什麼要讓志工知道的？（選填）
+          </FieldLabel>
+          <TextField
+            fullWidth
+            multiline
+            minRows={2}
+            size="small"
+            value={form.description}
+            onChange={(event) => set('description')(event.target.value)}
+            placeholder="例：巷子窄，小貨車進不來。阿嬤一個人住，早上九點到下午三點都在家。"
+            slotProps={{ htmlInput: { 'aria-labelledby': notesLabelId } }}
+          />
+        </Stack>
 
         {/* Last, after the notes and for the same reason: extra, not the frame. First, and someone
             with no photo yet stops here before saying what they need (prototype

@@ -2,7 +2,8 @@
  * 請求協助 as it is being filled in, kept in this tab for the person filling it: the
  * form is long, and is lost whole when the site reloads as a guest on a sign-in that ran out, or
  * when a sign-out in another tab turns the drawer into the guest one. Keyed by the account, so
- * someone else signing in to the same tab does not see it. Gone when it is sent, or on 取消.
+ * someone else signing in to the same tab does not see it. Gone when it is sent, on 取消, or on
+ * 登出 in this tab.
  */
 
 import {
@@ -18,8 +19,10 @@ export type DraftStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 /** Raised when the form's shape changes, so a draft of the old shape is read as none. */
 const DRAFT_VERSION = 1;
 
+const DRAFT_KEY_PREFIX = 'wg:help-request-draft:';
+
 export function helpRequestDraftKey(userId: string): string {
-  return `wg:help-request-draft:${userId}`;
+  return `${DRAFT_KEY_PREFIX}${userId}`;
 }
 
 /** Null where the browser will not hand it over (storage turned off); reading it can throw. */
@@ -141,6 +144,38 @@ export function clearHelpRequestDraft(
 ): void {
   try {
     storage?.removeItem(helpRequestDraftKey(userId));
+  } catch {
+    // Nothing kept that could be taken away.
+  }
+}
+
+/**
+ * Every draft in the tab, whoever's: on a sign-out the person chose, maybe on a shared device, none
+ * is left for the next person — not this account's, nor one kept for an account whose sign-in ran
+ * out here earlier.
+ */
+export function clearAllHelpRequestDrafts(
+  storage: Pick<Storage, 'length' | 'key' | 'removeItem'> | null,
+): void {
+  try {
+    if (!storage) {
+      return;
+    }
+
+    // Collected first: removing while walking the keys would shift the ones after it.
+    const keys: string[] = [];
+
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
+
+      if (key?.startsWith(DRAFT_KEY_PREFIX)) {
+        keys.push(key);
+      }
+    }
+
+    for (const key of keys) {
+      storage.removeItem(key);
+    }
   } catch {
     // Nothing kept that could be taken away.
   }

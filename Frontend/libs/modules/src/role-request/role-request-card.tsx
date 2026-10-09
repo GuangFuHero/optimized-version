@@ -21,7 +21,9 @@ const STATUS_META: Record<string, { label: string; tone: BadgeTone }> = {
   rejected: { label: '未通過', tone: 'neutral' },
 };
 
+// Taiwan time whatever the device's zone, as 我承接的 and 我建立的 show theirs (`formatTaiwanTime`).
 const submittedAt = new Intl.DateTimeFormat('zh-TW', {
+  timeZone: 'Asia/Taipei',
   year: 'numeric',
   month: 'numeric',
   day: 'numeric',

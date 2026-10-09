@@ -24,6 +24,8 @@ interface NeedDraftRowProps {
   canRemove: boolean;
   /** No kind chosen after a try to send: the card itself turns red, there being no box to mark. */
   invalid: boolean;
+  /** A kind but a rescue chosen and no quantity, after a try to send (`isQuantityMissing`). */
+  quantityMissing: boolean;
   onChange: (next: NeedDraft) => void;
   onRemove: () => void;
 }
@@ -45,11 +47,15 @@ export function NeedDraftRow({
   showIndex,
   canRemove,
   invalid,
+  quantityMissing,
   onChange,
   onRemove,
 }: NeedDraftRowProps) {
   const option = getNeedOption(row.need);
   const ordinal = `第 ${index + 1} 件`;
+  // Nobody knows yet how many are trapped; every other kind is counted (backend
+  // `QUANTITY_REQUIRED_TASK_TYPES`).
+  const quantityOptional = option?.kind === 'rescue';
 
   return (
     <Box
@@ -180,17 +186,22 @@ export function NeedDraftRow({
               }
               // 「幾個／幾人」 does not fit the narrow column; the label still says what is meant.
               placeholder="數量"
+              error={quantityMissing}
+              helperText={quantityMissing ? '還沒填數量' : undefined}
               slotProps={{
                 htmlInput: {
                   min: 1,
                   inputMode: 'numeric',
-                  'aria-label': `${ordinal}需要幾個／幾人（選填）`,
+                  'aria-required': !quantityOptional,
+                  'aria-label': `${ordinal}需要幾個／幾人${quantityOptional ? '（選填）' : ''}`,
                 },
               }}
             />
           </Box>
           <Typography sx={{ ...hintSx, color: color.fg.neutral.muted }}>
-            說明留空就用「{option.label}」；數量不知道就留空，志工到現場再回報。
+            {quantityOptional
+              ? `說明留空就用「${option.label}」；人數不知道就留空，志工到現場再回報。`
+              : `說明留空就用「${option.label}」。`}
           </Typography>
         </>
       ) : (

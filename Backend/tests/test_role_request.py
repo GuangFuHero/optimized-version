@@ -18,6 +18,7 @@ from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.notification import Notification
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+from app.models.role_request import RoleRequest
 from app.models.team import Team
 from app.services import role_request
 from app.services.authz import refresh_actor
@@ -545,6 +546,61 @@ async def test_a_government_or_ngo_application_cannot_be_approved_yet(db, reques
     [still] = (await _state(db, citizen)).requests
     assert still.status == "pending"
     assert await _platform_roles(db, citizen_uuid) == ["user"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("meanwhile", ["super admin", "team member"])
+async def test_an_applicant_given_another_backoffice_identity_meanwhile_is_not_approved(db, meanwhile):
+    """Granting now would leave a third platform role (ADR-294) or a team identity beside it.
+
+    Neither could have applied (AC-RE-101), so the back office answers 409 and the application
+    stays pending for the reviewer to reject.
+    """
+    reviewer = await _reviewer(db)
+    await _role(db, "data_auditor", {})
+    citizen = await _citizen(db)
+    citizen_uuid = citizen.uuid
+    request = await _submit(db, citizen)
+    request_uuid = request.uuid
+    if meanwhile == "super admin":
+        super_admin = await _role(db, "super_admin", {})
+        db.add(UserRoleAssign(user_uuid=citizen_uuid, role_uuid=super_admin.uuid))
+        expected_roles = ["super_admin", "user"]
+    else:
+        team = Team(name="慈濟", type="ngo")
+        db.add(team)
+        await db.flush()  # assigns the team's uuid
+        member = await _role(db, "member", {}, kind="team")
+        db.add(UserRoleAssign(user_uuid=citizen_uuid, role_uuid=member.uuid, team_uuid=team.uuid))
+        expected_roles = ["user"]
+    await db.commit()
+
+    with pytest.raises(role_request.RoleRequestConflictError, match="another back-office identity"):
+        await _approve(db, reviewer, request_uuid)
+    [still] = (await _state(db, citizen)).requests
+    assert still.status == "pending"
+    assert await _platform_roles(db, citizen_uuid) == expected_roles
+
+
+@pytest.mark.asyncio
+async def test_an_applicant_already_made_a_data_auditor_is_approved_without_a_second_grant(db):
+    """ADR-288: an admin may have granted the role another way meanwhile; approval just closes it."""
+    reviewer = await _reviewer(db)
+    auditor_role = await _role(db, "data_auditor", {})
+    citizen = await _citizen(db)
+    citizen_uuid = citizen.uuid
+    db.add(UserRoleAssign(user_uuid=citizen_uuid, role_uuid=auditor_role.uuid))
+    await db.flush()
+    request = RoleRequest(requested_role="data_auditor", reason=REASON, created_by=citizen_uuid)
+    db.add(request)
+    await db.flush()
+    request_uuid = request.uuid
+    await db.commit()
+
+    approved = await _approve(db, reviewer, request_uuid)
+
+    assert approved.status == "approved"
+    assert await _platform_roles(db, citizen_uuid) == ["data_auditor", "user"]
 
 
 @pytest.mark.asyncio

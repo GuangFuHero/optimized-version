@@ -43,6 +43,10 @@ _ZOOM_DESCRIPTION = (
     "finer than resolution 8 whatever is sent"
 )
 
+# The most rows one `tickets` page may ask for: the site's map asks for 200 at a time
+# (use-site-map-live-data.ts). Without a ceiling one request could fetch every ticket at once.
+TICKET_LIST_MAX_LIMIT = 200
+
 
 async def _detail_filters(info: strawberry.types.Info) -> list:
     """`scope_filter` of the caller's ticket.view_detail — [] for all rows, [false()] for none.
@@ -99,7 +103,13 @@ class RequestQuery:
         Without ticket.view_detail, `bounds` matches a row by the cell centre the caller is
         shown and `q` by its title and task names only (ADR-281/282) — each row on what
         this caller can read of it, so neither filter recovers what the fields withhold.
+
+        At most TICKET_LIST_MAX_LIMIT rows a page, and a row's contact fields take
+        ticket.view_history besides ticket.view_pii (ADR-286 point 6): the list is not a
+        phone book, while the ticket a volunteer opens (`ticket`) still shows whom to call.
         """
+        if limit > TICKET_LIST_MAX_LIMIT:
+            raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Tickets)
@@ -121,7 +131,7 @@ class RequestQuery:
                 coarse_resolution=resolution,
             )
         return TicketConnection(
-            items=[TicketType.from_model(m, coarse_resolution=resolution) for m in items],
+            items=[TicketType.from_model(m, coarse_resolution=resolution, listed=True) for m in items],
             page_info=PageInfo(
                 total_count=total,
                 has_next_page=(skip + limit) < total,

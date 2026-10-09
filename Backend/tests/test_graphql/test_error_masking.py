@@ -41,9 +41,9 @@ mutation($input: CreateStationSuggestionInput!) {
 }
 """
 
-REVIEW_SUGGESTION = """
-mutation($uuid: UUID!, $approve: Boolean!) {
-    reviewStationSuggestion(uuid: $uuid, approve: $approve) { uuid status }
+MERGE_SUGGESTIONS = """
+mutation($station: UUID!, $decisions: [SuggestionDecisionInput!]!) {
+    mergeStationSuggestions(stationUuid: $station, decisions: $decisions) { uuid status }
 }
 """
 
@@ -101,11 +101,11 @@ async def test_update_station_over_long_type_is_masked(client, coordinator_auth)
 
 
 @pytest.mark.asyncio
-async def test_review_suggestion_over_long_value_is_masked(client, coordinator_auth):
+async def test_merge_suggestion_over_long_value_is_masked(client, coordinator_auth):
     """The indirect path, and the reason per-field validation is the wrong shape here.
 
     `station_update_suggestions.new_value` is an unbounded String, so an over-long value
-    stores fine and only hits the narrow `stations.type` when a reviewer approves it. Nothing
+    stores fine and only hits the narrow `stations.type` when a reviewer merges it. Nothing
     at the suggestion's own entry point could have caught this, and the statement leaked to
     the moderator rather than to the submitter.
     """
@@ -116,9 +116,10 @@ async def test_review_suggestion_over_long_value_is_masked(client, coordinator_a
         "fieldName": "type", "newValue": "T" * 300,
     }}, token)
     assert "errors" not in body, body
-    suggestion_uuid = body["data"]["createStationSuggestion"]["uuid"]
 
-    body = await _post(client, REVIEW_SUGGESTION, {"uuid": suggestion_uuid, "approve": True}, token)
+    body = await _post(client, MERGE_SUGGESTIONS, {"station": station_uuid, "decisions": [
+        {"targetUuid": station_uuid, "fieldName": "type", "approve": True, "value": "T" * 300},
+    ]}, token)
     _assert_masked(body)
 
 
@@ -146,10 +147,12 @@ async def test_an_unknown_input_field_is_not_masked(client):
 
     What went wrong is the caller's own input, found before any resolver runs, so the
     message is safe and it is the only thing that tells the caller which field to drop.
+    graphql-core 3.2 and 3.3 word it differently; both name the field and the input type.
     """
     body = await _post(client, UPDATE_STATION, {"uuid": str(uuid4()), "input": {"bogus": 1}})
     assert "errors" in body, body
-    assert "Field 'bogus' is not defined by type 'UpdateStationInput'" in body["errors"][0]["message"], body
+    message = body["errors"][0]["message"]
+    assert "'bogus'" in message and "'UpdateStationInput'" in message, body
 
 
 @pytest.mark.asyncio
@@ -239,3 +242,40 @@ async def test_an_unexpected_error_still_logs_at_error_with_its_traceback(
     assert "simulated internal fault" in str(errors[0].getMessage()), (
         "the log must keep the original message even though the client sees the mask"
     )
+
+
+@pytest.mark.asyncio
+async def test_a_concurrent_request_does_not_unmask_another(client, monkeypatch):
+    """Each request masks its own errors while another request is in flight.
+
+    Strawberry shares one MaskErrors instance across requests, so the request that fails here
+    finishes while the second one has already overwritten the shared execution context.
+    """
+    import asyncio
+
+    from app.repositories import geo_repository
+
+    second_started, first_done = asyncio.Event(), asyncio.Event()
+
+    async def count_active(*args, q=None, **kwargs):
+        if q == "失敗":
+            await second_started.wait()
+            raise RuntimeError("SQL: SELECT secret FROM stations")
+        second_started.set()
+        await first_done.wait()
+        return 0
+
+    async def list_active(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(geo_repository.station_repository, "count_active", count_active)
+    monkeypatch.setattr(geo_repository.station_repository, "list_active", list_active)
+
+    async def first():
+        body = await _post(client, STATIONS_SEARCH, {"q": "失敗"})
+        first_done.set()
+        return body
+
+    failed, _ = await asyncio.gather(first(), _post(client, STATIONS_SEARCH, {"q": "成功"}))
+
+    _assert_masked(failed)

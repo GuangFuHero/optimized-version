@@ -310,6 +310,8 @@
 
 > **部分被 ADR-285 取代**：站點不再由地理決定管轄，改為手動指派給單一 team（`stations.team_uuid`）；ticket/task 仍走 zone。
 
+> **部分被 ADR-300 取代**：`data_auditor` 不再是純唯讀，持有 `station.review` 與 `station.revoke`（`all`）；其餘寫入能力照舊沒有。
+
 > **狀態:ACCEPTED 並已落地驗證（2026-07-09,`pytest` 367 passed、`ruff` 乾淨)。** 本條整合 2026-07-08/09 對照 `Docs/rbac-permissions-design.md`(v1.1)+ `Dashboard.md` §3~§7 後的修正,並取代 ADR-048 的 scope 部分。
 >
 > **落地內容**:`permissions.py` 移除 `DASHBOARD_*`;`rbac_scopes.py` 移除 `Scope.GOV`/`NGO`(留 none/own/team/zone/all,team 僅團隊管理用);`models/geo.py` + migration `2f9a1c7b6e04` drop `base_geometries.team_uuid`;`services/{station,ticket,closure_area}.py` 建立時不再寫 team_uuid;`seed_rbac.py` 角色重寫成 super_admin/data_auditor/user(平台)+ admin/member(團隊),廢除 gov_manager/ngo_manager;新增 `graphql/masking.py`(移植 PR #23 遮罩)+ `tickets/types.py` PII resolver 從 null 改遮罩(zone 判定改吃 geometry);測試:移除 `test_team_scope.py`(team-geo 已退場)、`test_rbac_scopes.py`/`test_authz.py` 的 team/gov/ngo 案例改 zone、`test_query_rbac.py` PII 斷言改遮罩、新增 `test_masking.py`。
@@ -1253,6 +1255,17 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 4. **既有資料庫**：seed 是 additive bootstrap（ADR-055），另以資料 migration `65c5196498fb` 把仍停在舊預設值的
    grant——`user` 的 `own`、`admin`／`member` 的 `zone`——改為 `all`。runtime 已被改成其他值的 grant、個人
    grant、seed 沒定義的角色都不動。downgrade 把這三個角色的 `all` 改回舊預設值。
+5. **需求的審核狀態 `TicketTaskType.moderationStatus` 也由 `ticket.view_history` 把關**（2026-10-08 補）。它原本
+   是公開欄位，訪客也拿得到；民眾建的需求預設都是 `pending_review`，對外看起來每一筆都「待審核」，後台退回
+   （`rejected`）也被所有人看到。時間軸本來就把它放在稽核層（Spec 016）。跟承接名單一樣交給 `view_history`：
+   建單者看自己的、team 看責任區、稽核與超管看全部，其他人拿 null。每個 seed 角色的 `ticket.edit` 範圍都在
+   `view_history` 範圍內，所以會審核需求的人讀得到自己設的值。
+6. **`tickets` 列表裡的聯絡方式另要 `ticket.view_history`**（2026-10-08 補，#61 review）。單張 `ticket` 照第 1
+   點，登入就看得到；但列表一頁一頁翻，等於把所有求助者的電話交給任何新帳號。所以列表裡的 `contactName`／
+   `contactEmail`／`contactPhone` 與兩個檢傷欄位，除了 `view_pii` 還要 `view_history`（建單者、責任區的 team、
+   稽核與超管），其他登入者在列表看到遮罩、點進單才看到完整的。`myTickets`、`myTaskAssignments` 不受影響
+   （自己的單、自己承接的單）。同時列表一頁最多 200 筆（前台地圖一次要 200，`TICKET_LIST_MAX_LIMIT`）。
+   前台的詳情抽屜與承接確認框都用單張 `ticket` 查詢，看得到電話；地圖標記帶的是列表的值，只當備用。
 
 **不受影響**：時間軸要先有 `ticket.view_history`（一般帳號 `own`），一般帳號本來就只看得到自己單的時間軸，而
 自己的單原本就有 `view_pii`；匯出要 `ticket.export`，一般帳號沒有；地址自 ADR-281 起由 `view_detail` 把關。
@@ -1269,10 +1282,80 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 - 註冊即可登入，所以聯絡方式等於對任何願意註冊的人公開。這是規則本身的內容。日後若要收緊（例如只在緊急期
   開放），在 `/admin/rbac` 把 `user` 縮回 `own` 即可；但那樣承接者也會看不到，要另外設計「承接即解鎖」。
+  第 6 點只擋「從列表整批撈」：一張一張點開仍然拿得到。若要再擋，下一步是單張查詢的限流或記錄誰看了誰的電話。
 - 承接名單的可見性從此綁在時間軸的能力上：日後放寬 `ticket.view_history` 時要一併考慮承接名單。
   `tests/test_seed_rbac.py::test_who_claimed_a_need_stays_with_the_requester_and_coordinators` 會擋下。
 - GraphQL 測試的角色（`tests/test_graphql/conftest.py`）補上 `ticket.view_history`，比照 seed。
 - 文件同步：`RBAC_RESOURCE_ROLE_MATRIX.md` 的 `ticket.view_pii` 列與「PII 遮罩」一段。
+
+---
+
+#### ADR-300 `data_auditor` 可審核與撤銷站點修改建議（推翻 ADR-049「稽核員只讀」）
+
+> **狀態：ACCEPTED（2026-10-01）。** PR #57 review（jujuyuzu）指出 seed 已發出這兩個能力、但與 ADR-049 矛盾，使用者決定保留並補記本條。
+
+**白話**：稽核員仍然不能直接改站點，但可以決定群眾的修改建議，也可以把任何一次決定撤回。
+
+**Context**：ADR-049 拿掉 `data_auditor` 的 `station.review`，理由是「稽核員只讀」。修改建議改成合併制之後
+（一次決定某欄位的全部待審建議、寫入審核者的值、記下前後值），需要一個平台層、不受 team 指派限制的角色：
+
+- 決定建議：未指派的站點與民眾建的站，原本只有 super_admin 與 gov 能審（ADR-285 決策 7）。
+- 撤銷合併：審錯了要能還原。撤銷是監督動作，不該只有 super_admin 做得到。
+
+**Decision**：
+
+1. `data_auditor` 持有 `station.review=all` 與新的 `station.revoke=all`。`station.revoke` 只發給 `data_auditor`
+   與 super_admin；team 角色只能審、不能撤。
+2. 其餘寫入能力照舊沒有：不能新增、編輯、刪除站點，不能提出建議（無 `station.contribute`），不能匯入。
+3. 合併的寫入範圍受限：只能寫「有待審建議」的欄位（其他欄位是 `station.edit` 的事），每次合併在
+   `station_suggestion_merges` 記下前後值，兩張表都有 audit trigger。
+
+**取代關係**：
+
+- ADR-049「`data_auditor` 拿掉 `station.review`」與 seed 角色矩陣中「`data_auditor`：唯讀……**無** review」。
+- ADR-097（Spec 010）的例外理由「`data_auditor` 不持有寫入能力」改為「不持有市民能力」；例外本身不變，
+  因為 `data_auditor` 仍沒有 `station.contribute` 等市民能力。
+
+**後果**：
+
+➖ 審核者可以把有待審建議的欄位改成任何值（合併寫入的是審核者自己的值，不必是建議值）。這是合併制的設計，
+   對每個審核者都一樣；稽核員因 `all` 而影響範圍最大。由前後值紀錄、audit log 與撤銷兜底。
+◾ 不另加「審核者不得決定自己提出建議的欄位」：`data_auditor` 沒有 `station.contribute`，提不出建議，
+   這條只會限制到 team admin 與 super_admin，暫不需要。
+◾ Spec 015「`data_auditor` 不能匯入」照舊。
+
+---
+
+#### ADR-312 審核單與需求只看 `ticket.review`；團隊 member 與資料檢核員也有
+> **狀態：ACCEPTED（2026-10-08）。** 產品負責人於 #61 review 時拍板：審核是後台的事，資料檢核員要能審核所有
+> 單與需求，團隊 member 也要能審核。
+
+**白話**：民眾改不了自己單的審核結果；後台的團隊 admin、member 審核自己責任區的單與需求，資料檢核員與超管審
+核全部。
+
+**Context**：單的 `verification_status` 早就拆成 `reviewTicket`、要 `ticket.review`（見上方 `review_ticket`
+那一段）。但需求的 `moderation_status`、單與需求的 `review_note` 仍走 `updateTicket`／`updateTicketTask`，只查
+`ticket.edit`。一般帳號對自己的單有 `ticket.edit` `own`，所以能把自己的需求標成 `approved`、在自己的單上寫審
+核備註。另一頭，`ticket.review` 只有 admin（zone）與 super_admin（all），team member 能審核只是因為它有
+`ticket.edit` `zone`；資料檢核員能審核站點修改建議（ADR-300），卻不能審核單與需求。
+
+**Decision**：
+
+1. **審核欄位只看 `ticket.review`**：`updateTicket` 的 `reviewNote`、`updateTicketTask` 的 `moderationStatus`
+   與 `reviewNote`（`services/ticket.py:REVIEW_FIELDS`）。一次改動只帶審核欄位時只查 `ticket.review`；也帶其他
+   欄位時兩個都查；沒帶審核欄位時照舊只查 `ticket.edit`。scope 檢查對象不變：單看單本身，需求借單的位置
+   （ADR-052）。
+2. **seed 補授**：team `member` `ticket.review` `zone`（同 admin），`data_auditor` `ticket.review` `all`。seed 是
+   additive bootstrap（ADR-055），既有資料庫重跑 seed 就會補上，不需要資料 migration。`user` 不授。
+3. `data_auditor` 的寫入能力從站點修改建議的審核（ADR-300）擴大到單與需求的審核。它仍沒有 `ticket.edit`，改不了
+   單與需求的內容。
+
+**後果**：
+
+- ➕ 審核結果只有後台改得了，`reviewNote` 也一樣。
+- ➕ 資料檢核員能審核所有單與需求，team member 審核自己責任區的。
+- ➖ `tests/test_seed_rbac.py` 對 `data_auditor` 的例外說明改為「寫入只有審核（ADR-300、ADR-312）」。
+- ➖ 前台若曾讓建單者寫 `reviewNote`，現在會被拒（目前前台沒有這種畫面）。
 
 ---
 

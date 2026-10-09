@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  clearAllHelpRequestDrafts,
   clearHelpRequestDraft,
   helpRequestDraftKey,
   readHelpRequestDraft,
@@ -14,11 +15,16 @@ import {
 } from './help-request-form';
 
 /** sessionStorage as far as the draft uses it. */
-function memoryStorage(): DraftStorage & { items: Map<string, string> } {
+function memoryStorage(): DraftStorage &
+  Pick<Storage, 'length' | 'key'> & { items: Map<string, string> } {
   const items = new Map<string, string>();
 
   return {
     items,
+    get length() {
+      return items.size;
+    },
+    key: (index) => [...items.keys()][index] ?? null,
     getItem: (key) => items.get(key) ?? null,
     setItem: (key, value) => {
       items.set(key, value);
@@ -30,7 +36,13 @@ function memoryStorage(): DraftStorage & { items: Map<string, string> } {
 }
 
 /** One that refuses everything, as a private window or a full quota can. */
-const brokenStorage: DraftStorage = {
+const brokenStorage: DraftStorage & Pick<Storage, 'length' | 'key'> = {
+  get length(): number {
+    throw new Error('SecurityError');
+  },
+  key: () => {
+    throw new Error('SecurityError');
+  },
   getItem: () => {
     throw new Error('SecurityError');
   },
@@ -128,6 +140,19 @@ describe('help request draft', () => {
     expect(storage.items.size).toBe(0);
   });
 
+  it("clears every account's draft in the tab at once, and nothing else kept there", () => {
+    const storage = memoryStorage();
+
+    writeHelpRequestDraft(storage, 'user-1', filledForm());
+    writeHelpRequestDraft(storage, 'user-2', filledForm());
+    writeHelpRequestDraft(storage, 'user-3', filledForm());
+    storage.setItem('wg.sessionExpired', '1');
+
+    clearAllHelpRequestDrafts(storage);
+
+    expect([...storage.items.keys()]).toEqual(['wg.sessionExpired']);
+  });
+
   it('reads a broken draft, one from another version, or one of another shape as none', () => {
     const storage = memoryStorage();
     const key = helpRequestDraftKey('user-1');
@@ -164,12 +189,14 @@ describe('help request draft', () => {
     expect(() => {
       writeHelpRequestDraft(brokenStorage, 'user-1', filledForm());
       clearHelpRequestDraft(brokenStorage, 'user-1');
+      clearAllHelpRequestDrafts(brokenStorage);
     }).not.toThrow();
     expect(readHelpRequestDraft(brokenStorage, 'user-1')).toBeNull();
 
     expect(() => {
       writeHelpRequestDraft(null, 'user-1', filledForm());
       clearHelpRequestDraft(null, 'user-1');
+      clearAllHelpRequestDrafts(null);
     }).not.toThrow();
     expect(readHelpRequestDraft(null, 'user-1')).toBeNull();
   });

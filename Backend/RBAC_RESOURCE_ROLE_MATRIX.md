@@ -42,7 +42,7 @@
 |---|---|---|
 | **Guest** | （匿名，非 DB 角色） | `PUBLIC_PERMS` 白名單內的唯讀瀏覽 |
 | **user** | platform | 預設民眾：可瀏覽、可建立，只能動自己建的 |
-| **data_auditor** | platform | 稽核：全平台唯讀（含 PII、audit log），無 edit/make/review |
+| **data_auditor** | platform | 稽核：全平台可讀（含 PII、audit log）；寫入只有審核——站點修改建議（ADR-300）、單與需求（ADR-312）；無 edit/make |
 | **super_admin** | platform | 全能 |
 | **admin** | team | 團隊協調者：責任區內的通報單、指派給本隊的站點全操作 + 管團隊成員 + 畫/指派 zone + 指派站點（後兩者僅 gov） |
 | **member** | team | 團隊現場人員：責任區內的通報單、本隊的站點可編輯，無團隊管理、無 zone、無站點指派 |
@@ -71,7 +71,8 @@
 | station.contribute | — | all | — | all | all | all |
 | station.edit | — | own | — | all | team | team |
 | station.delete | — | own | — | all | team | own |
-| station.review | — | — | — | all | team | — |
+| station.review | — | — | all | all | team | — |
+| station.revoke | — | — | all | all | — | — |
 | **station.assign** | — | — | — | all | all（僅 gov） | all（僅 gov） |
 | station.export | — | — | all | all | team | — |
 | station.import | — | — | — | all | all | — |
@@ -104,11 +105,13 @@
 | ticket.edit | — | own | — | all | zone | zone |
 | ticket.delete | — | own | — | all | zone | own |
 | ticket.assign | — | own | — | all | zone | own |
-| ticket.review | — | — | — | all | zone | — |
+| **ticket.review** | — | — | all | all | zone | zone |
 | ticket.export | — | — | all | all | zone | — |
 | ticket.import | — | — | — | all | all | — |
 
-> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
+> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，除了審核之外全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
+
+> **審核（ADR-312）**：`ticket.review` 管「後台對單與需求的判斷」——單的 `verificationStatus`（`reviewTicket`）、單與需求的 `reviewNote`、需求的 `moderationStatus`。`updateTicket`／`updateTicketTask` 帶到這些欄位就要 `ticket.review`，其他欄位照舊要 `ticket.edit`；只改審核欄位時只要 `ticket.review`，所以沒有 `ticket.edit` 的 `data_auditor` 也能審核。一般使用者沒有 `ticket.review`，改不了自己單的審核結果。
 
 ### 使用者 User
 
@@ -222,9 +225,9 @@
 `ticket.view_pii` **絕不**公開；匿名一律看不到 PII。
 
 ### PII 遮罩（ADR-049）
-`ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩；登入者（user、team admin/member、data_auditor、super_admin）一律 all（ADR-286，原本 user→own、team→zone）。
+`ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩；登入者（user、team admin/member、data_auditor、super_admin）一律 all（ADR-286，原本 user→own、team→zone）。例外是 `tickets` **列表**：另要 `ticket.view_history`，其他登入者在列表看到遮罩、點進單（`ticket`）才看到完整的；列表一頁最多 200 筆（ADR-286 第 6 點）。
 
-任務的承接名單（`assignments`，誰承接了哪筆需求）**不**跟著 `view_pii`，改看 `ticket.view_history`（user→own、team→zone、data_auditor/super_admin→all）：建單者與協調者看得到，其他登入者看不到（ADR-286）。
+任務的承接名單（`assignments`，誰承接了哪筆需求）**不**跟著 `view_pii`，改看 `ticket.view_history`（user→own、team→zone、data_auditor/super_admin→all）：建單者與協調者看得到，其他登入者看不到（ADR-286）。需求的審核狀態（`moderationStatus`）同樣看 `ticket.view_history`，沒有的人拿 null（ADR-286 第 5 點）。
 
 ### 異動時間軸的四層可見度（ADR-127~130，功能 016）
 `*.view_history` 是**進入時間軸的門票**，它決定看得到「哪些資源」的歷史；`audit.view` 決定看得到「多深」。同一個時間軸依 caller 權限分四層揭露：

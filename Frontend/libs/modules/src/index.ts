@@ -113,4 +113,8 @@ export {
 } from './ticket';
 export { BriefingPlaceholder, NeedClaimProvider } from './ticket/needs';
 export type { ReloadedTicket } from './ticket/needs';
-export { MapRequestHelpButton, PlaceHereAction } from './ticket/help-request';
+export {
+  clearAllHelpRequestDrafts,
+  MapRequestHelpButton,
+  PlaceHereAction,
+} from './ticket/help-request';

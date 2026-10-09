@@ -57,18 +57,44 @@ CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
 
 # The kinds of help a need can ask for — the values `CreateTicketTaskInput.taskType` documents
 # and `chart_render` labels. Enforced only by `create_help_request`; `create_ticket_task`
-# still stores whatever it is sent.
+# still stores whatever it is sent. The site's GraphQL input lists them as `NeedKind`
+# (graphql/tickets/types.py): keep the two in step.
 TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
+# Needs that count heads or units must say how many (ADR-291 point 7): without a quantity a need
+# never fills, so its ticket never completes. A rescue may not know how many it takes, as the
+# design leaves it out of the 缺額 count; it alone may come without one, and then has no cap.
+QUANTITY_REQUIRED_TASK_TYPES = TASK_TYPES - {"rescue"}
 # `tickets.title` and `ticket_tasks.task_name` are both String(200).
 TICKET_TITLE_MAX_LENGTH = 200
 TASK_NAME_MAX_LENGTH = 200
 # Photo links a citizen may file with a request — the site's own limit, the same number its
 # form stops at (the prototype's TK_PHOTO_MAX in wg-photos.jsx).
 HELP_REQUEST_PHOTO_MAX = 10
+# Needs a request may be filed with at once. The prototype sets no limit; without one, a single
+# request could file thousands. Needs added later, one 「再加一件」 at a time, are not counted.
+HELP_REQUEST_NEED_MAX = 20
 
 # What a notice calls each review outcome — the site's own words, never the enum. An unknown
 # value falls through as itself, so a new one shows up rather than vanishing.
 MODERATION_STATUS_LABELS = {"pending_review": "待審核", "approved": "已通過", "rejected": "已退回"}
+
+# What a review decides on a ticket or a need (ADR-312): the back office's to write, under
+# ticket.review, never the requester's, whose ticket.edit `own` covers the rest of what they filed.
+REVIEW_FIELDS = frozenset({"moderation_status", "review_note"})
+
+
+async def _require_edit_or_review(db: AsyncSession, actor: User, fields, resource) -> None:
+    """ticket.review for the review fields among `fields`, ticket.edit for any other (ADR-312).
+
+    A data auditor reviews without holding ticket.edit, so a change made only of review fields
+    asks for ticket.review alone; one with both kinds asks for both. No field at all asks for
+    ticket.edit, as an edit always did.
+    """
+    reviewing = REVIEW_FIELDS & set(fields)
+    if reviewing:
+        await require_scope(actor, Perm.TICKET_REVIEW, db, resource=resource)
+    if not reviewing or set(fields) - REVIEW_FIELDS:
+        await require_scope(actor, Perm.TICKET_EDIT, db, resource=resource)
 
 
 async def _task_scope_target(db: AsyncSession, task: TicketTask) -> SimpleNamespace:
@@ -184,18 +210,22 @@ def _validate_help_request_task(task: dict) -> None:
         raise ValueError(f"Unknown task type: {task['task_type']}")
     if not task["task_name"].strip():
         raise ValueError("task_name is required")
-    _validate_need_size(task["task_name"], task.get("quantity"))
+    _validate_need_size(task["task_type"], task["task_name"], task.get("quantity"))
 
 
-def _validate_need_size(task_name: str, quantity: int | None) -> None:
-    """Refuse a name its column cannot hold, or a quantity that asks for nobody.
+def _validate_need_size(task_type: str, task_name: str, quantity: int | None) -> None:
+    """Refuse a name its column cannot hold, a quantity that asks for nobody, or none where needed.
 
     Past the column's limit the database raises an error the client only sees as "Unexpected
-    error."; a zero quantity would read as full the moment it was filed (`_lock_task_with_room`).
+    error."; a zero quantity would read as full the moment it was filed (`_lock_task_with_room`);
+    and a need of a kind that counts heads without one would never fill (ADR-291 point 7).
     """
     if len(task_name) > TASK_NAME_MAX_LENGTH:
         raise ValueError(f"task_name must be at most {TASK_NAME_MAX_LENGTH} characters")
-    if quantity is not None and quantity < 1:
+    if quantity is None:
+        if task_type in QUANTITY_REQUIRED_TASK_TYPES:
+            raise ValueError(f"quantity is required for a {task_type} task")
+    elif quantity < 1:
         raise ValueError("quantity must be at least 1")
 
 
@@ -245,6 +275,8 @@ async def create_help_request(
         raise ValueError(f"title must be at most {TICKET_TITLE_MAX_LENGTH} characters")
     if not tasks:
         raise ValueError("At least one task is required")
+    if len(tasks) > HELP_REQUEST_NEED_MAX:
+        raise ValueError(f"At most {HELP_REQUEST_NEED_MAX} tasks are allowed")
     # Every need and photo link is checked before anything is written, so one bad one refuses
     # the request rather than leaving the ones before it filed.
     for task in tasks:
@@ -332,10 +364,12 @@ async def update_ticket(
     db: AsyncSession, *, actor: User, uuid: str, changes: dict,
     secondary_location: dict | None = None,
 ) -> Tickets:
-    """Update a ticket (checkpoint 1 ticket.edit, then checkpoint 2 against the loaded ticket).
+    """Update a ticket, checked against the loaded ticket.
 
-    `changes` is the already-diffed field dict. It never carries `status`: a ticket's status
-    is worked out from its needs (`ticket_status.recompute_ticket_status`), not set by hand.
+    ticket.edit for what the requester wrote; ticket.review for `review_note`, which is the back
+    office's (ADR-312). `changes` is the already-diffed field dict. It never carries `status`: a
+    ticket's status is worked out from its needs (`ticket_status.recompute_ticket_status`), not
+    set by hand.
 
     `secondary_location` replaces the ticket's address, creating the row if the ticket was
     filed without one (ADR-268). Create-only would mean a mistyped door number stays wrong
@@ -344,7 +378,8 @@ async def update_ticket(
     ticket = await ticket_repository.get_by_uuid_active(db, uuid)
     if not ticket:
         raise ValueError("Ticket not found")
-    await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
+    fields = set(changes) | ({"secondary_location"} if secondary_location is not None else set())
+    await _require_edit_or_review(db, actor, fields, ticket)
     if secondary_location is not None:
         await _replace_secondary_location(db, str(ticket.uuid), secondary_location)
 
@@ -606,7 +641,7 @@ async def create_ticket_task(
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=ticket)
     if ticket.status == "cancelled":
         raise ValueError("Ticket is no longer open")
-    _validate_need_size(task_name, quantity)
+    _validate_need_size(task_type, task_name, quantity)
     need = {
         "task_type": task_type, "task_name": task_name, "task_description": task_description,
         "quantity": quantity, "source": source, "visibility": visibility, "route_uuid": route_uuid,
@@ -631,9 +666,11 @@ async def import_ticket_task(
 
     ticket.add alone, the rule createTicketTask had before 2026-09-28: who may import what is the
     back office's to decide, not the public site's. The row's columns were checked by the import
-    itself (bulk_columns); the rest is _add_need.
+    itself (bulk_columns); the name and quantity are checked again here, as for any need, in case
+    a caller skips that. The rest is _add_need.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
+    _validate_need_size(task_type, task_name, quantity)
     need = {
         "task_type": task_type, "task_name": task_name, "task_description": task_description,
         "quantity": quantity, "source": source, "visibility": visibility, "route_uuid": route_uuid,
@@ -666,9 +703,11 @@ async def _add_need(db: AsyncSession, *, actor: User, ticket_uuid: str, need: di
 
 
 async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, changes: dict) -> TicketTask:
-    """Update a ticket task (checkpoint 1 ticket.edit, then checkpoint 2 against the task).
+    """Update a ticket task, checked against the task.
 
-    TicketTask carries no team_uuid, so only `own`/`all` scope can match it.
+    ticket.edit for what was filed; ticket.review for `moderation_status` and `review_note`, the
+    back office's verdict, which a requester's ticket.edit `own` must not reach (ADR-312). A need
+    borrows its ticket's location, so `zone` reaches it (_task_scope_target).
 
     A task's status is not editable (ADR-293): it moves only through the actions that own it —
     a claim filling it, a release reopening it, the requester stopping recruitment, a deletion —
@@ -682,7 +721,7 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     task = await ticket_task_repository.get_by_uuid_active(db, uuid)
     if not task:
         raise ValueError("Ticket task not found")
-    await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
+    await _require_edit_or_review(db, actor, changes, await _task_scope_target(db, task))
 
     old_mod = task.moderation_status
     old_dup = task.is_duplicate

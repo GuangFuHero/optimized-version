@@ -32,7 +32,7 @@ mutation($uuid: UUID!, $input: UpdateTicketInput!) {
 
 UPDATE_TICKET_TASK = """
 mutation($uuid: UUID!, $input: UpdateTicketTaskInput!) {
-    updateTicketTask(uuid: $uuid, input: $input) { uuid moderationStatus }
+    updateTicketTask(uuid: $uuid, input: $input) { uuid }
 }
 """
 
@@ -41,8 +41,10 @@ INSIDE_ZONE_POINT = Point(121.5, 24.5)
 OUTSIDE_ZONE_POINT = Point(123.5, 24.5)
 
 
-async def _make_zone_scoped_editor(redis, team_uuid: str) -> tuple[str, str]:
-    """Create a user acting as a `team_uuid` role that grants ticket.edit at 'zone' scope.
+async def _make_zone_scoped_editor(
+    redis, team_uuid: str, perms: tuple[Perm, ...] = (Perm.TICKET_EDIT,)
+) -> tuple[str, str]:
+    """Create a user acting as a `team_uuid` role that grants `perms` (ticket.edit) at 'zone' scope.
 
     Zone scope resolves the team off the active identity (ADR-074), so the role has to be
     team-kind, the grant has to name the team, and the token has to act as that identity —
@@ -56,17 +58,17 @@ async def _make_zone_scoped_editor(redis, team_uuid: str) -> tuple[str, str]:
 
         team = await db.get(Team, team_uuid)
         role = Role(name=f"zone-editor-{uuid_mod.uuid4().hex[:8]}", kind="team")
-        perm_result = await db.execute(
-            select(Permission).where(Permission.key == Perm.TICKET_EDIT.value)
-        )
-        permission = perm_result.scalar_one_or_none()
-        if not permission:
-            permission = Permission(key=Perm.TICKET_EDIT.value)
-            db.add(permission)
-            await db.flush()
         db.add(role)
         await db.flush()
-        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="zone"))
+        for perm in perms:
+            permission = (
+                await db.execute(select(Permission).where(Permission.key == perm.value))
+            ).scalar_one_or_none()
+            if not permission:
+                permission = Permission(key=perm.value)
+                db.add(permission)
+                await db.flush()
+            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="zone"))
         db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid))
 
         return str(user.uuid), await token_for(redis, user.uuid, role, team)
@@ -182,11 +184,14 @@ async def _make_task_under(ticket_uuid: str) -> str:
 async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, redis, team_assigned_to_zone):
     """ADR-052 (direction B): a task inherits its parent ticket's location for the zone check.
 
-    A TicketTask has no geometry of its own, so a `ticket.edit=zone` grant would never match
-    it directly; borrowing the parent ticket's point lets a zone editor moderate tasks under
-    tickets inside the team's assigned zone (which they own neither).
+    A TicketTask has no geometry of its own, so a `zone` grant would never match it directly;
+    borrowing the parent ticket's point lets a zone member moderate tasks under tickets inside
+    the team's assigned zone (which they own neither). Moderating takes ticket.review, which
+    the seed gives a member at `zone` beside ticket.edit (ADR-312).
     """
-    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone)
+    _, editor_token = await _make_zone_scoped_editor(
+        redis, team_assigned_to_zone, (Perm.TICKET_EDIT, Perm.TICKET_REVIEW)
+    )
     ticket_uuid = await _make_ticket_at(INSIDE_ZONE_POINT)
     task_uuid = await _make_task_under(ticket_uuid)
 
@@ -200,13 +205,18 @@ async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, re
     )
     body = resp.json()
     assert "errors" not in body, body
-    assert body["data"]["updateTicketTask"]["moderationStatus"] == "approved"
+    # Read back from the row: reading the status back through GraphQL takes
+    # ticket.view_history, which is not what this test is about.
+    async with test_db() as db:
+        assert (await db.get(TicketTask, task_uuid)).moderation_status == "approved"
 
 
 @pytest.mark.asyncio
 async def test_zone_scope_404s_task_under_ticket_outside_zone(client, redis, team_assigned_to_zone):
     """Symmetric to the ticket-level case: a task under a ticket OUTSIDE the zone is 404."""
-    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone)
+    _, editor_token = await _make_zone_scoped_editor(
+        redis, team_assigned_to_zone, (Perm.TICKET_EDIT, Perm.TICKET_REVIEW)
+    )
     ticket_uuid = await _make_ticket_at(OUTSIDE_ZONE_POINT)
     task_uuid = await _make_task_under(ticket_uuid)
 

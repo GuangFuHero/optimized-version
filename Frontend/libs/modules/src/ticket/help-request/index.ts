@@ -1,3 +1,4 @@
+export { clearAllHelpRequestDrafts } from './help-request-draft';
 export { HelpRequestHost } from './help-request-host';
 export {
   MapRequestHelpButton,

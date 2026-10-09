@@ -111,8 +111,9 @@ users ||--o{ user_contacts : "reachable at"
 %% decoupled from DB tables (ADR-012); grants are additive/union with no deny (ADR-018).
 %% ==========================
 
-%% Functional role. kind = platform or team. A user holds exactly one platform identity
-%% and any number of team identities — one row of user_role_assign each (ADR-068/073).
+%% Functional role. kind = platform or team. A user holds the platform `user` role plus at most
+%% one other platform role (ADR-288/294), and any number of team identities — one row of
+%% user_role_assign each (ADR-068/073).
 roles {
     uuid uuid PK
     string name "UNIQUE, String(50)"
@@ -174,6 +175,36 @@ user_permission_assign {
 users ||--o{ user_permission_assign : "directly granted"
 permissions ||--o{ user_permission_assign : "granted to user"
 teams ||--o{ user_permission_assign : "scopes the grant"
+
+%% A citizen applying to become back-office staff (Spec/019). `government` / `ngo` name the type
+%% of team the reviewer will place them in, not a role (ADR-049); `data_auditor` is the platform
+%% role. Approval adds the grant beside `user` rather than replacing it (ADR-288); only a
+%% data_auditor application can be approved yet. reason/contact are the applicant's own words and
+%% often name their unit and phone, so only they and role_request.review holders read them.
+role_requests {
+    uuid uuid PK
+    uuid created_by FK "FK to users, indexed — the applicant"
+    string requested_role "government/ngo/data_auditor, String(20), CHECK"
+    string reason "text, CHECK length <= 500"
+    string contact "nullable, text, CHECK length <= 100"
+    string status "pending/approved/rejected/withdrawn, String(20), CHECK, default pending"
+    string review_note "nullable, text, CHECK length <= 500 — the reviewer's reply, shown to the applicant"
+    uuid reviewed_by FK "nullable, FK to users; stays NULL when the applicant withdraws"
+    uuid granted_role_uuid FK "nullable, FK to roles — what approval handed out"
+    uuid granted_team_uuid FK "nullable, FK to teams — reserved for government/NGO approval"
+    timestamp closed_at "nullable, when it left pending — approved, rejected or withdrawn"
+    timestamp created_at
+    timestamp updated_at
+    timestamp delete_at "unused"
+}
+%% UNIQUE(created_by) WHERE status = 'pending' -- uq_role_requests_one_pending: one pending
+%% application per account, so two tabs submitting at once still leave one (AC-RE-106).
+%% INDEX: ix_role_requests_status_created_at ON (status, created_at) -- the review queue, oldest first
+%% Audited (AUDITED_TABLES): submitting, withdrawing and deciding are all in audit_logs.
+users ||--o{ role_requests : "applies"
+users |o--o{ role_requests : "reviews"
+roles |o--o{ role_requests : "granted by approval"
+teams |o--o{ role_requests : "team granted (reserved)"
 
 %% --------------------------
 %% 2a. Teams & Work Zones (ADR-021/049; ADR-019's one-team-per-user rule superseded by ADR-073)
@@ -262,15 +293,18 @@ users ||--o{ announcements : "authors"
 %% NotificationService.dispatch() fans an event out over a resolved recipient list and
 %% always drops the actor from it, so nobody is notified of their own action.
 %% type values: announcement_published, zone_assigned, zone_unassigned, team_member_added,
-%%   ticket_task_status_update, ticket_task_moderation_update, task_assignment_created,
-%%   resource_station_updated, dedup_flag_ticket, dedup_flag_station
+%%   ticket_task_moderation_update, task_assignment_created, task_claimed, task_full,
+%%   task_recruiting_stopped, task_deleted, ticket_deleted, resource_station_updated,
+%%   station_assigned, station_unassigned, station_suggestion_created, dedup_flag_ticket,
+%%   dedup_flag_station, role_request_submitted, role_request_approved, role_request_rejected
+%% (ticket_task_status_update is gone: a need's status is no longer edited by hand, ADR-293.)
 notifications {
     uuid uuid PK
     uuid recipient_uuid FK "FK to users, ON DELETE CASCADE"
     uuid actor_uuid FK "nullable, FK to users, ON DELETE SET NULL; NULL = system-triggered"
     string type "String(50), see the value list above"
     string priority "urgent/high/medium/info, String(20), default medium"
-    string ref_type "nullable, String(50): announcement/work_zone/team/ticket_task/station"
+    string ref_type "nullable, String(50): announcement/work_zone/team/ticket/ticket_task/station/station_suggestion/role_request"
     uuid ref_uuid "nullable, uuid of the ref_type row — no DB FK, same polymorphic pattern as photos"
     string title "String(200)"
     text body
@@ -527,16 +561,33 @@ station_update_suggestions {
     string field_name "String(100), the single field being changed"
     string new_value "stored as text; coerced to the field's data type on approval"
     string comment "nullable, submitter's rationale"
-    string status "pending/approved/rejected, String(20), default pending"
+    string status "pending/approved/rejected/revoked, String(20), default pending"
     string review_note "nullable, reviewer's rationale"
     uuid reviewed_by FK "nullable, FK to users; NULL until reviewed"
-    uuid created_by FK "FK to users"
+    uuid created_by FK "FK to users; one pending row per (created_by, target_uuid, field_name)"
+    uuid merge_uuid FK "nullable, the merge that decided this row"
+    timestamp created_at
+    timestamp updated_at
+    timestamp delete_at
+}
+station_suggestion_merges {
+    uuid uuid PK
+    uuid station_uuid FK "FK to stations"
+    jsonb changes "[{target_type, target_uuid, field_name, before, after}] per applied field"
+    string review_note "nullable"
+    string status "applied/revoked, String(20)"
+    uuid reviewed_by FK "FK to users"
+    uuid revoked_by FK "nullable, FK to users"
+    timestamp revoked_at "nullable"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at
 }
 users ||--o{ station_update_suggestions : "suggests"
 users ||--o{ station_update_suggestions : "reviews"
+station_suggestion_merges ||--o{ station_update_suggestions : "decides"
+stations ||--o{ station_suggestion_merges : "merged into"
+users ||--o{ station_suggestion_merges : "merges / revokes"
 %% Dashed = logical reference; target_uuid is a plain column selected by target_type.
 stations ||..o{ station_update_suggestions : "target when target_type='station'"
 station_properties ||..o{ station_update_suggestions : "target when target_type='station_property'"
@@ -661,11 +712,11 @@ ticket_tasks {
     uuid uuid PK
     uuid ticket_uuid FK "FK to tickets"
     uuid route_uuid FK "nullable FK to routes"
-    string task_type "hr/supply/rescue"
+    string task_type "rescue/supply/medical/hr"
     string task_name
     string task_description "nullable"
-    int quantity "nullable"
-    string status "pending/in_progress/fulfilled/canceled"
+    int quantity "nullable = no cap; at least 1, and required for every type but rescue (ADR-291)"
+    string status "pending/fulfilled/canceled; in_progress only on rows from before ADR-293"
     string source "user/gov/crawler/ngo/admin"
     string progress_note "nullable"
     boolean is_duplicate
@@ -676,16 +727,19 @@ ticket_tasks {
     uuid created_by FK
     timestamp completed_at "nullable, set when status enters 'fulfilled' and cleared when it leaves"
     timestamp canceled_at "nullable, set when status enters 'canceled' and cleared when it leaves"
+    timestamp recruiting_stopped_at "nullable, set when the requester stopped recruiting by hand (ADR-292)"
     timestamp created_at
     timestamp updated_at
     timestamp delete_at
     string search_text "GENERATED ALWAYS AS task_name + left(task_description, 500), STORED"
 }
-%% completed_at/canceled_at are stamped and CLEARED by services/ticket.py::update_ticket_task as
-%% status enters and leaves the state, because analytics plots a task on the day its timestamp
-%% gives and a re-opened task holding a stale completed_at would still read as finished.
-%% `updated_at` can't stand in — it moves on every edit — though rows predating the columns
-%% were backfilled from it.
+%% A need's status moves only through the actions that own it (ADR-293): a claim filling it,
+%% giving a place back reopening it, stopping recruitment, deletion. Each stamps and CLEARS
+%% completed_at/canceled_at as status enters and leaves the state, because analytics plots a task
+%% on the day its timestamp gives and a re-opened task holding a stale completed_at would still
+%% read as finished. `updated_at` can't stand in — it moves on every edit — though rows predating
+%% the columns were backfilled from it. recruiting_stopped_at tells a stopped need from one that
+%% filled by itself: only the latter reopens when a place is given back (ADR-291/292).
 %% INDEX: ix_ticket_tasks_search_text_trgm USING gin (search_text gin_trgm_ops)
 %% NOTE: `progress_note` is deliberately NOT in search_text (free-text note, ADR-079)
 tickets ||--o{ ticket_tasks : "contains sub-tasks"

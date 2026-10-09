@@ -73,6 +73,11 @@ claim a task on the site. The team decided on 2026-09-28 that this must not happ
 1. **Approval inserts the platform grant `data_auditor` and leaves `user` in place.** It does not call
    `assign_role`. The insert is `ON CONFLICT DO NOTHING`, because an admin may have granted the role another
    way since the application was sent. Granting and marking the application `approved` are one commit.
+   Approval first checks the applicant's identities again, after locking the application: one who has since
+   gained any other back-office identity, `super_admin` or a team role, is refused with 409 and the
+   application stays pending for the reviewer to reject. Granting would leave a third platform role
+   (ADR-294) or a team identity beside it, and an account holding either could not have applied
+   (AC-RE-101). Added 2026-10-08 after review.
 2. **The applicant is not signed out**: their token still names a grant they hold. The approval notice says
    so: 右上角會出現「前往後台」，不需要重新登入。
 3. **Government and NGO applications cannot be approved yet.** Approving one answers 422 and changes nothing;

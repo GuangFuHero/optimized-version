@@ -197,7 +197,7 @@ export type CreateHelpRequestInput = {
   photoUrls?: InputMaybe<Array<Scalars['String']['input']>>;
   /** The address as typed goes in `landmarkNote`, with `floor` and `room` */
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
-  /** At least one need */
+  /** At least one need, at most 20 */
   tasks: Array<HelpRequestTaskInput>;
   /** At most 200 characters */
   title: Scalars['String']['input'];
@@ -296,7 +296,7 @@ export type CreateTicketInput = {
 };
 
 export type CreateTicketTaskInput = {
-  /** Number of people or units needed */
+  /** People or units needed, at least 1; required except for a 'rescue' task, which may omit it */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** Optional UUID of an associated route */
   routeUuid?: InputMaybe<Scalars['String']['input']>;
@@ -369,13 +369,13 @@ export type GenerateBriefingInput = {
 };
 
 export type HelpRequestTaskInput = {
-  /** People or units needed, at least 1; omit when not known */
+  /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   taskDescription?: InputMaybe<Scalars['String']['input']>;
   /** What is needed, at most 200 characters */
   taskName: Scalars['String']['input'];
-  /** Category: 'rescue', 'supply', 'medical', or 'hr' */
-  taskType: Scalars['String']['input'];
+  /** What the need asks for */
+  taskType: NeedKind;
 };
 
 export type Mutation = {
@@ -406,10 +406,11 @@ export type Mutation = {
   deleteWorkZone: Scalars['Boolean']['output'];
   detachStationPhoto: Scalars['Boolean']['output'];
   generateBriefing: BriefingType;
+  mergeStationSuggestions: StationSuggestionMergeType;
   moveAnnouncement: AnnouncementType;
   removeZoneFromTeam: Scalars['Boolean']['output'];
-  reviewStationSuggestion: StationSuggestionType;
   reviewTicket: TicketType;
+  revokeStationSuggestionMerge: StationSuggestionMergeType;
   setAnnouncementActive: AnnouncementType;
   setTicketDisasterDetails: Array<TicketDisasterDetailType>;
   stopRecruiting: TicketTaskType;
@@ -542,6 +543,12 @@ export type MutationGenerateBriefingArgs = {
   input: GenerateBriefingInput;
 };
 
+export type MutationMergeStationSuggestionsArgs = {
+  decisions: Array<SuggestionDecisionInput>;
+  reviewNote?: InputMaybe<Scalars['String']['input']>;
+  stationUuid: Scalars['UUID']['input'];
+};
+
 export type MutationMoveAnnouncementArgs = {
   direction: AnnouncementMoveDirection;
   uuid: Scalars['UUID']['input'];
@@ -551,16 +558,14 @@ export type MutationRemoveZoneFromTeamArgs = {
   input: ZoneTeamAssignmentInput;
 };
 
-export type MutationReviewStationSuggestionArgs = {
-  approve: Scalars['Boolean']['input'];
-  reviewNote?: InputMaybe<Scalars['String']['input']>;
-  uuid: Scalars['UUID']['input'];
-};
-
 export type MutationReviewTicketArgs = {
   reviewNote?: InputMaybe<Scalars['String']['input']>;
   uuid: Scalars['UUID']['input'];
   verificationStatus: Scalars['String']['input'];
+};
+
+export type MutationRevokeStationSuggestionMergeArgs = {
+  uuid: Scalars['UUID']['input'];
 };
 
 export type MutationSetAnnouncementActiveArgs = {
@@ -684,6 +689,14 @@ export type MyTaskAssignmentType = {
   ticket: TicketType;
 };
 
+export const NeedKind = {
+  Hr: 'hr',
+  Medical: 'medical',
+  Rescue: 'rescue',
+  Supply: 'supply',
+} as const;
+
+export type NeedKind = (typeof NeedKind)[keyof typeof NeedKind];
 export type PageInfo = {
   __typename?: 'PageInfo';
   /** True if there are more records after the current page */
@@ -724,7 +737,6 @@ export type Query = {
   myTickets: Array<TicketType>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
-  stationSuggestions: Array<StationSuggestionType>;
   stations: StationConnection;
   suggestableFields: Array<SuggestableFieldType>;
   taskProperties: Array<TaskPropertyType>;
@@ -787,16 +799,10 @@ export type QueryStationPropertyConfigsArgs = {
   stationType: Scalars['String']['input'];
 };
 
-export type QueryStationSuggestionsArgs = {
-  limit?: Scalars['Int']['input'];
-  skip?: Scalars['Int']['input'];
-  status?: InputMaybe<Scalars['String']['input']>;
-  targetUuid?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type QueryStationsArgs = {
   assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   bounds?: InputMaybe<BoundsInput>;
+  hasPendingSuggestions?: Scalars['Boolean']['input'];
   limit?: Scalars['Int']['input'];
   operationalStatus?: InputMaybe<StationOperationalStatus>;
   q?: InputMaybe<Scalars['String']['input']>;
@@ -999,6 +1005,8 @@ export type StationPropertyType = {
   /** UUID of the user who added this property */
   createdBy?: Maybe<Scalars['String']['output']>;
   crowdSourcings: Array<CrowdSourcingType>;
+  /** Fields of this property with a suggested edit awaiting review. Names only, so public. */
+  pendingSuggestedFields: Array<Scalars['String']['output']>;
   /** Specific item name, e.g. 'water', 'food_ration', 'medical_kit' */
   propertyName: Scalars['String']['output'];
   /** Category of this property, e.g. 'supply', 'service', 'equipment' */
@@ -1012,6 +1020,20 @@ export type StationPropertyType = {
   uuid: Scalars['UUID']['output'];
   /** Credibility weight applied during score aggregation [0.0–2.0], default 1.0 */
   weightings: Scalars['Float']['output'];
+};
+
+export type StationSuggestionMergeType = {
+  __typename?: 'StationSuggestionMergeType';
+  changes: Array<SuggestionChangeType>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  reviewNote?: Maybe<Scalars['String']['output']>;
+  reviewedBy: Scalars['String']['output'];
+  revokedAt?: Maybe<Scalars['DateTime']['output']>;
+  revokedBy?: Maybe<Scalars['String']['output']>;
+  stationUuid: Scalars['String']['output'];
+  /** 'applied' or 'revoked' */
+  status: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
 };
 
 export type StationSuggestionType = {
@@ -1028,7 +1050,7 @@ export type StationSuggestionType = {
   reviewNote?: Maybe<Scalars['String']['output']>;
   /** UUID of the admin who decided */
   reviewedBy?: Maybe<Scalars['String']['output']>;
-  /** 'pending', 'approved', or 'rejected' */
+  /** 'pending', 'approved', 'rejected', or 'revoked' */
   status: Scalars['String']['output'];
   /** What the suggestion targets: 'station' or 'station_property' */
   targetType: Scalars['String']['output'];
@@ -1069,6 +1091,8 @@ export type StationType = {
   opHour?: Maybe<Scalars['String']['output']>;
   /** Whether the station is open: 'active', 'temporarily_closed', or 'permanently_closed' */
   operationalStatus: Scalars['String']['output'];
+  /** Fields of this station with a suggested edit awaiting review. Names only, so public. */
+  pendingSuggestedFields: Array<Scalars['String']['output']>;
   photos: Array<PhotoType>;
   properties: Array<StationPropertyType>;
   /** Internal polymorphic discriminator — always 'station' */
@@ -1078,6 +1102,10 @@ export type StationType = {
   source?: Maybe<Scalars['String']['output']>;
   /** When operational_status last changed */
   statusChangedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Pending suggestions on this station and its properties, pooled per field; empty without station.review over this station */
+  suggestedFields: Array<SuggestedFieldType>;
+  /** Merges applied to this station, newest first; empty without station.review over this station */
+  suggestionMerges: Array<StationSuggestionMergeType>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: Maybe<Scalars['String']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1101,6 +1129,36 @@ export type SuggestableFieldType = {
   /** Allowed values when data_type is 'enum', else null */
   enumOptions?: Maybe<Array<Scalars['String']['output']>>;
   fieldName: Scalars['String']['output'];
+};
+
+export type SuggestedFieldType = {
+  __typename?: 'SuggestedFieldType';
+  comments: Array<Scalars['String']['output']>;
+  fieldName: Scalars['String']['output'];
+  firstSuggestedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Distinct proposed values, newest first */
+  proposedValues: Array<Scalars['String']['output']>;
+  suggestionCount: Scalars['Int']['output'];
+  targetType: Scalars['String']['output'];
+  targetUuid: Scalars['String']['output'];
+};
+
+export type SuggestionChangeType = {
+  __typename?: 'SuggestionChangeType';
+  after?: Maybe<Scalars['String']['output']>;
+  before?: Maybe<Scalars['String']['output']>;
+  fieldName: Scalars['String']['output'];
+  targetType: Scalars['String']['output'];
+  targetUuid: Scalars['String']['output'];
+};
+
+export type SuggestionDecisionInput = {
+  approve: Scalars['Boolean']['input'];
+  fieldName: Scalars['String']['input'];
+  /** The station, or one of its properties */
+  targetUuid: Scalars['UUID']['input'];
+  /** Value to write, possibly edited by the reviewer; required to approve */
+  value?: InputMaybe<Scalars['String']['input']>;
 };
 
 export const TaskAssignmentStatus = {
@@ -1232,15 +1290,15 @@ export type TicketTaskType = {
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket */
   createdBy?: Maybe<Scalars['String']['output']>;
-  /** Review state: 'pending_review', 'approved', or 'rejected' */
-  moderationStatus: Scalars['String']['output'];
+  /** Review state: 'pending_review', 'approved', or 'rejected'. Null to a caller without ticket.view_history on the parent ticket */
+  moderationStatus?: Maybe<Scalars['String']['output']>;
   /** The caller's own claim on this task. Null to a guest or a non-claimant */
   myAssignment?: Maybe<TaskAssignmentType>;
   progress?: Maybe<Scalars['Float']['output']>;
   /** Current progress update written by the assignee. Null to a caller without ticket.view_detail on the parent ticket */
   progressNote?: Maybe<Scalars['String']['output']>;
   properties: Array<TaskPropertyType>;
-  /** Number of people or units needed — null means unspecified */
+  /** Number of people or units needed. Null means unspecified and uncapped: a rescue need may leave it out, and needs filed before every other kind had to give one */
   quantity?: Maybe<Scalars['Int']['output']>;
   /** When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back */
   recruitingStoppedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1266,11 +1324,11 @@ export type TicketTaskType = {
 
 export type TicketType = {
   __typename?: 'TicketType';
-  /** Follow-up email — masked unless the caller holds ticket.view_pii here */
+  /** Follow-up email — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too */
   contactEmail?: Maybe<Scalars['String']['output']>;
-  /** Requester full name — masked unless the caller holds ticket.view_pii here */
+  /** Requester full name — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too */
   contactName?: Maybe<Scalars['String']['output']>;
-  /** Follow-up phone — masked unless the caller holds ticket.view_pii here */
+  /** Follow-up phone — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too */
   contactPhone?: Maybe<Scalars['String']['output']>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here */
@@ -1282,11 +1340,11 @@ export type TicketType = {
   disasterTypes: Array<Scalars['String']['output']>;
   /** GeoJSON Point indicating where help is needed. To a caller without ticket.view_detail here, the centre of the H3 cell the point falls in — at most resolution 8 (about 1 km across), coarser when `zoom` asks for it */
   geometry?: Maybe<Scalars['GeoJSON']['output']>;
-  /** Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. Not a triage grade and not a risk classification */
+  /** Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here (in the `tickets` list, ticket.view_history too). Not a triage grade and not a risk classification */
   immediateDangerReported?: Maybe<Scalars['String']['output']>;
   /** The H3 cell `geometry` stands in for, as its hex index (e.g. '884ba0a511fffff'), when the caller is shown the coarse location; null when `geometry` is the exact point. Tickets sharing a value share a location on the map — group by it, and draw the cell from it (h3-js `cellToBoundary`); its resolution is in the index */
   locationCell?: Maybe<Scalars['String']['output']>;
-  /** Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. What the person said, not a professional assessment */
+  /** Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here (in the `tickets` list, ticket.view_history too). What the person said, not a professional assessment */
   personTrappedReported?: Maybe<Scalars['String']['output']>;
   /** Photos attached to this ticket. Empty to a caller without ticket.view_detail here */
   photos: Array<PhotoType>;
@@ -1803,7 +1861,7 @@ export type TicketTaskFieldsFragment = {
   source: string;
   progressNote?: string | null;
   visibility: string;
-  moderationStatus: string;
+  moderationStatus?: string | null;
   reviewNote?: string | null;
   createdAt?: any | null;
   updatedAt?: any | null;

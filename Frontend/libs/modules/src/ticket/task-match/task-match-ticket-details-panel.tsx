@@ -1,22 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
-import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import ImageRoundedIcon from '@mui/icons-material/ImageRounded';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import PhotoLibraryRoundedIcon from '@mui/icons-material/PhotoLibraryRounded';
 import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
-import { Alert, Box, ButtonBase, Chip, Stack, Typography } from '@mui/material';
+import { Alert, Box, Stack, Typography } from '@mui/material';
 import { useQuery } from 'urql';
 
 import {
   GetTicketDocument,
-  GetTicketTasksDocument,
   TicketFieldsFragmentDoc,
-  TicketTaskFieldsFragmentDoc,
   useFragment,
 } from '@rescue-frontend/data-access';
 
@@ -34,13 +27,11 @@ const { color } = designTokens;
 
 const detailPalette = {
   surface: color.bg.neutral.default,
-  sectionSurface: color.bg.neutral.subtle,
   border: color.border.default,
   heading: color.fg.neutral.default,
   text: color.fg.neutral.default,
   muted: color.fg.neutral.muted,
   accent: color.brand.secondary.subtle,
-  accentSoft: color.bg.secondary.subtle,
 };
 
 // 詳情面板自行顯示載入狀態，停用 suspense 避免整頁因抓取任務資料而閃爍重渲染。
@@ -51,103 +42,13 @@ interface TicketPhotoItem {
   url: string;
 }
 
-interface TicketTaskPropertyItem {
-  uuid: string;
-  propertyName: string;
-  propertyValue: string;
-  quantity?: number | null;
-  status?: string | null;
-  comment?: string | null;
-  createdAt?: string | null;
-}
-
-interface TicketTaskDetailItem {
-  uuid: string;
-  taskType: string;
-  taskName: string;
-  taskDescription?: string | null;
-  quantity?: number | null;
-  status?: string | null;
-  source?: string | null;
-  progressNote?: string | null;
-  visibility?: string | null;
-  moderationStatus?: string | null;
-  reviewNote?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  properties: TicketTaskPropertyItem[];
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) {
-    return '未提供';
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
-
-function formatPriorityLabel(value?: string | null) {
-  if (!value) {
-    return '未提供';
-  }
-
-  const normalized = value.trim().toLowerCase();
-
-  switch (normalized) {
-    case 'low':
-      return '低';
-    case 'medium':
-      return '中';
-    case 'high':
-      return '高';
-    case 'critical':
-      // As its badge reads (prototype 2026-09-21).
-      return '最高優先';
-    default:
-      return value;
-  }
-}
-
-function formatModerationStatusLabel(value?: string | null) {
-  if (!value) {
-    return '未提供';
-  }
-
-  const normalized = value.trim().toLowerCase();
-
-  switch (normalized) {
-    case 'pending_review':
-      return '待審核';
-    case 'approved':
-      return '已通過';
-    case 'rejected':
-      return '已退回';
-    default:
-      return value;
-  }
-}
-
 function SectionCard({
   title,
   icon,
-  action,
   children,
 }: {
   title: string;
   icon: ReactNode;
-  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -183,7 +84,6 @@ function SectionCard({
             {title}
           </Typography>
         </Box>
-        {action}
       </Box>
       {children}
     </Stack>
@@ -226,64 +126,6 @@ function DetailRow({
   );
 }
 
-function CarouselControls({
-  index,
-  total,
-  onPrevious,
-  onNext,
-}: {
-  index: number;
-  total: number;
-  onPrevious: () => void;
-  onNext: () => void;
-}) {
-  if (total <= 1) {
-    return (
-      <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12] }}>
-        {total === 0 ? '0 / 0' : '1 / 1'}
-      </Typography>
-    );
-  }
-
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <ButtonBase
-        disableRipple
-        onClick={onPrevious}
-        aria-label="上一筆"
-        sx={{
-          width: 28,
-          height: 28,
-          borderRadius: '999px',
-          border: `1px solid ${detailPalette.border}`,
-          bgcolor: detailPalette.sectionSurface,
-          color: detailPalette.accent,
-        }}
-      >
-        <ChevronLeftRoundedIcon sx={{ fontSize: 18 }} />
-      </ButtonBase>
-      <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[12], minWidth: 44, textAlign: 'center' }}>
-        {index + 1} / {total}
-      </Typography>
-      <ButtonBase
-        disableRipple
-        onClick={onNext}
-        aria-label="下一筆"
-        sx={{
-          width: 28,
-          height: 28,
-          borderRadius: '999px',
-          border: `1px solid ${detailPalette.border}`,
-          bgcolor: detailPalette.sectionSurface,
-          color: detailPalette.accent,
-        }}
-      >
-        <ChevronRightRoundedIcon sx={{ fontSize: 18 }} />
-      </ButtonBase>
-    </Box>
-  );
-}
-
 export function TaskMatchTicketDetailsPanel({
   marker,
   isAuthenticated = false,
@@ -302,18 +144,6 @@ export function TaskMatchTicketDetailsPanel({
       pause: !marker.id,
       context: DETAIL_QUERY_CONTEXT,
     });
-  const [{ data: taskData, fetching: isTaskFetching, error: taskError }] =
-    useQuery({
-      query: GetTicketTasksDocument,
-      variables: {
-        ticketUuid: marker.id,
-        skip: 0,
-        limit: 50,
-      },
-      pause: !marker.id,
-      context: DETAIL_QUERY_CONTEXT,
-    });
-  const [activeTaskIndex, setActiveTaskIndex] = useState(0);
 
   const ticket = useMemo(() => {
     if (!ticketData?.ticket) {
@@ -335,54 +165,7 @@ export function TaskMatchTicketDetailsPanel({
     [ticket?.photos],
   );
 
-  const tasks = useMemo<TicketTaskDetailItem[]>(() => {
-    const detailedTasks = (taskData?.ticketTasks ?? []).map((task) => ({
-      ...task,
-      ...useFragment(TicketTaskFieldsFragmentDoc, task),
-    }));
-    const detailedTaskById = new Map(detailedTasks.map((task) => [task.uuid, task]));
-    const baseTasks = (ticket?.tasks ?? []).map((task) => ({
-      ...task,
-      ...useFragment(TicketTaskFieldsFragmentDoc, task),
-    }));
-    const orderedTasks = baseTasks.length > 0 ? baseTasks : detailedTasks;
-
-    return orderedTasks.map((task) => {
-      const detailedTask = detailedTaskById.get(task.uuid);
-
-      return {
-        uuid: task.uuid,
-        taskType: detailedTask?.taskType ?? task.taskType,
-        taskName: detailedTask?.taskName ?? task.taskName,
-        taskDescription:
-          detailedTask?.taskDescription ?? task.taskDescription ?? null,
-        quantity: detailedTask?.quantity ?? task.quantity ?? null,
-        status: detailedTask?.status ?? task.status ?? null,
-        source: detailedTask?.source ?? task.source ?? null,
-        progressNote: detailedTask?.progressNote ?? task.progressNote ?? null,
-        visibility: detailedTask?.visibility ?? task.visibility ?? null,
-        moderationStatus:
-          detailedTask?.moderationStatus ?? task.moderationStatus ?? null,
-        reviewNote: detailedTask?.reviewNote ?? task.reviewNote ?? null,
-        createdAt:
-          detailedTask?.createdAt?.toString() ?? task.createdAt?.toString() ?? null,
-        updatedAt:
-          detailedTask?.updatedAt?.toString() ?? task.updatedAt?.toString() ?? null,
-        properties:
-          detailedTask?.properties.map((property) => ({
-            uuid: property.uuid,
-            propertyName: property.propertyName,
-            propertyValue: property.propertyValue,
-            quantity: property.quantity,
-            status: property.status,
-            comment: property.comment,
-            createdAt: property.createdAt?.toString() ?? null,
-          })) ?? [],
-      };
-    });
-  }, [taskData?.ticketTasks, ticket?.tasks]);
-
-  // The same tasks, as needs a volunteer can claim. Who claimed them is not shown: without
+  // The ticket's tasks, as needs a volunteer can claim. Who claimed them is not shown: without
   // ticket.view_history `assignments` comes back empty, and `assignedCount` is what everyone gets.
   const needs = useMemo(
     () => readTicketNeeds(ticketData?.ticket ?? null),
@@ -392,36 +175,19 @@ export function TaskMatchTicketDetailsPanel({
   const ticketCreatedBy = ticket?.createdBy ?? marker.ticketMeta?.createdBy;
   // Its requester can add one more need, even to a ticket left with none.
   const canAddNeed = useCanAddNeed({ ticketStatus, ticketCreatedBy });
-
-  const activeTask = tasks[activeTaskIndex] ?? null;
-
-  useEffect(() => {
-    setActiveTaskIndex(0);
-  }, [marker.id]);
-
-  useEffect(() => {
-    setActiveTaskIndex((current) =>
-      tasks.length === 0 ? 0 : Math.min(current, tasks.length - 1),
-    );
-  }, [tasks.length]);
-
-  const handlePreviousTask = () => {
-    setActiveTaskIndex((current) =>
-      tasks.length === 0 ? 0 : (current - 1 + tasks.length) % tasks.length,
-    );
-  };
-
-  const handleNextTask = () => {
-    setActiveTaskIndex((current) =>
-      tasks.length === 0 ? 0 : (current + 1) % tasks.length,
-    );
-  };
+  const contact =
+    [
+      ticket?.contactName?.trim() || marker.ticketMeta?.contactName?.trim(),
+      ticket?.contactPhone?.trim() || marker.ticketMeta?.contactPhone?.trim(),
+    ]
+      .filter(Boolean)
+      .join(' / ') || '未提供';
 
   return (
     <Stack spacing={2}>
-      {ticketError || taskError ? (
+      {ticketError ? (
         <Alert severity="error">
-          {(ticketError ?? taskError)?.message ?? '載入任務詳情失敗。'}
+          {ticketError.message ?? '載入任務詳情失敗。'}
         </Alert>
       ) : null}
 
@@ -463,42 +229,69 @@ export function TaskMatchTicketDetailsPanel({
 
       {coarse ? (
         <LocationPrivacyNotice isAuthenticated={isAuthenticated}>
-          為保護求助者，這裡只顯示<b>概略區塊</b>與結構化資訊。精確位置、狀況描述與照片不會對外公開。
+          為保護求助者，這裡只顯示<b>概略區塊</b>
+          與結構化資訊。精確位置、狀況描述、照片與聯絡方式不會對外公開。
         </LocationPrivacyNotice>
       ) : null}
 
-      <SectionCard title="任務單摘要" icon={<InfoOutlinedIcon sx={{ fontSize: 18 }} />}>
-        <Typography
-          sx={{
-            color: detailPalette.muted,
-            fontSize: displayTextSize[12],
-            lineHeight: '19px',
-          }}
-        >
-          這張任務單是母單，實際執行與媒合重點在下方子任務。
-        </Typography>
+      {/* The rest of the prototype's 詳情, in its order: what this is, then where and whom to ask.
+          Nothing of the back office's — 母單／子任務, review state, notes, times — which the
+          prototype does not show. */}
+      <SectionCard
+        title="任務資訊"
+        icon={<InfoOutlinedIcon sx={{ fontSize: 18 }} />}
+      >
         <Stack spacing={1.25}>
-          <DetailRow label="任務單標題" value={ticket?.title?.trim() || marker.title} />
           <DetailRow
-            label="任務單狀態"
-            value={formatTicketStatusLabel(ticket?.status ?? marker.ticketMeta?.status)}
+            label="狀態"
+            value={formatTicketStatusLabel(ticketStatus)}
           />
+          {coarse ? null : (
+            <DetailRow
+              label="任務說明"
+              value={ticket?.description?.trim() || marker.subtitle}
+            />
+          )}
           <DetailRow
-            label="任務單類型"
+            label="任務類型"
             value={formatTicketTypeLabel(ticket?.taskType ?? marker.ticketMeta?.taskType)}
           />
-          <DetailRow
-            label="現場聯絡人"
-            value={[
-              ticket?.contactName?.trim() || marker.ticketMeta?.contactName?.trim(),
-              ticket?.contactPhone?.trim() || marker.ticketMeta?.contactPhone?.trim(),
-            ]
-              .filter(Boolean)
-              .join(' / ') || '未提供'}
-          />
+          {/* Withheld with the location — a scene photo can show the house number (AC-03) — and
+              left out when there are none, as in the prototype. All at once, as thumbnails that
+              open the image itself (prototype site-detail.jsx:353), and each failing on its own
+              into a card with its link. No 上傳者 or time: the one is an account's uuid, which
+              tells a reader nothing and ties the photo to an account. */}
+          {!coarse && photos.length > 0 ? (
+            <DetailRow
+              label={`現場照片（${photos.length}）`}
+              value={
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns:
+                      'repeat(auto-fill, minmax(120px, 1fr))',
+                    gap: 1,
+                  }}
+                >
+                  {photos.map((photo, index) => (
+                    <PhotoThumb
+                      key={photo.uuid}
+                      url={photo.url}
+                      index={index}
+                      linksOut
+                    />
+                  ))}
+                </Box>
+              }
+            />
+          ) : null}
+          {/* Not beside a coarse location, as in the prototype: a caller without ticket.view_pii
+              gets it masked (王◯◯ / 09*****678 — backend `graphql/tickets/types.py`), which
+              tells a guest nothing and reaches no one. */}
+          {coarse ? null : <DetailRow label="現場聯絡人" value={contact} />}
           {marker.locationCell ? (
             <DetailRow
-              label="位置"
+              label="位置資訊"
               value={
                 <Stack spacing={0.25}>
                   <Typography sx={{ color: detailPalette.text, fontSize: displayTextSize[14], lineHeight: '21px' }}>
@@ -512,256 +305,12 @@ export function TaskMatchTicketDetailsPanel({
             />
           ) : (
             <DetailRow
-              label="座標"
+              label="位置資訊"
               value={`緯度 ${marker.position[0].toFixed(6)} / 經度 ${marker.position[1].toFixed(6)}`}
             />
           )}
-          {coarse ? null : (
-            <DetailRow
-              label="任務單說明"
-              value={ticket?.description?.trim() || marker.subtitle}
-            />
-          )}
-          <Box
-            sx={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 1,
-            }}
-          >
-            <Chip
-              size="small"
-              label={`優先度 ${formatPriorityLabel(ticket?.priority ?? marker.ticketMeta?.priority)}`}
-              sx={{ bgcolor: detailPalette.accentSoft, color: detailPalette.accent }}
-            />
-            <Chip
-              size="small"
-              label={`子任務 ${tasks.length} 張`}
-              sx={{ bgcolor: detailPalette.accentSoft, color: detailPalette.accent }}
-            />
-            {coarse ? null : (
-              <Chip
-                size="small"
-                label={`照片 ${photos.length} 張`}
-                sx={{ bgcolor: detailPalette.accentSoft, color: detailPalette.accent }}
-              />
-            )}
-          </Box>
-          <DetailRow
-            label="建立時間"
-            value={formatDateTime(ticket?.createdAt?.toString() ?? marker.ticketMeta?.createdAt)}
-          />
-          <DetailRow
-            label="最後更新"
-            value={formatDateTime(ticket?.updatedAt?.toString() ?? marker.ticketMeta?.updatedAt)}
-          />
         </Stack>
       </SectionCard>
-
-      <SectionCard
-        title={`子任務${tasks.length > 0 ? ` (${tasks.length})` : ''}`}
-        icon={<AssignmentRoundedIcon sx={{ fontSize: 18 }} />}
-        action={
-          <CarouselControls
-            index={activeTaskIndex}
-            total={tasks.length}
-            onPrevious={handlePreviousTask}
-            onNext={handleNextTask}
-          />
-        }
-      >
-        {isTicketFetching || isTaskFetching ? (
-          <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
-            載入子任務資料中...
-          </Typography>
-        ) : activeTask ? (
-          <Stack spacing={1.5}>
-            <Box
-              sx={{
-                p: 1.5,
-                borderRadius: 2.5,
-                bgcolor: detailPalette.sectionSurface,
-                border: `1px solid ${detailPalette.border}`,
-              }}
-            >
-              <Typography
-                sx={{
-                  color: detailPalette.heading,
-                  fontSize: displayTextSize[16],
-                  lineHeight: '24px',
-                  fontWeight: 800,
-                }}
-              >
-                {activeTask.taskName}
-              </Typography>
-              <Box
-                sx={{
-                  mt: 1,
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 1,
-                }}
-              >
-                <Chip
-                  size="small"
-                  label={formatTicketTypeLabel(activeTask.taskType)}
-                  sx={{
-                    bgcolor: color.bg.secondary.subtle,
-                    color: color.brand.secondary.subtle,
-                  }}
-                />
-                <Chip
-                  size="small"
-                  label={formatTicketStatusLabel(activeTask.status)}
-                  sx={{
-                    bgcolor: color.bg.primary.subtle,
-                    color: color.brand.primary.subtle,
-                  }}
-                />
-                <Chip
-                  size="small"
-                  label={
-                    activeTask.quantity !== null && activeTask.quantity !== undefined
-                      ? `需求數量 ${activeTask.quantity}`
-                      : '需求數量未提供'
-                  }
-                  sx={{
-                    bgcolor: color.bg.neutral.sunken,
-                    color: color.fg.neutral.subtle,
-                  }}
-                />
-              </Box>
-            </Box>
-
-            {coarse ? null : (
-              <DetailRow
-                label="子任務說明"
-                value={activeTask.taskDescription?.trim() || '未提供'}
-              />
-            )}
-            <DetailRow
-              label="審核狀態"
-              value={formatModerationStatusLabel(activeTask.moderationStatus)}
-            />
-            {coarse ? null : (
-              <>
-                <DetailRow
-                  label="進度備註"
-                  value={activeTask.progressNote?.trim() || '未提供'}
-                />
-                <DetailRow
-                  label="審核備註"
-                  value={activeTask.reviewNote?.trim() || '未提供'}
-                />
-              </>
-            )}
-            <DetailRow
-              label="建立時間"
-              value={formatDateTime(activeTask.createdAt)}
-            />
-
-            <Box
-              sx={{
-                p: 1.5,
-                borderRadius: 2.5,
-                bgcolor: detailPalette.sectionSurface,
-                border: `1px solid ${detailPalette.border}`,
-              }}
-            >
-              <Typography
-                sx={{
-                  color: detailPalette.heading,
-                  fontSize: displayTextSize[13],
-                  lineHeight: '20px',
-                  fontWeight: 800,
-                }}
-              >
-                子任務屬性
-              </Typography>
-              {activeTask.properties.length > 0 ? (
-                <Stack spacing={1} sx={{ mt: 1.25 }}>
-                  {activeTask.properties.map((property) => (
-                    <Box
-                      key={property.uuid}
-                      sx={{
-                        p: 1.25,
-                        borderRadius: 2,
-                        bgcolor: detailPalette.surface,
-                        border: `1px solid ${detailPalette.border}`,
-                      }}
-                    >
-                      <Typography sx={{ color: detailPalette.text, fontSize: displayTextSize[13], fontWeight: 700 }}>
-                        {property.propertyName}
-                      </Typography>
-                      <Typography sx={{ mt: 0.5, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
-                        {property.propertyValue}
-                        {property.quantity !== null && property.quantity !== undefined
-                          ? ` / 數量 ${property.quantity}`
-                          : ''}
-                        {property.status ? ` / 狀態 ${property.status}` : ''}
-                      </Typography>
-                      {property.comment?.trim() ? (
-                        <Typography sx={{ mt: 0.75, color: detailPalette.text, fontSize: displayTextSize[12] }}>
-                          {property.comment}
-                        </Typography>
-                      ) : null}
-                    </Box>
-                  ))}
-                </Stack>
-              ) : (
-                <Typography sx={{ mt: 1, color: detailPalette.muted, fontSize: displayTextSize[12] }}>
-                  此子任務目前沒有額外屬性資料。
-                </Typography>
-              )}
-            </Box>
-          </Stack>
-        ) : (
-          <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
-            這張任務單目前沒有子任務。
-          </Typography>
-        )}
-      </SectionCard>
-
-      {/* Withheld with the location — a scene photo can show the house number (AC-03). */}
-      {coarse ? null : (
-      <SectionCard
-        title={`現場照片${photos.length > 0 ? ` (${photos.length})` : ''}`}
-        icon={<PhotoLibraryRoundedIcon sx={{ fontSize: 18 }} />}
-      >
-        {/* All at once, as thumbnails that open the image itself (prototype site-detail.jsx:353),
-            and each failing on its own into a card with its link. No 上傳者 or time: the one is an
-            account's uuid, which tells a reader nothing and ties the photo to an account. */}
-        {photos.length > 0 ? (
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-              gap: 1,
-            }}
-          >
-            {photos.map((photo, index) => (
-              <PhotoThumb key={photo.uuid} url={photo.url} index={index} linksOut />
-            ))}
-          </Box>
-        ) : (
-          <Box
-            sx={{
-              p: 2,
-              borderRadius: 2.5,
-              border: `1px dashed ${detailPalette.border}`,
-              bgcolor: detailPalette.sectionSurface,
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <ImageRoundedIcon sx={{ color: detailPalette.muted, fontSize: 18 }} />
-              <Typography sx={{ color: detailPalette.muted, fontSize: displayTextSize[13] }}>
-                這張任務單目前沒有照片。
-              </Typography>
-            </Box>
-          </Box>
-        )}
-      </SectionCard>
-      )}
     </Stack>
   );
 }

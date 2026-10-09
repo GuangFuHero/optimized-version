@@ -89,9 +89,22 @@ const STOP_RECRUITING_WORDS: RefusalWords = {
   fallback: '停止招募失敗，請稍後再試一次。',
 };
 
+const QUANTITY_REQUIRED = '每項需求都要填數量（人員受困除外）。';
+
+/**
+ * A need of a kind that needs a count, filed without one (`QUANTITY_REQUIRED_TASK_TYPES`): the
+ * forms ask for it first, so these are for one that gets through. 請求協助 says them too.
+ */
+export const QUANTITY_REFUSALS: Record<string, string> = {
+  'quantity is required for a hr task': QUANTITY_REQUIRED,
+  'quantity is required for a supply task': QUANTITY_REQUIRED,
+  'quantity is required for a medical task': QUANTITY_REQUIRED,
+};
+
 /** `create_ticket_task`'s refusals — a requester's 「再加一件」. */
 const ADD_NEED_WORDS: RefusalWords = {
   refusals: {
+    ...QUANTITY_REFUSALS,
     // Deleted while the requester was adding to it, from another tab or by a coordinator.
     'Ticket not found': '這張單已經刪除了。',
     // A ticket cancelled by hand before statuses were derived: final, nobody could claim more.

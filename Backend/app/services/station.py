@@ -64,13 +64,8 @@ async def notify_operational_status_change(
 ) -> None:
     """Tell Gov staff and the station's team admins that a station's live status changed.
 
-    Shared by the two write paths that can change an operational value: direct property
-    edits (update_station_property) and approved suggestions
-    (suggestion.review_station_suggestion).
-
-    Callers must commit their own write first and pass plain values, never ORM attributes —
-    dispatch() commits, and the test suite runs sessions with expire_on_commit=True
-    (tests/conftest.py), so anything read off an ORM object afterwards would be stale.
+    Shared by direct property edits and suggestion merges and revokes. Callers commit their
+    own write first and pass plain values, because dispatch() commits and expires ORM objects.
     """
     station = await station_repository.get_by_uuid_active(db, station_uuid)
     station_name = (station.name if station else None) or "物資站"

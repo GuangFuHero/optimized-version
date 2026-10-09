@@ -94,20 +94,23 @@ async def _stranger(db, perm: Perm = Perm.TICKET_EDIT, scope: str = "own") -> Us
     return await _holding(db, stranger, perm, scope)
 
 
-async def _add(db, actor: User, ticket_uuid: str, *, name: str = "搬家具", quantity: int | None = 3) -> str:
+async def _add(
+    db, actor: User, ticket_uuid: str, *,
+    name: str = "搬家具", quantity: int | None = 3, task_type: str = "hr",
+) -> str:
     """Add a need through createTicketTask's service. It commits: take ids out beforehand."""
     task = await ticket_service.create_ticket_task(
-        db, actor=actor, ticket_uuid=ticket_uuid, task_type="hr", task_name=name,
+        db, actor=actor, ticket_uuid=ticket_uuid, task_type=task_type, task_name=name,
         task_description=None, quantity=quantity, source="user", visibility="public", route_uuid=None,
     )
     return str(task.uuid)
 
 
-async def _import(db, actor: User, ticket_uuid: str) -> str:
+async def _import(db, actor: User, ticket_uuid: str, *, quantity: int | None = 3) -> str:
     """Add a need the way a bulk import does."""
     task = await ticket_service.import_ticket_task(
         db, actor=actor, ticket_uuid=ticket_uuid, task_type="hr", task_name="搬家具",
-        task_description=None, quantity=3, source="import", visibility="public", route_uuid=None,
+        task_description=None, quantity=quantity, source="import", visibility="public", route_uuid=None,
     )
     return str(task.uuid)
 
@@ -126,15 +129,15 @@ async def _ticket_status(db, ticket_uuid: str) -> str:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("quantity", [3, None])
-async def test_the_requester_adds_a_need_to_their_ticket(db, quantity):
-    """The need is open, and recorded as added by the requester; a need need not say how many."""
+@pytest.mark.parametrize(("task_type", "quantity"), [("hr", 3), ("rescue", None)])
+async def test_the_requester_adds_a_need_to_their_ticket(db, task_type, quantity):
+    """The need is open, and recorded as added by the requester; a rescue need need not say how many."""
     ticket = await _ticket(db, status="in_progress")
     await _need(db, ticket, claims=1)
     requester = await _requester(db, ticket)
     requester_uuid = str(requester.uuid)
 
-    task_uuid = await _add(db, requester, str(ticket.uuid), quantity=quantity)
+    task_uuid = await _add(db, requester, str(ticket.uuid), quantity=quantity, task_type=task_type)
 
     added = await db.get(TicketTask, uuidlib.UUID(task_uuid))
     assert (added.task_name, added.quantity, added.status) == ("搬家具", quantity, "pending")
@@ -248,14 +251,15 @@ async def test_a_ticket_cancelled_by_hand_takes_no_need(db):
     [
         ("清" * 201, 3, "task_name must be at most 200 characters"),
         ("搬家具", 0, "quantity must be at least 1"),
+        ("搬家具", None, "quantity is required for a hr task"),
     ],
-    ids=["name too long", "zero quantity"],
+    ids=["name too long", "zero quantity", "no quantity"],
 )
 async def test_a_need_the_site_would_misread_is_refused(db, name, quantity, message):
     """Checked before anything is written, so the caller hears why instead of "Unexpected error."
 
-    A name longer than its column would fail in the database, and a zero quantity would read as
-    full the moment it was filed.
+    A name longer than its column would fail in the database, a zero quantity would read as
+    full the moment it was filed, and an hr need without one would never fill (ADR-291 point 7).
     """
     ticket = await _ticket(db)
     ticket_uuid = str(ticket.uuid)
@@ -332,3 +336,22 @@ async def test_an_import_reopens_a_completed_ticket_too(db):
     await _import(db, importer, ticket_uuid)
 
     assert await _ticket_status(db, ticket_uuid) == "pending"
+
+
+@pytest.mark.asyncio
+async def test_an_import_takes_no_need_for_nobody_either(db):
+    """A zero quantity reads as full at once, and an hr need without one never fills.
+
+    The import's preview refuses such a row first (`task_quantity`'s minimum in bulk_columns, the
+    quantity check in _plan_tickets); this is the backstop for a caller that skips the preview.
+    """
+    ticket = await _ticket(db)
+    ticket_uuid = str(ticket.uuid)
+    importer = await _stranger(db, Perm.TICKET_ADD, "all")
+
+    with pytest.raises(ValueError, match="quantity must be at least 1"):
+        await _import(db, importer, ticket_uuid, quantity=0)
+    with pytest.raises(ValueError, match="quantity is required for a hr task"):
+        await _import(db, importer, ticket_uuid, quantity=None)
+
+    assert await _needs(db, ticket_uuid) == 0

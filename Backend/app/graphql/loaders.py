@@ -13,7 +13,7 @@ the plan produced, and the same field can come back differently twice running.
 
 from collections import defaultdict
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from strawberry.dataloader import DataLoader
 
@@ -24,6 +24,7 @@ from app.graphql.geo.types import (
     StationPropertyType,
 )
 from app.graphql.scalars import geom_to_geojson
+from app.graphql.suggestions.types import StationSuggestionMergeType, StationSuggestionType
 from app.graphql.tickets.types import (
     PhotoType,
     TaskAssignmentType,
@@ -36,7 +37,12 @@ from app.models.geo import BaseGeometry
 from app.models.photo import Photo
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
-from app.models.station_property import CrowdSourcing, StationProperty
+from app.models.station_property import (
+    CrowdSourcing,
+    StationProperty,
+    StationSuggestionMerge,
+    StationUpdateSuggestion,
+)
 from app.models.team import Team
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
@@ -75,6 +81,19 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
                 db, CrowdSourcing, "item_uuid", CrowdSourcingType,
                 # A feed, not a form: newest rating first.
                 order_by=(CrowdSourcing.created_at.desc(), CrowdSourcing.uuid),
+            )
+        ),
+        # Keyed by station and covering its properties too, so a station list with nested
+        # properties still costs one query.
+        "pending_suggestions_by_station": DataLoader(
+            load_fn=_make_pending_suggestions_by_station_loader(db)
+        ),
+        "suggestion_merges_by_station": DataLoader(
+            load_fn=_make_one_to_many_loader(
+                db, StationSuggestionMerge, "station_uuid", StationSuggestionMergeType,
+                soft_delete=True,
+                # Newest decision first, since that is the one a revoke would target.
+                order_by=(StationSuggestionMerge.created_at.desc(), StationSuggestionMerge.uuid),
             )
         ),
         "photos_by_ticket": photos_by_geometry,
@@ -150,6 +169,38 @@ def _make_one_to_many_loader(
         for row in rows:
             grouped[str(getattr(row, parent_column))].append(gql_type.from_model(row))
         return [grouped[str(uuid)] for uuid in parent_uuids]
+
+    return load_fn
+
+
+def _make_pending_suggestions_by_station_loader(db: AsyncSession):
+    """Build a load function: ``list[station_uuid] -> list[list[StationSuggestionType]]``.
+
+    Returns the pending suggestions on each station and on its active properties, newest first.
+    """
+    prop_station = cast(StationProperty.station_uuid, String)
+    station_key = func.coalesce(prop_station, StationUpdateSuggestion.target_uuid)
+
+    async def load_fn(station_uuids: list[str]) -> list[list]:
+        keys = [str(uuid) for uuid in station_uuids]
+        stmt = (
+            select(StationUpdateSuggestion, station_key)
+            .outerjoin(
+                StationProperty,
+                (cast(StationProperty.uuid, String) == StationUpdateSuggestion.target_uuid)
+                & StationProperty.delete_at.is_(None),
+            )
+            .where(
+                StationUpdateSuggestion.status == "pending",
+                StationUpdateSuggestion.delete_at.is_(None),
+                or_(StationUpdateSuggestion.target_uuid.in_(keys), prop_station.in_(keys)),
+            )
+            .order_by(StationUpdateSuggestion.created_at.desc(), StationUpdateSuggestion.uuid)
+        )
+        grouped: dict[str, list] = defaultdict(list)
+        for row, key in (await db.execute(stmt)).all():
+            grouped[key].append(StationSuggestionType.from_model(row))
+        return [grouped[key] for key in keys]
 
     return load_fn
 

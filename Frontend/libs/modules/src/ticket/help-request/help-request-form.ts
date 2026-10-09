@@ -83,12 +83,29 @@ export interface NeedDraft {
   /** Null until chosen: a default kind would file 清淤 for someone who never picked it. */
   need: SiteNeedValue | null;
   name: string;
-  /** Text as typed; blank means not known yet, which the server stores as null. */
+  /**
+   * Text as typed. Required but for a rescue, whose count nobody knows yet: blank is sent as
+   * null, which the server takes for a rescue only (`QUANTITY_REQUIRED_TASK_TYPES`).
+   */
   quantity: string;
 }
 
 export function emptyNeed(): NeedDraft {
   return { need: null, name: '', quantity: '' };
+}
+
+/** The most needs one request files (backend `HELP_REQUEST_NEED_MAX`); 「再加一件」 adds more later. */
+export const MAX_NEEDS = 20;
+
+export function canAddNeedRow(needs: readonly NeedDraft[]): boolean {
+  return needs.length < MAX_NEEDS;
+}
+
+/** A chosen need but a rescue, with no quantity typed. A row with no kind yet is not asked. */
+export function isQuantityMissing(row: NeedDraft): boolean {
+  const option = getNeedOption(row.need);
+
+  return Boolean(option) && option?.kind !== 'rescue' && !row.quantity.trim();
 }
 
 export interface HelpRequestForm {
@@ -130,7 +147,8 @@ export type HelpRequestFieldKey =
   | 'landmark'
   | 'address'
   | 'contact'
-  | 'needs';
+  | 'needs'
+  | 'quantity';
 
 export interface MissingField {
   key: HelpRequestFieldKey;
@@ -146,7 +164,7 @@ function chosenNeeds(needs: readonly NeedDraft[]) {
 
 /**
  * What still has to be filled in, in the form's order from the top, so the first is the one to
- * scroll to. At least one need is required.
+ * scroll to. At least one need is required, and how many of each but a rescue.
  */
 export function findMissingFields(form: HelpRequestForm): MissingField[] {
   const missing: MissingField[] = [];
@@ -165,6 +183,9 @@ export function findMissingFields(form: HelpRequestForm): MissingField[] {
   }
   if (chosenNeeds(form.needs).length === 0) {
     missing.push({ key: 'needs', label: '至少要選一項你需要的幫忙' });
+  }
+  if (form.needs.some(isQuantityMissing)) {
+    missing.push({ key: 'quantity', label: '需求的數量' });
   }
 
   return missing;

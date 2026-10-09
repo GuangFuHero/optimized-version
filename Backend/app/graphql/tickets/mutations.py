@@ -81,7 +81,7 @@ class RequestMutation:
             ),
             tasks=[
                 {
-                    "task_type": task.task_type,
+                    "task_type": task.task_type.value,
                     "task_name": task.task_name,
                     "task_description": task.task_description,
                     "quantity": task.quantity,

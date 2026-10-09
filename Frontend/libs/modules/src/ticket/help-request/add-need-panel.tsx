@@ -12,7 +12,11 @@ import { addNeedErrorMessage } from '../needs/claim-error';
 import { useNeedClaim } from '../needs/need-claim-provider';
 import { announceTicketChanged } from '../ticket-changes';
 import { canAddNeed, toCreateTicketTaskInput } from './add-need';
-import { emptyNeed, type NeedDraft } from './help-request-form';
+import {
+  emptyNeed,
+  isQuantityMissing,
+  type NeedDraft,
+} from './help-request-form';
 import { NeedDraftRow } from './need-draft-row';
 
 const { color, radius } = designTokens;
@@ -79,7 +83,7 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
 
     const input = toCreateTicketTaskInput(ticketUuid, draft);
 
-    if (!input || submitting) {
+    if (!input || isQuantityMissing(draft) || submitting) {
       return;
     }
 
@@ -138,6 +142,7 @@ export function AddNeedPanel({ ticketUuid, needCount }: AddNeedPanelProps) {
         showIndex={false}
         canRemove={false}
         invalid={unchosen}
+        quantityMissing={touched && isQuantityMissing(draft)}
         onChange={setDraft}
         onRemove={close}
       />

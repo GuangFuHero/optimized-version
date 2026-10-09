@@ -488,6 +488,52 @@ async def test_an_integer_beyond_int4_fails_its_own_row(db):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("quantity", ["0", "-2"])
+async def test_a_need_for_nobody_fails_its_own_row_before_anything_is_written(db, quantity):
+    """With a quantity below 1 every claim reads as full, so nobody could ever take the need.
+
+    The row fails at preview. Caught only when its need was added, it would have left the row's
+    new ticket committed with no need on it.
+    """
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([_row("正常的一列"), {**_row("求救"), "task_quantity": quantity}])
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename,
+                                   task_type="rescue")
+
+    assert (outcome.created, outcome.failed, outcome.partial_rows) == (1, 1, ())
+    assert await _ticket_titled(db, "求救") is None
+    assert "不能小於 1" in " ".join(e.message for e in outcome.errors)
+
+
+@pytest.mark.asyncio
+async def test_an_hr_need_without_a_quantity_fails_its_own_row_before_anything_is_written(db):
+    """Any need but a rescue must say how many (ADR-291 point 7): refused at preview, no ticket left."""
+    actor = await _importer(db)
+    hr_row = {**_row("清淤"), "task_type": "hr"}
+    raw, filename = _file([hr_row, {**hr_row, "title": "搬家具", "task_quantity": ""}])
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="hr")
+
+    assert (outcome.created, outcome.failed, outcome.partial_rows) == (1, 1, ())
+    assert await _ticket_titled(db, "搬家具") is None
+    assert "人數" in " ".join(e.message for e in outcome.errors)
+
+
+@pytest.mark.asyncio
+async def test_a_rescue_need_may_still_leave_out_how_many(db):
+    """A rescue may not know how many it takes; it alone comes without a quantity."""
+    await _configs(db)
+    actor = await _importer(db)
+    raw, filename = _file([{**_row("人員受困"), "task_quantity": ""}])
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+
+    assert (outcome.created, outcome.failed) == (1, 0), outcome.errors
+
+
+@pytest.mark.asyncio
 async def test_the_error_report_is_re_uploadable_when_the_file_has_an_error_column(db):
     """A file already carrying an `error` header must still produce a readable report.
 

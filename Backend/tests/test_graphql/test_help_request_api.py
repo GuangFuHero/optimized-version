@@ -6,6 +6,8 @@ tests/test_help_request.py; these only prove the mutation is wired to them.
 
 import pytest
 
+from app.graphql.tickets.types import NeedKind
+from app.services.ticket import TASK_TYPES
 from tests.test_graphql.conftest import _create_user_with_role, auth_header
 
 FILE = """
@@ -73,6 +75,30 @@ async def test_a_refused_request_says_why(client, redis):
     assert [e["message"] for e in res.json()["errors"]] == ["At least one task is required"]
 
 
+def test_the_site_input_lists_exactly_the_kinds_the_service_accepts():
+    """`NeedKind` and `TASK_TYPES` are one list written twice; apart, one refuses what the other takes."""
+    assert {kind.value for kind in NeedKind} == TASK_TYPES
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_kind_of_need_is_refused_by_the_schema(client, redis):
+    """`taskType` is an enum, so the value is refused before the resolver runs, naming the enum.
+
+    graphql-core 3.2 and 3.3 word it differently; both name the value and the enum.
+    """
+    _, token = await _create_user_with_role(redis, "Login User")
+    tasks = [{"taskType": "cooking", "taskName": "煮飯"}]
+
+    res = await client.post(
+        "/graphql",
+        json={"query": FILE, "variables": {"input": _input(tasks=tasks)}},
+        headers=auth_header(token),
+    )
+
+    [error] = res.json()["errors"]
+    assert "'cooking'" in error["message"] and "NeedKind" in error["message"], error
+
+
 @pytest.mark.asyncio
 async def test_the_needs_come_back_in_the_order_they_were_listed(client, redis):
     """「第 1 件、第 2 件…」 stays in that order.
@@ -87,7 +113,9 @@ async def test_the_needs_come_back_in_the_order_they_were_listed(client, redis):
         "/graphql",
         json={
             "query": FILE,
-            "variables": {"input": _input(tasks=[{"taskType": "hr", "taskName": n} for n in names])},
+            "variables": {
+                "input": _input(tasks=[{"taskType": "hr", "taskName": n, "quantity": 1} for n in names])
+            },
         },
         headers=auth_header(token),
     )
