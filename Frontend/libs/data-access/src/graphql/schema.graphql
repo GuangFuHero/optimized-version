@@ -184,7 +184,7 @@ input CreateHelpRequestInput {
   """The address as typed goes in `landmarkNote`, with `floor` and `room`"""
   secondaryLocation: SecondaryLocationInput = null
 
-  """At least one need"""
+  """At least one need, at most 20"""
   tasks: [HelpRequestTaskInput!]!
 
   """
@@ -333,7 +333,9 @@ input CreateTicketTaskInput {
   taskName: String!
   taskDescription: String = null
 
-  """Number of people or units needed"""
+  """
+  People or units needed, at least 1; required except for a 'rescue' task, which may omit it
+  """
   quantity: Int = null
 
   """Origin: 'user' (default) or 'official'"""
@@ -423,14 +425,16 @@ input GenerateBriefingInput {
 scalar GeoJSON
 
 input HelpRequestTaskInput {
-  """Category: 'rescue', 'supply', 'medical', or 'hr'"""
-  taskType: String!
+  """What the need asks for"""
+  taskType: NeedKind!
 
   """What is needed, at most 200 characters"""
   taskName: String!
   taskDescription: String = null
 
-  """People or units needed, at least 1; omit when not known"""
+  """
+  People or units needed, at least 1; required except for a 'rescue' need, which may omit it
+  """
   quantity: Int = null
 }
 
@@ -479,7 +483,8 @@ type Mutation {
   updateBriefing(uuid: UUID!, input: UpdateBriefingInput!): BriefingType!
   deleteBriefing(uuid: UUID!): Boolean!
   createStationSuggestion(input: CreateStationSuggestionInput!): StationSuggestionType!
-  reviewStationSuggestion(uuid: UUID!, approve: Boolean!, reviewNote: String = null): StationSuggestionType!
+  mergeStationSuggestions(stationUuid: UUID!, decisions: [SuggestionDecisionInput!]!, reviewNote: String = null): StationSuggestionMergeType!
+  revokeStationSuggestionMerge(uuid: UUID!): StationSuggestionMergeType!
   createWorkZone(input: CreateWorkZoneInput!): WorkZoneType!
   updateWorkZone(uuid: UUID!, input: UpdateWorkZoneInput!): WorkZoneType!
   assignZoneToTeam(input: ZoneTeamAssignmentInput!): ZoneAssignmentType!
@@ -507,6 +512,13 @@ type MyTaskAssignmentType {
   assignment: TaskAssignmentType!
   task: TicketTaskType!
   ticket: TicketType!
+}
+
+enum NeedKind {
+  rescue
+  supply
+  medical
+  hr
 }
 
 type PageInfo {
@@ -540,7 +552,7 @@ type PhotoType {
 }
 
 type Query {
-  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
+  stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
   station(uuid: UUID!): StationType
   closureAreas(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): ClosureAreaConnection!
   closureArea(uuid: UUID!): ClosureAreaType
@@ -580,7 +592,6 @@ type Query {
   briefings(state: BriefingState = null, tag: String = null): [BriefingType!]!
   briefing(uuid: UUID!): BriefingType
   suggestableFields(targetType: String!): [SuggestableFieldType!]!
-  stationSuggestions(status: String = null, targetUuid: String = null, skip: Int! = 0, limit: Int! = 50): [StationSuggestionType!]!
   workZones(skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
   workZone(uuid: UUID!): WorkZoneType
   zonesByTeam(teamUuid: UUID!, skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
@@ -774,7 +785,26 @@ type StationPropertyType {
   """UUID of the user who added this property"""
   createdBy: String
   createdAt: DateTime
+
+  """
+  Fields of this property with a suggested edit awaiting review. Names only, so public.
+  """
+  pendingSuggestedFields: [String!]!
   crowdSourcings: [CrowdSourcingType!]!
+}
+
+type StationSuggestionMergeType {
+  uuid: UUID!
+  stationUuid: String!
+  changes: [SuggestionChangeType!]!
+
+  """'applied' or 'revoked'"""
+  status: String!
+  reviewNote: String
+  reviewedBy: String!
+  revokedBy: String
+  revokedAt: DateTime
+  createdAt: DateTime
 }
 
 type StationSuggestionType {
@@ -793,7 +823,7 @@ type StationSuggestionType {
   """Why the user suggests this change"""
   comment: String
 
-  """'pending', 'approved', or 'rejected'"""
+  """'pending', 'approved', 'rejected', or 'revoked'"""
   status: String!
 
   """Admin's note recorded when approving/rejecting"""
@@ -886,6 +916,21 @@ type StationType {
   photos: [PhotoType!]!
   secondaryLocation: SecondaryLocationType
   properties: [StationPropertyType!]!
+
+  """
+  Fields of this station with a suggested edit awaiting review. Names only, so public.
+  """
+  pendingSuggestedFields: [String!]!
+
+  """
+  Pending suggestions on this station and its properties, pooled per field; empty without station.review over this station
+  """
+  suggestedFields: [SuggestedFieldType!]!
+
+  """
+  Merges applied to this station, newest first; empty without station.review over this station
+  """
+  suggestionMerges: [StationSuggestionMergeType!]!
 }
 
 input SubmitRoleRequestInput {
@@ -902,6 +947,36 @@ type SuggestableFieldType {
 
   """Allowed values when data_type is 'enum', else null"""
   enumOptions: [String!]
+}
+
+type SuggestedFieldType {
+  targetType: String!
+  targetUuid: String!
+  fieldName: String!
+
+  """Distinct proposed values, newest first"""
+  proposedValues: [String!]!
+  suggestionCount: Int!
+  comments: [String!]!
+  firstSuggestedAt: DateTime
+}
+
+type SuggestionChangeType {
+  targetType: String!
+  targetUuid: String!
+  fieldName: String!
+  before: String
+  after: String
+}
+
+input SuggestionDecisionInput {
+  """The station, or one of its properties"""
+  targetUuid: UUID!
+  fieldName: String!
+  approve: Boolean!
+
+  """Value to write, possibly edited by the reviewer; required to approve"""
+  value: String = null
 }
 
 enum TaskAssignmentStatus {
@@ -1068,7 +1143,9 @@ type TicketTaskType {
   """Short name summarising the task"""
   taskName: String!
 
-  """Number of people or units needed — null means unspecified"""
+  """
+  Number of people or units needed. Null means unspecified and uncapped: a rescue need may leave it out, and needs filed before every other kind had to give one
+  """
   quantity: Int
 
   """
@@ -1081,9 +1158,6 @@ type TicketTaskType {
 
   """Who can see this task: 'public', 'restricted', or 'internal'"""
   visibility: String!
-
-  """Review state: 'pending_review', 'approved', or 'rejected'"""
-  moderationStatus: String!
 
   """
   When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back
@@ -1111,6 +1185,11 @@ type TicketTaskType {
   UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket
   """
   createdBy: String
+
+  """
+  Review state: 'pending_review', 'approved', or 'rejected'. Null to a caller without ticket.view_history on the parent ticket
+  """
+  moderationStatus: String
   properties: [TaskPropertyType!]!
 
   """
@@ -1184,23 +1263,27 @@ type TicketType {
   createdBy: String
 
   """
-  Requester full name — masked unless the caller holds ticket.view_pii here
+  Requester full name — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too
   """
   contactName: String
 
-  """Follow-up email — masked unless the caller holds ticket.view_pii here"""
+  """
+  Follow-up email — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too
+  """
   contactEmail: String
 
-  """Follow-up phone — masked unless the caller holds ticket.view_pii here"""
+  """
+  Follow-up phone — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too
+  """
   contactPhone: String
 
   """
-  Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. What the person said, not a professional assessment
+  Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here (in the `tickets` list, ticket.view_history too). What the person said, not a professional assessment
   """
   personTrappedReported: String
 
   """
-  Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. Not a triage grade and not a risk classification
+  Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here (in the `tickets` list, ticket.view_history too). Not a triage grade and not a risk classification
   """
   immediateDangerReported: String
 

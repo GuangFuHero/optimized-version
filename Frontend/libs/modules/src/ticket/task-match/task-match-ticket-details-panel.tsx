@@ -236,7 +236,7 @@ export function TaskMatchTicketDetailsPanel({
 
       {/* The rest of the prototype's 詳情, in its order: what this is, then where and whom to ask.
           Nothing of the back office's — 母單／子任務, review state, notes, times — which the
-          prototype does not show, and whose review state the backend hands to anyone. */}
+          prototype does not show. */}
       <SectionCard
         title="任務資訊"
         icon={<InfoOutlinedIcon sx={{ fontSize: 18 }} />}
