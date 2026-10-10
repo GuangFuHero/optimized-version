@@ -11,7 +11,7 @@ import pytest
 
 from app.dedup_engine.fast import (
     STATION_PARAMETERS,
-    TICKET_PARAMETERS,
+    TICKET_TASK_PARAMETERS,
     FastParameters,
     Signals,
     combine,
@@ -35,7 +35,7 @@ def _signals(**overrides) -> Signals:
 
 def test_defaults_are_the_grid_search_values():
     """The shipped parameters are the provisional grid-search winners, unchanged from Spec 019."""
-    p = TICKET_PARAMETERS
+    p = TICKET_TASK_PARAMETERS
     assert (p.distance_half_m, p.time_half_min) == (200.0, 360.0)
     assert (p.distance_weight, p.time_weight, p.task_type_weight, p.text_weight) == (2.0, 0.5, 0.5, 1.0)
     assert (p.hint_threshold, p.component_baseline) == (0.8, 0.5)
@@ -81,16 +81,16 @@ def test_identical_place_and_moment_scores_one():
 
 def test_text_signal_joins_the_weighted_average():
     """With text at weight 1.0, a strong trigram match lifts the same pair over the threshold."""
-    without_text, _ = combine(_signals(), TICKET_PARAMETERS)
-    with_text, _ = combine(_signals(text_similarity=0.9), TICKET_PARAMETERS)
+    without_text, _ = combine(_signals(), TICKET_TASK_PARAMETERS)
+    with_text, _ = combine(_signals(text_similarity=0.9), TICKET_TASK_PARAMETERS)
     # (0.7071067811865476*2 + 0.8908987181403393*0.5 + 1*0.5 + 0.9*1) / 4
     assert with_text == pytest.approx(0.8149157303608162, abs=1e-12)
-    assert without_text < TICKET_PARAMETERS.hint_threshold <= with_text
+    assert without_text < TICKET_TASK_PARAMETERS.hint_threshold <= with_text
 
 
 def test_components_carry_weight_and_baseline_light():
     """Every component reports its weight and whether it cleared the shared baseline."""
-    _, components = combine(_signals(same_category=False, text_similarity=0.9), TICKET_PARAMETERS)
+    _, components = combine(_signals(same_category=False, text_similarity=0.9), TICKET_TASK_PARAMETERS)
     by_name = {c["name"]: c for c in components}
     assert list(by_name) == ["distance", "time", "task_type", "text"]
     assert by_name["distance"]["weight"] == 2.0
@@ -107,7 +107,7 @@ def test_all_weights_zero_is_a_configuration_error():
 
 def test_a_missing_signal_leaves_the_average():
     """An unavailable signal is absent from the breakdown, not scored zero."""
-    similarity, components = combine(_signals(same_category=None), TICKET_PARAMETERS)
+    similarity, components = combine(_signals(same_category=None), TICKET_TASK_PARAMETERS)
     assert [c["name"] for c in components] == ["distance", "time"]
     assert similarity == pytest.approx(0.7438651685773059, abs=1e-12)
 
@@ -123,8 +123,10 @@ def test_a_zero_time_weight_drops_the_time_component():
 
 def test_the_same_phone_adds_the_bonus_outside_the_average():
     """+0.10 on top of the weighted average, reported as its own component."""
-    plain, plain_components = combine(_signals(text_similarity=0.5), TICKET_PARAMETERS)
-    bonus, components = combine(_signals(text_similarity=0.5, same_contact_phone=True), TICKET_PARAMETERS)
+    plain, plain_components = combine(_signals(text_similarity=0.5), TICKET_TASK_PARAMETERS)
+    bonus, components = combine(
+        _signals(text_similarity=0.5, same_contact_phone=True), TICKET_TASK_PARAMETERS
+    )
     assert bonus == pytest.approx(plain + 0.10, abs=1e-12)
     assert components[:-1] == plain_components
     assert components[-1] == {"name": "phone", "score": 1.0, "weight": 0.10, "passed": True}
@@ -133,15 +135,15 @@ def test_the_same_phone_adds_the_bonus_outside_the_average():
 @pytest.mark.parametrize("same", [False, None], ids=["different", "missing"])
 def test_a_different_or_missing_phone_changes_nothing(same):
     """Never a penalty, and no component either."""
-    assert combine(_signals(same_contact_phone=same), TICKET_PARAMETERS) == combine(
-        _signals(), TICKET_PARAMETERS
+    assert combine(_signals(same_contact_phone=same), TICKET_TASK_PARAMETERS) == combine(
+        _signals(), TICKET_TASK_PARAMETERS
     )
 
 
 def test_the_bonus_is_capped_at_one():
     """A perfect pair stays 1.0."""
     perfect = _signals(distance_m=0.0, age_min=0.0, text_similarity=1.0, same_contact_phone=True)
-    assert combine(perfect, TICKET_PARAMETERS)[0] == 1.0
+    assert combine(perfect, TICKET_TASK_PARAMETERS)[0] == 1.0
 
 
 def test_stations_get_no_phone_bonus():
@@ -180,12 +182,12 @@ def test_same_contact_phone():
 
 def test_the_hint_boundary_is_where_a_perfect_candidate_scores_exactly_the_threshold():
     """`max_hint_distance_m` is the exact inverse of the formula, with the phone bonus earned."""
-    boundary = max_hint_distance_m(TICKET_PARAMETERS)
+    boundary = max_hint_distance_m(TICKET_TASK_PARAMETERS)
     assert boundary == pytest.approx(-200 * math.log2(0.4), abs=1e-9)  # 264.4 m; 147.4 m without the bonus
     perfect = _signals(distance_m=boundary, age_min=0.0, text_similarity=1.0, same_contact_phone=True)
-    assert combine(perfect, TICKET_PARAMETERS)[0] == pytest.approx(TICKET_PARAMETERS.hint_threshold)
+    assert combine(perfect, TICKET_TASK_PARAMETERS)[0] == pytest.approx(TICKET_TASK_PARAMETERS.hint_threshold)
     beyond = _signals(distance_m=boundary + 1, age_min=0.0, text_similarity=1.0, same_contact_phone=True)
-    assert combine(beyond, TICKET_PARAMETERS)[0] < TICKET_PARAMETERS.hint_threshold
+    assert combine(beyond, TICKET_TASK_PARAMETERS)[0] < TICKET_TASK_PARAMETERS.hint_threshold
 
 
 def test_without_the_bonus_the_boundary_is_fast_v2s():
@@ -195,7 +197,7 @@ def test_without_the_bonus_the_boundary_is_fast_v2s():
 
 def test_the_boundary_is_widest_when_every_signal_is_available():
     """Fewer signals means a tighter boundary, so the all-four radius covers every ticket."""
-    all_four = max_hint_distance_m(TICKET_PARAMETERS)
+    all_four = max_hint_distance_m(TICKET_TASK_PARAMETERS)
     assert max_hint_distance_m(FastParameters(text_weight=0.0)) < all_four
     assert max_hint_distance_m(FastParameters(task_type_weight=0.0)) < all_four
 
@@ -216,11 +218,11 @@ def test_degenerate_parameters_give_a_degenerate_boundary(parameters, expected):
 def test_the_boundary_scales_with_the_distance_half_life():
     """Doubling `distance_half_m` doubles the reach."""
     assert max_hint_distance_m(FastParameters(distance_half_m=400.0)) == pytest.approx(
-        2 * max_hint_distance_m(TICKET_PARAMETERS)
+        2 * max_hint_distance_m(TICKET_TASK_PARAMETERS)
     )
 
 
 def test_the_station_boundary_is_tighter():
     """Without time the boundary shrinks."""
     assert max_hint_distance_m(STATION_PARAMETERS) == pytest.approx(124.29767534925406, abs=1e-9)
-    assert max_hint_distance_m(STATION_PARAMETERS) < max_hint_distance_m(TICKET_PARAMETERS)
+    assert max_hint_distance_m(STATION_PARAMETERS) < max_hint_distance_m(TICKET_TASK_PARAMETERS)

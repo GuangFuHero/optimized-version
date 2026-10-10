@@ -27,7 +27,7 @@ from app.dedup_engine.contract import (
     TaskDraft,
     TicketDraft,
 )
-from app.dedup_engine.fast import STATION_PARAMETERS, TICKET_PARAMETERS, FastEngine, max_hint_distance_m
+from app.dedup_engine.fast import STATION_PARAMETERS, TICKET_TASK_PARAMETERS, FastEngine, max_hint_distance_m
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.request import Tickets
@@ -102,7 +102,7 @@ async def test_each_task_draft_gets_at_most_one_suspect(db):
     assert [(s.draft_ref, s.related_kind, s.related_uuid, s.related_ticket_uuid) for s in suspects] == [
         ("task:1", "ticket_task", existing, str(ticket.uuid))
     ]
-    assert suspects[0].similarity >= TICKET_PARAMETERS.hint_threshold
+    assert suspects[0].similarity >= TICKET_TASK_PARAMETERS.hint_threshold
 
 
 async def test_the_ticket_itself_is_never_compared(db):
@@ -113,15 +113,15 @@ async def test_the_ticket_itself_is_never_compared(db):
 
 
 async def test_best_candidate_wins_and_ties_break_on_uuid(db):
-    """Several matches for one draft: the highest, then the lowest uuid."""
+    """Several matches for one draft: the highest, then the highest uuid."""
     owner = await _owner(db)
     near = await _ticket(db, owner)
-    a = await _task(db, owner, near, uuid=uuid_mod.UUID("00000000-0000-0000-0000-00000000000a"))
-    await _task(db, owner, near, uuid=uuid_mod.UUID("00000000-0000-0000-0000-00000000000b"))
+    await _task(db, owner, near, uuid=uuid_mod.UUID("00000000-0000-0000-0000-00000000000a"))
+    b = await _task(db, owner, near, uuid=uuid_mod.UUID("00000000-0000-0000-0000-00000000000b"))
     await _task(db, owner, await _ticket(db, owner, east_deg=DEG_100M * 0.6))
 
     (suspect,) = await FastEngine().check(db, _new_ticket(PUMP), NOW)
-    assert suspect.related_uuid == a
+    assert suspect.related_uuid == b
 
 
 async def test_unrelated_or_far_tasks_are_not_suspected(db):
@@ -189,7 +189,7 @@ async def test_score_rates_one_named_pair_without_a_threshold(db):
 
     suspect = await engine.score(db, _new_ticket(PUMP), "task:0", "ticket_task", closed, NOW)
     assert suspect.related_uuid == closed and suspect.related_ticket_uuid == str(far.uuid)
-    assert suspect.similarity < TICKET_PARAMETERS.hint_threshold
+    assert suspect.similarity < TICKET_TASK_PARAMETERS.hint_threshold
 
     assert (
         await engine.score(db, _new_ticket(PUMP), "task:0", "ticket_task", str(uuid_mod.uuid4()), NOW) is None
@@ -224,7 +224,7 @@ def test_version_and_radius():
     """fast-v3; the radius is the hint boundary per kind (phone bonus included), with the rounding margin."""
     engine = FastEngine()
     assert engine.version == "fast-v3"
-    assert engine.radius_m("ticket_task") == pytest.approx(max_hint_distance_m(TICKET_PARAMETERS) * 1.1)
+    assert engine.radius_m("ticket_task") == pytest.approx(max_hint_distance_m(TICKET_TASK_PARAMETERS) * 1.1)
     assert engine.radius_m("station") == pytest.approx(max_hint_distance_m(STATION_PARAMETERS) * 1.1)
     assert engine.radius_m("ticket_task") == pytest.approx(290.8, abs=0.1)
     assert engine.radius_m("station") == pytest.approx(136.7, abs=0.1)

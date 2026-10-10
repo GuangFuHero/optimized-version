@@ -84,10 +84,10 @@ class FastParameters:
     phone_bonus: float = 0.10
 
 
-TICKET_PARAMETERS = FastParameters()
+TICKET_TASK_PARAMETERS = FastParameters()
 # A station's age says nothing about whether it duplicates one being registered now. The phone
 # bonus was only researched on tickets.
-STATION_PARAMETERS = replace(TICKET_PARAMETERS, time_weight=0.0, phone_bonus=0.0)
+STATION_PARAMETERS = replace(TICKET_TASK_PARAMETERS, time_weight=0.0, phone_bonus=0.0)
 
 
 @dataclass(frozen=True)
@@ -165,7 +165,10 @@ class FastEngine:
 
     def __init__(self, parameters: dict[RelatedKind, FastParameters] | None = None):
         """Use the shipped per-kind parameters unless others are given."""
-        self._parameters = parameters or {"ticket_task": TICKET_PARAMETERS, "station": STATION_PARAMETERS}
+        self._parameters = parameters or {
+            "ticket_task": TICKET_TASK_PARAMETERS,
+            "station": STATION_PARAMETERS,
+        }
 
     def radius_m(self, kind: RelatedKind) -> float:
         """How far to look: the hint boundary plus a rounding margin."""
@@ -243,7 +246,7 @@ class FastEngine:
             for s in (self._task_suspect(draft_ref, draft, phone, *row, now) for row in rows)
             if s.similarity >= threshold
         ]
-        return min(hits, key=lambda s: (-s.similarity, s.related_uuid), default=None)
+        return max(hits, key=lambda s: (s.similarity, s.related_uuid), default=None)
 
     def _task_suspect(
         self,
@@ -281,7 +284,7 @@ class FastEngine:
         hits = [
             s for s in (self._station_suspect(draft, *row, now) for row in rows) if s.similarity >= threshold
         ]
-        return min(hits, key=lambda s: (-s.similarity, s.related_uuid), default=None)
+        return max(hits, key=lambda s: (s.similarity, s.related_uuid), default=None)
 
     def _station_suspect(
         self, draft: StationDraft, station: Station, distance_m: float, now: datetime
