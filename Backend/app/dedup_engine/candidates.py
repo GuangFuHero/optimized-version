@@ -1,17 +1,24 @@
-"""Candidate queries for the fast layer (ADR-304): read-only, owned by the engine.
+"""Candidate queries for the fast layer (ADR-304). The engine owns the queries. All queries are read-only.
 
-What counts as an open candidate is Spec 019's (2026-09-29, task level):
+Spec 019 (2026-09-29, task level) defines an open candidate:
 
-- A task is a candidate while it is neither fulfilled nor canceled and not deleted, under a
-  ticket that is not deleted and not cancelled. A `completed` ticket stays in — it can take a
-  new task — and cancelling a ticket does not cancel its tasks, hence the ticket check.
-- A task has no location of its own: distance is measured from its ticket, and its contact
-  phone is its ticket's (the whole `Tickets` row comes back with each task).
-- A station is a candidate while it is not deleted, is active or temporarily closed, and is not
-  a temporary station past its expiry. `stations.geometry` is a generic GEOMETRY column, so it
-  is measured from its centroid.
+- A task is a candidate if all of these are true:
+  - The task is not fulfilled, not canceled and not deleted.
+  - Its ticket is not deleted and not cancelled.
+  A `completed` ticket stays in, because it can get a new task. When a ticket is cancelled, its
+  tasks stay open. Thus, the query also checks the ticket status.
+- A task does not have its own location. The query measures distance from the ticket of the
+  task. The contact phone of a task is the contact phone of its ticket. Thus, each task comes
+  back with its full `Tickets` row.
+- A station is a candidate if all of these are true:
+  - The station is not deleted.
+  - Its status is active or temporarily closed.
+  - It is not a temporary station after its expiry time.
+  `stations.geometry` is a generic GEOMETRY column. Thus, the query measures distance from
+  the centroid of the station.
 
-Nothing here writes: the backend runs the engine inside a savepoint it always rolls back.
+The queries in this module do not write. The backend runs the engine inside a savepoint, and
+always rolls the savepoint back.
 """
 
 import uuid as _uuid
@@ -31,9 +38,9 @@ CLOSED_TASK_STATUSES = ("fulfilled", "canceled")
 CANCELLED_TICKET_STATUS = "cancelled"
 OPEN_STATION_STATUSES = ("active", "temporarily_closed")
 
-# A bare `geography` cast. geoalchemy2's default `Geography()` renders `geography(GEOMETRY,-1)`,
-# which Postgres does not match against the `::geography` expression indexes on base_geometries,
-# so every submission scanned every geometry row (ADR-305).
+# Use a bare `geography` cast. The default `Geography()` of geoalchemy2 renders
+# `geography(GEOMETRY,-1)`. Postgres does not match that cast against the `::geography`
+# expression indexes on base_geometries. Then each submission scans all geometry rows (ADR-305).
 _GEOGRAPHY = Geography(geometry_type=None)
 
 
@@ -42,7 +49,7 @@ def _point(at: GeoPoint):
 
 
 def _ticket_geography():
-    """Served by `ix_base_geometries_geography`."""
+    """The index `ix_base_geometries_geography` serves this expression."""
     return cast(Tickets.geometry, _GEOGRAPHY)
 
 
@@ -51,7 +58,7 @@ def _ticket_distance(at: GeoPoint):
 
 
 def _station_geography():
-    """Served by `ix_base_geometries_centroid_geography`."""
+    """The index `ix_base_geometries_centroid_geography` serves this expression."""
     return cast(func.ST_Centroid(Station.geometry), _GEOGRAPHY)
 
 
@@ -64,14 +71,17 @@ def _is_uuid(value: str) -> bool:
 
 
 class TicketAnchor(NamedTuple):
-    """What a task added to an existing ticket is compared from: the ticket's point and phone."""
+    """The start point for a new task on a ticket that exists: the point and phone of the ticket."""
 
     location: GeoPoint
     contact_phone: str | None
 
 
 async def ticket_anchor(db: AsyncSession, ticket_uuid: str) -> TicketAnchor | None:
-    """Where a live ticket is and its contact phone, or None if it is missing, deleted or has no point."""
+    """Use `ticket_uuid` to find the point and contact phone of the ticket.
+
+    Returns None if the ticket does not exist, is deleted or does not have a point.
+    """
     if not _is_uuid(ticket_uuid):
         return None
     row = (
@@ -89,7 +99,7 @@ async def ticket_anchor(db: AsyncSession, ticket_uuid: str) -> TicketAnchor | No
 async def open_tasks_near(
     db: AsyncSession, *, at: GeoPoint, radius_m: float, exclude_ticket_uuid: str | None = None
 ) -> list[tuple[TicketTask, Tickets, float]]:
-    """Every open task whose ticket lies within `radius_m` of `at`, with that distance."""
+    """Find all open tasks whose ticket is within `radius_m` of `at`. Each result includes the distance."""
     query = (
         select(TicketTask, Tickets, _ticket_distance(at))
         .join(Tickets, TicketTask.ticket_uuid == Tickets.uuid)
@@ -110,7 +120,10 @@ async def open_tasks_near(
 async def task_with_distance(
     db: AsyncSession, *, task_uuid: str, at: GeoPoint
 ) -> tuple[TicketTask, Tickets, float] | None:
-    """One named task, open or not, unless it or its ticket is deleted."""
+    """Use `task_uuid` to find one task and its ticket, open or closed. Each result includes the distance.
+
+    Returns None if the task or its ticket does not exist or is deleted.
+    """
     if not _is_uuid(task_uuid):
         return None
     row = (
@@ -126,7 +139,7 @@ async def task_with_distance(
 async def open_stations_near(
     db: AsyncSession, *, at: GeoPoint, radius_m: float, now: datetime
 ) -> list[tuple[Station, float]]:
-    """Every serving station within `radius_m` of `at`, with its distance."""
+    """Find all serving stations within `radius_m` of `at`. Each result includes the distance."""
     geography = _station_geography()
     query = select(Station, func.ST_Distance(geography, _point(at)).label("distance_m")).where(
         Station.delete_at.is_(None),
@@ -141,7 +154,10 @@ async def open_stations_near(
 async def station_with_distance(
     db: AsyncSession, *, station_uuid: str, at: GeoPoint
 ) -> tuple[Station, float] | None:
-    """One named station, serving or not, unless it is deleted."""
+    """Use `station_uuid` to find one station, serving or not. The result includes the distance.
+
+    Returns None if the station does not exist or is deleted.
+    """
     if not _is_uuid(station_uuid):
         return None
     row = (

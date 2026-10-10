@@ -1,30 +1,42 @@
-"""The fast layer (current version: fast-v3) — rule-based dedup at task level.
+"""The fast layer (current version: fast-v3). It finds duplicates at task level with fixed rules.
 
-Each signal is normalised to 0–1 and the similarity is their weighted average over the signals
-that are available:
+The engine changes each signal to a score from 0 to 1. The similarity is the weighted average of
+the available signals:
 
-    distance  = 2 ** (-distance_m / distance_half_m)          between the tasks' tickets
-    time      = 2 ** (-age_min / time_half_min)                the candidate's age; skipped at weight 0
-    task_type = 1.0 if both categories match else 0.0          skipped if either side is unknown
-    text      = trigram similarity of name + description       skipped if either side has none
+    distance  = 2 ** (-distance_m / distance_half_m)          between the tickets of the two tasks
+    time      = 2 ** (-age_min / time_half_min)                the age of the candidate; not used at weight 0
+    task_type = 1.0 if both categories match else 0.0          not used if one side is unknown
+    text      = trigram similarity of name + description       not used if one side has no text
 
-A missing signal leaves the average instead of scoring 0, so an empty optional field never
-pushes a candidate below the threshold.
+A missing signal does not get a score of 0. It is not part of the average. Thus, an empty
+optional field never pushes a candidate below the threshold.
 
-Then a pure bonus (fast-v3): when both tickets have a contact phone and the two are the same
-number, `phone_bonus` is added (capped at 1). A different or missing phone changes nothing:
-different people often report the same need, and many leave the phone out, so neither is
-evidence of a different need. The bonus is applied to every candidate before the best one is
-picked and the threshold checked.
+Then the engine adds a pure bonus (fast-v3). If both tickets have a contact phone and the two
+phones are the same number, the engine adds `phone_bonus`. The maximum similarity is 1.
+A different phone or a missing phone changes nothing. Different people often report the same
+need, and many people do not give a phone. Thus, neither one shows that the need is different.
+The engine adds the bonus to each candidate before it selects the best candidate and compares
+it with the threshold.
 
-`combine` and `text_similarity` are also what the offline evaluation tool (`tools/dedup_eval/`)
-scores with, so tuning there scores exactly as here.
+The offline evaluation tool (`tools/dedup_eval/`) also scores with `combine` and
+`text_similarity`. Thus, the tool and the engine give the same scores.
 
-The unit is a ticket task (Spec 019, 2026-09-29): each task draft is compared with open tasks
-nearby and gets at most one suspect; the ticket itself is not compared. Adding a task to an
-existing ticket searches from that ticket and skips its own tasks. Stations are compared as
-stations, without the time signal or the phone bonus. Candidates come from `candidates.py`
-(read-only, ADR-304).
+The unit is a ticket task (Spec 019, 2026-09-29). The engine compares each task draft with open
+tasks nearby. Each task draft gets a maximum of one suspect. The engine does not compare the
+ticket itself. For a new task on a ticket that exists, the engine searches from that ticket and
+skips the tasks of that ticket. The engine compares stations only with stations, without the
+time signal and without the phone bonus. The candidates come from `candidates.py` (read-only,
+ADR-304).
+
+The module has four layers:
+
+- Parameters: `FastParameters`, `TICKET_TASK_PARAMETERS`, `STATION_PARAMETERS` and the
+  module constants.
+- Formula: `Signals`, `combine` and `max_hint_distance_m`. These do not use the database.
+- Measurements: `_age_min`, `text_similarity`, `phone_key` and `same_contact_phone`. These
+  change raw data to signals.
+- Flow: `FastEngine`. It finds candidates, scores them with the formula and gives suspects
+  to the backend.
 
 ⚠️ 參數是暫定值，不是建議值：13 筆手寫 fixture 的 grid search 第一名，沒有正式資料的
 ground truth；`text_weight` 與 `component_baseline` 沒跑過 grid。`phone_bonus` 0.10 來自 2025 光復
@@ -61,17 +73,21 @@ from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 
-# 200 is the width of `tickets.title`; descriptions are unbounded, so 2000 is a chosen cap.
+# 200 is the width of `ticket_tasks.task_name`. Descriptions do not have a length limit, so 2000
+# is a selected limit. The limits keep the text comparison fast for very long input.
 TITLE_MAX_CHARS = 200
 DESCRIPTION_MAX_CHARS = 2000
-# Float rounding must not drop a candidate that scores exactly on the threshold.
+# Float rounding must not remove a candidate whose score is exactly on the threshold.
 RETRIEVAL_SAFETY_FACTOR = 1.1
 _NON_DIGIT = re.compile(r"\D")
 
 
 @dataclass(frozen=True)
 class FastParameters:
-    """Tuning knobs. `phone_bonus` is added on top of the weighted average, not averaged in."""
+    """The values that tune the score. The engine adds `phone_bonus` after the weighted average.
+
+    `phone_bonus` is not part of the average.
+    """
 
     distance_half_m: float = 200.0
     time_half_min: float = 360.0
@@ -85,14 +101,17 @@ class FastParameters:
 
 
 TICKET_TASK_PARAMETERS = FastParameters()
-# A station's age says nothing about whether it duplicates one being registered now. The phone
-# bonus was only researched on tickets.
+# The age of a station does not show if a new station is a duplicate of it. The research for the
+# phone bonus used only tickets.
 STATION_PARAMETERS = replace(TICKET_TASK_PARAMETERS, time_weight=0.0, phone_bonus=0.0)
 
 
 @dataclass(frozen=True)
 class Signals:
-    """The raw measurements between a submission and one candidate. None = unavailable."""
+    """The raw measurements between a submission and one candidate.
+
+    None means that the engine cannot measure the signal, because data is missing.
+    """
 
     distance_m: float
     age_min: float
@@ -102,10 +121,11 @@ class Signals:
 
 
 def combine(signals: Signals, p: FastParameters) -> tuple[float, list[dict[str, Any]]]:
-    """The weighted average over available signals plus the phone bonus, and the breakdown.
+    """Calculate the similarity and its breakdown.
 
-    The bonus shows up as a "phone" component (score 1.0, weight = the bonus) only when it was
-    added; it is never part of the average.
+    The similarity is the weighted average of the available signals, plus the phone bonus.
+    The phone bonus is not part of the average. When the engine adds the bonus, the breakdown
+    shows it as a "phone" component. Its score is 1.0 and its weight is the bonus.
 
     Raises:
         ValueError: when no available signal has positive weight.
@@ -133,18 +153,19 @@ def combine(signals: Signals, p: FastParameters) -> tuple[float, list[dict[str, 
 
 
 def max_hint_distance_m(p: FastParameters) -> float:
-    """The distance past which no candidate can reach `hint_threshold`.
+    """Calculate the distance after which no candidate can get to `hint_threshold`.
 
-    Every other signal is taken at 1.0 and the phone bonus as earned, so the weighted average
-    only has to reach `threshold − phone_bonus`. Solving the formula for distance, with W the
-    sum of all four weights:
+    The calculation uses the best case: all other signals are 1.0, and the candidate gets the
+    phone bonus. Thus, the weighted average must get to only `threshold − phone_bonus`.
+    W is the sum of all four weights. The formula, solved for distance, is:
 
         d_signal = 1 + W · (threshold − phone_bonus − 1) / distance_weight
         distance = −distance_half_m · log2(d_signal)
 
-    All four weights give the widest boundary: a missing signal shrinks W and tightens it.
-    Returns `math.inf` when distance alone can never rule a candidate out, and 0.0 when even
-    a candidate at the same point cannot qualify.
+    All four weights give the largest distance. If a signal is missing, W becomes smaller and
+    the distance becomes smaller.
+    Returns `math.inf` if distance alone can never remove a candidate.
+    Returns 0.0 if a candidate at the same point cannot get to the threshold.
     """
     total_weight = p.distance_weight + p.time_weight + p.task_type_weight + p.text_weight
     if p.distance_weight <= 0 or total_weight <= 0:
@@ -159,23 +180,23 @@ def max_hint_distance_m(p: FastParameters) -> float:
 
 
 class FastEngine:
-    """The task-level fast layer as a `DedupEngine`."""
+    """The fast layer at task level. It is a `DedupEngine`."""
 
     version = "fast-v3"
 
     def __init__(self, parameters: dict[RelatedKind, FastParameters] | None = None):
-        """Use the shipped per-kind parameters unless others are given."""
+        """Use the default parameters for each kind, if the caller does not give other parameters."""
         self._parameters = parameters or {
             "ticket_task": TICKET_TASK_PARAMETERS,
             "station": STATION_PARAMETERS,
         }
 
     def radius_m(self, kind: RelatedKind) -> float:
-        """How far to look: the hint boundary plus a rounding margin."""
+        """Calculate the search radius: the hint boundary plus a margin for float rounding."""
         return max_hint_distance_m(self._parameters[kind]) * RETRIEVAL_SAFETY_FACTOR
 
     async def check(self, db: AsyncSession, submission: Submission, now: datetime) -> list[Suspect]:
-        """At most one suspect per task draft (or per station)."""
+        """Find suspects. Each task draft (or station) gets a maximum of one suspect."""
         if isinstance(submission, NewStation):
             rows = await candidates.open_stations_near(
                 db, at=submission.station.location, radius_m=self.radius_m("station"), now=now
@@ -201,7 +222,10 @@ class FastEngine:
         related_uuid: str,
         now: datetime,
     ) -> Suspect | None:
-        """One named pair, no threshold. None if the draft, the kind or the related entity does not fit."""
+        """Score one pair that the caller names. Do not apply a threshold.
+
+        Returns None if the draft, the kind or the related entity does not fit.
+        """
         try:
             if kind_of_ref(draft_ref) != related_kind:
                 return None
@@ -224,7 +248,10 @@ class FastEngine:
     async def _task_context(
         self, db: AsyncSession, submission: NewTicket | NewTask
     ) -> tuple[tuple[TaskDraft, ...], GeoPoint | None, str | None, str | None]:
-        """The task drafts, where to search from, the submitting ticket's phone, and which ticket to skip."""
+        """Prepare the search: the task drafts, the start point, the phone and the ticket to skip.
+
+        The phone is the contact phone of the ticket that the user submits to.
+        """
         if isinstance(submission, NewTicket):
             return submission.tasks, submission.ticket.location, submission.ticket.contact_phone, None
         anchor = await candidates.ticket_anchor(db, submission.ticket_uuid)
@@ -319,18 +346,19 @@ def _text(first: str | None, second: str | None) -> str:
 def text_similarity(
     mine: tuple[str | None, str | None], theirs: tuple[str | None, str | None]
 ) -> float | None:
-    """Trigram similarity of the two texts, or None when either side has none."""
+    """Calculate the trigram similarity of the two texts. Returns None if one side has no text."""
     a, b = _text(*mine), _text(*theirs)
     return set_similarity(trigrams(a), trigrams(b)) if a and b else None
 
 
 @functools.lru_cache(maxsize=4096)  # pure; the submission's phone is parsed once per candidate otherwise
 def phone_key(phone: str | None) -> str | None:
-    """A phone's comparison form: its digits, after E.164 when it parses; None when it has none.
+    """Make the form of a phone that the engine compares: its digits, after E.164 if possible.
 
-    The submission's phone arrives in E.164 (`+886912345678`), but `tickets.contact_phone` is
-    stored as typed (`0912-345-678`), so both sides go through the backend's own E.164 parser
-    first. Anything the parser rejects falls back to its bare digits.
+    The phone of the submission comes in E.164 (`+886912345678`). But `tickets.contact_phone`
+    keeps the phone as the user typed it (`0912-345-678`). Thus, the engine sends both sides
+    through the E.164 parser of the backend first. If the parser rejects a phone, the engine
+    uses only its digits. Returns None if there is no phone.
     """
     if not phone:
         return None
@@ -340,6 +368,6 @@ def phone_key(phone: str | None) -> str | None:
 
 
 def same_contact_phone(mine: str | None, theirs: str | None) -> bool | None:
-    """Whether two phones are the same number; None when either side has none."""
+    """Return True if the two phones are the same number. Returns None if one side has no phone."""
     a, b = phone_key(mine), phone_key(theirs)
     return None if a is None or b is None else a == b
