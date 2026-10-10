@@ -10,7 +10,6 @@ import os
 os.environ["ENV"] = "testing"
 
 import pytest
-from scripts.seed_rbac import ROLES_DATA
 from sqlalchemy import select
 
 from app.core.permissions import PUBLIC_PERMS, Perm
@@ -19,6 +18,7 @@ from app.core.security import resolve_scope
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.team import Team
+from scripts.seed_rbac import ROLES_DATA
 from tests.conftest import acting_as
 
 HISTORY_PERMS = (Perm.TICKET_VIEW_HISTORY, Perm.STATION_VIEW_HISTORY)
@@ -116,14 +116,16 @@ def test_seed_matrix_matches_adr_128(role_name):
 
 
 @pytest.mark.parametrize("role_name", sorted(EXPECTED_GRANTS))
-def test_history_scope_mirrors_view_pii(role_name):
-    """ADR-128: each timeline tiers exactly like its own resource's view_pii, by design.
+def test_station_history_scope_mirrors_view_pii(role_name):
+    """ADR-128: a station's timeline tiers exactly like station.view_pii, by design.
 
     Asserted as a relationship rather than as two independent tables so that moving
     view_pii without reconsidering the timeline fails here instead of drifting silently.
+    A ticket's timeline was reconsidered and no longer mirrors: ADR-286 opened
+    ticket.view_pii to anyone signed in and kept the timeline — which now also gates who
+    claimed a need — at the old tiering, pinned by test_seed_matrix_matches_adr_128.
     """
     perms = next(r for r in ROLES_DATA if r["name"] == role_name)["permissions"]
-    assert perms[Perm.TICKET_VIEW_HISTORY] == perms[Perm.TICKET_VIEW_PII]
     assert perms[Perm.STATION_VIEW_HISTORY] == perms[Perm.STATION_VIEW_PII]
 
 
@@ -479,14 +481,17 @@ async def _ticket_owned_by(db, owner):
 
 
 @pytest.mark.asyncio
-async def test_a_requester_unlocks_pii_on_their_own_ticket_only(db):
-    """view_pii is `own` for a plain user, and checkpoint 2 decides which ticket that is."""
+async def test_view_pii_at_own_unlocks_pii_on_the_callers_ticket_only(db):
+    """ADR-286 put view_pii at `all` for every role; narrowed to `own`, checkpoint 2 must run.
+
+    The seed's `all` would hide a missing in_scope call, as with view_detail below.
+    """
     owner = User(name="Owner")
     stranger = User(name="Stranger")
     db.add_all([owner, stranger])
     await db.flush()
-    await _assign_seed_role(db, owner, "user")
-    await _assign_seed_role(db, stranger, "user")
+    await _grant(db, owner, Perm.TICKET_VIEW_PII, "own")
+    await _grant(db, stranger, Perm.TICKET_VIEW_PII, "own")
     ticket = await _ticket_owned_by(db, owner)
 
     mine = await resolve_visibility(db, actor=owner, resource=ticket, entity=TICKET)

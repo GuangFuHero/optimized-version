@@ -11,6 +11,7 @@ would satisfy the masked half of this file while turning every 400 into an opaqu
 """
 
 import logging
+from uuid import uuid4
 
 import pytest
 
@@ -140,6 +141,28 @@ async def test_permission_denied_is_not_masked(client):
     assert any("Permission Denied." in e["message"] for e in body.get("errors", [])), body
 
 
+@pytest.mark.asyncio
+async def test_an_unknown_input_field_is_not_masked(client):
+    """graphql-core wraps a variable's coercion error in a second GraphQLError.
+
+    What went wrong is the caller's own input, found before any resolver runs, so the
+    message is safe and it is the only thing that tells the caller which field to drop.
+    graphql-core 3.2 and 3.3 word it differently; both name the field and the input type.
+    """
+    body = await _post(client, UPDATE_STATION, {"uuid": str(uuid4()), "input": {"bogus": 1}})
+    assert "errors" in body, body
+    message = body["errors"][0]["message"]
+    assert "'bogus'" in message and "'UpdateStationInput'" in message, body
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_scalar_variable_is_not_masked(client):
+    """A scalar that rejects its value is wrapped the same way."""
+    body = await _post(client, UPDATE_STATION, {"uuid": "not-a-uuid", "input": {}})
+    assert "errors" in body, body
+    assert "Value cannot represent a UUID" in body["errors"][0]["message"], body
+
+
 # ──────────────────────────────────────────────
 # 記錄等級 (ADR-174)
 # ──────────────────────────────────────────────
@@ -180,6 +203,15 @@ async def test_permission_denied_is_not_logged_as_a_server_fault(client, caplog)
 
     assert any("Permission Denied." in e["message"] for e in body.get("errors", [])), body
     assert _records_at(caplog, logging.ERROR) == []
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_input_field_is_not_logged_as_a_server_fault(client, caplog):
+    """呼叫端在 variables 裡帶了不存在的欄位是輸入錯誤,不該以 ERROR + traceback 記錄。"""
+    with caplog.at_level(logging.INFO):
+        await _post(client, UPDATE_STATION, {"uuid": str(uuid4()), "input": {"bogus": 1}})
+
+    assert _records_at(caplog, logging.ERROR) == [], "a client input error must not log at ERROR"
 
 
 @pytest.mark.asyncio

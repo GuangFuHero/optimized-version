@@ -23,7 +23,7 @@ from app.core.permissions import Perm
 from app.core.tabular import Table, read_table, write_csv, write_xlsx
 from app.models.auth import User
 from app.repositories.geo_repository import station_property_repository
-from app.repositories.tickets_repository import task_property_repository, ticket_repository
+from app.repositories.tickets_repository import task_property_repository
 from app.services import station as station_service
 from app.services import ticket as ticket_service
 from app.services.authz import refresh_actor, require_scope, stable_actor
@@ -391,6 +391,17 @@ async def _plan_tickets(
         if match.kind == AMBIGUOUS:
             errors.append(_ambiguous_error(line, match.candidates, "title"))
 
+        # Any need but a rescue must say how many (ADR-291 point 7). A row whose ticket is not
+        # in the database yet adds a need for certain, so it fails here, before its ticket is
+        # written; one attaching to a ticket that is may match a need it has, and is left to
+        # import_ticket_task.
+        if (
+            match.kind != MATCHED
+            and task_type in ticket_service.QUANTITY_REQUIRED_TASK_TYPES
+            and not (row.get("task_quantity") or "").strip()
+        ):
+            errors.append(_error(line, "task_quantity", "救援以外的需求都要填人數"))
+
         # A ticket key repeated inside one file is one ticket on several lines, one per task
         # (ADR-120) — not a duplicate. The first line creates it; the rest attach to it, and
         # the writer resolves the uuid once it exists.
@@ -458,20 +469,10 @@ async def _write_ticket(
 
     if is_update:
         ticket_uuid = resolved.uuid
-        status = fixed.pop("status", None)
-        current = await ticket_repository.get_by_uuid_active(db, ticket_uuid)
-        # ADR-122: an untouched export carries the row's own status back. Sending it as a
-        # change would make every completed ticket fail its own state machine, so only a
-        # genuine difference is passed on.
-        if current is not None and status == current.status:
-            status = None
-        if fixed or status:
-            await ticket_service.update_ticket(
-                db, actor=actor, uuid=ticket_uuid, status=status, changes=fixed
-            )
+        if fixed:
+            await ticket_service.update_ticket(db, actor=actor, uuid=ticket_uuid, changes=fixed)
             progress.parent_written = True
     else:
-        fixed.pop("status", None)  # `create_ticket` always writes "pending"
         ticket = await ticket_service.create_ticket(
             db, actor=actor, geometry=_point_of(plan.row),
             title=fixed.get("title"),
@@ -525,7 +526,7 @@ async def _write_task(
         return match.uuid
 
     creating = {**(task_on_create or {}), **task_fields}
-    task = await ticket_service.create_ticket_task(
+    task = await ticket_service.import_ticket_task(
         db, actor=actor, ticket_uuid=ticket_uuid, task_type=task_type, task_name=task_name,
         task_description=creating.get("task_description"),
         quantity=creating.get("task_quantity"),

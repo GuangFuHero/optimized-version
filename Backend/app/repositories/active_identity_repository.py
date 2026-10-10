@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.identity import ActiveIdentity, decode_act
 from app.models.rbac import Role, UserRoleAssign
 from app.models.team import Team
+from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 
 
 def _select_identities():
@@ -80,14 +81,14 @@ class ActiveIdentityRepository:
         return _to_identity(row) if row else None
 
     async def default_for_user(self, db: AsyncSession, user_uuid: str) -> ActiveIdentity | None:
-        """The identity a fresh login lands on: the user's platform identity (ADR-069).
+        """The identity a fresh login lands on: `user` if held, else a platform identity (ADR-069).
 
-        Every account is meant to have exactly one — registration grants `user`, and every
-        later platform grant *replaces* it rather than adding (`admin_service.assign_role`,
-        and `user_repository.assign_role` since ADR-184). `ORDER BY` is defence in depth for
-        any row that predates that guarantee: without it "the platform identity" would be
-        whichever `role_uuid` happened to sort first in the partial unique index, which is an
-        arbitrary UUID draw and not stable between reads.
+        An account may hold more than one platform grant since Spec/019: an approved data
+        auditor keeps `user` beside `data_auditor` (ADR-288), and migration 15370be54155 gave
+        `user` to every account, super admins included. Whoever holds `user` starts on it
+        (ADR-290) — the least of what they hold — and the back office switches to anything
+        more on purpose. After that, `ORDER BY` names and uuids so the answer is stable between
+        reads rather than whichever row the partial unique index happened to return first.
 
         Returns None only for an account holding no platform grant at all. ADR-185 makes that
         unreachable through the API by refusing to unassign a platform role; this stays
@@ -101,7 +102,25 @@ class ActiveIdentityRepository:
                     UserRoleAssign.user_uuid == user_uuid,
                     UserRoleAssign.team_uuid.is_(None),
                 )
-                .order_by(Role.name, UserRoleAssign.role_uuid)
+                # False sorts first: the `user` grant, if there is one, then the rest by name.
+                .order_by(Role.name != DEFAULT_PLATFORM_ROLE, Role.name, UserRoleAssign.role_uuid)
+            )
+        ).first()
+        return _to_identity(row) if row else None
+
+    async def site_identity(self, db: AsyncSession, user_uuid: str) -> ActiveIdentity | None:
+        """The `user` grant a request from the site acts as (ADR-289), or None if not held.
+
+        None leaves the caller on the token's identity (ADR-289 decision 2): the site only ever picks a grant
+        the caller holds, and never hands one out.
+        """
+        row = (
+            await db.execute(
+                _select_identities().where(
+                    UserRoleAssign.user_uuid == user_uuid,
+                    UserRoleAssign.team_uuid.is_(None),
+                    Role.name == DEFAULT_PLATFORM_ROLE,
+                )
             )
         ).first()
         return _to_identity(row) if row else None

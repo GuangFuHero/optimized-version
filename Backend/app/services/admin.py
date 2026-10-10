@@ -24,6 +24,7 @@ from app.models.team import Team
 from app.repositories.auth_repository import role_repository, user_repository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.team_repository import team_repository
+from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 from app.services.notification_service import NotificationService
 
@@ -66,7 +67,12 @@ async def _remaining_super_admins(db: AsyncSession, role_uuid: str, *, excluding
 
 
 async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_name: str) -> UserRoleAssign:
-    """Grant a user a platform/team role, replacing any existing role of the same kind (ADR-019).
+    """Grant a user a platform role, replacing the other one they hold but never `user`.
+
+    An account holds `user` plus at most one other platform role (019/ADR-294, amending
+    ADR-019): `user` is what the site acts as (ADR-289) and where a login starts (ADR-290). So
+    the new role replaces the other one, and assigning `user` itself takes the other one away —
+    the way down ADR-185 points to, for a super admin as for an approved data auditor.
 
     Refuses to demote the last super_admin (ADR-032). Checkpoint 1 only — rbac.assign is a
     super_admin-only capability granted at Scope.ALL.
@@ -98,28 +104,35 @@ async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_nam
     ).all()
 
     already_assigned = next((row for row, role in existing if role.uuid == new_role.uuid), None)
-    if already_assigned is not None:
+    replaced = [
+        (row, role)
+        for row, role in existing
+        if role.uuid != new_role.uuid and role.name != DEFAULT_PLATFORM_ROLE
+    ]
+    # Already held, nothing else to take away. Holding `user` alone is no reason to stop: since
+    # every account holds it, that used to make demoting to `user` a silent no-op.
+    if already_assigned is not None and not replaced:
         return already_assigned
 
-    if new_role.kind == "platform":
-        current_super_admin_role = next(
-            (role for _, role in existing if role.name == SUPER_ADMIN_ROLE_NAME), None
+    replaced_super_admin = next((role for _, role in replaced if role.name == SUPER_ADMIN_ROLE_NAME), None)
+    if replaced_super_admin is not None:
+        remaining = await _remaining_super_admins(
+            db, replaced_super_admin.uuid, excluding=str(target.uuid)
         )
-        if current_super_admin_role is not None:
-            remaining = await _remaining_super_admins(
-                db, current_super_admin_role.uuid, excluding=str(target.uuid)
-            )
-            if remaining == 0:
-                raise AdminConflictError("Cannot remove the last super_admin")
+        if remaining == 0:
+            raise AdminConflictError("Cannot remove the last super_admin")
 
-    for row, _ in existing:
+    for row, _ in replaced:
         await db.delete(row)
     await db.flush()
 
-    assignment = UserRoleAssign(
-        user_uuid=target.uuid, role_uuid=new_role.uuid, team_uuid=None, role_kind=new_role.kind
-    )
-    db.add(assignment)
+    if already_assigned is not None:
+        assignment = already_assigned
+    else:
+        assignment = UserRoleAssign(
+            user_uuid=target.uuid, role_uuid=new_role.uuid, team_uuid=None, role_kind=new_role.kind
+        )
+        db.add(assignment)
     await db.commit()
     await db.refresh(assignment)
     return assignment

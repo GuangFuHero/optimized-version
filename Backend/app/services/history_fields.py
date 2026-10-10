@@ -288,6 +288,8 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
         # a1b2c3d4e5f6, both stamped by the status transition that sets them.
         "completed_at": _DERIVED_STAMP,
         "canceled_at": _DERIVED_STAMP,
+        # 6c5a9d3d3444: stamped by stop_recruiting with the `status` and `quantity` it changes.
+        "recruiting_stopped_at": _DERIVED_STAMP,
         "ticket_uuid": _FK,
         "route_uuid": _FK,
         "created_by": _FK,

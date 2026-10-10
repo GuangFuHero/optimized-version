@@ -115,7 +115,10 @@ def coerce(column: ColumnSpec, raw: str):
             f"長度 {len(value)} 超過上限 {column.max_length} 字，請縮短後再匯入"
         )
     if column.data_type == INTEGER:
-        return _to_integer(value)
+        number = _to_integer(value)
+        if column.min_value is not None and number < column.min_value:
+            raise ValueError(f"「{value}」不能小於 {column.min_value}")
+        return number
     if column.data_type == FLOAT:
         return _to_float(value)
     if column.data_type == BOOLEAN:

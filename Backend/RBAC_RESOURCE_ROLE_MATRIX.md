@@ -12,6 +12,10 @@
   一人 = 一 platform 角色 + **任意多個** team 角色，每個 team 一個。
   **任一時刻只有一個身分生效**，由 access token 的 `act` claim 指定（010/ADR-068/069）。
   `users.team_uuid` 已刪除；組織歸屬讀的是當前身分的 team（`team.type ∈ {gov, ngo}`）。
+- **每個帳號都有 `user`，前台一律用它（功能 019）**：申請通過的資料檢核員、`bootstrap_admin` 設的超管同時持有
+  `user` 和另一個平台角色（019/ADR-288、290）。登入一律先落在 `user`，超管也一樣；要用後台權限得先切換身分。
+  前台請求帶 `X-WG-Realm: site`，該次請求改用此人持有的 `user`（019/ADR-289）——所以本表 `user` 那一欄就是
+  每個登入者在前台的權限。
 - **合併規則**：**當前身分內**的 grant 取聯集、**最寬勝**、無 deny（ADR-018/021 + 010/ADR-074）。
   跨身分**不**聯集——`super_admin` 切到團隊身分時是真的降權，本表下方每一列都要理解成
   「持有該角色**並且正以該角色行動**時」的權限。
@@ -38,7 +42,7 @@
 |---|---|---|
 | **Guest** | （匿名，非 DB 角色） | `PUBLIC_PERMS` 白名單內的唯讀瀏覽 |
 | **user** | platform | 預設民眾：可瀏覽、可建立，只能動自己建的 |
-| **data_auditor** | platform | 稽核：全平台唯讀（含 PII、audit log），無 edit/make/review |
+| **data_auditor** | platform | 稽核：全平台可讀（含 PII、audit log）；寫入只有審核——站點修改建議（ADR-300）、單與需求（ADR-312）；無 edit/make |
 | **super_admin** | platform | 全能 |
 | **admin** | team | 團隊協調者：責任區內的通報單、指派給本隊的站點全操作 + 管團隊成員 + 畫/指派 zone + 指派站點（後兩者僅 gov） |
 | **member** | team | 團隊現場人員：責任區內的通報單、本隊的站點可編輯，無團隊管理、無 zone、無站點指派 |
@@ -67,7 +71,8 @@
 | station.contribute | — | all | — | all | all | all |
 | station.edit | — | own | — | all | team | team |
 | station.delete | — | own | — | all | team | own |
-| station.review | — | — | — | all | team | — |
+| station.review | — | — | all | all | team | — |
+| station.revoke | — | — | all | all | — | — |
 | **station.assign** | — | — | — | all | all（僅 gov） | all（僅 gov） |
 | station.export | — | — | all | all | team | — |
 | station.import | — | — | — | all | all | — |
@@ -94,17 +99,19 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | ticket.view | all（公開） | all | all | all | all | all |
-| **ticket.view_pii** | —（遮罩） | own | all | all | zone | zone |
+| **ticket.view_pii** | —（遮罩） | all | all | all | all | all |
 | **ticket.view_history** | — | own | all | all | zone | zone |
 | ticket.add | — | all | — | all | all | all |
 | ticket.edit | — | own | — | all | zone | zone |
 | ticket.delete | — | own | — | all | zone | own |
 | ticket.assign | — | own | — | all | zone | own |
-| ticket.review | — | — | — | all | zone | — |
+| **ticket.review** | — | — | all | all | zone | zone |
 | ticket.export | — | — | all | all | zone | — |
 | ticket.import | — | — | — | all | all | — |
 
-> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
+> **批量匯入匯出（feature 015, ADR-110/111）**：`*.export` 的 scope 是有作用的——它決定匯出檔涵蓋哪些列（team admin 只拿得到自己 WorkZone 內的通報單、指派給本隊的站點）。`*.import` 一律 `all`，因為逐筆保護來自每一列仍會跑的 `*.add` / `*.edit` 檢查；在這裡放 zone 只會看起來有意義而不影響任何行為。`data_auditor` 有 export 無 import（oversight only，除了審核之外全範圍無寫權）；team member 與 platform user 兩者皆無——批量誤操作的爆炸半徑遠大於單筆。
+
+> **審核（ADR-312）**：`ticket.review` 管「後台對單與需求的判斷」——單的 `verificationStatus`（`reviewTicket`）、單與需求的 `reviewNote`、需求的 `moderationStatus`。`updateTicket`／`updateTicketTask` 帶到這些欄位就要 `ticket.review`，其他欄位照舊要 `ticket.edit`；只改審核欄位時只要 `ticket.review`，所以沒有 `ticket.edit` 的 `data_auditor` 也能審核。一般使用者沒有 `ticket.review`，改不了自己單的審核結果。
 
 ### 使用者 User
 
@@ -198,6 +205,18 @@
 
 > `rbac.view`（feature 009 #25：`/admin/rbac` 唯讀面的 checkpoint-1 gate）只有 super_admin；`rbac.*` 全是 super_admin 專屬治理，不委派給其他角色。
 
+### 後台人員申請 Role Request（功能 019）
+
+| capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
+|---|---|---|---|---|---|---|
+| role_request.add | — | all | — | — | — | — |
+| role_request.review | — | — | — | all | — | — |
+
+> `role_request.add` 只給 `user`：資格寫在程式裡（只持有平台 `user`、沒有任何其他身分的帳號才能申請），有後台
+> 身分的人本來就不能申請，所以不發給其他角色；ADR-097 的回歸測試把它列為「只屬於一般民眾」的例外。在
+> `/admin/rbac` 收回 `user` 的 `role_request.add` 就是暫停開放申請；已送出的申請照樣可以撤回（撤回只看是不是本人）。
+> 理由與聯絡方式只有申請人本人與持有 `role_request.review` 的人看得到（019/ADR-287）。
+
 ## 補充說明
 
 ### 公開白名單（`PUBLIC_PERMS`，`app/core/permissions.py`）
@@ -206,7 +225,9 @@
 `ticket.view_pii` **絕不**公開；匿名一律看不到 PII。
 
 ### PII 遮罩（ADR-049）
-`ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩、user→own、team admin/member→zone、data_auditor/super_admin→all。
+`ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩；登入者（user、team admin/member、data_auditor、super_admin）一律 all（ADR-286，原本 user→own、team→zone）。例外是 `tickets` **列表**：另要 `ticket.view_history`，其他登入者在列表看到遮罩、點進單（`ticket`）才看到完整的；列表一頁最多 200 筆（ADR-286 第 6 點）。
+
+任務的承接名單（`assignments`，誰承接了哪筆需求）**不**跟著 `view_pii`，改看 `ticket.view_history`（user→own、team→zone、data_auditor/super_admin→all）：建單者與協調者看得到，其他登入者看不到（ADR-286）。需求的審核狀態（`moderationStatus`）同樣看 `ticket.view_history`，沒有的人拿 null（ADR-286 第 5 點）。
 
 ### 異動時間軸的四層可見度（ADR-127~130，功能 016）
 `*.view_history` 是**進入時間軸的門票**，它決定看得到「哪些資源」的歷史；`audit.view` 決定看得到「多深」。同一個時間軸依 caller 權限分四層揭露：
@@ -228,4 +249,4 @@
 （`ticket.export` 自功能 015 起已授予；`audit.view` 自功能 016 起首次真正被 enforcement 消費；`pre_departure.*` 自功能 007 起已接上 enforcement，並補上原本沒有的 `pre_departure.delete`。）
 
 ### 相關 ADR
-ADR-018（union）、ADR-019（兩軸/一人一 team，**身分部分被 010/ADR-068 取代**）、010/ADR-068·073·074（多 team 身分切換）、010/ADR-097（team 角色必須自給自足，`station.contribute`）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）、ADR-285（站點改為手動指派給單一 team，不跟 zone）。
+ADR-018（union）、ADR-019（兩軸/一人一 team，**身分部分被 010/ADR-068 取代**）、010/ADR-068·073·074（多 team 身分切換）、010/ADR-097（team 角色必須自給自足，`station.contribute`）、ADR-021（scope enum + 最寬勝）、ADR-027（view 公開）、ADR-030/048/049（view=all、PII 遮罩、scope 定案為純地理）、ADR-050（軟刪 + ahead-of-feature）、ADR-052（task 借 parent geometry 判 zone）、ADR-053（team 邊界欄位）、ADR-054（team.edit = super_admin）、ADR-127/128/130（時間軸 capability 與四層可見度）、ADR-285（站點改為手動指派給單一 team，不跟 zone）、019/ADR-287～290（申請成為後台人員、通過是新增身分、前台固定 `user`、登入先落在 `user`）。
