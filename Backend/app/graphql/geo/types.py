@@ -4,6 +4,7 @@ import asyncio
 import enum
 from datetime import datetime
 from types import SimpleNamespace
+from typing import Annotated
 from uuid import UUID
 
 import strawberry
@@ -15,6 +16,7 @@ from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import (  # noqa: F401 -- the address types and their mapper are
     AccessStatus,  # re-exported here for existing geo callers
+    DuplicatesSuspected,
     PageInfo,
     SecondaryLocationInput,
     SecondaryLocationType,
@@ -289,6 +291,16 @@ class StationType:
             _geometry_raw=m.geometry,
             _team_uuid_raw=m.team_uuid,
         )
+
+
+@strawberry.type
+class StationCreated:
+    """`createStation` registered the station."""
+
+    station: StationType
+
+
+CreateStationResult = Annotated[StationCreated | DuplicatesSuspected, strawberry.union("CreateStationResult")]
 
 
 @strawberry.type

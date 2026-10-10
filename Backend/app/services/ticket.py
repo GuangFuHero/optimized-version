@@ -4,6 +4,7 @@ Same flat-service style as station.py: `db` first, keyword-only args, each funct
 its own authz + validation + persistence (ADR-013/014/015/022).
 """
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -85,6 +86,101 @@ async def _assignment_scope_target(db: AsyncSession, assignment: TaskAssignment)
     )
 
 
+@dataclass(frozen=True)
+class TicketFields:
+    """A ticket that passed authz and validation but is not written yet (Spec 020, ADR-299).
+
+    `values` are the normalized column values, ready for `ticket_repository.add`; `point` is
+    the validated GeoJSON Point they were built from.
+    """
+
+    point: dict
+    values: dict
+    secondary_location: dict | None
+
+
+async def validate_ticket(
+    db: AsyncSession,
+    *,
+    actor: User,
+    geometry: dict,
+    title: str,
+    description: str | None,
+    contact_name: str,
+    contact_email: str | None,
+    contact_phone: str | None,
+    priority: str,
+    task_type: str | None,
+    visibility: str,
+    disaster_types: list[str] | None = None,
+    person_trapped_reported: str | None = None,
+    immediate_danger_reported: str | None = None,
+    secondary_location: dict | None = None,
+) -> TicketFields:
+    """Checkpoint 1 plus every input check `create_ticket` makes, without writing anything.
+
+    `disaster_types` is validated against the vocabulary table before anything is written: a
+    ticket filed under a disaster that does not exist would store cleanly and then render an
+    empty disaster-field form, telling the reporter nothing was asked of them.
+    """
+    await require_scope(actor, Perm.TICKET_ADD, db)
+    disaster_types = await validate_disaster_types(db, disaster_types or [])
+    validate_point(geometry, entity="Ticket")
+    contacts = normalize_contact_fields(
+        {
+            "contact_name": contact_name,
+            "contact_email": contact_email,
+            "contact_phone": contact_phone,
+        },
+        # tickets.contact_name is NOT NULL, unlike the station column of the same name, so a
+        # whitespace-only value has to be refused here rather than normalized to None.
+        required=frozenset({"contact_name"}),
+    )
+    return TicketFields(
+        point=geometry,
+        values={
+            "title": title,
+            "description": description,
+            # Normalized, not raw — same reason as create_station in station.py.
+            **contacts,
+            "priority": priority,
+            "task_type": task_type,
+            "visibility": visibility,
+            "disaster_types": disaster_types,
+            "person_trapped_reported": person_trapped_reported,
+            "immediate_danger_reported": immediate_danger_reported,
+        },
+        secondary_location=secondary_location,
+    )
+
+
+async def insert_ticket(db: AsyncSession, *, actor: User, fields: TicketFields) -> Tickets:
+    """Write a validated ticket and its address, and flush. The caller owns the commit.
+
+    `secondary_location` is new in feature 018. Stations have been able to carry an address
+    since they existed; tickets could not, which meant the one record that most needs a door
+    number — somebody asking to be found — had only a map pin.
+    """
+    ticket = await ticket_repository.add(
+        db,
+        obj_in={
+            "property_name": "request",
+            "geometry": geojson_to_geom(fields.point),
+            "created_by": str(actor.uuid),
+            "status": "pending",
+            **fields.values,
+        },
+    )
+    if fields.secondary_location:
+        # A ticket's uuid IS its base_geometries.uuid (joined-table inheritance), which is
+        # what secondary_locations.geometry_uuid points at — the same key the station path
+        # uses, so one address table serves both.
+        await secondary_location_repository.add(
+            db, obj_in={"geometry_uuid": str(ticket.uuid), **fields.secondary_location}
+        )
+    return ticket
+
+
 async def create_ticket(
     db: AsyncSession,
     *,
@@ -105,54 +201,29 @@ async def create_ticket(
 ) -> Tickets:
     """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner).
 
-    `disaster_types` is validated against the vocabulary table before anything is written: a
-    ticket filed under a disaster that does not exist would store cleanly and then render an
-    empty disaster-field form, telling the reporter nothing was asked of them.
-
-    `secondary_location` is new in feature 018. Stations have been able to carry an address
-    since they existed; tickets could not, which meant the one record that most needs a door
-    number — somebody asking to be found — had only a map pin. Owns the two-table orchestration
-    and the single commit that makes it atomic, exactly as `station.py::create_station` does.
+    Validate, insert, and one commit that makes the ticket + address pair atomic, exactly as
+    `station.py::create_station` does. Batch import calls this; the interactive GraphQL path
+    goes through `dedup_submission.submit_new_ticket`, which runs the same two steps around a
+    duplicate check (Spec 020, ADR-299).
     """
-    await require_scope(actor, Perm.TICKET_ADD, db)
-    disaster_types = await validate_disaster_types(db, disaster_types or [])
-    validate_point(geometry, entity="Ticket")
-    contacts = normalize_contact_fields(
-        {
-            "contact_name": contact_name,
-            "contact_email": contact_email,
-            "contact_phone": contact_phone,
-        },
-        # tickets.contact_name is NOT NULL, unlike the station column of the same name, so a
-        # whitespace-only value has to be refused here rather than normalized to None.
-        required=frozenset({"contact_name"}),
-    )
-    ticket = await ticket_repository.add(
+    fields = await validate_ticket(
         db,
-        obj_in={
-            "property_name": "request",
-            "geometry": geojson_to_geom(geometry),
-            "created_by": str(actor.uuid),
-            "title": title,
-            "description": description,
-            # Normalized, not raw — same reason as create_station in station.py.
-            **contacts,
-            "status": "pending",
-            "priority": priority,
-            "task_type": task_type,
-            "visibility": visibility,
-            "disaster_types": disaster_types,
-            "person_trapped_reported": person_trapped_reported,
-            "immediate_danger_reported": immediate_danger_reported,
-        },
+        actor=actor,
+        geometry=geometry,
+        title=title,
+        description=description,
+        contact_name=contact_name,
+        contact_email=contact_email,
+        contact_phone=contact_phone,
+        priority=priority,
+        task_type=task_type,
+        visibility=visibility,
+        disaster_types=disaster_types,
+        person_trapped_reported=person_trapped_reported,
+        immediate_danger_reported=immediate_danger_reported,
+        secondary_location=secondary_location,
     )
-    if secondary_location:
-        # A ticket's uuid IS its base_geometries.uuid (joined-table inheritance), which is
-        # what secondary_locations.geometry_uuid points at — the same key the station path
-        # uses, so one address table serves both.
-        await secondary_location_repository.add(
-            db, obj_in={"geometry_uuid": str(ticket.uuid), **secondary_location}
-        )
+    ticket = await insert_ticket(db, actor=actor, fields=fields)
     await db.commit()
     await db.refresh(ticket)
     return ticket
@@ -314,6 +385,52 @@ async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
     await ticket_repository.soft_delete(db, db_obj=ticket)
 
 
+@dataclass(frozen=True)
+class TaskFields:
+    """A ticket task that passed authz and validation but is not written yet (Spec 020 plan Task 20).
+
+    Carries no ticket: a new ticket's tasks are validated before the ticket exists.
+    """
+
+    values: dict
+
+
+async def validate_ticket_task(
+    db: AsyncSession,
+    *,
+    actor: User,
+    task_type: str,
+    task_name: str,
+    task_description: str | None,
+    quantity: int | None,
+    source: str,
+    visibility: str,
+    route_uuid: str | None,
+) -> TaskFields:
+    """Checkpoint 1 for a task, without writing and without needing its ticket to exist."""
+    await require_scope(actor, Perm.TICKET_ADD, db)
+    return TaskFields(
+        values={
+            "task_type": task_type,
+            "task_name": task_name,
+            "task_description": task_description,
+            "quantity": quantity,
+            "source": source,
+            "visibility": visibility,
+            "route_uuid": route_uuid,
+        }
+    )
+
+
+async def insert_ticket_task(
+    db: AsyncSession, *, actor: User, ticket_uuid: str, fields: TaskFields
+) -> TicketTask:
+    """Write a validated task under `ticket_uuid` and flush. The caller owns the commit."""
+    return await ticket_task_repository.add(
+        db, obj_in={"ticket_uuid": ticket_uuid, "created_by": str(actor.uuid), **fields.values}
+    )
+
+
 async def create_ticket_task(
     db: AsyncSession,
     *,
@@ -327,24 +444,28 @@ async def create_ticket_task(
     visibility: str,
     route_uuid: str | None,
 ) -> TicketTask:
-    """Create a task under a ticket (checkpoint 1 only — no scope check against the parent)."""
-    await require_scope(actor, Perm.TICKET_ADD, db)
+    """Create a task under a ticket (checkpoint 1 only — no scope check against the parent).
+
+    Batch import calls this; the interactive GraphQL path goes through
+    `dedup_submission.submit_new_task` (Spec 020, ADR-302).
+    """
+    fields = await validate_ticket_task(
+        db,
+        actor=actor,
+        task_type=task_type,
+        task_name=task_name,
+        task_description=task_description,
+        quantity=quantity,
+        source=source,
+        visibility=visibility,
+        route_uuid=route_uuid,
+    )
     if not await ticket_repository.get_by_uuid_active(db, ticket_uuid):
         raise ValueError("Ticket not found")
-    return await ticket_task_repository.create(
-        db,
-        obj_in={
-            "ticket_uuid": ticket_uuid,
-            "task_type": task_type,
-            "task_name": task_name,
-            "task_description": task_description,
-            "quantity": quantity,
-            "source": source,
-            "visibility": visibility,
-            "route_uuid": route_uuid,
-            "created_by": str(actor.uuid),
-        },
-    )
+    task = await insert_ticket_task(db, actor=actor, ticket_uuid=ticket_uuid, fields=fields)
+    await db.commit()
+    await db.refresh(task)
+    return task
 
 
 async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, changes: dict) -> TicketTask:

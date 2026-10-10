@@ -3,6 +3,7 @@
 import uuid as uuid_mod
 from contextlib import asynccontextmanager
 
+import pytest
 import pytest_asyncio
 from geoalchemy2.shape import from_shape
 from httpx import ASGITransport, AsyncClient
@@ -15,6 +16,7 @@ from app.core.identity import encode_act
 from app.core.permissions import Perm
 from app.core.security import create_access_token
 from app.db.session import Base
+from app.dedup_engine import registry as dedup_registry
 from app.main import app
 from app.models.auth import User
 from app.models.geo import ClosureArea, Station
@@ -146,6 +148,38 @@ async def _ensure_db():
 
         await db.commit()
     await eng.dispose()
+
+
+class _NeverSuspects:
+    """A dedup engine that never suspects a duplicate (Spec 020 plan Task 12).
+
+    GraphQL tests create many similar tickets, tasks and stations at the same spot, and with the
+    real engine the create mutations would answer DuplicatesSuspected instead of creating. Those
+    tests are not about deduplication, so they get this; the ones that are opt in to the real
+    engine with `@pytest.mark.real_dedup`.
+    """
+
+    version = "stub-v2"
+
+    async def check(self, db, submission, now):
+        """Never a suspect."""
+        return []
+
+    async def score(self, db, submission, draft_ref, related_kind, related_uuid, now):
+        """Only reached through an acknowledged create, which these tests do not send."""
+        raise AssertionError("the stub dedup engine does not score")
+
+
+def pytest_configure(config):
+    """Register the marker that opts a test into the real dedup engine."""
+    config.addinivalue_line("markers", "real_dedup: run create mutations with the real dedup engine")
+
+
+@pytest.fixture(autouse=True)
+def _no_dedup_hints(request, monkeypatch):
+    """Every GraphQL test runs with the never-suspecting engine unless marked `real_dedup`."""
+    if request.node.get_closest_marker("real_dedup") is None:
+        monkeypatch.setattr(dedup_registry, "_ENGINE", _NeverSuspects())
 
 
 @pytest_asyncio.fixture(autouse=True)

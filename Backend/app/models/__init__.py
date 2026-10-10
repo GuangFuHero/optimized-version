@@ -8,6 +8,7 @@ from app.models.auth import (  # noqa: F401
     UserIdentity,
 )
 from app.models.briefing import Briefing, BriefingTemplate  # noqa: F401
+from app.models.dedup import DedupAuditEvent, DuplicatePair  # noqa: F401
 from app.models.disaster_type import DisasterType  # noqa: F401
 from app.models.geo import BaseGeometry, ClosureArea, Station  # noqa: F401
 from app.models.notification import Notification  # noqa: F401

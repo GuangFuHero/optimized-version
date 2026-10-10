@@ -24,7 +24,7 @@ query($q: String) {
 
 CREATE_STATION = """
 mutation($input: CreateStationInput!) {
-    createStation(input: $input) { uuid }
+    createStation(input: $input) { ... on StationCreated { station { uuid } } }
 }
 """
 
@@ -79,7 +79,7 @@ def _assert_masked(body):
 async def _create_station(client, token, **fields) -> str:
     body = await _post(client, CREATE_STATION, {"input": {"geometry": POINT, **fields}}, token)
     assert "errors" not in body, body
-    return body["data"]["createStation"]["uuid"]
+    return body["data"]["createStation"]["station"]["uuid"]
 
 
 @pytest.mark.asyncio

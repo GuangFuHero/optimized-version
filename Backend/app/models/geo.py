@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -14,6 +14,22 @@ class BaseGeometry(Base, UUIDPKMixin, TimestampMixin):
     """Base polymorphic ORM model for geospatial geometry entities."""
 
     __tablename__ = "base_geometries"
+    # Serve the dedup engine's `ST_DWithin(...::geography, ...)` candidate lookups (ADR-305):
+    # tickets by their point, stations by their centroid. The GIST index geoalchemy2 builds on
+    # `geometry` cannot serve a geography operand. Also created by migration d4c8b1e07a92;
+    # declared here so `create_all` schemas match.
+    __table_args__ = (
+        Index(
+            "ix_base_geometries_geography",
+            text("(geometry::geography)"),
+            postgresql_using="gist",
+        ),
+        Index(
+            "ix_base_geometries_centroid_geography",
+            text("(ST_Centroid(geometry)::geography)"),
+            postgresql_using="gist",
+        ),
+    )
     property_name: Mapped[str] = mapped_column(String(50))
     geometry = mapped_column(Geometry("GEOMETRY", srid=4326))
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"))

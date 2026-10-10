@@ -16,7 +16,9 @@ from app.graphql.geo.types import (
     CreateCrowdSourcingInput,
     CreateStationInput,
     CreateStationPropertyInput,
+    CreateStationResult,
     CrowdSourcingType,
+    StationCreated,
     StationPropertyType,
     StationType,
     UpdateClosureAreaInput,
@@ -24,10 +26,12 @@ from app.graphql.geo.types import (
     UpdateStationPropertyInput,
     secondary_location_to_dict,
 )
+from app.graphql.shared import DuplicatesSuspected
 from app.graphql.tickets.types import PhotoType
 from app.services import closure_area as closure_area_service
 from app.services import photo as photo_service
 from app.services import station as station_service
+from app.services.dedup_submission import SubmissionHeld, submit_new_station
 
 
 @strawberry.type
@@ -35,20 +39,30 @@ class GeoMutation:
     """Mutations for creating, updating, and deleting stations and closure areas."""
 
     @strawberry.mutation
-    async def create_station(self, info: strawberry.types.Info, input: CreateStationInput) -> StationType:
-        """Create a new map station.
+    async def create_station(
+        self,
+        info: strawberry.types.Info,
+        input: CreateStationInput,
+        acknowledged_duplicate_of: str | None = None,
+    ) -> CreateStationResult:
+        """Register a map station — unless it looks like a serving station nearby.
 
-        Validates the geometry as a Point within valid lon/lat bounds. Optionally
-        attaches a secondary address or pole location. Requires station.add permission.
-        Returns the created station.
+        Validates the geometry as a Point within valid lon/lat bounds. Optionally attaches a
+        secondary address or pole location. Requires station.add.
+
+        Two-phase (Spec 020 §5.3): returns `StationCreated`, or registers nothing and returns
+        `DuplicatesSuspected`. Call again with `acknowledgedDuplicateOf` = the suspect's
+        `relatedUuid` to register anyway; the pair is recorded for review. A failing duplicate
+        check never blocks.
         """
         sl_dict = None
         if input.secondary_location is not None:
             sl = input.secondary_location
             sl_dict = secondary_location_to_dict(sl)
-        station = await station_service.create_station(
+        result = await submit_new_station(
             info.context["db"],
             actor=require_authenticated(info),
+            acknowledged_duplicate_of=acknowledged_duplicate_of,
             geometry=input.geometry,
             type=input.type, name=input.name, description=input.description,
             op_hour=input.op_hour, level=input.level, comment=input.comment,
@@ -58,7 +72,9 @@ class GeoMutation:
             operational_status=input.operational_status.value,
             secondary_location=sl_dict,
         )
-        return StationType.from_model(station)
+        if isinstance(result, SubmissionHeld):
+            return DuplicatesSuspected.of(result.suspects)
+        return StationCreated(station=StationType.from_model(result.entity))
 
     @strawberry.mutation
     async def attach_station_photo(
