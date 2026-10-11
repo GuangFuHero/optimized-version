@@ -1,8 +1,6 @@
 'use client';
 
 import {
-  Alert,
-  Button,
   Dialog as MuiDialog,
   DialogActions,
   DialogContent,
@@ -12,21 +10,10 @@ import {
 import type { FormEvent, ReactNode } from 'react';
 
 import { designTokens, displayTextSize } from '../../theme';
+import { Button } from '../Button';
+import { Callout } from '../Callout';
 
 const { color, radius, shadow } = designTokens;
-
-const CONFIRM_TONES = {
-  primary: {
-    bg: color.bg.primary.default,
-    hover: color.bg.primary.hover,
-    fg: color.fg.onPrimary,
-  },
-  danger: {
-    bg: color.bg.danger.default,
-    hover: color.bg.danger.hover,
-    fg: color.fg.onDanger,
-  },
-};
 
 export interface DialogProps {
   open: boolean;
@@ -35,7 +22,7 @@ export interface DialogProps {
   title: ReactNode;
   confirmLabel: ReactNode;
   confirmIcon?: ReactNode;
-  confirmTone?: keyof typeof CONFIRM_TONES;
+  confirmTone?: 'primary' | 'danger';
   confirmDisabled?: boolean;
   cancelLabel?: ReactNode;
   error?: ReactNode;
@@ -59,8 +46,6 @@ export function Dialog({
   onExited,
   children,
 }: DialogProps) {
-  const tone = CONFIRM_TONES[confirmTone];
-
   return (
     <MuiDialog
       open={open}
@@ -104,46 +89,25 @@ export function Dialog({
       <DialogContent sx={{ px: 3, pb: 1 }}>
         <Stack spacing={2}>
           {children}
-          {error ? <Alert severity="error">{error}</Alert> : null}
+          {error ? <Callout tone="danger">{error}</Callout> : null}
         </Stack>
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pt: 1, pb: 3, gap: 1.5 }}>
         <Button
+          variant="outline"
           onClick={onClose}
           disabled={submitting}
-          variant="outlined"
-          color="inherit"
-          sx={{
-            flex: 1,
-            height: 44,
-            whiteSpace: 'nowrap',
-            borderRadius: `${radius.full}px`,
-            borderColor: color.border.default,
-            color: color.fg.neutral.subtle,
-          }}
+          sx={{ flex: 1 }}
         >
           {cancelLabel}
         </Button>
         <Button
           type="submit"
+          variant={confirmTone}
           disabled={submitting || confirmDisabled}
-          variant="contained"
-          disableElevation
           startIcon={confirmIcon}
-          sx={{
-            flex: 1,
-            height: 44,
-            whiteSpace: 'nowrap',
-            borderRadius: `${radius.full}px`,
-            bgcolor: tone.bg,
-            color: tone.fg,
-            '&:hover': { bgcolor: tone.hover },
-            '&.Mui-disabled': {
-              bgcolor: color.bg.disable,
-              color: color.fg.disable,
-            },
-          }}
+          sx={{ flex: 1 }}
         >
           {confirmLabel}
         </Button>
