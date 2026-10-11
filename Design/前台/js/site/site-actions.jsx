@@ -126,33 +126,229 @@
    *    日後若要開放，走選項 C —— **兩位在任的 SA 都批准才成立**，
    *    不是單一審核者。這一句要留著，不然下次有人會直接加進清單。
    *
-   * 🔒 2026-09-11 裁示：**這一版只做 Government／Data Auditor 兩種。**
-   *    正典 `AC-RE-102` 的第三種「加入指定團隊」**刻意不做** ——
-   *    前台沒有任何團隊清單（`WG_MEMBERSHIPS` 是後台的），做它就得由我
-   *    編一份團隊名單出來。團隊加入走 QR 邀請（`MEM-FEAT-002`），那條路本來就有。
+   * 🔒 2026-09-11 裁示：這一版只做 Government／Data Auditor 兩種，正典 `AC-RE-102`
+   *    的「加入指定團隊」刻意不做（前台沒有團隊清單）。
+   *    ⛔ **2026-10-05 Sucre 推翻**：「升級身份要可以選 team，因為希望進來就確定是哪個 team 了。」
+   *
+   * 🔒 2026-10-05 裁示（**10/5 有更新，以下覆蓋 09-11**）：
+   *   1. **政府單位人員、社福團體人員：必選團隊。** 資料檢核員不選（`AC-RE-105` 不變）。
+   *      平台角色照 `AC-RE-104` 由團隊類型推導，所以清單只列與所選身分同類型的團隊。
+   *      ✅ 這也解掉下方 09-11 記的「申請 ngo 卻不屬於任何團隊」的張力。
+   *   2. **審核者：該團隊的團隊管理員或超級管理員，兩個都可以**（任一人核准即成立）。
+   *      覆蓋正典 `AC-RE-103`（原寫只進該團隊佇列）。實際判斷在 wg-bridge `roleRequestReviewers`。
+   *   3. 團隊少量直接列出，超過 `TEAM_SEARCH_THRESHOLD` 才出現搜尋框。
+   *   4. **可以自創團隊。** 新團隊沒有團隊管理員 → 只有超級管理員能審；
+   *      通過＝建立團隊 ＋ 申請人成為該團隊的**團隊管理員**。
+   *   QR 邀請（`MEM-FEAT-002`）照舊存在，是另一條更快的路，不互斥。
    */
   const ROLE_REQUEST_OPTIONS = [
-    { value: 'government', label: '政府單位人員',
-      hint: '縣市政府、鄉鎮公所、各級應變中心的編制人員。審核者：超級管理員。' },
-    /* 🔒 2026-09-11 Sucre：「申請成為後台人員要多一個社福團體。」
-       對應平台角色 `ngo`（`AC-FEAT-001` 的五個平台角色之一），不是新角色。
-       ⚠️ **與正典 `AC-RE-104` 有張力，要記著：** 那條說 NGO 這個平台角色是
-          「由所屬團隊的 type **推導**出來的，不是指派的」，而且權威鏈因此仍回到
-          超級管理員（團隊是他建的）。從這裡直接申請 `ngo` 等於**繞過那條推導**——
-          申請人不屬於任何團隊，卻拿到 NGO 平台角色。
-          目前照裁示做，但這一項要問工程：`user_role_assign` 直接寫 `ngo`
-          會不會讓依賴「NGO ⇒ 有 team」的地方（例如可視範圍 scope）壞掉。 */
-    { value: 'ngo', label: '社福團體人員',
-      hint: '社福團體、基金會、協會等民間組織的工作人員。審核者：超級管理員。' },
-    { value: 'data_auditor', label: '資料檢核員',
+    { value: 'government', label: '政府單位人員', teamType: 'gov',
+      hint: '縣市政府、鄉鎮公所、各級應變中心的編制人員。需選擇所屬單位。' },
+    /* 🔒 2026-09-11 Sucre：「申請成為後台人員要多一個社福團體。」對應平台角色 `ngo`。
+       （09-11 記的張力 —— 直接申請 ngo 會繞過 `AC-RE-104` 的團隊推導 ——
+        已由 2026-10-05「必選團隊」解掉，這段留著說明為什麼一定要選。） */
+    { value: 'ngo', label: '社福團體人員', teamType: 'ngo',
+      hint: '社福團體、基金會、協會等民間組織的工作人員。需選擇所屬團隊。' },
+    { value: 'data_auditor', label: '資料檢核員', teamType: null,
       hint: '協助檢查重複通報與資料正確性，唯讀為主。審核者：超級管理員。' },
   ];
+
+  /* 2026-10-05：團隊數超過這個數字才出搜尋框；少量直接列（Sucre：「少量不用搜尋」）。 */
+  const TEAM_SEARCH_THRESHOLD = 8;
+  const NEW_TEAM = '__new__';
+
+  /* 選團隊。只列與身分同類型、啟用中的團隊；最後一項永遠是「建立新團隊」。
+   *
+   * 🔒 2026-10-11 Sucre：「要不要用下拉選單？展開來體驗很好但有點長，應該可以搭配手機內建的滾輪？」
+   *    → 改用**原生 <select>**：手機點下去就是系統的滾輪／清單，桌機可以打字跳到該項。
+   *    不自刻下拉選單 —— 自刻的在手機上沒有系統滾輪，鍵盤與讀屏也要自己補。
+   * ⚠️ 字級刻意 16px：iOS 對小於 16px 的輸入框會自動放大整頁。
+   * 搜尋框保留 10-05 的規則：超過 TEAM_SEARCH_THRESHOLD 才出現，用來縮短下拉清單。 */
+  function TeamPicker({ type, teamId, onPick, newName, onNewName, error }) {
+    const [query, setQuery] = useState('');
+    const all = useMemo(() => Bridge.readTeamDirectory(type), [type]);
+    const showSearch = all.length > TEAM_SEARCH_THRESHOLD;
+    const q = query.trim().toLowerCase();
+    const filtered = showSearch && q ? all.filter((t) => t.name.toLowerCase().includes(q)) : all;
+    /* 已選的那一隊就算被搜尋濾掉也要留在選項裡，否則 <select> 會顯示成沒選。 */
+    const picked = all.find((t) => t.id === teamId);
+    const list = picked && !filtered.includes(picked) ? [picked].concat(filtered) : filtered;
+    const noun = type === 'gov' ? '單位' : '團隊';
+    const dup = teamId === NEW_TEAM && newName.trim()
+      ? all.find((t) => t.name.trim() === newName.trim()) : null;
+
+    const onChange = (e) => {
+      const v = e.target.value;
+      onPick(v || null);
+      if (v === NEW_TEAM && !newName && q) onNewName(query.trim());
+    };
+
+    return (
+      <div>
+        <label htmlFor="wg-team-select" style={{ display: 'block', font: '700 var(--fs-14)/1.2 var(--font-latin)',
+          color: 'var(--color-fg-neutral-default)', marginBottom: 'var(--space-2)' }}>
+          你屬於哪個{noun}？<span aria-hidden="true" style={{ color: 'var(--color-fg-danger)' }}>*</span>
+        </label>
+        {error ? (
+          <span role="alert" style={{ display: 'block', marginBottom: 'var(--space-2)',
+            font: '400 var(--fs-13)/1.5 var(--font-body)', color: 'var(--color-fg-danger)' }}>{error}</span>
+        ) : null}
+        {showSearch ? (
+          <div style={{ marginBottom: 'var(--space-2)' }}>
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={'先打幾個字縮短清單'} />
+          </div>
+        ) : null}
+        <div style={{ position: 'relative' }}>
+          <select id="wg-team-select" value={teamId || ''} onChange={onChange} aria-invalid={error ? true : undefined}
+            style={{ width: '100%', minHeight: 44, appearance: 'none', WebkitAppearance: 'none',
+              padding: '0 40px 0 var(--space-3)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              font: '400 16px/1.4 var(--font-body)',
+              color: teamId ? 'var(--color-fg-neutral-default)' : 'var(--color-fg-neutral-muted)',
+              background: 'var(--color-bg-neutral-default)',
+              border: '1px solid ' + (error ? 'var(--color-fg-danger)' : 'var(--color-border-default)') }}>
+            <option value="" disabled>請選擇{noun}</option>
+            {list.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {showSearch && q && filtered.length === 0 ? (
+              <option value="" disabled>找不到「{query.trim()}」</option>
+            ) : null}
+            <option value={NEW_TEAM}>＋ 清單裡沒有，建立新的{noun}</option>
+          </select>
+          <span aria-hidden="true" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+            pointerEvents: 'none', color: 'var(--color-fg-neutral-subtle)', display: 'flex' }}>
+            <WGIcon n="ChevronDown" s={18} />
+          </span>
+        </div>
+        {teamId === NEW_TEAM ? (
+          <div style={{ marginTop: 'var(--space-3)' }}>
+            <Field label={'新' + noun + '名稱'} required
+              error={dup ? '已經有「' + dup.name + '」了，請直接在上面選它' : undefined}
+              helper={'由超級管理員審核；通過後這個' + noun + '會建立，你是它的管理員，之後可以用邀請碼邀其他人加入。'}>
+              <Input value={newName} onChange={(e) => onNewName(e.target.value)}
+                placeholder={type === 'gov' ? '例：花蓮縣光復鄉公所' : '例：光復在地互助協會'} />
+            </Field>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   const ROLE_REQUEST_STATUS = {
     pending:  { label: '審核中', tone: 'warning' },
     approved: { label: '已通過', tone: 'success' },
     rejected: { label: '未通過', tone: 'neutral' },
+    withdrawn: { label: '已撤回', tone: 'neutral' },
   };
+
+  /* ── 申請人基本資料（2026-10-05）─────────────────────────────────────────
+   *
+   * 🔴 Sucre：「後台人員有名字跟電話，前台人員沒有 —— 申請時就該填，進後台就不用再填一次。」
+   *    前台註冊只收「手機或 Email → 驗證碼 → 密碼」，沒有名字。用 Email 註冊的人名字電話都沒有。
+   * 🔒 裁示：名字＋手機必填、Email 選填；**手機申請時就驗證**；
+   *    帳號裡已有的手機／Email **帶入唯讀**（那是登入帳號，不在這裡改）；名字可以改。
+   * 取代 09-11 的「可聯絡到你的方式（選填）」自由文字欄 —— 那是一份沒驗證、和帳號脫鉤的副本。
+   * ⚠️ 前台目前**沒有個人設定頁**，所以唯讀欄位不寫「請到個人設定修改」。
+   */
+  const SITE_PHONE_RE = /^09\d{8}$/;
+  const SITE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const DEMO_OTP = '123456';   // 與登入頁 site-auth.jsx 同一組示範驗證碼
+
+  function ReadonlyContact({ label, value, note }) {
+    return (
+      <div>
+        <div style={{ font: '700 var(--fs-14)/1.2 var(--font-latin)', color: 'var(--color-fg-neutral-default)',
+          marginBottom: 'var(--space-2)' }}>{label}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-3)',
+          borderRadius: 'var(--radius-md)', background: 'var(--color-bg-neutral-subtle)',
+          border: '1px solid var(--color-border-default)', font: '400 var(--fs-14)/1.4 var(--font-data)',
+          color: 'var(--color-fg-neutral-default)' }}>
+          <span style={{ flex: 1, minWidth: 0 }}>{value}</span>
+          <Badge tone="success" variant="subtle">已驗證</Badge>
+        </div>
+        <div style={{ marginTop: 'var(--space-1)', font: '400 var(--fs-12)/1.5 var(--font-body)',
+          color: 'var(--color-fg-neutral-muted)' }}>{note}</div>
+      </div>
+    );
+  }
+
+  function ApplicantSection({ profile, viewerId, form, setForm, touched, errors }) {
+    const set = (patch) => setForm(Object.assign({}, form, patch));
+    const hasPhone = Boolean(profile.phone && profile.phoneVerified);
+    const hasEmail = Boolean(profile.email);
+
+    const sendCode = () => {
+      const p = Bridge.normalizePhone(form.phone);
+      if (!SITE_PHONE_RE.test(p)) { set({ phoneError: '手機號碼格式不正確（09 開頭十碼）' }); return; }
+      if (Bridge.isPhoneTaken(p, viewerId)) { set({ phoneError: '這支手機已經是別的帳號在用，請換一支，或用那個帳號登入申請' }); return; }
+      set({ phone: p, codeSent: true, code: '', phoneError: null, codeError: null });
+    };
+    const confirmCode = () => {
+      if (form.code.trim() !== DEMO_OTP) { set({ codeError: '驗證碼不正確或已過期，請重新輸入或重新傳送' }); return; }
+      set({ phoneVerified: true, codeError: null });
+    };
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', padding: 'var(--space-4)',
+        borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-default)' }}>
+        <div>
+          <div style={{ font: '700 var(--fs-15)/1.3 var(--font-display)', color: 'var(--color-fg-neutral-default)' }}>你的基本資料</div>
+          <div style={{ marginTop: 2, font: '400 var(--fs-12)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)', textWrap: 'pretty' }}>
+            審核者會用這支手機跟你確認身分；通過後這些資料直接帶進管理平台，不用再填一次。
+          </div>
+        </div>
+
+        <Field label="你的名字" required error={touched && errors.name ? errors.name : undefined}
+          helper="管理平台上其他人看到的名字，建議用真實姓名">
+          <Input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="例：王志豪" />
+        </Field>
+
+        {hasPhone ? (
+          <ReadonlyContact label="手機號碼" value={profile.phone} note="這是你登入用的手機，不在這裡改。" />
+        ) : (
+          <div>
+            <Field label="手機號碼" required
+              error={form.phoneError || (touched && errors.phone ? errors.phone : undefined)}
+              helper={form.phoneVerified ? undefined : '會傳一組驗證碼給你。這支手機之後也可以拿來登入。'}>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Input value={form.phone} inputMode="tel" placeholder="0912345678"
+                    disabled={form.phoneVerified}
+                    onChange={(e) => set({ phone: e.target.value, codeSent: false, code: '', phoneVerified: false, phoneError: null, codeError: null })} />
+                </div>
+                {form.phoneVerified ? (
+                  <span style={{ alignSelf: 'center' }}><Badge tone="success" variant="subtle">已驗證</Badge></span>
+                ) : (
+                  <Button variant="outline" onClick={sendCode}>{form.codeSent ? '重新傳送' : '傳送驗證碼'}</Button>
+                )}
+              </div>
+            </Field>
+            {form.codeSent && !form.phoneVerified ? (
+              <div style={{ marginTop: 'var(--space-2)' }}>
+                <Field label="簡訊驗證碼" required error={form.codeError || undefined}
+                  helper={'原型不會真的傳簡訊，驗證碼固定是 ' + DEMO_OTP}>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Input value={form.code} inputMode="numeric" placeholder="6 位數字"
+                        onChange={(e) => set({ code: e.target.value, codeError: null })} />
+                    </div>
+                    <Button variant="secondary" onClick={confirmCode}>確認</Button>
+                  </div>
+                </Field>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {hasEmail ? (
+          <ReadonlyContact label="Email" value={profile.email} note="這是你登入用的 Email，不在這裡改。" />
+        ) : (
+          <Field label="Email（選填）" error={errors.email || undefined}>
+            <Input value={form.email} type="email" placeholder="name@example.tw"
+              onChange={(e) => set({ email: e.target.value })} />
+          </Field>
+        )}
+      </div>
+    );
+  }
 
   function RoleElevationDrawer({ open, viewerId, onClose }) {
     const version = Bridge.useBridgeVersion();
@@ -162,34 +358,112 @@
 
     const [role, setRole] = useState(null);
     const [reason, setReason] = useState('');
-    const [contact, setContact] = useState('');
     const [touched, setTouched] = useState(false);
-    React.useEffect(() => { if (open) { setRole(null); setReason(''); setContact(''); setTouched(false); } }, [open]);
+    const [confirmWithdraw, setConfirmWithdraw] = useState(false);
+    const profile = useMemo(() => Bridge.readSiteProfile(viewerId) || {}, [viewerId, version]);
+    const blankApplicant = () => ({ name: profile.name || '', phone: '', codeSent: false, code: '',
+      phoneVerified: false, phoneError: null, codeError: null, email: '' });
+    const [applicant, setApplicant] = useState(blankApplicant);
+    const [teamId, setTeamId] = useState(null);       // 2026-10-05：既有團隊 id，或 NEW_TEAM
+    const [newTeamName, setNewTeamName] = useState('');
+    React.useEffect(() => {
+      if (open) { setRole(null); setReason(''); setTouched(false); setConfirmWithdraw(false); setApplicant(blankApplicant());
+      setTeamId(null); setNewTeamName(''); } }, [open]);
+    /* 換身分就清掉團隊：政府與社福的清單不同，留著舊的會變成選了一個不在畫面上的團隊。 */
+    React.useEffect(() => { setTeamId(null); setNewTeamName(''); }, [role]);
 
     if (!open) return null;
 
     const opt = ROLE_REQUEST_OPTIONS.find((o) => o.value === role) || null;
+    const needsTeam = Boolean(opt && opt.teamType);
+    const teamNoun = opt && opt.teamType === 'gov' ? '單位' : '團隊';
+    const directory = needsTeam ? Bridge.readTeamDirectory(opt.teamType) : [];
+    const pickedTeam = directory.find((t) => t.id === teamId) || null;
+    const isNewTeam = teamId === NEW_TEAM;
+    const dupTeam = isNewTeam && newTeamName.trim()
+      ? directory.find((t) => t.name.trim() === newTeamName.trim()) : null;
+    let teamError = null;
+    if (needsTeam) {
+      if (!teamId) teamError = '請選擇你所屬的' + teamNoun;
+      else if (isNewTeam && !newTeamName.trim()) teamError = '請填新' + teamNoun + '的名稱';
+      else if (dupTeam) teamError = '已經有同名的' + teamNoun + '，請直接選它';
+    }
+
+    const hasPhone = Boolean(profile.phone && profile.phoneVerified);
+    const applicantErrors = {};
+    if (!applicant.name.trim()) applicantErrors.name = '必填';
+    if (!hasPhone) {
+      if (!applicant.phone.trim()) applicantErrors.phone = '必填';
+      else if (!applicant.phoneVerified) applicantErrors.phone = '請先完成手機驗證';
+    }
+    if (!profile.email && applicant.email.trim() && !SITE_EMAIL_RE.test(applicant.email.trim()))
+      applicantErrors.email = 'Email 格式不正確';
+
     const missing = [];
     if (!opt) missing.push('要申請的身分');
+    if (applicantErrors.name) missing.push('你的名字');
+    if (applicantErrors.phone) missing.push(applicantErrors.phone === '必填' ? '手機號碼' : '手機驗證');
+    if (applicantErrors.email) missing.push('Email 格式');
+    if (teamError) missing.push('所屬' + teamNoun);
     if (!reason.trim()) missing.push('申請理由');
 
     const submit = () => {
       setTouched(true);
       if (missing.length) return;
+      const app = {
+        name: applicant.name.trim(),
+        phone: hasPhone ? profile.phone : Bridge.normalizePhone(applicant.phone),
+        email: profile.email || applicant.email.trim(),
+      };
+      /* 先寫回帳號：驗證過的手機與名字是帳號本身的資料，進後台直接沿用。 */
+      Bridge.writeSiteProfile(viewerId, { name: app.name, phone: app.phone, phoneVerified: true, email: app.email });
       Bridge.submitRoleRequest({ by: viewerId, role: opt.value, roleLabel: opt.label,
-        reason: reason.trim(), contact: contact.trim() });
+        reason: reason.trim(), applicant: app,
+        teamId: pickedTeam ? pickedTeam.id : null,
+        teamName: pickedTeam ? pickedTeam.name : (isNewTeam ? newTeamName.trim() : null),
+        teamType: needsTeam ? opt.teamType : null,
+        teamIsNew: needsTeam && isNewTeam });
     };
+
+    /* 審核者說明跟著選擇變（2026-10-05：既有團隊＝團隊管理員或超管，兩個都可以）。 */
+    const reviewerText = !needsTeam ? '送出後由超級管理員審核。'
+      : pickedTeam ? '送出後由「' + pickedTeam.name + '」的管理員或超級管理員審核，任一人通過即可。'
+      : isNewTeam ? '新' + teamNoun + '由超級管理員審核，通過後你會是它的管理員。'
+      : '送出後由該' + teamNoun + '的管理員或超級管理員審核。';
 
     /* AC-RE-106：已有待審就**只顯示那一筆**，連表單都不給 ——
        「送出後被擋下」比「一開始就看得出不能送」差得多。 */
     if (pending) {
+      /* 2026-10-06：可撤回。按一次先展開確認，不直接撤 —— 撤回會讓這筆離開審核佇列，
+         重新送出要重排。不用彈窗，因為後果可逆（可以馬上再送）。 */
       return (
         <ActionDrawer open={open} title="申請管理權限" onClose={onClose}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             <Alert tone="info" title="你已經有一筆申請在審核中">
-              同一時間只能有一筆申請。要改申請別的身分，請等這一筆有結果。
+              同一時間只能有一筆申請。要改申請別的身分或團隊，可以先撤回這一筆。
             </Alert>
             <RoleRequestCard row={pending} />
+            {confirmWithdraw ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', padding: 'var(--space-4)',
+                borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-default)' }}>
+                <div style={{ font: '400 var(--fs-13)/1.6 var(--font-body)', color: 'var(--color-fg-neutral-default)', textWrap: 'pretty' }}>
+                  撤回後審核者就不會再處理這筆申請。你隨時可以重新送出，但要重新排隊審核。
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                  <Button variant="outline" onClick={() => setConfirmWithdraw(false)} style={{ flex: 1 }}>先不要</Button>
+                  <Button variant="primary" onClick={() => { Bridge.withdrawRoleRequest(pending.id, viewerId); setConfirmWithdraw(false); }}
+                    style={{ flex: 1 }}>確定撤回</Button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <Button variant="outline" onClick={() => setConfirmWithdraw(true)}>撤回這筆申請</Button>
+                <div style={{ marginTop: 'var(--space-2)', font: '400 var(--fs-12)/1.6 var(--font-body)',
+                  color: 'var(--color-fg-neutral-muted)', textWrap: 'pretty' }}>
+                  如果團隊已經用邀請碼讓你加入，就不需要這筆申請了，可以直接撤回。
+                </div>
+              </div>
+            )}
           </div>
         </ActionDrawer>
       );
@@ -197,7 +471,7 @@
 
     return (
       <ActionDrawer open={open} title="申請管理權限"
-        subtitle="有管理權限的人可以派工、審核資料、管理站點。送出後由超級管理員審核。"
+        subtitle={'有管理權限的人可以派工、審核資料、管理站點。' + reviewerText}
         onClose={onClose}
         footer={
           <React.Fragment>
@@ -207,7 +481,7 @@
         }>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           {/* AC-RE-107：被拒過的人要看得到上一次的結果與理由，否則會重複送一模一樣的內容。 */}
-          {latest && latest.status === 'rejected' ? <RoleRequestCard row={latest} /> : null}
+          {latest && (latest.status === 'rejected' || latest.status === 'withdrawn') ? <RoleRequestCard row={latest} /> : null}
 
           {/* 與建單表單的「你需要什麼幫忙」同一個問題（2026-09-13 回報）：
               自己刻的選擇區塊不會自動有 DS 的必填星號與錯誤樣式，要自己補。 */}
@@ -237,13 +511,24 @@
                 );
               })}
             </div>
-            {/* 🔒 這一段是刻意寫出來的，不是佔位文字。看不到自己要的選項時，
-                使用者會以為是自己找不到 —— 直接告訴他那條路在哪裡。 */}
-            <div style={{ marginTop: 'var(--space-2)', font: '400 var(--fs-12)/1.6 var(--font-body)',
-              color: 'var(--color-fg-neutral-muted)', textWrap: 'pretty' }}>
-              要加入某個救災團隊（NGO 或政府單位）請向該團隊索取邀請碼，不從這裡申請。
-            </div>
+            {/* 2026-10-05 前這裡寫「要加入團隊請索取邀請碼，不從這裡申請」—— 已改成可直接選團隊。
+                邀請碼仍是更快的路，留一句提示。 */}
+            {needsTeam ? (
+              <div style={{ marginTop: 'var(--space-2)', font: '400 var(--fs-12)/1.6 var(--font-body)',
+                color: 'var(--color-fg-neutral-muted)', textWrap: 'pretty' }}>
+                如果{teamNoun}已經給你邀請碼，直接掃碼加入會更快，不用等審核。
+              </div>
+            ) : null}
           </div>
+
+          {needsTeam ? (
+            <TeamPicker key={opt.teamType} type={opt.teamType} teamId={teamId} onPick={setTeamId}
+              newName={newTeamName} onNewName={setNewTeamName}
+              error={touched && teamError && !dupTeam ? teamError : null} />
+          ) : null}
+
+          <ApplicantSection profile={profile} viewerId={viewerId} form={applicant} setForm={setApplicant}
+            touched={touched} errors={applicantErrors} />
 
           <Field label="申請理由" required error={touched && !reason.trim() ? '必填' : undefined}
             helper="寫清楚你的單位、職務，以及為什麼需要管理權限">
@@ -252,9 +537,6 @@
               style={textareaStyle}></textarea>
           </Field>
 
-          <Field label="可聯絡到你的方式（選填）" helper="審核者可能需要向你確認身分">
-            <Input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="公務電話、分機或 Email" />
-          </Field>
 
           {touched && missing.length ? (
             <Alert tone="danger" title={'尚有 ' + missing.length + ' 項未完成'}>請補齊：{missing.join('、')}。</Alert>
@@ -276,6 +558,16 @@
             </div>
             <div style={{ marginTop: 2, font: '700 var(--fs-15)/1.4 var(--font-display)',
               color: 'var(--color-fg-neutral-default)' }}>{row.roleLabel}</div>
+            {row.applicant ? (
+              <div style={{ marginTop: 2, font: '400 var(--fs-12)/1.4 var(--font-data)', color: 'var(--color-fg-neutral-subtle)' }}>
+                {[row.applicant.name, row.applicant.phone, row.applicant.email].filter(Boolean).join(' · ')}
+              </div>
+            ) : null}
+            {row.teamName ? (
+              <div style={{ marginTop: 2, font: '400 var(--fs-13)/1.4 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+                {row.teamName}{row.teamIsNew ? '（新建立，待審核）' : ''}
+              </div>
+            ) : null}
           </div>
           <Badge tone={meta.tone} variant="subtle">{meta.label}</Badge>
         </div>

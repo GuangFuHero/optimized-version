@@ -57,7 +57,7 @@
   //    使用者」。這個詞只會出現在**同時擁有兩邊的人**眼前，所以要對那個人精確。
   //
   // ⚠️ 回到公開地圖 ≠ 登出（IAM-PS-105）：不動任何憑證，使用者那一側仍是已登入狀態。
-  const WG_SITE_HOME = "../前台/前台地圖 Site Map.html#/map";
+  const WG_SITE_HOME = "../前台/前台地圖 Site Map.html#/map";  // 交付版：前後台分在兩個資料夾
 
   function WGRealmBar({ collapsed, href = WG_SITE_HOME }) {
     const link = encodeURI(href);
@@ -135,15 +135,15 @@
         {/* 起始時間 ＋ 啟動者 */}
         <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>
           <span>起始 {act.startedAt}</span>
-          {act.startedBy && <span>由 {act.startedBy} 啟動</span>}
+          {/* 「由 X 啟動」已拿掉（2026-10-03：後端 project_settings 沒有建立者欄位，不記錄開站人） */}
         </span>
 
         {/* 災害類型（移除 X 在這裡，不在常駐區） */}
         <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" }}>
           <span style={{ flexShrink: 0 }}>災害類型</span>
           {types.map((t) => (
-            <DisasterChip key={t.key} type={t.key} isNew={t.isNew}
-              onRemove={canRemove ? () => onRemoveDisaster(t.key) : undefined} />
+            /* 2026-10-05：事件卡改成只能看 —— 移除 X 拿掉，改設定一律到設定頁（只有一個地方能改）。 */
+            <DisasterChip key={t.key} type={t.key} isNew={t.isNew} />
           ))}
         </span>
 
@@ -151,18 +151,18 @@
         <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
           paddingTop: 10, borderTop: "1px solid var(--color-border-default)" }}>
           <ShellPendingChip info={window.WG_EVENT_PENDING} label="事件層資料待確認" />
-          {/* 行為不變：任務管理頁就地開彈窗，其他頁跳到任務管理頁再開。點下去先關卡片。 */}
-          <button className="tk-chipbtn"
+          {/* 2026-10-05：一律前往設定頁。原本任務管理頁就地開彈窗、其他頁跳任務管理 ——
+              同一個設定有兩個能改的地方。現在 ⓘ 只負責「看」與「指路」，改只在設定頁。 */}
+          <button className="tk-chipbtn" data-wg-goto-settings
             onClick={() => {
               onClose();
-              if (inPlace) onOpenEventSettings();
-              else if (window.wgNavigate) window.wgNavigate("ticket", activeNav);
+              if (window.wgNavigate) window.wgNavigate("settings", activeNav);
             }}
-            title={inPlace ? "事件設定與歷史" : "事件設定在任務管理頁，點擊前往"}
+            title="前往設定頁修改"
             style={{ marginLeft: "auto", border: "none", background: "transparent", padding: 0,
               color: "var(--color-fg-neutral-muted)", cursor: "pointer",
               display: "inline-flex", alignItems: "center", gap: 4, font: "var(--font-data-300)" }}>
-            <Icon n="Settings" s={13} c="currentColor" />事件設定
+            <Icon n="Settings" s={13} c="currentColor" />前往設定
           </button>
         </span>
       </div>
@@ -252,7 +252,8 @@
     );
     const act = activation || window.TK_ACTIVATION || {};
     const types = disasterTypes || (window.wgActiveDisasters ? window.wgActiveDisasters() : []);
-    const current = NAV.find((n) => n[0] === activeNav) || NAV[0];
+    // 2026-10-05：「設定」不在 NAV 裡（它在側邊欄底部），查不到時標題會退回第一項「總覽儀表板」。
+    const current = NAV.find((n) => n[0] === activeNav) || (activeNav === "settings" ? ["settings", "設定"] : NAV[0]);
     const canRemove = typeof onRemoveDisaster === "function" && types.length > 1;
 
     // 事件卡：三種關閉方式 —— 點卡片外面、Esc、收合側邊欄。

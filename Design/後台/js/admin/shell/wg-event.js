@@ -36,6 +36,51 @@
     };
   }
 
+  // ── 設定頁的值套用到各頁（2026-10-05）─────────────────────────────────
+  // 設定頁（設定 Settings.html）把改過的值存在 localStorage 的 wg.settings.v1。
+  // 這裡讀回來，覆寫 TK_ACTIVATION（名稱／簡稱／起始時間／這次的災害類型）、
+  // TK_DISASTERS（自訂類型與改過的名稱）、TK_DISASTER_FIELDS（災害專屬欄位）。
+  // ⚠️ 任務管理頁的 tk-data.js 在本檔**之後**載入，會整個重設 TK_ACTIVATION —— 所以
+  //    除了現在跑一次，DOMContentLoaded 再跑一次（那時一般 script 都跑完了，
+  //    text/babel 的頁面程式還沒執行）。沒有存過設定時什麼都不做。
+  const ST_COLORS = ["#9D174D", "#0F766E", "#4338CA", "#A16207", "#BE185D", "#334155"];
+  window.wgApplySettings = function () {
+    let st = null;
+    try { st = JSON.parse(localStorage.getItem("wg.settings.v1") || "null"); } catch (e) {}
+    if (!st) return;
+    const act = window.TK_ACTIVATION;
+    if (act && st.event) {
+      act.name = st.event.name || act.name;
+      act.shortName = st.event.shortName || "";
+      act.startedAt = st.event.startedAt || act.startedAt;
+      act.types = (st.event.types || []).slice();
+    }
+    const D = window.TK_DISASTERS || (window.TK_DISASTERS = {});
+    let ci = 0;
+    (st.vocab || []).forEach((v) => {
+      if (D[v.key]) { D[v.key].label = v.label; return; }
+      const c = ST_COLORS[ci++ % ST_COLORS.length];
+      D[v.key] = { label: v.label, color: c, tint: "var(--color-bg-neutral-subtle)" };
+    });
+    if (st.fields) {
+      const map = {};
+      const toForm = (f) => {
+        const sel = f.dataType === "single_select" || f.dataType === "multi_select" || f.dataType === "boolean";
+        return { key: f.key, label: f.label, type: sel ? "select" : "text",
+          options: f.dataType === "boolean" ? ["是", "否"] : (f.options || []),
+          hint: f.unit || f.hint || undefined };
+      };
+      st.fields.filter((f) => f.kind === "disaster" && f.active).forEach((f) => {
+        // 空的＝所有災害都適用（ERD：empty = universal）
+        const ts = (f.disasterTypes && f.disasterTypes.length) ? f.disasterTypes : ((st.event && st.event.types) || []);
+        ts.forEach((t) => { (map[t] = map[t] || []).push(toForm(f)); });
+      });
+      window.TK_DISASTER_FIELDS = map;
+    }
+  };
+  window.wgApplySettings();
+  document.addEventListener("DOMContentLoaded", () => window.wgApplySettings());
+
   // 「事件層資料待確認」的統一說明（比照 tk-data.js 的 TK_PENDING.activation）
   // 用 getter，讓之後才載入的 tk-data.js 的 TK_PENDING 有機會覆蓋
   const FALLBACK_PENDING = {

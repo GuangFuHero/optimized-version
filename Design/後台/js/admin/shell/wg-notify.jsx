@@ -95,6 +95,7 @@
   // 本頁處理不了才跨頁，並用 #open= 讓落地頁自己開。
   // 落點對照沿用 nav.js 的 PAGES，不另立一份。
   const NOTIFY_PAGES = {
+    ticket:  "任務管理 Ticket Management.html",
     station: "資源站點管理 Resource Station v2.html",
   };
 

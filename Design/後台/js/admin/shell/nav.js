@@ -17,7 +17,8 @@
     ["__sep__", "協作與權限"],
     ["teams", "團隊", "Building2"],
     ["members", "成員與權限", "UserCog"],
-    ["audit", "資料檢核", "ShieldCheck"],
+    // 2026-10-10：原本的「資料檢核」佔位頁改成「AI 重複審核」（頁名 10-03 定；位置 10-02 定在資料檢核那一格）。
+    ["dedup", "AI 重複審核", "ScanSearch"],
   ];
 
   // ── 依「目前身份」收斂導覽（三頁共用）──────────────────────────────────
@@ -69,7 +70,12 @@
       //    否則兩隊會互相覆蓋。見 feature.md。
       if (id === "brief") return isSuper || role === "gov";
       if (id === "members") return isSuper;
-      if (id === "audit") return isSuper || isAuditor;
+      // 🔒 2026-10-05：能處理重複的＝團隊管理員、超級管理員、資料檢核員（團隊成員不行）。
+      //    團隊管理員看自己團隊範圍內的同案；跨單位的只能看（頁面內處理）。
+      if (id === "dedup") {
+        const ident = window.wgActingIdentity ? window.wgActingIdentity(persona) : null;
+        return isSuper || isAuditor || !!(ident && ident.kind === "team" && ident.role === "admin");
+      }
       // Notion PRD v5.2 §3 A1：「Data Auditor 不顯示此頁」。乾淨切之後這條終於成立 ——
       // 舊版讀 persona.rbac，所以張育成加入某隊之後不管切到哪都看得到團隊頁。
       if (id === "teams") return !isAuditor;
@@ -78,22 +84,26 @@
   };
 
   // 各導覽項的實際落點；未獨立成頁者回成員管理頁以佔位呈現
-  // 交付版：總覽儀表板／互助地圖／任務管理不在本次交付，點下去落到成員管理的「建置中」佔位頁。
   const PAGES = {
+    // 交付版（2026-10-11）：總覽儀表板、AI 重複審核不在本次交付，點下去落到成員管理的「建置中」佔位頁。
     // 2026-08-27：互助地圖獨立成頁（MAP-FEAT-002 責任區與危險區）。
     // 在此之前 WG_NAV_CORE 有 "map" 這一項但 PAGES 沒有，所以點下去會落到
     // 成員管理的佔位頁 —— 加這一行，四頁一起生效（見本檔 wgNavigate 的註解）。
+    map: "互助地圖 Mutual Aid Map.html",
+    ticket: "任務管理 Ticket Management.html",
     station: "資源站點管理 Resource Station v2.html",
     // 2026-08-29：緊急公告獨立成頁（EA-FEAT-001 全站橫幅）。
     // 在此之前 WG_NAV_CORE 有 "announce" 但 PAGES 沒有，點下去會落到成員管理的
     // 佔位頁 —— 與 2026-08-27 的 map 同一個狀況。
     announce: "緊急公告 Emergency Announcements.html",
     brief: "志工行前資訊 Volunteer Briefing.html",
+    // 2026-10-05：設定頁獨立成頁。在此之前「設定」落在成員管理的佔位頁（IN_PAGE）。
+    settings: "設定 Settings.html",
   };
   const MEMBER_PAGE = "成員管理 Member Management.html";
 
   // 自己就有頁面的導覽項不必再跨頁（成員管理頁把它們當內頁 view 處理）
-  const IN_PAGE = { members: ["teams", "members", "audit", "settings"] };
+  const IN_PAGE = { members: ["teams", "members"] };   // audit 佔位頁 2026-10-10 改為獨立的 AI 重複審核頁   // settings 已於 2026-10-05 獨立成頁
 
   // 回傳 true 表示已離開本頁；false 表示由本頁自行處理
   //

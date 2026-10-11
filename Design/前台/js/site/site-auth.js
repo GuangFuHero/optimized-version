@@ -88,7 +88,7 @@
 
     const adminHome = window.ADMIN_PORTAL_HOME
       ? encodeURI(window.ADMIN_PORTAL_HOME)
-      : encodeURI('../後台/資源站點管理 Resource Station v2.html');
+      : encodeURI('../後台/任務管理 Ticket Management.html');
 
     let dest;
     if (back && BACK_WINS) dest = back;
