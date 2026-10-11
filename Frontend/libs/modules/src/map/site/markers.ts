@@ -7,7 +7,6 @@ import {
   type GetStationsQuery,
   type GetTicketsQuery,
   type StationFieldsFragment,
-  type TicketFieldsFragment,
 } from '@rescue-frontend/data-access';
 import type { Geometry, Polygon } from 'geojson';
 
@@ -16,7 +15,7 @@ import type {
   RescueMapMarkerItem,
 } from '../types';
 import { getStationTypeLabel } from '../../station/type-options';
-import { formatTicketStatusLabel } from '../../ticket/status';
+import { formatTicketStatusLabel, formatTicketTypeLabel } from '../../ticket/status';
 import type { SiteRouteState } from '../../route/types';
 
 export interface BoundsInput {
@@ -95,10 +94,11 @@ function createStationSubtitle(station: StationFieldsFragment): string {
 }
 
 function resolveTicketVariant(
-  ticket: TicketFieldsFragment,
+  status?: string | null,
+  priority?: string | null,
 ): RescueMapMarkerItem['variant'] {
-  const normalizedStatus = ticket.status?.trim().toLowerCase();
-  const normalizedPriority = ticket.priority?.trim().toLowerCase();
+  const normalizedStatus = status?.trim().toLowerCase();
+  const normalizedPriority = priority?.trim().toLowerCase();
 
   if (
     normalizedStatus === 'in_progress' ||
@@ -113,6 +113,14 @@ function resolveTicketVariant(
   }
 
   return 'urgent-ticket';
+}
+
+/** What a ticket's marker shows of its status: the word on the pin and the pin's colour. */
+function ticketStatusLook(status?: string | null, priority?: string | null) {
+  return {
+    label: formatTicketStatusLabel(status, '任務'),
+    variant: resolveTicketVariant(status, priority),
+  };
 }
 
 export function dedupeMarkersById(markers: readonly RescueMapMarkerItem[]) {
@@ -180,10 +188,11 @@ export function mapTicketToMarker(
 
   const title =
     ticket.title.trim() || ticket.propertyName?.trim() || ticket.uuid;
+  // Not `ticket.status`: the status is already the badge beside the title, translated. Falling back
+  // to it here printed the raw enum (`in_progress`) under every ticket that has no description.
   const subtitle =
     ticket.description?.trim() ||
-    ticket.taskType?.trim() ||
-    ticket.status?.trim() ||
+    (ticket.taskType?.trim() ? formatTicketTypeLabel(ticket.taskType) : '') ||
     '救災任務';
 
   return {
@@ -191,9 +200,10 @@ export function mapTicketToMarker(
     title,
     subtitle,
     position,
-    label: formatTicketStatusLabel(ticket.status, '任務'),
-    variant: resolveTicketVariant(ticket),
+    ...ticketStatusLook(ticket.status, ticket.priority),
     detailType: 'ticket',
+    // Set when `position` is only a cell centre (ADR-281) — see `buildLocationCells`.
+    locationCell: ticket.locationCell ?? null,
     ticketMeta: {
       status: ticket.status,
       priority: ticket.priority,
@@ -210,6 +220,22 @@ export function mapTicketToMarker(
     },
     requiredVolunteers: 1,
     matchedVolunteers: 0,
+  };
+}
+
+/**
+ * The marker with its ticket's status swapped for one read again — after a claim, a release or a
+ * stop, which the backend works the ticket's status out from — so the list's badge and the map's
+ * pin follow it without fetching the page again.
+ */
+export function withTicketStatus(
+  marker: RescueMapMarkerItem,
+  status: string,
+): RescueMapMarkerItem {
+  return {
+    ...marker,
+    ...ticketStatusLook(status, marker.ticketMeta?.priority),
+    ticketMeta: { ...marker.ticketMeta, status },
   };
 }
 

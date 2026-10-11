@@ -1,12 +1,17 @@
 import { getBackendGraphqlUrl } from '../../../lib/server-backend-auth';
 import {
   applyBackendAuthResponseCookies,
+  expireSessionResponse,
+  refreshUnavailableResponse,
   resolveBackendAuthTokenAsync,
 } from '../../../lib/server-backend-auth';
+import { SITE_REALM_HEADERS } from '../../../lib/site-realm';
+import { isSessionExpired } from '@rescue-frontend/modules/session';
 import { NextResponse, type NextRequest } from 'next/server';
 
 function buildForwardHeaders(request: NextRequest, accessToken?: string) {
-  const headers = new Headers();
+  // Every browser-side GraphQL request of the site comes through here.
+  const headers = new Headers(SITE_REALM_HEADERS);
   const contentType = request.headers.get('content-type');
   const accept = request.headers.get('accept');
 
@@ -26,12 +31,18 @@ function buildForwardHeaders(request: NextRequest, accessToken?: string) {
 }
 
 async function forwardGraphqlRequestAsync(request: NextRequest) {
-  const resolvedAuth = await resolveBackendAuthTokenAsync({
+  const requestLike = {
     cookies: {
       getAll: () => request.cookies.getAll(),
     },
     headers: request.headers,
-  });
+  };
+  const resolvedAuth = await resolveBackendAuthTokenAsync(requestLike);
+
+  if (resolvedAuth.refreshUnavailable) {
+    return refreshUnavailableResponse();
+  }
+
   const backendGraphqlUrl = new URL(getBackendGraphqlUrl());
 
   backendGraphqlUrl.search = request.nextUrl.search;
@@ -56,8 +67,15 @@ async function forwardGraphqlRequestAsync(request: NextRequest) {
         response.headers.get('content-type') ?? 'application/json',
     },
   });
+  const expired = isSessionExpired({
+    refreshFailed: resolvedAuth.refreshFailed,
+    sentToken: Boolean(resolvedAuth.token?.accessToken),
+    backendStatus: response.status,
+  });
 
-  return applyBackendAuthResponseCookies(proxiedResponse, resolvedAuth);
+  return expired
+    ? expireSessionResponse(proxiedResponse, requestLike, resolvedAuth)
+    : applyBackendAuthResponseCookies(proxiedResponse, resolvedAuth);
 }
 
 export async function GET(request: NextRequest) {

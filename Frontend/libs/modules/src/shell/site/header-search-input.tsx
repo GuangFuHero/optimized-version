@@ -2,14 +2,15 @@
 
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import { Box, InputBase } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
 import { usePathname } from 'next/navigation';
 import { startTransition, useEffect, useState, type ChangeEvent } from 'react';
 
-import { getRescueColorScheme, Icons } from '@rescue-frontend/ui';
+import { designTokens, Icons } from '@rescue-frontend/ui';
 
 import { useOptionalSiteMapRouteState } from '../../map/site/use-site-map-route-state';
 import { useSiteRouteState } from '../../route/use-site-route-state';
+
+const { color, radius, typography, motion } = designTokens;
 
 interface SiteHeaderSearchInputProps {
   compact?: boolean;
@@ -32,8 +33,6 @@ function SiteHeaderSearchField({
   value,
   onChange,
 }: SiteHeaderSearchFieldProps) {
-  const palette = getRescueColorScheme(useTheme()).adminShell.topNavBar;
-
   return (
     <Box
       sx={{
@@ -45,16 +44,21 @@ function SiteHeaderSearchField({
         display: 'flex',
         alignItems: 'center',
         gap: 1,
-        borderRadius: '999px',
-        border: `1px solid ${palette.border}`,
-        bgcolor: 'rgba(255, 255, 255, 0.72)',
-        boxShadow: '0 10px 24px rgba(21, 28, 34, 0.06)',
+        borderRadius: `${radius.full}px`,
+        bgcolor: color.bg.neutral.subtle,
+        // Inset ring rather than a border, matching the design system's `Input`: the ring can
+        // thicken on focus without the field changing size and nudging the header around it.
+        boxShadow: `inset 0 0 0 1px ${color.border.default}`,
+        transition: `box-shadow ${motion.transition.fast}`,
+        '&:focus-within': {
+          boxShadow: `inset 0 0 0 1.5px ${color.brand.secondary.default}`,
+        },
       }}
     >
       <InputBase
         value={value ?? ''}
         onChange={onChange}
-        placeholder="搜尋"
+        placeholder="搜尋站點、任務或地點"
         inputProps={{
           'aria-label': '搜尋',
         }}
@@ -62,14 +66,14 @@ function SiteHeaderSearchField({
           <SearchRoundedIcon
             sx={{
               fontSize: compact ? 18 : 20,
-              color: palette.brandText,
+              color: color.fg.neutral.muted,
               flexShrink: 0,
               mr: 1,
             }}
           />
         }
         endAdornment={
-          !!value ? (
+          value ? (
             <Box
               component="button"
               onClick={() =>
@@ -90,7 +94,7 @@ function SiteHeaderSearchField({
                 border: 'none',
                 p: 2,
                 '&:hover': {
-                  bgcolor: 'rgba(21, 28, 34, 0.04)',
+                  bgcolor: color.bg.neutral.sunken,
                 },
               }}
             >
@@ -101,15 +105,16 @@ function SiteHeaderSearchField({
         sx={{
           minWidth: 0,
           flex: 1,
-          color: palette.brandText,
+          color: color.fg.neutral.default,
           '& .MuiInputBase-input': {
             p: 0,
+            fontFamily: typography.body[400].fontFamily,
             fontSize: compact ? 15 : 14,
             lineHeight: compact ? '22px' : '20px',
             fontWeight: 600,
-            color: palette.brandText,
+            color: color.fg.neutral.default,
             '&::placeholder': {
-              color: 'rgba(21, 28, 34, 0.56)',
+              color: color.fg.neutral.muted,
               opacity: 1,
             },
           },

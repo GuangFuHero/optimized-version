@@ -1,5 +1,10 @@
 import qrcodeFactory from 'qrcode-generator';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, primitives } = designTokens;
+
+
 qrcodeFactory.stringToBytes = (text: string) =>
   Array.from(new TextEncoder().encode(text));
 
@@ -35,7 +40,9 @@ export function createQrSvg(value: string) {
     .filter(Boolean)
     .join('');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges"><path fill="#FFFFFF" d="M0 0h${size}v${size}H0z"/><path fill="#111827" d="${path}"/></svg>`;
+  // A QR code needs maximum contrast to scan under a head-torch at night, so the modules use the
+  // palette's pure white and near-black rather than any softer surface/text pairing.
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges"><path fill="${color.bg.neutral.default}" d="M0 0h${size}v${size}H0z"/><path fill="${primitives.color.neutral.black}" d="${path}"/></svg>`;
 }
 
 export function createQrDataUrl(value: string) {

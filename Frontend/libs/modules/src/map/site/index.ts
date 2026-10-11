@@ -1,4 +1,6 @@
+export { dedupeMarkersById } from './markers';
 export { SiteMapControls } from './site-map-controls';
+export { useCreatedTicketMarker } from './use-created-ticket-marker';
 export {
   SiteMapRouteProvider,
   useSiteMapRouteState,

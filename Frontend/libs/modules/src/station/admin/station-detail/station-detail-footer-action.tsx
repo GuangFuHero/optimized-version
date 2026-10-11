@@ -2,6 +2,8 @@
 
 import { Box, ButtonBase, Typography } from '@mui/material';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { useStationDetailColorScheme } from './constants';
 import { StationDetailIconSlot } from './station-detail-primitives';
 import type { StationDetailActionProps } from './types';
@@ -74,7 +76,7 @@ export function StationDetailFooterAction({
               <Typography
                 sx={{
                   color: 'inherit',
-                  fontSize: 12,
+                  fontSize: displayTextSize[12],
                   lineHeight: '16px',
                   fontWeight: 600,
                   letterSpacing: '0.6px',
@@ -121,7 +123,7 @@ export function StationDetailFooterAction({
               <Typography
                 sx={{
                   color: 'inherit',
-                  fontSize: 12,
+                  fontSize: displayTextSize[12],
                   lineHeight: '16px',
                   fontWeight: 600,
                   letterSpacing: '0.6px',

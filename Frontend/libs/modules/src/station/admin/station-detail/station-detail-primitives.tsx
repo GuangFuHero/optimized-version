@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 
 import { Box, Typography } from '@mui/material';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { useStationDetailColorScheme } from './constants';
 
 export function StationDetailIconSlot({
@@ -61,7 +63,7 @@ export function StationDetailSectionHeading({ label }: { label: string }) {
       <Typography
         sx={{
           color: stationDetailPalette.sectionText,
-          fontSize: 12,
+          fontSize: displayTextSize[12],
           lineHeight: '16px',
           fontWeight: 600,
           letterSpacing: '0.6px',

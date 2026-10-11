@@ -1,26 +1,25 @@
 'use client';
 
-import {
-  Alert,
-  Button,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Alert, Button, TextField } from '@mui/material';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
 import {
   type AuthIdentityType,
 } from '@rescue-frontend/data-access';
-import { AuthFormError, RegisterForm } from '@rescue-frontend/modules';
+import {
+  AuthFormError,
+  authHref,
+  RegisterForm,
+} from '@rescue-frontend/modules';
 import {
   registerAsync,
   resendVerificationAsync,
   verifyAsync,
 } from '../api/client';
 import { resolveAuthErrorMessage } from '../api/error-messages';
+import { AuthActionCard } from '../shared/auth-action-card';
 import { createHashedCredentialAsync } from './credentials';
 
 const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
@@ -48,6 +47,11 @@ interface PendingRegistration {
 
 export default function RegisterFormClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // The page the login page was asked to return to, carried here — a guest who pressed 「登入後接」
+  // and had no account yet lands back on that ticket. Nothing asked: the map.
+  const requestedCallbackUrl = searchParams.get('callbackUrl');
+  const callbackUrl = requestedCallbackUrl ?? '/map';
   const [pendingRegistration, setPendingRegistration] =
     useState<PendingRegistration | null>(null);
   const [verificationCode, setVerificationCode] = useState('');
@@ -93,7 +97,7 @@ export default function RegisterFormClient() {
           refreshToken: tokenPair.refresh_token,
           tokenType: tokenPair.token_type ?? 'bearer',
           expiresIn: String(tokenPair.expires_in),
-          callbackUrl: '/map',
+          callbackUrl,
           redirect: false,
         });
       } catch (error) {
@@ -109,7 +113,7 @@ export default function RegisterFormClient() {
       setVerificationSuccess('帳號驗證完成，正在登入。');
 
       startTransition(() => {
-        router.replace(result?.url ?? '/map', { scroll: false });
+        router.replace(result?.url ?? callbackUrl, { scroll: false });
       });
     } catch (error) {
       setVerificationError(
@@ -148,26 +152,10 @@ export default function RegisterFormClient() {
 
   if (pendingRegistration) {
     return (
-      <Stack
-        spacing={2}
-        sx={{
-          width: '100%',
-          borderRadius: '32px',
-          border: '1px solid #DCC1B1',
-          p: 3,
-          boxShadow: '0 1px 1px rgba(0, 0, 0, 0.05)',
-          bgcolor: '#FFFFFF',
-        }}
+      <AuthActionCard
+        title="輸入驗證碼"
+        description={`驗證碼已寄送到 ${pendingRegistration.normalizedIdentity}`}
       >
-        <Stack spacing={0.75}>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            輸入驗證碼
-          </Typography>
-          <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>
-            驗證碼已寄送到 {pendingRegistration.normalizedIdentity}
-          </Typography>
-        </Stack>
-
         <TextField
           label="驗證碼"
           value={verificationCode}
@@ -216,7 +204,7 @@ export default function RegisterFormClient() {
         >
           返回上一頁
         </Button>
-      </Stack>
+      </AuthActionCard>
     );
   }
 
@@ -262,7 +250,10 @@ export default function RegisterFormClient() {
       secondaryActionLabel="返回登入"
       onSecondaryAction={() => {
         startTransition(() => {
-          router.push('/login', { scroll: false });
+          router.push(
+            authHref('/login', { callbackUrl: requestedCallbackUrl }),
+            { scroll: false },
+          );
         });
       }}
     />

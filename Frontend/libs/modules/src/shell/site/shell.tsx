@@ -6,13 +6,21 @@ import { Box, Drawer, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { usePathname } from 'next/navigation';
 
-import { getRescueColorScheme } from '@rescue-frontend/ui';
+import { displayTextSize, getRescueColorScheme } from '@rescue-frontend/ui';
 
 import { LAYOUT_DIMENSIONS } from '../layout';
 import { GuangFuBrandIcon } from '../../brand';
 import { SiteMapRouteProvider } from '../../map/site/use-site-map-route-state';
+import {
+  RoleRequestDrawer,
+  sitePortalEntry,
+  useMyRoleRequests,
+} from '../../role-request';
 import { SiteRouteProvider } from '../../route/use-site-route-state';
+import { HelpRequestHost } from '../../ticket/help-request/help-request-host';
+import { MobileRequestHelpFab } from '../../ticket/help-request/mobile-request-help';
 import { SiteMobileTopNavBar } from './mobile-top-navbar';
+import { PageHelpDialog, usePageHelp } from './page-help';
 import { SiteSidebar } from './sidebar';
 import { SiteTopNavBar } from './top-navbar';
 
@@ -43,6 +51,20 @@ export function SiteShell({
   const rescue = getRescueColorScheme(useTheme());
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  // 前往後台 / 申請成為後台人員: asked once here, shown in the top bar or the phone's menu, and
+  // the application drawer the latter opens.
+  const { myRoleRequests, refetch: refetchRoleRequests } =
+    useMyRoleRequests(isAuthenticated);
+  const portalEntry = sitePortalEntry(isAuthenticated, myRoleRequests);
+  const [roleRequestOpen, setRoleRequestOpen] = useState(false);
+  const openRoleRequest = () => {
+    // From the phone's menu: the menu gives way to the drawer rather than sit under it.
+    setMobileDrawerOpen(false);
+    setRoleRequestOpen(true);
+  };
+  // 這一頁怎麼用 on a phone, from the menu's row: the desktop's ？ holds its own.
+  const pageHelp = usePageHelp();
+  const [pageHelpOpen, setPageHelpOpen] = useState(false);
   const bodyMinHeight = `calc(100dvh - ${LAYOUT_DIMENSIONS.desktopTopNavBarHeight}px)`;
   const desktopSidebarWidth = desktopSidebarOpen
     ? SITE_EXPANDED_SIDEBAR_WIDTH
@@ -62,7 +84,7 @@ export function SiteShell({
         sx={{
           minWidth: 0,
           color: rescue.adminShell.sidebar.heading,
-          fontSize: 20,
+          fontSize: displayTextSize[20],
           lineHeight: '28px',
           fontWeight: 700,
           whiteSpace: 'nowrap',
@@ -111,6 +133,8 @@ export function SiteShell({
           isAuthenticated={isAuthenticated}
           userName={userName}
           userImage={userImage}
+          portalEntry={portalEntry}
+          onApplyRoleRequest={openRoleRequest}
           onSignIn={onSignIn}
           onSignOut={onSignOut}
         />
@@ -211,8 +235,39 @@ export function SiteShell({
           showCloseButton
           onClose={() => setMobileDrawerOpen(false)}
           onSignOut={onSignOut}
+          portalEntry={portalEntry}
+          onApplyRoleRequest={openRoleRequest}
+          pageHelp={
+            pageHelp
+              ? {
+                  fresh: pageHelp.fresh,
+                  onOpen: () => {
+                    pageHelp.markSeen();
+                    setPageHelpOpen(true);
+                  },
+                }
+              : undefined
+          }
         />
       </Drawer>
+
+      <PageHelpDialog
+        open={pageHelpOpen}
+        onClose={() => setPageHelpOpen(false)}
+      />
+
+      <RoleRequestDrawer
+        open={roleRequestOpen}
+        onClose={() => setRoleRequestOpen(false)}
+        myRoleRequests={myRoleRequests}
+        onSubmitted={refetchRoleRequests}
+      />
+
+      {/* The map has its own, clear of its 「＋」 (`MapRequestHelpButton`). */}
+      {pathname.startsWith('/map') ? null : <MobileRequestHelpFab />}
+
+      {/* Inside the route providers: once a ticket is filed it turns the page to it. */}
+      <HelpRequestHost isAuthenticated={isAuthenticated} />
     </Box>
   );
 

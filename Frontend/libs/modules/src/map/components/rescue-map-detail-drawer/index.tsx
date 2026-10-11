@@ -2,8 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
-import LocalPhoneRoundedIcon from '@mui/icons-material/LocalPhoneRounded';
-import RadioRoundedIcon from '@mui/icons-material/RadioRounded';
 import { Box } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
@@ -12,19 +10,24 @@ import { StationDetailDrawer } from '../../../station';
 import type {
   StationDetailActionProps,
   StationDetailTabId,
-  StationDetailTabPanels,
 } from '../../../station/station-detail';
 import { TicketDetailDrawer } from '../../../ticket';
+import { formatTicketTypeLabel } from '../../../ticket/status';
 import type { TicketDetailDrawerProps } from '../../../ticket/ticket-detail';
-import type { RescueMapMarkerItem } from '../../types';
+import { describeLocationCellSpan } from '../../location-cells';
+import type { RescueMapDetailItem, RescueMapMarkerItem } from '../../types';
+import { LocationCellDetail } from '../location-cell-detail';
 
 export type RescueMapTicketDetailOverrides = Partial<
   Pick<
     TicketDetailDrawerProps,
     | 'summaryLine'
+    | 'headerActions'
+    | 'headerBadges'
     | 'detailsPane'
     | 'content'
     | 'footerActions'
+    | 'footerLead'
     | 'tabs'
     | 'tabsVariant'
   >
@@ -33,17 +36,17 @@ export type RescueMapTicketDetailOverrides = Partial<
 };
 
 interface RescueMapDetailDrawerProps {
-  marker: RescueMapMarkerItem | null;
+  marker: RescueMapDetailItem | null;
   onClose: () => void;
+  /** 從概略區塊的清單點進某一筆時切換選取。 */
+  onSelectMarker?: (markerId: string) => void;
+  /** 只影響訪客提示文案（「登入後可看」），不決定遮不遮 —— 遮在後端。 */
+  isAuthenticated?: boolean;
   ticketDetailOverrides?: RescueMapTicketDetailOverrides;
-  stationAction?: StationDetailActionProps;
   stationSecondaryAction?: StationDetailActionProps;
-  stationPendingCorrectionCount?: number;
-  stationTabPanels?: StationDetailTabPanels;
 }
 
 const DetailsIcon = Icons.details;
-const IncidentLogIcon = Icons.incidentLog;
 const CloseIcon = Icons.close;
 const MapIcon = Icons.map;
 const PersonIcon = Icons.person;
@@ -58,22 +61,34 @@ function formatStationStatus(marker: RescueMapMarkerItem) {
     station?.verificationStatus === 'human_verified'
   ) {
     return {
-      label: station.isTemporary ? 'TEMP VERIFIED' : 'ACTIVE VERIFIED',
+      label: station.isTemporary ? '臨時 · 已人工驗證' : '啟用 · 已人工驗證',
       tone: 'active' as const,
     };
   }
 
   if (station?.verificationStatus === 'ai_verified') {
     return {
-      label: 'AI VERIFIED',
+      label: 'AI 驗證',
       tone: 'warning' as const,
     };
   }
 
   return {
-    label: station?.visibility?.toUpperCase() ?? 'ACTIVE',
+    label: station?.visibility === 'public' ? '公開' : '未驗證',
     tone: 'inactive' as const,
   };
+}
+
+function formatVerificationStatus(status: string | null | undefined) {
+  if (status === 'human_verified') {
+    return '人工驗證';
+  }
+
+  if (status === 'ai_verified') {
+    return 'AI 驗證';
+  }
+
+  return '未驗證';
 }
 
 function createStationResources(marker: RescueMapMarkerItem) {
@@ -92,15 +107,9 @@ function createStationResources(marker: RescueMapMarkerItem) {
       value: station?.opHour?.trim() || '未提供',
       icon: <MapIcon />,
     },
-    {
-      id: 'level',
-      label: '站點等級',
-      value:
-        typeof station?.level === 'number'
-          ? `Level ${station.level}`
-          : '未提供',
-      icon: <IncidentLogIcon />,
-    },
+    // 「站點等級」與「可信度」依設計決議不在前台顯示：`level` 的語意還在問後端，
+    // 對讀者顯示一個我們自己都不確定意思的數字沒有意義；信任制度 v0.1.0 不做，
+    // 後端也已移除 `confidence_score`（a889fd4，從未被寫入）。
   ];
 }
 
@@ -119,12 +128,15 @@ function createTicketSummary(marker: RescueMapMarkerItem) {
         label: marker.label,
       },
       locationLabel: '位置資訊',
-      locationLines: [
-        marker.subtitle,
-        `緯度 ${latitude.toFixed(6)} / 經度 ${longitude.toFixed(6)}`,
-      ],
+      // A cell centre is not a place: printing it to six decimals would pass it off as one.
+      locationLines: marker.locationCell
+        ? [`概略區塊（${describeLocationCellSpan(marker.locationCell)}範圍）`]
+        : [
+            marker.subtitle,
+            `緯度 ${latitude.toFixed(6)} / 經度 ${longitude.toFixed(6)}`,
+          ],
       taskLabel: '任務類型',
-      taskValue: marker.ticketMeta?.taskType?.trim() || '未提供',
+      taskValue: formatTicketTypeLabel(marker.ticketMeta?.taskType),
       requesterLabel: '現場聯絡人',
       requesterValue: contactSummary.join(' / ') || '未提供',
       notesLabel: '任務說明',
@@ -164,25 +176,15 @@ function createStationSummary({
     //   icon: <EditRoundedIcon />,
     // },
     secondaryAction: stationSecondaryAction,
-    contactCard: marker.stationMeta?.source
-      ? {
-          name: marker.stationMeta.isOfficial ? '官方站點' : '一般站點',
-          role: marker.stationMeta.source.toUpperCase(),
-          avatarIcon: <PersonIcon />,
-          methods: [
-            {
-              id: 'verification',
-              value: marker.stationMeta.verificationStatus ?? '未驗證',
-              icon: <RadioRoundedIcon />,
-            },
-            {
-              id: 'visibility',
-              value: marker.stationMeta.visibility ?? '未提供',
-              icon: <LocalPhoneRoundedIcon />,
-            },
-          ],
-        }
-      : undefined,
+    // 2026-08-21 決議：前台不顯示 `source`。站點一律由後台建立，來源不具區別力；
+    // 有區別力的是「是不是官方造冊」。這張卡也不再列 visibility —— 讀者只會看到
+    // 公開的站點，這個欄位對他永遠是同一個值。
+    contactCard: {
+      name: marker.stationMeta?.isOfficial ? '官方站點' : '一般站點',
+      role: formatVerificationStatus(marker.stationMeta?.verificationStatus),
+      avatarIcon: <PersonIcon />,
+      methods: [],
+    },
     resources: createStationResources(marker),
   };
 }
@@ -190,6 +192,8 @@ function createStationSummary({
 export function RescueMapDetailDrawer({
   marker,
   onClose,
+  onSelectMarker,
+  isAuthenticated = false,
   ticketDetailOverrides,
   stationSecondaryAction,
 }: RescueMapDetailDrawerProps) {
@@ -210,6 +214,17 @@ export function RescueMapDetailDrawer({
 
   if (!marker) {
     return null;
+  }
+
+  if (marker.detailType === 'cell') {
+    return (
+      <LocationCellDetail
+        cell={marker}
+        isAuthenticated={isAuthenticated}
+        onClose={onClose}
+        onSelectMember={(markerId) => onSelectMarker?.(markerId)}
+      />
+    );
   }
 
   const resolvedTicketOverrides = ticketDetailOverrides

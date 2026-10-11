@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
-import { Icons } from '@rescue-frontend/ui';
+import { displayTextSize, Icons } from '@rescue-frontend/ui';
 
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 
@@ -101,6 +101,10 @@ export interface TicketDetailHeaderProps {
   title: string;
   summaryLine?: string;
   closeAction?: TicketDetailCloseActionProps;
+  /** Beside the close button, before it — the public site's ⋯ for a ticket's requester. */
+  actions?: ReactNode;
+  /** Under the title — the public site's 最高優先／高優先. */
+  badges?: ReactNode;
 }
 
 export interface TicketDetailTabsProps {
@@ -110,16 +114,27 @@ export interface TicketDetailTabsProps {
 
 export interface TicketDetailFooterActionsProps {
   items: readonly TicketDetailFooterActionItem[];
+  /**
+   * Goes first on the inline row, before the items. For an action that has to render itself — the
+   * public site's claim button reads the ticket's needs, which a plain item cannot.
+   */
+  lead?: ReactNode;
 }
 
 export interface TicketDetailDrawerProps {
   title?: string;
   summaryLine?: string;
   closeAction?: TicketDetailCloseActionProps;
+  /** See `TicketDetailHeaderProps.actions`. */
+  headerActions?: ReactNode;
+  /** See `TicketDetailHeaderProps.badges`. */
+  headerBadges?: ReactNode;
   tabs?: readonly TicketDetailTabItem[];
   detailsPane?: TicketDetailDetailsPaneProps;
   content?: ReactNode;
   footerActions?: readonly TicketDetailFooterActionItem[];
+  /** See `TicketDetailFooterActionsProps.lead`. */
+  footerLead?: ReactNode;
   tabsVariant?: TicketDetailTabsVariant;
   width?: number | string;
   height?: number | string;
@@ -238,13 +253,16 @@ export function TicketDetailHeader({
   title,
   summaryLine,
   closeAction = createDefaultCloseAction(),
+  actions,
+  badges,
 }: TicketDetailHeaderProps) {
   return (
     <Stack
       sx={{
         borderBottom: `1px solid ${ticketDetailPalette.frameBorder}`,
         px: 2.5,
-        height: 75,
+        // A title that wraps leaves no room for badges in the fixed height: with them, it grows.
+        ...(badges ? { minHeight: 75, py: 1.5 } : { height: 75 }),
         justifyContent: 'center',
       }}
     >
@@ -259,43 +277,54 @@ export function TicketDetailHeader({
         <Typography
           sx={{
             color: ticketDetailPalette.heading,
-            fontSize: 18,
+            fontSize: displayTextSize[18],
             lineHeight: '24px',
             fontWeight: 600,
           }}
         >
           {title}
         </Typography>
-        <ButtonBase
-          disableRipple
-          aria-label={closeAction.ariaLabel ?? 'Close'}
-          onClick={closeAction.onClick}
-          sx={{
-            width: 40,
-            height: 40,
-            mt: -1,
-            borderRadius: '999px',
-            color: ticketDetailPalette.summary,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+        <Stack
+          direction="row"
+          sx={{ flexShrink: 0, alignItems: 'center', gap: 0.5 }}
         >
-          <TicketDetailIconSlot
-            icon={closeAction.icon}
-            width={16}
-            height={16}
-            color={ticketDetailPalette.summary}
-          />
-        </ButtonBase>
+          {actions}
+          <ButtonBase
+            disableRipple
+            aria-label={closeAction.ariaLabel ?? 'Close'}
+            onClick={closeAction.onClick}
+            sx={{
+              width: 40,
+              height: 40,
+              mt: -1,
+              borderRadius: '999px',
+              color: ticketDetailPalette.summary,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <TicketDetailIconSlot
+              icon={closeAction.icon}
+              width={16}
+              height={16}
+              color={ticketDetailPalette.summary}
+            />
+          </ButtonBase>
+        </Stack>
       </Box>
+      {badges ? (
+        <Stack direction="row" sx={{ mt: 0.75, gap: 1, flexWrap: 'wrap' }}>
+          {badges}
+        </Stack>
+      ) : null}
       {summaryLine ? (
         <Typography
           sx={{
             mt: 0.75,
             color: ticketDetailPalette.summary,
-            fontSize: 13,
-            lineHeight: '16px',
+            fontSize: displayTextSize[13],
+            lineHeight: 1.23,
             fontWeight: 600,
             letterSpacing: '1.1px',
           }}
@@ -362,7 +391,7 @@ export function TicketDetailTabs({
               <Typography
                 sx={{
                   color,
-                  fontSize: 12,
+                  fontSize: displayTextSize[12],
                   lineHeight: '16px',
                   fontWeight: 600,
                   letterSpacing: '0.6px',
@@ -425,7 +454,7 @@ export function TicketDetailTabs({
             <Typography
               sx={{
                 color,
-                fontSize: 12,
+                fontSize: displayTextSize[12],
                 lineHeight: '16px',
                 fontWeight: 600,
                 letterSpacing: '0.6px',
@@ -485,8 +514,8 @@ export function TicketDetailStatusBadge({
         <Typography
           sx={{
             color: ticketDetailPalette.label,
-            fontSize: 10,
-            lineHeight: '12px',
+            fontSize: displayTextSize[10],
+            lineHeight: 1.2,
             fontWeight: 700,
             letterSpacing: '0.8px',
           }}
@@ -496,7 +525,7 @@ export function TicketDetailStatusBadge({
         <Typography
           sx={{
             color: accentColor,
-            fontSize: 20,
+            fontSize: displayTextSize[20],
             lineHeight: '28px',
             fontWeight: 600,
           }}
@@ -528,8 +557,8 @@ export function TicketDetailFieldRow({
       <Typography
         sx={{
           color: ticketDetailPalette.label,
-          fontSize: 10,
-          lineHeight: '12px',
+          fontSize: displayTextSize[10],
+          lineHeight: 1.2,
           fontWeight: 700,
           letterSpacing: '0.8px',
         }}
@@ -548,7 +577,7 @@ export function TicketDetailFieldRow({
             <Typography
               sx={{
                 color: valueColor,
-                fontSize: 16,
+                fontSize: displayTextSize[16],
                 lineHeight: '24px',
                 fontWeight: 400,
               }}
@@ -573,8 +602,8 @@ export function TicketDetailNotesCard({
       <Typography
         sx={{
           color: ticketDetailPalette.label,
-          fontSize: 10,
-          lineHeight: '12px',
+          fontSize: displayTextSize[10],
+          lineHeight: 1.2,
           fontWeight: 700,
           letterSpacing: '0.8px',
         }}
@@ -593,7 +622,7 @@ export function TicketDetailNotesCard({
           <Typography
             sx={{
               color: ticketDetailPalette.label,
-              fontSize: 14,
+              fontSize: displayTextSize[14],
               lineHeight: '20px',
               fontWeight: 400,
             }}
@@ -635,7 +664,7 @@ export function TicketDetailDetailsPane({
                   key={line}
                   sx={{
                     color: ticketDetailPalette.body,
-                    fontSize: 16,
+                    fontSize: displayTextSize[16],
                     lineHeight: '24px',
                     fontWeight: 400,
                   }}
@@ -707,7 +736,7 @@ function TicketDetailFooterButton({
       <Typography
         sx={{
           color: 'inherit',
-          fontSize: 12,
+          fontSize: displayTextSize[12],
           lineHeight: '16px',
           fontWeight: 600,
           letterSpacing: '0.6px',
@@ -722,6 +751,7 @@ function TicketDetailFooterButton({
 
 export function TicketDetailFooterActions({
   items,
+  lead,
 }: TicketDetailFooterActionsProps) {
   const inlineItems = items.filter(
     (item) => item.placement !== 'block' && item.intent !== 'danger',
@@ -741,8 +771,9 @@ export function TicketDetailFooterActions({
         bgcolor: ticketDetailPalette.frame,
       }}
     >
-      {inlineItems.length > 0 ? (
+      {lead || inlineItems.length > 0 ? (
         <Box sx={{ display: 'flex', alignItems: 'stretch', gap: 1.5 }}>
+          {lead}
           {inlineItems.map((item) => (
             <TicketDetailFooterButton key={item.id} item={item} />
           ))}
@@ -759,10 +790,13 @@ export function TicketDetailDrawer({
   title = '事件詳情',
   summaryLine,
   closeAction = createDefaultCloseAction(),
+  headerActions,
+  headerBadges,
   tabs = createDefaultTabs(),
   detailsPane = createDefaultDetailsPane(),
   content,
   footerActions = createDefaultFooterActions(),
+  footerLead,
   tabsVariant = 'default',
   width = 400,
   height,
@@ -782,10 +816,12 @@ export function TicketDetailDrawer({
           title={title}
           summaryLine={summaryLine}
           closeAction={closeAction}
+          actions={headerActions}
+          badges={headerBadges}
         />
       }
       tabs={<TicketDetailTabs items={tabs} variant={tabsVariant} />}
-      footer={<TicketDetailFooterActions items={footerActions} />}
+      footer={<TicketDetailFooterActions items={footerActions} lead={footerLead} />}
     >
       {content ?? <TicketDetailDetailsPane {...detailsPane} />}
     </AdminDetailModalFrame>

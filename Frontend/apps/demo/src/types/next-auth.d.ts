@@ -18,7 +18,7 @@ declare module 'next-auth/jwt' {
     tokenType?: string;
     expiresIn?: number;
     accessTokenExpiresAt?: number;
-    authError?: 'RefreshAccessTokenError';
+    authError?: 'RefreshAccessTokenError' | 'RefreshUnavailable';
     authProvider?: 'credentials' | 'google' | 'line';
     loginIdentity?: string;
   }

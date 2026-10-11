@@ -150,6 +150,11 @@
       selectedMarkerId: state.selectedMarkerId, setSelectedMarkerId, setViewportState,
       layerPanelOpen, openLayerPanel: () => setLayerPanelOpen(true), closeLayerPanel: () => setLayerPanelOpen(false),
       markers, closureAreas, initialView,
+      /* 把整份路由狀態原樣帶出來 —— SiteViewSwitch 要用它生跨頁連結
+         （`PUB-PS-102`：兩頁共用同一份篩選狀態，切過去必須還在）。
+         controller 只挑幾個欄位出來的話，呼叫端就得再接一條 state，
+         兩條路遲早會不一致。 */
+      routeState: state,
     };
   }
 

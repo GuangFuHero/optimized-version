@@ -109,11 +109,56 @@ button { font-family: inherit; }
         **填色的不透明度**，不是往字上疊效果。 */
   transition: transform var(--transition-spring);
 }
-.wg-cell__n { font: 800 var(--fs-24)/1 var(--font-data); color: var(--color-bg-primary); }
-.wg-cell__u { font: 800 var(--fs-14)/1 var(--font-body); color: var(--color-bg-primary); }
-.wg-cell--active .wg-cell__n, .wg-cell--active .wg-cell__u { color: var(--color-brand-secondary-default); }
+/* 🔴 2026-09-18 Sucre：「未登入時文字應該是白色，因為現在橘色底橘色字看不清楚。」
+   他講的是實際的 bug：字用 `--color-bg-primary`（橘），而六邊形的填色**也是**
+   `--color-bg-primary`（見 site-map.jsx 的 fillColor）—— 橘底橘字。
+   前兩輪一直在調不透明度，等於在調「橘色要多濃」，而顏色本身從頭就是錯的。
+   改成白字，並把填色提到足以撐住白字的濃度（見 site-map.jsx 的 fillOpacity）。
+   🔒 仍然不要加 text-stroke / text-shadow。 */
+/* ⚠️ **不要**用 --color-fg-on-primary：那個 token 是**黑色**
+   （DS 的判斷是「在淺橘上黑字比白字好讀」，量起來也是對的：黑字 8.24:1）。
+   這裡用白字是 2026-09-18 的指定，代價是填色必須一起變深才及格 ——
+   數字與取捨寫在 site-map.jsx 的 stroke 註解裡。 */
+.wg-cell__n { font: 800 var(--fs-24)/1 var(--font-data); color: var(--prim-color-neutral-white); }
+.wg-cell__u { font: 800 var(--fs-14)/1 var(--font-body); color: var(--prim-color-neutral-white); }
+/* 選取狀態只加粗六邊形的邊與填色，字色不變 —— 白字在兩種濃度上都讀得到，
+   換色只會讓人以為那是另一種狀態。 */
 .wg-cell--active { transform: scale(1.12); }
 .wg-marker-wrapper:hover .wg-cell { transform: scale(1.06); }
+
+/* ---- 直立地圖的建築標記（2026-09-18）---------------------------------------
+   三種形狀各自對應一種「這是什麼」：
+     圓頭大頭針 .wg-marker  → 一個地點（一張任務單）
+     六邊形     .wg-cell    → 一片區域（訪客的概略位置）
+     方角       .wg-bld     → 一棟樓（同址多戶，點下去是矩陣）
+   🔒 方角是刻意的：建築的輪廓。不要改成圓角去「跟大頭針一致」——
+      它們要一眼分得出來，那正是這個標記存在的理由。 */
+.wg-bld {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  background: var(--color-bg-neutral-default);
+  border: 2px solid var(--color-bg-primary);
+  box-shadow: var(--shadow-md);
+  color: var(--color-fg-neutral-default);
+  white-space: nowrap;
+  transition: transform var(--transition-spring);
+}
+.wg-bld__n { font: 700 var(--fs-13)/1 var(--font-data); }
+/* 「缺 N」用 danger —— 與列表、矩陣同一套語意（還缺人＝紅）。
+   標記上只放這一個數字，因為它是志工唯一要做的判斷。 */
+.wg-bld__lack {
+  padding: 2px 6px; border-radius: var(--radius-full);
+  background: var(--color-bg-danger); color: var(--color-fg-on-danger);
+  font: 700 var(--fs-11)/1.3 var(--font-data);
+}
+.wg-bld--active { transform: scale(1.06); border-color: var(--color-brand-secondary-default); }
+.wg-marker-wrapper:hover .wg-bld { transform: scale(1.04); }
+
+/* 「在這裡新增」的可拖曳準心（2026-09-19）。
+   命中區 44×44，視覺只有中間那個圈 —— 外圈的透明區是刻意留的抓取範圍。 */
+.wg-xhair-wrapper { background: none; border: 0; }
+.wg-xhair { width: 44px; height: 44px; line-height: 0; cursor: grab; touch-action: none; }
+.wg-xhair:active { cursor: grabbing; }
 
 /* ---- Leaflet 覆寫（對齊 DS 圓角與字型） -------------------------------- */
 .leaflet-container { background: var(--color-bg-neutral-sunken); font-family: var(--font-body); }

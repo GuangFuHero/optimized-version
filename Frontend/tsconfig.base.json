@@ -4,7 +4,7 @@
     "rootDir": ".",
     "sourceMap": true,
     "declaration": false,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "importHelpers": true,
@@ -15,15 +15,7 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "skipDefaultLibCheck": true,
-    "paths": {
-      "@rescue-frontend/ui": ["./libs/ui/src/index.ts"],
-      "@rescue-frontend/modules": ["./libs/modules/src/index.ts"],
-      "@rescue-frontend/data-access": ["./libs/data-access/src/index.ts"],
-      "@rescue-frontend/data-access/server": [
-        "./libs/data-access/src/server.ts"
-      ]
-    }
+    "skipDefaultLibCheck": true
   },
   "exclude": ["node_modules", "tmp"]
 }

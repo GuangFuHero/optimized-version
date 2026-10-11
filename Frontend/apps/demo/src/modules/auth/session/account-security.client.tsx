@@ -14,6 +14,8 @@ import { signOut } from 'next-auth/react';
 import { useState } from 'react';
 
 import {
+  newPasswordProblem,
+  newPasswordText,
   normalizeIdentityValue,
   validateIdentityValue,
   type AuthIdentityType,
@@ -109,13 +111,13 @@ export default function AccountSecurityClient({
       return;
     }
 
-    if (newPassword.trim().length < 6) {
-      setPasswordError('新密碼至少需要 6 個字元');
-      return;
-    }
+    const newPasswordError = newPasswordProblem(
+      newPassword,
+      newPasswordConfirm,
+    );
 
-    if (newPassword !== newPasswordConfirm) {
-      setPasswordError('兩次輸入的新密碼不一致');
+    if (newPasswordError) {
+      setPasswordError(newPasswordError);
       return;
     }
 
@@ -148,13 +150,13 @@ export default function AccountSecurityClient({
   }
 
   async function handleSetPasswordAsync() {
-    if (setPasswordValue.trim().length < 6) {
-      setSetPasswordErrorMessage('新密碼至少需要 6 個字元');
-      return;
-    }
+    const setPasswordProblem = newPasswordProblem(
+      setPasswordValue,
+      setPasswordConfirm,
+    );
 
-    if (setPasswordValue !== setPasswordConfirm) {
-      setSetPasswordErrorMessage('兩次輸入的新密碼不一致');
+    if (setPasswordProblem) {
+      setSetPasswordErrorMessage(setPasswordProblem);
       return;
     }
 
@@ -320,6 +322,7 @@ export default function AccountSecurityClient({
           <TextField
             label="新密碼"
             type="password"
+            placeholder={newPasswordText.placeholder}
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
           />
@@ -355,6 +358,7 @@ export default function AccountSecurityClient({
           <TextField
             label="新密碼"
             type="password"
+            placeholder={newPasswordText.placeholder}
             value={setPasswordValue}
             onChange={(event) => setSetPasswordValue(event.target.value)}
           />

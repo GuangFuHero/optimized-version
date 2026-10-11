@@ -1,5 +1,4 @@
-import { Stack } from '@mui/material';
-import { AuthBrandHeader, AuthShell } from '@rescue-frontend/modules';
+import { AuthShell } from '@rescue-frontend/modules';
 import { Metadata } from 'next';
 import { Suspense } from 'react';
 import LoginForm from '../../../modules/auth/login/login-form.client';
@@ -29,13 +28,9 @@ export default function Index() {
   return (
     <Suspense fallback={null}>
       <AuthShell>
-        <Stack spacing={2} sx={{ width: '100%' }}>
-          <AuthBrandHeader />
+        <LoginForm />
 
-          <LoginForm />
-
-          {/* <AuthFooterLinks items={FOOTER_LINKS} /> */}
-        </Stack>
+        {/* <AuthFooterLinks items={FOOTER_LINKS} /> */}
       </AuthShell>
     </Suspense>
   );

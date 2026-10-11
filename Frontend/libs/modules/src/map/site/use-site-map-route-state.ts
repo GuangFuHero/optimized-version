@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   createContext,
   createElement,
@@ -12,7 +13,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { parseSiteRouteState } from '../../route/parse';
+import { parseSiteRouteState, type SiteQuerySource } from '../../route/parse';
 import { createSiteHref } from '../../route/serialize';
 import type { SiteRouteState } from '../../route/types';
 import {
@@ -64,30 +65,36 @@ function mergeViewportState(
   };
 }
 
-function readSnapshotFromLocation(): SiteMapRouteSnapshot {
-  if (typeof window === 'undefined') {
-    const state = parseSiteRouteState('map', [], new URLSearchParams());
-
-    return { state, href: createSiteHref('map', state) };
-  }
-
-  const pathname = window.location.pathname;
+function readSnapshot(
+  pathname: string,
+  query: SiteQuerySource,
+): SiteMapRouteSnapshot {
   const segments = pathname
     .slice('/map'.length)
     .replace(/^\/+/, '')
     .split('/')
     .filter(Boolean);
-  const state = parseSiteRouteState(
-    'map',
-    segments,
-    new URLSearchParams(window.location.search),
-  );
+  const state = parseSiteRouteState('map', segments, query);
 
   return { state, href: createSiteHref('map', state) };
 }
 
+function readSnapshotFromLocation(): SiteMapRouteSnapshot {
+  return readSnapshot(
+    window.location.pathname,
+    new URLSearchParams(window.location.search),
+  );
+}
+
 export function SiteMapRouteProvider({ children }: SiteMapRouteProviderProps) {
-  const externalSnapshot = useMemo(() => readSnapshotFromLocation(), []);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Read once, from the router rather than `window.location`: on a client-side navigation into the
+  // map — back from signing in, say — the page renders before the browser's address changes, and
+  // `window.location` still names the page the user came from. Read from there, the map would take
+  // the login page's address for a route, fall back to the defaults and write them over the right
+  // address.
+  const [externalSnapshot] = useState(() => readSnapshot(pathname, searchParams));
   const initialSplitState = useMemo(
     () => splitViewportState(externalSnapshot.state),
     [externalSnapshot.state],

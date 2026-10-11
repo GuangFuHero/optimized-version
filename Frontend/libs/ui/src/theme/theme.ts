@@ -12,6 +12,8 @@
 import type { CssVarsTheme } from '@mui/material/styles';
 import { extendTheme } from '@mui/material/styles';
 
+import { designExtensions } from './bridge';
+import { designTokens, IOS_NO_ZOOM_INPUT_PX } from './design-tokens';
 import {
   colorSchemes as cs,
   moduleColorSchemes,
@@ -39,6 +41,8 @@ declare module '@mui/material/styles' {
     rescue: RescueModuleColorScheme;
   }
 }
+
+const { focusRing } = designTokens;
 
 export const theme = extendTheme({
   breakpoints: {
@@ -90,12 +94,20 @@ export const theme = extendTheme({
         },
         background: {
           default: cs.light.background,
-          paper: cs.light.surfaceContainer,
+          // `paper` is what Card, Dialog, Menu and Drawer sit on — surfaces ABOVE the page, so it
+          // has to be lighter than `default`, not darker. It was `surfaceContainer`, which under
+          // the design system's ramp is the *sunken* tint (#EDF2F7, darker than the #F6FAFF page):
+          // every raised surface read as a recess. `surfaceContainerLowest` is the white the design
+          // system calls `bg.neutral.default` and uses for cards.
+          paper: cs.light.surfaceContainerLowest,
         },
         text: {
           primary: cs.light.onSurface,
           secondary: cs.light.onSurfaceVariant,
-          disabled: cs.light.onSurfaceVariant,
+          // Was `onSurfaceVariant`, the same value as `secondary` — disabled text rendered
+          // identically to ordinary secondary text, so nothing looked disabled. M3 has no
+          // disabled role; the design system does.
+          disabled: designExtensions.disabled.foreground,
         },
         divider: cs.light.outlineVariant,
       },
@@ -124,6 +136,31 @@ export const theme = extendTheme({
   },
 
   components: {
+    // Keyboard focus ring (`designTokens.focusRing`, from the design system's `tokens/base.css`).
+    // ButtonBase resets `outline: 0` and signals focus with a ripple instead, but most controls
+    // here set `disableRipple`, so keyboard users saw no focus at all. `&:focus-visible` outranks
+    // ButtonBase's own reset. It relies on the browser's :focus-visible heuristic to stay quiet on
+    // mouse clicks — that part is per spec, not verified in an automated browser.
+    MuiButtonBase: {
+      styleOverrides: {
+        root: {
+          '&:focus-visible': {
+            outline: `${focusRing.width}px solid ${focusRing.color}`,
+            outlineOffset: focusRing.offset,
+          },
+        },
+      },
+    },
+    // 🔒 A focused input smaller than 16px makes iOS Safari zoom the whole page in, and the user has
+    // to pinch back out — worse than small text. `site.css` pins inputs to 16px below its 767px
+    // cutoff for exactly this reason; `down('tablet')` is that same cutoff.
+    MuiInputBase: {
+      styleOverrides: {
+        input: ({ theme: t }) => ({
+          [t.breakpoints.down('tablet')]: { fontSize: IOS_NO_ZOOM_INPUT_PX },
+        }),
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {
@@ -164,6 +201,42 @@ export const theme = extendTheme({
     MuiTooltip: {
       styleOverrides: {
         tooltip: { borderRadius: '8px' },
+      },
+    },
+
+    // ── Floating-layer rules (designer, 2026-09-17) ─────────────────────────
+    // The design system's shadows are warm — orange at 10–20% alpha. Over a white card that is
+    // almost invisible, so a floating layer cannot rely on elevation alone to show its edge. The
+    // two rules below are the compensation, and they are set here rather than per component so a
+    // new menu or dialog inherits them instead of re-inventing them.
+
+    // Anything with a scrim dims the page behind it at a fixed 45%.
+    MuiBackdrop: {
+      styleOverrides: {
+        root: {
+          backgroundColor: designExtensions.overlay.scrim,
+          '&.MuiBackdrop-invisible': { backgroundColor: 'transparent' },
+        },
+      },
+    },
+
+    // Overlays with NO scrim draw their own hairline instead.
+    MuiPopover: {
+      styleOverrides: {
+        paper: {
+          backgroundImage: 'none',
+          border: designExtensions.overlay.border,
+          boxShadow: designExtensions.overlay.shadow,
+        },
+      },
+    },
+    MuiMenu: {
+      styleOverrides: {
+        paper: {
+          backgroundImage: 'none',
+          border: designExtensions.overlay.border,
+          boxShadow: designExtensions.overlay.shadow,
+        },
       },
     },
   },
