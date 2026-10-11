@@ -142,21 +142,53 @@ function SiteSidebarNav({
         );
       })}
 
-<Stack sx={{ mt: 'auto', gap: '8px' }}>
-  <SidebarItem icon={<HandshakeRoundedIcon />} label="請求協助" collapsed={collapsed} onClick={() => { onClose?.(); openHelpRequest(); }} />
-  {pageHelp ? <SidebarItem icon={<PageHelpIcon fresh={pageHelp.fresh} />} label="這一頁怎麼用" collapsed={collapsed} onClick={() => { onClose?.(); pageHelp.onOpen(); }} /> : null}
-  {portalEntry === 'backOffice' ? <SidebarItem LinkComponent={Link} href={BACK_OFFICE_HREF} icon={<SwapHorizRoundedIcon />} label="前往後台" collapsed={collapsed} /> : null}
-  {portalEntry === 'apply' ? <SidebarItem icon={<VerifiedRoundedIcon />} label="申請成為後台人員" collapsed={collapsed} onClick={onApplyRoleRequest} /> : null}
-{isAuthenticated ? null : (
-
+      <Stack sx={{ mt: 'auto', gap: '8px' }}>
         <SidebarItem
-          icon={<LoginRoundedIcon />}
-          label="登入"
+          icon={<HandshakeRoundedIcon />}
+          label="請求協助"
           collapsed={collapsed}
-          onClick={onSignIn}
-          sx={{ mt: 'auto' }}
+          onClick={() => {
+            onClose?.();
+            openHelpRequest();
+          }}
         />
-      )}
+        {pageHelp ? (
+          <SidebarItem
+            icon={<PageHelpIcon fresh={pageHelp.fresh} />}
+            label="這一頁怎麼用"
+            collapsed={collapsed}
+            onClick={() => {
+              onClose?.();
+              pageHelp.onOpen();
+            }}
+          />
+        ) : null}
+        {portalEntry === 'backOffice' ? (
+          <SidebarItem
+            LinkComponent={Link}
+            href={BACK_OFFICE_HREF}
+            icon={<SwapHorizRoundedIcon />}
+            label="前往後台"
+            collapsed={collapsed}
+          />
+        ) : null}
+        {portalEntry === 'apply' ? (
+          <SidebarItem
+            icon={<VerifiedRoundedIcon />}
+            label="申請成為後台人員"
+            collapsed={collapsed}
+            onClick={onApplyRoleRequest}
+          />
+        ) : null}
+        {isAuthenticated ? null : (
+          <SidebarItem
+            icon={<LoginRoundedIcon />}
+            label="登入"
+            collapsed={collapsed}
+            onClick={onSignIn}
+            sx={{ mt: 'auto' }}
+          />
+        )}
       </Stack>
     </Stack>
   );
