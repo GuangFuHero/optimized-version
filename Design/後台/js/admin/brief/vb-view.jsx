@@ -89,6 +89,9 @@
 .vb-check input:focus-visible { outline: 3px solid var(--color-brand-secondary-default); outline-offset: 2px; }
 .vb-check input:disabled { cursor: default; }   /* 後台預覽：看得到框但不可勾，不要畫成灰的 */
 .vb-check__t { flex: 1; min-width: 0; padding: 10px 0; }
+/* VB-BR-194b「已更新」標記：放在項目文字右邊，對齊第一行（同 192a 的理由：項目常有兩三行）。
+   用資訊色不用警示色 —— 清單更新是常態，不是警報。 */
+.vb-check .vb-changed { flex-shrink: 0; margin-top: 11px; }
 /* 勾掉的變淡而**不畫刪除線** —— 項目常有兩三行的「較佳／避免」，整塊劃掉很難讀。
    掃視「還沒打包的」靠的是深色那幾列。 */
 .vb-check input:checked ~ .vb-check__t { opacity: .45; }
@@ -219,7 +222,7 @@
    *  🔴 **清單一律用原本的 ul／ol 輸出，而且只換掉被標記的那幾個 li 的內容。**
    *     09-19 那次把所有清單重建成 `<ul>`，「如何參與」的有序步驟就變成了項目符號 ——
    *     內容的意思被實作弄丟，而畫面上只差一點點。沒標記的 li 連結構都不動。 */
-  function ArticleBody({ blocks, checkable, checked, onToggle, changedSet }) {
+  function ArticleBody({ blocks, checkable, checked, updated, onToggle, changedSet }) {
     let h2i = 0, h3i = 0;
     return (
       <div className="vb-rich" data-vb-body>
@@ -257,6 +260,10 @@
                       <input type="checkbox" checked={on} disabled={!checkable}
                         aria-label={it.text} onChange={() => onToggle(it.text)} />
                       <span className="vb-check__t" dangerouslySetInnerHTML={{ __html: it.html }} />
+                      {/* VB-BR-194b：後台改過或新增、志工還沒處理的項目。勾或取消勾這一項就消失。 */}
+                      {updated && updated.has(it.text) && (
+                        <span className="vb-changed" data-vb-item-updated={it.text}>已更新</span>
+                      )}
                     </label>
                   </li>
                 );
@@ -278,42 +285,42 @@
     return out;
   };
 
-  // ── 勾選狀態：**單一來源**（2026-09-19）────────────────────────────────
+  // ── 勾選狀態：**單一來源**（2026-09-19；2026-10-11 改成「保留沒改的、標出改過的」）──
   //
-  // 🔴 第一版把狀態放在 BriefingArticle 裡，而進度列（ChecklistTools）自己再讀一次
-  //    localStorage —— 兩個問題：
-  //      ① 勾了之後進度列不會更新（兄弟元件，彼此不知道）
-  //      ② `vbChecklistLoad` **有副作用**（指紋不符時會刪 key），被呼叫兩次時
-  //         先跑的那個把「已重置」這個事實吃掉，提示就再也不會出現
-  //    → 狀態提到呼叫端，兩個元件吃同一份。**有副作用的讀取函式只能有一個呼叫點。**
+  // 🔒 進度列（ChecklistTools）與文章（BriefingArticle）**吃同一份狀態**，由呼叫端建立後傳給兩者。
+  //    09-19 第一版各自讀 localStorage：勾了進度不更新，而且互相吃掉提示。
   //
-  // 🔒 2026-09-20 裁示：可勾的項目由**作者標記**，可能落在內容的任何地方，
-  //    所以指紋只取「所有被標記項目的文字」——
-  //    後台改交通那一段的敘述不該清掉別人的打包進度（VB-BR-194 的理由不變，取樣範圍變了）。
+  // 🔒 規則本體（VB-BR-194／194a／194b）寫在 vb-data.js 的 `vbChecklistLoad` 上面，這裡只接線：
+  //    · 沒改的項目保持勾選
+  //    · 改過／新增的項目標「已更新」，清單上方提示「有 N 項更新，請重新核對」
+  //    · 勾或取消勾某一項 → 那一項的標記消失；按「知道了」→ 全部標記一次消失
+  //    · 被刪掉的項目直接不見，不提示
   window.useBriefChecklist = function (content) {
     const items = React.useMemo(() => window.vbCheckableTexts(content), [content]);
-    const fp = window.vbHash(items.join("\u0000"));
-    // `vbChecklistLoad` 是**純讀取**（見 vb-data.js 那段註解：踩過兩次才改成這樣），
-    // 所以這裡想讀幾次都可以，掛載與 fp 變動各讀一次也不會互相蓋掉。
-    const [st, setSt] = React.useState(() => window.vbChecklistLoad(fp));
-    const [dismissed, setDismissed] = React.useState(false);
-    React.useEffect(() => { setSt(window.vbChecklistLoad(fp)); setDismissed(false); }, [fp]);
+    const key = items.join("\u0000");
+    const [st, setSt] = React.useState(() => window.vbChecklistLoad(items));
+    // 後台重新發布（清單變了）就重讀一次 —— 正在看這一頁的人也會當場看到「已更新」
+    React.useEffect(() => { setSt(window.vbChecklistLoad(items)); }, [key]);
 
-    const total = items.length;
     const checkedSet = new Set(st.checked);
+    const updatedSet = new Set(st.updated);
+
+    // seen ＝ 現在的清單扣掉還沒處理的「已更新」項目。存這一份，標記才撐得過重整。
+    function persist(checked, updated) {
+      window.vbChecklistSave(checked, items.filter((t) => !updated.has(t)));
+      setSt({ checked, updated: items.filter((t) => updated.has(t)) });
+    }
 
     return {
-      fp, total, done: st.checked.length, checkedSet,
-      reset: st.reset && !dismissed,
-      // 按掉提示 = 認了這份新清單：把舊 fp 的殘留資料換成新的空清單，
-      // 這樣提示不會再出現，而且舊勾選真的被清掉（不是只是藏起來）。
-      dismissReset: () => { window.vbChecklistSave(fp, []); setSt({ checked: [], reset: false }); setDismissed(true); },
+      total: items.length, done: st.checked.length, checkedSet, updatedSet,
+      updatedCount: st.updated.length,
       toggle: (text) => {
         const next = checkedSet.has(text) ? st.checked.filter((t) => t !== text) : [...st.checked, text];
-        window.vbChecklistSave(fp, next);
-        setSt({ checked: next, reset: false });
+        const upd = new Set(updatedSet); upd.delete(text);   // 動過這一項 ＝ 看過了
+        persist(next, upd);
       },
-      clear: () => { window.vbChecklistSave(fp, []); setSt({ checked: [], reset: false }); },
+      dismissUpdates: () => persist(st.checked, new Set()),
+      clear: () => persist([], new Set()),
     };
   };
 
@@ -332,6 +339,7 @@
     const changedSet = new Set(recent ? (changed || []) : []);
     const checkable = Boolean(checklist);
     const checkedSet = checklist ? checklist.checkedSet : new Set();
+    const updatedSet = checklist ? checklist.updatedSet : null;
     const toggle = checklist ? checklist.toggle : () => {};
     const blocks = React.useMemo(() => parseBlocks(content || ""), [content]);
 
@@ -356,31 +364,21 @@
       <div style={{ display: "flex", flexDirection: "column", gap: compact ? 10 : 14 }}>
         <JumpBar heads={heads} />
         <ArticleBody blocks={blocks} checkable={checkable} checked={checkedSet}
-          onToggle={toggle} changedSet={changedSet} />
-        {checkable && checklist.reset && (
-          /* 「內容改了就重置並告知」（裁示）。在災害情境下，
-             叫他重看一次比默默掃錯安全。 */
-          <div data-vb-check-reset style={{ display: "flex", gap: 8, alignItems: "flex-start",
-            padding: "10px 12px", borderRadius: "var(--radius-md)",
-            background: "var(--color-bg-info-subtle)" }}>
-            <Icon n="RefreshCw" s={15} c="var(--color-fg-info)" style={{ marginTop: 2, flexShrink: 0 }} />
-            <span className="wg-caption" style={{ flex: 1, minWidth: 0, color: "var(--color-fg-info)", lineHeight: 1.7 }}>
-              <strong>清單更新了，之前的勾選已清除。</strong>請重新核對一次 —— 可能有新增或改過的項目。
-            </span>
-            <button type="button" onClick={checklist.dismissReset}
-              style={{ flexShrink: 0, border: "none", background: "transparent", cursor: "pointer",
-                color: "var(--color-fg-info)", padding: 4, lineHeight: 0 }} aria-label="知道了">
-              <Icon n="X" s={15} c="currentColor" />
-            </button>
-          </div>
-        )}
+          updated={updatedSet} onToggle={toggle} changedSet={changedSet} />
       </div>
     );
   }
 
   function ChecklistTools({ checklist, at, version }) {
     if (!checklist || !checklist.total) return null;
-    const { total, done } = checklist;
+    const { total, done, updatedCount } = checklist;
+
+    // 🔒 VB-BR-194c：「清單有更新」的提示放在**清單最上方**（這個進度列裡），不放文章最後。
+    //    09-19 版放在文章結尾 —— 清單一長，志工根本滑不到那裡，等於沒提示。
+    function jumpToFirstUpdated() {
+      const el = document.querySelector("[data-vb-item-updated]");
+      if (el) el.closest("li").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
 
     function print() {
       // 🔒 不做 PDF 產生器（2026-09-19 裁示）。複製一份文章到 .vb-print-sheet 再叫
@@ -416,6 +414,33 @@
     }
 
     return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {updatedCount > 0 && (
+        <div data-vb-check-updated role="status" style={{ display: "flex", gap: 8, alignItems: "flex-start",
+          flexWrap: "wrap", padding: "10px 12px", borderRadius: "var(--radius-md)",
+          background: "var(--color-bg-info-subtle)" }}>
+          <Icon n="RefreshCw" s={15} c="var(--color-fg-info)" style={{ marginTop: 3, flexShrink: 0 }} />
+          <span className="wg-caption" style={{ flex: "1 1 220px", minWidth: 0, color: "var(--color-fg-info)", lineHeight: 1.7 }}>
+            <strong>清單有 {updatedCount} 項更新，請重新核對。</strong>
+            改過或新增的項目標了「已更新」，其他勾選都還在。
+          </span>
+          <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+            <button type="button" data-vb-updated-jump onClick={jumpToFirstUpdated}
+              style={{ minHeight: 44, padding: "0 12px", border: "none", cursor: "pointer",
+                borderRadius: "var(--radius-full)", background: "transparent",
+                color: "var(--color-fg-info)", font: "var(--font-label-400)", fontSize: 13,
+                textDecoration: "underline" }}>
+              看是哪幾項
+            </button>
+            <button type="button" data-vb-updated-dismiss onClick={checklist.dismissUpdates}
+              style={{ minHeight: 44, padding: "0 12px", border: "none", cursor: "pointer",
+                borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-default)",
+                color: "var(--color-fg-info)", font: "var(--font-label-400)", fontSize: 13 }}>
+              知道了
+            </button>
+          </div>
+        </div>
+      )}
       <div data-vb-check-tools style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
         padding: "10px 14px", borderRadius: "var(--radius-md)",
         background: "var(--color-bg-neutral-default)", boxShadow: "inset 0 0 0 1px var(--color-border-default)" }}>
@@ -444,6 +469,7 @@
             <Icon n="Printer" s={15} c="currentColor" />列印清單
           </button>
         </div>
+      </div>
       </div>
     );
   }

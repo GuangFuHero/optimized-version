@@ -610,26 +610,38 @@
   //    ⚠️ 「不跨裝置」是**裁示**不是待辦（Q10 已否決）：要跨裝置就得綁帳號，
   //       而這一頁未登入的人也要能用。換手機不會同步，介面上要寫明。
   //
-  // 🔒 **內容一改就重置，並且要告訴使用者。**
-  //    這是這個功能真正的難點 —— 後台把「長筒雨鞋」改成「長筒雨鞋（綁帶佳）」之後：
-  //      · 用項目文字當 key → 那一項靜靜掉勾，使用者不知道為什麼
-  //      · 用索引當 key     → 中間插一項就全部錯位，比掉勾更糟
-  //    所以改成**整份重置 ＋ 明講「清單更新了，請重新核對」**。
-  //    在災害情境下，「叫他重看一次」比「默默掃錯」安全。
+  // 🔒 **VB-BR-194（2026-10-11 改寫，推翻 09-19 的「整份重置」）**
+  //    後台改了清單之後：**沒改的項目照樣保持勾選，改過或新增的項目標「已更新」，
+  //    清單上方告訴志工「有 N 項更新，請重新核對」。**
   //
-  // ⚠️ 判斷依據是**內容指紋**，不是版本號 ——
-  //    後台只改交通那一段的敘述也會讓版號進位，那不該把人的打包進度清掉。
+  //    例：志工勾了 10 項，後台把「雨鞋」改成「長筒雨鞋」
+  //      ✅ 正確：9 項仍是勾的；「長筒雨鞋」沒勾、旁邊標「已更新」；上方提示「有 1 項更新」
+  //      ❌ 不可以：9 項仍是勾的、「長筒雨鞋」沒勾，**但什麼都沒說**
+  //         → 志工以為自己漏勾，或根本沒發現那一項變了。**沒有提示就不要做。**
+  //      ❌ 不可以：10 項全部清掉（09-19 的舊做法）—— 一個字的修改讓人重勾整份清單，
+  //         重勾的人會一路往下點，反而沒在看。
   //
-  // 🔄 **2026-09-20：指紋的取樣範圍變了。**
-  //    舊：裝備段的整段 HTML（那時「可勾」是從段落推導的）
-  //    新：**全文所有被作者標記為可勾的項目文字**（`vbCheckableTexts()`）
-  //    → 改交通段的敘述不再清掉打包進度，而改一項裝備的字仍然會 —— 這正是要的。
+  // 🔒 **VB-BR-194a 用「項目文字」當 key，不用索引。**
+  //    用索引的話，後台在中間插一項，後面全部錯位 —— 勾的是 A、畫面顯示勾的是 B。
+  //    用文字的代價是「改一個字就算新項目」，而那正好就是我們要標「已更新」的情況。
   //
-  // 🔴 **給正式版的前端：這一段的規則不在程式裡看得出來。**
-  //    「哪些項目可勾」是**作者標記**的（原型用 li 的 data-check 旗標，
-  //    Markdown 版是 GFM 的 `- [ ]`），而且**編輯器只輸出未勾、render 一律忽略 `[x]`**。
-  //    照著原型實作 data-check 是錯的，那只是 Markdown 之前的替身。
-  const CKEY = "wg.briefing.checklist.v1";
+  // 🔒 **VB-BR-194b 怎麼判斷「已更新」：存下志工上次看過的完整項目清單（`seen`）。**
+  //    現在的項目不在 `seen` 裡 ＝ 改過或新增 → 標「已更新」。
+  //    · 被刪掉的項目：直接消失，不提示（志工不需要為它做任何事）
+  //    · 第一次來的人：沒有存檔紀錄，**不提示**（對他來說每一項都是新的，標了等於沒標）
+  //    · 標記何時消失：勾／取消勾那一項，或按提示的「知道了」（全部一次認掉）
+  //    · 沒處理之前**撐得過重整**（`seen` 存在 localStorage，不是記憶體）
+  //
+  // 🔒 **VB-BR-193 只存本地（localStorage），不進後端、不需要登入。**
+  //    這是「我這台手機的打包進度」，不是平台資料。換手機不會同步，介面上要寫明。
+  //
+  // 🔒 **VB-BR-191a 哪些項目可勾由作者標記**（Markdown 的 `- [ ]`）。
+  //    編輯器只輸出未勾、render 一律忽略 `[x]` —— 否則後台存進去的勾會變成志工打開就勾好的清單。
+  //
+  // ⚠️ 這兩支是**純讀取／純寫入，沒有副作用**。09-19 第一版在讀取時順手刪資料，
+  //    被兩個元件各呼叫一次，先跑的把提示吃掉了。讀取函式不要偷偷改資料。
+  const CKEY = "wg.briefing.checklist.v2";     // { checked: string[], seen: string[], at }
+  const CKEY_V1 = "wg.briefing.checklist.v1";  // 09-19 版：{ fp, checked }。只讀不寫
 
   /** djb2。只用來比對「內容有沒有變」，不是安全雜湊。 */
   window.vbHash = function (str) {
@@ -639,33 +651,33 @@
     return (h >>> 0).toString(36);
   };
 
-  /** 讀勾選。**純讀取，沒有副作用** —— 這一點很重要，踩過兩次：
-   *
-   *   第一版會在指紋不符時 `removeItem`，於是：
-   *     · 兩個元件各讀一次 → 先跑的把「已重置」吃掉，提示永遠不出現
-   *     · `useState` 的 lazy init 與 `useEffect` 各跑一次 → 同樣互相蓋掉
-   *     · 後台發布時 storage 事件即時傳過來，當場消費掉 → 使用者重整後就看不到提示了
-   *   → 改成純讀取：指紋不符就回報 `reset`，**舊資料留著不刪**。
-   *     真正的清除發生在下一次寫入（勾選、全部清除、或按掉提示）——
-   *     那時 fp 會一起換成新的。
-   *
-   *  `reset` 為 true 代表「清單換過了，之前的勾選不算數」，畫面要告知。
-   *  因為不刪資料，這個提示**撐得過重整**，直到使用者真的處理它為止。 */
-  window.vbChecklistLoad = function (fp) {
+  /** 讀勾選。`items`＝現在這份清單所有可勾項目的文字（`vbCheckableTexts()`）。
+   *  回傳 `{ checked, updated }`：
+   *    checked — 仍存在於現在清單裡、而且勾著的項目（被刪掉的自動不算）
+   *    updated — 現在清單裡、志工上次沒看過的項目（改過或新增），要標「已更新」 */
+  window.vbChecklistLoad = function (items) {
+    const now = new Set(items || []);
     try {
       const raw = localStorage.getItem(CKEY);
-      if (!raw) return { checked: [], reset: false };
-      const v = JSON.parse(raw);
-      if (!v || v.fp !== fp) {
-        // 只有「本來真的有勾」才值得提示；空的就當作沒事
-        return { checked: [], reset: Boolean(v && (v.checked || []).length) };
+      if (raw) {
+        const v = JSON.parse(raw) || {};
+        const seen = new Set(Array.isArray(v.seen) ? v.seen : []);
+        return {
+          checked: (Array.isArray(v.checked) ? v.checked : []).filter((t) => now.has(t)),
+          // 有存檔紀錄才比對（VB-BR-194b：第一次來的人不提示）
+          updated: seen.size ? [...now].filter((t) => !seen.has(t)) : [],
+        };
       }
-      return { checked: Array.isArray(v.checked) ? v.checked : [], reset: false };
-    } catch (e) { return { checked: [], reset: false }; }
+      // 09-19 版的舊資料：只有指紋沒有 seen，無從得知哪幾項是新的 → 保留還對得上的勾，不標更新
+      const old = JSON.parse(localStorage.getItem(CKEY_V1) || "null");
+      if (old && Array.isArray(old.checked)) return { checked: old.checked.filter((t) => now.has(t)), updated: [] };
+    } catch (e) {}
+    return { checked: [], updated: [] };
   };
 
-  window.vbChecklistSave = function (fp, checked) {
-    try { localStorage.setItem(CKEY, JSON.stringify({ fp, checked, at: Date.now() })); } catch (e) {}
+  /** 寫勾選。`seen` 要傳「現在清單扣掉還沒處理的已更新項目」，標記才撐得過重整。 */
+  window.vbChecklistSave = function (checked, seen) {
+    try { localStorage.setItem(CKEY, JSON.stringify({ checked, seen, at: Date.now() })); } catch (e) {}
   };
 
   // ── 顯示用 ──────────────────────────────────────────────────────────────
