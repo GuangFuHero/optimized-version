@@ -1,10 +1,12 @@
 import { resolveClientIp } from '@rescue-frontend/data-access/server';
 import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import { isSessionExpired } from '../session';
 import { getBackendApiBaseUrl } from './backend-api-url';
 import { withClientIpAsync } from './client-ip';
 import {
+  applyAccessTokenAsync,
   applyBackendAuthResponseCookies,
   expireSessionResponse,
   getBackendGraphqlUrl,
@@ -22,6 +24,11 @@ interface BackendRestContext {
 
 const MAP_CACHE_SECONDS = 7 * 24 * 60 * 60;
 const MAP_STALE_SECONDS = 24 * 60 * 60;
+
+const switchedAccessToken = z.object({
+  access_token: z.string(),
+  expires_in: z.number(),
+});
 
 function forwardHeaders(
   request: NextRequest,
@@ -122,6 +129,23 @@ export function createBackendRestHandler(audience: Audience) {
         forwardHeaders(request, audience, auth?.token?.accessToken),
         publicMap,
       );
+      if (
+        auth?.token &&
+        response.ok &&
+        segments.join('/') === 'auth/switch-identity'
+      ) {
+        return applyBackendAuthResponseCookies(
+          new NextResponse(null, {
+            status: 204,
+            headers: { 'cache-control': 'no-store' },
+          }),
+          await applyAccessTokenAsync(
+            request,
+            auth.token,
+            switchedAccessToken.parse(await response.json()),
+          ),
+        );
+      }
       return auth ? applySession(response, request, auth) : response;
     });
 }
