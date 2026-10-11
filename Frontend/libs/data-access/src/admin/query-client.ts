@@ -5,6 +5,7 @@ import ApiError from '../rest/api-error';
 
 export function createAdminQueryClient(onError: (error: Error) => void) {
   const reportError = (error: Error) => {
+    if (error instanceof ApiError && error.code === 'step_up_required') return;
     onError(
       error instanceof CombinedError
         ? new ApiError(
