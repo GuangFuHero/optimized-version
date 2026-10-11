@@ -7,7 +7,7 @@ areas per floor, so that tickets inside it can be filed by floor and area. `buil
 so that each ticket has at most one.
 
 Revision ID: 7c4d2e9a1f30
-Revises: 5e2c8a9f1b47
+Revises: 15370be54155
 Create Date: 2026-10-02
 
 """
@@ -19,7 +19,7 @@ from app.db.triggers import get_audit_trigger_sql
 
 # revision identifiers, used by Alembic.
 revision: str = "7c4d2e9a1f30"
-down_revision: str | Sequence[str] | None = "5e2c8a9f1b47"
+down_revision: str | Sequence[str] | None = "15370be54155"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

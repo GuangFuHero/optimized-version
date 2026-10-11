@@ -17,21 +17,13 @@ from app.db.session import Base
 from app.main import app
 from app.models.rbac import Role
 from app.services.auth_account import create_account
-from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
-
-TEST_REDIS_URL = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/15")  # dedicated logical DB
-assert TEST_REDIS_URL.rsplit("/", 1)[-1] not in (
-    "",
-    "0",
-), "TEST_REDIS_URL must use a non-0 db index (flushdb wipes it)"
-_db_ready = False
+from tests.conftest import TEST_DB_URL, TEST_REDIS_URL, schema_has_role  # per-worker under xdist
 
 
 async def _ensure_db():
-    global _db_ready
-    if _db_ready:
+    """Build the schema and the default 'user' role unless another test left them in place."""
+    if await schema_has_role("user"):
         return
-    _db_ready = True
     eng = create_async_engine(TEST_DB_URL, echo=False)
     async with eng.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -53,7 +45,7 @@ async def setup_db():
 
 @pytest_asyncio.fixture
 async def fake_redis():
-    """Real bytes-mode Redis (db 15, flushed per test) matching the app's client; overrides get_redis."""
+    """Real bytes-mode Redis (TEST_REDIS_URL, flushed per test) like the app's; overrides get_redis."""
     r = aioredis.from_url(TEST_REDIS_URL, decode_responses=False)
     await r.flushdb()
     app.dependency_overrides[get_redis] = lambda: r

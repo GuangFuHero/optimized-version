@@ -115,17 +115,24 @@ class UserRepository(GenericRepository[User]):
         index on platform grants, since the plain unique key includes team_uuid and Postgres
         does not treat two NULLs as equal.
 
-        **Replaces whatever platform role the user already held**, the same way
-        `admin_service.assign_role` does (ADR-019). Adding alongside would leave the account
-        with two platform identities, and `default_for_user` would then pick between them by
-        whatever order the index returned — a bootstrapped super_admin could log in as a
-        plain `user` (ADR-184).
+        **Replaces whatever platform role the user already held, except `user`** (ADR-184, as
+        Spec/019 amends it). The back office has one platform role per account besides `user`,
+        which `admin_service.assign_role` keeps the same way (019/ADR-294). `user` stays: the
+        site acts as it (ADR-289) and a login starts on it (ADR-290), super admins included. ADR-184
+        replaced it so that a bootstrapped super admin could not log in as a plain `user`;
+        that is now intended, and the back office switches to super_admin on purpose. Without
+        `user`, a super admin would browse the site with every permission.
         """
+        # Imported here, not at module scope: auth_account imports this module for its
+        # role_repository, so a top-level import would close the cycle.
+        from app.services.auth_account import DEFAULT_PLATFORM_ROLE
+
         await db.execute(
             delete(UserRoleAssign).where(
                 UserRoleAssign.user_uuid == user_uuid,
                 UserRoleAssign.team_uuid.is_(None),
                 UserRoleAssign.role_uuid != role_uuid,
+                UserRoleAssign.role_uuid.not_in(select(Role.uuid).where(Role.name == DEFAULT_PLATFORM_ROLE)),
             )
         )
         stmt = insert(UserRoleAssign).values(
