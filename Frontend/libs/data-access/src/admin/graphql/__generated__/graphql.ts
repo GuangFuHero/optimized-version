@@ -375,10 +375,11 @@ export type Mutation = {
   deleteWorkZone: Scalars['Boolean']['output'];
   detachStationPhoto: Scalars['Boolean']['output'];
   generateBriefing: BriefingType;
+  mergeStationSuggestions: StationSuggestionMergeType;
   moveAnnouncement: AnnouncementType;
   removeZoneFromTeam: Scalars['Boolean']['output'];
-  reviewStationSuggestion: StationSuggestionType;
   reviewTicket: TicketType;
+  revokeStationSuggestionMerge: StationSuggestionMergeType;
   setAnnouncementActive: AnnouncementType;
   setTicketDisasterDetails: Array<TicketDisasterDetailType>;
   unassignStation: StationType;
@@ -500,6 +501,12 @@ export type MutationGenerateBriefingArgs = {
   input: GenerateBriefingInput;
 };
 
+export type MutationMergeStationSuggestionsArgs = {
+  decisions: Array<SuggestionDecisionInput>;
+  reviewNote?: InputMaybe<Scalars['String']['input']>;
+  stationUuid: Scalars['UUID']['input'];
+};
+
 export type MutationMoveAnnouncementArgs = {
   direction: AnnouncementMoveDirection;
   uuid: Scalars['UUID']['input'];
@@ -509,16 +516,14 @@ export type MutationRemoveZoneFromTeamArgs = {
   input: ZoneTeamAssignmentInput;
 };
 
-export type MutationReviewStationSuggestionArgs = {
-  approve: Scalars['Boolean']['input'];
-  reviewNote?: InputMaybe<Scalars['String']['input']>;
-  uuid: Scalars['UUID']['input'];
-};
-
 export type MutationReviewTicketArgs = {
   reviewNote?: InputMaybe<Scalars['String']['input']>;
   uuid: Scalars['UUID']['input'];
   verificationStatus: Scalars['String']['input'];
+};
+
+export type MutationRevokeStationSuggestionMergeArgs = {
+  uuid: Scalars['UUID']['input'];
 };
 
 export type MutationSetAnnouncementActiveArgs = {
@@ -649,7 +654,6 @@ export type Query = {
   disasterTypes: Array<DisasterTypeType>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
-  stationSuggestions: Array<StationSuggestionType>;
   stations: StationConnection;
   suggestableFields: Array<SuggestableFieldType>;
   taskProperties: Array<TaskPropertyType>;
@@ -712,16 +716,10 @@ export type QueryStationPropertyConfigsArgs = {
   stationType: Scalars['String']['input'];
 };
 
-export type QueryStationSuggestionsArgs = {
-  limit?: Scalars['Int']['input'];
-  skip?: Scalars['Int']['input'];
-  status?: InputMaybe<Scalars['String']['input']>;
-  targetUuid?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type QueryStationsArgs = {
   assignedTeamUuid?: InputMaybe<Scalars['UUID']['input']>;
   bounds?: InputMaybe<BoundsInput>;
+  hasPendingSuggestions?: Scalars['Boolean']['input'];
   limit?: Scalars['Int']['input'];
   operationalStatus?: InputMaybe<StationOperationalStatus>;
   q?: InputMaybe<Scalars['String']['input']>;
@@ -893,6 +891,8 @@ export type StationPropertyType = {
   /** UUID of the user who added this property */
   createdBy?: Maybe<Scalars['String']['output']>;
   crowdSourcings: Array<CrowdSourcingType>;
+  /** Fields of this property with a suggested edit awaiting review. Names only, so public. */
+  pendingSuggestedFields: Array<Scalars['String']['output']>;
   /** Specific item name, e.g. 'water', 'food_ration', 'medical_kit' */
   propertyName: Scalars['String']['output'];
   /** Category of this property, e.g. 'supply', 'service', 'equipment' */
@@ -906,6 +906,20 @@ export type StationPropertyType = {
   uuid: Scalars['UUID']['output'];
   /** Credibility weight applied during score aggregation [0.0–2.0], default 1.0 */
   weightings: Scalars['Float']['output'];
+};
+
+export type StationSuggestionMergeType = {
+  __typename?: 'StationSuggestionMergeType';
+  changes: Array<SuggestionChangeType>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  reviewNote?: Maybe<Scalars['String']['output']>;
+  reviewedBy: Scalars['String']['output'];
+  revokedAt?: Maybe<Scalars['DateTime']['output']>;
+  revokedBy?: Maybe<Scalars['String']['output']>;
+  stationUuid: Scalars['String']['output'];
+  /** 'applied' or 'revoked' */
+  status: Scalars['String']['output'];
+  uuid: Scalars['UUID']['output'];
 };
 
 export type StationSuggestionType = {
@@ -922,7 +936,7 @@ export type StationSuggestionType = {
   reviewNote?: Maybe<Scalars['String']['output']>;
   /** UUID of the admin who decided */
   reviewedBy?: Maybe<Scalars['String']['output']>;
-  /** 'pending', 'approved', or 'rejected' */
+  /** 'pending', 'approved', 'rejected', or 'revoked' */
   status: Scalars['String']['output'];
   /** What the suggestion targets: 'station' or 'station_property' */
   targetType: Scalars['String']['output'];
@@ -963,6 +977,8 @@ export type StationType = {
   opHour?: Maybe<Scalars['String']['output']>;
   /** Whether the station is open: 'active', 'temporarily_closed', or 'permanently_closed' */
   operationalStatus: Scalars['String']['output'];
+  /** Fields of this station with a suggested edit awaiting review. Names only, so public. */
+  pendingSuggestedFields: Array<Scalars['String']['output']>;
   photos: Array<PhotoType>;
   properties: Array<StationPropertyType>;
   /** Internal polymorphic discriminator — always 'station' */
@@ -972,6 +988,10 @@ export type StationType = {
   source?: Maybe<Scalars['String']['output']>;
   /** When operational_status last changed */
   statusChangedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Pending suggestions on this station and its properties, pooled per field; empty without station.review over this station */
+  suggestedFields: Array<SuggestedFieldType>;
+  /** Merges applied to this station, newest first; empty without station.review over this station */
+  suggestionMerges: Array<StationSuggestionMergeType>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: Maybe<Scalars['String']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -989,6 +1009,36 @@ export type SuggestableFieldType = {
   /** Allowed values when data_type is 'enum', else null */
   enumOptions?: Maybe<Array<Scalars['String']['output']>>;
   fieldName: Scalars['String']['output'];
+};
+
+export type SuggestedFieldType = {
+  __typename?: 'SuggestedFieldType';
+  comments: Array<Scalars['String']['output']>;
+  fieldName: Scalars['String']['output'];
+  firstSuggestedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Distinct proposed values, newest first */
+  proposedValues: Array<Scalars['String']['output']>;
+  suggestionCount: Scalars['Int']['output'];
+  targetType: Scalars['String']['output'];
+  targetUuid: Scalars['String']['output'];
+};
+
+export type SuggestionChangeType = {
+  __typename?: 'SuggestionChangeType';
+  after?: Maybe<Scalars['String']['output']>;
+  before?: Maybe<Scalars['String']['output']>;
+  fieldName: Scalars['String']['output'];
+  targetType: Scalars['String']['output'];
+  targetUuid: Scalars['String']['output'];
+};
+
+export type SuggestionDecisionInput = {
+  approve: Scalars['Boolean']['input'];
+  fieldName: Scalars['String']['input'];
+  /** The station, or one of its properties */
+  targetUuid: Scalars['UUID']['input'];
+  /** Value to write, possibly edited by the reviewer; required to approve */
+  value?: InputMaybe<Scalars['String']['input']>;
 };
 
 export const TaskAssignmentStatus = {

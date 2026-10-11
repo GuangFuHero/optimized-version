@@ -2448,6 +2448,7 @@ export interface components {
       | 'station.delete'
       | 'station.review'
       | 'station.assign'
+      | 'station.revoke'
       | 'station.contribute'
       | 'station.export'
       | 'station.import'
@@ -2869,6 +2870,7 @@ export interface components {
       created_at: string;
       /** Identities */
       identities?: components['schemas']['IdentityOption'][];
+      /** @description 目前使用中的身分，一次只有一個；沒有時為 null */
       active_identity?: components['schemas']['IdentityOption'] | null;
       /** Contacts */
       contacts?: components['schemas']['ContactOut'][];
