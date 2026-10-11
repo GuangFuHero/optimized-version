@@ -12,6 +12,6 @@ The existing admin placeholder pages and sample map data remain in place. The ho
 
 GraphQL uses the existing urql client factory and The Guild's client preset to generate typed documents. The admin uses urql's fetch exchange without its cache because TanStack Query owns caching. The site's urql provider and normalized cache remain unchanged.
 
-Run `pnpm schemas:generate` to export schemas from the checked-out backend and regenerate clients. It imports the FastAPI app and Strawberry schema without starting a server or connecting to the database. It requires the backend's `uv` environment. `pnpm typecheck` runs generation before checking every frontend workspace package. `pnpm lint` checks all frontend projects.
+Run `pnpm schemas:generate` to export schemas from the checked-out backend and regenerate clients. It imports the FastAPI app and Strawberry schema without starting a server or connecting to the database. It requires the backend's `uv` environment. `pnpm typecheck` checks every frontend workspace package without regenerating. CI fails if regeneration changes committed files. `pnpm lint` checks all frontend projects.
 
 The admin schema is `libs/data-access/src/admin/graphql/schema.graphql`. The site's existing `libs/data-access/src/graphql/schema.graphql` is a separate snapshot because the checked-out backend does not implement some site operations. Export updates the admin contract and the shared REST OpenAPI contract, and leaves the site snapshot intact.
