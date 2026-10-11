@@ -17,6 +17,8 @@ export type {
   DataTableFeatures,
   DataTableProps,
 } from './components/DataTable';
+export { Dialog } from './components/Dialog';
+export type { DialogProps } from './components/Dialog';
 export { EmptyState } from './components/EmptyState';
 export type { EmptyStateProps } from './components/EmptyState';
 export { ListPagination } from './components/ListPagination';
