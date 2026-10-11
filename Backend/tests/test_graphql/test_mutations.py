@@ -1393,13 +1393,15 @@ async def test_unassign_removes_assignment(
 
 
 @pytest.mark.asyncio
-async def test_assignment_actor_name_gated(
+async def test_assignment_actor_name_follows_view_history(
     client,
+    coordinator_auth,
     login_user_auth,
     sample_ticket,
     sample_ticket_task,
 ):
-    """A signed-in caller sees the assignee's name; an anonymous one gets null."""
+    """The requester sees who claimed their need by name; the volunteer and a guest get no list (ADR-286)."""
+    _, requester_token = coordinator_auth
     user_uuid, token = login_user_auth
     await _assign(client, token, sample_ticket_task)
     async with open_db() as db:
@@ -1409,15 +1411,14 @@ async def test_assignment_actor_name_gated(
         "variables": {"t": sample_ticket},
     }
 
-    signed_in = (await client.post("/graphql", json=query, headers=auth_header(token))).json()
-    anonymous = (await client.post("/graphql", json=query)).json()
-
-    def names(body):
+    async def names(headers=None):
+        body = (await client.post("/graphql", json=query, headers=headers)).json()
         task = next(t for t in body["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task)
         return [a["actorName"] for a in task["assignments"]]
 
-    assert names(signed_in) == [name]
-    assert names(anonymous) == [None]
+    assert await names(auth_header(requester_token)) == [name]
+    assert await names(auth_header(token)) == []
+    assert await names() == []
 
 
 @pytest.mark.asyncio
