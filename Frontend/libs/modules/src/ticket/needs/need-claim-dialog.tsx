@@ -5,17 +5,7 @@ import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useQuery } from 'urql';
 
@@ -24,14 +14,14 @@ import {
   TicketFieldsFragmentDoc,
   useFragment,
 } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, Dialog, displayTextSize } from '@rescue-frontend/ui';
 
 import { formatTicketAddress } from '../address';
 import { formatNeedHeadcount, resolveNeedClaim } from './need-claim';
 import { readNeedDialog } from './need-dialog';
 import { readTicketNeeds, TICKET_NEEDS_QUERY_CONTEXT } from './use-ticket-needs';
 
-const { color, radius, shadow } = designTokens;
+const { color, radius } = designTokens;
 
 export interface NeedClaimTarget {
   ticketUuid: string;
@@ -106,133 +96,65 @@ export function NeedClaimDialog({
   return (
     <Dialog
       open={open}
-      onClose={submitting ? undefined : onCancel}
-      fullWidth
-      maxWidth="xs"
-      slotProps={{
-        paper: {
-          sx: {
-            // MUI's 32px side margins left each button ~130px on a 390px phone, and 確認承接 broke
-            // onto two lines beside its icon.
-            m: { mobile: 2, tablet: 4 },
-            width: { mobile: 'calc(100% - 32px)', tablet: 'calc(100% - 64px)' },
-            borderRadius: `${radius.lg}px`,
-            bgcolor: color.bg.neutral.default,
-            boxShadow: shadow.lg,
-            backgroundImage: 'none',
-          },
-        },
-      }}
+      onClose={onCancel}
+      onConfirm={onConfirm}
+      title="確認承接這一筆？"
+      confirmLabel={submitting ? '承接中...' : '確認承接'}
+      confirmIcon={<VolunteerActivismRoundedIcon />}
+      confirmDisabled={!claim || settled}
+      cancelLabel={settled || dialog.box === 'gone' ? '關閉' : '取消'}
+      error={dialog.refusal}
+      submitting={submitting}
     >
-      <DialogTitle
+      <Box
         sx={{
-          px: 3,
-          pt: 3,
-          pb: 1.5,
-          color: color.fg.neutral.default,
-          fontSize: displayTextSize[20],
-          lineHeight: 1.4,
-          fontWeight: 700,
+          p: 2,
+          borderRadius: `${radius.md}px`,
+          bgcolor: color.bg.neutral.subtle,
+          border: `1px solid ${color.border.default}`,
         }}
       >
-        確認承接這一筆？
-      </DialogTitle>
-
-      <DialogContent sx={{ px: 3, pb: 1 }}>
-        <Stack spacing={2}>
-          <Box
-            sx={{
-              p: 2,
-              borderRadius: `${radius.md}px`,
-              bgcolor: color.bg.neutral.subtle,
-              border: `1px solid ${color.border.default}`,
-            }}
-          >
-            {need && fields && claim ? (
-              <>
-                <Typography
-                  sx={{
-                    color: color.fg.neutral.default,
-                    fontSize: displayTextSize[16],
-                    lineHeight: 1.4,
-                    fontWeight: 700,
-                  }}
-                >
-                  {need.taskName}
-                </Typography>
-                <Stack spacing={0.5} sx={{ mt: 0.75, color: color.fg.neutral.subtle }}>
-                  <DetailLine icon={<AssignmentRoundedIcon />}>{fields.title}</DetailLine>
-                  {/* An address, or plainly none: never the description passed off as one — the
-                      prototype's own 2026-09-10 fix (site-detail.jsx:368-373). */}
-                  <DetailLine icon={<PlaceRoundedIcon />}>{address ?? '未填地址'}</DetailLine>
-                  {/* As the API returns it: masked where this viewer may not see it. */}
-                  {contact ? <DetailLine icon={<PersonRoundedIcon />}>{contact}</DetailLine> : null}
-                  <DetailLine icon={<GroupsRoundedIcon />}>
-                    {formatNeedHeadcount(need, claim.kind)}
-                  </DetailLine>
-                </Stack>
-              </>
-            ) : (
-              <Typography sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13] }}>
-                {/* Deleted between the tap and the load: say so rather than load forever. */}
-                {dialog.box === 'loading' ? '載入中...' : '找不到這筆需求，可能已經被刪除。'}
-              </Typography>
-            )}
-          </Box>
-
-          {/* With the need there only, as the stop confirmation keeps its explanation: gone, or
-              still loading, there is no place to give back. */}
-          {dialog.box === 'need' ? (
+        {need && fields && claim ? (
+          <>
             <Typography
-              sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13], lineHeight: 1.6 }}
+              sx={{
+                color: color.fg.neutral.default,
+                fontSize: displayTextSize[16],
+                lineHeight: 1.4,
+                fontWeight: 700,
+              }}
             >
-              去不了的話請到「我的任務 › 我承接的」釋出名額，讓建立者有機會補人。
+              {need.taskName}
             </Typography>
-          ) : null}
+            <Stack spacing={0.5} sx={{ mt: 0.75, color: color.fg.neutral.subtle }}>
+              <DetailLine icon={<AssignmentRoundedIcon />}>{fields.title}</DetailLine>
+              {/* An address, or plainly none: never the description passed off as one — the
+                  prototype's own 2026-09-10 fix (site-detail.jsx:368-373). */}
+              <DetailLine icon={<PlaceRoundedIcon />}>{address ?? '未填地址'}</DetailLine>
+              {/* As the API returns it: masked where this viewer may not see it. */}
+              {contact ? <DetailLine icon={<PersonRoundedIcon />}>{contact}</DetailLine> : null}
+              <DetailLine icon={<GroupsRoundedIcon />}>
+                {formatNeedHeadcount(need, claim.kind)}
+              </DetailLine>
+            </Stack>
+          </>
+        ) : (
+          <Typography sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13] }}>
+            {/* Deleted between the tap and the load: say so rather than load forever. */}
+            {dialog.box === 'loading' ? '載入中...' : '找不到這筆需求，可能已經被刪除。'}
+          </Typography>
+        )}
+      </Box>
 
-          {dialog.refusal ? <Alert severity="error">{dialog.refusal}</Alert> : null}
-        </Stack>
-      </DialogContent>
-
-      <DialogActions sx={{ px: 3, pt: 1, pb: 3, gap: 1.5 }}>
-        <Button
-          onClick={onCancel}
-          disabled={submitting}
-          variant="outlined"
-          color="inherit"
-          sx={{
-            flex: 1,
-            height: 44,
-            whiteSpace: 'nowrap',
-            borderRadius: `${radius.full}px`,
-            borderColor: color.border.default,
-            color: color.fg.neutral.subtle,
-          }}
+      {/* With the need there only, as the stop confirmation keeps its explanation: gone, or
+          still loading, there is no place to give back. */}
+      {dialog.box === 'need' ? (
+        <Typography
+          sx={{ color: color.fg.neutral.muted, fontSize: displayTextSize[13], lineHeight: 1.6 }}
         >
-          {settled || dialog.box === 'gone' ? '關閉' : '取消'}
-        </Button>
-        <Button
-          onClick={onConfirm}
-          disabled={submitting || !claim || settled}
-          variant="contained"
-          disableElevation
-          startIcon={<VolunteerActivismRoundedIcon />}
-          sx={{
-            flex: 1,
-            height: 44,
-            whiteSpace: 'nowrap',
-            borderRadius: `${radius.full}px`,
-            bgcolor: color.bg.primary.default,
-            color: color.fg.onPrimary,
-            '&:hover': { bgcolor: color.bg.primary.hover },
-            // The fill above outranks MUI's own disabled look, so restate it — the same grey as a
-            // need button that cannot be pressed.
-            '&.Mui-disabled': { bgcolor: color.bg.disable, color: color.fg.disable },
-          }}
-        >
-          {submitting ? '承接中...' : '確認承接'}
-        </Button>
-      </DialogActions>
+          去不了的話請到「我的任務 › 我承接的」釋出名額，讓建立者有機會補人。
+        </Typography>
+      ) : null}
     </Dialog>
   );
 }
