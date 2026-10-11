@@ -4,7 +4,7 @@ import {
   Spline,
   Grid2X2,
   Layers,
-  Map,
+  MapIcon,
   MousePointer2,
   Ruler,
 } from 'lucide-react';
@@ -203,7 +203,7 @@ function ViewToggle() {
     >
       <ViewToggleButton
         active
-        icon={<Box component={Map} sx={{ width: 14, height: 14 }} />}
+        icon={<Box component={MapIcon} sx={{ width: 14, height: 14 }} />}
         label="Map"
       />
       <ViewToggleButton

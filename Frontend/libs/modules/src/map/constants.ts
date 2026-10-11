@@ -1,4 +1,4 @@
-import { Route, Ban, MapPin, Map, Satellite } from 'lucide-react';
+import { Route, Ban, MapPin, MapIcon, Satellite } from 'lucide-react';
 import { designTokens } from '@rescue-frontend/ui';
 
 import type {
@@ -40,7 +40,7 @@ export const BASE_LAYER_CONFIG: Record<
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     tileSourceType: 'road',
     tileSource: 'osm-direct',
-    icon: Map,
+    icon: MapIcon,
   },
   carto: {
     label: '街道地圖',
@@ -51,7 +51,7 @@ export const BASE_LAYER_CONFIG: Record<
     url: '/api/map/tile/road/carto/{z}/{x}/{y}',
     tileSourceType: 'road',
     tileSource: 'carto',
-    icon: Map,
+    icon: MapIcon,
   },
   osm: {
     label: 'OSM 標準街道圖',
@@ -62,7 +62,7 @@ export const BASE_LAYER_CONFIG: Record<
     url: '/api/map/tile/road/osm/{z}/{x}/{y}',
     tileSourceType: 'road',
     tileSource: 'osm',
-    icon: Map,
+    icon: MapIcon,
   },
   eox: {
     label: '衛星影像（EOX）',
