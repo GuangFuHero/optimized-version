@@ -38,11 +38,11 @@ export function rehypeCheckboxKey() {
         .trim()
         .normalize('NFC');
       const key = bytesToHex(sha256(utf8ToBytes(label)));
-      const checked = checkbox.properties.checked === true;
 
       checkboxKeys.add(key);
       checkbox.properties['data-task-key'] = key;
       checkbox.properties.ariaLabel = label;
+      delete checkbox.properties.checked;
 
       const children = node.children
         .filter((child) => child !== checkbox)
@@ -74,10 +74,7 @@ export function rehypeCheckboxKey() {
           node.children.push({
             type: 'element',
             tagName: 'task-label',
-            properties: {
-              'data-task-key': key,
-              'data-task-checked': checked,
-            },
+            properties: { 'data-task-key': key },
             children: [child],
           });
         }
