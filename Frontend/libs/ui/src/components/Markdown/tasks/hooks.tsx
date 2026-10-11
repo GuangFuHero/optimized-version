@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useLocalStorage } from 'usehooks-ts';
 import z from 'zod';
 import { localStorageKeys } from '../../../constant/local-storage-keys';
@@ -8,7 +8,6 @@ const checkboxStateSchema = z.record(z.string(), z.boolean());
 export type CheckboxProps = {
   articleId: string;
   checkboxId: string;
-  defaultChecked?: boolean;
 };
 
 export function useCheckboxes(articleId: string) {
@@ -26,11 +25,7 @@ export function useCheckboxes(articleId: string) {
   return { checkboxes, setCheckboxes };
 }
 
-export function useCheckbox({
-  articleId,
-  checkboxId,
-  defaultChecked = false,
-}: CheckboxProps) {
+export function useCheckbox({ articleId, checkboxId }: CheckboxProps) {
   const { checkboxes, setCheckboxes } = useCheckboxes(articleId);
   const checkbox = checkboxes[checkboxId];
   const setCheckbox = useCallback(
@@ -40,15 +35,5 @@ export function useCheckbox({
     [setCheckboxes, checkboxId],
   );
 
-  useEffect(() => {
-    if (checkbox === undefined) {
-      setCheckboxes((current) =>
-        current[checkboxId] === undefined
-          ? { ...current, [checkboxId]: defaultChecked }
-          : current,
-      );
-    }
-  }, [articleId, checkboxId, checkbox, defaultChecked, setCheckboxes]);
-
-  return { checkbox: checkbox ?? defaultChecked, setCheckbox };
+  return { checkbox: checkbox ?? false, setCheckbox };
 }

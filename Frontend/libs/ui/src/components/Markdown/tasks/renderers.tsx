@@ -30,34 +30,22 @@ export const taskComponents = (articleId: string) =>
       ),
     'task-label': ({ node, children }) => {
       const checkboxId = z.string().parse(node?.properties['data-task-key']);
-      const defaultChecked = node?.properties['data-task-checked'] === true;
 
       return articleId ? (
-        <TaskLabel
-          articleId={articleId}
-          checkboxId={checkboxId}
-          defaultChecked={defaultChecked}
-        >
+        <TaskLabel articleId={articleId} checkboxId={checkboxId}>
           {children}
         </TaskLabel>
       ) : (
-        <div data-task-key={checkboxId} data-task-checked={defaultChecked}>
-          {children}
-        </div>
+        <div data-task-key={checkboxId}>{children}</div>
       );
     },
-    input: ({ node, checked, ...props }) => {
+    input: ({ node, ...props }) => {
       const checkboxId = String(node?.properties['data-task-key'] ?? '');
       if (props.type !== 'checkbox' || !articleId || !checkboxId)
-        return <input {...props} checked={checked} />;
+        return <input {...props} />;
 
       return (
-        <Checkbox
-          articleId={articleId}
-          checkboxId={checkboxId}
-          defaultChecked={checked}
-          {...props}
-        />
+        <Checkbox articleId={articleId} checkboxId={checkboxId} {...props} />
       );
     },
   }) satisfies TaskComponents;
