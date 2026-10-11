@@ -317,6 +317,50 @@ export function useUpdateCurrentUser() {
   });
 }
 
+export interface SwitchIdentityInput {
+  body: paths['/api/v1/auth/switch-identity']['post']['requestBody']['content']['application/json'];
+}
+
+export function useSwitchIdentity() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ body }: SwitchIdentityInput) =>
+      adminRestClient
+        .POST('/api/v1/auth/switch-identity', { body })
+        .then(() => undefined),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
+  });
+}
+
+export interface AddContactInput {
+  body: paths['/api/v1/auth/contacts']['post']['requestBody']['content']['application/json'];
+}
+
+export function useAddContact() {
+  return useMutation({
+    mutationFn: ({ body }: AddContactInput) =>
+      adminRestClient
+        .POST('/api/v1/auth/contacts', { body })
+        .then(() => undefined),
+  });
+}
+
+export interface VerifyContactInput {
+  body: paths['/api/v1/auth/contacts/verify']['post']['requestBody']['content']['application/json'];
+}
+
+export function useVerifyContact() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ body }: VerifyContactInput) =>
+      adminRestClient
+        .POST('/api/v1/auth/contacts/verify', { body })
+        .then(() => undefined),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['admin', 'session'] }),
+  });
+}
+
 export interface UpdateProjectSettingsInput {
   body: paths['/api/v1/admin/project-settings']['patch']['requestBody']['content']['application/json'];
 }
