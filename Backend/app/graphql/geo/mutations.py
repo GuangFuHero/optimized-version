@@ -226,7 +226,7 @@ class GeoMutation:
     async def create_building_map(
         self, info: strawberry.types.Info, input: CreateBuildingMapInput
     ) -> BuildingMapType:
-        """Create a building map with its address and floor layout. Requires map.add."""
+        """Create a building map with its address and floor layout. Requires work_zone.add."""
         building = await building_map_service.create_building_map(
             info.context["db"], actor=require_authenticated(info),
             name=input.name, geometry=input.geometry,
@@ -241,7 +241,7 @@ class GeoMutation:
     async def update_building_map(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateBuildingMapInput,
     ) -> BuildingMapType:
-        """Update a building map's name, point or floor layout. Requires map.edit with scope check."""
+        """Update a building map's name, point or floor layout. Requires work_zone.edit with scope check."""
         changes = {}
         for field in ("name", "floors_above_ground", "floors_below_ground"):
             val = getattr(input, field)
@@ -257,7 +257,7 @@ class GeoMutation:
 
     @strawberry.mutation
     async def delete_building_map(self, info: strawberry.types.Info, uuid: UUID) -> bool:
-        """Soft-delete a building map. Its tickets stay. Requires map.delete with scope check."""
+        """Soft-delete a building map. Its tickets stay. Requires work_zone.delete with scope check."""
         await building_map_service.delete_building_map(
             info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
         )

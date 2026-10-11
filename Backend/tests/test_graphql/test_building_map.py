@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.models.geo import BuildingMapTicketMap
 from tests.test_graphql.conftest import auth_header
 from tests.test_graphql.conftest import test_db as open_db
+from tests.test_graphql.test_work_zone import _make_team_user
 
 pytestmark = pytest.mark.asyncio
 
@@ -92,13 +93,22 @@ async def test_anonymous_caller_can_read_building_maps(client, coordinator_auth)
     assert building["uuid"] in {item["uuid"] for item in body["data"]["buildingMaps"]["items"]}
 
 
-async def test_create_building_map_requires_map_add(client, login_user_auth):
+async def test_create_building_map_requires_work_zone_add(client, login_user_auth):
     """A plain signed-in user cannot pin a building."""
     _, token = login_user_auth
     body = await _gql(client, CREATE_BUILDING, {"input": {
         "name": "x", "geometry": POINT, "secondaryLocation": ADDRESS, **LAYOUT,
     }}, token)
     assert body["data"] is None and body["errors"]
+
+
+async def test_ngo_team_admin_cannot_pin_a_building(client, redis):
+    """work_zone.add is not enough on an ngo team, as with zones."""
+    token = await _make_team_user(redis, "ngo")
+    body = await _gql(client, CREATE_BUILDING, {"input": {
+        "name": "x", "geometry": POINT, "secondaryLocation": ADDRESS, **LAYOUT,
+    }}, token)
+    assert "Only gov teams" in body["errors"][0]["message"]
 
 
 @pytest.mark.parametrize(("overrides", "message"), [

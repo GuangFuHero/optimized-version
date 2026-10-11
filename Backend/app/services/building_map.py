@@ -11,7 +11,7 @@ from app.graphql.scalars import geojson_to_geom, geom_to_geojson
 from app.models.auth import User
 from app.models.geo import BuildingMap
 from app.repositories.geo_repository import building_map_repository, secondary_location_repository
-from app.services.authz import require_scope
+from app.services.authz import require_gov_team, require_scope
 from app.services.geo_validation import validate_point
 
 # Offered on every floor that has areas, so a reporter in an unlisted space can still file.
@@ -27,6 +27,11 @@ MAX_AREA_LENGTH = 20
 def floor_labels(above: int, below: int) -> list[str]:
     """The building's floor labels, roof first: RF, 3F, 2F, 1F, B1, B2."""
     return ["RF"] + [f"{n}F" for n in range(above, 0, -1)] + [f"B{n}" for n in range(1, below + 1)]
+
+
+async def _require_gov_team(db: AsyncSession, actor: User) -> None:
+    """Building maps are drawn with the work_zone capabilities, so like zones they need a gov team."""
+    await require_gov_team(db, actor, detail="Only gov teams may pin, edit or delete building maps.")
 
 
 def _validate_name(name: str) -> str:
@@ -74,7 +79,8 @@ async def create_building_map(
     floor_areas: dict[str, list[str]],
 ) -> BuildingMap:
     """Create a building map and its address in one commit (checkpoint 1 only)."""
-    await require_scope(actor, Perm.MAP_ADD, db)
+    await require_scope(actor, Perm.ZONE_ADD, db)
+    await _require_gov_team(db, actor)
     validate_point(geometry, entity="Building map")
     if any(secondary_location.get(k) for k in ("building_section", "floor", "room")):
         raise ValueError("A building map's address has no building section, floor or room")
@@ -101,14 +107,15 @@ async def create_building_map(
 async def update_building_map(
     db: AsyncSession, *, actor: User, uuid: str, geometry: dict | None = None, changes: dict
 ) -> BuildingMap:
-    """Update a building map (checkpoint 1 map.edit, then checkpoint 2 against the loaded map).
+    """Update a building map (checkpoint 1 work_zone.edit, then checkpoint 2 against the loaded map).
 
     The layout is re-checked as a whole, so shrinking the floor count cannot strand an area list.
     """
     building = await building_map_repository.get_by_uuid_active(db, uuid)
     if not building:
         raise ValueError("Building map not found")
-    await require_scope(actor, Perm.MAP_EDIT, db, resource=building)
+    await require_scope(actor, Perm.ZONE_EDIT, db, resource=building)
+    await _require_gov_team(db, actor)
 
     obj_in = dict(changes)
     if "name" in obj_in:
@@ -125,11 +132,12 @@ async def update_building_map(
 
 
 async def delete_building_map(db: AsyncSession, *, actor: User, uuid: str) -> None:
-    """Soft-delete a building map (checkpoint 1 map.delete, then checkpoint 2 against it)."""
+    """Soft-delete a building map (checkpoint 1 work_zone.delete, then checkpoint 2 against it)."""
     building = await building_map_repository.get_by_uuid_active(db, uuid)
     if not building:
         raise ValueError("Building map not found")
-    await require_scope(actor, Perm.MAP_DELETE, db, resource=building)
+    await require_scope(actor, Perm.ZONE_DELETE, db, resource=building)
+    await _require_gov_team(db, actor)
     await building_map_repository.soft_delete(db, db_obj=building)
 
 
