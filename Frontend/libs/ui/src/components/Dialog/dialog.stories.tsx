@@ -1,15 +1,16 @@
-import { Button, Typography } from '@mui/material';
+import { Typography } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
+import { Button } from '../Button';
 import { Dialog, type DialogProps } from './index';
 
 function DialogDemo(props: Omit<DialogProps, 'open' | 'onClose'>) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button variant="outlined" onClick={() => setOpen(true)}>
+      <Button variant="outline" onClick={() => setOpen(true)}>
         開啟
       </Button>
       <Dialog {...props} open={open} onClose={() => setOpen(false)} />
@@ -22,7 +23,7 @@ const meta = {
   component: Dialog,
   render: (args) => <DialogDemo {...args} />,
   args: {
-    open: true,
+    open: false,
     onClose: () => undefined,
     onConfirm: () => undefined,
     title: '撤回這筆申請？',
