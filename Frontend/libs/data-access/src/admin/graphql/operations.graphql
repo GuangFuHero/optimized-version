@@ -1,0 +1,668 @@
+fragment AdminPageInfo on PageInfo {
+  totalCount
+  hasNextPage
+  hasPreviousPage
+}
+fragment AdminTicketFields on TicketType {
+  uuid
+  title
+  description
+  geometry
+  status
+  priority
+  taskType
+  visibility
+  verificationStatus
+  contactName
+  contactEmail
+  contactPhone
+  createdBy
+  createdAt
+  updatedAt
+}
+fragment AdminTaskFields on TicketTaskType {
+  uuid
+  ticketUuid
+  taskType
+  taskName
+  taskDescription
+  quantity
+  status
+  progressNote
+  reviewNote
+  source
+  visibility
+  moderationStatus
+  createdAt
+  updatedAt
+  assignments {
+    uuid
+    actorUuid
+    role
+    status
+    assignedAt
+    updatedAt
+  }
+}
+fragment AdminStationFields on StationType {
+  uuid
+  type
+  name
+  description
+  geometry
+  opHour
+  level
+  comment
+  source
+  visibility
+  verificationStatus
+  operationalStatus
+  isDuplicate
+  isTemporary
+  isOfficial
+  createdBy
+  createdAt
+  updatedAt
+  assignedTeam {
+    uuid
+    name
+    type
+  }
+}
+query AdminTickets(
+  $bounds: BoundsInput
+  $status: String
+  $priority: String
+  $q: String
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  tickets(
+    bounds: $bounds
+    status: $status
+    priority: $priority
+    q: $q
+    skip: $skip
+    limit: $limit
+  ) {
+    items {
+      ...AdminTicketFields
+      tasks {
+        ...AdminTaskFields
+      }
+    }
+    pageInfo {
+      ...AdminPageInfo
+    }
+  }
+}
+query AdminTicket($uuid: UUID!) {
+  ticket(uuid: $uuid) {
+    ...AdminTicketFields
+    secondaryLocation {
+      county
+      city
+      lane
+      alley
+      no
+      floor
+      room
+      landmarkNote
+    }
+    photos {
+      uuid
+      url
+      createdAt
+    }
+    tasks {
+      ...AdminTaskFields
+      properties {
+        uuid
+        propertyName
+        propertyValue
+        quantity
+        status
+        comment
+      }
+    }
+    disasterDetails {
+      uuid
+      propertyName
+      value
+    }
+  }
+}
+query AdminTicketTasks(
+  $ticketUuid: String!
+  $status: String
+  $q: String
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  ticketTasks(
+    ticketUuid: $ticketUuid
+    status: $status
+    q: $q
+    skip: $skip
+    limit: $limit
+  ) {
+    ...AdminTaskFields
+  }
+}
+query AdminStations(
+  $bounds: BoundsInput
+  $stationType: String
+  $operationalStatus: StationOperationalStatus
+  $q: String
+  $assignedTeamUuid: UUID
+  $unassignedOnly: Boolean = false
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  stations(
+    bounds: $bounds
+    stationType: $stationType
+    operationalStatus: $operationalStatus
+    q: $q
+    assignedTeamUuid: $assignedTeamUuid
+    unassignedOnly: $unassignedOnly
+    skip: $skip
+    limit: $limit
+  ) {
+    items {
+      ...AdminStationFields
+    }
+    pageInfo {
+      ...AdminPageInfo
+    }
+  }
+}
+query AdminStation($uuid: UUID!) {
+  station(uuid: $uuid) {
+    ...AdminStationFields
+    contactName
+    contactPhone
+    secondaryLocation {
+      county
+      city
+      lane
+      alley
+      no
+      floor
+      room
+      poleId
+      poleType
+      poleNote
+    }
+    photos {
+      uuid
+      url
+      createdAt
+    }
+    properties {
+      uuid
+      propertyType
+      propertyName
+      quantity
+      comment
+      status
+      weightings
+      createdAt
+    }
+  }
+}
+query AdminAnnouncements($filter: AnnouncementFilter = ALL) {
+  announcements(filter: $filter) {
+    uuid
+    content
+    active
+    order
+    createdBy
+    createdAt
+    updatedAt
+  }
+}
+query AdminBriefings($state: BriefingState, $tag: String) {
+  briefings(state: $state, tag: $tag) {
+    uuid
+    templateUuid
+    content
+    tags
+    state
+    createdBy
+    createdAt
+    updatedAt
+  }
+}
+query AdminBriefingTemplates($state: BriefingState, $tag: String) {
+  briefingTemplates(state: $state, tag: $tag) {
+    uuid
+    content
+    tags
+    state
+    createdBy
+    createdAt
+    updatedAt
+  }
+}
+query AdminStationPropertyConfigs(
+  $stationType: String!
+  $includeInactive: Boolean = true
+) {
+  stationPropertyConfigs(
+    stationType: $stationType
+    includeInactive: $includeInactive
+  ) {
+    uuid
+    stationType
+    propertyName
+    dataType
+    enumOptions
+    unit
+    label
+    displayLabel
+    sortOrder
+    isActive
+  }
+}
+query AdminTaskPropertyConfigs(
+  $taskType: String!
+  $includeInactive: Boolean = true
+) {
+  taskPropertyConfigs(taskType: $taskType, includeInactive: $includeInactive) {
+    uuid
+    taskType
+    propertyName
+    dataType
+    enumOptions
+    unit
+    disasterTypes
+    label
+    displayLabel
+    sortOrder
+    isActive
+  }
+}
+query AdminTicketPropertyConfigs(
+  $disasterTypes: [String!]!
+  $includeInactive: Boolean = true
+) {
+  ticketPropertyConfigs(
+    disasterTypes: $disasterTypes
+    includeInactive: $includeInactive
+  ) {
+    uuid
+    propertyName
+    dataType
+    enumOptions
+    unit
+    disasterTypes
+    label
+    displayLabel
+    hint
+    isActive
+  }
+}
+query AdminDisasterTypes($includeInactive: Boolean = true) {
+  disasterTypes(includeInactive: $includeInactive) {
+    uuid
+    key
+    label
+    isActive
+  }
+}
+query AdminWorkZones($skip: Int = 0, $limit: Int = 50) {
+  workZones(skip: $skip, limit: $limit) {
+    items {
+      uuid
+      name
+      geometry
+      createdAt
+      updatedAt
+      assignedTeams {
+        uuid
+        name
+        type
+      }
+    }
+    pageInfo {
+      ...AdminPageInfo
+    }
+  }
+}
+query AdminClosureAreas(
+  $bounds: BoundsInput
+  $skip: Int = 0
+  $limit: Int = 50
+) {
+  closureAreas(bounds: $bounds, skip: $skip, limit: $limit) {
+    items {
+      uuid
+      geometry
+      status
+      informationSource
+      comment
+      createdAt
+      updatedAt
+    }
+    pageInfo {
+      ...AdminPageInfo
+    }
+  }
+}
+mutation AdminCreateTicket($input: CreateTicketInput!) {
+  createTicket(input: $input) {
+    ...AdminTicketFields
+  }
+}
+mutation AdminUpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
+  updateTicket(uuid: $uuid, input: $input) {
+    ...AdminTicketFields
+  }
+}
+mutation AdminDeleteTicket($uuid: UUID!) {
+  deleteTicket(uuid: $uuid)
+}
+mutation AdminReviewTicket(
+  $uuid: UUID!
+  $verificationStatus: String!
+  $reviewNote: String
+) {
+  reviewTicket(
+    uuid: $uuid
+    verificationStatus: $verificationStatus
+    reviewNote: $reviewNote
+  ) {
+    ...AdminTicketFields
+  }
+}
+mutation AdminSetTicketDisasterDetails(
+  $uuid: UUID!
+  $details: [TicketDisasterDetailInput!]!
+) {
+  setTicketDisasterDetails(uuid: $uuid, details: $details) {
+    uuid
+    propertyName
+    value
+  }
+}
+mutation AdminCreateTicketTask($input: CreateTicketTaskInput!) {
+  createTicketTask(input: $input) {
+    ...AdminTaskFields
+  }
+}
+mutation AdminUpdateTicketTask($uuid: UUID!, $input: UpdateTicketTaskInput!) {
+  updateTicketTask(uuid: $uuid, input: $input) {
+    ...AdminTaskFields
+  }
+}
+mutation AdminAssignTaskActor(
+  $taskUuid: UUID!
+  $actorUuid: UUID
+  $role: String
+) {
+  assignTaskActor(taskUuid: $taskUuid, actorUuid: $actorUuid, role: $role) {
+    uuid
+    taskUuid
+    actorUuid
+    role
+    status
+    assignedAt
+  }
+}
+mutation AdminUpdateTaskAssignment(
+  $uuid: UUID!
+  $input: UpdateTaskAssignmentInput!
+) {
+  updateTaskAssignment(uuid: $uuid, input: $input) {
+    uuid
+    taskUuid
+    actorUuid
+    role
+    status
+    updatedAt
+  }
+}
+mutation AdminUnassignTaskActor($uuid: UUID!) {
+  unassignTaskActor(uuid: $uuid)
+}
+mutation AdminCreateStation($input: CreateStationInput!) {
+  createStation(input: $input) {
+    ...AdminStationFields
+  }
+}
+mutation AdminUpdateStation($uuid: UUID!, $input: UpdateStationInput!) {
+  updateStation(uuid: $uuid, input: $input) {
+    ...AdminStationFields
+  }
+}
+mutation AdminDeleteStation($uuid: UUID!) {
+  deleteStation(uuid: $uuid)
+}
+mutation AdminAssignStation($stationUuid: UUID!, $teamUuid: UUID!) {
+  assignStationToTeam(stationUuid: $stationUuid, teamUuid: $teamUuid) {
+    ...AdminStationFields
+  }
+}
+mutation AdminUnassignStation($stationUuid: UUID!) {
+  unassignStation(stationUuid: $stationUuid) {
+    ...AdminStationFields
+  }
+}
+mutation AdminAttachStationPhoto($stationUuid: UUID!, $url: String!) {
+  attachStationPhoto(stationUuid: $stationUuid, url: $url) {
+    uuid
+    url
+    createdAt
+  }
+}
+mutation AdminDetachStationPhoto($uuid: UUID!) {
+  detachStationPhoto(uuid: $uuid)
+}
+mutation AdminCreateStationProperty($input: CreateStationPropertyInput!) {
+  createStationProperty(input: $input) {
+    uuid
+    stationUuid
+    propertyType
+    propertyName
+    quantity
+    status
+    comment
+  }
+}
+mutation AdminUpdateStationProperty(
+  $uuid: UUID!
+  $input: UpdateStationPropertyInput!
+) {
+  updateStationProperty(uuid: $uuid, input: $input) {
+    uuid
+    stationUuid
+    propertyType
+    propertyName
+    quantity
+    status
+    comment
+  }
+}
+mutation AdminCreateTaskProperty($input: CreateTaskPropertyInput!) {
+  createTaskProperty(input: $input) {
+    uuid
+    taskUuid
+    propertyName
+    propertyValue
+    quantity
+    status
+    comment
+  }
+}
+mutation AdminUpdateTaskProperty(
+  $uuid: UUID!
+  $input: UpdateTaskPropertyInput!
+) {
+  updateTaskProperty(uuid: $uuid, input: $input) {
+    uuid
+    taskUuid
+    propertyName
+    propertyValue
+    quantity
+    status
+    comment
+  }
+}
+mutation AdminCreateAnnouncement($input: CreateAnnouncementInput!) {
+  createAnnouncement(input: $input) {
+    uuid
+    content
+    active
+    order
+  }
+}
+mutation AdminUpdateAnnouncement(
+  $uuid: UUID!
+  $input: UpdateAnnouncementInput!
+) {
+  updateAnnouncement(uuid: $uuid, input: $input) {
+    uuid
+    content
+    active
+    order
+  }
+}
+mutation AdminDeleteAnnouncement($uuid: UUID!) {
+  deleteAnnouncement(uuid: $uuid)
+}
+mutation AdminMoveAnnouncement(
+  $uuid: UUID!
+  $direction: AnnouncementMoveDirection!
+) {
+  moveAnnouncement(uuid: $uuid, direction: $direction) {
+    uuid
+    order
+  }
+}
+mutation AdminSetAnnouncementActive($uuid: UUID!, $active: Boolean!) {
+  setAnnouncementActive(uuid: $uuid, active: $active) {
+    uuid
+    active
+    order
+  }
+}
+mutation AdminGenerateBriefing($input: GenerateBriefingInput!) {
+  generateBriefing(input: $input) {
+    uuid
+    templateUuid
+    content
+    tags
+    state
+  }
+}
+mutation AdminUpdateBriefing($uuid: UUID!, $input: UpdateBriefingInput!) {
+  updateBriefing(uuid: $uuid, input: $input) {
+    uuid
+    content
+    tags
+    state
+  }
+}
+mutation AdminDeleteBriefing($uuid: UUID!) {
+  deleteBriefing(uuid: $uuid)
+}
+mutation AdminCreateBriefingTemplate($input: CreateBriefingTemplateInput!) {
+  createBriefingTemplate(input: $input) {
+    uuid
+    content
+    tags
+    state
+  }
+}
+mutation AdminUpdateBriefingTemplate(
+  $uuid: UUID!
+  $input: UpdateBriefingTemplateInput!
+) {
+  updateBriefingTemplate(uuid: $uuid, input: $input) {
+    uuid
+    content
+    tags
+    state
+  }
+}
+mutation AdminDeleteBriefingTemplate($uuid: UUID!) {
+  deleteBriefingTemplate(uuid: $uuid)
+}
+mutation AdminUpsertStationPropertyConfig(
+  $stationType: String!
+  $input: UpsertPropertyConfigInput!
+) {
+  upsertStationPropertyConfig(stationType: $stationType, input: $input) {
+    uuid
+    propertyName
+  }
+}
+mutation AdminUpsertTaskPropertyConfig(
+  $taskType: String!
+  $input: UpsertPropertyConfigInput!
+) {
+  upsertTaskPropertyConfig(taskType: $taskType, input: $input) {
+    uuid
+    propertyName
+  }
+}
+mutation AdminUpsertTicketPropertyConfig(
+  $input: UpsertTicketPropertyConfigInput!
+) {
+  upsertTicketPropertyConfig(input: $input) {
+    uuid
+    propertyName
+  }
+}
+mutation AdminUpsertDisasterType($input: UpsertDisasterTypeInput!) {
+  upsertDisasterType(input: $input) {
+    uuid
+    key
+    label
+  }
+}
+mutation AdminCreateWorkZone($input: CreateWorkZoneInput!) {
+  createWorkZone(input: $input) {
+    uuid
+    name
+    geometry
+  }
+}
+mutation AdminUpdateWorkZone($uuid: UUID!, $input: UpdateWorkZoneInput!) {
+  updateWorkZone(uuid: $uuid, input: $input) {
+    uuid
+    name
+    geometry
+  }
+}
+mutation AdminDeleteWorkZone($uuid: UUID!) {
+  deleteWorkZone(uuid: $uuid)
+}
+mutation AdminAssignZoneToTeam($input: ZoneTeamAssignmentInput!) {
+  assignZoneToTeam(input: $input) {
+    zoneUuid
+    teamUuid
+    assignedAt
+  }
+}
+mutation AdminRemoveZoneFromTeam($input: ZoneTeamAssignmentInput!) {
+  removeZoneFromTeam(input: $input)
+}
+mutation AdminCreateClosureArea($input: CreateClosureAreaInput!) {
+  createClosureArea(input: $input) {
+    uuid
+    geometry
+    status
+  }
+}
+mutation AdminUpdateClosureArea($uuid: UUID!, $input: UpdateClosureAreaInput!) {
+  updateClosureArea(uuid: $uuid, input: $input) {
+    uuid
+    geometry
+    status
+  }
+}
+mutation AdminDeleteClosureArea($uuid: UUID!) {
+  deleteClosureArea(uuid: $uuid)
+}

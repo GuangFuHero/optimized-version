@@ -18,12 +18,16 @@
     "affected:lint": "nx affected -t lint",
     "graph": "nx graph",
     "reset": "nx reset",
-    "codegen": "graphql-codegen --config libs/data-access/src/graphql/codegen.ts",
+    "codegen": "graphql-codegen --config libs/data-access/src/graphql/codegen.ts && pnpm codegen:admin && pnpm codegen:openapi && prettier --write libs/data-access/src/graphql/__generated__ libs/data-access/src/admin/graphql/__generated__ libs/data-access/src/rest/openapi.d.ts",
     "typecheck": "pnpm -r typecheck",
     "dev:ui": "nx dev ui",
     "dev:admin": "nx dev admin",
     "build:admin": "nx build admin",
-    "start:admin": "nx start admin"
+    "start:admin": "nx start admin",
+    "schemas:export": "cd ../Backend && PYTHONPATH=. ENV=testing uv run python scripts/export_frontend_schemas.py",
+    "codegen:openapi": "pnpm --filter @rescue-frontend/data-access codegen:openapi",
+    "schemas:generate": "pnpm schemas:export && pnpm codegen",
+    "codegen:admin": "graphql-codegen --config libs/data-access/src/admin/graphql/codegen.ts"
   },
   "private": true,
   "devDependencies": {
@@ -64,7 +68,8 @@
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.40.0",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "openapi-typescript": "^7.13.0"
   },
   "engines": {
     "node": ">=22"

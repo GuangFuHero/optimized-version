@@ -2,7 +2,7 @@
 
 import { Plus, X, Trash2 } from 'lucide-react';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   Alert,
@@ -19,19 +19,18 @@ import {
   Typography,
 } from '@mui/material';
 import { useSession } from 'next-auth/react';
-import { useMutation } from 'urql';
 
 import {
-  CreateStationDocument,
-  StationFieldsFragmentDoc,
-  useFragment,
-} from '@rescue-frontend/data-access';
+  useCreateStation,
+  type AdminCreateStationMutation,
+} from '@rescue-frontend/data-access/admin';
 
 import {
   getStationTypeLabel,
   STATION_TYPE_OPTIONS,
   type StationTypeValue,
 } from '../../type-options';
+import { reverseGeocodeResponse } from '../../../map/reverse-geocode';
 import type { RescueMapMarkerItem } from '../../../map/types';
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 import type { StationListRow } from '../station-list/types';
@@ -60,17 +59,6 @@ interface StationCreateFormState {
   availableTime: string;
   isTemporary: boolean;
   photoUrls: string[];
-}
-
-interface ReverseGeocodePayload {
-  address: string;
-  county: string;
-  city: string;
-  lane: string;
-  alley: string;
-  no: string;
-  floor: string;
-  room: string;
 }
 
 interface StationCreateDrawerProps {
@@ -140,25 +128,25 @@ function isValidHttpUrl(value: string) {
   }
 }
 
-function mapStationStatus(isTemporary: boolean): StationListRow['status'] {
-  return isTemporary ? 'limited' : 'active';
-}
-
-function createStationRow(input: {
-  uuid: string;
-  type: string;
-  address: string;
-  description: string;
-  isTemporary: boolean;
-  updatedAt?: string | null;
-}): StationListRow {
+function createStationRow(
+  input: AdminCreateStationMutation['createStation'],
+  address: string,
+): StationListRow {
   return {
     id: input.uuid,
     code: input.uuid.slice(0, 8).toUpperCase(),
-    name: input.description.slice(0, 18) || getStationTypeLabel(input.type),
+    name:
+      input.name?.trim() ||
+      input.description?.slice(0, 18) ||
+      getStationTypeLabel(input.type),
     type: getStationTypeLabel(input.type),
-    address: input.address || '未提供地址',
-    status: mapStationStatus(input.isTemporary),
+    address: address || '未提供地址',
+    status:
+      input.operationalStatus === 'active'
+        ? 'active'
+        : input.operationalStatus === 'temporarily_closed'
+          ? 'limited'
+          : 'offline',
     currentOccupancy: 0,
     capacity: 0,
     suppliesLabel: '未提供',
@@ -174,23 +162,10 @@ function createStationRow(input: {
   };
 }
 
-function buildStationMarker(input: {
-  uuid: string;
-  type?: string | null;
-  description?: string | null;
-  opHour?: string | null;
-  level?: number | null;
-  comment?: string | null;
-  source?: string | null;
-  visibility?: string | null;
-  verificationStatus?: string | null;
-  isDuplicate?: boolean;
-  isTemporary?: boolean;
-  isOfficial?: boolean;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  position: [number, number];
-}): RescueMapMarkerItem {
+function buildStationMarker(
+  input: AdminCreateStationMutation['createStation'],
+  position: RescueMapMarkerItem['position'],
+): RescueMapMarkerItem {
   const normalizedType = input.type?.trim().toLowerCase();
   const stationTypeLabel = getStationTypeLabel(normalizedType);
 
@@ -199,28 +174,14 @@ function buildStationMarker(input: {
     title: input.description?.trim() || stationTypeLabel,
     subtitle:
       input.description?.trim() || input.opHour?.trim() || stationTypeLabel,
-    position: input.position,
+    position,
     label: stationTypeLabel,
     variant:
       input.isTemporary || normalizedType === 'shelter'
         ? 'pinned-location'
         : 'resource-station',
     detailType: 'station',
-    stationMeta: {
-      type: input.type,
-      description: input.description,
-      opHour: input.opHour,
-      level: input.level,
-      comment: input.comment,
-      source: input.source,
-      visibility: input.visibility,
-      verificationStatus: input.verificationStatus,
-      isDuplicate: input.isDuplicate,
-      isTemporary: input.isTemporary,
-      isOfficial: input.isOfficial,
-      createdAt: input.createdAt,
-      updatedAt: input.updatedAt,
-    },
+    stationMeta: input,
   };
 }
 
@@ -236,7 +197,13 @@ function Section({
   return (
     <Stack spacing={1.5}>
       <Box>
-        <Typography sx={{ fontSize: 15, fontWeight: 800, color: color.fg.neutral.default }}>
+        <Typography
+          sx={{
+            fontSize: 15,
+            fontWeight: 800,
+            color: color.fg.neutral.default,
+          }}
+        >
           {title}
         </Typography>
         {description ? (
@@ -267,14 +234,11 @@ export function StationCreateDrawer({
   const [form, setForm] = useState<StationCreateFormState>(createInitialState);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
-  const [createStationResult, createStation] = useMutation(
-    CreateStationDocument,
-  );
+  const createStation = useCreateStation();
   const { status: authStatus } = useSession();
   const reverseGeocodeRequestKeyRef = useRef<string | null>(null);
 
-  const isSubmitting = createStationResult.fetching;
-  const derivedUpdatedAt = useMemo(() => formatNow(), [open]);
+  const isSubmitting = createStation.isPending;
 
   useEffect(() => {
     if (!open) {
@@ -311,7 +275,7 @@ export function StationCreateDrawer({
           return;
         }
 
-        const payload = (await response.json()) as ReverseGeocodePayload;
+        const payload = reverseGeocodeResponse.parse(await response.json());
 
         setForm((current) => ({
           ...current,
@@ -453,88 +417,48 @@ export function StationCreateDrawer({
       return;
     }
 
-    const stationResult = await createStation({
-      input: {
-        type: form.type,
-        description: form.description.trim(),
-        geometry: {
-          type: 'Point',
-          coordinates: [longitude, latitude],
+    try {
+      const stationResult = await createStation.mutateAsync({
+        input: {
+          type: form.type,
+          description: form.description.trim(),
+          geometry: {
+            type: 'Point',
+            coordinates: [longitude, latitude],
+          },
+          opHour: form.availableTime.trim() || undefined,
+          // TODO: 後端建立站點流程穩定後，再把地址/次要位置欄位一起送出。
+          // comment: form.address.trim(),
+          // source: 'user',
+          // visibility: 'public',
+          // secondaryLocation: {
+          //   locationType: form.locationType,
+          //   county: form.county.trim() || undefined,
+          //   city: form.city.trim() || undefined,
+          //   lane: form.lane.trim() || undefined,
+          //   alley: form.alley.trim() || undefined,
+          //   no: form.no.trim() || undefined,
+          //   floor: form.floor.trim() || undefined,
+          //   room: form.room.trim() || undefined,
+          //   poleId: form.poleId.trim() || undefined,
+          //   poleType: form.poleType.trim() || undefined,
+          //   poleNote: form.poleNote.trim() || undefined,
+          // },
         },
-        opHour: form.availableTime.trim() || undefined,
-        // TODO: 後端建立站點流程穩定後，再把地址/次要位置欄位一起送出。
-        // comment: form.address.trim(),
-        // source: 'user',
-        // visibility: 'public',
-        // secondaryLocation: {
-        //   locationType: form.locationType,
-        //   county: form.county.trim() || undefined,
-        //   city: form.city.trim() || undefined,
-        //   lane: form.lane.trim() || undefined,
-        //   alley: form.alley.trim() || undefined,
-        //   no: form.no.trim() || undefined,
-        //   floor: form.floor.trim() || undefined,
-        //   room: form.room.trim() || undefined,
-        //   poleId: form.poleId.trim() || undefined,
-        //   poleType: form.poleType.trim() || undefined,
-        //   poleNote: form.poleNote.trim() || undefined,
-        // },
-      },
-    });
+      });
 
-    if (stationResult.error || !stationResult.data?.createStation) {
-      const rawErrorMessage = stationResult.error?.message ?? '';
-      const normalizedErrorMessage = rawErrorMessage.toLowerCase();
+      const createdStation = stationResult.createStation;
 
-      if (
-        normalizedErrorMessage.includes('401') ||
-        normalizedErrorMessage.includes('could not validate credentials')
-      ) {
-        setSubmitError('登入狀態已失效或尚未登入，請重新登入後再建立站點。');
-        return;
-      }
+      onCreated?.(createStationRow(createdStation, form.address.trim()));
 
-      setSubmitError(rawErrorMessage || '新增站點失敗。');
-      return;
+      onCreatedMarker?.(
+        buildStationMarker(createdStation, [latitude, longitude]),
+      );
+
+      handleClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '新增站點失敗。');
     }
-
-    const createdStation = useFragment(
-      StationFieldsFragmentDoc,
-      stationResult.data.createStation,
-    );
-
-    onCreated?.(
-      createStationRow({
-        uuid: createdStation.uuid,
-        type: createdStation.type ?? form.type,
-        address: form.address.trim(),
-        description: createdStation.description ?? form.description,
-        isTemporary: form.isTemporary,
-        updatedAt: createdStation.updatedAt?.toString() ?? null,
-      }),
-    );
-
-    onCreatedMarker?.(
-      buildStationMarker({
-        uuid: createdStation.uuid,
-        type: createdStation.type,
-        description: createdStation.description,
-        opHour: createdStation.opHour,
-        level: createdStation.level,
-        comment: createdStation.comment,
-        source: createdStation.source,
-        visibility: createdStation.visibility,
-        verificationStatus: createdStation.verificationStatus,
-        isDuplicate: createdStation.isDuplicate,
-        isTemporary: createdStation.isTemporary,
-        isOfficial: createdStation.isOfficial,
-        createdAt: createdStation.createdAt?.toString() ?? null,
-        updatedAt: createdStation.updatedAt?.toString() ?? null,
-        position: [latitude, longitude],
-      }),
-    );
-
-    handleClose();
   };
 
   return (
@@ -663,9 +587,12 @@ export function StationCreateDrawer({
                 required
                 label="站點類型"
                 value={form.type}
-                onChange={(event) =>
-                  updateForm('type', event.target.value as StationTypeValue)
-                }
+                onChange={(event) => {
+                  const selected = STATION_TYPE_OPTIONS.find(
+                    (option) => option.value === event.target.value,
+                  );
+                  if (selected) updateForm('type', selected.value);
+                }}
                 fullWidth
                 size="small"
               >
@@ -759,12 +686,11 @@ export function StationCreateDrawer({
                 required
                 label="位置類型"
                 value={form.locationType}
-                onChange={(event) =>
-                  updateForm(
-                    'locationType',
-                    event.target.value as 'address' | 'pole',
-                  )
-                }
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === 'address' || value === 'pole')
+                    updateForm('locationType', value);
+                }}
                 fullWidth
                 size="small"
               >

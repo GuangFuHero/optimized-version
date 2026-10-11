@@ -3,32 +3,26 @@
 import { Box } from '@mui/material';
 import { useState, type ReactNode } from 'react';
 
+import {
+  AnnouncementFilter,
+  useAnnouncements,
+} from '@rescue-frontend/data-access/admin';
 import { AnnouncementBanner, designTokens } from '@rescue-frontend/ui';
 
-import type { AdminUser } from './account-menu';
 import { AdminHeader } from './header';
 import { useActiveAdminNavItem } from './nav';
-import { AdminSidebar, type AdminEvent } from './sidebar';
+import { AdminSidebar } from './sidebar';
 
 const { color } = designTokens;
 
 export interface AdminShellProps {
-  event: AdminEvent;
-  user: AdminUser;
-  announcement?: ReactNode;
-  onSignOut?: () => void;
   children: ReactNode;
 }
 
-export function AdminShell({
-  event,
-  user,
-  announcement,
-  onSignOut,
-  children,
-}: AdminShellProps) {
+export function AdminShell({ children }: AdminShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const activeItem = useActiveAdminNavItem();
+  const { data } = useAnnouncements({ filter: AnnouncementFilter.Active });
 
   return (
     <Box
@@ -39,9 +33,11 @@ export function AdminShell({
         overflow: 'hidden',
       }}
     >
-      {announcement ? (
-        <AnnouncementBanner>{announcement}</AnnouncementBanner>
-      ) : null}
+      {data?.announcements.map((announcement) => (
+        <AnnouncementBanner key={announcement.uuid}>
+          {announcement.content}
+        </AnnouncementBanner>
+      ))}
       <Box
         sx={{
           display: 'flex',
@@ -51,11 +47,9 @@ export function AdminShell({
         }}
       >
         <AdminSidebar
-          event={event}
           collapsed={collapsed}
           onToggle={() => setCollapsed((value) => !value)}
           activeId={activeItem?.id}
-          onSignOut={onSignOut}
         />
         <Box
           sx={{
@@ -65,11 +59,7 @@ export function AdminShell({
             flexDirection: 'column',
           }}
         >
-          <AdminHeader
-            title={activeItem?.label}
-            user={user}
-            onSignOut={onSignOut}
-          />
+          <AdminHeader title={activeItem?.label} />
           <Box
             component="main"
             sx={{

@@ -1,6 +1,6 @@
 'use client';
 
-import { AuthRequestError } from './request-async';
+import { ApiError } from '@rescue-frontend/data-access';
 
 /**
  * User-facing Chinese copy for the backend's auth error codes.
@@ -41,7 +41,8 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   // Social login
   sso_token_invalid: '第三方登入驗證失敗，請重新試一次。',
   sso_email_unverified: '這個 Google 帳號的信箱尚未驗證，請先完成驗證再登入。',
-  sso_email_taken: '這個信箱已經註冊過了。請先用原本的方式登入，再到設定裡綁定。',
+  sso_email_taken:
+    '這個信箱已經註冊過了。請先用原本的方式登入，再到設定裡綁定。',
   sso_already_linked: '這個帳號已經綁定過了。',
   sso_linked_elsewhere: '這個第三方帳號已經綁定到另一個帳號了。',
   sso_signin_race: '登入沒有完成，請再試一次。',
@@ -71,12 +72,12 @@ export function messageForCode(code: string) {
  * failure, or a backend case that has not been given copy yet.
  */
 export function resolveAuthErrorMessage(
-  error: unknown,
+  cause: unknown,
   fallback: string,
   overrides?: Record<string, string>,
 ) {
-  if (error instanceof AuthRequestError && error.code) {
-    return overrides?.[error.code] ?? MESSAGE_BY_CODE[error.code] ?? fallback;
+  if (cause instanceof ApiError && cause.code) {
+    return overrides?.[cause.code] ?? MESSAGE_BY_CODE[cause.code] ?? fallback;
   }
 
   return fallback;

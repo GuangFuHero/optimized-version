@@ -14,6 +14,8 @@
 
 `libs/ui` 目前仍只承接 design system / primitive 級責任，沒有業務流程。
 
+需要 backend 資料的視覺元件可透過 `import type` 引用 generated contracts。`Timeline` 直接接收 history events 與 changes；queries、mutations 和業務流程留在 modules 或 apps。
+
 ## `libs/modules` 現況
 
 目前採 capability-first 結構，不是以 `site` / `admin` 當第一層。
