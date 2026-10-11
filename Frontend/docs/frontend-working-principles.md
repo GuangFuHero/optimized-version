@@ -43,7 +43,6 @@ modules -> data-access
 - `apps/demo/src/app/api/graphql/route.ts`
 - `apps/demo/src/app/api/bff/auth/[[...segments]]/route.ts`
 - `apps/demo/src/app/(site)/map/[[...segments]]/*`
-- `apps/demo/src/modules/auth/session/*`
 
 ### `libs/ui`
 
