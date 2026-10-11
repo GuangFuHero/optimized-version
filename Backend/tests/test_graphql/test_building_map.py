@@ -185,11 +185,12 @@ async def test_ticket_in_building_rejects_a_place_outside_the_layout(
     {"floor": "B1"},
     {"floor": "RF"},
     {},
+    {"floor": "", "room": "大廳"},
 ])
 async def test_ticket_in_building_accepts_other_and_free_text_rooms(
     client, coordinator_auth, login_user_auth, location
 ):
-    """其他 is offered where areas exist, other floors take any room, and RF or no floor is fine."""
+    """其他 is offered where areas exist, other floors take any room, and RF or an unknown floor is fine."""
     _, admin_token = coordinator_auth
     _, token = login_user_auth
     building = await _create_building(client, admin_token)

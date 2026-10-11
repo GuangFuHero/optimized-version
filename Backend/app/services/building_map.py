@@ -138,8 +138,8 @@ async def place_ticket(
 ) -> tuple[dict, dict]:
     """Return a ticket's point and address: the building's, plus the reporter's floor and room.
 
-    The floor must be one of the building's or left out when unknown, and on a floor with areas the
-    room must be one of them or `其他`.
+    The floor must be one of the building's, or left out or blank when unknown, and on a floor with
+    areas the room must be one of them or `其他`.
     """
     if geometry is not None:
         raise ValueError("Omit geometry when filing under a building map; its point is used")
@@ -147,7 +147,8 @@ async def place_ticket(
     if not building:
         raise ValueError("Building map not found")
     location = dict(location or {})
-    floor = location.get("floor")
+    # A "don't know" select sends an empty string, which is stored as an unknown floor.
+    floor = location["floor"] = location.get("floor") or None
     labels = floor_labels(building.floors_above_ground, building.floors_below_ground)
     if floor is not None and floor not in labels:
         raise ValueError(f"Floor '{floor}' is not in this building")
