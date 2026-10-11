@@ -1,6 +1,7 @@
 'use client';
 
-import MoreHorizRoundedIcon from '@mui/icons-material/MoreHorizRounded';
+import { Ellipsis } from 'lucide-react';
+
 import { Box, ButtonBase, Typography } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
@@ -368,7 +369,10 @@ function OverflowButton({ onClick }: { onClick?: () => void }) {
         color: ticketListPalette.bodyText,
       }}
     >
-      <MoreHorizRoundedIcon sx={{ width: 16, height: 16, color: 'inherit' }} />
+      <Box
+        component={Ellipsis}
+        sx={{ width: 16, height: 16, color: 'inherit' }}
+      />
     </ButtonBase>
   );
 }

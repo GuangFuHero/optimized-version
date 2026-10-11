@@ -1,11 +1,14 @@
 'use client';
 
-import FileUploadRoundedIcon from '@mui/icons-material/FileUploadRounded';
-import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+import { Upload, SlidersHorizontal } from 'lucide-react';
+
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
-import { TicketListIconSlot, ticketListPalette } from './ticket-list-primitives';
+import {
+  TicketListIconSlot,
+  ticketListPalette,
+} from './ticket-list-primitives';
 import type { TicketListActionItem, TicketListHeaderProps } from './types';
 
 const PlusIcon = Icons.plus;
@@ -15,13 +18,13 @@ function createDefaultActions(): readonly TicketListActionItem[] {
     {
       id: 'export',
       label: '匯出',
-      icon: <FileUploadRoundedIcon />,
+      icon: <Upload />,
       variant: 'outlined',
     },
     {
       id: 'field-config',
       label: '欄位設定',
-      icon: <TuneRoundedIcon />,
+      icon: <SlidersHorizontal />,
       variant: 'outlined',
     },
     {

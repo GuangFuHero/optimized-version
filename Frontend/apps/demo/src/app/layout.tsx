@@ -1,8 +1,8 @@
 import InitColorSchemeScript from '@mui/material/InitColorSchemeScript';
 import { Inter, Noto_Sans_TC, Nunito } from 'next/font/google';
 
+import { Providers } from '@rescue-frontend/modules';
 import { fontVariables } from '@rescue-frontend/ui';
-import { Providers } from '../providers/index.providers';
 import './global.css';
 
 /**

@@ -1,9 +1,7 @@
 'use client';
 
-import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
-import MyLocationRoundedIcon from '@mui/icons-material/MyLocationRounded';
-import OpenWithRoundedIcon from '@mui/icons-material/OpenWithRounded';
-import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
+import { CircleAlert, LocateFixed, Move, MapPin } from 'lucide-react';
+
 import { Box, Button, Stack, Typography } from '@mui/material';
 import dynamic from 'next/dynamic';
 import {
@@ -181,17 +179,13 @@ export function LocationPicker({
         <LocationPickerCanvas value={value} onPick={handlePick} />
         {/* Said while there is a pin too: that it drags is otherwise told nowhere (designer, a004385). */}
         {status === 'locating' ? (
-          <HintPill icon={<MyLocationRoundedIcon />}>
-            正在取得目前定位…
-          </HintPill>
+          <HintPill icon={<LocateFixed />}>正在取得目前定位…</HintPill>
         ) : value ? (
-          <HintPill icon={<OpenWithRoundedIcon />}>
+          <HintPill icon={<Move />}>
             可拖曳大頭針微調，或點地圖其他位置
           </HintPill>
         ) : (
-          <HintPill icon={<PlaceRoundedIcon />}>
-            點地圖任一處放置大頭針
-          </HintPill>
+          <HintPill icon={<MapPin />}>點地圖任一處放置大頭針</HintPill>
         )}
       </Box>
 
@@ -202,7 +196,9 @@ export function LocationPicker({
         <Button
           variant="outlined"
           size="small"
-          startIcon={<MyLocationRoundedIcon sx={{ fontSize: 16 }} />}
+          startIcon={
+            <Box component={LocateFixed} sx={{ width: 16, height: 16 }} />
+          }
           onClick={() => locate(true)}
           disabled={status === 'locating'}
         >
@@ -228,7 +224,7 @@ export function LocationPicker({
           direction="row"
           sx={{ alignItems: 'center', gap: 0.75, color: color.fg.danger }}
         >
-          <ErrorOutlineRoundedIcon sx={{ fontSize: 14 }} />
+          <Box component={CircleAlert} sx={{ width: 14, height: 14 }} />
           <Typography sx={{ fontSize: displayTextSize[12], lineHeight: 1.5 }}>
             拿不到定位，請在地圖上點一下
           </Typography>

@@ -1,0 +1,261 @@
+'use client';
+
+import { Alert, Button, TextField } from '@mui/material';
+import { signIn } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { startTransition, useState } from 'react';
+
+import {
+  type AuthIdentityType,
+} from '@rescue-frontend/data-access';
+import {
+  AuthFormError,
+  authHref,
+  RegisterForm,
+} from './index';
+import {
+  registerAsync,
+  resendVerificationAsync,
+  verifyAsync,
+} from '../api/client';
+import { resolveAuthErrorMessage } from '../api/error-messages';
+import { AuthActionCard } from '../shared/auth-action-card';
+import { createHashedCredentialAsync } from './credentials';
+
+const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
+  email:
+    '此電子郵件已經註冊過了，請直接登入。若當初是用 Google 或 LINE 註冊，請改用該方式登入。',
+  phone: '此手機號碼已經註冊過了，請直接登入。',
+};
+
+const VERIFY_FALLBACK_MESSAGE = '驗證失敗，請稍後再試。';
+const RESEND_FALLBACK_MESSAGE = '重新發送失敗，請稍後再試。';
+
+/**
+ * The account exists by this point — the code was accepted and only the automatic sign-in failed.
+ * Telling the user "verification failed" would send them back to register and straight into a 409.
+ */
+const SIGN_IN_FAILED_MESSAGE =
+  '帳號已建立完成，但自動登入沒有成功。請返回登入頁手動登入。';
+
+class SignInFailedError extends Error {}
+
+interface PendingRegistration {
+  identityType: AuthIdentityType;
+  normalizedIdentity: string;
+}
+
+export function RegisterFormClient() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // The page the login page was asked to return to, carried here — a guest who pressed 「登入後接」
+  // and had no account yet lands back on that ticket. Nothing asked: the map.
+  const requestedCallbackUrl = searchParams.get('callbackUrl');
+  const callbackUrl = requestedCallbackUrl ?? '/map';
+  const [pendingRegistration, setPendingRegistration] =
+    useState<PendingRegistration | null>(null);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationError, setVerificationError] = useState<string>();
+  const [verificationSuccess, setVerificationSuccess] = useState<string>();
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+
+  async function handleVerificationAsync() {
+    if (!pendingRegistration || isVerifying) {
+      return;
+    }
+
+    const code = verificationCode.trim();
+
+    if (!code) {
+      setVerificationError('請輸入驗證碼');
+      return;
+    }
+
+    setIsVerifying(true);
+    setVerificationError(undefined);
+    setVerificationSuccess(undefined);
+
+    try {
+      const tokenPair = await verifyAsync({
+        type: pendingRegistration.identityType,
+        value: pendingRegistration.normalizedIdentity,
+        code,
+      });
+
+      // Past this line the account exists. Every way sign-in can fail — a returned `error`, a
+      // thrown network blip, a 500 from the next-auth route — means the same thing to the user, so
+      // they all have to arrive as the same error. Letting a throw escape to the outer catch would
+      // report "verification failed" and send them back to register, straight into a 409.
+      let result: Awaited<ReturnType<typeof signIn>>;
+
+      try {
+        result = await signIn('credentials', {
+          username: pendingRegistration.normalizedIdentity,
+          password: '',
+          accessToken: tokenPair.access_token,
+          refreshToken: tokenPair.refresh_token,
+          tokenType: tokenPair.token_type ?? 'bearer',
+          expiresIn: String(tokenPair.expires_in),
+          callbackUrl,
+          redirect: false,
+        });
+      } catch (error) {
+        throw new SignInFailedError(
+          error instanceof Error ? error.message : 'sign-in threw',
+        );
+      }
+
+      if (result?.error) {
+        throw new SignInFailedError(result.error);
+      }
+
+      setVerificationSuccess('帳號驗證完成，正在登入。');
+
+      startTransition(() => {
+        router.replace(result?.url ?? callbackUrl, { scroll: false });
+      });
+    } catch (error) {
+      setVerificationError(
+        error instanceof SignInFailedError
+          ? SIGN_IN_FAILED_MESSAGE
+          : resolveAuthErrorMessage(error, VERIFY_FALLBACK_MESSAGE),
+      );
+    } finally {
+      setIsVerifying(false);
+    }
+  }
+
+  async function handleResendAsync() {
+    if (!pendingRegistration || isResending) {
+      return;
+    }
+
+    setIsResending(true);
+    setVerificationError(undefined);
+    setVerificationSuccess(undefined);
+
+    try {
+      await resendVerificationAsync({
+        type: pendingRegistration.identityType,
+        value: pendingRegistration.normalizedIdentity,
+      });
+      setVerificationSuccess('已重新發送驗證碼。');
+    } catch (error) {
+      setVerificationError(
+        resolveAuthErrorMessage(error, RESEND_FALLBACK_MESSAGE),
+      );
+    } finally {
+      setIsResending(false);
+    }
+  }
+
+  if (pendingRegistration) {
+    return (
+      <AuthActionCard
+        title="輸入驗證碼"
+        description={`驗證碼已寄送到 ${pendingRegistration.normalizedIdentity}`}
+      >
+        <TextField
+          label="驗證碼"
+          value={verificationCode}
+          onChange={(event) => setVerificationCode(event.target.value)}
+          placeholder="請輸入 6 碼驗證碼"
+          disabled={isVerifying}
+          autoComplete="one-time-code"
+        />
+
+        {verificationError ? (
+          <Alert severity="error">{verificationError}</Alert>
+        ) : null}
+
+        {verificationSuccess ? (
+          <Alert severity="success">{verificationSuccess}</Alert>
+        ) : null}
+
+        <Button
+          variant="contained"
+          disabled={isVerifying || verificationCode.trim().length === 0}
+          onClick={() => {
+            void handleVerificationAsync();
+          }}
+        >
+          完成驗證
+        </Button>
+
+        <Button
+          variant="text"
+          disabled={isResending}
+          onClick={() => {
+            void handleResendAsync();
+          }}
+        >
+          重新發送驗證碼
+        </Button>
+
+        <Button
+          variant="text"
+          onClick={() => {
+            setPendingRegistration(null);
+            setVerificationCode('');
+            setVerificationError(undefined);
+            setVerificationSuccess(undefined);
+          }}
+        >
+          返回上一頁
+        </Button>
+      </AuthActionCard>
+    );
+  }
+
+  return (
+    <RegisterForm
+      onSubmitAsync={async ({
+        identityType,
+        normalizedIdentity,
+        password,
+        name,
+      }) => {
+        const trimmedName = name?.trim();
+
+        if (!trimmedName) {
+          throw new AuthFormError('請輸入顯示名稱');
+        }
+
+        const { saltFrontend, hashedPassword } =
+          await createHashedCredentialAsync(password);
+
+        try {
+          await registerAsync({
+            name: trimmedName,
+            password: hashedPassword,
+            salt_frontend: saltFrontend,
+            type: identityType,
+            value: normalizedIdentity,
+          });
+        } catch (error) {
+          throw new AuthFormError(
+            resolveAuthErrorMessage(error, '註冊失敗，請稍後再試。', {
+              identifier_taken: IDENTITY_TAKEN_MESSAGE[identityType],
+            }),
+          );
+        }
+
+        setPendingRegistration({
+          identityType,
+          normalizedIdentity,
+        });
+      }}
+      successMessage="註冊請求已送出，請輸入驗證碼完成啟用。"
+      secondaryActionLabel="返回登入"
+      onSecondaryAction={() => {
+        startTransition(() => {
+          router.push(
+            authHref('/login', { callbackUrl: requestedCallbackUrl }),
+            { scroll: false },
+          );
+        });
+      }}
+    />
+  );
+}
