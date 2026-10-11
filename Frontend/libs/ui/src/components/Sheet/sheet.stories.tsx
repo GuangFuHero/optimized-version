@@ -1,17 +1,18 @@
-import { Box, Button, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
 import { Badge } from '../Badge';
+import { Button } from '../Button';
 import { MetadataTable } from '../MetadataTable';
 import { Sheet, type SheetProps } from './index';
 
 function SheetDemo(props: Omit<SheetProps, 'open' | 'onClose'>) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button variant="outlined" onClick={() => setOpen(true)}>
+      <Button variant="outline" onClick={() => setOpen(true)}>
         開啟
       </Button>
       <Sheet {...props} open={open} onClose={() => setOpen(false)} />
@@ -24,7 +25,7 @@ const meta = {
   component: Sheet,
   render: (args) => <SheetDemo {...args} />,
   args: {
-    open: true,
+    open: false,
     onClose: () => undefined,
     eyebrow: '#TK-1042',
     title: '民宅一樓淤泥清除',
@@ -32,8 +33,10 @@ const meta = {
     headerContent: <Badge tone="warning">待指派</Badge>,
     footer: (
       <>
-        <Button>關閉</Button>
-        <Button variant="contained">指派 Team</Button>
+        <Button variant="secondary" size="sm">
+          關閉
+        </Button>
+        <Button size="sm">指派 Team</Button>
       </>
     ),
     children: (
