@@ -35,6 +35,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: pnpm install --frozen-lockfile
+      - run: pnpm schemas:generate
+      - run: git diff --exit-code
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
