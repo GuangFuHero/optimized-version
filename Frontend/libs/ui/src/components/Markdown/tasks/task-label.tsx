@@ -4,10 +4,9 @@ import { CheckboxProps, useCheckbox } from './hooks';
 export function TaskLabel({
   articleId,
   checkboxId,
-  defaultChecked,
   children,
 }: PropsWithChildren<CheckboxProps>) {
-  const { checkbox } = useCheckbox({ articleId, checkboxId, defaultChecked });
+  const { checkbox } = useCheckbox({ articleId, checkboxId });
 
   return (
     <div data-task-key={checkboxId} data-task-checked={checkbox}>

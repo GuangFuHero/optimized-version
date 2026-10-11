@@ -4,14 +4,9 @@ import { CheckboxProps, useCheckbox } from './hooks';
 export function Checkbox({
   articleId,
   checkboxId,
-  defaultChecked,
   ...props
 }: CheckboxProps & InputHTMLAttributes<HTMLInputElement>) {
-  const { checkbox, setCheckbox } = useCheckbox({
-    articleId,
-    checkboxId,
-    defaultChecked,
-  });
+  const { checkbox, setCheckbox } = useCheckbox({ articleId, checkboxId });
 
   return (
     <input
