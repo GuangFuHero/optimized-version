@@ -60,9 +60,8 @@ ROLES_DATA = [
             # hard-coded "logged in" so it can be narrowed here or at /admin/rbac, e.g. to
             # `own` once the volunteer flow can hand out detail on sign-up instead.
             Perm.TICKET_VIEW_DETAIL: "all",
-            # `own` lets a requester follow their own ticket on the public site without exposing
-            # anyone else's. It also gates who claimed a need: the requester sees who is coming,
-            # other citizens do not.
+            # `own` lets a requester follow their own ticket on the public site, including who is
+            # coming to help, without exposing anyone else's.
             Perm.TICKET_VIEW_HISTORY: "own",
             Perm.STATION_VIEW_HISTORY: "own",
             Perm.TICKET_ADD: "all",
@@ -182,7 +181,7 @@ ROLES_DATA = [
             Perm.TICKET_REVIEW: "zone",
             Perm.TEAM_VIEW: "team",
             Perm.TEAM_MEMBER_MANAGE: "team",
-            Perm.ANN_VIEW_ADMIN: "all",  # see data_auditor above
+            Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.ZONE_VIEW: "all",
             Perm.ZONE_ADD: "all",
             Perm.ZONE_EDIT: "all",
@@ -231,7 +230,7 @@ ROLES_DATA = [
             # ADR-312: field workers review the tickets and needs in their zone, as admins do.
             Perm.TICKET_REVIEW: "zone",
             Perm.TEAM_VIEW: "team",
-            Perm.ANN_VIEW_ADMIN: "all",  # see data_auditor above
+            Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
         },
     },
 ]

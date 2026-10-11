@@ -173,9 +173,11 @@ async def _listed(client, mine, query, variables=None, token=None):
 async def _notified(ref_uuid):
     async with _test_db() as db:
         rows = await db.execute(
-            select(Notification.recipient_uuid).where(Notification.ref_uuid == UUID(ref_uuid))
+            select(Notification.recipient_uuid, Notification.body).where(
+                Notification.ref_uuid == UUID(ref_uuid)
+            )
         )
-        return {str(u) for u in rows.scalars()}
+        return {str(u): body for u, body in rows}
 
 
 @pytest.mark.asyncio
@@ -199,7 +201,7 @@ async def test_placement_controls_which_page_lists_it(client, content_admin_auth
 
 @pytest.mark.asyncio
 async def test_admin_page_needs_view_admin(client, redis, content_admin_auth, login_user_auth):
-    """Guests and plain accounts can't read admin-page rows or get notified of them; staff can."""
+    """Guests and plain accounts can't read admin-page rows or get notified; staff are, without the text."""
     _, admin_token = content_admin_auth
     user_uuid, user_token = login_user_auth
     staff_uuid, staff_token = await _create_user_with_role(redis, "Content Admin")
@@ -214,6 +216,7 @@ async def test_admin_page_needs_view_admin(client, redis, content_admin_auth, lo
 
     notified = await _notified(admin_only)
     assert staff_uuid in notified
+    assert "admin only" not in notified[staff_uuid]
     assert user_uuid not in notified
 
 

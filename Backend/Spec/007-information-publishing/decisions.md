@@ -214,8 +214,8 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
   grant 的帳號都是 403）。單筆 `announcement(uuid)` 讀到 `admin_page` 的公告時也一樣。
 - seed 把 `announcement.view_admin` 給 `data_auditor`、`super_admin`、團隊 `admin` 與 `member`；自行註冊
   拿到的 `user` 沒有。
-- 發布或重新啟用 `admin_page` 公告時，通知只送給持有 `announcement.view_admin` 的帳號；其他 placement
-  照舊送給所有啟用中的帳號。
+- 發布或重新啟用 `admin_page` 公告時，通知只送給持有 `announcement.view_admin` 的帳號，標題是「📢 後台公告」，
+  內文不帶公告內容；其他 placement 照舊送給所有啟用中的帳號，內文是公告的前 80 字。
 
 ```
 排序（全站一條）           匿名 → 前台               工作人員 → 後台
@@ -233,8 +233,10 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 這類公告要留在工作人員之間。現有的兩個 key 都不合用：`announcement.view` 是公開的，`announcement.edit`
 只有 `super_admin` 有，團隊協調員會被擋在外面。
 
-**為什麼通知也要收窄**：通知內文帶公告的前 80 字。只擋讀取、通知照樣全站廣播的話，一般使用者還是會在
-通知裡看到內容。
+**為什麼通知要收窄，而且不帶內容**：通知原本帶公告的前 80 字並全站廣播，只擋讀取的話，一般使用者還是會在
+通知裡看到內容，所以收件人收窄到持有這個 key 的帳號。但通知送的是帳號，讀取看的是這次登入的身分
+（ADR-097）：團隊成員以 `user` 身分登入時讀不到，帳號卻仍持有這個 key。發通知時沒有身分可查，所以通知只說
+有新的後台公告，內容一律交給讀取把關，跟站點修改建議、重複標記等通知的做法一樣。
 
 **Consequences**：
 ➕ 既有的匿名呼叫結果不變，而且永遠拿不到 `admin_page` 的公告。
@@ -242,6 +244,9 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 ➕ 自行註冊的帳號讀不到 `admin_page` 公告，也收不到它的通知。
 ◾ 不用 migration：部署時會跑 `seed_rbac.py`，它只補缺少的 grant，新 key 下次部署就會發給上述角色。
 ➖ 單一頁面上的 `order` 會跳號（上例前台是 1、3、4）；前端要照 `order` 排序，不能把它當名次顯示。
-➖ 身分一次只有一個（ADR-097）：團隊成員切回個人的 `user` 身分時，看不到 `admin_page` 公告。在
-  `/admin/rbac` 新建的角色也要手動給這個 key。
+➖ 讀取看的是這次登入的身分（ADR-097），而登入一律先落在 `user`（ADR-290，Spec 019），超管也一樣。前端
+  登入不帶 `scope`、也還沒有切換身分的介面，所以補上之前，後台人員都讀不到 `admin_page` 公告，只會收到不帶
+  內容的通知。這跟其他後台端點一樣：發布、編輯公告要的 `announcement.publish`、`announcement.edit`，`user`
+  也沒有。
+➖ 在 `/admin/rbac` 新建的角色要手動給這個 key。
 ➖ 前端的 `/admin` 仍然只檢查登入。一般使用者打開時，後台公告的查詢會回 403，前端要把它當成空清單。
