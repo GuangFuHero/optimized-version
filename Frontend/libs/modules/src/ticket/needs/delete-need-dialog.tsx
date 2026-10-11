@@ -3,17 +3,7 @@
 import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import { useCallback, useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from 'urql';
 
@@ -23,7 +13,7 @@ import {
   TicketFieldsFragmentDoc,
   useFragment,
 } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, Dialog, displayTextSize } from '@rescue-frontend/ui';
 
 import { deleteNeedErrorMessage, isNeedAlreadyGone } from './claim-error';
 import { describeNeedDeletion } from './delete-need';
@@ -34,7 +24,7 @@ import {
   TICKET_NEEDS_QUERY_CONTEXT,
 } from './use-ticket-needs';
 
-const { color, radius, shadow } = designTokens;
+const { color, radius } = designTokens;
 
 interface DeleteNeedDialogProps {
   open: boolean;
@@ -190,139 +180,71 @@ export function DeleteNeedDialog({
   return (
     <Dialog
       open={open}
-      onClose={submitting ? undefined : onCancel}
-      fullWidth
-      maxWidth="xs"
-      slotProps={{
-        transition: { onExited },
-        paper: {
-          sx: {
-            m: { mobile: 2, tablet: 4 },
-            width: { mobile: 'calc(100% - 32px)', tablet: 'calc(100% - 64px)' },
-            borderRadius: `${radius.lg}px`,
-            bgcolor: color.bg.neutral.default,
-            boxShadow: shadow.lg,
-            backgroundImage: 'none',
-          },
-        },
-      }}
+      onClose={onCancel}
+      onConfirm={onConfirm}
+      title="刪除這筆需求？"
+      confirmLabel={submitting ? '刪除中...' : '刪除'}
+      confirmIcon={<DeleteOutlineRoundedIcon />}
+      confirmTone="danger"
+      confirmDisabled={!need}
+      cancelLabel={gone ? '關閉' : '取消'}
+      error={error}
+      submitting={submitting}
+      onExited={onExited}
     >
-      <DialogTitle
+      <Box
         sx={{
-          px: 3,
-          pt: 3,
-          pb: 1.5,
-          color: color.fg.neutral.default,
-          fontSize: displayTextSize[20],
-          lineHeight: 1.4,
-          fontWeight: 700,
+          p: 2,
+          borderRadius: `${radius.md}px`,
+          bgcolor: color.bg.neutral.subtle,
+          border: `1px solid ${color.border.default}`,
         }}
       >
-        刪除這筆需求？
-      </DialogTitle>
-
-      <DialogContent sx={{ px: 3, pb: 1 }}>
-        <Stack spacing={2}>
-          <Box
-            sx={{
-              p: 2,
-              borderRadius: `${radius.md}px`,
-              bgcolor: color.bg.neutral.subtle,
-              border: `1px solid ${color.border.default}`,
-            }}
-          >
-            {need && fields ? (
-              <>
-                <Typography
-                  sx={{
-                    color: color.fg.neutral.default,
-                    fontSize: displayTextSize[16],
-                    lineHeight: 1.4,
-                    fontWeight: 700,
-                  }}
-                >
-                  {need.taskName}
-                </Typography>
-                <Stack
-                  spacing={0.5}
-                  sx={{ mt: 0.75, color: color.fg.neutral.subtle }}
-                >
-                  <DetailLine icon={<AssignmentRoundedIcon />}>
-                    {fields.title}
-                  </DetailLine>
-                  <DetailLine icon={<GroupsRoundedIcon />}>
-                    {headcount}
-                  </DetailLine>
-                </Stack>
-              </>
-            ) : (
-              <Typography
-                sx={{
-                  color: color.fg.neutral.muted,
-                  fontSize: displayTextSize[13],
-                }}
-              >
-                {gone ? '找不到這筆需求，可能已經被刪除。' : '載入中...'}
-              </Typography>
-            )}
-          </Box>
-
-          {need ? (
+        {need && fields ? (
+          <>
             <Typography
               sx={{
-                color: color.fg.neutral.muted,
-                fontSize: displayTextSize[13],
-                lineHeight: 1.6,
+                color: color.fg.neutral.default,
+                fontSize: displayTextSize[16],
+                lineHeight: 1.4,
+                fontWeight: 700,
               }}
             >
-              {describeNeedDeletion(need, needs)}
+              {need.taskName}
             </Typography>
-          ) : null}
+            <Stack
+              spacing={0.5}
+              sx={{ mt: 0.75, color: color.fg.neutral.subtle }}
+            >
+              <DetailLine icon={<AssignmentRoundedIcon />}>
+                {fields.title}
+              </DetailLine>
+              <DetailLine icon={<GroupsRoundedIcon />}>{headcount}</DetailLine>
+            </Stack>
+          </>
+        ) : (
+          <Typography
+            sx={{
+              color: color.fg.neutral.muted,
+              fontSize: displayTextSize[13],
+            }}
+          >
+            {gone ? '找不到這筆需求，可能已經被刪除。' : '載入中...'}
+          </Typography>
+        )}
+      </Box>
 
-          {error ? <Alert severity="error">{error}</Alert> : null}
-        </Stack>
-      </DialogContent>
-
-      <DialogActions sx={{ px: 3, pt: 1, pb: 3, gap: 1.5 }}>
-        <Button
-          onClick={onCancel}
-          disabled={submitting}
-          variant="outlined"
-          color="inherit"
+      {need ? (
+        <Typography
           sx={{
-            flex: 1,
-            height: 44,
-            whiteSpace: 'nowrap',
-            borderRadius: `${radius.full}px`,
-            borderColor: color.border.default,
-            color: color.fg.neutral.subtle,
+            color: color.fg.neutral.muted,
+            fontSize: displayTextSize[13],
+            lineHeight: 1.6,
           }}
         >
-          {gone ? '關閉' : '取消'}
-        </Button>
-        <Button
-          onClick={onConfirm}
-          disabled={submitting || !need}
-          variant="contained"
-          disableElevation
-          startIcon={<DeleteOutlineRoundedIcon />}
-          sx={{
-            flex: 1,
-            height: 44,
-            whiteSpace: 'nowrap',
-            borderRadius: `${radius.full}px`,
-            bgcolor: color.bg.danger.default,
-            color: color.fg.onDanger,
-            '&:hover': { bgcolor: color.bg.danger.hover },
-            '&.Mui-disabled': {
-              bgcolor: color.bg.disable,
-              color: color.fg.disable,
-            },
-          }}
-        >
-          {submitting ? '刪除中...' : '刪除'}
-        </Button>
-      </DialogActions>
+          {describeNeedDeletion(need, needs)}
+        </Typography>
+      ) : null}
     </Dialog>
   );
 }

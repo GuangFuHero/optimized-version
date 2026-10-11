@@ -2,17 +2,7 @@
 
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded';
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import { useCallback, useState } from 'react';
 import { useMutation, useQuery } from 'urql';
 
@@ -22,7 +12,7 @@ import {
   TicketFieldsFragmentDoc,
   useFragment,
 } from '@rescue-frontend/data-access';
-import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, Dialog, displayTextSize } from '@rescue-frontend/ui';
 
 import { SiteToast } from '../../shell/site/site-toast';
 import { deleteTicketErrorMessage, isTicketAlreadyGone } from './claim-error';
@@ -32,7 +22,7 @@ import {
   TICKET_NEEDS_QUERY_CONTEXT,
 } from './use-ticket-needs';
 
-const { color, radius, shadow } = designTokens;
+const { color, radius } = designTokens;
 
 interface DeleteTicketDialogProps {
   open: boolean;
@@ -171,156 +161,87 @@ export function DeleteTicketDialog({
     <>
       <Dialog
         open={open}
-        onClose={submitting ? undefined : onCancel}
-        fullWidth
-        maxWidth="xs"
-        slotProps={{
-          transition: { onExited },
-          paper: {
-            sx: {
-              m: { mobile: 2, tablet: 4 },
-              width: {
-                mobile: 'calc(100% - 32px)',
-                tablet: 'calc(100% - 64px)',
-              },
-              borderRadius: `${radius.lg}px`,
-              bgcolor: color.bg.neutral.default,
-              boxShadow: shadow.lg,
-              backgroundImage: 'none',
-            },
-          },
-        }}
+        onClose={onCancel}
+        onConfirm={() => fields && onConfirm(fields.title)}
+        title="刪除整張單？"
+        confirmLabel={submitting ? '刪除中...' : '刪除'}
+        confirmIcon={<DeleteOutlineRoundedIcon />}
+        confirmTone="danger"
+        confirmDisabled={!fields}
+        cancelLabel={gone ? '關閉' : '取消'}
+        error={error}
+        submitting={submitting}
+        onExited={onExited}
       >
-        <DialogTitle
+        <Box
           sx={{
-            px: 3,
-            pt: 3,
-            pb: 1.5,
-            color: color.fg.neutral.default,
-            fontSize: displayTextSize[20],
-            lineHeight: 1.4,
-            fontWeight: 700,
+            p: 2,
+            borderRadius: `${radius.md}px`,
+            bgcolor: color.bg.neutral.subtle,
+            border: `1px solid ${color.border.default}`,
           }}
         >
-          刪除整張單？
-        </DialogTitle>
-
-        <DialogContent sx={{ px: 3, pb: 1 }}>
-          <Stack spacing={2}>
-            <Box
-              sx={{
-                p: 2,
-                borderRadius: `${radius.md}px`,
-                bgcolor: color.bg.neutral.subtle,
-                border: `1px solid ${color.border.default}`,
-              }}
-            >
-              {fields ? (
-                <>
-                  <Typography
-                    sx={{
-                      color: color.fg.neutral.default,
-                      fontSize: displayTextSize[16],
-                      lineHeight: 1.4,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {fields.title}
-                  </Typography>
-                  <Stack
-                    direction="row"
-                    sx={{
-                      mt: 0.75,
-                      gap: 0.75,
-                      alignItems: 'flex-start',
-                      color: color.fg.neutral.subtle,
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        placeItems: 'center',
-                        mt: '3px',
-                        '& svg': { fontSize: 14 },
-                      }}
-                    >
-                      <VolunteerActivismRoundedIcon />
-                    </Box>
-                    <Typography
-                      sx={{ fontSize: displayTextSize[13], lineHeight: 1.6 }}
-                    >
-                      {formatTicketNeedCount(needs.length)}
-                    </Typography>
-                  </Stack>
-                </>
-              ) : (
-                <Typography
-                  sx={{
-                    color: color.fg.neutral.muted,
-                    fontSize: displayTextSize[13],
-                  }}
-                >
-                  {gone ? '找不到這張單，可能已經被刪除。' : '載入中...'}
-                </Typography>
-              )}
-            </Box>
-
-            {fields ? (
+          {fields ? (
+            <>
               <Typography
                 sx={{
-                  color: color.fg.neutral.muted,
-                  fontSize: displayTextSize[13],
-                  lineHeight: 1.6,
+                  color: color.fg.neutral.default,
+                  fontSize: displayTextSize[16],
+                  lineHeight: 1.4,
+                  fontWeight: 700,
                 }}
               >
-                {describeTicketDeletion(needs)}
+                {fields.title}
               </Typography>
-            ) : null}
+              <Stack
+                direction="row"
+                sx={{
+                  mt: 0.75,
+                  gap: 0.75,
+                  alignItems: 'flex-start',
+                  color: color.fg.neutral.subtle,
+                }}
+              >
+                <Box
+                  sx={{
+                    display: 'grid',
+                    placeItems: 'center',
+                    mt: '3px',
+                    '& svg': { fontSize: 14 },
+                  }}
+                >
+                  <VolunteerActivismRoundedIcon />
+                </Box>
+                <Typography
+                  sx={{ fontSize: displayTextSize[13], lineHeight: 1.6 }}
+                >
+                  {formatTicketNeedCount(needs.length)}
+                </Typography>
+              </Stack>
+            </>
+          ) : (
+            <Typography
+              sx={{
+                color: color.fg.neutral.muted,
+                fontSize: displayTextSize[13],
+              }}
+            >
+              {gone ? '找不到這張單，可能已經被刪除。' : '載入中...'}
+            </Typography>
+          )}
+        </Box>
 
-            {error ? <Alert severity="error">{error}</Alert> : null}
-          </Stack>
-        </DialogContent>
-
-        <DialogActions sx={{ px: 3, pt: 1, pb: 3, gap: 1.5 }}>
-          <Button
-            onClick={onCancel}
-            disabled={submitting}
-            variant="outlined"
-            color="inherit"
+        {fields ? (
+          <Typography
             sx={{
-              flex: 1,
-              height: 44,
-              whiteSpace: 'nowrap',
-              borderRadius: `${radius.full}px`,
-              borderColor: color.border.default,
-              color: color.fg.neutral.subtle,
+              color: color.fg.neutral.muted,
+              fontSize: displayTextSize[13],
+              lineHeight: 1.6,
             }}
           >
-            {gone ? '關閉' : '取消'}
-          </Button>
-          <Button
-            onClick={() => fields && onConfirm(fields.title)}
-            disabled={submitting || !fields}
-            variant="contained"
-            disableElevation
-            startIcon={<DeleteOutlineRoundedIcon />}
-            sx={{
-              flex: 1,
-              height: 44,
-              whiteSpace: 'nowrap',
-              borderRadius: `${radius.full}px`,
-              bgcolor: color.bg.danger.default,
-              color: color.fg.onDanger,
-              '&:hover': { bgcolor: color.bg.danger.hover },
-              '&.Mui-disabled': {
-                bgcolor: color.bg.disable,
-                color: color.fg.disable,
-              },
-            }}
-          >
-            {submitting ? '刪除中...' : '刪除'}
-          </Button>
-        </DialogActions>
+            {describeTicketDeletion(needs)}
+          </Typography>
+        ) : null}
       </Dialog>
 
       <SiteToast
