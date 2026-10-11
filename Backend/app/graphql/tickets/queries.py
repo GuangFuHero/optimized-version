@@ -17,10 +17,12 @@ from app.core.rbac_scopes import Scope, in_scope, scope_filter
 from app.core.search import normalize_query, search_timeout
 from app.core.security import resolve_scope
 from app.db.h3 import coarse_resolution
-from app.graphql.context import check_permission
+from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import BoundsInput
 from app.graphql.shared import PageInfo
 from app.graphql.tickets.types import (
+    MyTaskAssignmentType,
+    TaskAssignmentType,
     TaskPropertyType,
     TicketConnection,
     TicketTaskType,
@@ -33,12 +35,17 @@ from app.repositories.tickets_repository import (
     ticket_repository,
     ticket_task_repository,
 )
+from app.services import ticket as ticket_service
 
 _ZOOM_DESCRIPTION = (
     "Map zoom the result is for. Only affects a caller without ticket.view_detail: sets how "
     "coarse the H3 cell standing in for each point is — coarser as the map zooms out, never "
     "finer than resolution 8 whatever is sent"
 )
+
+# The most rows one `tickets` page may ask for: the site's map asks for 200 at a time
+# (use-site-map-live-data.ts). Without a ceiling one request could fetch every ticket at once.
+TICKET_LIST_MAX_LIMIT = 200
 
 
 async def _detail_filters(info: strawberry.types.Info) -> list:
@@ -96,7 +103,13 @@ class RequestQuery:
         Without ticket.view_detail, `bounds` matches a row by the cell centre the caller is
         shown and `q` by its title and task names only (ADR-281/282) — each row on what
         this caller can read of it, so neither filter recovers what the fields withhold.
+
+        At most TICKET_LIST_MAX_LIMIT rows a page, and a row's contact fields take
+        ticket.view_history besides ticket.view_pii (ADR-286 point 6): the list is not a
+        phone book, while the ticket a volunteer opens (`ticket`) still shows whom to call.
         """
+        if limit > TICKET_LIST_MAX_LIMIT:
+            raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
         extra_filters = scope_filter(scope, actor=info.context["user"], model=Tickets)
@@ -118,7 +131,7 @@ class RequestQuery:
                 coarse_resolution=resolution,
             )
         return TicketConnection(
-            items=[TicketType.from_model(m, coarse_resolution=resolution) for m in items],
+            items=[TicketType.from_model(m, coarse_resolution=resolution, listed=True) for m in items],
             page_info=PageInfo(
                 total_count=total,
                 has_next_page=(skip + limit) < total,
@@ -149,6 +162,18 @@ class RequestQuery:
                 return None
         return TicketType.from_model(m, coarse_resolution=coarse_resolution(zoom))
 
+    @strawberry.field
+    async def my_tickets(self, info: strawberry.types.Info) -> list[TicketType]:
+        """The tickets the caller filed, newest first — 「我的任務 › 我建立的」.
+
+        Sign-in only, no capability: every row is the caller's own ticket. Every status is
+        listed; deleted tickets drop off. Each ticket's `tasks` carry the quantity, status and
+        headcount its progress is counted from, and its fields follow the same per-field rules
+        as anywhere else.
+        """
+        tickets = await ticket_service.list_my_tickets(info.context["db"], actor=require_authenticated(info))
+        return [TicketType.from_model(ticket) for ticket in tickets]
+
 
 @strawberry.type
 class TicketTaskQuery:
@@ -172,8 +197,13 @@ class TicketTaskQuery:
         properties (ADR-079/080). 2–50 characters; outside that range raises. The
         description only counts when the caller may read it (ADR-281) — the parent
         ticket's detail decides, the same one that decides the task fields.
+
+        A deleted ticket lists no needs, whatever their own rows say: deleteTicket takes a
+        ticket's needs with it now, but tickets deleted before it did left theirs live.
         """
         await check_permission(info, Perm.TICKET_VIEW)
+        if not await ticket_repository.get_by_uuid_active(info.context["db"], ticket_uuid):
+            return []
         public_only = (
             normalize_query(q) is not None
             and not await ticket_detail_visible(info, ticket_uuid)
@@ -185,13 +215,37 @@ class TicketTaskQuery:
         return [TicketTaskType.from_model(t) for t in items]
 
     @strawberry.field
+    async def my_task_assignments(self, info: strawberry.types.Info) -> list[MyTaskAssignmentType]:
+        """The needs the caller claimed, newest first — 「我的任務 › 我承接的」.
+
+        Sign-in only, no capability: every row is the caller's own claim. Canceled and
+        fulfilled needs stay listed; deleted ones drop off. Each ticket follows the same
+        per-field rules as anywhere else: claiming changes nothing, and since ADR-286 anyone
+        signed in reads the requester's contact details anyway.
+        """
+        rows = await ticket_service.list_my_claims(info.context["db"], actor=require_authenticated(info))
+        return [
+            MyTaskAssignmentType(
+                assignment=TaskAssignmentType.from_model(assignment),
+                task=TicketTaskType.from_model(task),
+                ticket=TicketType.from_model(ticket),
+            )
+            for assignment, task, ticket in rows
+        ]
+
+    @strawberry.field
     async def task_properties(
         self, info: strawberry.types.Info, task_uuid: str
     ) -> list[TaskPropertyType]:
         """List all active properties for a given task UUID.
 
         Requires ticket.view permission (public — Guest may call this). Checkpoint 1 only.
+        A deleted need, or a need of a deleted ticket, has none to show.
         """
         await check_permission(info, Perm.TICKET_VIEW)
-        items = await task_property_repository.list_by_task(info.context["db"], task_uuid)
+        db = info.context["db"]
+        task = await ticket_task_repository.get_by_uuid_active(db, task_uuid)
+        if not task or not await ticket_repository.get_by_uuid_active(db, task.ticket_uuid):
+            return []
+        items = await task_property_repository.list_by_task(db, task_uuid)
         return [TaskPropertyType.from_model(p) for p in items]

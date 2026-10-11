@@ -23,9 +23,7 @@ from app.models.request import Tickets
 from app.models.station_property import StationProperty
 from app.models.ticket_task import TicketTask
 from app.repositories.session_repository import SessionRepository
-from tests.conftest import TEST_DB_URL  # dedicated test DB, env-driven (single source of truth)
-
-_db_initialized = False
+from tests.conftest import TEST_DB_URL, schema_has_role  # env-driven, per-worker under xdist
 
 
 @asynccontextmanager
@@ -51,11 +49,12 @@ async def _grant(db, role: Role, perm_cache: dict, perm: Perm, scope: str) -> No
 
 
 async def _ensure_db():
-    """Create tables and seed RBAC roles (runs once)."""
-    global _db_initialized
-    if _db_initialized:
+    """Create tables and seed RBAC roles, unless another test left them in place.
+
+    The roles below are committed together, so finding the first one means all are there.
+    """
+    if await schema_has_role("Login User"):
         return
-    _db_initialized = True
 
     eng = create_async_engine(TEST_DB_URL, echo=False)
     async with eng.begin() as conn:
@@ -81,6 +80,8 @@ async def _ensure_db():
         await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW_PII, "own")
         # Every seeded role holds this at `all` (ADR-281): signing in shows the exact place.
         await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW_DETAIL, "all")
+        # Who claimed a need follows the timeline's tiering (ADR-286), as the seed grants it.
+        await _grant(db, login_role, perm_cache, Perm.TICKET_VIEW_HISTORY, "own")
         await _grant(db, login_role, perm_cache, Perm.TICKET_ADD, "all")
         await _grant(db, login_role, perm_cache, Perm.TICKET_EDIT, "own")
         await _grant(db, login_role, perm_cache, Perm.TICKET_DELETE, "own")
@@ -105,6 +106,7 @@ async def _ensure_db():
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW_PII, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW_DETAIL, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_VIEW_HISTORY, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_ADD, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_DELETE, "all")
@@ -198,6 +200,34 @@ async def _create_user_with_role(redis, role_name: str) -> tuple[str, str]:
         sid, _ = await SessionRepository(redis).create_session(str(user.uuid), "test", act=act)
         token = create_access_token(data={"sub": str(user.uuid)}, sid=sid, act=act)
         return str(user.uuid), token
+
+
+async def _citizen_since_adr_286(redis) -> str:
+    """A signed-in citizen granted as the seed grants one since ADR-286; returns their token.
+
+    view_pii `all` (anyone signed in may call the requester), view_history `own`, assign `own`
+    (claiming a need). Login User keeps view_pii at `own`, which the masking tests rely on.
+    """
+    async with test_db() as db:
+        role = Role(name=f"citizen-{uuid_mod.uuid4().hex[:8]}", kind="platform")
+        db.add(role)
+        await db.flush()
+        for perm, scope in (
+            (Perm.TICKET_VIEW, "all"),
+            (Perm.TICKET_VIEW_DETAIL, "all"),
+            (Perm.TICKET_VIEW_PII, "all"),
+            (Perm.TICKET_VIEW_HISTORY, "own"),
+            (Perm.TICKET_ASSIGN, "own"),
+        ):
+            permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
+            if permission is None:
+                permission = Permission(key=perm.value)
+                db.add(permission)
+                await db.flush()
+            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
+        role_name = role.name
+    _, token = await _create_user_with_role(redis, role_name)
+    return token
 
 
 @pytest_asyncio.fixture

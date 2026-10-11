@@ -115,8 +115,8 @@ async def main():
     print(f"  建立求助單 {ticket_uuid}")
 
     await op(lambda db, actor: ticket_service.update_ticket(
-        db, actor=actor, uuid=ticket_uuid, status="in_progress", changes={}))
-    print("  更新狀態 pending → in_progress")
+        db, actor=actor, uuid=ticket_uuid, changes={"priority": "critical"}))
+    print("  更新優先度 high → critical")
 
     task = await op(lambda db, actor: ticket_service.create_ticket_task(
         db, actor=actor, ticket_uuid=ticket_uuid, task_type="cleanup",

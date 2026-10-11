@@ -38,6 +38,7 @@ from app.schemas.admin import (
 from app.services import admin as admin_service
 from app.services import project_settings as project_settings_service
 from app.services.admin import AdminConflictError, AdminNotFoundError
+from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.project_settings import ProjectSettingsValidationError
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,18 @@ async def _session_counts(redis, user_uuids: list[str]) -> dict[str, int | None]
     return dict(zip(user_uuids, counts, strict=True))
 
 
+def _platform_role(identities: list[IdentitySummary]) -> str | None:
+    """The platform role a user list shows: the one besides `user` if there is one, else `user`.
+
+    An account holds `user` plus at most one other platform role (019/ADR-294), and the other
+    one is what sets back-office staff apart. Taking the first by name only worked while every
+    other platform role happened to sort before `user`.
+    """
+    platform = [i.role for i in identities if i.team_uuid is None]
+    others = [role for role in platform if role != DEFAULT_PLATFORM_ROLE]
+    return (others or platform or [None])[0]
+
+
 @router.get(
     "/users",
     response_model=list[AdminUserListItem],
@@ -153,9 +166,7 @@ async def list_users(
         AdminUserListItem(
             uuid=u.uuid,
             name=u.name,
-            platform_role=next(
-                (i.role for i in identities.get(str(u.uuid), []) if i.team_uuid is None), None
-            ),
+            platform_role=_platform_role(identities.get(str(u.uuid), [])),
             identities=identities.get(str(u.uuid), []),
             last_login_at=u.last_login_at,
             last_activity_at=u.last_activity_at,
@@ -232,9 +243,10 @@ async def assign_role(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Grant a user a PLATFORM role, replacing the one they hold.
+    """Grant a user a PLATFORM role, replacing the other one they hold; `user` always stays.
 
-    Team roles go through POST /teams/{team_uuid}/members, where the team is unambiguous —
+    Assigning `user` takes the other one away, which is how to demote (019/ADR-294). Team roles
+    go through POST /teams/{team_uuid}/members, where the team is unambiguous —
     granting a team role IS joining that team (ADR-072).
     """
     try:

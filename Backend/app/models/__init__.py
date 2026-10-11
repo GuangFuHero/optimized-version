@@ -26,6 +26,7 @@ from app.models.rbac import (  # noqa: F401
     UserRoleAssign,
 )
 from app.models.request import Tickets  # noqa: F401
+from app.models.role_request import RoleRequest  # noqa: F401
 from app.models.route import Route  # noqa: F401
 from app.models.secondary_location import SecondaryLocation  # noqa: F401
 from app.models.station_property import (  # noqa: F401
