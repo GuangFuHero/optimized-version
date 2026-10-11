@@ -5533,6 +5533,7 @@
           "station.delete",
           "station.review",
           "station.assign",
+          "station.revoke",
           "station.contribute",
           "station.export",
           "station.import",
@@ -6288,7 +6289,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "目前使用中的身分，一次只有一個；沒有時為 null"
           },
           "contacts": {
             "items": {
