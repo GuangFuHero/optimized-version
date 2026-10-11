@@ -11,7 +11,7 @@ import type { CodegenConfig } from '@graphql-codegen/cli';
  */
 const config: CodegenConfig = {
   // 優先使用本地 SDL 檔（由 backend 匯出），避免 codegen 每次都需要後端在線。
-  schema: 'libs/data-access/schema.graphql',
+  schema: 'libs/data-access/src/graphql/schema.graphql',
 
   // 掃描 src/graphql/**/*.graphql 作為 operation documents
   documents: ['libs/data-access/src/graphql/**/*.graphql'],
