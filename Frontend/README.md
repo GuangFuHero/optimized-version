@@ -1,6 +1,6 @@
 # 島嶼守望 前端專案說明
 
-本目錄為「島嶼守望（救災資訊平台）」的前端 monorepo，使用 **Nx + pnpm** 管理，目前以 `apps/demo`（Next.js App Router）作為唯一的部署目標，並透過 `libs/*` 提供可重用的 UI foundation、業務 modules 與資料存取層。
+本目錄為「島嶼守望（救災資訊平台）」的前端 monorepo，使用 **Nx + pnpm** 管理。`apps/demo` 是前台，`apps/admin` 是獨立後台，兩者使用 Next.js App Router，並透過 `libs/*` 共用 UI、業務 modules 與資料存取層。
 
 ---
 
@@ -9,8 +9,8 @@
 - **Monorepo**：Nx 22 + pnpm workspaces，各 app 與 library 使用自己的 `package.json`
 - **App framework**：Next.js 16（App Router）、React 19
 - **UI**：MUI 9 + Emotion、Leaflet / react-leaflet（地圖）
-- **資料存取**：urql 5 + `@urql/exchange-graphcache`（GraphQL）、GraphQL Code Generator
-- **驗證**：NextAuth 4（JWT session）+ 後端 BFF（`/api/bff/auth/*`）
+- **資料存取**：urql 5、GraphQL Code Generator、openapi-fetch、TanStack Query；前台保留 urql graphcache
+- **驗證**：NextAuth 4（JWT session）+ 共用 REST proxy（`/api/v1/auth/*`）
 - **語言/工具**：TypeScript 5.9（strict）、ESLint 9（flat config）、Prettier
 
 ---
@@ -38,13 +38,15 @@ cp .env.example .env.local
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`：Google SSO（見 [`docs/authentication.md`](docs/authentication.md)）
 - `LINE_CLIENT_ID` / `LINE_CLIENT_SECRET`：LINE SSO（見 [`docs/authentication.md`](docs/authentication.md)）
 
-### 3. 啟動 demo app
+### 3. 啟動開發環境
 
 ```bash
-pnpm dev:demo
+pnpm dev
 ```
 
-預設於 `http://localhost:3000` 啟動。
+Nx 會同時啟動 demo（`http://localhost:3000`）、admin（`http://localhost:3001`）與 Storybook（`http://localhost:6006`）。
+
+也可用 `pnpm dev:demo`、`pnpm dev:admin` 或 `pnpm dev:ui` 單獨啟動。後台環境設定見 [admin README](apps/admin/README.md)。
 
 ---
 
@@ -53,12 +55,13 @@ pnpm dev:demo
 ```text
 Frontend/
   apps/
-    demo/                   # Next.js App Router 部署目標（前台 + admin + auth + BFF）
+    admin/                  # 獨立後台，頁面使用 root routes
+      src/app/(portal)/     # Dashboard、map、tickets、stations 等需登入頁面
+    demo/                   # 前台、auth 與 backend proxies
       src/app/
         (auth)/             # 登入 / 註冊 / 忘記密碼 等公開頁面
         (site)/             # 前台救災地圖 / 清單 / 帳號頁面
-        admin/              # 後台管理頁面（規劃中，詳見 docs/admin-features.md）
-        api/                # route handlers：NextAuth、BFF、GraphQL proxy、地圖圖磚/地理編碼
+        api/                # NextAuth、REST / GraphQL proxy、Google reverse geocode
       src/modules/          # app-local composition，尚未提升為 libs/modules 的頁面實作
       src/lib/               # server-side helpers（NextAuth options 等）
       src/providers/         # client-side context providers
@@ -81,11 +84,11 @@ Frontend/
 
 ### Workspace packages
 
-`apps/demo` 與 `libs/*` 都是 private workspace packages，各自在 `package.json` 宣告 dependencies。內部依賴使用 `workspace:*`，由 pnpm 連結，不使用 TypeScript path aliases。共用開發工具保留在 root `package.json`。
+`apps/demo`、`apps/admin` 與 `libs/*` 都是 private workspace packages，各自在 `package.json` 宣告 dependencies。內部依賴使用 `workspace:*`，由 pnpm 連結，不使用 TypeScript path aliases。共用開發工具保留在 root `package.json`。
 
 Libraries 透過 `exports` 提供 `src/index.ts`，`@rescue-frontend/data-access/server` 則提供 `src/server.ts`。Next.js 的 `transpilePackages` 負責編譯這些 TypeScript source，不需要先 build libraries。
 
-在 `Frontend/` 執行 `pnpm typecheck` 可檢查所有 packages，也可用 `pnpm --filter @rescue-frontend/ui typecheck` 單獨檢查一個 package。Demo 的 typecheck 會先執行 `next typegen` 產生 route types，不需要先 build 或啟動 dev server。GitHub Actions 的 `frontend-ci.yaml` 會在 frontend pull requests 與 main branch 更新時執行 typecheck 與 lint。
+在 `Frontend/` 執行 `pnpm typecheck` 會檢查所有 packages。也可用 `pnpm --filter @rescue-frontend/ui typecheck` 單獨檢查一個 package。兩個 app 的 typecheck 會先執行 `next typegen` 產生 route types。
 
 開發 UI library 時，執行 `pnpm dev:ui` 啟動 Storybook，預設 port 為 6006。Stories 使用共用 MUI theme，包含 icon gallery 與可互動的 pagination。更多指令見 [`libs/ui/README.md`](libs/ui/README.md)。
 
@@ -93,18 +96,19 @@ Libraries 透過 `exports` 提供 `src/index.ts`，`@rescue-frontend/data-access
 
 ## 常用指令
 
-| 指令                                         | 說明                                                                               |
-| -------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `pnpm dev:demo`                              | 啟動 `demo` app 開發伺服器                                                         |
-| `pnpm build:demo`                            | build `demo` app                                                                   |
-| `pnpm start:demo`                            | 以 production build 啟動 `demo` app                                                |
-| `pnpm build`                                 | build 所有 Nx projects                                                             |
-| `pnpm lint`                                  | lint 所有 Nx projects                                                              |
-| `pnpm affected:build` / `pnpm affected:lint` | 只對受影響的 projects 執行 build / lint（適合 CI）                                 |
-| `pnpm format` / `pnpm format:check`          | 透過 `nx format` 套用 / 檢查 Prettier 格式                                         |
-| `pnpm graph`                                 | 開啟 Nx project dependency graph                                                   |
-| `pnpm reset`                                 | 清除 Nx cache                                                                      |
-| `pnpm codegen`                               | 執行 GraphQL Code Generator，重新產生 `libs/data-access/src/graphql/__generated__` |
+| 指令                                         | 說明                                                    |
+| -------------------------------------------- | ------------------------------------------------------- |
+| `pnpm dev`                                  | 透過 Nx 同時啟動 demo、admin 與 Storybook                |
+| `pnpm dev:demo`                              | 啟動 `demo` app 開發伺服器                              |
+| `pnpm build:demo`                            | build `demo` app                                        |
+| `pnpm start:demo`                            | 以 production build 啟動 `demo` app                     |
+| `pnpm build`                                 | build 所有 Nx projects                                  |
+| `pnpm lint`                                  | lint 所有 Nx projects                                   |
+| `pnpm affected:build` / `pnpm affected:lint` | 只對受影響的 projects 執行 build / lint（適合 CI）      |
+| `pnpm format` / `pnpm format:check`          | 透過 `nx format` 套用 / 檢查 Prettier 格式              |
+| `pnpm graph`                                 | 開啟 Nx project dependency graph                        |
+| `pnpm reset`                                 | 清除 Nx cache                                           |
+| `pnpm codegen`                               | 執行 GraphQL codegen                                  |
 
 ---
 

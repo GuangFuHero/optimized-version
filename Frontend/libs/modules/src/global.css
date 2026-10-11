@@ -11,8 +11,7 @@ html {
      layout.tsx; each carries an inline fallback so an unset variable degrades to the next name
      instead of invalidating the whole declaration. */
   font-family:
-    var(--font-noto-sans-tc, 'Noto Sans TC'),
-    var(--font-nunito, 'Nunito'),
+    var(--font-noto-sans-tc, 'Noto Sans TC'), var(--font-nunito, 'Nunito'),
     sans-serif;
   line-height: 1.5;
   tab-size: 4;

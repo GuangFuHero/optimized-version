@@ -10,6 +10,24 @@ const nextConfig = {
   // Use this to set Nx-specific options
   // See: https://nx.dev/recipes/next/next-config-setup
   nx: {},
+  async redirects() {
+    const adminAppUrl =
+      process.env.ADMIN_APP_URL ??
+      (process.env.NODE_ENV === 'production'
+        ? undefined
+        : 'http://localhost:3001');
+
+    return adminAppUrl
+      ? [
+          {
+            source: '/admin/:path*',
+            destination: `${adminAppUrl}/:path*`,
+            permanent: false,
+          },
+        ]
+      : [];
+  },
+
   transpilePackages: [
     '@rescue-frontend/ui',
     '@rescue-frontend/modules',

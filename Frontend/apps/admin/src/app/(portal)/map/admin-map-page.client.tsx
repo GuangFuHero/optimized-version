@@ -1,9 +1,7 @@
 'use client';
 
-import AddLocationAltRoundedIcon from '@mui/icons-material/AddLocationAltRounded';
-import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
+import { ClipboardList, X, MapPin } from 'lucide-react';
+
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import { useSession } from 'next-auth/react';
 import { useMemo, useState } from 'react';
@@ -105,11 +103,15 @@ function AdminMapCreateControls({
           }}
         >
           <Stack spacing={1}>
-            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ flexWrap: 'wrap', rowGap: 1 }}
+            >
               <ControlChip
                 label="新增站點"
                 active={mode === 'station'}
-                icon={<PlaceRoundedIcon sx={{ fontSize: 18 }} />}
+                icon={<Box component={MapPin} sx={{ width: 18, height: 18 }} />}
                 onClick={() =>
                   onToggleMode(mode === 'station' ? 'idle' : 'station')
                 }
@@ -117,13 +119,20 @@ function AdminMapCreateControls({
               <ControlChip
                 label="新增任務"
                 active={mode === 'ticket'}
-                icon={<AssignmentRoundedIcon sx={{ fontSize: 18 }} />}
-                onClick={() => onToggleMode(mode === 'ticket' ? 'idle' : 'ticket')}
+                icon={
+                  <Box
+                    component={ClipboardList}
+                    sx={{ width: 18, height: 18 }}
+                  />
+                }
+                onClick={() =>
+                  onToggleMode(mode === 'ticket' ? 'idle' : 'ticket')
+                }
               />
               {mode !== 'idle' ? (
                 <ControlChip
                   label="取消"
-                  icon={<CloseRoundedIcon sx={{ fontSize: 18 }} />}
+                  icon={<Box component={X} sx={{ width: 18, height: 18 }} />}
                   onClick={onCancel}
                 />
               ) : null}
@@ -132,7 +141,9 @@ function AdminMapCreateControls({
               {helperText}
             </Typography>
             {pendingPosition ? (
-              <Typography sx={{ fontSize: 12, color: '#7A3E00', fontWeight: 700 }}>
+              <Typography
+                sx={{ fontSize: 12, color: '#7A3E00', fontWeight: 700 }}
+              >
                 目前落點：{formatCoordinate(pendingPosition[0])},{' '}
                 {formatCoordinate(pendingPosition[1])}
               </Typography>
@@ -150,13 +161,16 @@ export function AdminMapPageClient() {
     readRescueMapMarkers(),
   );
   const [createMode, setCreateMode] = useState<CreateMode>('idle');
-  const [pendingPosition, setPendingPosition] = useState<[number, number] | null>(
-    null,
-  );
+  const [pendingPosition, setPendingPosition] = useState<
+    [number, number] | null
+  >(null);
   const [stationDrawerOpen, setStationDrawerOpen] = useState(false);
   const [ticketDrawerOpen, setTicketDrawerOpen] = useState(false);
 
-  const currentInitialPosition = useMemo(() => pendingPosition, [pendingPosition]);
+  const currentInitialPosition = useMemo(
+    () => pendingPosition,
+    [pendingPosition],
+  );
   const canCreate = authStatus === 'authenticated';
 
   const handleMapClick = (position: [number, number]) => {
@@ -188,7 +202,7 @@ export function AdminMapPageClient() {
           markers={markers}
           showScale
           onMapClick={handleMapClick}
-          renderControls={() => (
+          renderControls={() =>
             canCreate ? (
               <AdminMapCreateControls
                 mode={createMode}
@@ -197,7 +211,7 @@ export function AdminMapPageClient() {
                 onCancel={resetCreateFlow}
               />
             ) : null
-          )}
+          }
         />
       </Box>
 
