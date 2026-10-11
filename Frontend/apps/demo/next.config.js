@@ -11,13 +11,21 @@ const nextConfig = {
   // See: https://nx.dev/recipes/next/next-config-setup
   nx: {},
   async redirects() {
-    return [
-      {
-        source: '/admin/:path*',
-        destination: `${process.env.ADMIN_APP_URL ?? 'http://localhost:3001'}/:path*`,
-        permanent: false,
-      },
-    ];
+    const adminAppUrl =
+      process.env.ADMIN_APP_URL ??
+      (process.env.NODE_ENV === 'production'
+        ? undefined
+        : 'http://localhost:3001');
+
+    return adminAppUrl
+      ? [
+          {
+            source: '/admin/:path*',
+            destination: `${adminAppUrl}/:path*`,
+            permanent: false,
+          },
+        ]
+      : [];
   },
 
   transpilePackages: [
