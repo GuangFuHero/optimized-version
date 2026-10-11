@@ -4,7 +4,7 @@ import {
   Check,
   FileText,
   Grid2X2,
-  Map,
+  MapIcon,
   MapPin,
   Newspaper,
   Package,
@@ -39,7 +39,7 @@ function themedIcon(component: LucideIcon) {
 
 export const Icons = {
   plus: themedIcon(Plus),
-  map: themedIcon(Map),
+  map: themedIcon(MapIcon),
   dataGrid: themedIcon(Grid2X2),
   resources: themedIcon(Package),
   incidentLog: themedIcon(Newspaper),

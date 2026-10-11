@@ -1,6 +1,6 @@
 'use client';
 
-import { Map } from 'lucide-react';
+import { MapIcon } from 'lucide-react';
 
 import { Box, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -150,7 +150,7 @@ export function AuthShell({ children }: AuthShellProps) {
             fontWeight: 700,
           }}
         >
-          <Box component={Map} sx={{ width: 16, height: 16 }} />
+          <Box component={MapIcon} sx={{ width: 16, height: 16 }} />
           {authShellText.heroExit}
         </Box>
       </Box>
@@ -216,7 +216,7 @@ export function AuthShell({ children }: AuthShellProps) {
               fontWeight: 700,
             }}
           >
-            <Box component={Map} sx={{ width: 16, height: 16 }} />
+            <Box component={MapIcon} sx={{ width: 16, height: 16 }} />
             {authShellText.phoneExit}
           </Box>
         </Box>
