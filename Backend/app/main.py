@@ -49,14 +49,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(AuditContextMiddleware)
+# Added last so it is outermost and answers preflights before any other middleware runs. Browsers
+# call this API with bearer tokens, never cookies, so any origin may call it without credentials.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(AuditContextMiddleware)
 
 
 @app.exception_handler(ApiError)
