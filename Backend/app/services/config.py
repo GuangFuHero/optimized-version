@@ -22,6 +22,14 @@ from app.repositories.config_repository import (
 from app.services.authz import require_scope
 
 
+def _check_lengths(model, **fields) -> None:
+    """Refuse a value longer than its column, which the database would reject as a server fault."""
+    for name, value in fields.items():
+        limit = getattr(model.__table__.c[name].type, "length", None)
+        if limit and isinstance(value, str) and len(value) > limit:
+            raise ValueError(f"{name} must be at most {limit} characters")
+
+
 async def _validated_disaster_types(
     db: AsyncSession, disaster_types: list[str] | None, load_stored
 ) -> list[str] | None:
@@ -74,6 +82,10 @@ async def upsert_station_property_config(
     are grandfathered (ADR-277).
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
+    _check_lengths(
+        StationPropertyConfig, station_type=station_type, property_name=property_name,
+        data_type=data_type, label=label, unit=unit,
+    )
     disaster_types = await _validated_disaster_types(
         db, disaster_types,
         lambda: station_property_config_repository.get_by_key(
@@ -114,6 +126,10 @@ async def upsert_task_property_config(
     validation against the vocabulary table, grandfathering included (ADR-277).
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
+    _check_lengths(
+        TaskPropertyConfig, task_type=task_type, property_name=property_name,
+        data_type=data_type, label=label, unit=unit,
+    )
     disaster_types = await _validated_disaster_types(
         db, disaster_types,
         lambda: task_property_config_repository.get_by_key(
@@ -164,6 +180,10 @@ async def upsert_ticket_property_config(
     the vocabulary was closed. Labels the row already carries are grandfathered (ADR-277).
     """
     await require_scope(actor, Perm.FIELD_EDIT, db)
+    _check_lengths(
+        TicketPropertyConfig, property_name=property_name, data_type=data_type,
+        label=label, hint=hint, unit=unit,
+    )
     disaster_types = await _validated_disaster_types(
         db, disaster_types,
         lambda: ticket_property_config_repository.get_by_key(db, property_name=property_name),
