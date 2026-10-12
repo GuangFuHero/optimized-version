@@ -90,6 +90,10 @@ def _is_expected(error: GraphQLError) -> bool:
     if original is None:
         # graphql-core's own input coercion, raised before any resolver runs.
         return True
+    if isinstance(original, GraphQLError) and error.path is None:
+        # A variable that fails coercion wraps the scalar's own error, raised before any resolver runs.
+        # A fault while serializing a result also wraps one but carries a path, so it stays masked.
+        return True
     return isinstance(original, ValueError | HTTPException)
 
 
