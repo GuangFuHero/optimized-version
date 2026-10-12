@@ -36,3 +36,17 @@ async def test_cookie_bearing_request_is_not_allowed_credentials(http):
     resp = await http.get("/health", headers={"Origin": "https://evil.example", "Cookie": "session=x"})
     assert resp.status_code == 200
     assert "access-control-allow-credentials" not in resp.headers
+
+
+@pytest.mark.parametrize("path", ["/health", "/no-such-route"])
+async def test_every_response_forbids_sniffing_and_cross_site_embedding(http, path):
+    """Error responses carry the headers too, not only successful ones."""
+    resp = await http.get(path)
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert resp.headers["cross-origin-resource-policy"] == "same-site"
+
+
+async def test_graphql_responses_carry_the_headers(http):
+    """The GraphQL router builds its own responses, so it is checked separately."""
+    resp = await http.post("/graphql", json={"query": "{ __typename }"})
+    assert resp.headers["x-content-type-options"] == "nosniff"

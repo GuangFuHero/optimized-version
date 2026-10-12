@@ -50,6 +50,17 @@ app = FastAPI(
 )
 
 app.add_middleware(AuditContextMiddleware)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Stop browsers sniffing a response's type or embedding it in a page from another site."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "same-site")
+    return response
+
+
 # Added last so it is outermost and answers preflights before any other middleware runs. Browsers
 # call this API with bearer tokens, never cookies, so any origin may call it without credentials.
 app.add_middleware(
