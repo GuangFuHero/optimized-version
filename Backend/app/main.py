@@ -42,11 +42,17 @@ async def lifespan(app: FastAPI):
         await app.state.redis.aclose()
 
 
+# The interactive docs and the schema they read are served only in development. Tooling that needs
+# the schema elsewhere can still call app.openapi() in-process.
+_dev = settings.ENV == "development"
 app = FastAPI(
     title="救災平台 API",
     description="災難救援與資源調度平台後端服務",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if _dev else None,
+    redoc_url="/redoc" if _dev else None,
+    openapi_url="/openapi.json" if _dev else None,
 )
 
 app.add_middleware(AuditContextMiddleware)

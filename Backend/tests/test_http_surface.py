@@ -4,6 +4,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from app.db.session import engine as app_engine
 from app.main import app
 
 pytestmark = pytest.mark.asyncio
@@ -11,7 +12,12 @@ pytestmark = pytest.mark.asyncio
 
 @pytest_asyncio.fixture
 async def http():
-    """A client for routes that touch neither the database nor redis."""
+    """A client for routes that read nothing from the database or redis.
+
+    The GraphQL context still opens a connection, so the app's pool is emptied first: one left
+    over from an earlier test belongs to that test's event loop.
+    """
+    await app_engine.dispose()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
 
@@ -50,3 +56,22 @@ async def test_graphql_responses_carry_the_headers(http):
     """The GraphQL router builds its own responses, so it is checked separately."""
     resp = await http.post("/graphql", json={"query": "{ __typename }"})
     assert resp.headers["x-content-type-options"] == "nosniff"
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
+async def test_api_docs_are_not_served_outside_development(http, path):
+    """The test suite runs as ENV=testing, which like staging and production must not serve them."""
+    resp = await http.get(path)
+    assert resp.status_code == 404
+
+
+async def test_graphiql_is_not_served_outside_development(http):
+    """A browser GET on the GraphQL endpoint gets no IDE outside development."""
+    resp = await http.get("/graphql", headers={"Accept": "text/html"})
+    assert "graphiql" not in resp.text.lower()
+    assert resp.status_code == 404
+
+
+async def test_openapi_schema_is_still_available_in_process():
+    """Spec dumps and contract generation call app.openapi() directly, which stays available."""
+    assert "/api/v1/auth/login" in app.openapi()["paths"]
