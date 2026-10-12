@@ -44,10 +44,10 @@ async def _require_gov_zone_authority(db: AsyncSession, actor: User) -> None:
 
 
 def _check_fields(kind: str, changes: dict) -> None:
-    """Refuse fields the area's kind does not have. A hazardous zone stays public and keeps a status."""
+    """Refuse fields the area's kind lacks. Only a mark zone may be hidden; a hazard needs a status."""
+    if kind != "mark_zone" and changes.get("is_public") is False:
+        raise ValueError(f"A {kind.replace('_', ' ')} is always public")
     if kind == "hazardous_zone":
-        if changes.get("is_public") is False:
-            raise ValueError("A hazardous zone is always public")
         if "status" in changes and not (changes["status"] or "").strip():
             raise ValueError("A hazardous zone needs a status")
     elif changes.get("status") is not None or changes.get("information_source") is not None:
@@ -74,7 +74,7 @@ async def create_area(
     if (team_uuid is None) == (kind == "team_zone"):
         raise ValueError("A team zone needs a team, and only a team zone takes one")
     _check_fields(kind, {"status": None} | fields)
-    if kind == "hazardous_zone":
+    if kind != "mark_zone":
         fields["is_public"] = True
 
     obj_in = {key: value for key, value in fields.items() if value is not None}

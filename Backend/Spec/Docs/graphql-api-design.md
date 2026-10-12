@@ -16,7 +16,7 @@ GraphQL endpoint at `/graphql` serves map domain data (stations, map areas, tick
 | Q2 | `station` | `uuid` | `StationType \| null` | US1/US5 |
 | Q3 | `hazardousZones` | `bounds?`, `skip=0`, `limit=50` | `HazardousZoneConnection` | US7 |
 | Q4 | `hazardousZone` | `uuid` | `HazardousZoneType \| null` | US7 |
-| Q3a | `areas` | `bounds?`, `includePrivate=false` (needs `work_zone.view`), `skip=0`, `limit=50` | `AreaConnection` (public areas only by default; no team data) | ADR-311 |
+| Q3a | `areas` | `bounds?`, `includePrivate=false` (needs `work_zone.view`), `skip=0`, `limit=50` | `AreaConnection` (every hazard and team zone, plus public mark zones; `assignedTeams` names a team zone's teams) | ADR-311 |
 | Q5 | `tickets` | `bounds?`, `status?`, `priority?`, `skip=0`, `limit=50` | `TicketConnection` | US2 |
 | Q6 | `ticket` | `uuid` | `TicketType \| null` | US2 |
 
@@ -29,7 +29,7 @@ GraphQL endpoint at `/graphql` serves map domain data (stations, map areas, tick
 | M1 | `createStation` | `input: CreateStationInput` { propertyName, geometry (GeoJSON Point), address fields?, opHour?, level?, comment? } | `map` / `create` | US4 |
 | M2 | `updateStation` | `uuid`, `input: UpdateStationInput` { all optional } | `map` / `edit` → scope `own`/`all` | US4 |
 | M3 | `deleteStation` | `uuid` | `map` / `delete` | Spec clarification |
-| M4 | `createArea` | `input: CreateAreaInput` { type (hazardous_zone\|team_zone\|mark_zone), geometry (GeoJSON Polygon/MultiPolygon), name?, note?, isPublic?, teamUuid (team_zone only, required), status (hazardous_zone only, required), informationSource? } | `work_zone.add` + gov team | ADR-311 |
+| M4 | `createArea` | `input: CreateAreaInput` { type (hazardous_zone\|team_zone\|mark_zone), geometry (GeoJSON Polygon/MultiPolygon), name?, note?, isPublic? (mark_zone only; the others are always public), teamUuid (team_zone only, required), status (hazardous_zone only, required), informationSource? } | `work_zone.add` + gov team | ADR-311 |
 | M5 | `updateArea` / `deleteArea` / `promoteMarkZone` | `uuid`, `input: UpdateAreaInput` { name?, geometry?, note?, isPublic?, status?, informationSource? } | `work_zone.edit` / `work_zone.delete` + gov team | ADR-311 |
 | M6 | `createStationProperty` | `input: CreateStationPropertyInput` { stationUuid, propertyType, propertyName, quantity?, weightings? } | `map` / `create` | US5 |
 | M7 | `updateStationProperty` | `uuid`, `input: UpdateStationPropertyInput` { quantity?, status?, weightings? } | `map` / `edit` → scope `own`/`all` | US5 |

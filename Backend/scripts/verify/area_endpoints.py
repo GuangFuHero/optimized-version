@@ -146,8 +146,8 @@ async def main() -> int:
         ):
             check(f"{label} created", "errors" not in body, errors(body))
         hz, tz, mz, fz = (b["data"]["createArea"] for b in (hazard, team_zone, mark, far))
-        check("hazard is public on creation", hz["isPublic"] is True)
-        check("team zone and mark start hidden", tz["isPublic"] is False and mz["isPublic"] is False)
+        check("hazard and team zone start public", hz["isPublic"] is True and tz["isPublic"] is True)
+        check("mark starts hidden", mz["isPublic"] is False)
         zone = await gql(
             "query($u: UUID!) { teamZone(uuid: $u) { assignedTeams { uuid } } }", {"u": tz["uuid"]}, gov
         )
@@ -174,6 +174,19 @@ async def main() -> int:
         )
         check("hidden hazard", "always public" in errors(body), body)
         body = await gql(
+            create,
+            {
+                "i": {
+                    "type": "team_zone",
+                    "geometry": square(120.0, 22.0),
+                    "teamUuid": ngo_team,
+                    "isPublic": False,
+                }
+            },
+            gov,
+        )
+        check("hidden team zone", "A team zone is always public" in errors(body), body)
+        body = await gql(
             create, {"i": {"type": "mark_zone", "geometry": square(120.0, 22.0), "status": "x"}}, gov
         )
         check("mark with a status", "Only a hazardous zone has a status" in errors(body), body)
@@ -191,24 +204,34 @@ async def main() -> int:
         print("3/5. areas(bounds) for a guest, and the visibility switch")
         seen = await gql(areas, {"b": box(120.0, 22.0)})
         uuids = {i["uuid"] for i in seen["data"]["areas"]["items"]}
-        check("guest sees the hazard", hz["uuid"] in uuids)
-        check("guest does not see hidden mark / team zone", not {tz["uuid"], mz["uuid"]} & uuids)
-        for area in (tz, mz):
-            body = await gql(update, {"u": area["uuid"], "i": {"isPublic": True}}, gov)
-            check(
-                f"{area['type']} switched on alone",
-                body.get("data", {}).get("updateArea", {}).get("isPublic") is True,
-                body,
-            )
+        check("guest sees the hazard and team zone", {hz["uuid"], tz["uuid"]} <= uuids)
+        check("guest does not see the hidden mark", mz["uuid"] not in uuids)
+        body = await gql(update, {"u": mz["uuid"], "i": {"isPublic": True}}, gov)
+        check(
+            "mark switched on alone",
+            body.get("data", {}).get("updateArea", {}).get("isPublic") is True,
+            body,
+        )
         seen = await gql(areas, {"b": box(120.0, 22.0)})
         items = {i["uuid"]: i for i in seen["data"]["areas"]["items"]}
         check("guest now sees hazard + team zone + mark", {hz["uuid"], tz["uuid"], mz["uuid"]} <= set(items))
         check("public layer carries the type", items[tz["uuid"]]["type"] == "team_zone")
         check("area outside the box is left out", fz["uuid"] not in items)
-        body = await gql("query { areas { items { uuid assignedTeams { uuid } } } }")
-        check("AreaType has no team field", "Cannot query field" in errors(body), body)
-        body = await gql(update, {"u": hz["uuid"], "i": {"isPublic": False}}, gov)
-        check("hazard cannot be switched off", "always public" in errors(body), body)
+        body = await gql(
+            "query($b: BoundsInput) { areas(bounds: $b) { items { uuid assignedTeams { uuid name } } } }",
+            {"b": box(120.0, 22.0)},
+        )
+        teams = {i["uuid"]: i["assignedTeams"] for i in body["data"]["areas"]["items"]}
+        zone_teams = teams[tz["uuid"]]
+        check(
+            "guest sees the team zone's team by name",
+            [t["uuid"] for t in zone_teams] == [ngo_team] and all(t["name"] for t in zone_teams),
+            body,
+        )
+        check("hazard and mark have no teams", teams[hz["uuid"]] == [] and teams[mz["uuid"]] == [], body)
+        for area in (hz, tz):
+            body = await gql(update, {"u": area["uuid"], "i": {"isPublic": False}}, gov)
+            check(f"{area['type']} cannot be switched off", "always public" in errors(body), body)
         body = await gql(
             update,
             {
@@ -226,11 +249,11 @@ async def main() -> int:
         print("4. areas(includePrivate)")
         body = await gql(areas, {"b": box(120.0, 22.0), "p": True})
         check("guest is refused", "Permission Denied." in errors(body), body)
-        await gql(update, {"u": tz["uuid"], "i": {"isPublic": False}}, gov)
+        await gql(update, {"u": mz["uuid"], "i": {"isPublic": False}}, gov)
         body = await gql(areas, {"b": box(120.0, 22.0), "p": True}, gov)
         check(
-            "gov sees hidden areas too",
-            tz["uuid"] in {i["uuid"] for i in body["data"]["areas"]["items"]},
+            "gov sees the hidden mark too",
+            mz["uuid"] in {i["uuid"] for i in body["data"]["areas"]["items"]},
             body,
         )
 

@@ -40,7 +40,7 @@ class AreaKind(enum.Enum):
 
 @strawberry.type
 class AreaType:
-    """A map area of any kind, as the public map may see it: it carries no team data."""
+    """A map area of any kind, as the public map may see it, including the teams assigned to a team zone."""
 
     uuid: UUID
     type: str = strawberry.field(description="'hazardous_zone', 'team_zone' or 'mark_zone'")
@@ -50,10 +50,15 @@ class AreaType:
     )
     note: str | None = None
     is_public: bool = strawberry.field(
-        default=False, description="Shown on the public map; always true for a hazardous zone"
+        default=False, description="Shown on the public map; always true except for a mark zone"
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    @strawberry.field(description="Teams a team zone is assigned to; empty for the other kinds")
+    async def assigned_teams(self, info: strawberry.types.Info) -> list[AssignedTeamType]:
+        """Resolve the zone's teams via the per-request DataLoader; a team's name and type are public."""
+        return await info.context["loaders"]["teams_by_zone"].load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "AreaType":
@@ -74,7 +79,7 @@ class AreaConnection:
 
 @strawberry.type
 class TeamZoneType:
-    """責任區: a map area assigned to one or more teams, visible only to work_zone.view holders."""
+    """責任區 as the admin side sees it, with who drew it; needs work_zone.view, unlike `areas`."""
 
     uuid: UUID
     name: str | None = None
@@ -83,7 +88,7 @@ class TeamZoneType:
     )
     note: str | None = None
     is_public: bool = strawberry.field(
-        default=False, description="Shown on the public map, without its teams"
+        default=True, description="Always true: a team zone and its teams are shown on the public map"
     )
     created_by: str | None = strawberry.field(
         default=None, description="UUID of the gov user who drew this zone"
@@ -153,7 +158,10 @@ class CreateAreaInput:
     note: str | None = None
     is_public: bool | None = strawberry.field(
         default=None,
-        description="Shown on the public map; a hazardous zone is always public, others default to false",
+        description=(
+            "Shown on the public map; hazardous and team zones are always public, "
+            "a mark zone defaults to false"
+        ),
     )
     team_uuid: UUID | None = strawberry.field(
         default=None, description="Required for a team zone, refused for the other kinds"

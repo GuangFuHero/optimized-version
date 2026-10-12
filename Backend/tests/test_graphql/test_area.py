@@ -1,7 +1,7 @@
 """GraphQL integration tests for map areas (危險區, 責任區, 標示區) and team zone assignment.
 
-Covers the gov gate on drawing, the hazard-always-public and team-zone-needs-a-team rules,
-the public visibility switch and viewport, mark -> hazard promotion, and assign/remove.
+Covers the gov gate on drawing, the always-public hazard and team zone, the team-zone-needs-a-team
+rule, the mark zone's visibility switch and viewport, mark -> hazard promotion, and assign/remove.
 """
 
 import uuid as uuid_mod
@@ -40,7 +40,9 @@ query($bounds: BoundsInput) { teamZones(bounds: $bounds) { items { uuid } } }
 
 AREAS = """
 query($bounds: BoundsInput, $includePrivate: Boolean! = false) {
-    areas(bounds: $bounds, includePrivate: $includePrivate) { items { uuid type isPublic } }
+    areas(bounds: $bounds, includePrivate: $includePrivate) {
+        items { uuid type isPublic assignedTeams { name } }
+    }
 }
 """
 
@@ -673,7 +675,36 @@ async def test_a_hazardous_zone_is_always_public(client, redis):
     assert "A hazardous zone is always public" in _errors(switch_off.json())
 
     guest = await client.post("/graphql", json={"query": AREAS, "variables": {"bounds": _box(130.0, 30.0)}})
-    assert hazard_uuid in {i["uuid"] for i in guest.json()["data"]["areas"]["items"]}
+    items = {i["uuid"]: i for i in guest.json()["data"]["areas"]["items"]}
+    assert items[hazard_uuid]["assignedTeams"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_team_zone_is_always_public_with_its_teams(client, redis, team_uuid):
+    """A team zone is public on creation, cannot be switched off, and the guest map names its team."""
+    gov_token = await _make_gov_user(redis)
+    zone = _zone_input("Public zone", team_uuid, _square(136.0, 36.0))
+
+    refused = await _create(client, gov_token, {"input": {**zone["input"], "isPublic": False}})
+    assert "A team zone is always public" in _errors(refused), refused
+
+    body = await _create(client, gov_token, zone)
+    assert body["data"]["createArea"]["isPublic"] is True
+    zone_uuid = body["data"]["createArea"]["uuid"]
+
+    switch_off = await client.post(
+        "/graphql",
+        json={"query": UPDATE_AREA, "variables": {"uuid": zone_uuid, "input": {"isPublic": False}}},
+        headers=auth_header(gov_token),
+    )
+    assert "A team zone is always public" in _errors(switch_off.json())
+
+    async with test_db() as db:
+        team_name = await db.scalar(select(Team.name).where(Team.uuid == team_uuid))
+    guest = await client.post("/graphql", json={"query": AREAS, "variables": {"bounds": _box(136.0, 36.0)}})
+    items = {i["uuid"]: i for i in guest.json()["data"]["areas"]["items"]}
+    assert items[zone_uuid]["isPublic"] is True
+    assert items[zone_uuid]["assignedTeams"] == [{"name": team_name}]
 
 
 @pytest.mark.asyncio
@@ -733,38 +764,36 @@ async def test_a_hazardous_zone_status_cannot_be_blank(client, redis):
 
 
 @pytest.mark.asyncio
-async def test_the_visibility_switch_controls_the_public_map(client, redis, team_uuid):
-    """Mark and team zones start hidden and appear on the guest map once switched on."""
+async def test_the_visibility_switch_controls_the_public_map(client, redis):
+    """A mark zone starts hidden, admins still list it, and it appears on the guest map once switched on."""
     gov_token = await _make_gov_user(redis)
     mark = await _create(
         client, gov_token, {"input": {"type": "mark_zone", "geometry": _square(131.0, 31.0)}}
     )
-    zone = await _create(client, gov_token, _zone_input("Public zone", team_uuid, _square(131.01, 31.01)))
-    uuids = {mark["data"]["createArea"]["uuid"], zone["data"]["createArea"]["uuid"]}
+    mark_uuid = mark["data"]["createArea"]["uuid"]
     variables = {"bounds": _box(131.0, 31.0)}
 
     async def _guest_sees() -> set:
         resp = await client.post("/graphql", json={"query": AREAS, "variables": variables})
         return {i["uuid"] for i in resp.json()["data"]["areas"]["items"]}
 
-    assert not uuids & await _guest_sees()
+    assert mark_uuid not in await _guest_sees()
 
     admin = await client.post(
         "/graphql",
         json={"query": AREAS, "variables": {**variables, "includePrivate": True}},
         headers=auth_header(gov_token),
     )
-    assert uuids <= {i["uuid"] for i in admin.json()["data"]["areas"]["items"]}
+    assert mark_uuid in {i["uuid"] for i in admin.json()["data"]["areas"]["items"]}
 
-    for area_uuid in uuids:
-        resp = await client.post(
-            "/graphql",
-            json={"query": UPDATE_AREA, "variables": {"uuid": area_uuid, "input": {"isPublic": True}}},
-            headers=auth_header(gov_token),
-        )
-        assert resp.json()["data"]["updateArea"]["isPublic"] is True
+    resp = await client.post(
+        "/graphql",
+        json={"query": UPDATE_AREA, "variables": {"uuid": mark_uuid, "input": {"isPublic": True}}},
+        headers=auth_header(gov_token),
+    )
+    assert resp.json()["data"]["updateArea"]["isPublic"] is True
 
-    assert uuids <= await _guest_sees()
+    assert mark_uuid in await _guest_sees()
 
 
 @pytest.mark.asyncio

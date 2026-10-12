@@ -430,7 +430,7 @@ area_polygons {
     uuid uuid PK, FK "PK is also FK to base_geometries"
     string name "String(100), nullable"
     string note "nullable"
-    boolean is_public "default false; always true for hazardous_zone"
+    boolean is_public "default false; always true except for mark_zone"
 }
 base_geometries ||--|| area_polygons : "inherits as"
 
@@ -442,7 +442,7 @@ hazardous_zones {
 }
 area_polygons ||--|| hazardous_zones : "inherits as"
 
-%% 責任區: the only area team_zone_assign can point at (see the Identity diagram).
+%% 責任區: always public with its teams' names, and the only area team_zone_assign can point at.
 team_zones {
     uuid uuid PK, FK "PK is also FK to area_polygons"
 }

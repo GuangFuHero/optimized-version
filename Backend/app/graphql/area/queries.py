@@ -1,8 +1,8 @@
 """GraphQL queries for map areas and team zones.
 
-`areas` serves the public map (map.view) and returns only public areas unless the caller asks
-for private ones, which needs work_zone.view. Team zones carry team data, so they need
-work_zone.view (ADR-036), which only the super_admin and team admin roles hold, both at Scope.ALL.
+`areas` serves the public map (map.view) with every hazardous and team zone and the team names,
+and adds hidden mark zones only for work_zone.view holders. The team zone queries also return who
+drew each zone, so they need work_zone.view, which only super_admin and team admins hold.
 """
 
 from uuid import UUID
@@ -37,9 +37,9 @@ class AreaQuery:
     ) -> AreaConnection:
         """List map areas of every kind inside an optional bounding box, newest first.
 
-        Without includePrivate this is the public map layer (map.view, so a guest may call it):
-        every hazardous zone plus the mark and team zones switched to public. includePrivate
-        needs work_zone.view and also returns the hidden ones.
+        Without includePrivate this is the public map layer, which a guest may call: every
+        hazardous and team zone, plus the mark zones switched to public. includePrivate needs
+        work_zone.view and adds the hidden mark zones.
         """
         db = info.context["db"]
         await check_permission(info, Perm.ZONE_VIEW if include_private else Perm.MAP_VIEW)

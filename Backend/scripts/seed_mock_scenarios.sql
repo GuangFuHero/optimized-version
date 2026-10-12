@@ -641,15 +641,15 @@ INSERT INTO task_assignments (uuid, task_uuid, actor_uuid, role, assigned_at) VA
  ('f0000000-0000-4000-8000-000000000047','e0000000-0000-4000-8000-000000000051','c0000000-0000-4000-8000-000000000029','volunteer','2025-10-03 16:39+08');
 
 -- 6. TEAM ZONES(責任區)— 每個情境一個,官方帳號劃設,涵蓋該情境站點/tickets 座標範圍。
--- 區域是 base_geometries → area_polygons → team_zones 三層繼承,三張表都要寫;預設不在前台顯示。
+-- 區域是 base_geometries → area_polygons → team_zones 三層繼承,三張表都要寫。責任區恆公開,前後台都顯示被指派的團隊名稱。
 INSERT INTO base_geometries (uuid, property_name, geometry, created_by) VALUES
  ('20000000-0000-4000-8000-000000000001','team_zone',
   ST_MakeEnvelope(121.35,23.48,121.47,23.76,4326),'c0000000-0000-4000-8000-000000000025'),
  ('20000000-0000-4000-8000-000000000002','team_zone',
   ST_MakeEnvelope(121.70,24.60,121.82,24.76,4326),'c0000000-0000-4000-8000-000000000037');
-INSERT INTO area_polygons (uuid, name) VALUES
- ('20000000-0000-4000-8000-000000000001','花蓮光復救災範圍'),
- ('20000000-0000-4000-8000-000000000002','宜蘭冬山救災範圍');
+INSERT INTO area_polygons (uuid, name, is_public) VALUES
+ ('20000000-0000-4000-8000-000000000001','花蓮光復救災範圍',true),
+ ('20000000-0000-4000-8000-000000000002','宜蘭冬山救災範圍',true);
 INSERT INTO team_zones (uuid) VALUES
  ('20000000-0000-4000-8000-000000000001'),
  ('20000000-0000-4000-8000-000000000002');
