@@ -4,10 +4,17 @@ import logging
 
 import strawberry
 from fastapi import HTTPException
-from strawberry.extensions import MaskErrors
+from strawberry.extensions import (
+    AddValidationRules,
+    MaskErrors,
+    MaxAliasesLimiter,
+    MaxTokensLimiter,
+    QueryDepthLimiter,
+)
 from strawberry.types.execution import ExecutionResult as StrawberryExecutionResult
 from strawberry.utils.logging import StrawberryLogger
 
+from app.core.config import settings
 from app.graphql.announcements.mutations import AnnouncementMutation
 from app.graphql.announcements.queries import AnnouncementQuery
 from app.graphql.area.mutations import AreaMutation
@@ -25,8 +32,9 @@ from app.graphql.tickets.queries import RequestQuery, TicketTaskQuery
 
 # Ruff sorts `graphql` into the first-party block (it collides with this package's own
 # name, app.graphql). Moving it up beside fastapi reads better but fails I001 in CI.
-from graphql import GraphQLError
+from graphql import GraphQLError, parse
 from graphql.execution.execute import ExecutionResult as GraphQLExecutionResult
+from graphql.validation import NoSchemaIntrospectionCustomRule
 
 _logger = logging.getLogger("app.graphql")
 
@@ -102,6 +110,19 @@ class _RequestMaskErrors(MaskErrors):
             self._process_result(result.initial_result)
 
 
+class _MaxTokensLimiter(MaxTokensLimiter):
+    """MaxTokensLimiter that also bounds async requests, which every request through FastAPI is.
+
+    Strawberry's async path parses without the extension's `max_tokens`, so the stock limiter
+    never fires there; parsing here, before strawberry does, applies it.
+    """
+
+    def on_parse(self):
+        execution_context = self.execution_context
+        execution_context.graphql_document = parse(execution_context.query, **execution_context.parse_options)
+        yield
+
+
 class _Schema(strawberry.Schema):
     """Schema that logs expected errors as information, not as failures.
 
@@ -133,5 +154,13 @@ class _Schema(strawberry.Schema):
 schema = _Schema(
     query=Query,
     mutation=Mutation,
-    extensions=[_RequestMaskErrors(should_mask_error=_should_mask)],
+    # The limits sit well above the largest frontend operation (4 levels deep, no aliases, about
+    # 90 tokens), and introspection is open only in development so other deployments hide the schema.
+    extensions=[
+        _RequestMaskErrors(should_mask_error=_should_mask),
+        QueryDepthLimiter(max_depth=10),
+        MaxAliasesLimiter(max_alias_count=10),
+        _MaxTokensLimiter(max_token_count=1000),
+        *([] if settings.ENV == "development" else [AddValidationRules([NoSchemaIntrospectionCustomRule])]),
+    ],
 )
