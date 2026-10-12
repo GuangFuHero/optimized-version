@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from strawberry.dataloader import DataLoader
 
 from app.db.h3 import h3_cell_text, h3_centroid
+from app.graphql.area.types import AssignedTeamType
 from app.graphql.geo.types import (
     CrowdSourcingType,
     SecondaryLocationType,
@@ -32,7 +33,6 @@ from app.graphql.tickets.types import (
     TicketDisasterDetailType,
     TicketTaskType,
 )
-from app.graphql.work_zone.types import AssignedTeamType
 from app.models.geo import BaseGeometry
 from app.models.photo import Photo
 from app.models.request import Tickets
@@ -333,7 +333,7 @@ def _make_team_by_uuid_loader(db: AsyncSession):
 
 
 def _make_teams_by_zone_loader(db: AsyncSession):
-    """Batch-load the teams each work zone is delegated to (soft-deleted teams excluded)."""
+    """Batch-load the teams each team zone is delegated to (soft-deleted teams excluded)."""
 
     async def load_fn(zone_uuids: list[str]) -> list[list[AssignedTeamType]]:
         pairs = await team_zone_assign_repository.teams_by_zones(db, list(zone_uuids))

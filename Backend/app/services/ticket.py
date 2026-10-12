@@ -58,7 +58,7 @@ async def _task_scope_target(db: AsyncSession, task: TicketTask) -> SimpleNamesp
     directly (in_scope's ZONE branch needs resource.geometry). Direction B: the task
     borrows its parent ticket's location for the zone check, so a team's `zone`-scoped
     ticket.edit / ticket.assign reaches the tasks under tickets sitting inside its
-    WorkZone. `own` is unchanged — it still means the task's own creator.
+    TeamZone. `own` is unchanged — it still means the task's own creator.
     """
     parent = await ticket_repository.get_by_uuid_active(db, task.ticket_uuid)
     return SimpleNamespace(
@@ -74,7 +74,7 @@ async def _assignment_scope_target(db: AsyncSession, assignment: TaskAssignment)
     `own` means "I am the assignee" (actor_uuid), not "I created this row" (ADR-045).
     `zone` borrows the assignment's task's parent-ticket location (ADR-052, direction B),
     so a coordinator with ticket.assign=zone can manage assignments on tasks inside their
-    WorkZone.
+    TeamZone.
     """
     task = await ticket_task_repository.get_by_uuid_active(db, assignment.task_uuid)
     parent = await ticket_repository.get_by_uuid_active(db, task.ticket_uuid) if task else None

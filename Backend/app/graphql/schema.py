@@ -10,6 +10,8 @@ from strawberry.utils.logging import StrawberryLogger
 
 from app.graphql.announcements.mutations import AnnouncementMutation
 from app.graphql.announcements.queries import AnnouncementQuery
+from app.graphql.area.mutations import AreaMutation
+from app.graphql.area.queries import AreaQuery
 from app.graphql.briefings.mutations import BriefingMutation
 from app.graphql.briefings.queries import BriefingQuery
 from app.graphql.config.mutations import PropertyConfigMutation
@@ -20,8 +22,6 @@ from app.graphql.suggestions.mutations import SuggestionMutation
 from app.graphql.suggestions.queries import SuggestionQuery
 from app.graphql.tickets.mutations import RequestMutation, TicketTaskMutation
 from app.graphql.tickets.queries import RequestQuery, TicketTaskQuery
-from app.graphql.work_zone.mutations import WorkZoneMutation
-from app.graphql.work_zone.queries import WorkZoneQuery
 
 # Ruff sorts `graphql` into the first-party block (it collides with this package's own
 # name, app.graphql). Moving it up beside fastapi reads better but fails I001 in CI.
@@ -32,12 +32,12 @@ _logger = logging.getLogger("app.graphql")
 
 
 @strawberry.type
-class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, BriefingQuery, SuggestionQuery, WorkZoneQuery):  # noqa: E501
+class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, BriefingQuery, SuggestionQuery, AreaQuery):  # noqa: E501
     """Root query type composing all domain query mixins."""
 
 
 @strawberry.type
-class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, BriefingMutation, SuggestionMutation, WorkZoneMutation):  # noqa: E501
+class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, BriefingMutation, SuggestionMutation, AreaMutation):  # noqa: E501
     """Root mutation type composing all domain mutation mixins."""
 
 

@@ -52,9 +52,8 @@
 | capability | Guest | user | data_auditor | super_admin | admin(team) | member(team) |
 |---|---|---|---|---|---|---|
 | map.view | all（公開） | all | all | all | all | all |
-| map.add | — | — | — | all | — | — |
-| map.edit | — | — | — | all | — | — |
-| map.delete | — | — | — | all | — | — |
+
+> 畫、改、刪地圖區域（危險區／責任區／標示區）一律用 `work_zone.*`（ADR-311），`map.add/edit/delete` 已刪除。
 
 ### 站點 Station
 

@@ -21,7 +21,7 @@ from app.models.auth import User
 from app.models.property_config import TaskPropertyConfig
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_task import TaskProperty, TicketTask
 from app.services.bulk_columns import DYNAMIC_PREFIX
 from app.services.bulk_export import export_tickets
@@ -299,7 +299,7 @@ async def test_a_zone_scoped_export_comes_back_half_writable(db):
     await db.flush()
     assigner = User(name="assigner")
     db.add(assigner)
-    zone = WorkZone(name="Z", geometry=from_shape(ZONE_POLYGON, srid=4326))
+    zone = TeamZone(name="Z", geometry=from_shape(ZONE_POLYGON, srid=4326))
     db.add(zone)
     await db.flush()
     db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))

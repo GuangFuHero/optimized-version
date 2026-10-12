@@ -26,7 +26,7 @@ from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssi
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import StationProperty
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_task import TaskProperty, TicketTask
 from app.services.bulk_columns import DYNAMIC_PREFIX
 from app.services.bulk_export import BulkExportError, export_stations, export_tickets
@@ -79,7 +79,7 @@ async def _zoned_team(db) -> Team:
     await db.flush()
     assigner = User(name="zone-assigner")
     db.add(assigner)
-    zone = WorkZone(name="Z", geometry=from_shape(ZONE_POLYGON, srid=4326))
+    zone = TeamZone(name="Z", geometry=from_shape(ZONE_POLYGON, srid=4326))
     db.add(zone)
     await db.flush()
     db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))
