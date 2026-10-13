@@ -7,7 +7,7 @@ import { ButtonBase } from '@mui/material';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
-import type { NeedClaim } from './need-claim';
+import type { NeedClaim, NeedClaimKind } from './need-claim';
 
 const { color, radius, typography, motion } = designTokens;
 
@@ -36,6 +36,51 @@ const LOOKS = {
   },
 } as const;
 
+/** One per kind, so a kind added without an icon does not compile. */
+const ICONS: Record<NeedClaimKind, typeof CheckRoundedIcon> = {
+  mine: CheckRoundedIcon,
+  guest: LockRoundedIcon,
+  open: VolunteerActivismRoundedIcon,
+  full: VolunteerActivismRoundedIcon,
+  fulfilled: VolunteerActivismRoundedIcon,
+};
+
+const SIZES = {
+  row: {
+    flex: '0 0 auto',
+    gap: 0.75,
+    // 36px tall: below that it is missed on a moving truck (prototype site-list.jsx:85-92).
+    minHeight: 36,
+    px: 1.75,
+    py: 0,
+    borderRadius: `${radius.full}px`,
+    fontSize: displayTextSize[13],
+    iconSize: 15,
+  },
+  footer: {
+    flex: 1,
+    gap: 1,
+    minHeight: undefined,
+    px: 1,
+    py: '9px',
+    borderRadius: 0,
+    fontSize: displayTextSize[12],
+    iconSize: 14,
+  },
+} as const;
+
+/**
+ * A guest's 「登入後接」 takes the same fill as 「接這筆」 and keeps its lock: the prototype's
+ * button, only pressable — it disabled it (site-detail.jsx:103, 128-129).
+ */
+function lookFor(pressable: boolean, kind: NeedClaimKind) {
+  if (pressable) {
+    return LOOKS.pressable;
+  }
+
+  return kind === 'mine' ? LOOKS.claimed : LOOKS.disabled;
+}
+
 interface NeedClaimButtonProps {
   claim: NeedClaim;
   /** Joins the label in the accessible name — 「接這筆」alone does not say which need. */
@@ -58,23 +103,13 @@ export function NeedClaimButton({
   onSignIn,
   placement = 'row',
 }: NeedClaimButtonProps) {
-  const onPress =
-    claim.action === 'claim' ? onClaim : claim.action === 'sign-in' ? onSignIn : undefined;
+  const onPress = claim.action
+    ? { claim: onClaim, 'sign-in': onSignIn }[claim.action]
+    : undefined;
   const pressable = Boolean(onPress);
-  // A guest's 「登入後接」 takes the same fill as 「接這筆」 and keeps its lock: the prototype's
-  // button, only pressable — it disabled it (site-detail.jsx:103, 128-129).
-  const look = pressable
-    ? LOOKS.pressable
-    : claim.kind === 'mine'
-      ? LOOKS.claimed
-      : LOOKS.disabled;
-  const Icon =
-    claim.kind === 'mine'
-      ? CheckRoundedIcon
-      : claim.kind === 'guest'
-        ? LockRoundedIcon
-        : VolunteerActivismRoundedIcon;
-  const footer = placement === 'footer';
+  const look = lookFor(pressable, claim.kind);
+  const Icon = ICONS[claim.kind];
+  const { iconSize, ...size } = SIZES[placement];
 
   return (
     <ButtonBase
@@ -84,23 +119,15 @@ export function NeedClaimButton({
       // Starts with the visible label, so a voice user saying what they see still hits it.
       aria-label={`${claim.label}：${needName}`}
       sx={{
-        flex: footer ? 1 : '0 0 auto',
+        ...size,
         minWidth: 0,
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: footer ? 1 : 0.75,
-        // A row button stays 36px tall: below that it is missed on a moving truck (prototype
-        // site-list.jsx:85-92).
-        minHeight: footer ? undefined : 36,
-        px: footer ? 1 : 1.75,
-        py: footer ? '9px' : 0,
-        borderRadius: footer ? 0 : `${radius.full}px`,
         border: `1px solid ${look.border}`,
         bgcolor: look.background,
         color: look.color,
         fontFamily: typography.label[400].fontFamily,
-        fontSize: footer ? displayTextSize[12] : displayTextSize[13],
         lineHeight: 1.2,
         fontWeight: 700,
         whiteSpace: 'nowrap',
@@ -109,7 +136,7 @@ export function NeedClaimButton({
         '&:hover': { bgcolor: look.hover },
       }}
     >
-      <Icon sx={{ fontSize: footer ? 14 : 15 }} />
+      <Icon sx={{ fontSize: iconSize }} />
       {claim.label}
     </ButtonBase>
   );
