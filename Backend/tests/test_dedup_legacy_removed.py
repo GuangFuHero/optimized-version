@@ -16,7 +16,7 @@ from app.services import dedup_snapshot, dedup_submission
 
 GONE_MODULES = [
     "app.services.dedup_scoring",  # Spec 019's formula, now app.dedup_engine.fast
-    "app.graphql.dedup",  # the standalone dedup API (ADR-286)
+    "app.graphql.dedup",  # the standalone dedup API (ADR-314)
     "app.dedup_engine.fast_v2",  # merged back into fast.py
 ]
 GONE_ATTRIBUTES = {

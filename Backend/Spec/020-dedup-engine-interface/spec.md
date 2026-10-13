@@ -7,7 +7,7 @@
 剩 plan Task 0：等 Chi 確認 §2~§4 的 contract、離線調參數工具怎麼接 DB，並補 CHANGELOG 的驗證數字（交接訊息見 `handoff-chi.md`）。
 **Depends on**: `Spec/019-dedup-fast-layer/spec.md`（PR #46 / #59，未合併）
 **Stacked on**: `feat/dedup-station-fast-layer`（#59，已合進 `3f97468f8`，含 main 的站點指派 #58）→ `feat/dedup-fast-layer`（#46）→ `main`
-**Decisions**: `decisions.md`（ADR-286~307；現行架構以 ADR-304 為準）
+**Decisions**: `decisions.md`（ADR-295~299、301~307、313~323；現行架構以 ADR-304 為準）
 
 ## 概述
 
@@ -18,7 +18,7 @@ Spec 019 交付了去重快層（2026-09-29 起比對單位是任務）。本功
 
 - Chi 改比對單位、候選條件、文字方法、公式、參數 → 只動 `app/dedup_engine/`。
 - 後端改權限、API、資料表、呼叫端 → 不影響演算法。
-- 去重是內部能力，由建立流程呼叫，不開獨立 API（ADR-286）。
+- 去重是內部能力，由建立流程呼叫，不開獨立 API（ADR-314）。
 
 ## 目標
 
@@ -54,7 +54,7 @@ Spec 019 交付了去重快層（2026-09-29 起比對單位是任務）。本功
 
 ---
 
-## 2. 輸入：送出的草稿（ADR-304，沿用 ADR-289 的白名單與只加不改）
+## 2. 輸入：送出的草稿（ADR-304，沿用 ADR-317 的白名單與只加不改）
 
 後端送進 engine 的是**驗證過的送出內容**，不是快照；候選由 engine 自己查。
 
@@ -135,11 +135,11 @@ class Suspect:
 ```
 
 - 每個 `draft_ref` 最多一個 `Suspect`（019 決定 2）。回幾個、比哪一層，都是 engine 的事。
-- 後端只讀 `draft_ref`、`related_*`、`similarity`；`evidence` 只存不讀（ADR-291）。
+- 後端只讀 `draft_ref`、`related_*`、`similarity`；`evidence` 只存不讀（ADR-319）。
 
 ---
 
-## 4. Engine 介面（ADR-290、297、304）
+## 4. Engine 介面（ADR-318、297、304）
 
 ```python
 class DedupEngine(Protocol):
@@ -153,7 +153,7 @@ class DedupEngine(Protocol):
 
 - `check`：第一段用。回傳疑似重複，沒有就是空序列。
 - `score`：使用者確認「不是重複」後建立時，替那一對算 evidence；找不到對方回 None。
-- `now` 由後端傳入（ADR-290）。
+- `now` 由後端傳入（ADR-318）。
 - engine 可以用 `db` 做任何**唯讀**查詢；不得寫入、flush、commit。
 - 版本號、CHANGELOG、golden test 沿用 ADR-297；golden 改在測試 DB 上以固定資料執行。
 
@@ -222,7 +222,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 
 ---
 
-## 6. Schema（ADR-294，Phase 1 已完成）
+## 6. Schema（ADR-322，Phase 1 已完成）
 
 | 表 / 常數 | 內容 |
 |---|---|
@@ -285,7 +285,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 ## 10. 演進紀錄
 
 - **Phase 1（2026-09-28，Task 1~14）**：以工單為單位；後端送快照（`TicketSnapshot`）、後端撈候選、engine 為純函式。已實作、Docker 驗證通過。
-- **ADR-300~303（2026-09-29）**：Chi 把單位改成任務；原計畫把後端的快照與 repository 改成任務層級。
+- **ADR-323、301~303（2026-09-29）**：Chi 把單位改成任務；原計畫把後端的快照與 repository 改成任務層級。
 - **ADR-304（2026-09-29）**：為避免每次改單位都要改後端，候選查詢與比對單位整個歸 engine；本文件以此為準。
 - **ADR-305（2026-09-29，Task 24 Docker 驗證）**：發現候選查詢從未用到空間 index（cast 的 typmod 對不上、站點無 centroid index），在本票修正。
 - **ADR-306／307（2026-09-29）**：`app/dedup_engine/` 裡歸後端的部分（registry、守門測試、時限）；依延遲實測定效能門檻、逾時維持 2 秒。

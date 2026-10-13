@@ -54,7 +54,7 @@ mutation($input: CreateStationInput!, $ack: String) {{
     }}
 }}
 """
-# Spec 019's standalone API (ADR-286) and Phase 1's single-suspect types (ADR-304).
+# Spec 019's standalone API (ADR-314) and Phase 1's single-suspect types (ADR-304).
 REMOVED_FROM_SDL = (
     "ticketDedupCandidates",
     "stationDedupCandidates",

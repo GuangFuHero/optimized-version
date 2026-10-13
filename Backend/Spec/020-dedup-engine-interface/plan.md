@@ -17,7 +17,7 @@
 **Tech Stack:** FastAPI, strawberry, SQLAlchemy async, PostgreSQL/PostGIS（pg_trgm 只剩對照測試用）,
 pytest（`uv run pytest`）, ruff。無新依賴（文字相似度自己實作，見 Task 2）。
 
-**Source spec:** `Spec/020-dedup-engine-interface/spec.md`（ADR-286~299）
+**Source spec:** `Spec/020-dedup-engine-interface/spec.md`（ADR-295~299、314~322）
 
 **Branch:** `feat/dedup-engine-interface`（off `feat/dedup-station-fast-layer` #59 → `feat/dedup-fast-layer` #46）。
 **合併必須排在 #46、#59 之後**；本分支會改 #46 的 migration，#46 若先合併，Task 5 要改成新開 migration。
@@ -29,7 +29,7 @@ pytest（`uv run pytest`）, ruff。無新依賴（文字相似度自己實作�
 - **core 不做 I/O。** `app/dedup_engine/` 底下不能 import `sqlalchemy`、`fastapi`、`strawberry`、`app.models`、
   `app.repositories`、`app.services`。Task 1 有一條守衛測試強制這件事。
 - **fast-v1 的分數行為盡量不變。** 權重、門檻、公式、半徑解法照 019 搬。唯一刻意的差異是文字相似度改用
-  Python（ADR-288），Task 2 用 pg_trgm 對照測試把差異壓到 0。
+  Python（ADR-316），Task 2 用 pg_trgm 對照測試把差異壓到 0。
 - **`create_ticket` / `create_station` 對外行為不變**（ADR-299）。批次匯入與既有測試不應該有任何紅燈。
 - **不存重播用的輸入**（ADR-295）。任何 audit / pair 寫入都不能放快照或標題、描述原文。
 - **不動未結案定義**（spec §10 延後）。`DEDUP_ENTITIES.open_filters` 原樣保留。
@@ -112,7 +112,7 @@ export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/
 - [x] **RED**：`test_core_isolation.py`，掃 `app/dedup_engine/**/*.py` 的 import，禁止清單出現就失敗
 
 ```python
-"""app/dedup_engine is the algorithm owner's code: it must stay pure (ADR-287)."""
+"""app/dedup_engine is the algorithm owner's code: it must stay pure (ADR-315)."""
 
 import ast
 from pathlib import Path
@@ -146,7 +146,7 @@ def test_core_does_no_io():
 - [x] **GREEN**：寫 `contract.py`（內容即 spec §3、§4，下面是完整檔案）
 
 ```python
-"""The contract between the backend and the dedup algorithm (Spec 020, ADR-289~292).
+"""The contract between the backend and the dedup algorithm (Spec 020, ADR-317~320).
 
 Both sides depend on this module and nothing else of each other. Changing it needs both
 owners to agree: add fields with defaults; renaming, removing or re-meaning a field bumps
@@ -215,7 +215,7 @@ class Candidate:
 
     snapshot: Snapshot
     distance_m: float
-    same_contact_phone: bool | None = None  # None: either side has no usable phone (ADR-293)
+    same_contact_phone: bool | None = None  # None: either side has no usable phone (ADR-321)
 
 
 @dataclass(frozen=True)
@@ -242,7 +242,7 @@ class DedupEngine(Protocol):
 
 - [x] **RED → GREEN**：`test_contract_types.py`
   - [x] 所有快照與 `Candidate`、`Match`、`RetrievalSpec` 都是 frozen（賦值拋 `FrozenInstanceError`）
-  - [x] 快照除必填欄位外全部有預設值（ADR-289 第 4 點「只加不改」的前提）：用 `dataclasses.fields` 檢查
+  - [x] 快照除必填欄位外全部有預設值（ADR-317 第 4 點「只加不改」的前提）：用 `dataclasses.fields` 檢查
   - [x] 快照欄位不含 `contact_*`、`review_note`、`visibility`、`team_uuid`、`updated_by`、`search_text`
   - [x] `FastEngine`（Task 3 之後）滿足 `DedupEngine` Protocol：先寫成 `@pytest.mark.skip(reason="Task 3")`，Task 3 拿掉
 - [x] `uv run pytest tests/dedup_engine -q` 綠
@@ -253,7 +253,7 @@ class DedupEngine(Protocol):
 
 **Files:** Create `app/dedup_engine/text.py`, `tests/dedup_engine/test_text.py`, `tests/test_dedup_trgm_parity.py`
 
-目標：fast-v1 的文字分數與 019 在 SQL 算的 **完全相同**，這樣「門檻要重跑回測」（ADR-288）的風險就縮到只剩欄位串接方式。
+目標：fast-v1 的文字分數與 019 在 SQL 算的 **完全相同**，這樣「門檻要重跑回測」（ADR-316）的風險就縮到只剩欄位串接方式。
 
 - [x] **RED**：`test_text.py` 單元測試
 
@@ -300,7 +300,7 @@ async def test_python_trigram_matches_pg_trgm(a, b):
 - [x] **GREEN**：`text.py`
 
 ```python
-"""pg_trgm-compatible trigram similarity, in Python (ADR-288).
+"""pg_trgm-compatible trigram similarity, in Python (ADR-316).
 
 Mirrors pg_trgm's `similarity()`: lower-case, split into alphanumeric words, pad each word
 with two spaces in front and one behind, take the set of 3-character windows, and return
@@ -577,7 +577,7 @@ def test_golden():
 
 - [x] `AUDIT_EVENT_TYPES` 加 `"hint_shown"`
 - [x] `DuplicatePair.score_components` → `evidence: Mapped[dict | None]`（JSONB，comment：「engine 的 evidence，內容由 engine 版本決定」）
-- [x] `DuplicatePair.engine_version: Mapped[str | None]`，CHECK `method = 'manual' OR engine_version IS NOT NULL`（ADR-294 修訂）
+- [x] `DuplicatePair.engine_version: Mapped[str | None]`，CHECK `method = 'manual' OR engine_version IS NOT NULL`（ADR-322 修訂）
 - [x] `DedupAuditEvent.engine_version: Mapped[str | None] = mapped_column(Text, nullable=True)`
 - [x] migration 同步改：`sa.Column("evidence", ...)`、兩個 `engine_version` 欄、`ck_dedup_audit_events_type` 的值清單
 - [x] `uv run pytest tests/test_migrations_match_models.py -q` 綠
@@ -689,7 +689,7 @@ def station_snapshot(row: Station) -> StationSnapshot: ...
 
 
 def same_contact_phone(a: str | None, b: str | None) -> bool | None:
-    """Equality after normalize_phone. None when either side has no usable number (ADR-293).
+    """Equality after normalize_phone. None when either side has no usable number (ADR-321).
 
     Stored phones are only stripped, not E.164, so both sides are normalized here.
     """
@@ -737,7 +737,7 @@ def to_candidate(kind, row, *, distance_m: float, submission_phone: str | None) 
 **留到 Task 13 才刪**：舊 GraphQL resolver 到 Task 11 才移除，在那之前仍呼叫它們（2026-09-28 實作時調整）。
 
 ```python
-MAX_CANDIDATE_RADIUS_M = 1000.0  # 後端防呆上限（ADR-292）
+MAX_CANDIDATE_RADIUS_M = 1000.0  # 後端防呆上限（ADR-320）
 
 
 async def find_match(db, *, kind: EntityKind, submission: Snapshot, submission_phone: str | None,
@@ -996,7 +996,7 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 ## Phase 2：engine 自己撈資料（ADR-304，2026-09-29）
 
-取代原本的「任務層級」Phase 2 草案（ADR-300 的 `TaskSnapshot` 方案）。候選查詢與比對單位整個歸 engine；
+取代原本的「任務層級」Phase 2 草案（ADR-323 的 `TaskSnapshot` 方案）。候選查詢與比對單位整個歸 engine；
 後端只管三個觸發點、保護措施與寫入。前提：本分支已合進 #59 的新 head（`af2ca1d95`）。
 完成條件同前：每個 Task 自己的測試（先紅後綠）＋全套件不比基準（1587）差；全部做完重跑 Docker 完整驗證。
 

@@ -4,8 +4,8 @@
 
 > **2026-09-28／29：部分內容已被 `Spec/020-dedup-engine-interface/` 取代。**
 > §1 的 GraphQL（`ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`）已移除，
-> 改為建立 mutation 的兩段式（ADR-286、296，任務層級見 020 的後續 ADR）；§3 的計分移到 `app/dedup_engine/`，
-> 文字相似度改由 Python 計算（ADR-288）；§2 的 `score_components` 改為 `evidence`，並新增 `engine_version`（ADR-294）。
+> 改為建立 mutation 的兩段式（ADR-314、296，任務層級見 020 的後續 ADR）；§3 的計分移到 `app/dedup_engine/`，
+> 文字相似度改由 Python 計算（ADR-316）；§2 的 `score_components` 改為 `evidence`，並新增 `engine_version`（ADR-322）。
 > 本檔的比對單位（task）、三個觸發決策、候選條件與計分公式維持有效。
 
 比對單位是 **task**：每個要送出的 task，先跟附近「還開著」的 task 比一次，最像的一筆過門檻就提示使用者；

@@ -1,4 +1,4 @@
-"""Trigram similarity in Python, with the same result as pg_trgm (ADR-288).
+"""Trigram similarity in Python, with the same result as pg_trgm (ADR-316).
 
 This module does the same steps as `similarity()` of pg_trgm:
 

@@ -135,7 +135,7 @@ class DedupEngine(Protocol):
 
     The engine may run any read-only query on `db`; it must not add, flush or commit. The backend
     calls it inside a savepoint it always rolls back, under a timeout, and treats any failure as
-    "no suspects" (fail-open). `now` comes from the backend (ADR-290).
+    "no suspects" (fail-open). `now` comes from the backend (ADR-318).
     """
 
     version: str

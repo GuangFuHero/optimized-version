@@ -306,7 +306,7 @@ DEDUP_REGEN_GOLDEN=1 uv run pytest tests/dedup_engine/test_golden.py   # 升 ver
 
 | Commit | Task | 內容 |
 |---|---|---|
-| `3030754cb`、`5e1bb3705`、`6c6594cce` | — | 以任務為單位的設計（ADR-300~303）→ 改成 engine 自己撈資料（ADR-304） |
+| `3030754cb`、`5e1bb3705`、`6c6594cce` | — | 以任務為單位的設計（ADR-323、301~303）→ 改成 engine 自己撈資料（ADR-304） |
 | `19fb9881e` | 16 | ADR-304 的 contract（draft、`Suspect`、async engine） |
 | `7e21f3a59` | 17 | fast-v2：以任務為單位、自己撈 candidates |
 | `f08b9644a` | 18 | contract 的測試（真的 DB，含「engine 不能寫 DB」的檢查） |

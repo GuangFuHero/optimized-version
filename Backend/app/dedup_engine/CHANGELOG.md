@@ -164,7 +164,7 @@ at which a candidate perfect on every other signal scores exactly the threshold,
 
 ### Differences from Spec 019
 
-1. **Text similarity is computed in Python** (`text.py`), not by pg_trgm in SQL (ADR-288).
+1. **Text similarity is computed in Python** (`text.py`), not by pg_trgm in SQL (ADR-316).
    `tests/test_dedup_trgm_parity.py` checks it equals `similarity()` on the database.
 2. **Candidate text is truncated too** (title 200, description 2000 characters). Spec 019
    truncated only the submission's text.

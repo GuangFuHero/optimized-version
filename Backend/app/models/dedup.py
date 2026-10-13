@@ -36,7 +36,7 @@ AUDIT_EVENT_TYPES = (
     "suggested",
     "hint_accepted",
     "ignored_by_submitter",
-    # Spec 020 (ADR-294): a hint was shown and the submission stopped there. A later create
+    # Spec 020 (ADR-322): a hint was shown and the submission stopped there. A later create
     # with acknowledgedDuplicateOf adds `ignored_by_submitter`; none means the hint was taken.
     "hint_shown",
     "rejected",
@@ -68,7 +68,7 @@ class DuplicatePair(Base, UUIDPKMixin, TimestampMixin):
         ),
         CheckConstraint(_in_list("method", PAIR_METHODS), name="ck_duplicate_pairs_method"),
         # Every engine-made card names the engine version that judged it; only a card an admin
-        # made by hand has no engine behind it (Spec 020, ADR-294).
+        # made by hand has no engine behind it (Spec 020, ADR-322).
         CheckConstraint(
             "method = 'manual' OR engine_version IS NOT NULL", name="ck_duplicate_pairs_engine_version"
         ),

@@ -35,7 +35,7 @@ REQUIRED = {
     NewStation: {"station"},
     Suspect: {"draft_ref", "related_kind", "related_uuid", "similarity", "evidence"},
 }
-# Never handed to the engine (ADR-304 keeps ADR-289's whitelist for drafts).
+# Never handed to the engine (ADR-304 keeps ADR-317's whitelist for drafts).
 EXCLUDED = {"contact_name", "contact_email", "review_note", "visibility", "team_uuid", "created_by"}
 
 

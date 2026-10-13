@@ -1,14 +1,24 @@
-# 去重引擎介面 — ADR 全集（ADR-286~304）
+# 去重引擎介面 — ADR 全集（ADR-295~299、301~307、313~323）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號接續 `Spec/008-rbac-authorization/decisions.md`（ADR-285 為 2026-09-28 全 repo 各分支掃描的最大值）。
+
+**改號（2026-10-13，PR #73 審查）**：本檔原本用 ADR-286~307。其中 ADR-300 已被 main 的 `Spec/008`（#57）使用，
+ADR-286~294 也與其他尚未合併的 PR（#63 的 `Spec/008`、`Spec/019-role-requests`、`Spec/020-volunteer-claim`）撞號，
+因此這 10 條改到全 repo 各分支都還沒用過的號碼。內容不變，條目維持原本的先後順序：
+
+| 原號 | 286 | 287 | 288 | 289 | 290 | 291 | 292 | 293 | 294 | 300 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 新號 | 314 | 315 | 316 | 317 | 318 | 319 | 320 | 321 | 322 | 323 |
+
+2026-10-13 之前的 commit 訊息與 `handoff-chi.md` 引用的是原號。
 
 **背景**：Spec 019（PR #46 / #59，作者 Chi）交付了去重快層。本功能由後端接手包裝，
 而演算法會由 Chi 持續迭代。以下每條決策都在回答同一個問題：**演算法改了，後端要不要跟著改？**
 
 ---
 
-### ADR-286 去重是內部能力，不開獨立 GraphQL API
+### ADR-314 去重是內部能力，不開獨立 GraphQL API
 
 **白話**：拿掉 `ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`。
 去重由需要它的業務流程（建單、登記據點、之後的慢層）在內部呼叫。
@@ -35,7 +45,7 @@
 
 ---
 
-### ADR-287 分成 algorithm core / repository / service / model 四層，core 不做 I/O
+### ADR-315 分成 algorithm core / repository / service / model 四層，core 不做 I/O
 
 > **被 ADR-304 取代（2026-09-29）**：候選查詢改歸 engine，engine 可唯讀查 DB。
 
@@ -52,7 +62,7 @@ Chi 要加一個訊號，三個檔案都可能要動。
 | 層 | 擁有者 | 職責 |
 |---|---|---|
 | algorithm core `app/dedup_engine/` | Chi | 訊號、分數、門檻、各種類參數、檢索範圍、`evidence` 內容 |
-| snapshot builder | 後端 | ORM row / 建單 input → 快照（ADR-289） |
+| snapshot builder | 後端 | ORM row / 建單 input → 快照（ADR-317） |
 | repository | 後端 | 依 core 給的檢索範圍撈「未結案」候選，回傳快照＋關係事實 |
 | service | 後端 | 組快照、呼叫 engine、fail-open、寫配對卡與 audit |
 | model | 後端 | `duplicate_pairs`、`dedup_audit_events` |
@@ -65,7 +75,7 @@ Chi 要加一個訊號，三個檔案都可能要動。
 
 ---
 
-### ADR-288 文字相似度移到 core，用 Python 計算，不用 pg_trgm
+### ADR-316 文字相似度移到 core，用 Python 計算，不用 pg_trgm
 
 > **被 ADR-304 取代（2026-09-29）**：文字比對方法完全歸 engine。
 
@@ -73,7 +83,7 @@ Chi 要加一個訊號，三個檔案都可能要動。
 
 **Context**：Spec 019 在 SQL 裡算 `similarity(concat_ws(' ', title, description), query)`。
 pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 repository 在做演算法的工作。
-依 ADR-287 的規則，比對方法、比哪些欄位、要不要截斷都會隨迭代改變，屬於 core。
+依 ADR-315 的規則，比對方法、比哪些欄位、要不要截斷都會隨迭代改變，屬於 core。
 
 **Decision**：core 用 Python 計算文字相似度。
 
@@ -87,7 +97,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 ---
 
-### ADR-289 送事實不送特徵：型別化的白名單快照，送出與候選同型
+### ADR-317 送事實不送特徵：型別化的白名單快照，送出與候選同型
 
 > **被 ADR-304 取代（2026-09-29）**：後端只送驗證過的草稿，候選由 engine 自己查。「白名單、只加不改」的原則保留給草稿型別。
 
@@ -115,7 +125,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 ---
 
-### ADR-290 時間由外部傳入，engine 是純函式
+### ADR-318 時間由外部傳入，engine 是純函式
 
 **白話**：engine 不呼叫 `datetime.now()`，由 service 傳 `now`。
 
@@ -125,7 +135,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 ---
 
-### ADR-291 engine 輸出：依分數排序的清單；只有 uuid 與 similarity 有語意
+### ADR-319 engine 輸出：依分數排序的清單；只有 uuid 與 similarity 有語意
 
 **白話**：後端只讀 `candidate_uuid` 和 `similarity`，其餘放不透明的 `evidence`，後端只存不讀。
 
@@ -142,7 +152,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 ---
 
-### ADR-292 檢索半徑由 engine 宣告；後端硬上限 1000 m
+### ADR-320 檢索半徑由 engine 宣告；後端硬上限 1000 m
 
 > **被 ADR-304 取代（2026-09-29）**：半徑歸 engine 自己的查詢；後端改以逾時保護。
 
@@ -160,7 +170,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 ---
 
-### ADR-293 電話以 pair 層級布林 `same_contact_phone` 送入，不雜湊、不進快照
+### ADR-321 電話以 pair 層級布林 `same_contact_phone` 送入，不雜湊、不進快照
 
 > **被 ADR-304 取代（2026-09-29）**：電話怎麼比歸 engine；草稿帶正規化後的電話。
 
@@ -181,15 +191,15 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 `contact_phone` 不進快照。離線資料集同格式，存 pair 層級布林。
 
 ➕ 不需要金鑰；engine 完全看不到電話。
-➕ 與 `distance_m` 同一類（兩筆之間的關係事實），不違反 ADR-289。
-➖ 模糊比對（例如只比後 8 碼）要後端改，依 ADR-289 第 4 點以新增欄位處理。
+➕ 與 `distance_m` 同一類（兩筆之間的關係事實），不違反 ADR-317。
+➖ 模糊比對（例如只比後 8 碼）要後端改，依 ADR-317 第 4 點以新增欄位處理。
 
 **否決 HMAC**：成本真實（金鑰管理），防護很薄。
 **否決 SHA**：可被暴力還原，等同把電話放進快照與 log。
 
 ---
 
-### ADR-294 資料表：`score_components` 改為不透明 `evidence`；新增 `engine_version`；新增 `hint_shown` 事件
+### ADR-322 資料表：`score_components` 改為不透明 `evidence`；新增 `engine_version`；新增 `hint_shown` 事件
 
 **白話**：資料表不再綁定現行公式的分數結構，並記錄每筆判斷是哪一版引擎做的。
 
@@ -232,7 +242,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 **白話**：第一次送出如果疑似重複，就不建單，回傳疑似重複的那一筆；使用者確認後再送一次才建單。
 
-**Context**：ADR-286 拿掉了獨立 API，「建單前提示使用者」要改由建單流程本身帶出。考慮過三種：
+**Context**：ADR-314 拿掉了獨立 API，「建單前提示使用者」要改由建單流程本身帶出。考慮過三種：
 
 - **A. 兩段式**：回 union，確認後再送一次。
 - **B. 照常建單，回傳附帶疑似重複**：非破壞性，但重複單已經建立。
@@ -278,7 +288,7 @@ SemVer 的 major/minor 對演算法很難定義；commit hash 讀不懂且改註
 - **Changelog**：`app/dedup_engine/CHANGELOG.md`，每版記錄改了什麼、參數表、回測結果（資料集名稱與指標）。
 - **Golden test**：固定輸入 → 輸出存成 golden file，檔案內記錄產生時的版本號。
   輸出變了但 `version` 沒變 → 失敗；升版時重新產生。
-- 第一版：搬進 core 並改用 Python 文字相似度（ADR-288）之後的版本定為 `fast-v1`。
+- 第一版：搬進 core 並改用 Python 文字相似度（ADR-316）之後的版本定為 `fast-v1`。
 
 ➕ 「改行為必升版」由 CI 保證，不靠人記得。
 
@@ -330,11 +340,11 @@ SemVer 的 major/minor 對演算法很難定義；commit hash 讀不懂且改註
 
 Chi 在 2026-09-29 把 Spec 019 的比對單位從工單改成任務（commit `0d186dedb`、`cf0e51c3e`、`7e28d72e3`，
 已合進本分支）。以下 ADR 把任務層級接到 Spec 020 的架構上。ADR-296 的「以工單為單位的 createTicket 兩段式」
-被 ADR-301／302 取代；ADR-289 的 `TicketSnapshot` 被 ADR-300 的 `TaskSnapshot` 取代。
+被 ADR-301／302 取代；ADR-317 的 `TicketSnapshot` 被 ADR-323 的 `TaskSnapshot` 取代。
 
 ---
 
-### ADR-300 求助單這邊的比對單位是任務；快照改為 `TaskSnapshot`
+### ADR-323 求助單這邊的比對單位是任務；快照改為 `TaskSnapshot`
 
 > **被 ADR-304 取代（2026-09-29）**：比對單位由 engine 決定；不再有 `TaskSnapshot`。
 
@@ -346,12 +356,12 @@ Chi 在 2026-09-29 把 Spec 019 的比對單位從工單改成任務（commit `0
 
 **Decision**：
 
-- contract 以 `TaskSnapshot` 取代 `TicketSnapshot`，`SNAPSHOT_SCHEMA_VERSION` 升為 2（改名＝破壞性，依 ADR-289 第 4 點）。
+- contract 以 `TaskSnapshot` 取代 `TicketSnapshot`，`SNAPSHOT_SCHEMA_VERSION` 升為 2（改名＝破壞性，依 ADR-317 第 4 點）。
   欄位：`uuid`、`ticket_uuid`、`location`（所屬工單的點）、`created_at`、`task_type`、`task_name`、`task_description`、
   `quantity`、`status`。`EntityKind` 改為 `"ticket_task" | "station"`。
 - engine 的文字訊號比 `task_name + task_description`，類別比 `task_type`，距離是兩個任務所屬工單之間。
 - repository 的候選條件照 019；新增「排除某張工單的任務」參數。
-- `same_contact_phone` 比的是兩個任務**所屬工單**的電話（ADR-293 不變）。
+- `same_contact_phone` 比的是兩個任務**所屬工單**的電話（ADR-321 不變）。
 - 分數行為改變（單位、文字欄位都換了），engine 升為 **`fast-v2`**，重產 golden，寫 CHANGELOG。
 
 ➖ 工單本身不再去重：兩張單的任務都不像，就不會提示。這是 019 的產品決定，照做。
@@ -420,8 +430,8 @@ type TaskSuspect { draftIndex: Int!  relatedTicketUuid: String!  relatedTaskUuid
 
 **白話**：Chi 可以自己寫查詢、自己組資料，要比工單、比任務、比什麼都行。後端只管什麼時候問、問完怎麼記。
 
-**Context**：ADR-287 的接縫只隔離了「怎麼算分數」；「比什麼」（快照型別、repository 撈哪張表、比對單位）寫死在後端。
-2026-09-29 Chi 把比對單位從工單改成任務（ADR-300），後端的 contract、builder、repository、API 都得跟著改。
+**Context**：ADR-315 的接縫只隔離了「怎麼算分數」；「比什麼」（快照型別、repository 撈哪張表、比對單位）寫死在後端。
+2026-09-29 Chi 把比對單位從工單改成任務（ADR-323），後端的 contract、builder、repository、API 都得跟著改。
 使用者 2026-09-29 定案：讓 Chi 自己改 repository、自己組資料，以後改比對單位不用動後端。
 
 **Decision**：
@@ -458,14 +468,14 @@ class DedupEngine(Protocol):
 ```
 
 - **唯讀由後端強制**：engine 在 SAVEPOINT 內執行，結束後一律 rollback；contract test 另驗證呼叫後 session 沒有新增／修改／刪除的物件。
-- **逾時取代半徑上限**：後端以 `asyncio.wait_for` 包住 `check`（預設 2 秒），逾時＝fail-open。ADR-292 的 1000 m 上限改由 engine 自律（contract test 驗效能）。
+- **逾時取代半徑上限**：後端以 `asyncio.wait_for` 包住 `check`（預設 2 秒），逾時＝fail-open。ADR-320 的 1000 m 上限改由 engine 自律（contract test 驗效能）。
 - **確認（acknowledgement）**：每個草稿（工單、每個任務、站點）可帶 `acknowledgedDuplicateOf`；已確認的草稿，其疑似重複由後端濾掉，不再回報（避免迴圈），並在建立後寫配對卡（用 `engine.score` 算 evidence）。
 - **配對卡**：`entity_kind` 取 `related_kind`；送出方是對應 `draft_ref` 建出來的那筆，兩邊同種類。
 - **比對單位由 engine 決定**：比工單就回 `draft_ref="ticket"`，比任務就回 `"task:i"`，兩種都比就都回。後端不需要知道。
 
-**被取代**：ADR-287 的「core 不做 I/O」（engine 可唯讀查 DB）、ADR-288（文字比對方法歸 engine，用 pg_trgm 或 Python 都行）、
-ADR-289 的快照型別（改為送出草稿；「白名單、只加不改」原則保留給草稿）、ADR-292 的半徑上限（改逾時）、
-ADR-293（電話怎麼比歸 engine；草稿帶正規化後的 `contact_phone`）、ADR-298（站點位置的算法歸 engine）、ADR-300 的 `TaskSnapshot`。
+**被取代**：ADR-315 的「core 不做 I/O」（engine 可唯讀查 DB）、ADR-316（文字比對方法歸 engine，用 pg_trgm 或 Python 都行）、
+ADR-317 的快照型別（改為送出草稿；「白名單、只加不改」原則保留給草稿）、ADR-320 的半徑上限（改逾時）、
+ADR-321（電話怎麼比歸 engine；草稿帶正規化後的 `contact_phone`）、ADR-298（站點位置的算法歸 engine）、ADR-323 的 `TaskSnapshot`。
 ADR-301／302 的 API 保留，但回傳的疑似重複改為通用形狀（見 spec §5）。
 
 ➕ 比對單位、候選條件、文字方法以後都只動 `app/dedup_engine/`。
