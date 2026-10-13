@@ -1,4 +1,4 @@
-"""The fast layer (current version: fast-v3). It finds duplicates at task level with fixed rules.
+"""The fast layer (current version: fast-v4). It finds duplicates at task level with fixed rules.
 
 The engine changes each signal to a score from 0 to 1. The similarity is the weighted average of
 the available signals:
@@ -15,6 +15,8 @@ Then the engine adds a pure bonus (fast-v3). If both tickets have a contact phon
 phones are the same number, the engine adds `phone_bonus`. The maximum similarity is 1.
 A different phone or a missing phone changes nothing. Different people often report the same
 need, and many people do not give a phone. Thus, neither one shows that the need is different.
+A phone that the backend's E.164 parser rejects counts as missing (fast-v4): two tickets with the
+same placeholder, such as `0000000000`, do not show the same person.
 The engine adds the bonus to each candidate before it selects the best candidate and compares
 it with the threshold.
 
@@ -43,8 +45,6 @@ ground truth；`text_weight` 與 `component_baseline` 沒跑過 grid。`phone_bo
 舊平台資料 100 筆人工裁決的 proxy backtest（5-fold）。見 CHANGELOG.md。
 """
 
-import contextlib
-import functools
 import math
 import re
 from dataclasses import dataclass, replace
@@ -182,7 +182,7 @@ def max_hint_distance_m(p: FastParameters) -> float:
 class FastEngine:
     """The fast layer at task level. It is a `DedupEngine`."""
 
-    version = "fast-v3"
+    version = "fast-v4"
 
     def __init__(self, parameters: dict[RelatedKind, FastParameters] | None = None):
         """Use the default parameters for each kind, if the caller does not give other parameters."""
@@ -210,7 +210,10 @@ class FastEngine:
         rows = await candidates.open_tasks_near(
             db, at=at, radius_m=self.radius_m("ticket_task"), exclude_ticket_uuid=exclude
         )
-        suspects = (self._best_task(task_ref(i), draft, phone, rows, now) for i, draft in enumerate(drafts))
+        same_phones = _same_phones(phone, rows)
+        suspects = (
+            self._best_task(task_ref(i), draft, rows, same_phones, now) for i, draft in enumerate(drafts)
+        )
         return [s for s in suspects if s is not None]
 
     async def score(
@@ -238,12 +241,18 @@ class FastEngine:
             )
             return None if found is None else self._station_suspect(submission.station, *found, now)
 
+        if related_kind != "ticket_task":
+            return None  # the engine compares tasks, never the ticket itself (Spec 019)
         drafts, at, phone, _ = await self._task_context(db, submission)
         index = int(draft_ref.partition(":")[2])
         if at is None or index >= len(drafts):
             return None
         found = await candidates.task_with_distance(db, task_uuid=related_uuid, at=at)
-        return None if found is None else self._task_suspect(draft_ref, drafts[index], phone, *found, now)
+        if found is None:
+            return None
+        task, ticket, distance_m = found
+        same_phone = same_contact_phone(phone, ticket.contact_phone)
+        return self._task_suspect(draft_ref, drafts[index], same_phone, task, ticket, distance_m, now)
 
     async def _task_context(
         self, db: AsyncSession, submission: NewTicket | NewTask
@@ -263,14 +272,17 @@ class FastEngine:
         self,
         draft_ref: str,
         draft: TaskDraft,
-        phone: str | None,
         rows: list[tuple[TicketTask, Tickets, float]],
+        same_phones: list[bool | None],
         now: datetime,
     ) -> Suspect | None:
         threshold = self._parameters["ticket_task"].hint_threshold
         hits = [
             s
-            for s in (self._task_suspect(draft_ref, draft, phone, *row, now) for row in rows)
+            for s in (
+                self._task_suspect(draft_ref, draft, same_phone, *row, now)
+                for row, same_phone in zip(rows, same_phones, strict=True)
+            )
             if s.similarity >= threshold
         ]
         return max(hits, key=lambda s: (s.similarity, s.related_uuid), default=None)
@@ -279,7 +291,7 @@ class FastEngine:
         self,
         draft_ref: str,
         draft: TaskDraft,
-        phone: str | None,
+        same_phone: bool | None,
         task: TicketTask,
         ticket: Tickets,
         distance_m: float,
@@ -292,7 +304,7 @@ class FastEngine:
             text_similarity=text_similarity(
                 (draft.task_name, draft.task_description), (task.task_name, task.task_description)
             ),
-            same_contact_phone=same_contact_phone(phone, ticket.contact_phone),
+            same_contact_phone=same_phone,
         )
         similarity, components = combine(signals, self._parameters["ticket_task"])
         return Suspect(
@@ -351,23 +363,38 @@ def text_similarity(
     return set_similarity(trigrams(a), trigrams(b)) if a and b else None
 
 
-@functools.lru_cache(maxsize=4096)  # pure; the submission's phone is parsed once per candidate otherwise
 def phone_key(phone: str | None) -> str | None:
-    """Make the form of a phone that the engine compares: its digits, after E.164 if possible.
+    """Make the form of a phone that the engine compares: the digits of its E.164 form.
 
     The phone of the submission comes in E.164 (`+886912345678`). But `tickets.contact_phone`
     keeps the phone as the user typed it (`0912-345-678`). Thus, the engine sends both sides
-    through the E.164 parser of the backend first. If the parser rejects a phone, the engine
-    uses only its digits. Returns None if there is no phone.
+    through the E.164 parser of the backend first. Returns None if there is no phone or the
+    parser rejects it: a placeholder such as `0000000000` is not a phone (fast-v4).
     """
     if not phone:
         return None
-    with contextlib.suppress(ValueError):
-        phone = normalize_phone(phone)
-    return _NON_DIGIT.sub("", phone) or None
+    try:
+        return _NON_DIGIT.sub("", normalize_phone(phone)) or None
+    except ValueError:
+        return None
 
 
 def same_contact_phone(mine: str | None, theirs: str | None) -> bool | None:
     """Return True if the two phones are the same number. Returns None if one side has no phone."""
-    a, b = phone_key(mine), phone_key(theirs)
-    return None if a is None or b is None else a == b
+    return _same_key(phone_key(mine), phone_key(theirs))
+
+
+def _same_key(mine: str | None, theirs: str | None) -> bool | None:
+    return None if mine is None or theirs is None else mine == theirs
+
+
+def _same_phones(phone: str | None, rows: list[tuple[TicketTask, Tickets, float]]) -> list[bool | None]:
+    """Compare the submission's phone with each candidate's, once per candidate.
+
+    `check` scores every candidate once per task draft. Parsing a phone is slow, so each phone is
+    parsed here once, not once per draft.
+    """
+    mine = phone_key(phone)
+    if mine is None:
+        return [None] * len(rows)
+    return [_same_key(mine, phone_key(ticket.contact_phone)) for _, ticket, _ in rows]

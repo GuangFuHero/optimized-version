@@ -22,7 +22,7 @@ similarity = Σ(signal × weight) / Σ(這次可用 signal 的 weight)
 if same_contact_phone 為 true：similarity = min(1, similarity + phone_bonus)
 ```
 
-電話是純加分（fast-v3）：候選帶 `same_contact_phone: true`（兩張單都有電話、只留數字後相同）才加 `phone_bonus`，不算進加權平均；`false`、`null` 或沒有這個欄位都完全不影響分數，所以舊資料集照跑，結果跟沒有電話時一樣。`score_candidate` 回傳的 `phone_bonus` 欄位在有加分時是 1.0，沒加分是 `null`。
+電話是純加分（fast-v3 起）：候選帶 `same_contact_phone: true`（兩張單的電話都通過 E.164 解析、而且是同一支；解析失敗的佔位號碼算沒有電話，fast-v4）才加 `phone_bonus`，不算進加權平均；`false`、`null` 或沒有這個欄位都完全不影響分數，所以舊資料集照跑，結果跟沒有電話時一樣。`score_candidate` 回傳的 `phone_bonus` 欄位在有加分時是 1.0，沒加分是 `null`。
 
 `title`、`description` 對應任務的 `task_name`、`task_description`。候選也可以直接帶算好的 `text_similarity`（0–1），有的話優先使用。舊的 pair fixture 雖然有 title／description，預設不帶入，要看文字的效果得明確加上 `--legacy-include-text`。
 

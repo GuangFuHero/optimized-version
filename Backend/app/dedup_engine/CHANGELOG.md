@@ -11,6 +11,49 @@ accepted on.
 
 ---
 
+## fast-v4 — 2026-10-13
+
+fast-v3 with the phone bonus limited to phones the parser accepts (`fast.py`). Found in the
+PR #73 review (`Spec/020-dedup-engine-interface/pr73-algorithm-notes.md`).
+
+### What changed from fast-v3
+
+1. **A phone the backend's E.164 parser rejects counts as missing.** fast-v3 fell back to the
+   bare digits, so two tickets with the same placeholder (`0000000000`, `12-34`) earned the
+   bonus. Only "adding a task to an existing ticket" could hit this: a new ticket's phone is
+   E.164 or dropped by the backend before the engine sees it, but an existing ticket's
+   `contact_phone` is stored as typed and read by the engine (`candidates.ticket_anchor`).
+   Measured in the review: ticket A with a pump task, ticket B 200 m east, both `0000000000`;
+   adding the same pump task to B was held at 0.8499. fast-v4 creates it at 0.7499.
+2. **`score` returns `None` for a ticket-level acknowledgement** (`draft_ref="ticket"`), as
+   the contract says. fast-v3 raised `ValueError`; the backend already handled the failure
+   (ADR-313) but logged an error on every such submission.
+3. **Each candidate's phone is parsed once per `check`, not once per task draft.** Output is
+   unchanged. In the review's dense-area benchmark (about 2000 candidates in the old radius,
+   5 drafts) fast-v3's p50 was 834 ms, about half of it phone parsing: every draft re-parsed
+   every candidate's phone and a 4096-entry cache was flushed on each pass. The cache is gone.
+
+### Parameters
+
+Unchanged from fast-v3 (same table, same retrieval radii: ticket tasks 290.8 m, stations
+136.7 m).
+
+### Backtest
+
+Not rerun: the parameters are unchanged and the data stays off the repo. Two notes for the
+next rerun (`tools/dedup_eval/`):
+
+- The fast-v3 backtest compared phones on bare digits. The engine compares E.164 forms, so
+  `+886912345678` and `0912-345-678` are the same phone online but not in that backtest; the
+  online bonus rate may be slightly higher than 30/292.
+- Whether the old platform's data had placeholder phones that fast-v4 now ignores was not
+  checked.
+
+Golden: regenerated under fast-v4; every fast-v3 case gives the same answer (the fixed data has
+no placeholder phone).
+
+---
+
 ## fast-v3 — 2026-10-05
 
 fast-v2 plus one rule: the same contact phone is a pure bonus (`fast.py`).

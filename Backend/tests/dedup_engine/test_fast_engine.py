@@ -221,9 +221,9 @@ async def test_check_writes_nothing(db):
 
 
 def test_version_and_radius():
-    """fast-v3; the radius is the hint boundary per kind (phone bonus included), with the rounding margin."""
+    """fast-v4; the radius is the hint boundary per kind (phone bonus included), with the rounding margin."""
     engine = FastEngine()
-    assert engine.version == "fast-v3"
+    assert engine.version == "fast-v4"
     assert engine.radius_m("ticket_task") == pytest.approx(max_hint_distance_m(TICKET_TASK_PARAMETERS) * 1.1)
     assert engine.radius_m("station") == pytest.approx(max_hint_distance_m(STATION_PARAMETERS) * 1.1)
     assert engine.radius_m("ticket_task") == pytest.approx(290.8, abs=0.1)
@@ -295,6 +295,26 @@ async def test_adding_a_task_uses_its_tickets_phone(db):
     (suspect,) = await FastEngine().check(db, NewTask(ticket_uuid=str(mine.uuid), task=PUMP), NOW)
     assert suspect.related_uuid == theirs
     assert suspect.evidence["components"][-1]["name"] == "phone"
+
+
+async def test_the_same_placeholder_phone_is_not_the_same_phone(db):
+    """fast-v4: a phone the parser rejects counts as missing, even when both tickets store it.
+
+    Only this path can see one: an existing ticket's `contact_phone` is stored as typed.
+    """
+    owner = await _owner(db)
+    await _a_task_200m_away(db, owner, "0000000000")
+    mine = await _ticket(db, owner, contact_phone="0000000000")
+
+    assert await FastEngine().check(db, NewTask(ticket_uuid=str(mine.uuid), task=PUMP), NOW) == []
+
+
+async def test_score_returns_none_for_a_ticket_level_acknowledgement(db):
+    """The engine compares tasks, so acknowledging the ticket itself names nothing it scores."""
+    owner = await _owner(db)
+    other = await _ticket(db, owner, east_deg=DEG_100M)
+
+    assert await FastEngine().score(db, _new_ticket(PUMP), "ticket", "ticket", str(other.uuid), NOW) is None
 
 
 async def test_the_bonus_applies_before_the_best_candidate_is_picked(db):

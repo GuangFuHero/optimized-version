@@ -158,7 +158,8 @@ def test_stations_get_no_phone_bonus():
         ("+886912345678", "886912345678"),  # E.164, as the backend sends the submission's
         ("0912-345-678", "886912345678"),  # as typed into tickets.contact_phone
         ("+886 912 345 678", "886912345678"),
-        ("12-34", "1234"),  # not a valid number: bare digits
+        ("12-34", None),  # not a valid number: no key (fast-v4)
+        ("0000000000", None),  # a placeholder is not a phone
         ("", None),
         (None, None),
         ("無", None),
@@ -170,11 +171,12 @@ def test_phone_key(raw, key):
 
 
 def test_same_contact_phone():
-    """None when either side has no phone, else whether the keys match."""
+    """None when either side has no phone or a rejected one, else whether the keys match."""
     assert same_contact_phone("+886912345678", "0912 345 678") is True
     assert same_contact_phone("+886912345678", "0922000111") is False
     assert same_contact_phone(None, "0912345678") is None
     assert same_contact_phone("+886912345678", "") is None
+    assert same_contact_phone("0000000000", "0000000000") is None  # the same placeholder is no match
 
 
 # --- the hint boundary -----------------------------------------------------------------
