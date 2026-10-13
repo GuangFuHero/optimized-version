@@ -1183,6 +1183,7 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
 - [x] 先寫失敗的測試：score 的 SQL 出錯、逾時、偷寫、對方不存在（三種 kind）、不是 uuid、大寫 uuid、真 engine 的工單層級確認、建單時 score 逾時
 - [x] `_guarded` 共用保護；`score_acknowledged`（建立前）＋`record_pair_ignored`（建立後）；`entity_exists`；uuid 正規化
 - [x] dedup 相關測試全過；全套測試
+- [x] 審查時看到的演算法現象（速度、佔位電話、回測比電話方式、`score` 對工單確認丟例外、上線時機）寫成 `pr73-algorithm-notes.md` 給 Chi，後端不改演算法
 
 ## 交給前端的 API 變更（後端不負責實作）
 
