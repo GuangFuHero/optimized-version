@@ -27,11 +27,17 @@ export interface SiteNeedOption {
   /** The need's `taskType`. A resident is never asked to pick 人力 or 物資: that means nothing to them. */
   kind: 'hr' | 'supply' | 'rescue';
   hint: string;
+  /**
+   * The description field's placeholder: what someone asking for this kind might write. At most 9
+   * characters, or a 360px phone cuts it off.
+   */
+  example: string;
 }
 
 /**
  * The prototype's six (`site-actions.jsx:1151-1158`). Which one was picked is not stored: nothing
- * filters needs by it yet, and a ticket's need has no field for it.
+ * filters needs by it yet, and a ticket's need has no field for it. The examples past 清淤 and 送餐
+ * are the PM's (2026-10-10): the prototype gave the other four 清淤's.
  */
 export const SITE_NEED_OPTIONS: readonly SiteNeedOption[] = [
   {
@@ -39,36 +45,42 @@ export const SITE_NEED_OPTIONS: readonly SiteNeedOption[] = [
     label: '清淤／搬運',
     kind: 'hr',
     hint: '室內外清理、家具搬運、廢棄物清運',
+    example: '例：清淤人力、圓鍬',
   },
   {
     value: 'supplies',
     label: '送餐／物資',
     kind: 'supply',
     hint: '長輩、行動不便者的餐食與日用品',
+    example: '例：晚餐便當',
   },
   {
     value: 'care',
     label: '陪同／照顧',
     kind: 'hr',
     hint: '獨居長者探視、就醫陪同',
+    example: '例：輔導、家扶志工',
   },
   {
     value: 'repair',
     label: '修繕',
     kind: 'hr',
     hint: '水電、屋頂、門窗的簡易修復',
+    example: '例：水泥、電工師傅',
   },
   {
     value: 'transport',
     label: '交通接送',
     kind: 'hr',
     hint: '往返收容所、醫院、市區',
+    example: '例：火車站到ＸＸ街',
   },
   {
     value: 'rescue',
     label: '人員受困／急難',
     kind: 'rescue',
     hint: '有人受困、失聯或受傷',
+    example: '例：孩童受困於廚房',
   },
 ];
 

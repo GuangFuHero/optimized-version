@@ -165,11 +165,7 @@ export function NeedDraftRow({
               onChange={(event) =>
                 onChange({ ...row, name: event.target.value })
               }
-              placeholder={
-                option.value === 'supplies'
-                  ? '例：晚餐便當'
-                  : '例：清淤人力、圓鍬'
-              }
+              placeholder={option.example}
               slotProps={{
                 htmlInput: {
                   maxLength: NEED_NAME_MAX_LENGTH,

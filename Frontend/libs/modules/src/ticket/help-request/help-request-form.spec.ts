@@ -35,6 +35,18 @@ describe('SITE_NEED_OPTIONS', () => {
       expect(['hr', 'supply', 'rescue', 'medical']).toContain(option.kind);
     }
   });
+
+  it('gives each choice an example of its own, not one borrowed from another', () => {
+    const examples = SITE_NEED_OPTIONS.map((option) => option.example);
+
+    expect(new Set(examples).size).toBe(SITE_NEED_OPTIONS.length);
+  });
+
+  it('keeps each example short enough for the description field on a 360px phone', () => {
+    for (const option of SITE_NEED_OPTIONS) {
+      expect(option.example.length).toBeLessThanOrEqual(9);
+    }
+  });
 });
 
 describe('findMissingFields', () => {
