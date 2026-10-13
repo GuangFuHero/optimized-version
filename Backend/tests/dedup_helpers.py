@@ -35,7 +35,8 @@ class AsyncStubEngine:
 
     `suspects` is returned by `check` (a callable receives the submission); `delay_s` sleeps
     first; `fail` raises; `write` adds a row before answering, to exercise the read-only guard.
-    `scored` is what `score` returns (None = the related entity is gone).
+    `scored` is what `score` returns (None = the related entity is gone); `score_sql` is run by
+    `score` first, to exercise a failing or slow query inside the guard.
     """
 
     version: str = "stub-v2"
@@ -45,6 +46,7 @@ class AsyncStubEngine:
     write: bool = False
     scored: object = "default"
     fail_score: bool = False
+    score_sql: str | None = None
     check_calls: list = field(default_factory=list)
     score_calls: list = field(default_factory=list)
 
@@ -67,6 +69,10 @@ class AsyncStubEngine:
         from app.dedup_engine.contract import Suspect
 
         self.score_calls.append((draft_ref, related_kind, related_uuid))
+        if self.score_sql:
+            from sqlalchemy import text
+
+            await db.execute(text(self.score_sql))
         if self.fail_score:
             raise RuntimeError("engine exploded")
         if self.scored != "default":

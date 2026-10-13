@@ -3,11 +3,17 @@
 Candidate retrieval is the engine's own (`app/dedup_engine/candidates.py`, ADR-304).
 """
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.repository.base import GenericRepository
 from app.models.dedup import DedupAuditEvent, DuplicatePair
+from app.models.geo import Station
+from app.models.request import Tickets
+from app.models.ticket_task import TicketTask
+
+# What a pair card's `entity_kind` points at.
+_ENTITY_MODELS = {"ticket": Tickets, "ticket_task": TicketTask, "station": Station}
 
 
 class DuplicatePairRepository(GenericRepository[DuplicatePair]):
@@ -30,6 +36,12 @@ class DuplicatePairRepository(GenericRepository[DuplicatePair]):
             )
         )
         return result.scalar_one_or_none()
+
+    async def entity_exists(self, db: AsyncSession, *, entity_kind: str, uuid: str) -> bool:
+        """Whether a not-deleted entity of `entity_kind` has this uuid (when the engine could not tell)."""
+        model = _ENTITY_MODELS[entity_kind]
+        query = select(exists().where(model.uuid == uuid, model.delete_at.is_(None)))
+        return bool((await db.execute(query)).scalar())
 
 
 class DedupAuditEventRepository(GenericRepository[DedupAuditEvent]):

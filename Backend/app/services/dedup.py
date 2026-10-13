@@ -3,7 +3,11 @@
 - `check_submission`: ask the engine about a submission, guarded — savepoint always rolled
   back, timeout, write detection, malformed and acknowledged results dropped. Fail-open.
 - `record_suspect_shown`: audit that a hint was shown (ADR-296/303).
-- `record_pair_ignored`: card a pair the submitter chose to file anyway. Does not commit.
+- `score_acknowledged`: score a pair the submitter chose to file anyway, before creating.
+- `record_pair_ignored`: card that pair once the new entity exists. Does not commit.
+
+Both engine calls, `check` and `score`, run before anything is written and go through `_guarded`
+(ADR-313).
 
 The engine (`app.dedup_engine`) finds and scores candidates itself; this module only calls it
 safely and writes what it decided.
@@ -12,6 +16,9 @@ safely and writes what it decided.
 import asyncio
 import contextlib
 import logging
+import uuid as _uuid
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
@@ -32,6 +39,10 @@ logger = logging.getLogger("app.dedup")
 ENGINE_TIMEOUT_S = 2.0
 
 
+class EngineWroteError(RuntimeError):
+    """The engine wrote to the database during a call that must be read-only."""
+
+
 async def check_submission(
     db: AsyncSession,
     *,
@@ -50,18 +61,12 @@ async def check_submission(
     """
     engine = get_engine()
     try:
-        wrote_before = await _transaction_has_written(db)
-        savepoint = await db.begin_nested()
-        try:
-            suspects = await asyncio.wait_for(engine.check(db, submission, now), ENGINE_TIMEOUT_S)
-            wrote = not wrote_before and await _transaction_has_written(db)
-        finally:
-            await savepoint.rollback()
-        if wrote:
-            logger.error(
-                "dedup engine %s wrote to the database during check; ignoring its answer", engine.version
-            )
-            return []
+        suspects = await _guarded(db, lambda: engine.check(db, submission, now))
+    except EngineWroteError:
+        logger.error(
+            "dedup engine %s wrote to the database during check; ignoring its answer", engine.version
+        )
+        return []
     except Exception:
         logger.exception("dedup check failed or timed out; creating without a hint (fail-open)")
         with contextlib.suppress(Exception):
@@ -88,60 +93,92 @@ async def record_suspect_shown(db: AsyncSession, *, suspect: Suspect, actor_uuid
     )
 
 
-async def record_pair_ignored(
+@dataclass(frozen=True)
+class AcknowledgedPair:
+    """A pair the submitter filed anyway, scored before anything was created.
+
+    `related_uuid` is in canonical form; `suspect` is None when scoring failed (carded unscored).
+    """
+
+    draft_ref: str
+    related_kind: RelatedKind
+    related_uuid: str
+    suspect: Suspect | None
+    engine_version: str
+
+
+async def score_acknowledged(
     db: AsyncSession,
     *,
     submission: Submission,
     draft_ref: str,
-    created_uuid: str,
     related_kind: RelatedKind,
     related_uuid: str,
-    actor_uuid: str,
+    actor: User,
     now: datetime,
-) -> DuplicatePair | None:
-    """Card the pair a submitter filed anyway: `created_uuid` (made from `draft_ref`) and the related one.
+) -> AcknowledgedPair | None:
+    """Score a pair the submitter acknowledged, before anything is created. Never raises.
 
-    The engine scores the pair. It reporting the related entity gone means nothing to pair with
-    (None, nothing written); it failing still records the submitter's choice, unscored.
+    Called while the transaction has written nothing, under the same guard as `check`
+    (ADR-313), so a failure can roll everything back and the create still goes ahead. None
+    means nothing to card: not a uuid, or the related entity is gone. If the engine fails, the
+    submitter's choice is still carded unscored — but only when the related entity exists,
+    since nobody vouched for that uuid.
     """
     engine = get_engine()
-    scoring_failed = False
+    canonical = _canonical_uuid(related_uuid)
+    if canonical is None:
+        logger.warning("acknowledged duplicate %r is not a uuid; creating without a pair card", related_uuid)
+        return None
     try:
-        suspect = await engine.score(db, submission, draft_ref, related_kind, related_uuid, now)
+        suspect = await _guarded(
+            db, lambda: engine.score(db, submission, draft_ref, related_kind, canonical, now)
+        )
+        found = suspect is not None
     except Exception:
         logger.exception("dedup scoring failed for an acknowledged pair; carding it without a score")
-        suspect, scoring_failed = None, True
-    if suspect is None and not scoring_failed:
+        with contextlib.suppress(Exception):
+            await db.rollback()
+        await refresh_actor(db, actor)
+        suspect = None
+        found = await duplicate_pair_repository.entity_exists(db, entity_kind=related_kind, uuid=canonical)
+    if not found:
         logger.warning(
-            "acknowledged duplicate %s (%s) not found; created without a pair card",
-            related_uuid,
-            related_kind,
+            "acknowledged duplicate %s (%s) not found; creating without a pair card", canonical, related_kind
         )
         return None
-    pair = await _ignore_pair(
+    return AcknowledgedPair(draft_ref, related_kind, canonical, suspect, engine.version)
+
+
+async def record_pair_ignored(
+    db: AsyncSession, *, pair: AcknowledgedPair, created_uuid: str, actor_uuid: str
+) -> DuplicatePair:
+    """Card `pair` against `created_uuid`, the entity made from its draft. Does not commit."""
+    suspect = pair.suspect
+    card = await _ignore_pair(
         db,
-        kind=related_kind,
-        uuids=(created_uuid, related_uuid),
+        kind=pair.related_kind,
+        uuids=(created_uuid, pair.related_uuid),
         similarity=None if suspect is None else suspect.similarity,
         evidence=None if suspect is None else dict(suspect.evidence),
-        engine_version=engine.version,
+        engine_version=pair.engine_version,
     )
     await dedup_audit_event_repository.add(
         db,
         obj_in={
-            "entity_kind": related_kind,
+            "entity_kind": pair.related_kind,
             "event_type": "ignored_by_submitter",
-            "pair_uuid": str(pair.uuid),
-            "primary_uuid": related_uuid,
+            "pair_uuid": str(card.uuid),
+            "primary_uuid": pair.related_uuid,
             "duplicate_uuid": created_uuid,
             "actor_uuid": actor_uuid,
             "source_layer": "fast",
             "decision_reason": "ignored_hint",
             "evidence": None if suspect is None else _suspect_evidence(suspect),
-            "engine_version": engine.version,
+            "engine_version": pair.engine_version,
         },
     )
-    return pair
+    return card
 
 
 async def _ignore_pair(
@@ -185,6 +222,34 @@ async def _ignore_pair(
             "rescan_needed": True,
         },
     )
+
+
+async def _guarded[T](db: AsyncSession, call: Callable[[], Awaitable[T]]) -> T:
+    """Run one engine call in a savepoint that is always rolled back, under `ENGINE_TIMEOUT_S`.
+
+    Raises whatever the call raised, `TimeoutError`, or `EngineWroteError`. The rollback undoes
+    any write; detection works because callers run this before writing anything themselves.
+    A timeout can cut a query in flight and leave the connection unusable, so on any failure the
+    caller rolls the whole transaction back — safe only because nothing was written yet.
+    """
+    wrote_before = await _transaction_has_written(db)
+    savepoint = await db.begin_nested()
+    try:
+        result = await asyncio.wait_for(call(), ENGINE_TIMEOUT_S)
+        wrote = not wrote_before and await _transaction_has_written(db)
+    finally:
+        await savepoint.rollback()
+    if wrote:
+        raise EngineWroteError("engine wrote during a read-only call")
+    return result
+
+
+def _canonical_uuid(value: str) -> str | None:
+    """`value` as Postgres prints a uuid (lower case, hyphenated), or None if it is not one."""
+    try:
+        return str(_uuid.UUID(str(value)))
+    except ValueError:
+        return None
 
 
 async def _transaction_has_written(db: AsyncSession) -> bool:

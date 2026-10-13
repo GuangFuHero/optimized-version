@@ -355,3 +355,35 @@ async def test_end_to_end_with_fast_v2(db, monkeypatch):
     pair = (await db.execute(select(DuplicatePair))).scalar_one()
     assert (pair.entity_kind, pair.engine_version) == ("ticket_task", FastEngine.version)
     assert float(pair.similarity) >= 0.8
+
+
+async def test_a_ticket_acknowledgement_of_nothing_writes_no_card(db, monkeypatch):
+    """The ticket-level acknowledgement with a uuid of nothing, on the real engine: created, no pair card."""
+    monkeypatch.setattr(registry, "_ENGINE", FastEngine())
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    filed = await submit_new_ticket(
+        db, actor=actor, tasks=[_task("抽水")], acknowledged_duplicate_of=str(uuid_mod.uuid4()), **_ticket()
+    )
+    assert isinstance(filed, SubmissionCreated)
+    await db.rollback()
+    assert (await _count(db, DuplicatePair), await _events(db)) == (0, [])
+
+
+async def test_a_slow_score_on_an_acknowledged_create_still_creates(db, engine, monkeypatch):
+    """Score is cut at the timeout before anything is written, so everything is still created (ADR-313)."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    ticket_uuid = await _existing_ticket(db, actor)
+    task = TicketTask(ticket_uuid=ticket_uuid, task_type="rescue", task_name="送水", created_by=actor.uuid)
+    db.add(task)
+    await db.flush()
+    related = str(task.uuid)
+    await db.commit()
+    await db.refresh(actor)
+    monkeypatch.setattr(dedup_service, "ENGINE_TIMEOUT_S", 0.2)
+    engine.score_sql = "SELECT pg_sleep(5)"
+    filed = await submit_new_ticket(db, actor=actor, tasks=[_task("送水", ack=related)], **_ticket())
+    assert isinstance(filed, SubmissionCreated)
+    await db.rollback()
+    assert (await _count(db, Tickets), await _count(db, TicketTask)) == (2, 2)
+    pair = (await db.execute(select(DuplicatePair))).scalar_one()
+    assert (pair.similarity, related in {str(pair.low_uuid), str(pair.high_uuid)}) == (None, True)

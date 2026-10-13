@@ -3,8 +3,9 @@
 First submission: validate, then ask the dedup engine. A match returns `Suspected` and creates
 nothing — the submitter decides. No match creates as usual.
 
-Acknowledged submission (`acknowledged_duplicate_of` set): validate, create without checking
-again (so the submitter is never shown a second hint), and card the pair — all in one commit.
+Acknowledged submission (`acknowledged_duplicate_of` set): validate, score each acknowledged
+pair, create without checking again (so the submitter is never shown a second hint), and card
+the pairs — all in one commit. Every engine call happens before anything is written (ADR-313).
 
 Batch import does not come through here; it calls `create_ticket` / `create_station` directly.
 
@@ -92,6 +93,7 @@ async def submit_new_ticket(
     )
     if held is not None:
         return held
+    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
 
     ticket = await ticket_service.insert_ticket(db, actor=actor, fields=fields)
     created_tasks = [
@@ -99,7 +101,7 @@ async def submit_new_ticket(
         for f in task_fields
     ]
     created = {"ticket": str(ticket.uuid)} | {task_ref(i): str(t.uuid) for i, t in enumerate(created_tasks)}
-    await _record_acknowledged(db, submission, acknowledged, created, actor_uuid, now)
+    await _record_acknowledged(db, pairs, created, actor_uuid)
     await db.commit()
     await db.refresh(ticket)
     for task in created_tasks:
@@ -124,13 +126,12 @@ async def submit_new_task(
     )
     if held is not None:
         return held
+    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
 
     created_task = await ticket_service.insert_ticket_task(
         db, actor=actor, ticket_uuid=ticket_uuid, fields=fields
     )
-    await _record_acknowledged(
-        db, submission, acknowledged, {task_ref(0): str(created_task.uuid)}, actor_uuid, now
-    )
+    await _record_acknowledged(db, pairs, {task_ref(0): str(created_task.uuid)}, actor_uuid)
     await db.commit()
     await db.refresh(created_task)
     return SubmissionCreated(entity=created_task)
@@ -151,9 +152,10 @@ async def submit_new_station(
     )
     if held is not None:
         return held
+    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
 
     station = await station_service.insert_station(db, actor=actor, fields=fields)
-    await _record_acknowledged(db, submission, acknowledged, {"station": str(station.uuid)}, actor_uuid, now)
+    await _record_acknowledged(db, pairs, {"station": str(station.uuid)}, actor_uuid)
     await db.commit()
     await db.refresh(station)
     await station_service.announce_station_created(db, station=station, actor_uuid=actor_uuid)
@@ -178,19 +180,33 @@ async def _hold_if_suspected(db, *, submission, acknowledged, actor, now) -> Sub
     return SubmissionHeld(suspects=tuple(suspects))
 
 
-async def _record_acknowledged(db, submission, acknowledged, created, actor_uuid, now) -> None:
-    """Card each acknowledged draft against what the submitter said it is not a duplicate of."""
+async def _score_acknowledged(
+    db, submission, acknowledged, actor, now
+) -> list[dedup_service.AcknowledgedPair]:
+    """Score each acknowledged draft against what the submitter said it is not a duplicate of."""
+    pairs = []
     for draft_ref, related_uuid in acknowledged.items():
-        if related_uuid and draft_ref in created:
-            await dedup_service.record_pair_ignored(
+        if related_uuid:
+            pair = await dedup_service.score_acknowledged(
                 db,
                 submission=submission,
                 draft_ref=draft_ref,
-                created_uuid=created[draft_ref],
                 related_kind=kind_of_ref(draft_ref),
                 related_uuid=related_uuid,
-                actor_uuid=actor_uuid,
+                actor=actor,
                 now=now,
+            )
+            if pair is not None:
+                pairs.append(pair)
+    return pairs
+
+
+async def _record_acknowledged(db, pairs, created, actor_uuid) -> None:
+    """Card each scored pair against the entity made from its draft."""
+    for pair in pairs:
+        if pair.draft_ref in created:
+            await dedup_service.record_pair_ignored(
+                db, pair=pair, created_uuid=created[pair.draft_ref], actor_uuid=actor_uuid
             )
 
 
