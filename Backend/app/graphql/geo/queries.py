@@ -1,4 +1,4 @@
-"""GraphQL queries for stations and closure areas.
+"""GraphQL queries for stations and hazardous zones.
 
 Read-checked per ADR-027/028: station.view/map.view are public (Guest gets Scope.ALL),
 authenticated callers get whatever scope their role grants, applied as a list-level
@@ -9,7 +9,7 @@ detail queries.
 from uuid import UUID
 
 import strawberry
-from sqlalchemy import exists, select
+from sqlalchemy import String, cast, exists, or_, select
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope, scope_filter
@@ -17,21 +17,44 @@ from app.core.search import normalize_query, search_timeout
 from app.graphql.context import check_permission
 from app.graphql.geo.types import (
     BoundsInput,
-    ClosureAreaConnection,
-    ClosureAreaType,
+    HazardousZoneConnection,
+    HazardousZoneType,
     StationConnection,
     StationOperationalStatus,
     StationType,
 )
 from app.graphql.shared import PageInfo
-from app.models.geo import ClosureArea, Station
+from app.models.geo import HazardousZone, Station
+from app.models.station_property import StationProperty, StationUpdateSuggestion
 from app.models.team import Team
-from app.repositories.geo_repository import closure_area_repository, station_repository
+from app.repositories.geo_repository import hazardous_zone_repository, station_repository
+
+
+def _has_pending_suggestion():
+    """EXISTS clause: the station, or one of its active properties, has a pending suggestion."""
+    return exists(
+        select(1)
+        .select_from(StationUpdateSuggestion)
+        .outerjoin(
+            StationProperty,
+            (cast(StationProperty.uuid, String) == StationUpdateSuggestion.target_uuid)
+            & StationProperty.delete_at.is_(None),
+        )
+        .where(
+            StationUpdateSuggestion.status == "pending",
+            StationUpdateSuggestion.delete_at.is_(None),
+            or_(
+                StationUpdateSuggestion.target_uuid == cast(Station.uuid, String),
+                StationProperty.station_uuid == Station.uuid,
+            ),
+        )
+        .correlate(Station)
+    )
 
 
 @strawberry.type
 class GeoQuery:
-    """GraphQL queries for stations and closure areas."""
+    """GraphQL queries for stations and hazardous zones."""
 
     @strawberry.field
     async def stations(
@@ -42,6 +65,7 @@ class GeoQuery:
         q: str | None = None,
         assigned_team_uuid: UUID | None = None,
         unassigned_only: bool = False,
+        has_pending_suggestions: bool = False,
         skip: int = 0, limit: int = 50,
     ) -> StationConnection:
         """List stations within an optional geographic bounding box.
@@ -63,6 +87,8 @@ class GeoQuery:
             assigned_team_uuid: Optional — only the stations assigned to this team (ADR-285).
             unassigned_only: Only the stations no team runs yet — gov's queue to hand out.
                 Mutually exclusive with assigned_team_uuid.
+            has_pending_suggestions: When true, only stations with a pending suggestion on
+                themselves or one of their properties — the reviewer's queue.
             skip: Pagination offset.
             limit: Max results per page (default 50).
 
@@ -84,6 +110,8 @@ class GeoQuery:
             extra_filters += [Station.team_uuid == assigned_team_uuid, runs_it]
         if unassigned_only:
             extra_filters.append(~runs_it)
+        if has_pending_suggestions:
+            extra_filters.append(_has_pending_suggestion())
         # One ceiling for the whole request, not one per statement (ADR-176). count and
         # list are two halves of the same search, and search_timeout() is nesting-aware
         # (ADR-157): the windows the repositories open inside see depth > 0 and skip their
@@ -126,24 +154,24 @@ class GeoQuery:
         return StationType.from_model(m)
 
     @strawberry.field
-    async def closure_areas(
+    async def hazardous_zones(
         self, info: strawberry.types.Info,
         bounds: BoundsInput | None = None,
         skip: int = 0, limit: int = 50,
-    ) -> ClosureAreaConnection:
-        """List closure areas within an optional geographic bounding box, paginated.
+    ) -> HazardousZoneConnection:
+        """List hazardous zones within an optional geographic bounding box, paginated.
 
         Requires map.view permission (public — Guest may call this).
         """
         db = info.context["db"]
         scope = await check_permission(info, Perm.MAP_VIEW)
-        extra_filters = scope_filter(scope, actor=info.context["user"], model=ClosureArea)
-        total = await closure_area_repository.count_active(db, bounds=bounds, extra_filters=extra_filters)
-        items = await closure_area_repository.list_active(
+        extra_filters = scope_filter(scope, actor=info.context["user"], model=HazardousZone)
+        total = await hazardous_zone_repository.count_active(db, bounds=bounds, extra_filters=extra_filters)
+        items = await hazardous_zone_repository.list_active(
             db, bounds=bounds, skip=skip, limit=limit, extra_filters=extra_filters
         )
-        return ClosureAreaConnection(
-            items=[ClosureAreaType.from_model(m) for m in items],
+        return HazardousZoneConnection(
+            items=[HazardousZoneType.from_model(m) for m in items],
             page_info=PageInfo(
                 total_count=total,
                 has_next_page=(skip + limit) < total,
@@ -152,18 +180,18 @@ class GeoQuery:
         )
 
     @strawberry.field
-    async def closure_area(self, info: strawberry.types.Info, uuid: UUID) -> ClosureAreaType | None:
-        """Fetch a single active closure area by UUID.
+    async def hazardous_zone(self, info: strawberry.types.Info, uuid: UUID) -> HazardousZoneType | None:
+        """Fetch a single active hazardous zone by UUID.
 
         Returns None if not found, soft-deleted, or outside the caller's scope.
         """
         db = info.context["db"]
         scope = await check_permission(info, Perm.MAP_VIEW)
-        m = await closure_area_repository.get_by_uuid_active(db, uuid)
+        m = await hazardous_zone_repository.get_by_uuid_active(db, uuid)
         if not m:
             return None
         if scope != Scope.ALL:
             user = info.context["user"]
             if user is None or not await in_scope(scope, actor=user, resource=m, db=db):
                 return None
-        return ClosureAreaType.from_model(m)
+        return HazardousZoneType.from_model(m)

@@ -1,12 +1,12 @@
-"""SQLAlchemy models for teams and work zones (RBAC v1, Spec/008-rbac-authorization/decisions.md §2B)."""
+"""SQLAlchemy models for teams and team zones (RBAC v1, Spec/008-rbac-authorization/decisions.md §2B)."""
 
 from datetime import datetime
 
-from geoalchemy2 import Geometry
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
+from app.models.geo import AreaPolygon
 
 
 class Team(Base, UUIDPKMixin, TimestampMixin):
@@ -28,27 +28,26 @@ class Team(Base, UUIDPKMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), default="active")
 
 
-class WorkZone(Base, UUIDPKMixin, TimestampMixin):
-    """A gov-drawn polygon defining a disaster response area (ADR-021)."""
+class TeamZone(AreaPolygon):
+    """責任區: the only area a team can be assigned to, and so the only source of `zone` scope."""
 
-    __tablename__ = "work_zones"
-    name: Mapped[str] = mapped_column(String(100))
-    geometry = mapped_column(Geometry("MULTIPOLYGON", srid=4326))
-    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), nullable=True)
+    __tablename__ = "team_zones"
+    uuid: Mapped[str] = mapped_column(ForeignKey("area_polygons.uuid"), primary_key=True)
+
+    __mapper_args__ = {"polymorphic_identity": "team_zone"}
 
 
 class TeamZoneAssign(Base, UUIDPKMixin):
-    """Junction table: a gov assigns a WorkZone to a Team for `zone` scope.
+    """Junction table: a gov assigns a TeamZone to a Team, which grants that team `zone` scope.
 
-    `created_at` / `assigned_by` are denormalised from audit_logs so the API can show who
-    assigned a zone without scanning the shared audit table. audit_logs stays the source of
-    truth for history — these columns vanish with the row on unassign, by design.
+    `created_at` / `assigned_by` are copied from audit_logs for cheap display; audit_logs stays
+    the history, since these columns vanish with the row on unassign.
     """
 
     __tablename__ = "team_zone_assign"
     __table_args__ = (UniqueConstraint("team_uuid", "zone_uuid", name="uq_team_zone"),)
     team_uuid: Mapped[str] = mapped_column(ForeignKey("teams.uuid"), index=True)
-    zone_uuid: Mapped[str] = mapped_column(ForeignKey("work_zones.uuid"), index=True)
+    zone_uuid: Mapped[str] = mapped_column(ForeignKey("team_zones.uuid"), index=True)
     # server_default is required, not optional: tests build the schema with
     # Base.metadata.create_all (tests/test_graphql/conftest.py), never through alembic.
     created_at: Mapped[datetime] = mapped_column(

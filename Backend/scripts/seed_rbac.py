@@ -31,11 +31,8 @@ AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=F
 
 # scope 值: "none" | "own" | "team" | "zone" | "all"  (ADR-049 乙:gov/ngo scope 已退場)
 #
-# 角色 = 功能軸 × 組織軸(ADR-049)。功能角色住這裡(user_role_assign);組織(gov/ngo)是
-# users.team_uuid → team.type,不進角色名。"政府協調員" = 團隊角色 admin + gov 型 team。
-# 通報單授權靠地理:能不能被某 team 的人 edit/看 PII,看它的座標是否落在該 team 被指派的
-# WorkZone polygon 內(zone scope)。站點例外(ADR-285):看它被指派給哪個 team(team scope)。
-# 建立(make)是純 capability,任何人有能力就能建。
+# 角色 = 功能軸 × 組織軸(ADR-049):組織(gov/ngo)看 team.type,不進角色名。
+# 通報單授權看座標是否落在該 team 被指派的責任區(TeamZone)內;站點則看指派給哪個 team(ADR-285)。
 ROLES_DATA = [
     {
         # Default platform role every registered account gets (app/services/auth_account.py).
@@ -70,8 +67,8 @@ ROLES_DATA = [
         },
     },
     {
-        # Oversight only — no edit/review/make (ADR-049 / Docs/rbac-permissions-design.md §2.4).
-        # Sees all data incl. PII; reviews the audit trail (endpoint TBD, granted ahead).
+        # Oversight: sees all data incl. PII and the audit trail, and makes no edits of its own.
+        # The one write it holds is reviewing crowd-sourced station suggestions, and undoing that review.
         "name": "data_auditor",
         "kind": "platform",
         "permissions": {
@@ -88,10 +85,14 @@ ROLES_DATA = [
             # and the raw audit payload.
             Perm.TICKET_VIEW_HISTORY: "all",
             Perm.STATION_VIEW_HISTORY: "all",
-            # ADR-111: oversight reads the whole platform, so its export reaches everything.
-            # No import counterpart — this role has no write path anywhere else either.
+            # Oversight reads the whole platform, so its export reaches everything. It gets no
+            # import, because its only writes are deciding and undoing station suggestions.
             Perm.STATION_EXPORT: "all",
             Perm.TICKET_EXPORT: "all",
+            # A reversal of the read-only auditor (ADR-300): a merge can only write a field
+            # someone suggested, and every merge records its before values so it can be undone.
+            Perm.STATION_REVIEW: "all",
+            Perm.STATION_REVOKE: "all",
         },
     },
     {
@@ -99,10 +100,10 @@ ROLES_DATA = [
         "kind": "platform",
         "permissions": dict.fromkeys(
             [
-                Perm.MAP_VIEW, Perm.MAP_ADD, Perm.MAP_EDIT, Perm.MAP_DELETE,
+                Perm.MAP_VIEW,
                 Perm.STATION_VIEW, Perm.STATION_VIEW_PII, Perm.STATION_VIEW_HISTORY,
                 Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
-                Perm.STATION_DELETE, Perm.STATION_REVIEW, Perm.STATION_ASSIGN,
+                Perm.STATION_DELETE, Perm.STATION_REVIEW, Perm.STATION_ASSIGN, Perm.STATION_REVOKE,
                 Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_VIEW_DETAIL,
                 Perm.TICKET_VIEW_HISTORY, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
@@ -120,15 +121,8 @@ ROLES_DATA = [
             "all",
         ),
     },
-    # --- Team-kind functional roles (attached to a team via user_role_assign; org = the
-    # team's team.type). "gov admin" = admin + gov team; "ngo admin" = admin + ngo team.
-    # Ticket access is `zone` — the team works tickets geographically inside a WorkZone
-    # assigned to it. Station access is `team` — the stations assigned to the team (ADR-285);
-    # a gov team's `team` widens to `all` in resolve_scope (GOV_TEAM_WIDENED_PERMS). Zone
-    # operations and station assignment are gov-only: `_require_gov_zone_authority` /
-    # `require_gov_team` enforce it. NGO admins hold these capabilities in the seed (NGO
-    # members hold station.assign) but are rejected with 403 at the service layer. GOV_TEAM_ONLY_PERMS in app/core/permissions.py
-    # mirrors this for display—keep in lockstep.
+    # --- Team-kind roles: ticket access is `zone` (tickets inside the team's TeamZones) and
+    # station access is `team`; drawing areas and assigning stations work only for gov teams.
     {
         # Team coordinator: full operations on the team's tickets (zone) and stations (team)
         # + team-member management + zone drawing/assignment + station assignment (gov).

@@ -5,10 +5,13 @@ import logging
 import strawberry
 from fastapi import HTTPException
 from strawberry.extensions import MaskErrors
+from strawberry.types.execution import ExecutionResult as StrawberryExecutionResult
 from strawberry.utils.logging import StrawberryLogger
 
 from app.graphql.announcements.mutations import AnnouncementMutation
 from app.graphql.announcements.queries import AnnouncementQuery
+from app.graphql.area.mutations import AreaMutation
+from app.graphql.area.queries import AreaQuery
 from app.graphql.briefings.mutations import BriefingMutation
 from app.graphql.briefings.queries import BriefingQuery
 from app.graphql.config.mutations import PropertyConfigMutation
@@ -19,23 +22,22 @@ from app.graphql.suggestions.mutations import SuggestionMutation
 from app.graphql.suggestions.queries import SuggestionQuery
 from app.graphql.tickets.mutations import RequestMutation, TicketTaskMutation
 from app.graphql.tickets.queries import RequestQuery, TicketTaskQuery
-from app.graphql.work_zone.mutations import WorkZoneMutation
-from app.graphql.work_zone.queries import WorkZoneQuery
 
 # Ruff sorts `graphql` into the first-party block (it collides with this package's own
 # name, app.graphql). Moving it up beside fastapi reads better but fails I001 in CI.
 from graphql import GraphQLError
+from graphql.execution.execute import ExecutionResult as GraphQLExecutionResult
 
 _logger = logging.getLogger("app.graphql")
 
 
 @strawberry.type
-class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, BriefingQuery, SuggestionQuery, WorkZoneQuery):  # noqa: E501
+class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, BriefingQuery, SuggestionQuery, AreaQuery):  # noqa: E501
     """Root query type composing all domain query mixins."""
 
 
 @strawberry.type
-class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, BriefingMutation, SuggestionMutation, WorkZoneMutation):  # noqa: E501
+class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, BriefingMutation, SuggestionMutation, AreaMutation):  # noqa: E501
     """Root mutation type composing all domain mutation mixins."""
 
 
@@ -83,6 +85,23 @@ def _is_expected(error: GraphQLError) -> bool:
     return isinstance(original, ValueError | HTTPException)
 
 
+class _RequestMaskErrors(MaskErrors):
+    """MaskErrors that masks its own request's result, not whichever request ran last.
+
+    Strawberry builds each extension once and reassigns its `execution_context` per request, so
+    the stock hook, which reads it after `yield`, can leave a concurrent request's errors unmasked.
+    """
+
+    def on_operation(self):
+        execution_context = self.execution_context
+        yield
+        result = execution_context.result
+        if isinstance(result, GraphQLExecutionResult | StrawberryExecutionResult):
+            self._process_result(result)
+        elif result:
+            self._process_result(result.initial_result)
+
+
 class _Schema(strawberry.Schema):
     """Schema that logs expected errors as information, not as failures.
 
@@ -114,5 +133,5 @@ class _Schema(strawberry.Schema):
 schema = _Schema(
     query=Query,
     mutation=Mutation,
-    extensions=[MaskErrors(should_mask_error=_should_mask)],
+    extensions=[_RequestMaskErrors(should_mask_error=_should_mask)],
 )

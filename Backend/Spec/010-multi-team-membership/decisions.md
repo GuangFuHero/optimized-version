@@ -305,6 +305,8 @@ ADR-068 改版正是採用了括號裡被否決的那條路。缺陷消失，**a
 
 ### ADR-097 team 角色必須自給自足；補上 `station.contribute`
 
+> **部分被 ADR-300（Spec 008）修訂**：`data_auditor` 現在持有 `station.review`/`station.revoke`，不再是「不持有寫入能力」；它仍沒有市民能力，所以照舊是本條的例外。
+
 **白話**：切到志工身分後，不該連「回報站點物資」這種每個市民都能做的事都做不了。
 
 **Context**：完整身分切換曝出一個**既有的 seed 缺陷**。比對 `scripts/seed_rbac.py` 的授予表：

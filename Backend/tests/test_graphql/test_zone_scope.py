@@ -2,7 +2,7 @@
 
 Mirrors test_team_scope.py's pattern for `team` scope. own/team/gov/ngo all got a GraphQL
 e2e test somewhere in Phase 1-3; `zone` only ever had DB-level unit coverage
-(test_rbac_scopes.py/test_authz.py) — this closes that gap using a real WorkZone +
+(test_rbac_scopes.py/test_authz.py) — this closes that gap using a real TeamZone +
 TeamZoneAssign instead of a hand-rolled resource in a unit test.
 """
 
@@ -19,7 +19,7 @@ from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_task import TicketTask
 from tests.conftest import token_for
 from tests.test_graphql.conftest import auth_header, test_db
@@ -74,13 +74,13 @@ async def _make_zone_scoped_editor(redis, team_uuid: str) -> tuple[str, str]:
 
 @pytest_asyncio.fixture
 async def team_assigned_to_zone() -> str:
-    """A Team assigned to a WorkZone covering ~121-122E/24-25N, returned as team_uuid."""
+    """A Team assigned to a TeamZone covering ~121-122E/24-25N, returned as team_uuid."""
     async with test_db() as db:
         team = Team(name=f"Zone Team {uuid_mod.uuid4().hex[:8]}", type="ngo")
         db.add(team)
         assigner = User(name=f"assigner_{uuid_mod.uuid4().hex[:8]}")
         db.add(assigner)
-        zone = WorkZone(name="Test Zone", geometry=from_shape(ZONE_POLYGON, srid=4326))
+        zone = TeamZone(name="Test Zone", geometry=from_shape(ZONE_POLYGON, srid=4326))
         db.add(zone)
         await db.flush()
         db.add(
@@ -227,7 +227,7 @@ async def test_zone_scope_404s_task_under_ticket_outside_zone(client, redis, tea
 async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, redis, team_assigned_to_zone):
     """Soft-deleting a work zone immediately lapses the zone scope it granted.
 
-    rbac_scopes.py filters `WorkZone.delete_at IS NULL` on both the in_scope and scope_filter
+    rbac_scopes.py filters `TeamZone.delete_at IS NULL` on both the in_scope and scope_filter
     paths, so no cache invalidation or assignment cleanup is needed — but that has to stay
     true, hence this test. A lapsed zone scope surfaces as 404, not 403 (ADR-023).
     """
@@ -248,8 +248,8 @@ async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, redis
     async with test_db() as db:
         zone = (
             await db.execute(
-                select(WorkZone)
-                .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == WorkZone.uuid)
+                select(TeamZone)
+                .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == TeamZone.uuid)
                 .where(TeamZoneAssign.team_uuid == team_assigned_to_zone)
             )
         ).scalars().first()

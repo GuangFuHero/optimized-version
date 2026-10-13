@@ -1,4 +1,4 @@
-"""GraphQL types for stations, closure areas, and station properties."""
+"""GraphQL types for stations, hazardous zones, and station properties."""
 
 import asyncio
 import enum
@@ -12,6 +12,7 @@ import strawberry
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope
 from app.core.security import resolve_scope
+from app.graphql.area.types import AssignedTeamType
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import (  # noqa: F401 -- the address types and their mapper are
@@ -23,8 +24,35 @@ from app.graphql.shared import (  # noqa: F401 -- the address types and their ma
     Visibility,
     secondary_location_to_dict,
 )
+from app.graphql.suggestions.types import StationSuggestionMergeType, SuggestedFieldType
 from app.graphql.tickets.types import PhotoType
-from app.graphql.work_zone.types import AssignedTeamType
+
+
+async def _can_review_suggestions(info: strawberry.types.Info, station: "StationType") -> bool:
+    """Whether the caller holds station.review over this station, as a merge requires.
+
+    Never raises: a denial reads as [].
+    """
+    user = info.context["user"]
+    if user is None:
+        return False
+    scope = await resolve_scope(
+        user, Perm.STATION_REVIEW, info.context["db"], cache=info.context["_rbac_cache"]
+    )
+    if scope == Scope.NONE:
+        return False
+    if scope == Scope.ALL:
+        return True
+    resource = SimpleNamespace(
+        created_by=station.created_by, team_uuid=station._team_uuid_raw, geometry=station._geometry_raw
+    )
+    return await in_scope(scope, actor=user, resource=resource, db=info.context["db"])
+
+
+async def _pending_suggested_fields(info: strawberry.types.Info, station_uuid, target_uuid) -> list[str]:
+    """Names of the fields on one target with a pending suggestion, from the station's batch."""
+    rows = await info.context["loaders"]["pending_suggestions_by_station"].load(str(station_uuid))
+    return sorted({r.field_name for r in rows if r.target_uuid == str(target_uuid)})
 
 
 @strawberry.enum
@@ -144,7 +172,7 @@ class StationType:
         Neither raises — a denial renders as a *masked* contact field, not a GraphQL
         field-level error. Per-role scope: guest -> not visible; own -> own station;
         team -> a station assigned to my team (ADR-285; a gov team resolves to all);
-        zone -> station's location inside my team's WorkZone; all -> everything.
+        zone -> station's location inside my team's TeamZone; all -> everything.
         """
         user = info.context["user"]
         if user is None:
@@ -202,6 +230,46 @@ class StationType:
     async def properties(self, info: strawberry.types.Info) -> list["StationPropertyType"]:
         """Resolve all properties (supply items, services) attached to this station."""
         return await info.context["loaders"]["station_properties_by_station"].load(str(self.uuid))
+
+    @strawberry.field(
+        description="Fields of this station with a suggested edit awaiting review. Names only, so public."
+    )
+    async def pending_suggested_fields(self, info: strawberry.types.Info) -> list[str]:
+        """Resolve the field names on this station that have a pending suggestion."""
+        return await _pending_suggested_fields(info, self.uuid, self.uuid)
+
+    @strawberry.field(
+        description="Pending suggestions on this station and its properties, pooled per field; "
+        "empty without station.review over this station"
+    )
+    async def suggested_fields(self, info: strawberry.types.Info) -> list[SuggestedFieldType]:
+        """Group every pending suggestion by field, without saying who made which."""
+        if not await _can_review_suggestions(info, self):
+            return []
+        rows = await info.context["loaders"]["pending_suggestions_by_station"].load(str(self.uuid))
+        grouped: dict[tuple[str, str], list] = {}
+        for row in rows:  # newest first, from the loader
+            grouped.setdefault((row.target_uuid, row.field_name), []).append(row)
+        return [
+            SuggestedFieldType(
+                target_type=group[0].target_type, target_uuid=target_uuid, field_name=field_name,
+                proposed_values=list(dict.fromkeys(r.new_value for r in group)),
+                suggestion_count=len(group),
+                comments=[r.comment for r in group if r.comment],
+                first_suggested_at=group[-1].created_at,
+            )
+            for (target_uuid, field_name), group in sorted(grouped.items())
+        ]
+
+    @strawberry.field(
+        description="Merges applied to this station, newest first; empty without station.review "
+        "over this station"
+    )
+    async def suggestion_merges(self, info: strawberry.types.Info) -> list[StationSuggestionMergeType]:
+        """Resolve the merge history, which is what a revoke targets."""
+        if not await _can_review_suggestions(info, self):
+            return []
+        return await info.context["loaders"]["suggestion_merges_by_station"].load(str(self.uuid))
 
     @classmethod
     def from_model(cls, m) -> "StationType":
@@ -308,78 +376,53 @@ class UpdateStationInput:
     contact_phone: str | None = strawberry.UNSET
 
 
-# --- Closure Area ---
+# --- Hazardous Zone ---
 
 @strawberry.type
-class ClosureAreaType:
-    """GraphQL type representing a road or area closure."""
+class HazardousZoneType:
+    """危險區: a no-entry map area. It is always public and never has a team."""
 
     uuid: UUID
     property_name: str = strawberry.field(
-        description="Internal polymorphic discriminator — always 'closure_area'"
+        description="Internal polymorphic discriminator — always 'hazardous_zone'"
     )
+    name: str | None = None
     geometry: GeoJSON | None = strawberry.field(
-        default=None, description="GeoJSON Polygon or MultiPolygon marking the closed area"
+        default=None, description="GeoJSON Polygon or MultiPolygon marking the zone"
     )
     created_by: str | None = strawberry.field(
-        default=None, description="UUID of the user who reported this closure"
+        default=None, description="UUID of the user who drew this zone"
     )
     status: str = strawberry.field(
-        default="", description="Current closure status: 'dangerous', 'block'"
+        default="", description="Current hazard status, e.g. 'dangerous', 'block'"
     )
     information_source: str | None = strawberry.field(
         default=None,
-        description="Source of the closure report, e.g. agency name or URL",
+        description="Source of the hazard report, e.g. agency name or URL",
     )
-    comment: str | None = strawberry.field(
-        default=None, description="Additional notes about this closure"
+    note: str | None = strawberry.field(
+        default=None, description="Additional notes about this zone"
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
     @classmethod
-    def from_model(cls, m) -> "ClosureAreaType":
+    def from_model(cls, m) -> "HazardousZoneType":
         """Build from a SQLAlchemy model instance."""
         return cls(
-            uuid=m.uuid, property_name=m.property_name,
+            uuid=m.uuid, property_name=m.property_name, name=m.name,
             geometry=geom_to_geojson(m.geometry), created_by=m.created_by,
             status=m.status, information_source=m.information_source,
-            comment=m.comment, created_at=m.created_at, updated_at=m.updated_at,
+            note=m.note, created_at=m.created_at, updated_at=m.updated_at,
         )
 
 
 @strawberry.type
-class ClosureAreaConnection:
-    """Paginated list of closure areas with page metadata."""
+class HazardousZoneConnection:
+    """Paginated list of hazardous zones with page metadata."""
 
-    items: list[ClosureAreaType]
+    items: list[HazardousZoneType]
     page_info: PageInfo
-
-
-@strawberry.input
-class CreateClosureAreaInput:
-    """Input for creating a new closure area."""
-
-    geometry: GeoJSON = strawberry.field(
-        description="GeoJSON Polygon or MultiPolygon — must not be a Point"
-    )
-    status: str = strawberry.field(
-        description="Initial closure status: 'active', 'cleared', or 'unknown'"
-    )
-    information_source: str | None = strawberry.field(
-        default=None, description="Source of the closure report, e.g. agency name or URL"
-    )
-    comment: str | None = None
-
-
-@strawberry.input
-class UpdateClosureAreaInput:
-    """Input for updating an existing closure area. UNSET fields are left unchanged."""
-
-    geometry: GeoJSON | None = None
-    status: str | None = None
-    information_source: str | None = strawberry.UNSET
-    comment: str | None = strawberry.UNSET
 
 
 # --- Station Property ---
@@ -413,6 +456,13 @@ class StationPropertyType:
         default=None, description="UUID of the user who added this property"
     )
     created_at: datetime | None = None
+
+    @strawberry.field(
+        description="Fields of this property with a suggested edit awaiting review. Names only, so public."
+    )
+    async def pending_suggested_fields(self, info: strawberry.types.Info) -> list[str]:
+        """Resolve the field names on this property that have a pending suggestion."""
+        return await _pending_suggested_fields(info, self.station_uuid, self.uuid)
 
     @strawberry.field
     async def crowd_sourcings(self, info: strawberry.types.Info) -> list["CrowdSourcingType"]:

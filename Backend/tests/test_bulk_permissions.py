@@ -151,7 +151,7 @@ async def test_team_admin_exports_its_share_but_imports_platform_wide(db):
 
 @pytest.mark.asyncio
 async def test_data_auditor_exports_everything_but_cannot_import(db):
-    """data_auditor is oversight-only: full export reach, no write path at all."""
+    """data_auditor oversees the whole platform, so it exports everything but imports nothing."""
     actor = User(name="Auditor")
     db.add(actor)
     await db.flush()
