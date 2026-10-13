@@ -92,31 +92,32 @@ type BriefingType {
   updatedAt: DateTime
 }
 
-type ClosureAreaConnection {
-  items: [ClosureAreaType!]!
+type HazardousZoneConnection {
+  items: [HazardousZoneType!]!
   pageInfo: PageInfo!
 }
 
-type ClosureAreaType {
+type HazardousZoneType {
   uuid: UUID!
 
-  """Internal polymorphic discriminator — always 'closure_area'"""
+  """Internal polymorphic discriminator — always 'hazardous_zone'"""
   propertyName: String!
+  name: String
 
-  """GeoJSON Polygon or MultiPolygon marking the closed area"""
+  """GeoJSON Polygon or MultiPolygon marking the zone"""
   geometry: GeoJSON
 
-  """UUID of the user who reported this closure"""
+  """UUID of the user who drew this zone"""
   createdBy: String
 
-  """Current closure status: 'dangerous', 'block'"""
+  """Current hazard status, e.g. 'dangerous', 'block'"""
   status: String!
 
-  """Source of the closure report, e.g. agency name or URL"""
+  """Source of the hazard report, e.g. agency name or URL"""
   informationSource: String
 
-  """Additional notes about this closure"""
-  comment: String
+  """Additional notes about this zone"""
+  note: String
   createdAt: DateTime
   updatedAt: DateTime
 }
@@ -135,18 +136,6 @@ input CreateBriefingTemplateInput {
 
   """Lifecycle phase this template targets"""
   state: BriefingState! = BRIEFING
-}
-
-input CreateClosureAreaInput {
-  """GeoJSON Polygon or MultiPolygon — must not be a Point"""
-  geometry: GeoJSON!
-
-  """Initial closure status: 'active', 'cleared', or 'unknown'"""
-  status: String!
-
-  """Source of the closure report, e.g. agency name or URL"""
-  informationSource: String = null
-  comment: String = null
 }
 
 input CreateCrowdSourcingInput {
@@ -446,9 +435,6 @@ type Mutation {
   deleteStation(uuid: UUID!): Boolean!
   assignStationToTeam(stationUuid: UUID!, teamUuid: UUID!): StationType!
   unassignStation(stationUuid: UUID!): StationType!
-  createClosureArea(input: CreateClosureAreaInput!): ClosureAreaType!
-  updateClosureArea(uuid: UUID!, input: UpdateClosureAreaInput!): ClosureAreaType!
-  deleteClosureArea(uuid: UUID!): Boolean!
   createStationProperty(input: CreateStationPropertyInput!): StationPropertyType!
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
@@ -554,8 +540,8 @@ type PhotoType {
 type Query {
   stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
   station(uuid: UUID!): StationType
-  closureAreas(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): ClosureAreaConnection!
-  closureArea(uuid: UUID!): ClosureAreaType
+  hazardousZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): HazardousZoneConnection!
+  hazardousZone(uuid: UUID!): HazardousZoneType
   tickets(
     bounds: BoundsInput = null
     status: String = null
@@ -1333,13 +1319,6 @@ input UpdateBriefingTemplateInput {
 
   """New lifecycle phase"""
   state: BriefingState = null
-}
-
-input UpdateClosureAreaInput {
-  geometry: GeoJSON = null
-  status: String = null
-  informationSource: String
-  comment: String
 }
 
 input UpdateStationInput {

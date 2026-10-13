@@ -266,7 +266,7 @@ function readClosureAreaPolygons(
 }
 
 export function mapClosureAreaToOverlay(
-  areaRef: GetClosureAreasQuery['closureAreas']['items'][number],
+  areaRef: GetClosureAreasQuery['hazardousZones']['items'][number],
 ): RescueMapClosureArea | null {
   const area = useFragment(ClosureAreaFieldsFragmentDoc, areaRef);
   const polygons = readClosureAreaPolygons(area.geometry ?? null);
@@ -280,7 +280,7 @@ export function mapClosureAreaToOverlay(
     label: area.propertyName,
     status: area.status,
     informationSource: area.informationSource,
-    comment: area.comment,
+    comment: area.note,
     polygons,
   };
 }

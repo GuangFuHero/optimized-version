@@ -22,7 +22,7 @@ from app.core.rbac_scopes import Scope, in_scope, scope_filter, widest
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.request import Tickets
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from tests.conftest import acting_as
 
 
@@ -190,7 +190,7 @@ async def test_in_scope_zone_matches_point_inside_assigned_zone(db):
     _acting_in_team(actor, team)
 
     zone_polygon = Polygon([(121.0, 24.5), (122.0, 24.5), (122.0, 25.5), (121.0, 25.5), (121.0, 24.5)])
-    zone = WorkZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
+    zone = TeamZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
     db.add(zone)
     await db.flush()
     db.add(
@@ -216,7 +216,7 @@ async def test_in_scope_zone_rejects_point_outside_assigned_zone(db):
     _acting_in_team(actor, team)
 
     zone_polygon = Polygon([(121.0, 24.5), (122.0, 24.5), (122.0, 25.5), (121.0, 25.5), (121.0, 24.5)])
-    zone = WorkZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
+    zone = TeamZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
     db.add(zone)
     await db.flush()
     db.add(
@@ -362,7 +362,7 @@ async def test_scope_filter_zone_matches_rows_inside_assigned_zone_only(db):
     _acting_in_team(actor, team)
 
     zone_polygon = Polygon([(121.0, 24.5), (122.0, 24.5), (122.0, 25.5), (121.0, 25.5), (121.0, 24.5)])
-    zone = WorkZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
+    zone = TeamZone(name="Zone1", geometry=from_shape(zone_polygon, srid=4326))
     db.add(zone)
     await db.flush()
     db.add(

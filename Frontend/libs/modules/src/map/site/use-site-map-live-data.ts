@@ -328,8 +328,8 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
             : [],
       });
       const closureAreas = (
-        (closureResult.data?.closureAreas.items ??
-          []) as GetClosureAreasQuery['closureAreas']['items']
+        (closureResult.data?.hazardousZones.items ??
+          []) as GetClosureAreasQuery['hazardousZones']['items']
       )
         .map((item) => mapClosureAreaToOverlay(item))
         .filter((item): item is RescueMapClosureArea => Boolean(item));

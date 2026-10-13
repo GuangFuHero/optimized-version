@@ -8,11 +8,11 @@ import pytest
 
 from app.models.auth import User
 from app.models.rbac import Role
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_task import TaskAssignment, TicketTask
 from app.services import admin as admin_service
+from app.services import area as area_service
 from app.services import ticket as ticket_service
-from app.services import work_zone as work_zone_service
 
 
 @pytest.fixture
@@ -32,7 +32,7 @@ async def test_assign_zone_triggers_notification(mock_actor):
     team_id = str(uuid.uuid4())
     admin_id = str(uuid.uuid4())
 
-    mock_zone = WorkZone(name="花蓮第一搜救區")
+    mock_zone = TeamZone(name="花蓮第一搜救區")
     mock_zone.uuid = uuid.UUID(zone_id)
     mock_team = Team(name="慈濟搜救隊", type="ngo", status="active")
     mock_team.uuid = uuid.UUID(team_id)
@@ -40,33 +40,33 @@ async def test_assign_zone_triggers_notification(mock_actor):
     mock_assignment = TeamZoneAssign(team_uuid=team_id, zone_uuid=zone_id, assigned_by=str(mock_actor.uuid))
 
     with (
-        patch("app.services.work_zone.require_scope", new_callable=AsyncMock),
-        patch("app.services.work_zone._require_gov_zone_authority", new_callable=AsyncMock),
+        patch("app.services.area.require_scope", new_callable=AsyncMock),
+        patch("app.services.area._require_gov_zone_authority", new_callable=AsyncMock),
         patch(
-            "app.services.work_zone.work_zone_repository.get_by_uuid_active",
+            "app.services.area.team_zone_repository.get_by_uuid_active",
             new_callable=AsyncMock,
             return_value=mock_zone,
         ),
         patch(
-            "app.services.work_zone.team_zone_assign_repository.get_assignment",
+            "app.services.area.team_zone_assign_repository.get_assignment",
             new_callable=AsyncMock,
             return_value=None,
         ),
         patch(
-            "app.services.work_zone.team_zone_assign_repository.create",
+            "app.services.area.team_zone_assign_repository.create",
             new_callable=AsyncMock,
             return_value=mock_assignment,
         ),
         patch(
-            "app.services.work_zone.NotificationRecipientResolver.resolve_team_admin",
+            "app.services.area.NotificationRecipientResolver.resolve_team_admin",
             new_callable=AsyncMock,
             return_value=[admin_id],
         ),
-        patch("app.services.work_zone.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch,
+        patch("app.services.area.NotificationService.dispatch", new_callable=AsyncMock) as mock_dispatch,
     ):
         mock_db.scalar = AsyncMock(return_value=mock_team)
 
-        await work_zone_service.assign_zone_to_team(
+        await area_service.assign_zone_to_team(
             mock_db,
             actor=mock_actor,
             zone_uuid=zone_id,

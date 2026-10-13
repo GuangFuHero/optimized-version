@@ -10,7 +10,9 @@ AUDITED_TABLES = [
     # Geospatial and child inheritance tables
     "base_geometries",
     "stations",
-    "closure_areas",
+    "area_polygons",
+    "hazardous_zones",
+    "team_zones",
     "tickets",
 
     # Work assignment & routing
@@ -19,10 +21,8 @@ AUDITED_TABLES = [
     "routes",
     "secondary_locations",
 
-    # RBAC v1: teams & work zones (Spec/008-rbac-authorization/decisions.md ADR-024 falls out of ADR-026's
-    # drop-and-replace of the old groups/policies/policy_*/user_group_assign tables)
+    # RBAC v1: teams and their zone assignments.
     "teams",
-    "work_zones",
     "team_zone_assign",
 
     # RBAC v1: capability-based role/permission engine
@@ -51,6 +51,11 @@ AUDITED_TABLES = [
     # Feature 018: the per-ticket answers. An edit flipping "person trapped" from no to yes is
     # exactly what a timeline has to show, and ADR-124's missing trail is the mistake not to repeat.
     "ticket_disaster_details",
+
+    # Crowd-sourced station suggestions and the merges that apply them, so every submit,
+    # review and revoke leaves a trail. Rows written before these triggers have none.
+    "station_update_suggestions",
+    "station_suggestion_merges",
 ]
 
 # PL/pgSQL function that serializes row mutations into JSONB, redacting password_hash

@@ -2,11 +2,8 @@
 
 import strawberry
 
-from app.core.permissions import Perm
-from app.graphql.context import check_permission, require_authenticated
 from app.graphql.suggestions.fields import SUGGESTABLE_FIELDS, VALID_TARGET_TYPES
-from app.graphql.suggestions.types import StationSuggestionType, SuggestableFieldType
-from app.repositories.geo_repository import station_suggestion_repository
+from app.graphql.suggestions.types import SuggestableFieldType
 
 
 @strawberry.type
@@ -26,20 +23,3 @@ class SuggestionQuery:
             SuggestableFieldType(field_name=name, data_type=data_type, enum_options=opts)
             for name, data_type, opts in SUGGESTABLE_FIELDS[target_type]
         ]
-
-    @strawberry.field
-    async def station_suggestions(
-        self, info: strawberry.types.Info,
-        status: str | None = None, target_uuid: str | None = None,
-        skip: int = 0, limit: int = 50,
-    ) -> list[StationSuggestionType]:
-        """List suggestions (the admin review queue), filterable by status and target.
-
-        Requires station.view (any logged-in user). Newest first.
-        """
-        require_authenticated(info)  # STATION_VIEW is in PUBLIC_PERMS; the review queue is not public
-        await check_permission(info, Perm.STATION_VIEW)
-        items = await station_suggestion_repository.list_active(
-            info.context["db"], status=status, target_uuid=target_uuid, skip=skip, limit=limit
-        )
-        return [StationSuggestionType.from_model(s) for s in items]

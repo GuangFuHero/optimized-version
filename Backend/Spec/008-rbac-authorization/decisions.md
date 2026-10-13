@@ -306,6 +306,8 @@
 
 > **部分被 ADR-285 取代**：站點不再由地理決定管轄，改為手動指派給單一 team（`stations.team_uuid`）；ticket/task 仍走 zone。
 
+> **部分被 ADR-300 取代**：`data_auditor` 不再是純唯讀，持有 `station.review` 與 `station.revoke`（`all`）；其餘寫入能力照舊沒有。
+
 > **狀態:ACCEPTED 並已落地驗證（2026-07-09,`pytest` 367 passed、`ruff` 乾淨)。** 本條整合 2026-07-08/09 對照 `Docs/rbac-permissions-design.md`(v1.1)+ `Dashboard.md` §3~§7 後的修正,並取代 ADR-048 的 scope 部分。
 >
 > **落地內容**:`permissions.py` 移除 `DASHBOARD_*`;`rbac_scopes.py` 移除 `Scope.GOV`/`NGO`(留 none/own/team/zone/all,team 僅團隊管理用);`models/geo.py` + migration `2f9a1c7b6e04` drop `base_geometries.team_uuid`;`services/{station,ticket,closure_area}.py` 建立時不再寫 team_uuid;`seed_rbac.py` 角色重寫成 super_admin/data_auditor/user(平台)+ admin/member(團隊),廢除 gov_manager/ngo_manager;新增 `graphql/masking.py`(移植 PR #23 遮罩)+ `tickets/types.py` PII resolver 從 null 改遮罩(zone 判定改吃 geometry);測試:移除 `test_team_scope.py`(team-geo 已退場)、`test_rbac_scopes.py`/`test_authz.py` 的 team/gov/ngo 案例改 zone、`test_query_rbac.py` PII 斷言改遮罩、新增 `test_masking.py`。
@@ -1223,13 +1225,87 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 ---
 
+#### ADR-300 `data_auditor` 可審核與撤銷站點修改建議（推翻 ADR-049「稽核員只讀」）
+
+> **狀態：ACCEPTED（2026-10-01）。** PR #57 review（jujuyuzu）指出 seed 已發出這兩個能力、但與 ADR-049 矛盾，使用者決定保留並補記本條。
+
+**白話**：稽核員仍然不能直接改站點，但可以決定群眾的修改建議，也可以把任何一次決定撤回。
+
+**Context**：ADR-049 拿掉 `data_auditor` 的 `station.review`，理由是「稽核員只讀」。修改建議改成合併制之後
+（一次決定某欄位的全部待審建議、寫入審核者的值、記下前後值），需要一個平台層、不受 team 指派限制的角色：
+
+- 決定建議：未指派的站點與民眾建的站，原本只有 super_admin 與 gov 能審（ADR-285 決策 7）。
+- 撤銷合併：審錯了要能還原。撤銷是監督動作，不該只有 super_admin 做得到。
+
+**Decision**：
+
+1. `data_auditor` 持有 `station.review=all` 與新的 `station.revoke=all`。`station.revoke` 只發給 `data_auditor`
+   與 super_admin；team 角色只能審、不能撤。
+2. 其餘寫入能力照舊沒有：不能新增、編輯、刪除站點，不能提出建議（無 `station.contribute`），不能匯入。
+3. 合併的寫入範圍受限：只能寫「有待審建議」的欄位（其他欄位是 `station.edit` 的事），每次合併在
+   `station_suggestion_merges` 記下前後值，兩張表都有 audit trigger。
+
+**取代關係**：
+
+- ADR-049「`data_auditor` 拿掉 `station.review`」與 seed 角色矩陣中「`data_auditor`：唯讀……**無** review」。
+- ADR-097（Spec 010）的例外理由「`data_auditor` 不持有寫入能力」改為「不持有市民能力」；例外本身不變，
+  因為 `data_auditor` 仍沒有 `station.contribute` 等市民能力。
+
+**後果**：
+
+➖ 審核者可以把有待審建議的欄位改成任何值（合併寫入的是審核者自己的值，不必是建議值）。這是合併制的設計，
+   對每個審核者都一樣；稽核員因 `all` 而影響範圍最大。由前後值紀錄、audit log 與撤銷兜底。
+◾ 不另加「審核者不得決定自己提出建議的欄位」：`data_auditor` 沒有 `station.contribute`，提不出建議，
+   這條只會限制到 team admin 與 super_admin，暫不需要。
+◾ Spec 015「`data_auditor` 不能匯入」照舊。
+
+---
+
+#### ADR-311 互助地圖三種區域：`area_polygons` 繼承樹、危險區與責任區恆公開、三種區域同一道閘門
+
+> **狀態：ACCEPTED（2026-10-04）；2026-10-11 修訂第 5、8 點。** 互助地圖區域類型 ticket（Sucre 2026-09-27 裁定三種區域）；
+> 2026-10-11 需求更新：指派區（責任區）一經設立，前後台皆需公布被指派的組織名稱。
+
+**白話**：地圖上畫的區域分三種——危險區、責任區、標示區，全部放進同一棵表繼承樹。危險區與責任區一律公開，
+責任區連同被指派的組織名稱一起公開；只有標示區有「前台可見」開關。三種都只有 super_admin 與 gov team 能畫。
+
+**Context**：原本危險區是 `closure_areas`（`base_geometries` 的子表），責任區是獨立的 `work_zones`。
+標示區不存在，沒有團隊的責任區與標示區分不出來，兩張表都沒有前台可見欄位。危險區的寫入用 `map.add/edit/delete`，
+只有 super_admin 持有。
+
+**Decision**：
+
+1. 新增 `area_polygons`（`base_geometries` 的 joined-table 子表，欄位 `name`/`note`/`is_public`），幾何只收
+   Polygon / MultiPolygon，由唯一的寫入服務 `app/services/area.py` 檢查。
+2. `closure_areas` → `hazardous_zones`、`work_zones` → `team_zones`，皆為 `area_polygons` 的子表；
+   `closure_areas.comment` 併入 `area_polygons.note`。
+3. 標示區（`mark_zone`）只是一個多型身分，沒有自己的表——它沒有 `area_polygons` 以外的欄位。
+4. `team_zone_assign.zone_uuid` 改指向 `team_zones`：只有責任區能掛團隊，標示區與危險區不可能擴大任何 team 的
+   `zone` scope。責任區建立時必須帶一個團隊（與第一筆指派同一次 commit），且不能移除最後一個團隊；一區可多隊。
+5. 危險區與責任區 `is_public` 恆為 true：建立時強制、更新時拒絕關閉、`hazardousZones` 不依此過濾。只有標示區預設 false。
+6. 唯一的類型轉換是標示區 → 危險區（`promoteMarkZone`，保留 uuid/名稱/備註並轉為公開）；沒有反向或其他轉換。
+7. 三種區域的寫入都走 `work_zone.*` + `_require_gov_zone_authority`；`map.add/edit/delete` 刪除（`map.view` 保留給公開讀取）。
+8. 公開讀取 `areas(bounds)` 只回傳 `is_public` 的區域，`assignedTeams` 列出責任區被指派的團隊（名稱與類型，非個資）；
+   `includePrivate: true` 需要 `work_zone.view`，只會多出隱藏的標示區。
+
+**取代關係**：BE-028 的 `closure_areas` 與 DATA-005 的 `work_zones` 表；`map.add/edit/delete` 三個能力。
+
+**後果**：
+
+➕ 一個 `areas(bounds)` 查詢就能畫出公開地圖上所有區域；三種區域共用一套寫入與 bbox 程式。
+➖ `scope_filter` 的 ZONE 分支必須把 zone 取別名：zone 與被過濾的資料列共用 `base_geometries`，不取別名時
+   EXISTS 會關聯到資料列自己，而每個幾何都包含自己。
+◾ 本次 migration 不保留區域資料：本地只有 `seed_mock_scenarios.sql` 載入的假資料。
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|
 | none | `false()`（防禦性；CP1 應已先擋掉） | — |
 | own | `resource.created_by == actor.uuid` | — |
 | team | `resource.<team 邊界欄位> == actor 當前身分的 team`（預設欄位 `team_uuid`；`Team` 宣告 `uuid`）。用於團隊成員管理，以及**站點**（`stations.team_uuid`，ADR-285；gov team 身分視同 `all`）。不套用在其他 geo 資源 | active identity（010/ADR-074）、`__team_scope_attr__`（ADR-053） |
-| zone | `ST_Contains(actor 當前身分那個 team 被指派的 WorkZone, resource.geometry)` | `work_zones`+`team_zone_assign`（ADR-049/052） |
+| zone | `ST_Contains(actor 當前身分那個 team 被指派的 TeamZone, resource.geometry)` | `team_zones`+`team_zone_assign`（ADR-049/052/311） |
 | all | 全域 | — |
 
 最寬勝：`all > zone > team > own > none`（見 `app/core/rbac_scopes.py:WIDTH`）。gov/ngo scope 已於 ADR-049 退場——組織身分改由 team 的 `type` 表達，不進 scope。

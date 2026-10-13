@@ -125,31 +125,6 @@ export type BriefingType = {
   uuid: Scalars['UUID']['output'];
 };
 
-export type ClosureAreaConnection = {
-  __typename?: 'ClosureAreaConnection';
-  items: Array<ClosureAreaType>;
-  pageInfo: PageInfo;
-};
-
-export type ClosureAreaType = {
-  __typename?: 'ClosureAreaType';
-  /** Additional notes about this closure */
-  comment?: Maybe<Scalars['String']['output']>;
-  createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who reported this closure */
-  createdBy?: Maybe<Scalars['String']['output']>;
-  /** GeoJSON Polygon or MultiPolygon marking the closed area */
-  geometry?: Maybe<Scalars['GeoJSON']['output']>;
-  /** Source of the closure report, e.g. agency name or URL */
-  informationSource?: Maybe<Scalars['String']['output']>;
-  /** Internal polymorphic discriminator — always 'closure_area' */
-  propertyName: Scalars['String']['output'];
-  /** Current closure status: 'dangerous', 'block' */
-  status: Scalars['String']['output'];
-  updatedAt?: Maybe<Scalars['DateTime']['output']>;
-  uuid: Scalars['UUID']['output'];
-};
-
 export type CreateAnnouncementInput = {
   /** The announcement body text */
   content: Scalars['String']['input'];
@@ -162,16 +137,6 @@ export type CreateBriefingTemplateInput = {
   state?: BriefingState;
   /** Categorization tags */
   tags?: Array<Scalars['String']['input']>;
-};
-
-export type CreateClosureAreaInput = {
-  comment?: InputMaybe<Scalars['String']['input']>;
-  /** GeoJSON Polygon or MultiPolygon — must not be a Point */
-  geometry: Scalars['GeoJSON']['input'];
-  /** Source of the closure report, e.g. agency name or URL */
-  informationSource?: InputMaybe<Scalars['String']['input']>;
-  /** Initial closure status: 'active', 'cleared', or 'unknown' */
-  status: Scalars['String']['input'];
 };
 
 export type CreateCrowdSourcingInput = {
@@ -368,6 +333,32 @@ export type GenerateBriefingInput = {
   templateUuid?: InputMaybe<Scalars['UUID']['input']>;
 };
 
+export type HazardousZoneConnection = {
+  __typename?: 'HazardousZoneConnection';
+  items: Array<HazardousZoneType>;
+  pageInfo: PageInfo;
+};
+
+export type HazardousZoneType = {
+  __typename?: 'HazardousZoneType';
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the user who drew this zone */
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** GeoJSON Polygon or MultiPolygon marking the zone */
+  geometry?: Maybe<Scalars['GeoJSON']['output']>;
+  /** Source of the hazard report, e.g. agency name or URL */
+  informationSource?: Maybe<Scalars['String']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  /** Additional notes about this zone */
+  note?: Maybe<Scalars['String']['output']>;
+  /** Internal polymorphic discriminator — always 'hazardous_zone' */
+  propertyName: Scalars['String']['output'];
+  /** Current hazard status, e.g. 'dangerous', 'block' */
+  status: Scalars['String']['output'];
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
 export type HelpRequestTaskInput = {
   /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
   quantity?: InputMaybe<Scalars['Int']['input']>;
@@ -386,7 +377,6 @@ export type Mutation = {
   attachStationPhoto: PhotoType;
   createAnnouncement: AnnouncementType;
   createBriefingTemplate: BriefingTemplateType;
-  createClosureArea: ClosureAreaType;
   createCrowdSourcing: CrowdSourcingType;
   createHelpRequest: TicketType;
   createStation: StationType;
@@ -399,7 +389,6 @@ export type Mutation = {
   deleteAnnouncement: Scalars['Boolean']['output'];
   deleteBriefing: Scalars['Boolean']['output'];
   deleteBriefingTemplate: Scalars['Boolean']['output'];
-  deleteClosureArea: Scalars['Boolean']['output'];
   deleteStation: Scalars['Boolean']['output'];
   deleteTicket: Scalars['Boolean']['output'];
   deleteTicketTask: Scalars['Boolean']['output'];
@@ -420,7 +409,6 @@ export type Mutation = {
   updateAnnouncement: AnnouncementType;
   updateBriefing: BriefingType;
   updateBriefingTemplate: BriefingTemplateType;
-  updateClosureArea: ClosureAreaType;
   updateStation: StationType;
   updateStationProperty: StationPropertyType;
   updateTaskAssignment: TaskAssignmentType;
@@ -461,10 +449,6 @@ export type MutationCreateAnnouncementArgs = {
 
 export type MutationCreateBriefingTemplateArgs = {
   input: CreateBriefingTemplateInput;
-};
-
-export type MutationCreateClosureAreaArgs = {
-  input: CreateClosureAreaInput;
 };
 
 export type MutationCreateCrowdSourcingArgs = {
@@ -512,10 +496,6 @@ export type MutationDeleteBriefingArgs = {
 };
 
 export type MutationDeleteBriefingTemplateArgs = {
-  uuid: Scalars['UUID']['input'];
-};
-
-export type MutationDeleteClosureAreaArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
@@ -606,11 +586,6 @@ export type MutationUpdateBriefingArgs = {
 
 export type MutationUpdateBriefingTemplateArgs = {
   input: UpdateBriefingTemplateInput;
-  uuid: Scalars['UUID']['input'];
-};
-
-export type MutationUpdateClosureAreaArgs = {
-  input: UpdateClosureAreaInput;
   uuid: Scalars['UUID']['input'];
 };
 
@@ -729,9 +704,9 @@ export type Query = {
   briefingTemplate?: Maybe<BriefingTemplateType>;
   briefingTemplates: Array<BriefingTemplateType>;
   briefings: Array<BriefingType>;
-  closureArea?: Maybe<ClosureAreaType>;
-  closureAreas: ClosureAreaConnection;
   disasterTypes: Array<DisasterTypeType>;
+  hazardousZone?: Maybe<HazardousZoneType>;
+  hazardousZones: HazardousZoneConnection;
   myRoleRequests: MyRoleRequestsType;
   myTaskAssignments: Array<MyTaskAssignmentType>;
   myTickets: Array<TicketType>;
@@ -776,18 +751,18 @@ export type QueryBriefingsArgs = {
   tag?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type QueryClosureAreaArgs = {
+export type QueryDisasterTypesArgs = {
+  includeInactive?: Scalars['Boolean']['input'];
+};
+
+export type QueryHazardousZoneArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
-export type QueryClosureAreasArgs = {
+export type QueryHazardousZonesArgs = {
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
-};
-
-export type QueryDisasterTypesArgs = {
-  includeInactive?: Scalars['Boolean']['input'];
 };
 
 export type QueryStationArgs = {
@@ -1401,13 +1376,6 @@ export type UpdateBriefingTemplateInput = {
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
-export type UpdateClosureAreaInput = {
-  comment?: InputMaybe<Scalars['String']['input']>;
-  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
-  informationSource?: InputMaybe<Scalars['String']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type UpdateStationInput = {
   comment?: InputMaybe<Scalars['String']['input']>;
   contactEmail?: InputMaybe<Scalars['String']['input']>;
@@ -1605,13 +1573,14 @@ export type StationFieldsFragment = {
 } & { ' $fragmentName'?: 'StationFieldsFragment' };
 
 export type ClosureAreaFieldsFragment = {
-  __typename?: 'ClosureAreaType';
+  __typename?: 'HazardousZoneType';
   uuid: string;
   propertyName: string;
+  name?: string | null;
   geometry?: Geometry | null;
   status: string;
   informationSource?: string | null;
-  comment?: string | null;
+  note?: string | null;
   createdBy?: string | null;
   createdAt?: any | null;
   updatedAt?: any | null;
@@ -1690,10 +1659,10 @@ export type GetClosureAreasQueryVariables = Exact<{
 
 export type GetClosureAreasQuery = {
   __typename?: 'Query';
-  closureAreas: {
-    __typename?: 'ClosureAreaConnection';
+  hazardousZones: {
+    __typename?: 'HazardousZoneConnection';
     items: Array<
-      { __typename?: 'ClosureAreaType' } & {
+      { __typename?: 'HazardousZoneType' } & {
         ' $fragmentRefs'?: {
           ClosureAreaFieldsFragment: ClosureAreaFieldsFragment;
         };
@@ -1711,8 +1680,8 @@ export type GetClosureAreaQueryVariables = Exact<{
 
 export type GetClosureAreaQuery = {
   __typename?: 'Query';
-  closureArea?:
-    | ({ __typename?: 'ClosureAreaType' } & {
+  hazardousZone?:
+    | ({ __typename?: 'HazardousZoneType' } & {
         ' $fragmentRefs'?: {
           ClosureAreaFieldsFragment: ClosureAreaFieldsFragment;
         };
@@ -2264,17 +2233,18 @@ export const ClosureAreaFieldsFragmentDoc = {
       name: { kind: 'Name', value: 'ClosureAreaFields' },
       typeCondition: {
         kind: 'NamedType',
-        name: { kind: 'Name', value: 'ClosureAreaType' },
+        name: { kind: 'Name', value: 'HazardousZoneType' },
       },
       selectionSet: {
         kind: 'SelectionSet',
         selections: [
           { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'informationSource' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'note' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -2762,7 +2732,7 @@ export const GetClosureAreasDocument = {
         selections: [
           {
             kind: 'Field',
-            name: { kind: 'Name', value: 'closureAreas' },
+            name: { kind: 'Name', value: 'hazardousZones' },
             arguments: [
               {
                 kind: 'Argument',
@@ -2845,17 +2815,18 @@ export const GetClosureAreasDocument = {
       name: { kind: 'Name', value: 'ClosureAreaFields' },
       typeCondition: {
         kind: 'NamedType',
-        name: { kind: 'Name', value: 'ClosureAreaType' },
+        name: { kind: 'Name', value: 'HazardousZoneType' },
       },
       selectionSet: {
         kind: 'SelectionSet',
         selections: [
           { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'informationSource' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'note' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -2889,7 +2860,7 @@ export const GetClosureAreaDocument = {
         selections: [
           {
             kind: 'Field',
-            name: { kind: 'Name', value: 'closureArea' },
+            name: { kind: 'Name', value: 'hazardousZone' },
             arguments: [
               {
                 kind: 'Argument',
@@ -2918,17 +2889,18 @@ export const GetClosureAreaDocument = {
       name: { kind: 'Name', value: 'ClosureAreaFields' },
       typeCondition: {
         kind: 'NamedType',
-        name: { kind: 'Name', value: 'ClosureAreaType' },
+        name: { kind: 'Name', value: 'HazardousZoneType' },
       },
       selectionSet: {
         kind: 'SelectionSet',
         selections: [
           { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
           { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
           { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'informationSource' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'note' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },

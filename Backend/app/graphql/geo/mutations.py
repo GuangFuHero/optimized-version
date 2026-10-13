@@ -1,8 +1,7 @@
-"""GraphQL mutations for stations, closure areas, and station properties.
+"""GraphQL mutations for stations and station properties.
 
 Thin per ADR-014: parse input, call the service function (which owns authz, validation,
-and persistence), map the result back to a GraphQL type. See app/services/station.py and
-app/services/closure_area.py.
+and persistence), map the result back to a GraphQL type.
 """
 
 from uuid import UUID
@@ -11,28 +10,24 @@ import strawberry
 
 from app.graphql.context import require_authenticated
 from app.graphql.geo.types import (
-    ClosureAreaType,
-    CreateClosureAreaInput,
     CreateCrowdSourcingInput,
     CreateStationInput,
     CreateStationPropertyInput,
     CrowdSourcingType,
     StationPropertyType,
     StationType,
-    UpdateClosureAreaInput,
     UpdateStationInput,
     UpdateStationPropertyInput,
     secondary_location_to_dict,
 )
 from app.graphql.tickets.types import PhotoType
-from app.services import closure_area as closure_area_service
 from app.services import photo as photo_service
 from app.services import station as station_service
 
 
 @strawberry.type
 class GeoMutation:
-    """Mutations for creating, updating, and deleting stations and closure areas."""
+    """Mutations for creating, updating, and deleting stations."""
 
     @strawberry.mutation
     async def create_station(self, info: strawberry.types.Info, input: CreateStationInput) -> StationType:
@@ -159,55 +154,6 @@ class GeoMutation:
             station_uuid=str(station_uuid), team_uuid=None,
         )
         return StationType.from_model(station)
-
-    @strawberry.mutation
-    async def create_closure_area(
-        self, info: strawberry.types.Info, input: CreateClosureAreaInput
-    ) -> ClosureAreaType:
-        """Create a new road or area closure with a Polygon/MultiPolygon geometry.
-
-        Validates geometry type. Requires map.add permission. Returns the created closure area.
-        """
-        area = await closure_area_service.create_closure_area(
-            info.context["db"], actor=require_authenticated(info),
-            geometry=input.geometry, status=input.status,
-            information_source=input.information_source, comment=input.comment,
-        )
-        return ClosureAreaType.from_model(area)
-
-    @strawberry.mutation
-    async def update_closure_area(
-        self, info: strawberry.types.Info, uuid: UUID, input: UpdateClosureAreaInput,
-    ) -> ClosureAreaType:
-        """Update a closure area's geometry, status, or notes.
-
-        UNSET fields are skipped. Requires map.edit permission with scope check.
-        Returns the updated closure area.
-        """
-        changes = {}
-        if input.status is not None:
-            changes["status"] = input.status
-        for field in ("information_source", "comment"):
-            val = getattr(input, field)
-            if val is not strawberry.UNSET:
-                changes[field] = val
-
-        area = await closure_area_service.update_closure_area(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), geometry=input.geometry, changes=changes,
-        )
-        return ClosureAreaType.from_model(area)
-
-    @strawberry.mutation
-    async def delete_closure_area(self, info: strawberry.types.Info, uuid: UUID) -> bool:
-        """Soft-delete a closure area (sets delete_at).
-
-        Requires map.delete permission with scope check. Returns True on success.
-        """
-        await closure_area_service.delete_closure_area(
-            info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
-        )
-        return True
 
 
 @strawberry.type
