@@ -52,7 +52,8 @@ export function reloginHref({
   pathname,
   search,
 }: Pick<Location, 'pathname' | 'search'>): string {
-  return `/login?callbackUrl=${encodeURIComponent(`${pathname}${search}`)}`;
+  const callbackUrl = encodeURIComponent(`${pathname}${search}`);
+  return `/login?callbackUrl=${callbackUrl}`;
 }
 
 /** next-auth's `useSession().status`, spelled out so this file stays import-free. */
@@ -110,7 +111,7 @@ export interface UnauthorizedCheck {
 export function isUnauthorizedError(error: UnauthorizedCheck): boolean {
   return (
     error.response?.status === 401 ||
-    /^401:/.test(error.graphQLErrors?.[0]?.message ?? '')
+    (error.graphQLErrors?.[0]?.message ?? '').startsWith('401:')
   );
 }
 

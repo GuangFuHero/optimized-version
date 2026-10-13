@@ -524,7 +524,7 @@ export function withAlpha(hex: string, alpha: number): string {
     return hex;
   }
 
-  const value = parseInt(match[1], 16);
+  const value = Number.parseInt(match[1], 16);
 
   return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
 }

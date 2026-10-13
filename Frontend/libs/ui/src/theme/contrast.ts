@@ -29,7 +29,7 @@ export function relativeLuminance(hex: string): number {
     throw new Error(`relativeLuminance expects #RRGGBB, received ${hex}`);
   }
 
-  const value = parseInt(match[1], 16);
+  const value = Number.parseInt(match[1], 16);
   const [r, g, b] = [(value >> 16) & 255, (value >> 8) & 255, value & 255].map(
     (channel) => channelLuminance(channel / 255),
   );
