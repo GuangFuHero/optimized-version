@@ -15,7 +15,6 @@ import { useMutation } from 'urql';
 
 import {
   SubmitRoleRequestDocument,
-  WithdrawRoleRequestDocument,
   type MyRoleRequestsQuery,
 } from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
@@ -33,6 +32,7 @@ import {
   type RoleRequestFormValues,
 } from './form';
 import { RoleRequestCard } from './role-request-card';
+import { useWithdrawRoleRequest } from './use-withdraw-role-request';
 import { WithdrawRoleRequestDialog } from './withdraw-role-request-dialog';
 
 const { color, radius } = designTokens;
@@ -73,14 +73,8 @@ export function RoleRequestDrawer({
   const [{ fetching: submitting }, submitRoleRequest] = useMutation(
     SubmitRoleRequestDocument,
   );
-  // Open is kept apart from the application being withdrawn, so the dialog can tell whether that
-  // one still waits after a refusal's reload.
-  const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [withdrawing, setWithdrawing] = useState<string | null>(null);
-  const [withdrawError, setWithdrawError] = useState<string | null>(null);
-  const [{ fetching: withdrawSubmitting }, withdrawRoleRequest] = useMutation(
-    WithdrawRoleRequestDocument,
-  );
+  const withdraw = useWithdrawRoleRequest(onSubmitted);
+  const resetWithdraw = withdraw.reset;
   const roleLabelId = useId();
 
   // Each opening starts from an empty form, as the prototype does.
@@ -89,10 +83,9 @@ export function RoleRequestDrawer({
       setValues(EMPTY_FORM);
       setTouched(false);
       setSubmitError(null);
-      setWithdrawOpen(false);
-      setWithdrawError(null);
+      resetWithdraw();
     }
-  }, [open]);
+  }, [open, resetWithdraw]);
 
   if (!myRoleRequests) {
     return null;
@@ -100,46 +93,20 @@ export function RoleRequestDrawer({
 
   const view = roleRequestDrawerView(myRoleRequests);
   const stillWaiting =
-    view.kind === 'pending' && view.pending.uuid === withdrawing;
-
-  const requestWithdraw = (uuid: string) => {
-    setWithdrawError(null);
-    setWithdrawing(uuid);
-    setWithdrawOpen(true);
-  };
-
-  const confirmWithdraw = async () => {
-    if (!withdrawing) {
-      return;
-    }
-
-    setWithdrawError(null);
-    const result = await withdrawRoleRequest({ uuid: withdrawing });
-
-    if (result.error) {
-      setWithdrawError(
-        roleRequestErrorMessage(result.error, '撤回失敗，請稍後再試一次。'),
-      );
-    } else {
-      setWithdrawOpen(false);
-    }
-
-    // Either way: the drawer goes back to the form, or shows what the application became instead.
-    onSubmitted();
-  };
+    view.kind === 'pending' && view.pending.uuid === withdraw.withdrawing;
 
   // Outside the views below: after a refusal the reload may switch the view under it, and the
   // reason must stay in sight until the applicant closes it.
   const withdrawDialog = (
     <WithdrawRoleRequestDialog
-      open={withdrawOpen}
-      error={withdrawError}
-      submitting={withdrawSubmitting}
+      open={withdraw.open}
+      error={withdraw.error}
+      submitting={withdraw.submitting}
       // Only after a refusal: a success reloads too, as the dialog fades out, and 取消 must not
       // turn into 關閉 on the way.
-      settled={Boolean(withdrawError) && !stillWaiting}
-      onCancel={() => setWithdrawOpen(false)}
-      onConfirm={() => void confirmWithdraw()}
+      settled={Boolean(withdraw.error) && !stillWaiting}
+      onCancel={withdraw.cancel}
+      onConfirm={() => void withdraw.confirm()}
     />
   );
 
@@ -155,7 +122,7 @@ export function RoleRequestDrawer({
             <RoleRequestCard request={view.pending} />
             <Button
               variant="outlined"
-              onClick={() => requestWithdraw(view.pending.uuid)}
+              onClick={() => withdraw.request(view.pending.uuid)}
               sx={{ alignSelf: 'flex-start' }}
             >
               撤回申請
