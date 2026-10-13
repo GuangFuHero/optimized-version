@@ -146,12 +146,30 @@ function GuestHelpRequestDrawer({
           志工會依照你留的資訊到現場，來源必須追得到，雙方才安心。登入可用 Email
           或手機號碼註冊。
         </Alert>
-        <Alert severity="warning">
-          <AlertTitle>如果現在有人受困或受傷</AlertTitle>
-          請直接撥打 <strong>119</strong>，不要等這裡的流程。
-        </Alert>
+        <EmergencyCallNotice />
       </Stack>
     </SiteActionDrawer>
+  );
+}
+
+/**
+ * Small, in the PM's words (2026-10-10): whoever reaches the site already knows to call 119, so it
+ * says what the platform is for instead of leading the form.
+ */
+function EmergencyCallNotice() {
+  return (
+    <Alert
+      severity="error"
+      sx={{
+        py: 0.25,
+        fontSize: displayTextSize[12],
+        lineHeight: 1.5,
+        '& .MuiAlert-icon': { py: 0.5, fontSize: 18 },
+      }}
+    >
+      緊急醫療需求請即時撥打 <strong>119</strong>{' '}
+      或當地醫院電話，平台為災害時期透明資訊、尋求志工用。
+    </Alert>
   );
 }
 
@@ -346,13 +364,7 @@ function HelpRequestFormDrawer({
           </Alert>
         ) : null}
 
-        {hasRescueNeed(form.needs) ? (
-          <Alert severity="error">
-            <AlertTitle>請先撥打 119</AlertTitle>
-            有人受困、失聯或受傷時，<strong>119 才是第一線</strong>
-            。這張單補的是後續人力，不取代緊急救護。
-          </Alert>
-        ) : null}
+        {hasRescueNeed(form.needs) ? <EmergencyCallNotice /> : null}
 
         {/* The asterisk is hidden from screen readers, so the rule is said in words, up front. */}
         <Typography

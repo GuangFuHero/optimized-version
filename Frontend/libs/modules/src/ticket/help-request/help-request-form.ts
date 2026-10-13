@@ -192,7 +192,7 @@ export function findMissingFields(form: HelpRequestForm): MissingField[] {
 }
 
 /**
- * Someone trapped or hurt: the form then says to call 119 first, and sets no flag — as in the
+ * Someone trapped or hurt: the form then shows the 119 notice, and sets no flag — as in the
  * prototype, it asks nothing about how dangerous it is.
  */
 export function hasRescueNeed(needs: readonly NeedDraft[]): boolean {
