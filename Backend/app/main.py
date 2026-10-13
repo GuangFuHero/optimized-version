@@ -60,7 +60,11 @@ app.add_middleware(AuditContextMiddleware)
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    """Stop browsers sniffing a response's type or embedding it in a page from another site."""
+    """Stop browsers sniffing a response's type or embedding it in a page from another site.
+
+    An unhandled exception's 500 goes without them, because Starlette sends it from outside every
+    added middleware.
+    """
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Cross-Origin-Resource-Policy", "same-site")

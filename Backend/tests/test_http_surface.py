@@ -45,8 +45,8 @@ async def test_cookie_bearing_request_is_not_allowed_credentials(http):
 
 
 @pytest.mark.parametrize("path", ["/health", "/no-such-route"])
-async def test_every_response_forbids_sniffing_and_cross_site_embedding(http, path):
-    """Error responses carry the headers too, not only successful ones."""
+async def test_handled_responses_forbid_sniffing_and_cross_site_embedding(http, path):
+    """Error responses the app handles carry the headers too, not only successful ones."""
     resp = await http.get(path)
     assert resp.headers["x-content-type-options"] == "nosniff"
     assert resp.headers["cross-origin-resource-policy"] == "same-site"
