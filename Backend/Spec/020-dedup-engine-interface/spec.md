@@ -163,6 +163,8 @@ class DedupEngine(Protocol):
 2. `asyncio.wait_for(..., ENGINE_TIMEOUT_S)`（2 秒，ADR-307）；逾時或任何例外 → 記 log、當作沒有疑似重複（fail-open）、reload actor。
 3. 丟掉 `related_kind` 與 `draft_ref` 種類不符的結果（記 warning），避免寫出錯誤的配對卡。
 4. 丟掉已確認（帶 `acknowledgedDuplicateOf`）的草稿上的結果（ADR-296：確認後不再提示）。
+5. `engine.score` 也走 1、2 兩項，而且跟 `check` 一樣在**建立任何東西之前**呼叫（ADR-313）：逾時可能在查詢中途切斷連線，
+   這時要整個 transaction rollback，只有還沒寫入時這麼做才不會弄丟新單。
 
 ---
 
@@ -198,8 +200,11 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 1. 權限、工單與每個任務草稿的輸入驗證（失敗就在比對前結束，不透露任何疑似重複）。
 2. `engine.check(NewTicket(...))`，依 §4 的保護措施。
 3. 有疑似重複：每個寫一筆 `hint_shown`，回 `DuplicatesSuspected`，**工單與任務都不建**。
-4. 沒有：工單＋所有任務同一個 transaction 建立；帶確認的草稿，建好後各用 `engine.score` 寫 `dup_ignored` 配對卡＋`ignored_by_submitter`
-   （對方找不到或已刪：照常建立、不寫卡；`score` 失敗：照常建立、卡的分數為 null）。
+4. 沒有：帶確認的草稿先各用 `engine.score` 算分（§4 第 5 項），再把工單＋所有任務同一個 transaction 建立，
+   並寫 `dup_ignored` 配對卡＋`ignored_by_submitter`（ADR-313）：
+   - 確認的值不是 uuid、或 engine 回報對方找不到或已刪：照常建立、不寫卡。
+   - `score` 失敗（例外、逾時、偷寫）：照常建立；後端自己查對方存在才寫卡，分數為 null，不存在就不寫。
+   - uuid 一律轉成 Postgres 的寫法（小寫、有連字號）再用，配對卡的 `low_uuid < high_uuid` 才會跟資料庫一致。
 
 ### 5.2 替既有的單加任務
 
@@ -284,3 +289,4 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 - **ADR-304（2026-09-29）**：為避免每次改單位都要改後端，候選查詢與比對單位整個歸 engine；本文件以此為準。
 - **ADR-305（2026-09-29，Task 24 Docker 驗證）**：發現候選查詢從未用到空間 index（cast 的 typmod 對不上、站點無 centroid index），在本票修正。
 - **ADR-306／307（2026-09-29）**：`app/dedup_engine/` 裡歸後端的部分（registry、守門測試、時限）；依延遲實測定效能門檻、逾時維持 2 秒。
+- **ADR-313（2026-10-13，PR #73 審查）**：`engine.score` 補上跟 `check` 一樣的保護並移到建立之前；score 失敗時後端自己確認對方存在才寫卡；確認的 uuid 先正規化。

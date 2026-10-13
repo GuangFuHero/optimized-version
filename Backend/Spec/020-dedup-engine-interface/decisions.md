@@ -542,3 +542,34 @@ ADR-301／302 的 API 保留，但回傳的疑似重複改為通用形狀（見 
 ➕ 門檻同時守住「用得到 index」與「多任務不會疊加爆掉」兩件事。
 ➖ 測試多灌 2 萬筆（純 SQL，約 1~2 秒）。
 ◾ 實測時 DB 是 amd64 模擬，數字偏悲觀；Chi 仍可在 Task 0 提意見，改門檻照 ADR-306 由後端拍板。
+
+### ADR-313 `engine.score` 跟 `check` 一樣受保護，並在建立任何東西之前呼叫；失敗時後端自己確認對方存在才寫卡
+
+**白話**：使用者按「不是重複，照樣建立」時，後端要請 engine 替那一對算分數。這一步以前沒有保護，engine 出錯會讓整筆建立失敗；
+現在跟第一次送出時的檢查一樣：出錯、太慢、偷寫，都照常建立，只是那張配對卡沒有分數。
+
+**Context**（PR #73 審查，2026-10-13，都在測試 DB 上實測重現）：
+
+1. `score` 直接在建單的 transaction 裡、新單已 flush 之後呼叫，沒有 SAVEPOINT 也沒有逾時。engine 的 SQL 出錯時 Postgres 會把整個
+   transaction 標成失敗，後面寫卡、commit 全被拒（`InFailedSQLTransactionError`），工單沒建成；engine 很慢時使用者一直等（實測 5 秒）。
+2. 直接套用 `check` 的保護不夠：逾時會在查詢中途切斷連線，已 flush 的新單跟著消失（實測 `PendingRollbackError`）。
+   `check` 沒這個問題，是因為它在寫入任何東西之前呼叫，失敗時整個 rollback 也不會掉東西。
+3. 舊規則「`score` 失敗也照常寫卡（分數 null）」沒有確認對方存在。fast-v3 只比任務，`score` 收到工單層級的確認（`draft_ref="ticket"`）
+   會丟例外，於是任何人送一個隨機 uuid 就會留下一張指向不存在東西的 `entity_kind='ticket'` 配對卡。
+4. 配對卡用 Python 字串排序決定 `low_uuid`／`high_uuid`，資料庫比的是 uuid 本身；確認的 uuid 是大寫時順序會反，違反 CHECK → 500（實測 12 次 4~5 次）。
+
+**Decision**（只動後端，engine 不用改）：
+
+1. `score` 改在**建立之前**呼叫（它本來就不需要新單的 uuid）：`dedup.score_acknowledged` 先算分，建單後 `dedup.record_pair_ignored` 再寫卡。
+2. `check` 與 `score` 共用 `_guarded`：SAVEPOINT 一律 rollback、`ENGINE_TIMEOUT_S`、寫入偵測（兩者都在寫入前呼叫，所以偵測一定有效）。
+   任何失敗 → 整個 transaction rollback、reload actor，然後照常建立。
+3. `score` 失敗時，後端用 `duplicate_pair_repository.entity_exists` 依 `related_kind` 查對方是否存在（未刪除）；存在才寫沒分數的卡，不存在就不寫。
+   engine 正常回 `None`（找不到）時照舊不寫卡。
+4. 確認的值先用 `uuid.UUID` 轉成 Postgres 的寫法；不是 uuid 就不呼叫 engine、不寫卡、照常建立。
+
+這條細化 spec §5.1 原本「`score` 失敗：照常建立、卡的分數為 null」的寫法（加上「對方存在」的條件），不推翻 ADR-296／303。
+
+➕ 「dedup 出錯絕不擋建立」在兩段都成立，而且不依賴 engine 怎麼實作。
+➕ 不會再出現指向不存在東西的配對卡。
+➖ 確認那一段多一個查詢（只在 `score` 失敗時）。
+◾ 測試：`tests/test_dedup_check.py`（score 的 SQL 出錯、逾時、偷寫、對方不存在、不是 uuid、大寫 uuid）、`tests/test_dedup_submission.py`（真 engine 的工單層級確認、建單時 score 逾時）。

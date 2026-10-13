@@ -1173,6 +1173,17 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
 - [x] 突變：cast 改回 `Geography()` → 670 ms，測試失敗；還原後通過
 - [x] `ENGINE_TIMEOUT_S` 維持 2 秒（ADR-307）
 
+## Task 26: PR #73 審查修正（ADR-313，2026-10-13）
+
+**Files:** `alembic/versions/d4c8b1e07a92_dedup_fast_layer_tables.py`、`app/models/geo.py`、`app/services/dedup.py`、`app/services/dedup_submission.py`、
+`app/repositories/dedup_repository.py`、`tests/test_dedup_check.py`、`tests/test_dedup_submission.py`、`tests/dedup_helpers.py`
+
+- [x] 把 main（#57、#72）merge 進來；`geo.py` 的 import 衝突兩邊合併
+- [x] migration `d4c8b1e07a92` 改接在 `a7d3c5e9f214` 後面（main 也接在 `e3b8f1a6c2d7`，原本變成兩個 head）；空 DB 上 upgrade → downgrade -1 → upgrade 通過
+- [x] 先寫失敗的測試：score 的 SQL 出錯、逾時、偷寫、對方不存在（三種 kind）、不是 uuid、大寫 uuid、真 engine 的工單層級確認、建單時 score 逾時
+- [x] `_guarded` 共用保護；`score_acknowledged`（建立前）＋`record_pair_ignored`（建立後）；`entity_exists`；uuid 正規化
+- [x] dedup 相關測試全過；全套測試
+
 ## 交給前端的 API 變更（後端不負責實作）
 
 前端改動由前端負責，後端只提供合約。以下是本票（Phase 2 完成後的最終版）對 GraphQL 的變更，供前端與 #47 作者調整。
