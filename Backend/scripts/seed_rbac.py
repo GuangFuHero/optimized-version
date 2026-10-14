@@ -52,8 +52,9 @@ ROLES_DATA = [
             Perm.STATION_EDIT: "own",
             Perm.STATION_DELETE: "own",
             Perm.TICKET_VIEW: "all",      # help-request board is public (ADR-027)
-            # ADR-286: anyone signed in may call the requester — contact details and the two
-            # triage answers. Volunteers could not reach the person they were going to help.
+            # ADR-286: the two triage answers to anyone signed in. The contact details also take
+            # view_history or a claim on one of the ticket's needs, which the code asks for:
+            # volunteers could not reach the person they were going to help.
             Perm.TICKET_VIEW_PII: "all",
             # ADR-281: signing in is what unlocks the exact point, the address and the free
             # text — the team's rule since 2026-07 (訪客看區域、登入看精確). `all` rather than
@@ -63,7 +64,8 @@ ROLES_DATA = [
             # ADR-128: `own` is what makes Notion's front-of-house requirement real — a
             # requester following their own ticket's progress — without exposing anyone else's.
             # It kept view_pii's old tiering when ADR-286 opened view_pii, and it now also gates
-            # who claimed a need: the requester sees who is coming, other citizens do not.
+            # who claimed a need — the requester sees who is coming, other citizens do not — and,
+            # beside a claim, whom to call.
             Perm.TICKET_VIEW_HISTORY: "own",
             Perm.STATION_VIEW_HISTORY: "own",
             Perm.TICKET_ADD: "all",
@@ -165,6 +167,7 @@ ROLES_DATA = [
             Perm.TICKET_VIEW: "all",
             # ADR-286/ADR-281: `all`, like every signed-in account (see `user`) — a team
             # identity that saw less than the citizen one would lose it on switching (ADR-097).
+            # Whom to call still takes view_history (`zone` below) or a claim, as for `user`.
             Perm.TICKET_VIEW_PII: "all",
             Perm.TICKET_VIEW_DETAIL: "all",
             # ADR-128: a ticket's timeline is `zone`, never `team` — tickets carry no team_uuid,

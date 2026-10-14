@@ -205,7 +205,7 @@ async def _create_user_with_role(redis, role_name: str) -> tuple[str, str]:
 async def _citizen_since_adr_286(redis) -> str:
     """A signed-in citizen granted as the seed grants one since ADR-286; returns their token.
 
-    view_pii `all` (anyone signed in may call the requester), view_history `own`, assign `own`
+    view_pii `all` (whom to call once they claim, ADR-286), view_history `own`, assign `own`
     (claiming a need). Login User keeps view_pii at `own`, which the masking tests rely on.
     """
     async with test_db() as db:

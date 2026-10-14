@@ -32,8 +32,8 @@ class Perm(StrEnum):
     # audit.view — that key is auditor-only, while the requirement is that a requester can
     # follow their own ticket. Not a reuse of ticket.view either: that one is in
     # PUBLIC_PERMS, so sharing it would put staff names and review timings in front of
-    # anonymous visitors. Scoped as view_pii was before ADR-286 opened contact details to
-    # anyone signed in: the timeline names people, and it also gates who claimed a need.
+    # anonymous visitors. Scoped as view_pii was before ADR-286 widened it to everyone signed
+    # in: the timeline names people, and it also gates who claimed a need and whom to call.
     TICKET_VIEW_HISTORY = "ticket.view_history"
     TICKET_ADD = "ticket.add"
     TICKET_EDIT = "ticket.edit"

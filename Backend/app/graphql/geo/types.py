@@ -157,7 +157,7 @@ class StationType:
     def _pii_visible(self, info: strawberry.types.Info):
         """Memoized PII-visibility check shared by the three contact_* resolvers.
 
-        See TicketType._pii_visible (app/graphql/tickets/types.py) for the full rationale —
+        See TicketType._pii_in_scope (app/graphql/tickets/types.py) for the full rationale —
         same memoization-per-instance pattern, scoped to station.view_pii here instead.
         """
         if self._pii_visible_task is None:

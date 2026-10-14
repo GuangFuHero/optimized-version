@@ -225,7 +225,8 @@
 `ticket.view_pii` **絕不**公開；匿名一律看不到 PII。
 
 ### PII 遮罩（ADR-049）
-`ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩；登入者（user、team admin/member、data_auditor、super_admin）一律 all（ADR-286，原本 user→own、team→zone）。例外是 `tickets` **列表**：另要 `ticket.view_history`，其他登入者在列表看到遮罩、點進單（`ticket`）才看到完整的；列表一頁最多 200 筆（ADR-286 第 6 點）。
+`ticket.view_pii` 不在 scope 內時回傳**遮罩字形**（`王◯◯` / `j***@***.com` / `09*****678`），不是 null、也不是報錯。逐角色：guest→遮罩；登入者（user、team admin/member、data_auditor、super_admin）一律 all（ADR-286，原本 user→own、team→zone）。
+聯絡人姓名、電話、Email 在 `view_pii` 之外還要**二擇一**：這張單的 `ticket.view_history`（建單者、責任區的 team、稽核與超管），或在這張單的某筆需求上有承接；其他登入者看到遮罩，單張（`ticket`）和列表（`tickets`）都一樣（ADR-286 第 1 點，2026-10-11 收緊）。兩個檢傷欄位不受這條影響：點進單登入就看得到，列表另要 `ticket.view_history`；列表一頁最多 200 筆（ADR-286 第 6 點）。
 
 任務的承接名單（`assignments`，誰承接了哪筆需求）**不**跟著 `view_pii`，改看 `ticket.view_history`（user→own、team→zone、data_auditor/super_admin→all）：建單者與協調者看得到，其他登入者看不到（ADR-286）。需求的審核狀態（`moderationStatus`）同樣看 `ticket.view_history`，沒有的人拿 null（ADR-286 第 5 點）。
 

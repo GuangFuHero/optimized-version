@@ -256,10 +256,12 @@ async def _row_decider(db: AsyncSession, actor: User, perm: Perm):
     """Return an `async (ticket) -> bool` answering "does `perm` reach this row for this caller".
 
     Used for ticket.view_pii (the contact columns) and ticket.view_detail (the point and the
-    free text, ADR-281) — the same two decisions the API makes per field. Resolves the
-    capability once and only falls back to a per-row geometry check when the scope actually
-    needs one — `all` and `none` are decided without touching the database again (mirrors
-    TicketType._compute_pii_visible in app/graphql/tickets/types.py).
+    free text, ADR-281) — the same two decisions the API makes per field. The API also asks the
+    contact for ticket.view_history or a claim (ADR-286 point 1); every seeded holder of
+    ticket.export holds ticket.view_history over the rows it may export, so it is not asked
+    again here. Resolves the capability once and only falls back to a per-row geometry check
+    when the scope actually needs one — `all` and `none` are decided without touching the
+    database again (mirrors TicketType._compute_pii_in_scope in app/graphql/tickets/types.py).
     """
     scope = await resolve_scope(actor, perm, db)
     if scope == Scope.ALL:
