@@ -29,7 +29,11 @@ from app.repositories.tickets_repository import (
     ticket_task_repository,
 )
 from app.services.authz import require_scope
-from app.services.geo_validation import normalize_contact_fields, validate_point
+from app.services.geo_validation import (
+    check_address_lengths,
+    normalize_contact_fields,
+    validate_point,
+)
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 from app.services.photo import normalize_photo_url
@@ -174,6 +178,7 @@ async def create_ticket(
         # whitespace-only value has to be refused here rather than normalized to None.
         required=frozenset({"contact_name"}),
     )
+    check_address_lengths(secondary_location)
     ticket = await ticket_repository.add(
         db,
         obj_in={
@@ -288,6 +293,7 @@ async def create_help_request(
         {"contact_name": contact_name, "contact_email": None, "contact_phone": contact_phone},
         required=frozenset({"contact_name"}),
     )
+    check_address_lengths(secondary_location)
     creator = str(actor.uuid)
     ticket = await ticket_repository.add(
         db,
@@ -382,6 +388,7 @@ async def update_ticket(
     fields = set(changes) | ({"secondary_location"} if secondary_location is not None else set())
     await _require_edit_or_review(db, actor, fields, ticket)
     if secondary_location is not None:
+        check_address_lengths(secondary_location)
         await _replace_secondary_location(db, str(ticket.uuid), secondary_location)
 
     obj_in = dict(changes)

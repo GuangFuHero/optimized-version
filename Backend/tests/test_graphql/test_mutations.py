@@ -791,6 +791,38 @@ async def test_create_ticket_rejects_over_long_contact(client, coordinator_auth,
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["createStation", "createTicket", "updateTicket"])
+async def test_an_address_part_too_long_for_its_column_is_refused_by_name(
+    client, coordinator_auth, sample_ticket, mutation
+):
+    """`floor` is varchar(20) wherever an address is written, and a longer one is named as such.
+
+    It used to reach the INSERT, and the caller read only "Unexpected error." (#61 review).
+    """
+    _, token = coordinator_auth
+    address = {"floor": "x" * 21}
+    query, variables = {
+        "createStation": (CREATE_STATION, {"input": _station_input(secondaryLocation=address)}),
+        "createTicket": (
+            CREATE_TICKET,
+            {
+                "input": {
+                    "title": "Need medics", "geometry": POINT_TAIPEI, "contactName": "Alice",
+                    "priority": "high", "secondaryLocation": address,
+                }
+            },
+        ),
+        "updateTicket": (UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}}),
+    }[mutation]
+
+    resp = await client.post(
+        "/graphql", json={"query": query, "variables": variables}, headers=auth_header(token)
+    )
+
+    assert [e["message"] for e in resp.json()["errors"]] == ["floor must be at most 20 characters"]
+
+
+@pytest.mark.asyncio
 async def test_create_ticket_stores_contact_stripped(client, coordinator_auth):
     """A ticket's contact values are stored stripped, matching what the length check measured.
 
