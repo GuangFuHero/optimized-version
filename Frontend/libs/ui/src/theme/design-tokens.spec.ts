@@ -289,9 +289,9 @@ describe('display text scale', () => {
     expect(steps).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 22, 24]);
   });
 
-  it('keys are the desktop size, so porting from the prototype is a lookup', () => {
+  it('sets a desktop step 2px over its key, the top one 1px, so the phone still reads larger', () => {
     for (const step of steps) {
-      expect(displayTextSize[step].tablet).toBe(step);
+      expect(displayTextSize[step].tablet).toBe(step + (step === 24 ? 1 : 2));
     }
   });
 
@@ -299,16 +299,16 @@ describe('display text scale', () => {
     expect(displayTextSize[step].mobile).toBeGreaterThan(displayTextSize[step].tablet);
   });
 
-  it('shifts the small end by +4 and the large end by +2', () => {
-    const delta = (step: DisplayTextStep) =>
-      displayTextSize[step].mobile - displayTextSize[step].tablet;
+  it("keeps the phone at the prototype's +4 at the small end and +2 at the large end", () => {
+    const phoneOverKey = (step: DisplayTextStep) =>
+      displayTextSize[step].mobile - step;
 
-    expect(delta(10)).toBe(4);
-    expect(delta(14)).toBe(4);
-    expect(delta(18)).toBe(4);
-    expect(delta(20)).toBe(3);
-    expect(delta(22)).toBe(3);
-    expect(delta(24)).toBe(2);
+    expect(phoneOverKey(10)).toBe(4);
+    expect(phoneOverKey(14)).toBe(4);
+    expect(phoneOverKey(18)).toBe(4);
+    expect(phoneOverKey(20)).toBe(3);
+    expect(phoneOverKey(22)).toBe(3);
+    expect(phoneOverKey(24)).toBe(2);
   });
 
   /**
@@ -338,7 +338,7 @@ describe('display text scale', () => {
 
   it('emits the 767px cutoff for contexts MUI will not resolve', () => {
     expect(displayTextSizeCss(13)).toStrictEqual({
-      fontSize: 13,
+      fontSize: 15,
       '@media (max-width:767.95px)': { fontSize: 17 },
     });
     expect(DISPLAY_SCALE_MOBILE_MEDIA).toBe('@media (max-width:767.95px)');

@@ -399,13 +399,21 @@ export const semanticTypographyMobile = {
  * because 22 mostly sits beside 20-step text, and 23 vs 24 on a phone is a 1px difference nobody
  * reads as hierarchy. So this table is AHEAD of `site.css` until the designer adds `--fs-22` there.
  *
+ * ## Desktop is 2px over the prototype
+ *
+ * The designer's test (2026-10-10) found the site's text too small overall; measured, a phone read
+ * 16–19px but a desktop 12–15px, the prototype's own sizes. The product owner had every desktop
+ * step raised by 2 (2026-10-14), and 24 by 1 only, so a phone (26) still reads larger than a
+ * desktop. The phone sizes did not move. This table is AHEAD of `site.css` here too.
+ *
  * ## How to use it
  *
- * Keys are the DESKTOP px, matching the `--fs-NN` names in `site.css`, so porting a value from the
- * prototype is a lookup rather than a judgement call. Each entry is a ready-made MUI responsive
- * value keyed on this theme's `mobile` / `tablet` breakpoints:
+ * Keys are the `--fs-NN` names in `site.css`, so porting a value from the prototype is a lookup
+ * rather than a judgement call: what the prototype draws at `--fs-13` is `displayTextSize[13]`.
+ * Each entry is a ready-made MUI responsive value keyed on this theme's `mobile` / `tablet`
+ * breakpoints:
  *
- *     <Typography sx={{ fontSize: displayTextSize[13] }}>   // 17px on a phone, 13px from 768px up
+ *     <Typography sx={{ fontSize: displayTextSize[13] }}>   // 17px on a phone, 15px from 768px up
  *
  * `tablet` is 768, so the switch lands on `max-width: 767.95px` — the 767px cutoff `site.css` uses.
  * Note this is NOT `MOBILE_BREAKPOINT_PX` (600); that one belongs to the DS ramp above.
@@ -414,18 +422,18 @@ export const semanticTypographyMobile = {
  * not ride this scale — icons keep plain numbers.
  */
 export const displayTextSize = {
-  10: { mobile: 14, tablet: 10 },
-  11: { mobile: 15, tablet: 11 },
-  12: { mobile: 16, tablet: 12 },
-  13: { mobile: 17, tablet: 13 },
-  14: { mobile: 18, tablet: 14 },
-  15: { mobile: 19, tablet: 15 },
-  16: { mobile: 20, tablet: 16 },
-  17: { mobile: 21, tablet: 17 },
-  18: { mobile: 22, tablet: 18 },
-  20: { mobile: 23, tablet: 20 },
-  22: { mobile: 25, tablet: 22 },
-  24: { mobile: 26, tablet: 24 },
+  10: { mobile: 14, tablet: 12 },
+  11: { mobile: 15, tablet: 13 },
+  12: { mobile: 16, tablet: 14 },
+  13: { mobile: 17, tablet: 15 },
+  14: { mobile: 18, tablet: 16 },
+  15: { mobile: 19, tablet: 17 },
+  16: { mobile: 20, tablet: 18 },
+  17: { mobile: 21, tablet: 19 },
+  18: { mobile: 22, tablet: 20 },
+  20: { mobile: 23, tablet: 22 },
+  22: { mobile: 25, tablet: 24 },
+  24: { mobile: 26, tablet: 25 },
 } as const satisfies Record<number, { mobile: number; tablet: number }>;
 
 export type DisplayTextStep = keyof typeof displayTextSize;

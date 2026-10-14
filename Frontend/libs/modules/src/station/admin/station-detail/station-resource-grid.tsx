@@ -23,7 +23,8 @@ export function StationResourceTile({ item }: StationResourceTileProps) {
     <Box
       sx={{
         minWidth: 0,
-        height: 58,
+        // At least, not exactly: a value as long as 08:00-20:00 wraps, and the tile grows with it.
+        minHeight: 58,
         display: 'flex',
         alignItems: 'center',
         gap: 1,
