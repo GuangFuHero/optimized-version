@@ -1,4 +1,4 @@
-"""Two-phase create on the ADR-304 engine (Spec 020 §5): hold everything or create everything.
+"""Two-phase create on the ADR-304 engine (Spec 022 §5): hold everything or create everything.
 
 A stub engine decides what is suspected, so these test the backend's flow — validation first,
 nothing written on a hold, acknowledgements bound to drafts, one transaction — plus one pass

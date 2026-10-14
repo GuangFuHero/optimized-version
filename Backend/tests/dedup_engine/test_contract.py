@@ -1,4 +1,4 @@
-"""Contract tests every ADR-304 engine must pass (Spec 020 §8), against a real database.
+"""Contract tests every ADR-304 engine must pass (Spec 022 §8), against a real database.
 
 Owned by the backend: they check what the backend relies on — shapes, determinism, read-only,
 evidence hygiene, speed — not whether the algorithm is any good.

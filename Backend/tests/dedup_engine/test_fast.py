@@ -34,7 +34,7 @@ def _signals(**overrides) -> Signals:
 
 
 def test_defaults_are_the_grid_search_values():
-    """The shipped parameters are the provisional grid-search winners, unchanged from Spec 019."""
+    """The shipped parameters are the provisional grid-search winners, unchanged from Spec 021."""
     p = TICKET_TASK_PARAMETERS
     assert (p.distance_half_m, p.time_half_min) == (200.0, 360.0)
     assert (p.distance_weight, p.time_weight, p.task_type_weight, p.text_weight) == (2.0, 0.5, 0.5, 1.0)

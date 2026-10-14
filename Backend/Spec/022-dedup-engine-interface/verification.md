@@ -1,4 +1,4 @@
-# Spec 020 dedup engine 介面：驗證與速度報告
+# Spec 022 dedup engine 介面：驗證與速度報告
 
 **日期**：2026-09-29
 **branch**：`feat/dedup-engine-interface`（base 在 #59 → #46 上，PR 尚未開）
@@ -109,7 +109,7 @@ lint（`ruff==0.11.0`）：這次改到的檔案沒有新增問題。
 | 對工單 A 自己加一個一樣的任務 | 回傳結果裡不會有 A 自己的任務（同一張單的任務不算重複） |
 | 附近沒有別的單，只有同一張單裡有一樣的任務 | 直接建立 |
 
-**哪些資料會被當成 candidates（019 定的規則）**
+**哪些資料會被當成 candidates（021 定的規則）**
 
 | 已存在的那筆 | 送出一樣的內容 |
 |---|---|
@@ -322,6 +322,6 @@ DEDUP_REGEN_GOLDEN=1 uv run pytest tests/dedup_engine/test_golden.py   # 升 ver
 
 ### 8.2 Phase 1（Task 1~14，2026-09-28）摘要
 
-- 演算法搬進 `app/dedup_engine/`。分數跟 019 完全一樣（4 萬組隨機輸入，差距 0）；Python 算的文字相似度跟 Postgres 的 pg_trgm 一致（誤差 < 1e-6）。
+- 演算法搬進 `app/dedup_engine/`。分數跟 021 完全一樣（4 萬組隨機輸入，差距 0）；Python 算的文字相似度跟 Postgres 的 pg_trgm 一致（誤差 < 1e-6）。
 - 本機 1531 passed、容器內 1531 passed、API 22 個情境全通過（當時以工單為單位，`fast-v1`）。
 - **更正**：當時回報的「撈 candidates 的查詢有用到 `ix_base_geometries_geography`」是錯的（用的是手寫 SQL，見 §4）。

@@ -1,4 +1,4 @@
-"""The one place the backend gets its dedup engine from (Spec 020 §4).
+"""The one place the backend gets its dedup engine from (Spec 022 §4).
 
 Swapping the algorithm means changing what is registered here; tests replace it with monkeypatch.
 """

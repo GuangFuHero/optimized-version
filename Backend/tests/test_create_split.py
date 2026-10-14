@@ -1,4 +1,4 @@
-"""`create_ticket` / `create_station` split into validate → insert → commit (Spec 020, ADR-299).
+"""`create_ticket` / `create_station` split into validate → insert → commit (Spec 022, ADR-299).
 
 The two-phase create needs to validate before running dedup and to insert without committing,
 so the ticket, its pair card and its audit row land in one transaction. Batch import keeps
@@ -237,7 +237,7 @@ async def test_create_station_keeps_its_signature():
     assert list(inspect.signature(station_service.create_station).parameters) == CREATE_STATION_PARAMS
 
 
-# --- ticket tasks (Spec 020 plan Task 20) ------------------------------------------------
+# --- ticket tasks (Spec 022 plan Task 20) ------------------------------------------------
 
 CREATE_TICKET_TASK_PARAMS = [
     "db", "actor", "ticket_uuid", "task_type", "task_name", "task_description", "quantity",

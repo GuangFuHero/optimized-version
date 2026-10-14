@@ -88,7 +88,7 @@ async def _assignment_scope_target(db: AsyncSession, assignment: TaskAssignment)
 
 @dataclass(frozen=True)
 class TicketFields:
-    """A ticket that passed authz and validation but is not written yet (Spec 020, ADR-299).
+    """A ticket that passed authz and validation but is not written yet (Spec 022, ADR-299).
 
     `values` are the normalized column values, ready for `ticket_repository.add`; `point` is
     the validated GeoJSON Point they were built from.
@@ -204,7 +204,7 @@ async def create_ticket(
     Validate, insert, and one commit that makes the ticket + address pair atomic, exactly as
     `station.py::create_station` does. Batch import calls this; the interactive GraphQL path
     goes through `dedup_submission.submit_new_ticket`, which runs the same two steps around a
-    duplicate check (Spec 020, ADR-299).
+    duplicate check (Spec 022, ADR-299).
     """
     fields = await validate_ticket(
         db,
@@ -387,7 +387,7 @@ async def delete_ticket(db: AsyncSession, *, actor: User, uuid: str) -> None:
 
 @dataclass(frozen=True)
 class TaskFields:
-    """A ticket task that passed authz and validation but is not written yet (Spec 020 plan Task 20).
+    """A ticket task that passed authz and validation but is not written yet (Spec 022 plan Task 20).
 
     Carries no ticket: a new ticket's tasks are validated before the ticket exists.
     """
@@ -447,7 +447,7 @@ async def create_ticket_task(
     """Create a task under a ticket (checkpoint 1 only — no scope check against the parent).
 
     Batch import calls this; the interactive GraphQL path goes through
-    `dedup_submission.submit_new_task` (Spec 020, ADR-302).
+    `dedup_submission.submit_new_task` (Spec 022, ADR-302).
     """
     fields = await validate_ticket_task(
         db,

@@ -14,7 +14,7 @@ accepted on.
 ## fast-v4 — 2026-10-13
 
 fast-v3 with the phone bonus limited to phones the parser accepts (`fast.py`). Found in the
-PR #73 review (`Spec/020-dedup-engine-interface/pr73-algorithm-notes.md`).
+PR #73 review (`Spec/022-dedup-engine-interface/pr73-algorithm-notes.md`).
 
 ### What changed from fast-v3
 
@@ -118,13 +118,13 @@ reading these numbers apply unchanged.
 ## fast-v2 — 2026-09-29
 
 Task-level fast layer on the ADR-304 contract (`fast.py`, candidates in `candidates.py`).
-Spec 019 moved the unit from tickets to tasks the same day; ADR-304 moved candidate retrieval
+Spec 021 moved the unit from tickets to tasks the same day; ADR-304 moved candidate retrieval
 into the engine so a change of unit no longer touches the backend.
 
 ### What changed from fast-v1
 
 1. **Unit is a ticket task.** Each task draft is compared with open tasks nearby and gets at
-   most one suspect; the ticket itself is not compared. Candidate rules are Spec 019's: task not
+   most one suspect; the ticket itself is not compared. Candidate rules are Spec 021's: task not
    fulfilled/canceled and not deleted, under a ticket not deleted and not cancelled (a completed
    ticket stays in).
 2. **Signals read task fields**: distance between the tasks' tickets, the candidate task's age,
@@ -178,7 +178,7 @@ Reproduce with `tools/dedup_eval/`; the data stays off the repo.
 
 ## fast-v1 — 2026-09-28
 
-Spec 019's fast layer (PR #46 / #59), moved behind the Spec 020 contract.
+Spec 021's fast layer (PR #46 / #59), moved behind the Spec 022 contract.
 
 ### Formula
 
@@ -205,16 +205,16 @@ at which a candidate perfect on every other signal scores exactly the threshold,
 | `component_baseline` | 0.5 | 0.5 | judgement, drives the per-component `passed` light only |
 | retrieval radius | 162.1 m | 136.7 m | derived |
 
-### Differences from Spec 019
+### Differences from Spec 021
 
 1. **Text similarity is computed in Python** (`text.py`), not by pg_trgm in SQL (ADR-316).
    `tests/test_dedup_trgm_parity.py` checks it equals `similarity()` on the database.
-2. **Candidate text is truncated too** (title 200, description 2000 characters). Spec 019
+2. **Candidate text is truncated too** (title 200, description 2000 characters). Spec 021
    truncated only the submission's text.
 3. `Candidate.same_contact_phone` is available but **not used** in fast-v1.
 
 The formula itself is unchanged: 40,000 random signal combinations scored identically by
-Spec 019's `score_candidate` and fast-v1's `combine` (max difference 0.0).
+Spec 021's `score_candidate` and fast-v1's `combine` (max difference 0.0).
 
 ### Backtest
 

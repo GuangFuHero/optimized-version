@@ -1,7 +1,7 @@
-"""Superseded dedup code stays gone (Spec 020 plan Tasks 13 and 23).
+"""Superseded dedup code stays gone (Spec 022 plan Tasks 13 and 23).
 
 Two scoring paths, or two contracts, that could disagree is exactly the drift the engine
-boundary exists to prevent, so nothing of Spec 019's path or of Phase 1's snapshot contract
+boundary exists to prevent, so nothing of Spec 021's path or of Phase 1's snapshot contract
 may linger once ADR-304 replaced them.
 """
 
@@ -15,7 +15,7 @@ from app.services import dedup as dedup_service
 from app.services import dedup_snapshot, dedup_submission
 
 GONE_MODULES = [
-    "app.services.dedup_scoring",  # Spec 019's formula, now app.dedup_engine.fast
+    "app.services.dedup_scoring",  # Spec 021's formula, now app.dedup_engine.fast
     "app.graphql.dedup",  # the standalone dedup API (ADR-314)
     "app.dedup_engine.fast_v2",  # merged back into fast.py
 ]

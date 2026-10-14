@@ -44,7 +44,7 @@ class RequestMutation:
     ) -> CreateTicketResult:
         """Create a support ticket with its tasks — unless any part looks like something already there.
 
-        Two-phase (Spec 020 §5.1). If any task (or the ticket) looks like an open one nearby,
+        Two-phase (Spec 022 §5.1). If any task (or the ticket) looks like an open one nearby,
         nothing is created and `DuplicatesSuspected` lists each suspect: which part of the input
         (`draftRef`) and what it looks like. Send the same input again after editing, or with
         `acknowledgedDuplicateOf` set on each part confirmed not to be a duplicate; those parts are
@@ -195,7 +195,7 @@ class TicketTaskMutation:
     ) -> CreateTicketTaskResult:
         """Add a task (rescue, HR, supply, etc.) to an existing ticket — unless it looks like another.
 
-        Two-phase (Spec 020 §5.2): `DuplicatesSuspected` (nothing added) when it looks like an
+        Two-phase (Spec 022 §5.2): `DuplicatesSuspected` (nothing added) when it looks like an
         open task of another ticket; send again with `acknowledgedDuplicateOf` to add it anyway.
         The ticket's own tasks are never suspects. Verifies the parent ticket exists. Requires
         ticket.add (checkpoint 1 only — no scope check against the parent ticket).

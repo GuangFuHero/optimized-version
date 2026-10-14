@@ -1,4 +1,4 @@
-"""Two-phase createTicket / createTicketTask / createStation over GraphQL, real engine (Spec 020 §5).
+"""Two-phase createTicket / createTicketTask / createStation over GraphQL, real engine (Spec 022 §5).
 
 End to end: resolver, union results, the ADR-304 guard, fast-v2's own queries and scoring, and
 the rows written. Service-level cases (atomicity, fail-open, acknowledgement bookkeeping) are in
@@ -54,7 +54,7 @@ mutation($input: CreateStationInput!, $ack: String) {{
     }}
 }}
 """
-# Spec 019's standalone API (ADR-314) and Phase 1's single-suspect types (ADR-304).
+# Spec 021's standalone API (ADR-314) and Phase 1's single-suspect types (ADR-304).
 REMOVED_FROM_SDL = (
     "ticketDedupCandidates",
     "stationDedupCandidates",

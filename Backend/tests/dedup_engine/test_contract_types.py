@@ -1,4 +1,4 @@
-"""The ADR-304 contract: the backend sends drafts, the engine returns suspects (Spec 020 §2~§4)."""
+"""The ADR-304 contract: the backend sends drafts, the engine returns suspects (Spec 022 §2~§4)."""
 
 import dataclasses
 import inspect

@@ -1,4 +1,4 @@
-"""The GraphQL suite's dedup engine switch (Spec 020 plan Task 12).
+"""The GraphQL suite's dedup engine switch (Spec 022 plan Task 12).
 
 If the autouse stub leaked into the real-engine tests, they would pass by never suspecting
 anything; if it did not apply elsewhere, unrelated tests would start getting DuplicatesSuspected.

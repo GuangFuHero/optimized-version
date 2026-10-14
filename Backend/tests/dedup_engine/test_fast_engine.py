@@ -106,7 +106,7 @@ async def test_each_task_draft_gets_at_most_one_suspect(db):
 
 
 async def test_the_ticket_itself_is_never_compared(db):
-    """The unit is the task (Spec 019, 2026-09-29): a ticket with no tasks has nothing to match."""
+    """The unit is the task (Spec 021, 2026-09-29): a ticket with no tasks has nothing to match."""
     owner = await _owner(db)
     await _ticket(db, owner, title="民生街淹水")
     assert await FastEngine().check(db, _new_ticket(), NOW) == []
@@ -135,7 +135,7 @@ async def test_unrelated_or_far_tasks_are_not_suspected(db):
 
 
 async def test_adding_to_a_ticket_skips_its_own_tasks(db):
-    """NewTask: located at its ticket, and that ticket's tasks are not candidates (019 decision 3)."""
+    """NewTask: located at its ticket, and that ticket's tasks are not candidates (021 decision 3)."""
     owner = await _owner(db)
     mine = await _ticket(db, owner)
     await _task(db, owner, mine)

@@ -23,7 +23,7 @@ it with the threshold.
 The offline evaluation tool (`tools/dedup_eval/`) also scores with `combine` and
 `text_similarity`. Thus, the tool and the engine give the same scores.
 
-The unit is a ticket task (Spec 019, 2026-09-29). The engine compares each task draft with open
+The unit is a ticket task (Spec 021, 2026-09-29). The engine compares each task draft with open
 tasks nearby. Each task draft gets a maximum of one suspect. The engine does not compare the
 ticket itself. For a new task on a ticket that exists, the engine searches from that ticket and
 skips the tasks of that ticket. The engine compares stations only with stations, without the
@@ -242,7 +242,7 @@ class FastEngine:
             return None if found is None else self._station_suspect(submission.station, *found, now)
 
         if related_kind != "ticket_task":
-            return None  # the engine compares tasks, never the ticket itself (Spec 019)
+            return None  # the engine compares tasks, never the ticket itself (Spec 021)
         drafts, at, phone, _ = await self._task_context(db, submission)
         index = int(draft_ref.partition(":")[2])
         if at is None or index >= len(drafts):

@@ -1,1 +1,1 @@
-"""Dedup algorithm core (Spec 020). Pure code: see contract.py for the backend boundary."""
+"""Dedup algorithm core (Spec 022). Pure code: see contract.py for the backend boundary."""

@@ -1,4 +1,4 @@
-"""fast-v2's candidate queries against real PostGIS (Spec 019 task-level rules, ADR-304)."""
+"""fast-v2's candidate queries against real PostGIS (Spec 021 task-level rules, ADR-304)."""
 
 import os
 
@@ -113,7 +113,7 @@ async def test_a_ticket_without_tasks_is_never_a_candidate(db):
 
 
 async def test_the_ticket_being_added_to_is_excluded(db):
-    """Adding a task to a ticket: that ticket's own tasks are not candidates (019 decision 3)."""
+    """Adding a task to a ticket: that ticket's own tasks are not candidates (021 decision 3)."""
     owner = await _owner(db)
     mine, other = await _ticket(db, owner), await _ticket(db, owner)
     await _task(db, owner, mine)

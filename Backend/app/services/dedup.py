@@ -1,4 +1,4 @@
-"""Dedup fast layer service (Spec 020, ADR-304).
+"""Dedup fast layer service (Spec 022, ADR-304).
 
 - `check_submission`: ask the engine about a submission, guarded — savepoint always rolled
   back, timeout, write detection, malformed and acknowledged results dropped. Fail-open.

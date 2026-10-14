@@ -151,7 +151,7 @@ async def _ensure_db():
 
 
 class _NeverSuspects:
-    """A dedup engine that never suspects a duplicate (Spec 020 plan Task 12).
+    """A dedup engine that never suspects a duplicate (Spec 022 plan Task 12).
 
     GraphQL tests create many similar tickets, tasks and stations at the same spot, and with the
     real engine the create mutations would answer DuplicatesSuspected instead of creating. Those

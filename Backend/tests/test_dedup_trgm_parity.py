@@ -1,6 +1,6 @@
 """The core's Python trigram similarity equals pg_trgm's `similarity()` (ADR-316).
 
-Spec 019 scored text in SQL. fast-v1 scores it in Python so the algorithm owner can change the
+Spec 021 scored text in SQL. fast-v1 scores it in Python so the algorithm owner can change the
 method without touching the backend; this pins the two together so the move changes no score.
 """
 

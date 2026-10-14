@@ -1,4 +1,4 @@
-"""Validated create input → dedup drafts (Spec 020 §2, ADR-304).
+"""Validated create input → dedup drafts (Spec 022 §2, ADR-304).
 
 The drafts are all the engine learns about what is being submitted, so these pin that the facts
 come through, phones arrive in E.164 or not at all, and nothing outside the whitelist leaks.

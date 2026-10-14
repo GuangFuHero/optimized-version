@@ -1,4 +1,4 @@
-"""The backend's guard around an ADR-304 engine (Spec 020 §4), on a real session.
+"""The backend's guard around an ADR-304 engine (Spec 022 §4), on a real session.
 
 The engine may query the database, so the backend runs it in a savepoint it always rolls back,
 under a timeout, detects writes, drops malformed or acknowledged results, and fails open.

@@ -1,4 +1,4 @@
-"""Two-phase create for the interactive GraphQL path (Spec 020 §5, ADR-296/299).
+"""Two-phase create for the interactive GraphQL path (Spec 022 §5, ADR-296/299).
 
 First submission: validate, then ask the dedup engine. A match returns `Suspected` and creates
 nothing — the submitter decides. No match creates as usual.

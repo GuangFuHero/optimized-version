@@ -1,4 +1,4 @@
-"""The contract between the backend and the dedup engine (Spec 020 §2–§4, ADR-304).
+"""The contract between the backend and the dedup engine (Spec 022 §2–§4, ADR-304).
 
 The backend sends what is being submitted (validated drafts) from one of three fixed triggers
 and gets back suspects; the engine finds and scores candidates itself, reading the database

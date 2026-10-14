@@ -1,4 +1,4 @@
-"""Shared helpers for the Spec 020 service and submission tests."""
+"""Shared helpers for the Spec 022 service and submission tests."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field

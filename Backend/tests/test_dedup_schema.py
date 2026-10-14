@@ -1,4 +1,4 @@
-"""Dedup table constraints after Spec 020 (ADR-322), on both ways the schema gets built.
+"""Dedup table constraints after Spec 022 (ADR-322), on both ways the schema gets built.
 
 Every other test builds its schema from the models (`create_all`), and
 test_migrations_match_models compares column *names* only, so a CHECK constraint written wrong

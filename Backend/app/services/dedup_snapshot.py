@@ -1,4 +1,4 @@
-"""Validated create input → the drafts the dedup engine is told about (Spec 020 §2, ADR-304).
+"""Validated create input → the drafts the dedup engine is told about (Spec 022 §2, ADR-304).
 
 No scoring and no candidates here: the engine finds those itself. Drafts carry the whitelisted
 facts of what is being submitted; names, emails and internal fields stay behind, and phones go

@@ -1,6 +1,6 @@
 """Candidate queries for the fast layer (ADR-304). The engine owns the queries. All queries are read-only.
 
-Spec 019 (2026-09-29, task level) defines an open candidate:
+Spec 021 (2026-09-29, task level) defines an open candidate:
 
 - A task is a candidate if all of these are true:
   - The task is not fulfilled, not canceled and not deleted.

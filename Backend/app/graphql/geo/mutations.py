@@ -45,7 +45,7 @@ class GeoMutation:
         Validates the geometry as a Point within valid lon/lat bounds. Optionally attaches a
         secondary address or pole location. Requires station.add.
 
-        Two-phase (Spec 020 §5.3): returns `StationCreated`, or registers nothing and returns
+        Two-phase (Spec 022 §5.3): returns `StationCreated`, or registers nothing and returns
         `DuplicatesSuspected`. Call again with `acknowledgedDuplicateOf` = the suspect's
         `relatedUuid` to register anyway; the pair is recorded for review. A failing duplicate
         check never blocks.
