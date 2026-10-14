@@ -4,6 +4,8 @@ import { Link, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import type { ElementType, MouseEventHandler } from 'react';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { getAuthColorScheme } from '../../theme/auth-theme';
 
 interface AuthFooterLinkItem {
@@ -51,7 +53,7 @@ export function AuthFooterLinks({
               <Typography
                 sx={{
                   color: authPalette.textSecondary,
-                  fontSize: 10,
+                  fontSize: displayTextSize[10],
                   fontWeight: 700,
                 }}
               >
@@ -65,7 +67,7 @@ export function AuthFooterLinks({
               onClick={item.onClick}
               sx={{
                 color: authPalette.textSecondary,
-                fontSize: 10,
+                fontSize: displayTextSize[10],
                 fontWeight: 700,
                 letterSpacing: '0.08em',
                 cursor: item.onClick ? 'pointer' : 'inherit',

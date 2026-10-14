@@ -101,6 +101,7 @@ export { AdminLayout } from './shell';
 export {
   SiteActionDrawer,
   SiteShell,
+  SiteTextScale,
   type SiteActionDrawerProps,
 } from './shell/site';
 

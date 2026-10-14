@@ -14,8 +14,9 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 
-import { Badge, designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
+import { SiteBadge } from '../../shell/site/site-badge';
 import {
   checkPhotoLink,
   PHOTO_LINK_MAX,
@@ -87,7 +88,7 @@ export function PhotoLinkEditor({
         >
           {label}
         </Typography>
-        <Badge>{`${value.length}／${PHOTO_LINK_MAX}`}</Badge>
+        <SiteBadge>{`${value.length}／${PHOTO_LINK_MAX}`}</SiteBadge>
         <Typography
           sx={{
             color: color.fg.neutral.muted,

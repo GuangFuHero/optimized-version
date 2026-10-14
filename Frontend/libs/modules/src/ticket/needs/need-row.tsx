@@ -2,8 +2,9 @@
 
 import { Box, Stack, Typography } from '@mui/material';
 
-import { Badge, designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
+import { SiteBadge } from '../../shell/site/site-badge';
 import { formatTicketTypeLabel } from '../status';
 import { NeedActionsMenu } from './need-actions-menu';
 import {
@@ -76,9 +77,9 @@ export function NeedRow({
         >
           {need.taskName}
         </Typography>
-        <Badge tone="neutral" variant="subtle">
+        <SiteBadge tone="neutral" variant="subtle">
           {formatTicketTypeLabel(need.taskType)}
-        </Badge>
+        </SiteBadge>
         {/* Top right, where a card keeps its menu, apart from the claim button below.
             Pulled into the row's padding, so its 36px target does not make the line taller. */}
         <NeedActionsMenu needName={need.taskName} items={actions} sx={{ my: -1, mr: -1 }} />

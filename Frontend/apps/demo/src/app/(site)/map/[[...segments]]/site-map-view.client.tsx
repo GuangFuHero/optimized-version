@@ -9,7 +9,7 @@ import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box, ButtonBase, Fab, Stack, Typography, Zoom } from '@mui/material';
 import { useSession } from 'next-auth/react';
 
-import { designTokens } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import {
   createPointShareTarget,
@@ -106,7 +106,13 @@ function ControlChip({
       }}
     >
       <Box sx={{ display: 'grid', placeItems: 'center' }}>{icon}</Box>
-      <Typography sx={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
+      <Typography
+        sx={{
+          fontSize: displayTextSize[12],
+          fontWeight: 800,
+          whiteSpace: 'nowrap',
+        }}
+      >
         {label}
       </Typography>
     </ButtonBase>

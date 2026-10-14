@@ -3,3 +3,4 @@ export {
   SiteActionDrawer,
   type SiteActionDrawerProps,
 } from './site-action-drawer';
+export { SiteTextScale } from './site-text-scale';

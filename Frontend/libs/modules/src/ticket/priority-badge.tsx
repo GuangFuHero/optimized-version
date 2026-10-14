@@ -1,7 +1,8 @@
 'use client';
 
-import { Badge, type BadgeVariant } from '@rescue-frontend/ui';
+import type { BadgeVariant } from '@rescue-frontend/ui';
 
+import { SiteBadge } from '../shell/site/site-badge';
 import { getTicketPriorityBadge } from './status';
 
 /**
@@ -18,8 +19,8 @@ export function TicketPriorityBadge({
   const badge = getTicketPriorityBadge(priority, { high });
 
   return badge ? (
-    <Badge tone={badge.tone} variant={badge.variant}>
+    <SiteBadge tone={badge.tone} variant={badge.variant}>
       {badge.label}
-    </Badge>
+    </SiteBadge>
   ) : null;
 }

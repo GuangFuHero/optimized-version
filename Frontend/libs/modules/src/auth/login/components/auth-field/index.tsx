@@ -10,6 +10,8 @@ import {
 import { useTheme } from '@mui/material/styles';
 import type { HTMLAttributes, HTMLInputTypeAttribute, ReactNode } from 'react';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { getAuthColorScheme } from '../../theme/auth-theme';
 
 export interface AuthFieldProps {
@@ -49,8 +51,8 @@ export function AuthField({
         component="div"
         sx={{
           color: authPalette.textSecondary,
-          fontSize: 12,
-          lineHeight: '16px',
+          fontSize: displayTextSize[12],
+          lineHeight: 1.3,
           fontWeight: 600,
           letterSpacing: '0.6px',
         }}

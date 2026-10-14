@@ -6,9 +6,10 @@ import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import ShieldRoundedIcon from '@mui/icons-material/Shield';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 
-import { Badge, designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 
 import type { RescueMapMarkerItem } from '../map/types';
+import { SiteBadge } from '../shell/site/site-badge';
 import { getStationTypeIcon } from '../station/type-options';
 import { NeedLine } from '../ticket/needs';
 import { TicketPriorityBadge } from '../ticket/priority-badge';
@@ -120,21 +121,21 @@ export function SiteListRow({
                 />
                 {/* 官方認定：只有官方站點掛 chip，非官方不掛。 */}
                 {isStation && marker.stationMeta?.isOfficial ? (
-                  <Badge tone="secondary" variant="subtle">
+                  <SiteBadge tone="secondary" variant="subtle">
                     <ShieldRoundedIcon sx={{ fontSize: 12 }} />
                     官方
-                  </Badge>
+                  </SiteBadge>
                 ) : null}
                 {/* The list shows no coordinates, but its map link and its detail do: say up
                     front that this ticket's place is a region (ADR-281). */}
                 {marker.locationCell ? (
-                  <Badge tone="neutral" variant="subtle">
+                  <SiteBadge tone="neutral" variant="subtle">
                     <HexagonOutlinedIcon sx={{ fontSize: 12 }} />
                     概略位置
-                  </Badge>
+                  </SiteBadge>
                 ) : null}
               </Stack>
-              <Badge
+              <SiteBadge
                 tone={
                   isStation
                     ? 'secondary'
@@ -143,7 +144,7 @@ export function SiteListRow({
                 variant={isStation ? 'subtle' : 'solid'}
               >
                 {marker.label}
-              </Badge>
+              </SiteBadge>
             </Stack>
 
             <Typography

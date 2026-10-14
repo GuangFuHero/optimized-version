@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import { SiteTextScale } from '@rescue-frontend/modules';
+
 import { PortalSiteShell } from '../../modules/auth/session/site-shell.client';
 
 export const metadata: Metadata = {
@@ -9,5 +11,9 @@ export const metadata: Metadata = {
 };
 
 export default function SiteLayout({ children }: { children: ReactNode }) {
-  return <PortalSiteShell>{children}</PortalSiteShell>;
+  return (
+    <SiteTextScale>
+      <PortalSiteShell>{children}</PortalSiteShell>
+    </SiteTextScale>
+  );
 }

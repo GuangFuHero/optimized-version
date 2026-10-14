@@ -3,13 +3,9 @@
 import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
 import { Box, ButtonBase, IconButton, Stack, Typography } from '@mui/material';
 
-import {
-  Badge,
-  designTokens,
-  displayTextSize,
-  Icons,
-} from '@rescue-frontend/ui';
+import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
 
+import { SiteBadge } from '../../../shell/site/site-badge';
 import { TicketPriorityBadge } from '../../../ticket/priority-badge';
 import { getTicketStatusTone } from '../../../ticket/status';
 import { describeLocationCellSpan } from '../../location-cells';
@@ -155,12 +151,12 @@ export function LocationCellDetail({
               direction="row"
               sx={{ gap: `${spacing[2]}px`, flexWrap: 'wrap' }}
             >
-              <Badge
+              <SiteBadge
                 tone={getTicketStatusTone(member.ticketMeta?.status)}
                 variant="subtle"
               >
                 {member.label}
-              </Badge>
+              </SiteBadge>
               <TicketPriorityBadge priority={member.ticketMeta?.priority} />
             </Stack>
             <Typography

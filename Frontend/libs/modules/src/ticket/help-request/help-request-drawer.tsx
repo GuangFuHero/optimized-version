@@ -14,10 +14,11 @@ import {
 } from '@mui/material';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
-import { Badge, designTokens, displayTextSize } from '@rescue-frontend/ui';
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
 import { LocationPicker } from '../../map/components/location-picker';
 import { SiteActionDrawer } from '../../shell/site/site-action-drawer';
+import { SiteBadge } from '../../shell/site/site-badge';
 import { PhotoLinkEditor } from '../photos';
 import {
   clearHelpRequestDraft,
@@ -500,7 +501,9 @@ function HelpRequestFormDrawer({
         <Stack data-field="needs" spacing={1.5}>
           <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
             <FieldLabel required>你需要什麼幫忙？</FieldLabel>
-            {form.needs.length > 1 ? <Badge>{form.needs.length}</Badge> : null}
+            {form.needs.length > 1 ? (
+              <SiteBadge>{form.needs.length}</SiteBadge>
+            ) : null}
           </Stack>
           {/* Up here, where the eye is, not only in the summary at the foot (designer, 09-13). */}
           {isMissing('needs') ? (

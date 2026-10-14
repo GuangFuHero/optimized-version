@@ -3,12 +3,12 @@
 import { Box, Stack, Typography } from '@mui/material';
 
 import {
-  Badge,
   type BadgeTone,
   designTokens,
   displayTextSize,
 } from '@rescue-frontend/ui';
 
+import { SiteBadge } from '../shell/site/site-badge';
 import type { RoleRequestRow } from './drawer-view';
 import { ROLE_REQUEST_LABELS } from './form';
 
@@ -79,7 +79,7 @@ export function RoleRequestCard({ request }: { request: RoleRequestRow }) {
             {ROLE_REQUEST_LABELS[request.requestedRole]}
           </Typography>
         </Box>
-        <Badge tone={meta.tone}>{meta.label}</Badge>
+        <SiteBadge tone={meta.tone}>{meta.label}</SiteBadge>
       </Stack>
       {request.reason ? (
         <Typography
