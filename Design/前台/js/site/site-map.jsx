@@ -147,7 +147,7 @@
     return out;
   }
 
-  /** 直立地圖的建築標記 —— **一棟一個點，不是一戶一個點**。
+  /** 現場分區的建築標記 —— **一棟一個點，不是一戶一個點**。
    *
    * 🔴 2026-09-18 Sucre：「直立地圖的地圖上點位要不要有一點不一樣？
    *    現在是點進來才發現是直立地圖。不一樣的點是因為，這裡缺口比較大？」
@@ -512,7 +512,7 @@
       const plain = renderCells
         ? controller.markers.filter((m) => !m.isGuestMasked).concat(cells)
         : controller.markers;
-      /* 直立地圖：同一棟的單收成一個建築標記（2026-09-18）。
+      /* 現場分區：同一棟的單收成一個建築標記（2026-09-18）。
          ⚠️ 只對已登入者做 —— 訪客的單已經被遮成格子了，而且訪客本來就看不到矩陣
             （`SiteData.GUEST_CAN_SEE_MATRIX`）。對訪客分群等於把「這一棟有幾件」
             這個比格子精確的資訊送出去。 */
@@ -1001,7 +1001,7 @@
       setPendingSelectId(null);
     }, [pendingSelectId, sourceMarkers]);
 
-    /* ── 直立地圖：同址多樓層 ──────────────────────────────────────────
+    /* ── 現場分區：同址多樓層 ──────────────────────────────────────────
        🔒 訪客一律看不到矩陣（`SiteData.GUEST_CAN_SEE_MATRIX`，此處為 `D`；Q7 尚未裁示，
           走最保守的一路）。就算之後改成 true，資料層對訪客根本不放 floor／room
           進物件，所以訪客拿到的會是一張全部落在「未定位」的矩陣 ——
@@ -1056,7 +1056,7 @@
       viewerId: session.userId,
       onClaimNeed: (task) => claimNeedAndNudge(selectedMarker, task),
       onDeleteMatchSheet: () => setPendingDelete(selectedMarker),
-      /* 直立地圖（2026-09-12）：這個地址有沒有被後台開成「幾樓幾戶」。
+      /* 現場分區（2026-09-12）：這個地址有沒有被後台開成「幾樓幾戶」。
          沒開就是 null，詳情面板照原本的單張單流程走，什麼都不多出來。 */
       building: selectedBuilding,
       onOpenBuilding: selectedBuilding ? () => setBuildingOpen(selectedBuilding) : undefined,

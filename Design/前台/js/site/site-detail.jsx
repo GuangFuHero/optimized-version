@@ -405,7 +405,7 @@
                         現場描述：{marker.subtitle}
                       </div>
                     ) : null}
-                    {/* 直立地圖（2026-09-12）：這個地址後台開了「幾樓幾戶」，
+                    {/* 現場分區（2026-09-12）：這個地址後台開了「幾樓幾戶」，
                         所以它不只是一個點，是一整棟。**樓層／戶室排在座標之前** ——
                         要去的人先要知道「上幾樓、哪一戶」，經緯度是最後才看的。 */}
                     {(marker.ticketMeta && marker.ticketMeta.floor != null && marker.ticketMeta.floor !== '') ? (

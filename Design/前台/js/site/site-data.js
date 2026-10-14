@@ -461,7 +461,7 @@
         visibility: ticket.visibility, verificationStatus: ticket.verificationStatus,
         createdAt: ticket.createdAt, updatedAt: ticket.updatedAt,
         propertyName: ticket.propertyName,
-        /* 直立地圖（2026-09-12）。樓層／戶室對訪客一律不給 ——
+        /* 現場分區（2026-09-12）。樓層／戶室對訪客一律不給 ——
            「哪一棟的哪一層哪一戶」是可以指認到具體住戶家門的資訊，
            比 AC-02 要遮的門牌座標更精確。與 address 同一個理由，
            而且同樣是**不放進物件**，不是放進去再不顯示。
@@ -558,10 +558,10 @@
       description: t.desc || '',
       /* 民眾填的地址。ERD 是 county/city/lane/alley/no/floor/room 分欄，
          原型先合成一條字串顯示。
-         🔴 2026-09-13 修（直立地圖實測抓到）：這裡原本無條件把 county＋city
+         🔴 2026-09-13 修（現場分區實測抓到）：這裡原本無條件把 county＋city
             接在 street 前面，而 `createSiteTicket` 存的 `street` 就是使用者填的
             **完整地址**（含縣市）—— 於是變成「花蓮縣光復鄉花蓮縣光復鄉中正路…」。
-            平常只是顯示難看，直立地圖一來就變成**功能壞掉**：正規化後的地址
+            平常只是顯示難看，現場分區一來就變成**功能壞掉**：正規化後的地址
             對不上建築的 addrKey，從矩陣建的單找不回自己那一棟。
          🔴 同時把 `floor` 從這條字串裡拿掉 —— 樓層現在是獨立欄位（`floor`／`room`），
             黏在地址尾巴會讓正規化後的地址每一戶都不一樣，同樣對不上建築。 */
@@ -585,7 +585,7 @@
       createdAt: t.createdAt, updatedAt: t.createdAt,
       /* 排序用可比較的時間戳；`createdAt` 是給人看的字串，不能拿去 sort。 */
       createdAtISO: (t._site && t._site.createdAtISO) || null,
-      /* 直立地圖：民眾在矩陣上點格子建的單，帶著樓層與戶室回來。 */
+      /* 現場分區：民眾在矩陣上點格子建的單，帶著樓層與戶室回來。 */
       floor: (typeof t.floor === 'number') ? t.floor : (t.floor ? parseInt(t.floor, 10) : null),
       room: t.room != null ? t.room : null,
       /* 只要有任一筆需求是搜救，整張單就算搜救 —— 一張單可有多筆需求。 */
@@ -721,7 +721,7 @@
   }
 
   /* ══════════════════════════════════════════════════════════════════════
-     直立地圖：把任務單歸位到「樓 × 室」的格子 — 2026-09-12
+     現場分區：把任務單歸位到「樓 × 室」的格子 — 2026-09-12
      ══════════════════════════════════════════════════════════════════════ */
 
   /** 🔒 訪客看不看得到矩陣 —— **Q7 尚未裁示**（2026-09-12）。

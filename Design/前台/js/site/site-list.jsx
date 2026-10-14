@@ -534,7 +534,7 @@
       setPendingSelectId(null);
     }, [pendingSelectId, sourceMarkers]);
 
-    /* 直立地圖（2026-09-12）。與 /map 同一份邏輯 ——
+    /* 現場分區（2026-09-12）。與 /map 同一份邏輯 ——
        `PUB-PS-101`：兩頁共用同一個詳情面板。地圖有「查看整棟」而列表沒有，
        就等於兩頁的詳情面板長得不一樣。 */
     /* ⚠️ 這一支檔案上方（usePaginatedRescueMapMarkers）也有一個 `bridgeVersion`，

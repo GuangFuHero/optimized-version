@@ -1716,7 +1716,7 @@
   function SiteTicketCreateDrawer({ isAuthenticated, viewerId, seedLandmark, seedCell, onClose, onSubmit, onSignIn }) {
     const isMobile = useIsMobile();
     const [title, setTitle] = useState('');
-    /* 直立地圖（2026-09-12，Q16 解讀 A）：從矩陣某一格起手時，地址／樓層／戶室
+    /* 現場分區（2026-09-12，Q16 解讀 A）：從矩陣某一格起手時，地址／樓層／戶室
        都是**點出來的**，不是打出來的 —— 所以它們是結構化的（`floor` 是數字、
        `room` 是數字），而不是自由文字「3F」。
        ⚠️ 這正是既有的落差：自由文字地址拆不回 ERD 的
@@ -1912,7 +1912,7 @@
 
             {/* 地址與樓層併成一列 —— 手機也是。
                 樓層只會填「3F」「透天」這種兩三個字，獨佔一整列不划算。 */}
-            {/* 直立地圖：從矩陣某一格起手時，地址／樓層／戶室已經是點出來的，
+            {/* 現場分區：從矩陣某一格起手時，地址／樓層／戶室已經是點出來的，
                 不要再叫他打一次 —— 那是問他一個他剛剛才回答過的問題。
                 仍然保留「改一下」的出口：點格子點錯的人得有辦法改。 */}
             {seedCell ? (
