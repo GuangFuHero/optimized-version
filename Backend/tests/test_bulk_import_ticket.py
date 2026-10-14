@@ -148,6 +148,30 @@ async def test_a_new_row_creates_all_three_layers(db):
 
 
 @pytest.mark.asyncio
+async def test_a_new_rows_dynamic_value_takes_ticket_add_as_its_need_does(db):
+    """The import's dynamic value takes ticket.add, as its need does, not createTaskProperty's ticket.edit.
+
+    This importer's `zone` ticket.edit reaches no ticket at all, as it has no team: the row still
+    writes all three layers, as it did before createTaskProperty was tightened.
+    """
+    await _configs(db)
+    actor = await _importer(db, scope="zone")
+    raw, filename = _file([_row("需要飲用水", people="4")])
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+
+    assert (outcome.created, outcome.failed) == (1, 0)
+    ticket = await _ticket_titled(db, "需要飲用水")
+    task = (
+        await db.execute(select(TicketTask).where(TicketTask.ticket_uuid == ticket.uuid))
+    ).scalar_one()
+    prop = (
+        await db.execute(select(TaskProperty).where(TaskProperty.task_uuid == task.uuid))
+    ).scalar_one()
+    assert prop.property_value == "4"
+
+
+@pytest.mark.asyncio
 async def test_a_new_ticket_is_always_pending_whatever_the_file_says(db):
     """`create_ticket` writes "pending" unconditionally (app/services/ticket.py:99)."""
     await _configs(db)

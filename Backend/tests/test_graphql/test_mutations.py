@@ -1089,6 +1089,82 @@ async def test_update_task_property_blocks_non_owner(
 
 
 @pytest.mark.asyncio
+async def test_create_task_property_blocks_non_owner(client, login_user_auth, sample_ticket_task):
+    """Adding a property asks for ticket.edit on the parent task, as updateTaskProperty does.
+
+    sample_ticket_task is the Field Coordinator's. A Login User holds ticket.add at `all`, which
+    used to be all this asked for, but ticket.edit only at `own`.
+    """
+    _, token = login_user_auth
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TASK_PROPERTY,
+            "variables": {
+                "input": {
+                    "taskUuid": sample_ticket_task,
+                    "propertyName": "required_skill",
+                    "propertyValue": "medical",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    assert body["data"] is None
+    assert any("permission" in e["message"].lower() for e in body["errors"]), body
+
+
+@pytest.mark.asyncio
+async def test_a_requester_adds_a_property_to_their_own_need(client, login_user_auth):
+    """ticket.edit `own` reaches the need its holder added, so a requester's own need takes one."""
+    _, token = login_user_auth
+    ticket = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET,
+            "variables": {
+                "input": {
+                    "title": "一樓積泥", "geometry": POINT_TAIPEI, "contactName": "王小明",
+                    "priority": "high", "taskType": "hr", "visibility": "public",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    task = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET_TASK,
+            "variables": {
+                "input": {
+                    "ticketUuid": ticket.json()["data"]["createTicket"]["uuid"],
+                    "taskType": "hr", "taskName": "清淤", "quantity": 3,
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TASK_PROPERTY,
+            "variables": {
+                "input": {
+                    "taskUuid": task.json()["data"]["createTicketTask"]["uuid"],
+                    "propertyName": "required_skill",
+                    "propertyValue": "medical",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    assert body["data"]["createTaskProperty"]["propertyValue"] == "medical"
+
+
+@pytest.mark.asyncio
 async def test_update_task_property_blocked_when_parent_task_soft_deleted(
     client, coordinator_auth, login_user_auth, sample_ticket_task
 ):

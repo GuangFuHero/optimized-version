@@ -782,10 +782,53 @@ async def create_task_property(
     quantity: int | None,
     comment: str | None,
 ) -> TaskProperty:
-    """Add a structured property to a ticket task (checkpoint 1 only)."""
+    """Add a structured property to a ticket task — createTaskProperty.
+
+    ticket.edit on the parent task, as updateTaskProperty asks: ticket.add alone, which every
+    signed-in account holds at `all`, let anyone attach properties to someone else's need. A need
+    borrows its ticket's location, so `zone` reaches it (_task_scope_target).
+    """
+    task = await ticket_task_repository.get_by_uuid_active(db, task_uuid)
+    if not task:
+        raise ValueError("Ticket task not found")
+    await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
+    return await _add_task_property(
+        db, task_uuid=task_uuid, property_name=property_name, property_value=property_value,
+        quantity=quantity, comment=comment,
+    )
+
+
+async def import_task_property(
+    db: AsyncSession,
+    *,
+    actor: User,
+    task_uuid: str,
+    property_name: str,
+    property_value: str,
+) -> TaskProperty:
+    """Add a structured property for a bulk import row (ADR-120).
+
+    ticket.add alone, as import_ticket_task: the row's need is one the import just added or
+    matched, and who may import what is the back office's to decide, not the public site's.
+    """
     await require_scope(actor, Perm.TICKET_ADD, db)
     if not await ticket_task_repository.get_by_uuid_active(db, task_uuid):
         raise ValueError("Ticket task not found")
+    return await _add_task_property(
+        db, task_uuid=task_uuid, property_name=property_name, property_value=property_value,
+        quantity=None, comment=None,
+    )
+
+
+async def _add_task_property(
+    db: AsyncSession,
+    *,
+    task_uuid: str,
+    property_name: str,
+    property_value: str,
+    quantity: int | None,
+    comment: str | None,
+) -> TaskProperty:
     return await task_property_repository.create(
         db,
         obj_in={

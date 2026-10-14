@@ -261,8 +261,9 @@ class TicketTaskMutation:
     ) -> TaskPropertyType:
         """Add a structured property to a ticket task.
 
-        Verifies the parent task exists. Requires ticket.add permission (checkpoint 1
-        only — matches prior behavior). Returns the created TaskPropertyType.
+        Requires ticket.edit, scope-checked against the parent task as updateTaskProperty is: a
+        signed-in citizen adds properties to their own needs only. Returns the created
+        TaskPropertyType.
         """
         prop = await ticket_service.create_task_property(
             info.context["db"], actor=require_authenticated(info),

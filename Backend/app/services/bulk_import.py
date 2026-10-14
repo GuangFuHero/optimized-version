@@ -439,9 +439,8 @@ async def _write_task_properties(
                 db, actor=actor, uuid=str(existing[name].uuid), changes={"property_value": text}
             )
         else:
-            await ticket_service.create_task_property(
-                db, actor=actor, task_uuid=task_uuid, property_name=name,
-                property_value=text, quantity=None, comment=None,
+            await ticket_service.import_task_property(
+                db, actor=actor, task_uuid=task_uuid, property_name=name, property_value=text,
             )
 
 
