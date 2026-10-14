@@ -338,7 +338,7 @@ class TicketTaskType:
 class CreateTicketTaskInput:
     """Input for creating a new task under a support ticket."""
 
-    ticket_uuid: str = strawberry.field(description="UUID of the ticket this task belongs to")
+    ticket_uuid: UUID = strawberry.field(description="UUID of the ticket this task belongs to")
     task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str
     task_description: str | None = None
@@ -348,7 +348,7 @@ class CreateTicketTaskInput:
         default=Visibility.public,
         description="Visibility: 'public' (default), 'restricted', or 'internal'",
     )
-    route_uuid: str | None = strawberry.field(
+    route_uuid: UUID | None = strawberry.field(
         default=None, description="Optional UUID of an associated route"
     )
 
@@ -380,7 +380,7 @@ class UpdateTicketTaskInput:
 class CreateTaskPropertyInput:
     """Input for adding a structured property to a ticket task."""
 
-    task_uuid: str = strawberry.field(description="UUID of the task to attach this property to")
+    task_uuid: UUID = strawberry.field(description="UUID of the task to attach this property to")
     property_name: str = strawberry.field(
         description="Attribute key matching the task property config schema"
     )

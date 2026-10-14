@@ -1160,6 +1160,39 @@ async def test_upsert_station_property_config_idempotent(client, coordinator_aut
     assert resp.json()["data"]["upsertStationPropertyConfig"]["dataType"] == data_type
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query,variables,message", [
+    (
+        UPSERT_STATION_PROPERTY_CONFIG,
+        {"stationType": "x" * 51, "input": {"propertyName": "power_stable", "dataType": "text"}},
+        "station_type must be at most 50 characters",
+    ),
+    (
+        """mutation($taskType: String!, $input: UpsertPropertyConfigInput!) {
+            upsertTaskPropertyConfig(taskType: $taskType, input: $input) { uuid }
+        }""",
+        {"taskType": "hr", "input": {"propertyName": "skill", "dataType": "text", "unit": "x" * 21}},
+        "unit must be at most 20 characters",
+    ),
+    (
+        """mutation($input: UpsertTicketPropertyConfigInput!) {
+            upsertTicketPropertyConfig(input: $input) { uuid }
+        }""",
+        {"input": {"propertyName": "water_depth", "dataType": "text", "hint": "x" * 201}},
+        "hint must be at most 200 characters",
+    ),
+])
+async def test_upsert_property_config_refuses_a_value_longer_than_its_column(
+    client, coordinator_auth, query, variables, message
+):
+    """An over-long value is the caller's mistake, named as such, rather than a masked database error."""
+    _, token = coordinator_auth
+    resp = await client.post(
+        "/graphql", json={"query": query, "variables": variables}, headers=auth_header(token)
+    )
+    assert resp.json()["errors"][0]["message"] == message
+
+
 # ============================================================================
 # Task assignment mutations (HR staffing + work-completion progress bar)
 # ============================================================================

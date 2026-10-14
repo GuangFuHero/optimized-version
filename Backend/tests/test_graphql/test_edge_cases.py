@@ -137,9 +137,3 @@ async def test_multiple_queries_one_request(client, sample_station, sample_hazar
     assert data1["stations"]["pageInfo"]["totalCount"] >= 1
     assert data2["hazardousZones"]["pageInfo"]["totalCount"] >= 1
 
-
-@pytest.mark.asyncio
-async def test_graphql_endpoint_accessible(client):
-    """GET /graphql returns 200 (GraphiQL page)."""
-    res = await client.get("/graphql")
-    assert res.status_code == 200

@@ -4,10 +4,17 @@ import logging
 
 import strawberry
 from fastapi import HTTPException
-from strawberry.extensions import MaskErrors
+from strawberry.extensions import (
+    AddValidationRules,
+    MaskErrors,
+    MaxAliasesLimiter,
+    MaxTokensLimiter,
+    QueryDepthLimiter,
+)
 from strawberry.types.execution import ExecutionResult as StrawberryExecutionResult
 from strawberry.utils.logging import StrawberryLogger
 
+from app.core.config import settings
 from app.graphql.announcements.mutations import AnnouncementMutation
 from app.graphql.announcements.queries import AnnouncementQuery
 from app.graphql.area.mutations import AreaMutation
@@ -27,6 +34,7 @@ from app.graphql.tickets.queries import RequestQuery, TicketTaskQuery
 # name, app.graphql). Moving it up beside fastapi reads better but fails I001 in CI.
 from graphql import GraphQLError
 from graphql.execution.execute import ExecutionResult as GraphQLExecutionResult
+from graphql.validation import NoSchemaIntrospectionCustomRule
 
 _logger = logging.getLogger("app.graphql")
 
@@ -82,6 +90,10 @@ def _is_expected(error: GraphQLError) -> bool:
     if original is None:
         # graphql-core's own input coercion, raised before any resolver runs.
         return True
+    if isinstance(original, GraphQLError) and error.path is None:
+        # A variable that fails coercion wraps the scalar's own error, raised before any resolver runs.
+        # A fault while serializing a result also wraps one but carries a path, so it stays masked.
+        return True
     return isinstance(original, ValueError | HTTPException)
 
 
@@ -133,5 +145,13 @@ class _Schema(strawberry.Schema):
 schema = _Schema(
     query=Query,
     mutation=Mutation,
-    extensions=[_RequestMaskErrors(should_mask_error=_should_mask)],
+    # The limits sit well above the largest frontend operation (4 levels deep, no aliases, about
+    # 90 tokens), and introspection is open only in development so other deployments hide the schema.
+    extensions=[
+        _RequestMaskErrors(should_mask_error=_should_mask),
+        QueryDepthLimiter(max_depth=10),
+        MaxAliasesLimiter(max_alias_count=10),
+        MaxTokensLimiter(max_token_count=1000),
+        *([] if settings.ENV == "development" else [AddValidationRules([NoSchemaIntrospectionCustomRule])]),
+    ],
 )
