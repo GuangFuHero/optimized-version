@@ -522,6 +522,20 @@ async def test_an_hr_need_without_a_quantity_fails_its_own_row_before_anything_i
 
 
 @pytest.mark.asyncio
+async def test_a_need_of_a_kind_of_its_own_without_a_quantity_fails_its_own_row_too(db):
+    """Not only the four standard kinds: one the back office configured (ADR-214) says how many too."""
+    actor = await _importer(db)
+    food_row = {**_row("送便當"), "task_type": "food"}
+    raw, filename = _file([food_row, {**food_row, "title": "送飲水", "task_quantity": ""}])
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="food")
+
+    assert (outcome.created, outcome.failed, outcome.partial_rows) == (1, 1, ())
+    assert await _ticket_titled(db, "送飲水") is None
+    assert "人數" in " ".join(e.message for e in outcome.errors)
+
+
+@pytest.mark.asyncio
 async def test_a_rescue_need_may_still_leave_out_how_many(db):
     """A rescue may not know how many it takes; it alone comes without a quantity."""
     await _configs(db)

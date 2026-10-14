@@ -397,7 +397,7 @@ async def _plan_tickets(
         # import_ticket_task.
         if (
             match.kind != MATCHED
-            and task_type in ticket_service.QUANTITY_REQUIRED_TASK_TYPES
+            and task_type not in ticket_service.QUANTITY_OPTIONAL_TASK_TYPES
             and not (row.get("task_quantity") or "").strip()
         ):
             errors.append(_error(line, "task_quantity", "救援以外的需求都要填人數"))

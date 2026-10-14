@@ -60,10 +60,11 @@ CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
 # still stores whatever it is sent. The site's GraphQL input lists them as `NeedKind`
 # (graphql/tickets/types.py): keep the two in step.
 TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
-# Needs that count heads or units must say how many (ADR-291 point 7): without a quantity a need
-# never fills, so its ticket never completes. A rescue may not know how many it takes, as the
-# design leaves it out of the 缺額 count; it alone may come without one, and then has no cap.
-QUANTITY_REQUIRED_TASK_TYPES = TASK_TYPES - {"rescue"}
+# Every need but a rescue must say how many (ADR-291 point 7): without a quantity a need never
+# fills, so its ticket never completes. A rescue may not know how many it takes, as the design
+# leaves it out of the 缺額 count; it alone may come without one, and then has no cap. Written as
+# the exception rather than a list, so a kind the back office configured itself (ADR-214) counts too.
+QUANTITY_OPTIONAL_TASK_TYPES = frozenset({"rescue"})
 # `tickets.title` and `ticket_tasks.task_name` are both String(200).
 TICKET_TITLE_MAX_LENGTH = 200
 TASK_NAME_MAX_LENGTH = 200
@@ -223,7 +224,7 @@ def _validate_need_size(task_type: str, task_name: str, quantity: int | None) ->
     if len(task_name) > TASK_NAME_MAX_LENGTH:
         raise ValueError(f"task_name must be at most {TASK_NAME_MAX_LENGTH} characters")
     if quantity is None:
-        if task_type in QUANTITY_REQUIRED_TASK_TYPES:
+        if task_type not in QUANTITY_OPTIONAL_TASK_TYPES:
             raise ValueError(f"quantity is required for a {task_type} task")
     elif quantity < 1:
         raise ValueError("quantity must be at least 1")
