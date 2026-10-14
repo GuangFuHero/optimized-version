@@ -48,7 +48,7 @@
 | :--- | :--- |
 | **Ticket（求助單）** | `ticket.view` ★、`ticket.view_pii`、`ticket.add`、`ticket.edit`、`ticket.delete`、`ticket.assign`、`ticket.review`、`ticket.export` |
 | **Station（資源站點）** | `station.view` ★、`station.view_pii`、`station.add`、`station.contribute`、`station.edit`、`station.delete`、`station.review`、`station.revoke` |
-| **Map（地圖圖層/封閉區）** | `map.view` ★、`map.add`、`map.edit`、`map.delete` |
+| **Map（地圖圖層，公開讀取）** | `map.view` ★（畫區域用 `work_zone.*`，ADR-311） |
 | **Announcement（緊急公告）** | `announcement.view` ★、`announcement.publish`、`announcement.edit`、`announcement.delete` |
 | **AI Duplicate（重複審核）** | `ai_duplicate.view`、`ai_duplicate.review` |
 | **User（使用者管理）** | `user.view`、`user.add`、`user.edit`、`user.delete` |

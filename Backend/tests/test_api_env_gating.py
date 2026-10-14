@@ -1,8 +1,13 @@
-"""Tests for app.api.v1.api.rbac_test_enabled (T118/ADR-033).
+"""Which environments get the development-only routes.
 
-Allowlist, not denylist — `staging` is a real deployed environment and must stay excluded
-alongside `production`, so this pins the exact set rather than just "!= production".
+It is an allowlist that fails closed: staging is a real deployed environment, and an unset or
+unknown ENV counts as live.
 """
+
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 from app.api.v1.api import rbac_test_enabled
 
@@ -30,3 +35,15 @@ def test_disabled_in_production():
 def test_disabled_for_unknown_env():
     """Allowlist semantics: an unrecognized value fails closed, not open."""
     assert rbac_test_enabled("whatever-typo") is False
+
+
+def test_unset_env_is_production(tmp_path):
+    """A deployment that forgets ENV gets none of the development-only routes, not all of them."""
+    env = {key: value for key, value in os.environ.items() if key != "ENV"}
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    # Run from an empty directory so a developer's .env cannot supply ENV.
+    out = subprocess.run(
+        [sys.executable, "-c", "from app.core.config import settings; print(settings.ENV)"],
+        cwd=tmp_path, env=env, capture_output=True, text=True, check=True,
+    )
+    assert out.stdout.strip() == "production"

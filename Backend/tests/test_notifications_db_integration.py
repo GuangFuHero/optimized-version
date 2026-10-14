@@ -24,7 +24,7 @@ from app.models.rbac import (
     UserPermissionAssign,
     UserRoleAssign,
 )
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 from tests.conftest import TEST_DB_URL
@@ -113,10 +113,10 @@ async def test_station_notices_go_to_gov_and_the_team_the_station_is_assigned_to
         UserRoleAssign(user_uuid=zone_admin_uid, role_uuid=admin_role.uuid, team_uuid=zone_team.uuid),
     ])
     polygon_wkt = "SRID=4326;POLYGON((121.5 23.9, 121.7 23.9, 121.7 24.1, 121.5 24.1, 121.5 23.9))"
-    work_zone = WorkZone(name="第一搜救責任區", geometry=WKTElement(polygon_wkt, srid=4326))
-    db.add(work_zone)
+    team_zone = TeamZone(name="第一搜救責任區", geometry=WKTElement(polygon_wkt, srid=4326))
+    db.add(team_zone)
     await db.flush()
-    db.add(TeamZoneAssign(team_uuid=zone_team.uuid, zone_uuid=work_zone.uuid, assigned_by=str(gov_uid)))
+    db.add(TeamZoneAssign(team_uuid=zone_team.uuid, zone_uuid=team_zone.uuid, assigned_by=str(gov_uid)))
 
     station = Station(
         name="吉安國小收容中心",
@@ -151,10 +151,10 @@ async def test_an_unassigned_station_notifies_gov_only(db: AsyncSession):
         UserRoleAssign(user_uuid=zone_admin.uuid, role_uuid=admin_role.uuid, team_uuid=zone_team.uuid),
     ])
     polygon_wkt = "SRID=4326;POLYGON((121.5 23.9, 121.7 23.9, 121.7 24.1, 121.5 24.1, 121.5 23.9))"
-    work_zone = WorkZone(name="第一搜救責任區", geometry=WKTElement(polygon_wkt, srid=4326))
-    db.add(work_zone)
+    team_zone = TeamZone(name="第一搜救責任區", geometry=WKTElement(polygon_wkt, srid=4326))
+    db.add(team_zone)
     await db.flush()
-    db.add(TeamZoneAssign(team_uuid=zone_team.uuid, zone_uuid=work_zone.uuid, assigned_by=str(gov_uid)))
+    db.add(TeamZoneAssign(team_uuid=zone_team.uuid, zone_uuid=team_zone.uuid, assigned_by=str(gov_uid)))
     station = Station(name="無人認領站", geometry=WKTElement("SRID=4326;POINT(121.6 23.99)", srid=4326))
     db.add(station)
     await db.flush()

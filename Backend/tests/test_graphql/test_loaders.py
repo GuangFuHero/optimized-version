@@ -16,7 +16,7 @@ from app.models.photo import Photo
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.station_property import StationProperty, StationUpdateSuggestion
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from tests.conftest import token_for
 from tests.test_graphql.conftest import auth_header
 from tests.test_graphql.conftest import test_db as _test_db_ctx
@@ -176,7 +176,7 @@ async def test_pending_suggested_fields_use_single_batched_query(client, coordin
 async def _make_gov_viewer(redis) -> str:
     """Create a user holding a role granting work_zone.view at 'all', return its token.
 
-    Mirrors ``test_work_zone.py``'s ``_make_gov_user``, trimmed to the single permission
+    Mirrors ``test_area.py``'s ``_make_gov_user``, trimmed to the single permission
     this test needs. Looks up an existing ``work_zone.view`` Permission row first: the
     shared test DB persists across test files in this suite, so blindly inserting one
     would collide with ``Permission.key``'s unique constraint if another file already
@@ -207,7 +207,7 @@ async def _make_gov_viewer(redis) -> str:
 async def test_assigned_teams_uses_single_batched_query(client, redis):
     """Asking for assignedTeams across N work zones must issue one SELECT against team_zone_assign.
 
-    ``teams_by_zone`` (app/graphql/loaders.py) backs ``WorkZoneType.assignedTeams`` and is
+    ``teams_by_zone`` (app/graphql/loaders.py) backs ``TeamZoneType.assignedTeams`` and is
     supposed to collapse the per-zone lookup into a single
     ``team_zone_assign JOIN teams`` query for the whole page, instead of one query per zone.
     Counting SELECTs against ``team_zone_assign`` (rather than ``teams``) pins down the
@@ -224,13 +224,13 @@ async def test_assigned_teams_uses_single_batched_query(client, redis):
         assigner_uuid = str(assigner.uuid)
         team_uuid = str(team.uuid)
 
-        zones: list[WorkZone] = []
+        zones: list[TeamZone] = []
         for i in range(3):
             polygon = Polygon([
                 (121.0 + i, 24.0), (121.0 + i, 25.0),
                 (122.0 + i, 25.0), (122.0 + i, 24.0), (121.0 + i, 24.0),
             ])
-            zone = WorkZone(name=f"zone-{uuid_mod.uuid4().hex[:8]}", geometry=from_shape(polygon, srid=4326))
+            zone = TeamZone(name=f"zone-{uuid_mod.uuid4().hex[:8]}", geometry=from_shape(polygon, srid=4326))
             db.add(zone)
             zones.append(zone)
         await db.flush()
@@ -244,14 +244,14 @@ async def test_assigned_teams_uses_single_batched_query(client, redis):
     with _SelectCounter("team_zone_assign") as counter:
         resp = await client.post(
             "/graphql",
-            json={"query": "query { workZones { items { uuid assignedTeams { uuid } } } }"},
+            json={"query": "query { teamZones { items { uuid assignedTeams { uuid } } } }"},
             headers=auth_header(gov_token),
         )
 
     assert resp.status_code == 200
     body = resp.json()
     assert "errors" not in body, body
-    items = body["data"]["workZones"]["items"]
+    items = body["data"]["teamZones"]["items"]
     ours = {it["uuid"]: it for it in items if it["uuid"] in zone_uuids}
     assert len(ours) == len(zone_uuids), (ours, zone_uuids)
     for item in ours.values():

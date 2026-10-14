@@ -69,7 +69,7 @@ export const graphCache = cacheExchange({
     Query: {
       // Geo domain
       stations: connectionPagination('skip'),
-      closureAreas: connectionPagination('skip'),
+      hazardousZones: connectionPagination('skip'),
 
       // Tickets domain
       tickets: connectionPagination('skip'),

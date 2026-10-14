@@ -2,7 +2,13 @@
 
 from strawberry.fastapi import GraphQLRouter
 
+from app.core.config import settings
 from app.graphql.context import get_context
 from app.graphql.schema import schema
 
-graphql_router = GraphQLRouter(schema, context_getter=get_context)
+graphql_router = GraphQLRouter(
+    schema,
+    context_getter=get_context,
+    # GraphiQL needs introspection, which the schema allows only in development.
+    graphql_ide="graphiql" if settings.ENV == "development" else None,
+)

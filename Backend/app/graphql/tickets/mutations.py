@@ -210,9 +210,10 @@ class TicketTaskMutation:
         """
         task = await ticket_service.create_ticket_task(
             info.context["db"], actor=require_authenticated(info),
-            ticket_uuid=input.ticket_uuid, task_type=input.task_type, task_name=input.task_name,
+            ticket_uuid=str(input.ticket_uuid), task_type=input.task_type, task_name=input.task_name,
             task_description=input.task_description, quantity=input.quantity,
-            source=input.source, visibility=input.visibility.value, route_uuid=input.route_uuid,
+            source=input.source, visibility=input.visibility.value,
+            route_uuid=str(input.route_uuid) if input.route_uuid else None,
         )
         return TicketTaskType.from_model(task)
 
@@ -265,7 +266,7 @@ class TicketTaskMutation:
         """
         prop = await ticket_service.create_task_property(
             info.context["db"], actor=require_authenticated(info),
-            task_uuid=input.task_uuid, property_name=input.property_name,
+            task_uuid=str(input.task_uuid), property_name=input.property_name,
             property_value=input.property_value, quantity=input.quantity, comment=input.comment,
         )
         return TaskPropertyType.from_model(prop)
