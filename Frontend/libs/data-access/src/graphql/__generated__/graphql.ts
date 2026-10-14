@@ -70,6 +70,36 @@ export type AnnouncementType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export type AreaConnection = {
+  __typename?: 'AreaConnection';
+  items: Array<AreaType>;
+  pageInfo: PageInfo;
+};
+
+export const AreaKind = {
+  HazardousZone: 'hazardous_zone',
+  MarkZone: 'mark_zone',
+  TeamZone: 'team_zone',
+} as const;
+
+export type AreaKind = (typeof AreaKind)[keyof typeof AreaKind];
+export type AreaType = {
+  __typename?: 'AreaType';
+  /** Teams a team zone is assigned to; empty for the other kinds */
+  assignedTeams: Array<AssignedTeamType>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** GeoJSON Polygon or MultiPolygon marking the area */
+  geometry?: Maybe<Scalars['GeoJSON']['output']>;
+  /** Shown on the public map; always true except for a mark zone */
+  isPublic: Scalars['Boolean']['output'];
+  name?: Maybe<Scalars['String']['output']>;
+  note?: Maybe<Scalars['String']['output']>;
+  /** 'hazardous_zone', 'team_zone' or 'mark_zone' */
+  type: Scalars['String']['output'];
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
 export type AssignedTeamType = {
   __typename?: 'AssignedTeamType';
   name: Scalars['String']['output'];
@@ -130,6 +160,22 @@ export type CreateAnnouncementInput = {
   content: Scalars['String']['input'];
 };
 
+export type CreateAreaInput = {
+  /** GeoJSON Polygon or MultiPolygon — must not be a Point */
+  geometry: Scalars['GeoJSON']['input'];
+  /** Hazardous zone only: agency name or URL the report came from */
+  informationSource?: InputMaybe<Scalars['String']['input']>;
+  /** Shown on the public map; hazardous and team zones are always public, a mark zone defaults to false */
+  isPublic?: InputMaybe<Scalars['Boolean']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  note?: InputMaybe<Scalars['String']['input']>;
+  /** Required for a hazardous zone, refused for the other kinds */
+  status?: InputMaybe<Scalars['String']['input']>;
+  /** Required for a team zone, refused for the other kinds */
+  teamUuid?: InputMaybe<Scalars['UUID']['input']>;
+  type: AreaKind;
+};
+
 export type CreateBriefingTemplateInput = {
   /** The template body text */
   content: Scalars['String']['input'];
@@ -143,11 +189,11 @@ export type CreateCrowdSourcingInput = {
   /** Distance in meters from the user to the station at time of submission */
   distanceFromGeometry?: InputMaybe<Scalars['Float']['input']>;
   /** UUID of the StationProperty being rated — null for a general station rating */
-  itemUuid?: InputMaybe<Scalars['String']['input']>;
+  itemUuid?: InputMaybe<Scalars['UUID']['input']>;
   /** Rating value: 'up', 'neutral', or 'down' */
   rating: Scalars['String']['input'];
   /** UUID of the station being rated */
-  stationUuid: Scalars['String']['input'];
+  stationUuid: Scalars['UUID']['input'];
 };
 
 export type CreateHelpRequestInput = {
@@ -203,7 +249,7 @@ export type CreateStationPropertyInput = {
   propertyType: Scalars['String']['input'];
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** UUID of the station to attach this property to */
-  stationUuid: Scalars['String']['input'];
+  stationUuid: Scalars['UUID']['input'];
   /** Initial credibility weight [0.0–2.0], default 1.0 */
   weightings?: Scalars['Float']['input'];
 };
@@ -230,7 +276,7 @@ export type CreateTaskPropertyInput = {
   /** Number of units — null if not applicable */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** UUID of the task to attach this property to */
-  taskUuid: Scalars['String']['input'];
+  taskUuid: Scalars['UUID']['input'];
 };
 
 export type CreateTicketInput = {
@@ -264,7 +310,7 @@ export type CreateTicketTaskInput = {
   /** People or units needed, at least 1; required except for a 'rescue' task, which may omit it */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** Optional UUID of an associated route */
-  routeUuid?: InputMaybe<Scalars['String']['input']>;
+  routeUuid?: InputMaybe<Scalars['UUID']['input']>;
   /** Origin: 'user' (default) or 'official' */
   source?: Scalars['String']['input'];
   taskDescription?: InputMaybe<Scalars['String']['input']>;
@@ -272,15 +318,9 @@ export type CreateTicketTaskInput = {
   /** Category: 'rescue', 'supply', 'medical', or 'hr' */
   taskType: Scalars['String']['input'];
   /** UUID of the ticket this task belongs to */
-  ticketUuid: Scalars['String']['input'];
+  ticketUuid: Scalars['UUID']['input'];
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
   visibility?: Visibility;
-};
-
-export type CreateWorkZoneInput = {
-  /** GeoJSON Polygon or MultiPolygon — must not be a Point */
-  geometry: Scalars['GeoJSON']['input'];
-  name: Scalars['String']['input'];
 };
 
 export type CrowdSourcingType = {
@@ -376,6 +416,7 @@ export type Mutation = {
   assignZoneToTeam: ZoneAssignmentType;
   attachStationPhoto: PhotoType;
   createAnnouncement: AnnouncementType;
+  createArea: AreaType;
   createBriefingTemplate: BriefingTemplateType;
   createCrowdSourcing: CrowdSourcingType;
   createHelpRequest: TicketType;
@@ -385,18 +426,18 @@ export type Mutation = {
   createTaskProperty: TaskPropertyType;
   createTicket: TicketType;
   createTicketTask: TicketTaskType;
-  createWorkZone: WorkZoneType;
   deleteAnnouncement: Scalars['Boolean']['output'];
+  deleteArea: Scalars['Boolean']['output'];
   deleteBriefing: Scalars['Boolean']['output'];
   deleteBriefingTemplate: Scalars['Boolean']['output'];
   deleteStation: Scalars['Boolean']['output'];
   deleteTicket: Scalars['Boolean']['output'];
   deleteTicketTask: Scalars['Boolean']['output'];
-  deleteWorkZone: Scalars['Boolean']['output'];
   detachStationPhoto: Scalars['Boolean']['output'];
   generateBriefing: BriefingType;
   mergeStationSuggestions: StationSuggestionMergeType;
   moveAnnouncement: AnnouncementType;
+  promoteMarkZone: HazardousZoneType;
   removeZoneFromTeam: Scalars['Boolean']['output'];
   reviewTicket: TicketType;
   revokeStationSuggestionMerge: StationSuggestionMergeType;
@@ -407,6 +448,7 @@ export type Mutation = {
   unassignStation: StationType;
   unassignTaskActor: Scalars['Boolean']['output'];
   updateAnnouncement: AnnouncementType;
+  updateArea: AreaType;
   updateBriefing: BriefingType;
   updateBriefingTemplate: BriefingTemplateType;
   updateStation: StationType;
@@ -415,7 +457,6 @@ export type Mutation = {
   updateTaskProperty: TaskPropertyType;
   updateTicket: TicketType;
   updateTicketTask: TicketTaskType;
-  updateWorkZone: WorkZoneType;
   upsertDisasterType: DisasterTypeType;
   upsertStationPropertyConfig: StationPropertyConfigType;
   upsertTaskPropertyConfig: TaskPropertyConfigType;
@@ -445,6 +486,10 @@ export type MutationAttachStationPhotoArgs = {
 
 export type MutationCreateAnnouncementArgs = {
   input: CreateAnnouncementInput;
+};
+
+export type MutationCreateAreaArgs = {
+  input: CreateAreaInput;
 };
 
 export type MutationCreateBriefingTemplateArgs = {
@@ -483,11 +528,11 @@ export type MutationCreateTicketTaskArgs = {
   input: CreateTicketTaskInput;
 };
 
-export type MutationCreateWorkZoneArgs = {
-  input: CreateWorkZoneInput;
+export type MutationDeleteAnnouncementArgs = {
+  uuid: Scalars['UUID']['input'];
 };
 
-export type MutationDeleteAnnouncementArgs = {
+export type MutationDeleteAreaArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
@@ -511,10 +556,6 @@ export type MutationDeleteTicketTaskArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
-export type MutationDeleteWorkZoneArgs = {
-  uuid: Scalars['UUID']['input'];
-};
-
 export type MutationDetachStationPhotoArgs = {
   uuid: Scalars['UUID']['input'];
 };
@@ -531,6 +572,11 @@ export type MutationMergeStationSuggestionsArgs = {
 
 export type MutationMoveAnnouncementArgs = {
   direction: AnnouncementMoveDirection;
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MutationPromoteMarkZoneArgs = {
+  input: PromoteMarkZoneInput;
   uuid: Scalars['UUID']['input'];
 };
 
@@ -579,6 +625,11 @@ export type MutationUpdateAnnouncementArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+export type MutationUpdateAreaArgs = {
+  input: UpdateAreaInput;
+  uuid: Scalars['UUID']['input'];
+};
+
 export type MutationUpdateBriefingArgs = {
   input: UpdateBriefingInput;
   uuid: Scalars['UUID']['input'];
@@ -616,11 +667,6 @@ export type MutationUpdateTicketArgs = {
 
 export type MutationUpdateTicketTaskArgs = {
   input: UpdateTicketTaskInput;
-  uuid: Scalars['UUID']['input'];
-};
-
-export type MutationUpdateWorkZoneArgs = {
-  input: UpdateWorkZoneInput;
   uuid: Scalars['UUID']['input'];
 };
 
@@ -696,10 +742,16 @@ export type PhotoType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export type PromoteMarkZoneInput = {
+  informationSource?: InputMaybe<Scalars['String']['input']>;
+  status: Scalars['String']['input'];
+};
+
 export type Query = {
   __typename?: 'Query';
   announcement?: Maybe<AnnouncementType>;
   announcements: Array<AnnouncementType>;
+  areas: AreaConnection;
   briefing?: Maybe<BriefingType>;
   briefingTemplate?: Maybe<BriefingTemplateType>;
   briefingTemplates: Array<BriefingTemplateType>;
@@ -716,13 +768,13 @@ export type Query = {
   suggestableFields: Array<SuggestableFieldType>;
   taskProperties: Array<TaskPropertyType>;
   taskPropertyConfigs: Array<TaskPropertyConfigType>;
+  teamZone?: Maybe<TeamZoneType>;
+  teamZones: TeamZoneConnection;
   ticket?: Maybe<TicketType>;
   ticketPropertyConfigs: Array<TicketPropertyConfigType>;
   ticketTasks: Array<TicketTaskType>;
   tickets: TicketConnection;
-  workZone?: Maybe<WorkZoneType>;
-  workZones: WorkZoneConnection;
-  zonesByTeam: WorkZoneConnection;
+  zonesByTeam: TeamZoneConnection;
 };
 
 export type QueryAnnouncementArgs = {
@@ -731,6 +783,13 @@ export type QueryAnnouncementArgs = {
 
 export type QueryAnnouncementsArgs = {
   filter?: AnnouncementFilter;
+};
+
+export type QueryAreasArgs = {
+  bounds?: InputMaybe<BoundsInput>;
+  includePrivate?: Scalars['Boolean']['input'];
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
 };
 
 export type QueryBriefingArgs = {
@@ -799,6 +858,16 @@ export type QueryTaskPropertyConfigsArgs = {
   taskType: Scalars['String']['input'];
 };
 
+export type QueryTeamZoneArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type QueryTeamZonesArgs = {
+  bounds?: InputMaybe<BoundsInput>;
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+};
+
 export type QueryTicketArgs = {
   uuid: Scalars['UUID']['input'];
   zoom?: InputMaybe<Scalars['Float']['input']>;
@@ -825,15 +894,6 @@ export type QueryTicketsArgs = {
   skip?: Scalars['Int']['input'];
   status?: InputMaybe<Scalars['String']['input']>;
   zoom?: InputMaybe<Scalars['Float']['input']>;
-};
-
-export type QueryWorkZoneArgs = {
-  uuid: Scalars['UUID']['input'];
-};
-
-export type QueryWorkZonesArgs = {
-  limit?: Scalars['Int']['input'];
-  skip?: Scalars['Int']['input'];
 };
 
 export type QueryZonesByTeamArgs = {
@@ -1211,6 +1271,29 @@ export type TaskPropertyType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export type TeamZoneConnection = {
+  __typename?: 'TeamZoneConnection';
+  items: Array<TeamZoneType>;
+  pageInfo: PageInfo;
+};
+
+export type TeamZoneType = {
+  __typename?: 'TeamZoneType';
+  /** Teams this zone has been delegated to */
+  assignedTeams: Array<AssignedTeamType>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the gov user who drew this zone */
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** GeoJSON Polygon or MultiPolygon marking the zone boundary */
+  geometry?: Maybe<Scalars['GeoJSON']['output']>;
+  /** Always true: a team zone and its teams are shown on the public map */
+  isPublic: Scalars['Boolean']['output'];
+  name?: Maybe<Scalars['String']['output']>;
+  note?: Maybe<Scalars['String']['output']>;
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
 export type TicketConnection = {
   __typename?: 'TicketConnection';
   items: Array<TicketType>;
@@ -1299,11 +1382,11 @@ export type TicketTaskType = {
 
 export type TicketType = {
   __typename?: 'TicketType';
-  /** Follow-up email — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too */
+  /** Follow-up email — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
   contactEmail?: Maybe<Scalars['String']['output']>;
-  /** Requester full name — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too */
+  /** Requester full name — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
   contactName?: Maybe<Scalars['String']['output']>;
-  /** Follow-up phone — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too */
+  /** Follow-up phone — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
   contactPhone?: Maybe<Scalars['String']['output']>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here */
@@ -1356,6 +1439,15 @@ export type TriState = (typeof TriState)[keyof typeof TriState];
 export type UpdateAnnouncementInput = {
   /** The new announcement body text */
   content: Scalars['String']['input'];
+};
+
+export type UpdateAreaInput = {
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
+  informationSource?: InputMaybe<Scalars['String']['input']>;
+  isPublic?: InputMaybe<Scalars['Boolean']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  note?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateBriefingInput = {
@@ -1451,11 +1543,6 @@ export type UpdateTicketTaskInput = {
   visibility?: InputMaybe<Visibility>;
 };
 
-export type UpdateWorkZoneInput = {
-  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type UpsertDisasterTypeInput = {
   /** Set false to retire the type; there is no delete */
   isActive?: InputMaybe<Scalars['Boolean']['input']>;
@@ -1510,26 +1597,6 @@ export const Visibility = {
 } as const;
 
 export type Visibility = (typeof Visibility)[keyof typeof Visibility];
-export type WorkZoneConnection = {
-  __typename?: 'WorkZoneConnection';
-  items: Array<WorkZoneType>;
-  pageInfo: PageInfo;
-};
-
-export type WorkZoneType = {
-  __typename?: 'WorkZoneType';
-  /** Teams this zone has been delegated to */
-  assignedTeams: Array<AssignedTeamType>;
-  createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the gov user who drew this zone */
-  createdBy?: Maybe<Scalars['String']['output']>;
-  /** GeoJSON Polygon or MultiPolygon marking the zone boundary */
-  geometry?: Maybe<Scalars['GeoJSON']['output']>;
-  name: Scalars['String']['output'];
-  updatedAt?: Maybe<Scalars['DateTime']['output']>;
-  uuid: Scalars['UUID']['output'];
-};
-
 export type ZoneAssignmentType = {
   __typename?: 'ZoneAssignmentType';
   assignedAt?: Maybe<Scalars['DateTime']['output']>;

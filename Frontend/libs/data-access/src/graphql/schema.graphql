@@ -31,6 +31,37 @@ type AnnouncementType {
   updatedAt: DateTime
 }
 
+type AreaConnection {
+  items: [AreaType!]!
+  pageInfo: PageInfo!
+}
+
+enum AreaKind {
+  hazardous_zone
+  team_zone
+  mark_zone
+}
+
+type AreaType {
+  uuid: UUID!
+
+  """'hazardous_zone', 'team_zone' or 'mark_zone'"""
+  type: String!
+  name: String
+
+  """GeoJSON Polygon or MultiPolygon marking the area"""
+  geometry: GeoJSON
+  note: String
+
+  """Shown on the public map; always true except for a mark zone"""
+  isPublic: Boolean!
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """Teams a team zone is assigned to; empty for the other kinds"""
+  assignedTeams: [AssignedTeamType!]!
+}
+
 type AssignedTeamType {
   uuid: UUID!
   name: String!
@@ -92,39 +123,32 @@ type BriefingType {
   updatedAt: DateTime
 }
 
-type HazardousZoneConnection {
-  items: [HazardousZoneType!]!
-  pageInfo: PageInfo!
-}
-
-type HazardousZoneType {
-  uuid: UUID!
-
-  """Internal polymorphic discriminator — always 'hazardous_zone'"""
-  propertyName: String!
-  name: String
-
-  """GeoJSON Polygon or MultiPolygon marking the zone"""
-  geometry: GeoJSON
-
-  """UUID of the user who drew this zone"""
-  createdBy: String
-
-  """Current hazard status, e.g. 'dangerous', 'block'"""
-  status: String!
-
-  """Source of the hazard report, e.g. agency name or URL"""
-  informationSource: String
-
-  """Additional notes about this zone"""
-  note: String
-  createdAt: DateTime
-  updatedAt: DateTime
-}
-
 input CreateAnnouncementInput {
   """The announcement body text"""
   content: String!
+}
+
+input CreateAreaInput {
+  type: AreaKind!
+
+  """GeoJSON Polygon or MultiPolygon — must not be a Point"""
+  geometry: GeoJSON!
+  name: String = null
+  note: String = null
+
+  """
+  Shown on the public map; hazardous and team zones are always public, a mark zone defaults to false
+  """
+  isPublic: Boolean = null
+
+  """Required for a team zone, refused for the other kinds"""
+  teamUuid: UUID = null
+
+  """Required for a hazardous zone, refused for the other kinds"""
+  status: String = null
+
+  """Hazardous zone only: agency name or URL the report came from"""
+  informationSource: String = null
 }
 
 input CreateBriefingTemplateInput {
@@ -140,12 +164,12 @@ input CreateBriefingTemplateInput {
 
 input CreateCrowdSourcingInput {
   """UUID of the station being rated"""
-  stationUuid: String!
+  stationUuid: UUID!
 
   """
   UUID of the StationProperty being rated — null for a general station rating
   """
-  itemUuid: String = null
+  itemUuid: UUID = null
 
   """Rating value: 'up', 'neutral', or 'down'"""
   rating: String!
@@ -224,7 +248,7 @@ input CreateStationInput {
 
 input CreateStationPropertyInput {
   """UUID of the station to attach this property to"""
-  stationUuid: String!
+  stationUuid: UUID!
 
   """Category: 'supply', 'service', or 'equipment'"""
   propertyType: String!
@@ -256,7 +280,7 @@ input CreateStationSuggestionInput {
 
 input CreateTaskPropertyInput {
   """UUID of the task to attach this property to"""
-  taskUuid: String!
+  taskUuid: UUID!
 
   """Attribute key matching the task property config schema"""
   propertyName: String!
@@ -315,7 +339,7 @@ input CreateTicketInput {
 
 input CreateTicketTaskInput {
   """UUID of the ticket this task belongs to"""
-  ticketUuid: String!
+  ticketUuid: UUID!
 
   """Category: 'rescue', 'supply', 'medical', or 'hr'"""
   taskType: String!
@@ -334,14 +358,7 @@ input CreateTicketTaskInput {
   visibility: Visibility! = public
 
   """Optional UUID of an associated route"""
-  routeUuid: String = null
-}
-
-input CreateWorkZoneInput {
-  name: String!
-
-  """GeoJSON Polygon or MultiPolygon — must not be a Point"""
-  geometry: GeoJSON!
+  routeUuid: UUID = null
 }
 
 type CrowdSourcingType {
@@ -413,6 +430,36 @@ input GenerateBriefingInput {
 """GeoJSON geometry object (RFC 7946)"""
 scalar GeoJSON
 
+type HazardousZoneConnection {
+  items: [HazardousZoneType!]!
+  pageInfo: PageInfo!
+}
+
+type HazardousZoneType {
+  uuid: UUID!
+
+  """Internal polymorphic discriminator — always 'hazardous_zone'"""
+  propertyName: String!
+  name: String
+
+  """GeoJSON Polygon or MultiPolygon marking the zone"""
+  geometry: GeoJSON
+
+  """UUID of the user who drew this zone"""
+  createdBy: String
+
+  """Current hazard status, e.g. 'dangerous', 'block'"""
+  status: String!
+
+  """Source of the hazard report, e.g. agency name or URL"""
+  informationSource: String
+
+  """Additional notes about this zone"""
+  note: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
 input HelpRequestTaskInput {
   """What the need asks for"""
   taskType: NeedKind!
@@ -471,11 +518,12 @@ type Mutation {
   createStationSuggestion(input: CreateStationSuggestionInput!): StationSuggestionType!
   mergeStationSuggestions(stationUuid: UUID!, decisions: [SuggestionDecisionInput!]!, reviewNote: String = null): StationSuggestionMergeType!
   revokeStationSuggestionMerge(uuid: UUID!): StationSuggestionMergeType!
-  createWorkZone(input: CreateWorkZoneInput!): WorkZoneType!
-  updateWorkZone(uuid: UUID!, input: UpdateWorkZoneInput!): WorkZoneType!
+  createArea(input: CreateAreaInput!): AreaType!
+  updateArea(uuid: UUID!, input: UpdateAreaInput!): AreaType!
+  deleteArea(uuid: UUID!): Boolean!
+  promoteMarkZone(uuid: UUID!, input: PromoteMarkZoneInput!): HazardousZoneType!
   assignZoneToTeam(input: ZoneTeamAssignmentInput!): ZoneAssignmentType!
   removeZoneFromTeam(input: ZoneTeamAssignmentInput!): Boolean!
-  deleteWorkZone(uuid: UUID!): Boolean!
   submitRoleRequest(input: SubmitRoleRequestInput!): RoleRequestType!
   withdrawRoleRequest(uuid: UUID!): RoleRequestType!
 }
@@ -537,6 +585,11 @@ type PhotoType {
   createdAt: DateTime
 }
 
+input PromoteMarkZoneInput {
+  status: String!
+  informationSource: String = null
+}
+
 type Query {
   stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
   station(uuid: UUID!): StationType
@@ -578,9 +631,10 @@ type Query {
   briefings(state: BriefingState = null, tag: String = null): [BriefingType!]!
   briefing(uuid: UUID!): BriefingType
   suggestableFields(targetType: String!): [SuggestableFieldType!]!
-  workZones(skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
-  workZone(uuid: UUID!): WorkZoneType
-  zonesByTeam(teamUuid: UUID!, skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
+  areas(bounds: BoundsInput = null, includePrivate: Boolean! = false, skip: Int! = 0, limit: Int! = 50): AreaConnection!
+  teamZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): TeamZoneConnection!
+  teamZone(uuid: UUID!): TeamZoneType
+  zonesByTeam(teamUuid: UUID!, skip: Int! = 0, limit: Int! = 50): TeamZoneConnection!
   myRoleRequests: MyRoleRequestsType!
 }
 
@@ -1057,6 +1111,31 @@ type TaskPropertyType {
   comment: String
 }
 
+type TeamZoneConnection {
+  items: [TeamZoneType!]!
+  pageInfo: PageInfo!
+}
+
+type TeamZoneType {
+  uuid: UUID!
+  name: String
+
+  """GeoJSON Polygon or MultiPolygon marking the zone boundary"""
+  geometry: GeoJSON
+  note: String
+
+  """Always true: a team zone and its teams are shown on the public map"""
+  isPublic: Boolean!
+
+  """UUID of the gov user who drew this zone"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """Teams this zone has been delegated to"""
+  assignedTeams: [AssignedTeamType!]!
+}
+
 type TicketConnection {
   items: [TicketType!]!
   pageInfo: PageInfo!
@@ -1249,17 +1328,17 @@ type TicketType {
   createdBy: String
 
   """
-  Requester full name — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too
+  Requester full name — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs
   """
   contactName: String
 
   """
-  Follow-up email — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too
+  Follow-up email — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs
   """
   contactEmail: String
 
   """
-  Follow-up phone — masked unless the caller holds ticket.view_pii here, and in the `tickets` list ticket.view_history too
+  Follow-up phone — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs
   """
   contactPhone: String
 
@@ -1297,6 +1376,15 @@ scalar UUID
 input UpdateAnnouncementInput {
   """The new announcement body text"""
   content: String!
+}
+
+input UpdateAreaInput {
+  name: String
+  geometry: GeoJSON = null
+  note: String
+  isPublic: Boolean = null
+  status: String = null
+  informationSource: String
 }
 
 input UpdateBriefingInput {
@@ -1422,11 +1510,6 @@ input UpdateTicketTaskInput {
   visibility: Visibility = null
 }
 
-input UpdateWorkZoneInput {
-  name: String
-  geometry: GeoJSON = null
-}
-
 input UpsertDisasterTypeInput {
   """The code to create or update; normalized (trimmed, lower-cased)"""
   key: String!
@@ -1516,27 +1599,6 @@ enum Visibility {
   public
   restricted
   internal
-}
-
-type WorkZoneConnection {
-  items: [WorkZoneType!]!
-  pageInfo: PageInfo!
-}
-
-type WorkZoneType {
-  uuid: UUID!
-  name: String!
-
-  """GeoJSON Polygon or MultiPolygon marking the zone boundary"""
-  geometry: GeoJSON
-
-  """UUID of the gov user who drew this zone"""
-  createdBy: String
-  createdAt: DateTime
-  updatedAt: DateTime
-
-  """Teams this zone has been delegated to"""
-  assignedTeams: [AssignedTeamType!]!
 }
 
 type ZoneAssignmentType {
