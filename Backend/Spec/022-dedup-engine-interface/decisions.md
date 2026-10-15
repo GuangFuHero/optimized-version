@@ -13,7 +13,11 @@ ADR-286~294 也與其他尚未合併的 PR（#63 的 `Spec/008`、`Spec/019-role
 
 2026-10-13 之前的 commit 訊息與 `handoff-chi.md` 引用的是原號。
 
-**背景**：Spec 019（PR #46 / #59，作者 Chi）交付了去重快層。本功能由後端接手包裝，
+**Spec 改號（2026-10-14）**：這份 Spec 原本是 `Spec/020-dedup-engine-interface/`，Chi 的快層是 `Spec/019-dedup-fast-layer/`。
+019、020 跟 Dennis 的 `Spec/019-role-requests`、`Spec/020-volunteer-claim`（#61 等五個分支）撞號，改成 **021**（快層）與 **022**（本 Spec）。
+2026-10-14 之前的 commit 訊息、PR 說明與 `handoff-chi.md` 的原文寫的是 019／020。
+
+**背景**：Spec 021（PR #46 / #59，作者 Chi）交付了去重快層。本功能由後端接手包裝，
 而演算法會由 Chi 持續迭代。以下每條決策都在回答同一個問題：**演算法改了，後端要不要跟著改？**
 
 ---
@@ -23,7 +27,7 @@ ADR-286~294 也與其他尚未合併的 PR（#63 的 `Spec/008`、`Spec/019-role
 **白話**：拿掉 `ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`。
 去重由需要它的業務流程（建單、登記據點、之後的慢層）在內部呼叫。
 
-**Context**：Spec 019 把去重開成兩支 query 加一支 mutation，前端在 `createTicket` 前先查、
+**Context**：Spec 021 把去重開成兩支 query 加一支 mutation，前端在 `createTicket` 前先查、
 事後再回報結果。這讓演算法內部的東西成了對外合約：
 
 - `DedupScoreComponent{name, score, weight, passed}` 直接出現在 SDL；前端 #47 有 select，
@@ -52,7 +56,7 @@ ADR-286~294 也與其他尚未合併的 PR（#63 的 `Spec/008`、`Spec/019-role
 **白話**：Chi 的程式碼放在 `app/dedup_engine/`，不能 import SQLAlchemy、FastAPI、strawberry，
 不能碰 DB 或網路。
 
-**Context**：Spec 019 的演算法散在三處：`services/dedup_scoring.py`（公式）、
+**Context**：Spec 021 的演算法散在三處：`services/dedup_scoring.py`（公式）、
 `repositories/dedup_repository.py`（在 SQL 裡算文字相似度、換算 `age_min`）、
 `services/dedup.py`（由公式反推檢索半徑、截斷文字、#59 的 `_Kind.parameters`）。
 Chi 要加一個訊號，三個檔案都可能要動。
@@ -81,7 +85,7 @@ Chi 要加一個訊號，三個檔案都可能要動。
 
 **白話**：repository 只給原始文字，相似度怎麼算由 Chi 決定。
 
-**Context**：Spec 019 在 SQL 裡算 `similarity(concat_ws(' ', title, description), query)`。
+**Context**：Spec 021 在 SQL 裡算 `similarity(concat_ws(' ', title, description), query)`。
 pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 repository 在做演算法的工作。
 依 ADR-315 的規則，比對方法、比哪些欄位、要不要截斷都會隨迭代改變，屬於 core。
 
@@ -103,7 +107,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 **白話**：後端送整份實體的欄位原值，不送算好的分數；送出中那筆和候選是同一種型別。
 
-**Context**：Spec 019 的 `DedupCandidate(distance_m, age_min, task_type, text_similarity)`
+**Context**：Spec 021 的 `DedupCandidate(distance_m, age_min, task_type, text_similarity)`
 已經是特徵。Chi 想用 `priority` 或 `disaster_types` 就得改後端。
 
 **Decision**：
@@ -139,7 +143,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 **白話**：後端只讀 `candidate_uuid` 和 `similarity`，其餘放不透明的 `evidence`，後端只存不讀。
 
-**Context**：Spec 019 的 `top_hint` 只回一筆，`CandidateScore.components` 的結構被 API 與 DB 綁住。
+**Context**：Spec 021 的 `top_hint` 只回一筆，`CandidateScore.components` 的結構被 API 與 DB 綁住。
 
 **Decision**：
 
@@ -158,7 +162,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 **白話**：撈多遠的候選由 engine 說了算，後端不再用公式反推；後端只保留一個防呆上限。
 
-**Context**：Spec 019 的 `_retrieval_radius_m` 呼叫 `max_hint_distance_m`，
+**Context**：Spec 021 的 `_retrieval_radius_m` 呼叫 `max_hint_distance_m`，
 是用「指數衰減＋加權平均」這組公式解出來的。Chi 一換公式形式，半徑就算錯，候選會被靜默漏掉。
 
 **Decision**：engine 實作 `retrieval(kind) -> RetrievalSpec(radius_m)`，並保證半徑外的候選不可能達門檻。
@@ -166,7 +170,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 `RetrievalSpec` 日後可加有預設值的欄位（例：`max_age`）。
 
 ➕ 公式怎麼改，半徑都跟著正確。
-◾ 1000 m 沿用 Spec 019 的值，2026-09-28 決定維持。
+◾ 1000 m 沿用 Spec 021 的值，2026-09-28 決定維持。
 
 ---
 
@@ -203,7 +207,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
 
 **白話**：資料表不再綁定現行公式的分數結構，並記錄每筆判斷是哪一版引擎做的。
 
-**Context**：Spec 019 的 migration `d4c8b1e07a92` 尚未合併，現在改成本最低。
+**Context**：Spec 021 的 migration `d4c8b1e07a92` 尚未合併，現在改成本最低。
 
 **Decision**：
 
@@ -217,7 +221,7 @@ pg_trgm 天生是 DB 函式，寫起來自然落在 repository，等於 reposito
   原本寫 NOT NULL，實作 Task 5 時發現會讓日後的手動建卡寫不進去，2026-09-28 改為現行寫法。
 - `engine_version` 不塞進 `method`：`method` 有 CHECK（`PAIR_METHODS`），表示「哪一層、哪一類方法」，語意不同。
 - `hint_shown`：兩段式（ADR-296）下，使用者看到提示後選擇「去看既有的單」不會再呼叫任何 API；
-  要靠這筆事件才量得到接受率。取代 Spec 019 以 mutation 主動回報的 `accepted_hint`。
+  要靠這筆事件才量得到接受率。取代 Spec 021 以 mutation 主動回報的 `accepted_hint`。
 
 ➕ Chi 迭代後，每筆判斷都能追到版本，新舊版可比較。
 
@@ -338,8 +342,8 @@ SemVer 的 major/minor 對演算法很難定義；commit hash 讀不懂且改註
 
 ## 任務層級（2026-09-29 追加）
 
-Chi 在 2026-09-29 把 Spec 019 的比對單位從工單改成任務（commit `0d186dedb`、`cf0e51c3e`、`7e28d72e3`，
-已合進本分支）。以下 ADR 把任務層級接到 Spec 020 的架構上。ADR-296 的「以工單為單位的 createTicket 兩段式」
+Chi 在 2026-09-29 把 Spec 021 的比對單位從工單改成任務（commit `0d186dedb`、`cf0e51c3e`、`7e28d72e3`，
+已合進本分支）。以下 ADR 把任務層級接到 Spec 022 的架構上。ADR-296 的「以工單為單位的 createTicket 兩段式」
 被 ADR-301／302 取代；ADR-317 的 `TicketSnapshot` 被 ADR-323 的 `TaskSnapshot` 取代。
 
 ---
@@ -350,7 +354,7 @@ Chi 在 2026-09-29 把 Spec 019 的比對單位從工單改成任務（commit `0
 
 **白話**：比的不是「這張單像不像那張單」，而是「這個任務像不像附近另一個還開著的任務」。
 
-**Context**：019 的三個決定（Chi 註明「user 定案」）：每個任務寫入前都比對；每個任務最多一個提示；
+**Context**：021 的三個決定（Chi 註明「user 定案」）：每個任務寫入前都比對；每個任務最多一個提示；
 替既有的單加任務時排除同一張單自己的任務。候選是「還開著」的任務：任務 status 不是 `fulfilled`／`canceled`、
 未軟刪，所屬工單未軟刪、不是 `cancelled`（`completed` 的單仍算，它可以再加任務）。
 
@@ -360,11 +364,11 @@ Chi 在 2026-09-29 把 Spec 019 的比對單位從工單改成任務（commit `0
   欄位：`uuid`、`ticket_uuid`、`location`（所屬工單的點）、`created_at`、`task_type`、`task_name`、`task_description`、
   `quantity`、`status`。`EntityKind` 改為 `"ticket_task" | "station"`。
 - engine 的文字訊號比 `task_name + task_description`，類別比 `task_type`，距離是兩個任務所屬工單之間。
-- repository 的候選條件照 019；新增「排除某張工單的任務」參數。
+- repository 的候選條件照 021；新增「排除某張工單的任務」參數。
 - `same_contact_phone` 比的是兩個任務**所屬工單**的電話（ADR-321 不變）。
 - 分數行為改變（單位、文字欄位都換了），engine 升為 **`fast-v2`**，重產 golden，寫 CHANGELOG。
 
-➖ 工單本身不再去重：兩張單的任務都不像，就不會提示。這是 019 的產品決定，照做。
+➖ 工單本身不再去重：兩張單的任務都不像，就不會提示。這是 021 的產品決定，照做。
 
 ---
 
@@ -415,7 +419,7 @@ type TaskSuspect { draftIndex: Int!  relatedTicketUuid: String!  relatedTaskUuid
 
 **Decision**：`createTicketTask(input, acknowledgedDuplicateOf: String = null): CreateTicketTaskResult!`，
 回 `TicketTaskCreated { task }` 或 `DuplicatesSuspected`（`draftIndex` 固定 0）。位置取所屬工單的座標，
-候選排除同一張工單自己的任務（019 決定 3）。流程與 ADR-301 相同。
+候選排除同一張工單自己的任務（021 決定 3）。流程與 ADR-301 相同。
 
 ---
 
@@ -479,7 +483,7 @@ ADR-321（電話怎麼比歸 engine；草稿帶正規化後的 `contact_phone`�
 ADR-301／302 的 API 保留，但回傳的疑似重複改為通用形狀（見 spec §5）。
 
 ➕ 比對單位、候選條件、文字方法以後都只動 `app/dedup_engine/`。
-➕ Chi 可以直接沿用 019 的查詢寫法，不必把資料塞進後端定義的快照。
+➕ Chi 可以直接沿用 021 的查詢寫法，不必把資料塞進後端定義的快照。
 ➖ engine 能讀 DB：離線 harness 需要一個 DB（或 Chi 自己的替身），golden test 改為在測試 DB 上跑。
 ➖ 送出的草稿含正規化後的電話（engine 本來就能讀 DB 裡的電話，隔離已無意義）。
 

@@ -290,7 +290,7 @@ export type CreateTicketInput = {
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** Type of help: 'rescue', 'supply', 'medical', or 'hr' */
   taskType?: InputMaybe<Scalars['String']['input']>;
-  /** The ticket's tasks, created with it in one go (Spec 020 §5.1). Each is checked for duplicates */
+  /** The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates */
   tasks?: Array<CreateTicketTaskDraft>;
   title: Scalars['String']['input'];
   /** Visibility: 'public' (default), 'restricted', or 'internal' */

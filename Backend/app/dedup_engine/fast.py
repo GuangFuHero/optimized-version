@@ -31,7 +31,7 @@ Layout: parameters (`FastParameters` and the constants) → formula (`Signals`, 
 The parameters are provisional. The weights and threshold won a grid search over 13 hand-written
 cases; `text_weight` and `component_baseline` are judgement calls. `phone_bonus` 0.10 comes from
 a backtest on 100 hand-labelled pairs from the 2025 Guangfu platform. Version history and
-backtest numbers: `Spec/020-dedup-engine-interface/spec.md` §11.
+backtest numbers: `Spec/022-dedup-engine-interface/spec.md` §11.
 """
 
 import math

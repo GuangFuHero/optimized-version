@@ -190,7 +190,7 @@ def write_golden(path: Path, version: str, cases: dict[str, Any]) -> str:
         if old == new:
             return "unchanged"
         if old["version"] == version:
-            return "refused: outputs changed but the version did not — bump it (Spec 020 §11)"
+            return "refused: outputs changed but the version did not — bump it (Spec 022 §11)"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(new, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return "written"

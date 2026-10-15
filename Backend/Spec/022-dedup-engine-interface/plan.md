@@ -1,4 +1,4 @@
-# 020 去重引擎介面 — Implementation Plan
+# 022 去重引擎介面 — Implementation Plan
 
 **進度（2026-09-29）**：
 - Phase 1（Task 1~14）完成，Docker 驗證通過（摘要見 `verification.md` §8.2）。之後 merge 了 Chi 改成以任務為單位的版本和 main（merge `af2ca1d95`）。
@@ -8,7 +8,7 @@
 - **剩 Task 0**：等 Chi 回覆（交接訊息在 `handoff-chi.md`）。速度標準和 timeout 已經定了，只聽他的意見。
 - 前端不歸後端管；最後一節「交給前端的 API 變更」是給前端的說明。
 
-**Goal:** 把 Spec 019 的去重快層包成「演算法可獨立迭代」的後端服務：Chi 只動 `app/dedup_engine/`，
+**Goal:** 把 Spec 021 的去重快層包成「演算法可獨立迭代」的後端服務：Chi 只動 `app/dedup_engine/`，
 後端只依賴 `contract.py`；提示改由 `createTicket` / `createStation` 本身帶出（先檢查、有疑似重複就先不建立，使用者確認後再送一次），拿掉獨立的 dedup API。
 
 **Architecture:** 純函式的 algorithm core（不做 I/O）＋後端的 snapshot builder / repository / service /
@@ -17,7 +17,7 @@
 **Tech Stack:** FastAPI, strawberry, SQLAlchemy async, PostgreSQL/PostGIS（pg_trgm 只剩對照測試用）,
 pytest（`uv run pytest`）, ruff。無新依賴（文字相似度自己實作，見 Task 2）。
 
-**Source spec:** `Spec/020-dedup-engine-interface/spec.md`（ADR-295~299、314~322）
+**Source spec:** `Spec/022-dedup-engine-interface/spec.md`（ADR-295~299、314~322）
 
 **Branch:** `feat/dedup-engine-interface`（off `feat/dedup-station-fast-layer` #59 → `feat/dedup-fast-layer` #46）。
 **合併必須排在 #46、#59 之後**；本分支會改 #46 的 migration，#46 若先合併，Task 5 要改成新開 migration。
@@ -28,7 +28,7 @@ pytest（`uv run pytest`）, ruff。無新依賴（文字相似度自己實作�
 
 - **core 不做 I/O。** `app/dedup_engine/` 底下不能 import `sqlalchemy`、`fastapi`、`strawberry`、`app.models`、
   `app.repositories`、`app.services`。Task 1 有一條守衛測試強制這件事。
-- **fast-v1 的分數行為盡量不變。** 權重、門檻、公式、半徑解法照 019 搬。唯一刻意的差異是文字相似度改用
+- **fast-v1 的分數行為盡量不變。** 權重、門檻、公式、半徑解法照 021 搬。唯一刻意的差異是文字相似度改用
   Python（ADR-316），Task 2 用 pg_trgm 對照測試把差異壓到 0。
 - **`create_ticket` / `create_station` 對外行為不變**（ADR-299）。批次匯入與既有測試不應該有任何紅燈。
 - **不存重播用的輸入**（ADR-295）。任何 audit / pair 寫入都不能放快照或標題、描述原文。
@@ -59,7 +59,7 @@ export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/
 ### 已知陷阱
 
 1. **rollback 會 expire actor。** fail-open 的 `db.rollback()` 會讓所有已載入物件過期，之後讀 `actor.uuid`
-   就是 async lazy load → `MissingGreenlet`。019 的 query 在 rollback 後直接 return，所以沒踩到；
+   就是 async lazy load → `MissingGreenlet`。021 的 query 在 rollback 後直接 return，所以沒踩到；
    兩段式在 rollback 後還要建單，**一定要 `await refresh_actor(db, actor)`**（`app/services/authz.py`）。
    Task 9 有一條用真 DB 的測試專門抓這個，**不要用 fake session 或 `expire_on_commit=False` 的 fixture 繞過**。
 2. **flush 後不要讀 server default 欄位。** `created_at` 是 `server_default`，flush 後屬性是 expired，
@@ -146,7 +146,7 @@ def test_core_does_no_io():
 - [x] **GREEN**：寫 `contract.py`（內容即 spec §3、§4，下面是完整檔案）
 
 ```python
-"""The contract between the backend and the dedup algorithm (Spec 020, ADR-317~320).
+"""The contract between the backend and the dedup algorithm (Spec 022, ADR-317~320).
 
 Both sides depend on this module and nothing else of each other. Changing it needs both
 owners to agree: add fields with defaults; renaming, removing or re-meaning a field bumps
@@ -253,7 +253,7 @@ class DedupEngine(Protocol):
 
 **Files:** Create `app/dedup_engine/text.py`, `tests/dedup_engine/test_text.py`, `tests/test_dedup_trgm_parity.py`
 
-目標：fast-v1 的文字分數與 019 在 SQL 算的 **完全相同**，這樣「門檻要重跑回測」（ADR-316）的風險就縮到只剩欄位串接方式。
+目標：fast-v1 的文字分數與 021 在 SQL 算的 **完全相同**，這樣「門檻要重跑回測」（ADR-316）的風險就縮到只剩欄位串接方式。
 
 - [x] **RED**：`test_text.py` 單元測試
 
@@ -340,8 +340,8 @@ def trigram_similarity(a: str, b: str) -> float:
 > **實作時調整（2026-09-28）**：
 > - `app/services/dedup_scoring.py` 與 `tests/test_dedup_scoring.py` **留到 Task 13 才刪**。舊的 service／repository
 >   在 Task 8、9 之前仍 import 它，提早刪會讓全套件整片紅，違反「每個 Task 全套件不比基準差」。
-> - 公式拆成 `measure()`（快照 → `Signals`）與 `combine()`（`Signals` → 分數與成分），019 對照 harness 的精確數字測試
->   改打 `combine()`；另用 4 萬組隨機輸入比對 019 的 `score_candidate` 與 `combine()`，最大差距 0.0。
+> - 公式拆成 `measure()`（快照 → `Signals`）與 `combine()`（`Signals` → 分數與成分），021 對照 harness 的精確數字測試
+>   改打 `combine()`；另用 4 萬組隨機輸入比對 021 的 `score_candidate` 與 `combine()`，最大差距 0.0。
 > - `rank()` 只抽一次送出端的 trigram（`_Submission`），500 筆 2000 字候選從 132 ms 降到 68 ms。
 
 - [x] **RED**：把 `tests/test_dedup_scoring.py` 每一條改寫成吃快照的版本放進 `test_fast.py`。測試輔助：
@@ -361,7 +361,7 @@ def near(uuid="c1", *, distance_m=8.0, minutes_ago=12.0, **fields) -> Candidate:
     return Candidate(snapshot=ticket(uuid, minutes_ago=minutes_ago, **fields), distance_m=distance_m)
 ```
 
-  另外補 019 沒有的四條：
+  另外補 021 沒有的四條：
   - [x] 站點沒有 `time` 成分（`STATION_PARAMETERS.time_weight == 0`）
   - [x] 任一邊文字為空 → 沒有 `text` 成分（不是 0 分）
   - [x] `evidence` 裡不含 `title` / `description` 原文
@@ -370,7 +370,7 @@ def near(uuid="c1", *, distance_m=8.0, minutes_ago=12.0, **fields) -> Candidate:
 - [x] **GREEN**：`fast.py`
 
 ```python
-"""fast-v1: the rule-based fast layer, ported from Spec 019's dedup_scoring.py.
+"""fast-v1: the rule-based fast layer, ported from Spec 021's dedup_scoring.py.
 
 Signals (each 0–1), averaged by weight over the signals that are available:
 
@@ -498,8 +498,8 @@ def get_engine() -> DedupEngine:
     return _ENGINE
 ```
 
-> **與 019 的兩處刻意差異**（寫進 CHANGELOG）：(1) 文字相似度由 Python 算（Task 2 已對齊 pg_trgm）；
-> (2) 候選端文字也套 200／2000 截斷（019 只截送出端）。`same_contact_phone` 在 fast-v1 **不使用**，保持行為對等。
+> **與 021 的兩處刻意差異**（寫進 CHANGELOG）：(1) 文字相似度由 Python 算（Task 2 已對齊 pg_trgm）；
+> (2) 候選端文字也套 200／2000 截斷（021 只截送出端）。`same_contact_phone` 在 fast-v1 **不使用**，保持行為對等。
 
 ---
 
@@ -541,7 +541,7 @@ def test_performance(engine): ...                        # 500 筆候選 < PERF_
 def test_version_format(engine): assert re.fullmatch(r"[a-z]+-v[1-9][0-9]*", engine.version)
 ```
 
-- [x] `golden_cases.py`：約 20 組固定輸入（019 的 fixture 情境＋站點＋邊界：剛好在半徑上、文字為空、類別缺一邊）
+- [x] `golden_cases.py`：約 20 組固定輸入（021 的 fixture 情境＋站點＋邊界：剛好在半徑上、文字為空、類別缺一邊）
 - [x] `scripts/regen_dedup_golden.py`：算出所有案例的 `rank` 與 `score` 結果寫進 `golden/fast.json`
 
 ```python
@@ -566,7 +566,7 @@ def test_golden():
 ```
 
   similarity 在 golden 裡一律 `round(x, 6)`，避免浮點尾數讓測試不穩
-- [x] `CHANGELOG.md` 寫 fast-v1：參數表（照 019 spec §3）、與 019 的兩處差異、回測結果欄位先留「待 Chi 補」
+- [x] `CHANGELOG.md` 寫 fast-v1：參數表（照 021 spec §3）、與 021 的兩處差異、回測結果欄位先留「待 Chi 補」
 - [x] 跑一次 regen 產生第一份 golden，commit
 
 ---
@@ -669,7 +669,7 @@ async def create_ticket(db, *, actor, **kwargs) -> Tickets:   # 簽章保持原�
 - [x] **GREEN**：
 
 ```python
-"""Backend-side conversion into the dedup contract (Spec 020 §3). No scoring here."""
+"""Backend-side conversion into the dedup contract (Spec 022 §3). No scoring here."""
 
 def ticket_submission(fields: TicketFields, *, now: datetime) -> TicketSnapshot:
     lon, lat = fields.point["coordinates"][:2]
@@ -780,7 +780,7 @@ async def record_acknowledged(db, *, kind, created: Snapshot, submission_phone, 
 
 - 配對卡：`status="dup_ignored"`、`rescan_needed=True`、`hint_outcome="ignored_hint"`、`method="fast_rule"`、
   `source_layer="fast"`、`engine_version=engine.version`、`evidence=match.evidence`、`similarity=Decimal(f"{s:.4f}")`
-- 已有現行卡：沿用 019 的 `_upsert_fast_pair` 行為（就地改成 `dup_ignored` + `rescan_needed`），補寫 `engine_version`
+- 已有現行卡：沿用 021 的 `_upsert_fast_pair` 行為（就地改成 `dup_ignored` + `rescan_needed`），補寫 `engine_version`
 - audit：`hint_shown`（`primary_uuid`=候選、`duplicate_uuid`=None）、`ignored_by_submitter`（`primary_uuid`=被確認的、
   `duplicate_uuid`=新建的）；`evidence={"similarity": round(s, 4), "engine": match.evidence}`；`engine_version` 必填
 
@@ -931,7 +931,7 @@ def _no_dedup_hints(request, monkeypatch):
 ## Task 13: 收尾
 
 - [x] ~~刪 `tests/test_graphql/test_dedup.py`、`test_dedup_station.py`~~（已在 Task 11 刪）
-- [x] `Spec/019-dedup-fast-layer/spec.md` 開頭加註：§1 GraphQL、§3 計分位置、§4 的 GraphQL 已被 Spec 020 取代
+- [x] `Spec/021-dedup-fast-layer/spec.md` 開頭加註：§1 GraphQL、§3 計分位置、§4 的 GraphQL 已被 Spec 022 取代
 - [x] `grep -rn "dedup_scoring\|find_duplicate_hints\|record_hint_outcome\|score_components" app tests` 為零
 - [x] `ruff==0.11.0 check` 與 `ruff format --check` 在本票改動的檔案上乾淨
 - [x] **RED → GREEN**：`tests/test_dedup_legacy_removed.py`
@@ -1013,11 +1013,11 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 **Files:** `app/dedup_engine/candidates.py`（新）、`fast.py`、`CHANGELOG.md`、`tests/dedup_engine/*`、golden
 
-- [x] `candidates.py`：任務候選（019 條件：任務非 fulfilled／canceled、未刪；工單未刪、非 cancelled；距離取工單；`NewTask` 排除同單）、站點候選（019 條件）；由 `app/repositories/dedup_repository.py` 的 `nearby_open_rows` 移入並改寫
+- [x] `candidates.py`：任務候選（021 條件：任務非 fulfilled／canceled、未刪；工單未刪、非 cancelled；距離取工單；`NewTask` 排除同單）、站點候選（021 條件）；由 `app/repositories/dedup_repository.py` 的 `nearby_open_rows` 移入並改寫
 - [x] `fast.py`：`check` 對 `NewTicket` 的每個任務、`NewTask` 的任務、`NewStation` 各回最多一個 `Suspect`；`score` 算指定的一對；公式與參數不變（`measure`／`combine` 沿用）
 - [x] `version = "fast-v2"`；CHANGELOG：比對單位改任務、候選查詢歸 engine
 - [x] golden 改在測試 DB 上以固定資料產生；regen 腳本「輸出變了但沒升版就拒絕」的規則不變
-- [x] 測試：Chi 的決定 1~3、completed／cancelled 工單、距離與 019 SQL 一致
+- [x] 測試：Chi 的決定 1~3、completed／cancelled 工單、距離與 021 SQL 一致
 
 ## Task 18: contract test（DB 版）
 
@@ -1121,7 +1121,7 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 - [x] 帶 `acknowledgedDuplicateOf`=a1 再送 → `TicketTaskCreated`，有配對卡
 - [x] 對工單 A 自己再加一個與 a1 相同的任務 → 直接建立（同一張單的任務不算重複）
 
-**候選條件（019）**
+**候選條件（021）**
 
 - [x] a1 改成 fulfilled／canceled，或工單 A 改成 cancelled／軟刪 → 同內容送出不再命中
 - [x] 工單 A 為 completed、任務仍開著 → 仍會命中（候選條件只排除 cancelled 工單）
@@ -1184,6 +1184,7 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
 - [x] `_guarded` 共用保護；`score_acknowledged`（建立前）＋`record_pair_ignored`（建立後）；`entity_exists`；uuid 正規化
 - [x] dedup 相關測試全過；全套測試
 - [x] 審查時看到的演算法現象（速度、佔位電話、回測比電話方式、`score` 對工單確認丟例外、上線時機）寫成 `pr73-algorithm-notes.md` 給 Chi，後端不改演算法
+- [x] Spec 資料夾改號：`019-dedup-fast-layer` → `021-dedup-fast-layer`、`020-dedup-engine-interface` → `022-dedup-engine-interface`（避開 Dennis 的 019／020），所有引用跟著改
 
 ## 交給前端的 API 變更（後端不負責實作）
 

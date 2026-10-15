@@ -1,17 +1,17 @@
 # Design: 去重引擎介面 — Dedup Engine Interface
 
 **Date**: 2026-09-28（2026-09-29 改寫：engine 自己撈資料，ADR-304；同日補 ADR-305~307）
-**Feature**: 020-dedup-engine-interface
+**Feature**: 022-dedup-engine-interface
 **Status**（2026-09-29）：本文件描述的架構（ADR-304）已全部實作。plan Task 1~25 完成，Docker 從零驗證通過
 （本機與容器內皆 1612 passed、0 failed），驗證結果與速度實測見 `verification.md`。branch 已 push，PR 尚未開。
 剩 plan Task 0：等 Chi 確認 §2~§4 的 contract、離線調參數工具怎麼接 DB，並補版本紀錄的驗證數字（§11）（交接訊息見 `handoff-chi.md`）。
-**Depends on**: `Spec/019-dedup-fast-layer/spec.md`（PR #46 / #59，未合併）
+**Depends on**: `Spec/021-dedup-fast-layer/spec.md`（PR #46 / #59，未合併）
 **Stacked on**: `feat/dedup-station-fast-layer`（#59，已合進 `3f97468f8`，含 main 的站點指派 #58）→ `feat/dedup-fast-layer`（#46）→ `main`
 **Decisions**: `decisions.md`（ADR-295~299、301~307、313~323；現行架構以 ADR-304 為準）
 
 ## 概述
 
-Spec 019 交付了去重快層（2026-09-29 起比對單位是任務）。本功能由後端接手包裝，演算法由 Chi 持續迭代。
+Spec 021 交付了去重快層（2026-09-29 起比對單位是任務）。本功能由後端接手包裝，演算法由 Chi 持續迭代。
 
 接縫的原則（ADR-304）：**凡是 Chi 可能會改的，都歸 `app/dedup_engine/`**——撈哪些候選、比對單位（工單、任務、或兩者）、
 訊號、分數、門檻。後端只管不會隨演算法改變的部分：**什麼時候問、送什麼、問完怎麼記**。
@@ -29,7 +29,7 @@ Spec 019 交付了去重快層（2026-09-29 起比對單位是任務）。本功
 
 ## 非目標
 
-- **不改演算法本身。** Phase 2 的 fast-v2 只做 019 已定的任務層級。
+- **不改演算法本身。** Phase 2 的 fast-v2 只做 021 已定的任務層級。
 - **不做慢層**（背景掃描、向量、admin 審核）。
 - **不存重播用的輸入**（ADR-295）。
 - **批次匯入不去重**（ADR-299）。
@@ -134,7 +134,7 @@ class Suspect:
     evidence: Mapping[str, Any]            # 不透明、可 JSON 序列化、不含送出的文字原文
 ```
 
-- 每個 `draft_ref` 最多一個 `Suspect`（019 決定 2）。回幾個、比哪一層，都是 engine 的事。
+- 每個 `draft_ref` 最多一個 `Suspect`（021 決定 2）。回幾個、比哪一層，都是 engine 的事。
 - 後端只讀 `draft_ref`、`related_*`、`similarity`；`evidence` 只存不讀（ADR-319）。
 
 ---
@@ -209,7 +209,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 ### 5.2 替既有的單加任務
 
 `createTicketTask(input, acknowledgedDuplicateOf: String = null): CreateTicketTaskResult!`，
-回 `TicketTaskCreated { task }` 或 `DuplicatesSuspected`。送 `NewTask(ticket_uuid, task)`；要不要排除同一張單的任務由 engine 決定（019 決定 3 在 fast-v2 內實作）。
+回 `TicketTaskCreated { task }` 或 `DuplicatesSuspected`。送 `NewTask(ticket_uuid, task)`；要不要排除同一張單的任務由 engine 決定（021 決定 3 在 fast-v2 內實作）。
 
 ### 5.3 登記站點
 
@@ -243,7 +243,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 | 檔案 | 改動 |
 |---|---|
 | `app/dedup_engine/contract.py` | 改為 §2~§4 的草稿、`Submission`、`Suspect`、async `DedupEngine` |
-| `app/dedup_engine/fast.py`、`candidates.py`（新） | fast-v2：任務層級候選查詢（由 019／`app/repositories/dedup_repository.py` 移入）、站點候選、計分；版本紀錄、golden |
+| `app/dedup_engine/fast.py`、`candidates.py`（新） | fast-v2：任務層級候選查詢（由 021／`app/repositories/dedup_repository.py` 移入）、站點候選、計分；版本紀錄、golden |
 | `app/repositories/dedup_repository.py` | 候選查詢移出；只留配對卡與 audit 的 repository |
 | `app/services/dedup_snapshot.py` | 改為「驗證過的 input → 草稿」；不再建候選 |
 | `app/services/dedup.py` | 保護措施（SAVEPOINT、逾時、種類檢查、確認過濾）＋寫入 |
@@ -290,6 +290,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 - **ADR-305（2026-09-29，Task 24 Docker 驗證）**：發現候選查詢從未用到空間 index（cast 的 typmod 對不上、站點無 centroid index），在本票修正。
 - **ADR-306／307（2026-09-29）**：`app/dedup_engine/` 裡歸後端的部分（registry、守門測試、時限）；依延遲實測定效能門檻、逾時維持 2 秒。
 - **ADR-313（2026-10-13，PR #73 審查）**：`engine.score` 補上跟 `check` 一樣的保護並移到建立之前；score 失敗時後端自己確認對方存在才寫卡；確認的 uuid 先正規化。
+- **Spec 改號（2026-10-14）**：本 Spec 由 020 改為 022、Chi 的快層由 019 改為 021，避開 Dennis 的 `019-role-requests`、`020-volunteer-claim`。
 
 ---
 
@@ -385,11 +386,11 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 
 ### fast-v1（2026-09-28）
 
-Spec 019 的快層搬到本 spec 的 contract 後面，公式不變（4 萬組隨機訊號，019 的 `score_candidate` 和 fast-v1 的 `combine` 算出來完全相同）。
-跟 019 的差別：
+Spec 021 的快層搬到本 spec 的 contract 後面，公式不變（4 萬組隨機訊號，021 的 `score_candidate` 和 fast-v1 的 `combine` 算出來完全相同）。
+跟 021 的差別：
 
 1. 文字相似度改在 Python 算（ADR-316），`tests/test_dedup_trgm_parity.py` 驗證跟 DB 的 `similarity()` 相同。
-2. 候選的文字也截短（標題 200、描述 2000 字）；019 只截送出的那一邊。
+2. 候選的文字也截短（標題 200、描述 2000 字）；021 只截送出的那一邊。
 3. 有 `same_contact_phone` 但不使用。
 
 任務檢索半徑 162.1 m、站點 136.7 m。這份資料每張單只有一個任務，所以 fast-v1 和 fast-v2 的分數完全相同，回測同 fast-v2。

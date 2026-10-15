@@ -2,9 +2,11 @@
 
 **Status**: Draft — 參數暫定，等真實資料重跑
 
-> **2026-09-28／29：部分內容已被 `Spec/020-dedup-engine-interface/` 取代。**
+> **2026-10-14：本 Spec 由 `019-dedup-fast-layer` 改號為 021**（019 與 `Spec/019-role-requests` 撞號），見 `Spec/022-dedup-engine-interface/decisions.md` 開頭。
+
+> **2026-09-28／29：部分內容已被 `Spec/022-dedup-engine-interface/` 取代。**
 > §1 的 GraphQL（`ticketDedupCandidates`、`stationDedupCandidates`、`recordDedupHintOutcome`）已移除，
-> 改為建立 mutation 的兩段式（ADR-314、296，任務層級見 020 的後續 ADR）；§3 的計分移到 `app/dedup_engine/`，
+> 改為建立 mutation 的兩段式（ADR-314、296，任務層級見 022 的後續 ADR）；§3 的計分移到 `app/dedup_engine/`，
 > 文字相似度改由 Python 計算（ADR-316）；§2 的 `score_components` 改為 `evidence`，並新增 `engine_version`（ADR-322）。
 > 本檔的比對單位（task）、三個觸發決策、候選條件與計分公式維持有效。
 
