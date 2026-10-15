@@ -32,8 +32,8 @@ class Perm(StrEnum):
     # audit.view — that key is auditor-only, while the requirement is that a requester can
     # follow their own ticket. Not a reuse of ticket.view either: that one is in
     # PUBLIC_PERMS, so sharing it would put staff names and review timings in front of
-    # anonymous visitors. Scoped as view_pii was before ADR-286 opened contact details to
-    # anyone signed in: the timeline names people, and it also gates who claimed a need.
+    # anonymous visitors. Scoped as view_pii was before ADR-286 widened it to everyone signed
+    # in: the timeline names people, and it also gates who claimed a need and whom to call.
     TICKET_VIEW_HISTORY = "ticket.view_history"
     TICKET_ADD = "ticket.add"
     TICKET_EDIT = "ticket.edit"
@@ -70,11 +70,9 @@ class Perm(StrEnum):
     STATION_EXPORT = "station.export"
     STATION_IMPORT = "station.import"
 
-    # Interactive Map (tiles, closure areas — the map *overlay*, distinct from the Station entity)
+    # Reading the public map overlay (hazardous zones and public areas). Drawing areas of any
+    # kind needs the work_zone.* capabilities below.
     MAP_VIEW = "map.view"
-    MAP_ADD = "map.add"
-    MAP_EDIT = "map.edit"
-    MAP_DELETE = "map.delete"
 
     # AI Duplicate Review
     AI_DUP_VIEW = "ai_duplicate.view"
@@ -157,14 +155,8 @@ PUBLIC_PERMS = frozenset(
     {Perm.MAP_VIEW, Perm.ANN_VIEW, Perm.STATION_VIEW, Perm.TICKET_VIEW, Perm.PREDEP_VIEW}
 )
 
-# ADR-064: capabilities that, for a team-kind holder, only take effect when the actor's team
-# is gov-type. Checkpoint 1 (holding the grant) is not enough — work_zone.py's
-# `_require_gov_zone_authority` (ADR-063 [6]) additionally requires a gov team, so an ngo
-# admin holds these in the seed matrix but is blocked in practice. A platform holder
-# (super_admin, no team) is unaffected. Surfaced in the capability catalog so the read/matrix
-# display matches what is actually enforced (the role×capability matrix alone can't express a
-# team.type condition). Keep this in lockstep with the `_require_gov_zone_authority` and
-# `require_gov_team` call sites.
+# Capabilities a team-kind holder can only use when their team is gov-type (platform holders are
+# unaffected); listed so the capability catalog shows the team.type condition the services enforce.
 GOV_TEAM_ONLY_PERMS = frozenset(
     {Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN, Perm.ZONE_DELETE, Perm.STATION_ASSIGN}
 )

@@ -75,6 +75,22 @@ async def test_a_refused_request_says_why(client, redis):
     assert [e["message"] for e in res.json()["errors"]] == ["At least one task is required"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["floor", "room"])
+async def test_a_floor_or_room_too_long_for_its_column_is_refused_by_name(client, redis, field):
+    """Both are varchar(20); a longer one used to reach the INSERT and read "Unexpected error."."""
+    _, token = await _create_user_with_role(redis, "Login User")
+    address = {"landmarkNote": "花蓮縣光復鄉中山路100號", field: "x" * 21}
+
+    res = await client.post(
+        "/graphql",
+        json={"query": FILE, "variables": {"input": _input(secondaryLocation=address)}},
+        headers=auth_header(token),
+    )
+
+    assert [e["message"] for e in res.json()["errors"]] == [f"{field} must be at most 20 characters"]
+
+
 def test_the_site_input_lists_exactly_the_kinds_the_service_accepts():
     """`NeedKind` and `TASK_TYPES` are one list written twice; apart, one refuses what the other takes."""
     assert {kind.value for kind in NeedKind} == TASK_TYPES

@@ -21,12 +21,12 @@ from sqlalchemy import select, text
 from app.core.permissions import PUBLIC_PERMS, Perm
 from app.db import h3
 from app.models.auth import User
-from app.models.geo import ClosureArea
+from app.models.geo import HazardousZone
 from app.models.photo import Photo
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_task import TaskProperty, TicketTask
 from tests.conftest import token_for
 from tests.test_graphql.conftest import auth_header
@@ -102,7 +102,7 @@ async def zone_team() -> str:
     async with db_ctx() as db:
         team = Team(name=f"Detail Zone {uuid_mod.uuid4().hex[:8]}", type="ngo")
         assigner = User(name="assigner")
-        zone = WorkZone(name="Detail Zone", geometry=from_shape(ZONE_POLYGON, srid=4326))
+        zone = TeamZone(name="Detail Zone", geometry=from_shape(ZONE_POLYGON, srid=4326))
         db.add_all([team, assigner, zone])
         await db.flush()
         db.add(TeamZoneAssign(
@@ -382,22 +382,20 @@ async def test_a_bbox_matches_each_row_by_the_point_its_caller_can_see(client, r
 
 
 @pytest.mark.asyncio
-async def test_an_anonymous_bbox_survives_a_closure_area_in_the_same_box(client):
-    """`base_geometries` holds closure-area polygons beside ticket points.
+async def test_an_anonymous_bbox_survives_a_hazardous_zone_in_the_same_box(client):
+    """An area polygon in the box must not break the anonymous map, though h3 rejects non-points.
 
-    The planner is free to apply the bbox condition while scanning `base_geometries`, before
-    the join narrows it to tickets — so the cell expression meets polygons too. h3's
-    `h3_lat_lng_to_cell` rejects anything but a point ("geometry_to_point only accepts
-    Points"), which turned the anonymous map into an error wherever a road was closed.
+    `base_geometries` holds area polygons beside ticket points, and the bbox may run before the
+    join drops them.
     """
     uuid = await _ticket(INSIDE)
     async with db_ctx() as db:
         closer = User(name="closer")
         db.add(closer)
         await db.flush()
-        db.add(ClosureArea(
+        db.add(HazardousZone(
             geometry=from_shape(INSIDE.buffer(0.01), srid=4326), created_by=str(closer.uuid),
-            status="blocked", information_source="test", comment=TITLE,
+            status="blocked", information_source="test", note=TITLE,
         ))
     centre = await _centre(INSIDE)
 

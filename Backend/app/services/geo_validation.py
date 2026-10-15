@@ -7,6 +7,9 @@ resolver did.
 
 from shapely.geometry import shape
 
+from app.models.secondary_location import SecondaryLocation
+from app.services.column_lengths import check_lengths
+
 
 def validate_point(geojson: dict, *, entity: str = "Station") -> None:
     """Raise ValueError if geojson is not a valid Point within lon/lat bounds.
@@ -22,12 +25,8 @@ def validate_point(geojson: dict, *, entity: str = "Station") -> None:
         raise ValueError("Invalid coordinates")
 
 
-def validate_polygon(geojson: dict, *, entity: str = "Closure area") -> None:
-    """Raise ValueError if geojson is not a Polygon or MultiPolygon.
-
-    `entity` names the caller's domain in the error message (default kept for the
-    existing closure_area callers; work_zone passes "Work zone" — Phase 4/T119).
-    """
+def validate_polygon(geojson: dict, *, entity: str = "Area") -> None:
+    """Raise ValueError if geojson is not a Polygon or MultiPolygon; `entity` names it in the message."""
     geom = shape(geojson)
     if geom.geom_type not in ("Polygon", "MultiPolygon"):
         raise ValueError(f"{entity} geometry must be Polygon or MultiPolygon")
@@ -78,3 +77,16 @@ def normalize_contact_fields(fields: dict, *, required: frozenset[str] = frozens
             raise ValueError(f"{name} is required")
         out[name] = val or None
     return out
+
+
+def check_address_lengths(fields: dict | None) -> None:
+    """Refuse an address part longer than its `secondary_locations` column.
+
+    Every writer of an address calls this before anything is written: createStation,
+    createTicket, updateTicket and the site's createHelpRequest. `floor` and `room` are
+    `varchar(20)`, and a longer one used to fail at INSERT as "Unexpected error.". The values are
+    checked as they will be stored, not stripped first, for the reason `normalize_contact_fields`
+    gives.
+    """
+    if fields:
+        check_lengths(SecondaryLocation, **fields)

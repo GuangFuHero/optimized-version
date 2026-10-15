@@ -271,6 +271,23 @@ async def test_a_need_the_site_would_misread_is_refused(db, name, quantity, mess
     assert await _needs(db, ticket_uuid) == 0
 
 
+@pytest.mark.asyncio
+async def test_a_need_of_a_kind_the_back_office_made_up_must_say_how_many_too(db):
+    """Any need but a rescue (ADR-291 point 7), not only the four the site sends.
+
+    createTicketTask takes any task_type, as the back office may configure fields for a kind of
+    its own (ADR-214). Such a need without a quantity would never fill, nor its ticket complete.
+    """
+    ticket = await _ticket(db)
+    ticket_uuid = str(ticket.uuid)
+    requester = await _requester(db, ticket)
+
+    with pytest.raises(ValueError, match="quantity is required for a food task"):
+        await _add(db, requester, ticket_uuid, task_type="food", quantity=None)
+
+    assert await _needs(db, ticket_uuid) == 0
+
+
 # --- the lock order every writer keeps: the ticket first (ADR-291) ---
 
 

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from strawberry.dataloader import DataLoader
 
 from app.db.h3 import h3_cell_text, h3_centroid
+from app.graphql.area.types import AssignedTeamType
 from app.graphql.geo.types import (
     CrowdSourcingType,
     SecondaryLocationType,
@@ -32,7 +33,6 @@ from app.graphql.tickets.types import (
     TicketDisasterDetailType,
     TicketTaskType,
 )
-from app.graphql.work_zone.types import AssignedTeamType
 from app.models.geo import BaseGeometry
 from app.models.photo import Photo
 from app.models.request import Tickets
@@ -139,6 +139,8 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         "ticket_by_uuid": DataLoader(load_fn=_make_ticket_by_uuid_loader(db)),
         "ticket_uuid_by_task": DataLoader(load_fn=_make_ticket_uuid_by_task_loader(db)),
         "coarse_point": DataLoader(load_fn=_make_coarse_point_loader(db)),
+        # Whether the caller is going to a ticket: what unlocks whom to call (ADR-286 point 1).
+        "ticket_claimed_by": DataLoader(load_fn=_make_ticket_claimed_by_loader(db)),
     }
 
 
@@ -281,6 +283,36 @@ def _make_ticket_uuid_by_task_loader(db: AsyncSession):
     return load_fn
 
 
+def _make_ticket_claimed_by_loader(db: AsyncSession):
+    """Batch-load whether an account holds a claim on a live need of a ticket.
+
+    Keyed ``(actor_uuid, ticket_uuid)``. A request has one caller, so a page of tickets costs one
+    statement. A need deleted under a claim unlocks nothing: its volunteer was told not to come
+    (`task_deleted`), though the claim row may outlive the need.
+    """
+
+    async def load_fn(keys: list[tuple[str, str]]) -> list[bool]:
+        by_actor: dict[str, list[str]] = defaultdict(list)
+        for actor_uuid, ticket_uuid in keys:
+            by_actor[str(actor_uuid)].append(str(ticket_uuid))
+        claimed: set[tuple[str, str]] = set()
+        for actor_uuid, ticket_uuids in by_actor.items():
+            rows = await db.execute(
+                select(TicketTask.ticket_uuid)
+                .distinct()
+                .join(TaskAssignment, TaskAssignment.task_uuid == TicketTask.uuid)
+                .where(
+                    TaskAssignment.actor_uuid == actor_uuid,
+                    TicketTask.ticket_uuid.in_(ticket_uuids),
+                    TicketTask.delete_at.is_(None),
+                )
+            )
+            claimed.update((actor_uuid, str(ticket_uuid)) for (ticket_uuid,) in rows)
+        return [(str(actor_uuid), str(ticket_uuid)) in claimed for actor_uuid, ticket_uuid in keys]
+
+    return load_fn
+
+
 def _make_coarse_point_loader(db: AsyncSession):
     """Batch-load the coarse location, keyed ``(ticket_uuid, resolution)`` (ADR-281/283).
 
@@ -333,7 +365,7 @@ def _make_team_by_uuid_loader(db: AsyncSession):
 
 
 def _make_teams_by_zone_loader(db: AsyncSession):
-    """Batch-load the teams each work zone is delegated to (soft-deleted teams excluded)."""
+    """Batch-load the teams each team zone is delegated to (soft-deleted teams excluded)."""
 
     async def load_fn(zone_uuids: list[str]) -> list[list[AssignedTeamType]]:
         pairs = await team_zone_assign_repository.teams_by_zones(db, list(zone_uuids))

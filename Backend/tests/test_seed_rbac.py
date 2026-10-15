@@ -162,12 +162,13 @@ def test_station_assign_goes_to_super_admin_and_every_team_role():
     assert holders == {"super_admin": "all", "admin": "all", "member": "all"}
 
 
-def test_every_role_sees_who_to_call():
-    """ADR-286: a requester's contact details, and the two triage answers, to anyone signed in.
+def test_every_role_holds_ticket_view_pii_at_all():
+    """ADR-286: the two triage answers to anyone signed in, and whom to call beside a claim.
 
     Volunteers could not reach the person they were going to help. Every role holds it at `all`,
     not only `user`: one identity is active at a time (ADR-097), and a team identity must not
-    see less than a citizen. Guests stay masked — view_pii is not a public capability.
+    see less than a citizen. The contact details also take ticket.view_history or a claim, which
+    the code asks for (test_ticket_contact.py). Guests stay masked — view_pii is not public.
     """
     from app.core.permissions import Perm
     from scripts.seed_rbac import ROLES_DATA
@@ -179,8 +180,8 @@ def test_every_role_sees_who_to_call():
 def test_who_claimed_a_need_stays_with_the_requester_and_coordinators():
     """ADR-286: a need's claimant list follows ticket.view_history, which keeps the old tiering.
 
-    With contact details open, a requester's name ties their account to a person; were the
-    claimant list open as well, anyone signed in could follow a volunteer from need to need.
+    With the contact open to whoever claims, a requester's name ties their account to a person;
+    were the claimant list open as well, anyone signed in could follow a volunteer from need to need.
     """
     from app.core.permissions import Perm
     from scripts.seed_rbac import ROLES_DATA
