@@ -52,8 +52,8 @@ class Settings(BaseSettings):
         import hashlib
         return hashlib.sha256(self.SECRET_KEY.encode()).hexdigest()
 
-    # 環境設定 (development, staging, production)
-    ENV: str = os.getenv("ENV", "development")
+    # 環境設定 (development, testing, staging, production)。未設定時視為 production，開發用的功能預設關閉。
+    ENV: str = os.getenv("ENV", "production")
 
     model_config = SettingsConfigDict(
         env_file=".env",

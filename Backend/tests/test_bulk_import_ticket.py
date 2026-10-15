@@ -20,7 +20,7 @@ from app.models.auth import User
 from app.models.property_config import TaskPropertyConfig
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.models.ticket_task import TaskProperty, TicketTask
 from app.services.bulk_columns import DYNAMIC_PREFIX
 from app.services.bulk_export import export_tickets
@@ -144,6 +144,30 @@ async def test_a_new_row_creates_all_three_layers(db):
 
     assert task.task_name == "送水"
     assert task.source == "import"
+    assert prop.property_value == "4"
+
+
+@pytest.mark.asyncio
+async def test_a_new_rows_dynamic_value_takes_ticket_add_as_its_need_does(db):
+    """The import's dynamic value takes ticket.add, as its need does, not createTaskProperty's ticket.edit.
+
+    This importer's `zone` ticket.edit reaches no ticket at all, as it has no team: the row still
+    writes all three layers, as it did before createTaskProperty was tightened.
+    """
+    await _configs(db)
+    actor = await _importer(db, scope="zone")
+    raw, filename = _file([_row("需要飲用水", people="4")])
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="rescue")
+
+    assert (outcome.created, outcome.failed) == (1, 0)
+    ticket = await _ticket_titled(db, "需要飲用水")
+    task = (
+        await db.execute(select(TicketTask).where(TicketTask.ticket_uuid == ticket.uuid))
+    ).scalar_one()
+    prop = (
+        await db.execute(select(TaskProperty).where(TaskProperty.task_uuid == task.uuid))
+    ).scalar_one()
     assert prop.property_value == "4"
 
 
@@ -297,7 +321,7 @@ async def test_a_zone_scoped_export_comes_back_half_writable(db):
     await db.flush()
     assigner = User(name="assigner")
     db.add(assigner)
-    zone = WorkZone(name="Z", geometry=from_shape(ZONE_POLYGON, srid=4326))
+    zone = TeamZone(name="Z", geometry=from_shape(ZONE_POLYGON, srid=4326))
     db.add(zone)
     await db.flush()
     db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))
@@ -518,6 +542,20 @@ async def test_an_hr_need_without_a_quantity_fails_its_own_row_before_anything_i
 
     assert (outcome.created, outcome.failed, outcome.partial_rows) == (1, 1, ())
     assert await _ticket_titled(db, "搬家具") is None
+    assert "人數" in " ".join(e.message for e in outcome.errors)
+
+
+@pytest.mark.asyncio
+async def test_a_need_of_a_kind_of_its_own_without_a_quantity_fails_its_own_row_too(db):
+    """Not only the four standard kinds: one the back office configured (ADR-214) says how many too."""
+    actor = await _importer(db)
+    food_row = {**_row("送便當"), "task_type": "food"}
+    raw, filename = _file([food_row, {**food_row, "title": "送飲水", "task_quantity": ""}])
+
+    outcome = await commit_tickets(db, actor=actor, raw=raw, filename=filename, task_type="food")
+
+    assert (outcome.created, outcome.failed, outcome.partial_rows) == (1, 1, ())
+    assert await _ticket_titled(db, "送飲水") is None
     assert "人數" in " ".join(e.message for e in outcome.errors)
 
 

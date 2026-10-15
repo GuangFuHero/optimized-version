@@ -1,11 +1,18 @@
-"""Repositories for stations, closure areas, building maps, station properties, and crowd sourcing."""
+"""Repositories for stations, map areas, building maps, station properties, and crowd sourcing."""
 
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.search import like_pattern, matches, normalize_query, search_timeout
 from app.infrastructure.repository.base import GenericRepository
-from app.models.geo import BuildingMap, BuildingMapTicketMap, ClosureArea, Station
+from app.models.geo import (
+    AreaPolygon,
+    BuildingMap,
+    BuildingMapTicketMap,
+    HazardousZone,
+    MarkZone,
+    Station,
+)
 from app.models.secondary_location import SecondaryLocation
 from app.models.station_property import (
     CrowdSourcing,
@@ -155,17 +162,17 @@ class StationRepository(GenericRepository[Station]):
         return result.scalars().all()
 
 
-class ClosureAreaRepository(GenericRepository[ClosureArea]):
-    """Repository for closure area queries."""
+class AreaRepository(GenericRepository[AreaPolygon]):
+    """Repository for map areas: one instance per area model, or AreaPolygon for every kind."""
 
-    def __init__(self):
-        """Initialize with ClosureArea as the managed model."""
-        super().__init__(ClosureArea)
+    def __init__(self, model: type[AreaPolygon]):
+        """Initialize with the area model this instance manages."""
+        super().__init__(model)
 
     async def list_active(
         self, db: AsyncSession, *, bounds=None, skip: int = 0, limit: int = 50, extra_filters=()
-    ) -> list[ClosureArea]:
-        """List active closure areas with optional bbox filter and RBAC scope_filter conditions."""
+    ) -> list[AreaPolygon]:
+        """List active areas, newest first, with an optional bbox and extra filter conditions."""
         query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
             bbox = func.ST_MakeEnvelope(
@@ -178,7 +185,7 @@ class ClosureAreaRepository(GenericRepository[ClosureArea]):
         return result.scalars().all()
 
     async def count_active(self, db: AsyncSession, *, bounds=None, extra_filters=()) -> int:
-        """Count active closure areas with optional bbox filter and RBAC scope_filter conditions."""
+        """Count active areas with an optional bbox and extra filter conditions."""
         query = select(self.model).where(self.model.delete_at.is_(None), *extra_filters)
         if bounds:
             bbox = func.ST_MakeEnvelope(
@@ -188,12 +195,12 @@ class ClosureAreaRepository(GenericRepository[ClosureArea]):
         return await db.scalar(select(func.count()).select_from(query.subquery()))
 
 
-class BuildingMapRepository(ClosureAreaRepository):
-    """Repository for building maps, reusing the closure-area bbox list and count unchanged."""
+class BuildingMapRepository(AreaRepository):
+    """Repository for building maps, reusing the area bbox list and count unchanged."""
 
     def __init__(self):
         """Initialize with BuildingMap as the managed model."""
-        GenericRepository.__init__(self, BuildingMap)
+        super().__init__(BuildingMap)
 
 
 class StationPropertyRepository(GenericRepository[StationProperty]):
@@ -265,7 +272,9 @@ class SecondaryLocationRepository(GenericRepository[SecondaryLocation]):
 
 
 station_repository = StationRepository()
-closure_area_repository = ClosureAreaRepository()
+area_repository = AreaRepository(AreaPolygon)
+hazardous_zone_repository = AreaRepository(HazardousZone)
+mark_zone_repository = AreaRepository(MarkZone)
 building_map_repository = BuildingMapRepository()
 building_map_ticket_repository = GenericRepository(BuildingMapTicketMap)
 station_property_repository = StationPropertyRepository()

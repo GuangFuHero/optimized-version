@@ -1,12 +1,12 @@
 """Scope engine (ADR-020/021/049): fixed data-boundary scopes in place of a general ABAC engine.
 
 ADR-049 (乙, pure-geography model): a ticket's jurisdiction is decided by *where it is* (does its
-point fall inside a WorkZone polygon assigned to my team?), never by a stored owner-org. There is
+point fall inside a TeamZone polygon assigned to my team?), never by a stored owner-org. There is
 no `gov`/`ngo` scope. Stations are the exception (ADR-285): each is assigned by hand to one team
 and carries that `team_uuid`. The scopes:
 
 - `own`  — I created it (`created_by`).
-- `zone` — its location is inside a WorkZone assigned to my team (`ST_Contains`). Tickets.
+- `zone` — its location is inside a TeamZone assigned to my team (`ST_Contains`). Tickets.
 - `all`  — everything.
 - `team` — its `team_uuid` is my active team. Used for team-member management (a team admin
   manages their own team) and for stations. `resolve_scope` widens it to `all` for a gov team
@@ -20,9 +20,10 @@ from enum import StrEnum
 
 from sqlalchemy import exists, false, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.models.auth import User
-from app.models.team import TeamZoneAssign, WorkZone
+from app.models.team import TeamZone, TeamZoneAssign
 
 
 class Scope(StrEnum):
@@ -100,12 +101,12 @@ async def in_scope(scope: Scope, *, actor: User, resource, db: AsyncSession) -> 
             return False
         count = await db.scalar(
             select(func.count())
-            .select_from(WorkZone)
-            .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == WorkZone.uuid)
+            .select_from(TeamZone)
+            .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == TeamZone.uuid)
             .where(
                 TeamZoneAssign.team_uuid == mine,
-                WorkZone.delete_at.is_(None),
-                func.ST_Contains(WorkZone.geometry, geometry),
+                TeamZone.delete_at.is_(None),
+                func.ST_Contains(TeamZone.geometry, geometry),
             )
         )
         return bool(count and count > 0)
@@ -147,16 +148,19 @@ def scope_filter(scope: Scope, *, actor: User, model) -> list:
         mine = active_team(actor)
         if not mine or not hasattr(model, "geometry"):
             return [false()]
-        my_zones = (
-            select(WorkZone.uuid)
-            .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == WorkZone.uuid)
-            .where(TeamZoneAssign.team_uuid == mine, WorkZone.delete_at.is_(None))
-        )
+        # Aliased because a zone and the filtered row share base_geometries; unaliased, the
+        # EXISTS would correlate to the row itself, which always contains its own geometry.
+        zone = aliased(TeamZone, flat=True)
         return [
             exists(
                 select(1)
-                .select_from(WorkZone)
-                .where(WorkZone.uuid.in_(my_zones), func.ST_Contains(WorkZone.geometry, model.geometry))
+                .select_from(zone)
+                .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == zone.uuid)
+                .where(
+                    TeamZoneAssign.team_uuid == mine,
+                    zone.delete_at.is_(None),
+                    func.ST_Contains(zone.geometry, model.geometry),
+                )
             )
         ]
 

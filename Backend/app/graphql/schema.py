@@ -4,12 +4,21 @@ import logging
 
 import strawberry
 from fastapi import HTTPException
-from strawberry.extensions import MaskErrors
+from strawberry.extensions import (
+    AddValidationRules,
+    MaskErrors,
+    MaxAliasesLimiter,
+    MaxTokensLimiter,
+    QueryDepthLimiter,
+)
 from strawberry.types.execution import ExecutionResult as StrawberryExecutionResult
 from strawberry.utils.logging import StrawberryLogger
 
+from app.core.config import settings
 from app.graphql.announcements.mutations import AnnouncementMutation
 from app.graphql.announcements.queries import AnnouncementQuery
+from app.graphql.area.mutations import AreaMutation
+from app.graphql.area.queries import AreaQuery
 from app.graphql.briefings.mutations import BriefingMutation
 from app.graphql.briefings.queries import BriefingQuery
 from app.graphql.config.mutations import PropertyConfigMutation
@@ -22,24 +31,23 @@ from app.graphql.suggestions.mutations import SuggestionMutation
 from app.graphql.suggestions.queries import SuggestionQuery
 from app.graphql.tickets.mutations import RequestMutation, TicketTaskMutation
 from app.graphql.tickets.queries import RequestQuery, TicketTaskQuery
-from app.graphql.work_zone.mutations import WorkZoneMutation
-from app.graphql.work_zone.queries import WorkZoneQuery
 
 # Ruff sorts `graphql` into the first-party block (it collides with this package's own
 # name, app.graphql). Moving it up beside fastapi reads better but fails I001 in CI.
 from graphql import GraphQLError
 from graphql.execution.execute import ExecutionResult as GraphQLExecutionResult
+from graphql.validation import NoSchemaIntrospectionCustomRule
 
 _logger = logging.getLogger("app.graphql")
 
 
 @strawberry.type
-class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, BriefingQuery, SuggestionQuery, WorkZoneQuery, RoleRequestQuery):  # noqa: E501
+class Query(GeoQuery, RequestQuery, TicketTaskQuery, PropertyConfigQuery, AnnouncementQuery, BriefingQuery, SuggestionQuery, AreaQuery, RoleRequestQuery):  # noqa: E501
     """Root query type composing all domain query mixins."""
 
 
 @strawberry.type
-class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, BriefingMutation, SuggestionMutation, WorkZoneMutation, RoleRequestMutation):  # noqa: E501
+class Mutation(GeoMutation, StationPropertyMutation, RequestMutation, TicketTaskMutation, PropertyConfigMutation, AnnouncementMutation, BriefingMutation, SuggestionMutation, AreaMutation, RoleRequestMutation):  # noqa: E501
     """Root mutation type composing all domain mutation mixins."""
 
 
@@ -60,8 +68,8 @@ def _should_mask(error: GraphQLError) -> bool:
     - `HTTPException` — "Permission Denied." / "Not Found." from authz.py and context.py.
     - `original_error is None` — graphql-core's own input coercion ("not a valid value").
       Raised before any resolver runs, so there is nothing server-side in it to leak. A
-      variable's coercion error arrives wrapped in a second GraphQLError, and is judged by
-      what it wraps.
+      variable's coercion error arrives wrapped in a second GraphQLError with no response
+      path; a fault while serializing a result is wrapped too, but carries one.
 
     **Anything else must be a ValueError to reach the client.** A new custom exception class
     that does not subclass it will silently become "Unexpected error.".
@@ -83,12 +91,12 @@ def _is_expected(error: GraphQLError) -> bool:
     never be logged as if it were a crash, and vice versa.
     """
     original = error.original_error
-    # A bad variable (an unknown field, a value its scalar rejects) is reported as a
-    # GraphQLError wrapping the coercion error (graphql-core's `coerce_variable_values`).
-    while isinstance(original, GraphQLError):
-        original = original.original_error
     if original is None:
         # graphql-core's own input coercion, raised before any resolver runs.
+        return True
+    if isinstance(original, GraphQLError) and error.path is None:
+        # A variable that fails coercion wraps the scalar's own error, raised before any resolver runs.
+        # A fault while serializing a result also wraps one but carries a path, so it stays masked.
         return True
     return isinstance(original, ValueError | HTTPException)
 
@@ -141,5 +149,13 @@ class _Schema(strawberry.Schema):
 schema = _Schema(
     query=Query,
     mutation=Mutation,
-    extensions=[_RequestMaskErrors(should_mask_error=_should_mask)],
+    # The limits sit well above the largest frontend operation (4 levels deep, no aliases, about
+    # 90 tokens), and introspection is open only in development so other deployments hide the schema.
+    extensions=[
+        _RequestMaskErrors(should_mask_error=_should_mask),
+        QueryDepthLimiter(max_depth=10),
+        MaxAliasesLimiter(max_alias_count=10),
+        MaxTokensLimiter(max_token_count=1000),
+        *([] if settings.ENV == "development" else [AddValidationRules([NoSchemaIntrospectionCustomRule])]),
+    ],
 )

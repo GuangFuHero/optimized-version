@@ -397,7 +397,7 @@ async def _plan_tickets(
         # import_ticket_task.
         if (
             match.kind != MATCHED
-            and task_type in ticket_service.QUANTITY_REQUIRED_TASK_TYPES
+            and task_type not in ticket_service.QUANTITY_OPTIONAL_TASK_TYPES
             and not (row.get("task_quantity") or "").strip()
         ):
             errors.append(_error(line, "task_quantity", "救援以外的需求都要填人數"))
@@ -439,9 +439,8 @@ async def _write_task_properties(
                 db, actor=actor, uuid=str(existing[name].uuid), changes={"property_value": text}
             )
         else:
-            await ticket_service.create_task_property(
-                db, actor=actor, task_uuid=task_uuid, property_name=name,
-                property_value=text, quantity=None, comment=None,
+            await ticket_service.import_task_property(
+                db, actor=actor, task_uuid=task_uuid, property_name=name, property_value=text,
             )
 
 

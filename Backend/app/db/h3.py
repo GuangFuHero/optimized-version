@@ -80,12 +80,9 @@ def coarse_resolution(zoom: float | None) -> int:
 def h3_cell(geometry_column, resolution: int):
     """SQL expression: the H3 cell `geometry_column` falls in at `resolution` (an `h3index`).
 
-    `ST_PointOnSurface` first, although a ticket's geometry is always a point: the column
-    lives on `base_geometries`, which also holds closure-area polygons, and Postgres may
-    evaluate a WHERE condition while scanning that table — before the join to `tickets` has
-    thrown the polygons out. `h3_lat_lng_to_cell` raises on anything but a point
-    ("geometry_to_point only accepts Points"), so without this the anonymous map failed
-    wherever a closure area sat in the box. For a point it returns the point unchanged.
+    `ST_PointOnSurface` first because `base_geometries` also holds map-area polygons, and Postgres
+    may evaluate this before the join to `tickets` drops them, while `h3_lat_lng_to_cell` raises on
+    anything but a point. For a point it returns the point unchanged.
     """
     return func.h3_lat_lng_to_cell(func.ST_PointOnSurface(geometry_column), resolution)
 

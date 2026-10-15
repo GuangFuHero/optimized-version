@@ -1,7 +1,7 @@
 """Building-map write actions, and the floor and area rules a ticket filed inside one follows.
 
-Same flat-service style as closure_area.py: `db` first, keyword-only args, each function owns
-its own authz + validation + persistence.
+Each function takes `db` first and keyword-only args, and owns its own authz, validation and
+persistence.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession

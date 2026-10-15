@@ -22,9 +22,9 @@
 --   app/services/ticket_status.py 由需求推導。承接紀錄 status 一律 accepted,人數不超過 quantity(ADR-291)。
 --
 -- UUID 前綴:users=c…、A 站=a…、B 站=b…、tickets=d…、tasks=e…、assignments=f…、teams=1…、
---   work_zones=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、role_requests=6…
+--   team_zones=2…、team_zone_assign=3…、secondary_locations=4…、photos=5…、role_requests=6…
 -- 清除段照前綴刪,也照「建立者/承接者是 mock 帳號」刪:測試者在 staging 用 mock 帳號留下的單、站點、
---   照片、申請會一起清掉,所以可以重跑。
+--   地圖區域、照片、申請會一起清掉,所以可以重跑。
 --
 -- 登入:全部 37 人,密碼 Mock1234!(salt_frontend=mockdata12345678;
 --   前端送出的 password=PBKDF2-HMAC-SHA256('Mock1234!', salt_frontend, 100000)
@@ -40,29 +40,25 @@
 BEGIN;
 
 -- 0. 清除既有 seed,以及測試者用 mock 帳號留下的資料(可重跑)
--- 要刪的帳號、geometry(單、站點、封閉區域)、需求、工作區先各自列出來,下面照外鍵順序刪。
--- geometry 和需求除了看前綴,也看建立者:測試者在 staging 用 mock 帳號建的單、站點、加的需求,
+-- 要刪的帳號、geometry(單、站點、地圖區域)、需求先各自列出來,下面照外鍵順序刪。
+-- geometry 和需求除了看前綴,也看建立者:測試者在 staging 用 mock 帳號建的單、站點、區域、加的需求,
 -- UUID 不是前綴開頭,不一起刪的話,刪 mock 帳號時會被外鍵擋住。
 CREATE TEMP TABLE mock_users ON COMMIT DROP AS
   SELECT uuid FROM users WHERE uuid::text LIKE 'c0000000-%';
 CREATE TEMP TABLE mock_geometries ON COMMIT DROP AS
   SELECT uuid FROM base_geometries
-   WHERE uuid::text ~ '^[abd]0000000-' OR created_by IN (SELECT uuid FROM mock_users);
+   WHERE uuid::text ~ '^[abd2]0000000-' OR created_by IN (SELECT uuid FROM mock_users);
 CREATE TEMP TABLE mock_tasks ON COMMIT DROP AS
   SELECT uuid FROM ticket_tasks
    WHERE uuid::text LIKE 'e0000000-%'
       OR ticket_uuid IN (SELECT uuid FROM mock_geometries)
       OR created_by IN (SELECT uuid FROM mock_users);
-CREATE TEMP TABLE mock_zones ON COMMIT DROP AS
-  SELECT uuid FROM work_zones
-   WHERE uuid::text LIKE '20000000-%' OR created_by IN (SELECT uuid FROM mock_users);
 
 DELETE FROM team_zone_assign
  WHERE uuid::text LIKE '30000000-%'
-    OR zone_uuid IN (SELECT uuid FROM mock_zones)
+    OR zone_uuid IN (SELECT uuid FROM mock_geometries)
     OR team_uuid::text LIKE '10000000-%'
     OR assigned_by IN (SELECT uuid FROM mock_users);
-DELETE FROM work_zones WHERE uuid IN (SELECT uuid FROM mock_zones);
 DELETE FROM role_requests
  WHERE created_by IN (SELECT uuid FROM mock_users)
     OR reviewed_by IN (SELECT uuid FROM mock_users)
@@ -104,7 +100,10 @@ UPDATE stations SET child_station_uuid = NULL
  WHERE child_station_uuid IN (SELECT uuid FROM mock_geometries)
    AND uuid NOT IN (SELECT uuid FROM mock_geometries);
 DELETE FROM stations WHERE uuid IN (SELECT uuid FROM mock_geometries);
-DELETE FROM closure_areas WHERE uuid IN (SELECT uuid FROM mock_geometries);
+-- 地圖區域是 base_geometries → area_polygons → hazardous_zones/team_zones 三層,由子表往上刪。
+DELETE FROM hazardous_zones WHERE uuid IN (SELECT uuid FROM mock_geometries);
+DELETE FROM team_zones WHERE uuid IN (SELECT uuid FROM mock_geometries);
+DELETE FROM area_polygons WHERE uuid IN (SELECT uuid FROM mock_geometries);
 DELETE FROM routes
  WHERE origin_uuid IN (SELECT uuid FROM mock_geometries)
     OR destination_uuid IN (SELECT uuid FROM mock_geometries);
@@ -789,17 +788,22 @@ INSERT INTO task_assignments (uuid, task_uuid, actor_uuid, role, status, assigne
  ('f0000000-0000-4000-8000-000000000052','e0000000-0000-4000-8000-000000000068','c0000000-0000-4000-8000-000000000002','volunteer','accepted','2024-07-25 10:40+08'),  -- avol02:(f) 停止招募,名單已固定,不能釋出
  ('f0000000-0000-4000-8000-000000000053','e0000000-0000-4000-8000-000000000068','c0000000-0000-4000-8000-000000000009','volunteer','accepted','2024-07-25 11:05+08');
 
--- 6. WORK ZONES — 每個情境一個,官方帳號劃設(work_zones.created_by),涵蓋該情境站點/tickets 座標範圍。
--- geometry 欄位是 Geometry("MULTIPOLYGON", srid=4326)(見 app/models/team.py),故用 ST_Multi 包住
--- ST_MakeEnvelope 產生的 polygon,型別才吃得下。
-INSERT INTO work_zones (uuid, name, geometry, created_by) VALUES
- ('20000000-0000-4000-8000-000000000001','花蓮光復救災範圍',
-  ST_Multi(ST_MakeEnvelope(121.35,23.48,121.47,23.76,4326)),'c0000000-0000-4000-8000-000000000025'),
- ('20000000-0000-4000-8000-000000000002','宜蘭冬山救災範圍',
-  ST_Multi(ST_MakeEnvelope(121.70,24.60,121.82,24.76,4326)),'c0000000-0000-4000-8000-000000000037');
+-- 6. TEAM ZONES(責任區)— 每個情境一個,官方帳號劃設,涵蓋該情境站點/tickets 座標範圍。
+-- 區域是 base_geometries → area_polygons → team_zones 三層繼承,三張表都要寫。責任區恆公開,前後台都顯示被指派的團隊名稱。
+INSERT INTO base_geometries (uuid, property_name, geometry, created_by) VALUES
+ ('20000000-0000-4000-8000-000000000001','team_zone',
+  ST_MakeEnvelope(121.35,23.48,121.47,23.76,4326),'c0000000-0000-4000-8000-000000000025'),
+ ('20000000-0000-4000-8000-000000000002','team_zone',
+  ST_MakeEnvelope(121.70,24.60,121.82,24.76,4326),'c0000000-0000-4000-8000-000000000037');
+INSERT INTO area_polygons (uuid, name, is_public) VALUES
+ ('20000000-0000-4000-8000-000000000001','花蓮光復救災範圍',true),
+ ('20000000-0000-4000-8000-000000000002','宜蘭冬山救災範圍',true);
+INSERT INTO team_zones (uuid) VALUES
+ ('20000000-0000-4000-8000-000000000001'),
+ ('20000000-0000-4000-8000-000000000002');
 
 -- 7. TEAM ZONE ASSIGN — 每個情境的 zone 委派給一個同情境 NGO team;assigned_by 是劃設該 zone 的官方帳號
--- (與 app/services/work_zone.py 的真實服務層行為一致)。
+-- (與 app/services/area.py 的真實服務層行為一致)。
 INSERT INTO team_zone_assign (uuid, team_uuid, zone_uuid, assigned_by) VALUES
  ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
   '20000000-0000-4000-8000-000000000001','c0000000-0000-4000-8000-000000000025'),

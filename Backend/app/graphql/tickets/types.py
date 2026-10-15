@@ -35,7 +35,7 @@ def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resourc
     Returns the cached asyncio Task (await it). `resource` — anything with `created_by` and
     `geometry` — spares the loader round-trip when the caller already holds the ticket; the
     tasks, which carry neither, pass nothing and the ticket is loaded only if the scope is
-    `own` or `zone`. Same no-double-scheduling argument as TicketType._pii_visible: the
+    `own` or `zone`. Same no-double-scheduling argument as TicketType._pii_in_scope: the
     check-then-store below runs synchronously on the event loop.
     """
     decided = info.context["_ticket_detail_visible"]
@@ -52,12 +52,12 @@ def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str, resour
 
     Gates a task's `assignments`, which name the accounts of the volunteers going: the
     requester's and the coordinators' business. They followed ticket.view_pii until ADR-286
-    opened contact details to anyone signed in; with the requester's name and `createdBy` both
-    open, an open claimant list would let anyone follow a volunteer from need to need. So they
-    follow the timeline instead, which kept view_pii's old tiering — and already names who
-    took and who dropped a task (ADR-143). It also gates a need's moderation status and the
-    contact details in the `tickets` list (ADR-286 points 5 and 6). `resource` spares the loader
-    as in ticket_detail_visible.
+    widened it to everyone signed in; with `createdBy` open and the requester's name in full to
+    anyone who claims, an open claimant list would let anyone follow a volunteer from need to
+    need. So they follow the timeline instead, which kept view_pii's old tiering — and already
+    names who took and who dropped a task (ADR-143). It also gates a need's moderation status,
+    the contact details beside a claim, and the triage answers in the `tickets` list (ADR-286
+    points 1, 5 and 6). `resource` spares the loader as in ticket_detail_visible.
     """
     decided = info.context["_ticket_history_visible"]
     key = str(ticket_uuid)
@@ -71,7 +71,7 @@ def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str, resour
 async def _decide_ticket_scope(
     info: strawberry.types.Info, perm: Perm, ticket_uuid: str, resource
 ) -> bool:
-    """resolve_scope + in_scope, like _compute_pii_visible. Never raises: denial is withholding."""
+    """resolve_scope + in_scope, like _compute_pii_in_scope. Never raises: denial is withholding."""
     user = info.context["user"]
     if user is None:
         return False
@@ -226,14 +226,16 @@ class TaskAssignmentType:
     @strawberry.field(
         description=(
             "Display name of the assigned person. Null to a caller without "
-            "ticket.view_history on the parent ticket"
+            "ticket.view_history on the parent ticket, unless the assignment is their own"
         )
     )
     async def actor_name(self, info: strawberry.types.Info) -> str | None:
-        """The assignee's nickname, shown only to those who may see who claimed the need (ADR-286)."""
-        ticket_uuid = await info.context["loaders"]["ticket_uuid_by_task"].load(self.task_uuid)
-        if ticket_uuid is None or not await ticket_history_visible(info, ticket_uuid):
-            return None
+        """The assignee's nickname, to themselves and to those who may see who claimed the need (ADR-286)."""
+        user = info.context["user"]
+        if user is None or str(user.uuid) != str(self.actor_uuid):
+            ticket_uuid = await info.context["loaders"]["ticket_uuid_by_task"].load(self.task_uuid)
+            if ticket_uuid is None or not await ticket_history_visible(info, ticket_uuid):
+                return None
         return await info.context["loaders"]["user_name_by_uuid"].load(self.actor_uuid)
 
     @classmethod
@@ -435,7 +437,7 @@ class TicketTaskType:
 class CreateTicketTaskInput:
     """Input for creating a new task under a support ticket."""
 
-    ticket_uuid: str = strawberry.field(description="UUID of the ticket this task belongs to")
+    ticket_uuid: UUID = strawberry.field(description="UUID of the ticket this task belongs to")
     task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str
     task_description: str | None = None
@@ -450,7 +452,7 @@ class CreateTicketTaskInput:
         default=Visibility.public,
         description="Visibility: 'public' (default), 'restricted', or 'internal'",
     )
-    route_uuid: str | None = strawberry.field(
+    route_uuid: UUID | None = strawberry.field(
         default=None, description="Optional UUID of an associated route"
     )
 
@@ -520,7 +522,7 @@ class UpdateTicketTaskInput:
 class CreateTaskPropertyInput:
     """Input for adding a structured property to a ticket task."""
 
-    task_uuid: str = strawberry.field(description="UUID of the task to attach this property to")
+    task_uuid: UUID = strawberry.field(description="UUID of the task to attach this property to")
     property_name: str = strawberry.field(
         description="Attribute key matching the task property config schema"
     )
@@ -608,9 +610,10 @@ class TicketType:
     _person_trapped_reported_raw: strawberry.Private[str | None] = None
     _immediate_danger_reported_raw: strawberry.Private[str | None] = None
     _geometry_raw: strawberry.Private[object | None] = None
-    _pii_visible_task: strawberry.Private[object | None] = None
-    # Built by the `tickets` list: the contact fields then also need ticket.view_history (ADR-286
-    # point 6), so page after page of rows is not everyone's phone book.
+    _pii_scope_task: strawberry.Private[object | None] = None
+    _contact_visible_task: strawberry.Private[object | None] = None
+    # Built by the `tickets` list: the triage answers then also need ticket.view_history (ADR-286
+    # point 6). The contact fields need it, or a claim, wherever the ticket is read.
     _listed: strawberry.Private[bool] = False
     # Backing the ticket.view_detail resolvers (ADR-281). `_created_by_raw` also feeds both
     # scope checks — `own` is decided on it whether or not the caller may read it.
@@ -703,8 +706,12 @@ class TicketType:
         """Return the reporter's uuid, or null when the caller is out of detail scope."""
         return self._created_by_raw if await self._detail_visible(info) else None
 
-    def _pii_visible(self, info: strawberry.types.Info):
-        """Memoized PII-visibility check shared by the contact_* and triage-flag resolvers.
+    def _scope_resource(self) -> SimpleNamespace:
+        """What `own` and `zone` are decided on: who filed the ticket, and where it is."""
+        return SimpleNamespace(created_by=self._created_by_raw, geometry=self._geometry_raw)
+
+    def _pii_in_scope(self, info: strawberry.types.Info):
+        """Memoized ticket.view_pii check shared by the contact_* and triage-flag resolvers.
 
         Cached as a single asyncio Task on this instance so that when GraphQL resolves
         contact_name/email/phone concurrently on the SAME TicketType, the underlying zone
@@ -714,20 +721,16 @@ class TicketType:
         request; there is no cross-request cache, so the staleness window is identical to
         the per-request _rbac_cache it sits alongside.
         """
-        if self._pii_visible_task is None:
-            self._pii_visible_task = asyncio.ensure_future(self._compute_pii_visible(info))
-        return self._pii_visible_task
+        if self._pii_scope_task is None:
+            self._pii_scope_task = asyncio.ensure_future(self._compute_pii_in_scope(info))
+        return self._pii_scope_task
 
-    async def _compute_pii_visible(self, info: strawberry.types.Info) -> bool:
-        """Compute PII visibility directly via resolve_scope + in_scope (ADR-049).
+    async def _compute_pii_in_scope(self, info: strawberry.types.Info) -> bool:
+        """Compute ticket.view_pii directly via resolve_scope + in_scope (ADR-049).
 
         Neither raises — a denial renders as a *masked* contact field, not a GraphQL
         field-level error. Per-role scope: guest → not visible (no capability); own → own
-        ticket; zone → ticket's location inside my team's WorkZone; all → everything.
-
-        A row of the `tickets` list also needs ticket.view_history on it (ADR-286 point 6):
-        anyone signed in still reads the contact on the ticket they open, while the list shows it
-        only to the requester and the coordinators.
+        ticket; zone → ticket's location inside my team's TeamZone; all → everything.
         """
         user = info.context["user"]
         if user is None:
@@ -737,47 +740,74 @@ class TicketType:
         )
         if scope == Scope.NONE:
             return False
-        resource = SimpleNamespace(created_by=self._created_by_raw, geometry=self._geometry_raw)
-        db = info.context["db"]
-        if scope != Scope.ALL and not await in_scope(scope, actor=user, resource=resource, db=db):
+        if scope == Scope.ALL:
+            return True
+        return await in_scope(scope, actor=user, resource=self._scope_resource(), db=info.context["db"])
+
+    async def _triage_visible(self, info: strawberry.types.Info) -> bool:
+        """ticket.view_pii, and in the `tickets` list ticket.view_history too (ADR-286 point 6).
+
+        Not held back until a claim, as the contact is: a volunteer decides whether to go on them.
+        """
+        if not await self._pii_in_scope(info):
             return False
         if self._listed:
-            return await ticket_history_visible(info, str(self.uuid), resource)
+            return await ticket_history_visible(info, str(self.uuid), self._scope_resource())
         return True
+
+    def _contact_visible(self, info: strawberry.types.Info):
+        """Memoized: may the caller read whom to call in full? See _compute_contact_visible."""
+        if self._contact_visible_task is None:
+            self._contact_visible_task = asyncio.ensure_future(self._compute_contact_visible(info))
+        return self._contact_visible_task
+
+    async def _compute_contact_visible(self, info: strawberry.types.Info) -> bool:
+        """ticket.view_pii, then ticket.view_history on the ticket or a claim on one of its needs.
+
+        ticket.view_history is the requester and the coordinators; a claim is the volunteer on the
+        way (ADR-286 point 1). The same on the ticket a volunteer opens as in the `tickets` list,
+        so neither a page of `ticket` aliases nor a request per uuid off the list reads past it.
+        """
+        if not await self._pii_in_scope(info):
+            return False
+        if await ticket_history_visible(info, str(self.uuid), self._scope_resource()):
+            return True
+        key = (str(info.context["user"].uuid), str(self.uuid))
+        return await info.context["loaders"]["ticket_claimed_by"].load(key)
 
     @strawberry.field(
         description=(
-            "Requester full name — masked unless the caller holds ticket.view_pii here, and in "
-            "the `tickets` list ticket.view_history too"
+            "Requester full name — masked unless the caller holds ticket.view_pii here and either "
+            "ticket.view_history on the ticket or a claim on one of its needs"
         )
     )
     async def contact_name(self, info: strawberry.types.Info) -> str | None:
-        """Return the contact name raw if in scope, otherwise masked (王◯◯ / John S.)."""
-        if await self._pii_visible(info):
+        """Return the contact name raw if visible, otherwise masked (王◯◯ / John S.)."""
+        if await self._contact_visible(info):
             return self._contact_name_raw
         return mask_name(self._contact_name_raw)
 
     @strawberry.field(
         description=(
-            "Follow-up email — masked unless the caller holds ticket.view_pii here, and in the "
-            "`tickets` list ticket.view_history too"
+            "Follow-up email — masked unless the caller holds ticket.view_pii here and either "
+            "ticket.view_history on the ticket or a claim on one of its needs"
         )
     )
     async def contact_email(self, info: strawberry.types.Info) -> str | None:
-        """Return the contact email raw if in scope, otherwise masked (j***@***.com)."""
-        if await self._pii_visible(info):
+        """Return the contact email raw if visible, otherwise masked (j***@***.com)."""
+        if await self._contact_visible(info):
             return self._contact_email_raw
         return mask_email(self._contact_email_raw)
 
     @strawberry.field(
         description=(
-            "Follow-up phone — masked unless the caller holds ticket.view_pii here, and in the "
-            "`tickets` list ticket.view_history too"
+            "Follow-up phone — masked unless the caller holds ticket.view_pii here and either "
+            "ticket.view_history on the ticket or a claim on one of its needs"
         )
     )
     async def contact_phone(self, info: strawberry.types.Info) -> str | None:
-        """Return the contact phone raw if in scope, otherwise masked (09*****678)."""
-        if await self._pii_visible(info):
+        """Return the contact phone raw if visible, otherwise masked (09*****678)."""
+        if await self._contact_visible(info):
             return self._contact_phone_raw
         return mask_phone(self._contact_phone_raw)
 
@@ -796,7 +826,7 @@ class TicketType:
         distinction only matters to someone who can act on the answer, who holds the
         capability anyway.
         """
-        return self._person_trapped_reported_raw if await self._pii_visible(info) else None
+        return self._person_trapped_reported_raw if await self._triage_visible(info) else None
 
     @strawberry.field(
         description=(
@@ -807,7 +837,7 @@ class TicketType:
     )
     async def immediate_danger_reported(self, info: strawberry.types.Info) -> str | None:
         """Return the reporter's danger answer, or null when the caller is out of PII scope."""
-        return self._immediate_danger_reported_raw if await self._pii_visible(info) else None
+        return self._immediate_danger_reported_raw if await self._triage_visible(info) else None
 
     @strawberry.field(
         description=(
@@ -873,7 +903,7 @@ class TicketType:
 
         `coarse_resolution` is how coarse `geometry` is for a caller without detail — the
         read queries pass their `zoom`-derived value; everything else gets the cap. `listed`
-        marks a row of the `tickets` list, whose contact fields take ticket.view_history too.
+        marks a row of the `tickets` list, whose triage answers take ticket.view_history too.
         """
         return cls(
             uuid=m.uuid,

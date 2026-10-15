@@ -33,7 +33,11 @@ from app.repositories.tickets_repository import (
 )
 from app.services.authz import require_scope
 from app.services.building_map import place_ticket
-from app.services.geo_validation import normalize_contact_fields, validate_point
+from app.services.geo_validation import (
+    check_address_lengths,
+    normalize_contact_fields,
+    validate_point,
+)
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 from app.services.photo import normalize_photo_url
@@ -64,10 +68,11 @@ CLOSED_TICKET_STATUSES = frozenset({"completed", "cancelled"})
 # still stores whatever it is sent. The site's GraphQL input lists them as `NeedKind`
 # (graphql/tickets/types.py): keep the two in step.
 TASK_TYPES = frozenset({"rescue", "supply", "medical", "hr"})
-# Needs that count heads or units must say how many (ADR-291 point 7): without a quantity a need
-# never fills, so its ticket never completes. A rescue may not know how many it takes, as the
-# design leaves it out of the 缺額 count; it alone may come without one, and then has no cap.
-QUANTITY_REQUIRED_TASK_TYPES = TASK_TYPES - {"rescue"}
+# Every need but a rescue must say how many (ADR-291 point 7): without a quantity a need never
+# fills, so its ticket never completes. A rescue may not know how many it takes, as the design
+# leaves it out of the 缺額 count; it alone may come without one, and then has no cap. Written as
+# the exception rather than a list, so a kind the back office configured itself (ADR-214) counts too.
+QUANTITY_OPTIONAL_TASK_TYPES = frozenset({"rescue"})
 # `tickets.title` and `ticket_tasks.task_name` are both String(200).
 TICKET_TITLE_MAX_LENGTH = 200
 TASK_NAME_MAX_LENGTH = 200
@@ -108,7 +113,7 @@ async def _task_scope_target(db: AsyncSession, task: TicketTask) -> SimpleNamesp
     directly (in_scope's ZONE branch needs resource.geometry). Direction B: the task
     borrows its parent ticket's location for the zone check, so a team's `zone`-scoped
     ticket.edit / ticket.assign reaches the tasks under tickets sitting inside its
-    WorkZone. `own` is unchanged — it still means the task's own creator.
+    TeamZone. `own` is unchanged — it still means the task's own creator.
     """
     parent = await ticket_repository.get_by_uuid_active(db, task.ticket_uuid)
     return SimpleNamespace(
@@ -124,7 +129,7 @@ async def _assignment_scope_target(db: AsyncSession, assignment: TaskAssignment)
     `own` means "I am the assignee" (actor_uuid), not "I created this row" (ADR-045).
     `zone` borrows the assignment's task's parent-ticket location (ADR-052, direction B),
     so a coordinator with ticket.assign=zone can manage assignments on tasks inside their
-    WorkZone.
+    TeamZone.
     """
     task = await ticket_task_repository.get_by_uuid_active(db, assignment.task_uuid)
     parent = await ticket_repository.get_by_uuid_active(db, task.ticket_uuid) if task else None
@@ -184,6 +189,7 @@ async def create_ticket(
         # whitespace-only value has to be refused here rather than normalized to None.
         required=frozenset({"contact_name"}),
     )
+    check_address_lengths(secondary_location)
     ticket = await ticket_repository.add(
         db,
         obj_in={
@@ -238,7 +244,7 @@ def _validate_need_size(task_type: str, task_name: str, quantity: int | None) ->
     if len(task_name) > TASK_NAME_MAX_LENGTH:
         raise ValueError(f"task_name must be at most {TASK_NAME_MAX_LENGTH} characters")
     if quantity is None:
-        if task_type in QUANTITY_REQUIRED_TASK_TYPES:
+        if task_type not in QUANTITY_OPTIONAL_TASK_TYPES:
             raise ValueError(f"quantity is required for a {task_type} task")
     elif quantity < 1:
         raise ValueError("quantity must be at least 1")
@@ -302,6 +308,7 @@ async def create_help_request(
         {"contact_name": contact_name, "contact_email": None, "contact_phone": contact_phone},
         required=frozenset({"contact_name"}),
     )
+    check_address_lengths(secondary_location)
     creator = str(actor.uuid)
     ticket = await ticket_repository.add(
         db,
@@ -396,6 +403,7 @@ async def update_ticket(
     fields = set(changes) | ({"secondary_location"} if secondary_location is not None else set())
     await _require_edit_or_review(db, actor, fields, ticket)
     if secondary_location is not None:
+        check_address_lengths(secondary_location)
         await _replace_secondary_location(db, str(ticket.uuid), secondary_location)
 
     obj_in = dict(changes)
@@ -796,10 +804,53 @@ async def create_task_property(
     quantity: int | None,
     comment: str | None,
 ) -> TaskProperty:
-    """Add a structured property to a ticket task (checkpoint 1 only)."""
+    """Add a structured property to a ticket task — createTaskProperty.
+
+    ticket.edit on the parent task, as updateTaskProperty asks: ticket.add alone, which every
+    signed-in account holds at `all`, let anyone attach properties to someone else's need. A need
+    borrows its ticket's location, so `zone` reaches it (_task_scope_target).
+    """
+    task = await ticket_task_repository.get_by_uuid_active(db, task_uuid)
+    if not task:
+        raise ValueError("Ticket task not found")
+    await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
+    return await _add_task_property(
+        db, task_uuid=task_uuid, property_name=property_name, property_value=property_value,
+        quantity=quantity, comment=comment,
+    )
+
+
+async def import_task_property(
+    db: AsyncSession,
+    *,
+    actor: User,
+    task_uuid: str,
+    property_name: str,
+    property_value: str,
+) -> TaskProperty:
+    """Add a structured property for a bulk import row (ADR-120).
+
+    ticket.add alone, as import_ticket_task: the row's need is one the import just added or
+    matched, and who may import what is the back office's to decide, not the public site's.
+    """
     await require_scope(actor, Perm.TICKET_ADD, db)
     if not await ticket_task_repository.get_by_uuid_active(db, task_uuid):
         raise ValueError("Ticket task not found")
+    return await _add_task_property(
+        db, task_uuid=task_uuid, property_name=property_name, property_value=property_value,
+        quantity=None, comment=None,
+    )
+
+
+async def _add_task_property(
+    db: AsyncSession,
+    *,
+    task_uuid: str,
+    property_name: str,
+    property_value: str,
+    quantity: int | None,
+    comment: str | None,
+) -> TaskProperty:
     return await task_property_repository.create(
         db,
         obj_in={
@@ -1152,7 +1203,7 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
     task_id, task_name, deleted = task.uuid, task.task_name, task.delete_at is not None
-    removed_actor, actor_uid = str(assignment.actor_uuid), actor.uuid
+    ticket_title, removed_actor, actor_uid = ticket.title, str(assignment.actor_uuid), actor.uuid
     await db.commit()
 
     if deleted:
@@ -1160,8 +1211,8 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
     await NotificationService.dispatch(
         db,
         event_type="task_assignment_removed",
-        title=f"任務指派已取消：{task_name}",
-        body=f"您已被移出工單任務「{task_name}」。",
+        title=f"你已被移出「{task_name}」",
+        body=f"{ticket_title}　你已不在這筆需求的名單上，不用前往了。",
         priority="high",
         actor_uuid=actor_uid,
         ref_type="ticket_task",

@@ -1,1 +1,1 @@
-"""GraphQL geo domain — stations, closure areas, and station properties."""
+"""GraphQL geo domain — stations, hazardous zones, and station properties."""

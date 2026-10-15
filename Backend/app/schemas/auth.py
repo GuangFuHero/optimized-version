@@ -71,7 +71,13 @@ class UserResponse(UserBase):
     uuid: UUID
     created_at: datetime
     identities: list["IdentityOption"] = Field(default_factory=list)
-    active_identity: "IdentityOption | None" = None
+    active_identity: "IdentityOption | None" = Field(
+        None,
+        description=(
+            "這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；"
+            "沒有時為 null"
+        ),
+    )
     contacts: list[ContactOut] = Field(default_factory=list)
     login_methods: list[LoginMethodOut] = Field(default_factory=list)
 

@@ -217,32 +217,32 @@ async def test_station_not_found(client):
 
 
 # ──────────────────────────────────────────────
-# Closure area queries
+# Hazardous zone queries
 # ──────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_closure_areas_returns_data(client, sample_closure_area):
-    """ClosureAreas query returns at least one item when a closure area exists."""
+async def test_hazardous_zones_returns_data(client, sample_hazardous_zone):
+    """The hazardousZones query returns at least one item when a hazardous zone exists."""
     response = await client.post("/graphql", json={
         "query": """
-            query { closureAreas { items { uuid propertyName } pageInfo { totalCount } } }
+            query { hazardousZones { items { uuid propertyName } pageInfo { totalCount } } }
         """
     })
     assert response.status_code == 200
     data = response.json()
     assert "errors" not in data
-    items = data["data"]["closureAreas"]["items"]
+    items = data["data"]["hazardousZones"]["items"]
     assert isinstance(items, list)
     assert len(items) >= 1
 
 
 @pytest.mark.asyncio
-async def test_closure_areas_with_bounds(client, sample_closure_area):
-    """ClosureAreas query with bounding box includes only overlapping areas."""
+async def test_hazardous_zones_with_bounds(client, sample_hazardous_zone):
+    """The hazardousZones query with a bounding box includes only overlapping zones."""
     response = await client.post("/graphql", json={
         "query": """
             query {
-                closureAreas(bounds: {minLat: 24.9, maxLat: 25.1, minLng: 121.4, maxLng: 121.6}) {
+                hazardousZones(bounds: {minLat: 24.9, maxLat: 25.1, minLng: 121.4, maxLng: 121.6}) {
                     items { uuid }
                     pageInfo { totalCount }
                 }
@@ -252,21 +252,21 @@ async def test_closure_areas_with_bounds(client, sample_closure_area):
     assert response.status_code == 200
     data = response.json()
     assert "errors" not in data
-    items = data["data"]["closureAreas"]["items"]
+    items = data["data"]["hazardousZones"]["items"]
     assert len(items) >= 1
     uuids = [item["uuid"] for item in items]
-    assert sample_closure_area in uuids
+    assert sample_hazardous_zone in uuids
 
 
 @pytest.mark.asyncio
-async def test_closure_area_detail(client, sample_closure_area):
-    """closureArea(uuid) returns status, source, and geometry for a known area."""
+async def test_hazardous_zone_detail(client, sample_hazardous_zone):
+    """hazardousZone(uuid) returns status, source, and geometry for a known zone."""
     response = await client.post("/graphql", json={
         "query": f"""
             query {{
-                closureArea(uuid: "{sample_closure_area}") {{
+                hazardousZone(uuid: "{sample_hazardous_zone}") {{
                     uuid propertyName status
-                    informationSource comment createdAt updatedAt geometry
+                    informationSource note createdAt updatedAt geometry
                 }}
             }}
         """
@@ -274,25 +274,25 @@ async def test_closure_area_detail(client, sample_closure_area):
     assert response.status_code == 200
     data = response.json()
     assert "errors" not in data
-    area = data["data"]["closureArea"]
+    area = data["data"]["hazardousZone"]
     assert area is not None
-    assert area["uuid"] == sample_closure_area
+    assert area["uuid"] == sample_hazardous_zone
     assert area["status"] == "blocked"
 
 
 @pytest.mark.asyncio
-async def test_closure_area_not_found(client):
-    """closureArea(uuid) returns null for a non-existent UUID."""
+async def test_hazardous_zone_not_found(client):
+    """hazardousZone(uuid) returns null for a non-existent UUID."""
     random_uuid = str(uuid.uuid4())
     response = await client.post("/graphql", json={
         "query": f"""
-            query {{ closureArea(uuid: "{random_uuid}") {{ uuid }} }}
+            query {{ hazardousZone(uuid: "{random_uuid}") {{ uuid }} }}
         """
     })
     assert response.status_code == 200
     data = response.json()
     assert "errors" not in data
-    assert data["data"]["closureArea"] is None
+    assert data["data"]["hazardousZone"] is None
 
 
 # ──────────────────────────────────────────────
@@ -462,7 +462,7 @@ async def test_ticket_tasks_query(client, coordinator_auth, sample_ticket, sampl
 ANON_MULTI_ROOT_QUERY = """
     query {
         stations { items { uuid } pageInfo { totalCount } }
-        closureAreas { items { uuid } pageInfo { totalCount } }
+        hazardousZones { items { uuid } pageInfo { totalCount } }
         tickets { items { uuid } pageInfo { totalCount } }
         announcements { uuid }
     }
@@ -471,7 +471,7 @@ ANON_MULTI_ROOT_QUERY = """
 
 @pytest.mark.asyncio
 async def test_anonymous_multi_root_field_query_succeeds(
-    client, sample_station, sample_closure_area, sample_ticket
+    client, sample_station, sample_hazardous_zone, sample_ticket
 ):
     """An anonymous request selecting several root fields must not race on the DB session.
 
@@ -498,8 +498,8 @@ async def test_anonymous_multi_root_field_query_succeeds(
     body = data["data"]
     assert isinstance(body["stations"]["items"], list)
     assert isinstance(body["stations"]["pageInfo"]["totalCount"], int)
-    assert isinstance(body["closureAreas"]["items"], list)
-    assert isinstance(body["closureAreas"]["pageInfo"]["totalCount"], int)
+    assert isinstance(body["hazardousZones"]["items"], list)
+    assert isinstance(body["hazardousZones"]["pageInfo"]["totalCount"], int)
     assert isinstance(body["tickets"]["items"], list)
     assert isinstance(body["tickets"]["pageInfo"]["totalCount"], int)
     assert isinstance(body["announcements"], list)

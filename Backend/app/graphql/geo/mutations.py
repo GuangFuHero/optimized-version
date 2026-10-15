@@ -1,8 +1,7 @@
-"""GraphQL mutations for stations, closure areas, building maps, and station properties.
+"""GraphQL mutations for stations, building maps, and station properties.
 
 Thin per ADR-014: parse input, call the service function (which owns authz, validation,
-and persistence), map the result back to a GraphQL type. See app/services/station.py and
-app/services/closure_area.py.
+and persistence), map the result back to a GraphQL type.
 """
 
 from uuid import UUID
@@ -13,9 +12,7 @@ from app.graphql.context import require_authenticated
 from app.graphql.geo.types import (
     BuildingFloorAreasInput,
     BuildingMapType,
-    ClosureAreaType,
     CreateBuildingMapInput,
-    CreateClosureAreaInput,
     CreateCrowdSourcingInput,
     CreateStationInput,
     CreateStationPropertyInput,
@@ -23,14 +20,12 @@ from app.graphql.geo.types import (
     StationPropertyType,
     StationType,
     UpdateBuildingMapInput,
-    UpdateClosureAreaInput,
     UpdateStationInput,
     UpdateStationPropertyInput,
     secondary_location_to_dict,
 )
 from app.graphql.tickets.types import PhotoType
 from app.services import building_map as building_map_service
-from app.services import closure_area as closure_area_service
 from app.services import photo as photo_service
 from app.services import station as station_service
 
@@ -45,7 +40,7 @@ def _floor_areas_to_dict(floor_areas: list[BuildingFloorAreasInput]) -> dict[str
 
 @strawberry.type
 class GeoMutation:
-    """Mutations for creating, updating, and deleting stations and closure areas."""
+    """Mutations for creating, updating, and deleting stations and building maps."""
 
     @strawberry.mutation
     async def create_station(self, info: strawberry.types.Info, input: CreateStationInput) -> StationType:
@@ -174,55 +169,6 @@ class GeoMutation:
         return StationType.from_model(station)
 
     @strawberry.mutation
-    async def create_closure_area(
-        self, info: strawberry.types.Info, input: CreateClosureAreaInput
-    ) -> ClosureAreaType:
-        """Create a new road or area closure with a Polygon/MultiPolygon geometry.
-
-        Validates geometry type. Requires map.add permission. Returns the created closure area.
-        """
-        area = await closure_area_service.create_closure_area(
-            info.context["db"], actor=require_authenticated(info),
-            geometry=input.geometry, status=input.status,
-            information_source=input.information_source, comment=input.comment,
-        )
-        return ClosureAreaType.from_model(area)
-
-    @strawberry.mutation
-    async def update_closure_area(
-        self, info: strawberry.types.Info, uuid: UUID, input: UpdateClosureAreaInput,
-    ) -> ClosureAreaType:
-        """Update a closure area's geometry, status, or notes.
-
-        UNSET fields are skipped. Requires map.edit permission with scope check.
-        Returns the updated closure area.
-        """
-        changes = {}
-        if input.status is not None:
-            changes["status"] = input.status
-        for field in ("information_source", "comment"):
-            val = getattr(input, field)
-            if val is not strawberry.UNSET:
-                changes[field] = val
-
-        area = await closure_area_service.update_closure_area(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), geometry=input.geometry, changes=changes,
-        )
-        return ClosureAreaType.from_model(area)
-
-    @strawberry.mutation
-    async def delete_closure_area(self, info: strawberry.types.Info, uuid: UUID) -> bool:
-        """Soft-delete a closure area (sets delete_at).
-
-        Requires map.delete permission with scope check. Returns True on success.
-        """
-        await closure_area_service.delete_closure_area(
-            info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
-        )
-        return True
-
-    @strawberry.mutation
     async def create_building_map(
         self, info: strawberry.types.Info, input: CreateBuildingMapInput
     ) -> BuildingMapType:
@@ -280,7 +226,7 @@ class StationPropertyMutation:
         """
         prop = await station_service.create_station_property(
             info.context["db"], actor=require_authenticated(info),
-            station_uuid=input.station_uuid, property_type=input.property_type,
+            station_uuid=str(input.station_uuid), property_type=input.property_type,
             property_name=input.property_name, quantity=input.quantity,
             weightings=input.weightings,
         )
@@ -320,7 +266,8 @@ class StationPropertyMutation:
         """
         cs = await station_service.rate_station_property(
             info.context["db"], actor=require_authenticated(info),
-            station_uuid=input.station_uuid, item_uuid=input.item_uuid,
+            station_uuid=str(input.station_uuid),
+            item_uuid=str(input.item_uuid) if input.item_uuid else None,
             rating=input.rating, distance_from_geometry=input.distance_from_geometry,
         )
         return CrowdSourcingType.from_model(cs)

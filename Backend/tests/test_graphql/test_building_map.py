@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.models.geo import BuildingMapTicketMap
 from tests.test_graphql.conftest import auth_header
 from tests.test_graphql.conftest import test_db as open_db
-from tests.test_graphql.test_work_zone import _make_team_user
+from tests.test_graphql.test_area import _make_team_user
 
 pytestmark = pytest.mark.asyncio
 
