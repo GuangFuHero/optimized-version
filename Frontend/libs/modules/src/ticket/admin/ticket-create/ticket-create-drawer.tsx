@@ -98,6 +98,8 @@ const TICKET_TYPE_OPTIONS: readonly {
 
 const DETAIL_WIDTH = { mobile: '100vw', tablet: 460, desktop: 520 };
 const MAX_TICKET_PHOTO_URLS = 10;
+const DUPLICATE_SUSPECTED_MESSAGE =
+  '附近已有相似的任務，這次沒有建立。請先確認現有任務。';
 
 const ticketCreatePalette = {
   surface: '#FFFFFF',
@@ -636,9 +638,15 @@ export function TicketCreateDrawer({
       return;
     }
 
+    // 後端判定可能重複時不建立，改回傳 DuplicatesSuspected；比對結果的畫面還沒做，先給一般錯誤。
+    if (ticketResult.data.createTicket.__typename !== 'TicketCreated') {
+      setSubmitError(DUPLICATE_SUSPECTED_MESSAGE);
+      return;
+    }
+
     const createdTicket = useFragment(
       TicketFieldsFragmentDoc,
-      ticketResult.data.createTicket,
+      ticketResult.data.createTicket.ticket,
     );
 
     const taskInputs: CreateTicketTaskInput[] = tasks.map((task) => ({
@@ -658,6 +666,14 @@ export function TicketCreateDrawer({
 
       if (taskResult.error) {
         setSubmitError(taskResult.error.message);
+        return;
+      }
+
+      if (taskResult.data?.createTicketTask.__typename !== 'TicketTaskCreated') {
+        // 單已經建立了，只有這一項沒加上。
+        setSubmitError(
+          `求助單已建立，但「${taskInput.taskName}」跟附近的任務很像，這一項沒有加上。`,
+        );
         return;
       }
     }

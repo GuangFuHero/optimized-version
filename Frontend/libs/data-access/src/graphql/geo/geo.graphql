@@ -113,7 +113,12 @@ query GetClosureArea($uuid: UUID!) {
 
 mutation CreateStation($input: CreateStationInput!) {
   createStation(input: $input) {
-    ...StationFields
+    __typename
+    ... on StationCreated {
+      station {
+        ...StationFields
+      }
+    }
   }
 }
 
