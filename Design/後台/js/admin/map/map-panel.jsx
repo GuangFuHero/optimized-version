@@ -239,9 +239,28 @@
             {/* 危險區排最前 —— 打開頁面第一眼要先看到哪裡不能去 */}
             {window.MAP_ZONE_KINDS.map((k) => <Group key={k.value} title={k.label} list={byKind(k.value)} />)}
             {!zones.length && (
-              <div style={{ textAlign: "center", padding: "32px 8px", color: "var(--color-fg-neutral-muted)" }}>
-                <Icon n="MapPinned" s={28} />
-                <p style={{ font: "var(--font-body-300)", margin: "8px 0 0" }}>還沒有任何區域。</p>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "28px 8px 8px", color: "var(--color-fg-neutral-muted)" }}>
+                <span style={{ width: 48, height: 48, borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-subtle)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                  <Icon n="MapPinned" s={24} c="var(--color-fg-neutral-muted)" />
+                </span>
+                <p style={{ font: "var(--font-label-500)", color: "var(--color-fg-neutral-default)", margin: "12px 0 4px" }}>還沒有圈選任何區域</p>
+                <p className="wg-caption" style={{ margin: 0, lineHeight: 1.7, maxWidth: 280 }}>
+                  {canDraw ? "在地圖上圈出範圍，告訴大家哪裡危險、哪一區交給誰。" : "超級管理員或政府圈選區域後，會出現在這裡。"}
+                </p>
+                {/* 三種區域的說明：第一次用的人先知道能畫什麼（文字與表單卡片共用 MAP_ZONE_KINDS） */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", marginTop: 18, textAlign: "left" }}>
+                  {window.MAP_ZONE_KINDS.map((k) => (
+                    <div key={k.value} style={{ display: "flex", gap: 10, padding: "10px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)" }}>
+                      <span aria-hidden="true" style={{ width: 14, height: 14, marginTop: 3, flexShrink: 0, borderRadius: 3,
+                        background: k.value === "hazard" ? "repeating-linear-gradient(45deg,#E65100 0 3px,#fff 3px 6px)" : (k.value === "assign" ? window.MAP_ZONE_COLORS[0] : window.MAP_ZONE_COLORS[2]),
+                        border: k.value === "hazard" ? "1.5px solid #E65100" : "none" }}></span>
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", font: "var(--font-label-400)", color: "var(--color-fg-neutral-default)" }}>{k.label}<span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)", marginLeft: 6 }}>{k.hint}</span></span>
+                        <span className="wg-caption" style={{ display: "block", color: "var(--color-fg-neutral-muted)", marginTop: 2 }}>{k.example}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </>
@@ -258,7 +277,7 @@
         <div style={{ textAlign: "center", padding: "32px 8px", color: "var(--color-fg-neutral-muted)" }}>
           <Icon n="History" s={28} />
           <p style={{ font: "var(--font-body-300)", margin: "8px 0 4px" }}>這次還沒有任何操作。</p>
-          <p className="wg-caption" style={{ margin: 0, lineHeight: 1.6 }}>正式版寫入 <code>audit_logs</code>，這裡只留在本頁記憶體。</p>
+          <p className="wg-caption" style={{ margin: 0, lineHeight: 1.6 }}>圈選、修改、指派、解除危險區都會記在這裡。</p>
         </div>
       );
     }

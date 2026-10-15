@@ -29,9 +29,9 @@
     const lifeOverdue = tickets.filter((t) => t.priority === "life_threatening" && t.slaLeftMin < 0).length;
 
     const v = window.TK_VOLUNTEER;
-    const fillRate = Math.round((v.matchedToday / v.demand) * 100);
+    const fillRate = v.demand ? Math.round((v.matchedToday / v.demand) * 100) : 0;
     const gap = 100 - fillRate;
-    const gapWarn = gap > 50;
+    const gapWarn = v.demand > 0 && gap > 50;
 
     return (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(228px, 1fr))", gap: 16 }}>

@@ -170,12 +170,12 @@
         <Field label="地點（地址或現場名稱）" error={touched && !address.trim() ? "必填" : undefined}
           hint="要與任務單上的地址寫法一致，否則對不起來">
           <Input value={address} onChange={(e) => setAddress(e.target.value)}
-            invalid={touched && !address.trim()} placeholder="花蓮縣光復鄉中正路二段 120 號" />
+            invalid={touched && !address.trim()} placeholder="例：花蓮縣光復鄉中正路二段 120 號" />
         </Field>
 
         <Field label="現場名稱（選填）" hint="現場講的是這個，不是門牌">
           <Input value={alias} onChange={(e) => setAlias(e.target.value)}
-            placeholder="中正路社區大樓　／　0920 台鐵 408 次事故" />
+            placeholder="例：中正路社區大樓、台鐵 408 次列車" />
         </Field>
 
         {kind === "floors" && (

@@ -45,50 +45,19 @@
     role:   { label: "角色升級結果", icon: "ShieldCheck",   tone: "warning", fg: "var(--color-fg-warning)" },
   };
 
-  // ── 原型資料 ────────────────────────────────────────────────────────────
-  // ⚠️ 全部是我編的示意內容，沒有資料來源。人名沿用 TK_PERSONAS，事件內容是虛構的。
-  // `to` 決定哪個角色看得到，只是為了讓切換角色視角時內容不一樣，不是權限規則。
+  // ── 通知資料 ────────────────────────────────────────────────────────────
+  // 🧹 2026-10-16：示意通知（指向測試任務單 T-10xx／站點 RS-01xx）已全部移除，鈴鐺一開是空的。
+  // ⚠️ 後端沒有任何通知表（見 wg-bridge.js 的 KEYS.notices 說明），正式版要開新表。
+  //    一筆的形狀：{ id, type: task|review|role, to: [userId], summary, detail, count,
+  //                  ts, seen, read, target: "任務單 #T-…", ref: { kind: ticket|station|role, id } }
   const MIN = 60 * 1000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 
-  // 通知一律指向現有測試資料，不自己編號碼。
-  // 任務單取自 TK_TICKETS（tk-data.js），站點取自 station-v2 的 SD.STATIONS。
-  function ticketPool() {
-    return (window.TK_TICKETS || []).map((t) => ({ id: t.id, title: t.title }));
-  }
   function refKey(ref) {
     if (!ref) return null;
     return ref.kind === "role" ? "role" : ref.kind + ":" + ref.id;
   }
 
-  function seed() {
-    const now = Date.now();
-    return [
-      { id: "n1", type: "task",   to: ["u-huang", "u-lee", "u-lin"],
-        summary: "明德街6F 獨居長者失聯", detail: "李國豪已接案 · 已抵達現場 · 回報破門搜救需求",
-        count: 3, ts: now - 4 * MIN, seen: false, read: false,
-        target: "任務單 #T-1080", ref: { kind: "ticket", id: "T-1080" } },
-      { id: "n2", type: "review", to: ["u-huang", "u-chang", "u-lin"],
-        summary: "你回報的「光復車站充電補給站」已通過審核", detail: "站點已上架，公開地圖上可以看到了",
-        count: 1, ts: now - 38 * MIN, seen: false, read: false,
-        target: "站點 RS-0166", ref: { kind: "station", id: "RS-0166" } },
-      { id: "n3", type: "role",   to: ["u-lee"],
-        summary: "角色升級申請未通過", detail: "壯闊台灣的管理員審核未通過，可向該隊管理員了解原因",
-        count: 1, ts: now - 3 * HOUR, seen: false, read: false,
-        target: "個人設定 · 角色身份", ref: { kind: "role" } },
-      { id: "n4", type: "task",   to: ["u-huang", "u-lin", "u-wu"],
-        summary: "大同村活動中心 物資見底", detail: "已結案",
-        count: 1, ts: now - 6 * HOUR, seen: true, read: true,
-        target: "任務單 #T-1067", ref: { kind: "ticket", id: "T-1067" } },
-      { id: "n5", type: "review", to: ["u-chang", "u-lin"],
-        summary: "「大進村物資集散中心」的修改提案被退回", detail: "營運狀態與現場回報不一致，請補充佐證",
-        count: 1, ts: now - 2 * DAY, seen: true, read: false,
-        target: "站點 RS-0143", ref: { kind: "station", id: "RS-0143" } },
-      { id: "n6", type: "task",   to: ["u-wu", "u-lin"],
-        summary: "大平村12鄰 住宅清淤", detail: "已指派給慈濟基金會",
-        count: 1, ts: now - 5 * DAY, seen: true, read: true,
-        target: "任務單 #T-1071", ref: { kind: "ticket", id: "T-1071" } },
-    ];
-  }
+  function seed() { return []; }
 
   // ── IAM-UP-108：導向對應物件 ────────────────────────────────────────────
   // 兩段式：先問本頁能不能自己開（同頁直接開 Drawer，不重新載入），
@@ -360,7 +329,7 @@
     });
     const [open, setOpen] = React.useState(false);
     const [nudge, setNudge] = React.useState(false);
-    // 已關閉通知的對象（"ticket:T-1080" / "station:RS-0166"）
+    // 已關閉通知的對象（形如 "ticket:<id>" / "station:<id>"）
     // ⚠️ 正典沒有這個功能，Sucre 2026-08-08 指示要做。原型只存在記憶體，重整就沒了。
     const [muted, setMuted] = React.useState(() => readState().muted);
 
@@ -381,47 +350,10 @@
       });
     }, [pid]);
 
-    // ── IAM-UP-103 的原型示意 ────────────────────────────────────────────
-    // ⚠️ 20 秒是原型隨手挑的，不是規格值。
-    // 正典寫的是平常 60 秒、災害啟動期間 15~30 秒，但 Open decision Q2 未解：
-    // 沒有任何定義說明什麼算「災害啟動」，ERD 也沒有欄位可判斷。
-    // 這裡只是讓徽章會動，實際間隔請等 Q2 決議，不要照抄這個數字。
-    const PROTOTYPE_POLL_MS = 20000;
-    React.useEffect(() => {
-      const timer = window.setInterval(() => {
-        let changed = false;
-        setAll((prev) => {
-          const mine = prev.filter((i) => !pid || i.to.indexOf(pid) >= 0);
-
-          // 一半機率讓既有任務通知多聚合一則（IAM-UP-106）
-          const task = mine.find((i) => i.type === "task" && muted.indexOf(refKey(i.ref)) < 0);
-          if (task && Math.random() < 0.5) {
-            changed = true;
-            return prev.map((i) => i.id === task.id
-              ? { ...i, count: i.count + 1, ts: Date.now(), seen: false, detail: "現場回報有更新" }
-              : i);
-          }
-
-          // 否則長出新的一則。一律指向現有測試任務單，不自己編號碼。
-          // 已在清單裡的、以及已關閉通知的，都不再挑。
-          const used = mine.map((i) => i.ref && i.ref.kind === "ticket" ? i.ref.id : null);
-          const pool = ticketPool().filter((t) =>
-            used.indexOf(t.id) < 0 && muted.indexOf("ticket:" + t.id) < 0);
-          if (!pool.length) return prev;          // 沒得挑就什麼都不做
-
-          const pick = pool[Math.floor(Math.random() * pool.length)];
-          changed = true;
-          return [{
-            id: "n" + Date.now(), type: "task", to: pid ? [pid] : [],
-            summary: pick.title, detail: "有新的現場回報",
-            count: 1, ts: Date.now(), seen: false, read: false,
-            target: "任務單 #" + pick.id, ref: { kind: "ticket", id: pick.id },
-          }, ...prev];
-        });
-        if (changed) { setNudge(true); window.setTimeout(() => setNudge(false), 700); }
-      }, PROTOTYPE_POLL_MS);
-      return () => window.clearInterval(timer);
-    }, [pid, muted]);
+    // ── IAM-UP-103 輪詢 ─────────────────────────────────────────────────
+    // 🧹 2026-10-16：原型每 20 秒「隨機長出一則假通知」的模擬器已移除 —— 真實頁面不該自己編通知。
+    // 正式版：每 N 秒重抓通知（正典：平常 60 秒、災害啟動期間 15〜30 秒；Open decision Q2 未解），
+    // 抓回來 setAll(...)。在那之前鈴鐺只顯示 seed()（目前為空）。
 
     // IAM-UP-104：開清單 → 清徽章（seen），但 read 一律不動
     function openDrawer() {

@@ -223,8 +223,19 @@
         )
       ),
 
-      // 群聚狀態提示
-      zoom <= CLUSTER_MAX_ZOOM && React.createElement("div", { style: { position: "absolute", left: 12, top: 12, zIndex: 500, display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-default)", boxShadow: "var(--shadow-sm)", font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" } },
+      // 空白狀態：沒有任何站點時，地圖中央說明站點從哪來（不擋地圖操作）
+      stations.length === 0 && React.createElement("div", { style: { position: "absolute", inset: 0, zIndex: 450, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" } },
+        React.createElement("div", { role: "status", style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, maxWidth: 300, padding: "20px 24px", borderRadius: "var(--radius-lg)", background: "var(--color-bg-neutral-default)", boxShadow: "var(--shadow-md)", textAlign: "center" } },
+          React.createElement("span", { style: { width: 44, height: 44, borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-subtle)", display: "inline-flex", alignItems: "center", justifyContent: "center" } },
+            React.createElement(Icon, { n: "MapPinOff", s: 22, c: "var(--color-fg-neutral-muted)" })),
+          React.createElement("span", { style: { font: "var(--font-label-500)", color: "var(--color-fg-neutral-default)" } }, "地圖上還沒有站點"),
+          React.createElement("span", { className: "wg-caption", style: { color: "var(--color-fg-neutral-muted)" } },
+            caps && caps.canCreate ? "點地圖上任一處，就能在那個位置新增站點。" : "站點建立後會以圖釘出現在這裡。")
+        )
+      ),
+
+      // 群聚狀態提示（沒有站點時沒東西可合併，不顯示）
+      stations.length > 0 && zoom <= CLUSTER_MAX_ZOOM && React.createElement("div", { style: { position: "absolute", left: 12, top: 12, zIndex: 500, display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px", borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-default)", boxShadow: "var(--shadow-sm)", font: "var(--font-data-300)", color: "var(--color-fg-neutral-muted)" } },
         React.createElement(Icon, { n: "Group", s: 14, c: "currentColor" }), "密集站點已合併，放大可展開"
       )
     );

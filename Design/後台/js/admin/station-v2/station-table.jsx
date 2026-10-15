@@ -153,11 +153,12 @@
     );
   }
 
-  function EmptyState({ title, caption }) {
-    return React.createElement("div", { style: { padding: "64px 0", textAlign: "center", color: "var(--color-fg-neutral-muted)" } },
-      React.createElement(Icon, { n: "SearchX", s: 38, c: "var(--color-fg-neutral-muted)" }),
+  function EmptyState({ icon = "SearchX", title, caption, actions }) {
+    return React.createElement("div", { style: { padding: "64px 24px", textAlign: "center", color: "var(--color-fg-neutral-muted)", display: "flex", flexDirection: "column", alignItems: "center" } },
+      React.createElement(Icon, { n: icon, s: 38, c: "var(--color-fg-neutral-muted)" }),
       React.createElement("div", { className: "wg-h600", style: { marginTop: 12, color: "var(--color-fg-neutral-subtle)" } }, title),
-      React.createElement("div", { className: "wg-caption", style: { marginTop: 4 } }, caption)
+      React.createElement("div", { className: "wg-caption", style: { marginTop: 4, maxWidth: 420, lineHeight: 1.7 } }, caption),
+      actions && React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 16 } }, actions)
     );
   }
 
@@ -230,6 +231,21 @@
       options.map(([k, lbl]) => React.createElement(Chip, { key: k, active: value === k, onClick: () => onChange(k) }, lbl))
     );
 
+    // 空白狀態分兩種：
+    //   ① 這次災害還沒有任何站點 → 說明站點從哪來，有權限的人直接給「新增站點／匯入」
+    //   ② 有站點，但被篩選／搜尋濾光 → 叫人放寬條件
+    const noData = (stations || []).filter((s) => !s.deleted).length === 0;
+    const emptyState = noData
+      ? React.createElement(EmptyState, {
+          icon: "MapPinPlus", title: "還沒有任何資源站點",
+          caption: "新增站點、從 CSV 匯入，或民眾在前台回報的站點經審查通過後，會出現在這裡。",
+          actions: [
+            caps.canImport && onImport && React.createElement(Button, { key: "imp", variant: "outline", size: "sm", startIcon: React.createElement(Icon, { n: "Upload", s: 15 }), onClick: onImport }, "匯入 CSV"),
+            caps.canCreate && onNew && React.createElement(Button, { key: "new", variant: "primary", size: "sm", startIcon: React.createElement(Icon, { n: "Plus", s: 15 }), onClick: onNew }, "新增站點"),
+          ].filter(Boolean),
+        })
+      : React.createElement(EmptyState, { title: "沒有符合條件的站點", caption: "調整篩選或搜尋關鍵字再試。" });
+
     const fullTable = React.createElement(Card, { padding: "0" },
       React.createElement("div", { style: { overflowX: "auto" } },
         React.createElement("div", { style: { minWidth: 1000 } },
@@ -240,7 +256,7 @@
             )),
             React.createElement("span", null)
           ),
-          rows.length === 0 && React.createElement(EmptyState, { title: "此條件下沒有站點", caption: "調整篩選、搜尋或切換角色視角再試。" }),
+          rows.length === 0 && emptyState,
           nested.map((r) => React.createElement(StationRow, {
             key: r.s.id, s: r.s, cols, gridCols, pad, onOpen: onOpenStation,
             ctx: { caps, onQuickStatus, onAssign, parentName: parentNameOf(r.s), depth: r.depth, childCount: r.childCount },
@@ -257,7 +273,7 @@
           ["站點", "營運狀態"].map((h) => React.createElement("span", { key: h, className: "wg-caption", style: { fontWeight: 700, color: "var(--color-fg-neutral-muted)" } }, h))
         ),
         React.createElement("div", { style: { flex: 1, minHeight: 0, overflowY: "auto" } },
-          rows.length === 0 && React.createElement(EmptyState, { title: "此條件下沒有站點", caption: "調整篩選或搜尋再試。" }),
+          rows.length === 0 && emptyState,
           nested.map((r) => React.createElement(StationCard, { key: r.s.id, s: r.s, selected: sel === r.s.id, onSelect: setSel, onOpen: onOpenStation, parentName: parentNameOf(r.s), depth: r.depth, childCount: r.childCount }))
         )
       ),

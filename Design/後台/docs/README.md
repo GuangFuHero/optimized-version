@@ -1,0 +1,142 @@
+# 後台三頁：資源站點管理 · 任務管理 · 互助地圖
+
+> **給新來的工程師與你的 AI：先讀這一頁，再讀你要做的那一頁。**
+> 這三個 HTML 是設計端交付的**可操作原型**，用來說明「畫面長怎樣、按下去會發生什麼」。
+> 它不是要搬進 Next.js 的程式碼 —— 正式實作在 `Frontend/`（見下方「對應的正式程式碼」）。
+
+最後更新：2026-10-16 · 分支 `sucrelindesign`
+
+---
+
+## 一分鐘看懂
+
+| 頁面 | 檔案 | 一句話 | 文件 |
+|---|---|---|---|
+| 資源站點管理 | `資源站點管理 Resource Station v2.html` | 維護避難所、物資站、醫療站等**固定地點**的資料，審查民眾送來的修改建議 | [資源站點管理.md](資源站點管理.md) |
+| 任務管理 | `任務管理 Ticket Management.html` | 處理「某個地點需要什麼」的**任務單**：建單、指派單位、看承接進度與歷史 | [任務管理.md](任務管理.md) |
+| 互助地圖 | `互助地圖 Mutual Aid Map.html` | 政府在地圖上**圈區域**（危險區／責任區／標示區），責任區內的任務單一次指派給一個單位 | [互助地圖.md](互助地圖.md) |
+| （三頁共用） | | **每個角色看得到什麼、怎麼預覽某個角色** | [角色與權限.md](角色與權限.md) |
+
+三頁的關係：
+
+```
+                ┌─────────────── 前台（民眾、志工）───────────────┐
+                │  報案建任務單      承接需求      建議修改站點     │
+                └──────┬───────────────┬───────────────┬──────────┘
+                       ▼               ▼               ▼
+  互助地圖 ──圈責任區──▶ 任務管理 ◀──同一份任務單──    資源站點管理
+     │                  （指派單位）                    （審查佇列）
+     └──勾「前台可見」的區域 ──▶ 前台地圖的「標示區域」圖層
+```
+
+---
+
+## 打開來看
+
+這三頁是純靜態 HTML（React 18 UMD ＋ Babel standalone，瀏覽器裡即時編譯 JSX）。建議用本機 HTTP 伺服器開 —— 直接雙擊 `file://` 在部分瀏覽器會因為讀不到外部 `.jsx` 而白畫面：
+
+```bash
+cd Design/後台
+npx serve .            # 或 python3 -m http.server 8000
+```
+
+外部依賴從 unpkg 載入（React、Babel、Leaflet、Lucide），地圖圖磚是 OpenStreetMap，需要網路。
+
+---
+
+## 2026-10-16 這一版改了什麼（重要）
+
+1. **測試資料全部拿掉了。** 三頁一開都是空的 —— 這就是正式上線第一天的樣子。
+   被移除的：7 張測試任務單與其歷史、13 個測試站點、4 筆修改建議、互助地圖約 120 張合成任務單、14 個示範站點、4 個示範區域、示意村里邊界、現場分區的示範大樓、鈴鐺的示意通知與「每 20 秒長一則假通知」的模擬器。
+2. **每一個空白畫面都設計過了。** 分兩種：「完全沒資料」（說明資料從哪來、給建立按鈕）與「篩選後沒結果」（叫人放寬條件）。實作時兩種都要做，**不要只做一種**。各頁的空白狀態清單在各自的文件裡。
+3. **頂端黑底的「原型 · 角色視角」切換列拿掉了。** 這是給使用者用的頁面，角色來自登入，不是自己切。
+   🔎 **工程師要看某個角色的畫面：網址加 `?as=gov`**（`super`／`gov`／`ngo-admin`／`ngo-member`／`auditor`），使用者看不到這個機制。各角色看得到什麼，見 [角色與權限.md](角色與權限.md)。
+   右上角頭像選單裡的「切換身份」**是正式功能**（一人多隊，見 IAM-FEAT-004），保留。
+
+要讓畫面有東西：在頁面上「新增任務／新增站點／圈選新區域」，或到 `../前台/` 用民眾身分報案 —— 前台送出的單會透過 `localStorage` 出現在後台（見下方 bridge）。
+
+---
+
+## 原型的資料怎麼流（讀程式前先知道）
+
+| 原型做法 | 正式版要換成 |
+|---|---|
+| `window.TK_TICKETS`、`window.StationData.STATIONS` 等全域陣列，頁面載入時讀一次 | GraphQL 查詢（`tickets`、`stations`…），見各頁文件的欄位對照 |
+| React state 改了就算存了，**重整就沒了** | mutation（`createTicket`、`updateStation`…） |
+| `js/shared/wg-bridge.js`：前台與後台用 `localStorage` 互傳（民眾報案、承接、站點建議、前台可見區域、現場分區） | 後端資料表；**其中好幾張後端還沒有**，見各頁「待後端」 |
+| `wg-event.js` 的 `WG_SIGNED_IN_USER_ID` 決定「我是誰」（網址 `?as=` 可暫時換人） | GraphQL `me`（使用者＋各隊 membership） |
+| `TK_PERSONAS`／`MM_TEAMS`／`TK_TEAM_MEMBERS` 是人與隊的名冊 | `users`、`teams`、`team_members`。這些屬於「成員管理」，**這次沒清**，因為角色與權限要靠它們運作 |
+
+### 權威來源
+
+| 要查什麼 | 以誰為準 |
+|---|---|
+| 產品行為（按下去會怎樣） | 這三頁原型 ＋ 本資料夾文件 ＋ `../更新說明.md` |
+| 資料庫欄位 | `main` 分支 `Backend/Spec/Docs/er-diagram.md` |
+| 前端實際拿得到什麼 | `main` 分支 `Frontend/libs/data-access/src/graphql/schema.graphql` |
+| 原型裡的欄位名 | **不是規格。** 原型有些欄位後端沒有，文件裡都標了 ⚠️ |
+
+🔴 一律看 `main`。`docs/prd` 分支的 ERD 停在 2026-06-27，是舊的。
+
+### 文件裡的記號
+
+- 🔒 已經團隊裁示，照做
+- 🚨 設計端先定的，**尚未經團隊裁示**，實作前確認
+- ⚠️ 後端缺欄位／缺 API，前端先做不了或只能做一半
+
+---
+
+## 對應的正式程式碼（`main` 分支）
+
+| 原型頁 | Next.js 路由 | 模組 |
+|---|---|---|
+| 資源站點管理 | `Frontend/apps/demo/src/app/admin/stations/` | `Frontend/libs/modules/src/station/` |
+| 任務管理 | `Frontend/apps/demo/src/app/admin/tickets/` | `Frontend/libs/modules/src/ticket/` |
+| 互助地圖 | `Frontend/apps/demo/src/app/admin/map/` | `Frontend/libs/modules/src/map/` |
+| 共用外殼（側欄、頂欄、通知、身份切換） | `Frontend/apps/demo/src/app/admin/layout.tsx` | `Frontend/libs/modules/src/shell/`、`admin/` |
+
+設計系統 token → MUI theme：`Frontend/libs/ui/src/theme/`。原型的 `_ds/` 是同一套 token 的 CSS 版。
+
+---
+
+## 檔案地圖（三頁共用的部分）
+
+```
+Design/後台/
+├── 資源站點管理 Resource Station v2.html   ← 每頁一個 HTML，<script> 依序載入下面的檔
+├── 任務管理 Ticket Management.html
+├── 互助地圖 Mutual Aid Map.html
+├── docs/                                  ← 你在這裡
+├── 更新說明.md                             ← 每次交付的變更紀錄
+├── _ds/                                   ← 設計系統（tokens、元件 bundle、字型）
+└── js/
+    ├── shared/
+    │   ├── wg-bridge.js      前台⇄後台的 localStorage 橋（與 ../前台/js/shared/ 那份必須一模一樣）
+    │   ├── wg-help.jsx       每頁標題旁「？」的說明內容
+    │   ├── wg-photos.jsx     圖片連結（只存網址）
+    │   └── wg-hazard.js      危險區的橘白斜紋
+    └── admin/
+        ├── shell/            外殼：wg-shell（側欄／頂欄）、nav（誰看得到哪些導覽）、
+        │                     wg-event（事件設定、目前登入者、身份切換）、wg-notify（鈴鐺）、wg-terms（角色名稱）
+        ├── station-v2/       資源站點管理
+        ├── ticket/           任務管理
+        └── map/              互助地圖
+```
+
+⚠️ 不要搬動 `*.html`、`js/`、`_ds/`、`assets/` —— 它們用相對路徑互相引用。
+
+---
+
+## 角色（三頁共用）
+
+平台角色由「所屬團隊」推導（2026-08-14 裁示）：加入政府隊＝政府，加入 NGO 隊＝非政府組織。超級管理員與資料檢核員不屬於任何隊。
+
+| 角色 | 原型 persona id | 三頁裡大致能做的事 |
+|---|---|---|
+| 超級管理員 | `u-lin` | 全部 |
+| 政府 | `u-wu` | 圈區域與指派、指派任務單、匯入站點、審查（只能核准不能退回） |
+| 非政府組織 · 團隊管理員 | `u-huang` | 建單、把需求指派給隊員、維護**被指派給自己隊**的站點 |
+| 非政府組織 · 成員 | `u-lee` | 建單、維護被指派給自己隊的站點 |
+| 資料檢核員 | `u-chang` | 審查站點建議、合併重複；其餘唯讀 |
+
+導覽項依身份**直接不 render**，不是灰掉（`js/admin/shell/nav.js`）。逐頁、逐按鈕的對照表見 **[角色與權限.md](角色與權限.md)**。

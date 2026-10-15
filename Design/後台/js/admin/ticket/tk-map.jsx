@@ -3,28 +3,21 @@
 (function () {
   const Icon = window.WGIcon;
 
-  // 示範座標 — 正式版由後端 geocoding 提供
-  const COORDS = {
-    "T-1042": { c: [23.6760, 121.4205], anchor: true },
-    "T-1067": { c: [23.6748, 121.4218], anchor: true },
-    "T-1071": { c: [23.6640, 121.4290] },
-    "T-1080": { c: [23.7455, 121.4520], anchor: true },
-    "T-1085": { c: [23.7448, 121.4535], anchor: true },
-    "T-1078": { c: [23.6699, 121.4238] },
-    "T-1090": { c: [23.6672, 121.4262] },
-  };
+  // 座標一律由 tkCoord(t) 取（tk-data.js）—— 不再有寫死的示範座標表。
+  // 方形「建築」圖釘＝這張單掛在某個現場分區（buildingId）；其餘是水滴圖釘。
   const PRI_HEX = { critical: "#D32F2F", high: "#F57C00", medium: "#2592B9", low: "#2592B9" };
+  // 沒有任何標點時的預設視野（花蓮縣光復鄉）。正式版改讀 project_settings 的事件中心點。
   const CENTER = [23.6725, 121.4235];
-  window.TK_COORDS = COORDS;
+  const coordOf = (t) => window.tkCoord(t);
+  const isAnchor = (t) => !!t.buildingId;
 
   // 標點：填色 = 優先級；選中以外環 + 放大 + 層級表達（F5，不動色相）
   function pinHtml(t, selected) {
     const col = PRI_HEX[t.priority] || "#2592B9";
-    const c = COORDS[t.id];
     const ring = selected ? "outline:3px solid #fff;outline-offset:2px;border:2px solid #0F172A;" : "";
     const shadow = selected ? "0 10px 24px rgba(227,121,30,.34)" : "0 3px 8px rgba(227,121,30,.24)";
     const scale = selected ? "scale(1.18)" : "scale(1)";
-    const inner = c.anchor
+    const inner = isAnchor(t)
       ? `<span style="width:26px;height:26px;border-radius:6px;background:${col};display:flex;align-items:center;justify-content:center;box-shadow:${shadow};${ring}">
            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>
          </span>`
@@ -103,14 +96,15 @@
       if (!L || !map) return;
       const keep = {};
       rows.forEach((t) => {
-        if (!COORDS[t.id]) return;
+        const c = coordOf(t);
+        if (!c) return;
         keep[t.id] = true;
         const selected = selRef.current === t.id;
         let m = markersRef.current[t.id];
         const icon = L.divIcon({ className: "", html: pinHtml(t, selected), iconSize: [42, 42], iconAnchor: [21, 36] });
         if (m) { m.setIcon(icon); m.setZIndexOffset(selected ? 1000 : 0); }
         else {
-          m = L.marker(COORDS[t.id].c, { icon, zIndexOffset: selected ? 1000 : 0, riseOnHover: true }).addTo(map);
+          m = L.marker(c, { icon, zIndexOffset: selected ? 1000 : 0, riseOnHover: true }).addTo(map);
           m.bindTooltip(tipHtml(t), { direction: "top", offset: [0, -18], opacity: 1, className: "tk-leaflet-tip" });
           m.on("click", () => { onSelect(t.id); setCard(t.id); });
           markersRef.current[t.id] = m;
@@ -121,7 +115,7 @@
       });
       // 預設視野框住當前篩選結果（避免固定 center/zoom 將標點置於可視區外）
       if (!selRef.current) {
-        const pts = rows.filter((t) => COORDS[t.id]).map((t) => COORDS[t.id].c);
+        const pts = rows.map(coordOf).filter(Boolean);
         if (pts.length === 1) map.setView(pts[0], 15);
         else if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [48, 48] });
       }
@@ -130,9 +124,18 @@
     // 選取 → 飛到對應標點
     React.useEffect(() => {
       const map = mapRef.current;
-      if (!map || !selectedId || !COORDS[selectedId]) return;
-      map.flyTo(COORDS[selectedId].c, Math.max(map.getZoom(), 15), { duration: 0.6 });
+      const t = selectedId && rows.find((x) => x.id === selectedId);
+      const c = t && coordOf(t);
+      if (!map || !c) return;
+      map.flyTo(c, Math.max(map.getZoom(), 15), { duration: 0.6 });
     }, [selectedId]);
+
+    // 空白狀態：完全沒單／有單但都沒座標，兩種講法不同（後者要讓人知道去補地標）
+    const pinned = rows.filter((t) => coordOf(t)).length;
+    const empty = pinned > 0 ? null
+      : rows.length === 0
+        ? { icon: "MapPinOff", title: "地圖上還沒有任務單", caption: "任務單建立並標好地標後，會以圖釘出現在這裡。" }
+        : { icon: "MapPinned", title: `這 ${rows.length} 張任務單都還沒有地標`, caption: "開啟任務單、在「地標」欄位點地圖選點後，就會出現在地圖上。" };
 
     React.useEffect(() => { const m = mapRef.current; if (m) setTimeout(() => m.invalidateSize(), 60); }, [height]);
 
@@ -148,6 +151,18 @@
     return (
       <div style={{ position: "relative", height, borderRadius: "var(--radius-lg)", overflow: "hidden", border: "1px solid var(--color-border-default)" }}>
         <div ref={elRef} style={{ position: "absolute", inset: 0, background: "var(--color-bg-neutral-sunken)" }}></div>
+
+        {empty && (
+          <div style={{ position: "absolute", inset: 0, zIndex: 450, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+            <div role="status" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, maxWidth: 300, padding: "20px 24px", borderRadius: "var(--radius-lg)", background: "var(--color-bg-neutral-default)", boxShadow: "var(--shadow-md)", textAlign: "center" }}>
+              <span style={{ width: 44, height: 44, borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-subtle)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                <Icon n={empty.icon} s={22} c="var(--color-fg-neutral-muted)" />
+              </span>
+              <span style={{ font: "var(--font-label-500)", color: "var(--color-fg-neutral-default)" }}>{empty.title}</span>
+              <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>{empty.caption}</span>
+            </div>
+          </div>
+        )}
 
         {shown && <DetailCard t={shown} cardRef={cardRef} onOpen={onOpen} onClose={() => setCard(null)} />}
 

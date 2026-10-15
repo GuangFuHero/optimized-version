@@ -1,4 +1,9 @@
-// stationData.jsx — mock data model for 資源站管理 (R1 station, R2 proposals, R4 version history)
+// station-data.jsx — 資源站點管理的資料層（站點 / 修改建議 / 版本歷史）
+//
+// 🧹 2026-10-16：**測試站點與測試修改建議已全部移除**，頁面一開是空的。
+//    資料入口：後台「新增站點」、「匯入」（CSV）。（前台「建議修改」尚未接進來，見 PROPOSALS 註解）
+//    這支檔案現在只放「規則與選項」（狀態、類型、新鮮度門檻…），不放任何紀錄。
+//    一筆站點／修改建議的形狀見 Design/後台/docs/資源站點管理.md。
 (function () {
 
   // —— 營運狀態 (operational_status) ——
@@ -66,6 +71,7 @@
 
   // —— 可指派的 Team ——
   // ⚠️ 站點指派給 Team 沒有正典依據，見 PENDING.rbacTeam
+  // 這份名單是佔位（本頁沒有載入成員管理的 MM_TEAMS）。正式版讀 teams 表、只列啟用中的隊。
   const TEAMS = ["壯闊台灣", "慈濟基金會", "鳳林救難協會", "花蓮縣消防局"];
 
   // —— 行政區 (admin_area) ——
@@ -74,232 +80,17 @@
   // supply level chips
   const LEVEL = { full: { label: "充足", tone: "success" }, low: { label: "偏低", tone: "warning" }, out: { label: "缺貨", tone: "danger" } };
 
-  // —— 站點清單 (single source of truth, shared w/ 06 圖層) ——
-  // [x%, y%] are stylised map coords; lat/lng shown as data.
-  const STATIONS = [
-    // ── 站點群（大場地；站點一律是點，不畫 Polygon。群內站點以 UI 依附呈現）──
-    // 2026-08-21 決議：站點群為純容器，不帶物資盤點與營運狀態，但可被指派 Team。
-    // ⚠️ 此結構為本地決策，RS-FEAT-001 未提及。見 PENDING.parent
-    {
-      id: "RS-0100",
-      updatedMin: 35,
-      assignedTeam: "壯闊台灣", name: "花蓮觀光糖廠", type: "group", area: "光復鄉",
-      parentId: null, isParent: true,
-      photos: ["sugar-1.jpg", "sugar-2.jpg", "sugar-3.jpg"],
-      address: "花蓮縣光復鄉大進街 19 號", lat: 23.6722, lng: 121.4203, x: 47, y: 33,
-      // 站點群為純容器：無營運狀態、無物資盤點（2026-08-21 決議）
-      status: null, supplies: [],
-      contact: "現場指揮官", phone: "03-870-4801", hours: "24 小時開放",
-      isOfficial: true, verified: true, verifiedBy: "光復鄉公所", established: "2024-09-24",
-      createdBy: "光復鄉公所", updated: "2026-06-14 08:40", version: 9, deleted: false,
-      history: [{ v: 9, who: "系統匯入", when: "2026-06-14 08:40", note: "建立站點群", diff: [{ field: "—", old: "—", new: "初始建立" }] }],
-    },
-    {
-      id: "RS-0101",
-      updatedMin: 12,
-      assignedTeam: "壯闊台灣", name: "大進國小", type: "group", area: "光復鄉",
-      parentId: null, isParent: true,
-      photos: ["dajin-1.jpg"],
-      address: "花蓮縣光復鄉大進村大進街 100 號", lat: 23.6774, lng: 121.4280, x: 58, y: 25,
-      // 站點群為純容器：無營運狀態、無物資盤點（2026-08-21 決議）
-      status: null, supplies: [],
-      contact: "校方聯絡人", phone: "03-870-1601", hours: "24 小時開放",
-      isOfficial: true, verified: true, verifiedBy: "光復鄉公所", established: "2024-09-24",
-      createdBy: "光復鄉公所", updated: "2026-06-14 07:20", version: 6, deleted: false,
-      history: [{ v: 6, who: "系統匯入", when: "2026-06-14 07:20", note: "建立站點群", diff: [{ field: "—", old: "—", new: "初始建立" }] }],
-    },
-    // ── 糖廠這個站點群底下的站點 ──────────────────────────────────────
-    {
-      id: "RS-0102",
-      updatedMin: 190,
-      assignedTeam: "壯闊台灣", name: "糖廠沐浴站", type: "other", area: "光復鄉",
-      parentId: "RS-0100", photos: ["bath-1.jpg"],
-      address: "花蓮縣光復鄉大進街 19 號（糖廠停車場東側）", lat: 23.6731, lng: 121.4219, x: 49, y: 31,
-      status: "open", supplies: [{ item: "熱水", level: "full" }, { item: "毛巾", level: "low" }],
-      contact: "志工調度台", phone: "03-870-4812", hours: "06:00 – 22:00",
-      isOfficial: true, verified: true, verifiedBy: "光復鄉公所", established: "2024-09-26",
-      createdBy: "光復鄉公所", updated: "2026-06-14 08:05", version: 3, deleted: false,
-      history: [{ v: 3, who: "黃曉芳（Team Admin）", when: "2026-06-14 08:05", note: "毛巾存量偏低", diff: [{ field: "supplies.毛巾", old: "充足", new: "偏低" }] }],
-    },
-    {
-      id: "RS-0103",
-      updatedMin: 6,
-      assignedTeam: "壯闊台灣", name: "糖廠志工報到處", type: "other", area: "光復鄉",
-      parentId: "RS-0100", photos: [],
-      address: "花蓮縣光復鄉大進街 19 號（糖廠正門）", lat: 23.6715, lng: 121.4188, x: 45, y: 35,
-      status: "open", supplies: [{ item: "雨鞋", level: "low" }, { item: "鏟子/圓鍬", level: "full" }],
-      contact: "報到組", phone: "03-870-4820", hours: "07:00 – 18:00",
-      isOfficial: true, verified: true, verifiedBy: "光復鄉公所", established: "2024-09-25",
-      createdBy: "光復鄉公所", updated: "2026-06-14 09:12", version: 4, deleted: false,
-      history: [{ v: 4, who: "李國豪（Team Member）", when: "2026-06-14 09:12", note: "雨鞋存量偏低", diff: [{ field: "supplies.雨鞋", old: "充足", new: "偏低" }] }],
-    },
-    {
-      id: "RS-0142",
-      updatedMin: 78,
-      assignedTeam: "壯闊台灣",
-      parentId: null, photos: ["shelter-1.jpg", "shelter-2.jpg"], name: "光復國中收容所", type: "shelter", area: "光復鄉",
-      address: "花蓮縣光復鄉中正路一段 16 號", lat: 23.6694, lng: 121.4218, x: 46, y: 40,
-      status: "open", supplies: [{ item: "飲用水", level: "full" }, { item: "睡袋/毛毯", level: "low" }, { item: "即食餐", level: "full" }],
-      contact: "陳怡君", phone: "03-870-1234", hours: "24 小時開放",
-      isOfficial: true, verified: true, verifiedBy: "系統匯入", established: "2024-09-25",
-      createdBy: "中央災害應變中心", updated: "2026-06-14 08:12", version: 7, deleted: false,
-      history: [
-        { v: 7, who: "張育成（Data Auditor）", when: "2026-06-14 08:12", note: "更新目前收容人數", diff: [{ field: "current_load", old: "176", new: "198" }] },
-        { v: 6, who: "系統 · 快速通道", when: "2026-06-13 21:40", note: "營運狀態調整", diff: [{ field: "operational_status", old: "已關閉", new: "開設中" }] },
-        { v: 5, who: "林承翰（Super Admin）", when: "2026-06-12 09:05", note: "新增物資盤點欄位", diff: [{ field: "supplies", old: "—", new: "飲用水、睡袋/毛毯、即食餐" }] },
-      ],
-    },
-    {
-      id: "RS-0143",
-      updatedMin: 22,
-      assignedTeam: "壯闊台灣",
-      parentId: "RS-0101", photos: ["supply-1.jpg"], name: "大進村物資集散中心", type: "supply", area: "光復鄉",
-      address: "花蓮縣光復鄉大進村大全街 88 號", lat: 23.6731, lng: 121.4290, x: 58, y: 27,
-      status: "open", supplies: [{ item: "鏟子/圓鍬", level: "full" }, { item: "除濕機", level: "out" }, { item: "雨鞋", level: "low" }],
-      contact: "黃志明", phone: "0912-345-678", hours: "08:00 – 20:00",
-      isOfficial: true, verified: true, verifiedBy: "光復鄉公所", established: "2024-09-24",
-      createdBy: "光復鄉公所", updated: "2026-06-14 07:50", version: 11, deleted: false,
-      history: [
-        { v: 11, who: "張育成（Data Auditor）", when: "2026-06-14 07:50", note: "除濕機補貨需求", diff: [{ field: "supplies.除濕機", old: "偏低", new: "缺貨" }] },
-        { v: 10, who: "黃曉芳（Team Admin）", when: "2026-06-13 15:20", note: "更新聯絡電話", diff: [{ field: "contact_phone", old: "03-870-2200", new: "0912-345-678" }] },
-      ],
-    },
-    {
-      id: "RS-0151",
-      updatedMin: 620,
-      assignedTeam: "慈濟基金會",
-      parentId: null, photos: [], name: "馬太鞍臨時醫療站", type: "medical", area: "光復鄉",
-      address: "花蓮縣光復鄉馬太鞍部落活動中心", lat: 23.6602, lng: 121.4156, x: 33, y: 52,
-      status: "open", supplies: [{ item: "外傷敷料", level: "full" }, { item: "破傷風疫苗", level: "low" }],
-      contact: "張醫師", phone: "03-870-5588", hours: "24 小時開放",
-      isOfficial: true, verified: true, verifiedBy: "花蓮慈濟醫院", established: "2024-09-26",
-      createdBy: "花蓮慈濟醫院", updated: "2026-06-14 06:30", version: 4, deleted: false,
-      history: [
-        { v: 4, who: "張育成（Data Auditor）", when: "2026-06-14 06:30", note: "疫苗存量偏低", diff: [{ field: "supplies.破傷風疫苗", old: "充足", new: "偏低" }] },
-      ],
-    },
-    {
-      id: "RS-0160",
-      updatedMin: 2880,
-      assignedTeam: null,
-      parentId: null, photos: ["water-1.jpg"], name: "大富社區供水點", type: "water", area: "光復鄉",
-      address: "花蓮縣光復鄉大富村明德路 12 號", lat: 23.6210, lng: 121.4302, x: 70, y: 64,
-      status: "open", supplies: [{ item: "桶裝水", level: "low" }],
-      contact: "社區理事長", phone: "03-870-7788", hours: "06:00 – 18:00",
-      isOfficial: true, verified: true, verifiedBy: "台灣自來水公司", established: "2024-10-02",
-      createdBy: "大富社區發展協會", updated: "2026-06-13 18:00", version: 3, deleted: false,
-      history: [
-        { v: 3, who: "系統 · 快速通道", when: "2026-06-13 18:00", note: "管線維修，先關閉再恢復", diff: [{ field: "operational_status", old: "開設中", new: "已關閉" }] },
-      ],
-    },
-    {
-      id: "RS-0166",
-      updatedMin: 45,
-      assignedTeam: null,
-      parentId: null, photos: [], name: "光復車站充電補給站", type: "charging", area: "光復鄉",
-      address: "花蓮縣光復鄉中正路二段 1 號", lat: 23.6685, lng: 121.4240, x: 50, y: 46,
-      status: "open", supplies: [{ item: "行動電源", level: "out" }],
-      contact: "台鐵服務台", phone: "03-870-2001", hours: "24 小時開放",
-      isOfficial: false, verified: true, verifiedBy: "李** (志工)", established: "2024-09-28",
-      createdBy: "黃曉芳（Team Admin）", updated: "2026-06-14 09:01", version: 6, deleted: false,
-      history: [
-        { v: 6, who: "系統 · 快速通道", when: "2026-06-14 09:01", note: "插座已滿載，暫時關閉", diff: [{ field: "operational_status", old: "開設中", new: "已關閉" }] },
-      ],
-    },
-    {
-      id: "RS-0170",
-      updatedMin: 1520,
-      assignedTeam: "鳳林救難協會",
-      parentId: null, photos: [], name: "鳳林國小收容所", type: "shelter", area: "鳳林鎮",
-      address: "花蓮縣鳳林鎮中華路 132 號", lat: 23.7460, lng: 121.4510, x: 64, y: 16,
-      status: "open", supplies: [{ item: "飲用水", level: "full" }, { item: "盥洗包", level: "full" }],
-      contact: "鳳林鎮公所", phone: "03-876-1100", hours: "24 小時開放",
-      isOfficial: true, verified: true, verifiedBy: "鳳林鎮公所", established: "2024-09-25",
-      createdBy: "鳳林鎮公所", updated: "2026-06-13 22:10", version: 2, deleted: false,
-      history: [
-        { v: 2, who: "系統匯入", when: "2026-06-13 22:10", note: "建立站點", diff: [{ field: "—", old: "—", new: "初始建立" }] },
-      ],
-    },
-    {
-      id: "RS-0181",
-      updatedMin: 7300,
-      assignedTeam: null,
-      parentId: null, photos: [], name: "瑞穗溫泉避難據點", type: "shelter", area: "瑞穗鄉",
-      address: "花蓮縣瑞穗鄉溫泉路 25 號", lat: 23.4970, lng: 121.3760, x: 28, y: 82,
-      status: "open", supplies: [{ item: "毛毯", level: "full" }],
-      contact: "瑞穗鄉公所", phone: "03-887-2345", hours: "24 小時開放",
-      isOfficial: true, verified: true, verifiedBy: "瑞穗鄉公所", established: "2024-09-27",
-      createdBy: "瑞穗鄉公所", updated: "2026-06-12 11:00", version: 1, deleted: false,
-      history: [{ v: 1, who: "系統匯入", when: "2026-06-12 11:00", note: "建立站點", diff: [{ field: "—", old: "—", new: "初始建立" }] }],
-    },
-    {
-      id: "RS-0188",
-      updatedMin: 4320,
-      assignedTeam: "花蓮縣消防局",
-      parentId: null, photos: [], name: "萬榮林道前進指揮所", type: "other", area: "萬榮鄉",
-      address: "花蓮縣萬榮鄉萬榮村明利道路", lat: 23.7050, lng: 121.4080, x: 18, y: 30,
-      status: "open", supplies: [],
-      contact: "搜救協調官", phone: "03-875-0119", hours: "24 小時開放",
-      isOfficial: true, verified: true, verifiedBy: "消防局", established: "2024-09-26",
-      createdBy: "花蓮縣消防局", updated: "2026-06-14 05:15", version: 2, deleted: false,
-      history: [{ v: 2, who: "系統匯入", when: "2026-06-14 05:15", note: "建立站點", diff: [{ field: "—", old: "—", new: "初始建立" }] }],
-    },
-    {
-      id: "RS-0190",
-      updatedMin: 11200,
-      assignedTeam: null,
-      parentId: null, photos: [], name: "大同村臨時供餐站", type: "supply", area: "光復鄉",
-      address: "花蓮縣光復鄉大同村中山路三段 5 號", lat: 23.6760, lng: 121.4180, x: 42, y: 22,
-      status: "closed", supplies: [],
-      contact: "—", phone: "—", hours: "—",
-      isOfficial: false, verified: false, verifiedBy: null, established: "2024-09-30",
-      createdBy: "黃曉芳（Team Admin）", updated: "2026-06-10 14:00", version: 5, deleted: true,
-      history: [
-        { v: 5, who: "林承翰（Super Admin）", when: "2026-06-10 14:00", note: "任務結束，下架站點（軟刪除）", diff: [{ field: "operational_status", old: "open", new: "closed" }] },
-        { v: 4, who: "黃曉芳（Team Admin）", when: "2026-06-05 09:30", note: "更新供餐時段", diff: [{ field: "opening_hours", old: "11:00–13:00", new: "11:00–13:00, 17:00–19:00" }] },
-      ],
-    },
-  ];
+  // —— 站點清單 ——
+  // 🧹 空陣列。正式版換成 GraphQL `stations` 查詢結果（StationFields）。
+  // 站點群（type: "group"）與子站（parentId）是本地決策，見 PENDING.parent。
+  const STATIONS = [];
 
   // —— 修改建議 (StationEditSuggestion) ——
   // currentVersion = 站點現行版本；base_version < currentVersion 且同欄位被改 → 衝突
-  const PROPOSALS = [
-    {
-      id: "SUG-2207", stationId: "RS-0142", stationName: "光復國中收容所",
-      submittedBy: "前台用戶 · 王**", submittedAt: "2026-06-14 09:22", source: "crowdsourced",
-      baseVersion: 7, status: "pending",
-      changes: [
-        { field: "opening_hours", label: "開放時間", old: "24 小時開放", new: "夜間 22:00 後僅留守一名管理員" },
-        { field: "contact_phone", label: "聯絡電話", old: "03-870-1234", new: "03-870-1299" },
-      ],
-    },
-    {
-      id: "SUG-2211", stationId: "RS-0143", stationName: "大進村物資集散中心",
-      submittedBy: "前台用戶 · 李**", submittedAt: "2026-06-14 08:05", source: "crowdsourced",
-      baseVersion: 9, status: "pending", // 站點現為 v11 → 衝突
-      changes: [
-        { field: "contact_phone", label: "聯絡電話", old: "03-870-2200", new: "03-870-2255", conflict: true },
-        { field: "address", label: "地址", old: "花蓮縣光復鄉大進村大全街 88 號", new: "花蓮縣光復鄉大進村大全街 86 號" },
-      ],
-    },
-    {
-      id: "SUG-2215", stationId: "RS-0166", stationName: "光復車站充電補給站",
-      submittedBy: "前台用戶 · 陳**", submittedAt: "2026-06-14 07:40", source: "crowdsourced",
-      baseVersion: 6, status: "pending",
-      changes: [
-        { field: "name", label: "站點名稱", old: "光復車站充電補給站", new: "光復車站充電 & WiFi 補給站" },
-        { field: "supplies", label: "物資項目", old: "行動電源", new: "行動電源、延長線、WiFi 分享器" },
-      ],
-    },
-    {
-      id: "SUG-2219", stationId: "RS-0160", stationName: "大富社區供水點",
-      submittedBy: "前台用戶 · 周**", submittedAt: "2026-06-14 06:15", source: "crowdsourced",
-      baseVersion: 3, status: "pending", statusOnly: true,
-      changes: [
-        { field: "operational_status", label: "營運狀態", old: "已關閉", new: "開設中（回報已恢復供水）" },
-      ],
-    },
-  ];
+  // 🧹 空陣列。
+  // ⚠️ 原型尚未接上前台：前台「建議修改」寫進 wg-bridge.js 的 stationReports，但本頁沒有讀它，
+  //    所以審查佇列在原型裡永遠是空的。正式版讀後端的修改建議表（目前不存在，見文件「待後端」）。
+  const PROPOSALS = [];
 
   // ── 可選欄位定義 ────────────────────────────────────────────────────────
   // required 的欄位不可隱藏（沒有站名就無法辨識是哪一站）

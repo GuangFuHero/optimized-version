@@ -221,7 +221,7 @@
               window.tkPushHistory(id, { at: stamp(), ...who, action: "移除圖片連結（圖片仍在原網站上）", from: u, to: "（已移除）" });
             });
           })();
-          patch(id, (x) => ({ ...x, title: vals.title, street: vals.address, county: "", city: "", no: "", floor: vals.floor || null, contact_name: vals.contact_name, contact_phone: vals.contact_phone || null, desc: vals.desc, priority: vals.priority, photos: vals.photos || x.photos || [], tasks: mkTasks(tasks), updatedMin: 0 }));
+          patch(id, (x) => ({ ...x, title: vals.title, street: vals.address, county: "", city: "", no: "", floor: vals.floor || null, contact_name: vals.contact_name, contact_phone: vals.contact_phone || null, desc: vals.desc, priority: vals.priority, landmark: vals.landmark || x.landmark || null, photos: vals.photos || x.photos || [], tasks: mkTasks(tasks), updatedMin: 0 }));
           toast(`已儲存 ${id}`);
         } else {
           // 記住這次選的歸屬單位，下次開單直接帶入（取代全域身份切換器）
@@ -231,7 +231,7 @@
             if (hit) window.wgSetActingTeamId(persona, hit.id);
           }
           const nid = "T-" + (1100 + Math.floor(Math.random() * 800));
-          setTickets((ts) => [{ id: nid, title: vals.title, county: "", city: "", street: vals.address, no: "", floor: vals.floor || null, contact_name: vals.contact_name, contact_phone: vals.contact_phone || null, priority: vals.priority, status: "pending", team: vals.team || defaultTeam || null, region: "光復鄉", intake: "staff", visibility: "restricted", verification: null, createdAt: stamp(), updatedMin: 0, desc: vals.desc, fields: {}, photos: vals.photos || [], tasks: mkTasks(tasks) }, ...ts]);
+          setTickets((ts) => [{ id: nid, title: vals.title, county: "", city: "", street: vals.address, no: "", floor: vals.floor || null, contact_name: vals.contact_name, contact_phone: vals.contact_phone || null, priority: vals.priority, status: "pending", team: vals.team || defaultTeam || null, region: null, intake: "staff", visibility: "restricted", verification: null, createdAt: stamp(), updatedMin: 0, desc: vals.desc, fields: {}, landmark: vals.landmark || null, photos: vals.photos || [], tasks: mkTasks(tasks) }, ...ts]);
           toast(`已建立 ${nid}`);
         }
       },

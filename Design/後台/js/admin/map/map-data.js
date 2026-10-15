@@ -10,8 +10,10 @@
 //   → **責任區在後端是既有的實體，不是 2026-08-16 被移除的 `regions`。**
 //     那次移除的是「事件層的影響區域字串」，兩者不同，此處不推翻該裁示。
 //
-// 🚨 以下是我（Claude）自己編的，正典與程式碼裡沒有，交付前請複核：
-//   - 所有座標、村里邊界、任務單筆數、站點位置（`MAP_COORDS` / `MAP_ZONES` / `MAP_STATIONS`）
+// 🧹 2026-10-16：**示範區域、合成任務單（約 120 張）、示範站點、示意村里邊界已全部移除**。
+//    地圖一開是空的；任務單讀 TK_TICKETS（含前台報案），區域由使用者圈選。
+//
+// 🚨 以下是設計端定的，正典沒有，實作前請複核：
 //   - `zone.kind` 兩值（assign / hazard）是把 feature.md 的 Assignment Zone / Hazard Zone
 //     直接譯成資料欄位，正典沒有給欄位名
 //   - `zone.status` 三值（draft / active / expired）為我補的狀態機，正典只講 Hazard 24h 到期
@@ -80,99 +82,24 @@
     return Math.abs(a / 2);
   }
 
-  // ── 場景座標 ──────────────────────────────────────────────────────────────
-  // 情境沿用 tk-data.js：2026 花蓮光復 馬太鞍溪堰塞湖溢流。
-  // 🚨 全部是我編的示範座標，正式版由後端 geocoding 提供。
+  // ── 預設視野 ──────────────────────────────────────────────────────────
+  // 地圖上什麼都沒有時的中心點（花蓮縣光復鄉）。正式版改讀 project_settings 的事件中心點。
   const CENTER = [23.6725, 121.4235];
 
-  // tk-map.jsx 既有的七點，維持同一組座標以免兩頁對不起來
-  const BASE_COORDS = {
-    "T-1042": [23.6760, 121.4205], "T-1067": [23.6748, 121.4218], "T-1071": [23.6640, 121.4290],
-    "T-1080": [23.7455, 121.4520], "T-1085": [23.7448, 121.4535], "T-1078": [23.6699, 121.4238],
-    "T-1090": [23.6672, 121.4262],
-  };
-
-  // 村里（🚨 邊界為我畫的示意多邊形，不是實際村里界；Q1「是否預載行政區界」未裁示）
-  const VILLAGES = {
-    大平村: [[23.6800, 121.4150], [23.6805, 121.4290], [23.6690, 121.4300], [23.6680, 121.4160]],
-    大同村: [[23.6690, 121.4180], [23.6688, 121.4320], [23.6580, 121.4330], [23.6578, 121.4190]],
-    北富村: [[23.7500, 121.4450], [23.7505, 121.4600], [23.7390, 121.4610], [23.7385, 121.4460]],
-  };
-
-  const STREETS = ["中山路", "中正路", "林森路", "大進街", "糖廠街", "自強路", "民族街"];
-  const PRIORITIES = ["critical", "high", "medium", "medium", "low"];
-  const KINDS = [["hr", "清淤人力"], ["supply", "飲用水"], ["hr", "送餐志工"], ["supply", "毛毯"], ["rescue", "破拆搜救人力"]];
-
-  /** 在多邊形的 bounding box 內灑點，落在多邊形外就重抽。固定種子，每次開頁一樣。 */
-  function seeded(n) { let s = n; return () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648; }
-
-  function synthesize() {
-    const rnd = seeded(20260827);
-    const out = [];
-    let n = 1100;
-    Object.entries(VILLAGES).forEach(([village, ring]) => {
-      const lats = ring.map((p) => p[0]), lngs = ring.map((p) => p[1]);
-      // 數量刻意讓「一次框住兩個村」會超過 MAP_HIGH_VOLUME(100)，才示範得出 AC-02 的高量警示
-      const count = village === "北富村" ? 22 : 48;
-      for (let i = 0; i < count; i++) {
-        let p = null;
-        for (let k = 0; k < 60 && !p; k++) {
-          const c = [lats[3] + rnd() * (lats[0] - lats[3]), lngs[0] + rnd() * (lngs[1] - lngs[0])];
-          if (pointInPolygon(c, ring)) p = c;
-        }
-        if (!p) continue;
-        const id = "T-" + (++n);
-        const [kind, name] = KINDS[Math.floor(rnd() * KINDS.length)];
-        const pri = PRIORITIES[Math.floor(rnd() * PRIORITIES.length)];
-        // 三成先給團隊，用來示範 AC-07「已指派者被後畫的責任區覆蓋」
-        const team = rnd() < 0.3 ? ["壯闊台灣", "慈濟基金會", "中華民國紅十字會"][Math.floor(rnd() * 3)] : null;
-        out.push({
-          id, title: `${STREETS[Math.floor(rnd() * STREETS.length)]}${Math.floor(rnd() * 200) + 1}號 ${name}需求`,
-          county: "花蓮縣", city: "光復鄉", region: `光復鄉 ${village}`,
-          priority: pri, status: team ? "in_progress" : "pending", team,
-          coord: p, synthetic: true,
-          tasks: [{ id: `${id}-K1`, kind, name, quantity: Math.floor(rnd() * 8) + 1, status: team ? "in_progress" : "pending", assignees: [] }],
-        });
-      }
-    });
-    return out;
-  }
-
-  /** 把 tk-data.js 的七張正式假單與合成單合成一份地圖用清單。 */
+  /** 地圖用的任務單清單：tk-data.js 的 TK_TICKETS（已併入前台報案），座標由 tkCoord 取。
+   *  沒有座標的單不上地圖（區域計數也算不到它），列表頁照常看得到。 */
   function buildTickets() {
-    const real = (window.TK_TICKETS || []).map((t) => ({ ...t, coord: BASE_COORDS[t.id] || null }))
+    return (window.TK_TICKETS || [])
+      .map((t) => ({ ...t, coord: window.tkCoord ? window.tkCoord(t) : null }))
       .filter((t) => t.coord);
-    return real.concat(synthesize());
   }
 
-  // ── 責任區 ────────────────────────────────────────────────────────────────
-  // 🚨 這兩筆是我編的初始資料。「拉框大平村批次指派 47 筆給慈濟基金會」這個動作
-  //    在 tk-data.js 的 TK_HISTORY 裡已經存在（2026-06-12 吳政憲），此處沿用同一個情境。
-  const INITIAL_ZONES = [
-    {
-      id: "Z-01", kind: "assign", name: "光復鄉 大平村", ring: VILLAGES.大平村,
-      team: "慈濟基金會", note: "堰塞湖溢流主要淹沒帶，以清淤與送餐為主。",
-      status: "active", createdBy: "吳政憲", createdAt: "06/12 11:25", color: "#4338CA",
-    },
-    {
-      // 🚨 09-27 起責任區單位必填，原本「尚未指派」的示範改派給台灣世界展望會（我選的）
-      id: "Z-02", kind: "assign", name: "光復鄉 大同村", ring: VILLAGES.大同村,
-      team: "台灣世界展望會", note: "以物資發放與長者關懷為主。",
-      status: "active", createdBy: "吳政憲", createdAt: "06/12 11:40", color: "#7E22CE",
-    },
-    // 🚨 2026-09-25 補的兩筆示範（名稱與範圍都是我編的）：
-    //    一筆「不指派、前台可見」的責任區，示範志工休息區這種用法；一筆危險區，示範橘白斜紋。
-    {
-      id: "Z-03", kind: "mark", name: "糖廠志工休息區", ring: [[23.6712, 121.4232], [23.6713, 121.4256], [23.6697, 121.4257], [23.6696, 121.4233]],
-      team: null, note: "飲水、廁所、陰涼處。請勿在此停放車輛。",
-      status: "active", createdBy: "吳政憲", createdAt: "06/12 13:05", color: "#15803D", publicVisible: true,
-    },
-    {
-      id: "Z-04", kind: "hazard", name: "馬太鞍溪堤防潰口", ring: [[23.6632, 121.4262], [23.6636, 121.4310], [23.6606, 121.4318], [23.6600, 121.4270]],
-      team: null, note: "堤防缺口持續擴大，禁止進入。",
-      status: "active", createdBy: "吳政憲", createdAt: "06/12 14:20", color: "#E65100", publicVisible: true,
-    },
-  ].map((z) => ({ publicVisible: false, ...z }));
+  // ── 區域 ──────────────────────────────────────────────────────────────
+  // 🧹 空陣列。一筆區域的形狀：
+  //   { id, kind: hazard|assign|mark, name, ring: [[lat,lng]…], team, note,
+  //     status: active|expired, createdBy, createdAt, color, publicVisible }
+  // 正式版：work_zones（geometry MultiPolygon）＋ team_zone_assign。
+  const INITIAL_ZONES = [];
 
   /** 新區域的「前台可見」預設值。危險區預設勾 —— 危險資訊要讓民眾與志工看到（2026-09-25 Sucre）。 */
   function defaultPublic(kind) { return kind === "hazard"; }
@@ -208,23 +135,9 @@
     { value: "cellular",    label: "通訊", icon: "RadioTower" },
   ];
 
-  // 🚨 站點的名稱與座標是我編的示範資料，非真實站點。類型值本身照正典。
-  const STATIONS = [
-    { id: "S-1",  name: "光復國小 收容所",     type: "shelter",     coord: [23.6742, 121.4231], isOfficial: true },
-    { id: "S-2",  name: "花蓮糖廠 物資集散",   type: "supply",      coord: [23.6702, 121.4248], isOfficial: true },
-    { id: "S-3",  name: "大同村活動中心 淋浴站", type: "shower",     coord: [23.6640, 121.4255], isOfficial: false },
-    { id: "S-4",  name: "北富村 醫療站",       type: "medical",     coord: [23.7440, 121.4520], isOfficial: true },
-    { id: "S-5",  name: "中山路口 加水站",     type: "water",       coord: [23.6768, 121.4222], isOfficial: true },
-    { id: "S-6",  name: "糖廠停車場 流動廁所", type: "toilet",      coord: [23.6714, 121.4262], isOfficial: false },
-    { id: "S-7",  name: "光復火車站 接駁點",   type: "transport",   coord: [23.6690, 121.4205], isOfficial: true },
-    { id: "S-8",  name: "大平村 發電機集中點", type: "power",       coord: [23.6752, 121.4188], isOfficial: false },
-    { id: "S-9",  name: "活動中心 充電站",     type: "charge",      coord: [23.6636, 121.4228], isOfficial: false },
-    { id: "S-10", name: "馬太鞍橋頭 加油站",   type: "gas_station", coord: [23.6618, 121.4290], isOfficial: true },
-    { id: "S-11", name: "大同村 臨時基地台",   type: "cellular",    coord: [23.6660, 121.4300], isOfficial: true },
-    { id: "S-12", name: "北富村活動中心 避難所", type: "shelter",   coord: [23.7462, 121.4552], isOfficial: true },
-    { id: "S-13", name: "北富村 物資轉運",     type: "supply",      coord: [23.7420, 121.4576], isOfficial: false },
-    { id: "S-14", name: "大平村 加水點（民間）", type: "water",     coord: [23.6712, 121.4172], isOfficial: false },
-  ];
+  // 🧹 示範站點已移除。正式版讀 GraphQL `stations`（與資源站點管理同一份），
+  //    轉成 { id, name, type, coord: [lat, lng], isOfficial }。
+  const STATIONS = [];
 
   // 🔴 2026-09-26：區域色**整組避開任務單的優先級色**（紅 #D32F2F／橘 #F57C00／藍 #2592B9／灰 #64748B）
   //    與危險區的橘。原本第一色 #2592B9 跟「一般」優先級的藍一模一樣，區域和單混成一片。
@@ -321,7 +234,6 @@
     mapFilterTickets: filterTickets,
     mapFilterStations: filterStations,
     mapZoneEditDiff: zoneEditDiff,
-    MAP_VILLAGES: VILLAGES,
     MAP_STATIONS: STATIONS,
     MAP_TEAMS: TEAMS,
     MAP_ZONE_COLORS: ZONE_COLORS,

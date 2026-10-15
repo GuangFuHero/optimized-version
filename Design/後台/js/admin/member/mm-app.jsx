@@ -8,9 +8,10 @@
   const Icon = window.WGIcon;
   const { MMCtx, useMM, ToastHost, BlockDialog } = window;
 
+  // demoBar：2026-10-16 起關閉（角色視角列移除），要看別的角色用網址 ?as=（見 wg-event.js）
   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
     "density": "regular",
-    "demoBar": true
+    "demoBar": false
   }/*EDITMODE-END*/;
 
   // 後台核心模組（本原型以佔位呈現，聚焦成員管理）

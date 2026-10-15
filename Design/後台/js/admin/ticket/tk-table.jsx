@@ -143,7 +143,7 @@
     const [fTeam, setFTeam] = React.useState("all");
     const [fTime, setFTime] = React.useState("all");
 
-    const regionOpts = React.useMemo(() => [...new Set(tk.tickets.map((t) => t.region))].map((r) => [r, r]), [tk.tickets]);
+    const regionOpts = React.useMemo(() => [...new Set(tk.tickets.map((t) => t.region).filter(Boolean))].map((r) => [r, r]), [tk.tickets]);
     const teamOpts = React.useMemo(() => {
       const teams = [...new Set(tk.tickets.map((t) => t.team).filter(Boolean))].map((t) => [t, t]);
       return [...teams, ["__none__", "未指派"]];
@@ -178,6 +178,20 @@
       </div>
     );
 
+    // 空白狀態分兩種：
+    //   ① 整個事件還沒有任何任務單 → 說明單會從哪裡來，有權限的人直接給「新增任務」
+    //   ② 有單，但被篩選／搜尋／「我的單位」範圍濾光 → 叫人放寬條件，不是叫人建單
+    const noData = tk.tickets.length === 0;
+    const emptyState = noData
+      ? (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingBottom: 48 }}>
+          <EmptyState icon="ClipboardList" title="還沒有任何任務單"
+            caption="民眾在前台報案，或後台人員按「新增任務」代為登錄後，任務單會出現在這裡。" />
+          {onNew && <div style={{ marginTop: -40 }}><Button variant="primary" size="sm" startIcon={<Icon n="Plus" s={15} />} onClick={onNew}>新增任務</Button></div>}
+        </div>
+      )
+      : <EmptyState icon="SearchX" title="沒有符合條件的任務單" caption="調整篩選或搜尋關鍵字再試；若在「我的單位」範圍，可切到「全部單位」看看。" />;
+
     // TM-FS-102：列表不橫向捲動。格線用 minmax(0,…) 收進視窗，過寬的值單行截斷 + hover 全文。
     const fullTable = (
       <Card padding="0">
@@ -186,7 +200,7 @@
             {tk.visibleCols.map((c) => <span key={c.key} className="wg-caption" title={c.label} style={{ fontWeight: 700, color: "var(--color-fg-neutral-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>)}
             <span></span>
           </div>
-          {rows.length === 0 && <EmptyState icon="ClipboardList" title="此條件下沒有任務" caption="調整篩選、搜尋或切換角色視角再試。" />}
+          {rows.length === 0 && emptyState}
           {rows.map((t) => <TicketRow key={t.id} t={t} onOpen={onOpen} />)}
         </div>
       </Card>
@@ -200,7 +214,7 @@
             {["任務", "優先級", "狀態"].map((h) => <span key={h} className="wg-caption" style={{ fontWeight: 700, color: "var(--color-fg-neutral-muted)" }}>{h}</span>)}
           </div>
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-            {rows.length === 0 && <EmptyState icon="ClipboardList" title="此條件下沒有任務" caption="調整篩選或搜尋再試。" />}
+            {rows.length === 0 && emptyState}
             {rows.map((t) => <TicketCard key={t.id} t={t} selected={sel === t.id} onSelect={setSel} onOpen={onOpen} />)}
           </div>
         </Card>

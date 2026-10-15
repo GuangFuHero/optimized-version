@@ -65,7 +65,8 @@
       // 單隊的人直接就是那隊，看不到這個欄位；多隊的人預設帶入上次選的。
       team: ticket ? (ticket.team || "") : (tk.defaultTeam || ""),
     }));
-    const [landmark, setLandmark] = React.useState(() => (ticket && ticket.landmark) || (ticket && window.TK_COORDS && window.TK_COORDS[ticket.id] ? { lat: window.TK_COORDS[ticket.id].c[0], lng: window.TK_COORDS[ticket.id].c[1], source: "manual" } : null));
+    // 編輯時帶回原本的地標（後台建的單是 landmark，前台建的單是 _site.lat/lng，tkCoord 都認）
+    const [landmark, setLandmark] = React.useState(() => { const c = ticket && window.tkCoord(ticket); return c ? { lat: c[0], lng: c[1], source: (ticket.landmark && ticket.landmark.source) || "manual" } : null; });
     const [tasks, setTasks] = React.useState(() =>
       ticket ? ticket.tasks.map((t) => ({ ...t, _existing: true })) : [{ kind: "hr", name: "", quantity: "" }]
     );

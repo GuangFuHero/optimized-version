@@ -1,5 +1,9 @@
-// tk-data.js — 任務管理原型假資料（四層模型：Ticket 地點 → Task 需求 → 承接）
-// 情境：2026 花蓮光復 馬太鞍溪堰塞湖溢流（單一應變事件；複合災害：水災＋土石流）
+// tk-data.js — 任務管理的資料層（四層模型：Ticket 地點 → Task 需求 → 承接）
+//
+// 🧹 2026-10-16：**測試任務單已全部移除**，頁面一開是空的 —— 這是給使用者用的真實狀態。
+//    資料要從兩個入口進來：後台「新增任務」、前台民眾報案（經 wg-bridge.js 併入）。
+//    這支檔案現在只放「規則與選項」（狀態、優先級、需求種類…），不放任何紀錄。
+//    正式版：TK_TICKETS 換成 GraphQL `tickets` 查詢的結果，欄位見 README 的對照表。
 // ⚠️ 事件層（名稱／災害類型／起始時間）後端 ER diagram 目前無對應資料表，
 //    畫面上一律以「資料待確認」樣式標示，見 window.TK_PENDING。
 // ── RBAC（5 角色）─────────────────────────────────────────────────────────
@@ -125,111 +129,9 @@ window.TK_TEAM_MEMBERS = {
 };
 
 // ── 任務 Ticket（地點錨點）→ tasks（需求）→ assignees（承接，含 qty）───────────
+// 🧹 空陣列。一筆的形狀見 Design/後台/docs/任務管理.md「資料形狀」。
 // updatedMin = 距最後狀態異動的分鐘數（後端待補「最後狀態異動時間」欄位）
-window.TK_TICKETS = [
-  {
-    id: "T-1042", title: "中山路100號 透天遭土石掩埋受困",
-    county: "花蓮縣", city: "光復鄉", street: "中山路", no: "100號", floor: "透天 1–3F",
-    contact_name: "王先生", contact_phone: "0912-xxx-311",
-    priority: "critical", status: "in_progress", team: "壯闊台灣", region: "光復鄉", intake: "citizen",
-    visibility: "public", verification: null,
-    createdAt: "06/13 06:58", updatedMin: 74,
-    desc: "1 樓阿姨受困、3 樓有人待救，鄰居敲擊有回應。",
-    fields: { water_depth: "約 60", road_access: "單線可通", bury_extent: "1F 前半全埋" },
-    photos: ["https://picsum.photos/seed/tk1042a/640/420", "https://picsum.photos/seed/tk1042b/640/420"],
-    tasks: [
-      { id: "K-1", kind: "rescue", name: "破拆搜救人力", quantity: 2, status: "in_progress", assignees: [{ name: "李國豪", qty: 1, at: "08:40" }] },
-      { id: "K-2", kind: "supply", name: "圓鍬", quantity: 5, status: "pending", assignees: [] },
-    ],
-  },
-  {
-    id: "T-1067", title: "大同村活動中心 物資見底",
-    county: "花蓮縣", city: "光復鄉", street: "大同村活動中心", no: "", floor: null,
-    contact_name: "陳站長", contact_phone: "0928-xxx-770",
-    priority: "medium", status: "pending", team: null, region: "光復鄉", intake: "staff",
-    visibility: "restricted", verification: "disputed",
-    createdAt: "06/12 18:20", updatedMin: 890,
-    desc: "收容約 150 人，飲用水與食物不足。",
-    fields: { water_depth: "0", road_access: "正常" },
-    photos: [],
-    tasks: [
-      { id: "K-3", kind: "supply", name: "飲用水", quantity: 200, status: "pending", assignees: [] },
-      { id: "K-4", kind: "supply", name: "毛毯", quantity: 100, status: "pending", assignees: [] },
-      { id: "K-5", kind: "supply", name: "泡麵", quantity: 300, status: "pending", assignees: [] },
-    ],
-  },
-  {
-    id: "T-1071", title: "大平村12鄰 住宅清淤",
-    county: "花蓮縣", city: "光復鄉", street: "大平村12鄰", no: "", floor: null,
-    contact_name: "林小姐", contact_phone: null,
-    priority: "medium", status: "in_progress", team: "慈濟基金會", region: "光復鄉", intake: "citizen",
-    visibility: "restricted", verification: null,
-    createdAt: "06/12 09:14", updatedMin: 21,
-    desc: "一樓淤泥及膝，需人力與工具。",
-    fields: { water_depth: "0", road_access: "正常", slope_risk: "低" },
-    photos: ["https://picsum.photos/seed/tk1071a/640/420"],
-    tasks: [
-      { id: "K-6", kind: "hr", name: "清淤人力", quantity: 10, status: "in_progress", assignees: [{ name: "慈濟志工隊", qty: 6, at: "08:10" }] },
-      { id: "K-7", kind: "supply", name: "推車", quantity: 4, status: "fulfilled", assignees: [{ name: "在地五金行", qty: 4, at: "07:30" }] },
-    ],
-  },
-  {
-    id: "T-1080", title: "明德街6F 獨居長者失聯",
-    county: "花蓮縣", city: "鳳林鎮", street: "明德街", no: "45號", floor: "6F",
-    contact_name: "里長", contact_phone: "0933-xxx-102",
-    priority: "critical", status: "pending", team: null, region: "鳳林鎮", intake: "staff",
-    visibility: "restricted", verification: null,
-    createdAt: "06/13 09:12", updatedMin: 128,
-    desc: "鄰居通報失聯逾 12 小時，門反鎖。",
-    fields: { road_access: "正常" },
-    photos: [],
-    tasks: [
-      { id: "K-8", kind: "rescue", name: "破門搜救人力", quantity: 1, status: "pending", assignees: [] },
-    ],
-  },
-  {
-    id: "T-1085", title: "鳳林國小收容所 醫療支援",
-    county: "花蓮縣", city: "鳳林鎮", street: "復興路", no: "100號", floor: null,
-    contact_name: "護理師", contact_phone: "0955-xxx-640",
-    priority: "high", status: "in_progress", team: "中華民國紅十字會", region: "鳳林鎮", intake: "staff",
-    visibility: "public", verification: null,
-    createdAt: "06/12 22:05", updatedMin: 265,
-    desc: "收容 80 人，需醫護人力與常備藥品。",
-    fields: { water_depth: "0", road_access: "正常" },
-    photos: ["https://picsum.photos/seed/tk1085a/640/420"],
-    tasks: [
-      { id: "K-9", kind: "hr", name: "EMT 醫護人力", quantity: 2, status: "in_progress", assignees: [{ name: "紅十字救護隊", qty: 2, at: "08:00" }] },
-      { id: "K-10", kind: "supply", name: "常備藥品", quantity: null, status: "pending", assignees: [] },
-    ],
-  },
-  {
-    id: "T-1078", title: "光復車站前 街道沖洗",
-    county: "花蓮縣", city: "光復鄉", street: "中正路", no: "光復車站前", floor: null,
-    contact_name: "巡查員", contact_phone: null,
-    priority: "low", status: "pending", team: null, region: "光復鄉", intake: "staff",
-    visibility: "restricted", verification: null,
-    createdAt: "06/12 14:00", updatedMin: 1180,
-    desc: "街道淤泥乾涸揚塵。",
-    fields: { road_access: "正常" },
-    photos: [],
-    tasks: [
-      { id: "K-11", kind: "hr", name: "清淤人力", quantity: 6, status: "pending", assignees: [] },
-      { id: "K-12", kind: "supply", name: "高壓水槍", quantity: 1, status: "pending", assignees: [] },
-    ],
-  },
-  {
-    id: "T-1090", title: "林森路88號 待現場勘查",
-    county: "花蓮縣", city: "光復鄉", street: "林森路", no: "88號", floor: null,
-    contact_name: "通報里幹事", contact_phone: null,
-    priority: "medium", status: "pending", team: null, region: "光復鄉", intake: "system",
-    visibility: "restricted", verification: null,
-    createdAt: "06/13 09:22", updatedMin: 8,
-    desc: "1999 轉入，尚未釐清需求，待現場勘查後補列。",
-    fields: {},
-    photos: [],
-    tasks: [],
-  },
-];
+window.TK_TICKETS = [];
 
 // ── Disaster Activation（事件層；⚠️ 後端無對應表）──────────────────────────────
 window.TK_ACTIVATION = {
@@ -256,24 +158,10 @@ window.TK_COLUMNS = [
   { key: "team",     label: "指派 Team", width: "minmax(0,1fr)" },
 ];
 
-// ── 志工統計 ────────────────────────────────────────────────────────────────
-window.TK_VOLUNTEER = {
-  matchedToday: 312, demand: 3000, cumulative: 1840,
-  byRegion: [
-    { region: "光復鄉 大同村", supply: 64,  demand: 800 },
-    { region: "光復鄉 大平村", supply: 120, demand: 600 },
-    { region: "鳳林鎮 市區",   supply: 38,  demand: 900 },
-    { region: "光復鄉 北富村", supply: 90,  demand: 700 },
-  ],
-};
+// ── 志工統計（tk-stats.jsx；目前沒有任何畫面在用）───────────────────────────
+// 🧹 歸零。正式版由後端彙總 task_assignments，不在前端算。
+window.TK_VOLUNTEER = { matchedToday: 0, demand: 0, cumulative: 0, byRegion: [] };
 
-window.TK_HISTORY = [
-  { time: "今天 09:12", actor: "系統",   action: "AI 標記 T-1067 與 T-1069 疑似重複需求 → 進入審查佇列", cat: "review" },
-  { time: "今天 08:32", actor: "黃曉芳", action: "將 T-1042 升為生命危急", cat: "immediate", tone: "danger" },
-  { time: "06-12 11:25", actor: "吳政憲", action: "拉框「光復鄉大平村」批次指派 47 筆 Ticket 給 慈濟基金會", cat: "assign" },
-  { time: "06-10 05:50", actor: "林承翰", action: "平台為此事件增加災害種類「土石流」→ 變為 水災＋土石流 複合", cat: "activation" },
-  { time: "06-10 04:18", actor: "林承翰", action: "啟動應變事件「馬太鞍溪堰塞湖溢流」，通知全體後台", cat: "activation" },
-];
 
 // 地址組合（county/city/street/no 是分開的欄位，不是一整串）
 window.tkAddress = function (t) {
@@ -307,30 +195,10 @@ window.TK_STATUS_RULE = "狀態由需求的承接進度自動推導：全部需�
 //   field     有欄位變更時的欄位名稱
 //   from/to   TM-RH-103：變更前後值。無值變更的事件不帶這組
 //   fieldOff  TM-RH-107：該欄位事後已被停用，歷史仍完整保留
-window.TK_HISTORY = {
-  "T-1042": [
-    { at: "06/13 08:40", actor: "李國豪", team: "壯闊台灣", src: "assign", action: "承接需求「破拆搜救人力」×1" },
-    { at: "06/13 07:31", actor: "林承翰", team: "平台", src: "audit", action: "變更欄位", field: "積水深度", from: "約 40", to: "約 60" },
-    { at: "06/13 07:15", actor: "林承翰", team: "平台", src: "audit", action: "指派 Team", field: "指派 Team", from: "未指派", to: "壯闊台灣" },
-    { at: "06/13 07:04", actor: "陳彥廷", team: "平台", src: "audit", action: "升為生命危急", field: "優先級", from: "高", to: "生命危急" },
-    { at: "06/13 06:58", actor: "王先生", team: "前台民眾", src: "audit", action: "建立任務單" },
-  ],
-  "T-1067": [
-    { at: "06/13 09:05", actor: "周郁婷", team: "平台", src: "audit", action: "標記疑似重複（與 T-1069）" },
-    { at: "06/12 20:44", actor: "黃曉芳", team: "慈濟基金會", actorGone: true, src: "audit", action: "變更欄位", field: "臨時電力來源", from: "無", to: "發電機 1 台", fieldOff: true },
-    { at: "06/12 18:20", actor: "陳站長", team: "前台民眾", src: "audit", action: "建立任務單" },
-  ],
-  "T-1071": [
-    { at: "06/13 09:40", actor: "吳孟儒", team: "慈濟基金會", src: "assign", action: "承接需求「清淤人力」×3" },
-    { at: "06/12 09:20", actor: "系統", team: "平台", src: "audit", action: "指派 Team", field: "指派 Team", from: "未指派", to: "慈濟基金會" },
-    { at: "06/12 09:14", actor: "民眾（未具名）", team: "前台民眾", src: "audit", action: "建立任務單" },
-  ],
-  "T-1090": [
-    { at: "06/13 09:22", actor: "災情爬蟲", team: "平台", src: "audit", crawler: true, action: "自社群貼文建立任務單" },
-  ],
-};
+// 🧹 歷史種子已清空。沒有種子時，每張單至少會有一筆「建立任務單」（見 tkHistory）。
+window.TK_HISTORY = {};
 
-// 這一輪（原型）新寫入的歷史。TK_HISTORY 是種子資料、不動它 ——
+// 這一輪新寫入的歷史。TK_HISTORY 是後端讀回來的既有紀錄、不動它 ——
 // 種子是「以前發生過的事」，這裡是「這個 session 剛做的事」。
 // ⚠️ 只在記憶體，重整就沒了。正式版寫 audit_logs。
 window.TK_HISTORY_NEW = window.TK_HISTORY_NEW || {};
@@ -364,3 +232,21 @@ function tkSeedEntry(t) {
     crawler: t.intake === "system", action: "建立任務單",
   }];
 }
+
+// ── 任務單座標（地圖用）────────────────────────────────────────────────────
+// 三個來源的形狀不一樣，統一在這裡轉成 Leaflet 的 [lat, lng]：
+//   t.coord      互助地圖內部用的形狀
+//   t.landmark   後台建單（tk-form.jsx 的地標選點 {lat, lng, source}）
+//   t._site      前台民眾報案（wg-bridge.js createSiteTicket 存在 _site.lat/_site.lng）
+// 正式版：tickets 的地標座標（PostGIS Point，GeoJSON 是 [lng, lat]，注意順序）。
+// 沒座標回 null —— 地圖上不畫，列表照常顯示。
+window.tkCoord = function (t) {
+  if (!t) return null;
+  if (Array.isArray(t.coord) && t.coord.length === 2) return t.coord;
+  const lm = t.landmark;
+  if (lm && typeof lm.lat === "number" && typeof lm.lng === "number") return [lm.lat, lm.lng];
+  const st = t._site;
+  if (st && typeof st.lat === "number" && typeof st.lng === "number") return [st.lat, st.lng];
+  if (typeof t.lat === "number" && typeof t.lng === "number") return [t.lat, t.lng];
+  return null;
+};

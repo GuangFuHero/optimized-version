@@ -138,7 +138,10 @@
                     React.createElement(Button, { variant: "primary", size: "md", disabled: blocked, startIcon: React.createElement(Icon, { n: "Check", s: 18 }), onClick: approve }, "核准並套用")
                   )
             )
-          ) : React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-fg-neutral-muted)" } }, "—")
+          ) : React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: 32, textAlign: "center", color: "var(--color-fg-neutral-muted)" } },
+              React.createElement(Icon, { n: "GitPullRequestArrow", s: 28, c: "var(--color-fg-neutral-muted)" }),
+              React.createElement("div", { style: { font: "var(--font-label-500)", color: "var(--color-fg-neutral-subtle)" } }, pending.length ? "從左側選一筆修改建議開始審查" : "沒有需要審查的修改建議"),
+              React.createElement("div", { className: "wg-caption", style: { maxWidth: 320, lineHeight: 1.7 } }, "民眾在前台對站點按「建議修改」送出後，會排進這個佇列，由資料檢核員或超級管理員核准或退回。"))
         )
       )
     );

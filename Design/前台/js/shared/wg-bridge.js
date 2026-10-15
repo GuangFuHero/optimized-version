@@ -523,6 +523,8 @@
   function readBuildings() {
     var list = readRaw(KEYS.buildings, null);
     if (!Array.isArray(list)) { list = seedBuildings(); writeRaw(KEYS.buildings, list); }
+    var kept = list.filter(function (b) { return REMOVED_DEMO_BUILDINGS.indexOf(b && b.id) < 0; });
+    if (kept.length !== list.length) { list = kept; writeRaw(KEYS.buildings, list); }
     return list;
   }
 
@@ -635,27 +637,11 @@
     return updateBuilding(id, { missingCells: m });
   }
 
-  /** 🚨 種子建築：**這一棟是編的**，花蓮光復鄉沒有這個地址，不得對外使用。
-   *  存在的理由：現有 10 筆 mock 任務單全是低矮鄉村地址（堤防、國小、部落屋頂），
-   *  沒有任何一筆能示範「一個地址多層樓多戶」。不編一棟就看不到這個功能。 */
-  function seedBuildings() {
-    return [{
-      id: 'BLD-DEMO-1',
-      address: '花蓮縣光復鄉中正路二段 120 號',
-      addrKey: normalizeAddr('花蓮縣光復鄉中正路二段 120 號'),
-      alias: '中正路社區大樓',
-      floorsAbove: 12,
-      floorsBelow: 1,
-      unitsPerFloor: 6,
-      /* 頂樓兩戶打通、B1 只有 2 格是車位以外的空間 —— 都是編的，只為了讓
-         「不存在的格子」在畫面上真的出現，否則永遠測不到那個狀態。 */
-      missingCells: ['12-5', '12-6', '-1-3', '-1-4', '-1-5', '-1-6'],
-      segments: null,   // null ＝ 用樓層數產生（B1、1F…12F）
-      lat: 23.6675, lng: 121.4223,
-      createdBy: null,
-      createdAt: stamp(new Date()),
-    }];
-  }
+  /** 🧹 2026-10-16：種子建築（BLD-DEMO-1，編的地址）已移除，現場分區一開是空的。
+   *  由後台「任務管理 → 現場分區」或前台建單時開分區。
+   *  舊瀏覽器裡若還存著那一棟，readBuildings() 會把它濾掉。 */
+  var REMOVED_DEMO_BUILDINGS = ['BLD-DEMO-1'];
+  function seedBuildings() { return []; }
 
   /* ── 前台可見的區域（互助地圖 → 前台地圖）──────────────────────────── */
   function readPublicZones() {

@@ -263,14 +263,60 @@
     try { localStorage.setItem(PERSONA_KEY, id); } catch (e) {}
     window.dispatchEvent(new CustomEvent("wg:persona", { detail: { id } }));
   };
+  // ── 目前登入的人 ───────────────────────────────────────────────────────
+  // 🧹 2026-10-16：角色視角切換列已移除，頁面不再讀 localStorage 的 wg.personaId 決定「我是誰」。
+  //    所有後台頁一律以這個人登入。正式版：換成 GraphQL `me` 的回傳（使用者＋各隊 membership）。
+  //    本機想看其他角色的畫面：網址加 ?as=gov 之類（見下方 WG_PREVIEW_ROLES），不用改程式。
+  window.WG_SIGNED_IN_USER_ID = window.WG_SIGNED_IN_USER_ID || "u-lin";
+
+  // ── 工程師用的角色預覽：網址加 ?as=<角色> ─────────────────────────────────
+  // 頂端的角色切換列拿掉了（使用者不該看到），但工程師要能確認「每個角色看到什麼」。
+  //   ?as=gov          以政府身分看這一頁（同一個分頁內換頁會一直保持，存在 sessionStorage）
+  //   ?as=off          結束預覽，回到預設登入者
+  // 可用值見 WG_PREVIEW_ROLES；也可以直接給 persona id（例如 ?as=u-chen）。
+  // 預覽中左下角會有一顆小標籤提醒，點它可以結束預覽。正式版沒有這個機制。
+  window.WG_PREVIEW_ROLES = {
+    super:        { id: "u-lin",   label: "超級管理員" },
+    gov:          { id: "u-wu",    label: "政府（政府隊管理員）" },
+    "ngo-admin":  { id: "u-huang", label: "非政府組織 · 團隊管理員" },
+    "ngo-member": { id: "u-lee",   label: "非政府組織 · 團隊成員" },
+    auditor:      { id: "u-chang", label: "資料檢核員" },
+  };
+  (function applyPreview() {
+    const KEY = "wg.previewAs";
+    let want = null;
+    try { want = new URLSearchParams(window.location.search).get("as"); } catch (e) {}
+    try {
+      if (want === "off" || want === "") { sessionStorage.removeItem(KEY); want = null; }
+      else if (want) sessionStorage.setItem(KEY, want);
+      else want = sessionStorage.getItem(KEY);
+    } catch (e) {}
+    if (!want) return;
+    const hit = window.WG_PREVIEW_ROLES[want];
+    window.WG_SIGNED_IN_USER_ID = hit ? hit.id : want;
+    window.WG_PREVIEW_AS = { key: want, id: window.WG_SIGNED_IN_USER_ID, label: hit ? hit.label : want };
+
+    function chip() {
+      if (document.getElementById("wg-preview-chip")) return;
+      const el = document.createElement("button");
+      el.id = "wg-preview-chip"; el.type = "button";
+      el.title = "工程師用的角色預覽（網址 ?as=）。點一下結束預覽。";
+      el.textContent = "👁 角色預覽：" + window.WG_PREVIEW_AS.label + "　✕";
+      el.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:9999;padding:6px 12px;border-radius:999px;border:1px dashed #64748B;background:#0F172A;color:#E2E8F0;font:12px/1.4 system-ui,sans-serif;cursor:pointer;opacity:.9";
+      el.onclick = function () {
+        try { sessionStorage.removeItem(KEY); } catch (e) {}
+        const u = new URL(window.location.href); u.searchParams.delete("as"); window.location.href = u.toString();
+      };
+      document.body.appendChild(el);
+    }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", chip); else chip();
+  })();
+
   // personas: 該頁的 PERSONAS 物件；fallback: 對不到時用哪個 key
   window.wgRoleKeyFor = function (personas, fallback) {
-    const id = window.wgGetPersonaId();
-    if (id) {
-      const hit = Object.keys(personas).find((k) => personas[k].id === id);
-      if (hit) return hit;
-    }
-    return fallback;
+    const id = window.WG_SIGNED_IN_USER_ID;
+    const hit = Object.keys(personas || {}).find((k) => personas[k].id === id);
+    return hit || fallback;
   };
   // React hook：回傳 [roleKey, setRoleKey]，setRoleKey 會同步寫回共用 store
   window.useWGRole = function (personas, fallback) {

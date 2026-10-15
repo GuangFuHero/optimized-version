@@ -169,33 +169,12 @@
     );
   }
 
-  // ── 原型角色視角列（黑底）──────────────────────────────────────────────
-  // items: [{ id, name, sub, icon }]
-  function WGRoleBar({ items, value, onChange, note = "各角色可見的操作依權限總表收斂" }) {
-    return (
-      <div style={{ flexShrink: 0, background: "#0F172A", display: "flex", alignItems: "center", gap: 12, padding: "0 20px", height: 52, overflowX: "auto" }}>
-        <span style={{ font: "var(--font-label-300)", color: "#94A3B8", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <Icon n="Eye" s={15} c="#94A3B8" />原型 · 角色視角
-        </span>
-        <div style={{ display: "flex", gap: 6 }}>
-          {items.map((it) => {
-            const active = value === it.id;
-            return (
-              <button key={it.id} type="button" onClick={() => onChange(it.id)}
-                style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 34, padding: "0 14px", cursor: "pointer", borderRadius: "var(--radius-full)", whiteSpace: "nowrap",
-                  border: active ? "1.5px solid var(--color-bg-primary)" : "1px solid #334155", background: active ? "var(--color-bg-primary)" : "transparent",
-                  color: active ? "#111" : "#CBD5E1", font: "var(--font-label-300)" }}>
-                {it.icon && <Icon n={it.icon} s={15} c={active ? "#111" : "#CBD5E1"} />}
-                {it.name}
-                {it.sub && <span style={{ fontSize: 11, opacity: 0.75 }}>{it.sub}</span>}
-              </button>
-            );
-          })}
-        </div>
-        <span className="wg-caption" style={{ marginLeft: "auto", color: "#64748B", whiteSpace: "nowrap" }}>{note}</span>
-      </div>
-    );
-  }
+  // ── 原型角色視角列（已移除）─────────────────────────────────────────────
+  // 🧹 2026-10-16：頂端黑底的「原型 · 角色視角」切換列已拿掉 —— 這些是給使用者用的真實頁面，
+  //    使用者的角色來自登入（GraphQL `me`），不是自己切的。
+  //    元件保留成回傳 null，是為了不必改動每一頁的呼叫點（WGPage roleBar={...}）。
+  //    要在本機看不同角色，見 wg-event.js 的 WG_SIGNED_IN_USER_ID。
+  function WGRoleBar() { return null; }
 
   // ── 頁面外框（三頁共用）─────────────────────────────────────────────────
   // ⚠️ 2026-08-15：三頁原本各自寫 `minHeight: "100vh"` 包住角色列＋shell。

@@ -395,7 +395,7 @@
                 開單後 {window.TK_SETTINGS.archiveDays} 天自動封存（不論是否結案）。
                 <a href={window.TK_SETTINGS.settingsHref} style={{ marginLeft: 8, whiteSpace: "nowrap", color: "var(--color-brand-secondary-default)" }}>前往設定 ↗</a>
               </Row>
-              {showVerification && <Row label="查核狀態">疑似與 T-1069 重複（Data Auditor／Super Admin 可見）</Row>}
+              {showVerification && <Row label="查核狀態">{t.duplicateOf ? `疑似與 ${t.duplicateOf} 重複` : "疑似重複"}（資料檢核員／超級管理員可見）</Row>}
             </div>
           </Section>
         </div>
