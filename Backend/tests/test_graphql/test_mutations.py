@@ -1550,25 +1550,28 @@ async def test_assignment_actor_name_follows_view_history(
     sample_ticket,
     sample_ticket_task,
 ):
-    """The requester sees who claimed their need by name; the volunteer and a guest get no list (ADR-286)."""
+    """The requester sees who claimed their need by name; the volunteer sees only their own (ADR-286)."""
     _, requester_token = coordinator_auth
     user_uuid, token = login_user_auth
     await _assign(client, token, sample_ticket_task)
     async with open_db() as db:
         name = (await db.get(User, user_uuid)).name
     query = {
-        "query": "query($t: String!) { ticketTasks(ticketUuid: $t) { uuid assignments { actorName } } }",
+        "query": (
+            "query($t: String!) { ticketTasks(ticketUuid: $t) "
+            "{ uuid assignments { actorName } myAssignment { actorName } } }"
+        ),
         "variables": {"t": sample_ticket},
     }
 
     async def names(headers=None):
         body = (await client.post("/graphql", json=query, headers=headers)).json()
         task = next(t for t in body["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task)
-        return [a["actorName"] for a in task["assignments"]]
+        return [a["actorName"] for a in task["assignments"]], task["myAssignment"]
 
-    assert await names(auth_header(requester_token)) == [name]
-    assert await names(auth_header(token)) == []
-    assert await names() == []
+    assert await names(auth_header(requester_token)) == ([name], None)
+    assert await names(auth_header(token)) == ([], {"actorName": name})
+    assert await names() == ([], None)
 
 
 @pytest.mark.asyncio

@@ -728,7 +728,6 @@ async def test_a_place_on_a_deleted_need_can_still_be_given_back(db):
     assert await _claims(db, task_uuid) == 0
 
 
-
 @pytest.mark.asyncio
 async def test_someone_removed_by_a_coordinator_is_told(db):
     """A coordinator taking someone off a need tells them, by the need's name."""
@@ -743,7 +742,7 @@ async def test_someone_removed_by_a_coordinator_is_told(db):
     await unassign_task_actor(db, actor=coordinator, uuid=assignment_uuid)
 
     [notice] = await _notices(db, volunteer_uuid, "task_assignment_removed")
-    assert (notice.title, notice.priority) == ("任務指派已取消：清淤", "high")
+    assert (notice.title, notice.priority) == ("你已被移出「清淤」", "high")
 
 
 @pytest.mark.asyncio

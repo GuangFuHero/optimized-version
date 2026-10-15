@@ -1188,7 +1188,7 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
     task_id, task_name, deleted = task.uuid, task.task_name, task.delete_at is not None
-    removed_actor, actor_uid = str(assignment.actor_uuid), actor.uuid
+    ticket_title, removed_actor, actor_uid = ticket.title, str(assignment.actor_uuid), actor.uuid
     await db.commit()
 
     if deleted:
@@ -1196,8 +1196,8 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
     await NotificationService.dispatch(
         db,
         event_type="task_assignment_removed",
-        title=f"任務指派已取消：{task_name}",
-        body=f"您已被移出工單任務「{task_name}」。",
+        title=f"你已被移出「{task_name}」",
+        body=f"{ticket_title}　你已不在這筆需求的名單上，不用前往了。",
         priority="high",
         actor_uuid=actor_uid,
         ref_type="ticket_task",

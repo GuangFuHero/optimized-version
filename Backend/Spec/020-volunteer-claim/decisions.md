@@ -68,8 +68,9 @@ remembered to change it.
    - when a claim fills a need, everyone already on it hears it is complete (`task_full`, medium,
      titled `「{need}」已經湊齊人了`);
    - giving your own place back, and the reopening it may cause, send nothing;
-   - someone removed by another person hears it (`task_assignment_removed`, high), unless the need was
-     deleted: `task_deleted` or `ticket_deleted` already told them not to come.
+   - someone removed by another person hears it (`task_assignment_removed`, high, titled
+     `你已被移出「{need}」`), unless the need was deleted: `task_deleted` or `ticket_deleted` already
+     told them not to come.
 7. **Every need but a rescue says how many** (added 2026-10-08, after #61 review; the product owner's
    call). A need without a quantity never fills, so its request never completes on its own. `hr`,
    `supply` and `medical` needs are refused without one, and so is a kind the back office configured itself

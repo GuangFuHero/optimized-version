@@ -226,14 +226,16 @@ class TaskAssignmentType:
     @strawberry.field(
         description=(
             "Display name of the assigned person. Null to a caller without "
-            "ticket.view_history on the parent ticket"
+            "ticket.view_history on the parent ticket, unless the assignment is their own"
         )
     )
     async def actor_name(self, info: strawberry.types.Info) -> str | None:
-        """The assignee's nickname, shown only to those who may see who claimed the need (ADR-286)."""
-        ticket_uuid = await info.context["loaders"]["ticket_uuid_by_task"].load(self.task_uuid)
-        if ticket_uuid is None or not await ticket_history_visible(info, ticket_uuid):
-            return None
+        """The assignee's nickname, to themselves and to those who may see who claimed the need (ADR-286)."""
+        user = info.context["user"]
+        if user is None or str(user.uuid) != str(self.actor_uuid):
+            ticket_uuid = await info.context["loaders"]["ticket_uuid_by_task"].load(self.task_uuid)
+            if ticket_uuid is None or not await ticket_history_visible(info, ticket_uuid):
+                return None
         return await info.context["loaders"]["user_name_by_uuid"].load(self.actor_uuid)
 
     @classmethod
