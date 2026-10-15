@@ -82,11 +82,8 @@ def normalize_contact_fields(fields: dict, *, required: frozenset[str] = frozens
 def check_address_lengths(fields: dict | None) -> None:
     """Refuse an address part longer than its `secondary_locations` column.
 
-    Every writer of an address calls this before anything is written: createStation,
-    createTicket, updateTicket and the site's createHelpRequest. `floor` and `room` are
-    `varchar(20)`, and a longer one used to fail at INSERT as "Unexpected error.". The values are
-    checked as they will be stored, not stripped first, for the reason `normalize_contact_fields`
-    gives.
+    Every path that writes an address calls this first, because a part past its `varchar(n)` fails
+    at INSERT as "Unexpected error.". Values are checked as they will be stored, not stripped first.
     """
     if fields:
         check_lengths(SecondaryLocation, **fields)

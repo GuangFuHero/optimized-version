@@ -116,9 +116,10 @@ async def test_ngo_team_admin_cannot_pin_a_building(client, redis):
     ({"secondaryLocation": {**ADDRESS, "floor": "2F"}}, "no building section, floor or room"),
     ({"floorsAboveGround": 0}, "floorsAboveGround must be"),
     ({"floorAreas": [{"floor": "1F", "areas": ["   "]}]}, "Area names must be"),
+    ({"secondaryLocation": {**ADDRESS, "no": "1" * 21}}, "no must be at most 20 characters"),
 ])
 async def test_create_building_map_rejects_bad_layout(client, coordinator_auth, overrides, message):
-    """An area outside the floor range, a floor in the address, or a zero-floor building is refused."""
+    """A bad floor layout, a floor in the address, or an address part too long for its column is refused."""
     _, token = coordinator_auth
     body = await _gql(client, CREATE_BUILDING, {"input": {
         "name": "x", "geometry": POINT, "secondaryLocation": ADDRESS, **LAYOUT, **overrides,

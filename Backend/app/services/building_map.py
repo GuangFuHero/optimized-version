@@ -12,7 +12,7 @@ from app.models.auth import User
 from app.models.geo import BuildingMap
 from app.repositories.geo_repository import building_map_repository, secondary_location_repository
 from app.services.authz import require_gov_team, require_scope
-from app.services.geo_validation import validate_point
+from app.services.geo_validation import check_address_lengths, validate_point
 
 # Offered on every floor that has areas, so a reporter in an unlisted space can still file.
 OTHER_AREA = "其他"
@@ -84,6 +84,7 @@ async def create_building_map(
     validate_point(geometry, entity="Building map")
     if any(secondary_location.get(k) for k in ("building_section", "floor", "room")):
         raise ValueError("A building map's address has no building section, floor or room")
+    check_address_lengths(secondary_location)
     building = await building_map_repository.add(
         db,
         obj_in={
