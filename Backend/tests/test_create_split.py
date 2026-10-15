@@ -1,9 +1,8 @@
-"""`create_ticket` / `create_station` split into validate → insert → commit (Spec 020, ADR-299).
+"""Ticket, station and ticket-task creation split into validate → insert → commit.
 
-The two-phase create needs to validate before running dedup and to insert without committing,
-so the ticket, its pair card and its audit row land in one transaction. Batch import keeps
-calling `create_*` unchanged, so these also pin that `create_*` still behaves — and is called —
-exactly as before.
+A deduplicated create must validate before the dedup check and insert without committing, so the
+new row, its pair card and its audit row land in one transaction. Batch import still calls
+`create_*`, so these tests also pin that `create_*` keeps its signature and behaviour.
 """
 
 import inspect
@@ -32,7 +31,7 @@ pytestmark = pytest.mark.asyncio
 POINT = {"type": "Point", "coordinates": [121.5601, 23.6701]}
 ADDRESS = {"location_type": "address", "county": "花蓮縣", "city": "光復鄉"}
 
-# The parameter lists batch import (and the GraphQL resolvers) call with, before the split.
+# The keyword names batch import and the GraphQL resolvers call `create_*` with.
 CREATE_TICKET_PARAMS = [
     "db", "actor", "geometry", "title", "description", "contact_name", "contact_email",
     "contact_phone", "priority", "task_type", "visibility", "disaster_types",
@@ -151,7 +150,7 @@ async def test_insert_ticket_leaves_the_commit_to_the_caller(db):
 
 
 async def test_create_ticket_behaves_as_before(db):
-    """Same row as before the split: normalized contacts, pending, address written, committed."""
+    """Stores normalized contacts, status pending and the address, and commits."""
     actor = await _actor(db, Perm.TICKET_ADD)
     actor_uuid = str(actor.uuid)
     ticket = await ticket_service.create_ticket(db, actor=actor, **_ticket_fields())
@@ -166,7 +165,7 @@ async def test_create_ticket_behaves_as_before(db):
 
 
 async def test_create_ticket_keeps_its_signature():
-    """Batch import calls create_ticket by these keyword names (ADR-299)."""
+    """Batch import calls create_ticket by these keyword names."""
     assert list(inspect.signature(ticket_service.create_ticket).parameters) == CREATE_TICKET_PARAMS
 
 
@@ -213,7 +212,7 @@ async def test_insert_station_leaves_the_commit_to_the_caller(db):
 
 
 async def test_create_station_behaves_as_before_and_still_notifies(db, monkeypatch):
-    """Same row as before, committed, and the resource_station_updated notice still goes out."""
+    """Stores the station, commits, and sends the resource_station_updated notice."""
     sent = []
 
     async def record(db_, **kwargs):
@@ -233,11 +232,11 @@ async def test_create_station_behaves_as_before_and_still_notifies(db, monkeypat
 
 
 async def test_create_station_keeps_its_signature():
-    """Batch import calls create_station by these keyword names (ADR-299)."""
+    """Batch import calls create_station by these keyword names."""
     assert list(inspect.signature(station_service.create_station).parameters) == CREATE_STATION_PARAMS
 
 
-# --- ticket tasks (Spec 020 plan Task 20) ------------------------------------------------
+# --- ticket tasks --------------------------------------------------------------------
 
 CREATE_TICKET_TASK_PARAMS = [
     "db", "actor", "ticket_uuid", "task_type", "task_name", "task_description", "quantity",
@@ -272,7 +271,7 @@ async def test_validate_ticket_task_writes_nothing_and_needs_no_ticket(db):
 
 
 async def test_validate_ticket_task_needs_ticket_add(db):
-    """Checkpoint 1 is part of validation."""
+    """The ticket.add permission check is part of validation."""
     actor = await _actor(db)
     with pytest.raises(HTTPException):
         await ticket_service.validate_ticket_task(db, actor=actor, **_task_fields())
@@ -291,7 +290,7 @@ async def test_insert_ticket_task_leaves_the_commit_to_the_caller(db):
 
 
 async def test_create_ticket_task_behaves_as_before(db):
-    """Same row as before the split, committed; a missing ticket is still 'Ticket not found'."""
+    """Stores the task and commits; a missing ticket raises 'Ticket not found'."""
     actor = await _actor(db, Perm.TICKET_ADD)
     ticket_uuid = await _existing_ticket_uuid(db, actor)
     await db.refresh(actor)

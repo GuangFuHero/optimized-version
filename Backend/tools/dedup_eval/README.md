@@ -2,7 +2,7 @@
 
 拿一批人工裁決過的查詢，重播快層的 top-1 排序，算出 recall、誤報等指標，也可以做參數的 grid search。
 
-分數直接用 engine 的程式算：`score_candidate` 把每一對轉成 `app.dedup_engine.fast.Signals`，再交給 `combine`；文字訊號用 `fast.text_similarity`（截短規則也一樣）。所以在這裡調出來的參數，算分方式跟線上的 `FastEngine` 完全相同。`fast.py` 一改，這裡跟著變；engine 升版時要重跑評估、更新 `app/dedup_engine/CHANGELOG.md` 的 backtest。
+分數直接用 engine 的程式算：`score_candidate` 把每一對轉成 `app.dedup_engine.fast.Signals`，再交給 `combine`；文字訊號用 `fast.text_similarity`（截短規則也一樣）。所以在這裡調出來的參數，算分方式跟線上的 `FastEngine` 完全相同。`fast.py` 一改，這裡跟著變；engine 升版時要重跑評估、更新 `Spec/020-dedup-engine-interface/spec.md` §11 的回測數字。
 
 撈候選（`candidates.py`）不重播：每筆資料自帶當時撈回的候選清單，所以不需要 DB。
 

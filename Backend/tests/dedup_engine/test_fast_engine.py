@@ -1,9 +1,8 @@
-"""The task-level fast layer on the ADR-304 contract, against real PostGIS.
+"""FastEngine end to end against real PostGIS.
 
-The formula is fast-v1's plus fast-v3's phone bonus (tests/dedup_engine/test_fast.py pins it);
-these cover what changed:
-the unit is a task, candidates come from the engine's own queries, and each draft gets at most
-one suspect.
+tests/dedup_engine/test_fast.py pins the scoring formula; these cover the engine around it: the
+unit compared is a task, candidates come from the engine's own queries, and each draft gets at
+most one suspect.
 """
 
 import os
@@ -106,7 +105,7 @@ async def test_each_task_draft_gets_at_most_one_suspect(db):
 
 
 async def test_the_ticket_itself_is_never_compared(db):
-    """The unit is the task (Spec 019, 2026-09-29): a ticket with no tasks has nothing to match."""
+    """Only tasks are compared: a ticket with no tasks has nothing to match."""
     owner = await _owner(db)
     await _ticket(db, owner, title="民生街淹水")
     assert await FastEngine().check(db, _new_ticket(), NOW) == []
@@ -135,7 +134,7 @@ async def test_unrelated_or_far_tasks_are_not_suspected(db):
 
 
 async def test_adding_to_a_ticket_skips_its_own_tasks(db):
-    """NewTask: located at its ticket, and that ticket's tasks are not candidates (019 decision 3)."""
+    """NewTask: located at its ticket, and that ticket's own tasks are not candidates."""
     owner = await _owner(db)
     mine = await _ticket(db, owner)
     await _task(db, owner, mine)
@@ -203,7 +202,7 @@ async def test_score_rates_one_named_pair_without_a_threshold(db):
 
 
 async def test_evidence_never_echoes_submitted_text(db):
-    """ADR-295."""
+    """Evidence never contains the submitted text."""
     owner = await _owner(db)
     await _task(db, owner, await _ticket(db, owner), task_name=f"{MARK}淹水", task_description=f"{MARK}抽水")
     draft = TaskDraft(task_type="rescue", task_name=f"{MARK}淹水", task_description=f"{MARK}抽水")
@@ -212,7 +211,7 @@ async def test_evidence_never_echoes_submitted_text(db):
 
 
 async def test_check_writes_nothing(db):
-    """Read-only (ADR-304): the session has nothing pending after a check."""
+    """Read-only: the session has nothing pending after a check."""
     owner = await _owner(db)
     await _task(db, owner, await _ticket(db, owner))
     await db.commit()
@@ -221,7 +220,7 @@ async def test_check_writes_nothing(db):
 
 
 def test_version_and_radius():
-    """fast-v4; the radius is the hint boundary per kind (phone bonus included), with the rounding margin."""
+    """The radius per kind is the hint boundary (phone bonus included) plus a float-rounding margin."""
     engine = FastEngine()
     assert engine.version == "fast-v4"
     assert engine.radius_m("ticket_task") == pytest.approx(max_hint_distance_m(TICKET_TASK_PARAMETERS) * 1.1)
@@ -230,7 +229,7 @@ def test_version_and_radius():
     assert engine.radius_m("station") == pytest.approx(136.7, abs=0.1)
 
 
-# --- fast-v3: the same contact phone is a pure bonus -------------------------------------
+# --- the same contact phone is a pure bonus -------------------------------------------
 
 PHONE_E164 = "+886912345678"
 
@@ -262,7 +261,7 @@ async def test_the_same_phone_lifts_a_farther_task_over_the_threshold(db):
         "weight": 0.1,
         "passed": True,
     }
-    assert "912" not in json.dumps(suspect.evidence)  # no phone number in evidence (ADR-295)
+    assert "912" not in json.dumps(suspect.evidence)  # no phone number in evidence
 
     without = await engine.check(db, _new_ticket_with_phone(None, PUMP), NOW)
     assert without == []
@@ -298,9 +297,9 @@ async def test_adding_a_task_uses_its_tickets_phone(db):
 
 
 async def test_the_same_placeholder_phone_is_not_the_same_phone(db):
-    """fast-v4: a phone the parser rejects counts as missing, even when both tickets store it.
+    """A phone the parser rejects counts as missing, even when both tickets store it.
 
-    Only this path can see one: an existing ticket's `contact_phone` is stored as typed.
+    Only adding to an existing ticket can hit this: a stored `contact_phone` is kept as typed.
     """
     owner = await _owner(db)
     await _a_task_200m_away(db, owner, "0000000000")

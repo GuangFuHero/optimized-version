@@ -1,9 +1,9 @@
-"""app/dedup_engine is the algorithm owner's code; it may read the database but not the backend (ADR-304).
+"""app/dedup_engine is the algorithm owner's code: it may read the database but not use the backend.
 
-Since ADR-304 the engine queries candidates itself, so SQLAlchemy and the ORM models are fair
-game. What it must not reach is the backend's own layers — services, repositories, GraphQL, the
-HTTP API — or open its own session: the backend hands it one, inside a savepoint it rolls back.
-Otherwise every backend refactor would start touching algorithm code again.
+The engine queries candidates itself, so SQLAlchemy and the ORM models are allowed. It must not
+reach the backend's own layers — services, repositories, GraphQL, the HTTP API — or open its own
+session: the backend hands it one, inside a savepoint it rolls back. This keeps backend
+refactors from touching algorithm code.
 """
 
 import ast

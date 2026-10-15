@@ -1,6 +1,6 @@
 """Repositories for the dedup tables: pair cards and audit events.
 
-Candidate retrieval is the engine's own (`app/dedup_engine/candidates.py`, ADR-304).
+Candidate retrieval belongs to the engine (`app/dedup_engine/candidates.py`).
 """
 
 from sqlalchemy import exists, select
@@ -38,7 +38,7 @@ class DuplicatePairRepository(GenericRepository[DuplicatePair]):
         return result.scalar_one_or_none()
 
     async def entity_exists(self, db: AsyncSession, *, entity_kind: str, uuid: str) -> bool:
-        """Whether a not-deleted entity of `entity_kind` has this uuid (when the engine could not tell)."""
+        """Whether a not-deleted `entity_kind` row has this uuid; used when engine scoring failed."""
         model = _ENTITY_MODELS[entity_kind]
         query = select(exists().where(model.uuid == uuid, model.delete_at.is_(None)))
         return bool((await db.execute(query)).scalar())

@@ -1,1 +1,1 @@
-"""Tests for the dedup algorithm core (Spec 020): pure, no database."""
+"""Tests for the dedup engine in app/dedup_engine."""

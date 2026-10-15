@@ -1,1 +1,4 @@
-"""Dedup algorithm core (Spec 020). Pure code: see contract.py for the backend boundary."""
+"""Dedup engine: finds submissions that look like existing tasks or stations.
+
+contract.py is its only interface to the backend.
+"""

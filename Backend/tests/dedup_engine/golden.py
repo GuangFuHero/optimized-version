@@ -1,7 +1,7 @@
-"""Fixed database contents and submissions whose fast-layer outputs are pinned (ADR-297, ADR-304).
+"""Fixed database contents and submissions whose fast-layer outputs are pinned in golden/fast.json.
 
 Everything is deterministic: fixed uuids, fixed timestamps relative to NOW. Add cases freely;
-changing or removing one changes the golden file and so needs a version bump.
+changing or removing one changes the golden file and so needs an engine version bump.
 """
 
 import json
@@ -40,8 +40,8 @@ def _u(n: int) -> uuid_mod.UUID:
 
 OWNER = _u(1)
 T_FLOOD, T_DONE, T_FAR, T_CANCELLED = _u(10), _u(11), _u(12), _u(13)
-# fast-v3's phone cases, 2 km west of everything else: a task 200 m from PHONE_SPOT scores 0.75
-# on its own, so only the phone bonus can lift it to the threshold.
+# Phone cases, 2 km west of everything else: a task 200 m from PHONE_SPOT scores 0.75 on its
+# own, so only the phone bonus can lift it to the 0.8 threshold.
 T_PHONE, T_PHONE_NEIGHBOUR = _u(14), _u(15)
 PHONE_SPOT = GeoPoint(HERE.lon - DEG_100M * 22, HERE.lat)
 
@@ -190,7 +190,7 @@ def write_golden(path: Path, version: str, cases: dict[str, Any]) -> str:
         if old == new:
             return "unchanged"
         if old["version"] == version:
-            return "refused: outputs changed but the version did not — bump it and add a CHANGELOG entry"
+            return "refused: outputs changed but the version did not — bump it (Spec 020 §11)"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(new, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return "written"

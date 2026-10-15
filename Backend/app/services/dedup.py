@@ -1,16 +1,13 @@
-"""Dedup fast layer service (Spec 020, ADR-304).
+"""Dedup fast-layer service: calls the engine (`app.dedup_engine`) safely and writes what it decided.
 
 - `check_submission`: ask the engine about a submission, guarded — savepoint always rolled
   back, timeout, write detection, malformed and acknowledged results dropped. Fail-open.
-- `record_suspect_shown`: audit that a hint was shown (ADR-296/303).
+- `record_suspect_shown`: audit that a hint was shown.
 - `score_acknowledged`: score a pair the submitter chose to file anyway, before creating.
 - `record_pair_ignored`: card that pair once the new entity exists. Does not commit.
 
-Both engine calls, `check` and `score`, run before anything is written and go through `_guarded`
-(ADR-313).
-
-The engine (`app.dedup_engine`) finds and scores candidates itself; this module only calls it
-safely and writes what it decided.
+Both engine calls, `check` and `score`, go through `_guarded` before anything is written, so a
+failure can roll back the whole transaction.
 """
 
 import asyncio
@@ -34,8 +31,8 @@ from app.services.authz import refresh_actor
 
 logger = logging.getLogger("app.dedup")
 
-# How long the backend waits for the engine before creating without a hint (ADR-304). The
-# contract test holds the engine to a much smaller budget; this is the backstop.
+# How long the backend waits for the engine before creating without a hint. The contract
+# test holds the engine to a much smaller budget; this is the backstop.
 ENGINE_TIMEOUT_S = 2.0
 
 
@@ -53,7 +50,7 @@ async def check_submission(
 ) -> list[Suspect]:
     """What the engine suspects in `submission`, minus acknowledged drafts. Never raises.
 
-    The engine may query the database (ADR-304), so it runs inside a savepoint that is always
+    The engine may query the database, so it runs inside a savepoint that is always
     rolled back, under `ENGINE_TIMEOUT_S`. If it wrote anyway — detected by Postgres assigning a
     transaction id, which only a write does — its answer is discarded. Any failure is logged and
     treated as "no suspects" (fail-open). The actor is reloaded on the way out in case a rollback
@@ -78,7 +75,7 @@ async def check_submission(
 
 
 async def record_suspect_shown(db: AsyncSession, *, suspect: Suspect, actor_uuid: str) -> None:
-    """Audit that a hint was shown and nothing was created (ADR-296/303). Does not commit."""
+    """Audit that a hint was shown and nothing was created. Does not commit."""
     await dedup_audit_event_repository.add(
         db,
         obj_in={
@@ -119,8 +116,8 @@ async def score_acknowledged(
 ) -> AcknowledgedPair | None:
     """Score a pair the submitter acknowledged, before anything is created. Never raises.
 
-    Called while the transaction has written nothing, under the same guard as `check`
-    (ADR-313), so a failure can roll everything back and the create still goes ahead. None
+    Called while the transaction has written nothing, under the same guard as `check`, so a
+    failure can roll everything back and the create still goes ahead. None
     means nothing to card: not a uuid, or the related entity is gone. If the engine fails, the
     submitter's choice is still carded unscored — but only when the related entity exists,
     since nobody vouched for that uuid.

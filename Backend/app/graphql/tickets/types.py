@@ -768,7 +768,7 @@ class TicketConnection:
 
 @strawberry.input
 class CreateTicketTaskDraft:
-    """A task sent with a new ticket (Spec 020 §5.1)."""
+    """A task sent with a new ticket."""
 
     task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
     task_name: str

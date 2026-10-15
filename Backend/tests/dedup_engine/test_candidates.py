@@ -1,4 +1,4 @@
-"""fast-v2's candidate queries against real PostGIS (Spec 019 task-level rules, ADR-304)."""
+"""The engine's candidate queries (which tasks and stations count, and how far) against real PostGIS."""
 
 import os
 
@@ -113,7 +113,7 @@ async def test_a_ticket_without_tasks_is_never_a_candidate(db):
 
 
 async def test_the_ticket_being_added_to_is_excluded(db):
-    """Adding a task to a ticket: that ticket's own tasks are not candidates (019 decision 3)."""
+    """Adding a task to a ticket: that ticket's own tasks are not candidates."""
     owner = await _owner(db)
     mine, other = await _ticket(db, owner), await _ticket(db, owner)
     await _task(db, owner, mine)
@@ -220,12 +220,12 @@ async def _plan(db, run_query) -> str:
 
 
 async def test_the_task_query_can_use_the_geography_index(db):
-    """Otherwise every submission scans every geometry row (ADR-305)."""
+    """Otherwise every submission scans every geometry row."""
     plan = await _plan(db, lambda: candidates.open_tasks_near(db, at=HERE, radius_m=300.0))
     assert "ix_base_geometries_geography" in plan, plan
 
 
 async def test_the_station_query_can_use_the_centroid_geography_index(db):
-    """Stations are measured from their centroid, so they need an index on that expression (ADR-305)."""
+    """Stations are measured from their centroid, so they need an index on that expression."""
     plan = await _plan(db, lambda: candidates.open_stations_near(db, at=HERE, radius_m=300.0, now=NOW))
     assert "ix_base_geometries_centroid_geography" in plan, plan

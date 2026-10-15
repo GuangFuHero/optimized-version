@@ -1,4 +1,4 @@
-"""The backend's guard around an ADR-304 engine (Spec 020 §4), on a real session.
+"""The backend's guard around the pluggable dedup engine, on a real database session.
 
 The engine may query the database, so the backend runs it in a savepoint it always rolls back,
 under a timeout, detects writes, drops malformed or acknowledged results, and fails open.
@@ -225,7 +225,7 @@ async def test_record_pair_ignored_without_a_target_writes_nothing(db, engine):
 
 
 async def test_record_pair_ignored_when_scoring_fails_still_cards(db, engine):
-    """The submitter's choice is kept even without a score (spec §5.1)."""
+    """The submitter's choice is recorded even without a score."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     related = await _committed_task(db, actor)
     engine.fail_score = True
@@ -237,7 +237,7 @@ async def test_record_pair_ignored_when_scoring_fails_still_cards(db, engine):
 
 
 async def test_record_pair_ignored_when_scoring_fails_on_a_missing_target_writes_nothing(db, engine):
-    """A failed score is carded only if the related entity exists: nothing for a uuid of nothing (ADR-313)."""
+    """A failed score is carded only if the related entity exists; an unknown uuid writes nothing."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     engine.fail_score = True
     for kind, ref in (("ticket_task", "task:0"), ("ticket", "ticket"), ("station", "station")):

@@ -86,7 +86,7 @@ async def notify_operational_status_change(
 
 @dataclass(frozen=True)
 class StationFields:
-    """A station that passed authz and validation but is not written yet (Spec 020, ADR-299)."""
+    """A station that passed authz and validation but is not written yet."""
 
     point: dict
     values: dict
@@ -170,7 +170,7 @@ async def announce_station_created(db: AsyncSession, *, station: Station, actor_
     """Send the resource_station_updated notice for a committed new station.
 
     Every path that creates a station calls this after its commit, so the GraphQL two-phase
-    create (Spec 020) notifies exactly like the batch import does.
+    create notifies exactly like batch import does.
     """
     recipients = await NotificationRecipientResolver.resolve_gov_and_station_team(db, str(station.uuid))
     await NotificationService.dispatch(
@@ -210,7 +210,7 @@ async def create_station(
 
     Validate, insert, one commit that makes the station + address pair atomic, then notify.
     Batch import calls this; the interactive GraphQL path goes through
-    `dedup_submission.submit_new_station` (Spec 020, ADR-299).
+    `dedup_submission.submit_new_station`, which adds a duplicate check.
     """
     actor_uid = actor.uuid
     fields = await validate_station(

@@ -4,7 +4,7 @@
 **Feature**: 020-dedup-engine-interface
 **Status**（2026-09-29）：本文件描述的架構（ADR-304）已全部實作。plan Task 1~25 完成，Docker 從零驗證通過
 （本機與容器內皆 1612 passed、0 failed），驗證結果與速度實測見 `verification.md`。branch 已 push，PR 尚未開。
-剩 plan Task 0：等 Chi 確認 §2~§4 的 contract、離線調參數工具怎麼接 DB，並補 CHANGELOG 的驗證數字（交接訊息見 `handoff-chi.md`）。
+剩 plan Task 0：等 Chi 確認 §2~§4 的 contract、離線調參數工具怎麼接 DB，並補版本紀錄的驗證數字（§11）（交接訊息見 `handoff-chi.md`）。
 **Depends on**: `Spec/019-dedup-fast-layer/spec.md`（PR #46 / #59，未合併）
 **Stacked on**: `feat/dedup-station-fast-layer`（#59，已合進 `3f97468f8`，含 main 的站點指派 #58）→ `feat/dedup-fast-layer`（#46）→ `main`
 **Decisions**: `decisions.md`（ADR-295~299、301~307、313~323；現行架構以 ADR-304 為準）
@@ -41,7 +41,7 @@ Spec 019 交付了去重快層（2026-09-29 起比對單位是任務）。本功
 
 | 層 | 位置 | 擁有者 | 職責 | 不做的事 |
 |---|---|---|---|---|
-| engine | `app/dedup_engine/`（`registry.py` 除外） | Chi | 候選查詢（唯讀）、比對單位、訊號、分數、門檻、`evidence`；演算法測試、golden、`CHANGELOG.md` | 不寫 DB、不 commit；不 import `app.services`／`app.graphql`／`app.api` |
+| engine | `app/dedup_engine/`（`registry.py` 除外） | Chi | 候選查詢（唯讀）、比對單位、訊號、分數、門檻、`evidence`；演算法測試、golden、版本紀錄（§11） | 不寫 DB、不 commit；不 import `app.services`／`app.graphql`／`app.api` |
 | registry | `app/dedup_engine/registry.py` | 後端 | 線上用哪個 engine（ADR-306） | Chi 可新增 engine class，不切換上線 |
 | 守門測試 | `tests/dedup_engine/test_contract.py`、`test_core_isolation.py`、`test_candidates.py` 的 index 測試 | 後端（Chi 可改） | 合約、隔離、唯讀、效能、index（ADR-306） | Chi 改動需後端 review |
 | contract | `app/dedup_engine/contract.py` | 雙方 | 草稿與 `Submission`、`Suspect`、`DedupEngine` Protocol | 改動需雙方同意 |
@@ -155,7 +155,7 @@ class DedupEngine(Protocol):
 - `score`：使用者確認「不是重複」後建立時，替那一對算 evidence；找不到對方回 None。
 - `now` 由後端傳入（ADR-318）。
 - engine 可以用 `db` 做任何**唯讀**查詢；不得寫入、flush、commit。
-- 版本號、CHANGELOG、golden test 沿用 ADR-297；golden 改在測試 DB 上以固定資料執行。
+- 版本號、版本紀錄（§11）、golden test 沿用 ADR-297；golden 改在測試 DB 上以固定資料執行。
 
 ### 後端怎麼呼叫（保護措施）
 
@@ -243,7 +243,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 | 檔案 | 改動 |
 |---|---|
 | `app/dedup_engine/contract.py` | 改為 §2~§4 的草稿、`Submission`、`Suspect`、async `DedupEngine` |
-| `app/dedup_engine/fast.py`、`candidates.py`（新） | fast-v2：任務層級候選查詢（由 019／`app/repositories/dedup_repository.py` 移入）、站點候選、計分；CHANGELOG、golden |
+| `app/dedup_engine/fast.py`、`candidates.py`（新） | fast-v2：任務層級候選查詢（由 019／`app/repositories/dedup_repository.py` 移入）、站點候選、計分；版本紀錄、golden |
 | `app/repositories/dedup_repository.py` | 候選查詢移出；只留配對卡與 audit 的 repository |
 | `app/services/dedup_snapshot.py` | 改為「驗證過的 input → 草稿」；不再建候選 |
 | `app/services/dedup.py` | 保護措施（SAVEPOINT、逾時、種類檢查、確認過濾）＋寫入 |
@@ -290,3 +290,107 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 - **ADR-305（2026-09-29，Task 24 Docker 驗證）**：發現候選查詢從未用到空間 index（cast 的 typmod 對不上、站點無 centroid index），在本票修正。
 - **ADR-306／307（2026-09-29）**：`app/dedup_engine/` 裡歸後端的部分（registry、守門測試、時限）；依延遲實測定效能門檻、逾時維持 2 秒。
 - **ADR-313（2026-10-13，PR #73 審查）**：`engine.score` 補上跟 `check` 一樣的保護並移到建立之前；score 失敗時後端自己確認對方存在才寫卡；確認的 uuid 先正規化。
+
+---
+
+## 11. Engine 版本紀錄
+
+升版規則見 ADR-297：同樣的輸入（DB 內容＋送出的東西＋`now`）會得到不同的 `check`／`score` 結果，就升 `version`、
+在這裡記一版、重新產生 golden 檔（`DEDUP_REGEN_GOLDEN=1 uv run pytest tests/dedup_engine/test_golden.py`；
+結果變了但版本沒升，重產會被拒絕）。只改註解、重構或加速而輸出不變，不升版。每版記：改了什麼、參數、回測結果。
+
+### 現行參數（fast-v3 起沒變）
+
+| 參數 | 任務 | 站點 | 來源 |
+|---|---|---|---|
+| `distance_half_m` | 200 | 200 | 13 筆手寫案例 grid search 第一名 |
+| `time_half_min` | 360 | 360 | 同上 |
+| `distance_weight` | 2.0 | 2.0 | 同上 |
+| `time_weight` | 0.5 | **0.0** | 同上；站點的年齡跟重不重複無關 |
+| `task_type_weight` | 0.5 | 0.5 | 同上 |
+| `text_weight` | 1.0 | 1.0 | 判斷值，沒跑過 grid |
+| `hint_threshold` | 0.8 | 0.8 | grid search 第一名 |
+| `component_baseline` | 0.5 | 0.5 | 判斷值，只影響每個成分的 `passed` 燈號 |
+| `phone_bonus` | **0.10** | **0.0** | fast-v3 的回測；站點沒研究過 |
+| 檢索半徑 | 290.8 m | 136.7 m | 由 `hint_threshold − phone_bonus` 反解，× 1.1 |
+
+5-fold 參數掃描沒有推翻這組值；它們仍是暫定值，不是建議值。
+
+### 回測資料（每版共用）
+
+2025 光復舊平台 `human_resources` 備份（2026-02-08）：355 筆乾淨紀錄，其中 292 筆座標可信。每筆當成一張只有一個任務的單
+（角色名稱當 `task_name`、備註當 `task_description`），拿去跟所有更早的紀錄比，共 42,486 對。人工裁決 100 對
+（80 對來自早期提示、20 對來自漏抓抽樣），2026-10-03 重新標註：54 對重複、46 對不同。只算送單者看得到的第一名提示。
+重跑用 `tools/dedup_eval/`；資料不進 repo。
+
+讀數字時要注意：
+
+1. **recall 天生偏低**：54 對重複裡有 45 對，舊紀錄在新紀錄進來前就已完成（舊平台人滿就關單）。線上只比還開著的任務，
+   本來就不該提示這些。真正測到漏抓的只有 9 對，0.80 時提示了 4 對，只能看方向。
+2. **提示率高估線上**：沒有只挑舊紀錄仍開著的配對；只算那些，提示率是 8/292（fast-v2）。
+3. **一單一任務**：多任務的單、替既有的單加任務，這份資料都沒測到。
+4. **座標是事後用原始地址 Google 定位**（只收 rooftop 或 range-interpolated），不是使用者點的位置；
+   標註的配對偏向距離、時間都近。所以檢索半徑和 `distance_half_m` 不靠這份資料調。
+5. **標註問的是「是不是同一個需求」**，不管舊紀錄狀態；配對來自提示與可疑抽樣，數字不是母體比例。
+
+### fast-v4（2026-10-13）
+
+1. **後端 E.164 parser 不收的電話當作沒填。** fast-v3 會退回比純數字，兩張都填 `0000000000` 之類假號碼的單會拿到加分。
+   只有「替既有的單加任務」會遇到：新單的電話進 engine 前已是 E.164 或被丟掉，但既有單的 `contact_phone` 照使用者輸入存。
+   實測：A、B 兩單相距 200 m、都填 `0000000000`，在 B 加跟 A 一樣的抽水任務，fast-v3 0.8499 被擋，fast-v4 0.7499 直接建立。
+2. **`score` 遇到工單層級的確認（`draft_ref="ticket"`）回 `None`**，照 contract。fast-v3 丟 `ValueError`（後端有接住，但每次記 error）。
+3. **每個候選的電話在一次 `check` 只 parse 一次**（輸出不變）。密集區 benchmark（舊半徑內約 2000 個候選、5 個任務）
+   fast-v3 的 p50 是 834 ms，約一半花在重複 parse 電話。
+
+參數沒變，回測沒重跑。下次重跑注意：fast-v3 的回測比的是純數字，線上比 E.164（`+886912345678` 和 `0912-345-678` 線上算同號），
+所以線上加分率可能略高於 30/292；舊資料裡有沒有假號碼還沒查。golden 已重產，fast-v3 的案例結果都不變。
+
+### fast-v3（2026-10-05）
+
+1. **同一支聯絡電話 +0.10**（`phone_bonus`）：兩邊所屬的單都有電話且相同時，similarity = `min(1, 加權平均 + 0.10)`；
+   不同或沒填不扣分。加在挑第一名、比門檻之前，`score` 也加。evidence 多一個 `phone` 成分（score 1.0、weight＝加分），不含號碼。
+2. **電話來源**：新單用草稿的 `contact_phone`；加任務用既有單的；候選用它所屬單的。
+3. **站點不加分**：只研究過工單。
+4. **檢索半徑變大**：加分後較遠的候選也可能過門檻，所以改用 `hint_threshold − phone_bonus` 反解，任務 162.1 m → 290.8 m。
+
+「同一個建立者」加分延後：要改 contract 和後端，舊資料也沒有 operator id 可驗證。
+
+回測（5-fold，電話只比數字）：
+
+| 門檻 | precision | recall | 提示率 | 舊紀錄仍開著的提示率 |
+|---|---|---|---|---|
+| **0.80** | 16/19 | 16/54 | 30/292 | 13/292 |
+| fast-v2，0.80 | 9/10 | 9/54 | 16/292 | 8/292 |
+
+多抓到重複，precision 略降。
+
+### fast-v2（2026-09-29）
+
+比對單位改成任務（ADR-323），候選查詢移進 engine（ADR-304）。
+
+1. 每個任務草稿跟附近開著的任務比，最多一個疑似重複；工單本身不比。候選：任務未完成、未取消、未刪除，
+   所屬的單未刪除、未取消（已完成的單仍算）。
+2. 訊號讀任務欄位：兩任務所屬單的距離、候選任務的年齡、`task_type`、`task_name`＋`task_description` 的 trigram（截 200／2000 字）。
+3. 替既有的單加任務：從那張單的位置搜尋，跳過它自己的任務。
+
+公式、參數、檢索半徑同 fast-v1。golden 改成在測試 DB 上用固定資料跑（`tests/dedup_engine/golden.py`）。
+
+回測：
+
+| 門檻 | precision | recall | 提示率 |
+|---|---|---|---|
+| **0.80（上線）** | 9/10 | 9/54 | 16/292 |
+| 0.70 | 19/27 | 19/54 | 46/292 |
+| 0.65 | 25/40 | 25/54 | 70/292 |
+
+### fast-v1（2026-09-28）
+
+Spec 019 的快層搬到本 spec 的 contract 後面，公式不變（4 萬組隨機訊號，019 的 `score_candidate` 和 fast-v1 的 `combine` 算出來完全相同）。
+跟 019 的差別：
+
+1. 文字相似度改在 Python 算（ADR-316），`tests/test_dedup_trgm_parity.py` 驗證跟 DB 的 `similarity()` 相同。
+2. 候選的文字也截短（標題 200、描述 2000 字）；019 只截送出的那一邊。
+3. 有 `same_contact_phone` 但不使用。
+
+任務檢索半徑 162.1 m、站點 136.7 m。這份資料每張單只有一個任務，所以 fast-v1 和 fast-v2 的分數完全相同，回測同 fast-v2。
+PR #46 較早的數字（0.80 時 8 個提示對 7 個、26 對重複抓到 7 對）用的是重新標註前的標籤，已作廢。

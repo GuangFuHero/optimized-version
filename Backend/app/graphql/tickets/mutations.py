@@ -42,15 +42,16 @@ class RequestMutation:
     async def create_ticket(
         self, info: strawberry.types.Info, input: CreateTicketInput
     ) -> CreateTicketResult:
-        """Create a support ticket with its tasks — unless any part looks like something already there.
+        """Create a support ticket with its tasks — unless any task looks like an open one nearby.
 
-        Two-phase (Spec 020 §5.1). If any task (or the ticket) looks like an open one nearby,
-        nothing is created and `DuplicatesSuspected` lists each suspect: which part of the input
-        (`draftRef`) and what it looks like. Send the same input again after editing, or with
-        `acknowledgedDuplicateOf` set on each part confirmed not to be a duplicate; those parts are
+        Two-phase. If any task looks like an open task nearby, nothing is created and
+        `DuplicatesSuspected` lists each suspect: which part of the input (`draftRef`) and what it
+        looks like. Send the same input again after editing, or with `acknowledgedDuplicateOf` set
+        on each task confirmed not to be a duplicate; a task whose acknowledged entity exists is
         not checked again and the pair is recorded for review. Otherwise the ticket and all its
-        tasks are created together (`TicketCreated`). A failing duplicate check never blocks.
-        Requires ticket.add.
+        tasks are created together (`TicketCreated`). Tickets themselves are not compared, so the
+        ticket-level `acknowledgedDuplicateOf` has no effect. A failing duplicate check never
+        blocks. Requires ticket.add.
         """
         result = await submit_new_ticket(
             info.context["db"], actor=require_authenticated(info),
@@ -195,7 +196,7 @@ class TicketTaskMutation:
     ) -> CreateTicketTaskResult:
         """Add a task (rescue, HR, supply, etc.) to an existing ticket — unless it looks like another.
 
-        Two-phase (Spec 020 §5.2): `DuplicatesSuspected` (nothing added) when it looks like an
+        Two-phase: `DuplicatesSuspected` (nothing added) when it looks like an
         open task of another ticket; send again with `acknowledgedDuplicateOf` to add it anyway.
         The ticket's own tasks are never suspects. Verifies the parent ticket exists. Requires
         ticket.add (checkpoint 1 only — no scope check against the parent ticket).
@@ -340,7 +341,7 @@ class TicketTaskMutation:
 
 
 def _task_submission(draft) -> TaskSubmission:
-    """A `CreateTicketTaskDraft` as the service takes it."""
+    """Convert a `CreateTicketTaskDraft` into the service's `TaskSubmission`."""
     return TaskSubmission(
         task_type=draft.task_type,
         task_name=draft.task_name,

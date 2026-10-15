@@ -1,4 +1,4 @@
-"""Shared helpers for the Spec 020 service and submission tests."""
+"""Shared helpers for the dedup service and submission tests."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -31,12 +31,13 @@ async def actor_with(db, *perms: Perm) -> User:
 
 @dataclass
 class AsyncStubEngine:
-    """An ADR-304 engine whose answers the test decides.
+    """A dedup engine whose answers the test sets.
 
     `suspects` is returned by `check` (a callable receives the submission); `delay_s` sleeps
     first; `fail` raises; `write` adds a row before answering, to exercise the read-only guard.
-    `scored` is what `score` returns (None = the related entity is gone); `score_sql` is run by
-    `score` first, to exercise a failing or slow query inside the guard.
+    `scored` is what `score` returns (None = the related entity is gone); `fail_score` makes
+    `score` raise; `score_sql` is run by `score` first, to exercise a failing or slow query
+    inside the guard.
     """
 
     version: str = "stub-v2"

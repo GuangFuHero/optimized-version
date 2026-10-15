@@ -1,4 +1,4 @@
-"""The ADR-304 contract: the backend sends drafts, the engine returns suspects (Spec 020 §2~§4)."""
+"""The engine contract types: the backend sends drafts, the engine returns suspects."""
 
 import dataclasses
 import inspect
@@ -35,12 +35,12 @@ REQUIRED = {
     NewStation: {"station"},
     Suspect: {"draft_ref", "related_kind", "related_uuid", "similarity", "evidence"},
 }
-# Never handed to the engine (ADR-304 keeps ADR-317's whitelist for drafts).
+# Personal and internal fields that are never handed to the engine.
 EXCLUDED = {"contact_name", "contact_email", "review_note", "visibility", "team_uuid", "created_by"}
 
 
 def test_contract_version():
-    """Snapshots were version 1; drafts replace them (ADR-304)."""
+    """Renaming, removing or changing the meaning of a contract field must bump this."""
     assert CONTRACT_VERSION == 2
 
 
@@ -92,7 +92,7 @@ def test_draft_refs_name_the_part_and_its_kind():
 
 @pytest.mark.parametrize("name", ["check", "score"])
 def test_engine_methods_are_async_and_take_the_session(name):
-    """The engine queries the database itself (ADR-304), so both calls are coroutines taking `db`."""
+    """The engine queries the database itself, so both calls are coroutines taking `db`."""
     method = getattr(DedupEngine, name)
     assert inspect.iscoroutinefunction(method)
     assert list(inspect.signature(method).parameters)[1] == "db"

@@ -1,21 +1,17 @@
 """dedup fast layer: pair cards + dedup audit events
 
-Creates only the two tables the fast layer writes. The frozen contract also defines
-ticket_duplicate_groups / ticket_duplicate_group_members / dedup_settings /
-dedup_rule_versions / dedup_score_components / dedup_scan_runs — all slow-layer, all out of
-scope here. `duplicate_group_uuid` and `rule_version_uuid` are created as plain uuid columns
-(no FK) because their target tables do not exist yet; the FKs land with those tables.
+Creates only the two tables the fast layer writes. The slow-layer tables (duplicate groups,
+settings, rule versions, scan runs) come later, so `duplicate_group_uuid` and
+`rule_version_uuid` are plain uuid columns for now; their FKs land with those tables.
 
-Both tables are entity-agnostic: `entity_kind` says what `low_uuid`/`high_uuid` (and
-`primary_uuid`/`duplicate_uuid` on the audit table) point at (`'ticket'` / `'station'` /
-`'ticket_task'`), and those uuid columns carry no FK for the same reason — one shared table
-cannot FK to whichever entity table `entity_kind` names. The fast layer only ever writes
-`entity_kind='ticket'`.
+Both tables are entity-agnostic: `entity_kind` (`'ticket'` / `'station'` / `'ticket_task'`)
+says what `low_uuid`/`high_uuid` (and `primary_uuid`/`duplicate_uuid` on the audit table)
+point at, so those columns carry no FK — one shared table cannot FK to whichever entity table
+`entity_kind` names. The fast layer writes `'ticket_task'` and `'station'` cards.
 
-Spec 020 (ADR-322) amended this migration before it merged: `score_components` became the
-opaque `evidence`, both tables gained `engine_version` (required on every card an engine made),
-and `hint_shown` joined the audit event types. Scoring, the text signal included, moved into
-the algorithm core (`app.dedup_engine`); nothing here depends on pg_trgm any more.
+`evidence` is the engine's opaque verdict data, and `engine_version` records which engine made
+it (required on every card an engine made). Scoring lives in `app.dedup_engine`; nothing here
+depends on pg_trgm.
 
 Revision ID: d4c8b1e07a92
 Revises: a7d3c5e9f214
@@ -37,7 +33,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Create duplicate_pairs, dedup_audit_events, and the geography GIST index."""
+    """Create duplicate_pairs, dedup_audit_events, and the geography GIST indexes."""
     op.create_table(
         "duplicate_pairs",
         sa.Column("uuid", sa.UUID(as_uuid=True), nullable=False, comment="主鍵 UUID"),
@@ -167,8 +163,8 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "event_type IN ('suggested', 'hint_accepted', 'ignored_by_submitter', 'hint_shown', 'rejected', "
             "'confirmed', 'merged', 'unmerged', 'manual_note', "
-            # Slow-layer values the fast layer never writes; included so the group welding and
-            # detach flows land without having to rewrite this constraint (contract §1.5).
+            # Slow-layer values the fast layer never writes; listed now so the slow layer
+            # needs no rewrite of this constraint.
             "'group_welded', 'weld_kept', 'member_detached')",
             name="ck_dedup_audit_events_type",
         ),
@@ -188,11 +184,10 @@ def upgrade() -> None:
     op.create_index("ix_dedup_audit_events_group", "dedup_audit_events", ["duplicate_group_uuid"])
 
     # Candidate retrieval filters on ST_DWithin(<geography>, ..., metres): tickets by their
-    # point, stations by their centroid. The GIST index geoalchemy2 already builds is on the
-    # *geometry* column and cannot serve a geography operand — different operator class — so
-    # without these the submit path sequentially scans every geometry row in the database.
-    # The query must cast to a bare `geography` to match; geoalchemy2's default
-    # `Geography()` renders `geography(GEOMETRY,-1)`, which does not (ADR-305).
+    # point, stations by their centroid. geoalchemy2's own GIST index is on the *geometry*
+    # column and cannot serve a geography operand (different operator class), so without these
+    # every submission scans all geometry rows. The query must cast to a bare `geography` to
+    # match; geoalchemy2's default `Geography()` renders `geography(GEOMETRY,-1)`, which does not.
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_base_geometries_geography "
         "ON base_geometries USING GIST ((geometry::geography))"

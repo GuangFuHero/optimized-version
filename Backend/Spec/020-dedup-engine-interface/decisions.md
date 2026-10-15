@@ -285,7 +285,7 @@ SemVer 的 major/minor 對演算法很難定義；commit hash 讀不懂且改註
 - **格式**：`^[a-z]+-v[1-9][0-9]*$`，例 `fast-v1`。
 - **何時升版**：同樣的輸入（快照＋`now`）會得到不同的 `rank` / `score` 結果時。
   包括改參數、門檻、公式、文字比對方法、回傳筆數。只改註解、重構、效能且輸出不變時不升版。
-- **Changelog**：`app/dedup_engine/CHANGELOG.md`，每版記錄改了什麼、參數表、回測結果（資料集名稱與指標）。
+- **版本紀錄**：`spec.md` §11，每版記錄改了什麼、參數表、回測結果（資料集名稱與指標）。（原本放 `app/dedup_engine/CHANGELOG.md`，2026-10-15 併入 spec。）
 - **Golden test**：固定輸入 → 輸出存成 golden file，檔案內記錄產生時的版本號。
   輸出變了但 `version` 沒變 → 失敗；升版時重新產生。
 - 第一版：搬進 core 並改用 Python 文字相似度（ADR-316）之後的版本定為 `fast-v1`。

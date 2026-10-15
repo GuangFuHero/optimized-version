@@ -9,7 +9,7 @@
 - **candidates**：新送出一張單或一個站點時，engine 會去 DB 撈「附近、還開著的任務或站點」來跟它比對，這些就是 candidates。
 - **先檢查再建立**：送出時先跑 dedup。有疑似重複就先不建立，回傳 `DuplicatesSuspected` 讓使用者看；使用者確認後帶 `acknowledgedDuplicateOf` 再送一次，才真的建立。
 - **`duplicate_pairs`**：使用者看到提示後仍選擇建立時，後端記一筆「這兩筆疑似重複」的紀錄。
-- **golden test**：用一組固定的測試資料跑 engine，把結果（誰被判重複、分數多少）存成 `tests/dedup_engine/golden/fast.json`。之後每次跑測試都拿現在的結果跟它比，不一樣就失敗。故意改了演算法時，把 engine 的 `version` 加 1（例如 `fast-v2` → `fast-v3`）、寫進 CHANGELOG，再重新產生這個檔案。這樣分數就不會在沒人知道的情況下悄悄改變。
+- **golden test**：用一組固定的測試資料跑 engine，把結果（誰被判重複、分數多少）存成 `tests/dedup_engine/golden/fast.json`。之後每次跑測試都拿現在的結果跟它比，不一樣就失敗。故意改了演算法時，把 engine 的 `version` 加 1（例如 `fast-v2` → `fast-v3`）、寫進 `spec.md` §11 版本紀錄，再重新產生這個檔案。這樣分數就不會在沒人知道的情況下悄悄改變。
 
 ---
 
@@ -23,7 +23,7 @@
   修好後同一地點約 40 ms，算出來的距離不變，golden test 的結果也沒變（ADR-305）。
 - **速度**：dedup 讓使用者多等的時間，跟「附近的 candidates 數量 × 送出的任務數」成正比。實測最慢的情況（附近 2000 筆、5 個任務），最慢的 1%（p99）約 245 ms，離 2 秒的 timeout 很遠。
   依此定了速度標準，timeout 維持 2 秒（ADR-307）。
-- **等 Chi 回覆**：`contract.py` 夠不夠用、離線調參數的工具要怎麼接 DB、補 `CHANGELOG.md` 的驗證數字（§6）。
+- **等 Chi 回覆**：`contract.py` 夠不夠用、離線調參數的工具要怎麼接 DB、補版本紀錄的驗證數字（§6）。
 
 ---
 
@@ -32,7 +32,7 @@
 | 東西 | 誰負責 | 說明 |
 |---|---|---|
 | `candidates.py`、`fast.py`、`text.py` | Chi | 撈哪些 candidates（只能讀 DB）、比對的對象是工單還是任務、用哪些 signals、分數怎麼算、threshold、`evidence` 放什麼 |
-| 演算法的測試：`test_fast.py`、`test_fast_engine.py`、`test_text.py`、golden test；`CHANGELOG.md` | Chi | 結果改變就把 `version` 加 1、重新產生 golden 檔（見 §7） |
+| 演算法的測試：`test_fast.py`、`test_fast_engine.py`、`test_text.py`、golden test；`spec.md` §11 版本紀錄 | Chi | 結果改變就把 `version` 加 1、重新產生 golden 檔（見 §7） |
 | `contract.py`（engine 收什麼、回什麼） | 兩邊一起 | 改欄位要兩邊都同意，並把 `CONTRACT_VERSION` 加 1 |
 | `registry.py` | 後端 | 決定線上實際用哪一版 engine。Chi 可以寫新的 engine class，要不要上線、切到哪一版由後端改 |
 | 後端寫的檢查測試：`test_contract.py`、`test_core_isolation.py`、`test_candidates.py` 裡檢查 index 的兩條 | 後端，Chi 可以改 | Chi 的改動讓它們失敗的話，可以在自己的 PR 裡一起調整，後端會 review 這部分 |
@@ -274,7 +274,7 @@ CAST(geometry AS geography(GEOMETRY,-1))    → Seq Scan (cost=10000000000...)  
 1. **`contract.py`**：`TicketDraft`、`TaskDraft`、`StationDraft`、`Suspect` 這幾個型別，以及 `check`（`contract.py:143`）、`score`（`contract.py:147`）兩個 method，夠不夠用？
 2. **離線調參數的工具**：以前 engine 只要餵「新送出的單＋一串附近的資料」就能算分數，不需要 DB。現在 engine 會自己去 DB 撈，所以要跑完整的 engine，得準備一個有同樣資料表的 Postgres（含 PostGIS），把那批標好的資料灌進去。
    如果只想調分數公式，也可以直接呼叫 `fast.py` 裡算分數的部分（`Signals`、`combine`），不用 DB，但這樣就測不到「撈哪些資料」那一段。這對調參數的流程有影響嗎？打算用哪種方式？
-3. **`CHANGELOG.md`**：每一版都要記「用哪批資料驗證、準確度多少」。fast-v2 這格（資料集、threshold 0.80 時的 precision／recall、跳出提示的比例）請補上，fast-v1 那格也還空著。
+3. **版本紀錄（`spec.md` §11）**：每一版都要記「用哪批資料驗證、準確度多少」。fast-v2 這格（資料集、threshold 0.80 時的 precision／recall、跳出提示的比例）請補上，fast-v1 那格也還空著。
 4. **速度標準／timeout**：§5 的數字，有意見再提。
 
 ---

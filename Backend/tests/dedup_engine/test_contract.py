@@ -1,4 +1,4 @@
-"""Contract tests every ADR-304 engine must pass (Spec 020 §8), against a real database.
+"""Contract tests every dedup engine must pass, against a real database.
 
 Owned by the backend: they check what the backend relies on — shapes, determinism, read-only,
 evidence hygiene, speed — not whether the algorithm is any good.
@@ -40,8 +40,8 @@ from app.models.ticket_task import TicketTask
 pytestmark = pytest.mark.asyncio
 
 ENGINES = [FastEngine()]
-# Item 7 (ADR-307): a table big enough that a query unable to use its index shows, a crowded
-# spot, and a ticket carrying several tasks (the engine checks each one).
+# Speed budget for one `check`: a table big enough that a query unable to use its index is
+# visibly slow, a crowded spot, and a ticket carrying several tasks (the engine checks each one).
 PERF_BUDGET_MS = 200
 PERF_TABLE_ROWS = 20_000
 PERF_CANDIDATES = 500
@@ -118,7 +118,7 @@ async def _counts(db) -> dict[str, int]:
 
 
 async def test_suspect_shapes(db, engine):
-    """Items 1: similarity in [0,1], at most one suspect per draft, kind matches the draft."""
+    """Similarity in [0, 1], at most one suspect per draft, and its kind matches the draft."""
     ticket = await _world(db)
     for submission in _submissions(str(ticket.uuid)):
         suspects = await engine.check(db, submission, NOW)
@@ -131,14 +131,14 @@ async def test_suspect_shapes(db, engine):
 
 
 async def test_deterministic(db, engine):
-    """Item 2: same data, same submission, same answer."""
+    """Same data, same submission, same answer."""
     ticket = await _world(db)
     for submission in _submissions(str(ticket.uuid)):
         assert await engine.check(db, submission, NOW) == await engine.check(db, submission, NOW)
 
 
 async def test_empty_database_means_no_suspects(db, engine):
-    """Item 3."""
+    """An empty database gives no suspects."""
     for submission in _submissions(str(uuid_mod.uuid4())):
         assert list(await engine.check(db, submission, NOW)) == []
 
@@ -154,7 +154,7 @@ async def _wrote_anything(db) -> bool:
 
 
 async def test_read_only(db, engine):
-    """Item 4: the engine never writes — no transaction id assigned, nothing pending, nothing left."""
+    """The engine never writes: no transaction id assigned, nothing pending, nothing left."""
     ticket_uuid = str((await _world(db)).uuid)  # before the commit expires it
     await db.commit()
     before = await _counts(db)
@@ -170,7 +170,7 @@ async def test_read_only(db, engine):
 
 
 async def test_evidence_is_json_and_echoes_no_text(db, engine):
-    """Item 5 (ADR-295)."""
+    """Evidence is JSON-serializable and never echoes submitted text."""
     ticket = await _world(db, text=f"{MARK}淹水")
     draft = TaskDraft(task_type="rescue", task_name=f"{MARK}淹水0", task_description="水深及膝")
     submissions = [
@@ -186,7 +186,7 @@ async def test_evidence_is_json_and_echoes_no_text(db, engine):
 
 
 async def test_empty_optional_fields(db, engine):
-    """Item 6: drafts with every optional field empty still check and score."""
+    """Drafts with every optional field empty still check without error."""
     ticket = await _world(db)
     bare_task = TaskDraft(task_type="rescue", task_name="")
     for submission in (
@@ -232,7 +232,7 @@ async def _far_open_tasks(db, n: int) -> None:
 
 
 async def test_fast_enough(db, engine):
-    """Item 7 (ADR-307): PERF_CANDIDATES nearby among PERF_TABLE_ROWS, PERF_TASKS drafts, within budget.
+    """PERF_TASKS drafts, PERF_CANDIDATES nearby among PERF_TABLE_ROWS rows: under PERF_BUDGET_MS.
 
     Best of three. The far rows keep a query that cannot use its index from passing on a small table.
     """
@@ -258,5 +258,5 @@ async def test_fast_enough(db, engine):
 
 
 def test_version_format(engine):
-    """Item 8 (ADR-297)."""
+    """Versions look like `fast-v4`: a lower-case name, `-v`, and a positive integer."""
     assert re.fullmatch(r"[a-z]+-v[1-9][0-9]*", engine.version)

@@ -1,6 +1,6 @@
 """The fast layer's formula: parameters, `combine`, and the hint boundary.
 
-Expected numbers are the offline tuning harness's own output for the same inputs; a failure here
+Expected numbers are the offline tuning harness's output for the same inputs; a failure here
 means the formula has drifted from it. The engine around the formula — candidates, per-draft
 suspects — is tested in test_fast_engine.py.
 """
@@ -34,7 +34,7 @@ def _signals(**overrides) -> Signals:
 
 
 def test_defaults_are_the_grid_search_values():
-    """The shipped parameters are the provisional grid-search winners, unchanged from Spec 019."""
+    """The shipped parameters are the provisional grid-search winners."""
     p = TICKET_TASK_PARAMETERS
     assert (p.distance_half_m, p.time_half_min) == (200.0, 360.0)
     assert (p.distance_weight, p.time_weight, p.task_type_weight, p.text_weight) == (2.0, 0.5, 0.5, 1.0)
@@ -53,7 +53,7 @@ def test_station_parameters_are_the_ticket_parameters_without_time_or_phone():
 @pytest.mark.parametrize(
     ("same_category", "expected"),
     [
-        # harness: score_candidate(..., Parameters(200, 360, 2, 0.5, 0.5, 0.8))
+        # tuning harness output with the default parameters and no text signal
         (True, 0.786554307147755),
         (False, 0.6198876404810882),
         (None, 0.7438651685773059),  # category unavailable -> dropped from the average
@@ -118,7 +118,7 @@ def test_a_zero_time_weight_drops_the_time_component():
     assert [c["name"] for c in components] == ["distance", "task_type", "text"]
 
 
-# --- the phone bonus (fast-v3) ---------------------------------------------------------
+# --- the phone bonus -------------------------------------------------------------------
 
 
 def test_the_same_phone_adds_the_bonus_outside_the_average():
@@ -158,7 +158,7 @@ def test_stations_get_no_phone_bonus():
         ("+886912345678", "886912345678"),  # E.164, as the backend sends the submission's
         ("0912-345-678", "886912345678"),  # as typed into tickets.contact_phone
         ("+886 912 345 678", "886912345678"),
-        ("12-34", None),  # not a valid number: no key (fast-v4)
+        ("12-34", None),  # not a valid number: no key
         ("0000000000", None),  # a placeholder is not a phone
         ("", None),
         (None, None),
@@ -193,7 +193,7 @@ def test_the_hint_boundary_is_where_a_perfect_candidate_scores_exactly_the_thres
 
 
 def test_without_the_bonus_the_boundary_is_fast_v2s():
-    """With `phone_bonus` 0 the boundary is the fast-v1/v2 one."""
+    """With `phone_bonus` 0 the boundary shrinks to about 147.4 m."""
     assert max_hint_distance_m(FastParameters(phone_bonus=0.0)) == pytest.approx(147.3931188332412, abs=1e-9)
 
 

@@ -1,4 +1,4 @@
-"""Validated create input → the drafts the dedup engine is told about (Spec 020 §2, ADR-304).
+"""Turn validated create input into the drafts the dedup engine is told about.
 
 No scoring and no candidates here: the engine finds those itself. Drafts carry the whitelisted
 facts of what is being submitted; names, emails and internal fields stay behind, and phones go
@@ -12,7 +12,7 @@ from app.services.ticket import TaskFields, TicketFields
 
 
 def ticket_draft(fields: TicketFields) -> TicketDraft:
-    """What the ADR-304 engine is told about a ticket being submitted."""
+    """What the dedup engine is told about a ticket being submitted."""
     lon, lat = fields.point["coordinates"][:2]
     v = fields.values
     return TicketDraft(
@@ -29,7 +29,7 @@ def ticket_draft(fields: TicketFields) -> TicketDraft:
 
 
 def task_draft(fields: TaskFields) -> TaskDraft:
-    """What the ADR-304 engine is told about a task being submitted. Its location is its ticket's."""
+    """What the dedup engine is told about a task being submitted. Its location is its ticket's."""
     v = fields.values
     return TaskDraft(
         task_type=v["task_type"],
@@ -40,7 +40,7 @@ def task_draft(fields: TaskFields) -> TaskDraft:
 
 
 def station_draft(fields: StationFields) -> StationDraft:
-    """What the ADR-304 engine is told about a station being registered."""
+    """What the dedup engine is told about a station being registered."""
     lon, lat = fields.point["coordinates"][:2]
     v = fields.values
     return StationDraft(

@@ -1,12 +1,11 @@
-"""The contract between the backend and the dedup engine (Spec 020 §2–§4, ADR-304).
+"""The contract between the backend and the dedup engine.
 
-The backend sends what is being submitted (validated drafts) from one of three fixed triggers
-and gets back suspects; the engine finds and scores candidates itself, reading the database
-through the session it is handed. Both sides depend on this module and nothing else of each
-other.
+The backend sends a validated submission (new ticket, new task or new station) and gets back
+suspects; the engine finds and scores candidates itself, reading the database through the
+session it is handed. Neither side imports anything else from the other.
 
-Changing it needs both owners to agree. New fields come with a default, so no caller breaks;
-renaming, removing or changing what a field means bumps CONTRACT_VERSION.
+Changing this module needs both owners to agree. New fields get a default so no caller breaks;
+renaming, removing or changing the meaning of a field bumps CONTRACT_VERSION.
 """
 
 from collections.abc import Mapping, Sequence
@@ -104,7 +103,7 @@ class Suspect:
     At most one per `draft_ref`. `related_kind` must be the kind `draft_ref` names — a task is
     compared with tasks — because the pair card the backend writes joins two things of one kind.
     The backend reads everything but `evidence`, which it stores untouched; `evidence` must be
-    JSON-serializable and must not echo submitted text (ADR-295).
+    JSON-serializable and must not echo submitted text.
     """
 
     draft_ref: str
@@ -131,11 +130,11 @@ def kind_of_ref(draft_ref: str) -> RelatedKind:
 
 
 class DedupEngine(Protocol):
-    """What the backend calls (ADR-304).
+    """What the backend calls.
 
     The engine may run any read-only query on `db`; it must not add, flush or commit. The backend
     calls it inside a savepoint it always rolls back, under a timeout, and treats any failure as
-    "no suspects" (fail-open). `now` comes from the backend (ADR-318).
+    "no suspects" (fail-open). The engine uses the `now` it is given, never its own clock.
     """
 
     version: str
@@ -153,8 +152,8 @@ class DedupEngine(Protocol):
         related_uuid: str,
         now: datetime,
     ) -> Suspect | None:
-        """Score one named pair, no threshold, for a duplicate the submitter acknowledged.
+        """Score one named pair with no threshold, for a duplicate the submitter acknowledged.
 
-        None when the related entity is gone.
+        Returns None when the related entity is gone.
         """
         ...

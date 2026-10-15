@@ -151,12 +151,11 @@ async def _ensure_db():
 
 
 class _NeverSuspects:
-    """A dedup engine that never suspects a duplicate (Spec 020 plan Task 12).
+    """A dedup engine that never suspects a duplicate.
 
-    GraphQL tests create many similar tickets, tasks and stations at the same spot, and with the
-    real engine the create mutations would answer DuplicatesSuspected instead of creating. Those
-    tests are not about deduplication, so they get this; the ones that are opt in to the real
-    engine with `@pytest.mark.real_dedup`.
+    GraphQL tests create many similar tickets, tasks and stations at the same spot; with the real
+    engine the create mutations would answer DuplicatesSuspected instead of creating. Tests that
+    are about deduplication opt in to the real engine with `@pytest.mark.real_dedup`.
     """
 
     version = "stub-v2"

@@ -214,7 +214,7 @@ def secondary_location_to_dict(sl: SecondaryLocationInput) -> dict:
 
 @strawberry.type
 class DuplicateSuspect:
-    """One part of a submission that looks like something already there (Spec 020, ADR-304)."""
+    """One part of a submission that looks like something already there."""
 
     draft_ref: str = strawberry.field(
         description='Which part of what was sent: "ticket", "task:0", "task:1"…, or "station"'
@@ -230,7 +230,7 @@ class DuplicateSuspect:
 
 @strawberry.type
 class DuplicatesSuspected:
-    """Nothing was created: these parts look like existing ones (Spec 020 §5).
+    """Nothing was created: these parts look like existing ones.
 
     Show them to the submitter. To create anyway, send the same input again with
     `acknowledgedDuplicateOf` set on each part the submitter confirmed is not a duplicate.
@@ -240,7 +240,7 @@ class DuplicatesSuspected:
 
     @classmethod
     def of(cls, suspects) -> "DuplicatesSuspected":
-        """From the service's suspects."""
+        """Build from the service's suspects."""
         return cls(
             suspects=[
                 DuplicateSuspect(

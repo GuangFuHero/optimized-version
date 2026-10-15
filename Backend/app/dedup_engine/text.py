@@ -1,6 +1,6 @@
-"""Trigram similarity in Python, with the same result as pg_trgm (ADR-316).
+"""Trigram similarity in Python, giving the same result as pg_trgm.
 
-This module does the same steps as `similarity()` of pg_trgm:
+It follows the same steps as pg_trgm's `similarity()`:
 
 1. Change the text to lower case.
 2. Split the text into alphanumeric words.
@@ -8,10 +8,8 @@ This module does the same steps as `similarity()` of pg_trgm:
 4. Collect the set of all 3-character windows.
 5. Return |A ∩ B| / |A ∪ B|.
 
-CJK characters are alphanumeric. Thus, a Chinese sentence without spaces is one word.
-pg_trgm does the same with a UTF-8 locale.
-
-tests/test_dedup_trgm_parity.py compares this module with the database function.
+CJK characters count as alphanumeric, so a Chinese sentence without spaces is one word,
+as in pg_trgm under a UTF-8 locale. tests/test_dedup_trgm_parity.py checks parity with the database.
 """
 
 import re
@@ -20,7 +18,7 @@ _WORD = re.compile(r"[^\W_]+")
 
 
 def trigrams(text: str) -> frozenset[str]:
-    """Make the set of padded trigrams that pg_trgm makes from `text`."""
+    """Return the padded trigram set pg_trgm builds from `text`."""
     grams: set[str] = set()
     for word in _WORD.findall(text.lower()):
         padded = f"  {word} "
@@ -29,15 +27,14 @@ def trigrams(text: str) -> frozenset[str]:
 
 
 def trigram_similarity(a: str, b: str) -> float:
-    """Divide the shared trigrams by all trigrams. The result is 0–1. Returns 0 if one side has none."""
+    """Shared trigrams over all trigrams, 0–1; 0 if either side has none."""
     return set_similarity(trigrams(a), trigrams(b))
 
 
 def set_similarity(grams_a: frozenset[str], grams_b: frozenset[str]) -> float:
-    """Do `trigram_similarity` on trigram sets that the caller already made.
+    """`trigram_similarity` on precomputed trigram sets.
 
-    Use this function to compare one text with many texts. Then you make the trigrams of the
-    first text only one time.
+    Use it to compare one text with many, building the first text's trigrams only once.
     """
     if not grams_a or not grams_b:
         return 0.0
