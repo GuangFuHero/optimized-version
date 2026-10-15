@@ -1,7 +1,7 @@
 """add ticket_tasks.recruiting_stopped_at (a requester stopped recruiting for this need by hand)
 
 Revision ID: 6c5a9d3d3444
-Revises: 5e2c8a9f1b47
+Revises: a7d3c5e9f214
 Create Date: 2026-09-29 12:00:00.000000
 
 A need becomes `fulfilled` two ways: the claim that fills it, or its requester stopping
@@ -16,7 +16,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '6c5a9d3d3444'
-down_revision: str | Sequence[str] | None = '5e2c8a9f1b47'
+down_revision: str | Sequence[str] | None = 'a7d3c5e9f214'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

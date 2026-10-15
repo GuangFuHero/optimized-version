@@ -104,9 +104,9 @@ class RequestQuery:
         shown and `q` by its title and task names only (ADR-281/282) — each row on what
         this caller can read of it, so neither filter recovers what the fields withhold.
 
-        At most TICKET_LIST_MAX_LIMIT rows a page, and a row's contact fields take
-        ticket.view_history besides ticket.view_pii (ADR-286 point 6): the list is not a
-        phone book, while the ticket a volunteer opens (`ticket`) still shows whom to call.
+        At most TICKET_LIST_MAX_LIMIT rows a page. A row reads whom to call as `ticket` does —
+        to the requester, the coordinators and whoever claimed one of its needs (ADR-286 point 1)
+        — and its triage answers take ticket.view_history besides ticket.view_pii (point 6).
         """
         if limit > TICKET_LIST_MAX_LIMIT:
             raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
@@ -220,8 +220,8 @@ class TicketTaskQuery:
 
         Sign-in only, no capability: every row is the caller's own claim. Canceled and
         fulfilled needs stay listed; deleted ones drop off. Each ticket follows the same
-        per-field rules as anywhere else: claiming changes nothing, and since ADR-286 anyone
-        signed in reads the requester's contact details anyway.
+        per-field rules as anywhere else, by which the claim is what lets the volunteer read
+        whom to call (ADR-286 point 1).
         """
         rows = await ticket_service.list_my_claims(info.context["db"], actor=require_authenticated(info))
         return [

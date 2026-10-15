@@ -42,21 +42,44 @@ async def lifespan(app: FastAPI):
         await app.state.redis.aclose()
 
 
+# The interactive docs and the schema they read are served only in development. Tooling that needs
+# the schema elsewhere can still call app.openapi() in-process.
+_dev = settings.ENV == "development"
 app = FastAPI(
     title="救災平台 API",
     description="災難救援與資源調度平台後端服務",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if _dev else None,
+    redoc_url="/redoc" if _dev else None,
+    openapi_url="/openapi.json" if _dev else None,
 )
 
+app.add_middleware(AuditContextMiddleware)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Stop browsers sniffing a response's type or embedding it in a page from another site.
+
+    An unhandled exception's 500 goes without them, because Starlette sends it from outside every
+    added middleware.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "same-site")
+    return response
+
+
+# Added last so it is outermost and answers preflights before any other middleware runs. Browsers
+# call this API with bearer tokens, never cookies, so any origin may call it without credentials.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(AuditContextMiddleware)
 
 
 @app.exception_handler(ApiError)

@@ -35,17 +35,19 @@ QUERY_STATION = """
 query($uuid: UUID!) { station(uuid: $uuid) { uuid propertyName } }
 """
 
-CREATE_CLOSURE_AREA = """
-mutation($input: CreateClosureAreaInput!) {
-    createClosureArea(input: $input) { uuid status geometry }
+CREATE_AREA = """
+mutation($input: CreateAreaInput!) {
+    createArea(input: $input) { uuid type isPublic geometry }
 }
 """
 
-UPDATE_CLOSURE_AREA = """
-mutation($uuid: UUID!, $input: UpdateClosureAreaInput!) {
-    updateClosureArea(uuid: $uuid, input: $input) { uuid status }
+UPDATE_AREA = """
+mutation($uuid: UUID!, $input: UpdateAreaInput!) {
+    updateArea(uuid: $uuid, input: $input) { uuid }
 }
 """
+
+QUERY_HAZARD_STATUS = "query($uuid: UUID!) { hazardousZone(uuid: $uuid) { status } }"
 
 CREATE_STATION_PROPERTY = """
 mutation($input: CreateStationPropertyInput!) {
@@ -395,20 +397,21 @@ async def test_delete_station_excluded_from_queries(client, coordinator_auth):
 
 
 # ============================================================================
-# Closure area mutations (4 tests)
+# Hazardous zone mutations (4 tests)
 # ============================================================================
 
 
 @pytest.mark.asyncio
-async def test_create_closure_area(client, coordinator_auth):
-    """Coordinator creates a closure area with a polygon."""
+async def test_create_hazardous_zone(client, coordinator_auth):
+    """Coordinator creates a hazardous zone with a polygon, and it is public."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
-            "query": CREATE_CLOSURE_AREA,
+            "query": CREATE_AREA,
             "variables": {
                 "input": {
+                    "type": "hazardous_zone",
                     "geometry": POLYGON_TAIPEI,
                     "status": "blocked",
                 }
@@ -416,21 +419,23 @@ async def test_create_closure_area(client, coordinator_auth):
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["createClosureArea"]
+    data = resp.json()["data"]["createArea"]
     assert data["uuid"] is not None
-    assert data["status"] == "blocked"
+    assert data["type"] == "hazardous_zone"
+    assert data["isPublic"] is True
 
 
 @pytest.mark.asyncio
-async def test_create_closure_area_multipolygon(client, coordinator_auth):
-    """MultiPolygon geometry is accepted for closure areas."""
+async def test_create_hazardous_zone_multipolygon(client, coordinator_auth):
+    """MultiPolygon geometry is accepted for hazardous zones."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
-            "query": CREATE_CLOSURE_AREA,
+            "query": CREATE_AREA,
             "variables": {
                 "input": {
+                    "type": "hazardous_zone",
                     "geometry": MULTIPOLYGON,
                     "status": "blocked",
                 }
@@ -438,20 +443,21 @@ async def test_create_closure_area_multipolygon(client, coordinator_auth):
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["createClosureArea"]
+    data = resp.json()["data"]["createArea"]
     assert data["uuid"] is not None
 
 
 @pytest.mark.asyncio
-async def test_create_closure_area_rejects_point(client, coordinator_auth):
-    """Point geometry is rejected for closure areas."""
+async def test_create_area_rejects_point(client, coordinator_auth):
+    """Point geometry is rejected for map areas."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
-            "query": CREATE_CLOSURE_AREA,
+            "query": CREATE_AREA,
             "variables": {
                 "input": {
+                    "type": "hazardous_zone",
                     "geometry": POINT_TAIPEI,
                     "status": "blocked",
                 }
@@ -464,22 +470,25 @@ async def test_create_closure_area_rejects_point(client, coordinator_auth):
 
 
 @pytest.mark.asyncio
-async def test_update_closure_area(client, coordinator_auth, sample_closure_area):
-    """Coordinator updates a closure area's status."""
+async def test_update_hazardous_zone(client, coordinator_auth, sample_hazardous_zone):
+    """Coordinator updates a hazardous zone's status."""
     _, token = coordinator_auth
     resp = await client.post(
         "/graphql",
         json={
-            "query": UPDATE_CLOSURE_AREA,
+            "query": UPDATE_AREA,
             "variables": {
-                "uuid": sample_closure_area,
+                "uuid": sample_hazardous_zone,
                 "input": {"status": "cleared"},
             },
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["updateClosureArea"]
-    assert data["status"] == "cleared"
+    assert "errors" not in resp.json(), resp.json()
+    resp = await client.post(
+        "/graphql", json={"query": QUERY_HAZARD_STATUS, "variables": {"uuid": sample_hazardous_zone}}
+    )
+    assert resp.json()["data"]["hazardousZone"]["status"] == "cleared"
 
 
 # ============================================================================
@@ -784,6 +793,38 @@ async def test_create_ticket_rejects_over_long_contact(client, coordinator_auth,
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["createStation", "createTicket", "updateTicket"])
+async def test_an_address_part_too_long_for_its_column_is_refused_by_name(
+    client, coordinator_auth, sample_ticket, mutation
+):
+    """`floor` is varchar(20) wherever an address is written, and a longer one is named as such.
+
+    It used to reach the INSERT, and the caller read only "Unexpected error." (#61 review).
+    """
+    _, token = coordinator_auth
+    address = {"floor": "x" * 21}
+    query, variables = {
+        "createStation": (CREATE_STATION, {"input": _station_input(secondaryLocation=address)}),
+        "createTicket": (
+            CREATE_TICKET,
+            {
+                "input": {
+                    "title": "Need medics", "geometry": POINT_TAIPEI, "contactName": "Alice",
+                    "priority": "high", "secondaryLocation": address,
+                }
+            },
+        ),
+        "updateTicket": (UPDATE_TICKET, {"uuid": sample_ticket, "input": {"secondaryLocation": address}}),
+    }[mutation]
+
+    resp = await client.post(
+        "/graphql", json={"query": query, "variables": variables}, headers=auth_header(token)
+    )
+
+    assert [e["message"] for e in resp.json()["errors"]] == ["floor must be at most 20 characters"]
+
+
+@pytest.mark.asyncio
 async def test_create_ticket_stores_contact_stripped(client, coordinator_auth):
     """A ticket's contact values are stored stripped, matching what the length check measured.
 
@@ -1082,6 +1123,82 @@ async def test_update_task_property_blocks_non_owner(
 
 
 @pytest.mark.asyncio
+async def test_create_task_property_blocks_non_owner(client, login_user_auth, sample_ticket_task):
+    """Adding a property asks for ticket.edit on the parent task, as updateTaskProperty does.
+
+    sample_ticket_task is the Field Coordinator's. A Login User holds ticket.add at `all`, which
+    used to be all this asked for, but ticket.edit only at `own`.
+    """
+    _, token = login_user_auth
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TASK_PROPERTY,
+            "variables": {
+                "input": {
+                    "taskUuid": sample_ticket_task,
+                    "propertyName": "required_skill",
+                    "propertyValue": "medical",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    assert body["data"] is None
+    assert any("permission" in e["message"].lower() for e in body["errors"]), body
+
+
+@pytest.mark.asyncio
+async def test_a_requester_adds_a_property_to_their_own_need(client, login_user_auth):
+    """ticket.edit `own` reaches the need its holder added, so a requester's own need takes one."""
+    _, token = login_user_auth
+    ticket = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET,
+            "variables": {
+                "input": {
+                    "title": "一樓積泥", "geometry": POINT_TAIPEI, "contactName": "王小明",
+                    "priority": "high", "taskType": "hr", "visibility": "public",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    task = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TICKET_TASK,
+            "variables": {
+                "input": {
+                    "ticketUuid": ticket.json()["data"]["createTicket"]["uuid"],
+                    "taskType": "hr", "taskName": "清淤", "quantity": 3,
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": CREATE_TASK_PROPERTY,
+            "variables": {
+                "input": {
+                    "taskUuid": task.json()["data"]["createTicketTask"]["uuid"],
+                    "propertyName": "required_skill",
+                    "propertyValue": "medical",
+                }
+            },
+        },
+        headers=auth_header(token),
+    )
+    body = resp.json()
+    assert "errors" not in body, body
+    assert body["data"]["createTaskProperty"]["propertyValue"] == "medical"
+
+
+@pytest.mark.asyncio
 async def test_update_task_property_blocked_when_parent_task_soft_deleted(
     client, coordinator_auth, login_user_auth, sample_ticket_task
 ):
@@ -1158,6 +1275,39 @@ async def test_upsert_station_property_config_idempotent(client, coordinator_aut
         headers=auth_header(token),
     )
     assert resp.json()["data"]["upsertStationPropertyConfig"]["dataType"] == data_type
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query,variables,message", [
+    (
+        UPSERT_STATION_PROPERTY_CONFIG,
+        {"stationType": "x" * 51, "input": {"propertyName": "power_stable", "dataType": "text"}},
+        "station_type must be at most 50 characters",
+    ),
+    (
+        """mutation($taskType: String!, $input: UpsertPropertyConfigInput!) {
+            upsertTaskPropertyConfig(taskType: $taskType, input: $input) { uuid }
+        }""",
+        {"taskType": "hr", "input": {"propertyName": "skill", "dataType": "text", "unit": "x" * 21}},
+        "unit must be at most 20 characters",
+    ),
+    (
+        """mutation($input: UpsertTicketPropertyConfigInput!) {
+            upsertTicketPropertyConfig(input: $input) { uuid }
+        }""",
+        {"input": {"propertyName": "water_depth", "dataType": "text", "hint": "x" * 201}},
+        "hint must be at most 200 characters",
+    ),
+])
+async def test_upsert_property_config_refuses_a_value_longer_than_its_column(
+    client, coordinator_auth, query, variables, message
+):
+    """An over-long value is the caller's mistake, named as such, rather than a masked database error."""
+    _, token = coordinator_auth
+    resp = await client.post(
+        "/graphql", json={"query": query, "variables": variables}, headers=auth_header(token)
+    )
+    assert resp.json()["errors"][0]["message"] == message
 
 
 # ============================================================================

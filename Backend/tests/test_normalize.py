@@ -1,5 +1,7 @@
 """Tests for email identifier normalization."""
 
+import time
+
 import pytest
 
 from app.core.normalize import normalize_email, normalize_phone
@@ -37,3 +39,17 @@ def test_normalize_phone_rejects_invalid(bad):
     """Invalid / unparseable / impossible numbers raise ValueError."""
     with pytest.raises(ValueError):
         normalize_phone(bad)
+
+
+def test_normalize_email_rejects_overlong_address():
+    """An address longer than 320 characters is rejected even when it is otherwise well formed."""
+    with pytest.raises(ValueError):
+        normalize_email("a" * 64 + "@" + "b" * 252 + ".com")
+
+
+def test_normalize_email_rejects_backtracking_input_quickly():
+    """Input that makes the regex backtrack quadratically is rejected before the regex runs."""
+    start = time.monotonic()
+    with pytest.raises(ValueError):
+        normalize_email("a@" + "." * 100_000 + "@")
+    assert time.monotonic() - start < 1

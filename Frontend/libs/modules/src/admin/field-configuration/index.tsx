@@ -514,7 +514,7 @@ export function AdminFieldConfigurationExtensionCard({
             sx={{
               color: fieldConfigurationPalette.heading,
               fontSize: highlighted ? 14 : 12,
-              lineHeight: highlighted ? '16px' : '16px',
+              lineHeight: '16px',
               fontWeight: 500,
               letterSpacing: highlighted ? '0.7px' : '0.6px',
               whiteSpace: 'nowrap',

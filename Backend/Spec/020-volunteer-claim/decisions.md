@@ -72,7 +72,8 @@ remembered to change it.
      deleted: `task_deleted` or `ticket_deleted` already told them not to come.
 7. **Every need but a rescue says how many** (added 2026-10-08, after #61 review; the product owner's
    call). A need without a quantity never fills, so its request never completes on its own. `hr`,
-   `supply` and `medical` needs are refused without one (`QUANTITY_REQUIRED_TASK_TYPES`): filing a help
+   `supply` and `medical` needs are refused without one, and so is a kind the back office configured itself
+   (ADR-214; the rule names the exception, `QUANTITY_OPTIONAL_TASK_TYPES`, since 2026-10-11): filing a help
    request, adding a need (the site's 「再加一件」 and the back office share `createTicketTask`), and a bulk
    import, whose preview fails the row before its ticket is written. A `rescue` need may leave it out —
    whoever is trapped does not know how many it takes, and the design leaves rescues out of the 缺額

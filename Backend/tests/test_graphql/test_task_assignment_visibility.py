@@ -3,7 +3,7 @@
 `assignedCount` stays public — it is what a volunteer decides "is there room?" on. The list
 of `assignments`, which names each volunteer's account, follows the parent ticket's
 `ticket.view_history`: the requester and coordinators see who is coming, nobody else does —
-not even the signed-in citizens who, since ADR-286, may read the requester's contact details.
+not even a volunteer whose own claim lets them read the requester's contact details (ADR-286).
 Every signed-in caller gets `myAssignment`, their own claim, which is all the site needs to
 show "已承接" and to release it.
 """
@@ -11,6 +11,7 @@ show "已承接" and to release it.
 import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
+from sqlalchemy import select
 
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
@@ -121,14 +122,22 @@ async def test_a_volunteer_sees_their_own_claim(client, redis):
 
 
 @pytest.mark.asyncio
-async def test_a_citizen_who_may_call_the_requester_still_does_not_see_who_is_coming(client, redis):
-    """ADR-286 split the two: contact details open to anyone signed in, the claimant list not.
+async def test_a_volunteer_who_may_call_the_requester_still_does_not_see_who_else_is_coming(client, redis):
+    """ADR-286 split the two: a claim unlocks whom to call, not the claimant list.
 
     The requester's name in full, beside `createdBy`, ties an account to a person; an open list
-    would let anyone signed in follow a volunteer from need to need.
+    would let anyone who claimed one need follow the other volunteers from need to need.
     """
     ticket_uuid, *_ = await _claimed_need(client, redis)
     citizen_token = await _citizen_since_adr_286(redis)
+    async with test_db() as db:
+        task = await db.scalar(select(TicketTask).where(TicketTask.ticket_uuid == ticket_uuid))
+        task_uuid = str(task.uuid)
+    claimed = await client.post(
+        "/graphql", json={"query": CLAIM, "variables": {"taskUuid": task_uuid}},
+        headers=auth_header(citizen_token),
+    )
+    assert "errors" not in claimed.json(), claimed.json()
 
     res = await client.post(
         "/graphql", json={"query": CONTACT_AND_CLAIMS, "variables": {"uuid": ticket_uuid}},
@@ -139,7 +148,7 @@ async def test_a_citizen_who_may_call_the_requester_still_does_not_see_who_is_co
     ticket = res.json()["data"]["ticket"]
     assert ticket["contactName"] == "王小姐"
     [task] = ticket["tasks"]
-    assert task["assignedCount"] == 1
+    assert task["assignedCount"] == 2
     assert task["assignments"] == []
 
 

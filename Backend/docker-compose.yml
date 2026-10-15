@@ -49,6 +49,7 @@ services:
       - SQLALCHEMY_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/postgres
       - SECRET_KEY=your-secret-key-for-local-dev
       - REDIS_URL=redis://redis:6379
+      - ENV=development
     depends_on:
       - db
       - redis

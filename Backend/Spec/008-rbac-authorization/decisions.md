@@ -1227,10 +1227,12 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
   「站點例外」而不是刪掉。
 - 文件與註解要同步：`scripts/seed_rbac.py:153-155` 的「`zone`, never `team`」、`RBAC_RESOURCE_ROLE_MATRIX.md`。
 
-#### ADR-286 通報單的聯絡方式開放給所有登入者；承接名單改由 `ticket.view_history` 把關
+#### ADR-286 通報單的聯絡方式開放給承接者；承接名單改由 `ticket.view_history` 把關
 > **狀態：ACCEPTED（2026-09-30）。** 規則由團隊於 2026-09-28 確認；範圍與做法由產品負責人於同日拍板。
+> 2026-10-11 由產品負責人收緊（#61 第二輪 review）：聯絡方式從「登入就看得到」改為「承接者看得到」，見第 1、6 點。
 
-**白話**：登入的人都看得到求助者的聯絡方式，訪客仍然遮罩；誰承接了哪筆需求，仍然只有建單者與協調者看得到。
+**白話**：求助者的聯絡方式（姓名、電話、Email），建單者、協調者，以及承接了這張單某筆需求的志工看得到，其他
+登入者與訪客看到遮罩；兩個檢傷欄位登入就看得到；誰承接了哪筆需求，仍然只有建單者與協調者看得到。
 
 **Context**：一般帳號的 `ticket.view_pii` 是 `own`，看到的聯絡人是遮罩（王◯◯、09*****678），承接之後也不
 解鎖，志工到了現場不知道找誰。團隊 2026-09-28 確認：所有登入的人都看得到聯絡方式，不限承接者；訪客仍遮罩。
@@ -1239,16 +1241,30 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 任務的承接名單 `assignments`（每筆承接的帳號 uuid）、時間軸的 PII 層（Spec 016）與匯出的聯絡欄位。地址不在
 其中：ADR-281 已把它移到 `ticket.view_detail`。
 
+2026-10-11（#61 第二輪 review）：第 6 點只遮了列表，但列表每一列都帶 `uuid`，而單張 `ticket(uuid)` 對任何
+登入者給完整聯絡方式。GraphQL 可以在一個請求裡用別名查幾百個 `ticket`，reviewer 用新註冊的帳號一個請求就拿到
+200 支電話；GraphQL 沒有限流（`graphql/router.py` 沒掛 dependency），也沒有別名數量限制，一張一張查也一樣。
+也就是任何願意註冊的人都能把所有求助者的電話抄走，而災區最常見的正是假冒救援或募款的詐騙。產品負責人決定
+只收聯絡方式、改成承接者看得到；檢傷欄位、地點、描述維持登入可見，因為志工要靠它們決定去不去。
+
 **Decision**：
 
 1. **每個角色**的 `ticket.view_pii` 都是 `all`：`user` 由 `own`、team `admin`／`member` 由 `zone` 改過來，
    `data_auditor`、`super_admin` 本來就是。做法同 ADR-281 對 `view_detail`：仍是 capability＋scope，要收回只要在
    `/admin/rbac` 縮 scope，不必改程式。team 角色一起改，因為同一時間只有一個身分生效（ADR-097），team 身分不能
    看得比一般帳號少。不進 `PUBLIC_PERMS`，訪客照舊遮罩。
+
+   **聯絡人姓名、電話、Email 在 `view_pii` 之外還要二擇一**（2026-10-11 收緊）：這張單的 `ticket.view_history`
+   （建單者 `own`、責任區的 team `zone`、稽核與超管 `all`），或目前在這張單某筆**未刪除**的需求上有承接
+   （`TicketType._compute_contact_visible`、loader `ticket_claimed_by`）。單張 `ticket`、列表 `tickets`、
+   `myTaskAssignments`、`myTickets` 都是同一條。釋出名額會刪掉承接紀錄（`unassign_task_actor`），所以釋出後回到
+   遮罩；需求被刪除時已經通知過「不用前往」，那筆承接也不再算。`view_pii` 仍是外層的能力：在 `/admin/rbac`
+   把它縮回 `own`，承接者也一樣看不到。
 2. **兩個檢傷欄位跟著公開**：當初遮起來，是因為「只有能據以行動的人需要」（`graphql/tickets/types.py` 的
-   `person_trapped_reported`）；志工現在就是要據以行動的人。
+   `person_trapped_reported`）；志工現在就是要據以行動的人。2026-10-11 聯絡方式收緊時，它們**不跟著收**：志工在
+   承接前就要靠它們判斷要不要去。
 3. **承接名單改由 `ticket.view_history` 把關**，不再跟著 `view_pii`。`createdBy`（`view_detail`，登入即可見）
-   加上公開的聯絡人姓名，已經能把帳號對到真名；承接名單若也公開，任何登入者都能追出某位志工接了哪些需求、
+   加上承接後看得到的聯絡人姓名，已經能把帳號對到真名；承接名單若也公開，任何登入者都能追出某位志工接了哪些需求、
    何時接，等於志工行蹤外露。`view_history` 保有 `view_pii` 原本的分級（`user` `own`、team `zone`、稽核與超管
    `all`，ADR-128），而時間軸本來就會把承接人顯示成名字（ADR-143），所以不新增能力。前台沒有任何查詢讀
    `assignments`，畫面不受影響。
@@ -1260,19 +1276,20 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
    （`rejected`）也被所有人看到。時間軸本來就把它放在稽核層（Spec 016）。跟承接名單一樣交給 `view_history`：
    建單者看自己的、team 看責任區、稽核與超管看全部，其他人拿 null。每個 seed 角色的 `ticket.edit` 範圍都在
    `view_history` 範圍內，所以會審核需求的人讀得到自己設的值。
-6. **`tickets` 列表裡的聯絡方式另要 `ticket.view_history`**（2026-10-08 補，#61 review）。單張 `ticket` 照第 1
-   點，登入就看得到；但列表一頁一頁翻，等於把所有求助者的電話交給任何新帳號。所以列表裡的 `contactName`／
-   `contactEmail`／`contactPhone` 與兩個檢傷欄位，除了 `view_pii` 還要 `view_history`（建單者、責任區的 team、
-   稽核與超管），其他登入者在列表看到遮罩、點進單才看到完整的。`myTickets`、`myTaskAssignments` 不受影響
-   （自己的單、自己承接的單）。同時列表一頁最多 200 筆（前台地圖一次要 200，`TICKET_LIST_MAX_LIMIT`）。
-   前台的詳情抽屜與承接確認框都用單張 `ticket` 查詢，看得到電話；地圖標記帶的是列表的值，只當備用。
+6. **`tickets` 列表裡的兩個檢傷欄位另要 `ticket.view_history`**（2026-10-08 補，#61 review）：列表一頁一頁翻，
+   等於把每一張單的「有人受困」交給任何新帳號，所以列表裡除了 `view_pii` 還要 `view_history`（建單者、責任區的
+   team、稽核與超管），點進單才看得到。同時列表一頁最多 200 筆（前台地圖一次要 200，`TICKET_LIST_MAX_LIMIT`）。
+   聯絡方式原本也在這一點（列表另要 `view_history`、單張登入即可），但單張查詢繞得過去（見 Context），2026-10-11
+   併入第 1 點的規則，單張與列表一致。前台的承接確認框與詳情抽屜用單張 `ticket`，承接前看到遮罩，承接後在
+   「我承接的」（`myTaskAssignments`）看到完整的。
 
 **不受影響**：時間軸要先有 `ticket.view_history`（一般帳號 `own`），一般帳號本來就只看得到自己單的時間軸，而
 自己的單原本就有 `view_pii`；匯出要 `ticket.export`，一般帳號沒有；地址自 ADR-281 起由 `view_detail` 把關。
 
 **取代關係**：
 
-- 原本「承接之後聯絡方式仍維持遮罩」的規則作廢。
+- 原本「承接之後聯絡方式仍維持遮罩」的規則作廢：承接正是解鎖聯絡方式的條件（2026-10-11）。
+- 團隊 2026-09-28「所有登入的人都看得到聯絡方式，不限承接者」：2026-10-11 由產品負責人收緊為承接者（見 Context）。
 - ADR-128「時間軸的分級與 `view_pii` 完全一致」對通報單不再成立（站點照舊）：時間軸維持原分級，`view_pii`
   放寬。`tests/test_history_permissions.py` 的 mirror 測試改為只比對站點。
 - ADR-281 ➕「聯絡資料與兩個檢傷欄位維持 `ticket.view_pii`（一般帳號 `own`）」：能力照舊是兩個，「在哪裡」與
@@ -1280,11 +1297,16 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 **後果**：
 
-- 註冊即可登入，所以聯絡方式等於對任何願意註冊的人公開。這是規則本身的內容。日後若要收緊（例如只在緊急期
-  開放），在 `/admin/rbac` 把 `user` 縮回 `own` 即可；但那樣承接者也會看不到，要另外設計「承接即解鎖」。
-  第 6 點只擋「從列表整批撈」：一張一張點開仍然拿得到。若要再擋，下一步是單張查詢的限流或記錄誰看了誰的電話。
-- 承接名單的可見性從此綁在時間軸的能力上：日後放寬 `ticket.view_history` 時要一併考慮承接名單。
+- 要看聯絡方式得先承接。承接會通知建單者（`task_claimed`，「某某 承接了你的『…』」）並佔掉名額，大量收集
+  等於對每位求助者各發一則「我要來了」，很顯眼。擋不住的是真的承接了再看——那是規則本身的內容。
+- 前台的請求一律用 `user` 身分（ADR-289），所以協調者在前台只看得到自己的單與自己承接的單的聯絡方式；責任區的
+  要在後台、切到 team 身分看。
+- 沒有需求、或需求都已滿／已關閉的單，新來的志工承接不了，也就看不到聯絡方式。也沒有要他去做的事，所以合理。
+- 匯出的聯絡欄位只看 `view_pii`（`services/bulk_export.py:_row_decider`）。依 seed，持有 `ticket.export` 的角色
+  在它匯得出的列上都有 `view_history`，結果一致；runtime 把 `ticket.export` 給沒有 `view_history` 的角色時要重新評估。
+- 承接名單與聯絡方式的可見性從此綁在時間軸的能力上：日後放寬 `ticket.view_history` 時要一併考慮兩者。
   `tests/test_seed_rbac.py::test_who_claimed_a_need_stays_with_the_requester_and_coordinators` 會擋下。
+- 規則釘在 `tests/test_graphql/test_ticket_contact.py`（含一個請求用別名查多張單的回歸測試）。
 - GraphQL 測試的角色（`tests/test_graphql/conftest.py`）補上 `ticket.view_history`，比照 seed。
 - 文件同步：`RBAC_RESOURCE_ROLE_MATRIX.md` 的 `ticket.view_pii` 列與「PII 遮罩」一段。
 
@@ -1323,6 +1345,44 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 ◾ 不另加「審核者不得決定自己提出建議的欄位」：`data_auditor` 沒有 `station.contribute`，提不出建議，
    這條只會限制到 team admin 與 super_admin，暫不需要。
 ◾ Spec 015「`data_auditor` 不能匯入」照舊。
+
+---
+
+#### ADR-311 互助地圖三種區域：`area_polygons` 繼承樹、危險區與責任區恆公開、三種區域同一道閘門
+
+> **狀態：ACCEPTED（2026-10-04）；2026-10-11 修訂第 5、8 點。** 互助地圖區域類型 ticket（Sucre 2026-09-27 裁定三種區域）；
+> 2026-10-11 需求更新：指派區（責任區）一經設立，前後台皆需公布被指派的組織名稱。
+
+**白話**：地圖上畫的區域分三種——危險區、責任區、標示區，全部放進同一棵表繼承樹。危險區與責任區一律公開，
+責任區連同被指派的組織名稱一起公開；只有標示區有「前台可見」開關。三種都只有 super_admin 與 gov team 能畫。
+
+**Context**：原本危險區是 `closure_areas`（`base_geometries` 的子表），責任區是獨立的 `work_zones`。
+標示區不存在，沒有團隊的責任區與標示區分不出來，兩張表都沒有前台可見欄位。危險區的寫入用 `map.add/edit/delete`，
+只有 super_admin 持有。
+
+**Decision**：
+
+1. 新增 `area_polygons`（`base_geometries` 的 joined-table 子表，欄位 `name`/`note`/`is_public`），幾何只收
+   Polygon / MultiPolygon，由唯一的寫入服務 `app/services/area.py` 檢查。
+2. `closure_areas` → `hazardous_zones`、`work_zones` → `team_zones`，皆為 `area_polygons` 的子表；
+   `closure_areas.comment` 併入 `area_polygons.note`。
+3. 標示區（`mark_zone`）只是一個多型身分，沒有自己的表——它沒有 `area_polygons` 以外的欄位。
+4. `team_zone_assign.zone_uuid` 改指向 `team_zones`：只有責任區能掛團隊，標示區與危險區不可能擴大任何 team 的
+   `zone` scope。責任區建立時必須帶一個團隊（與第一筆指派同一次 commit），且不能移除最後一個團隊；一區可多隊。
+5. 危險區與責任區 `is_public` 恆為 true：建立時強制、更新時拒絕關閉、`hazardousZones` 不依此過濾。只有標示區預設 false。
+6. 唯一的類型轉換是標示區 → 危險區（`promoteMarkZone`，保留 uuid/名稱/備註並轉為公開）；沒有反向或其他轉換。
+7. 三種區域的寫入都走 `work_zone.*` + `_require_gov_zone_authority`；`map.add/edit/delete` 刪除（`map.view` 保留給公開讀取）。
+8. 公開讀取 `areas(bounds)` 只回傳 `is_public` 的區域，`assignedTeams` 列出責任區被指派的團隊（名稱與類型，非個資）；
+   `includePrivate: true` 需要 `work_zone.view`，只會多出隱藏的標示區。
+
+**取代關係**：BE-028 的 `closure_areas` 與 DATA-005 的 `work_zones` 表；`map.add/edit/delete` 三個能力。
+
+**後果**：
+
+➕ 一個 `areas(bounds)` 查詢就能畫出公開地圖上所有區域；三種區域共用一套寫入與 bbox 程式。
+➖ `scope_filter` 的 ZONE 分支必須把 zone 取別名：zone 與被過濾的資料列共用 `base_geometries`，不取別名時
+   EXISTS 會關聯到資料列自己，而每個幾何都包含自己。
+◾ 本次 migration 不保留區域資料：本地只有 `seed_mock_scenarios.sql` 載入的假資料。
 
 ---
 
@@ -1365,7 +1425,7 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 | none | `false()`（防禦性；CP1 應已先擋掉） | — |
 | own | `resource.created_by == actor.uuid` | — |
 | team | `resource.<team 邊界欄位> == actor 當前身分的 team`（預設欄位 `team_uuid`；`Team` 宣告 `uuid`）。用於團隊成員管理，以及**站點**（`stations.team_uuid`，ADR-285；gov team 身分視同 `all`）。不套用在其他 geo 資源 | active identity（010/ADR-074）、`__team_scope_attr__`（ADR-053） |
-| zone | `ST_Contains(actor 當前身分那個 team 被指派的 WorkZone, resource.geometry)` | `work_zones`+`team_zone_assign`（ADR-049/052） |
+| zone | `ST_Contains(actor 當前身分那個 team 被指派的 TeamZone, resource.geometry)` | `team_zones`+`team_zone_assign`（ADR-049/052/311） |
 | all | 全域 | — |
 
 最寬勝：`all > zone > team > own > none`（見 `app/core/rbac_scopes.py:WIDTH`）。gov/ngo scope 已於 ADR-049 退場——組織身分改由 team 的 `type` 表達，不進 scope。

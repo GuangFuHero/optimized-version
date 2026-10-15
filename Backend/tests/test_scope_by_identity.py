@@ -20,7 +20,7 @@ from app.core.rbac_scopes import Scope, scope_filter
 from app.models.auth import User
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.services.authz import require_scope
 from tests.conftest import acting_as
 
@@ -77,9 +77,9 @@ async def _identity(db, user: User, role_name: str, grants: dict, team=None) -> 
 
 
 async def _team_with_zone(db, name: str, polygon: Polygon, assigner: User) -> Team:
-    """A team holding a WorkZone covering `polygon`."""
+    """A team holding a TeamZone covering `polygon`."""
     team = Team(name=name, type="ngo")
-    zone = WorkZone(name=f"{name} zone", geometry=from_shape(polygon, srid=4326))
+    zone = TeamZone(name=f"{name} zone", geometry=from_shape(polygon, srid=4326))
     db.add_all([team, zone])
     await db.flush()
     db.add(

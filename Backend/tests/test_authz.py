@@ -28,7 +28,7 @@ from app.models.rbac import (
     UserRoleAssign,
 )
 from app.models.request import Tickets
-from app.models.team import Team, TeamZoneAssign, WorkZone
+from app.models.team import Team, TeamZone, TeamZoneAssign
 from app.services.authz import require_scope
 from tests.conftest import acting_as
 
@@ -140,10 +140,10 @@ async def test_require_scope_own_mismatch_is_403_not_404(db):
 
 
 async def _assign_zone(db, team, polygon: Polygon) -> None:
-    """Give `team` a WorkZone covering `polygon` (ADR-049 zone scope backing)."""
+    """Give `team` a TeamZone covering `polygon` (ADR-049 zone scope backing)."""
     assigner = User(name="zone-assigner")
     db.add(assigner)
-    zone = WorkZone(name="Z", geometry=from_shape(polygon, srid=4326))
+    zone = TeamZone(name="Z", geometry=from_shape(polygon, srid=4326))
     db.add(zone)
     await db.flush()
     db.add(
