@@ -1,16 +1,19 @@
-"""Two-phase create for the interactive GraphQL path (Spec 020 §5, ADR-296/299).
+"""Two-phase create for the interactive GraphQL path.
 
-First submission: validate, then ask the dedup engine. A match returns `Suspected` and creates
-nothing — the submitter decides. No match creates as usual.
+The engine is asked about the whole submission. Any suspect holds all of it: nothing is
+created (so nothing is left half-created), the API returns `Suspected`, and the submitter
+decides. No suspect creates as usual.
 
-Acknowledged submission (`acknowledged_duplicate_of` set): validate, score each acknowledged
-pair, create without checking again (so the submitter is never shown a second hint), and card
-the pairs — all in one commit. Every engine call happens before anything is written (ADR-313).
+A draft may carry `acknowledged_duplicate_of`: the entity the submitter was shown and
+confirmed this draft is not a duplicate of. Acknowledgements are scored first; a draft whose
+acknowledged entity scoring found skips the check, so the same hint is not shown again. Every other draft,
+including one whose acknowledgement names nothing, is checked and can still be held. On
+create, the scored pairs are carded in the same commit. A ticket-level acknowledgement is
+never scored or carded: the engine compares tasks and stations, not tickets.
 
-Batch import does not come through here; it calls `create_ticket` / `create_station` directly.
-
-The engine is asked about the whole submission (ADR-304); a single suspect anywhere holds all of
-it, so nothing half-created is ever left behind.
+Every engine call happens before anything is written, so a failed call can roll back the
+transaction. Batch import does not come through here; it calls `create_ticket` /
+`create_station` directly.
 """
 
 from dataclasses import dataclass
@@ -36,7 +39,7 @@ from app.services.dedup_snapshot import (
 
 @dataclass(frozen=True)
 class TaskSubmission:
-    """One task as the create input carries it, with its own acknowledgement (ADR-301)."""
+    """One task as the create input carries it, with its own acknowledgement."""
 
     task_type: str
     task_name: str
@@ -71,7 +74,7 @@ async def submit_new_ticket(
     acknowledged_duplicate_of: str | None = None,
     **ticket_fields,
 ) -> SubmissionCreated | SubmissionHeld:
-    """Create a ticket with its tasks, or hold all of it when any part looks like a duplicate (§5.1).
+    """Create a ticket with its tasks, or hold all of it when any part looks like a duplicate.
 
     `ticket_fields` are `create_ticket`'s keyword arguments. Each task carries its own
     acknowledgement, so reordering or dropping drafts between the two submissions keeps every
@@ -88,12 +91,12 @@ async def submit_new_ticket(
         task_ref(i): t.acknowledged_duplicate_of for i, t in enumerate(tasks)
     }
 
+    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
-        db, submission=submission, acknowledged=acknowledged, actor=actor, now=now
+        db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
     )
     if held is not None:
         return held
-    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
 
     ticket = await ticket_service.insert_ticket(db, actor=actor, fields=fields)
     created_tasks = [
@@ -112,7 +115,7 @@ async def submit_new_ticket(
 async def submit_new_task(
     db: AsyncSession, *, actor: User, ticket_uuid: str, task: TaskSubmission
 ) -> SubmissionCreated | SubmissionHeld:
-    """Add a task to an existing ticket, or hold it when it looks like a duplicate (§5.2)."""
+    """Add a task to an existing ticket, or hold it when it looks like a duplicate."""
     now = datetime.now(UTC)
     fields = await ticket_service.validate_ticket_task(db, actor=actor, **_task_kwargs(task))
     if not await ticket_repository.get_by_uuid_active(db, ticket_uuid):
@@ -121,12 +124,12 @@ async def submit_new_task(
     submission = NewTask(ticket_uuid=ticket_uuid, task=task_draft(fields))
     acknowledged = {task_ref(0): task.acknowledged_duplicate_of}
 
+    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
-        db, submission=submission, acknowledged=acknowledged, actor=actor, now=now
+        db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
     )
     if held is not None:
         return held
-    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
 
     created_task = await ticket_service.insert_ticket_task(
         db, actor=actor, ticket_uuid=ticket_uuid, fields=fields
@@ -140,19 +143,19 @@ async def submit_new_task(
 async def submit_new_station(
     db: AsyncSession, *, actor: User, acknowledged_duplicate_of: str | None, **station_fields
 ) -> SubmissionCreated | SubmissionHeld:
-    """Register a station, or hold it when it looks like a serving one (§5.3)."""
+    """Register a station, or hold it when it looks like a serving one."""
     now = datetime.now(UTC)
     fields = await station_service.validate_station(db, actor=actor, **station_fields)
     actor_uuid = str(actor.uuid)
     submission = NewStation(station=station_draft(fields))
     acknowledged = {"station": acknowledged_duplicate_of}
 
+    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
-        db, submission=submission, acknowledged=acknowledged, actor=actor, now=now
+        db, submission=submission, acknowledged={p.draft_ref for p in pairs}, actor=actor, now=now
     )
     if held is not None:
         return held
-    pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
 
     station = await station_service.insert_station(db, actor=actor, fields=fields)
     await _record_acknowledged(db, pairs, {"station": str(station.uuid)}, actor_uuid)
@@ -167,7 +170,7 @@ async def _hold_if_suspected(db, *, submission, acknowledged, actor, now) -> Sub
     suspects = await dedup_service.check_submission(
         db,
         submission=submission,
-        acknowledged=frozenset(ref for ref, ack in acknowledged.items() if ack),
+        acknowledged=frozenset(acknowledged),
         actor=actor,
         now=now,
     )
@@ -183,10 +186,13 @@ async def _hold_if_suspected(db, *, submission, acknowledged, actor, now) -> Sub
 async def _score_acknowledged(
     db, submission, acknowledged, actor, now
 ) -> list[dedup_service.AcknowledgedPair]:
-    """Score each acknowledged draft against what the submitter said it is not a duplicate of."""
+    """Score each acknowledged draft (except the ticket) against the entity it names.
+
+    Returns only the pairs whose related entity exists.
+    """
     pairs = []
     for draft_ref, related_uuid in acknowledged.items():
-        if related_uuid:
+        if related_uuid and draft_ref != "ticket":
             pair = await dedup_service.score_acknowledged(
                 db,
                 submission=submission,

@@ -1,8 +1,8 @@
-"""Two-phase create on the ADR-304 engine (Spec 020 §5): hold everything or create everything.
+"""Two-phase create: any suspected duplicate holds the whole submission, otherwise all is created.
 
 A stub engine decides what is suspected, so these test the backend's flow — validation first,
-nothing written on a hold, acknowledgements bound to drafts, one transaction — plus one pass
-with the real fast-v2 engine end to end.
+nothing written on a hold, acknowledgements bound to drafts, one transaction — plus end-to-end
+passes with the real engine.
 """
 
 import os
@@ -215,6 +215,36 @@ async def test_an_engine_failure_still_creates(db, engine):
     )
 
 
+@pytest.mark.parametrize(
+    ("ack", "scored"),
+    [("x", "default"), (RELATED, None)],
+    ids=["not-a-uuid", "related-gone"],
+)
+async def test_an_acknowledgement_that_names_nothing_still_gets_the_hint(db, engine, ack, scored):
+    """Only an acknowledgement that scoring found skips the check; anything else is held as usual."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    engine.suspects = _suspect_tasks_named("抽水")
+    engine.scored = scored
+    result = await submit_new_ticket(db, actor=actor, tasks=[_task("抽水", ack=ack)], **_ticket())
+    assert isinstance(result, SubmissionHeld)
+    await db.rollback()
+    assert (await _count(db, Tickets), await _count(db, DuplicatePair)) == (0, 0)
+
+
+async def test_a_ticket_acknowledgement_writes_no_card_even_when_scoring_fails(db, engine):
+    """The engine never scores the ticket itself, so the fallback must not card an existing ticket either."""
+    actor = await actor_with(db, Perm.TICKET_ADD)
+    existing = await _existing_ticket(db, actor)
+    engine.fail_score = True
+    filed = await submit_new_ticket(
+        db, actor=actor, tasks=[_task("抽水")], acknowledged_duplicate_of=existing, **_ticket()
+    )
+    assert isinstance(filed, SubmissionCreated)
+    assert engine.score_calls == []
+    await db.rollback()
+    assert await _count(db, DuplicatePair) == 0
+
+
 # --- task on an existing ticket ------------------------------------------------------------
 
 
@@ -315,11 +345,21 @@ async def test_station_created_notifies_and_acknowledged_is_carded(db, engine, n
     assert pair.entity_kind == "station"
 
 
+async def test_station_acknowledgement_that_is_not_a_uuid_is_held(db, engine, notifications):
+    """`"x"` names nothing, so the station is checked and held like any other."""
+    actor = await actor_with(db, Perm.STATION_ADD)
+    engine.suspects = [Suspect("station", "station", RELATED, 0.97, {})]
+    result = await submit_new_station(db, actor=actor, acknowledged_duplicate_of="x", **_station())
+    assert isinstance(result, SubmissionHeld)
+    await db.rollback()
+    assert await _count(db, Station) == 0
+
+
 # --- the real engine ---------------------------------------------------------------------
 
 
 async def test_end_to_end_with_fast_v2(db, monkeypatch):
-    """Held against a real open task nearby; filed anyway with the acknowledgement; carded by fast-v2."""
+    """Held against a real open task nearby; filed with the acknowledgement; carded by the real engine."""
     monkeypatch.setattr(registry, "_ENGINE", FastEngine())
     actor = await actor_with(db, Perm.TICKET_ADD)
     ticket_uuid = await _existing_ticket(db, actor)
@@ -358,7 +398,7 @@ async def test_end_to_end_with_fast_v2(db, monkeypatch):
 
 
 async def test_a_ticket_acknowledgement_of_nothing_writes_no_card(db, monkeypatch):
-    """The ticket-level acknowledgement with a uuid of nothing, on the real engine: created, no pair card."""
+    """A ticket-level acknowledgement of an unknown uuid, on the real engine: created, no pair card."""
     monkeypatch.setattr(registry, "_ENGINE", FastEngine())
     actor = await actor_with(db, Perm.TICKET_ADD)
     filed = await submit_new_ticket(
@@ -370,7 +410,7 @@ async def test_a_ticket_acknowledgement_of_nothing_writes_no_card(db, monkeypatc
 
 
 async def test_a_slow_score_on_an_acknowledged_create_still_creates(db, engine, monkeypatch):
-    """Score is cut at the timeout before anything is written, so everything is still created (ADR-313)."""
+    """Score is cut at the timeout before anything is written, so everything is still created."""
     actor = await actor_with(db, Perm.TICKET_ADD)
     ticket_uuid = await _existing_ticket(db, actor)
     task = TicketTask(ticket_uuid=ticket_uuid, task_type="rescue", task_name="送水", created_by=actor.uuid)
