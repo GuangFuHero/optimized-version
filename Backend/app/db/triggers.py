@@ -52,6 +52,9 @@ AUDITED_TABLES = [
     # exactly what a timeline has to show, and ADR-124's missing trail is the mistake not to repeat.
     "ticket_disaster_details",
 
+    # Feature 019: who asked to become back-office staff, and who decided. Approving one hands
+    # out a role, so it gets the same trail as the role grants it produces.
+    "role_requests",
     # Crowd-sourced station suggestions and the merges that apply them, so every submit,
     # review and revoke leaves a trail. Rows written before these triggers have none.
     "station_update_suggestions",

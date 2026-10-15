@@ -291,7 +291,7 @@ async def test_insert_ticket_task_leaves_the_commit_to_the_caller(db):
 
 async def test_create_ticket_task_behaves_as_before(db):
     """Stores the task and commits; a missing ticket raises 'Ticket not found'."""
-    actor = await _actor(db, Perm.TICKET_ADD)
+    actor = await _actor(db, Perm.TICKET_ADD, Perm.TICKET_EDIT)
     ticket_uuid = await _existing_ticket_uuid(db, actor)
     await db.refresh(actor)
     actor_uuid = str(actor.uuid)

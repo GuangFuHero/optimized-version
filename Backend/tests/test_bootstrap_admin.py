@@ -97,36 +97,57 @@ async def test_bootstrap_exits_when_contact_not_found(db):
         await bootstrap("email", "nobody@example.com", force=False)
 
 
-@pytest.mark.asyncio
-async def test_bootstrap_replaces_the_existing_platform_role(db):
-    """The account must end up with one platform identity, not two.
-
-    Registration grants `user`, and this script used to add `super_admin` alongside it. A
-    user holding two platform grants has no well-defined default identity — `default_for_user`
-    picks whichever role_uuid the partial unique index returns first, so a bootstrapped
-    super_admin could log in as a plain `user`. Every other platform grant in the codebase
-    replaces (`admin_service.assign_role`); this one now does too (ADR-184).
-    """
-    sa_role_uuid = await _make_super_admin_role(db)
-    plain = Role(name="user", kind="platform")
-    db.add(plain)
-    await db.flush()
-    plain_uuid = str(plain.uuid)
-    user_uuid = await _make_verified_user(db, email="replace@example.com")
-    db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=plain_uuid, role_kind="platform"))
-    await db.commit()
-
-    await bootstrap("email", "replace@example.com", force=False)
-
-    held = (
+async def _platform_roles_held(db, user_uuid: str) -> list[str]:
+    """Names of the platform roles the user holds, sorted."""
+    names = (
         await db.execute(
-            select(UserRoleAssign.role_uuid).where(
-                UserRoleAssign.user_uuid == user_uuid,
-                UserRoleAssign.team_uuid.is_(None),
-            )
+            select(Role.name)
+            .join(UserRoleAssign, UserRoleAssign.role_uuid == Role.uuid)
+            .where(UserRoleAssign.user_uuid == user_uuid, UserRoleAssign.team_uuid.is_(None))
         )
     ).scalars().all()
-    assert [str(r) for r in held] == [sa_role_uuid]
+    return sorted(names)
+
+
+async def _verified_user_holding(db, email: str, *role_names: str) -> str:
+    """A verified user holding the named platform roles, each created on first use."""
+    user_uuid = await _make_verified_user(db, email=email)
+    for name in role_names:
+        role = (await db.execute(select(Role).where(Role.name == name))).scalar_one_or_none()
+        if role is None:
+            role = Role(name=name, kind="platform")
+            db.add(role)
+            await db.flush()
+        db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=role.uuid, role_kind="platform"))
+    await db.commit()
+    return user_uuid
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_keeps_user_beside_super_admin(db):
+    """ADR-289/290: the site acts as `user`, and a login starts on it, super admins included.
+
+    ADR-184 had this script replace `user` so that a bootstrapped super admin could not log
+    in as a plain `user`. That is now the point: the back office switches to super_admin on
+    purpose, and a super admin without `user` would browse the site with every permission.
+    """
+    await _make_super_admin_role(db)
+    user_uuid = await _verified_user_holding(db, "keep@example.com", "user")
+
+    await bootstrap("email", "keep@example.com", force=False)
+
+    assert await _platform_roles_held(db, user_uuid) == ["super_admin", "user"]
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_replaces_any_other_platform_role(db):
+    """`user` is the one exception: the back office still has one platform role per account."""
+    await _make_super_admin_role(db)
+    user_uuid = await _verified_user_holding(db, "auditor@example.com", "user", "data_auditor")
+
+    await bootstrap("email", "auditor@example.com", force=False)
+
+    assert await _platform_roles_held(db, user_uuid) == ["super_admin", "user"]
 
 
 @pytest.mark.asyncio

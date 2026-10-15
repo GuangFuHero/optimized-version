@@ -4,6 +4,12 @@ import os
 
 os.environ["ENV"] = "testing"
 
+# pytest-xdist (`-n N`) runs each worker in its own process and exports its name — gw0, gw1, … —
+# before this module is imported; unset in a plain run. Tests drop the database schema and flush
+# their Redis db, so two workers sharing either would wipe each other mid-test: each worker gets
+# its own database (`<name>_gw0`, …) and its own Redis db index below.
+_XDIST_WORKER = os.getenv("PYTEST_XDIST_WORKER")
+
 # Dedicated Postgres test DB (env-driven). Resolved BEFORE any `app.*` import so the application
 # engine (app.db.session) binds to the test DB, not the dev `postgres` maintenance DB. Session
 # tests use the real app engine (no get_db override), so this is what keeps them off dev `postgres`.
@@ -11,6 +17,8 @@ TEST_DB_URL = os.getenv(
     "TEST_DB_URL",
     "postgresql+asyncpg://postgres:postgres@localhost:5432/disaster_rescue_test",
 )
+if _XDIST_WORKER:
+    TEST_DB_URL = f"{TEST_DB_URL}_{_XDIST_WORKER}"
 # Maintenance DB used to bootstrap the dedicated test DB (CREATE DATABASE can't run in a txn).
 _ADMIN_DB_URL = os.getenv(
     "TEST_ADMIN_DB_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
@@ -50,13 +58,86 @@ assert TEST_REDIS_URL.rsplit("/", 1)[-1] not in (
     "",
     "0",
 ), "TEST_REDIS_URL must use a non-0 db index (flushdb wipes it)"
+if _XDIST_WORKER:
+    # Redis has 16 logical dbs by default, so workers count down from the configured index:
+    # gw0 keeps it, gw1 takes the one below, and so on. db 0 — where dev data lives — is never
+    # reached; a run with more workers than indexes above it stops here instead.
+    _redis_base, _redis_index = TEST_REDIS_URL.rsplit("/", 1)
+    _worker_redis_index = int(_redis_index) - int(_XDIST_WORKER.removeprefix("gw"))
+    assert _worker_redis_index >= 1, (
+        f"{_XDIST_WORKER} has no Redis db left: TEST_REDIS_URL ends in /{_redis_index}, so at most "
+        f"{_redis_index} workers fit. Pass a smaller -n."
+    )
+    TEST_REDIS_URL = f"{_redis_base}/{_worker_redis_index}"
 
 _CODE_RE = re.compile(r"\b(\d{6})\b")
 
 
+def pytest_collection_finish(session) -> None:
+    """Stop a run whose collection split one test directory into two nodes.
+
+    pytest 9 decides a fixture's visibility by node object, not node id (`_matchfactories` in
+    _pytest/fixtures.py). Given `tests/test_graphql/a.py tests/b.py tests/test_graphql/c.py`
+    it builds a second `test_graphql` node for `c.py`, so that directory's conftest — the
+    autouse `setup_db`, its own `client` — never reaches `c.py`, which silently falls back to
+    the `client` below. What surfaces is a missing role or "Future attached to a different
+    loop", nowhere near the cause.
+    """
+    seen: dict[str, pytest.Directory] = {}
+    for item in session.items:
+        for node in item.listchain():
+            if isinstance(node, pytest.Directory) and seen.setdefault(node.nodeid, node) is not node:
+                raise pytest.UsageError(
+                    f"{node.nodeid} was collected as two separate nodes, so its conftest fixtures "
+                    "would reach only some of its tests. List the files of one directory next to "
+                    "each other, or pass the directory itself."
+                )
+
+
+# The extensions live in a schema of their own, installed once per database, because the `db` and
+# `db_session` fixtures drop `public` for every test. With the extensions in `public` each drop took
+# about 1,600 extension objects with it (postgis 900, postgis_raster 500) and each test put them
+# back — a serial run took 15 minutes instead of 9, and one lock per object ran Postgres out of
+# shared lock memory as soon as a few pytest-xdist workers did it at once. `search_path` is set on
+# the database, so every connection, the app's engine included, finds them unqualified.
+_EXTENSION_SCHEMA = "extensions"
+_EXTENSIONS = (
+    "postgis",
+    # gin_trgm_ops for the search_text indexes: without it Base.metadata.create_all fails —
+    # not one test, the whole suite.
+    "pg_trgm",
+    # h3 + h3_postgis snap a ticket's point to a hexagon for callers without ticket.view_detail
+    # (ADR-281). The resolvers call them at query time, so without them every anonymous ticket
+    # read fails. h3_postgis brings postgis_raster in with it.
+    "h3",
+    "h3_postgis",
+)
+
+
+async def _extensions_outside_their_schema() -> int:
+    """How many of the extensions are installed somewhere other than `_EXTENSION_SCHEMA`."""
+    eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
+    try:
+        async with eng.connect() as conn:
+            return await conn.scalar(
+                text(
+                    "SELECT count(*) FROM pg_extension e"
+                    " JOIN pg_namespace n ON n.oid = e.extnamespace"
+                    " WHERE e.extname = ANY(:names) AND n.nspname <> :schema"
+                ),
+                {"names": list(_EXTENSIONS), "schema": _EXTENSION_SCHEMA},
+            )
+    finally:
+        await eng.dispose()
+
+
 @pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
 async def _ensure_test_database():
-    """Create the dedicated test DB (+ PostGIS) before any test, so tests never touch dev `postgres`.
+    """Create the dedicated test DB and its extensions before any test.
+
+    Tests never touch dev `postgres`. A test DB made before the extensions had a schema of their
+    own keeps them in `public`, where the first per-test drop would take them — so it is dropped
+    and made again, once. It holds nothing worth keeping: every test wipes it anyway.
 
     Two gotchas handled here:
     - asyncpg can't run ``CREATE DATABASE`` inside a transaction / prepared statement, so we use an
@@ -69,23 +150,31 @@ async def _ensure_test_database():
         exists = await conn.scalar(
             text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": _TEST_DB_NAME}
         )
+        if exists and await _extensions_outside_their_schema():
+            await conn.exec_driver_sql(f'DROP DATABASE "{_TEST_DB_NAME}" WITH (FORCE)')
+            exists = False
         if not exists:
             await conn.exec_driver_sql(f'CREATE DATABASE "{_TEST_DB_NAME}"')
+        await conn.exec_driver_sql(
+            f'ALTER DATABASE "{_TEST_DB_NAME}" SET search_path = public, {_EXTENSION_SCHEMA}'
+        )
     await admin.dispose()
 
     eng = create_async_engine(TEST_DB_URL, isolation_level="AUTOCOMMIT")
     async with eng.connect() as conn:
-        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS postgis")
-        # pg_trgm supplies the gin_trgm_ops operator class used by the search_text indexes.
-        # Base.metadata.create_all builds those indexes, so without this every schema
-        # creation below fails — not one test, the whole suite.
-        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
-        # h3 + h3_postgis snap a ticket's point to a hexagon for callers without
-        # ticket.view_detail (ADR-281). The resolvers call them at query time, so a
-        # database without them fails every anonymous ticket read.
-        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS h3")
-        await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE")
+        await conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {_EXTENSION_SCHEMA}")
+        for extension in _EXTENSIONS:
+            await conn.exec_driver_sql(
+                f"CREATE EXTENSION IF NOT EXISTS {extension} SCHEMA {_EXTENSION_SCHEMA} CASCADE"
+            )
     await eng.dispose()
+
+
+async def _rebuild_public_schema(conn) -> None:
+    """Drop every table and build them again from the models; the extensions are left alone."""
+    await conn.execute(text("DROP SCHEMA public CASCADE;"))
+    await conn.execute(text("CREATE SCHEMA public;"))
+    await conn.run_sync(Base.metadata.create_all)
 
 
 
@@ -106,23 +195,47 @@ def seed_disaster_types(session) -> None:
     session.add_all(DisasterType(key=key, label=label) for key, label in DISASTER_TYPES)
 
 
+async def schema_has_role(name: str) -> bool:
+    """Whether the test DB still holds the schema and a role called `name`.
+
+    tests/session/ and tests/test_graphql/ seed their roles once and reuse them, while the `db`
+    and `db_session` fixtures below drop the whole schema for every test that uses them. A plain
+    run happens never to put one of those between two session or GraphQL tests; under
+    pytest-xdist a worker can run any file between two others, so "already seeded" has to be
+    looked up rather than remembered.
+    """
+    engine = create_async_engine(TEST_DB_URL, echo=False)
+    try:
+        async with engine.connect() as conn:
+            if not await conn.scalar(text("SELECT to_regclass('public.roles') IS NOT NULL")):
+                return False
+            return bool(
+                await conn.scalar(
+                    text("SELECT EXISTS (SELECT 1 FROM roles WHERE name = :name)"), {"name": name}
+                )
+            )
+    finally:
+        await engine.dispose()
+
+
+def _session_factory(engine):
+    """Sessions that flush only when told to, as the app's do (app/db/session.py).
+
+    An autoflushing session writes whatever it holds before every query, so an action that changed
+    a need and worked out the ticket's status without flushing first would get the right status
+    here and the wrong one in production. `expire_on_commit` stays True, stricter than the app's
+    False: read what you still need off an ORM object before anything commits.
+    """
+    return sessionmaker(engine, class_=AsyncSession, expire_on_commit=True, autoflush=False)
+
+
 @pytest_asyncio.fixture
 async def db():
     """Fresh schema per test, UNSEEDED (for model/repo/service/gate unit tests). Wipes the test DB."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
-        await conn.execute(text("DROP SCHEMA public CASCADE;"))
-        await conn.execute(text("CREATE SCHEMA public;"))
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
-        # DROP SCHEMA public CASCADE above takes pg_trgm with it (it installs into public),
-        # so it must be re-created here too — Base.metadata.create_all builds the
-        # search_text GIN indexes, which need gin_trgm_ops.
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
-        # Same reason as pg_trgm: h3 installs into public and went with the schema.
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3;"))
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;"))
-        await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
+        await _rebuild_public_schema(conn)
+    factory = _session_factory(engine)
     async with factory() as session:
         yield session
     await engine.dispose()
@@ -133,18 +246,8 @@ async def db_session():
     """Fresh schema + seeded default 'user' platform role per test (self-contained; wipes the test DB)."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
     async with engine.begin() as conn:
-        await conn.execute(text("DROP SCHEMA public CASCADE;"))
-        await conn.execute(text("CREATE SCHEMA public;"))
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
-        # DROP SCHEMA public CASCADE above takes pg_trgm with it (it installs into public),
-        # so it must be re-created here too — Base.metadata.create_all builds the
-        # search_text GIN indexes, which need gin_trgm_ops.
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
-        # Same reason as pg_trgm: h3 installs into public and went with the schema.
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3;"))
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;"))
-        await conn.run_sync(Base.metadata.create_all)
-    factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)
+        await _rebuild_public_schema(conn)
+    factory = _session_factory(engine)
     async with factory() as session:
         session.add(Role(name="user", kind="platform"))
         seed_disaster_types(session)
@@ -253,7 +356,7 @@ class CaptureSmsSender(_Capturer):
 
 @pytest_asyncio.fixture
 async def redis():
-    """One real redis (db 15, flushed per test) shared by the client fixture and by tests directly."""
+    """One real redis (TEST_REDIS_URL, flushed per test) shared by the client fixture and by tests."""
     r = aioredis.from_url(TEST_REDIS_URL, decode_responses=False)
     await r.flushdb()
     yield r
@@ -281,6 +384,23 @@ async def client(db_session, redis):
         yield ac
     app.dependency_overrides.clear()
     del app.state.redis
+
+
+@pytest_asyncio.fixture
+async def fresh_app_engine():
+    """Empty the app's own engine pool around a test that posts to /graphql through `client`.
+
+    The GraphQL context opens its session through `get_db()` directly, not through the
+    dependency `client` overrides, so it draws on the app engine's pool. A connection left
+    there by another test belongs to that test's event loop and fails in any other —
+    tests/test_graphql/conftest.py disposes the pool before each of its tests. Done afterwards
+    too, so the test leaves nothing behind for the next.
+    """
+    from app.db.session import engine as app_engine
+
+    await app_engine.dispose()
+    yield
+    await app_engine.dispose()
 
 
 @pytest.fixture

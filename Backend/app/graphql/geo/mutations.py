@@ -188,7 +188,7 @@ class StationPropertyMutation:
         """
         prop = await station_service.create_station_property(
             info.context["db"], actor=require_authenticated(info),
-            station_uuid=input.station_uuid, property_type=input.property_type,
+            station_uuid=str(input.station_uuid), property_type=input.property_type,
             property_name=input.property_name, quantity=input.quantity,
             weightings=input.weightings,
         )
@@ -228,7 +228,8 @@ class StationPropertyMutation:
         """
         cs = await station_service.rate_station_property(
             info.context["db"], actor=require_authenticated(info),
-            station_uuid=input.station_uuid, item_uuid=input.item_uuid,
+            station_uuid=str(input.station_uuid),
+            item_uuid=str(input.item_uuid) if input.item_uuid else None,
             rating=input.rating, distance_from_geometry=input.distance_from_geometry,
         )
         return CrowdSourcingType.from_model(cs)

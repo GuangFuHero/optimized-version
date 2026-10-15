@@ -144,13 +144,13 @@ CSV 與 XLSX 雙向（ADR-115）。CSV 匯出帶 UTF-8 BOM，XLSX 把電話、�
 |---|---|
 | `uuid` | 唯讀 |
 | `description`, `priority`, `disaster_type` | 新增 + 更新（`priority` 不驗值——ADR-126） |
-| `status` | 更新（走狀態機，ADR-122）；新增時忽略——`create_ticket` 一律寫 `"pending"`（`app/services/ticket.py:99`） |
+| `status` | 唯讀——單的狀態由底下的需求自動算，匯入不讀也不驗（ADR-122 的 2026-09-28 修訂） |
 | `title` | 僅新增（比對鍵，ADR-108） |
 | `contact_name`, `contact_email`, `contact_phone` | 僅新增；`contact_phone` 同時是比對鍵。匯出時逐筆遮罩（ADR-109） |
 | `latitude`, `longitude` | 僅新增，且新增時必填——**`UpdateTicketInput` 沒有 geometry**，求助單的位置建立後就固定了 |
 | `visibility`, `task_type` | 僅新增 |
 | `task_name` | 僅新增（task 層的比對鍵） |
-| `task_description`, `task_quantity` | 僅新增——**`UpdateTicketTaskInput` 沒有這兩個欄位**（它只收 status / progress_note / review_note / moderation_status / visibility） |
+| `task_description`, `task_quantity` | 僅新增——**`UpdateTicketTaskInput` 沒有這兩個欄位**（它只收 status / progress_note / review_note / moderation_status / visibility）。`task_quantity` 有填就至少 1：0 或負數的需求誰接都顯示已滿，預覽就讓那一列失敗、整列不寫入。只有救援（`rescue`）可以留空（表示不限人數）；其他類別新增需求時必填，沒填的列在預覽就失敗（Spec/020 ADR-291 第 7 點）。掛到資料庫裡既有單的列，需求可能本來就在，交給寫入時檢查 |
 | `verification_status`, `review_note`, `created_at` | 唯讀 |
 
 ### 動態欄位

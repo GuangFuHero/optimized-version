@@ -12,6 +12,7 @@ import strawberry
 from app.graphql.context import require_authenticated
 from app.graphql.shared import DuplicatesSuspected, secondary_location_to_dict
 from app.graphql.tickets.types import (
+    CreateHelpRequestInput,
     CreateTaskPropertyInput,
     CreateTicketInput,
     CreateTicketResult,
@@ -54,13 +55,19 @@ class RequestMutation:
         blocks. Requires ticket.add.
         """
         result = await submit_new_ticket(
-            info.context["db"], actor=require_authenticated(info),
+            info.context["db"],
+            actor=require_authenticated(info),
             acknowledged_duplicate_of=input.acknowledged_duplicate_of,
             tasks=[_task_submission(task) for task in input.tasks],
-            geometry=input.geometry, title=input.title, description=input.description,
-            contact_name=input.contact_name, contact_email=input.contact_email,
-            contact_phone=input.contact_phone, priority=input.priority,
-            task_type=input.task_type, visibility=input.visibility.value,
+            geometry=input.geometry,
+            title=input.title,
+            description=input.description,
+            contact_name=input.contact_name,
+            contact_email=input.contact_email,
+            contact_phone=input.contact_phone,
+            priority=input.priority,
+            task_type=input.task_type,
+            visibility=input.visibility.value,
             disaster_types=input.disaster_types,
             person_trapped_reported=(
                 input.person_trapped_reported.value if input.person_trapped_reported else None
@@ -82,14 +89,49 @@ class RequestMutation:
         )
 
     @strawberry.mutation
+    async def create_help_request(
+        self, info: strawberry.types.Info, input: CreateHelpRequestInput
+    ) -> TicketType:
+        """File a citizen's request for help, its needs and photo links in one transaction (請求協助).
+
+        Requires ticket.add. Nothing is written unless every need and photo link is valid; see
+        app/services/ticket.py::create_help_request for the rules.
+        """
+        ticket = await ticket_service.create_help_request(
+            info.context["db"],
+            actor=require_authenticated(info),
+            geometry=input.geometry,
+            title=input.title,
+            description=input.description,
+            contact_name=input.contact_name,
+            contact_phone=input.contact_phone,
+            secondary_location=(
+                secondary_location_to_dict(input.secondary_location)
+                if input.secondary_location is not None
+                else None
+            ),
+            tasks=[
+                {
+                    "task_type": task.task_type.value,
+                    "task_name": task.task_name,
+                    "task_description": task.task_description,
+                    "quantity": task.quantity,
+                }
+                for task in input.tasks
+            ],
+            photo_urls=input.photo_urls,
+        )
+        return TicketType.from_model(ticket)
+
+    @strawberry.mutation
     async def update_ticket(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateTicketInput
     ) -> TicketType:
-        """Update a ticket's status, priority, title, address, or review notes.
+        """Update a ticket's priority, title, address, or review notes.
 
-        Status changes are validated against VALID_TRANSITIONS (e.g. pending→in_progress).
-        `secondaryLocation` replaces the address wholesale and creates it when the ticket was
-        filed without one (ADR-268). Requires ticket.edit with scope check.
+        Not its status, which is worked out from its needs. `secondaryLocation` replaces the
+        address wholesale and creates it when the ticket was filed without one (ADR-268).
+        Requires ticket.edit with scope check.
 
         Note: verification_status is NOT set here — that is a review decision, handled by
         review_ticket under ticket.review (ADR-049).
@@ -113,8 +155,10 @@ class RequestMutation:
                 changes[field] = val.value if val is not None else None
 
         ticket = await ticket_service.update_ticket(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), status=input.status, changes=changes,
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
+            changes=changes,
             secondary_location=(
                 secondary_location_to_dict(input.secondary_location)
                 if input.secondary_location is not None
@@ -147,7 +191,9 @@ class RequestMutation:
         for detail in details:
             merged.setdefault(detail.property_name, []).extend(detail.values)
         rows = await ticket_service.set_ticket_disaster_details(
-            info.context["db"], actor=require_authenticated(info), ticket_uuid=str(uuid),
+            info.context["db"],
+            actor=require_authenticated(info),
+            ticket_uuid=str(uuid),
             details=merged,
         )
         return [TicketDisasterDetailType.from_model(r) for r in rows]
@@ -166,8 +212,11 @@ class RequestMutation:
         Returns the updated TicketType.
         """
         ticket = await ticket_service.review_ticket(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), verification_status=verification_status, review_note=review_note,
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
+            verification_status=verification_status,
+            review_note=review_note,
         )
         return TicketType.from_model(ticket)
 
@@ -194,21 +243,26 @@ class TicketTaskMutation:
         input: CreateTicketTaskInput,
         acknowledged_duplicate_of: str | None = None,
     ) -> CreateTicketTaskResult:
-        """Add a task (rescue, HR, supply, etc.) to an existing ticket — unless it looks like another.
+        """Add a need (rescue, HR, supply, etc.) to an existing ticket — the site's 再加一件.
 
-        Two-phase: `DuplicatesSuspected` (nothing added) when it looks like an
-        open task of another ticket; send again with `acknowledgedDuplicateOf` to add it anyway.
-        The ticket's own tasks are never suspects. Verifies the parent ticket exists. Requires
-        ticket.add (checkpoint 1 only — no scope check against the parent ticket).
+        Two-phase: `DuplicatesSuspected` (nothing added) when it looks like an open task of
+        another ticket; send again with `acknowledgedDuplicateOf` to add it anyway. The ticket's
+        own tasks are never suspects. Requires ticket.edit on the ticket: a signed-in citizen adds
+        to their own ticket only. A completed ticket is open again once it has the new need; a
+        deleted or cancelled one takes none.
         """
         result = await submit_new_task(
             info.context["db"],
             actor=require_authenticated(info),
-            ticket_uuid=input.ticket_uuid,
+            ticket_uuid=str(input.ticket_uuid),
             task=TaskSubmission(
-                task_type=input.task_type, task_name=input.task_name,
-                task_description=input.task_description, quantity=input.quantity,
-                source=input.source, visibility=input.visibility.value, route_uuid=input.route_uuid,
+                task_type=input.task_type,
+                task_name=input.task_name,
+                task_description=input.task_description,
+                quantity=input.quantity,
+                source=input.source,
+                visibility=input.visibility.value,
+                route_uuid=str(input.route_uuid) if input.route_uuid else None,
                 acknowledged_duplicate_of=acknowledged_duplicate_of,
             ),
         )
@@ -220,13 +274,13 @@ class TicketTaskMutation:
     async def update_ticket_task(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateTicketTaskInput
     ) -> TicketTaskType:
-        """Update a ticket task's status, moderation status, visibility, or progress notes.
+        """Update a ticket task's moderation status, visibility, or notes.
 
         UNSET fields are skipped. Requires ticket.edit permission. Returns the updated task.
+        Its status is not editable: it moves only through assignTaskActor, unassignTaskActor,
+        stopRecruiting and deletion.
         """
         changes = {}
-        if input.status is not None:
-            changes["status"] = input.status
         if input.moderation_status is not None:
             changes["moderation_status"] = input.moderation_status
         if input.visibility is not None:
@@ -242,18 +296,36 @@ class TicketTaskMutation:
         return TicketTaskType.from_model(task)
 
     @strawberry.mutation
+    async def delete_ticket_task(self, info: strawberry.types.Info, uuid: UUID) -> bool:
+        """Delete one need — the requester's 刪除這筆需求.
+
+        Requires ticket.delete on the need's ticket. Any need not already deleted can go, one
+        with everyone it asked for included. It is canceled and soft-deleted, the ticket's status
+        is worked out again, and everyone on it hears they need not go. Returns True.
+        """
+        await ticket_service.delete_ticket_task(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
+        )
+        return True
+
+    @strawberry.mutation
     async def create_task_property(
         self, info: strawberry.types.Info, input: CreateTaskPropertyInput
     ) -> TaskPropertyType:
         """Add a structured property to a ticket task.
 
-        Verifies the parent task exists. Requires ticket.add permission (checkpoint 1
-        only — matches prior behavior). Returns the created TaskPropertyType.
+        Requires ticket.edit, scope-checked against the parent task as updateTaskProperty is: a
+        signed-in citizen adds properties to their own needs only. Returns the created
+        TaskPropertyType.
         """
         prop = await ticket_service.create_task_property(
-            info.context["db"], actor=require_authenticated(info),
-            task_uuid=input.task_uuid, property_name=input.property_name,
-            property_value=input.property_value, quantity=input.quantity, comment=input.comment,
+            info.context["db"],
+            actor=require_authenticated(info),
+            task_uuid=str(input.task_uuid),
+            property_name=input.property_name,
+            property_value=input.property_value,
+            quantity=input.quantity,
+            comment=input.comment,
         )
         return TaskPropertyType.from_model(prop)
 
@@ -295,11 +367,14 @@ class TicketTaskMutation:
         When actor_uuid is omitted (or equals the caller), this is a self-sign-up and
         only ticket.assign (checkpoint 1) is required. Assigning someone else additionally
         requires the task to fall within the caller's ticket.assign scope (checkpoint 2).
-        Over-subscription is allowed (no capacity check); the only guard is that
-        the same actor cannot be linked to the same task twice. Returns the new assignment.
+        A fulfilled or canceled task is refused, as is any task of a completed or cancelled
+        ticket. Once the task has `quantity` people it takes nobody more, a coordinator
+        assigning someone else included. The same actor cannot be linked to the same task
+        twice. Returns the new assignment.
         """
         assignment = await ticket_service.assign_task_actor(
-            info.context["db"], actor=require_authenticated(info),
+            info.context["db"],
+            actor=require_authenticated(info),
             task_uuid=str(task_uuid),
             actor_uuid=str(actor_uuid) if actor_uuid else None,
             role=role,
@@ -332,12 +407,29 @@ class TicketTaskMutation:
         """Remove a person from a ticket task (withdraw or un-assign).
 
         Owner-scoped ticket.assign — the assignee can remove their own link, coordinators
-        can remove any. Hard-deletes the assignment row. Returns True on success.
+        can remove any. Hard-deletes the assignment row. Refused, for everyone, once the
+        requester stopped recruiting for the task (recruitingStoppedAt); a task that filled by
+        itself takes people again. Returns True on success.
         """
         await ticket_service.unassign_task_actor(
             info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
         )
         return True
+
+    @strawberry.mutation
+    async def stop_recruiting(self, info: strawberry.types.Info, task_uuid: UUID) -> TicketTaskType:
+        """Stop recruiting for one need — the requester's 停止招募.
+
+        Requires ticket.edit on the need's ticket. The need becomes fulfilled with its quantity
+        cut to the people already on it, never reopens, and nobody on it can give their place
+        back; to recruit again, open another need. Refused for a need nobody claimed (delete it
+        instead) and for one no longer open. Everyone on it hears they still go. Returns the
+        need.
+        """
+        task = await ticket_service.stop_recruiting(
+            info.context["db"], actor=require_authenticated(info), task_uuid=str(task_uuid)
+        )
+        return TicketTaskType.from_model(task)
 
 
 def _task_submission(draft) -> TaskSubmission:

@@ -1,0 +1,50 @@
+[
+  {
+    "label": "dedup 1: new ticket + tasks",
+    "adapter": "Debugpy",
+    "request": "launch",
+    "module": "pytest",
+    "args": [
+      "tests/dedup_engine/test_fast_engine.py::test_each_task_draft_gets_at_most_one_suspect",
+      "-s",
+      "-q",
+      "-p",
+      "no:cacheprovider"
+    ],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
+    "justMyCode": true
+  },
+  {
+    "label": "dedup 2: add task to existing ticket",
+    "adapter": "Debugpy",
+    "request": "launch",
+    "module": "pytest",
+    "args": [
+      "tests/dedup_engine/test_fast_engine.py::test_adding_to_a_ticket_skips_its_own_tasks",
+      "-s",
+      "-q",
+      "-p",
+      "no:cacheprovider"
+    ],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
+    "justMyCode": true
+  },
+  {
+    "label": "dedup 3: new station",
+    "adapter": "Debugpy",
+    "request": "launch",
+    "module": "pytest",
+    "args": [
+      "tests/dedup_engine/test_fast_engine.py::test_station_matches_have_no_time_component",
+      "-s",
+      "-q",
+      "-p",
+      "no:cacheprovider"
+    ],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
+    "justMyCode": true
+  }
+]

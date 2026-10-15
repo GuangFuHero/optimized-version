@@ -268,7 +268,7 @@ async def _existing_ticket(db, actor) -> str:
 
 async def test_new_task_suspected_is_held(db, engine):
     """Adding a task that looks like another open one: nothing added."""
-    actor = await actor_with(db, Perm.TICKET_ADD)
+    actor = await actor_with(db, Perm.TICKET_ADD, Perm.TICKET_EDIT)
     ticket_uuid = await _existing_ticket(db, actor)
     engine.suspects = _suspect_tasks_named("抽水")
     result = await submit_new_task(db, actor=actor, ticket_uuid=ticket_uuid, task=_task("抽水"))
@@ -281,12 +281,36 @@ async def test_new_task_suspected_is_held(db, engine):
 
 async def test_new_task_acknowledged_is_added_and_carded(db, engine):
     """With the acknowledgement it is added and the pair recorded."""
-    actor = await actor_with(db, Perm.TICKET_ADD)
+    actor = await actor_with(db, Perm.TICKET_ADD, Perm.TICKET_EDIT)
     ticket_uuid = await _existing_ticket(db, actor)
     result = await submit_new_task(db, actor=actor, ticket_uuid=ticket_uuid, task=_task("抽水", ack=RELATED))
     assert isinstance(result, SubmissionCreated)
     await db.rollback()
     assert (await _count(db, TicketTask), await _count(db, DuplicatePair)) == (1, 1)
+
+
+async def test_new_task_without_ticket_edit_fails_before_the_engine(db, engine):
+    """Adding to a ticket needs ticket.edit on it; a caller without it never learns what is nearby."""
+    owner = await actor_with(db, Perm.TICKET_ADD)
+    ticket_uuid = await _existing_ticket(db, owner)
+    with pytest.raises(HTTPException):
+        await submit_new_task(db, actor=owner, ticket_uuid=ticket_uuid, task=_task("抽水"))
+    assert engine.check_calls == []
+
+
+async def test_a_held_task_does_not_reopen_a_completed_ticket(db, engine):
+    """Nothing is written on a hold, so the ticket keeps its status."""
+    actor = await actor_with(db, Perm.TICKET_ADD, Perm.TICKET_EDIT)
+    ticket_uuid = await _existing_ticket(db, actor)
+    ticket = await db.get(Tickets, uuid_mod.UUID(ticket_uuid))
+    ticket.status = "completed"
+    await db.commit()
+    await db.refresh(actor)
+    engine.suspects = _suspect_tasks_named("抽水")
+    result = await submit_new_task(db, actor=actor, ticket_uuid=ticket_uuid, task=_task("抽水"))
+    assert isinstance(result, SubmissionHeld)
+    await db.rollback()
+    assert (await db.get(Tickets, uuid_mod.UUID(ticket_uuid))).status == "completed"
 
 
 async def test_new_task_on_a_missing_ticket_fails_before_the_engine(db, engine):

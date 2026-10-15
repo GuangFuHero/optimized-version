@@ -68,7 +68,7 @@ REMOVED_FROM_SDL = (
     "DuplicateStationSuspected",
 )
 PUMP = {"taskType": "rescue", "taskName": "一樓淹水需要抽水機", "taskDescription": "水深及膝"}
-WATER = {"taskType": "supply", "taskName": "需要飲用水", "taskDescription": "二十人份"}
+WATER = {"taskType": "supply", "taskName": "需要飲用水", "taskDescription": "二十人份", "quantity": 20}
 
 
 @pytest_asyncio.fixture(autouse=True)

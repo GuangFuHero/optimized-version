@@ -13,6 +13,7 @@ import pytest_asyncio
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 
+from app.graphql.tickets.queries import TICKET_LIST_MAX_LIMIT
 from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
@@ -27,18 +28,20 @@ from tests.test_graphql.conftest import test_db
 # quietly dropping seeded rows out of the membership assertions (ADR-154). Every query
 # document below therefore takes an explicit $limit, which _stations()/_tickets() fill in.
 PAGE_LIMIT = 500
+# `tickets` refuses a page over TICKET_LIST_MAX_LIMIT (ADR-286 point 6), so its pages ask for that.
+TICKET_PAGE_LIMIT = TICKET_LIST_MAX_LIMIT
 
 
-def _assert_total_count_matches_items(page: dict) -> None:
+def _assert_total_count_matches_items(page: dict, limit: int = PAGE_LIMIT) -> None:
     """count_active and list_active must agree — the assertion these tests actually make.
 
-    The page-size check comes first so that if the suite ever does grow past PAGE_LIMIT
+    The page-size check comes first so that if the suite ever does grow past `limit`
     matching rows, the failure says exactly that instead of looking like a broken predicate.
     """
     items = page["items"]
-    assert len(items) < PAGE_LIMIT, (
-        f"page hit PAGE_LIMIT ({PAGE_LIMIT}); totalCount can no longer equal len(items) — "
-        "raise PAGE_LIMIT rather than relaxing this assertion"
+    assert len(items) < limit, (
+        f"page hit its limit ({limit}); totalCount can no longer equal len(items) — "
+        "narrow the search rather than relaxing this assertion"
     )
     assert page["pageInfo"]["totalCount"] == len(items)
 
@@ -149,7 +152,7 @@ async def _stations(client, query=STATIONS_Q, **variables):
 
 
 async def _tickets(client, query=TICKETS_Q, **variables):
-    variables.setdefault("limit", PAGE_LIMIT)
+    variables.setdefault("limit", TICKET_PAGE_LIMIT)
     resp = await client.post("/graphql", json={"query": query, "variables": variables})
     return resp.json()
 
@@ -337,7 +340,8 @@ async def test_ticket_search_composes_with_status_filter(client, seeded_tickets)
 @pytest.mark.asyncio
 async def test_ticket_total_count_reflects_the_filter(client, seeded_tickets):
     """count_active must apply the same predicate as list_active."""
-    _assert_total_count_matches_items((await _tickets(client, q="需要"))["data"]["tickets"])
+    page = (await _tickets(client, q="需要"))["data"]["tickets"]
+    _assert_total_count_matches_items(page, TICKET_PAGE_LIMIT)
 
 
 # ──────────────────────────────────────────────

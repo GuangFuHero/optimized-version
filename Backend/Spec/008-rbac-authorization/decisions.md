@@ -172,6 +172,10 @@
 **Consequences**：➕ admin API 的 team member 端點對 super_admin 可用，不用等 Phase 4 才補。➖ 沒有；`admin`（team 角色）維持 scope=team 不變，兩者不衝突（ADR-018 union）。
 
 #### ADR-032 一人一角色（每種 kind）由 use-case 層強制，非 DB 約束；最後一個 super_admin 禁止被踢
+
+> **部分被 019/ADR-288、ADR-290 修改**：一人可以同時持有 `user` 加一個其他平台角色（申請通過的資料檢核員、`bootstrap_admin` 設的超管），前台一律用 `user`（019/ADR-289）。「同 kind 只留一個」對 `user` 不再成立；`admin_service.assign_role` 本身沒改，照舊取代。
+> **2026-10-01 再被 019/ADR-294 修改**：`admin_service.assign_role` 也改成保留 `user`，只取代另一個平台角色；指派 `user` 等於拿掉另一個（把超管降級、收回資料檢核員）。最後一個 super_admin 的保護照舊，降成 `user` 也會擋（409）。
+
 **Context**：T117 的「指派角色」端點要決定：(1) 使用者已有同 kind（platform/team）角色時，新指派要怎麼處理；(2) 如果要拿掉的剛好是全平台唯一的 `super_admin`，會造成沒有人能再指派角色的鎖死局面（沒有 UI 路徑能恢復）。
 **Decision**：`app/services/admin/assign_role.py` 在指派新角色前，查詢並刪除該使用者「同 kind」的既有角色指派（一人一 platform role + 一 team role，ADR-019 的落地方式，見 `app/models/rbac.py:UserRoleAssign` docstring——刻意不做 DB unique 約束，因為「同 kind 只能一個」是一個會隨業務演進的政策，不是資料完整性不變量）。指派 platform 角色前，若目標使用者目前持有 `super_admin` 且新角色不是 `super_admin`，會先數一次「扣掉這個人之後還剩幾個 super_admin」，`0` 就整個操作失敗（`AdminConflictError` → HTTP 409）。找不到使用者/角色是 `AdminNotFoundError`（404）；team 角色要求先有 `users.team_uuid` 是 `AdminConflictError`（409，**已於 010/ADR-072 移除**——授予 team 角色本身就是入隊，不再有「要先屬於某 team」的前置條件；現在這個端點一律拒收 team 角色，改走 `POST /admin/teams/{uuid}/members`）——這兩個型別都是 `ValueError` 的子類別（`app/services/admin/errors.py`），沿用既有 use-case 層「拋 `ValueError` 表示網域層失敗」的慣例（例如 `app/services/station/update.py` 的 `"Station not found"`），只是額外分兩個子類別讓 REST endpoint 能分別對應到不同的 HTTP 狀態碼，而不是每個 domain 錯誤都回一律的 400。
 **Consequences**：➕ 不會有「所有人都被鎖在 RBAC 系統外面」的不可逆事故。➖ 目前只擋「最後一個 super_admin 被換掉」，沒有擋「刪除使用者本身」（因為目前沒有 admin API 刪除使用者的端點）——之後如果加，需要同樣的計數保護。
@@ -1223,6 +1227,89 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
   「站點例外」而不是刪掉。
 - 文件與註解要同步：`scripts/seed_rbac.py:153-155` 的「`zone`, never `team`」、`RBAC_RESOURCE_ROLE_MATRIX.md`。
 
+#### ADR-286 通報單的聯絡方式開放給承接者；承接名單改由 `ticket.view_history` 把關
+> **狀態：ACCEPTED（2026-09-30）。** 規則由團隊於 2026-09-28 確認；範圍與做法由產品負責人於同日拍板。
+> 2026-10-11 由產品負責人收緊（#61 第二輪 review）：聯絡方式從「登入就看得到」改為「承接者看得到」，見第 1、6 點。
+
+**白話**：求助者的聯絡方式（姓名、電話、Email），建單者、協調者，以及承接了這張單某筆需求的志工看得到，其他
+登入者與訪客看到遮罩；兩個檢傷欄位登入就看得到；誰承接了哪筆需求，仍然只有建單者與協調者看得到。
+
+**Context**：一般帳號的 `ticket.view_pii` 是 `own`，看到的聯絡人是遮罩（王◯◯、09*****678），承接之後也不
+解鎖，志工到了現場不知道找誰。團隊 2026-09-28 確認：所有登入的人都看得到聯絡方式，不限承接者；訪客仍遮罩。
+
+同一個能力還把關了三樣東西：兩個檢傷欄位 `person_trapped_reported`／`immediate_danger_reported`（ADR-254）、
+任務的承接名單 `assignments`（每筆承接的帳號 uuid）、時間軸的 PII 層（Spec 016）與匯出的聯絡欄位。地址不在
+其中：ADR-281 已把它移到 `ticket.view_detail`。
+
+2026-10-11（#61 第二輪 review）：第 6 點只遮了列表，但列表每一列都帶 `uuid`，而單張 `ticket(uuid)` 對任何
+登入者給完整聯絡方式。GraphQL 可以在一個請求裡用別名查幾百個 `ticket`，reviewer 用新註冊的帳號一個請求就拿到
+200 支電話；GraphQL 沒有限流（`graphql/router.py` 沒掛 dependency），也沒有別名數量限制，一張一張查也一樣。
+也就是任何願意註冊的人都能把所有求助者的電話抄走，而災區最常見的正是假冒救援或募款的詐騙。產品負責人決定
+只收聯絡方式、改成承接者看得到；檢傷欄位、地點、描述維持登入可見，因為志工要靠它們決定去不去。
+
+**Decision**：
+
+1. **每個角色**的 `ticket.view_pii` 都是 `all`：`user` 由 `own`、team `admin`／`member` 由 `zone` 改過來，
+   `data_auditor`、`super_admin` 本來就是。做法同 ADR-281 對 `view_detail`：仍是 capability＋scope，要收回只要在
+   `/admin/rbac` 縮 scope，不必改程式。team 角色一起改，因為同一時間只有一個身分生效（ADR-097），team 身分不能
+   看得比一般帳號少。不進 `PUBLIC_PERMS`，訪客照舊遮罩。
+
+   **聯絡人姓名、電話、Email 在 `view_pii` 之外還要二擇一**（2026-10-11 收緊）：這張單的 `ticket.view_history`
+   （建單者 `own`、責任區的 team `zone`、稽核與超管 `all`），或目前在這張單某筆**未刪除**的需求上有承接
+   （`TicketType._compute_contact_visible`、loader `ticket_claimed_by`）。單張 `ticket`、列表 `tickets`、
+   `myTaskAssignments`、`myTickets` 都是同一條。釋出名額會刪掉承接紀錄（`unassign_task_actor`），所以釋出後回到
+   遮罩；需求被刪除時已經通知過「不用前往」，那筆承接也不再算。`view_pii` 仍是外層的能力：在 `/admin/rbac`
+   把它縮回 `own`，承接者也一樣看不到。
+2. **兩個檢傷欄位跟著公開**：當初遮起來，是因為「只有能據以行動的人需要」（`graphql/tickets/types.py` 的
+   `person_trapped_reported`）；志工現在就是要據以行動的人。2026-10-11 聯絡方式收緊時，它們**不跟著收**：志工在
+   承接前就要靠它們判斷要不要去。
+3. **承接名單改由 `ticket.view_history` 把關**，不再跟著 `view_pii`。`createdBy`（`view_detail`，登入即可見）
+   加上承接後看得到的聯絡人姓名，已經能把帳號對到真名；承接名單若也公開，任何登入者都能追出某位志工接了哪些需求、
+   何時接，等於志工行蹤外露。`view_history` 保有 `view_pii` 原本的分級（`user` `own`、team `zone`、稽核與超管
+   `all`，ADR-128），而時間軸本來就會把承接人顯示成名字（ADR-143），所以不新增能力。前台沒有任何查詢讀
+   `assignments`，畫面不受影響。
+4. **既有資料庫**：seed 是 additive bootstrap（ADR-055），另以資料 migration `65c5196498fb` 把仍停在舊預設值的
+   grant——`user` 的 `own`、`admin`／`member` 的 `zone`——改為 `all`。runtime 已被改成其他值的 grant、個人
+   grant、seed 沒定義的角色都不動。downgrade 把這三個角色的 `all` 改回舊預設值。
+5. **需求的審核狀態 `TicketTaskType.moderationStatus` 也由 `ticket.view_history` 把關**（2026-10-08 補）。它原本
+   是公開欄位，訪客也拿得到；民眾建的需求預設都是 `pending_review`，對外看起來每一筆都「待審核」，後台退回
+   （`rejected`）也被所有人看到。時間軸本來就把它放在稽核層（Spec 016）。跟承接名單一樣交給 `view_history`：
+   建單者看自己的、team 看責任區、稽核與超管看全部，其他人拿 null。每個 seed 角色的 `ticket.edit` 範圍都在
+   `view_history` 範圍內，所以會審核需求的人讀得到自己設的值。
+6. **`tickets` 列表裡的兩個檢傷欄位另要 `ticket.view_history`**（2026-10-08 補，#61 review）：列表一頁一頁翻，
+   等於把每一張單的「有人受困」交給任何新帳號，所以列表裡除了 `view_pii` 還要 `view_history`（建單者、責任區的
+   team、稽核與超管），點進單才看得到。同時列表一頁最多 200 筆（前台地圖一次要 200，`TICKET_LIST_MAX_LIMIT`）。
+   聯絡方式原本也在這一點（列表另要 `view_history`、單張登入即可），但單張查詢繞得過去（見 Context），2026-10-11
+   併入第 1 點的規則，單張與列表一致。前台的承接確認框與詳情抽屜用單張 `ticket`，承接前看到遮罩，承接後在
+   「我承接的」（`myTaskAssignments`）看到完整的。
+
+**不受影響**：時間軸要先有 `ticket.view_history`（一般帳號 `own`），一般帳號本來就只看得到自己單的時間軸，而
+自己的單原本就有 `view_pii`；匯出要 `ticket.export`，一般帳號沒有；地址自 ADR-281 起由 `view_detail` 把關。
+
+**取代關係**：
+
+- 原本「承接之後聯絡方式仍維持遮罩」的規則作廢：承接正是解鎖聯絡方式的條件（2026-10-11）。
+- 團隊 2026-09-28「所有登入的人都看得到聯絡方式，不限承接者」：2026-10-11 由產品負責人收緊為承接者（見 Context）。
+- ADR-128「時間軸的分級與 `view_pii` 完全一致」對通報單不再成立（站點照舊）：時間軸維持原分級，`view_pii`
+  放寬。`tests/test_history_permissions.py` 的 mirror 測試改為只比對站點。
+- ADR-281 ➕「聯絡資料與兩個檢傷欄位維持 `ticket.view_pii`（一般帳號 `own`）」：能力照舊是兩個，「在哪裡」與
+  「找誰」仍分開，但 `own` 改為 `all`。
+
+**後果**：
+
+- 要看聯絡方式得先承接。承接會通知建單者（`task_claimed`，「某某 承接了你的『…』」）並佔掉名額，大量收集
+  等於對每位求助者各發一則「我要來了」，很顯眼。擋不住的是真的承接了再看——那是規則本身的內容。
+- 前台的請求一律用 `user` 身分（ADR-289），所以協調者在前台只看得到自己的單與自己承接的單的聯絡方式；責任區的
+  要在後台、切到 team 身分看。
+- 沒有需求、或需求都已滿／已關閉的單，新來的志工承接不了，也就看不到聯絡方式。也沒有要他去做的事，所以合理。
+- 匯出的聯絡欄位只看 `view_pii`（`services/bulk_export.py:_row_decider`）。依 seed，持有 `ticket.export` 的角色
+  在它匯得出的列上都有 `view_history`，結果一致；runtime 把 `ticket.export` 給沒有 `view_history` 的角色時要重新評估。
+- 承接名單與聯絡方式的可見性從此綁在時間軸的能力上：日後放寬 `ticket.view_history` 時要一併考慮兩者。
+  `tests/test_seed_rbac.py::test_who_claimed_a_need_stays_with_the_requester_and_coordinators` 會擋下。
+- 規則釘在 `tests/test_graphql/test_ticket_contact.py`（含一個請求用別名查多張單的回歸測試）。
+- GraphQL 測試的角色（`tests/test_graphql/conftest.py`）補上 `ticket.view_history`，比照 seed。
+- 文件同步：`RBAC_RESOURCE_ROLE_MATRIX.md` 的 `ticket.view_pii` 列與「PII 遮罩」一段。
+
 ---
 
 #### ADR-300 `data_auditor` 可審核與撤銷站點修改建議（推翻 ADR-049「稽核員只讀」）
@@ -1296,6 +1383,39 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 ➖ `scope_filter` 的 ZONE 分支必須把 zone 取別名：zone 與被過濾的資料列共用 `base_geometries`，不取別名時
    EXISTS 會關聯到資料列自己，而每個幾何都包含自己。
 ◾ 本次 migration 不保留區域資料：本地只有 `seed_mock_scenarios.sql` 載入的假資料。
+
+---
+
+#### ADR-312 審核單與需求只看 `ticket.review`；團隊 member 與資料檢核員也有
+> **狀態：ACCEPTED（2026-10-08）。** 產品負責人於 #61 review 時拍板：審核是後台的事，資料檢核員要能審核所有
+> 單與需求，團隊 member 也要能審核。
+
+**白話**：民眾改不了自己單的審核結果；後台的團隊 admin、member 審核自己責任區的單與需求，資料檢核員與超管審
+核全部。
+
+**Context**：單的 `verification_status` 早就拆成 `reviewTicket`、要 `ticket.review`（見上方 `review_ticket`
+那一段）。但需求的 `moderation_status`、單與需求的 `review_note` 仍走 `updateTicket`／`updateTicketTask`，只查
+`ticket.edit`。一般帳號對自己的單有 `ticket.edit` `own`，所以能把自己的需求標成 `approved`、在自己的單上寫審
+核備註。另一頭，`ticket.review` 只有 admin（zone）與 super_admin（all），team member 能審核只是因為它有
+`ticket.edit` `zone`；資料檢核員能審核站點修改建議（ADR-300），卻不能審核單與需求。
+
+**Decision**：
+
+1. **審核欄位只看 `ticket.review`**：`updateTicket` 的 `reviewNote`、`updateTicketTask` 的 `moderationStatus`
+   與 `reviewNote`（`services/ticket.py:REVIEW_FIELDS`）。一次改動只帶審核欄位時只查 `ticket.review`；也帶其他
+   欄位時兩個都查；沒帶審核欄位時照舊只查 `ticket.edit`。scope 檢查對象不變：單看單本身，需求借單的位置
+   （ADR-052）。
+2. **seed 補授**：team `member` `ticket.review` `zone`（同 admin），`data_auditor` `ticket.review` `all`。seed 是
+   additive bootstrap（ADR-055），既有資料庫重跑 seed 就會補上，不需要資料 migration。`user` 不授。
+3. `data_auditor` 的寫入能力從站點修改建議的審核（ADR-300）擴大到單與需求的審核。它仍沒有 `ticket.edit`，改不了
+   單與需求的內容。
+
+**後果**：
+
+- ➕ 審核結果只有後台改得了，`reviewNote` 也一樣。
+- ➕ 資料檢核員能審核所有單與需求，team member 審核自己責任區的。
+- ➖ `tests/test_seed_rbac.py` 對 `data_auditor` 的例外說明改為「寫入只有審核（ADR-300、ADR-312）」。
+- ➖ 前台若曾讓建單者寫 `reviewNote`，現在會被拒（目前前台沒有這種畫面）。
 
 ---
 

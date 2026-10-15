@@ -159,7 +159,7 @@ class StationType:
     def _pii_visible(self, info: strawberry.types.Info):
         """Memoized PII-visibility check shared by the three contact_* resolvers.
 
-        See TicketType._pii_visible (app/graphql/tickets/types.py) for the full rationale —
+        See TicketType._pii_in_scope (app/graphql/tickets/types.py) for the full rationale —
         same memoization-per-instance pattern, scoped to station.view_pii here instead.
         """
         if self._pii_visible_task is None:
@@ -485,7 +485,7 @@ class StationPropertyType:
 class CreateStationPropertyInput:
     """Input for adding a new property to a station."""
 
-    station_uuid: str = strawberry.field(
+    station_uuid: UUID = strawberry.field(
         description="UUID of the station to attach this property to"
     )
     property_type: str = strawberry.field(
@@ -555,8 +555,8 @@ class CrowdSourcingType:
 class CreateCrowdSourcingInput:
     """Input for submitting or updating a crowd-sourced rating for a station property."""
 
-    station_uuid: str = strawberry.field(description="UUID of the station being rated")
-    item_uuid: str | None = strawberry.field(
+    station_uuid: UUID = strawberry.field(description="UUID of the station being rated")
+    item_uuid: UUID | None = strawberry.field(
         default=None,
         description="UUID of the StationProperty being rated — null for a general station rating",
     )

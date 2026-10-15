@@ -26,7 +26,6 @@ from app.models.auth import User
 from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
-from app.repositories.tickets_repository import ticket_repository
 from app.services import dedup as dedup_service
 from app.services import station as station_service
 from app.services import ticket as ticket_service
@@ -115,11 +114,16 @@ async def submit_new_ticket(
 async def submit_new_task(
     db: AsyncSession, *, actor: User, ticket_uuid: str, task: TaskSubmission
 ) -> SubmissionCreated | SubmissionHeld:
-    """Add a task to an existing ticket, or hold it when it looks like a duplicate."""
+    """Add a task to an existing ticket, or hold it when it looks like a duplicate.
+
+    All of `create_ticket_task`'s rules run before the engine is asked, so a caller who may not
+    add to this ticket never learns what is nearby. A held task writes nothing, so a completed
+    ticket is not reopened by it.
+    """
     now = datetime.now(UTC)
-    fields = await ticket_service.validate_ticket_task(db, actor=actor, **_task_kwargs(task))
-    if not await ticket_repository.get_by_uuid_active(db, ticket_uuid):
-        raise ValueError("Ticket not found")
+    fields = await ticket_service.validate_added_task(
+        db, actor=actor, ticket_uuid=ticket_uuid, **_task_kwargs(task)
+    )
     actor_uuid = str(actor.uuid)
     submission = NewTask(ticket_uuid=ticket_uuid, task=task_draft(fields))
     acknowledged = {task_ref(0): task.acknowledged_duplicate_of}
@@ -131,7 +135,7 @@ async def submit_new_task(
     if held is not None:
         return held
 
-    created_task = await ticket_service.insert_ticket_task(
+    created_task = await ticket_service.insert_added_task(
         db, actor=actor, ticket_uuid=ticket_uuid, fields=fields
     )
     await _record_acknowledged(db, pairs, {task_ref(0): str(created_task.uuid)}, actor_uuid)

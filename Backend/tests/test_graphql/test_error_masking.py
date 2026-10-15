@@ -11,6 +11,7 @@ would satisfy the masked half of this file while turning every 400 into an opaqu
 """
 
 import logging
+from uuid import uuid4
 
 import pytest
 
@@ -140,6 +141,28 @@ async def test_permission_denied_is_not_masked(client):
     assert any("Permission Denied." in e["message"] for e in body.get("errors", [])), body
 
 
+@pytest.mark.asyncio
+async def test_an_unknown_input_field_is_not_masked(client):
+    """graphql-core wraps a variable's coercion error in a second GraphQLError.
+
+    What went wrong is the caller's own input, found before any resolver runs, so the
+    message is safe and it is the only thing that tells the caller which field to drop.
+    graphql-core 3.2 and 3.3 word it differently; both name the field and the input type.
+    """
+    body = await _post(client, UPDATE_STATION, {"uuid": str(uuid4()), "input": {"bogus": 1}})
+    assert "errors" in body, body
+    message = body["errors"][0]["message"]
+    assert "'bogus'" in message and "'UpdateStationInput'" in message, body
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_scalar_variable_is_not_masked(client):
+    """A scalar that rejects its value is wrapped the same way."""
+    body = await _post(client, UPDATE_STATION, {"uuid": "not-a-uuid", "input": {}})
+    assert "errors" in body, body
+    assert "Value cannot represent a UUID" in body["errors"][0]["message"], body
+
+
 # ──────────────────────────────────────────────
 # 記錄等級 (ADR-174)
 # ──────────────────────────────────────────────
@@ -180,6 +203,15 @@ async def test_permission_denied_is_not_logged_as_a_server_fault(client, caplog)
 
     assert any("Permission Denied." in e["message"] for e in body.get("errors", [])), body
     assert _records_at(caplog, logging.ERROR) == []
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_input_field_is_not_logged_as_a_server_fault(client, caplog):
+    """呼叫端在 variables 裡帶了不存在的欄位是輸入錯誤,不該以 ERROR + traceback 記錄。"""
+    with caplog.at_level(logging.INFO):
+        await _post(client, UPDATE_STATION, {"uuid": str(uuid4()), "input": {"bogus": 1}})
+
+    assert _records_at(caplog, logging.ERROR) == [], "a client input error must not log at ERROR"
 
 
 @pytest.mark.asyncio
@@ -247,3 +279,33 @@ async def test_a_concurrent_request_does_not_unmask_another(client, monkeypatch)
     failed, _ = await asyncio.gather(first(), _post(client, STATIONS_SEARCH, {"q": "成功"}))
 
     _assert_masked(failed)
+
+
+@pytest.mark.asyncio
+async def test_a_result_that_fails_to_serialize_is_still_masked(client, monkeypatch):
+    """A malformed variable is the caller's fault and passes through; a malformed result is ours.
+
+    Both arrive as a GraphQL error wrapping another, so this pins the line between them: the
+    serialization fault carries a response path and must stay masked.
+    """
+    from app.repositories import geo_repository
+
+    async def count_active(*args, **kwargs):
+        return 2**31  # past GraphQL's 32-bit Int, so graphql-core refuses to serialize it
+
+    async def list_active(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(geo_repository.station_repository, "count_active", count_active)
+    monkeypatch.setattr(geo_repository.station_repository, "list_active", list_active)
+
+    _assert_masked(await _post(client, STATIONS_SEARCH, {"q": "光復"}))
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_uuid_variable_is_not_masked(client, coordinator_auth):
+    """Coercing a variable fails before any resolver runs, so its message is safe to return."""
+    _, token = coordinator_auth
+    body = await _post(client, UPDATE_STATION, {"uuid": "ZAP", "input": {}}, token)
+    message = body["errors"][0]["message"]
+    assert "Value cannot represent a UUID" in message, message

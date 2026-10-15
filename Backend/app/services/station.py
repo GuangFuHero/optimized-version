@@ -27,7 +27,11 @@ from app.repositories.geo_repository import (
     station_repository,
 )
 from app.services.authz import require_gov_team, require_scope
-from app.services.geo_validation import normalize_contact_fields, validate_point
+from app.services.geo_validation import (
+    check_address_lengths,
+    normalize_contact_fields,
+    validate_point,
+)
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 
@@ -122,6 +126,7 @@ async def validate_station(
             "contact_phone": contact_phone,
         }
     )
+    check_address_lengths(secondary_location)
     return StationFields(
         point=geometry,
         values={
@@ -328,9 +333,7 @@ async def assign_station(
     await require_scope(actor, Perm.STATION_ASSIGN, db)
     await require_gov_team(db, actor, detail="Only gov teams may assign stations.")
     station = await db.scalar(
-        select(Station)
-        .where(Station.uuid == station_uuid, Station.delete_at.is_(None))
-        .with_for_update()
+        select(Station).where(Station.uuid == station_uuid, Station.delete_at.is_(None)).with_for_update()
     )
     if not station:
         raise ValueError("Station not found")
