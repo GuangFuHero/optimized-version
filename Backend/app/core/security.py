@@ -8,7 +8,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from redis.exceptions import RedisError
@@ -261,10 +261,16 @@ async def _require_live_session(redis, payload: dict) -> None:
         raise _credentials_exception()
 
 
+# The header, and the one value of it, by which the site marks its requests (ADR-289).
+REALM_HEADER = "X-WG-Realm"
+SITE_REALM = "site"
+
+
 async def get_current_user(
         db: AsyncSession = Depends(get_db),
         token: str = Depends(oauth2_scheme),
         redis=Depends(get_redis),
+        realm: str | None = Header(None, alias=REALM_HEADER),
 ) -> User:
     """Resolve the authenticated user AND the identity this token acts as (ADR-069/096).
 
@@ -274,9 +280,16 @@ async def get_current_user(
     lost; refusing makes it visible. `/auth/refresh` refuses the same case, so between them
     the user is signed out and comes back on their platform identity.
 
-    `redis` is an ordinary parameter rather than something fetched from `app.state`, because
-    the GraphQL context calls this function directly instead of through FastAPI and has to
-    supply it itself (ADR-102).
+    A request the site marks with `realm` = `site` then acts as the caller's `user` grant
+    instead, for that request alone (ADR-289): everyone signed in has the same
+    permissions on the site, and switching identity is a back-office matter. It applies only
+    after the token's own identity has been checked, so a
+    revoked one still 401s, and an account holding no `user` grant keeps the token's identity
+    (ADR-289 decision 2). Neither the token nor the session changes.
+
+    `redis` and `realm` are ordinary parameters rather than read off the request, because the
+    GraphQL context calls this function directly instead of through FastAPI and has to supply
+    them itself (ADR-102).
     """
     payload = _decode_access_payload(token)
     await _require_live_session(redis, payload)
@@ -294,6 +307,8 @@ async def get_current_user(
         # the caller holds anyway, so it grants nothing new. Keeps tokens minted before this
         # feature (and any caller that does not track identity) working as they did.
         identity = await active_identity_repository.default_for_user(db, str(user.uuid))
+    if realm == SITE_REALM:
+        identity = await active_identity_repository.site_identity(db, str(user.uuid)) or identity
     user.active_identity = identity
     await _publish_identity_for_auditing(db, identity)
     return user

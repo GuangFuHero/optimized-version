@@ -26,7 +26,11 @@ from app.repositories.geo_repository import (
     station_repository,
 )
 from app.services.authz import require_gov_team, require_scope
-from app.services.geo_validation import normalize_contact_fields, validate_point
+from app.services.geo_validation import (
+    check_address_lengths,
+    normalize_contact_fields,
+    validate_point,
+)
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 
@@ -117,6 +121,7 @@ async def create_station(
             "contact_phone": contact_phone,
         }
     )
+    check_address_lengths(secondary_location)
 
     station = await station_repository.add(
         db,
