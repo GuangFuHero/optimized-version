@@ -13,13 +13,14 @@ import pytest_asyncio
 from geoalchemy2.shape import from_shape
 from graphql import print_schema
 from shapely.geometry import Point
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app.dedup_engine.registry import get_engine
 from app.graphql.schema import schema
 from app.models.dedup import DedupAuditEvent, DuplicatePair
-from app.models.geo import Station
+from app.models.geo import BuildingMapTicketMap, Station
 from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TicketTask
 from tests.test_graphql.conftest import auth_header, test_db
 
@@ -75,6 +76,12 @@ WATER = {"taskType": "supply", "taskName": "需要飲用水", "taskDescription":
 async def _clean_tables():
     """No leftovers from other tests become candidates."""
     async with test_db() as db:
+        await db.execute(delete(BuildingMapTicketMap))
+        await db.execute(
+            delete(SecondaryLocation).where(
+                SecondaryLocation.geometry_uuid.in_(select(Tickets.uuid).union(select(Station.uuid)))
+            )
+        )
         for model in (DedupAuditEvent, DuplicatePair, TicketTask, Tickets, Station):
             for row in (await db.execute(select(model))).scalars().all():
                 await db.delete(row)
