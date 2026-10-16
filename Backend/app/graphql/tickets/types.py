@@ -982,7 +982,7 @@ class CreateTicketTaskDraft:
     quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
     source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
     visibility: Visibility = strawberry.field(default=Visibility.public)
-    route_uuid: str | None = None
+    route_uuid: UUID | None = None
     acknowledged_duplicate_of: str | None = strawberry.field(
         default=None,
         description=(
@@ -1056,9 +1056,6 @@ class CreateTicketInput:
         description=(
             "The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates"
         ),
-    )
-    acknowledged_duplicate_of: str | None = strawberry.field(
-        default=None, description="The ticket itself was confirmed not to be a duplicate of this entity"
     )
 
 

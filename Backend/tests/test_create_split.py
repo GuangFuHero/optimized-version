@@ -36,6 +36,7 @@ CREATE_TICKET_PARAMS = [
     "db", "actor", "geometry", "title", "description", "contact_name", "contact_email",
     "contact_phone", "priority", "task_type", "visibility", "disaster_types",
     "person_trapped_reported", "immediate_danger_reported", "secondary_location",
+    "building_map_uuid",
 ]  # fmt: skip
 CREATE_STATION_PARAMS = [
     "db", "actor", "geometry", "type", "name", "description", "op_hour", "level", "comment",

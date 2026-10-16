@@ -8,8 +8,7 @@ A draft may carry `acknowledged_duplicate_of`: the entity the submitter was show
 confirmed this draft is not a duplicate of. Acknowledgements are scored first; a draft whose
 acknowledged entity scoring found skips the check, so the same hint is not shown again. Every other draft,
 including one whose acknowledgement names nothing, is checked and can still be held. On
-create, the scored pairs are carded in the same commit. A ticket-level acknowledgement is
-never scored or carded: the engine compares tasks and stations, not tickets.
+create, the scored pairs are carded in the same commit.
 
 Every engine call happens before anything is written, so a failed call can roll back the
 transaction. Batch import does not come through here; it calls `create_ticket` /
@@ -70,7 +69,6 @@ async def submit_new_ticket(
     *,
     actor: User,
     tasks: list[TaskSubmission],
-    acknowledged_duplicate_of: str | None = None,
     **ticket_fields,
 ) -> SubmissionCreated | SubmissionHeld:
     """Create a ticket with its tasks, or hold all of it when any part looks like a duplicate.
@@ -86,9 +84,7 @@ async def submit_new_ticket(
     ]
     actor_uuid = str(actor.uuid)
     submission = NewTicket(ticket=ticket_draft(fields), tasks=tuple(task_draft(f) for f in task_fields))
-    acknowledged = {"ticket": acknowledged_duplicate_of} | {
-        task_ref(i): t.acknowledged_duplicate_of for i, t in enumerate(tasks)
-    }
+    acknowledged = {task_ref(i): t.acknowledged_duplicate_of for i, t in enumerate(tasks)}
 
     pairs = await _score_acknowledged(db, submission, acknowledged, actor, now)
     held = await _hold_if_suspected(
@@ -102,7 +98,7 @@ async def submit_new_ticket(
         await ticket_service.insert_ticket_task(db, actor=actor, ticket_uuid=str(ticket.uuid), fields=f)
         for f in task_fields
     ]
-    created = {"ticket": str(ticket.uuid)} | {task_ref(i): str(t.uuid) for i, t in enumerate(created_tasks)}
+    created = {task_ref(i): str(t.uuid) for i, t in enumerate(created_tasks)}
     await _record_acknowledged(db, pairs, created, actor_uuid)
     await db.commit()
     await db.refresh(ticket)
@@ -190,13 +186,13 @@ async def _hold_if_suspected(db, *, submission, acknowledged, actor, now) -> Sub
 async def _score_acknowledged(
     db, submission, acknowledged, actor, now
 ) -> list[dedup_service.AcknowledgedPair]:
-    """Score each acknowledged draft (except the ticket) against the entity it names.
+    """Score each acknowledged draft against the entity it names.
 
     Returns only the pairs whose related entity exists.
     """
     pairs = []
     for draft_ref, related_uuid in acknowledged.items():
-        if related_uuid and draft_ref != "ticket":
+        if related_uuid:
             pair = await dedup_service.score_acknowledged(
                 db,
                 submission=submission,

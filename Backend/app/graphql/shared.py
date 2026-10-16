@@ -217,10 +217,10 @@ class DuplicateSuspect:
     """One part of a submission that looks like something already there."""
 
     draft_ref: str = strawberry.field(
-        description='Which part of what was sent: "ticket", "task:0", "task:1"…, or "station"'
+        description='Which part of what was sent: "task:0", "task:1"…, or "station"'
     )
     related_kind: str = strawberry.field(
-        description='What it looks like: "ticket", "ticket_task" or "station"'
+        description='What it looks like: "ticket_task" or "station"'
     )
     related_uuid: str = strawberry.field(description="The existing entity it looks like")
     related_ticket_uuid: str | None = strawberry.field(

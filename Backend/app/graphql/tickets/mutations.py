@@ -50,14 +50,12 @@ class RequestMutation:
         looks like. Send the same input again after editing, or with `acknowledgedDuplicateOf` set
         on each task confirmed not to be a duplicate; a task whose acknowledged entity exists is
         not checked again and the pair is recorded for review. Otherwise the ticket and all its
-        tasks are created together (`TicketCreated`). Tickets themselves are not compared, so the
-        ticket-level `acknowledgedDuplicateOf` has no effect. A failing duplicate check never
-        blocks. Requires ticket.add.
+        tasks are created together (`TicketCreated`). A failing duplicate check never blocks.
+        Requires ticket.add.
         """
         result = await submit_new_ticket(
             info.context["db"],
             actor=require_authenticated(info),
-            acknowledged_duplicate_of=input.acknowledged_duplicate_of,
             tasks=[_task_submission(task) for task in input.tasks],
             geometry=input.geometry,
             title=input.title,
@@ -442,6 +440,6 @@ def _task_submission(draft) -> TaskSubmission:
         quantity=draft.quantity,
         source=draft.source,
         visibility=draft.visibility.value,
-        route_uuid=draft.route_uuid,
+        route_uuid=str(draft.route_uuid) if draft.route_uuid else None,
         acknowledged_duplicate_of=draft.acknowledged_duplicate_of,
     )

@@ -231,20 +231,6 @@ async def test_an_acknowledgement_that_names_nothing_still_gets_the_hint(db, eng
     assert (await _count(db, Tickets), await _count(db, DuplicatePair)) == (0, 0)
 
 
-async def test_a_ticket_acknowledgement_writes_no_card_even_when_scoring_fails(db, engine):
-    """The engine never scores the ticket itself, so the fallback must not card an existing ticket either."""
-    actor = await actor_with(db, Perm.TICKET_ADD)
-    existing = await _existing_ticket(db, actor)
-    engine.fail_score = True
-    filed = await submit_new_ticket(
-        db, actor=actor, tasks=[_task("抽水")], acknowledged_duplicate_of=existing, **_ticket()
-    )
-    assert isinstance(filed, SubmissionCreated)
-    assert engine.score_calls == []
-    await db.rollback()
-    assert await _count(db, DuplicatePair) == 0
-
-
 # --- task on an existing ticket ------------------------------------------------------------
 
 
@@ -419,18 +405,6 @@ async def test_end_to_end_with_fast_v2(db, monkeypatch):
     pair = (await db.execute(select(DuplicatePair))).scalar_one()
     assert (pair.entity_kind, pair.engine_version) == ("ticket_task", FastEngine.version)
     assert float(pair.similarity) >= 0.8
-
-
-async def test_a_ticket_acknowledgement_of_nothing_writes_no_card(db, monkeypatch):
-    """A ticket-level acknowledgement of an unknown uuid, on the real engine: created, no pair card."""
-    monkeypatch.setattr(registry, "_ENGINE", FastEngine())
-    actor = await actor_with(db, Perm.TICKET_ADD)
-    filed = await submit_new_ticket(
-        db, actor=actor, tasks=[_task("抽水")], acknowledged_duplicate_of=str(uuid_mod.uuid4()), **_ticket()
-    )
-    assert isinstance(filed, SubmissionCreated)
-    await db.rollback()
-    assert (await _count(db, DuplicatePair), await _events(db)) == (0, [])
 
 
 async def test_a_slow_score_on_an_acknowledged_create_still_creates(db, engine, monkeypatch):
