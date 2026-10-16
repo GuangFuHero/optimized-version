@@ -5,6 +5,9 @@ import { useTheme } from '@mui/material/styles';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { startTransition } from 'react';
+
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { getAuthColorScheme } from '../../theme/auth-theme';
 
 type LoginAudience = 'site' | 'admin';
@@ -92,8 +95,8 @@ export function LoginAudienceSwitch({
               minHeight: 36,
               borderRadius: '14px',
               textTransform: 'none',
-              fontSize: 13,
-              lineHeight: '16px',
+              fontSize: displayTextSize[13],
+              lineHeight: 1.25,
               fontWeight: 700,
               letterSpacing: '0.04em',
               color: authPalette.textSecondary,

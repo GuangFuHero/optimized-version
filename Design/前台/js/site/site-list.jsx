@@ -583,6 +583,9 @@
             <SiteDataTypeToggle value={dataType} onChange={controller.setDataType} />
             <SiteSubTypeFilter dataType={dataType} selected={controller.subDataTypes} pinned={pinned}
               onToggle={controller.toggleSubDataType} onTogglePinned={togglePinned} />
+            {/* 與 /map 同一顆（2026-09-18）。兩頁都要有，否則從列表回地圖又得開漢堡包。
+                手機用純圖示，桌機展開成帶字的兩段切換。 */}
+            {window.SiteViewSwitch ? <SiteViewSwitch module="list" state={state} compact={isMobile} /> : null}
             <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
               {/* 任務維度是需求為列，計數要數需求不是任務單，否則跟畫面上的列數對不起來 */}
               <span style={{ font: '400 var(--fs-13)/1.5 var(--font-data)', color: 'var(--color-fg-neutral-subtle)' }}>

@@ -10,6 +10,11 @@ const nextConfig = {
   // Use this to set Nx-specific options
   // See: https://nx.dev/recipes/next/next-config-setup
   nx: {},
+  transpilePackages: [
+    '@rescue-frontend/ui',
+    '@rescue-frontend/modules',
+    '@rescue-frontend/data-access',
+  ],
   // Standalone output for a lean production Docker image: a self-contained server.js plus
   // traced node_modules. outputFileTracingRoot points at the monorepo root so workspace
   // libs are traced correctly.

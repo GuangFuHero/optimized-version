@@ -1,4 +1,8 @@
+import { designTokens } from '@rescue-frontend/ui';
+
 import type { RescueMapMarkerItem } from '../../types';
+
+const { color } = designTokens;
 
 function escapeHtml(value: string): string {
   return value
@@ -26,18 +30,21 @@ function getMarkerTone(item: RescueMapMarkerItem): {
   markerStroke: string;
   glyphFill: string;
 } {
+  // Fill and glyph always travel as a pair, from `.wg-marker--ticket` / `--station` in the design
+  // prototype's site.css. The stroke is the surface colour, not a light grey: the ring exists to
+  // separate the pin from whatever basemap is underneath it, so it has to be the page's own white.
   if (item.detailType === 'ticket') {
     return {
-      markerFill: '#E3791E',
-      markerStroke: '#E7EFF7',
-      glyphFill: '#4C2200',
+      markerFill: color.bg.primary.default,
+      markerStroke: color.bg.neutral.default,
+      glyphFill: color.fg.onPrimary,
     };
   }
 
   return {
-    markerFill: '#006493',
-    markerStroke: '#E7EFF7',
-    glyphFill: '#FFFFFF',
+    markerFill: color.brand.secondary.default,
+    markerStroke: color.bg.neutral.default,
+    glyphFill: color.fg.onSecondary,
   };
 }
 

@@ -17,6 +17,7 @@ import type {
   RescueMapMarkerItem,
 } from '../types';
 import type { SiteRouteState } from '../../route/types';
+import { sessionExpiryFetch } from '../../session/end-expired-session';
 import { resolveTicketStatusQueryValue } from '../../ticket/status';
 import {
   closureAreasSignature,
@@ -25,6 +26,7 @@ import {
   mapStationToMarker,
   mapTicketToMarker,
   toBoundsInput,
+  withTicketStatus,
 } from './markers';
 import { useSiteMapViewportStore } from './use-site-map-viewport-state';
 
@@ -54,6 +56,8 @@ export interface SiteMapLiveDataStore {
   dismissMarker: (markerId: string) => void;
   getSnapshot: () => SiteMapLiveDataSnapshot;
   replaceData: (next: SiteMapLiveDataSnapshot) => void;
+  /** A ticket's status read again after a change on it, shown until the next fetch. */
+  replaceTicketStatus: (ticketUuid: string, status: string) => void;
   setFetching: (isFetching: boolean) => void;
   subscribe: (listener: () => void) => () => void;
 }
@@ -62,7 +66,7 @@ function markersSignature(markers: readonly RescueMapMarkerItem[]) {
   return markers
     .map(
       (marker) =>
-        `${marker.id}:${marker.detailType}:${marker.variant}:${marker.position[0]}:${marker.position[1]}:${marker.label}`,
+        `${marker.id}:${marker.detailType}:${marker.variant}:${marker.position[0]}:${marker.position[1]}:${marker.label}:${marker.locationCell ?? ''}`,
     )
     .join('|');
 }
@@ -176,6 +180,18 @@ export function createSiteMapLiveDataStore(
     replaceData: (next) => {
       commit(next);
     },
+    // Through `commit`, whose signature carries each marker's label: a ticket not on the map, or
+    // already showing this status, tells nobody.
+    replaceTicketStatus: (ticketUuid, status) => {
+      commit({
+        ...snapshot,
+        markers: snapshot.markers.map((marker) =>
+          marker.id === ticketUuid && marker.detailType === 'ticket'
+            ? withTicketStatus(marker, status)
+            : marker,
+        ),
+      });
+    },
     setFetching: (isFetching) => {
       commit({
         ...snapshot,
@@ -201,6 +217,7 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
         runtime: 'client',
         url: '/api/graphql',
         exchanges: [fetchExchange],
+        fetch: sessionExpiryFetch,
         requestPolicy: 'network-only',
         suspense: false,
       }),
@@ -261,6 +278,9 @@ export function useSiteMapLiveData(baseRouteState: SiteRouteState) {
                   status: ticketStatus,
                   skip: 0,
                   limit: 200,
+                  // Coarser cells as the map zooms out; the server caps how fine they get and
+                  // ignores it entirely for a viewer who may see exact points (ADR-283).
+                  zoom: state.position?.zoom,
                 },
                 LIVE_QUERY_CONTEXT,
               )

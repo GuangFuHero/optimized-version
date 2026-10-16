@@ -2,6 +2,8 @@
 
 import { Box, Stack, Typography } from '@mui/material';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { useStationDetailColorScheme } from './constants';
 import type { StationCapacityBarProps } from './types';
 
@@ -36,7 +38,7 @@ export function StationCapacityBar({
         <Typography
           sx={{
             color: stationDetailPalette.bodyText,
-            fontSize: 12,
+            fontSize: displayTextSize[12],
             lineHeight: '16px',
             fontWeight: 600,
             letterSpacing: '0.6px',
@@ -49,7 +51,7 @@ export function StationCapacityBar({
           component="div"
           sx={{
             color: stationDetailPalette.heading,
-            fontSize: 12,
+            fontSize: displayTextSize[12],
             lineHeight: '16px',
             fontWeight: 700,
             letterSpacing: '0.6px',

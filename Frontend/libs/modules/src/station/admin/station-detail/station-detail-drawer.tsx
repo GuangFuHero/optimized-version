@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 
 import { Box, Stack, Typography } from '@mui/material';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { AdminDetailModalFrame } from '../../../admin/shared/detail-modal-frame';
 
 import {
@@ -40,7 +42,7 @@ function renderFallbackPanel(
         <Typography
           sx={{
             color: stationDetailPalette.heading,
-            fontSize: 14,
+            fontSize: displayTextSize[14],
             lineHeight: '20px',
             fontWeight: 600,
           }}
@@ -50,7 +52,7 @@ function renderFallbackPanel(
         <Typography
           sx={{
             color: stationDetailPalette.bodyText,
-            fontSize: 14,
+            fontSize: displayTextSize[14],
             lineHeight: '20px',
             fontWeight: 400,
           }}

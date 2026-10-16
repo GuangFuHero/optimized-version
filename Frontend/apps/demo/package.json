@@ -1,0 +1,23 @@
+{
+  "name": "@rescue-frontend/demo",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.0.0",
+    "@mui/material": "^9.0.0",
+    "@mui/material-nextjs": "^9.0.1",
+    "@rescue-frontend/data-access": "workspace:*",
+    "@rescue-frontend/modules": "workspace:*",
+    "@rescue-frontend/ui": "workspace:*",
+    "@urql/next": "^2.0.0",
+    "next": "~16.1.6",
+    "next-auth": "^4.24.14",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "scripts": {
+    "typecheck": "next typegen && tsc --noEmit -p tsconfig.json"
+  }
+}

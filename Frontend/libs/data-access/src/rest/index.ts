@@ -17,6 +17,9 @@ import setPasswordAsync from './v1/auth/set-password/post';
 import addContactAsync from './v1/auth/contacts/post';
 import verifyContactAsync from './v1/auth/contacts/verify/post';
 import resendContactAsync from './v1/auth/contacts/resend/post';
+import ApiError from './api-error';
+import getCurrentUserAsync from './v1/users/me/get';
+import patchCurrentUserAsync from './v1/users/me/patch';
 
 export {
   getUserSaltAsync,
@@ -40,12 +43,7 @@ export {
   resendContactAsync,
 };
 
-import ApiError from './api-error';
-
 export { ApiError };
-
-import getCurrentUserAsync from './v1/users/me/get';
-import patchCurrentUserAsync from './v1/users/me/patch';
 
 export { getCurrentUserAsync, patchCurrentUserAsync };
 

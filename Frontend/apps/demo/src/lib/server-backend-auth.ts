@@ -3,9 +3,15 @@ import {
   resolveGraphqlUrl,
   type ITokenPair,
 } from '@rescue-frontend/data-access';
+import {
+  createSharedRefresh,
+  isRefreshRefused,
+  SESSION_EXPIRED,
+  SESSION_HEADER,
+} from '@rescue-frontend/modules/session';
 import { encode, getToken, type JWT } from 'next-auth/jwt';
 import { cookies, headers } from 'next/headers';
-import type { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { withClientIpAsync } from './client-ip';
 
@@ -23,7 +29,7 @@ export interface BackendAuthToken extends JWT {
   tokenType?: string;
   expiresIn?: number;
   accessTokenExpiresAt?: number;
-  authError?: 'RefreshAccessTokenError';
+  authError?: 'RefreshAccessTokenError' | 'RefreshUnavailable';
 }
 
 interface RequestLike {
@@ -42,8 +48,17 @@ interface CookieOptions {
   maxAge?: number;
 }
 
-interface ResolvedBackendAuth {
+export interface ResolvedBackendAuth {
   token: BackendAuthToken | null;
+  /** There was a session, its access token could not be refreshed, and it has been cleared. */
+  refreshFailed: boolean;
+  /**
+   * There was a session and its access token is due, but `/auth/refresh` asked to wait or did not
+   * answer (`isRefreshRefused`). The session is kept as it is, and the request is not sent: as a
+   * guest or with the old access token, the backend's answer would read as a sign-out. It is
+   * answered `refreshUnavailableResponse()`, and the next request tries the refresh again.
+   */
+  refreshUnavailable: boolean;
   responseCookies: Array<{
     name: string;
     value: string;
@@ -78,6 +93,27 @@ function hasUsableAccessToken(token: BackendAuthToken) {
   );
 }
 
+// How long a refreshed pair is handed to requests that still carry the spent refresh token.
+const SHARED_REFRESH_REUSE_MS = 30_000;
+const SHARED_REFRESH_KEY = '__wanguardSharedBackendRefresh';
+
+type SharedRefresh = (refreshToken: string) => Promise<ITokenPair>;
+
+/**
+ * One refresh per refresh token for the GraphQL proxy, the BFF and next-auth alike: the backend
+ * revokes a session whose refresh token is used twice (`createSharedRefresh`). Kept on
+ * `globalThis` because each route handler may load its own copy of this module.
+ */
+const sharedRefresh: SharedRefresh = ((
+  globalThis as unknown as Record<string, SharedRefresh | undefined>
+)[SHARED_REFRESH_KEY] ??= createSharedRefresh(
+  // /auth/refresh is rate-limited per caller, and refreshes fire on their own schedule as access
+  // tokens age out — unattributed, they would all pile onto this container's allowance.
+  (refreshToken) =>
+    withClientIpAsync(() => refreshAsync({ refresh_token: refreshToken })),
+  { reuseForMs: SHARED_REFRESH_REUSE_MS },
+));
+
 export async function refreshBackendAuthTokenAsync(
   token: BackendAuthToken,
 ): Promise<BackendAuthToken> {
@@ -89,19 +125,27 @@ export async function refreshBackendAuthTokenAsync(
   }
 
   try {
-    // /auth/refresh is rate-limited per caller, and refreshes fire on their own schedule as access
-    // tokens age out — unattributed, they would all pile onto this container's allowance.
-    const refreshedTokenPair = await withClientIpAsync(() =>
-      refreshAsync({ refresh_token: token.refreshToken as string }),
-    );
+    const refreshedTokenPair = await sharedRefresh(token.refreshToken);
 
     return applyTokenPairToBackendAuthToken(token, refreshedTokenPair);
-  } catch {
+  } catch (error) {
     return {
       ...token,
-      authError: 'RefreshAccessTokenError',
+      authError: isRefreshRefused(refreshErrorStatus(error))
+        ? 'RefreshAccessTokenError'
+        : 'RefreshUnavailable',
     };
   }
+}
+
+/** The status `/auth/refresh` answered with (`ApiError.status`); none when it never answered. */
+function refreshErrorStatus(error: unknown): number | undefined {
+  return typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    typeof error.status === 'number'
+    ? error.status
+    : undefined;
 }
 
 function shouldUseSecureCookies(requestHeaders: Headers) {
@@ -238,31 +282,75 @@ export async function resolveBackendAuthTokenAsync(
   })) as BackendAuthToken | null;
 
   if (!token) {
-    return { token: null, responseCookies: [] };
+    return {
+      token: null,
+      refreshFailed: false,
+      refreshUnavailable: false,
+      responseCookies: [],
+    };
   }
 
   if (hasUsableAccessToken(token)) {
     return {
       token,
+      refreshFailed: false,
+      refreshUnavailable: false,
       responseCookies: [],
     };
   }
 
   const refreshedToken = await refreshBackendAuthTokenAsync(token);
 
+  if (refreshedToken.authError === 'RefreshUnavailable') {
+    return {
+      token: null,
+      refreshFailed: false,
+      refreshUnavailable: true,
+      responseCookies: [],
+    };
+  }
+
   if (!hasUsableAccessToken(refreshedToken)) {
     return {
       token: null,
+      refreshFailed: true,
+      refreshUnavailable: false,
       responseCookies: createClearedSessionCookies(request, secureCookies),
     };
   }
 
   return {
     token: refreshedToken,
+    refreshFailed: false,
+    refreshUnavailable: false,
     responseCookies: await createPersistedSessionCookiesAsync(
       request,
       refreshedToken,
       secureCookies,
+    ),
+  };
+}
+
+/**
+ * The same session once the backend has refused its token with a 401: ended elsewhere (另一台裝置
+ * 「登出所有裝置」, an admin, an identity removed — backend ADR-096). Cleared the way a failed
+ * refresh clears it, so the next request goes as a guest.
+ */
+function expireBackendAuth(
+  request: RequestLike,
+  resolvedAuth: ResolvedBackendAuth,
+): ResolvedBackendAuth {
+  const requestHeaders =
+    request.headers instanceof Headers
+      ? request.headers
+      : new Headers(request.headers);
+
+  return {
+    ...resolvedAuth,
+    token: null,
+    responseCookies: createClearedSessionCookies(
+      request,
+      shouldUseSecureCookies(requestHeaders),
     ),
   };
 }
@@ -280,6 +368,35 @@ export function applyBackendAuthResponseCookies(
   }
 
   return response;
+}
+
+/**
+ * Answers for a session that has ended (`isSessionExpired`): marks the response for the browser,
+ * which signs out and reloads as a guest, and clears the session. Status and body stay as they are:
+ * the `x-wg-session` header is the whole of the mark.
+ */
+export function expireSessionResponse(
+  response: NextResponse,
+  request: RequestLike,
+  resolvedAuth: ResolvedBackendAuth,
+) {
+  response.headers.set(SESSION_HEADER, SESSION_EXPIRED);
+
+  return applyBackendAuthResponseCookies(
+    response,
+    expireBackendAuth(request, resolvedAuth),
+  );
+}
+
+/**
+ * Answers a request whose session could not be refreshed just now (`refreshUnavailable`), with the
+ * session left as it is. The site reads a 503 as a dropped connection: 「連線失敗，請…再試一次」.
+ */
+export function refreshUnavailableResponse() {
+  return NextResponse.json(
+    { detail: '暫時無法確認登入狀態，請稍後再試一次。' },
+    { status: 503 },
+  );
 }
 
 export async function getServerBackendAccessTokenAsync() {

@@ -4,7 +4,7 @@ import { Button } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import type { ReactNode } from 'react';
 
-import { Icons } from '@rescue-frontend/ui';
+import { displayTextSize, Icons } from '@rescue-frontend/ui';
 import { getAuthColorScheme } from '../../theme/auth-theme';
 
 type AuthProvider = 'google' | 'line' | 'custom';
@@ -43,8 +43,8 @@ export function AuthProviderButton({
         color: authPalette.textPrimary,
         px: '17px',
         py: '9px',
-        fontSize: 12,
-        lineHeight: '16px',
+        fontSize: displayTextSize[12],
+        lineHeight: 1.3,
         fontWeight: 600,
         letterSpacing: '0.6px',
         textTransform: 'none',

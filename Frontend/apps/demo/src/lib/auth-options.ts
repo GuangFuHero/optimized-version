@@ -24,6 +24,7 @@ type OAuthAccountWithBackendUser = {
 };
 
 type AuthenticatedUser = {
+  /** The account's uuid, as the backend answers it — what a ticket's `createdBy` holds. */
   id: string;
   email?: string | null;
   loginIdentity?: string | null;
@@ -53,6 +54,34 @@ function authErrorCode(error: unknown) {
   return error instanceof ApiError && error.code ? error.code : 'login_failed';
 }
 
+/**
+ * Whom a token pair the backend issued belongs to, asked of the backend — never taken from what
+ * was typed to get it, so the session holds the account's uuid and its name.
+ */
+async function resolveAuthenticatedUserAsync(
+  tokenPair: ITokenPair,
+  loginIdentity: string,
+): Promise<AuthenticatedUser> {
+  let currentUser: Awaited<ReturnType<typeof getCurrentUserAsync>>;
+
+  try {
+    currentUser = await getCurrentUserAsync(tokenPair.access_token);
+  } catch (error) {
+    throw new ClassifiedAuthError(authErrorCode(error));
+  }
+
+  return {
+    id: currentUser.uuid,
+    email: loginIdentity,
+    loginIdentity,
+    name: currentUser.name,
+    accessToken: tokenPair.access_token,
+    refreshToken: tokenPair.refresh_token,
+    tokenType: tokenPair.token_type ?? 'bearer',
+    expiresIn: tokenPair.expires_in,
+  };
+}
+
 async function loginWithCredentials(
   username: string,
   password: string,
@@ -69,24 +98,7 @@ async function loginWithCredentials(
     throw new ClassifiedAuthError('login_failed');
   }
 
-  let currentUser: Awaited<ReturnType<typeof getCurrentUserAsync>>;
-
-  try {
-    currentUser = await getCurrentUserAsync(payload.access_token);
-  } catch (error) {
-    throw new ClassifiedAuthError(authErrorCode(error));
-  }
-
-  return {
-    id: currentUser.uuid,
-    email: username,
-    loginIdentity: username,
-    name: currentUser.name,
-    accessToken: payload.access_token,
-    refreshToken: payload.refresh_token,
-    tokenType: payload.token_type ?? 'bearer',
-    expiresIn: payload.expires_in,
-  };
+  return resolveAuthenticatedUserAsync(payload, username);
 }
 
 async function completeOAuthLoginAsync({
@@ -194,20 +206,24 @@ export const authOptions: NextAuthOptions = {
         const tokenType = credentials?.tokenType?.trim();
         const expiresIn = Number(credentials?.expiresIn);
 
+        // The tokens a registration's code was just exchanged for (register-form.client.tsx): signed
+        // in as whom the backend says they belong to, like a password sign-in. Taking the typed
+        // identity as the id left the session with an email where its uuid should be, and no name.
         if (
           username &&
           accessToken &&
           refreshToken &&
           Number.isFinite(expiresIn)
         ) {
-          return {
-            id: username,
-            email: username,
-            accessToken,
-            refreshToken,
-            tokenType: tokenType || 'bearer',
-            expiresIn,
-          };
+          return resolveAuthenticatedUserAsync(
+            {
+              access_token: accessToken,
+              refresh_token: refreshToken,
+              token_type: tokenType || 'bearer',
+              expires_in: expiresIn,
+            },
+            username,
+          );
         }
 
         if (!username || !password) {

@@ -1,22 +1,45 @@
 'use client';
 
+import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import { Box, Stack, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import { designTokens, displayTextSize } from '@rescue-frontend/ui';
+
+import { GuangFuBrandIcon } from '../../../../brand';
 import { authHeroTexture } from '../../assets/auth-hero-texture';
 import { getAuthColorScheme } from '../../theme/auth-theme';
+
+const { color, primitives } = designTokens;
 
 interface AuthShellProps {
   children: ReactNode;
 }
 
 const authShellText = {
-  heroTitle: '即時災情協作指揮',
+  brandName: '島嶼守望',
+  heroTitle: '災民與志工，看同一張地圖',
   heroDescription:
-    '整合任務、站點與資源調度資訊。\n讓現場與指揮中心在同一張地圖上\n同步掌握最新態勢。',
+    '登入之後才能請求協助、承接任務、提出站點的修改建議 —— 因為志工會依照你留的資訊到現場，來源必須追得到。',
+  heroExit: '不登入，先去看地圖',
+  phoneExit: '先看地圖',
 } as const;
 
+/**
+ * Guests see the map and the list already — sign-in is asked for at sending, not at the door — so
+ * the way there stays on every sign-in page, or the page reads as a wall (design `site-auth.jsx`).
+ */
+const MAP_HREF = '/map';
+
+/**
+ * The sign-in pages' frame (design `site.css` `.wg-auth`, `site-auth.jsx` `AuthHero`).
+ * From 900px: the hero on the left — brand, what signing in is for, and the way to the map — over
+ * the Figma photograph the design only stood in for. Below that the hero would push the form to a
+ * second screen, so the phone gets no hero: the brand and the way to the map sit in a row above the
+ * form instead, never both at once.
+ */
 export function AuthShell({ children }: AuthShellProps) {
   const authPalette = getAuthColorScheme(useTheme());
 
@@ -24,23 +47,24 @@ export function AuthShell({ children }: AuthShellProps) {
     <Box
       sx={{
         minHeight: '100dvh',
-        position: 'relative',
-        display: 'flex',
-        overflow: 'hidden',
-        bgcolor: {
-          xs: authPalette.heroBackground,
-          md: authPalette.pageBackground,
+        display: 'grid',
+        gridTemplateColumns: {
+          xs: 'minmax(0, 1fr)',
+          md: 'minmax(0, 1.05fr) minmax(0, 1fr)',
         },
+        bgcolor: color.bg.neutral.subtle,
       }}
     >
       <Box
         sx={{
           position: 'relative',
-          display: { xs: 'none', md: 'flex' },
-          flex: { md: '0 0 50%' },
-          alignItems: 'center',
-          justifyContent: 'center',
           overflow: 'hidden',
+          display: { xs: 'none', md: 'flex' },
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          gap: 4,
+          px: 4,
+          py: 6,
           borderRight: `1px solid ${authPalette.heroBorder}`,
           bgcolor: authPalette.heroBackground,
         }}
@@ -52,13 +76,10 @@ export function AuthShell({ children }: AuthShellProps) {
           aria-hidden
           sx={{
             position: 'absolute',
-            left: '50%',
-            top: '50%',
-            width: { xs: '100dvw', md: '50dvw' },
-            minHeight: '100dvh',
-            aspectRatio: '1 / 1',
+            inset: 0,
+            width: '100%',
+            height: '100%',
             objectFit: 'cover',
-            transform: 'translate(-50%, -50%)',
             pointerEvents: 'none',
             userSelect: 'none',
           }}
@@ -70,91 +91,136 @@ export function AuthShell({ children }: AuthShellProps) {
             background: authPalette.heroDesktopOverlay,
           }}
         />
+
         <Stack
-          spacing={1}
-          sx={{
-            position: 'absolute',
-            left: 32,
-            bottom: 32,
-            zIndex: 1,
-            maxWidth: 448,
-            pr: 3,
-          }}
+          direction="row"
+          spacing={1.5}
+          sx={{ position: 'relative', alignItems: 'center' }}
         >
+          <GuangFuBrandIcon width={44} height={30} />
           <Typography
-            variant="h3"
             sx={{
-              color: 'common.white',
-              fontSize: 32,
-              lineHeight: '40px',
+              color: color.fg.inverse,
+              fontSize: displayTextSize[18],
+              lineHeight: 1.4,
               fontWeight: 700,
-              letterSpacing: '-0.8px',
+            }}
+          >
+            {authShellText.brandName}
+          </Typography>
+        </Stack>
+
+        <Stack spacing={2} sx={{ position: 'relative', maxWidth: 420 }}>
+          <Typography
+            component="h1"
+            sx={{
+              color: color.fg.inverse,
+              fontSize: displayTextSize[24],
+              lineHeight: 1.3,
+              fontWeight: 700,
             }}
           >
             {authShellText.heroTitle}
           </Typography>
           <Typography
             sx={{
-              fontSize: 18,
-              lineHeight: '28px',
-              color: authPalette.heroBody,
-              opacity: 0.86,
-              whiteSpace: 'pre-line',
+              color: primitives.color.neutral[200],
+              fontSize: displayTextSize[15],
+              lineHeight: 1.7,
             }}
           >
             {authShellText.heroDescription}
           </Typography>
         </Stack>
+
+        <Box
+          component={Link}
+          href={MAP_HREF}
+          sx={{
+            position: 'relative',
+            alignSelf: 'flex-start',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 1,
+            minHeight: 44,
+            textDecoration: 'none',
+            color: primitives.color.blue[200],
+            fontSize: displayTextSize[14],
+            fontWeight: 700,
+          }}
+        >
+          <MapOutlinedIcon sx={{ fontSize: 16 }} />
+          {authShellText.heroExit}
+        </Box>
       </Box>
 
       <Box
         sx={{
-          position: 'absolute',
-          inset: 0,
-          display: { xs: 'block', md: 'none' },
-          overflow: 'hidden',
-          pointerEvents: 'none',
-        }}
-      >
-        <Box
-          component="img"
-          src={authHeroTexture}
-          alt=""
-          aria-hidden
-          sx={{
-            position: 'absolute',
-            left: '50%',
-            top: '50%',
-            width: '100dvw',
-            height: '100dvh',
-            aspectRatio: '1 / 1',
-            objectFit: 'cover',
-            transform: 'translate(-50%, -50%)',
-          }}
-        />
-        <Box
-          sx={{
-            position: 'absolute',
-            inset: 0,
-            background: authPalette.heroMobileOverlay,
-          }}
-        />
-      </Box>
-
-      <Box
-        sx={{
-          position: 'relative',
-          zIndex: 1,
-          flex: { xs: '1 1 100%', md: '0 0 50%' },
           minWidth: 0,
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100dvh',
-          p: { xs: 3, sm: 4, md: 4 },
+          justifyContent: { md: 'center' },
+          gap: 2,
+          px: 2,
+          py: 4,
         }}
       >
-        <Box sx={{ width: '100%', maxWidth: 448 }}>{children}</Box>
+        <Box
+          sx={{
+            width: '100%',
+            maxWidth: 440,
+            display: { xs: 'flex', md: 'none' },
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1.5,
+          }}
+        >
+          <Box
+            component={Link}
+            href={MAP_HREF}
+            sx={{
+              minWidth: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 1,
+              textDecoration: 'none',
+            }}
+          >
+            <GuangFuBrandIcon width={38} height={26} />
+            <Typography
+              component="span"
+              sx={{
+                color: color.fg.neutral.default,
+                fontSize: displayTextSize[16],
+                lineHeight: 1.4,
+                fontWeight: 700,
+              }}
+            >
+              {authShellText.brandName}
+            </Typography>
+          </Box>
+          <Box
+            component={Link}
+            href={MAP_HREF}
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.5,
+              minHeight: 44,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+              color: color.brand.primary.subtle,
+              fontSize: displayTextSize[13],
+              fontWeight: 700,
+            }}
+          >
+            <MapOutlinedIcon sx={{ fontSize: 16 }} />
+            {authShellText.phoneExit}
+          </Box>
+        </Box>
+
+        <Box sx={{ width: '100%', maxWidth: 440 }}>{children}</Box>
       </Box>
     </Box>
   );
