@@ -25,8 +25,8 @@ ADR-308 是所有分支上第一個沒被佔用的號碼（`feat/dedup-engine-in
 
 | 中文 | 英文行文 | 識別字（變數、enum、路由） | 例子 |
 |---|---|---|---|
-| 後台 | admin、admin site | `admin` | `/api/v1/admin`、`/admin/*` 頁面、`AdminUserListItem`、`AnnouncementPlacement.ADMIN_PAGE` |
-| 前台 | public、public site | `public` | `AnnouncementPlacement.PUBLIC_PAGE` |
+| 後台 | admin、admin site | `admin` | `/api/v1/admin`、`/admin/*` 頁面、`AdminUserListItem`、`AnnouncementPlacement.admin_page` |
+| 前台 | public、public site | `public` | `AnnouncementPlacement.public_page` |
 
 - **不要用**：backend / frontend 指前後台（它們專指伺服器與客戶端程式碼）、back-office、backstage、
   front-of-house、單獨的 site。

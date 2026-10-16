@@ -27,9 +27,9 @@ class AnnouncementMoveDirection(Enum):
 class AnnouncementPlacement(Enum):
     """Which page shows an announcement: the admin site, the public site, or both."""
 
-    ADMIN_PAGE = "admin_page"
-    PUBLIC_PAGE = "public_page"
-    ALL = "all"
+    admin_page = "admin_page"
+    public_page = "public_page"
+    all = "all"
 
 
 @strawberry.type
@@ -66,7 +66,7 @@ class CreateAnnouncementInput:
 
     content: str = strawberry.field(description="The announcement body text")
     placement: AnnouncementPlacement = strawberry.field(
-        default=AnnouncementPlacement.ALL, description="Which page shows it; defaults to both"
+        default=AnnouncementPlacement.all, description="Which page shows it; defaults to both"
     )
 
 

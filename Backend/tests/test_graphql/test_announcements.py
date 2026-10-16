@@ -184,16 +184,16 @@ async def _notified(ref_uuid):
 async def test_placement_controls_which_page_lists_it(client, content_admin_auth):
     """Each page lists its own placement plus "all", and guests read public-page rows."""
     _, token = content_admin_auth
-    admin_only = await _create_placed(client, token, "admin only", "ADMIN_PAGE")
-    public_only = await _create_placed(client, token, "public only", "PUBLIC_PAGE")
+    admin_only = await _create_placed(client, token, "admin only", "admin_page")
+    public_only = await _create_placed(client, token, "public only", "public_page")
     both = (await _create(client, token, "both"))["uuid"]
     mine = {admin_only, public_only, both}
 
     assert await _listed(client, mine, LIST_DEFAULT) == {public_only, both}
     assert await _listed(
-        client, mine, LIST_PLACED, {"placement": "ADMIN_PAGE"}, token
+        client, mine, LIST_PLACED, {"placement": "admin_page"}, token
     ) == {admin_only, both}
-    assert await _listed(client, mine, LIST_PLACED, {"placement": "ALL"}, token) == mine
+    assert await _listed(client, mine, LIST_PLACED, {"placement": "all"}, token) == mine
 
     public_get = await _post(client, GET_ONE, {"uuid": public_only})
     assert public_get["data"]["announcement"]["uuid"] == public_only
@@ -205,11 +205,11 @@ async def test_admin_page_needs_view_admin(client, redis, content_admin_auth, lo
     _, admin_token = content_admin_auth
     user_uuid, user_token = login_user_auth
     staff_uuid, staff_token = await _create_user_with_role(redis, "Content Admin")
-    admin_only = await _create_placed(client, admin_token, "admin only", "ADMIN_PAGE")
+    admin_only = await _create_placed(client, admin_token, "admin only", "admin_page")
 
     for token in (None, user_token):
-        assert (await _post(client, LIST_PLACED, {"placement": "ADMIN_PAGE"}, token)).get("errors")
-        assert (await _post(client, LIST_PLACED, {"placement": "ALL"}, token)).get("errors")
+        assert (await _post(client, LIST_PLACED, {"placement": "admin_page"}, token)).get("errors")
+        assert (await _post(client, LIST_PLACED, {"placement": "all"}, token)).get("errors")
         assert (await _post(client, GET_ONE, {"uuid": admin_only}, token)).get("errors")
     staff_get = await _post(client, GET_ONE, {"uuid": admin_only}, staff_token)
     assert staff_get["data"]["announcement"]["uuid"] == admin_only
@@ -222,11 +222,11 @@ async def test_admin_page_needs_view_admin(client, redis, content_admin_auth, lo
 
 @pytest.mark.asyncio
 async def test_update_changes_placement(client, content_admin_auth):
-    """Updating placement moves an announcement off the public page; omitting it keeps it."""
+    """Updating placement moves an announcement off the public page; omitting it or resending it keeps it."""
     _, token = content_admin_auth
-    a = await _create_placed(client, token, "moving", "PUBLIC_PAGE")
+    a = await _create_placed(client, token, "moving", "public_page")
 
-    moved = await _post(client, UPDATE, {"uuid": a, "content": "moving", "placement": "ADMIN_PAGE"}, token)
+    moved = await _post(client, UPDATE, {"uuid": a, "content": "moving", "placement": "admin_page"}, token)
     assert "errors" not in moved, moved
     assert moved["data"]["updateAnnouncement"] == {"content": "moving", "placement": "admin_page"}
     assert await _listed(client, {a}, LIST_DEFAULT) == set()
@@ -234,3 +234,7 @@ async def test_update_changes_placement(client, content_admin_auth):
     kept = await _post(client, UPDATE, {"uuid": a, "content": "edited"}, token)
     assert "errors" not in kept, kept
     assert kept["data"]["updateAnnouncement"] == {"content": "edited", "placement": "admin_page"}
+
+    read_back = kept["data"]["updateAnnouncement"]["placement"]
+    resaved = await _post(client, UPDATE, {"uuid": a, "content": "edited", "placement": read_back}, token)
+    assert "errors" not in resaved, resaved

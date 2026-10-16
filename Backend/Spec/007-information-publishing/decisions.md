@@ -206,11 +206,12 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 **Decision**：
 
 - `announcements.placement` 是 `admin_page` / `public_page` / `all`（兩邊都顯示）。GraphQL 輸入用
-  `AnnouncementPlacement` enum 擋值，DB 欄位是自由字串，沿用 repo 其他欄位的做法。
+  `AnnouncementPlacement` enum 擋值，成員名稱就是存的值，所以讀到的 `placement` 可以原樣送回；DB 欄位是
+  自由字串，輸出也是字串，沿用 repo 其他欄位的做法。
 - 新增時不指定就是 `all`；migration 把既有公告回填成 `all`，所以它們照舊到處都看得到。
-- `announcements(placement:)` 預設 `PUBLIC_PAGE`，回傳 `public_page` 與 `all`；`ADMIN_PAGE` 回傳
-  `admin_page` 與 `all`；`ALL` 回傳全部。
-- 只要不是 `PUBLIC_PAGE`，呼叫端就要持有 `announcement.view_admin`（不在 `PUBLIC_PERMS`，匿名與沒有
+- `announcements(placement:)` 預設 `public_page`，回傳 `public_page` 與 `all` 的公告；`admin_page` 回傳
+  `admin_page` 與 `all` 的公告；`all` 回傳全部。
+- 只要不是 `public_page`，呼叫端就要持有 `announcement.view_admin`（不在 `PUBLIC_PERMS`，匿名與沒有
   grant 的帳號都是 403）。單筆 `announcement(uuid)` 讀到 `admin_page` 的公告時也一樣。
 - seed 把 `announcement.view_admin` 給 `data_auditor`、`super_admin`、團隊 `admin` 與 `member`；自行註冊
   拿到的 `user` 沒有。
@@ -227,7 +228,7 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 
 **為什麼共用一條排序**：各頁照全站順序過濾，相對順序自然一致，`move`、`setAnnouncementActive`、
 `deleteAnnouncement` 一行都不用改。分頁排序得多一個排序欄位，維持連號的邏輯也要跑兩份。管理清單
-（`filter: ALL, placement: ALL`）看得到每一則，管理員在那裡排序就是排全站。
+（`filter: ALL, placement: all`）看得到每一則，管理員在那裡排序就是排全站。
 
 **為什麼另開一個 capability**：任何人都能自己註冊並拿到 `user` 角色，所以只檢查登入擋不住外人，而協調會
 這類公告要留在工作人員之間。現有的兩個 key 都不合用：`announcement.view` 是公開的，`announcement.edit`

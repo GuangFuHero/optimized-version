@@ -23,14 +23,14 @@ class AnnouncementQuery:
         self,
         info: strawberry.types.Info,
         filter: AnnouncementFilter = AnnouncementFilter.ACTIVE,
-        placement: AnnouncementPlacement = AnnouncementPlacement.PUBLIC_PAGE,
+        placement: AnnouncementPlacement = AnnouncementPlacement.public_page,
     ) -> list[AnnouncementType]:
-        """List announcements shown on `placement`; only PUBLIC_PAGE (default) is open to guests.
+        """List announcements shown on `placement`; only public_page (default) is open to guests.
 
-        ADMIN_PAGE and ALL (every placement) need announcement.view_admin, and filter ALL
+        admin_page and all (every placement) need announcement.view_admin, and filter ALL
         (inactive ones too) needs announcement.edit.
         """
-        if placement is not AnnouncementPlacement.PUBLIC_PAGE:
+        if placement is not AnnouncementPlacement.public_page:
             await check_permission(info, Perm.ANN_VIEW_ADMIN)
         if filter is AnnouncementFilter.ALL:
             await check_permission(info, Perm.ANN_EDIT)
@@ -51,7 +51,7 @@ class AnnouncementQuery:
         announcement.edit.
         """
         m = await announcement_repository.get_by_uuid_active(info.context["db"], uuid)
-        if m and m.placement == AnnouncementPlacement.ADMIN_PAGE.value:
+        if m and m.placement == AnnouncementPlacement.admin_page.value:
             await check_permission(info, Perm.ANN_VIEW_ADMIN)
         if m and not m.active:
             await check_permission(info, Perm.ANN_EDIT)
