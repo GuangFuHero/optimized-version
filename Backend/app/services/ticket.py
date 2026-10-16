@@ -19,7 +19,10 @@ from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.repositories.auth_repository import user_repository
-from app.repositories.geo_repository import secondary_location_repository
+from app.repositories.geo_repository import (
+    building_map_ticket_repository,
+    secondary_location_repository,
+)
 from app.repositories.photo_repository import photo_repository
 from app.repositories.tickets_repository import (
     task_assignment_repository,
@@ -29,6 +32,7 @@ from app.repositories.tickets_repository import (
     ticket_task_repository,
 )
 from app.services.authz import require_scope
+from app.services.building_map import place_ticket
 from app.services.geo_validation import (
     check_address_lengths,
     normalize_contact_fields,
@@ -140,7 +144,7 @@ async def create_ticket(
     db: AsyncSession,
     *,
     actor: User,
-    geometry: dict,
+    geometry: dict | None,
     title: str,
     description: str | None,
     contact_name: str,
@@ -153,6 +157,7 @@ async def create_ticket(
     person_trapped_reported: str | None = None,
     immediate_danger_reported: str | None = None,
     secondary_location: dict | None = None,
+    building_map_uuid: str | None = None,
 ) -> Tickets:
     """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner).
 
@@ -166,6 +171,12 @@ async def create_ticket(
     and the single commit that makes it atomic, exactly as `station.py::create_station` does.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
+    if building_map_uuid:
+        geometry, secondary_location = await place_ticket(
+            db, building_map_uuid, geometry, secondary_location
+        )
+    if geometry is None:
+        raise ValueError("geometry or buildingMapUuid is required")
     disaster_types = await validate_disaster_types(db, disaster_types or [])
     validate_point(geometry, entity="Ticket")
     contacts = normalize_contact_fields(
@@ -204,6 +215,10 @@ async def create_ticket(
         # uses, so one address table serves both.
         await secondary_location_repository.add(
             db, obj_in={"geometry_uuid": str(ticket.uuid), **secondary_location}
+        )
+    if building_map_uuid:
+        await building_map_ticket_repository.add(
+            db, obj_in={"ticket_uuid": str(ticket.uuid), "building_map_uuid": building_map_uuid}
         )
     await db.commit()
     await db.refresh(ticket)
