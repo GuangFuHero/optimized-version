@@ -114,12 +114,7 @@ query GetTicketTasks(
 
 mutation CreateTicket($input: CreateTicketInput!) {
   createTicket(input: $input) {
-    __typename
-    ... on TicketCreated {
-      ticket {
-        ...TicketFields
-      }
-    }
+    ...TicketFields
   }
 }
 
@@ -131,12 +126,7 @@ mutation UpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
 
 mutation CreateTicketTask($input: CreateTicketTaskInput!) {
   createTicketTask(input: $input) {
-    __typename
-    ... on TicketTaskCreated {
-      task {
-        ...TicketTaskFields
-      }
-    }
+    ...TicketTaskFields
   }
 }
 

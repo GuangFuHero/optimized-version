@@ -495,15 +495,9 @@ export function StationCreateDrawer({
       return;
     }
 
-    // 後端判定可能重複時不建立，改回傳 DuplicatesSuspected；比對結果的畫面還沒做，先給一般錯誤。
-    if (stationResult.data.createStation.__typename !== 'StationCreated') {
-      setSubmitError('附近已有相似的站點，這次沒有建立。請先確認現有站點。');
-      return;
-    }
-
     const createdStation = useFragment(
       StationFieldsFragmentDoc,
-      stationResult.data.createStation.station,
+      stationResult.data.createStation,
     );
 
     onCreated?.(
