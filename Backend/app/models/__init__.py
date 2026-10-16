@@ -12,6 +12,7 @@ from app.models.disaster_type import DisasterType  # noqa: F401
 from app.models.geo import (  # noqa: F401
     AreaPolygon,
     BaseGeometry,
+    BuildingMap,
     HazardousZone,
     MarkZone,
     Station,

@@ -13,6 +13,7 @@ AUDITED_TABLES = [
     "area_polygons",
     "hazardous_zones",
     "team_zones",
+    "building_maps",
     "tickets",
 
     # Work assignment & routing

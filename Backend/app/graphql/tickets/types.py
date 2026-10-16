@@ -223,6 +223,21 @@ class TaskAssignmentType:
         default=None, description="Timestamp when the status was last changed"
     )
 
+    @strawberry.field(
+        description=(
+            "Display name of the assigned person. Null to a caller without "
+            "ticket.view_history on the parent ticket, unless the assignment is their own"
+        )
+    )
+    async def actor_name(self, info: strawberry.types.Info) -> str | None:
+        """The assignee's nickname, to themselves and to those who may see who claimed the need (ADR-286)."""
+        user = info.context["user"]
+        if user is None or str(user.uuid) != str(self.actor_uuid):
+            ticket_uuid = await info.context["loaders"]["ticket_uuid_by_task"].load(self.task_uuid)
+            if ticket_uuid is None or not await ticket_history_visible(info, ticket_uuid):
+                return None
+        return await info.context["loaders"]["user_name_by_uuid"].load(self.actor_uuid)
+
     @classmethod
     def from_model(cls, m) -> "TaskAssignmentType":
         """Build from a SQLAlchemy model instance."""
@@ -940,8 +955,20 @@ class CreateTicketInput:
 
     title: str
     description: str | None = None
-    geometry: GeoJSON = strawberry.field(
-        description="GeoJSON Point for the location where help is needed — [longitude, latitude]"
+    geometry: GeoJSON | None = strawberry.field(
+        default=None,
+        description=(
+            "GeoJSON Point for the location where help is needed — [longitude, latitude]. "
+            "Required unless buildingMapUuid is given, in which case it must be omitted"
+        ),
+    )
+    building_map_uuid: UUID | None = strawberry.field(
+        default=None,
+        description=(
+            "File the ticket inside this building map. Its point and address are copied onto "
+            "the ticket, and secondaryLocation.floor (and room, on a floor with areas) must "
+            "match the building's floors. Omit floor when the reporter doesn't know it"
+        ),
     )
     contact_name: str = strawberry.field(description="Full name of the requester")
     contact_email: str | None = strawberry.field(default=None, description="Optional email for follow-up")
