@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import Perm
 from app.infrastructure.repository.base import GenericRepository
 from app.models.announcement import Announcement
 from app.services.notification_resolver import NotificationRecipientResolver
@@ -25,14 +26,16 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         """Initialize with Announcement as the managed model."""
         super().__init__(Announcement)
 
-    async def list_announcements(self, db: AsyncSession, *, only_active: bool) -> list[Announcement]:
-        """List non-deleted announcements.
+    async def list_announcements(
+        self, db: AsyncSession, *, only_active: bool, placement: str = "all"
+    ) -> list[Announcement]:
+        """List non-deleted announcements placed on `placement` or "all", active ones by order.
 
-        only_active=True  → active rows ordered by display_order ASC.
-        only_active=False → all non-deleted rows: active first (by display_order),
-                            then inactive by created_at DESC.
+        placement="all" returns every row; only_active=False appends inactive rows, newest first.
         """
         query = select(self.model).where(self.model.delete_at.is_(None))
+        if placement != "all":
+            query = query.where(self.model.placement.in_((placement, "all")))
         if only_active:
             query = query.where(self.model.active.is_(True)).order_by(self.model.display_order.asc())
         else:
@@ -66,29 +69,45 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             if a.display_order is not None and a.display_order > removed:
                 a.display_order -= 1
 
-    async def create_at_end(self, db: AsyncSession, *, content: str, created_by: str) -> Announcement:
+    async def _notify_published(self, db: AsyncSession, ann: Announcement, actor_uuid: Any) -> None:
+        """Notify that an announcement went live; any not on the public page reach view_admin holders only.
+
+        Reads check the identity a session acts as, which a notification can't, so only reads show the text.
+        """
+        if ann.placement in ("public_page", "all"):
+            title = "📢 全站重要公告"
+            body = ann.content[:80] + ("..." if len(ann.content) > 80 else "")
+            recipients = await NotificationRecipientResolver.resolve_all_active(db)
+        else:
+            title, body = "📢 後台公告", "後台有一則新公告。"
+            recipients = await NotificationRecipientResolver.resolve_permission(db, Perm.ANN_VIEW_ADMIN.value)
+        await NotificationService.dispatch(
+            db,
+            event_type="announcement_published",
+            title=title,
+            body=body,
+            priority="medium",
+            actor_uuid=actor_uuid,
+            ref_type="announcement",
+            ref_uuid=ann.uuid,
+            explicit_recipients=recipients,
+        )
+
+    async def create_at_end(
+        self, db: AsyncSession, *, content: str, created_by: str, placement: str = "all"
+    ) -> Announcement:
         """Create an active announcement appended at the bottom (largest order)."""
         live = await self._live_for_update(db)
         next_order = (live[-1].display_order + 1) if live else 1
-        obj = self.model(content=content, created_by=created_by, active=True, display_order=next_order)
+        obj = self.model(
+            content=content, created_by=created_by, placement=placement,
+            active=True, display_order=next_order,
+        )
         db.add(obj)
         await db.commit()
         await db.refresh(obj)
 
-        # 觸發 announcement_published 通知 (全站廣播)
-        recipients = await NotificationRecipientResolver.resolve_all_active(db)
-        summary = content[:80] + ("..." if len(content) > 80 else "")
-        await NotificationService.dispatch(
-            db,
-            event_type="announcement_published",
-            title="📢 全站重要公告",
-            body=summary,
-            priority="medium",
-            actor_uuid=created_by,
-            ref_type="announcement",
-            ref_uuid=obj.uuid,
-            explicit_recipients=recipients,
-        )
+        await self._notify_published(db, obj, actor_uuid=created_by)
         await db.refresh(obj)
 
         return obj
@@ -130,20 +149,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             await db.commit()
             await db.refresh(target)
 
-            # 觸發 announcement_published 通知
-            recipients = await NotificationRecipientResolver.resolve_all_active(db)
-            summary = target.content[:80] + ("..." if len(target.content) > 80 else "")
-            await NotificationService.dispatch(
-                db,
-                event_type="announcement_published",
-                title="📢 全站重要公告",
-                body=summary,
-                priority="medium",
-                actor_uuid=actor_uuid or target.created_by,
-                ref_type="announcement",
-                ref_uuid=target.uuid,
-                explicit_recipients=recipients,
-            )
+            await self._notify_published(db, target, actor_uuid=actor_uuid or target.created_by)
             await db.refresh(target)
 
         elif not active and target.active:

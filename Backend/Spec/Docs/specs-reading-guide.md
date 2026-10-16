@@ -233,7 +233,9 @@ claudeBackend/Spec/Docs/
 
 ---
 
-### 🛡️ Feature 006: 後台管理系統 (Backend Administration)
+### 🛡️ Feature 006: 後台管理系統 (Admin)
+
+> 用語：前台 = public，後台 = admin；backend / frontend 只指程式碼。舊名 "Backend Administration" 即 admin。見 [ADR-308](../006-backend-administration/decisions.md)。
 
 **一句話描述**: 統一的管理介面，提供儀表板、稽核、權限管理、系統設定
 

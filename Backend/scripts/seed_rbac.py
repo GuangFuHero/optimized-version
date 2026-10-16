@@ -58,11 +58,8 @@ ROLES_DATA = [
             # hard-coded "logged in" so it can be narrowed here or at /admin/rbac, e.g. to
             # `own` once the volunteer flow can hand out detail on sign-up instead.
             Perm.TICKET_VIEW_DETAIL: "all",
-            # ADR-128: `own` is what makes Notion's front-of-house requirement real — a
-            # requester following their own ticket's progress — without exposing anyone else's.
-            # It kept view_pii's old tiering when ADR-286 opened view_pii, and it now also gates
-            # who claimed a need — the requester sees who is coming, other citizens do not — and,
-            # beside a claim, whom to call.
+            # `own` lets a requester follow their own ticket on the public site, including who is
+            # coming to help and, beside a claim, whom to call, without exposing anyone else's.
             Perm.TICKET_VIEW_HISTORY: "own",
             Perm.STATION_VIEW_HISTORY: "own",
             Perm.TICKET_ADD: "all",
@@ -87,6 +84,8 @@ ROLES_DATA = [
             Perm.TICKET_VIEW_DETAIL: "all",
             Perm.USER_VIEW: "all",
             Perm.AUDIT_VIEW: "all",
+            # Every staff role reads admin-page announcements; the self-registered `user` doesn't.
+            Perm.ANN_VIEW_ADMIN: "all",
             # ADR-130: audit.view is no longer the ticket into the timeline (that is
             # *.view_history), but it still unlocks its top two tiers — the review columns
             # and the raw audit payload.
@@ -119,7 +118,8 @@ ROLES_DATA = [
                 Perm.TICKET_VIEW_HISTORY, Perm.TICKET_ADD, Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
                 Perm.FIELD_VIEW, Perm.FIELD_ADD, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
-                Perm.ANN_VIEW, Perm.ANN_PUBLISH, Perm.ANN_EDIT, Perm.ANN_DELETE,
+                Perm.ANN_VIEW, Perm.ANN_VIEW_ADMIN, Perm.ANN_PUBLISH, Perm.ANN_EDIT,
+                Perm.ANN_DELETE,
                 Perm.PREDEP_VIEW, Perm.PREDEP_PUBLISH, Perm.PREDEP_EDIT, Perm.PREDEP_DELETE,
                 Perm.USER_VIEW, Perm.USER_ADD, Perm.USER_EDIT, Perm.USER_DELETE,
                 Perm.RBAC_VIEW, Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
@@ -173,6 +173,7 @@ ROLES_DATA = [
             Perm.TICKET_REVIEW: "zone",
             Perm.TEAM_VIEW: "team",
             Perm.TEAM_MEMBER_MANAGE: "team",
+            Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
             Perm.ZONE_VIEW: "all",
             Perm.ZONE_ADD: "all",
             Perm.ZONE_EDIT: "all",
@@ -221,6 +222,7 @@ ROLES_DATA = [
             # ADR-312: field workers review the tickets and needs in their zone, as admins do.
             Perm.TICKET_REVIEW: "zone",
             Perm.TEAM_VIEW: "team",
+            Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
         },
     },
 ]
