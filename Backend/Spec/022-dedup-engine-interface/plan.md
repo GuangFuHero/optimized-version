@@ -1,11 +1,11 @@
 # 022 去重引擎介面 — Implementation Plan
 
 **進度（2026-09-29）**：
-- Phase 1（Task 1~14）完成，Docker 驗證通過（摘要見 `verification.md` §8.2）。之後 merge 了 Chi 改成以任務為單位的版本和 main（merge `af2ca1d95`）。
+- Phase 1（Task 1~14）完成，Docker 驗證通過。之後 merge 了 Chi 改成以任務為單位的版本和 main（merge `af2ca1d95`）。
 - Phase 2（ADR-304）Task 16~23 完成，每個 commit 的全部測試都通過（T19 1655、T20 1661、T21 1676、T22 1676、T23 1610 passed，0 failed）。
-- Task 24 完成：Docker 從零驗證，本機與容器內都是 1612 passed；過程中發現並修好 index 沒被用到的問題（ADR-305）。報告在 `verification.md`。
+- Task 24 完成：Docker 從零驗證，本機與容器內都是 1612 passed；過程中發現並修好 index 沒被用到的問題（ADR-305）。
 - Task 25 完成：量了 dedup 讓使用者多等多久，依此定了速度標準（ADR-307）。
-- **剩 Task 0**：等 Chi 回覆（交接訊息在 `handoff-chi.md`）。速度標準和 timeout 已經定了，只聽他的意見。
+- **剩 Task 0**：等 Chi 回覆。速度標準和 timeout 已經定了，只聽他的意見。
 - 前端不歸後端管；最後一節「交給前端的 API 變更」是給前端的說明。
 
 **Goal:** 把 Spec 021 的去重快層包成「演算法可獨立迭代」的後端服務：Chi 只動 `app/dedup_engine/`，
@@ -91,9 +91,9 @@ export TEST_ADMIN_DB_URL="postgresql+asyncpg://postgres:postgres@localhost:5435/
 
 ## Task 0: 跟 Chi 確認 contract
 
-不用寫程式，所以沒有測試。做完的標準：Chi 的回覆記進 `handoff-chi.md`，並寫回 spec §3、§4（有改就改；沒改就在 spec 註明哪天確認過）。
+不用寫程式，所以沒有測試。做完的標準：Chi 的回覆寫回 spec §3、§4（有改就改；沒改就在 spec 註明哪天確認過）。
 
-- [ ] 把 `handoff-chi.md` 的訊息傳給 Chi，他的回覆記在同一份檔案最後
+- [ ] 請 Chi 確認 §2~§4 的 contract，他的回覆寫回 spec
 - [ ] 確認 `contract.py` 的型別（`TicketDraft`、`TaskDraft`、`StationDraft`、`Suspect`）和 `check`、`score` 夠他用
 - [ ] 確認他離線調參數的工具怎麼處理 DB：engine 現在會自己去 DB 撈資料（ADR-304），他要準備一個有同樣資料表的 Postgres，或只呼叫 `fast.py` 裡算分數的 `Signals`、`combine`（spec §9）
 - [ ] 讓他知道速度標準和 timeout 已經用實測數字定了（ADR-307：整張表 2 萬筆、附近 500 筆、送 5 個任務，`check` 要在 200 ms 內；timeout 2 秒），聽他的意見
@@ -1162,11 +1162,11 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
 
 - [x] `docker compose -p dedup020verify2 -f <scratchpad compose> down -v`；手動起的容器 `docker rm -f`；刪 `dedup020verify2_app-network`；刪 image `dedup020-backend:verify2`
 - [x] 確認 `backend-db-1`、`backend-redis-1` 仍在跑、沒被重建
-- [x] 驗證報告整理為 `verification.md`（Phase 2 版：24.1~24.4 的實際輸出、passed 數、SQL 查詢結果、HTTP 回應、效能數字），回報使用者。**不自行開 PR**
+- [x] 驗證報告（Phase 2 版：24.1~24.4 的實際輸出、passed 數、SQL 查詢結果、HTTP 回應、效能數字），回報使用者。**不自行開 PR**
 
 ## Task 25: 延遲實測與效能門檻（ADR-307，2026-09-29）
 
-**Files:** `tests/dedup_engine/test_contract.py`、`verification.md` §5
+**Files:** `tests/dedup_engine/test_contract.py`
 
 - [x] 隔離 Docker stack 上量 `createTicket`：有 dedup 與完全跳過 dedup 的對照組相減；全表 2 萬／10 萬、半徑內 0／50／500／2000、1／5 個任務、照樣建立兩趟
 - [x] contract test 第 7 項改為全表 20,000、半徑內 500、5 個任務、200 ms（背景資料用純 SQL、固定亂數種子、範圍避開 HERE）
@@ -1183,7 +1183,7 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
 - [x] 先寫失敗的測試：score 的 SQL 出錯、逾時、偷寫、對方不存在（三種 kind）、不是 uuid、大寫 uuid、真 engine 的工單層級確認、建單時 score 逾時
 - [x] `_guarded` 共用保護；`score_acknowledged`（建立前）＋`record_pair_ignored`（建立後）；`entity_exists`；uuid 正規化
 - [x] dedup 相關測試全過；全套測試
-- [x] 審查時看到的演算法現象（速度、佔位電話、回測比電話方式、`score` 對工單確認丟例外、上線時機）寫成 `pr73-algorithm-notes.md` 給 Chi，後端不改演算法
+- [x] 審查時看到的演算法現象（速度、佔位電話、回測比電話方式、`score` 對工單確認丟例外、上線時機）交給 Chi，後端不改演算法（已在 fast-v4 處理，見 spec §11）
 - [x] Spec 資料夾改號：`019-dedup-fast-layer` → `021-dedup-fast-layer`、`020-dedup-engine-interface` → `022-dedup-engine-interface`（避開 Dennis 的 019／020），所有引用跟著改
 
 ## 交給前端的 API 變更（後端不負責實作）
