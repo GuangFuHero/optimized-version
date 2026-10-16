@@ -277,6 +277,7 @@ type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
 
 - ~~contract test 的效能門檻與 `ENGINE_TIMEOUT_S`~~：已依實測定案（ADR-307）；Chi 在 Task 0 仍可提意見。
 - **離線 harness**：engine 需要 DB 後，Chi 的離線回測要有對應的資料庫或替身，由 Chi 決定。
+- **任務的 visibility**：候選目前不看 `visibility`，`restricted`／`internal` 的任務也會擋住民眾送出的單，跟「讀」任務的 API 一致（2026-10-16 決定保留）。如果「讀」開始依 visibility 過濾，民眾會被看不到的任務擋下，候選查詢必須跟著改。
 
 ---
 
