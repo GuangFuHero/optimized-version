@@ -47,11 +47,11 @@ class AnnouncementQuery:
     ) -> AnnouncementType | None:
         """Fetch a single non-deleted announcement by UUID, or None if missing or soft-deleted.
 
-        Admin-page announcements need announcement.view_admin, and inactive ones need
+        Announcements not on the public page need announcement.view_admin, and inactive ones need
         announcement.edit.
         """
         m = await announcement_repository.get_by_uuid_active(info.context["db"], uuid)
-        if m and m.placement == AnnouncementPlacement.admin_page.value:
+        if m and m.placement not in ("public_page", "all"):
             await check_permission(info, Perm.ANN_VIEW_ADMIN)
         if m and not m.active:
             await check_permission(info, Perm.ANN_EDIT)

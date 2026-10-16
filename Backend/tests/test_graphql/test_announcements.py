@@ -8,8 +8,9 @@ Strict contiguity of display_order is covered by tests/test_announcements_reposi
 from uuid import UUID
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
+from app.models.announcement import Announcement
 from app.models.notification import Notification
 from tests.test_graphql.conftest import _create_user_with_role, auth_header
 from tests.test_graphql.conftest import test_db as _test_db
@@ -238,3 +239,26 @@ async def test_update_changes_placement(client, content_admin_auth):
     read_back = kept["data"]["updateAnnouncement"]["placement"]
     resaved = await _post(client, UPDATE, {"uuid": a, "content": "edited", "placement": read_back}, token)
     assert "errors" not in resaved, resaved
+
+
+@pytest.mark.asyncio
+async def test_unknown_placement_is_kept_off_the_public_site(
+    client, redis, content_admin_auth, login_user_auth
+):
+    """A placement outside the enum, written straight to the DB, is read and notified like admin_page."""
+    _, admin_token = content_admin_auth
+    user_uuid, _ = login_user_auth
+    staff_uuid, _ = await _create_user_with_role(redis, "Content Admin")
+    a = await _create_placed(client, admin_token, "staff only", "admin_page")
+    async with _test_db() as db:
+        await db.execute(update(Announcement).where(Announcement.uuid == UUID(a)).values(placement="staff"))
+        await db.commit()
+
+    for active in (False, True):
+        body = await _post(client, SET_ACTIVE, {"uuid": a, "active": active}, admin_token)
+        assert "errors" not in body, body
+
+    assert (await _post(client, GET_ONE, {"uuid": a})).get("errors")
+    notified = await _notified(a)
+    assert "staff only" not in notified[staff_uuid]
+    assert user_uuid not in notified

@@ -216,7 +216,8 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 - seed 把 `announcement.view_admin` 給 `data_auditor`、`super_admin`、團隊 `admin` 與 `member`；自行註冊
   拿到的 `user` 沒有。
 - 發布或重新啟用 `admin_page` 公告時，通知只送給持有 `announcement.view_admin` 的帳號，標題是「📢 後台公告」，
-  內文不帶公告內容；其他 placement 照舊送給所有啟用中的帳號，內文是公告的前 80 字。
+  內文不帶公告內容；`public_page` 與 `all` 照舊送給所有啟用中的帳號，內文是公告的前 80 字。
+- DB 裡若出現這三個值以外的 placement，讀取和通知都當成 `admin_page` 處理，寧可擋錯也不外流。
 
 ```
 排序（全站一條）           匿名 → 前台               工作人員 → 後台

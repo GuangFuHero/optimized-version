@@ -70,17 +70,17 @@ class AnnouncementRepository(GenericRepository[Announcement]):
                 a.display_order -= 1
 
     async def _notify_published(self, db: AsyncSession, ann: Announcement, actor_uuid: Any) -> None:
-        """Notify that an announcement went live; admin-page ones reach view_admin holders, content withheld.
+        """Notify that an announcement went live; any not on the public page reach view_admin holders only.
 
         Reads check the identity a session acts as, which a notification can't, so only reads show the text.
         """
-        if ann.placement == "admin_page":
-            title, body = "📢 後台公告", "後台有一則新公告。"
-            recipients = await NotificationRecipientResolver.resolve_permission(db, Perm.ANN_VIEW_ADMIN.value)
-        else:
+        if ann.placement in ("public_page", "all"):
             title = "📢 全站重要公告"
             body = ann.content[:80] + ("..." if len(ann.content) > 80 else "")
             recipients = await NotificationRecipientResolver.resolve_all_active(db)
+        else:
+            title, body = "📢 後台公告", "後台有一則新公告。"
+            recipients = await NotificationRecipientResolver.resolve_permission(db, Perm.ANN_VIEW_ADMIN.value)
         await NotificationService.dispatch(
             db,
             event_type="announcement_published",
