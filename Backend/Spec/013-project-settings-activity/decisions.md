@@ -111,6 +111,10 @@ ALTER TABLE task_property_config    ADD CONSTRAINT uq_task_prop    UNIQUE (task_
 
 ### ADR-092 動態欄位設定維持無強制力，且定義可自由修改
 
+> **部分被 ADR-117 取代**：匯入路徑嚴格照 config 驗證（`Spec/015-bulk-import-export/decisions.md`）。
+
+> **部分被 ADR-310 取代**：在建物底下報案時，樓層與區域照建物配置驗證（`Spec/018-ticket-disaster-fields/decisions.md`）。
+
 **白話**：這些設定只是「告訴前端要畫哪些欄位」，後端不會因為值不符合定義就擋下來。定義本身隨時可以改。
 
 **Context**：查證發現 config 目前**完全沒有強制力**——寫入 property 的兩條路徑從不查 config 表：

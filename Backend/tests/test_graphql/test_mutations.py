@@ -5,9 +5,11 @@ from datetime import UTC, datetime
 
 import pytest
 
+from app.models.auth import User
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 from tests.test_graphql.conftest import auth_header
+from tests.test_graphql.conftest import test_db as open_db
 
 # ---------------------------------------------------------------------------
 # GraphQL query strings
@@ -1540,6 +1542,38 @@ async def test_unassign_removes_assignment(
     )
     task = next(t for t in resp.json()["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task)
     assert task["assignedCount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_assignment_actor_name_follows_view_history(
+    client,
+    coordinator_auth,
+    login_user_auth,
+    sample_ticket,
+    sample_ticket_task,
+):
+    """The requester sees who claimed their need by name; the volunteer sees only their own (ADR-286)."""
+    _, requester_token = coordinator_auth
+    user_uuid, token = login_user_auth
+    await _assign(client, token, sample_ticket_task)
+    async with open_db() as db:
+        name = (await db.get(User, user_uuid)).name
+    query = {
+        "query": (
+            "query($t: String!) { ticketTasks(ticketUuid: $t) "
+            "{ uuid assignments { actorName } myAssignment { actorName } } }"
+        ),
+        "variables": {"t": sample_ticket},
+    }
+
+    async def names(headers=None):
+        body = (await client.post("/graphql", json=query, headers=headers)).json()
+        task = next(t for t in body["data"]["ticketTasks"] if t["uuid"] == sample_ticket_task)
+        return [a["actorName"] for a in task["assignments"]], task["myAssignment"]
+
+    assert await names(auth_header(requester_token)) == ([name], None)
+    assert await names(auth_header(token)) == ([], {"actorName": name})
+    assert await names() == ([], None)
 
 
 @pytest.mark.asyncio

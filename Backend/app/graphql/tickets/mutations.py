@@ -80,6 +80,7 @@ class RequestMutation:
                 if input.secondary_location is not None
                 else None
             ),
+            building_map_uuid=str(input.building_map_uuid) if input.building_map_uuid else None,
         )
         if isinstance(result, SubmissionHeld):
             return DuplicatesSuspected.of(result.suspects)

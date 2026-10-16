@@ -1,4 +1,4 @@
-"""GraphQL mutations for stations and station properties.
+"""GraphQL mutations for stations, building maps, and station properties.
 
 Thin per ADR-014: parse input, call the service function (which owns authz, validation,
 and persistence), map the result back to a GraphQL type.
@@ -10,6 +10,9 @@ import strawberry
 
 from app.graphql.context import require_authenticated
 from app.graphql.geo.types import (
+    BuildingFloorAreasInput,
+    BuildingMapType,
+    CreateBuildingMapInput,
     CreateCrowdSourcingInput,
     CreateStationInput,
     CreateStationPropertyInput,
@@ -18,20 +21,30 @@ from app.graphql.geo.types import (
     StationCreated,
     StationPropertyType,
     StationType,
+    UpdateBuildingMapInput,
     UpdateStationInput,
     UpdateStationPropertyInput,
     secondary_location_to_dict,
 )
 from app.graphql.shared import DuplicatesSuspected
 from app.graphql.tickets.types import PhotoType
+from app.services import building_map as building_map_service
 from app.services import photo as photo_service
 from app.services import station as station_service
 from app.services.dedup_submission import SubmissionHeld, submit_new_station
 
 
+def _floor_areas_to_dict(floor_areas: list[BuildingFloorAreasInput]) -> dict[str, list[str]]:
+    """Key the areas by floor, joining two entries that name the same floor."""
+    merged: dict[str, list[str]] = {}
+    for entry in floor_areas:
+        merged.setdefault(entry.floor, []).extend(entry.areas)
+    return merged
+
+
 @strawberry.type
 class GeoMutation:
-    """Mutations for creating, updating, and deleting stations."""
+    """Mutations for creating, updating, and deleting stations and building maps."""
 
     @strawberry.mutation
     async def create_station(
@@ -170,6 +183,47 @@ class GeoMutation:
             station_uuid=str(station_uuid), team_uuid=None,
         )
         return StationType.from_model(station)
+
+    @strawberry.mutation
+    async def create_building_map(
+        self, info: strawberry.types.Info, input: CreateBuildingMapInput
+    ) -> BuildingMapType:
+        """Create a building map with its address and floor layout. Requires work_zone.add."""
+        building = await building_map_service.create_building_map(
+            info.context["db"], actor=require_authenticated(info),
+            name=input.name, geometry=input.geometry,
+            secondary_location=secondary_location_to_dict(input.secondary_location),
+            floors_above_ground=input.floors_above_ground,
+            floors_below_ground=input.floors_below_ground,
+            floor_areas=_floor_areas_to_dict(input.floor_areas),
+        )
+        return BuildingMapType.from_model(building)
+
+    @strawberry.mutation
+    async def update_building_map(
+        self, info: strawberry.types.Info, uuid: UUID, input: UpdateBuildingMapInput,
+    ) -> BuildingMapType:
+        """Update a building map's name, point or floor layout. Requires work_zone.edit with scope check."""
+        changes = {}
+        for field in ("name", "floors_above_ground", "floors_below_ground"):
+            val = getattr(input, field)
+            if val is not None:
+                changes[field] = val
+        if input.floor_areas is not None:
+            changes["floor_areas"] = _floor_areas_to_dict(input.floor_areas)
+        building = await building_map_service.update_building_map(
+            info.context["db"], actor=require_authenticated(info),
+            uuid=str(uuid), geometry=input.geometry, changes=changes,
+        )
+        return BuildingMapType.from_model(building)
+
+    @strawberry.mutation
+    async def delete_building_map(self, info: strawberry.types.Info, uuid: UUID) -> bool:
+        """Soft-delete a building map. Its tickets stay. Requires work_zone.delete with scope check."""
+        await building_map_service.delete_building_map(
+            info.context["db"], actor=require_authenticated(info), uuid=str(uuid)
+        )
+        return True
 
 
 @strawberry.type

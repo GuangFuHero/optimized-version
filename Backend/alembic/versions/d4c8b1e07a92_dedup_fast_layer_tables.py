@@ -14,7 +14,7 @@ it (required on every card an engine made). Scoring lives in `app.dedup_engine`;
 depends on pg_trgm.
 
 Revision ID: d4c8b1e07a92
-Revises: 15370be54155
+Revises: b9f8048bff6f
 Create Date: 2026-09-04 00:00:00.000000
 
 """
@@ -27,7 +27,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "d4c8b1e07a92"
-down_revision: str | Sequence[str] | None = "15370be54155"
+down_revision: str | Sequence[str] | None = "b9f8048bff6f"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -20,7 +20,10 @@ from app.models.request import Tickets
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.repositories.auth_repository import user_repository
-from app.repositories.geo_repository import secondary_location_repository
+from app.repositories.geo_repository import (
+    building_map_ticket_repository,
+    secondary_location_repository,
+)
 from app.repositories.photo_repository import photo_repository
 from app.repositories.tickets_repository import (
     task_assignment_repository,
@@ -30,6 +33,7 @@ from app.repositories.tickets_repository import (
     ticket_task_repository,
 )
 from app.services.authz import require_scope
+from app.services.building_map import place_ticket
 from app.services.geo_validation import (
     check_address_lengths,
     normalize_contact_fields,
@@ -142,19 +146,21 @@ class TicketFields:
     """A ticket that passed authz and validation but is not written yet.
 
     `values` are the normalized column values, ready for `ticket_repository.add`; `point` is
-    the validated GeoJSON Point they were built from.
+    the validated GeoJSON Point they were built from. With `building_map_uuid`, the point and
+    address are the building's.
     """
 
     point: dict
     values: dict
     secondary_location: dict | None
+    building_map_uuid: str | None = None
 
 
 async def validate_ticket(
     db: AsyncSession,
     *,
     actor: User,
-    geometry: dict,
+    geometry: dict | None,
     title: str,
     description: str | None,
     contact_name: str,
@@ -167,6 +173,7 @@ async def validate_ticket(
     person_trapped_reported: str | None = None,
     immediate_danger_reported: str | None = None,
     secondary_location: dict | None = None,
+    building_map_uuid: str | None = None,
 ) -> TicketFields:
     """Checkpoint 1 plus every input check `create_ticket` makes, without writing anything.
 
@@ -175,6 +182,12 @@ async def validate_ticket(
     empty disaster-field form, telling the reporter nothing was asked of them.
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
+    if building_map_uuid:
+        geometry, secondary_location = await place_ticket(
+            db, building_map_uuid, geometry, secondary_location
+        )
+    if geometry is None:
+        raise ValueError("geometry or buildingMapUuid is required")
     disaster_types = await validate_disaster_types(db, disaster_types or [])
     validate_point(geometry, entity="Ticket")
     contacts = normalize_contact_fields(
@@ -203,6 +216,7 @@ async def validate_ticket(
             "immediate_danger_reported": immediate_danger_reported,
         },
         secondary_location=secondary_location,
+        building_map_uuid=building_map_uuid,
     )
 
 
@@ -230,6 +244,11 @@ async def insert_ticket(db: AsyncSession, *, actor: User, fields: TicketFields) 
         await secondary_location_repository.add(
             db, obj_in={"geometry_uuid": str(ticket.uuid), **fields.secondary_location}
         )
+    if fields.building_map_uuid:
+        await building_map_ticket_repository.add(
+            db,
+            obj_in={"ticket_uuid": str(ticket.uuid), "building_map_uuid": fields.building_map_uuid},
+        )
     return ticket
 
 
@@ -237,7 +256,7 @@ async def create_ticket(
     db: AsyncSession,
     *,
     actor: User,
-    geometry: dict,
+    geometry: dict | None,
     title: str,
     description: str | None,
     contact_name: str,
@@ -250,6 +269,7 @@ async def create_ticket(
     person_trapped_reported: str | None = None,
     immediate_danger_reported: str | None = None,
     secondary_location: dict | None = None,
+    building_map_uuid: str | None = None,
 ) -> Tickets:
     """Create a support ticket (checkpoint 1 only — a new ticket has no prior owner).
 
@@ -274,6 +294,7 @@ async def create_ticket(
         person_trapped_reported=person_trapped_reported,
         immediate_danger_reported=immediate_danger_reported,
         secondary_location=secondary_location,
+        building_map_uuid=building_map_uuid,
     )
     ticket = await insert_ticket(db, actor=actor, fields=fields)
     await db.commit()
@@ -1346,18 +1367,11 @@ async def _notify_need_full(
 
 
 async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> None:
-    """Remove a task assignment. The assignee can remove their own, coordinators can remove any.
+    """Give back a place on a need, locked and committed like a claim (ADR-291).
 
-    Authorization first; then the need's ticket and the need are locked like a claim locks them
-    (_lock_ticket_and_task), and the removal commits once, with the ticket's status worked out
-    again.
-
-    Once the requester stopped recruiting by hand, the need's list is final and no place on it
-    can be given back, by anyone (ADR-292): those on it may already have done the work, or were
-    enough, and the site cannot tell — a freed place would leave room to refill a need its
-    requester closed. Any other place can be, a deleted need's included. A need that filled by
-    itself recruits again once a place frees up (ADR-291), with no notice to anyone, as with
-    any release.
+    The assignee may give back their own and a coordinator anyone's, but nobody once recruiting was
+    stopped by hand (ADR-292); someone removed by another person is told, unless the need was deleted
+    and they were already told not to come.
     """
     assignment = await task_assignment_repository.get_by_uuid(db, uuid)
     if not assignment:
@@ -1387,7 +1401,23 @@ async def unassign_task_actor(db: AsyncSession, *, actor: User, uuid: str) -> No
         task.completed_at = None
     await db.flush()
     await recompute_ticket_status(db, ticket_uuid=str(ticket.uuid))
+    task_id, task_name, deleted = task.uuid, task.task_name, task.delete_at is not None
+    ticket_title, removed_actor, actor_uid = ticket.title, str(assignment.actor_uuid), actor.uuid
     await db.commit()
+
+    if deleted:
+        return
+    await NotificationService.dispatch(
+        db,
+        event_type="task_assignment_removed",
+        title=f"你已被移出「{task_name}」",
+        body=f"{ticket_title}　你已不在這筆需求的名單上，不用前往了。",
+        priority="high",
+        actor_uuid=actor_uid,
+        ref_type="ticket_task",
+        ref_uuid=task_id,
+        explicit_recipients=[removed_actor],
+    )
 
 
 async def update_task_assignment(

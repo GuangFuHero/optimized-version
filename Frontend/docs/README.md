@@ -21,3 +21,4 @@
 - 規劃中的內容若仍值得保留，必須明確標示為「未接通 / 未啟用 / 僅有模組尚未掛路由」。
 - 調整分層、路由、API contract 或重要流程時，應在同一個 PR 一起更新對應文件。
 - `frontend-working-principles.md` 描述規則，`frontend-library-layering-inventory.md` 描述現況；兩者用途不同，重構時通常要一起更新。
+- 英文用語：前台 = public（public site），後台 = admin；不要用 backend / frontend 指前後台。既有的 `(site)` route group 不改名。見 [ADR-308](../../Backend/Spec/006-backend-administration/decisions.md)。

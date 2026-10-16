@@ -23,4 +23,6 @@ class Announcement(Base, UUIDPKMixin, TimestampMixin):
     content: Mapped[str] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), default=False)
     display_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Which page shows it: "admin_page", "public_page" or "all" (both).
+    placement: Mapped[str] = mapped_column(Text, server_default=text("'all'"), default="all")
     created_by: Mapped[str] = mapped_column(ForeignKey("users.uuid"))
