@@ -70,6 +70,109 @@
     return L.divIcon({ className: 'wg-marker-wrapper', html, iconSize: [104, 34], iconAnchor: [52, 17] });
   }
 
+  /** 「在這裡新增」的準心。
+   *
+   * 🔴 2026-09-19 Sucre：「地圖上的地標不能拖動。」——**是大地圖，不是建單抽屜裡那張小地圖。**
+   *    （我上一輪只修了小地圖，而且只驗證「屬性有沒有設」，沒有真的拖一次。）
+   *
+   * 舊實作是一張 `pointerEvents: none` 的 SVG，用 containerPoint 絕對定位浮在地圖上 ——
+   * 它**根本不是 marker**，是純裝飾，當然拖不動。
+   *
+   * 這正好卡住他原本的情境：想開單的位置被既有的任務單大頭針蓋住時，
+   * 點下去會被 Leaflet 的 marker click 吃掉、準心根本放不出來。
+   * 改成真的可拖曳 marker 之後，就能「點旁邊的空白處，再拖過去」。
+   *
+   * 🔒 命中區要 44px。準心視覺只有 26px，外面墊透明 padding 撐到 44 ——
+   *    現場是手機、可能戴手套，26px 抓不到。 */
+  function createCrosshairIcon(L) {
+    const html = '<div class="wg-xhair">'
+      + '<svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">'
+      + '<circle cx="22" cy="22" r="13" fill="none" stroke="#fff" stroke-width="4" opacity=".9"/>'
+      + '<circle cx="22" cy="22" r="13" fill="none" stroke="var(--color-bg-primary)" stroke-width="2"/>'
+      + '<line x1="22" y1="2" x2="22" y2="13" stroke="#fff" stroke-width="4" opacity=".9"/>'
+      + '<line x1="22" y1="31" x2="22" y2="42" stroke="#fff" stroke-width="4" opacity=".9"/>'
+      + '<line x1="2" y1="22" x2="13" y2="22" stroke="#fff" stroke-width="4" opacity=".9"/>'
+      + '<line x1="31" y1="22" x2="42" y2="22" stroke="#fff" stroke-width="4" opacity=".9"/>'
+      + '<line x1="22" y1="2" x2="22" y2="13" stroke="var(--color-bg-primary)" stroke-width="2"/>'
+      + '<line x1="22" y1="31" x2="22" y2="42" stroke="var(--color-bg-primary)" stroke-width="2"/>'
+      + '<line x1="2" y1="22" x2="13" y2="22" stroke="var(--color-bg-primary)" stroke-width="2"/>'
+      + '<line x1="31" y1="22" x2="42" y2="22" stroke="var(--color-bg-primary)" stroke-width="2"/>'
+      + '<circle cx="22" cy="22" r="2.5" fill="var(--color-bg-primary)"/>'
+      + '</svg></div>';
+    return L.divIcon({ className: 'wg-xhair-wrapper', html, iconSize: [44, 44], iconAnchor: [22, 22] });
+  }
+
+  /** 把同一棟的任務單收成一個建築標記；其餘原樣帶過。
+   *  回傳的建築項目是**合成的**，不是真的 marker —— 它沒有 id 對應任何一張單，
+   *  所以不能餵給 setSelectedMarkerId。點擊走 openBuilding。 */
+  function groupBuildingMarkers(list) {
+    const B = window.WGBridge;
+    if (!B || !window.SiteData) return list;
+    const out = [];
+    const byBld = new Map();
+    list.forEach((m) => {
+      /* 訪客的單（已遮成格子）與站點不參與分群。 */
+      if (m.detailType !== 'ticket' || m.isGuestMasked) { out.push(m); return; }
+      const addr = m.ticketMeta && m.ticketMeta.address;
+      const b = addr ? B.buildingForAddress(addr) : null;
+      if (!b) { out.push(m); return; }
+      if (!byBld.has(b.id)) byBld.set(b.id, { building: b, members: [] });
+      byBld.get(b.id).members.push(m);
+    });
+    byBld.forEach(({ building, members }) => {
+      /* 只有一張單的地址不值得換一種形狀 —— 那看起來像「這裡很特別」，
+         而它其實跟旁邊的單一模一樣。等到真的有兩張以上才收成一棟。 */
+      if (members.length < 2) { members.forEach((m) => out.push(m)); return; }
+      let lack = 0;
+      members.forEach((m) => {
+        const need = m.requiredVolunteers || 0;
+        const got = m.matchedVolunteers || 0;
+        lack += Math.max(0, need - got);
+      });
+      out.push({
+        id: 'bld:' + building.id,
+        detailType: 'building',
+        building,
+        title: building.alias || building.address,
+        position: (typeof building.lat === 'number' && typeof building.lng === 'number')
+          ? [building.lat, building.lng] : members[0].position,
+        ticketCount: members.length,
+        lack,
+      });
+    });
+    return out;
+  }
+
+  /** 直立地圖的建築標記 —— **一棟一個點，不是一戶一個點**。
+   *
+   * 🔴 2026-09-18 Sucre：「直立地圖的地圖上點位要不要有一點不一樣？
+   *    現在是點進來才發現是直立地圖。不一樣的點是因為，這裡缺口比較大？」
+   *
+   * 他講的是兩件事，而且兩件都對：
+   *
+   * ① **點進來才發現**：同一棟的六張單原本各自畫一個大頭針，座標一樣所以**互相疊住**，
+   *    看起來像一根針，點下去卻跳出一張單的詳情 —— 使用者無從知道那裡是一整棟。
+   *    現在同一棟收成**一個**標記，點下去直接開整棟的矩陣。
+   *
+   * ② **這裡缺口比較大**：一棟 12 層的求助量級跟路邊一件倒樹不一樣，
+   *    所以標記上直接寫「N 件・缺 M」——
+   *    🔒 形狀不同的理由不是「這個功能比較特別」，是**這個點代表的東西數量級不同**。
+   *       只為了「這是新功能」換形狀，是拿視覺語言當公告板。
+   *
+   * 形狀刻意用**方角**（建築的輪廓），與任務單的圓頭大頭針、訪客的六邊形都分得開。
+   * 三種形狀各自對應一種「這是什麼」：圓＝一個地點、六邊形＝一片區域、方＝一棟樓。 */
+  function createBuildingIcon(item, L, active) {
+    const html = '<div class="wg-marker-stack">'
+      + '<div class="wg-bld' + (active ? ' wg-bld--active' : '') + '">'
+      + lucideSvg('Building2', 18)
+      + '<span class="wg-bld__n">' + item.ticketCount + ' 件</span>'
+      + (item.lack > 0 ? '<span class="wg-bld__lack">缺 ' + item.lack + '</span>' : '')
+      + '</div>'
+      + '<div class="wg-marker__label wg-marker__label--ticket">' + escapeHtml(item.title) + '</div>'
+      + '</div>';
+    return L.divIcon({ className: 'wg-marker-wrapper', html, iconSize: [140, 64], iconAnchor: [70, 40], popupAnchor: [0, -34] });
+  }
+
   /** 以中心點＋公尺半徑算出地理六邊形頂點（固定真實大小，隨縮放自然貼合）。 */
   function hexRing(lat, lng, meters) {
     const dLat = meters / 111320;
@@ -268,7 +371,7 @@
   }
 
   /* ── Leaflet 畫布 ──────────────────────────────────────────────────────── */
-  function RescueMapCanvas({ controller, onSelectMarker }) {
+  function RescueMapCanvas({ controller, onSelectMarker, onOpenBuilding, buildingOpen, blankSpot }) {
     const hostRef = useRef(null);
     const mapRef = useRef(null);
     const tileRef = useRef(null);
@@ -278,6 +381,17 @@
     const markerRefs = useRef(new Map());
     const selectRef = useRef(onSelectMarker);
     selectRef.current = onSelectMarker;
+    /* 用 ref 而不是把它們放進 effect 的 deps —— 這支 effect 每次重跑都會
+       重建所有 marker，而 callback 每次 render 都是新的 function。
+       放進 deps 會讓地圖在每次父層 render 時整批重畫（marker 閃一下、
+       正在拖的手勢被打斷）。 */
+    const openBuildingRef = useRef(onOpenBuilding);
+    openBuildingRef.current = onOpenBuilding || (() => {});
+    const buildingOpenRef = useRef(buildingOpen);
+    buildingOpenRef.current = buildingOpen;
+    /* 「在這裡新增」的準心（可拖曳）。 */
+    const blankMarkRef = useRef(null);
+    const blankDraggingRef = useRef(false);
     const viewportRef = useRef(controller.setViewportState);
     viewportRef.current = controller.setViewportState;
 
@@ -314,7 +428,8 @@
         });
       };
       const dismissBlankSpot = () => window.dispatchEvent(new CustomEvent('wg:site-map-moved'));
-      map.on('movestart', dismissBlankSpot);
+      /* ⚠️ 拖曳準心時 autoPan 會讓地圖移動 —— 不擋的話準心會把自己關掉。 */
+      map.on('movestart', () => { if (!blankDraggingRef.current) dismissBlankSpot(); });
       map.on('zoomstart', dismissBlankSpot);
       map.on('moveend', publishViewport);
       map.on('zoomend', publishViewport);
@@ -346,6 +461,38 @@
       tileRef.current.bringToBack();
     }, [controller.baseLayer]);
 
+    /* 可拖曳的「在這裡新增」準心。
+       拖動時只發事件、不碰 marker 的位置（Leaflet 自己在動它）；
+       `blankDraggingRef` 擋住 effect 回頭 setLatLng，否則會跟手勢打架。 */
+    useEffect(() => {
+      const L = window.L, map = mapRef.current;
+      if (!L || !map) return;
+      if (!blankSpot) {
+        if (blankMarkRef.current) { map.removeLayer(blankMarkRef.current); blankMarkRef.current = null; }
+        return;
+      }
+      const ll = [blankSpot.lat, blankSpot.lng];
+      if (blankMarkRef.current) {
+        if (!blankDraggingRef.current) blankMarkRef.current.setLatLng(ll);
+        return;
+      }
+      const emit = (latlng) => {
+        const pt = map.latLngToContainerPoint(latlng);
+        window.dispatchEvent(new CustomEvent('wg:site-map-blank-click', {
+          detail: { lat: latlng.lat, lng: latlng.lng, point: [pt.x, pt.y] },
+        }));
+      };
+      const m = L.marker(ll, {
+        draggable: true, autoPan: true, zIndexOffset: 1000,
+        icon: createCrosshairIcon(L), keyboard: false,
+        title: '拖曳可移動位置',
+      }).addTo(map);
+      m.on('dragstart', () => { blankDraggingRef.current = true; });
+      m.on('drag', () => emit(m.getLatLng()));
+      m.on('dragend', () => { blankDraggingRef.current = false; emit(m.getLatLng()); });
+      blankMarkRef.current = m;
+    }, [blankSpot && blankSpot.lat, blankSpot && blankSpot.lng]);
+
     // marker 增量同步
     useEffect(() => {
       const L = window.L, layer = markerLayerRef.current;
@@ -355,9 +502,14 @@
       const maskedTickets = controller.markers.filter((m) => m.isGuestMasked);
       const renderCells = maskedTickets.length > 0;
       const cells = renderCells ? D.groupMarkersByGridCell(maskedTickets) : [];
-      const items = renderCells
+      const plain = renderCells
         ? controller.markers.filter((m) => !m.isGuestMasked).concat(cells)
         : controller.markers;
+      /* 直立地圖：同一棟的單收成一個建築標記（2026-09-18）。
+         ⚠️ 只對已登入者做 —— 訪客的單已經被遮成格子了，而且訪客本來就看不到矩陣
+            （`SiteData.GUEST_CAN_SEE_MATRIX`）。對訪客分群等於把「這一棟有幾件」
+            這個比格子精確的資訊送出去。 */
+      const items = groupBuildingMarkers(plain);
 
       const nextIds = new Set(items.map((m) => m.id));
       markerRefs.current.forEach((marker, id) => {
@@ -365,8 +517,13 @@
       });
       items.forEach((item) => {
         const isCell = item.detailType === 'cell';
-        const active = item.id === controller.selectedMarkerId;
-        const icon = isCell ? createCellIcon(item, L, active) : createMapMarkerIcon(item, L, active);
+        const isBld = item.detailType === 'building';
+        const active = isBld
+          ? (buildingOpenRef.current && buildingOpenRef.current.id === item.building.id)
+          : item.id === controller.selectedMarkerId;
+        const icon = isBld ? createBuildingIcon(item, L, active)
+          : isCell ? createCellIcon(item, L, active)
+          : createMapMarkerIcon(item, L, active);
         const existing = markerRefs.current.get(item.id);
         if (existing) {
           existing.setIcon(icon);
@@ -374,9 +531,15 @@
           return;
         }
         const marker = L.marker(item.position, {
-          icon, title: isCell ? item.count + ' 筆求助（概略區塊）' : item.title, riseOnHover: true, keyboard: true,
+          icon,
+          title: isCell ? item.count + ' 筆求助（概略區塊）'
+            : isBld ? item.title + '：' + item.ticketCount + ' 件求助' + (item.lack ? '，還缺 ' + item.lack + ' 位' : '')
+            : item.title,
+          riseOnHover: true, keyboard: true,
         });
-        marker.on('click', () => selectRef.current(item.id));
+        /* 建築標記點下去**直接開整棟**，不進單張單的詳情 ——
+           這就是「點進來才發現是直立地圖」的修法：入口本身就說明了它是什麼。 */
+        marker.on('click', () => { if (isBld) openBuildingRef.current(item.building); else selectRef.current(item.id); });
         marker.addTo(layer);
         markerRefs.current.set(item.id, marker);
       });
@@ -386,8 +549,18 @@
       if (hexLayer) {
         hexLayer.clearLayers();
         cells.forEach((cell) => {
+          /* 🔴 2026-09-18：訪客格子改用**深一階**的橘（orange-600），不是 --color-bg-primary。
+             量過的數字（白字 vs 六邊形實際呈現色，疊在淺色底圖上）：
+               orange-400 @0.42（原本）＋橘字  →  1.31:1   ← 這就是「橘底橘字看不清楚」
+               orange-400 @0.72  ＋白字        →  2.29:1   ← 只改字色**還是不及格**
+               orange-600 @0.90  ＋白字        →  4.90:1   ← 通過 WCAG AA（4.5:1）
+             所以白字要成立，填色必須一起變深 —— 這同時滿足你前兩輪說的
+             「透明的部分更不透明」。
+             ⚠️ 用 prim 層的 token 是因為**語意層沒有「更深的 primary」**：
+                --color-bg-primary-hover 是 orange-500，白字只有 3.54:1，
+                大字過得去、「求助」那行 14px 粗體過不去。 */
           const stroke = resolveCssToken(cell.variant === 'urgent-ticket'
-            ? 'var(--color-bg-danger)' : 'var(--color-bg-primary)');
+            ? 'var(--color-bg-danger)' : 'var(--prim-color-orange-600)');
           /* 選取狀態改由**六邊形自己**表達（線變粗、底色變深）。
              原本是那顆圓形徽章放大 ＋ 加外框 —— 徽章拿掉之後，
              如果不把選取搬到六邊形上，點了就會完全沒有回饋。 */
@@ -397,8 +570,17 @@
                透明的部分更不透明」）。字上已經沒有描邊也沒有陰影了，
                所以讀不清楚時要調的是這裡，不是往字上疊效果。
                0.2 → 0.42：足以讓深色的數字浮出來，又還看得見底下的路網
-               （描邊界時要對齊街廓，把底圖蓋死就失去六邊形的意義）。 */
-            color: stroke, weight: on ? 4 : 2, fillColor: stroke, fillOpacity: on ? 0.58 : 0.42,
+               （描邊界時要對齊街廓，把底圖蓋死就失去六邊形的意義）。
+
+               🔴 2026-09-18：0.42 → 0.90（選取 0.58 → 0.96）。
+               前兩輪都在調這個數字，但真正的問題是**字色是橘的**（site.css 的
+               .wg-cell__n 用了 --color-bg-primary，跟這裡的 fillColor 同一個 token）
+               —— 橘底橘字，不管調到多濃都不會變清楚。
+               字改成白色之後，這個數字要負責的是「讓白字有底可站」，
+               所以必須比以前濃。路網看得見的程度確實下降了，
+               但訪客格子的用途是「這一區有幾件求助」，不是描街廓 —— 那是登入後
+               看實際座標才需要的資訊。 */
+            color: stroke, weight: on ? 4 : 2, fillColor: stroke, fillOpacity: on ? 0.96 : 0.90,
             interactive: true,
           }).on('click', () => selectRef.current(cell.id)).addTo(hexLayer);
         });
@@ -483,6 +665,15 @@
               <SiteSubTypeFilter dataType={dataType} selected={controller.subDataTypes} pinned={pinned}
                 onToggle={controller.toggleSubDataType} onTogglePinned={togglePinned} compact />
             </div>
+            {/* 地圖 ⇄ 列表：純圖示，與旁邊的篩選／圖層同一種形狀（2026-09-18）。
+                不做成第二組分段控制 —— 旁邊已經有「站點 ⇄ 任務」，兩組并排分不出誰是誰。 */}
+            {window.SiteViewSwitch ? (
+              <div style={{ flexShrink: 0, pointerEvents: 'auto' }}>
+                <SiteControlSurface style={{ width: 44, height: 44, display: 'grid', placeItems: 'center' }}>
+                  <SiteViewSwitch module="map" state={controller.routeState} compact />
+                </SiteControlSurface>
+              </div>
+            ) : null}
             <div style={{ flexShrink: 0, pointerEvents: 'auto' }}>
             <SiteControlSurface style={{ width: 44, height: 44, display: 'grid', placeItems: 'center' }}>
               <button type="button" aria-label="開啟圖層控制" onClick={controller.openLayerPanel}
@@ -536,6 +727,12 @@
             <SiteDataTypeToggle value={dataType} onChange={controller.setDataType} />
             <SiteSubTypeFilter dataType={dataType} selected={controller.subDataTypes} pinned={pinned}
               onToggle={controller.toggleSubDataType} onTogglePinned={togglePinned} />
+            {/* 桌機展開成帶字的兩段切換 —— 有空間就把「我現在在哪一種看法」講出來。 */}
+            {window.SiteViewSwitch ? (
+              <SiteControlSurface style={{ padding: 3 }}>
+                <SiteViewSwitch module="map" state={controller.routeState} />
+              </SiteControlSurface>
+            ) : null}
           </div>
           <SitePinnedFilterRow items={pinnedOptions} selected={controller.subDataTypes} onToggle={controller.toggleSubDataType} />
         </div>
@@ -838,37 +1035,30 @@
         gridTemplateRows: 'minmax(0,1fr)', overflow: 'hidden',
         transition: 'grid-template-columns var(--duration-base) var(--ease-out)' }}>
         <div style={{ gridColumn: 1, gridRow: 1, position: 'relative', minWidth: 0, minHeight: 0 }}>
-          <RescueMapCanvas controller={controller} onSelectMarker={controller.setSelectedMarkerId} />
+          <RescueMapCanvas controller={controller} onSelectMarker={controller.setSelectedMarkerId}
+            onOpenBuilding={setBuildingOpen} buildingOpen={buildingOpen} blankSpot={blankSpot} />
           <SiteMapControls controller={controller} isMobile={isMobile} />
         {/* 點地圖空白處浮出的動作泡泡。未登入也顯示 —— 擋在送出前，不擋在入口前。 */}
           {/* 十字準星：標出「剛剛點到的到底是哪一點」。
               沒有它的話，泡泡浮在上方 12px，使用者無法確認基準點落在哪裡 ——
               而這個點會直接變成任務單的地標，錯了就是救援端導航到錯的地方。
               pointerEvents:none 讓它不擋住底下的地圖互動。 */}
-          {blankSpot ? (
-            <div aria-hidden="true" style={{ position: 'absolute', zIndex: 899, pointerEvents: 'none',
-              left: blankSpot.point[0], top: blankSpot.point[1], transform: 'translate(-50%, -50%)' }}>
-              <svg width="44" height="44" viewBox="0 0 44 44">
-                {/* 外圈用白色描邊墊底，深色底圖上也看得見 */}
-                <circle cx="22" cy="22" r="13" fill="none" stroke="#fff" strokeWidth="4" opacity=".9" />
-                <circle cx="22" cy="22" r="13" fill="none" stroke="var(--color-bg-primary)" strokeWidth="2" />
-                <line x1="22" y1="2" x2="22" y2="13" stroke="#fff" strokeWidth="4" opacity=".9" />
-                <line x1="22" y1="31" x2="22" y2="42" stroke="#fff" strokeWidth="4" opacity=".9" />
-                <line x1="2" y1="22" x2="13" y2="22" stroke="#fff" strokeWidth="4" opacity=".9" />
-                <line x1="31" y1="22" x2="42" y2="22" stroke="#fff" strokeWidth="4" opacity=".9" />
-                <line x1="22" y1="2" x2="22" y2="13" stroke="var(--color-bg-primary)" strokeWidth="2" />
-                <line x1="22" y1="31" x2="22" y2="42" stroke="var(--color-bg-primary)" strokeWidth="2" />
-                <line x1="2" y1="22" x2="13" y2="22" stroke="var(--color-bg-primary)" strokeWidth="2" />
-                <line x1="31" y1="22" x2="42" y2="22" stroke="var(--color-bg-primary)" strokeWidth="2" />
-                <circle cx="22" cy="22" r="2.5" fill="var(--color-bg-primary)" />
-              </svg>
-            </div>
-          ) : null}
+          {/* 準心已改成地圖上真正的可拖曳 marker（見 createCrosshairIcon），
+              這裡不再畫那張 pointerEvents:none 的裝飾 SVG ——
+              留著會有兩個準心，而且只有其中一個能拖。 */}
 
           {blankSpot ? (
             <div style={{ position: 'absolute', zIndex: 900,
               left: blankSpot.point[0], top: blankSpot.point[1],
-              transform: 'translate(-50%, calc(-100% - 30px))', pointerEvents: 'auto' }}>
+              transform: 'translate(-50%, calc(-100% - 34px))', pointerEvents: 'auto',
+              display: 'grid', justifyItems: 'center', gap: 4 }}>
+              {/* 「可以拖」要講出來 —— 準心看起來像裝飾，不會有人主動去抓它。 */}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px',
+                borderRadius: 'var(--radius-full)', background: 'var(--color-bg-neutral-default)',
+                boxShadow: 'var(--shadow-sm)', whiteSpace: 'nowrap',
+                font: '400 var(--fs-11)/1.5 var(--font-body)', color: 'var(--color-fg-neutral-subtle)' }}>
+                <WGIcon n="Move" s={12} />可拖曳準心調整位置
+              </span>
               <button type="button"
                 onClick={() => {
                   setSeedLandmark({ lat: blankSpot.lat, lng: blankSpot.lng, source: 'manual' });

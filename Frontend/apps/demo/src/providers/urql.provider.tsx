@@ -4,6 +4,7 @@ import {
   createUrqlClient,
   createUrqlExchanges,
 } from '@rescue-frontend/data-access';
+import { sessionExpiryFetch } from '@rescue-frontend/modules';
 import { UrqlProvider, ssrExchange } from '@urql/next';
 import { useState } from 'react';
 
@@ -23,6 +24,8 @@ export default function PortalUrqlClientProvider({
       runtime: 'client',
       url: '/api/graphql',
       exchanges: createUrqlExchanges(ssr),
+      // A session that ended elsewhere signs out and reloads as a guest (`sessionExpiryFetch`).
+      fetch: sessionExpiryFetch,
       suspense: true,
     });
 

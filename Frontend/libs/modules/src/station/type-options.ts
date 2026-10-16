@@ -1,3 +1,16 @@
+import BatteryChargingFullRoundedIcon from '@mui/icons-material/BatteryChargingFullRounded';
+import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
+import CellTowerRoundedIcon from '@mui/icons-material/CellTowerRounded';
+import DirectionsBusRoundedIcon from '@mui/icons-material/DirectionsBusRounded';
+import Inventory2RoundedIcon from '@mui/icons-material/Inventory2Rounded';
+import LocalGasStationRoundedIcon from '@mui/icons-material/LocalGasStationRounded';
+import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
+import NightShelterRoundedIcon from '@mui/icons-material/NightShelterRounded';
+import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
+import ShowerRoundedIcon from '@mui/icons-material/ShowerRounded';
+import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded';
+import WcRoundedIcon from '@mui/icons-material/WcRounded';
+
 export type StationTypeValue =
   | 'water'
   | 'shelter'
@@ -40,4 +53,29 @@ export function getStationTypeLabel(type?: string | null): string {
   }
 
   return STATION_TYPE_LABELS[normalizedType] ?? normalizedType;
+}
+
+/**
+ * Station type → MUI icon component, mirroring `STATION_TYPE_ICONS` in the design prototype
+ * (`Design/前台/js/site/site-route.js:23`). The prototype names lucide icons; these are the
+ * closest MUI Rounded equivalents, since MUI is what this app already ships.
+ */
+export const STATION_TYPE_ICONS: Record<StationTypeValue, typeof PlaceRoundedIcon> = {
+  water: WaterDropRoundedIcon,
+  shelter: NightShelterRoundedIcon,
+  shower: ShowerRoundedIcon,
+  toilet: WcRoundedIcon,
+  transport: DirectionsBusRoundedIcon,
+  medical: MonitorHeartRoundedIcon,
+  supply: Inventory2RoundedIcon,
+  gas_station: LocalGasStationRoundedIcon,
+  charge: BatteryChargingFullRoundedIcon,
+  power: BoltRoundedIcon,
+  cellular: CellTowerRoundedIcon,
+};
+
+export function getStationTypeIcon(type?: string | null) {
+  const key = type?.trim().toLowerCase() as StationTypeValue | undefined;
+
+  return (key && STATION_TYPE_ICONS[key]) || Inventory2RoundedIcon;
 }

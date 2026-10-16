@@ -2,6 +2,10 @@
 
 import { Box, Typography } from '@mui/material';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, primitives } = designTokens;
+
 interface RescueMapStatusMessageProps {
   message: string;
 }
@@ -104,17 +108,17 @@ export function RescueMapStatusMessage({
             >
               <path
                 d="M82.9331 33.7408C70.7473 41.7942 56.9624 61.6938 44.7767 77.8513C32.5911 94.0088 15.0982 104.307 8.51639 121.818C-5.07977 157.99 11.7196 179.071 63.0149 179.071C81.3867 179.81 111.379 182.912 129.571 179.246C182.66 168.545 201.309 136.013 193.172 91.0789C191.987 84.5319 190.233 68.3125 186.735 59.6836C176.185 33.6602 161.724 19.6442 137.135 17.2541C116.341 15.233 95.1189 25.6875 82.9331 33.7408Z"
-                fill="#F37C0E"
+                fill={color.bg.primary.default}
               />
               <path
                 className="rescue-blob-eye"
                 d="M153.479 83.7147C154.693 82.5793 156.409 81.8355 158.083 82.0312C158.501 82.0704 158.961 82.1878 159.296 82.4619C160.008 83.01 159.924 83.9887 159.966 84.85C160.301 90.84 158.125 101.254 155.739 102.468C153.354 103.681 151.429 102.624 150.341 101.254C148.207 98.5526 148.793 92.7192 150.885 87.7863C151.513 86.2986 152.308 84.85 153.521 83.7147H153.479Z"
-                fill="#3A3937"
+                fill={color.fg.neutral.default}
               />
               <path
                 className="rescue-blob-eye"
                 d="M121.479 83.7147C122.693 82.5793 124.409 81.8355 126.083 82.0312C126.501 82.0704 126.961 82.1878 127.296 82.4619C128.008 83.01 127.924 83.9887 127.966 84.85C128.301 90.84 126.125 101.254 123.739 102.468C121.354 103.681 119.429 102.624 118.341 101.254C116.207 98.5526 116.793 92.7192 118.885 87.7863C119.513 86.2986 120.308 84.85 121.521 83.7147H121.479Z"
-                fill="#3A3937"
+                fill={color.fg.neutral.default}
               />
             </svg>
           </Box>
@@ -124,7 +128,7 @@ export function RescueMapStatusMessage({
               width: '100%',
               height: 9,
               borderRadius: 999,
-              backgroundColor: '#D3D8DD',
+              backgroundColor: color.bg.neutral.sunken,
               overflow: 'hidden',
               position: 'relative',
               '&::before': {
@@ -135,8 +139,7 @@ export function RescueMapStatusMessage({
                 left: 0,
                 width: '32%',
                 borderRadius: 'inherit',
-                background:
-                  'linear-gradient(90deg, #D9853E 0%, #D9853E 55%, #F3A85F 100%)',
+                background: `linear-gradient(90deg, ${color.bg.primary.hover} 0%, ${color.bg.primary.default} 55%, ${primitives.color.orange[300]} 100%)`,
                 willChange: 'transform',
                 transform: 'translate3d(-132%, 0, 0)',
                 animation: 'rescueLoadBar 1.6s ease-in-out infinite',

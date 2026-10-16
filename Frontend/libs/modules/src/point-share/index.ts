@@ -1,3 +1,9 @@
+export {
+  pointForMetadata,
+  SITE_LIST_METADATA,
+  syncDocumentMetadata,
+} from './document-metadata';
+export type { PageMetadata } from './document-metadata';
 export { PointShareDrawer } from './point-share-drawer';
 export { createQrDataUrl, createQrSvg, downloadQrSvg } from './qr-code';
 export {

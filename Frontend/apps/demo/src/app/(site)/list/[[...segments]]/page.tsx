@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 
 import {
   resolvePointShareTargetFromRoute,
+  SITE_LIST_METADATA,
   SiteListView,
 } from '@rescue-frontend/modules';
 
@@ -43,10 +44,8 @@ export async function generateMetadata({
   });
 
   if (!target) {
-    return {
-      title: '救災列表 - 島嶼守望',
-      description: '以列表檢視救災任務與站點資訊。',
-    };
+    // `SiteListView` names the page the same once nothing is open in place.
+    return { ...SITE_LIST_METADATA };
   }
 
   return {

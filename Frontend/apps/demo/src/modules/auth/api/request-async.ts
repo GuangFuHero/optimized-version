@@ -1,3 +1,5 @@
+import { sessionExpiryFetch } from '@rescue-frontend/modules';
+
 /**
  * Error carrying the BFF response status and the backend's stable error code.
  *
@@ -50,7 +52,8 @@ export async function requestFrontendJsonAsync<T>(
   input: string,
   init?: RequestInit,
 ) {
-  const response = await fetch(input, {
+  // A session ended elsewhere signs out and reloads as a guest (`sessionExpiryFetch`).
+  const response = await sessionExpiryFetch(input, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

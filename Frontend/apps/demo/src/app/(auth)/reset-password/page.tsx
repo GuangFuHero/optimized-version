@@ -1,5 +1,4 @@
-import { Stack } from '@mui/material';
-import { AuthBrandHeader, AuthShell } from '@rescue-frontend/modules';
+import { AuthShell } from '@rescue-frontend/modules';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
@@ -14,11 +13,7 @@ export default function ResetPasswordPage() {
   return (
     <Suspense fallback={null}>
       <AuthShell>
-        <Stack spacing={2} sx={{ width: '100%' }}>
-          <AuthBrandHeader />
-
-          <ResetPasswordFormClient />
-        </Stack>
+        <ResetPasswordFormClient />
       </AuthShell>
     </Suspense>
   );

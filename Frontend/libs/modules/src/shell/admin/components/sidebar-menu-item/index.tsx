@@ -7,8 +7,12 @@ import type { ReactNode } from 'react';
 
 import { getRescueColorScheme } from '@rescue-frontend/ui';
 
+import { designTokens, displayTextSize, withAlpha } from '@rescue-frontend/ui';
+
+const { color: token } = designTokens;
+
 const sidebarMenuItemTransition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-const sidebarMenuItemHoverSurface = 'rgba(119, 213, 254, 0.18)';
+const sidebarMenuItemHoverSurface = withAlpha(token.bg.secondary.subtle, 0.6);
 
 type SidebarMenuItemColorVariant = 'default' | 'active';
 
@@ -67,13 +71,15 @@ export function SidebarMenuItem({
         py: 1,
         borderRadius: '32px',
         justifyContent: 'flex-start',
-        bgcolor: active ? '#D8F2FF' : 'transparent',
-        border: active ? '1px solid #8ED8F8' : '1px solid transparent',
+        bgcolor: active ? token.bg.secondary.subtle : 'transparent',
+        border: `1px solid ${
+          active ? token.brand.secondary.default : 'transparent'
+        }`,
         color,
         transition: sidebarMenuItemTransition,
         '&:hover': {
           bgcolor: active
-            ? '#D8F2FF'
+            ? token.bg.secondary.subtle
             : sidebarMenuItemHoverSurface,
         },
       }}
@@ -111,7 +117,11 @@ export function SidebarMenuItem({
           whiteSpace: 'nowrap',
           my: 0,
           color,
-          fontSize: 14,
+          // 🔴 The designer's 2026-09-11 note calls this element out by name: the sidebar label
+          // rides the DS `label[400]` size, which is NOT on the display ladder, so it sat still
+          // while the rest of the site grew on a phone. 18px is their stated ceiling for a row
+          // this short — do not raise it further without also raising `lineHeight`.
+          fontSize: displayTextSize[14],
           lineHeight,
           fontWeight: item.fontWeight ?? 400,
           letterSpacing,

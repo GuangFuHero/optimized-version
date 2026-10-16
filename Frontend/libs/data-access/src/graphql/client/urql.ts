@@ -108,6 +108,8 @@ export interface UrqlClientOptions {
   exchanges?: Exchange[];
   /** 額外 fetchOptions。server-side 預設會補上 no-store。 */
   fetchOptions?: RequestInit;
+  /** 取代預設的 fetch，例如前台要先看 proxy 標記的登入失效再交回回應。 */
+  fetch?: typeof fetch;
   /** 指定 urql client 的 requestPolicy。 */
   requestPolicy?: ClientOptions['requestPolicy'];
   /** 指定是否啟用 suspense。 */
@@ -122,6 +124,7 @@ export function createUrqlClient({
   headers,
   exchanges,
   fetchOptions,
+  fetch,
   requestPolicy,
   suspense,
 }: UrqlClientOptions): Client {
@@ -130,6 +133,7 @@ export function createUrqlClient({
   return new Client({
     url: url ?? resolveGraphqlUrl(resolvedRuntime),
     exchanges: exchanges ?? createUrqlExchanges(),
+    fetch,
     requestPolicy,
     suspense,
     fetchOptions: () => {

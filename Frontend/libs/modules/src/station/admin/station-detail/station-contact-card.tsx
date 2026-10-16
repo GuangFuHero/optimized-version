@@ -2,6 +2,8 @@
 
 import { Box, Stack, Typography } from '@mui/material';
 
+import { displayTextSize } from '@rescue-frontend/ui';
+
 import { useStationDetailColorScheme } from './constants';
 import { StationDetailIconSlot } from './station-detail-primitives';
 import type { StationContactCardProps } from './types';
@@ -57,8 +59,8 @@ export function StationContactCard({
             <Typography
               sx={{
                 color: stationDetailPalette.heading,
-                fontSize: 14,
-                lineHeight: '16px',
+                fontSize: displayTextSize[14],
+                lineHeight: 1.14,
                 fontWeight: 600,
                 letterSpacing: '0.7px',
               }}
@@ -68,7 +70,7 @@ export function StationContactCard({
             <Typography
               sx={{
                 color: stationDetailPalette.bodyText,
-                fontSize: 14,
+                fontSize: displayTextSize[14],
                 lineHeight: '20px',
                 fontWeight: 400,
               }}
@@ -78,41 +80,43 @@ export function StationContactCard({
           </Box>
         </Box>
 
-        <Stack
-          sx={{
-            rowGap: '3.5px',
-            pt: '9px',
-            borderTop: `1px solid ${stationDetailPalette.cardDivider}`,
-          }}
-        >
-          {methods.map((method) => (
-            <Box
-              key={method.id}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-              }}
-            >
-              <StationDetailIconSlot
-                icon={method.icon}
-                width={14}
-                height={14}
-                color={stationDetailPalette.heading}
-              />
-              <Typography
+        {methods.length ? (
+          <Stack
+            sx={{
+              rowGap: '3.5px',
+              pt: '9px',
+              borderTop: `1px solid ${stationDetailPalette.cardDivider}`,
+            }}
+          >
+            {methods.map((method) => (
+              <Box
+                key={method.id}
                 sx={{
-                  color: stationDetailPalette.heading,
-                  fontSize: 14,
-                  lineHeight: '20px',
-                  fontWeight: 400,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
                 }}
               >
-                {method.value}
-              </Typography>
-            </Box>
-          ))}
-        </Stack>
+                <StationDetailIconSlot
+                  icon={method.icon}
+                  width={14}
+                  height={14}
+                  color={stationDetailPalette.heading}
+                />
+                <Typography
+                  sx={{
+                    color: stationDetailPalette.heading,
+                    fontSize: displayTextSize[14],
+                    lineHeight: '20px',
+                    fontWeight: 400,
+                  }}
+                >
+                  {method.value}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+        ) : null}
       </Stack>
     </Box>
   );

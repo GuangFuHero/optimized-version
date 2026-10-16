@@ -119,10 +119,11 @@ app route 保留：
 
 - `SiteMapControls`
 - `PointShareDrawer`
-- `SiteStationReportDrawer`
-- `StationReportHistoryPanel`
-- `TaskMatchDeleteConfirmDialog`
+- `NeedClaimProvider`
 - `StationCreateDrawer`
-- `TicketCreateDrawer`
+- `PlaceHereAction`
+- `MapRequestHelpButton`
 
-也就是說，前台地圖不只是讀取資料，還承接了分享、回報、任務媒合與建立標記等互動。
+也就是說，前台地圖不只是讀取資料，還承接了分享、承接需求、新增站點與請求協助等互動。
+
+請求協助的抽屜（`HelpRequestHost`）掛在網站外框，地圖上的 `PlaceHereAction`、`MapRequestHelpButton` 只負責打開它。

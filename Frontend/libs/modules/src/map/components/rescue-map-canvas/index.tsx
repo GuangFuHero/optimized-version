@@ -1,26 +1,82 @@
 'use client';
 
 import L from 'leaflet';
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 
+import {
+  buildLocationCells,
+  isCoarseTicket,
+  locationCellBoundary,
+} from '../../location-cells';
 import type {
   RescueMapClosureArea,
   RescueMapControllerValue,
+  RescueMapDraftPoint,
+  RescueMapLocationCell,
   RescueMapMarkerItem,
   RescueMapViewportStoreSnapshot,
   RescueMapViewportStoreLike,
 } from '../../types';
 import { createMapMarkerIcon } from '../map-marker';
 
+import { designTokens } from '@rescue-frontend/ui';
+
+const { color, primitives } = designTokens;
+
 interface RescueMapCanvasProps {
   controller: RescueMapControllerValue;
   onMarkerClick: (item: RescueMapMarkerItem) => void;
+  /** 點選訪客的概略區塊（ADR-281）。未提供時格子只畫不接點擊。 */
+  onLocationCellClick?: (cell: RescueMapLocationCell) => void;
   previewMarker?: RescueMapMarkerItem | null;
   cursor?: string;
   onMapClick?: (position: [number, number]) => void;
   layoutKey: string;
   showScale?: boolean;
   viewportStore?: RescueMapViewportStoreLike;
+  /** Marked by a crosshair that drags — see `Map`'s prop of the same name. */
+  draftPoint?: RescueMapDraftPoint | null;
+  /** The crosshair dragged to a new point, or let go (`null`) as the map is moved by hand. */
+  onDraftPointChange?: (point: RescueMapDraftPoint | null) => void;
+  /** Floats above the crosshair and goes where it goes. */
+  draftPointAction?: ReactNode;
+}
+
+/**
+ * The crosshair of a picked point: 26px to see, 44px to grab with a gloved thumb (prototype
+ * `createCrosshairIcon`, `site-map.jsx:73-95`). White under the stroke, to read on any basemap.
+ */
+function createDraftPointIcon(): L.DivIcon {
+  const stroke = color.bg.primary.default;
+  const halo = color.bg.neutral.default;
+  const ring = (colour: string, width: number) =>
+    `<circle cx="22" cy="22" r="13" fill="none" stroke="${colour}" stroke-width="${width}"/>`;
+  const ticks = (colour: string, width: number) =>
+    [
+      [22, 2, 22, 13],
+      [22, 31, 22, 42],
+      [2, 22, 13, 22],
+      [31, 22, 42, 22],
+    ]
+      .map(
+        ([x1, y1, x2, y2]) =>
+          `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${colour}" stroke-width="${width}"/>`,
+      )
+      .join('');
+
+  return L.divIcon({
+    className: '',
+    html: `<div style="cursor:grab;line-height:0"><svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">${ring(halo, 4)}${ticks(halo, 4)}${ring(stroke, 2)}${ticks(stroke, 2)}</svg></div>`,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
 }
 
 /** moveend／zoomend 後延遲寫回路由狀態，把連續手勢合併成一次提交。 */
@@ -67,6 +123,16 @@ type MarkerClusterConstructor = new (options: {
     getAllChildMarkers: () => Array<L.Marker & { __rescueDetailType?: string }>;
   }) => L.DivIcon;
 }) => MarkerClusterGroupLike;
+
+/**
+ * 畫成圖釘的：站點與精確座標的任務單。概略座標的單（`locationCell`）改由格子層畫 ——
+ * 它們都落在格子中心，當圖釘會整疊壓在同一點，也會讓人以為那就是地點。
+ */
+function getPinnedMarkers(
+  markers: readonly RescueMapMarkerItem[],
+): RescueMapMarkerItem[] {
+  return markers.filter((marker) => !isCoarseTicket(marker));
+}
 
 /** marker icon 的外觀只由色調（detailType）、圖示（variant）與標籤文字決定。 */
 function getMarkerIconSignature(item: RescueMapMarkerItem): string {
@@ -121,8 +187,8 @@ function getClosureAreaStyle(status: string) {
 
   if (normalizedStatus === 'dangerous' || normalizedStatus === 'active') {
     return {
-      color: '#c2410c',
-      fillColor: '#f97316',
+      color: color.fg.warning,
+      fillColor: color.bg.warning.default,
       fillOpacity: 0.18,
       opacity: 0.84,
       weight: 2,
@@ -132,8 +198,8 @@ function getClosureAreaStyle(status: string) {
 
   if (normalizedStatus === 'block') {
     return {
-      color: '#b91c1c',
-      fillColor: '#ef4444',
+      color: color.fg.danger,
+      fillColor: color.bg.danger.default,
       fillOpacity: 0.14,
       opacity: 0.78,
       weight: 2,
@@ -142,8 +208,8 @@ function getClosureAreaStyle(status: string) {
   }
 
   return {
-    color: '#9a3412',
-    fillColor: '#fdba74',
+    color: color.brand.primary.subtle,
+    fillColor: primitives.color.orange[200],
     fillOpacity: 0.12,
     opacity: 0.72,
     weight: 2,
@@ -226,8 +292,13 @@ function syncClosureAreaLayer({
   });
 }
 
+/** Unsubscribe handle for the no-op store. Named so the empty body reads as deliberate. */
+function unsubscribeNoop() {
+  // Nothing was subscribed, so there is nothing to tear down.
+}
+
 function subscribeViewportStoreNoop() {
-  return () => {};
+  return unsubscribeNoop;
 }
 
 function getEmptyViewportState(): RescueMapViewportStoreSnapshot {
@@ -315,15 +386,108 @@ function syncMarkerLayer({
   });
 }
 
+/**
+ * 格子的填色：一般用深一階的橘（orange-600），裡面有急件就用 danger。
+ *
+ * 設計 2026-09-18（`origin/sucrelindesign` site-map.jsx）量過的數字：白字壓在淺色底圖上，
+ * orange-400 @0.72 只有 2.29:1，orange-600 @0.90 才到 4.90:1（WCAG AA）。字上不加描邊或
+ * 陰影 —— 讀不清楚時要調的是這裡的不透明度（PUB-PS-126）。語意層沒有「更深的 primary」，
+ * 所以直接取 primitive。
+ */
+function getLocationCellFill(cell: RescueMapLocationCell): string {
+  return cell.variant === 'urgent-ticket'
+    ? color.bg.danger.default
+    : primitives.color.orange[600];
+}
+
+function createLocationCellLabelIcon(
+  cell: RescueMapLocationCell,
+  selected: boolean,
+): L.DivIcon {
+  return L.divIcon({
+    className: 'map-location-cell-wrapper',
+    html: [
+      `<div class="map-location-cell${selected ? ' map-location-cell--active' : ''}">`,
+      `<span class="map-location-cell__count">${cell.members.length}</span>`,
+      '<span class="map-location-cell__unit">求助</span>',
+      '</div>',
+    ].join(''),
+    // 罩得住放大後的字，否則 Leaflet 會裁掉。
+    iconSize: [104, 34],
+    iconAnchor: [52, 17],
+  });
+}
+
+function getLocationCellLayerSignature(
+  cells: readonly RescueMapLocationCell[],
+  selectedId: string | undefined,
+): string {
+  return cells
+    .map(
+      (cell) =>
+        `${cell.id}:${cell.members.length}:${cell.variant}:${cell.id === selectedId ? 1 : 0}`,
+    )
+    .join('|');
+}
+
+/**
+ * 訪客的概略區塊：六角形本身 ＋ 中央的數量。整層重畫 —— 格子數量少，而簽章相同時整個跳過，
+ * 不會每次資料刷新都閃爍。選取狀態由六角形自己表達（線變粗、底色變深），數字不換色。
+ */
+function syncLocationCellLayer({
+  cellLayer,
+  cells,
+  selectedId,
+  onCellClickRef,
+}: {
+  cellLayer: L.LayerGroup;
+  cells: readonly RescueMapLocationCell[];
+  selectedId: string | undefined;
+  onCellClickRef: React.MutableRefObject<
+    ((cell: RescueMapLocationCell) => void) | undefined
+  >;
+}) {
+  cellLayer.clearLayers();
+
+  cells.forEach((cell) => {
+    const selected = cell.id === selectedId;
+    const fill = getLocationCellFill(cell);
+    const onClick = () => onCellClickRef.current?.(cell);
+
+    L.polygon(locationCellBoundary(cell.cell), {
+      color: fill,
+      weight: selected ? 4 : 2,
+      fillColor: fill,
+      fillOpacity: selected ? 0.96 : 0.9,
+      // A tap on a cell picks the cell, and is not also a tap on the map (which picks a point).
+      bubblingMouseEvents: false,
+    })
+      .on('click', onClick)
+      .addTo(cellLayer);
+
+    L.marker(cell.position, {
+      icon: createLocationCellLabelIcon(cell, selected),
+      title: `${cell.members.length} 筆求助（概略區塊）`,
+      keyboard: true,
+    })
+      .on('click', onClick)
+      .addTo(cellLayer);
+  });
+}
+
 export function RescueMapCanvas({
   controller,
   onMarkerClick,
+  onLocationCellClick,
   previewMarker,
   cursor,
   onMapClick,
   layoutKey,
   showScale = false,
   viewportStore,
+  draftPoint,
+  onDraftPointChange,
+  draftPointAction,
 }: RescueMapCanvasProps) {
   const externalViewportState =
     useSyncExternalStore<RescueMapViewportStoreSnapshot>(
@@ -337,7 +501,17 @@ export function RescueMapCanvas({
   const scaleControlRef = useRef<L.Control.Scale | null>(null);
   const markerLayerRef = useRef<MarkerClusterGroupLike | null>(null);
   const overlayLayerRef = useRef<L.LayerGroup | null>(null);
+  const cellLayerRef = useRef<L.LayerGroup | null>(null);
+  const cellLayerSignatureRef = useRef<string | null>(null);
   const previewMarkerRef = useRef<L.Marker | null>(null);
+  const draftMarkerRef = useRef<L.Marker | null>(null);
+  const draftBubbleRef = useRef<L.Marker | null>(null);
+  // While the crosshair is dragged, the map autopans: that move is not the person moving the map.
+  const draftDraggingRef = useRef(false);
+  // The element the bubble's content is portaled into, once its marker is on the map.
+  const [draftBubbleHost, setDraftBubbleHost] = useState<HTMLElement | null>(
+    null,
+  );
   const markerHandlesRef = useRef<Map<string, MarkerHandle>>(new Map());
   const closureAreaHandlesRef = useRef<Map<string, ClosureAreaHandle>>(
     new Map(),
@@ -345,11 +519,15 @@ export function RescueMapCanvas({
   const controllerRef = useRef(controller);
   const onMapClickRef = useRef(onMapClick);
   const onMarkerClickRef = useRef(onMarkerClick);
+  const onLocationCellClickRef = useRef(onLocationCellClick);
+  const onDraftPointChangeRef = useRef(onDraftPointChange);
   const initialViewportStateRef = useRef(externalViewportState);
 
   controllerRef.current = controller;
   onMapClickRef.current = onMapClick;
   onMarkerClickRef.current = onMarkerClick;
+  onLocationCellClickRef.current = onLocationCellClick;
+  onDraftPointChangeRef.current = onDraftPointChange;
 
   // 地圖實例整個生命週期只建立一次；受控的視角變化由下方 setView 效果套用，
   // 避免位置寫回路由狀態後反過來把整張地圖銷毀重建。
@@ -381,13 +559,17 @@ export function RescueMapCanvas({
     map.attributionControl.setPrefix(false);
 
     const overlayLayer = L.layerGroup();
+    const cellLayer = L.layerGroup();
     const markerHandles = markerHandlesRef.current;
     let cancelled = false;
 
     mapRef.current = map;
     overlayLayerRef.current = overlayLayer;
+    cellLayerRef.current = cellLayer;
 
     overlayLayer.addTo(map);
+    // Drawn by the cell effect below, which runs after this one in the same commit.
+    cellLayer.addTo(map);
 
     void import(MARKER_CLUSTER_MODULE_ID).then(() => {
       if (cancelled || !mapRef.current) {
@@ -445,7 +627,7 @@ export function RescueMapCanvas({
       markerLayerRef.current = markerLayer;
       syncMarkerLayer({
         markerLayer,
-        items: controllerRef.current.markers,
+        items: getPinnedMarkers(controllerRef.current.markers),
         handles: markerHandles,
         leaflet: L,
         onMarkerClickRef,
@@ -476,9 +658,20 @@ export function RescueMapCanvas({
       onMapClickRef.current?.([event.latlng.lat, event.latlng.lng]);
     };
 
+    // A picked point is let go once the map moves under it, as its bubble would point elsewhere
+    // (prototype site-map.jsx:430-434). Resizing does not start a move; the crosshair's own
+    // autopan does, and is not the person moving the map.
+    const releaseDraftPoint = () => {
+      if (!draftDraggingRef.current) {
+        onDraftPointChangeRef.current?.(null);
+      }
+    };
+
     map.on('moveend', scheduleViewportSync);
     map.on('zoomend', scheduleViewportSync);
     map.on('click', handleMapClick);
+    map.on('movestart', releaseDraftPoint);
+    map.on('zoomstart', releaseDraftPoint);
 
     const resizeObserver = new ResizeObserver(() => {
       try {
@@ -504,13 +697,19 @@ export function RescueMapCanvas({
       map.off('moveend', scheduleViewportSync);
       map.off('zoomend', scheduleViewportSync);
       map.off('click', handleMapClick);
+      map.off('movestart', releaseDraftPoint);
+      map.off('zoomstart', releaseDraftPoint);
       cancelled = true;
 
       markerHandles.clear();
       closureAreaHandlesRef.current.clear();
       markerLayerRef.current = null;
       overlayLayerRef.current = null;
+      cellLayerRef.current = null;
+      cellLayerSignatureRef.current = null;
       previewMarkerRef.current = null;
+      draftMarkerRef.current = null;
+      draftBubbleRef.current = null;
       tileLayerRef.current = null;
       scaleControlRef.current = null;
       mapRef.current = null;
@@ -642,12 +841,38 @@ export function RescueMapCanvas({
 
     syncMarkerLayer({
       markerLayer,
-      items: controller.markers,
+      items: getPinnedMarkers(controller.markers),
       handles: markerHandlesRef.current,
       leaflet: L,
       onMarkerClickRef,
     });
   }, [controller.markers]);
+
+  useEffect(() => {
+    const cellLayer = cellLayerRef.current;
+
+    if (!cellLayer) {
+      return;
+    }
+
+    const cells = buildLocationCells(controller.markers);
+    const signature = getLocationCellLayerSignature(
+      cells,
+      controller.selectedMarkerId,
+    );
+
+    if (signature === cellLayerSignatureRef.current) {
+      return;
+    }
+
+    cellLayerSignatureRef.current = signature;
+    syncLocationCellLayer({
+      cellLayer,
+      cells,
+      selectedId: controller.selectedMarkerId,
+      onCellClickRef: onLocationCellClickRef,
+    });
+  }, [controller.markers, controller.selectedMarkerId]);
 
   useEffect(() => {
     const overlayLayer = overlayLayerRef.current;
@@ -689,5 +914,89 @@ export function RescueMapCanvas({
     previewMarkerRef.current = marker;
   }, [previewMarker]);
 
-  return <div ref={hostRef} style={{ width: '100%', height: '100%' }} />;
+  const draftLat = draftPoint?.lat;
+  const draftLng = draftPoint?.lng;
+
+  // Two markers: the crosshair, which drags, and the bubble, which is not to be dragged by and
+  // keeps up with the crosshair on the way. A real marker rather than a picture floated over the
+  // map, so that a point under an existing pin can be reached by tapping beside it and dragging
+  // across (designer, 2026-09-19).
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!map) {
+      return;
+    }
+
+    if (draftLat === undefined || draftLng === undefined) {
+      draftMarkerRef.current?.remove();
+      draftBubbleRef.current?.remove();
+      draftMarkerRef.current = null;
+      draftBubbleRef.current = null;
+      setDraftBubbleHost(null);
+      return;
+    }
+
+    const position: L.LatLngTuple = [draftLat, draftLng];
+
+    if (draftMarkerRef.current) {
+      // After its own drag, Leaflet has already put it there.
+      if (!draftDraggingRef.current) {
+        draftMarkerRef.current.setLatLng(position);
+        draftBubbleRef.current?.setLatLng(position);
+      }
+      return;
+    }
+
+    const crosshair = L.marker(position, {
+      icon: createDraftPointIcon(),
+      draggable: true,
+      autoPan: true,
+      keyboard: false,
+      zIndexOffset: 1000,
+      title: '拖曳可移動位置',
+    });
+    // An empty, zero-size icon at the point: the bubble's content is portaled in and laid out
+    // above it. Interactive, so its buttons take taps.
+    const bubble = L.marker(position, {
+      icon: L.divIcon({
+        className: '',
+        html: '',
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      }),
+      keyboard: false,
+      zIndexOffset: 1100,
+    });
+
+    // Leaflet counts a tap as the marker's only if the marker listens for it; one that does not
+    // passes the tap on to the map, which would pick a new point under the bubble's own button.
+    bubble.on('click', () => undefined);
+
+    crosshair.on('dragstart', () => {
+      draftDraggingRef.current = true;
+    });
+    crosshair.on('drag', () => bubble.setLatLng(crosshair.getLatLng()));
+    crosshair.on('dragend', () => {
+      draftDraggingRef.current = false;
+
+      const { lat, lng } = crosshair.getLatLng();
+      onDraftPointChangeRef.current?.({ lat, lng });
+    });
+
+    crosshair.addTo(map);
+    bubble.addTo(map);
+    draftMarkerRef.current = crosshair;
+    draftBubbleRef.current = bubble;
+    setDraftBubbleHost(bubble.getElement() ?? null);
+  }, [draftLat, draftLng]);
+
+  return (
+    <>
+      <div ref={hostRef} style={{ width: '100%', height: '100%' }} />
+      {draftBubbleHost && draftPointAction
+        ? createPortal(draftPointAction, draftBubbleHost)
+        : null}
+    </>
+  );
 }

@@ -9,8 +9,18 @@
     "isolatedModules": true,
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
-    "plugins": [{ "name": "next" }]
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
-  "include": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
-  "exclude": ["node_modules", ".next", "dist"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
 }
