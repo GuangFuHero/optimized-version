@@ -2,9 +2,7 @@
 
 **Date**: 2026-09-28（2026-09-29 改寫：engine 自己撈資料，ADR-304；同日補 ADR-305~307）
 **Feature**: 022-dedup-engine-interface
-**Status**（2026-09-29）：本文件描述的架構（ADR-304）已全部實作。plan Task 1~25 完成，Docker 從零驗證通過
-（本機與容器內皆 1612 passed、0 failed），驗證結果與速度實測見 `verification.md`。branch 已 push，PR 尚未開。
-剩 plan Task 0：等 Chi 確認 §2~§4 的 contract、離線調參數工具怎麼接 DB，並補版本紀錄的驗證數字（§11）（交接訊息見 `handoff-chi.md`）。
+**Status**：已實作，在 PR #73 審查中。待辦：Chi 補版本紀錄的驗證數字（§11）。
 **Depends on**: `Spec/021-dedup-fast-layer/spec.md`（PR #46 / #59，未合併）
 **Stacked on**: `feat/dedup-station-fast-layer`（#59，已合進 `3f97468f8`，含 main 的站點指派 #58）→ `feat/dedup-fast-layer`（#46）→ `main`
 **Decisions**: `decisions.md`（ADR-295~299、301~307、313~323；現行架構以 ADR-304 為準）
