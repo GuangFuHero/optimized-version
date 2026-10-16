@@ -38,6 +38,9 @@
 > `station_property_config` / `task_property_config` / the three new tables joined
 > AUDITED_TABLES at the same time — the two config tables had been unaudited since they
 > existed.
+> Building maps (2026-10-02): new `building_maps`, a `base_geometries` subtype (Geospatial
+> diagram), and the `building_map_ticket_map` join table (Tickets diagram); `building_maps`
+> joined AUDITED_TABLES.
 > 互助地圖 area types (ADR-311, 2026-10-04): `closure_areas` became `hazardous_zones` and the
 > standalone `work_zones` became `team_zones`, both joined-table children of a new
 > `area_polygons` table under `base_geometries`. 標示區 (`mark_zone`) is a third kind with no
@@ -53,6 +56,7 @@ something to point at without duplicating the full column list:
 | `base_geometries`      | Geospatial   | Tickets                 |
 | `team_zones`           | Geospatial   | Identity                |
 | `secondary_locations`  | Geospatial   | Tickets                 |
+| `building_maps`        | Geospatial   | Tickets                 |
 
 Note: `secondary_locations.pole_photo_uuid` is a FK to `photos` (home: Tickets), but —
 matching the original combined diagram — it's documented only as a column comment, not
@@ -289,8 +293,8 @@ users ||--o{ announcements : "authors"
 %% NotificationService.dispatch() fans an event out over a resolved recipient list and
 %% always drops the actor from it, so nobody is notified of their own action.
 %% type values: announcement_published, zone_assigned, zone_unassigned, team_member_added,
-%%   ticket_task_moderation_update, task_assignment_created, task_claimed, task_full,
-%%   task_recruiting_stopped, task_deleted, ticket_deleted, resource_station_updated,
+%%   ticket_task_moderation_update, task_assignment_created, task_assignment_removed, task_claimed,
+%%   task_full, task_recruiting_stopped, task_deleted, ticket_deleted, resource_station_updated,
 %%   station_assigned, station_unassigned, station_suggestion_created, dedup_flag_ticket,
 %%   dedup_flag_station, role_request_submitted, role_request_approved, role_request_rejected
 %% (ticket_task_status_update is gone: a need's status is no longer edited by hand, ADR-293.)
@@ -484,6 +488,21 @@ area_polygons ||--|| team_zones : "inherits as"
 %% 標示區 (property_name 'mark_zone') has no table: it has no columns beyond area_polygons.
 %% A mark zone can be promoted to a hazardous zone; no other change of kind exists.
 
+%% Inheritance: Building Map inherits from base_geometries. An admin pins the building once,
+%% and tickets inside it are filed by floor and area. Its address is its secondary_locations
+%% row, with building_section/floor/room always empty.
+building_maps {
+    uuid uuid PK, FK "PK is also FK to base_geometries"
+    string name "String(100), sidebar title e.g. 光復國小圖書館"
+    int floors_above_ground "1..200, labels 1F..nF"
+    int floors_below_ground "0..20, default 0, labels B1..Bn"
+    jsonb floor_areas "default {}, floor label to area names, e.g. 1F: 閱覽室, 健身房"
+}
+base_geometries ||--|| building_maps : "inherits as"
+%% NOTE: polymorphic_identity = "building_map". Every building also has RF, and a ticket may leave
+%% the floor empty when unknown. A floor with areas also accepts 其他; a floor without areas takes
+%% a free-text room number. Checked on ticket create (ADR-310), not by the DB.
+
 %% Inheritance: Station inherits from base_geometries
 stations {
     uuid uuid PK, FK "PK is also FK to base_geometries"
@@ -655,6 +674,9 @@ base_geometries {
 secondary_locations {
     uuid uuid PK
 }
+building_maps {
+    uuid uuid PK
+}
 
 %% ==========================
 %% Ticket Data
@@ -687,6 +709,17 @@ base_geometries ||--|| tickets : "inherits as general ticket"
 %% ticket_analytics compares two tickets' arrays with `=`, which is order-sensitive.
 %% NOTE: person_trapped_reported/immediate_danger_reported are NULL when nobody was asked;
 %% 'unknown' means they were asked and could not say. The two are different facts.
+
+%% Which building map a ticket was filed under. ticket_uuid is the PK, so a ticket belongs to
+%% at most one building; the ticket keeps its own copy of the building's point and address.
+building_map_ticket_map {
+    uuid ticket_uuid PK, FK "FK to tickets"
+    uuid building_map_uuid FK "FK to building_maps"
+    timestamp created_at
+}
+%% INDEX: ix_building_map_ticket_map_building_map_uuid (building_map_uuid)
+building_maps ||--o{ building_map_ticket_map : "files"
+tickets ||--o| building_map_ticket_map : "filed under"
 
 photos {
     uuid uuid PK

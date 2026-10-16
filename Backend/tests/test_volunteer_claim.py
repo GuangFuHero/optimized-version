@@ -728,6 +728,58 @@ async def test_a_place_on_a_deleted_need_can_still_be_given_back(db):
     assert await _claims(db, task_uuid) == 0
 
 
+@pytest.mark.asyncio
+async def test_someone_removed_by_a_coordinator_is_told(db):
+    """A coordinator taking someone off a need tells them, by the need's name."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    volunteer = await _volunteer(db)
+    volunteer_uuid = str(volunteer.uuid)
+    coordinator = await _volunteer(db, "協調者", scope="all")
+    assignment_uuid = str((await _claim(db, volunteer, task_uuid)).uuid)
+    await refresh_actor(db, coordinator)
+
+    await unassign_task_actor(db, actor=coordinator, uuid=assignment_uuid)
+
+    [notice] = await _notices(db, volunteer_uuid, "task_assignment_removed")
+    assert (notice.title, notice.priority) == ("你已被移出「清淤」", "high")
+
+
+@pytest.mark.asyncio
+async def test_giving_back_your_own_place_tells_nobody(db):
+    """The volunteer who gives their own place back already knows."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    volunteer = await _volunteer(db)
+    volunteer_uuid = str(volunteer.uuid)
+    assignment_uuid = str((await _claim(db, volunteer, task_uuid)).uuid)
+    await refresh_actor(db, volunteer)
+
+    await unassign_task_actor(db, actor=volunteer, uuid=assignment_uuid)
+
+    assert await _notices(db, volunteer_uuid, "task_assignment_removed") == []
+
+
+@pytest.mark.asyncio
+async def test_someone_removed_from_a_deleted_need_is_not_told_twice(db):
+    """Deleting the need already told them not to come, so a later removal sends nothing more."""
+    task = await _need(db, quantity=5)
+    task_uuid = str(task.uuid)
+    volunteer = await _volunteer(db)
+    volunteer_uuid = str(volunteer.uuid)
+    coordinator = await _volunteer(db, "協調者", scope="all")
+    assignment_uuid = str((await _claim(db, volunteer, task_uuid)).uuid)
+    deleted = await db.get(TicketTask, task_uuid)
+    deleted.status, deleted.delete_at = "canceled", datetime.now(UTC)
+    await db.flush()
+    await refresh_actor(db, coordinator)
+
+    await unassign_task_actor(db, actor=coordinator, uuid=assignment_uuid)
+
+    assert await _claims(db, task_uuid) == 0
+    assert await _notices(db, volunteer_uuid, "task_assignment_removed") == []
+
+
 # --- changing a claim (ADR-293) ---
 
 
