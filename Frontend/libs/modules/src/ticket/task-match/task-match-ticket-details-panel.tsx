@@ -16,6 +16,7 @@ import {
 import { LocationPrivacyNotice } from '../../map/components/location-privacy-notice';
 import { describeLocationCellSpan } from '../../map/location-cells';
 import type { RescueMapMarkerItem } from '../../map/types';
+import { formatTicketStreet, formatTicketUnit } from '../address';
 import { AddNeedPanel, useCanAddNeed } from '../help-request/add-need-panel';
 import { NeedRow, readTicketNeeds } from '../needs';
 import { PhotoThumb } from '../photos';
@@ -182,6 +183,8 @@ export function TaskMatchTicketDetailsPanel({
     ]
       .filter(Boolean)
       .join(' / ') || '未提供';
+  const street = formatTicketStreet(ticketData?.ticket?.secondaryLocation);
+  const unit = formatTicketUnit(ticketData?.ticket?.secondaryLocation);
 
   return (
     <Stack spacing={2}>
@@ -306,7 +309,45 @@ export function TaskMatchTicketDetailsPanel({
           ) : (
             <DetailRow
               label="位置資訊"
-              value={`緯度 ${marker.position[0].toFixed(6)} / 經度 ${marker.position[1].toFixed(6)}`}
+              value={
+                // The prototype's order (site-detail.jsx:402-420): the address, then which floor
+                // and room — what someone going there needs first — and the coordinates last.
+                <Stack spacing={0.25}>
+                  {street || !isTicketFetching ? (
+                    <Typography
+                      sx={{
+                        color: detailPalette.text,
+                        fontSize: displayTextSize[14],
+                        lineHeight: '21px',
+                      }}
+                    >
+                      {street ?? '未填地址'}
+                    </Typography>
+                  ) : null}
+                  {unit ? (
+                    <Typography
+                      sx={{
+                        color: detailPalette.text,
+                        fontSize: displayTextSize[13],
+                        lineHeight: '20px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {unit}
+                    </Typography>
+                  ) : null}
+                  <Typography
+                    sx={{
+                      color: detailPalette.muted,
+                      fontSize: displayTextSize[12],
+                      lineHeight: '19px',
+                    }}
+                  >
+                    緯度 {marker.position[0].toFixed(6)} / 經度{' '}
+                    {marker.position[1].toFixed(6)}
+                  </Typography>
+                </Stack>
+              }
             />
           )}
         </Stack>
