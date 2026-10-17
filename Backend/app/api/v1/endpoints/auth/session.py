@@ -7,10 +7,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import auth_cookies, security
+from app.core import security
 from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
-from app.core.identity import encode_act
 from app.core.redis import get_redis
 from app.core.request_auth import authenticated_by_cookie
 from app.models.auth import User
@@ -93,7 +92,6 @@ async def refresh(
 async def switch_identity(
         body: SwitchIdentityRequest,
         request: Request,
-        response: Response,
         session=Depends(security.get_current_session),
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
@@ -101,49 +99,21 @@ async def switch_identity(
 ):
     """Act as a different identity you already hold; returns a re-signed access token.
 
-    Deliberately gated by nothing but being logged in. Requiring a capability here would let
-    a user downgrade into an identity that cannot switch back, locking themselves out of
-    their own permissions (ADR-070).
+    The rules are in `auth_session.switch_identity`. Rate limited because it mints credentials,
+    as `login` and `refresh` do (ADR-183).
 
-    Only re-signs the access token — the session is untouched and the refresh token is not
-    rotated, because switching is not a credential event.
-
-    **The session it re-signs from has to still exist** (ADR-183). This mints a fresh
-    access token with a fresh expiry, so without that check the endpoint is a token
-    refresher gated on nothing but holding an unexpired token: after `logout` or
-    `logout-all`, `/auth/refresh` correctly refuses, but calling this before each expiry
-    would keep a revoked session alive indefinitely. Rate limited for the same reason —
-    it mints credentials, and `login` and `refresh` both are.
+    **Bearer only** (ADR-325). The answer carries the token in its body, which is exactly what
+    the browser's cookie keeps away from the page's scripts, so a request signed in by the
+    cookie is refused. A browser switches through `POST /auth/session/identity`.
     """
-    identity = await active_identity_repository.resolve(
-        db, str(current_user.uuid),
-        encode_act(str(body.role_uuid), str(body.team_uuid) if body.team_uuid else None),
-    )
-    if identity is None:
-        # Switching may only move between identities already held; it never grants one.
+    if authenticated_by_cookie(request):
         raise ApiError(
             status_code=status.HTTP_403_FORBIDDEN,
-            code=ErrorCode.IDENTITY_NOT_HELD,
-            detail="You do not hold that identity",
+            code=ErrorCode.BEARER_TOKEN_REQUIRED,
+            detail="A browser switches identity through POST /auth/session/identity",
         )
     _user_uuid, sid = session
-    if sid is None or await SessionRepository(redis).get_session(sid) is None:
-        raise ApiError(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            code=ErrorCode.SESSION_EXPIRED,
-            detail="Session is no longer active",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    # The switch has to outlive the token it returns (ADR-188): without this the session
-    # still remembers the identity it was created with, and the next refresh that does not
-    # name one would undo the switch.
-    await SessionRepository(redis).set_identity(sid, identity.to_claim())
-    access_token = security.create_access_token(
-        data={"sub": str(current_user.uuid)}, sid=sid, act=identity.to_claim()
-    )
-    # A browser holds the token in the cookie, and the one it holds is stale as of now (ADR-195).
-    if authenticated_by_cookie(request):
-        auth_cookies.set_access_cookie(response, access_token)
+    access_token, identity = await auth_session.switch_identity(db, redis, current_user, sid, body)
     return AccessTokenResponse(
         access_token=access_token, expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         identity=identity.to_view(),

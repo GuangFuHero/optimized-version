@@ -38,13 +38,24 @@ flowchart LR
 
 ---
 
-## 2. 切換：`POST /auth/switch-identity`
+## 2. 切換：`POST /auth/switch-identity`（Bearer）、`POST /auth/session/identity`（瀏覽器）
 
 切換身分**不是憑證事件**。不輪替 refresh token、不延長 session 壽命、不要求重新登入。
 
+兩支 endpoint 走同一套規則（`services/auth_session.py` 的 `switch_identity`，就是下圖），差別只在新的 access token 交到哪裡
+（023/ADR-325）：
+
+| endpoint | 給誰 | 新的 access token | 另一種用戶端打進來 |
+|---|---|---|---|
+| `POST /auth/switch-identity` | 腳本、測試（Bearer） | 在 body | cookie 驗證的請求 → 403 `bearer_token_required`，什麼都不改 |
+| `POST /auth/session/identity` | 瀏覽器（cookie） | 寫進 `{p}_at` cookie，body 只回 `identity` | Bearer → 403 `cookie_session_required`，什麼都不改 |
+
+瀏覽器不能用前者，是因為 body 裡的 token 會被頁面上注入的 script 讀走，`HttpOnly` cookie 就白設了。Bearer 用戶端不能用後者，是因為它
+讀不到 cookie，手上那顆 token 卻已經跟 session 的身分對不上。
+
 ```mermaid
 flowchart TD
-    REQ["POST /auth/switch-identity<br/>{ role_uuid, team_uuid? }"] --> S1
+    REQ["POST /auth/switch-identity 或 /auth/session/identity<br/>{ role_uuid, team_uuid? }"] --> S1
 
     S1{"1 · resolve()<br/>你持有這個身分嗎"}
     S1 -- "否" --> E1["403 You do not hold that identity<br/><i>切換只在既有身分間移動，永不授予</i>"]

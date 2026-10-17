@@ -111,13 +111,15 @@ class SessionRepository:
     async def set_identity(self, sid: str, act: str | None) -> None:
         """Record which identity this session is now acting as (ADR-188).
 
-        Called by `/auth/switch-identity`: without it the switch lives only in the access
-        token it returned, and the next refresh that does not name an identity would put the
-        caller back on their platform default — silently undoing a deliberate downgrade.
+        Called when switching identity (`auth_session.switch_identity`, behind
+        `/auth/switch-identity` and `/auth/session/identity`): without it the switch lives
+        only in the access token it returned, and the next refresh that does not name an
+        identity would put the caller back on their platform default — silently undoing a
+        deliberate downgrade.
 
         Preserves the record's TTL rather than resetting it: switching identity is not a
         credential event (ADR-070) and must not extend the session's life. A session that
-        vanished between the caller's request and this write is left alone; the endpoint has
+        vanished between the caller's request and this write is left alone; the switch has
         already checked it exists, and re-creating it here would resurrect a revoked session.
         """
         raw = await self.redis.get(self.SESSION + sid)

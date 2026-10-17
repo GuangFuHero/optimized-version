@@ -1,13 +1,14 @@
-"""The browser signs in, refreshes and signs out through cookies the backend sets (ADR-325).
+"""The browser signs in, refreshes, switches identity and signs out through cookies (ADR-325).
 
 `/auth/session*` are the browser's endpoints. They answer with `Set-Cookie` and never put a token in
-the body, so a script injected into a page has nothing to read. `/auth/login`, `/auth/refresh` and
-`/auth/verify` stay as they were for Bearer clients, and both pairs run the same checks. The endpoints
-that end sessions or replace the access token also update the cookies, but only on a request that
-authenticated with them.
+the body, so a script injected into a page has nothing to read. `/auth/login`, `/auth/refresh`,
+`/auth/switch-identity` and `/auth/verify` stay for Bearer clients, and each pair runs the same checks.
+Switching identity is the one operation each kind of client may only do its own way. The endpoints that
+end the caller's session also clear the cookies, but only on a request that authenticated with them.
 """
 
 import logging
+import uuid
 from datetime import timedelta
 
 import pytest
@@ -38,6 +39,8 @@ PASSWORD = "secret"
 SESSION = "/api/v1/auth/session"
 REFRESH = "/api/v1/auth/session/refresh"
 VERIFY = "/api/v1/auth/session/verify"
+IDENTITY = "/api/v1/auth/session/identity"
+SWITCH = "/api/v1/auth/switch-identity"
 
 
 @pytest.fixture(autouse=True)
@@ -71,6 +74,19 @@ async def _account(db, *, contact_type: str = "email", value: str = EMAIL) -> st
         password_hash=get_password_hash(PASSWORD, generate_salt()),
     )
     return str(user.uuid)
+
+
+async def _member_of_a_team(db) -> dict:
+    """An account that signs in with PASSWORD and is also `member` of 慈濟; returns the switch body."""
+    account = await _account(db)
+    member = Role(name="member", kind="team")
+    team = Team(name="慈濟", type="ngo")
+    db.add_all([member, team])
+    await db.flush()
+    db.add(UserRoleAssign(user_uuid=account, role_uuid=member.uuid, team_uuid=team.uuid))
+    body = {"role_uuid": str(member.uuid), "team_uuid": str(team.uuid)}
+    await db.commit()
+    return body
 
 
 async def _sign_in(client, username: str = EMAIL, password: str = PASSWORD, headers: dict = ORIGIN):
@@ -378,6 +394,98 @@ async def test_a_wrong_code_is_400_and_signs_nobody_in(client, capture_email):
     assert cookies_set_by(response) == {}
 
 
+# --- POST /auth/session/identity: switch identity in the browser ------------------------------
+
+
+async def test_switching_in_the_browser_replaces_only_the_access_cookie(client, db_session):
+    """The identity in the body, the token in the cookie; the old access cookie is stale (ADR-195)."""
+    body = await _member_of_a_team(db_session)
+    access, _ = _assert_signed_in(await _sign_in(client))
+
+    response = await client.post(IDENTITY, json=body, headers={**ORIGIN, **_cookies(at=access)})
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "identity": {
+            "role_uuid": body["role_uuid"],
+            "role": "member",
+            "team_uuid": body["team_uuid"],
+            "team": "慈濟",
+        }
+    }
+    cookies = cookies_set_by(response)
+    assert set(cookies) == {_at()}
+    assert cookies[_at()]["value"] not in response.text
+    assert await _acting_as(client, cookies[_at()]["value"]) == "member"
+    stale = await client.get("/api/v1/users/me", headers=_cookies(at=access))
+    assert stale.json()["code"] == "access_token_stale"
+
+
+async def test_a_refresh_after_switching_in_the_browser_keeps_the_identity(client, db_session):
+    """The session remembers the switch, so the next pair of cookies acts as it too (ADR-188)."""
+    body = await _member_of_a_team(db_session)
+    access, refresh = _assert_signed_in(await _sign_in(client))
+    switched = await client.post(IDENTITY, json=body, headers={**ORIGIN, **_cookies(at=access)})
+    assert switched.status_code == 200, switched.text
+
+    refreshed = await client.post(REFRESH, headers=_cookies(rt=refresh))
+
+    assert await _acting_as(client, _assert_signed_in(refreshed)[0]) == "member"
+
+
+async def test_switching_in_the_browser_to_an_identity_not_held_is_403(client, db_session):
+    """Switching never grants an identity (ADR-068)."""
+    body = await _member_of_a_team(db_session)
+    access, _ = _assert_signed_in(await _sign_in(client))
+
+    response = await client.post(
+        IDENTITY, json={**body, "team_uuid": str(uuid.uuid4())}, headers={**ORIGIN, **_cookies(at=access)}
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["code"] == "identity_not_held"
+    assert cookies_set_by(response) == {}
+
+
+async def test_switching_in_the_browser_on_a_dead_session_is_401_and_clears(client, db_session, redis):
+    """Logged out elsewhere: nothing to switch, and the browser drops its dead cookies (ADR-328)."""
+    body = await _member_of_a_team(db_session)
+    access, _ = _assert_signed_in(await _sign_in(client))
+    await SessionRepository(redis).revoke_session(_sid_of(access))
+
+    response = await client.post(IDENTITY, json=body, headers={**ORIGIN, **_cookies(at=access)})
+
+    assert response.status_code == 401, response.text
+    assert response.json()["code"] == "session_expired"
+    _assert_cleared(response)
+
+
+async def test_switching_in_the_browser_refuses_a_bearer_token(client, db_session):
+    """Its answer is a cookie, which a Bearer client would never read: refused, and nothing changes."""
+    body = await _member_of_a_team(db_session)
+    access, _ = _assert_signed_in(await _sign_in(client))
+
+    response = await client.post(IDENTITY, json=body, headers={"Authorization": f"Bearer {access}"})
+
+    assert response.status_code == 403, response.text
+    assert response.json()["code"] == "cookie_session_required"
+    assert cookies_set_by(response) == {}
+    assert await _acting_as(client, access) == "user"
+
+
+async def test_switching_in_the_browser_needs_one_of_our_origins(client, db_session):
+    """A cookie-authenticated write like any other (ADR-327)."""
+    body = await _member_of_a_team(db_session)
+    access, _ = _assert_signed_in(await _sign_in(client))
+
+    response = await client.post(
+        IDENTITY, json=body, headers={"Origin": "https://elsewhere.test", **_cookies(at=access)}
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["code"] == "origin_not_allowed"
+
+
 # --- the existing endpoints, on a cookie and on a Bearer token ---------------------------------
 
 
@@ -401,27 +509,32 @@ def _assert_cleared_if_cookie(response, sent_by) -> None:
         assert cookies_set_by(response) == {}
 
 
-async def test_switching_identity_replaces_the_access_cookie(client, db_session, sent_by):
-    """The new access token goes into the cookie too; the refresh token is untouched (ADR-070)."""
-    account = await _account(db_session)
-    member = Role(name="member", kind="team")
-    team = Team(name="慈濟", type="ngo")
-    db_session.add_all([member, team])
-    await db_session.flush()
-    db_session.add(UserRoleAssign(user_uuid=account, role_uuid=member.uuid, team_uuid=team.uuid))
-    body = {"role_uuid": str(member.uuid), "team_uuid": str(team.uuid)}
-    await db_session.commit()
+async def test_switch_identity_refuses_a_cookie_session(client, db_session):
+    """Its body carries the token the cookie keeps from page scripts, so a browser is sent elsewhere.
+
+    Nothing happens: the session still acts as `user`, and the browser's cookie still works.
+    """
+    body = await _member_of_a_team(db_session)
     access, _ = _assert_signed_in(await _sign_in(client))
 
-    response = await client.post("/api/v1/auth/switch-identity", json=body, headers=sent_by(access))
+    response = await client.post(SWITCH, json=body, headers={**ORIGIN, **_cookies(at=access)})
+
+    assert response.status_code == 403, response.text
+    assert response.json()["code"] == "bearer_token_required"
+    assert cookies_set_by(response) == {}
+    assert await _acting_as(client, access) == "user"
+
+
+async def test_switch_identity_stays_for_bearer_clients(client, db_session):
+    """A script holds its tokens itself: it gets the new one in the body, and no cookie."""
+    body = await _member_of_a_team(db_session)
+    access, _ = _assert_signed_in(await _sign_in(client))
+
+    response = await client.post(SWITCH, json=body, headers={"Authorization": f"Bearer {access}"})
 
     assert response.status_code == 200, response.text
-    if sent_by.cookie:
-        cookies = cookies_set_by(response)
-        assert set(cookies) == {_at()}
-        assert cookies[_at()]["value"] == response.json()["access_token"]
-    else:
-        assert cookies_set_by(response) == {}
+    assert response.json()["identity"]["role"] == "member"
+    assert cookies_set_by(response) == {}
 
 
 async def test_signing_out_everywhere_clears_the_cookies(client, db_session, sent_by):

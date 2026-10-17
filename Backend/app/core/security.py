@@ -294,7 +294,7 @@ async def _require_live_session(redis, payload: dict) -> None:
     # invariant a future path cannot quietly break (ADR-101).
     if session.get("user_uuid") != payload["sub"]:
         raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
-    # The identity is pinned to the session too (ADR-195). `/auth/switch-identity` writes the
+    # The identity is pinned to the session too (ADR-195). Switching identity writes the
     # new `act` into the session record, but the access token it replaced carries the same
     # sid/sub and would otherwise stay usable for the rest of its 15 minutes — replaying it
     # undoes a deliberate downgrade, and attributes whatever it does to the pre-switch
@@ -399,9 +399,10 @@ async def get_current_session(token: str = Depends(get_access_token)) -> tuple[s
     """Resolve (user_uuid, sid) from the access token without a DB hit or a Redis read.
 
     Deliberately does NOT check that the session is still live (ADR-190, superseding
-    ADR-180). Its only callers are the logout endpoints and `/auth/switch-identity`, and
-    "the session is gone" means something different at each: switch-identity checks it
-    itself and refuses, while logout has already got what it was asking for and answers 204.
+    ADR-180). Its only callers are the logout endpoints and the two that switch identity, and
+    "the session is gone" means something different at each: switching checks it itself
+    (`auth_session.switch_identity`) and refuses, while logout has already got what it was
+    asking for and answers 204.
     Raising 401 from here made `/auth/logout` non-idempotent, which breaks the ordinary
     client pattern of calling logout from a 401 interceptor.
 

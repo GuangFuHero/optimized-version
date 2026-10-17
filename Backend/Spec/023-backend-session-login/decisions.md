@@ -5,7 +5,7 @@ tokens that scripts and tests keep using; the backend runs the Google and LINE O
 sign-in covers both the site and the back office, which live on sibling hosts.
 
 Numbering continues the repo-wide ADR sequence: this spec holds ADR-325 to ADR-331. The decisions were made
-by the product owner between 2026-10-11 and 2026-10-17.
+by the product owner between 2026-10-11 and 2026-10-18.
 
 ---
 
@@ -13,7 +13,8 @@ by the product owner between 2026-10-11 and 2026-10-17.
 
 > **Status: ACCEPTED (2026-10-18).** Moving sign-in to the backend was chosen by the product owner on
 > 2026-10-11 and confirmed on 2026-10-16, together with the separate browser endpoints and with keeping
-> tokens out of their bodies.
+> tokens out of their bodies. Giving switching identity a browser endpoint of its own, closing
+> `/auth/switch-identity` to the cookie and the browser's endpoint to Bearer, was chosen on 2026-10-18.
 
 **In plain words**: the backend now signs a browser in, refreshes its session and signs it out, and it
 keeps the session in cookies it sets itself. The frontend only passes requests on. Scripts and tests keep the
@@ -43,6 +44,7 @@ and each sign the user in separately. The backend is the one thing both apps alr
    | `POST /auth/session` | sign in with `username` (an email or phone number, at most 320 characters) and `password` (frontend-hashed, as everywhere) | 200 `{"user": {"uuid", "name"}, "identity"}` and both cookies; 401 `credentials_invalid` with the cookies left alone |
    | `POST /auth/session/verify` | finish a registration with its code, the body of `/auth/verify` | as above; 400 `code_invalid` or `registration_expired`; 409 `identifier_taken` |
    | `POST /auth/session/refresh` | rotate the refresh cookie | 204 and both cookies renewed; 401 `refresh_token_invalid` or `identity_revoked`, with both cookies cleared |
+   | `POST /auth/session/identity` | act as another identity the account holds, the body of `/auth/switch-identity`; signed in by the cookie only | 200 `{"identity"}` and a new `{p}_at`; 403 `identity_not_held`; 403 `cookie_session_required` for a Bearer request; 401 `session_expired`, with both cookies cleared, once the session is gone |
    | `DELETE /auth/session` | end this browser's session | 204 with both cookies cleared, always; 503 `session_store_unavailable` with the cookies kept when Redis cannot be reached |
 
 2. **No token in any of their bodies.** The cookies are `HttpOnly` (ADR-326), so a script injected into a
@@ -57,19 +59,26 @@ and each sign the user in separately. The backend is the one thing both apps alr
    checked; without a usable one, from the record of the refresh cookie. The refresh cookie is read only by
    these endpoints (ADR-326 point 5).
 6. Signing in shares its rate limit, 5 per 60 seconds, with `/auth/login`: both check the same password, and
-   two doors must not double the guesses a caller gets. Refreshing and verifying are counted on their own,
-   10 per 60 seconds each like their Bearer twins; a registration code is burned after a few wrong guesses
-   anyway.
-7. The endpoints that replace the access token or end the caller's session update the cookies too, but only
-   on a request that authenticated with them; a Bearer request gets no `Set-Cookie`. `switch-identity` also
-   sets the new `{p}_at` (its body is unchanged). `logout-all`, `change-password`, `set-password` and
-   `DELETE /auth/link/{provider}` revoke the caller's session and clear both cookies. `reset-password` does
-   not: it is used signed out, and the cookies on that browser may belong to someone else. If they belong to
-   the reset account, its next request answers `session_expired` and clears them (ADR-328).
-8. `/auth/login`, `/auth/refresh`, `/auth/verify` and `/auth/logout` stay as they are for scripts, tests and
-   the HTTP collections. Each pair goes through one set of service functions (`services/auth_session.py`),
-   so the two cannot drift apart.
-9. Google and LINE sign-in move to the backend too (ADR-331), in place of `/auth/sso/*`.
+   two doors must not double the guesses a caller gets. Refreshing, verifying and switching identity are
+   counted on their own, 10 per 60 seconds each like their Bearer twins; a registration code is burned after
+   a few wrong guesses anyway.
+7. The endpoints that end the caller's session clear the cookies too, but only on a request that
+   authenticated with them; a Bearer request gets no `Set-Cookie`. `logout-all`, `change-password`,
+   `set-password` and `DELETE /auth/link/{provider}` revoke the caller's session and clear both cookies.
+   `reset-password` does not: it is used signed out, and the cookies on that browser may belong to someone
+   else. If they belong to the reset account, its next request answers `session_expired` and clears them
+   (ADR-328).
+8. **`/auth/switch-identity` refuses the cookie**: a request authenticated by it answers 403
+   `bearer_token_required`, and nothing changes. Its answer carries the new token in the body, so a script
+   injected into a page could otherwise switch identity and read a working token — the one thing point 2
+   and `HttpOnly` exist to prevent. A browser switches through `POST /auth/session/identity` instead, which
+   in turn refuses a Bearer request with 403 `cookie_session_required`: its answer is a cookie, and the
+   caller's Bearer token would be left acting as the identity it just switched away from (ADR-195). So each
+   kind of client has exactly one way to switch.
+9. `/auth/login`, `/auth/refresh`, `/auth/switch-identity`, `/auth/verify` and `/auth/logout` stay as they
+   are for scripts, tests and the HTTP collections. Each pair goes through one set of service functions
+   (`services/auth_session.py`), so the two cannot drift apart.
+10. Google and LINE sign-in move to the backend too (ADR-331), in place of `/auth/sso/*`.
 
 **Amends**:
 
@@ -81,6 +90,8 @@ and each sign the user in separately. The backend is the one thing both apps alr
 ➕ No token is reachable from a page's scripts.
 ➖ The backend now handles redirects and holds the OAuth client secrets (ADR-331).
 ➖ Two endpoints for each operation, kept in step only by sharing their service functions.
+➖ A frontend that still switches identity through `/auth/switch-identity` with the cookie gets 403 until it
+moves to the browser endpoint.
 ➖ Deploying this signs everyone out once: the frontend stops reading NextAuth's cookie.
 
 ---
@@ -277,8 +288,9 @@ site and the back office (ADR-325, ADR-326), both send the same cookie, so they 
 1. The back office sends `X-WG-Realm: admin` on every request. `get_current_user` first checks the token, its
    session and its `act` claim exactly as before; then, for the value `admin` only:
    - A token acting as a back-office identity — anything but the platform `user`, team identities included —
-     keeps it. Switching identity in the back office therefore works as it did: `switch-identity` writes the
-     session's `act`, and from then on the back office acts as it.
+     keeps it. Switching identity in the back office therefore works as it did: the switch
+     (`POST /auth/session/identity` from the browser, ADR-325) writes the session's `act`, and from then on
+     the back office acts as it.
    - A token acting as `user`, or as no identity, acts as the caller's first back-office identity: platform
      identities first, then by role name, team name and team uuid. The last two make `admin` of two teams
      resolve to the same team every time; ordering by role name alone does not.

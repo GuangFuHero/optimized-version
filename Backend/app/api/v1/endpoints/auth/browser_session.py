@@ -1,8 +1,8 @@
-"""The browser's session endpoints: sign in, refresh, sign out, and finish a registration (ADR-325).
+"""The browser's session endpoints: sign in, refresh, switch identity, sign out, finish a registration.
 
 They answer with the sign-in cookies (ADR-326) and never put a token in the body, so a script on the page
-has nothing to read. Each runs the same checks as its Bearer twin — `/auth/login`, `/auth/refresh`,
-`/auth/verify`, `/auth/logout` — through `services.auth_session`.
+has nothing to read (ADR-325). Each runs the same checks as its Bearer twin — `/auth/login`,
+`/auth/refresh`, `/auth/switch-identity`, `/auth/verify`, `/auth/logout` — through `services.auth_session`.
 
 Signing in, finishing a registration and signing out carry no access cookie for `accept_access_token` to
 check, so they check the origin themselves, before the body is validated (ADR-327 point 4): otherwise
@@ -19,11 +19,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import auth_cookies, security
 from app.core.api_errors import ApiError, ErrorCode
 from app.core.redis import get_redis
-from app.core.request_auth import mark_authenticated_by_cookie, require_allowed_origin
+from app.core.request_auth import (
+    authenticated_by_cookie,
+    mark_authenticated_by_cookie,
+    require_allowed_origin,
+)
 from app.models.auth import User
 from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.session_repository import SessionRepository
-from app.schemas.auth import SessionSignInRequest, SignedInResponse, SignedInUser, VerifyRequest
+from app.schemas.auth import (
+    SessionIdentityResponse,
+    SessionSignInRequest,
+    SignedInResponse,
+    SignedInUser,
+    SwitchIdentityRequest,
+    VerifyRequest,
+)
 from app.services import auth_session
 
 from .deps import PASSWORD_SIGN_IN_BUCKET, device_of, get_rate_limiter
@@ -97,6 +108,42 @@ async def refresh_browser_session(
         db, redis, auth_cookies.read_refresh_cookie(request)
     )
     auth_cookies.set_session_cookies(response, access_token, new_refresh)
+
+
+@router.post(
+    "/session/identity",
+    response_model=SessionIdentityResponse,
+    dependencies=[Depends(get_rate_limiter(10, 60))],
+)
+async def switch_browser_identity(
+    body: SwitchIdentityRequest,
+    request: Request,
+    response: Response,
+    session=Depends(security.get_current_session),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+    redis=Depends(get_redis),
+):
+    """Act as another identity the account holds; the new access token goes into the cookie.
+
+    The browser's `/auth/switch-identity`, under the same rules (`auth_session.switch_identity`). The
+    access cookie it replaces is stale from now on (ADR-195), and a refresh carries the new identity
+    forward (ADR-188). A cookie-authenticated write, so it needs one of our origins (ADR-327).
+
+    **Cookie only** (ADR-325). A Bearer client would get its new token in a cookie it does not read,
+    and be left holding one that acts as the identity it switched away from; it is refused, and switches
+    through `/auth/switch-identity`.
+    """
+    if not authenticated_by_cookie(request):
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            ErrorCode.COOKIE_SESSION_REQUIRED,
+            detail="A Bearer client switches identity through POST /auth/switch-identity",
+        )
+    _user_uuid, sid = session
+    access_token, identity = await auth_session.switch_identity(db, redis, current_user, sid, body)
+    auth_cookies.set_access_cookie(response, access_token)
+    return SessionIdentityResponse(identity=identity.to_view())
 
 
 async def _session_of_cookies(request: Request, repo: SessionRepository) -> str | None:

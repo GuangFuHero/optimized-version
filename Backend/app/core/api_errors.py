@@ -58,6 +58,13 @@ class ErrorCode(StrEnum):
     # A switch may only move between identities already held; the client's list was stale.
     # Remedy: refresh the identity list, not the sign-in.
     IDENTITY_NOT_HELD = "identity_not_held"
+    # `/auth/switch-identity` answers with a token in the body, so a request signed in by the cookie is
+    # refused there (ADR-325): the cookie exists to keep the token from the page's scripts. A browser
+    # switches through `POST /auth/session/identity`. A client bug, not something to show a user.
+    BEARER_TOKEN_REQUIRED = "bearer_token_required"
+    # The mirror case: `POST /auth/session/identity` answers with a cookie, so a Bearer request is refused
+    # there and switches through `/auth/switch-identity` (ADR-325). Also a client bug.
+    COOKIE_SESSION_REQUIRED = "cookie_session_required"
     # A back-office request (ADR-329) from an account holding nothing besides `user`. Not a sign-in
     # failure: the session is fine and the site still works, so the back office says "no access"
     # and signs nobody out.

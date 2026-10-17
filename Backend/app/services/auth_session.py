@@ -1,9 +1,9 @@
-"""Signing in, refreshing and finishing a registration, shared by the Bearer and the browser endpoints.
+"""Signing in, refreshing, switching identity and finishing a registration, for Bearer and browser alike.
 
-`/auth/login`, `/auth/refresh` and `/auth/verify` answer scripts and tests with tokens in the body;
-`/auth/session*` answer the browser with cookies (ADR-325). Each pair runs the same checks through these
-functions, so a fix to one reaches the other: #75's 320-character cap on the username, ADR-330's grace
-period, ADR-096's refusal of a revoked identity.
+`/auth/login`, `/auth/refresh`, `/auth/switch-identity` and `/auth/verify` answer scripts and tests with
+tokens in the body; `/auth/session*` answer the browser with cookies (ADR-325). Each pair runs the same
+checks through these functions, so a fix to one reaches the other: #75's 320-character cap on the
+username, ADR-330's grace period, ADR-096's refusal of a revoked identity.
 
 They raise `ApiError` themselves, because both callers answer every failure identically.
 """
@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
 from app.core.api_errors import ApiError, ErrorCode
-from app.core.identity import ActiveIdentity
+from app.core.identity import ActiveIdentity, encode_act
 from app.core.normalize import normalize_email, normalize_phone
 from app.db.session import attribute_writes_to
 from app.models.auth import User
@@ -25,7 +25,7 @@ from app.repositories.active_identity_repository import active_identity_reposito
 from app.repositories.auth_repository import contact_repository, identity_repository, user_repository
 from app.repositories.session_repository import InvalidRefreshToken, RefreshTokenReuse, SessionRepository
 from app.repositories.verification_repository import VerificationRepository
-from app.schemas.auth import VerifyRequest
+from app.schemas.auth import SwitchIdentityRequest, VerifyRequest
 from app.services.auth_account import create_account
 
 logger = logging.getLogger(__name__)
@@ -194,6 +194,54 @@ async def refresh_session(
         data={"sub": user_uuid}, sid=sid, act=identity.to_claim() if identity else None
     )
     return access_token, new_refresh, identity
+
+
+async def switch_identity(
+    db: AsyncSession, redis, user: User, sid: str | None, body: SwitchIdentityRequest
+) -> tuple[str, ActiveIdentity]:
+    """Make session `sid` act as the identity `body` names; return (new access token, that identity).
+
+    Deliberately gated by nothing but being logged in. Requiring a capability here would let
+    a user downgrade into an identity that cannot switch back, locking themselves out of
+    their own permissions (ADR-070).
+
+    Only re-signs the access token — the refresh token is not rotated, because switching is
+    not a credential event.
+
+    **The session it re-signs from has to still exist** (ADR-183). This mints a fresh
+    access token with a fresh expiry, so without that check it is a token refresher gated on
+    nothing but holding an unexpired token: after `logout` or `logout-all`, a refresh
+    correctly refuses, but switching before each expiry would keep a revoked session alive
+    indefinitely.
+    """
+    identity = await active_identity_repository.resolve(
+        db,
+        str(user.uuid),
+        encode_act(str(body.role_uuid), str(body.team_uuid) if body.team_uuid else None),
+    )
+    if identity is None:
+        # Switching may only move between identities already held; it never grants one.
+        raise ApiError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code=ErrorCode.IDENTITY_NOT_HELD,
+            detail="You do not hold that identity",
+        )
+    repo = SessionRepository(redis)
+    if sid is None or await repo.get_session(sid) is None:
+        raise ApiError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code=ErrorCode.SESSION_EXPIRED,
+            detail="Session is no longer active",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # The switch has to outlive the token it returns (ADR-188): without this the session
+    # still remembers the identity it was created with, and the next refresh that does not
+    # name one would undo the switch.
+    await repo.set_identity(sid, identity.to_claim())
+    access_token = security.create_access_token(
+        data={"sub": str(user.uuid)}, sid=sid, act=identity.to_claim()
+    )
+    return access_token, identity
 
 
 async def verify_registration(db: AsyncSession, redis, body: VerifyRequest) -> User:

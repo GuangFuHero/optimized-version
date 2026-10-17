@@ -194,6 +194,15 @@ class SignedInResponse(BaseModel):
     identity: IdentityView | None = None
 
 
+class SessionIdentityResponse(BaseModel):
+    """Answer to the browser's identity switch: the identity now in effect (ADR-325).
+
+    The new access token went into the cookie, so there is none here.
+    """
+
+    identity: IdentityView
+
+
 class RefreshRequest(BaseModel):
     """Request body carrying a refresh token to exchange.
 

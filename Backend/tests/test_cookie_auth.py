@@ -116,11 +116,11 @@ async def test_a_guest_on_graphql_is_still_a_guest(client, fresh_app_engine):
 
 
 async def _switch_to_user(client, db, redis, headers: dict):
-    """A POST: switch to the `user` identity the account already acts as."""
+    """A POST: switch to the `user` identity the account already acts as, the browser's way (ADR-325)."""
     token = await _new_session_token(db, redis)
     role = (await db.execute(select(Role).where(Role.name == "user"))).scalar_one()
     return await client.post(
-        "/api/v1/auth/switch-identity",
+        "/api/v1/auth/session/identity",
         json={"role_uuid": str(role.uuid)},
         headers={**_access_cookie(token), **headers},
     )
