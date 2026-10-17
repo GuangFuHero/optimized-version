@@ -117,6 +117,15 @@ def test_the_shared_tables_really_are_classified_differently():
     assert differing, "shared tables are identical — the (entity, table) key buys nothing"
 
 
+def test_a_stations_internal_comment_is_pii_without_a_masker():
+    """ADR-332: the timeline gates `comment` with the key StationType.comment uses (ADR-197).
+
+    Withheld, not masked: free text has no shape to redact.
+    """
+    spec = FIELD_TIERS[("station", "stations")]["comment"]
+    assert spec.tier is Tier.PII and spec.mask is None
+
+
 def test_review_columns_are_audit_tier():
     """ADR-130: internal review notes need audit.view, not merely *.view_history."""
     assert FIELD_TIERS[("ticket", "tickets")]["review_note"].tier is Tier.AUDIT

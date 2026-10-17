@@ -140,7 +140,9 @@ _STATION_FIELDS = {
     "description": _public(),
     "op_hour": _public(),
     "level": _public(),
-    "comment": _public(),
+    # The back office's internal note. Behind the same key as StationType.comment (ADR-332,
+    # following ADR-197), withheld rather than masked: free text has no shape to redact.
+    "comment": _pii(),
     "source": _public(),
     "visibility": _public(),
     "verification_status": _public(),

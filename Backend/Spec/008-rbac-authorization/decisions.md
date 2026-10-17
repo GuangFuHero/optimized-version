@@ -1419,6 +1419,43 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 ---
 
+#### ADR-332 站點的內部備註 `comment` 由 `station.view_pii` 把關，範圍外讀到 `null`
+> **狀態：ACCEPTED（2026-10-17）。** 使用者 2026-10-17 拍板用 `station.view_pii`。
+
+**白話**：站點的內部備註只給看得到這個站點聯絡方式的人；訪客和其他民眾拿到空值。
+
+**Context**：`StationType.comment` 的欄位說明寫著「Internal admin comment, not shown to the public」，但
+`from_model` 直接回傳 `m.comment`，沒有任何權限檢查。2026-10-17 在 staging 用訪客身分查 `stations`，25 個站點
+裡有 8 個拿到內部備註，例如「水退後已撤站，記錄未更新 (stale)」「與 b…07 疑似重複」。前台的站點詳情在沒有描述
+時，還會拿 `comment` 當描述顯示。操作紀錄（016）也把站點的 `comment` 分在公開層。
+
+**Decision**：
+
+1. **`StationType.comment` 改成 resolver**，跟三個 `contact_*` 共用 `_pii_visible`（`station.view_pii`＋
+   checkpoint 2）：scope 內回原文，scope 外回 `null`。
+2. **不遮罩**：備註是自由文字，沒有可以留一部分的格式。做法同 018 的兩個檢傷欄位（ADR-254）。
+3. **用 `station.view_pii`，不用 `station.edit` 或 `station.review`**。照 seed，持有它的剛好是該讀的人：`user`
+   `own`（建站的人讀得到自己寫的，建站抽屜也會讀回 `createStation` 的結果）、`data_auditor` `all`、團隊
+   `admin`／`member` `team`、`super_admin` `all`。另外兩個都有缺口：
+   - `station.edit`：`data_auditor` 沒有，可是「疑似重複」這類備註正是寫給它看的。
+   - `station.review`：`member` 沒有，能改備註卻讀不回來；`user` 也讀不到自己剛寫的。
+4. **操作紀錄跟著改**：站點的 `comment` 從公開層改成 PII 層，不帶 mask（`services/history_fields.py`）。依
+   ADR-197，同一個欄位的單筆讀取與時間軸用同一把鑰匙。照 seed，`station.view_history` 的 scope 沒有一個比
+   `station.view_pii` 寬，但 scope 可以在執行期調整，seed 不是保證（ADR-197 的理由）。
+
+**後果**：
+
+- ➕ 訪客與一般帳號讀不到別人站點的內部備註。`station`、`stations`、`createStation`、`updateStation` 都經過
+  `from_model`，一起生效。
+- ◾ 站點搜尋原本就只比對名稱與描述（`models/geo.py` 的 `search_text`），不能用 `q` 猜備註；REST 沒有回傳站點的
+  `comment`。
+- ◾ `StationPropertyType.comment` 不受影響：它存的是 Boolean／Enum 屬性的值（`services/station.py` 的
+  comment-backed 屬性，例如供水充足程度），本來就是公開資料。
+- ➖ 團隊 `admin`／`member` 讀別的團隊的站點時拿到 `null`（之前讀得到）。後台目前沒有畫面讀 `comment`。
+- ➖ 前台站點詳情「沒有描述就顯示 `comment`」的退回要拿掉，fragment 也不再選它（前端另一支 PR）。
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|
