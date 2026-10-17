@@ -47,7 +47,7 @@ export function SiteShell({
   const rescue = getRescueColorScheme(useTheme());
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  // 前往後台 / 申請成為後台人員: asked once here, shown in the top bar or the phone's menu, and
+  // 前往管理平台 / 申請管理權限: asked once here, shown in the top bar or the phone's menu, and
   // the application drawer the latter opens.
   const { myRoleRequests, refetch: refetchRoleRequests } =
     useMyRoleRequests(isAuthenticated);

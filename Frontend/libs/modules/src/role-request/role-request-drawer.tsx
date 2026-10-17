@@ -37,7 +37,7 @@ import { WithdrawRoleRequestDialog } from './withdraw-role-request-dialog';
 
 const { color, radius } = designTokens;
 
-const TITLE = '申請成為後台人員';
+const TITLE = '申請管理權限';
 const EMPTY_FORM: RoleRequestFormValues = {
   role: null,
   reason: '',
@@ -56,7 +56,7 @@ interface RoleRequestDrawerProps {
 }
 
 /**
- * 申請成為後台人員 (prototype `RoleElevationDrawer`, `Design/前台/js/site/site-actions.jsx:157-265`):
+ * 申請管理權限 (prototype `RoleElevationDrawer`, `Design/前台/js/site/site-actions.jsx:157-265`):
  * the application waiting for review, which can be withdrawn, or the form under the last
  * rejection. What it shows is `roleRequestDrawerView`'s decision; the form's rules are
  * `validateRoleRequestForm`'s.
@@ -140,7 +140,7 @@ export function RoleRequestDrawer({
         <SiteActionDrawer open={open} title={TITLE} onClose={onClose}>
           <Stack spacing={2}>
             <Alert severity="success">
-              你已經有後台身分，可以從「前往後台」進入。
+              你已經有管理平台身分，可以從「前往管理平台」進入。
             </Alert>
             {view.approved ? <RoleRequestCard request={view.approved} /> : null}
           </Stack>
@@ -179,7 +179,7 @@ export function RoleRequestDrawer({
     <SiteActionDrawer
       open={open}
       title={TITLE}
-      subtitle="後台人員可以派工、審核資料、管理站點。送出後由超級管理員審核。"
+      subtitle="有管理權限的人可以派工、審核資料、管理站點。送出後由超級管理員審核。"
       onClose={onClose}
       footer={
         <>
@@ -270,12 +270,12 @@ export function RoleRequestDrawer({
           fullWidth
           value={values.reason}
           onChange={(event) => set('reason')(event.target.value)}
-          placeholder="例：我是光復鄉公所民政課，負責收容所名冊，需要在後台更新站點資訊。"
+          placeholder="例：我是光復鄉公所民政課，負責收容所名冊，需要在管理平台更新站點資訊。"
           error={touched && Boolean(errors.reason)}
           helperText={
             touched && errors.reason
               ? errors.reason
-              : `寫清楚你的單位、職務，以及為什麼需要後台權限（最多 ${REASON_MAX_LENGTH} 字）`
+              : `寫清楚你的單位、職務，以及為什麼需要管理權限（最多 ${REASON_MAX_LENGTH} 字）`
           }
         />
 
