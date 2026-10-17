@@ -56,6 +56,8 @@ export type {
 export { MetadataTable } from './components/MetadataTable';
 export { Markdown } from './components/Markdown';
 export type { MarkdownProps } from './components/Markdown';
+export { MarkdownEditor } from './components/markdown-editor';
+export type { MarkdownEditorProps } from './components/markdown-editor';
 export { localStorageKeys } from './constant/local-storage-keys';
 export type {
   MetadataRow,
