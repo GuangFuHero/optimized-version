@@ -17,7 +17,7 @@ from tests.test_graphql.conftest import test_db as open_db
 
 CREATE_STATION = """
 mutation($input: CreateStationInput!) {
-    createStation(input: $input) { uuid propertyName geometry level }
+    createStation(input: $input) { ... on StationCreated { station { uuid propertyName geometry level } } }
 }
 """
 
@@ -69,7 +69,7 @@ mutation($input: CreateCrowdSourcingInput!) {
 
 CREATE_TICKET = """
 mutation($input: CreateTicketInput!) {
-    createTicket(input: $input) { uuid title status priority }
+    createTicket(input: $input) { ... on TicketCreated { ticket { uuid title status priority } } }
 }
 """
 
@@ -77,7 +77,9 @@ mutation($input: CreateTicketInput!) {
 # above does not — that combination is what the expire_on_commit=False fix made work.
 CREATE_TICKET_WITH_CONTACT = """
 mutation($input: CreateTicketInput!) {
-    createTicket(input: $input) { uuid contactName contactEmail contactPhone }
+    createTicket(input: $input) {
+        ... on TicketCreated { ticket { uuid contactName contactEmail contactPhone } }
+    }
 }
 """
 
@@ -89,7 +91,7 @@ mutation($uuid: UUID!, $input: UpdateTicketInput!) {
 
 CREATE_TICKET_TASK = """
 mutation($input: CreateTicketTaskInput!) {
-    createTicketTask(input: $input) { uuid taskType taskName status }
+    createTicketTask(input: $input) { ... on TicketTaskCreated { task { uuid taskType taskName status } } }
 }
 """
 
@@ -198,7 +200,7 @@ async def test_create_station(client, coordinator_auth):
         headers=auth_header(token),
     )
 
-    data = resp.json()["data"]["createStation"]
+    data = resp.json()["data"]["createStation"]["station"]
     assert data["uuid"] is not None
     assert data["propertyName"] == "station"
     assert data["level"] == 3
@@ -233,7 +235,7 @@ async def test_create_station_accepts_internal_visibility(client, coordinator_au
     )
     body = resp.json()
     assert "errors" not in body
-    assert body["data"]["createStation"]["uuid"] is not None
+    assert body["data"]["createStation"]["station"]["uuid"] is not None
 
 
 @pytest.mark.asyncio
@@ -312,7 +314,7 @@ async def test_update_station_all_scope(client, redis, coordinator_auth):
         },
         headers=auth_header(other_token),
     )
-    station_uuid = resp.json()["data"]["createStation"]["uuid"]
+    station_uuid = resp.json()["data"]["createStation"]["station"]["uuid"]
 
     # Original coordinator edits it
     _, token = coordinator_auth
@@ -348,7 +350,7 @@ async def test_delete_station(client, coordinator_auth):
         },
         headers=auth_header(token),
     )
-    station_uuid = resp.json()["data"]["createStation"]["uuid"]
+    station_uuid = resp.json()["data"]["createStation"]["station"]["uuid"]
 
     resp = await client.post(
         "/graphql",
@@ -374,7 +376,7 @@ async def test_delete_station_excluded_from_queries(client, coordinator_auth):
         },
         headers=auth_header(token),
     )
-    station_uuid = resp.json()["data"]["createStation"]["uuid"]
+    station_uuid = resp.json()["data"]["createStation"]["station"]["uuid"]
 
     await client.post(
         "/graphql",
@@ -718,7 +720,7 @@ async def test_create_ticket(client, coordinator_auth):
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["createTicket"]
+    data = resp.json()["data"]["createTicket"]["ticket"]
     assert data["title"] == "Need medics"
     assert data["status"] == "pending"
     assert data["priority"] == "high"
@@ -852,7 +854,7 @@ async def test_create_ticket_stores_contact_stripped(client, coordinator_auth):
     )
     body = resp.json()
     assert "errors" not in body, body
-    ticket = body["data"]["createTicket"]
+    ticket = body["data"]["createTicket"]["ticket"]
     # The creator is in ticket.view_pii=own scope, so these come back unmasked.
     assert ticket["contactName"] == "A" * 95
     assert ticket["contactPhone"] == "0912345678"
@@ -971,7 +973,7 @@ async def test_create_ticket_task(client, coordinator_auth, sample_ticket):
         },
         headers=auth_header(token),
     )
-    data = resp.json()["data"]["createTicketTask"]
+    data = resp.json()["data"]["createTicketTask"]["task"]
     assert data["uuid"] is not None
     assert data["taskType"] == "hr"
     assert data["status"] == "pending"
@@ -1172,7 +1174,7 @@ async def test_a_requester_adds_a_property_to_their_own_need(client, login_user_
             "query": CREATE_TICKET_TASK,
             "variables": {
                 "input": {
-                    "ticketUuid": ticket.json()["data"]["createTicket"]["uuid"],
+                    "ticketUuid": ticket.json()["data"]["createTicket"]["ticket"]["uuid"],
                     "taskType": "hr", "taskName": "清淤", "quantity": 3,
                 }
             },
@@ -1185,7 +1187,7 @@ async def test_a_requester_adds_a_property_to_their_own_need(client, login_user_
             "query": CREATE_TASK_PROPERTY,
             "variables": {
                 "input": {
-                    "taskUuid": task.json()["data"]["createTicketTask"]["uuid"],
+                    "taskUuid": task.json()["data"]["createTicketTask"]["task"]["uuid"],
                     "propertyName": "required_skill",
                     "propertyValue": "medical",
                 }

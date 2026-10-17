@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guangfuhero.example/dedup/query-evaluation.schema.json",
+  "title": "GuangFuHero fast-layer query-level evaluation dataset",
+  "type": "object",
+  "required": ["schema_version", "dataset_id", "queries"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "dataset_id": {"type": "string", "minLength": 1},
+    "queries": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/query"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "nullableTaskType": {"type": ["string", "null"]},
+    "nullableText": {
+      "type": ["string", "null"],
+      "description": "Optional. The text signal is skipped (left out of the denominator) when either the query ticket or the candidate has neither title nor description."
+    },
+    "query": {
+      "type": "object",
+      "required": [
+        "query_id",
+        "event_group",
+        "query_ticket",
+        "retrieval",
+        "candidates",
+        "ground_truth",
+        "provisional_expectation",
+        "observed_hint_behavior"
+      ],
+      "properties": {
+        "query_id": {"type": "string", "minLength": 1},
+        "event_group": {
+          "type": "string",
+          "description": "Disaster or incident group used for leakage-safe train/validation splitting."
+        },
+        "query_ticket": {
+          "type": "object",
+          "required": ["ticket_id", "created_at", "task_type"],
+          "properties": {
+            "ticket_id": {"type": "string"},
+            "created_at": {"type": "string", "format": "date-time"},
+            "task_type": {"$ref": "#/$defs/nullableTaskType"},
+            "title": {"$ref": "#/$defs/nullableText"},
+            "description": {"$ref": "#/$defs/nullableText"}
+          },
+          "additionalProperties": false
+        },
+        "retrieval": {
+          "type": "object",
+          "required": ["was_executed", "fail_open_reason", "candidate_ids"],
+          "properties": {
+            "was_executed": {"type": "boolean"},
+            "fail_open_reason": {"type": ["string", "null"]},
+            "candidate_ids": {
+              "type": "array",
+              "items": {"type": "string"},
+              "uniqueItems": true,
+              "description": "Candidates actually returned by the production-equivalent nearby/open query."
+            }
+          },
+          "additionalProperties": false
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ticket_id", "distance_m", "age_min", "task_type"],
+            "properties": {
+              "ticket_id": {"type": "string"},
+              "distance_m": {"type": "number", "minimum": 0},
+              "age_min": {"type": "number", "minimum": 0},
+              "task_type": {"$ref": "#/$defs/nullableTaskType"},
+              "title": {"$ref": "#/$defs/nullableText"},
+              "description": {"$ref": "#/$defs/nullableText"},
+              "text_similarity": {
+                "type": ["number", "null"],
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Optional precomputed pg_trgm similarity against the query ticket; overrides title/description when present."
+              },
+              "same_contact_phone": {
+                "type": ["boolean", "null"],
+                "description": "Optional. true when both tickets have a contact phone and they are the same number (digits only); false when both have one and they differ; null or absent when either side has none. Only true earns the phone bonus."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "ground_truth": {
+          "type": "object",
+          "required": [
+            "adjudication_complete",
+            "confirmed_duplicate_candidate_ids",
+            "rejected_candidate_ids"
+          ],
+          "properties": {
+            "adjudication_complete": {"type": "boolean"},
+            "confirmed_duplicate_candidate_ids": {
+              "type": "array",
+              "items": {"type": "string"},
+              "uniqueItems": true,
+              "description": "Only admin-confirmed duplicate pairs belong here, including a known duplicate missed by retrieval."
+            },
+            "rejected_candidate_ids": {
+              "type": "array",
+              "items": {"type": "string"},
+              "uniqueItems": true,
+              "description": "Only admin-rejected pairs belong here."
+            }
+          },
+          "additionalProperties": false
+        },
+        "provisional_expectation": {
+          "type": "object",
+          "required": ["class", "duplicate_candidate_ids", "source"],
+          "properties": {
+            "class": {"enum": ["duplicate", "distinct", "unknown"]},
+            "duplicate_candidate_ids": {
+              "type": "array",
+              "items": {"type": "string"},
+              "uniqueItems": true
+            },
+            "source": {"type": "string"},
+            "legacy_expected_behavior": {"type": ["string", "null"]}
+          },
+          "additionalProperties": false
+        },
+        "observed_hint_behavior": {
+          "type": "object",
+          "required": ["hint_was_shown", "hinted_candidate_id", "outcome"],
+          "properties": {
+            "hint_was_shown": {"type": ["boolean", "null"]},
+            "hinted_candidate_id": {"type": ["string", "null"]},
+            "outcome": {
+              "enum": ["accepted_hint", "ignored_hint", "no_hint", "not_observed"]
+            }
+          },
+          "additionalProperties": false,
+          "description": "Behavioral telemetry only; never promoted to duplicate ground truth."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

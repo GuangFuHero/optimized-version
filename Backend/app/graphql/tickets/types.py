@@ -4,6 +4,7 @@ import asyncio
 import enum
 from datetime import datetime
 from types import SimpleNamespace
+from typing import Annotated
 from uuid import UUID
 
 import strawberry
@@ -15,6 +16,7 @@ from app.db.h3 import COARSE_MAX_H3_RESOLUTION
 from app.graphql.masking import mask_email, mask_name, mask_phone
 from app.graphql.scalars import GeoJSON, geom_to_geojson
 from app.graphql.shared import (
+    DuplicatesSuspected,
     PageInfo,
     SecondaryLocationInput,
     SecondaryLocationType,
@@ -942,11 +944,52 @@ class MyTaskAssignmentType:
 
 
 @strawberry.type
+class TicketCreated:
+    """`createTicket` created the ticket and all its tasks, in the order sent."""
+
+    ticket: TicketType
+    tasks: list[TicketTaskType]
+
+
+@strawberry.type
+class TicketTaskCreated:
+    """`createTicketTask` added the task."""
+
+    task: TicketTaskType
+
+
+CreateTicketResult = Annotated[TicketCreated | DuplicatesSuspected, strawberry.union("CreateTicketResult")]
+CreateTicketTaskResult = Annotated[
+    TicketTaskCreated | DuplicatesSuspected, strawberry.union("CreateTicketTaskResult")
+]
+
+
+@strawberry.type
 class TicketConnection:
     """Paginated list of tickets with page metadata."""
 
     items: list[TicketType]
     page_info: PageInfo
+
+
+@strawberry.input
+class CreateTicketTaskDraft:
+    """A task sent with a new ticket."""
+
+    task_type: str = strawberry.field(description="Category: 'rescue', 'supply', 'medical', or 'hr'")
+    task_name: str
+    task_description: str | None = None
+    quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
+    source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
+    visibility: Visibility = strawberry.field(default=Visibility.public)
+    route_uuid: UUID | None = None
+    acknowledged_duplicate_of: str | None = strawberry.field(
+        default=None,
+        description=(
+            "Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); "
+            "not checked again"
+        ),
+    )
 
 
 @strawberry.input
@@ -1006,6 +1049,12 @@ class CreateTicketInput:
             "Street address and space detail for where help is needed. New in feature 018 — "
             "before it, only stations could carry one, so the record that most needs a door "
             "number had nothing but a map pin"
+        ),
+    )
+    tasks: list[CreateTicketTaskDraft] = strawberry.field(
+        default_factory=list,
+        description=(
+            "The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates"
         ),
     )
 

@@ -9,6 +9,7 @@ openspec
 
 # Local editor settings
 .vscode/
+.zed/
 Frontend/.vscode/
 
 # Local workflow tooling

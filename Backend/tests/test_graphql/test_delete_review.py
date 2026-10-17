@@ -10,7 +10,9 @@ import pytest
 from tests.test_graphql.conftest import auth_header
 
 CREATE_TICKET = """
-mutation($input: CreateTicketInput!) { createTicket(input: $input) { uuid } }
+mutation($input: CreateTicketInput!) {
+    createTicket(input: $input) { ... on TicketCreated { ticket { uuid } } }
+}
 """
 DELETE_TICKET = "mutation($uuid: UUID!) { deleteTicket(uuid: $uuid) }"
 GET_TICKET = "query($uuid: UUID!) { ticket(uuid: $uuid) { uuid status } }"
@@ -41,7 +43,7 @@ async def _create_ticket(client, token: str) -> str:
         },
         headers=auth_header(token),
     )
-    return resp.json()["data"]["createTicket"]["uuid"]
+    return resp.json()["data"]["createTicket"]["ticket"]["uuid"]
 
 
 @pytest.mark.asyncio

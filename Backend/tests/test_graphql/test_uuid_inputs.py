@@ -27,14 +27,24 @@ CASES = {
         {"stationUuid": "STATION", "itemUuid": "ZAP", "rating": "up"},
     ),
     "ticket task": (
-        "createTicketTask(input: $input) { uuid }",
+        "createTicketTask(input: $input) { __typename }",
         "CreateTicketTaskInput",
         {"ticketUuid": "ZAP", "taskType": "hr", "taskName": "Need medics"},
     ),
     "ticket task route": (
-        "createTicketTask(input: $input) { uuid }",
+        "createTicketTask(input: $input) { __typename }",
         "CreateTicketTaskInput",
         {"ticketUuid": "TICKET", "taskType": "hr", "taskName": "Need medics", "routeUuid": "ZAP"},
+    ),
+    "new ticket's task route": (
+        "createTicket(input: $input) { __typename }",
+        "CreateTicketInput",
+        {
+            "title": "Flooded",
+            "geometry": {"type": "Point", "coordinates": [121.42, 23.67]},
+            "contactName": "Lee",
+            "tasks": [{"taskType": "hr", "taskName": "Need medics", "routeUuid": "ZAP"}],
+        },
     ),
     "task property": (
         "createTaskProperty(input: $input) { uuid }",
@@ -52,7 +62,9 @@ async def test_malformed_uuid_is_a_coercion_error(
     _, token = coordinator_auth
     field, input_type, values = CASES[case]
     real = {"STATION": sample_station, "TICKET": sample_ticket}
-    values = {key: real.get(value, value) for key, value in values.items()}
+    values = {
+        key: real.get(value, value) if isinstance(value, str) else value for key, value in values.items()
+    }
 
     resp = await client.post(
         "/graphql",

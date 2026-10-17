@@ -12,7 +12,7 @@ from tests.test_graphql.conftest import auth_header
 
 CREATE_TICKET = """
 mutation($input: CreateTicketInput!) {
-    createTicket(input: $input) { uuid title status priority }
+    createTicket(input: $input) { ... on TicketCreated { ticket { uuid title status priority } } }
 }
 """
 
@@ -32,7 +32,7 @@ query($stationType: String!) { stationPropertyConfigs(stationType: $stationType)
 
 CREATE_STATION = """
 mutation($input: CreateStationInput!) {
-    createStation(input: $input) { uuid }
+    createStation(input: $input) { ... on StationCreated { station { uuid } } }
 }
 """
 
@@ -71,7 +71,7 @@ async def _create_station(client, token: str) -> str:
         },
         headers=auth_header(token),
     )
-    return resp.json()["data"]["createStation"]["uuid"]
+    return resp.json()["data"]["createStation"]["station"]["uuid"]
 
 
 async def _create_ticket(client, token: str, title: str) -> str:
@@ -91,7 +91,7 @@ async def _create_ticket(client, token: str, title: str) -> str:
         },
         headers=auth_header(token),
     )
-    return resp.json()["data"]["createTicket"]["uuid"]
+    return resp.json()["data"]["createTicket"]["ticket"]["uuid"]
 
 
 @pytest.mark.asyncio
@@ -429,7 +429,7 @@ async def test_create_station_stores_contact_stripped(
     )
     body = resp.json()
     assert "errors" not in body, body
-    station_uuid = body["data"]["createStation"]["uuid"]
+    station_uuid = body["data"]["createStation"]["station"]["uuid"]
 
     resp = await client.post(
         "/graphql",
@@ -469,7 +469,7 @@ async def test_create_station_blank_contact_stores_null(client, coordinator_auth
     )
     body = resp.json()
     assert "errors" not in body, body
-    station_uuid = body["data"]["createStation"]["uuid"]
+    station_uuid = body["data"]["createStation"]["station"]["uuid"]
 
     resp = await client.post(
         "/graphql",

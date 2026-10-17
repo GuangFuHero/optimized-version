@@ -45,9 +45,9 @@ query ($disasterTypes: [String!]!) {
 
 CREATE_TICKET = """
 mutation ($input: CreateTicketInput!) {
-  createTicket(input: $input) {
+  createTicket(input: $input) { ... on TicketCreated { ticket {
     uuid disasterTypes personTrappedReported immediateDangerReported
-  }
+  } } }
 }
 """
 
@@ -200,7 +200,7 @@ async def _create_ticket(client, token, **overrides) -> dict:
     }, headers=auth_header(token))
     body = resp.json()
     assert body.get("errors") is None, body
-    return body["data"]["createTicket"]
+    return body["data"]["createTicket"]["ticket"]
 
 
 # --------------------------------------------------------------------------------------

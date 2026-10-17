@@ -10,16 +10,20 @@ from uuid import UUID
 import strawberry
 
 from app.graphql.context import require_authenticated
-from app.graphql.shared import secondary_location_to_dict
+from app.graphql.shared import DuplicatesSuspected, secondary_location_to_dict
 from app.graphql.tickets.types import (
     CreateHelpRequestInput,
     CreateTaskPropertyInput,
     CreateTicketInput,
+    CreateTicketResult,
     CreateTicketTaskInput,
+    CreateTicketTaskResult,
     TaskAssignmentType,
     TaskPropertyType,
+    TicketCreated,
     TicketDisasterDetailInput,
     TicketDisasterDetailType,
+    TicketTaskCreated,
     TicketTaskType,
     TicketType,
     UpdateTaskAssignmentInput,
@@ -28,6 +32,7 @@ from app.graphql.tickets.types import (
     UpdateTicketTaskInput,
 )
 from app.services import ticket as ticket_service
+from app.services.dedup_submission import SubmissionHeld, TaskSubmission, submit_new_task, submit_new_ticket
 
 
 @strawberry.type
@@ -35,17 +40,32 @@ class RequestMutation:
     """Mutations for creating and updating disaster relief support tickets."""
 
     @strawberry.mutation
-    async def create_ticket(self, info: strawberry.types.Info, input: CreateTicketInput) -> TicketType:
-        """Create a new support ticket with location, contact info, and priority.
+    async def create_ticket(
+        self, info: strawberry.types.Info, input: CreateTicketInput
+    ) -> CreateTicketResult:
+        """Create a support ticket with its tasks — unless any task looks like an open one nearby.
 
-        Requires ticket.add permission. Returns the created TicketType.
+        Two-phase. If any task looks like an open task nearby, nothing is created and
+        `DuplicatesSuspected` lists each suspect: which part of the input (`draftRef`) and what it
+        looks like. Send the same input again after editing, or with `acknowledgedDuplicateOf` set
+        on each task confirmed not to be a duplicate; a task whose acknowledged entity exists is
+        not checked again and the pair is recorded for review. Otherwise the ticket and all its
+        tasks are created together (`TicketCreated`). A failing duplicate check never blocks.
+        Requires ticket.add.
         """
-        ticket = await ticket_service.create_ticket(
-            info.context["db"], actor=require_authenticated(info),
-            geometry=input.geometry, title=input.title, description=input.description,
-            contact_name=input.contact_name, contact_email=input.contact_email,
-            contact_phone=input.contact_phone, priority=input.priority,
-            task_type=input.task_type, visibility=input.visibility.value,
+        result = await submit_new_ticket(
+            info.context["db"],
+            actor=require_authenticated(info),
+            tasks=[_task_submission(task) for task in input.tasks],
+            geometry=input.geometry,
+            title=input.title,
+            description=input.description,
+            contact_name=input.contact_name,
+            contact_email=input.contact_email,
+            contact_phone=input.contact_phone,
+            priority=input.priority,
+            task_type=input.task_type,
+            visibility=input.visibility.value,
             disaster_types=input.disaster_types,
             person_trapped_reported=(
                 input.person_trapped_reported.value if input.person_trapped_reported else None
@@ -60,7 +80,12 @@ class RequestMutation:
             ),
             building_map_uuid=str(input.building_map_uuid) if input.building_map_uuid else None,
         )
-        return TicketType.from_model(ticket)
+        if isinstance(result, SubmissionHeld):
+            return DuplicatesSuspected.of(result.suspects)
+        return TicketCreated(
+            ticket=TicketType.from_model(result.entity),
+            tasks=[TicketTaskType.from_model(task) for task in result.tasks],
+        )
 
     @strawberry.mutation
     async def create_help_request(
@@ -72,9 +97,13 @@ class RequestMutation:
         app/services/ticket.py::create_help_request for the rules.
         """
         ticket = await ticket_service.create_help_request(
-            info.context["db"], actor=require_authenticated(info),
-            geometry=input.geometry, title=input.title, description=input.description,
-            contact_name=input.contact_name, contact_phone=input.contact_phone,
+            info.context["db"],
+            actor=require_authenticated(info),
+            geometry=input.geometry,
+            title=input.title,
+            description=input.description,
+            contact_name=input.contact_name,
+            contact_phone=input.contact_phone,
             secondary_location=(
                 secondary_location_to_dict(input.secondary_location)
                 if input.secondary_location is not None
@@ -125,8 +154,10 @@ class RequestMutation:
                 changes[field] = val.value if val is not None else None
 
         ticket = await ticket_service.update_ticket(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), changes=changes,
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
+            changes=changes,
             secondary_location=(
                 secondary_location_to_dict(input.secondary_location)
                 if input.secondary_location is not None
@@ -159,7 +190,9 @@ class RequestMutation:
         for detail in details:
             merged.setdefault(detail.property_name, []).extend(detail.values)
         rows = await ticket_service.set_ticket_disaster_details(
-            info.context["db"], actor=require_authenticated(info), ticket_uuid=str(uuid),
+            info.context["db"],
+            actor=require_authenticated(info),
+            ticket_uuid=str(uuid),
             details=merged,
         )
         return [TicketDisasterDetailType.from_model(r) for r in rows]
@@ -178,8 +211,11 @@ class RequestMutation:
         Returns the updated TicketType.
         """
         ticket = await ticket_service.review_ticket(
-            info.context["db"], actor=require_authenticated(info),
-            uuid=str(uuid), verification_status=verification_status, review_note=review_note,
+            info.context["db"],
+            actor=require_authenticated(info),
+            uuid=str(uuid),
+            verification_status=verification_status,
+            review_note=review_note,
         )
         return TicketType.from_model(ticket)
 
@@ -201,22 +237,37 @@ class TicketTaskMutation:
 
     @strawberry.mutation
     async def create_ticket_task(
-        self, info: strawberry.types.Info, input: CreateTicketTaskInput
-    ) -> TicketTaskType:
+        self,
+        info: strawberry.types.Info,
+        input: CreateTicketTaskInput,
+        acknowledged_duplicate_of: str | None = None,
+    ) -> CreateTicketTaskResult:
         """Add a need (rescue, HR, supply, etc.) to an existing ticket — the site's 再加一件.
 
-        Requires ticket.edit on the ticket: a signed-in citizen adds to their own ticket only.
-        A completed ticket is open again once it has the new need; a deleted one takes none.
-        Returns the created TicketTaskType.
+        Two-phase: `DuplicatesSuspected` (nothing added) when it looks like an open task of
+        another ticket; send again with `acknowledgedDuplicateOf` to add it anyway. The ticket's
+        own tasks are never suspects. Requires ticket.edit on the ticket: a signed-in citizen adds
+        to their own ticket only. A completed ticket is open again once it has the new need; a
+        deleted or cancelled one takes none.
         """
-        task = await ticket_service.create_ticket_task(
-            info.context["db"], actor=require_authenticated(info),
-            ticket_uuid=str(input.ticket_uuid), task_type=input.task_type, task_name=input.task_name,
-            task_description=input.task_description, quantity=input.quantity,
-            source=input.source, visibility=input.visibility.value,
-            route_uuid=str(input.route_uuid) if input.route_uuid else None,
+        result = await submit_new_task(
+            info.context["db"],
+            actor=require_authenticated(info),
+            ticket_uuid=str(input.ticket_uuid),
+            task=TaskSubmission(
+                task_type=input.task_type,
+                task_name=input.task_name,
+                task_description=input.task_description,
+                quantity=input.quantity,
+                source=input.source,
+                visibility=input.visibility.value,
+                route_uuid=str(input.route_uuid) if input.route_uuid else None,
+                acknowledged_duplicate_of=acknowledged_duplicate_of,
+            ),
         )
-        return TicketTaskType.from_model(task)
+        if isinstance(result, SubmissionHeld):
+            return DuplicatesSuspected.of(result.suspects)
+        return TicketTaskCreated(task=TicketTaskType.from_model(result.entity))
 
     @strawberry.mutation
     async def update_ticket_task(
@@ -267,9 +318,13 @@ class TicketTaskMutation:
         TaskPropertyType.
         """
         prop = await ticket_service.create_task_property(
-            info.context["db"], actor=require_authenticated(info),
-            task_uuid=str(input.task_uuid), property_name=input.property_name,
-            property_value=input.property_value, quantity=input.quantity, comment=input.comment,
+            info.context["db"],
+            actor=require_authenticated(info),
+            task_uuid=str(input.task_uuid),
+            property_name=input.property_name,
+            property_value=input.property_value,
+            quantity=input.quantity,
+            comment=input.comment,
         )
         return TaskPropertyType.from_model(prop)
 
@@ -317,7 +372,8 @@ class TicketTaskMutation:
         twice. Returns the new assignment.
         """
         assignment = await ticket_service.assign_task_actor(
-            info.context["db"], actor=require_authenticated(info),
+            info.context["db"],
+            actor=require_authenticated(info),
             task_uuid=str(task_uuid),
             actor_uuid=str(actor_uuid) if actor_uuid else None,
             role=role,
@@ -373,3 +429,17 @@ class TicketTaskMutation:
             info.context["db"], actor=require_authenticated(info), task_uuid=str(task_uuid)
         )
         return TicketTaskType.from_model(task)
+
+
+def _task_submission(draft) -> TaskSubmission:
+    """Convert a `CreateTicketTaskDraft` into the service's `TaskSubmission`."""
+    return TaskSubmission(
+        task_type=draft.task_type,
+        task_name=draft.task_name,
+        task_description=draft.task_description,
+        quantity=draft.quantity,
+        source=draft.source,
+        visibility=draft.visibility.value,
+        route_uuid=str(draft.route_uuid) if draft.route_uuid else None,
+        acknowledged_duplicate_of=draft.acknowledged_duplicate_of,
+    )
