@@ -26,6 +26,17 @@ export interface AvatarProps extends Omit<MuiAvatarProps, 'children'> {
   tone?: AvatarTone;
 }
 
+/** What an avatar without a picture shows: the first letter of each of the name's first two words. */
+export function nameInitials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .map((word) => word[0] ?? '')
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
 export function Avatar({
   name = '',
   size = 40,
@@ -34,13 +45,7 @@ export function Avatar({
   ...rest
 }: AvatarProps) {
   const t = TONES[tone];
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .map((word) => word[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  const initials = nameInitials(name);
 
   return (
     <MuiAvatar

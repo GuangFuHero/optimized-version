@@ -60,28 +60,39 @@ export function reloginHref({
   return `/login?callbackUrl=${callbackUrl}`;
 }
 
-/** next-auth's `useSession().status`, spelled out so this file stays import-free. */
+/** `useAuthSession().status` (`auth-session.tsx`), spelled out so this file stays import-free. */
 export type SessionStatus = 'authenticated' | 'unauthenticated' | 'loading';
 
+/** What the reload rule reads of `useAuthSession()`. */
+export interface SessionSeen {
+  status: SessionStatus;
+  user: { uuid: string } | null;
+}
+
 /**
- * Another tab signed out — on its own, or because its session ended — and next-auth told this one
- * (its sign-out broadcast, or a refetch on focus): reload, so urql's cache stops showing what the
- * signed-in person could see. Only from `authenticated`:
- * `loading` is a page still reading its session, not a sign-out.
+ * The person this tab shows is no longer the one signed in — another tab signed out (on its own,
+ * or because its session ended), or signed out and in as someone else — and this tab has just
+ * read its session again (the other tab's broadcast, or a check on focus): reload, so urql's cache
+ * stops showing what the first person could see. A tab left in the background may go straight
+ * from one person to the next without ever seeing the guest in between.
+ *
+ * Only from `authenticated`: a guest tab holds nothing private, and one that another tab signs in
+ * just shows the person. `loading` is a page still reading its session, not a sign-out.
  */
 export function shouldReloadForSignOut({
   previous,
   current,
   signingOutHere,
 }: {
-  previous: SessionStatus;
-  current: SessionStatus;
+  previous: SessionSeen;
+  current: SessionSeen;
   /** This tab started the sign-out and reloads by itself. */
   signingOutHere: boolean;
 }): boolean {
   return (
-    previous === 'authenticated' &&
-    current === 'unauthenticated' &&
+    previous.status === 'authenticated' &&
+    current.status !== 'loading' &&
+    current.user?.uuid !== previous.user?.uuid &&
     !signingOutHere
   );
 }

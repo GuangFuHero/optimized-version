@@ -12,6 +12,7 @@ import {
   resendVerificationAsync,
   verifyAsync,
 } from '../api/client';
+import { useAuthSession } from '../../session/auth-session';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
 import { createHashedCredentialAsync } from './credentials';
@@ -42,6 +43,7 @@ interface PendingRegistration {
 export function RegisterFormClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { refetch: refetchSession } = useAuthSession();
   // The page the login page was asked to return to, carried here — a guest who pressed 「登入後接」
   // and had no account yet lands back on that ticket. Nothing asked: the map.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
@@ -106,6 +108,8 @@ export function RegisterFormClient() {
 
       setVerificationSuccess('帳號驗證完成，正在登入。');
 
+      // Nothing else tells this tab it is signed in now (next-auth's provider used to).
+      await refetchSession();
       startTransition(() => {
         router.replace(result?.url ?? callbackUrl, { scroll: false });
       });

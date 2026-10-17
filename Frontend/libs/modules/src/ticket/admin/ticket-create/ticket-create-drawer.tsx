@@ -18,7 +18,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useSession } from 'next-auth/react';
+
+import { useAuthSession } from '../../../session/auth-session';
 
 import {
   useCreateTicket,
@@ -316,7 +317,7 @@ export function TicketCreateDrawer({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
   const createTicket = useCreateTicket();
-  const { status: authStatus } = useSession();
+  const { status: authStatus } = useAuthSession();
   const reverseGeocodeRequestKeyRef = useRef<string | null>(null);
 
   const isSubmitting = createTicket.isPending;

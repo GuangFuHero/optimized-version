@@ -12,6 +12,7 @@ import {
   LoginForm,
   signedInMessage,
 } from './index';
+import { useAuthSession } from '../../session/auth-session';
 import { sessionStorageOrNull } from '../../session/end-expired-session';
 import { takeSessionExpired } from '@rescue-frontend/modules/session';
 import { messageForCode } from '../api/error-messages';
@@ -70,6 +71,7 @@ export function LoginFormClient({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { refetch: refetchSession } = useAuthSession();
   // Set by the page that sent the user here — a guest's 「登入後接」 among them — and kept if they
   // register instead, or go through a forgotten password.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
@@ -131,6 +133,8 @@ export function LoginFormClient({
             );
           }
 
+          // Nothing else tells this tab it is signed in now (next-auth's provider used to).
+          await refetchSession();
           startTransition(() => {
             router.replace(result?.url ?? callbackUrl, { scroll: false });
           });

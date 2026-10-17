@@ -15,32 +15,34 @@ import {
   shouldReloadForSignOut,
 } from '@rescue-frontend/modules/session';
 import { useRouter } from 'next/navigation';
-import { signOut, useSession } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 
+import { useAuthSession } from '../../session/auth-session';
 import { logoutAsync } from '../api/client';
 
 export function PortalSiteShell({ children }: { children: ReactNode }) {
-  const { data: session, status } = useSession();
+  const { status, user } = useAuthSession();
   const router = useRouter();
-  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
-  const previousStatus = useRef(status);
+  const isAuthenticated = status === 'authenticated' && !!user;
+  const previousSession = useRef({ status, user });
 
-  // Signed out in another tab — from its menu, or because its session ended — and next-auth has
-  // told this one. Reload as handleSignOut does, without a notice: that is for the tab it ended in.
+  // Signed out in another tab — from its menu, or because its session ended — or signed in there
+  // as someone else, and this tab has read its session again. Reload as handleSignOut does,
+  // without a notice: that is for the tab it ended in.
   useEffect(() => {
-    const previous = previousStatus.current;
-    previousStatus.current = status;
+    const previous = previousSession.current;
+    previousSession.current = { status, user };
 
     if (
       shouldReloadForSignOut({
         previous,
-        current: status,
+        current: { status, user },
         signingOutHere: isSigningOutHere(),
       })
     ) {
       window.location.reload();
     }
-  }, [status]);
+  }, [status, user]);
 
   const handleSignOut = () => {
     // Its own reload below; the watch above must not add another.
@@ -74,8 +76,7 @@ export function PortalSiteShell({ children }: { children: ReactNode }) {
     <>
       <SiteShell
         isAuthenticated={isAuthenticated}
-        userName={session?.user?.name ?? undefined}
-        userImage={session?.user?.image ?? undefined}
+        userName={user?.name}
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
       >

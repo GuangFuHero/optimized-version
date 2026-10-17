@@ -13,7 +13,12 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  Icons,
+  nameInitials,
+} from '@rescue-frontend/ui';
 
 import { MyTasksDrawer } from '../../ticket/my-claims/my-tasks-drawer';
 
@@ -84,7 +89,12 @@ export function SiteUserMenu({
             border: `1px solid ${color.border.default}`,
           }}
         >
-          {!userImage ? <PersonIcon sx={{ fontSize: 20 }} /> : null}
+          {/* No picture since the login moved to the backend (`/users/me` has none): the name's initials. */}
+          {!userImage
+            ? nameInitials(userName ?? '') || (
+                <PersonIcon sx={{ fontSize: 20 }} />
+              )
+            : null}
         </Avatar>
       </ButtonBase>
 

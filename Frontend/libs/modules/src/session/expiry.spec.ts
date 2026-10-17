@@ -10,14 +10,22 @@ import {
   shouldReloadForSignOut,
   takeSessionExpired,
   type FlagStorage,
+  type SessionSeen,
 } from './expiry';
 
 describe('shouldReloadForSignOut', () => {
+  const signedInAs = (uuid: string): SessionSeen => ({
+    status: 'authenticated',
+    user: { uuid },
+  });
+  const guest: SessionSeen = { status: 'unauthenticated', user: null };
+  const loading: SessionSeen = { status: 'loading', user: null };
+
   it('reloads a tab whose session another tab signed out', () => {
     expect(
       shouldReloadForSignOut({
-        previous: 'authenticated',
-        current: 'unauthenticated',
+        previous: signedInAs('u-a'),
+        current: guest,
         signingOutHere: false,
       }),
     ).toBe(true);
@@ -26,8 +34,8 @@ describe('shouldReloadForSignOut', () => {
   it('leaves the signing-out tab to its own reload', () => {
     expect(
       shouldReloadForSignOut({
-        previous: 'authenticated',
-        current: 'unauthenticated',
+        previous: signedInAs('u-a'),
+        current: guest,
         signingOutHere: true,
       }),
     ).toBe(false);
@@ -36,8 +44,8 @@ describe('shouldReloadForSignOut', () => {
   it('leaves a guest arriving alone: loading is not a sign-out', () => {
     expect(
       shouldReloadForSignOut({
-        previous: 'loading',
-        current: 'unauthenticated',
+        previous: loading,
+        current: guest,
         signingOutHere: false,
       }),
     ).toBe(false);
@@ -46,8 +54,8 @@ describe('shouldReloadForSignOut', () => {
   it('waits out a session being read again', () => {
     expect(
       shouldReloadForSignOut({
-        previous: 'authenticated',
-        current: 'loading',
+        previous: signedInAs('u-a'),
+        current: loading,
         signingOutHere: false,
       }),
     ).toBe(false);
@@ -56,11 +64,23 @@ describe('shouldReloadForSignOut', () => {
   it('leaves a guest tab alone when another tab signs in: it holds nothing private', () => {
     expect(
       shouldReloadForSignOut({
-        previous: 'unauthenticated',
-        current: 'authenticated',
+        previous: guest,
+        current: signedInAs('u-a'),
         signingOutHere: false,
       }),
     ).toBe(false);
+  });
+
+  it('reloads a tab that next finds someone else signed in', () => {
+    // A tab left in the background checks only when it comes back (focus), and may never see the
+    // guest in between: what it shows is still the first person's.
+    expect(
+      shouldReloadForSignOut({
+        previous: signedInAs('u-a'),
+        current: signedInAs('u-b'),
+        signingOutHere: false,
+      }),
+    ).toBe(true);
   });
 });
 

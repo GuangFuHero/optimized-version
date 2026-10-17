@@ -107,6 +107,7 @@ export {
   sessionStorageOrNull,
 } from './session/end-expired-session';
 export { SessionExpiredNotice } from './session/session-expired-notice';
+export { AuthSessionProvider, useAuthSession } from './session/auth-session';
 
 export {
   SiteActionDrawer,
