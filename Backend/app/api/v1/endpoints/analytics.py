@@ -290,7 +290,7 @@ async def _data_domain(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
     x_values, series = chart_render.chart_series(domain, y.value, data)
     return DataResponse(
-        x=resolved_x,
+        x=resolved_x or chart_render.CATALOG[domain][y.value].get("grouping"),
         x_values=x_values,
         series=[
             {"name": name, "values": [_in_catalog_unit(domain, y, v) for v in values]}

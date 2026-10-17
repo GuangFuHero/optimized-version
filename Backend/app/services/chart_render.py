@@ -65,6 +65,7 @@ _TICKET_CATALOG = {
         "label": "未結案等待時間", "unit": "件", "description": "未完成任務單自建立至今的時長",
         "allowed_x": (None,),  # forced shape: always grouped by age bucket internally
         "default_chart_type": "bar", "allowed_chart_types": ("bar",),
+        "grouping": "age_bucket",  # /data's `x`, since x=None still returns grouped rows
     },
     "time_to_completion": {
         "label": "處理時長", "unit": "天", "description": "建立到完成的平均與中位數",
@@ -80,6 +81,7 @@ _TICKET_CATALOG = {
         "label": "子任務完成比例", "unit": "項", "description": "以子任務計，非任務單",
         "allowed_x": (None,),  # forced shape: fixed completed/remaining pie
         "default_chart_type": "pie", "allowed_chart_types": ("pie",),
+        "grouping": "completion",  # /data's `x`, since x=None still returns grouped rows
     },
     "duplicate_count": {
         "label": "疑似重複", "unit": "件", "description": "位置、類型、時間相近的任務單",

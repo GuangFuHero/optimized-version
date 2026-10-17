@@ -753,8 +753,16 @@ async def test_data_reports_the_grouping_it_applied(client, db_session, redis):
         TICKETS_DATA_URL, params={"y": "task_completion_distribution", "x": "date"}, headers=headers
     )
     assert res.status_code == 200
-    assert res.json()["x"] is None
+    assert res.json()["x"] == "completion"
     assert res.json()["x_values"] == ["已完成", "未完成"]
+
+    res = await client.get(TICKETS_DATA_URL, params={"y": "age_distribution"}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["x"] == "age_bucket"
+
+    res = await client.get(TICKETS_DATA_URL, params={"y": "total_tickets"}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["x"] is None
 
     res = await client.get(TICKETS_DATA_URL, params={"y": "net_backlog_change"}, headers=headers)
     assert res.status_code == 200

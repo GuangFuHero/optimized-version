@@ -134,12 +134,14 @@ class DataResponse(BaseModel):
     """The numbers a chart of the metric plots, for a frontend that draws its own."""
 
     x: str | None = Field(
-        description="The grouping actually applied: 'date', 'category', or null for one aggregate. "
+        description="The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' "
+        "(the two metrics with a built-in grouping), or null for one aggregate. "
         "It can differ from the requested `x`, which is ignored where it doesn't apply."
     )
     x_values: list[str | datetime | None] = Field(
         description="Axis values in display order: bucket starts as wall-clock time in the request's `tz`, "
-        "with no UTC offset, when x is 'date'; otherwise zh-TW category names, or ['總計'] for an aggregate."
+        "with no UTC offset, when x is 'date'; otherwise category or bucket names (zh-TW where the glossary "
+        "has them), or ['總計'] for an aggregate."
     )
     series: list[ChartSeries]
 
