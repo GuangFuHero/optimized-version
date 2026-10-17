@@ -10,12 +10,15 @@ import { AuthFormError, authHref, RegisterForm } from './index';
 import {
   registerAsync,
   resendVerificationAsync,
+  verifyAndSignInAsync,
   verifyAsync,
 } from '../api/client';
 import { useAuthSession } from '../../session/auth-session';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
+import { useContinueSignedIn } from './continue-signed-in';
 import { createHashedCredentialAsync } from './credentials';
+import { safeReturnPath } from './utils/return-path';
 
 const IDENTITY_TAKEN_MESSAGE: Record<AuthIdentityType, string> = {
   email:
@@ -40,10 +43,19 @@ interface PendingRegistration {
   normalizedIdentity: string;
 }
 
-export function RegisterFormClient() {
+/**
+ * Who signs the new account in: next-auth by default, the back office's way until its own move to
+ * the backend login (③); or the backend, which does it in the same request that takes the code.
+ */
+export function RegisterFormClient({
+  signInWith = 'next-auth',
+}: {
+  signInWith?: 'next-auth' | 'backend';
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refetch: refetchSession } = useAuthSession();
+  const continueSignedIn = useContinueSignedIn();
   // The page the login page was asked to return to, carried here — a guest who pressed 「登入後接」
   // and had no account yet lands back on that ticket. Nothing asked: the map.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
@@ -73,6 +85,18 @@ export function RegisterFormClient() {
     setVerificationSuccess(undefined);
 
     try {
+      if (signInWith === 'backend') {
+        // One request: when it fails no account was made, never one made and left signed out.
+        await verifyAndSignInAsync({
+          type: pendingRegistration.identityType,
+          value: pendingRegistration.normalizedIdentity,
+          code,
+        });
+        setVerificationSuccess('帳號驗證完成，正在登入。');
+        await continueSignedIn(safeReturnPath(requestedCallbackUrl, '/map'));
+        return;
+      }
+
       const tokenPair = await verifyAsync({
         type: pendingRegistration.identityType,
         value: pendingRegistration.normalizedIdentity,

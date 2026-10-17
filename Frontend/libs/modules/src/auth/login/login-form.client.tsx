@@ -12,20 +12,38 @@ import {
   LoginForm,
   signedInMessage,
 } from './index';
+import { signInAsync } from '../api/client';
 import { useAuthSession } from '../../session/auth-session';
 import { sessionStorageOrNull } from '../../session/end-expired-session';
 import { takeSessionExpired } from '@rescue-frontend/modules/session';
+import { useContinueSignedIn } from './continue-signed-in';
 import { resolveHashedCredentialAsync } from './credentials';
-import { LOGIN_FALLBACK_MESSAGE, loginErrorMessage } from './utils/login-error';
+import {
+  LOGIN_FALLBACK_MESSAGE,
+  loginErrorMessage,
+  passwordSignInErrorMessage,
+} from './utils/login-error';
+import { oauthStartHref, safeReturnPath } from './utils/return-path';
+
+/**
+ * Who signs the form in: next-auth by default, the back office's way until its own move to the
+ * backend login (③); or the backend's cookies, for which Google and LINE need to know the app to
+ * send the person back to.
+ */
+export type SignInWith =
+  | { signInWith?: 'next-auth' }
+  | { signInWith: 'backend'; app: 'site' | 'admin' };
 
 export function LoginFormClient({
   defaultCallbackUrl = '/map',
+  ...auth
 }: {
   defaultCallbackUrl?: string;
-}) {
+} & SignInWith) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refetch: refetchSession } = useAuthSession();
+  const continueSignedIn = useContinueSignedIn();
   // Set by the page that sent the user here — a guest's 「登入後接」 among them — and kept if they
   // register instead, or go through a forgotten password.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
@@ -40,6 +58,22 @@ export function LoginFormClient({
       setSessionExpired(true);
     }
   }, []);
+
+  async function signInWithProviderAsync(provider: 'google' | 'line') {
+    if (auth.signInWith === 'backend') {
+      // A whole-page navigation: the backend sends the browser on to Google or LINE.
+      window.location.assign(
+        oauthStartHref(provider, {
+          app: auth.app,
+          callbackUrl: requestedCallbackUrl,
+          fallback: defaultCallbackUrl,
+        }),
+      );
+      return;
+    }
+
+    await signIn(provider, { callbackUrl });
+  }
 
   return (
     <Stack spacing={2}>
@@ -56,16 +90,12 @@ export function LoginFormClient({
           {
             provider: 'google',
             label: '使用 Google 繼續',
-            onClick: async () => {
-              await signIn('google', { callbackUrl });
-            },
+            onClick: () => signInWithProviderAsync('google'),
           },
           {
             provider: 'line',
             label: '使用 LINE 繼續',
-            onClick: async () => {
-              await signIn('line', { callbackUrl });
-            },
+            onClick: () => signInWithProviderAsync('line'),
           },
         ]}
         onSubmitAsync={async ({ normalizedIdentity, password }) => {
@@ -73,6 +103,23 @@ export function LoginFormClient({
             normalizedIdentity,
             password,
           );
+
+          if (auth.signInWith === 'backend') {
+            try {
+              await signInAsync({
+                username: normalizedIdentity,
+                password: hashedPassword,
+              });
+            } catch (error) {
+              throw new AuthFormError(passwordSignInErrorMessage(error));
+            }
+
+            // next-auth's redirect callback kept `?callbackUrl=` on this site; now nothing else does.
+            await continueSignedIn(
+              safeReturnPath(requestedCallbackUrl, defaultCallbackUrl),
+            );
+            return;
+          }
 
           const result = await signIn('credentials', {
             username: normalizedIdentity,

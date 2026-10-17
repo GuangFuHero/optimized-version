@@ -28,6 +28,24 @@ export function verifyAsync(payload: components['schemas']['VerifyRequest']) {
     .then(responseData);
 }
 
+/** Signs this browser in: the backend sets the `{p}_at` and `{p}_rt` cookies on its answer. */
+export function signInAsync(
+  payload: components['schemas']['SessionSignInRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/session', { body: payload })
+    .then(responseData);
+}
+
+/** Finishes a registration with its code and signs the new account in, as `signInAsync` does. */
+export function verifyAndSignInAsync(
+  payload: components['schemas']['VerifyRequest'],
+) {
+  return authApiClient
+    .POST('/api/v1/auth/session/verify', { body: payload })
+    .then(responseData);
+}
+
 export function resendVerificationAsync(
   payload: components['schemas']['ResendVerificationRequest'],
 ) {

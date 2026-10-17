@@ -1,6 +1,7 @@
+import { ApiError } from '@rescue-frontend/data-access';
 import { describe, expect, it } from 'vitest';
 
-import { loginErrorMessage } from './login-error';
+import { loginErrorMessage, passwordSignInErrorMessage } from './login-error';
 
 const GENERIC_MESSAGE = '登入流程發生錯誤，請稍後再試。';
 
@@ -38,5 +39,36 @@ describe('loginErrorMessage', () => {
 
   it('says nothing when the page came without an error', () => {
     expect(loginErrorMessage(null)).toBeUndefined();
+  });
+});
+
+// What `POST /auth/session` failing says on the login form, which signs the site in with the backend.
+describe('passwordSignInErrorMessage', () => {
+  it('reads a credentials_invalid as a wrong account or password', () => {
+    const cause = new ApiError(
+      401,
+      'Incorrect email or password',
+      'credentials_invalid',
+    );
+
+    expect(passwordSignInErrorMessage(cause)).toBe('帳號或密碼不正確。');
+  });
+
+  it('says to wait when signing in is rate-limited, not that the password is wrong', () => {
+    const cause = new ApiError(429, 'Too Many Requests', 'rate_limited');
+
+    expect(passwordSignInErrorMessage(cause)).toBe(
+      '系統忙碌中，請等一分鐘後再試。',
+    );
+  });
+
+  it.each([
+    // An identifier past the schema's length: FastAPI's 422 carries no code.
+    ['a 422', new ApiError(422, 'API request failed (422).')],
+    ['no answer at all', new TypeError('Failed to fetch')],
+  ])('says something general for %s', (_, cause) => {
+    expect(passwordSignInErrorMessage(cause)).toBe(
+      '登入失敗，請確認帳號或密碼。',
+    );
   });
 });

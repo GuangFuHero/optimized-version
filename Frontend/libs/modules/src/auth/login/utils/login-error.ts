@@ -1,6 +1,20 @@
-import { messageForCode } from '../../api/error-messages';
+import {
+  messageForCode,
+  resolveAuthErrorMessage,
+} from '../../api/error-messages';
 
 export const LOGIN_FALLBACK_MESSAGE = '登入失敗，請確認帳號或密碼。';
+
+// On the login form a wrong password; the shared copy reads `credentials_invalid` as a session that
+// is gone, which is what it means everywhere else.
+const WRONG_CREDENTIALS_MESSAGE = '帳號或密碼不正確。';
+
+/** What signing in with a password (`POST /auth/session`) failing says on the login form. */
+export function passwordSignInErrorMessage(cause: unknown) {
+  return resolveAuthErrorMessage(cause, LOGIN_FALLBACK_MESSAGE, {
+    credentials_invalid: WRONG_CREDENTIALS_MESSAGE,
+  });
+}
 
 /**
  * Resolve the `?error=` the login page was sent back with.
@@ -12,10 +26,8 @@ export const LOGIN_FALLBACK_MESSAGE = '登入失敗，請確認帳號或密碼�
  * reported as a wrong password.
  */
 export function loginErrorMessage(errorCode: string | null) {
-  // On the login form a wrong password; the shared copy reads it as a session that is gone, which
-  // is what it means everywhere else.
   if (errorCode === 'credentials_invalid') {
-    return '帳號或密碼不正確。';
+    return WRONG_CREDENTIALS_MESSAGE;
   }
 
   const backendMessage = errorCode ? messageForCode(errorCode) : undefined;
