@@ -78,6 +78,7 @@ class GeoMutation:
             contact_name=input.contact_name, contact_email=input.contact_email,
             contact_phone=input.contact_phone,
             operational_status=input.operational_status.value,
+            supply_status=input.supply_status,
             secondary_location=sl_dict,
         )
         if isinstance(result, SubmissionHeld):
@@ -133,7 +134,7 @@ class GeoMutation:
         if input.operational_status is not None:
             changes["operational_status"] = input.operational_status.value
         for field in (
-            "type", "name", "description", "op_hour", "comment",
+            "type", "name", "description", "op_hour", "comment", "supply_status",
             "contact_name", "contact_email", "contact_phone",
         ):
             val = getattr(input, field)

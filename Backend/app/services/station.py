@@ -114,6 +114,7 @@ async def validate_station(
     contact_email: str | None = None,
     contact_phone: str | None = None,
     operational_status: str = "active",
+    supply_status: str | None = None,
     secondary_location: dict | None = None,
 ) -> StationFields:
     """Checkpoint 1 plus every input check `create_station` makes, without writing anything."""
@@ -143,6 +144,7 @@ async def validate_station(
             # PR #40 review found leaking the INSERT.
             **contacts,
             "operational_status": operational_status,
+            "supply_status": supply_status,
         },
         secondary_location=secondary_location,
     )
@@ -162,6 +164,11 @@ async def insert_station(db: AsyncSession, *, actor: User, fields: StationFields
             # Stamped on every operational_status assignment, including creation, so
             # analytics' freshness-trend query never has to special-case a null here.
             "status_changed_at": datetime.now(UTC),
+            # Unlike the status, a supply status starts out unset; its stamp says how old the
+            # line is, so there is nothing to date until there is a line (ADR-333).
+            "supply_status_updated_at": (
+                datetime.now(UTC) if fields.values.get("supply_status") is not None else None
+            ),
         },
     )
     if fields.secondary_location:
@@ -209,6 +216,7 @@ async def create_station(
     contact_email: str | None = None,
     contact_phone: str | None = None,
     operational_status: str = "active",
+    supply_status: str | None = None,
     secondary_location: dict | None = None,
 ) -> Station:
     """Create a station (checkpoint 1 only — a new station has no prior owner to scope-check).
@@ -234,6 +242,7 @@ async def create_station(
         contact_email=contact_email,
         contact_phone=contact_phone,
         operational_status=operational_status,
+        supply_status=supply_status,
         secondary_location=secondary_location,
     )
     station = await insert_station(db, actor=actor, fields=fields)
@@ -268,6 +277,9 @@ async def update_station(
     # station kept re-entering the "closed" series.
     if obj_in.get("operational_status") not in (None, station.operational_status):
         obj_in["status_changed_at"] = datetime.now(UTC)
+    # Same rule for the supply status (ADR-333), except that clearing it is a change too.
+    if "supply_status" in obj_in and obj_in["supply_status"] != station.supply_status:
+        obj_in["supply_status_updated_at"] = datetime.now(UTC)
     updated = await station_repository.update(db, db_obj=station, obj_in=obj_in)
 
     # 觸發通知

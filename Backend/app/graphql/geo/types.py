@@ -130,6 +130,14 @@ class StationType:
     status_changed_at: datetime | None = strawberry.field(
         default=None, description="When operational_status last changed"
     )
+    supply_status: str | None = strawberry.field(
+        default=None,
+        description="What the station is short of, in free text, e.g. '飲用水見底、尿布尚有存量'. Public "
+        "(ADR-333)",
+    )
+    supply_status_updated_at: datetime | None = strawberry.field(
+        default=None, description="When supply_status last changed; null while it has never been set"
+    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -293,6 +301,7 @@ class StationType:
             is_duplicate=m.is_duplicate, is_temporary=m.is_temporary,
             is_official=m.is_official,
             operational_status=m.operational_status, status_changed_at=m.status_changed_at,
+            supply_status=m.supply_status, supply_status_updated_at=m.supply_status_updated_at,
             created_at=m.created_at, updated_at=m.updated_at,
             _contact_name_raw=m.contact_name,
             _contact_email_raw=m.contact_email,
@@ -355,6 +364,9 @@ class CreateStationInput:
         description="Whether the station is open: 'active' (default), 'temporarily_closed', "
         "or 'permanently_closed'",
     )
+    supply_status: str | None = strawberry.field(
+        default=None, description="Optional public line on what the station is short of"
+    )
     secondary_location: SecondaryLocationInput | None = strawberry.field(
         default=None,
         description="Optional secondary address or pole location to attach to this station",
@@ -381,6 +393,7 @@ class UpdateStationInput:
         default=None,
         description="Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed'",
     )
+    supply_status: str | None = strawberry.UNSET
     contact_name: str | None = strawberry.UNSET
     contact_email: str | None = strawberry.UNSET
     contact_phone: str | None = strawberry.UNSET

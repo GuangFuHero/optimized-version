@@ -153,6 +153,8 @@ _STATION_FIELDS = {
     # to team B" is the event, and the service resolves it to the team's name. A team name is
     # not PII, and which organisation runs a station is public on the station itself.
     "team_uuid": _public(),
+    # ADR-333: what the station is short of. Public on the station, so public here too.
+    "supply_status": _public(),
 }
 
 _TASK_FIELDS = {
@@ -279,6 +281,7 @@ EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
         "uuid": _ID,
         "search_text": _GENERATED,
         "status_changed_at": _DERIVED_STAMP,
+        "supply_status_updated_at": _DERIVED_STAMP,
         "child_station_uuid": _FK,
         "updated_by": _FK,
         "is_duplicate": _SCORE,

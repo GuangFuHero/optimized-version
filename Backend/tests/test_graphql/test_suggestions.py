@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy import select, update
 
+from app.models.geo import Station
 from app.models.station_property import StationProperty, StationUpdateSuggestion
 from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
 
@@ -530,6 +531,50 @@ async def test_revoke_restores_status_changed_at(
     await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
 
     after = (await _gql(client, auditor_token, status_query, {"uuid": sample_station}))["data"]["station"]
+    assert after == before
+
+
+SUPPLY_QUERY = "query($uuid: UUID!) { station(uuid: $uuid) { supplyStatus supplyStatusUpdatedAt } }"
+
+
+@pytest.mark.asyncio
+async def test_supply_status_merge_stamps_it(client, auditor_auth, login_user_auth, sample_station):
+    """ADR-333: a merged supply status is as fresh as a direct edit."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, user_token, "station", sample_station, "supply_status", "飲用水見底")
+
+    await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "supply_status", "飲用水見底"),
+    ])
+
+    after = (await _gql(client, auditor_token, SUPPLY_QUERY, {"uuid": sample_station}))["data"]["station"]
+    assert after["supplyStatus"] == "飲用水見底"
+    assert after["supplyStatusUpdatedAt"] is not None
+
+
+@pytest.mark.asyncio
+async def test_revoke_restores_supply_status_and_when_it_was_set(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """Undoing a wrong report puts back the old line and its old time, not the time of the revoke."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    async with test_db() as db:
+        await db.execute(
+            update(Station).where(Station.uuid == sample_station).values(
+                supply_status="尿布不足", supply_status_updated_at=datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
+            )
+        )
+    before = (await _gql(client, auditor_token, SUPPLY_QUERY, {"uuid": sample_station}))["data"]["station"]
+    await _create(client, user_token, "station", sample_station, "supply_status", "飲用水見底")
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "supply_status", "飲用水見底"),
+    ]))["data"]["mergeStationSuggestions"]
+
+    await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
+
+    after = (await _gql(client, auditor_token, SUPPLY_QUERY, {"uuid": sample_station}))["data"]["station"]
     assert after == before
 
 
