@@ -19,7 +19,7 @@ from app.models.ticket_task import TaskAssignment, TicketTask
 from app.schemas.analytics import ChartStyle
 from app.services import ticket_analytics
 from app.services.analytics_common import UNCATEGORIZED_LABEL
-from app.services.chart_render import _render_pivoted, render_chart, resolve
+from app.services.chart_render import _render_pivoted, chart_series, render_chart, resolve
 
 UTC_TZ = ZoneInfo("UTC")
 
@@ -296,8 +296,8 @@ async def test_ticket_count_category_labels_null_task_type(db):
     assert labels == {"rescue", UNCATEGORIZED_LABEL}
 
     # The whole point: this shape must now render as a line chart without raising.
-    html = render_chart("tickets", "total_tickets", rows, x="category", chart_type="line")
-    assert html.startswith("<div")
+    figure = render_chart("tickets", "total_tickets", rows, x="category", chart_type="line")
+    assert figure["data"][0]["x"] == ["搜救", "未分類"]
 
 
 @pytest.mark.asyncio
@@ -388,16 +388,41 @@ async def test_duplicate_count_requires_a_date_range(db):
     assert rows == [{"count": 0}]
 
 
-def test_render_pivoted_line_tolerates_a_none_key():
-    """Backstop at the shared render boundary: a None key sorts last instead of raising."""
-    fig = _render_pivoted(["b", None, "a"], {"v": [1, 2, 3]}, "line", ChartStyle())
-    assert list(fig.data[0].x) == ["a", "b", None]
+def _count_rows(*pairs) -> list[dict]:
+    return [{"x": x, "count": count} for x, count in pairs]
 
 
-def test_render_pivoted_line_orders_categories_by_glossary():
+def test_chart_series_tolerates_a_none_key():
+    """Backstop at the shared series boundary: a None key sorts last instead of raising."""
+    rows = _count_rows(("hr", 1), (None, 2), ("rescue", 3))
+    x_values, series = chart_series("tickets", "total_tickets", rows)
+    assert x_values == ["搜救", "人力", None]
+    assert series == {"任務單": [3, 1, 2]}
+
+
+def test_chart_series_orders_categories_by_glossary():
     """task_type keys sort in _CATEGORY_LABEL order, not alphabetically; 未分類 last."""
-    fig = _render_pivoted(["uncategorized", "hr", "rescue"], {"v": [1, 2, 3]}, "line", ChartStyle())
-    assert list(fig.data[0].x) == ["搜救", "人力", "未分類"]
+    rows = _count_rows(("uncategorized", 1), ("hr", 2), ("rescue", 3))
+    x_values, series = chart_series("tickets", "total_tickets", rows)
+    assert x_values == ["搜救", "人力", "未分類"]
+    assert series == {"任務單": [3, 2, 1]}
+
+
+def test_chart_series_orders_dates_but_keeps_other_keys_as_given():
+    """Dates come back chronological whatever order SQL gave them; age buckets keep theirs."""
+    later, earlier = datetime(2026, 8, 2), datetime(2026, 8, 1)
+    x_values, series = chart_series("tickets", "total_tickets", _count_rows((later, 1), (earlier, 2)))
+    assert (x_values, series) == ([earlier, later], {"任務單": [2, 1]})
+
+    buckets = _count_rows(("<24h", 1), ("24-48h", 2), ("48-72h", 3), (">72h", 4))
+    x_values, _ = chart_series("tickets", "age_distribution", buckets)
+    assert x_values == ["<24h", "24-48h", "48-72h", ">72h"]
+
+
+def test_chart_series_rate_stays_a_fraction_for_the_figure():
+    """The figure's `.0%` tickformat needs the 0–1 fraction, so the series doesn't scale it."""
+    rows = [{"total": 2, "completed": 1, "rate": 0.5}]
+    assert chart_series("tickets", "completion_rate", rows) == (["總計"], {"完成率": [0.5]})
 
 
 def test_render_pivoted_line_marks_a_single_point():
