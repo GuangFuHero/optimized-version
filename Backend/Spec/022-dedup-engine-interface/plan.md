@@ -1060,9 +1060,11 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 **Files:** `app/graphql/tickets/*`、`app/graphql/geo/*`、`app/graphql/shared.py`、`tests/test_graphql/*`
 
-> **實作時調整（2026-09-29）**：通用的 `DuplicateSuspect`／`DuplicatesSuspected` 放在 `app/graphql/shared.py`（工單與站點共用，
-> 避免 geo↔tickets 互相 import）；`createTicket` 的工單層確認改放在 `CreateTicketInput.acknowledgedDuplicateOf`（spec §5.1），
-> 不再是 mutation 參數（這個欄位後來在 PR #73 審查時拿掉了：工單不比對）；GraphQL 測試的 stub 同時蓋掉 `_ENGINE` 與 `_SUBMISSION_ENGINE`。
+> **實作時調整（2026-09-29）**：
+> - 通用的 `DuplicateSuspect`／`DuplicatesSuspected` 放在 `app/graphql/shared.py`，工單與站點共用，避免 geo↔tickets 互相 import。
+> - 工單本身的確認原本從 mutation 參數改放進 `CreateTicketInput.acknowledgedDuplicateOf`。工單不比對，這個確認不會有作用，
+>   所以 PR #73 審查時整個拿掉了；現在只有任務和站點有 `acknowledgedDuplicateOf`。
+> - GraphQL 測試的 stub 同時蓋掉 `_ENGINE` 與 `_SUBMISSION_ENGINE`。
 
 - [x] 通用 `DuplicatesSuspected { suspects: [DuplicateSuspect] }`；`CreateTicketTaskDraft`、`CreateTicketInput.tasks`、`TicketCreated { ticket, tasks }`
 - [x] `createTicketTask(input, acknowledgedDuplicateOf)` 回 `CreateTicketTaskResult`；`createStation` 改回通用型別
