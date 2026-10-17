@@ -22,6 +22,10 @@ export interface SessionExpiryInput {
  * A revoked token answers 401 for every request, public ones included (backend
  * `tests/test_graphql/test_session_revocation.py`). A 403 is a signed-in caller who may not do
  * this, and a guest's 401 ends nothing they had.
+ *
+ * The back office's rule, for as long as it still signs in with next-auth and sends a bearer token.
+ * The site's proxy no longer needs it: the backend names an ended session in the 401's `code`
+ * (`session_expired`, `credentials_invalid`; backend login design §5.3), see `backend-proxy.ts`.
  */
 export function isSessionExpired({
   refreshFailed,

@@ -102,18 +102,26 @@ const REFRESHABLE_CODES: ReadonlySet<unknown> = new Set([
   'access_token_stale',
 ]);
 
-async function needsRefreshAsync(response: Response) {
-  if (response.status !== 401) return false;
+/**
+ * The 401 codes that mean the session itself has ended (§5.3): signed out, a password changed, an
+ * admin's sign-out, an identity removed, a token the backend can no longer accept. The backend
+ * clears both cookies in the same answer (§4); the browser is told so it reloads as a guest.
+ */
+const SESSION_ENDED_CODES: ReadonlySet<unknown> = new Set([
+  'session_expired',
+  'credentials_invalid',
+]);
+
+/** The `code` of a 401 from the backend (`{ detail, code }`, §5.3); nothing for any other answer. */
+async function unauthorizedCodeAsync(response: Response): Promise<unknown> {
+  if (response.status !== 401) return undefined;
   try {
     const body: unknown = await response.clone().json();
-    return (
-      typeof body === 'object' &&
-      body !== null &&
-      'code' in body &&
-      REFRESHABLE_CODES.has(body.code)
-    );
+    return typeof body === 'object' && body !== null && 'code' in body
+      ? body.code
+      : undefined;
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -253,27 +261,46 @@ async function sendWithRefreshAsync(
   send: (cookieHeader: string | null) => Promise<NextResponse>,
 ): Promise<NextResponse> {
   const response = await send(cookieHeader);
-  if (!cookieHeader || !(await needsRefreshAsync(response))) {
+  if (!cookieHeader) {
     return response;
+  }
+
+  const code = await unauthorizedCodeAsync(response);
+  if (!REFRESHABLE_CODES.has(code)) {
+    return markIfSessionEnded(response, code);
   }
 
   const refresh = await refreshBackendSessionAsync(
     cookieValue(cookieHeader, authCookieNames().refresh) ?? '',
   );
   switch (refresh.kind) {
-    case 'refreshed':
+    case 'refreshed': {
+      const resent = await send(
+        cookieHeaderAfter(cookieHeader, refresh.setCookies),
+      );
       return withSetCookiesFirst(
-        await send(cookieHeaderAfter(cookieHeader, refresh.setCookies)),
+        markIfSessionEnded(resent, await unauthorizedCodeAsync(resent)),
         refresh.setCookies,
       );
-    case 'refused': {
-      const ended = withSetCookiesFirst(response, refresh.setCookies);
-      ended.headers.set(SESSION_HEADER, SESSION_EXPIRED);
-      return ended;
     }
+    case 'refused':
+      return withSetCookiesFirst(
+        markSessionEnded(response),
+        refresh.setCookies,
+      );
     case 'unavailable':
       return refreshUnavailableResponse();
   }
+}
+
+/** Marks the answer for the browser, which reloads as a guest (`sessionExpiryFetch`). */
+function markSessionEnded(response: NextResponse) {
+  response.headers.set(SESSION_HEADER, SESSION_EXPIRED);
+  return response;
+}
+
+function markIfSessionEnded(response: NextResponse, code: unknown) {
+  return SESSION_ENDED_CODES.has(code) ? markSessionEnded(response) : response;
 }
 
 export function createBackendGraphqlHandler(audience: Audience) {

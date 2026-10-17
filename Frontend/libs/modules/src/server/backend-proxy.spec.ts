@@ -467,3 +467,40 @@ describe('site GraphQL proxy', () => {
     }).toEqual({ status: 200, body: guestError, session: null });
   });
 });
+
+describe('site proxy, session ended elsewhere', () => {
+  it('tells the browser when the backend says the session is gone', async () => {
+    fakeBackend(() => unauthorized('session_expired'));
+
+    const response = await callSiteRest('tickets', {
+      cookie: 'wgdev_at=access-20; wgdev_rt=refresh-20',
+    });
+
+    expect(response.headers.get('x-wg-session')).toBe('expired');
+  });
+
+  it('tells the browser when the backend can no longer accept its token', async () => {
+    fakeBackend(() => unauthorized('credentials_invalid'));
+
+    const response = await callSiteRest('tickets', {
+      cookie: 'wgdev_at=access-21; wgdev_rt=refresh-21',
+    });
+
+    expect(response.headers.get('x-wg-session')).toBe('expired');
+  });
+
+  it('tells the browser when the session ends between the refresh and the resend', async () => {
+    fakeBackend((call) => {
+      if (isRefresh(call)) return refreshed('access-22b', 'refresh-22b');
+      return call.headers.get('cookie')?.includes('wgdev_at=access-22b')
+        ? unauthorized('session_expired')
+        : unauthorized('access_token_expired');
+    });
+
+    const response = await callSiteRest('tickets', {
+      cookie: 'wgdev_at=access-22a; wgdev_rt=refresh-22a',
+    });
+
+    expect(response.headers.get('x-wg-session')).toBe('expired');
+  });
+});
