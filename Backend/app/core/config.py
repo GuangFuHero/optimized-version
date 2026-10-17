@@ -26,6 +26,24 @@ class Settings(BaseSettings):
     # How long a rotated refresh token still yields the token it was rotated into (ADR-330); 0 turns it off.
     REFRESH_REUSE_GRACE_SECONDS: int = 30
 
+    # The browser's sign-in cookies (ADR-326). Every name starts with the prefix — `wg` in production,
+    # `wgstg` on staging, `wgdev` on a developer's machine — so no environment reads or clears another's.
+    # The default is the developer's, never production's: an environment that forgets to set it cannot end
+    # up answering to production's cookies.
+    AUTH_COOKIE_PREFIX: str = os.getenv("AUTH_COOKIE_PREFIX", "wgdev")
+    # The parent domain of the site and the back office, so one sign-in reaches both
+    # (`.staging.wan-guard.com`). Empty sends no Domain: the cookie stays on the one host, as on localhost.
+    AUTH_COOKIE_DOMAIN: str = os.getenv("AUTH_COOKIE_DOMAIN", "")
+    # Deliberately not derived from ENV, which counts as production when unset; a developer serving over
+    # plain http sets it to false.
+    AUTH_COOKIE_SECURE: bool = True
+    # The pages allowed to send a cookie-authenticated write (ADR-327): comma-separated origins. The default
+    # names only the two local apps, so an environment that forgets it refuses every such write instead
+    # of accepting some it should not.
+    AUTH_ALLOWED_ORIGINS: str = os.getenv(
+        "AUTH_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"
+    )
+
     # Redis 連線字串
     # Docker 內部連線預設: redis://redis:6379
     # 本地開發連線預設: redis://localhost:6379
@@ -47,6 +65,18 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
 
     LINE_CHANNEL_ID: str = os.getenv("LINE_CHANNEL_ID", "")
+
+    @property
+    def allowed_origins(self) -> frozenset[str]:
+        """`AUTH_ALLOWED_ORIGINS` as a set, written the way a browser sends `Origin`.
+
+        Kept as a plain string field and split here because pydantic-settings reads a list field from
+        the environment as JSON, which would reject a comma-separated value. Origins are compared
+        case-insensitively and without a trailing slash. Entries are filtered after normalising, so a
+        stray `/` cannot leave an empty origin in the set for a request without one to match.
+        """
+        normalised = (origin.strip().lower().rstrip("/") for origin in self.AUTH_ALLOWED_ORIGINS.split(","))
+        return frozenset(origin for origin in normalised if origin)
 
     @property
     def JWT_SIGNING_KEY(self) -> str:

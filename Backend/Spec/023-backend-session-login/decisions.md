@@ -9,6 +9,67 @@ by the product owner between 2026-10-11 and 2026-10-17.
 
 ---
 
+### ADR-326 The browser keeps the session in prefixed cookies on its environment's parent domain
+
+> **Status: ACCEPTED (2026-10-17).** The domains and the cookies were chosen by the product owner on
+> 2026-10-16. The first layout scoped the refresh cookie to `/api/v1/auth/session` and let the access cookie
+> expire with its JWT after 15 minutes; it was changed to point 4 below the same day, once the frontend design
+> showed it could not work.
+
+**In plain words**: after signing in, the browser holds two cookies the backend set — the short-lived pass and
+the means to renew it. Page scripts cannot read them, and every page of both the site and the back office
+sends them, so one sign-in covers both. Each environment's cookies carry their own name, so production,
+staging and a developer's machine never mix theirs up.
+
+**Context**: Until now the frontend's NextAuth cookie held the backend's tokens and the frontend's server sent
+them on as Bearer. With sign-in moving to the backend (ADR-325), the backend sets the cookies itself, and they
+have to reach two sibling hosts: the site and the back office (`staging.wan-guard.com` and
+`admin.staging.wan-guard.com` on staging, `wan-guard.com` and `admin.wan-guard.com` in production).
+
+**Decision**:
+
+1. Three cookies, each named with `AUTH_COOKIE_PREFIX` — `wg` in production, `wgstg` on staging, `wgdev` on a
+   developer's machine and by default:
+
+   | cookie | holds | `Path` | `Max-Age` |
+   |---|---|---|---|
+   | `{p}_at` | the access token, a JWT that expires after 15 minutes | `/` | `REFRESH_TOKEN_EXPIRE_DAYS`, renewed on every refresh |
+   | `{p}_rt` | the refresh token | `/` | the same |
+   | `{p}_oauth` | the state of a Google or LINE sign-in in progress | `/api/v1/auth/oauth` | 10 minutes |
+
+2. All three are `HttpOnly` and `SameSite=Lax`, and `Secure` unless `AUTH_COOKIE_SECURE` is false. `Secure` is
+   a setting of its own rather than derived from `ENV`, which counts as production when unset.
+3. `Domain` is `AUTH_COOKIE_DOMAIN`, the parent of the environment's two hosts (`.wan-guard.com`,
+   `.staging.wan-guard.com`). Left empty, no `Domain` is sent and the cookie stays on one host, as a
+   developer's `localhost` needs.
+4. **The access cookie outlives its JWT, and the refresh cookie goes to every path.** The frontend's server
+   refreshes on the browser's behalf — in its proxy, and before rendering a page — and both only ever see
+   ordinary paths, so a refresh cookie scoped to the session endpoints would never reach them. An access
+   cookie expiring together with its JWT would vanish from the browser: the next request would arrive as a
+   guest's, public data would be served to a user who had silently become a guest, and the backend could
+   never answer `access_token_expired` (ADR-328). Kept for the session's lifetime, the expired token reaches
+   the backend and is answered for what it is. The frontend's proxy forwards only cookies with its own
+   prefix, and strips `{p}_rt` from every request but the session endpoints'.
+5. The backend reads only cookies with its own prefix, and reads `{p}_rt` only on the session endpoints
+   (`/auth/session*`), so a refresh token that does travel with some other request is never used there.
+   Clearing a cookie writes the same name, path and domain with `Max-Age=0`; a browser ignores a clear sent
+   under any other combination.
+6. No environment logs `Cookie`, `Set-Cookie` or `Authorization` headers — neither the backend nor the
+   frontend's server.
+
+**Consequences**:
+➕ One sign-in covers the site and the back office.
+➕ A script injected into a page cannot read a token.
+➖ Staging and production are separated in one direction only. Staging's cookies, on `.staging.wan-guard.com`,
+never reach production's hosts. Production's, on `.wan-guard.com`, do reach staging's, which are subdomains of
+`wan-guard.com` too: staging's backend never reads them (another prefix, another signing key) and its proxy
+does not forward them, but staging's frontend server receives them. Separating the two completely takes a
+registrable domain of staging's own, to be decided before production launches.
+➖ The refresh token now travels with every request to the frontend's own server (same origin, `HttpOnly`),
+not only to the session endpoints.
+
+---
+
 ### ADR-328 Every 401 a token earns names why: refresh, or signed out
 
 > **Status: ACCEPTED (2026-10-17).** Chosen by the product owner on 2026-10-16, together with moving sign-in
