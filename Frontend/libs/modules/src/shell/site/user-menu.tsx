@@ -28,18 +28,13 @@ const PersonIcon = Icons.person;
 
 interface SiteUserMenuProps {
   userName?: string;
-  userImage?: string;
   onSignOut?: () => void;
 }
 
 /**
  * 前台使用者操作按鈕：以左側 Avatar 作為觸發點，開啟登出等帳號操作。
  */
-export function SiteUserMenu({
-  userName,
-  userImage,
-  onSignOut,
-}: SiteUserMenuProps) {
+export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
   const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
@@ -80,7 +75,6 @@ export function SiteUserMenu({
       >
         <Avatar
           alt={userName ?? '使用者'}
-          src={userImage}
           sx={{
             width: 32,
             height: 32,
@@ -90,11 +84,7 @@ export function SiteUserMenu({
           }}
         >
           {/* No picture since the login moved to the backend (`/users/me` has none): the name's initials. */}
-          {!userImage
-            ? nameInitials(userName ?? '') || (
-                <PersonIcon sx={{ fontSize: 20 }} />
-              )
-            : null}
+          {nameInitials(userName ?? '') || <PersonIcon sx={{ fontSize: 20 }} />}
         </Avatar>
       </ButtonBase>
 
