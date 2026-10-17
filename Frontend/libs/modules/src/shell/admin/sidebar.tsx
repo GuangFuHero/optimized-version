@@ -252,8 +252,7 @@ function RealmBar({ collapsed }: { collapsed: boolean }) {
         <IconButton
           component={Link}
           href="/map"
-          aria-label="回到前台"
-          title="你在管理後台 · 回到前台（不會登出）"
+          aria-label="回到公開地圖"
           sx={{
             color: color.fg.neutral.subtle,
             borderRadius: `${radius.sm}px`,
@@ -276,12 +275,12 @@ function RealmBar({ collapsed }: { collapsed: boolean }) {
         borderBottom: `1px solid ${color.border.default}`,
       }}
     >
-      <Badge tone="neutral" title="你目前在管理後台">
+      <Badge tone="neutral">
         <Box
           component={ShieldCheck}
           sx={{ width: 12, height: 12, color: color.fg.neutral.muted }}
         />
-        管理後台
+        管理平台
       </Badge>
       <Box
         component={Link}
