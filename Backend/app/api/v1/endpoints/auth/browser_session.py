@@ -25,7 +25,6 @@ from app.core.request_auth import (
     require_allowed_origin,
 )
 from app.models.auth import User
-from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.session_repository import SessionRepository
 from app.schemas.auth import (
     SessionIdentityResponse,
@@ -49,12 +48,10 @@ async def _sign_browser_in(
 ) -> SignedInResponse:
     """Open a session on the account's default identity and hand the browser its cookies.
 
-    The default is `user` (ADR-290), written into the session and the token rather than left for
-    every request to work out again; the back office reaches its own identity by its marker (ADR-329).
+    The back office reaches its own identity by its marker (ADR-329).
     """
-    identity = await active_identity_repository.default_for_user(db, str(user.uuid))
-    access_token, refresh_token = await auth_session.open_session(
-        redis, str(user.uuid), identity, device_of(request)
+    access_token, refresh_token, identity = await auth_session.open_default_session(
+        db, redis, user, device_of(request)
     )
     auth_cookies.set_session_cookies(response, access_token, refresh_token)
     return SignedInResponse(

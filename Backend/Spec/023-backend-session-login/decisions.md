@@ -383,3 +383,81 @@ failure the claim had before.
 replay compares that with the time where it lands. With one backend today this is exact. With several, clock
 drift between them stretches or shrinks the window by the drift; if that ever matters, measure it with the
 Redis server's clock instead (the claim key's remaining TTL).
+
+---
+
+### ADR-331 The backend runs the Google and LINE sign-in itself
+
+> **Status: ACCEPTED (2026-10-18).** Chosen by the product owner on 2026-10-16, together with moving sign-in
+> to the backend (ADR-325); sending every failure back to the sign-in page was chosen on 2026-10-17, and
+> leaving the sibling-subdomain risk below for before production on 2026-10-18. This records the flow with
+> Google; LINE joins it, and `/auth/sso/google` and `/auth/sso/line` are removed, in the same change.
+
+**In plain words**: "Sign in with Google" now takes the browser from our page to Google and back to our own
+backend, which then talks to Google directly and signs the browser in. The frontend never sees Google's
+tokens or our secret. Whatever goes wrong, the person lands back on the sign-in page with the reason.
+
+**Context**: The frontend's NextAuth used to run the provider's flow and post the `id_token` it got to
+`/auth/sso/google` (ADR-325). With sign-in in the backend, the backend has to take the browser to the
+provider and back, exchange the one-time code for the `id_token` itself, and hold the client secret that
+exchange needs. Done naively, that flow can be hijacked in three places: a code intercepted on its way
+back, a callback planted in another person's browser to sign them into the attacker's account, and a
+`return_to` pointing at another site.
+
+**Decision**:
+
+1. Two endpoints per provider, both browser navigations: `GET /auth/oauth/{provider}/start?app=…&return_to=…`
+   and `GET /auth/oauth/{provider}/callback`, which the provider redirects to.
+2. **Authorization code with PKCE (S256), a nonce, and a state bound to the browser.** `start` records the
+   provider, the app, `return_to`, the PKCE verifier and the nonce under `oauth_state:{state}` in Redis for
+   10 minutes, sets the state in the `{p}_oauth` cookie (ADR-326), and sends the browser to the provider.
+   `callback` first requires the state it receives to equal that cookie and to be on record, and spends it
+   in the same step (`GETDEL`): a state works once, in the browser that started it. Only then does it
+   exchange the code, with the verifier and the client secret, verify the `id_token` as before (signature,
+   audience, issuer, expiry), and require its nonce to be the one recorded.
+3. **One redirect URI per provider, on the site's host**:
+   `{OAUTH_REDIRECT_BASE_URL}/api/v1/auth/oauth/{provider}/callback`. A sign-in started from the back office
+   comes back there too and is sent on to the back office, as its state records.
+4. **`return_to` is a path on our own site**: it starts with `/` but not `//`, and holds no backslash, no
+   character that is not printable, and no `.` or `..` segment, percent-encoded or not (a browser resolves
+   `/.//host` into `//host`). `app` is `site` or `admin`, which the backend maps to `SITE_APP_URL` and
+   `ADMIN_APP_URL`; the browser never names a host to return to.
+5. **Every failure goes back to the sign-in page**, `{app}/login?error=<code>`: `oauth_request_invalid`
+   (an unknown or unconfigured provider, a bad `return_to`), `origin_not_allowed`, `oauth_state_invalid`,
+   `oauth_cancelled` (the user said no at the provider), `oauth_exchange_failed`, `sso_token_invalid` (the
+   token does not verify, or carries another nonce), `sso_email_unverified` and `sso_email_taken`. A
+   callback whose state is not on record cannot tell which app it was for and goes to the site's. Only a
+   start naming no app of ours answers with JSON, 400 `oauth_request_invalid`. A callback clears
+   `{p}_oauth` whatever its outcome; a refused start leaves it alone, so a link from another site cannot end
+   a sign-in another tab has in progress.
+6. `start` must come from one of our pages (ADR-327 point 4). A navigation carries no `Origin`, so in
+   practice the `Referer` decides, and a browser set to send none is refused with `origin_not_allowed`. The
+   callback is the provider's redirect and carries neither; the state protects it instead.
+7. Who signs in follows the rules `/auth/sso/google` always had, now shared (`services/sso_login.py`): a
+   known Google identity signs in to its account; a first sign-in creates one with Google's verified email;
+   an email another account already holds is refused, and its owner links Google in their settings
+   (ADR-217). The new session acts as the account's default identity (ADR-325 point 3), and the browser is
+   sent to `{app}{return_to}` with the sign-in cookies set.
+8. The client secrets (`GOOGLE_CLIENT_SECRET`, `LINE_CHANNEL_SECRET`) live only in the backend's settings,
+   and a provider without its secret refuses to start. Nothing we log holds the code, the `id_token`, the
+   state, the verifier or the nonce, and uvicorn's access log has the query of every
+   `/api/v1/auth/oauth/` request replaced with `?…`.
+9. `start` and `callback` are each limited to 10 requests per 60 seconds, as `/auth/sso/*` was.
+
+**Consequences**:
+➕ The frontend holds no OAuth configuration or secret, and one flow serves both apps.
+➕ An intercepted code is useless without the verifier, a token minted for another sign-in fails the nonce,
+and a callback planted in a browser from another site fails the cookie.
+➖ **Not from one of our own subdomains.** `{p}_oauth` sits on the parent domain (ADR-326), so that a
+sign-in started from the back office's host reaches the callback on the site's. Whoever can run a page on
+any sibling host (an XSS on another of our apps, a dangling subdomain) can therefore set it: start a
+sign-in in their own browser, plant its state in the victim's cookie, and send the victim to the callback
+with their own code. The victim is then signed in as the attacker, and whatever they enter lands in the
+attacker's account. Closing it means a host-only `__Host-` cookie and starting every sign-in on the site's
+host, which changes the frontend's links and its cookie filter; it is left for before production.
+➖ Signing in now depends on the backend reaching the provider's token endpoint.
+➖ A browser or extension that strips `Referer` cannot start a sign-in from our pages.
+➖ Each environment's redirect URI has to be registered with each provider before its first deployment.
+➖ Over their rate limit, start and callback answer 429 as JSON, a bare page for a navigation, rather than
+going back to the sign-in page; the refused callback leaves `{p}_oauth` to expire on its own. So does a
+callback that fails on the server itself (Redis or the database), as a 500.

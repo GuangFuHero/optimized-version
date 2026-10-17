@@ -33,7 +33,7 @@ from app.schemas.auth import (
     TokenPair,
     UnlinkIdentityRequest,
 )
-from app.services import auth_identity
+from app.services import auth_identity, auth_session, sso_login
 from app.services.auth_account import create_account
 from app.services.auth_contact import SSO_PROVIDERS, ContactNotFound, StepUpFailed, StepUpRequired
 from app.sso import get_sso_verifiers
@@ -93,45 +93,15 @@ async def sso_google(
     except GoogleTokenVerificationError as err:
         raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID,
                        detail="Invalid Google token") from err
-
-    identity = await identity_repository.get_by_provider_subject(db, provider="google", subject=gid.sub)
-    if identity is None:
-        if not gid.email_verified:
-            raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.SSO_EMAIL_UNVERIFIED,
-                           detail="Google email not verified")
-        try:
-            email = normalize_email(gid.email)
-        except ValueError as err:
-            raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.SSO_EMAIL_UNVERIFIED,
-                           detail="Google email not verified") from err
-        if await contact_repository.is_value_taken(db, type_="email", value=email):
-            raise ApiError(
-                status.HTTP_409_CONFLICT, ErrorCode.SSO_EMAIL_TAKEN,
-                detail="Email already in use; log in and link Google in settings",
-            )
-        name = gid.name or email.split("@")[0]
-        try:
-            user = await create_account(
-                db, name=name, provider="google", provider_subject=gid.sub,
-                contact_type="email", value=email,
-            )
-        except IntegrityError as err:  # concurrent first-login race
-            await db.rollback()
-            identity = await identity_repository.get_by_provider_subject(
-                db, provider="google", subject=gid.sub)
-            if identity is None:
-                raise ApiError(
-                    status.HTTP_409_CONFLICT, ErrorCode.SSO_EMAIL_TAKEN,
-                    detail="Email already in use; log in and link Google in settings",
-                ) from err
-            user = await user_repository.get_by_uuid(db, identity.user_uuid)
-    else:
-        user = await user_repository.get_by_uuid(db, identity.user_uuid)
-
+    try:
+        user = await sso_login.sign_in_with_google(db, gid)
+    except sso_login.EmailUnverified as err:
+        raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.SSO_EMAIL_UNVERIFIED, detail=str(err)) from err
+    except sso_login.EmailTaken as err:
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.SSO_EMAIL_TAKEN, detail=str(err)) from err
     # Same as the password path: no access token on the request, but the provider's ID token
     # has just established who this is, so the audited write gets an actor (ADR-170).
-    await attribute_writes_to(db, str(user.uuid))
-    await user_repository.update(db, db_obj=user, obj_in={"last_login_at": datetime.now(UTC)})
+    await auth_session.record_login(db, user)
     return await issue_token_pair(redis, request, str(user.uuid))
 
 

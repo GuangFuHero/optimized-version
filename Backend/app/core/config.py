@@ -72,8 +72,20 @@ class Settings(BaseSettings):
     KOTSMS_PASSWORD: str = os.getenv("KOTSMS_PASSWORD", "")
 
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    # The backend runs the Google and LINE sign-in itself (ADR-331), so the client secrets live here and
+    # nowhere else. Left empty, that provider's sign-in is refused at its start.
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
     LINE_CHANNEL_ID: str = os.getenv("LINE_CHANNEL_ID", "")
+    LINE_CHANNEL_SECRET: str = os.getenv("LINE_CHANNEL_SECRET", "")
+
+    # Where a Google or LINE sign-in sends the browser back to: the site's or the back office's own URL,
+    # by the `app` it was started for (ADR-331). Local values by default, like APP_BASE_URL.
+    SITE_APP_URL: str = os.getenv("SITE_APP_URL", "http://localhost:3000")
+    ADMIN_APP_URL: str = os.getenv("ADMIN_APP_URL", "http://localhost:3001")
+    # The host each provider is registered to call back, the site's: one redirect URI per provider, for
+    # both apps (ADR-331).
+    OAUTH_REDIRECT_BASE_URL: str = os.getenv("OAUTH_REDIRECT_BASE_URL", "http://localhost:3000")
 
     @property
     def allowed_origins(self) -> frozenset[str]:

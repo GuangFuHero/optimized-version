@@ -15,6 +15,9 @@ class GoogleIdentity:
     email: str
     email_verified: bool
     name: str | None
+    # The `nonce` claim, which the backend's own sign-in compares with the one it sent (ADR-331). A token
+    # the frontend obtained, for linking or step-up, has none of ours to compare.
+    nonce: str | None = None
 
 
 class GoogleTokenVerificationError(Exception):
@@ -53,6 +56,7 @@ class GoogleOidcVerifier:
             email=claims.get("email", ""),
             email_verified=bool(claims.get("email_verified", False)),
             name=claims.get("name"),
+            nonce=claims.get("nonce"),
         )
 
 

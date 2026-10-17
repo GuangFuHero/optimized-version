@@ -83,6 +83,19 @@ async def open_session(
     return access_token, refresh_token
 
 
+async def open_default_session(
+    db: AsyncSession, redis, user: User, device: str
+) -> tuple[str, str, ActiveIdentity | None]:
+    """Open a session on the account's default identity; return (access token, refresh token, identity).
+
+    What every browser sign-in lands on (ADR-325 point 3): `user` (ADR-290), written into the session
+    and the token rather than left for every request to work out again.
+    """
+    identity = await active_identity_repository.default_for_user(db, str(user.uuid))
+    access_token, refresh_token = await open_session(redis, str(user.uuid), identity, device)
+    return access_token, refresh_token, identity
+
+
 async def _record_activity(db: AsyncSession, user_uuid: str) -> None:
     """Stamp `users.last_activity_at`, swallowing any failure (ADR-093).
 

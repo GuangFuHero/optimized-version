@@ -3,6 +3,7 @@ import json
 
 from app.sso.google import GoogleIdentity, GoogleTokenVerificationError
 from app.sso.line import LineIdentity, LineTokenVerificationError
+from app.sso.oauth import OAuthExchangeError, OAuthProvider
 
 
 class FakeGoogleVerifier:
@@ -21,6 +22,7 @@ class FakeGoogleVerifier:
             email=claims.get("email", ""),
             email_verified=bool(claims.get("email_verified", False)),
             name=claims.get("name"),
+            nonce=claims.get("nonce"),
         )
 
 
@@ -38,6 +40,26 @@ class FakeLineVerifier:
         return LineIdentity(
             sub=str(claims["sub"]), name=claims.get("name"), email=claims.get("email")
         )
+
+
+class FakeOAuthExchanger:
+    """Test double for the provider's token endpoint: hands back whatever id_token a test set.
+
+    Records each exchange, so a test can check the code and the PKCE verifier the callback sent.
+    `id_token = None` makes the exchange fail, as a provider that refused would.
+    """
+
+    def __init__(self):
+        """Start with no id_token to hand out and no exchanges seen."""
+        self.id_token: str | None = None
+        self.exchanges: list[tuple[str, str, str]] = []
+
+    async def exchange(self, provider: OAuthProvider, code: str, code_verifier: str) -> str:
+        """Return the configured id_token, or fail like a refusing provider."""
+        self.exchanges.append((provider.name, code, code_verifier))
+        if self.id_token is None:
+            raise OAuthExchangeError("fake exchanger has no id_token to hand out")
+        return self.id_token
 
 
 class CapturingSession:

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.api import api_router
 from app.core import auth_cookies, security
+from app.core.access_log import OAuthQueryRedactor
 from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.context import AuditContextMiddleware
@@ -30,6 +31,11 @@ if not _app_logger.handlers:
     _app_logger.setLevel(logging.INFO)
     # Keep propagate=True so pytest's caplog (root-level capture) still sees app.* records;
     # uvicorn adds no root handler, so this does not double-log in production.
+
+# uvicorn prints every request line, query included, and an OAuth callback's query carries the provider's
+# code and the state (ADR-331). uvicorn configures its loggers before it imports the app, so the filter
+# added here stays on.
+logging.getLogger("uvicorn.access").addFilter(OAuthQueryRedactor())
 
 
 @asynccontextmanager

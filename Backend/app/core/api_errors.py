@@ -85,6 +85,20 @@ class ErrorCode(StrEnum):
     # because the remedy is to retry, not to log in some other way.
     SSO_SIGNIN_RACE = "sso_signin_race"
 
+    # The backend's own Google / LINE sign-in (ADR-331). They reach the browser as `?error=<code>` on the
+    # sign-in page, which is where the user lands either way; only a start naming no app of ours is
+    # answered as JSON instead, there being no sign-in page to send it to.
+    # A sign-in that cannot be started: an unknown or unconfigured provider, an unknown app, or a
+    # `return_to` that is not a path on our own site. A bug in the page that linked here.
+    OAUTH_REQUEST_INVALID = "oauth_request_invalid"
+    # The provider sent the browser back with a state this browser did not start, or one already used
+    # or expired. Remedy: start again.
+    OAUTH_STATE_INVALID = "oauth_state_invalid"
+    # The user said no at the provider. Not an error to apologise for: just offer the buttons again.
+    OAUTH_CANCELLED = "oauth_cancelled"
+    # The provider could not be asked for the user's identity, or answered with none. Remedy: retry.
+    OAUTH_EXCHANGE_FAILED = "oauth_exchange_failed"
+
     # Step-up proof before authentication material changes (ADR-215/217/220/234).
     # STEP_UP_REQUIRED is not a mistake the caller made: the backend has just delivered a code
     # (or is asking for the account's password / provider token) and wants the same call again
