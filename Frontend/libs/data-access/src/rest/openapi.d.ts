@@ -3024,6 +3024,11 @@ export interface components {
       contacts?: components['schemas']['ContactOut'][];
       /** Login Methods */
       login_methods?: components['schemas']['LoginMethodOut'][];
+      /**
+       * Capabilities
+       * @description 目前身分能使用的 capability；物件層級的範圍仍由各 endpoint 判斷
+       */
+      capabilities: components['schemas']['Perm'][];
     };
     /**
      * UserSaltResponse
