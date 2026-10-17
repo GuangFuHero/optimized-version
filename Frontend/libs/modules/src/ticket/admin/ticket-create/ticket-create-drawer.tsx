@@ -22,9 +22,8 @@ import { useSession } from 'next-auth/react';
 
 import {
   useCreateTicket,
-  useCreateTicketTask,
-  type CreateTicketTaskInput,
-  type AdminCreateTicketMutation,
+  type CreateTicketTaskDraft,
+  type AdminTicketFieldsFragment,
 } from '@rescue-frontend/data-access/admin';
 
 import { reverseGeocodeResponse } from '../../../map/reverse-geocode';
@@ -211,7 +210,7 @@ function mapVerification(
 }
 
 function buildTicketRow(
-  input: AdminCreateTicketMutation['createTicket'],
+  input: AdminTicketFieldsFragment,
   address: string,
 ): TicketListRowItem {
   return {
@@ -236,7 +235,7 @@ function buildTicketRow(
 }
 
 function buildTicketMarker(
-  input: AdminCreateTicketMutation['createTicket'],
+  input: AdminTicketFieldsFragment,
   position: RescueMapMarkerItem['position'],
 ): RescueMapMarkerItem {
   const normalizedStatus = input.status?.trim().toLowerCase();
@@ -319,11 +318,10 @@ export function TicketCreateDrawer({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
   const createTicket = useCreateTicket();
-  const createTicketTask = useCreateTicketTask();
   const { status: authStatus } = useSession();
   const reverseGeocodeRequestKeyRef = useRef<string | null>(null);
 
-  const isSubmitting = createTicket.isPending || createTicketTask.isPending;
+  const isSubmitting = createTicket.isPending;
 
   useEffect(() => {
     if (!open) {
@@ -569,31 +567,28 @@ export function TicketCreateDrawer({
           priority: 'medium',
           taskType: form.taskType,
           visibility: 'public',
+          tasks: tasks.map(
+            (task) =>
+              ({
+                taskType: task.taskType,
+                taskName: task.taskName.trim(),
+                taskDescription: task.taskDescription.trim() || undefined,
+                quantity: task.quantity ? Number(task.quantity) : undefined,
+                source: 'user',
+                visibility: 'public',
+              }) satisfies CreateTicketTaskDraft,
+          ),
           // TODO: backend 目前 createTicket 還沒有 secondary location / 地址拆欄位。
           // TODO: backend 目前也沒有 ticket photos 的建立 mutation。
         },
       });
 
-      const createdTicket = ticketResult.createTicket;
-
-      const taskInputs = tasks.map(
-        (task) =>
-          ({
-            ticketUuid: createdTicket.uuid,
-            taskType: task.taskType,
-            taskName: task.taskName.trim(),
-            taskDescription: task.taskDescription.trim() || undefined,
-            quantity: task.quantity ? Number(task.quantity) : undefined,
-            source: 'user',
-            visibility: 'public',
-            // TODO: backend 目前沒有 create task assignment mutation，
-            // actorUuid / assignedAt 先保留在前端 UI，暫不送出。
-          }) satisfies CreateTicketTaskInput,
-      );
-
-      for (const taskInput of taskInputs) {
-        await createTicketTask.mutateAsync({ input: taskInput });
+      if (ticketResult.createTicket.__typename !== 'TicketCreated') {
+        setSubmitError('疑似有重複的需求，尚未建立任務。請確認內容後再試。');
+        return;
       }
+
+      const createdTicket = ticketResult.createTicket.ticket;
 
       onCreated?.(buildTicketRow(createdTicket, form.address.trim()));
       onCreatedMarker?.(

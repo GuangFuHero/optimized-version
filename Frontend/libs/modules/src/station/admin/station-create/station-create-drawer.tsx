@@ -22,7 +22,7 @@ import { useSession } from 'next-auth/react';
 
 import {
   useCreateStation,
-  type AdminCreateStationMutation,
+  type AdminStationFieldsFragment,
 } from '@rescue-frontend/data-access/admin';
 
 import {
@@ -129,7 +129,7 @@ function isValidHttpUrl(value: string) {
 }
 
 function createStationRow(
-  input: AdminCreateStationMutation['createStation'],
+  input: AdminStationFieldsFragment,
   address: string,
 ): StationListRow {
   return {
@@ -163,7 +163,7 @@ function createStationRow(
 }
 
 function buildStationMarker(
-  input: AdminCreateStationMutation['createStation'],
+  input: AdminStationFieldsFragment,
   position: RescueMapMarkerItem['position'],
 ): RescueMapMarkerItem {
   const normalizedType = input.type?.trim().toLowerCase();
@@ -447,7 +447,12 @@ export function StationCreateDrawer({
         },
       });
 
-      const createdStation = stationResult.createStation;
+      if (stationResult.createStation.__typename !== 'StationCreated') {
+        setSubmitError('疑似有重複的站點，尚未建立站點。請確認內容後再試。');
+        return;
+      }
+
+      const createdStation = stationResult.createStation.station;
 
       onCreated?.(createStationRow(createdStation, form.address.trim()));
 

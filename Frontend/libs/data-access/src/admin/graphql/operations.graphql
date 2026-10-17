@@ -313,7 +313,12 @@ query AdminDisasterTypes($includeInactive: Boolean = true) {
 }
 mutation AdminCreateTicket($input: CreateTicketInput!) {
   createTicket(input: $input) {
-    ...AdminTicketFields
+    __typename
+    ... on TicketCreated {
+      ticket {
+        ...AdminTicketFields
+      }
+    }
   }
 }
 mutation AdminUpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
@@ -349,7 +354,12 @@ mutation AdminSetTicketDisasterDetails(
 }
 mutation AdminCreateTicketTask($input: CreateTicketTaskInput!) {
   createTicketTask(input: $input) {
-    ...AdminTaskFields
+    __typename
+    ... on TicketTaskCreated {
+      task {
+        ...AdminTaskFields
+      }
+    }
   }
 }
 mutation AdminUpdateTicketTask($uuid: UUID!, $input: UpdateTicketTaskInput!) {
@@ -389,7 +399,12 @@ mutation AdminUnassignTaskActor($uuid: UUID!) {
 }
 mutation AdminCreateStation($input: CreateStationInput!) {
   createStation(input: $input) {
-    ...AdminStationFields
+    __typename
+    ... on StationCreated {
+      station {
+        ...AdminStationFields
+      }
+    }
   }
 }
 mutation AdminUpdateStation($uuid: UUID!, $input: UpdateStationInput!) {

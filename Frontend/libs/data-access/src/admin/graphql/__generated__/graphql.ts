@@ -319,6 +319,8 @@ export type CreateStationPropertyInput = {
   weightings?: Scalars['Float']['input'];
 };
 
+export type CreateStationResult = DuplicatesSuspected | StationCreated;
+
 export type CreateStationSuggestionInput = {
   /** Why the change is suggested */
   comment?: InputMaybe<Scalars['String']['input']>;
@@ -368,8 +370,27 @@ export type CreateTicketInput = {
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** Type of help: 'rescue', 'supply', 'medical', or 'hr' */
   taskType?: InputMaybe<Scalars['String']['input']>;
+  /** The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates */
+  tasks?: Array<CreateTicketTaskDraft>;
   title: Scalars['String']['input'];
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
+  visibility?: Visibility;
+};
+
+export type CreateTicketResult = DuplicatesSuspected | TicketCreated;
+
+export type CreateTicketTaskDraft = {
+  /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
+  /** Number of people or units needed */
+  quantity?: InputMaybe<Scalars['Int']['input']>;
+  routeUuid?: InputMaybe<Scalars['UUID']['input']>;
+  /** Origin: 'user' (default) or 'official' */
+  source?: Scalars['String']['input'];
+  taskDescription?: InputMaybe<Scalars['String']['input']>;
+  taskName: Scalars['String']['input'];
+  /** Category: 'rescue', 'supply', 'medical', or 'hr' */
+  taskType: Scalars['String']['input'];
   visibility?: Visibility;
 };
 
@@ -389,6 +410,8 @@ export type CreateTicketTaskInput = {
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
   visibility?: Visibility;
 };
+
+export type CreateTicketTaskResult = DuplicatesSuspected | TicketTaskCreated;
 
 export type CrowdSourcingType = {
   __typename?: 'CrowdSourcingType';
@@ -417,6 +440,23 @@ export type DisasterTypeType = {
   /** Display name, e.g. '水災' */
   label: Scalars['String']['output'];
   uuid: Scalars['UUID']['output'];
+};
+
+export type DuplicateSuspect = {
+  __typename?: 'DuplicateSuspect';
+  /** Which part of what was sent: "task:0", "task:1"…, or "station" */
+  draftRef: Scalars['String']['output'];
+  /** What it looks like: "ticket_task" or "station" */
+  relatedKind: Scalars['String']['output'];
+  /** When it looks like a task, that task's ticket */
+  relatedTicketUuid?: Maybe<Scalars['String']['output']>;
+  /** The existing entity it looks like */
+  relatedUuid: Scalars['String']['output'];
+};
+
+export type DuplicatesSuspected = {
+  __typename?: 'DuplicatesSuspected';
+  suspects: Array<DuplicateSuspect>;
 };
 
 export const FieldDataType = {
@@ -488,12 +528,12 @@ export type Mutation = {
   createBuildingMap: BuildingMapType;
   createCrowdSourcing: CrowdSourcingType;
   createHelpRequest: TicketType;
-  createStation: StationType;
+  createStation: CreateStationResult;
   createStationProperty: StationPropertyType;
   createStationSuggestion: StationSuggestionType;
   createTaskProperty: TaskPropertyType;
-  createTicket: TicketType;
-  createTicketTask: TicketTaskType;
+  createTicket: CreateTicketResult;
+  createTicketTask: CreateTicketTaskResult;
   deleteAnnouncement: Scalars['Boolean']['output'];
   deleteArea: Scalars['Boolean']['output'];
   deleteBriefing: Scalars['Boolean']['output'];
@@ -579,6 +619,7 @@ export type MutationCreateHelpRequestArgs = {
 };
 
 export type MutationCreateStationArgs = {
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   input: CreateStationInput;
 };
 
@@ -599,6 +640,7 @@ export type MutationCreateTicketArgs = {
 };
 
 export type MutationCreateTicketTaskArgs = {
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   input: CreateTicketTaskInput;
 };
 
@@ -1103,6 +1145,11 @@ export type StationConnection = {
   pageInfo: PageInfo;
 };
 
+export type StationCreated = {
+  __typename?: 'StationCreated';
+  station: StationType;
+};
+
 export const StationOperationalStatus = {
   Active: 'active',
   PermanentlyClosed: 'permanently_closed',
@@ -1405,6 +1452,12 @@ export type TicketConnection = {
   pageInfo: PageInfo;
 };
 
+export type TicketCreated = {
+  __typename?: 'TicketCreated';
+  tasks: Array<TicketTaskType>;
+  ticket: TicketType;
+};
+
 export type TicketDisasterDetailInput = {
   /** The field key from `ticketPropertyConfigs` */
   propertyName: Scalars['String']['input'];
@@ -1442,6 +1495,11 @@ export type TicketPropertyConfigType = {
   /** Unit suffix for a number field, e.g. 'cm', 'mm' */
   unit?: Maybe<Scalars['String']['output']>;
   uuid: Scalars['UUID']['output'];
+};
+
+export type TicketTaskCreated = {
+  __typename?: 'TicketTaskCreated';
+  task: TicketTaskType;
 };
 
 export type TicketTaskType = {
@@ -2258,24 +2316,29 @@ export type AdminCreateTicketMutationVariables = Exact<{
 
 export type AdminCreateTicketMutation = {
   __typename?: 'Mutation';
-  createTicket: {
-    __typename?: 'TicketType';
-    uuid: string;
-    title: string;
-    description?: string | null;
-    geometry?: Geometry | null;
-    status: string;
-    priority: string;
-    taskType?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
-    contactName?: string | null;
-    contactEmail?: string | null;
-    contactPhone?: string | null;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-  };
+  createTicket:
+    | { __typename: 'DuplicatesSuspected' }
+    | {
+        __typename: 'TicketCreated';
+        ticket: {
+          __typename?: 'TicketType';
+          uuid: string;
+          title: string;
+          description?: string | null;
+          geometry?: Geometry | null;
+          status: string;
+          priority: string;
+          taskType?: string | null;
+          visibility?: string | null;
+          verificationStatus?: string | null;
+          contactName?: string | null;
+          contactEmail?: string | null;
+          contactPhone?: string | null;
+          createdBy?: string | null;
+          createdAt?: string | null;
+          updatedAt?: string | null;
+        };
+      };
 };
 
 export type AdminUpdateTicketMutationVariables = Exact<{
@@ -2363,32 +2426,37 @@ export type AdminCreateTicketTaskMutationVariables = Exact<{
 
 export type AdminCreateTicketTaskMutation = {
   __typename?: 'Mutation';
-  createTicketTask: {
-    __typename?: 'TicketTaskType';
-    uuid: string;
-    ticketUuid: string;
-    taskType: string;
-    taskName: string;
-    taskDescription?: string | null;
-    quantity?: number | null;
-    status: string;
-    progressNote?: string | null;
-    reviewNote?: string | null;
-    source: string;
-    visibility: string;
-    moderationStatus?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    assignments: Array<{
-      __typename?: 'TaskAssignmentType';
-      uuid: string;
-      actorUuid: string;
-      role?: string | null;
-      status: string;
-      assignedAt?: string | null;
-      updatedAt?: string | null;
-    }>;
-  };
+  createTicketTask:
+    | { __typename: 'DuplicatesSuspected' }
+    | {
+        __typename: 'TicketTaskCreated';
+        task: {
+          __typename?: 'TicketTaskType';
+          uuid: string;
+          ticketUuid: string;
+          taskType: string;
+          taskName: string;
+          taskDescription?: string | null;
+          quantity?: number | null;
+          status: string;
+          progressNote?: string | null;
+          reviewNote?: string | null;
+          source: string;
+          visibility: string;
+          moderationStatus?: string | null;
+          createdAt?: string | null;
+          updatedAt?: string | null;
+          assignments: Array<{
+            __typename?: 'TaskAssignmentType';
+            uuid: string;
+            actorUuid: string;
+            role?: string | null;
+            status: string;
+            assignedAt?: string | null;
+            updatedAt?: string | null;
+          }>;
+        };
+      };
 };
 
 export type AdminUpdateTicketTaskMutationVariables = Exact<{
@@ -2478,33 +2546,38 @@ export type AdminCreateStationMutationVariables = Exact<{
 
 export type AdminCreateStationMutation = {
   __typename?: 'Mutation';
-  createStation: {
-    __typename?: 'StationType';
-    uuid: string;
-    type?: string | null;
-    name?: string | null;
-    description?: string | null;
-    geometry?: Geometry | null;
-    opHour?: string | null;
-    level: number;
-    comment?: string | null;
-    source?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
-    operationalStatus: string;
-    isDuplicate: boolean;
-    isTemporary: boolean;
-    isOfficial: boolean;
-    createdBy?: string | null;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-    assignedTeam?: {
-      __typename?: 'AssignedTeamType';
-      uuid: string;
-      name: string;
-      type: string;
-    } | null;
-  };
+  createStation:
+    | { __typename: 'DuplicatesSuspected' }
+    | {
+        __typename: 'StationCreated';
+        station: {
+          __typename?: 'StationType';
+          uuid: string;
+          type?: string | null;
+          name?: string | null;
+          description?: string | null;
+          geometry?: Geometry | null;
+          opHour?: string | null;
+          level: number;
+          comment?: string | null;
+          source?: string | null;
+          visibility?: string | null;
+          verificationStatus?: string | null;
+          operationalStatus: string;
+          isDuplicate: boolean;
+          isTemporary: boolean;
+          isOfficial: boolean;
+          createdBy?: string | null;
+          createdAt?: string | null;
+          updatedAt?: string | null;
+          assignedTeam?: {
+            __typename?: 'AssignedTeamType';
+            uuid: string;
+            name: string;
+            type: string;
+          } | null;
+        };
+      };
 };
 
 export type AdminUpdateStationMutationVariables = Exact<{
@@ -4724,9 +4797,34 @@ export const AdminCreateTicketDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
+                { kind: 'Field', name: { kind: 'Name', value: '__typename' } },
                 {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminTicketFields' },
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'TicketCreated' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'ticket' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'FragmentSpread',
+                              name: {
+                                kind: 'Name',
+                                value: 'AdminTicketFields',
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
                 },
               ],
             },
@@ -5159,9 +5257,31 @@ export const AdminCreateTicketTaskDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
+                { kind: 'Field', name: { kind: 'Name', value: '__typename' } },
                 {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminTaskFields' },
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'TicketTaskCreated' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'task' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'FragmentSpread',
+                              name: { kind: 'Name', value: 'AdminTaskFields' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
                 },
               ],
             },
@@ -5575,9 +5695,34 @@ export const AdminCreateStationDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
+                { kind: 'Field', name: { kind: 'Name', value: '__typename' } },
                 {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'AdminStationFields' },
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'StationCreated' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'station' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'FragmentSpread',
+                              name: {
+                                kind: 'Name',
+                                value: 'AdminStationFields',
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
                 },
               ],
             },

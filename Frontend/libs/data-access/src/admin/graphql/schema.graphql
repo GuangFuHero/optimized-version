@@ -337,6 +337,8 @@ input CreateStationPropertyInput {
   weightings: Float! = 1
 }
 
+union CreateStationResult = StationCreated | DuplicatesSuspected
+
 input CreateStationSuggestionInput {
   """'station' or 'station_property'"""
   targetType: String!
@@ -416,6 +418,33 @@ input CreateTicketInput {
   Street address and space detail for where help is needed. New in feature 018 — before it, only stations could carry one, so the record that most needs a door number had nothing but a map pin
   """
   secondaryLocation: SecondaryLocationInput = null
+
+  """
+  The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates
+  """
+  tasks: [CreateTicketTaskDraft!]! = []
+}
+
+union CreateTicketResult = TicketCreated | DuplicatesSuspected
+
+input CreateTicketTaskDraft {
+  """Category: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String!
+  taskName: String!
+  taskDescription: String = null
+
+  """Number of people or units needed"""
+  quantity: Int = null
+
+  """Origin: 'user' (default) or 'official'"""
+  source: String! = "user"
+  visibility: Visibility! = public
+  routeUuid: UUID = null
+
+  """
+  Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again
+  """
+  acknowledgedDuplicateOf: String = null
 }
 
 input CreateTicketTaskInput {
@@ -441,6 +470,8 @@ input CreateTicketTaskInput {
   """Optional UUID of an associated route"""
   routeUuid: UUID = null
 }
+
+union CreateTicketTaskResult = TicketTaskCreated | DuplicatesSuspected
 
 type CrowdSourcingType {
   uuid: UUID!
@@ -483,6 +514,28 @@ type DisasterTypeType {
 
   """False retires the type: no new writes, existing ones readable"""
   isActive: Boolean!
+}
+
+type DuplicateSuspect {
+  """
+  Which part of what was sent: "task:0", "task:1"…, or "station"
+  """
+  draftRef: String!
+
+  """
+  What it looks like: "ticket_task" or "station"
+  """
+  relatedKind: String!
+
+  """The existing entity it looks like"""
+  relatedUuid: String!
+
+  """When it looks like a task, that task's ticket"""
+  relatedTicketUuid: String
+}
+
+type DuplicatesSuspected {
+  suspects: [DuplicateSuspect!]!
 }
 
 enum FieldDataType {
@@ -556,7 +609,7 @@ input HelpRequestTaskInput {
 }
 
 type Mutation {
-  createStation(input: CreateStationInput!): StationType!
+  createStation(input: CreateStationInput!, acknowledgedDuplicateOf: String = null): CreateStationResult!
   attachStationPhoto(stationUuid: UUID!, url: String!): PhotoType!
   detachStationPhoto(uuid: UUID!): Boolean!
   updateStation(uuid: UUID!, input: UpdateStationInput!): StationType!
@@ -569,13 +622,13 @@ type Mutation {
   createStationProperty(input: CreateStationPropertyInput!): StationPropertyType!
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
-  createTicket(input: CreateTicketInput!): TicketType!
+  createTicket(input: CreateTicketInput!): CreateTicketResult!
   createHelpRequest(input: CreateHelpRequestInput!): TicketType!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
   setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!
   reviewTicket(uuid: UUID!, verificationStatus: String!, reviewNote: String = null): TicketType!
   deleteTicket(uuid: UUID!): Boolean!
-  createTicketTask(input: CreateTicketTaskInput!): TicketTaskType!
+  createTicketTask(input: CreateTicketTaskInput!, acknowledgedDuplicateOf: String = null): CreateTicketTaskResult!
   updateTicketTask(uuid: UUID!, input: UpdateTicketTaskInput!): TicketTaskType!
   deleteTicketTask(uuid: UUID!): Boolean!
   createTaskProperty(input: CreateTaskPropertyInput!): TaskPropertyType!
@@ -839,6 +892,10 @@ type SecondaryLocationType {
 type StationConnection {
   items: [StationType!]!
   pageInfo: PageInfo!
+}
+
+type StationCreated {
+  station: StationType!
 }
 
 enum StationOperationalStatus {
@@ -1233,6 +1290,11 @@ type TicketConnection {
   pageInfo: PageInfo!
 }
 
+type TicketCreated {
+  ticket: TicketType!
+  tasks: [TicketTaskType!]!
+}
+
 input TicketDisasterDetailInput {
   """The field key from `ticketPropertyConfigs`"""
   propertyName: String!
@@ -1286,6 +1348,10 @@ type TicketPropertyConfigType {
 
   """Whether the field is in use"""
   isActive: Boolean!
+}
+
+type TicketTaskCreated {
+  task: TicketTaskType!
 }
 
 type TicketTaskType {
