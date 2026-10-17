@@ -7783,6 +7783,14 @@
             },
             "type": "array",
             "title": "Login Methods"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/Perm"
+            },
+            "type": "array",
+            "title": "Capabilities",
+            "description": "目前身分能使用的 capability；物件層級的範圍仍由各 endpoint 判斷"
           }
         },
         "type": "object",
@@ -7790,7 +7798,8 @@
           "name",
           "credibility_score",
           "uuid",
-          "created_at"
+          "created_at",
+          "capabilities"
         ],
         "title": "UserResponse",
         "description": "Full user profile response, including which identity is in effect (ADR-068).\n\nTwo different things live here and the names have to keep them apart:\n`identities` / `active_identity` are the RBAC identities the user can act as — role plus\noptional team (feature 010) — while `login_methods` is how they authenticate, one entry\nper password/google/line credential (feature 012, ADR-089). The latter also tells the\nfrontend whether the account is SSO-only, which decides which step-up it must collect\nbefore replacing a contact."
