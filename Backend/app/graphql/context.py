@@ -18,8 +18,9 @@ async def get_context(request: Request):
     for JWT authentication.
 
     Errors:
-        - Invalid/expired token: raises HTTPException(401) from get_current_user
-          with detail "無法驗證憑證"
+        - Invalid/expired token: raises ApiError(401) from get_current_user, whose `code` says
+          whether refreshing will help (ADR-328). It is raised here, in a dependency, so it
+          answers as an HTTP 401 like REST — not as a GraphQL error inside a 200.
         - No token: user is None — a Guest (ADR-025): only PUBLIC_PERMS are reachable,
           everything else 403s in check_permission below. Guest is a program-level view,
           never a DB row.
@@ -99,9 +100,11 @@ def require_authenticated(info) -> User:
 
     Every write mutation needs an actual actor to hand its use-case (ADR-022's `execute(cmd,
     actor=..., db=...)` contract assumes `actor` is real, never Guest) — this is the
-    GraphQL-side equivalent of a REST endpoint's `Depends(get_current_user)`. Same 401
-    shape as security.get_current_user's own failure (same status/detail/header), since
-    this is really the same check, just reached via "no context user" instead of "bad token".
+    GraphQL-side equivalent of a REST endpoint's `Depends(get_current_user)`, built with the
+    same detail and header as security.get_current_user's own failure. It carries no `code`,
+    and the client never sees it as an HTTP 401: raised inside a resolver, it reaches the
+    client as a GraphQL error inside a 200 ("401: …"). That is right for a guest, who holds
+    no token a refresh could fix (ADR-328).
     """
     user = info.context["user"]
     if user is None:

@@ -37,6 +37,12 @@ class ErrorCode(StrEnum):
     # The session died out from under a live client (revoked elsewhere, or expired). Remedy:
     # sign in again; everything will be as it was.
     SESSION_EXPIRED = "session_expired"
+    # The access token's own 15 minutes ran out; the session behind it is fine. Remedy: refresh
+    # and send the request again — unlike SESSION_EXPIRED, nobody is signed out (ADR-328).
+    ACCESS_TOKEN_EXPIRED = "access_token_expired"
+    # The session switched identity after this token was signed (ADR-195). Remedy: refresh, which
+    # signs a token for the identity the session acts as now (ADR-328).
+    ACCESS_TOKEN_STALE = "access_token_stale"
     # Logout could not reach the session store, so the caller is still signed in. Distinct from
     # every other failure because the generic "something went wrong" copy would let a user walk
     # away from a shared machine believing they signed out.

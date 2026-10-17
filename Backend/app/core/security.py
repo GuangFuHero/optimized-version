@@ -10,11 +10,12 @@ from typing import Protocol
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
 from redis.exceptions import RedisError
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.context import request_identity
 from app.core.permissions import GOV_TEAM_WIDENED_PERMS, Perm
@@ -197,10 +198,22 @@ async def get_db():
 logger = logging.getLogger(__name__)
 
 
-def _credentials_exception() -> HTTPException:
-    """Build the standard 401 used when an access token cannot be validated."""
-    return HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
+def _credentials_exception(code: ErrorCode) -> ApiError:
+    """Build the 401 used when an access token cannot be used, naming why (ADR-328).
+
+    The detail is the same in every case; `code` is what a client branches on. Two codes mean
+    "refresh and send it again" — `access_token_expired`, `access_token_stale` — and the rest
+    mean the user is signed out. Without them a browser cannot tell a token that merely ran out
+    from a session that was revoked, and either refreshes in vain or signs out for nothing.
+
+    `code` has no default, and every caller spells it as `ErrorCode.X`: the same contract
+    `tests/test_error_codes.py` enforces on the auth endpoints, where a code that arrives some
+    other way is how a typo ships. A default would also let a new raise site sign users out
+    without anyone having decided that it should.
+    """
+    return ApiError(
+        status.HTTP_401_UNAUTHORIZED,
+        code,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
@@ -210,10 +223,13 @@ def _decode_access_payload(token: str) -> dict:
     """Decode and validate an access JWT, returning its payload. Raises 401 on any failure."""
     try:
         payload = jwt.decode(token, settings.JWT_SIGNING_KEY, algorithms=[settings.ALGORITHM])
+    except ExpiredSignatureError as err:
+        # Checked before JWTError, which it subclasses: only an expired token is worth refreshing.
+        raise _credentials_exception(ErrorCode.ACCESS_TOKEN_EXPIRED) from err
     except JWTError as err:
-        raise _credentials_exception() from err
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID) from err
     if payload.get("sub") is None or payload.get("type") != "access":
-        raise _credentials_exception()
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
     return payload
 
 
@@ -234,7 +250,7 @@ async def _require_live_session(redis, payload: dict) -> None:
     # session to check them against. Letting them through would make "leave the sid out" a
     # way around this check (ADR-101).
     if not sid:
-        raise _credentials_exception()
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
     try:
         session = await SessionRepository(redis).get_session(sid)
     except RedisError:
@@ -244,20 +260,25 @@ async def _require_live_session(redis, payload: dict) -> None:
         # so this log is the only thing that distinguishes "everyone was signed out" from
         # "everyone's credentials broke".
         logger.exception("refusing the request: Redis (the session store) is unreachable")
-        raise _credentials_exception() from None
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID) from None
+    # Gone: logged out, signed out everywhere, a password change or an admin's kick. The token
+    # itself is fine, but nothing a refresh does can bring the session back (ADR-328).
+    if session is None:
+        raise _credentials_exception(ErrorCode.SESSION_EXPIRED)
     # A session that names a different user than the token does is not a case that can arise
     # today — both claims are signed — but pinning it here keeps sid/sub paired as an
     # invariant a future path cannot quietly break (ADR-101).
-    if session is None or session.get("user_uuid") != payload["sub"]:
-        raise _credentials_exception()
+    if session.get("user_uuid") != payload["sub"]:
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
     # The identity is pinned to the session too (ADR-195). `/auth/switch-identity` writes the
     # new `act` into the session record, but the access token it replaced carries the same
     # sid/sub and would otherwise stay usable for the rest of its 15 minutes — replaying it
     # undoes a deliberate downgrade, and attributes whatever it does to the pre-switch
     # identity in the audit trail. The session record is the single source of truth for which
-    # identity a session is acting as; a token that disagrees with it is stale.
+    # identity a session is acting as; a token that disagrees with it is stale — and a refresh,
+    # which signs for the session's current identity, is what replaces it (ADR-328).
     if session.get("act") != payload.get("act"):
-        raise _credentials_exception()
+        raise _credentials_exception(ErrorCode.ACCESS_TOKEN_STALE)
 
 
 # The header, and the one value of it, by which the site marks its requests (ADR-289).
@@ -294,12 +315,12 @@ async def get_current_user(
     await _require_live_session(redis, payload)
     user = await user_repository.get_by_uuid(db, payload["sub"])
     if user is None:
-        raise _credentials_exception()
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
     act = payload.get("act")
     if act:
         identity = await active_identity_repository.resolve(db, str(user.uuid), act)
         if identity is None:
-            raise _credentials_exception()
+            raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
     else:
         # No `act` at all is a different case from one that names a vanished identity: nothing
         # was claimed, so fall back to the platform identity — the ADR-069 default, and what
