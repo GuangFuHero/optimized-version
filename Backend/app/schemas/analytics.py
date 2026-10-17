@@ -138,8 +138,8 @@ class DataResponse(BaseModel):
         "It can differ from the requested `x`, which is ignored where it doesn't apply."
     )
     x_values: list[str | datetime | None] = Field(
-        description="Axis values in display order: bucket starts (local to `tz`) when x is 'date', "
-        "otherwise zh-TW category names, or ['總計'] for an aggregate."
+        description="Axis values in display order: bucket starts as wall-clock time in the request's `tz`, "
+        "with no UTC offset, when x is 'date'; otherwise zh-TW category names, or ['總計'] for an aggregate."
     )
     series: list[ChartSeries]
 

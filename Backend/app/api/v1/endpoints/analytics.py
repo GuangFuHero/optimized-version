@@ -303,8 +303,9 @@ def _in_catalog_unit(domain: str, y, value: int | float) -> int | float:
     """Scale a plotted number to the metric's catalog unit for the endpoints that return numbers.
 
     Rates are 0–1 fractions because the figure's `.0%` tickformat needs them, but the catalog unit is `%`.
+    Rounding drops the float noise `* 100` leaves behind, such as 0.07 becoming 7.000000000000001.
     """
-    return value * 100 if chart_render.CATALOG[domain][y.value]["unit"] == "%" else value
+    return round(value * 100, 6) if chart_render.CATALOG[domain][y.value]["unit"] == "%" else value
 
 
 async def _value_domain(

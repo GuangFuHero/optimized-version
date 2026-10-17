@@ -14,12 +14,14 @@ import pytest
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 
+from app.api.v1.endpoints.analytics import _in_catalog_unit
 from app.core.permissions import Perm
 from app.models.auth import User
 from app.models.geo import Station
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TicketTask
+from app.schemas.analytics import TicketYMetric
 from app.services import chart_render
 from tests.conftest import auth_headers_for
 
@@ -778,3 +780,18 @@ async def test_station_data_renders(client, db_session, redis):
     res = await client.get(STATIONS_DATA_URL, params={"y": "station_status_count"}, headers=headers)
     assert res.status_code == 200
     assert res.json() == {"x": "category", "x_values": [], "series": [{"name": "站點", "values": []}]}
+
+
+@pytest.mark.parametrize(
+    ("y", "plotted", "returned"),
+    [
+        (TicketYMetric.completion_rate, 0.07, 7.0),
+        (TicketYMetric.completion_rate, 0.29, 29.0),
+        (TicketYMetric.completion_rate, 0.57, 57.0),
+        (TicketYMetric.total_tickets, 3, 3),
+    ],
+)
+def test_catalog_unit_scaling_leaves_no_float_noise(y, plotted, returned):
+    """A plain `* 100` turns 0.07 into 7.000000000000001; counts pass through untouched."""
+    assert _in_catalog_unit("tickets", y, plotted) == returned
+    assert type(_in_catalog_unit("tickets", y, plotted)) is type(returned)
