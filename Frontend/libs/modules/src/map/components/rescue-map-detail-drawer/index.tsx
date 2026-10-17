@@ -156,10 +156,9 @@ function createStationSummary({
     stationSummary: {
       stationCode: marker.stationMeta?.name?.trim() || marker.title,
       stationIcon: <ResourcesIcon />,
-      address:
-        marker.stationMeta?.description?.trim() ||
-        marker.stationMeta?.comment?.trim() ||
-        marker.subtitle,
+      // Never the station's `comment`: that is the back office's internal note (backend ADR-332),
+      // and in its place it read as the station's address.
+      address: marker.stationMeta?.description?.trim() || marker.subtitle,
       addressIcon: <PinIcon />,
       status: formatStationStatus(marker),
     },

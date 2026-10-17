@@ -163,7 +163,7 @@ export function mapStationToMarker(
       description: station.description,
       opHour: station.opHour,
       level: station.level,
-      comment: station.comment,
+      // No `comment`: the back office's internal note, which the site never shows (ADR-332).
       source: station.source,
       visibility: station.visibility,
       verificationStatus: station.verificationStatus,
