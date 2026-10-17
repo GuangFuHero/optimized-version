@@ -16,6 +16,16 @@ export type SessionRefresh =
 
 type SettledRefresh = Exclude<SessionRefresh, { kind: 'unavailable' }>;
 
+/**
+ * The 401 codes that a refresh cures (backend login design §5.3): the access token is past its 15
+ * minutes, or it names an identity the session has since switched away from (ADR-195). Any other
+ * 401 — the session itself gone, a broken token, a guest — a refresh cannot help.
+ */
+export const REFRESHABLE_CODES: ReadonlySet<unknown> = new Set([
+  'access_token_expired',
+  'access_token_stale',
+]);
+
 /** Thrown inside the shared refresh so an unavailable one is not kept for the next request. */
 class RefreshUnavailableError extends Error {}
 
@@ -67,8 +77,9 @@ const sharedRefresh: SharedRefresh = ((
 }));
 
 /**
- * Refreshes the session the refresh token belongs to. Called on the server only — the proxy, when
- * the backend says the access token is spent.
+ * Refreshes the session the refresh token belongs to. Called on the server only: by the proxy when
+ * the backend says the access token is spent, and by the middleware before a page renders with one
+ * about to run out.
  */
 export async function refreshBackendSessionAsync(
   refreshToken: string,

@@ -1,9 +1,12 @@
-/** A contact on the account, as `/users/me` lists it. */
-export interface AccountContact {
-  type: string;
-  value: string;
-  verified: boolean;
-}
+import type { components } from '@rescue-frontend/data-access/openapi';
+
+/** A contact on the account, as `/users/me` lists it — the parts the page reads. */
+export type AccountContact = Pick<
+  components['schemas']['ContactOut'],
+  'type' | 'value' | 'verified'
+>;
+
+export type LoginMethod = components['schemas']['LoginMethodOut'];
 
 /**
  * The account to look the password's salt up by, before checking the current password. The salt
@@ -27,9 +30,7 @@ const LOGIN_METHOD_LABELS: ReadonlyArray<[provider: string, label: string]> = [
  * How the account signs in, for 「登入方式：…」: whether it has a password at all tells the
  * person which of 變更密碼 and 建立密碼 is theirs.
  */
-export function loginMethodsText(
-  methods: readonly { provider: string }[],
-): string {
+export function loginMethodsText(methods: readonly LoginMethod[]): string {
   const providers = new Set(methods.map((method) => method.provider));
 
   return LOGIN_METHOD_LABELS.filter(([provider]) => providers.has(provider))

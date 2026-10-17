@@ -101,4 +101,22 @@ describe('currentUserFromBackendAsync', () => {
       currentUserFromBackendAsync('wgdev_at=access-4'),
     ).rejects.toThrow();
   });
+
+  it.each(['access_token_expired', 'access_token_stale'])(
+    'does not read a session whose access token is merely %s as a guest',
+    async (code) => {
+      // The middleware could not refresh it just now (rate-limited, say); the session itself lives
+      // on, and the page has no client-side retry to fall back on.
+      fakeBackend(() =>
+        Response.json(
+          { detail: 'Could not validate credentials', code },
+          { status: 401 },
+        ),
+      );
+
+      await expect(
+        currentUserFromBackendAsync('wgdev_at=access-6; wgdev_rt=refresh-6'),
+      ).rejects.toThrow();
+    },
+  );
 });

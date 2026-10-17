@@ -6,7 +6,7 @@ const GENERIC_MESSAGE = '登入流程發生錯誤，請稍後再試。';
 
 describe('loginErrorMessage', () => {
   // What the backend sends the browser back to the login page with when a Google or LINE sign-in
-  // does not go through (`?error=`; backend login tickets §4, 10-17).
+  // does not go through (`?error=`), from the OAuth start and from the callback.
   it.each([
     // The start
     'oauth_request_invalid',

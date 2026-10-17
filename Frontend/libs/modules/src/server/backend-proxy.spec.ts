@@ -68,6 +68,18 @@ function callSiteRest(path: string, init: BrowserRequest = {}) {
   });
 }
 
+/** A browser request to the back office's `/api/v1/*` proxy route. */
+function callAdminRest(path: string, cookie: string) {
+  const request = new NextRequest(`http://localhost:3001/api/v1/${path}`, {
+    headers: { accept: 'application/json', cookie },
+  });
+  const segments = new URL(request.url).pathname.split('/').slice(3);
+
+  return createBackendRestHandler('admin')(request, {
+    params: Promise.resolve({ segments }),
+  });
+}
+
 /** A browser's GraphQL request to the site's `/api/graphql` proxy route. */
 function callSiteGraphql(query: string, cookie?: string) {
   const headers = new Headers({ 'content-type': 'application/json' });
@@ -147,6 +159,19 @@ describe('site REST proxy', () => {
     });
 
     expect(calls[0].headers.get('cookie')).toBe('wgstg_at=access-23');
+  });
+
+  it("falls back on the backend's own default prefix, never production's", async () => {
+    // A deployment that forgot AUTH_COOKIE_PREFIX must not hand production's tokens on: the
+    // backend defaults to `wgdev` for the same reason.
+    vi.stubEnv('AUTH_COOKIE_PREFIX', undefined);
+    const calls = fakeBackend();
+
+    await callSiteRest('tickets', {
+      cookie: 'wg_at=production-access; wgdev_at=access-26',
+    });
+
+    expect(calls[0].headers.get('cookie')).toBe('wgdev_at=access-26');
   });
 
   it('sends the refresh cookie on to /auth/session, which signs out by it', async () => {
@@ -336,6 +361,61 @@ describe('site REST proxy, access token expired', () => {
     expect(await response.json()).toEqual({ items: ['ticket-9'] });
   });
 
+  it("puts the resent answer's own cookies after the refresh's, so the backend's last word wins", async () => {
+    // Switching identity answers with a new access cookie of its own (backend login design §6).
+    fakeBackend((call) => {
+      if (isRefresh(call)) return refreshed('access-28b', 'refresh-28b');
+      if (!call.headers.get('cookie')?.includes('wgdev_at=access-28b')) {
+        return unauthorized('access_token_expired');
+      }
+      const headers = new Headers({ 'content-type': 'application/json' });
+      headers.append(
+        'set-cookie',
+        'wgdev_at=access-28c; Path=/; HttpOnly; SameSite=Lax',
+      );
+      return new Response('{}', { status: 200, headers });
+    });
+
+    const response = await callSiteRest('auth/session/switch-identity', {
+      method: 'POST',
+      cookie: 'wgdev_at=access-28a; wgdev_rt=refresh-28a',
+      body: '{}',
+    });
+
+    expect(response.headers.getSetCookie()).toEqual([
+      'wgdev_at=access-28b; Path=/; HttpOnly; SameSite=Lax',
+      'wgdev_rt=refresh-28b; Path=/; HttpOnly; SameSite=Lax',
+      'wgdev_at=access-28c; Path=/; HttpOnly; SameSite=Lax',
+    ]);
+  });
+
+  it.each([
+    [
+      'no code',
+      () => Response.json({ detail: 'Unauthorized' }, { status: 401 }),
+    ],
+    [
+      'a body that is not JSON',
+      () => new Response('Unauthorized', { status: 401 }),
+    ],
+  ])(
+    'leaves a 401 with %s alone: nothing says a refresh would help',
+    async (_what, answer) => {
+      const calls = fakeBackend((call) =>
+        isRefresh(call) ? refreshed('access-29b', 'refresh-29b') : answer(),
+      );
+
+      const response = await callSiteRest('tickets', {
+        cookie: 'wgdev_at=access-29a; wgdev_rt=refresh-29a',
+      });
+
+      expect({
+        status: response.status,
+        refreshes: calls.filter(isRefresh).length,
+      }).toEqual({ status: 401, refreshes: 0 });
+    },
+  );
+
   it('refreshes once for a page whose requests all found the access token spent', async () => {
     const calls = fakeBackend(async (call) => {
       if (isRefresh(call)) {
@@ -496,6 +576,44 @@ describe('site GraphQL proxy', () => {
       body: await response.json(),
       session: response.headers.get('x-wg-session'),
     }).toEqual({ status: 200, body: guestError, session: null });
+  });
+});
+
+describe('back-office REST proxy, until its own move', () => {
+  it("signs in with its next-auth bearer token alone, leaving the site's cookies and session be", async () => {
+    // localhost:3000 and :3001 share cookies, and so do the staging hosts: the site's login cookies
+    // reach the back office's proxy. It still signs in through next-auth until its own move, so it
+    // neither sends them on nor refreshes the site's session when its bearer token is turned down.
+    vi.stubEnv('NEXTAUTH_SECRET', 'test-secret');
+    const session = await encode({
+      secret: 'test-secret',
+      token: {
+        sub: 'user-27',
+        accessToken: 'admin-bearer-27',
+        refreshToken: 'admin-refresh-27',
+        accessTokenExpiresAt: Date.now() + 10 * 60 * 1000,
+      },
+    });
+    const calls = fakeBackend((call) =>
+      isRefresh(call)
+        ? refreshed('access-27b', 'refresh-27b')
+        : unauthorized('access_token_stale'),
+    );
+
+    await callAdminRest(
+      'tickets',
+      `next-auth.session-token=${session}; wgdev_at=access-27a; wgdev_rt=refresh-27a`,
+    );
+
+    expect({
+      authorization: calls[0].headers.get('authorization'),
+      cookie: calls[0].headers.get('cookie'),
+      refreshes: calls.filter(isRefresh).length,
+    }).toEqual({
+      authorization: 'Bearer admin-bearer-27',
+      cookie: null,
+      refreshes: 0,
+    });
   });
 });
 

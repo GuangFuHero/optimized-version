@@ -2,10 +2,12 @@
  * The login cookies the backend sets and reads (backend login design §4): `{prefix}_at` holds the
  * access token, `{prefix}_rt` the refresh token. The prefix tells environments apart — production
  * `wg`, staging `wgstg`, local `wgdev` — because production's `.wan-guard.com` cookies also reach
- * the staging hosts. It must match the backend's `AUTH_COOKIE_PREFIX`.
+ * the staging hosts. It must match the backend's `AUTH_COOKIE_PREFIX`, and falls back on the
+ * backend's default when unset: `wgdev`, so a deployment that forgot it never takes production's
+ * cookies for its own.
  */
 export function authCookieNames() {
-  const prefix = process.env.AUTH_COOKIE_PREFIX ?? 'wg';
+  const prefix = process.env.AUTH_COOKIE_PREFIX || 'wgdev';
 
   return { prefix, access: `${prefix}_at`, refresh: `${prefix}_rt` };
 }

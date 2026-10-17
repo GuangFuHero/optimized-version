@@ -28,24 +28,35 @@ export function sessionStorageOrNull(): Storage | null {
 }
 
 /**
+ * This tab is signed out now — the backend cleared both cookies in its answer (backend login
+ * design §4) — so it carries on as a guest: the other tabs are told, and read the session again,
+ * and this one leaves for `href` or reloads where it is. A whole-page load, not client-side
+ * navigation: urql's cache lives in the page and must not go on showing what the signed-in person
+ * could see.
+ */
+export function continueSignedOut(href?: string): void {
+  markSigningOutHere();
+  broadcastAuthChange('signed-out');
+
+  if (href) {
+    window.location.assign(href);
+  } else {
+    window.location.reload();
+  }
+}
+
+/**
  * The proxy says the session has ended: reload where the person is, now a guest — as signing out
- * does, rather than sending them to the login page. A reload, not client-side navigation: urql's
- * cache lives in the page and must not go on showing what the signed-in person could see. Runs once
- * per tab, however many requests come back marked at the same time.
- *
- * Nothing to sign out of here: the backend cleared both cookies in the answer that ended the session
- * (backend login design §4). Only the other tabs still need telling; they read the session again and
- * reload as guests.
+ * does, rather than sending them to the login page — with word for the next page to say why. Runs
+ * once per tab, however many requests come back marked at the same time.
  */
 export function endExpiredSession(): void {
   if (signingOutHere) {
     return;
   }
 
-  markSigningOutHere();
   markSessionExpired(sessionStorageOrNull());
-  broadcastAuthChange('signed-out');
-  window.location.reload();
+  continueSignedOut();
 }
 
 /**

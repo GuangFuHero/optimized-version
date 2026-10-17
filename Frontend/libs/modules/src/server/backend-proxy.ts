@@ -11,7 +11,10 @@ import {
 } from './auth-cookies';
 import { getBackendApiBaseUrl } from './backend-api-url';
 import { withClientIpAsync } from './client-ip';
-import { refreshBackendSessionAsync } from './session-refresh';
+import {
+  REFRESHABLE_CODES,
+  refreshBackendSessionAsync,
+} from './session-refresh';
 import {
   applyAccessTokenAsync,
   applyBackendAuthResponseCookies,
@@ -62,13 +65,24 @@ function forwardHeaders(
 }
 
 /**
- * The back office still signs in with next-auth until its own move (Ethan's PR on top of this one,
- * backend login design §12–§13): its requests keep the bearer token from next-auth's session. The
+ * The back office still signs in with next-auth until its own move to the backend login, which
+ * ships in the same release (backend login design §13): its requests keep the bearer token from
+ * next-auth's session. The
  * site never reads it, so a next-auth session left in a browser from before the move is ignored
  * rather than sent ahead of the new cookies (the backend prefers a bearer token, §5.1).
  */
 function resolveNextAuthForAdminAsync(request: NextRequest) {
   return resolveBackendAuthTokenAsync(request);
+}
+
+/**
+ * The browser's cookies, for the site's requests only. The back office's proxy gets the site's
+ * login cookies too (localhost's ports share them, and so do the staging hosts), but until its own
+ * move it signs in with the bearer token alone: it neither sends them on nor refreshes the site's
+ * session on their behalf.
+ */
+function siteCookieHeader(request: NextRequest, audience: Audience) {
+  return audience === 'site' ? request.headers.get('cookie') : null;
 }
 
 function applySession(
@@ -91,16 +105,6 @@ async function readBodyAsync(request: NextRequest) {
     ? undefined
     : await request.arrayBuffer();
 }
-
-/**
- * The 401 codes that a refresh cures (backend login design §5.3): the access token is past its 15
- * minutes, or it names an identity the session has since switched away from (ADR-195). Any other
- * 401 — the session itself gone, a broken token, a guest — a refresh cannot help.
- */
-const REFRESHABLE_CODES: ReadonlySet<unknown> = new Set([
-  'access_token_expired',
-  'access_token_stale',
-]);
 
 /**
  * The 401 codes that mean the session itself has ended (§5.3): signed out, a password changed, an
@@ -227,7 +231,7 @@ export function createBackendRestHandler(audience: Audience) {
         );
       // A public tile is the same for everyone and cached once for all: it goes without cookies.
       const response = await sendWithRefreshAsync(
-        publicMap ? null : request.headers.get('cookie'),
+        publicMap ? null : siteCookieHeader(request, audience),
         send,
       );
       if (
@@ -328,7 +332,7 @@ export function createBackendGraphqlHandler(audience: Audience) {
       }
       const body = await readBodyAsync(request);
       const response = await sendWithRefreshAsync(
-        request.headers.get('cookie'),
+        siteCookieHeader(request, audience),
         (cookieHeader) =>
           forwardRequest(
             request,

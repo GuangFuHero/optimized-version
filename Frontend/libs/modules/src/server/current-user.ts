@@ -1,19 +1,15 @@
+import type { components } from '@rescue-frontend/data-access/openapi';
+
 import { forwardedCookieHeader } from './auth-cookies';
 import { getBackendApiBaseUrl } from './backend-api-url';
+import { REFRESHABLE_CODES } from './session-refresh';
 import { SITE_REALM_HEADERS } from './site-realm';
 
-/** The parts of `/users/me` a page reads on the server (backend `UserResponse`). */
-export interface CurrentUser {
-  uuid: string;
-  name: string;
-  contacts?: { type: string; value: string; verified: boolean }[];
-  /** `password`, `google`, `line` (backend `users.py`). */
-  login_methods?: { provider: string }[];
-}
+export type CurrentUser = components['schemas']['UserResponse'];
 
 /**
  * Who is signed in, for a page rendering on the server, from the browser's cookies. The
- * middleware has refreshed a spent access token by now (`refresh-before-render.ts`).
+ * middleware has tried to refresh a spent access token by now (`refresh-before-render.ts`).
  */
 export async function currentUserFromBackendAsync(
   cookieHeader: string | null,
@@ -26,12 +22,29 @@ export async function currentUserFromBackendAsync(
     headers,
     cache: 'no-store',
   });
-  if (response.status === 401) return null;
-  // Anything else says nothing about the session: the page fails rather than sending a signed-in
-  // person to the login page as if they were a guest.
+  if (response.status === 401 && !(await isSpentAccessTokenAsync(response))) {
+    return null;
+  }
+  // Anything else says nothing about who is signed in — the backend out of reach, or an access
+  // token the middleware could not refresh just now: the page fails rather than sending a
+  // signed-in person to the login page as if they were a guest.
   if (!response.ok) {
     throw new Error(`/users/me answered ${response.status}`);
   }
 
   return (await response.json()) as CurrentUser;
+}
+
+async function isSpentAccessTokenAsync(response: Response): Promise<boolean> {
+  try {
+    const body: unknown = await response.clone().json();
+    return (
+      typeof body === 'object' &&
+      body !== null &&
+      'code' in body &&
+      REFRESHABLE_CODES.has(body.code)
+    );
+  } catch {
+    return false;
+  }
 }

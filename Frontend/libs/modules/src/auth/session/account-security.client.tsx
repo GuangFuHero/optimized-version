@@ -12,8 +12,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 
-import { broadcastAuthChange } from '../../session/auth-broadcast';
-import { markSigningOutHere } from '../../session/end-expired-session';
+import { continueSignedOut } from '../../session/end-expired-session';
 import {
   newPasswordProblem,
   newPasswordText,
@@ -38,23 +37,22 @@ import {
   loginMethodsText,
   saltLookupIdentity,
   type AccountContact,
+  type LoginMethod,
 } from './account-security-view';
 
 interface AccountSecurityClientProps {
   /** `/users/me`'s contacts and login methods, read on the server. */
   contacts: AccountContact[];
-  loginMethods: { provider: string }[];
+  loginMethods: LoginMethod[];
 }
 
 /**
  * The backend ended every session of this account in its answer and cleared the cookies — a
  * password changed or created, every device signed out (backend login design §6.6) — so sign in
- * again. The other tabs are told, and this one goes on its own (`markSigningOutHere`).
+ * again.
  */
-function continueSignedOut() {
-  markSigningOutHere();
-  broadcastAuthChange('signed-out');
-  window.location.assign('/login');
+function signInAgain() {
+  continueSignedOut('/login');
 }
 
 interface PendingContact {
@@ -168,7 +166,7 @@ export function AccountSecurityClient({
       });
 
       setPasswordSuccess('密碼已更新，系統將重新登入。');
-      continueSignedOut();
+      signInAgain();
     } catch (error) {
       setPasswordError(
         resolveAuthErrorMessage(error, '變更密碼失敗，請稍後再試。'),
@@ -205,8 +203,8 @@ export function AccountSecurityClient({
       setSetPasswordSuccessMessage('已建立登入密碼，請用新密碼重新登入。');
       setSetPasswordValue('');
       setSetPasswordConfirm('');
-      // Creating the password ends the session as changing it does (C, 10-17).
-      continueSignedOut();
+      // The backend ends the session on a password created, as on one changed.
+      signInAgain();
     } catch (error) {
       setSetPasswordErrorMessage(
         resolveAuthErrorMessage(error, '建立密碼失敗，請稍後再試。'),
@@ -316,7 +314,7 @@ export function AccountSecurityClient({
 
     try {
       await logoutAllAsync();
-      continueSignedOut();
+      signInAgain();
     } finally {
       setIsLoggingOutAll(false);
     }

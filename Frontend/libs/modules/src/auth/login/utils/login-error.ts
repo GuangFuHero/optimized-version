@@ -7,7 +7,7 @@ export const LOGIN_FALLBACK_MESSAGE = '登入失敗，請確認帳號或密碼�
  *
  * Two vocabularies arrive on this one parameter: our backend's — what its Google and LINE sign-in
  * redirects back with (backend login design §6.5) — and next-auth's own codes, which the back
- * office signs in with until its own move (Ethan's PR, §13). Backend codes are tried first so a
+ * office signs in with until its own move to the backend login. Backend codes are tried first so a
  * classified failure keeps its meaning; a 429 used to land here as `CredentialsSignin` and be
  * reported as a wrong password.
  */
