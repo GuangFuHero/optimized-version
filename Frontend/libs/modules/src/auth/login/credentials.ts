@@ -1,6 +1,6 @@
 'use client';
 
-import { normalizePassword } from './index';
+import { normalizePassword } from './utils/new-password';
 
 import { getUserSaltAsync } from '../api/client';
 

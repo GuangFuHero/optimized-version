@@ -16,8 +16,7 @@
     "lucide-react": "^0.577.0",
     "@tanstack/react-query": "^5.90.0",
     "@mui/material-nextjs": "^9.0.1",
-    "sonner": "^2.0.7",
-    "urql": "^5.0.1"
+    "sonner": "^2.0.7"
   },
   "scripts": {
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.json",

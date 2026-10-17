@@ -331,6 +331,30 @@ export async function resolveBackendAuthTokenAsync(
   };
 }
 
+export async function applyAccessTokenAsync(
+  request: RequestLike,
+  token: BackendAuthToken,
+  accessToken: Pick<ITokenPair, 'access_token' | 'expires_in'>,
+): Promise<ResolvedBackendAuth> {
+  const nextToken = {
+    ...token,
+    accessToken: accessToken.access_token,
+    expiresIn: accessToken.expires_in,
+    accessTokenExpiresAt: createAccessTokenExpiresAt(accessToken.expires_in),
+  } satisfies BackendAuthToken;
+
+  return {
+    token: nextToken,
+    refreshFailed: false,
+    refreshUnavailable: false,
+    responseCookies: await createPersistedSessionCookiesAsync(
+      request,
+      nextToken,
+      shouldUseSecureCookies(request.headers),
+    ),
+  };
+}
+
 /**
  * The same session once the backend has refused its token with a 401: ended elsewhere (另一台裝置
  * 「登出所有裝置」, an admin, an identity removed — backend ADR-096). Cleared the way a failed

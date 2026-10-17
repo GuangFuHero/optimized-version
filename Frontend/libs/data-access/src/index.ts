@@ -1,6 +1,8 @@
 export * from './graphql';
 export {
   ApiError,
+  createRestClient,
+  responseData,
   getUserSaltAsync,
   loginAsync,
   registerAsync,
