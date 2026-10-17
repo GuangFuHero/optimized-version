@@ -656,6 +656,30 @@ describe('site proxy, session ended elsewhere', () => {
     expect(response.headers.get('x-wg-session')).toBeNull();
   });
 
+  it('leaves the session alone when someone signed in mistypes a password signing in again', async () => {
+    // Signing in reads the password, not the cookie: the backend answers a wrong one
+    // `credentials_invalid` and clears nothing, and whoever is signed in stays so.
+    const calls = fakeBackend(() =>
+      Response.json(
+        { detail: 'Incorrect email or password', code: 'credentials_invalid' },
+        { status: 401 },
+      ),
+    );
+
+    const response = await callSiteRest('auth/session', {
+      method: 'POST',
+      cookie: 'wgdev_at=access-23; wgdev_rt=refresh-23',
+      origin: 'http://localhost:3000',
+      body: JSON.stringify({ username: 'a@example.com', password: 'wrong' }),
+    });
+
+    expect(response.headers.get('x-wg-session')).toBeNull();
+    expect(await response.json()).toMatchObject({
+      code: 'credentials_invalid',
+    });
+    expect(calls).toHaveLength(1);
+  });
+
   it('tells the browser when the session ends between the refresh and the resend', async () => {
     fakeBackend((call) => {
       if (isRefresh(call)) return refreshed('access-22b', 'refresh-22b');

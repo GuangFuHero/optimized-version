@@ -230,10 +230,16 @@ export function createBackendRestHandler(audience: Audience) {
           body,
         );
       // A public tile is the same for everyone and cached once for all: it goes without cookies.
-      const response = await sendWithRefreshAsync(
-        publicMap ? null : siteCookieHeader(request, audience),
-        send,
-      );
+      const cookieHeader = publicMap
+        ? null
+        : siteCookieHeader(request, audience);
+      // Signing in reads the password, not the cookies: a wrong one is `credentials_invalid`, which
+      // clears nothing, and whoever is already signed in on this browser stays so.
+      const signingIn =
+        request.method === 'POST' && segments.join('/') === 'auth/session';
+      const response = signingIn
+        ? await send(cookieHeader)
+        : await sendWithRefreshAsync(cookieHeader, send);
       if (
         auth?.token &&
         response.ok &&
