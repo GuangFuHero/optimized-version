@@ -1,0 +1,13 @@
+/* ==========================================================================
+ * Wan Guard 島嶼守望 Design System — global stylesheet
+ * This is the single entry point consumers link. Imports only.
+ * ========================================================================== */
+
+@import "./tokens/fonts.css";
+@import "./tokens/primitives.css";
+@import "./tokens/semantic.css";
+@import "./tokens/spacing.css";
+@import "./tokens/typography.css";
+@import "./tokens/motion.css";
+@import "./tokens/elevation.css";
+@import "./tokens/base.css";

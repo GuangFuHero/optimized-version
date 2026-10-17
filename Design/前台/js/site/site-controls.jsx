@@ -56,7 +56,7 @@
   }
 
   /** 地圖 / 列表共用控制器：受控於網址狀態，回寫由 onRouteStateChange 處理。 */
-  function useRescueMapController({ routeState, onRouteStateChange, sourceMarkers = [], closureAreas: sourceClosureAreas = [], filterMarkersByOverlayLayers = true, filterMarkersByBbox = true }) {
+  function useRescueMapController({ routeState, onRouteStateChange, sourceMarkers = [], closureAreas: sourceClosureAreas = [], publicZones: sourcePublicZones = [], filterMarkersByOverlayLayers = true, filterMarkersByBbox = true }) {
     const [layerPreferences, setLayerPreferences] = useState({ enabledOverlayLayers: [...R.DEFAULT_RESCUE_MAP_OVERLAY_LAYERS] });
     const [layerPanelOpen, setLayerPanelOpen] = useState(false);
     useEffect(() => { setLayerPreferences(readLayerPreferences()); }, []);
@@ -131,6 +131,10 @@
       () => (!filterMarkersByOverlayLayers || enabledOverlayLayers.includes('closure-areas') ? [...sourceClosureAreas] : []),
       [enabledOverlayLayers, sourceClosureAreas, filterMarkersByOverlayLayers],
     );
+    const publicZones = useMemo(
+      () => (!filterMarkersByOverlayLayers || enabledOverlayLayers.includes('public-zones') ? [...sourcePublicZones] : []),
+      [enabledOverlayLayers, sourcePublicZones, filterMarkersByOverlayLayers],
+    );
     const initialView = useMemo(() => ({
       center: (state.position && state.position.center) || R.RESCUE_MAP_INITIAL_VIEW.center,
       zoom: (state.position && state.position.zoom) || R.RESCUE_MAP_INITIAL_VIEW.zoom,
@@ -144,12 +148,13 @@
       enabledOverlayLayers, toggleOverlayLayer,
       overlayLayerMeta: {
         'closure-areas': { itemCount: sourceClosureAreas.length, sourceLabel: R.OVERLAY_LAYER_CONFIG['closure-areas'].sourceLabel },
+        'public-zones': { itemCount: sourcePublicZones.length, sourceLabel: R.OVERLAY_LAYER_CONFIG['public-zones'].sourceLabel },
         routes: { itemCount: 0, sourceLabel: R.OVERLAY_LAYER_CONFIG.routes.sourceLabel },
         'secondary-locations': { itemCount: 0, sourceLabel: R.OVERLAY_LAYER_CONFIG['secondary-locations'].sourceLabel },
       },
       selectedMarkerId: state.selectedMarkerId, setSelectedMarkerId, setViewportState,
       layerPanelOpen, openLayerPanel: () => setLayerPanelOpen(true), closeLayerPanel: () => setLayerPanelOpen(false),
-      markers, closureAreas, initialView,
+      markers, closureAreas, publicZones, initialView,
       /* 把整份路由狀態原樣帶出來 —— SiteViewSwitch 要用它生跨頁連結
          （`PUB-PS-102`：兩頁共用同一份篩選狀態，切過去必須還在）。
          controller 只挑幾個欄位出來的話，呼叫端就得再接一條 state，
