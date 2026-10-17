@@ -23,3 +23,7 @@ export {
   createBackendRestHandler,
 } from './server/backend-proxy';
 export { refreshBeforeRenderAsync } from './server/refresh-before-render';
+export {
+  currentUserFromBackendAsync,
+  type CurrentUser,
+} from './server/current-user';
