@@ -97,25 +97,56 @@ describe('site REST proxy', () => {
   it('passes the browser cookies to the backend instead of a bearer token', async () => {
     const calls = fakeBackend();
 
-    await callSiteRest('users/me', { cookie: 'wgdev_at=access-1; theme=dark' });
+    await callSiteRest('users/me', { cookie: 'wgdev_at=access-1' });
 
     expect(calls).toHaveLength(1);
-    expect(calls[0].headers.get('cookie')).toBe(
-      'wgdev_at=access-1; theme=dark',
-    );
+    expect(calls[0].headers.get('cookie')).toBe('wgdev_at=access-1');
     expect(calls[0].headers.get('authorization')).toBeNull();
+  });
+
+  it("leaves the browser's other cookies behind, of no use to the backend", async () => {
+    const calls = fakeBackend();
+
+    await callSiteRest('users/me', {
+      cookie: 'theme=dark; _ga=GA1.1.24; wgdev_at=access-24',
+    });
+
+    expect(calls[0].headers.get('cookie')).toBe('wgdev_at=access-24');
   });
 
   it('keeps the refresh cookie from every backend path outside /auth/session', async () => {
     const calls = fakeBackend();
 
     await callSiteRest('tickets', {
-      cookie: 'wgdev_at=access-2; wgdev_rt=refresh-2; theme=dark',
+      cookie: 'wgdev_at=access-2; wgdev_rt=refresh-2',
     });
 
-    expect(calls[0].headers.get('cookie')).toBe(
-      'wgdev_at=access-2; theme=dark',
+    expect(calls[0].headers.get('cookie')).toBe('wgdev_at=access-2');
+  });
+
+  it('sends the OAuth callback the state cookie its start set', async () => {
+    const calls = fakeBackend(
+      () => new Response(null, { status: 302, headers: { location: '/map' } }),
     );
+
+    await callSiteRest('auth/oauth/google/callback?code=c25&state=s25', {
+      cookie: 'theme=dark; wgdev_oauth=state-25',
+    });
+
+    expect(calls[0].headers.get('cookie')).toBe('wgdev_oauth=state-25');
+  });
+
+  it("keeps production's tokens out of the staging backend", async () => {
+    // Production's `.wan-guard.com` cookies reach the staging hosts too (backend design §4).
+    vi.stubEnv('AUTH_COOKIE_PREFIX', 'wgstg');
+    const calls = fakeBackend();
+
+    await callSiteRest('tickets', {
+      cookie:
+        'wg_at=production-access; wg_rt=production-refresh; wgstg_at=access-23',
+    });
+
+    expect(calls[0].headers.get('cookie')).toBe('wgstg_at=access-23');
   });
 
   it('sends the refresh cookie on to /auth/session, which signs out by it', async () => {
@@ -487,6 +518,24 @@ describe('site proxy, session ended elsewhere', () => {
     });
 
     expect(response.headers.get('x-wg-session')).toBe('expired');
+  });
+
+  it('leaves a guest alone whose browser holds other cookies but no access token', async () => {
+    // The backend names a request with no token `credentials_invalid` too, without clearing
+    // anything: marking it would reload the guest's page on every load.
+    fakeBackend(() =>
+      Response.json(
+        { detail: 'Not authenticated', code: 'credentials_invalid' },
+        { status: 401 },
+      ),
+    );
+
+    const response = await callSiteRest('users/me', {
+      // Production's `.wan-guard.com` cookies reach the staging hosts too (backend design §4).
+      cookie: 'theme=dark; wg_at=access-from-production',
+    });
+
+    expect(response.headers.get('x-wg-session')).toBeNull();
   });
 
   it('tells the browser when the session ends between the refresh and the resend', async () => {

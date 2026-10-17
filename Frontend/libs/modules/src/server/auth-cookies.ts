@@ -7,13 +7,17 @@
 export function authCookieNames() {
   const prefix = process.env.AUTH_COOKIE_PREFIX ?? 'wg';
 
-  return { access: `${prefix}_at`, refresh: `${prefix}_rt` };
+  return { prefix, access: `${prefix}_at`, refresh: `${prefix}_rt` };
 }
 
 /**
- * The browser's Cookie header as the backend should see it. The refresh cookie is sent on every
- * request (`Path=/`, so the proxy and the middleware can refresh), but the backend only ever reads
- * it on `/auth/session*`: elsewhere it is left out, so it travels no further than it has to.
+ * The browser's Cookie header as the backend should see it (backend login design §4):
+ * - only this environment's own `{prefix}_*` cookies. Production's cookies sit on `.wan-guard.com`
+ *   and reach the staging hosts too; its tokens must not go on into the staging backend (or its
+ *   logs). Any other site's or tool's cookie is of no use to the backend either.
+ * - the refresh cookie only to `/auth/session*`. It is sent on every request (`Path=/`, so the proxy
+ *   and the middleware can refresh), but the backend reads it nowhere else, so it travels no
+ *   further than it has to.
  *
  * `backendPath` is the path under `/api/v1/`, e.g. `auth/session/refresh`.
  */
@@ -25,16 +29,13 @@ export function forwardedCookieHeader(
     return null;
   }
 
-  if (
-    backendPath === 'auth/session' ||
-    backendPath.startsWith('auth/session/')
-  ) {
-    return cookieHeader;
-  }
-
-  const { refresh } = authCookieNames();
+  const { prefix, refresh } = authCookieNames();
+  const toSession =
+    backendPath === 'auth/session' || backendPath.startsWith('auth/session/');
   const kept = cookiePairs(cookieHeader).filter(
-    (pair) => !pair.startsWith(`${refresh}=`),
+    (pair) =>
+      pair.startsWith(`${prefix}_`) &&
+      (toSession || !pair.startsWith(`${refresh}=`)),
   );
 
   return kept.length > 0 ? kept.join('; ') : null;

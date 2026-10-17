@@ -261,7 +261,12 @@ async function sendWithRefreshAsync(
   send: (cookieHeader: string | null) => Promise<NextResponse>,
 ): Promise<NextResponse> {
   const response = await send(cookieHeader);
-  if (!cookieHeader) {
+  // A guest, whatever else the browser holds: the backend names a request without a token
+  // `credentials_invalid` too (and clears nothing), and there is no session to refresh or end.
+  if (
+    !cookieHeader ||
+    cookieValue(cookieHeader, authCookieNames().access) === undefined
+  ) {
     return response;
   }
 
