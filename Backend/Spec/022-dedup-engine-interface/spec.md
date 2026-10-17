@@ -174,8 +174,8 @@ class DedupEngine(Protocol):
 ```graphql
 type DuplicatesSuspected { suspects: [DuplicateSuspect!]! }
 type DuplicateSuspect {
-  draftRef: String!          # "ticket"｜"task:0"…｜"station"
-  relatedKind: String!       # "ticket"｜"ticket_task"｜"station"
+  draftRef: String!          # "task:0"…｜"station"
+  relatedKind: String!       # "ticket_task"｜"station"
   relatedUuid: String!
   relatedTicketUuid: String  # 對到任務時它所屬的工單
 }
@@ -186,10 +186,10 @@ type DuplicateSuspect {
 ```graphql
 input CreateTicketTaskDraft {
   taskType: String!  taskName: String!  taskDescription: String  quantity: Int
-  source: String = "user"  visibility: Visibility = public  routeUuid: String
+  source: String = "user"  visibility: Visibility = public  routeUuid: UUID
   acknowledgedDuplicateOf: String = null
 }
-# CreateTicketInput 新增：tasks: [CreateTicketTaskDraft!]! = []、acknowledgedDuplicateOf: String = null（工單本身的確認）
+# CreateTicketInput 新增：tasks: [CreateTicketTaskDraft!]! = []
 
 union CreateTicketResult = TicketCreated | DuplicatesSuspected
 type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }

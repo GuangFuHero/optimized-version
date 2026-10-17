@@ -1062,9 +1062,9 @@ sandbox 從 host 打 published port 會失敗，一律 `docker cp` 腳本進 bac
 
 > **實作時調整（2026-09-29）**：通用的 `DuplicateSuspect`／`DuplicatesSuspected` 放在 `app/graphql/shared.py`（工單與站點共用，
 > 避免 geo↔tickets 互相 import）；`createTicket` 的工單層確認改放在 `CreateTicketInput.acknowledgedDuplicateOf`（spec §5.1），
-> 不再是 mutation 參數；GraphQL 測試的 stub 同時蓋掉 `_ENGINE` 與 `_SUBMISSION_ENGINE`。
+> 不再是 mutation 參數（這個欄位後來在 PR #73 審查時拿掉了：工單不比對）；GraphQL 測試的 stub 同時蓋掉 `_ENGINE` 與 `_SUBMISSION_ENGINE`。
 
-- [x] 通用 `DuplicatesSuspected { suspects: [DuplicateSuspect] }`；`CreateTicketTaskDraft`、`CreateTicketInput.tasks`／`acknowledgedDuplicateOf`、`TicketCreated { ticket, tasks }`
+- [x] 通用 `DuplicatesSuspected { suspects: [DuplicateSuspect] }`；`CreateTicketTaskDraft`、`CreateTicketInput.tasks`、`TicketCreated { ticket, tasks }`
 - [x] `createTicketTask(input, acknowledgedDuplicateOf)` 回 `CreateTicketTaskResult`；`createStation` 改回通用型別
 - [x] 既有 `createTicketTask` 測試改走 union；`test_create_dedup.py` 改為任務層級（真 engine）；SDL 守門更新
 
@@ -1198,8 +1198,8 @@ stub engine 的三條：用環境變數或啟動腳本在容器內替換 `regist
 ```graphql
 type DuplicatesSuspected { suspects: [DuplicateSuspect!]! }
 type DuplicateSuspect {
-  draftRef: String!          # 送出的哪一部分："ticket"、"task:0"、"task:1"…、"station"
-  relatedKind: String!       # 它像哪一種既有的東西："ticket"、"ticket_task"、"station"
+  draftRef: String!          # 送出的哪一部分："task:0"、"task:1"…、"station"
+  relatedKind: String!       # 它像哪一種既有的東西："ticket_task"、"station"
   relatedUuid: String!       # 那個既有的東西
   relatedTicketUuid: String  # 像的是任務時，那個任務所屬的工單（顯示用）
 }
@@ -1211,7 +1211,6 @@ type DuplicateSuspect {
 createTicket(input: CreateTicketInput!): CreateTicketResult!   # TicketCreated | DuplicatesSuspected
 # CreateTicketInput 新增：
 #   tasks: [CreateTicketTaskDraft!]! = []
-#   acknowledgedDuplicateOf: String = null      # 工單本身的確認（目前 engine 不比工單，通常不用）
 # CreateTicketTaskDraft：taskType、taskName、taskDescription、quantity、source、visibility、routeUuid、
 #   acknowledgedDuplicateOf（這個任務的確認）
 type TicketCreated { ticket: TicketType!  tasks: [TicketTaskType!]! }
