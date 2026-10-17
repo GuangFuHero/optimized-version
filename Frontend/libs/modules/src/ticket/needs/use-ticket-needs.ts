@@ -76,6 +76,8 @@ export function useTicketNeeds(ticketUuid: string) {
     query: GetTicketDocument,
     variables: { uuid: ticketUuid },
     pause: !ticketUuid,
+    // As the detail panel's, so the two still share one request (WG-028).
+    requestPolicy: 'cache-and-network',
     context: TICKET_NEEDS_QUERY_CONTEXT,
   });
 

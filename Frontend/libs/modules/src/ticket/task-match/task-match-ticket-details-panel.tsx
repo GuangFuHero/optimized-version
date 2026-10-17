@@ -143,6 +143,9 @@ export function TaskMatchTicketDetailsPanel({
       query: GetTicketDocument,
       variables: { uuid: marker.id },
       pause: !marker.id,
+      // Shown from the cache, then re-read (WG-028): a ticket opened again in the same visit
+      // otherwise showed claims and releases made since by other people as they were.
+      requestPolicy: 'cache-and-network',
       context: DETAIL_QUERY_CONTEXT,
     });
 
