@@ -212,7 +212,7 @@ query AdminStation($uuid: UUID!) {
   }
 }
 query AdminAnnouncements($filter: AnnouncementFilter = ALL) {
-  announcements(filter: $filter) {
+  announcements(filter: $filter, placement: admin_page) {
     uuid
     content
     active
@@ -309,45 +309,6 @@ query AdminDisasterTypes($includeInactive: Boolean = true) {
     key
     label
     isActive
-  }
-}
-query AdminWorkZones($skip: Int = 0, $limit: Int = 50) {
-  workZones(skip: $skip, limit: $limit) {
-    items {
-      uuid
-      name
-      geometry
-      createdAt
-      updatedAt
-      assignedTeams {
-        uuid
-        name
-        type
-      }
-    }
-    pageInfo {
-      ...AdminPageInfo
-    }
-  }
-}
-query AdminClosureAreas(
-  $bounds: BoundsInput
-  $skip: Int = 0
-  $limit: Int = 50
-) {
-  closureAreas(bounds: $bounds, skip: $skip, limit: $limit) {
-    items {
-      uuid
-      geometry
-      status
-      informationSource
-      comment
-      createdAt
-      updatedAt
-    }
-    pageInfo {
-      ...AdminPageInfo
-    }
   }
 }
 mutation AdminCreateTicket($input: CreateTicketInput!) {
@@ -622,23 +583,6 @@ mutation AdminUpsertDisasterType($input: UpsertDisasterTypeInput!) {
     label
   }
 }
-mutation AdminCreateWorkZone($input: CreateWorkZoneInput!) {
-  createWorkZone(input: $input) {
-    uuid
-    name
-    geometry
-  }
-}
-mutation AdminUpdateWorkZone($uuid: UUID!, $input: UpdateWorkZoneInput!) {
-  updateWorkZone(uuid: $uuid, input: $input) {
-    uuid
-    name
-    geometry
-  }
-}
-mutation AdminDeleteWorkZone($uuid: UUID!) {
-  deleteWorkZone(uuid: $uuid)
-}
 mutation AdminAssignZoneToTeam($input: ZoneTeamAssignmentInput!) {
   assignZoneToTeam(input: $input) {
     zoneUuid
@@ -648,21 +592,4 @@ mutation AdminAssignZoneToTeam($input: ZoneTeamAssignmentInput!) {
 }
 mutation AdminRemoveZoneFromTeam($input: ZoneTeamAssignmentInput!) {
   removeZoneFromTeam(input: $input)
-}
-mutation AdminCreateClosureArea($input: CreateClosureAreaInput!) {
-  createClosureArea(input: $input) {
-    uuid
-    geometry
-    status
-  }
-}
-mutation AdminUpdateClosureArea($uuid: UUID!, $input: UpdateClosureAreaInput!) {
-  updateClosureArea(uuid: $uuid, input: $input) {
-    uuid
-    geometry
-    status
-  }
-}
-mutation AdminDeleteClosureArea($uuid: UUID!) {
-  deleteClosureArea(uuid: $uuid)
 }

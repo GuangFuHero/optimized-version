@@ -285,51 +285,6 @@ export function useDisasterTypes(
   });
 }
 
-export const workZonesQuery = (
-  variables: documents.AdminWorkZonesQueryVariables = {},
-) =>
-  queryOptions({
-    queryKey: ['admin', 'work-zones', 'workZones', variables],
-    queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminWorkZonesDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
-  });
-
-export function useWorkZones(
-  variables: documents.AdminWorkZonesQueryVariables = {},
-  options: AdminQueryOptions = {},
-) {
-  return useQuery({ ...workZonesQuery(variables), enabled: options.enabled });
-}
-
-export const closureAreasQuery = (
-  variables: documents.AdminClosureAreasQueryVariables = {},
-) =>
-  queryOptions({
-    queryKey: ['admin', 'closure-areas', 'closureAreas', variables],
-    queryFn: ({ signal }) =>
-      adminGraphqlClient
-        .query(documents.AdminClosureAreasDocument, variables, {
-          fetchOptions: { credentials: 'include', signal },
-        })
-        .toPromise()
-        .then(graphqlResponseData),
-  });
-
-export function useClosureAreas(
-  variables: documents.AdminClosureAreasQueryVariables = {},
-  options: AdminQueryOptions = {},
-) {
-  return useQuery({
-    ...closureAreasQuery(variables),
-    enabled: options.enabled,
-  });
-}
-
 export function useCreateTicket() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -838,45 +793,6 @@ export function useUpsertDisasterType() {
   });
 }
 
-export function useCreateWorkZone() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminCreateWorkZoneMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateWorkZoneDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
-  });
-}
-
-export function useUpdateWorkZone() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminUpdateWorkZoneMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateWorkZoneDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
-  });
-}
-
-export function useDeleteWorkZone() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (variables: documents.AdminDeleteWorkZoneMutationVariables) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDeleteWorkZoneDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
-  });
-}
-
 export function useAssignZoneToTeam() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -902,50 +818,5 @@ export function useRemoveZoneFromTeam() {
         .then(graphqlResponseData),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['admin', 'work-zones'] }),
-  });
-}
-
-export function useCreateClosureArea() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (
-      variables: documents.AdminCreateClosureAreaMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminCreateClosureAreaDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'closure-areas'] }),
-  });
-}
-
-export function useUpdateClosureArea() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (
-      variables: documents.AdminUpdateClosureAreaMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminUpdateClosureAreaDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'closure-areas'] }),
-  });
-}
-
-export function useDeleteClosureArea() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (
-      variables: documents.AdminDeleteClosureAreaMutationVariables,
-    ) =>
-      adminGraphqlClient
-        .mutation(documents.AdminDeleteClosureAreaDocument, variables)
-        .toPromise()
-        .then(graphqlResponseData),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['admin', 'closure-areas'] }),
   });
 }

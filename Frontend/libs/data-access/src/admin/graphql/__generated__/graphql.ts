@@ -1,3 +1,4 @@
+/* eslint-disable */
 import type { Geometry } from 'geojson';
 import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
 export type Maybe<T> = T | null;
@@ -56,6 +57,14 @@ export const AnnouncementMoveDirection = {
 
 export type AnnouncementMoveDirection =
   (typeof AnnouncementMoveDirection)[keyof typeof AnnouncementMoveDirection];
+export const AnnouncementPlacement = {
+  AdminPage: 'admin_page',
+  All: 'all',
+  PublicPage: 'public_page',
+} as const;
+
+export type AnnouncementPlacement =
+  (typeof AnnouncementPlacement)[keyof typeof AnnouncementPlacement];
 export type AnnouncementType = {
   __typename?: 'AnnouncementType';
   active: Scalars['Boolean']['output'];
@@ -65,6 +74,38 @@ export type AnnouncementType = {
   createdBy?: Maybe<Scalars['String']['output']>;
   /** Display position (1 = top) among active announcements; null when inactive */
   order?: Maybe<Scalars['Int']['output']>;
+  /** admin_page, public_page, or all (both pages) */
+  placement: Scalars['String']['output'];
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
+export type AreaConnection = {
+  __typename?: 'AreaConnection';
+  items: Array<AreaType>;
+  pageInfo: PageInfo;
+};
+
+export const AreaKind = {
+  HazardousZone: 'hazardous_zone',
+  MarkZone: 'mark_zone',
+  TeamZone: 'team_zone',
+} as const;
+
+export type AreaKind = (typeof AreaKind)[keyof typeof AreaKind];
+export type AreaType = {
+  __typename?: 'AreaType';
+  /** Teams a team zone is assigned to; empty for the other kinds */
+  assignedTeams: Array<AssignedTeamType>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** GeoJSON Polygon or MultiPolygon marking the area */
+  geometry?: Maybe<Scalars['GeoJSON']['output']>;
+  /** Shown on the public map; always true except for a mark zone */
+  isPublic: Scalars['Boolean']['output'];
+  name?: Maybe<Scalars['String']['output']>;
+  note?: Maybe<Scalars['String']['output']>;
+  /** 'hazardous_zone', 'team_zone' or 'mark_zone' */
+  type: Scalars['String']['output'];
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
 };
@@ -124,27 +165,41 @@ export type BriefingType = {
   uuid: Scalars['UUID']['output'];
 };
 
-export type ClosureAreaConnection = {
-  __typename?: 'ClosureAreaConnection';
-  items: Array<ClosureAreaType>;
+export type BuildingFloorAreasInput = {
+  /** Area names, 1-20 characters each */
+  areas: Array<Scalars['String']['input']>;
+  /** Floor label: '3F', '1F', 'B1' */
+  floor: Scalars['String']['input'];
+};
+
+export type BuildingFloorType = {
+  __typename?: 'BuildingFloorType';
+  /** Areas a ticket on this floor must pick from, ending with '其他' for an unlisted space. Empty when the floor takes a free-text room number instead */
+  areas: Array<Scalars['String']['output']>;
+  /** Floor label: '3F', '1F', 'B1' */
+  label: Scalars['String']['output'];
+};
+
+export type BuildingMapConnection = {
+  __typename?: 'BuildingMapConnection';
+  items: Array<BuildingMapType>;
   pageInfo: PageInfo;
 };
 
-export type ClosureAreaType = {
-  __typename?: 'ClosureAreaType';
-  /** Additional notes about this closure */
-  comment?: Maybe<Scalars['String']['output']>;
+export type BuildingMapType = {
+  __typename?: 'BuildingMapType';
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who reported this closure */
   createdBy?: Maybe<Scalars['String']['output']>;
-  /** GeoJSON Polygon or MultiPolygon marking the closed area */
+  /** The building's floors, roof (RF) first */
+  floors: Array<BuildingFloorType>;
+  floorsAboveGround: Scalars['Int']['output'];
+  floorsBelowGround: Scalars['Int']['output'];
+  /** GeoJSON Point of the building — [longitude, latitude] */
   geometry?: Maybe<Scalars['GeoJSON']['output']>;
-  /** Source of the closure report, e.g. agency name or URL */
-  informationSource?: Maybe<Scalars['String']['output']>;
-  /** Internal polymorphic discriminator — always 'closure_area' */
-  propertyName: Scalars['String']['output'];
-  /** Current closure status: 'dangerous', 'block' */
-  status: Scalars['String']['output'];
+  /** Building name shown on the map and in the sidebar */
+  name: Scalars['String']['output'];
+  /** The building's street address. Public, like a station's */
+  secondaryLocation?: Maybe<SecondaryLocationType>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
 };
@@ -152,6 +207,24 @@ export type ClosureAreaType = {
 export type CreateAnnouncementInput = {
   /** The announcement body text */
   content: Scalars['String']['input'];
+  /** Which page shows it; defaults to both */
+  placement?: AnnouncementPlacement;
+};
+
+export type CreateAreaInput = {
+  /** GeoJSON Polygon or MultiPolygon — must not be a Point */
+  geometry: Scalars['GeoJSON']['input'];
+  /** Hazardous zone only: agency name or URL the report came from */
+  informationSource?: InputMaybe<Scalars['String']['input']>;
+  /** Shown on the public map; hazardous and team zones are always public, a mark zone defaults to false */
+  isPublic?: InputMaybe<Scalars['Boolean']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  note?: InputMaybe<Scalars['String']['input']>;
+  /** Required for a hazardous zone, refused for the other kinds */
+  status?: InputMaybe<Scalars['String']['input']>;
+  /** Required for a team zone, refused for the other kinds */
+  teamUuid?: InputMaybe<Scalars['UUID']['input']>;
+  type: AreaKind;
 };
 
 export type CreateBriefingTemplateInput = {
@@ -163,25 +236,48 @@ export type CreateBriefingTemplateInput = {
   tags?: Array<Scalars['String']['input']>;
 };
 
-export type CreateClosureAreaInput = {
-  comment?: InputMaybe<Scalars['String']['input']>;
-  /** GeoJSON Polygon or MultiPolygon — must not be a Point */
+export type CreateBuildingMapInput = {
+  /** Areas per floor. A floor left out takes a free-text room number */
+  floorAreas?: Array<BuildingFloorAreasInput>;
+  /** Floors from 1F up, 1-200 */
+  floorsAboveGround: Scalars['Int']['input'];
+  /** Basement floors, 0-20 */
+  floorsBelowGround?: Scalars['Int']['input'];
+  /** GeoJSON Point — [longitude, latitude] */
   geometry: Scalars['GeoJSON']['input'];
-  /** Source of the closure report, e.g. agency name or URL */
-  informationSource?: InputMaybe<Scalars['String']['input']>;
-  /** Initial closure status: 'active', 'cleared', or 'unknown' */
-  status: Scalars['String']['input'];
+  /** Building name, e.g. '光復國小圖書館' */
+  name: Scalars['String']['input'];
+  /** Street address. Leave buildingSection, floor and room empty */
+  secondaryLocation: SecondaryLocationInput;
 };
 
 export type CreateCrowdSourcingInput = {
   /** Distance in meters from the user to the station at time of submission */
   distanceFromGeometry?: InputMaybe<Scalars['Float']['input']>;
   /** UUID of the StationProperty being rated — null for a general station rating */
-  itemUuid?: InputMaybe<Scalars['String']['input']>;
+  itemUuid?: InputMaybe<Scalars['UUID']['input']>;
   /** Rating value: 'up', 'neutral', or 'down' */
   rating: Scalars['String']['input'];
   /** UUID of the station being rated */
-  stationUuid: Scalars['String']['input'];
+  stationUuid: Scalars['UUID']['input'];
+};
+
+export type CreateHelpRequestInput = {
+  /** Who to ask for at the place */
+  contactName: Scalars['String']['input'];
+  /** Phone number or LINE ID, as the person typed it */
+  contactPhone?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** GeoJSON Point for the location where help is needed — [longitude, latitude] */
+  geometry: Scalars['GeoJSON']['input'];
+  /** Scene photos as links to images kept elsewhere — the platform stores no image. At most 10, each an https:// URL of at most 500 characters */
+  photoUrls?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** The address as typed goes in `landmarkNote`, with `floor` and `room` */
+  secondaryLocation?: InputMaybe<SecondaryLocationInput>;
+  /** At least one need, at most 20 */
+  tasks: Array<HelpRequestTaskInput>;
+  /** At most 200 characters */
+  title: Scalars['String']['input'];
 };
 
 export type CreateStationInput = {
@@ -219,7 +315,7 @@ export type CreateStationPropertyInput = {
   propertyType: Scalars['String']['input'];
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** UUID of the station to attach this property to */
-  stationUuid: Scalars['String']['input'];
+  stationUuid: Scalars['UUID']['input'];
   /** Initial credibility weight [0.0–2.0], default 1.0 */
   weightings?: Scalars['Float']['input'];
 };
@@ -246,10 +342,12 @@ export type CreateTaskPropertyInput = {
   /** Number of units — null if not applicable */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** UUID of the task to attach this property to */
-  taskUuid: Scalars['String']['input'];
+  taskUuid: Scalars['UUID']['input'];
 };
 
 export type CreateTicketInput = {
+  /** File the ticket inside this building map. Its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it */
+  buildingMapUuid?: InputMaybe<Scalars['UUID']['input']>;
   /** Optional email for follow-up */
   contactEmail?: InputMaybe<Scalars['String']['input']>;
   /** Full name of the requester */
@@ -259,8 +357,8 @@ export type CreateTicketInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   /** Disaster type keys, e.g. ['flood', 'landslide']. Each must be an active key from `disasterTypes`; an unknown one is rejected rather than stored, because a ticket filed under a disaster that does not exist would show the reporter an empty form */
   disasterTypes?: InputMaybe<Array<Scalars['String']['input']>>;
-  /** GeoJSON Point for the location where help is needed — [longitude, latitude] */
-  geometry: Scalars['GeoJSON']['input'];
+  /** GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted */
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
   /** 立即生命危險. Omit when nobody was asked */
   immediateDangerReported?: InputMaybe<TriState>;
   /** 災民受困／無法自行離開. Omit when nobody was asked */
@@ -277,10 +375,10 @@ export type CreateTicketInput = {
 };
 
 export type CreateTicketTaskInput = {
-  /** Number of people or units needed */
+  /** People or units needed, at least 1; required except for a 'rescue' task, which may omit it */
   quantity?: InputMaybe<Scalars['Int']['input']>;
   /** Optional UUID of an associated route */
-  routeUuid?: InputMaybe<Scalars['String']['input']>;
+  routeUuid?: InputMaybe<Scalars['UUID']['input']>;
   /** Origin: 'user' (default) or 'official' */
   source?: Scalars['String']['input'];
   taskDescription?: InputMaybe<Scalars['String']['input']>;
@@ -288,15 +386,9 @@ export type CreateTicketTaskInput = {
   /** Category: 'rescue', 'supply', 'medical', or 'hr' */
   taskType: Scalars['String']['input'];
   /** UUID of the ticket this task belongs to */
-  ticketUuid: Scalars['String']['input'];
+  ticketUuid: Scalars['UUID']['input'];
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
   visibility?: Visibility;
-};
-
-export type CreateWorkZoneInput = {
-  /** GeoJSON Polygon or MultiPolygon — must not be a Point */
-  geometry: Scalars['GeoJSON']['input'];
-  name: Scalars['String']['input'];
 };
 
 export type CrowdSourcingType = {
@@ -349,6 +441,42 @@ export type GenerateBriefingInput = {
   templateUuid?: InputMaybe<Scalars['UUID']['input']>;
 };
 
+export type HazardousZoneConnection = {
+  __typename?: 'HazardousZoneConnection';
+  items: Array<HazardousZoneType>;
+  pageInfo: PageInfo;
+};
+
+export type HazardousZoneType = {
+  __typename?: 'HazardousZoneType';
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the user who drew this zone */
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** GeoJSON Polygon or MultiPolygon marking the zone */
+  geometry?: Maybe<Scalars['GeoJSON']['output']>;
+  /** Source of the hazard report, e.g. agency name or URL */
+  informationSource?: Maybe<Scalars['String']['output']>;
+  name?: Maybe<Scalars['String']['output']>;
+  /** Additional notes about this zone */
+  note?: Maybe<Scalars['String']['output']>;
+  /** Internal polymorphic discriminator — always 'hazardous_zone' */
+  propertyName: Scalars['String']['output'];
+  /** Current hazard status, e.g. 'dangerous', 'block' */
+  status: Scalars['String']['output'];
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
+export type HelpRequestTaskInput = {
+  /** People or units needed, at least 1; required except for a 'rescue' need, which may omit it */
+  quantity?: InputMaybe<Scalars['Int']['input']>;
+  taskDescription?: InputMaybe<Scalars['String']['input']>;
+  /** What is needed, at most 200 characters */
+  taskName: Scalars['String']['input'];
+  /** What the need asks for */
+  taskType: NeedKind;
+};
+
 export type Mutation = {
   __typename?: 'Mutation';
   assignStationToTeam: StationType;
@@ -356,49 +484,55 @@ export type Mutation = {
   assignZoneToTeam: ZoneAssignmentType;
   attachStationPhoto: PhotoType;
   createAnnouncement: AnnouncementType;
+  createArea: AreaType;
   createBriefingTemplate: BriefingTemplateType;
-  createClosureArea: ClosureAreaType;
+  createBuildingMap: BuildingMapType;
   createCrowdSourcing: CrowdSourcingType;
+  createHelpRequest: TicketType;
   createStation: StationType;
   createStationProperty: StationPropertyType;
   createStationSuggestion: StationSuggestionType;
   createTaskProperty: TaskPropertyType;
   createTicket: TicketType;
   createTicketTask: TicketTaskType;
-  createWorkZone: WorkZoneType;
   deleteAnnouncement: Scalars['Boolean']['output'];
+  deleteArea: Scalars['Boolean']['output'];
   deleteBriefing: Scalars['Boolean']['output'];
   deleteBriefingTemplate: Scalars['Boolean']['output'];
-  deleteClosureArea: Scalars['Boolean']['output'];
+  deleteBuildingMap: Scalars['Boolean']['output'];
   deleteStation: Scalars['Boolean']['output'];
   deleteTicket: Scalars['Boolean']['output'];
-  deleteWorkZone: Scalars['Boolean']['output'];
+  deleteTicketTask: Scalars['Boolean']['output'];
   detachStationPhoto: Scalars['Boolean']['output'];
   generateBriefing: BriefingType;
   mergeStationSuggestions: StationSuggestionMergeType;
   moveAnnouncement: AnnouncementType;
+  promoteMarkZone: HazardousZoneType;
   removeZoneFromTeam: Scalars['Boolean']['output'];
   reviewTicket: TicketType;
   revokeStationSuggestionMerge: StationSuggestionMergeType;
   setAnnouncementActive: AnnouncementType;
   setTicketDisasterDetails: Array<TicketDisasterDetailType>;
+  stopRecruiting: TicketTaskType;
+  submitRoleRequest: RoleRequestType;
   unassignStation: StationType;
   unassignTaskActor: Scalars['Boolean']['output'];
   updateAnnouncement: AnnouncementType;
+  updateArea: AreaType;
   updateBriefing: BriefingType;
   updateBriefingTemplate: BriefingTemplateType;
-  updateClosureArea: ClosureAreaType;
+  updateBuildingMap: BuildingMapType;
   updateStation: StationType;
   updateStationProperty: StationPropertyType;
   updateTaskAssignment: TaskAssignmentType;
   updateTaskProperty: TaskPropertyType;
   updateTicket: TicketType;
   updateTicketTask: TicketTaskType;
-  updateWorkZone: WorkZoneType;
   upsertDisasterType: DisasterTypeType;
   upsertStationPropertyConfig: StationPropertyConfigType;
   upsertTaskPropertyConfig: TaskPropertyConfigType;
   upsertTicketPropertyConfig: TicketPropertyConfigType;
+  withdrawRoleRequest: RoleRequestType;
 };
 
 export type MutationAssignStationToTeamArgs = {
@@ -425,16 +559,24 @@ export type MutationCreateAnnouncementArgs = {
   input: CreateAnnouncementInput;
 };
 
+export type MutationCreateAreaArgs = {
+  input: CreateAreaInput;
+};
+
 export type MutationCreateBriefingTemplateArgs = {
   input: CreateBriefingTemplateInput;
 };
 
-export type MutationCreateClosureAreaArgs = {
-  input: CreateClosureAreaInput;
+export type MutationCreateBuildingMapArgs = {
+  input: CreateBuildingMapInput;
 };
 
 export type MutationCreateCrowdSourcingArgs = {
   input: CreateCrowdSourcingInput;
+};
+
+export type MutationCreateHelpRequestArgs = {
+  input: CreateHelpRequestInput;
 };
 
 export type MutationCreateStationArgs = {
@@ -461,11 +603,11 @@ export type MutationCreateTicketTaskArgs = {
   input: CreateTicketTaskInput;
 };
 
-export type MutationCreateWorkZoneArgs = {
-  input: CreateWorkZoneInput;
+export type MutationDeleteAnnouncementArgs = {
+  uuid: Scalars['UUID']['input'];
 };
 
-export type MutationDeleteAnnouncementArgs = {
+export type MutationDeleteAreaArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
@@ -477,7 +619,7 @@ export type MutationDeleteBriefingTemplateArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
-export type MutationDeleteClosureAreaArgs = {
+export type MutationDeleteBuildingMapArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
@@ -489,7 +631,7 @@ export type MutationDeleteTicketArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
-export type MutationDeleteWorkZoneArgs = {
+export type MutationDeleteTicketTaskArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
@@ -509,6 +651,11 @@ export type MutationMergeStationSuggestionsArgs = {
 
 export type MutationMoveAnnouncementArgs = {
   direction: AnnouncementMoveDirection;
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MutationPromoteMarkZoneArgs = {
+  input: PromoteMarkZoneInput;
   uuid: Scalars['UUID']['input'];
 };
 
@@ -536,6 +683,14 @@ export type MutationSetTicketDisasterDetailsArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+export type MutationStopRecruitingArgs = {
+  taskUuid: Scalars['UUID']['input'];
+};
+
+export type MutationSubmitRoleRequestArgs = {
+  input: SubmitRoleRequestInput;
+};
+
 export type MutationUnassignStationArgs = {
   stationUuid: Scalars['UUID']['input'];
 };
@@ -549,6 +704,11 @@ export type MutationUpdateAnnouncementArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
+export type MutationUpdateAreaArgs = {
+  input: UpdateAreaInput;
+  uuid: Scalars['UUID']['input'];
+};
+
 export type MutationUpdateBriefingArgs = {
   input: UpdateBriefingInput;
   uuid: Scalars['UUID']['input'];
@@ -559,8 +719,8 @@ export type MutationUpdateBriefingTemplateArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
-export type MutationUpdateClosureAreaArgs = {
-  input: UpdateClosureAreaInput;
+export type MutationUpdateBuildingMapArgs = {
+  input: UpdateBuildingMapInput;
   uuid: Scalars['UUID']['input'];
 };
 
@@ -594,11 +754,6 @@ export type MutationUpdateTicketTaskArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
-export type MutationUpdateWorkZoneArgs = {
-  input: UpdateWorkZoneInput;
-  uuid: Scalars['UUID']['input'];
-};
-
 export type MutationUpsertDisasterTypeArgs = {
   input: UpsertDisasterTypeInput;
 };
@@ -617,6 +772,36 @@ export type MutationUpsertTicketPropertyConfigArgs = {
   input: UpsertTicketPropertyConfigInput;
 };
 
+export type MutationWithdrawRoleRequestArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MyRoleRequestsType = {
+  __typename?: 'MyRoleRequestsType';
+  /** May send an application now: no back-office identity, none pending, not paused */
+  canApply: Scalars['Boolean']['output'];
+  /** Holds a role beyond `user`: the entry offers 前往後台 instead of applying */
+  hasBackofficeIdentity: Scalars['Boolean']['output'];
+  /** Newest first */
+  requests: Array<RoleRequestType>;
+};
+
+/** One of the caller's claims, with the need and the ticket it is for */
+export type MyTaskAssignmentType = {
+  __typename?: 'MyTaskAssignmentType';
+  assignment: TaskAssignmentType;
+  task: TicketTaskType;
+  ticket: TicketType;
+};
+
+export const NeedKind = {
+  Hr: 'hr',
+  Medical: 'medical',
+  Rescue: 'rescue',
+  Supply: 'supply',
+} as const;
+
+export type NeedKind = (typeof NeedKind)[keyof typeof NeedKind];
 export type PageInfo = {
   __typename?: 'PageInfo';
   /** True if there are more records after the current page */
@@ -641,30 +826,42 @@ export type PhotoType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export type PromoteMarkZoneInput = {
+  informationSource?: InputMaybe<Scalars['String']['input']>;
+  status: Scalars['String']['input'];
+};
+
 export type Query = {
   __typename?: 'Query';
   announcement?: Maybe<AnnouncementType>;
   announcements: Array<AnnouncementType>;
+  areas: AreaConnection;
   briefing?: Maybe<BriefingType>;
   briefingTemplate?: Maybe<BriefingTemplateType>;
   briefingTemplates: Array<BriefingTemplateType>;
   briefings: Array<BriefingType>;
-  closureArea?: Maybe<ClosureAreaType>;
-  closureAreas: ClosureAreaConnection;
+  buildingMap?: Maybe<BuildingMapType>;
+  buildingMapTickets: Array<TicketType>;
+  buildingMaps: BuildingMapConnection;
   disasterTypes: Array<DisasterTypeType>;
+  hazardousZone?: Maybe<HazardousZoneType>;
+  hazardousZones: HazardousZoneConnection;
+  myRoleRequests: MyRoleRequestsType;
+  myTaskAssignments: Array<MyTaskAssignmentType>;
+  myTickets: Array<TicketType>;
   station?: Maybe<StationType>;
   stationPropertyConfigs: Array<StationPropertyConfigType>;
   stations: StationConnection;
   suggestableFields: Array<SuggestableFieldType>;
   taskProperties: Array<TaskPropertyType>;
   taskPropertyConfigs: Array<TaskPropertyConfigType>;
+  teamZone?: Maybe<TeamZoneType>;
+  teamZones: TeamZoneConnection;
   ticket?: Maybe<TicketType>;
   ticketPropertyConfigs: Array<TicketPropertyConfigType>;
   ticketTasks: Array<TicketTaskType>;
   tickets: TicketConnection;
-  workZone?: Maybe<WorkZoneType>;
-  workZones: WorkZoneConnection;
-  zonesByTeam: WorkZoneConnection;
+  zonesByTeam: TeamZoneConnection;
 };
 
 export type QueryAnnouncementArgs = {
@@ -673,6 +870,14 @@ export type QueryAnnouncementArgs = {
 
 export type QueryAnnouncementsArgs = {
   filter?: AnnouncementFilter;
+  placement?: AnnouncementPlacement;
+};
+
+export type QueryAreasArgs = {
+  bounds?: InputMaybe<BoundsInput>;
+  includePrivate?: Scalars['Boolean']['input'];
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
 };
 
 export type QueryBriefingArgs = {
@@ -693,11 +898,17 @@ export type QueryBriefingsArgs = {
   tag?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type QueryClosureAreaArgs = {
+export type QueryBuildingMapArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
-export type QueryClosureAreasArgs = {
+export type QueryBuildingMapTicketsArgs = {
+  buildingMapUuid: Scalars['UUID']['input'];
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+};
+
+export type QueryBuildingMapsArgs = {
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
@@ -705,6 +916,16 @@ export type QueryClosureAreasArgs = {
 
 export type QueryDisasterTypesArgs = {
   includeInactive?: Scalars['Boolean']['input'];
+};
+
+export type QueryHazardousZoneArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type QueryHazardousZonesArgs = {
+  bounds?: InputMaybe<BoundsInput>;
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
 };
 
 export type QueryStationArgs = {
@@ -741,6 +962,16 @@ export type QueryTaskPropertyConfigsArgs = {
   taskType: Scalars['String']['input'];
 };
 
+export type QueryTeamZoneArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type QueryTeamZonesArgs = {
+  bounds?: InputMaybe<BoundsInput>;
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+};
+
 export type QueryTicketArgs = {
   uuid: Scalars['UUID']['input'];
   zoom?: InputMaybe<Scalars['Float']['input']>;
@@ -769,19 +1000,41 @@ export type QueryTicketsArgs = {
   zoom?: InputMaybe<Scalars['Float']['input']>;
 };
 
-export type QueryWorkZoneArgs = {
-  uuid: Scalars['UUID']['input'];
-};
-
-export type QueryWorkZonesArgs = {
-  limit?: Scalars['Int']['input'];
-  skip?: Scalars['Int']['input'];
-};
-
 export type QueryZonesByTeamArgs = {
   limit?: Scalars['Int']['input'];
   skip?: Scalars['Int']['input'];
   teamUuid: Scalars['UUID']['input'];
+};
+
+export const RoleRequestRole = {
+  DataAuditor: 'data_auditor',
+  Government: 'government',
+  Ngo: 'ngo',
+} as const;
+
+export type RoleRequestRole =
+  (typeof RoleRequestRole)[keyof typeof RoleRequestRole];
+export const RoleRequestStatus = {
+  Approved: 'approved',
+  Pending: 'pending',
+  Rejected: 'rejected',
+  Withdrawn: 'withdrawn',
+} as const;
+
+export type RoleRequestStatus =
+  (typeof RoleRequestStatus)[keyof typeof RoleRequestStatus];
+export type RoleRequestType = {
+  __typename?: 'RoleRequestType';
+  /** When it was approved, rejected or withdrawn */
+  closedAt?: Maybe<Scalars['DateTime']['output']>;
+  contact?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['DateTime']['output'];
+  reason: Scalars['String']['output'];
+  requestedRole: RoleRequestRole;
+  /** The reviewer's reply, if any */
+  reviewNote?: Maybe<Scalars['String']['output']>;
+  status: RoleRequestStatus;
+  uuid: Scalars['UUID']['output'];
 };
 
 export type SecondaryLocationInput = {
@@ -1002,6 +1255,12 @@ export type StationType = {
   visibility?: Maybe<Scalars['String']['output']>;
 };
 
+export type SubmitRoleRequestInput = {
+  contact?: InputMaybe<Scalars['String']['input']>;
+  reason: Scalars['String']['input'];
+  requestedRole: RoleRequestRole;
+};
+
 export type SuggestableFieldType = {
   __typename?: 'SuggestableFieldType';
   /** Input widget hint: 'string', 'integer', or 'enum' */
@@ -1051,6 +1310,8 @@ export type TaskAssignmentStatus =
   (typeof TaskAssignmentStatus)[keyof typeof TaskAssignmentStatus];
 export type TaskAssignmentType = {
   __typename?: 'TaskAssignmentType';
+  /** Display name of the assigned person. Null to a caller without ticket.view_history on the parent ticket, unless the assignment is their own */
+  actorName?: Maybe<Scalars['String']['output']>;
   /** UUID of the assigned user or group */
   actorUuid: Scalars['String']['output'];
   /** Timestamp when the assignment was created */
@@ -1116,6 +1377,29 @@ export type TaskPropertyType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export type TeamZoneConnection = {
+  __typename?: 'TeamZoneConnection';
+  items: Array<TeamZoneType>;
+  pageInfo: PageInfo;
+};
+
+export type TeamZoneType = {
+  __typename?: 'TeamZoneType';
+  /** Teams this zone has been delegated to */
+  assignedTeams: Array<AssignedTeamType>;
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of the gov user who drew this zone */
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** GeoJSON Polygon or MultiPolygon marking the zone boundary */
+  geometry?: Maybe<Scalars['GeoJSON']['output']>;
+  /** Always true: a team zone and its teams are shown on the public map */
+  isPublic: Scalars['Boolean']['output'];
+  name?: Maybe<Scalars['String']['output']>;
+  note?: Maybe<Scalars['String']['output']>;
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
 export type TicketConnection = {
   __typename?: 'TicketConnection';
   items: Array<TicketType>;
@@ -1164,24 +1448,29 @@ export type TicketPropertyConfigType = {
 export type TicketTaskType = {
   __typename?: 'TicketTaskType';
   assignedCount: Scalars['Int']['output'];
+  /** Everyone who claimed this task. Empty to a caller without ticket.view_history on the parent ticket — assignedCount stays public, and a caller's own claim is myAssignment */
   assignments: Array<TaskAssignmentType>;
   completedCount: Scalars['Int']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket */
   createdBy?: Maybe<Scalars['String']['output']>;
-  /** Review state: 'pending_review', 'approved', or 'rejected' */
-  moderationStatus: Scalars['String']['output'];
+  /** Review state: 'pending_review', 'approved', or 'rejected'. Null to a caller without ticket.view_history on the parent ticket */
+  moderationStatus?: Maybe<Scalars['String']['output']>;
+  /** The caller's own claim on this task. Null to a guest or a non-claimant */
+  myAssignment?: Maybe<TaskAssignmentType>;
   progress?: Maybe<Scalars['Float']['output']>;
   /** Current progress update written by the assignee. Null to a caller without ticket.view_detail on the parent ticket */
   progressNote?: Maybe<Scalars['String']['output']>;
   properties: Array<TaskPropertyType>;
-  /** Number of people or units needed — null means unspecified */
+  /** Number of people or units needed. Null means unspecified and uncapped: a rescue need may leave it out, and needs filed before every other kind had to give one */
   quantity?: Maybe<Scalars['Int']['output']>;
+  /** When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back */
+  recruitingStoppedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Moderator's notes explaining the review decision. Null to a caller without ticket.view_detail on the parent ticket */
   reviewNote?: Maybe<Scalars['String']['output']>;
   /** Origin of this task: 'user' or 'official' */
   source: Scalars['String']['output'];
-  /** Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled' */
+  /** Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or its requester stopped recruiting — the people on it still go), or 'canceled'. Moves only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion */
   status: Scalars['String']['output'];
   /** Detailed task instructions or context. Null to a caller without ticket.view_detail on the parent ticket */
   taskDescription?: Maybe<Scalars['String']['output']>;
@@ -1199,11 +1488,11 @@ export type TicketTaskType = {
 
 export type TicketType = {
   __typename?: 'TicketType';
-  /** Follow-up email — masked unless the caller holds ticket.view_pii here */
+  /** Follow-up email — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
   contactEmail?: Maybe<Scalars['String']['output']>;
-  /** Requester full name — masked unless the caller holds ticket.view_pii here */
+  /** Requester full name — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
   contactName?: Maybe<Scalars['String']['output']>;
-  /** Follow-up phone — masked unless the caller holds ticket.view_pii here */
+  /** Follow-up phone — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
   contactPhone?: Maybe<Scalars['String']['output']>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here */
@@ -1215,11 +1504,11 @@ export type TicketType = {
   disasterTypes: Array<Scalars['String']['output']>;
   /** GeoJSON Point indicating where help is needed. To a caller without ticket.view_detail here, the centre of the H3 cell the point falls in — at most resolution 8 (about 1 km across), coarser when `zoom` asks for it */
   geometry?: Maybe<Scalars['GeoJSON']['output']>;
-  /** Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. Not a triage grade and not a risk classification */
+  /** Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here (in the `tickets` list, ticket.view_history too). Not a triage grade and not a risk classification */
   immediateDangerReported?: Maybe<Scalars['String']['output']>;
   /** The H3 cell `geometry` stands in for, as its hex index (e.g. '884ba0a511fffff'), when the caller is shown the coarse location; null when `geometry` is the exact point. Tickets sharing a value share a location on the map — group by it, and draw the cell from it (h3-js `cellToBoundary`); its resolution is in the index */
   locationCell?: Maybe<Scalars['String']['output']>;
-  /** Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. What the person said, not a professional assessment */
+  /** Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here (in the `tickets` list, ticket.view_history too). What the person said, not a professional assessment */
   personTrappedReported?: Maybe<Scalars['String']['output']>;
   /** Photos attached to this ticket. Empty to a caller without ticket.view_detail here */
   photos: Array<PhotoType>;
@@ -1256,6 +1545,17 @@ export type TriState = (typeof TriState)[keyof typeof TriState];
 export type UpdateAnnouncementInput = {
   /** The new announcement body text */
   content: Scalars['String']['input'];
+  /** Which page shows it; omit to keep the current placement */
+  placement?: InputMaybe<AnnouncementPlacement>;
+};
+
+export type UpdateAreaInput = {
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
+  informationSource?: InputMaybe<Scalars['String']['input']>;
+  isPublic?: InputMaybe<Scalars['Boolean']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  note?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateBriefingInput = {
@@ -1276,11 +1576,13 @@ export type UpdateBriefingTemplateInput = {
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
-export type UpdateClosureAreaInput = {
-  comment?: InputMaybe<Scalars['String']['input']>;
+export type UpdateBuildingMapInput = {
+  /** Replaces every floor's areas when sent; [] clears them */
+  floorAreas?: InputMaybe<Array<BuildingFloorAreasInput>>;
+  floorsAboveGround?: InputMaybe<Scalars['Int']['input']>;
+  floorsBelowGround?: InputMaybe<Scalars['Int']['input']>;
   geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
-  informationSource?: InputMaybe<Scalars['String']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateStationInput = {
@@ -1342,8 +1644,6 @@ export type UpdateTicketInput = {
   reviewNote?: InputMaybe<Scalars['String']['input']>;
   /** Replace the ticket's street address and space detail, creating it if the ticket was filed without one. A whole-input replacement, not a patch — omitted members are written as null */
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
-  /** New lifecycle state — must follow valid transitions (e.g. pending → in_progress) */
-  status?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   /** Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed' */
   verificationStatus?: InputMaybe<Scalars['String']['input']>;
@@ -1356,15 +1656,8 @@ export type UpdateTicketTaskInput = {
   progressNote?: InputMaybe<Scalars['String']['input']>;
   /** Moderator's review notes — pass null to clear */
   reviewNote?: InputMaybe<Scalars['String']['input']>;
-  /** New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled' */
-  status?: InputMaybe<Scalars['String']['input']>;
   /** Updated visibility: 'public', 'restricted', or 'internal' */
   visibility?: InputMaybe<Visibility>;
-};
-
-export type UpdateWorkZoneInput = {
-  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpsertDisasterTypeInput = {
@@ -1421,26 +1714,6 @@ export const Visibility = {
 } as const;
 
 export type Visibility = (typeof Visibility)[keyof typeof Visibility];
-export type WorkZoneConnection = {
-  __typename?: 'WorkZoneConnection';
-  items: Array<WorkZoneType>;
-  pageInfo: PageInfo;
-};
-
-export type WorkZoneType = {
-  __typename?: 'WorkZoneType';
-  /** Teams this zone has been delegated to */
-  assignedTeams: Array<AssignedTeamType>;
-  createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the gov user who drew this zone */
-  createdBy?: Maybe<Scalars['String']['output']>;
-  /** GeoJSON Polygon or MultiPolygon marking the zone boundary */
-  geometry?: Maybe<Scalars['GeoJSON']['output']>;
-  name: Scalars['String']['output'];
-  updatedAt?: Maybe<Scalars['DateTime']['output']>;
-  uuid: Scalars['UUID']['output'];
-};
-
 export type ZoneAssignmentType = {
   __typename?: 'ZoneAssignmentType';
   assignedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1493,7 +1766,7 @@ export type AdminTaskFieldsFragment = {
   reviewNote?: string | null;
   source: string;
   visibility: string;
-  moderationStatus: string;
+  moderationStatus?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   assignments: Array<{
@@ -1578,7 +1851,7 @@ export type AdminTicketsQuery = {
         reviewNote?: string | null;
         source: string;
         visibility: string;
-        moderationStatus: string;
+        moderationStatus?: string | null;
         createdAt?: string | null;
         updatedAt?: string | null;
         assignments: Array<{
@@ -1654,7 +1927,7 @@ export type AdminTicketQuery = {
       reviewNote?: string | null;
       source: string;
       visibility: string;
-      moderationStatus: string;
+      moderationStatus?: string | null;
       createdAt?: string | null;
       updatedAt?: string | null;
       properties: Array<{
@@ -1708,7 +1981,7 @@ export type AdminTicketTasksQuery = {
     reviewNote?: string | null;
     source: string;
     visibility: string;
-    moderationStatus: string;
+    moderationStatus?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
     assignments: Array<{
@@ -1980,67 +2253,6 @@ export type AdminDisasterTypesQuery = {
   }>;
 };
 
-export type AdminWorkZonesQueryVariables = Exact<{
-  skip?: InputMaybe<Scalars['Int']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-export type AdminWorkZonesQuery = {
-  __typename?: 'Query';
-  workZones: {
-    __typename?: 'WorkZoneConnection';
-    items: Array<{
-      __typename?: 'WorkZoneType';
-      uuid: string;
-      name: string;
-      geometry?: Geometry | null;
-      createdAt?: string | null;
-      updatedAt?: string | null;
-      assignedTeams: Array<{
-        __typename?: 'AssignedTeamType';
-        uuid: string;
-        name: string;
-        type: string;
-      }>;
-    }>;
-    pageInfo: {
-      __typename?: 'PageInfo';
-      totalCount: number;
-      hasNextPage: boolean;
-      hasPreviousPage: boolean;
-    };
-  };
-};
-
-export type AdminClosureAreasQueryVariables = Exact<{
-  bounds?: InputMaybe<BoundsInput>;
-  skip?: InputMaybe<Scalars['Int']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-export type AdminClosureAreasQuery = {
-  __typename?: 'Query';
-  closureAreas: {
-    __typename?: 'ClosureAreaConnection';
-    items: Array<{
-      __typename?: 'ClosureAreaType';
-      uuid: string;
-      geometry?: Geometry | null;
-      status: string;
-      informationSource?: string | null;
-      comment?: string | null;
-      createdAt?: string | null;
-      updatedAt?: string | null;
-    }>;
-    pageInfo: {
-      __typename?: 'PageInfo';
-      totalCount: number;
-      hasNextPage: boolean;
-      hasPreviousPage: boolean;
-    };
-  };
-};
-
 export type AdminCreateTicketMutationVariables = Exact<{
   input: CreateTicketInput;
 }>;
@@ -2165,7 +2377,7 @@ export type AdminCreateTicketTaskMutation = {
     reviewNote?: string | null;
     source: string;
     visibility: string;
-    moderationStatus: string;
+    moderationStatus?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
     assignments: Array<{
@@ -2200,7 +2412,7 @@ export type AdminUpdateTicketTaskMutation = {
     reviewNote?: string | null;
     source: string;
     visibility: string;
-    moderationStatus: string;
+    moderationStatus?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
     assignments: Array<{
@@ -2715,44 +2927,6 @@ export type AdminUpsertDisasterTypeMutation = {
   };
 };
 
-export type AdminCreateWorkZoneMutationVariables = Exact<{
-  input: CreateWorkZoneInput;
-}>;
-
-export type AdminCreateWorkZoneMutation = {
-  __typename?: 'Mutation';
-  createWorkZone: {
-    __typename?: 'WorkZoneType';
-    uuid: string;
-    name: string;
-    geometry?: Geometry | null;
-  };
-};
-
-export type AdminUpdateWorkZoneMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-  input: UpdateWorkZoneInput;
-}>;
-
-export type AdminUpdateWorkZoneMutation = {
-  __typename?: 'Mutation';
-  updateWorkZone: {
-    __typename?: 'WorkZoneType';
-    uuid: string;
-    name: string;
-    geometry?: Geometry | null;
-  };
-};
-
-export type AdminDeleteWorkZoneMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type AdminDeleteWorkZoneMutation = {
-  __typename?: 'Mutation';
-  deleteWorkZone: boolean;
-};
-
 export type AdminAssignZoneToTeamMutationVariables = Exact<{
   input: ZoneTeamAssignmentInput;
 }>;
@@ -2774,44 +2948,6 @@ export type AdminRemoveZoneFromTeamMutationVariables = Exact<{
 export type AdminRemoveZoneFromTeamMutation = {
   __typename?: 'Mutation';
   removeZoneFromTeam: boolean;
-};
-
-export type AdminCreateClosureAreaMutationVariables = Exact<{
-  input: CreateClosureAreaInput;
-}>;
-
-export type AdminCreateClosureAreaMutation = {
-  __typename?: 'Mutation';
-  createClosureArea: {
-    __typename?: 'ClosureAreaType';
-    uuid: string;
-    geometry?: Geometry | null;
-    status: string;
-  };
-};
-
-export type AdminUpdateClosureAreaMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-  input: UpdateClosureAreaInput;
-}>;
-
-export type AdminUpdateClosureAreaMutation = {
-  __typename?: 'Mutation';
-  updateClosureArea: {
-    __typename?: 'ClosureAreaType';
-    uuid: string;
-    geometry?: Geometry | null;
-    status: string;
-  };
-};
-
-export type AdminDeleteClosureAreaMutationVariables = Exact<{
-  uuid: Scalars['UUID']['input'];
-}>;
-
-export type AdminDeleteClosureAreaMutation = {
-  __typename?: 'Mutation';
-  deleteClosureArea: boolean;
 };
 
 export const AdminPageInfoFragmentDoc = {
@@ -4056,6 +4192,11 @@ export const AdminAnnouncementsDocument = {
                   name: { kind: 'Name', value: 'filter' },
                 },
               },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'placement' },
+                value: { kind: 'EnumValue', value: 'admin_page' },
+              },
             ],
             selectionSet: {
               kind: 'SelectionSet',
@@ -4541,282 +4682,6 @@ export const AdminDisasterTypesDocument = {
 } as unknown as DocumentNode<
   AdminDisasterTypesQuery,
   AdminDisasterTypesQueryVariables
->;
-export const AdminWorkZonesDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminWorkZones' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '0' },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'limit' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '50' },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'workZones' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'skip' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'skip' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'limit' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'limit' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'items' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                      { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'geometry' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'createdAt' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'updatedAt' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'assignedTeams' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'uuid' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'name' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'type' },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'pageInfo' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'AdminPageInfo' },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminPageInfo' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'PageInfo' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'totalCount' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'hasNextPage' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'hasPreviousPage' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<AdminWorkZonesQuery, AdminWorkZonesQueryVariables>;
-export const AdminClosureAreasDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'AdminClosureAreas' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'bounds' },
-          },
-          type: {
-            kind: 'NamedType',
-            name: { kind: 'Name', value: 'BoundsInput' },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'skip' } },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '0' },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'limit' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '50' },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'closureAreas' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'bounds' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'bounds' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'skip' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'skip' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'limit' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'limit' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'items' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'geometry' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'status' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'informationSource' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'comment' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'createdAt' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'updatedAt' },
-                      },
-                    ],
-                  },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'pageInfo' },
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'FragmentSpread',
-                        name: { kind: 'Name', value: 'AdminPageInfo' },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'AdminPageInfo' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'PageInfo' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'totalCount' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'hasNextPage' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'hasPreviousPage' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminClosureAreasQuery,
-  AdminClosureAreasQueryVariables
 >;
 export const AdminCreateTicketDocument = {
   kind: 'Document',
@@ -7499,176 +7364,6 @@ export const AdminUpsertDisasterTypeDocument = {
   AdminUpsertDisasterTypeMutation,
   AdminUpsertDisasterTypeMutationVariables
 >;
-export const AdminCreateWorkZoneDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminCreateWorkZone' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateWorkZoneInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createWorkZone' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminCreateWorkZoneMutation,
-  AdminCreateWorkZoneMutationVariables
->;
-export const AdminUpdateWorkZoneDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateWorkZone' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateWorkZoneInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateWorkZone' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateWorkZoneMutation,
-  AdminUpdateWorkZoneMutationVariables
->;
-export const AdminDeleteWorkZoneDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminDeleteWorkZone' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'deleteWorkZone' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminDeleteWorkZoneMutation,
-  AdminDeleteWorkZoneMutationVariables
->;
 export const AdminAssignZoneToTeamDocument = {
   kind: 'Document',
   definitions: [
@@ -7772,174 +7467,4 @@ export const AdminRemoveZoneFromTeamDocument = {
 } as unknown as DocumentNode<
   AdminRemoveZoneFromTeamMutation,
   AdminRemoveZoneFromTeamMutationVariables
->;
-export const AdminCreateClosureAreaDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminCreateClosureArea' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateClosureAreaInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createClosureArea' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminCreateClosureAreaMutation,
-  AdminCreateClosureAreaMutationVariables
->;
-export const AdminUpdateClosureAreaDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminUpdateClosureArea' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'UpdateClosureAreaInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'updateClosureArea' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminUpdateClosureAreaMutation,
-  AdminUpdateClosureAreaMutationVariables
->;
-export const AdminDeleteClosureAreaDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminDeleteClosureArea' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
-          type: {
-            kind: 'NonNullType',
-            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'deleteClosureArea' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'uuid' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'uuid' },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  AdminDeleteClosureAreaMutation,
-  AdminDeleteClosureAreaMutationVariables
 >;

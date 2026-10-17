@@ -15,10 +15,19 @@ enum AnnouncementMoveDirection {
   DOWN
 }
 
+enum AnnouncementPlacement {
+  admin_page
+  public_page
+  all
+}
+
 type AnnouncementType {
   uuid: UUID!
   content: String!
   active: Boolean!
+
+  """admin_page, public_page, or all (both pages)"""
+  placement: String!
 
   """
   Display position (1 = top) among active announcements; null when inactive
@@ -29,6 +38,37 @@ type AnnouncementType {
   createdBy: String
   createdAt: DateTime
   updatedAt: DateTime
+}
+
+type AreaConnection {
+  items: [AreaType!]!
+  pageInfo: PageInfo!
+}
+
+enum AreaKind {
+  hazardous_zone
+  team_zone
+  mark_zone
+}
+
+type AreaType {
+  uuid: UUID!
+
+  """'hazardous_zone', 'team_zone' or 'mark_zone'"""
+  type: String!
+  name: String
+
+  """GeoJSON Polygon or MultiPolygon marking the area"""
+  geometry: GeoJSON
+  note: String
+
+  """Shown on the public map; always true except for a mark zone"""
+  isPublic: Boolean!
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """Teams a team zone is assigned to; empty for the other kinds"""
+  assignedTeams: [AssignedTeamType!]!
 }
 
 type AssignedTeamType {
@@ -92,38 +132,79 @@ type BriefingType {
   updatedAt: DateTime
 }
 
-type ClosureAreaConnection {
-  items: [ClosureAreaType!]!
+input BuildingFloorAreasInput {
+  """Floor label: '3F', '1F', 'B1'"""
+  floor: String!
+
+  """Area names, 1-20 characters each"""
+  areas: [String!]!
+}
+
+type BuildingFloorType {
+  """Floor label: '3F', '1F', 'B1'"""
+  label: String!
+
+  """
+  Areas a ticket on this floor must pick from, ending with '其他' for an unlisted space. Empty when the floor takes a free-text room number instead
+  """
+  areas: [String!]!
+}
+
+type BuildingMapConnection {
+  items: [BuildingMapType!]!
   pageInfo: PageInfo!
 }
 
-type ClosureAreaType {
+type BuildingMapType {
   uuid: UUID!
 
-  """Internal polymorphic discriminator — always 'closure_area'"""
-  propertyName: String!
+  """Building name shown on the map and in the sidebar"""
+  name: String!
 
-  """GeoJSON Polygon or MultiPolygon marking the closed area"""
+  """GeoJSON Point of the building — [longitude, latitude]"""
   geometry: GeoJSON
-
-  """UUID of the user who reported this closure"""
+  floorsAboveGround: Int!
+  floorsBelowGround: Int!
   createdBy: String
-
-  """Current closure status: 'dangerous', 'block'"""
-  status: String!
-
-  """Source of the closure report, e.g. agency name or URL"""
-  informationSource: String
-
-  """Additional notes about this closure"""
-  comment: String
   createdAt: DateTime
   updatedAt: DateTime
+
+  """The building's floors, roof (RF) first"""
+  floors: [BuildingFloorType!]!
+
+  """The building's street address. Public, like a station's"""
+  secondaryLocation: SecondaryLocationType
 }
 
 input CreateAnnouncementInput {
   """The announcement body text"""
   content: String!
+
+  """Which page shows it; defaults to both"""
+  placement: AnnouncementPlacement! = all
+}
+
+input CreateAreaInput {
+  type: AreaKind!
+
+  """GeoJSON Polygon or MultiPolygon — must not be a Point"""
+  geometry: GeoJSON!
+  name: String = null
+  note: String = null
+
+  """
+  Shown on the public map; hazardous and team zones are always public, a mark zone defaults to false
+  """
+  isPublic: Boolean = null
+
+  """Required for a team zone, refused for the other kinds"""
+  teamUuid: UUID = null
+
+  """Required for a hazardous zone, refused for the other kinds"""
+  status: String = null
+
+  """Hazardous zone only: agency name or URL the report came from"""
+  informationSource: String = null
 }
 
 input CreateBriefingTemplateInput {
@@ -137,32 +218,68 @@ input CreateBriefingTemplateInput {
   state: BriefingState! = BRIEFING
 }
 
-input CreateClosureAreaInput {
-  """GeoJSON Polygon or MultiPolygon — must not be a Point"""
+input CreateBuildingMapInput {
+  """Building name, e.g. '光復國小圖書館'"""
+  name: String!
+
+  """GeoJSON Point — [longitude, latitude]"""
   geometry: GeoJSON!
 
-  """Initial closure status: 'active', 'cleared', or 'unknown'"""
-  status: String!
+  """Street address. Leave buildingSection, floor and room empty"""
+  secondaryLocation: SecondaryLocationInput!
 
-  """Source of the closure report, e.g. agency name or URL"""
-  informationSource: String = null
-  comment: String = null
+  """Floors from 1F up, 1-200"""
+  floorsAboveGround: Int!
+
+  """Basement floors, 0-20"""
+  floorsBelowGround: Int! = 0
+
+  """Areas per floor. A floor left out takes a free-text room number"""
+  floorAreas: [BuildingFloorAreasInput!]! = []
 }
 
 input CreateCrowdSourcingInput {
   """UUID of the station being rated"""
-  stationUuid: String!
+  stationUuid: UUID!
 
   """
   UUID of the StationProperty being rated — null for a general station rating
   """
-  itemUuid: String = null
+  itemUuid: UUID = null
 
   """Rating value: 'up', 'neutral', or 'down'"""
   rating: String!
 
   """Distance in meters from the user to the station at time of submission"""
   distanceFromGeometry: Float = null
+}
+
+input CreateHelpRequestInput {
+  """At most 200 characters"""
+  title: String!
+  description: String = null
+
+  """
+  GeoJSON Point for the location where help is needed — [longitude, latitude]
+  """
+  geometry: GeoJSON!
+
+  """Who to ask for at the place"""
+  contactName: String!
+
+  """Phone number or LINE ID, as the person typed it"""
+  contactPhone: String = null
+
+  """The address as typed goes in `landmarkNote`, with `floor` and `room`"""
+  secondaryLocation: SecondaryLocationInput = null
+
+  """At least one need, at most 20"""
+  tasks: [HelpRequestTaskInput!]!
+
+  """
+  Scene photos as links to images kept elsewhere — the platform stores no image. At most 10, each an https:// URL of at most 500 characters
+  """
+  photoUrls: [String!] = null
 }
 
 input CreateStationInput {
@@ -207,7 +324,7 @@ input CreateStationInput {
 
 input CreateStationPropertyInput {
   """UUID of the station to attach this property to"""
-  stationUuid: String!
+  stationUuid: UUID!
 
   """Category: 'supply', 'service', or 'equipment'"""
   propertyType: String!
@@ -239,7 +356,7 @@ input CreateStationSuggestionInput {
 
 input CreateTaskPropertyInput {
   """UUID of the task to attach this property to"""
-  taskUuid: String!
+  taskUuid: UUID!
 
   """Attribute key matching the task property config schema"""
   propertyName: String!
@@ -257,9 +374,14 @@ input CreateTicketInput {
   description: String = null
 
   """
-  GeoJSON Point for the location where help is needed — [longitude, latitude]
+  GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted
   """
-  geometry: GeoJSON!
+  geometry: GeoJSON = null
+
+  """
+  File the ticket inside this building map. Its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it
+  """
+  buildingMapUuid: UUID = null
 
   """Full name of the requester"""
   contactName: String!
@@ -298,14 +420,16 @@ input CreateTicketInput {
 
 input CreateTicketTaskInput {
   """UUID of the ticket this task belongs to"""
-  ticketUuid: String!
+  ticketUuid: UUID!
 
   """Category: 'rescue', 'supply', 'medical', or 'hr'"""
   taskType: String!
   taskName: String!
   taskDescription: String = null
 
-  """Number of people or units needed"""
+  """
+  People or units needed, at least 1; required except for a 'rescue' task, which may omit it
+  """
   quantity: Int = null
 
   """Origin: 'user' (default) or 'official'"""
@@ -315,14 +439,7 @@ input CreateTicketTaskInput {
   visibility: Visibility! = public
 
   """Optional UUID of an associated route"""
-  routeUuid: String = null
-}
-
-input CreateWorkZoneInput {
-  name: String!
-
-  """GeoJSON Polygon or MultiPolygon — must not be a Point"""
-  geometry: GeoJSON!
+  routeUuid: UUID = null
 }
 
 type CrowdSourcingType {
@@ -394,6 +511,50 @@ input GenerateBriefingInput {
 """GeoJSON geometry object (RFC 7946)"""
 scalar GeoJSON
 
+type HazardousZoneConnection {
+  items: [HazardousZoneType!]!
+  pageInfo: PageInfo!
+}
+
+type HazardousZoneType {
+  uuid: UUID!
+
+  """Internal polymorphic discriminator — always 'hazardous_zone'"""
+  propertyName: String!
+  name: String
+
+  """GeoJSON Polygon or MultiPolygon marking the zone"""
+  geometry: GeoJSON
+
+  """UUID of the user who drew this zone"""
+  createdBy: String
+
+  """Current hazard status, e.g. 'dangerous', 'block'"""
+  status: String!
+
+  """Source of the hazard report, e.g. agency name or URL"""
+  informationSource: String
+
+  """Additional notes about this zone"""
+  note: String
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+input HelpRequestTaskInput {
+  """What the need asks for"""
+  taskType: NeedKind!
+
+  """What is needed, at most 200 characters"""
+  taskName: String!
+  taskDescription: String = null
+
+  """
+  People or units needed, at least 1; required except for a 'rescue' need, which may omit it
+  """
+  quantity: Int = null
+}
+
 type Mutation {
   createStation(input: CreateStationInput!): StationType!
   attachStationPhoto(stationUuid: UUID!, url: String!): PhotoType!
@@ -402,24 +563,27 @@ type Mutation {
   deleteStation(uuid: UUID!): Boolean!
   assignStationToTeam(stationUuid: UUID!, teamUuid: UUID!): StationType!
   unassignStation(stationUuid: UUID!): StationType!
-  createClosureArea(input: CreateClosureAreaInput!): ClosureAreaType!
-  updateClosureArea(uuid: UUID!, input: UpdateClosureAreaInput!): ClosureAreaType!
-  deleteClosureArea(uuid: UUID!): Boolean!
+  createBuildingMap(input: CreateBuildingMapInput!): BuildingMapType!
+  updateBuildingMap(uuid: UUID!, input: UpdateBuildingMapInput!): BuildingMapType!
+  deleteBuildingMap(uuid: UUID!): Boolean!
   createStationProperty(input: CreateStationPropertyInput!): StationPropertyType!
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
   createTicket(input: CreateTicketInput!): TicketType!
+  createHelpRequest(input: CreateHelpRequestInput!): TicketType!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
   setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!
   reviewTicket(uuid: UUID!, verificationStatus: String!, reviewNote: String = null): TicketType!
   deleteTicket(uuid: UUID!): Boolean!
   createTicketTask(input: CreateTicketTaskInput!): TicketTaskType!
   updateTicketTask(uuid: UUID!, input: UpdateTicketTaskInput!): TicketTaskType!
+  deleteTicketTask(uuid: UUID!): Boolean!
   createTaskProperty(input: CreateTaskPropertyInput!): TaskPropertyType!
   updateTaskProperty(uuid: UUID!, input: UpdateTaskPropertyInput!): TaskPropertyType!
   assignTaskActor(taskUuid: UUID!, actorUuid: UUID = null, role: String = null): TaskAssignmentType!
   updateTaskAssignment(uuid: UUID!, input: UpdateTaskAssignmentInput!): TaskAssignmentType!
   unassignTaskActor(uuid: UUID!): Boolean!
+  stopRecruiting(taskUuid: UUID!): TicketTaskType!
   upsertStationPropertyConfig(stationType: String!, input: UpsertPropertyConfigInput!): StationPropertyConfigType!
   upsertTaskPropertyConfig(taskType: String!, input: UpsertPropertyConfigInput!): TaskPropertyConfigType!
   upsertTicketPropertyConfig(input: UpsertTicketPropertyConfigInput!): TicketPropertyConfigType!
@@ -438,11 +602,41 @@ type Mutation {
   createStationSuggestion(input: CreateStationSuggestionInput!): StationSuggestionType!
   mergeStationSuggestions(stationUuid: UUID!, decisions: [SuggestionDecisionInput!]!, reviewNote: String = null): StationSuggestionMergeType!
   revokeStationSuggestionMerge(uuid: UUID!): StationSuggestionMergeType!
-  createWorkZone(input: CreateWorkZoneInput!): WorkZoneType!
-  updateWorkZone(uuid: UUID!, input: UpdateWorkZoneInput!): WorkZoneType!
+  createArea(input: CreateAreaInput!): AreaType!
+  updateArea(uuid: UUID!, input: UpdateAreaInput!): AreaType!
+  deleteArea(uuid: UUID!): Boolean!
+  promoteMarkZone(uuid: UUID!, input: PromoteMarkZoneInput!): HazardousZoneType!
   assignZoneToTeam(input: ZoneTeamAssignmentInput!): ZoneAssignmentType!
   removeZoneFromTeam(input: ZoneTeamAssignmentInput!): Boolean!
-  deleteWorkZone(uuid: UUID!): Boolean!
+  submitRoleRequest(input: SubmitRoleRequestInput!): RoleRequestType!
+  withdrawRoleRequest(uuid: UUID!): RoleRequestType!
+}
+
+type MyRoleRequestsType {
+  """Holds a role beyond `user`: the entry offers 前往後台 instead of applying"""
+  hasBackofficeIdentity: Boolean!
+
+  """
+  May send an application now: no back-office identity, none pending, not paused
+  """
+  canApply: Boolean!
+
+  """Newest first"""
+  requests: [RoleRequestType!]!
+}
+
+"""One of the caller's claims, with the need and the ticket it is for"""
+type MyTaskAssignmentType {
+  assignment: TaskAssignmentType!
+  task: TicketTaskType!
+  ticket: TicketType!
+}
+
+enum NeedKind {
+  rescue
+  supply
+  medical
+  hr
 }
 
 type PageInfo {
@@ -475,11 +669,18 @@ type PhotoType {
   createdAt: DateTime
 }
 
+input PromoteMarkZoneInput {
+  status: String!
+  informationSource: String = null
+}
+
 type Query {
   stations(bounds: BoundsInput = null, stationType: String = null, operationalStatus: StationOperationalStatus = null, q: String = null, assignedTeamUuid: UUID = null, unassignedOnly: Boolean! = false, hasPendingSuggestions: Boolean! = false, skip: Int! = 0, limit: Int! = 50): StationConnection!
   station(uuid: UUID!): StationType
-  closureAreas(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): ClosureAreaConnection!
-  closureArea(uuid: UUID!): ClosureAreaType
+  hazardousZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): HazardousZoneConnection!
+  hazardousZone(uuid: UUID!): HazardousZoneType
+  buildingMaps(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): BuildingMapConnection!
+  buildingMap(uuid: UUID!): BuildingMapType
   tickets(
     bounds: BoundsInput = null
     status: String = null
@@ -501,22 +702,55 @@ type Query {
     """
     zoom: Float = null
   ): TicketType
+  myTickets: [TicketType!]!
+  buildingMapTickets(buildingMapUuid: UUID!, skip: Int! = 0, limit: Int! = 100): [TicketType!]!
   ticketTasks(ticketUuid: String!, status: String = null, q: String = null, skip: Int! = 0, limit: Int! = 50): [TicketTaskType!]!
+  myTaskAssignments: [MyTaskAssignmentType!]!
   taskProperties(taskUuid: String!): [TaskPropertyType!]!
   stationPropertyConfigs(stationType: String!, includeInactive: Boolean! = false): [StationPropertyConfigType!]!
   taskPropertyConfigs(taskType: String!, includeInactive: Boolean! = false): [TaskPropertyConfigType!]!
   ticketPropertyConfigs(disasterTypes: [String!]!, includeInactive: Boolean! = false): [TicketPropertyConfigType!]!
   disasterTypes(includeInactive: Boolean! = false): [DisasterTypeType!]!
-  announcements(filter: AnnouncementFilter! = ACTIVE): [AnnouncementType!]!
+  announcements(filter: AnnouncementFilter! = ACTIVE, placement: AnnouncementPlacement! = public_page): [AnnouncementType!]!
   announcement(uuid: UUID!): AnnouncementType
   briefingTemplates(state: BriefingState = null, tag: String = null): [BriefingTemplateType!]!
   briefingTemplate(uuid: UUID!): BriefingTemplateType
   briefings(state: BriefingState = null, tag: String = null): [BriefingType!]!
   briefing(uuid: UUID!): BriefingType
   suggestableFields(targetType: String!): [SuggestableFieldType!]!
-  workZones(skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
-  workZone(uuid: UUID!): WorkZoneType
-  zonesByTeam(teamUuid: UUID!, skip: Int! = 0, limit: Int! = 50): WorkZoneConnection!
+  areas(bounds: BoundsInput = null, includePrivate: Boolean! = false, skip: Int! = 0, limit: Int! = 50): AreaConnection!
+  teamZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): TeamZoneConnection!
+  teamZone(uuid: UUID!): TeamZoneType
+  zonesByTeam(teamUuid: UUID!, skip: Int! = 0, limit: Int! = 50): TeamZoneConnection!
+  myRoleRequests: MyRoleRequestsType!
+}
+
+enum RoleRequestRole {
+  government
+  ngo
+  data_auditor
+}
+
+enum RoleRequestStatus {
+  pending
+  approved
+  rejected
+  withdrawn
+}
+
+type RoleRequestType {
+  uuid: UUID!
+  requestedRole: RoleRequestRole!
+  reason: String!
+  contact: String
+  status: RoleRequestStatus!
+
+  """The reviewer's reply, if any"""
+  reviewNote: String
+  createdAt: DateTime!
+
+  """When it was approved, rejected or withdrawn"""
+  closedAt: DateTime
 }
 
 input SecondaryLocationInput {
@@ -826,6 +1060,12 @@ type StationType {
   suggestionMerges: [StationSuggestionMergeType!]!
 }
 
+input SubmitRoleRequestInput {
+  requestedRole: RoleRequestRole!
+  reason: String!
+  contact: String = null
+}
+
 type SuggestableFieldType {
   fieldName: String!
 
@@ -892,6 +1132,11 @@ type TaskAssignmentType {
 
   """Timestamp when the status was last changed"""
   updatedAt: DateTime
+
+  """
+  Display name of the assigned person. Null to a caller without ticket.view_history on the parent ticket, unless the assignment is their own
+  """
+  actorName: String
 }
 
 type TaskPropertyConfigType {
@@ -956,6 +1201,31 @@ type TaskPropertyType {
   Optional notes about this property. Null to a caller without ticket.view_detail on the parent ticket
   """
   comment: String
+}
+
+type TeamZoneConnection {
+  items: [TeamZoneType!]!
+  pageInfo: PageInfo!
+}
+
+type TeamZoneType {
+  uuid: UUID!
+  name: String
+
+  """GeoJSON Polygon or MultiPolygon marking the zone boundary"""
+  geometry: GeoJSON
+  note: String
+
+  """Always true: a team zone and its teams are shown on the public map"""
+  isPublic: Boolean!
+
+  """UUID of the gov user who drew this zone"""
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """Teams this zone has been delegated to"""
+  assignedTeams: [AssignedTeamType!]!
 }
 
 type TicketConnection {
@@ -1030,10 +1300,14 @@ type TicketTaskType {
   """Short name summarising the task"""
   taskName: String!
 
-  """Number of people or units needed — null means unspecified"""
+  """
+  Number of people or units needed. Null means unspecified and uncapped: a rescue need may leave it out, and needs filed before every other kind had to give one
+  """
   quantity: Int
 
-  """Lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'"""
+  """
+  Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or its requester stopped recruiting — the people on it still go), or 'canceled'. Moves only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion
+  """
   status: String!
 
   """Origin of this task: 'user' or 'official'"""
@@ -1042,8 +1316,10 @@ type TicketTaskType {
   """Who can see this task: 'public', 'restricted', or 'internal'"""
   visibility: String!
 
-  """Review state: 'pending_review', 'approved', or 'rejected'"""
-  moderationStatus: String!
+  """
+  When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back
+  """
+  recruitingStoppedAt: DateTime
   createdAt: DateTime
   updatedAt: DateTime
 
@@ -1066,8 +1342,20 @@ type TicketTaskType {
   UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket
   """
   createdBy: String
+
+  """
+  Review state: 'pending_review', 'approved', or 'rejected'. Null to a caller without ticket.view_history on the parent ticket
+  """
+  moderationStatus: String
   properties: [TaskPropertyType!]!
+
+  """
+  Everyone who claimed this task. Empty to a caller without ticket.view_history on the parent ticket — assignedCount stays public, and a caller's own claim is myAssignment
+  """
   assignments: [TaskAssignmentType!]!
+
+  """The caller's own claim on this task. Null to a guest or a non-claimant"""
+  myAssignment: TaskAssignmentType
   assignedCount: Int!
   completedCount: Int!
   progress: Float
@@ -1132,23 +1420,27 @@ type TicketType {
   createdBy: String
 
   """
-  Requester full name — masked unless the caller holds ticket.view_pii here
+  Requester full name — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs
   """
   contactName: String
 
-  """Follow-up email — masked unless the caller holds ticket.view_pii here"""
+  """
+  Follow-up email — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs
+  """
   contactEmail: String
 
-  """Follow-up phone — masked unless the caller holds ticket.view_pii here"""
+  """
+  Follow-up phone — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs
+  """
   contactPhone: String
 
   """
-  Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. What the person said, not a professional assessment
+  Reporter's answer to 災民受困／無法自行離開: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here (in the `tickets` list, ticket.view_history too). What the person said, not a professional assessment
   """
   personTrappedReported: String
 
   """
-  Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here. Not a triage grade and not a risk classification
+  Reporter's answer to 立即生命危險: 'yes', 'no', 'unknown'. Null when nobody was asked — and also null to a caller without ticket.view_pii here (in the `tickets` list, ticket.view_history too). Not a triage grade and not a risk classification
   """
   immediateDangerReported: String
 
@@ -1176,6 +1468,18 @@ scalar UUID
 input UpdateAnnouncementInput {
   """The new announcement body text"""
   content: String!
+
+  """Which page shows it; omit to keep the current placement"""
+  placement: AnnouncementPlacement = null
+}
+
+input UpdateAreaInput {
+  name: String
+  geometry: GeoJSON = null
+  note: String
+  isPublic: Boolean = null
+  status: String = null
+  informationSource: String
 }
 
 input UpdateBriefingInput {
@@ -1200,11 +1504,14 @@ input UpdateBriefingTemplateInput {
   state: BriefingState = null
 }
 
-input UpdateClosureAreaInput {
+input UpdateBuildingMapInput {
+  name: String = null
   geometry: GeoJSON = null
-  status: String = null
-  informationSource: String
-  comment: String
+  floorsAboveGround: Int = null
+  floorsBelowGround: Int = null
+
+  """Replaces every floor's areas when sent; [] clears them"""
+  floorAreas: [BuildingFloorAreasInput!] = null
 }
 
 input UpdateStationInput {
@@ -1264,11 +1571,6 @@ input UpdateTaskPropertyInput {
 }
 
 input UpdateTicketInput {
-  """
-  New lifecycle state — must follow valid transitions (e.g. pending → in_progress)
-  """
-  status: String = null
-
   """Updated urgency: 'low', 'medium', 'high', or 'critical'"""
   priority: String = null
   title: String = null
@@ -1300,11 +1602,6 @@ input UpdateTicketInput {
 }
 
 input UpdateTicketTaskInput {
-  """
-  New lifecycle state: 'pending', 'in_progress', 'fulfilled', or 'canceled'
-  """
-  status: String = null
-
   """Updated progress description — pass null to clear"""
   progressNote: String
 
@@ -1316,11 +1613,6 @@ input UpdateTicketTaskInput {
 
   """Updated visibility: 'public', 'restricted', or 'internal'"""
   visibility: Visibility = null
-}
-
-input UpdateWorkZoneInput {
-  name: String
-  geometry: GeoJSON = null
 }
 
 input UpsertDisasterTypeInput {
@@ -1412,27 +1704,6 @@ enum Visibility {
   public
   restricted
   internal
-}
-
-type WorkZoneConnection {
-  items: [WorkZoneType!]!
-  pageInfo: PageInfo!
-}
-
-type WorkZoneType {
-  uuid: UUID!
-  name: String!
-
-  """GeoJSON Polygon or MultiPolygon marking the zone boundary"""
-  geometry: GeoJSON
-
-  """UUID of the gov user who drew this zone"""
-  createdBy: String
-  createdAt: DateTime
-  updatedAt: DateTime
-
-  """Teams this zone has been delegated to"""
-  assignedTeams: [AssignedTeamType!]!
 }
 
 type ZoneAssignmentType {
