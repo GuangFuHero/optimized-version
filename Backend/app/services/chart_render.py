@@ -318,8 +318,8 @@ def render_chart(
 ) -> dict:
     """Build a styled Plotly figure for `y` and return it as `{"data", "layout", "config"}`.
 
-    Each layer overrides the one before: `style`, the metric's own axis rules, `width`/`height`,
-    then `layout_overrides`. A bad `y`, `chart_type` or layout key raises AnalyticsInputError.
+    `style`, the metric's axis rules, `width`/`height` and `layout_overrides` apply in that order,
+    each overriding the last; a bad `y`, `chart_type` or layout key raises AnalyticsInputError.
     """
     style = style or ChartStyle()
     resolved_x, resolved_chart_type = resolve(domain, y, x, chart_type)

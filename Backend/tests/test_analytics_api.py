@@ -206,11 +206,12 @@ async def test_unparseable_layout_overrides_is_a_400(client, db_session, redis):
 
 @pytest.mark.asyncio
 async def test_station_chart_renders(client, db_session, redis):
-    """The station handler shares _render_domain, so cover its permission + happy path."""
+    """The station handler shares _render_domain; no rows to group is an empty pie, not a 總計 slice."""
     headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
     res = await client.get(STATIONS_URL, params={"y": "station_status_count"}, headers=headers)
     assert res.status_code == 200
-    assert res.json()["data"][0]["type"] == "pie"
+    pie = res.json()["data"][0]
+    assert (pie["type"], pie["labels"], pie["values"]) == ("pie", [], [])
 
 
 @pytest.mark.asyncio
@@ -775,7 +776,7 @@ async def test_data_keeps_the_metrics_own_input_rules(client, db_session, redis)
 
 @pytest.mark.asyncio
 async def test_station_data_renders(client, db_session, redis):
-    """The station handler shares _data_domain; status always groups by category."""
+    """The station handler shares _data_domain; a grouping over no rows is empty, not a zero total."""
     headers = await _user_with_perms(db_session, redis, Perm.STATION_VIEW)
     res = await client.get(STATIONS_DATA_URL, params={"y": "station_status_count"}, headers=headers)
     assert res.status_code == 200
@@ -795,3 +796,30 @@ def test_catalog_unit_scaling_leaves_no_float_noise(y, plotted, returned):
     """A plain `* 100` turns 0.07 into 7.000000000000001; counts pass through untouched."""
     assert _in_catalog_unit("tickets", y, plotted) == returned
     assert type(_in_catalog_unit("tickets", y, plotted)) is type(returned)
+
+
+@pytest.mark.asyncio
+async def test_data_durations_are_days_as_numbers(client, db_session, redis):
+    """Postgres hands the average back as a Decimal; the series carries it as a number of days."""
+    user_uuid, headers = await _seeded_user(db_session, redis, Perm.TICKET_VIEW)
+    ticket = _ticket(user_uuid)
+    db_session.add(ticket)
+    await db_session.flush()
+    task = TicketTask(
+        ticket_uuid=ticket.uuid, task_type="rescue", task_name="task",
+        source="user", visibility="public", created_by=user_uuid, status="fulfilled",
+    )
+    task.created_at = datetime.fromisoformat("2026-08-01T00:00:00+00:00")
+    task.completed_at = datetime.fromisoformat("2026-08-02T12:00:00+00:00")
+    db_session.add(task)
+    await db_session.commit()
+
+    res = await client.get(
+        TICKETS_DATA_URL, params={"y": "time_to_completion", "x": "category"}, headers=headers
+    )
+    assert res.status_code == 200
+    assert res.json() == {
+        "x": "category",
+        "x_values": ["搜救"],
+        "series": [{"name": "平均（天）", "values": [1.5]}, {"name": "中位數（天）", "values": [1.5]}],
+    }
