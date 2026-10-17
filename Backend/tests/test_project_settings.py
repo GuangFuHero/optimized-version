@@ -6,7 +6,7 @@ Feature 013 (Spec/013-project-settings-activity/decisions.md ADR-090/091/095).
 import logging
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.core.permissions import Perm
@@ -19,12 +19,14 @@ from app.models.property_config import (
     TicketPropertyConfig,
 )
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
+from app.models.team import Team
 from app.repositories.config_repository import (
     PropertyConfigValidationError,
     station_property_config_repository,
     task_property_config_repository,
 )
 from app.repositories.project_settings_repository import project_settings_repository
+from scripts.seed_rbac import ROLES_DATA
 from tests.conftest import auth_headers_for
 
 pytestmark = pytest.mark.asyncio
@@ -92,13 +94,13 @@ async def test_config_defaults(db):
 SETTINGS_URL = "/api/v1/admin/project-settings"
 
 
-async def _auth_header(redis, user_uuid: str, role_uuid=None) -> dict:
+async def _auth_header(redis, user_uuid: str, role_uuid=None, team_uuid=None) -> dict:
     """Bearer headers backed by a live session, the way production mints them.
 
     A bare `create_access_token` carries no session (014) and no identity (010): it 401s
     before the assertion runs, and would resolve to zero grants if it got past that.
     """
-    return await auth_headers_for(redis, user_uuid, role_uuid)
+    return await auth_headers_for(redis, user_uuid, role_uuid, team_uuid)
 
 
 async def _make_project_admin(db):
@@ -135,6 +137,43 @@ async def _make_plain_user(db) -> str:
     user_uuid = str(user.uuid)
     await db.commit()
     return user_uuid
+
+
+async def _make_seeded_identity(db, role_name: str) -> tuple[str, str, str | None]:
+    """Create a user holding `role_name` as seed_rbac grants it; return (user, role, team) uuids.
+
+    The grants come from ROLES_DATA instead of being restated here, so these tests follow the
+    seed. The role is reused when present, since `db_session` already creates `user` with no
+    grants. A team-kind role is held through a team, which ADR-073's CHECK requires.
+    """
+    spec = next(r for r in ROLES_DATA if r["name"] == role_name)
+    role = await db.scalar(select(Role).where(Role.name == spec["name"]))
+    if role is None:
+        role = Role(name=spec["name"], kind=spec["kind"])
+        db.add(role)
+        await db.flush()
+    for perm, scope in spec["permissions"].items():
+        permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
+        if permission is None:
+            permission = Permission(key=perm.value)
+            db.add(permission)
+            await db.flush()
+        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
+    team = None
+    if spec["kind"] == "team":
+        team = Team(name=f"team-for-{role_name}", type="gov")
+        db.add(team)
+        await db.flush()
+    user = User(name=f"Seeded {role_name}")
+    db.add(user)
+    await db.flush()
+    db.add(UserRoleAssign(
+        user_uuid=user.uuid, role_uuid=role.uuid,
+        team_uuid=team.uuid if team is not None else None, role_kind=spec["kind"],
+    ))
+    uuids = (str(user.uuid), str(role.uuid), str(team.uuid) if team is not None else None)
+    await db.commit()
+    return uuids
 
 
 async def test_get_project_settings_is_empty_before_first_write(client, db_session, redis):
@@ -198,6 +237,43 @@ async def test_writes_are_refused_without_project_edit(client, db_session, redis
 
     assert resp.status_code == 403, resp.text
     assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 0
+
+
+BACK_OFFICE_ROLES = ("data_auditor", "super_admin", "admin", "member")
+
+
+@pytest.mark.parametrize("role_name", BACK_OFFICE_ROLES)
+async def test_every_back_office_identity_reads_the_settings(client, db_session, redis, role_name):
+    """ADR-324: every back-office page's shell shows the disaster, so every staff identity reads it."""
+    user_uuid, role_uuid, team_uuid = await _make_seeded_identity(db_session, role_name)
+
+    resp = await client.get(SETTINGS_URL, headers=await _auth_header(redis, user_uuid, role_uuid, team_uuid))
+
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.parametrize("role_name", ("data_auditor", "admin", "member"))
+async def test_reading_the_settings_does_not_let_a_back_office_identity_change_them(
+    client, db_session, redis, role_name
+):
+    """project.edit stays with the super admin (ADR-090, ADR-324)."""
+    user_uuid, role_uuid, team_uuid = await _make_seeded_identity(db_session, role_name)
+    headers = await _auth_header(redis, user_uuid, role_uuid, team_uuid)
+
+    resp = await client.patch(SETTINGS_URL, headers=headers,
+                              json={"name": "亂改", "disaster_types": ["fire"]})
+
+    assert resp.status_code == 403, resp.text
+    assert await db_session.scalar(text("SELECT count(*) FROM project_settings")) == 0
+
+
+async def test_a_citizen_identity_still_cannot_read_the_settings(client, db_session, redis):
+    """The site never reads them, and the disaster types its report form needs are public (ADR-263)."""
+    user_uuid, role_uuid, _ = await _make_seeded_identity(db_session, "user")
+
+    resp = await client.get(SETTINGS_URL, headers=await _auth_header(redis, user_uuid, role_uuid))
+
+    assert resp.status_code == 403, resp.text
 
 
 async def test_project_settings_changes_are_audited(client, db_session, redis):
