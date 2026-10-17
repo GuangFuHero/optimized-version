@@ -31,13 +31,6 @@
 - 位置：`libs/modules/src/shell/site/user-menu.tsx`
 - 現況：`useRouter()` 與導向 `/account/security` 的 menu item 仍被註解；但 `/account/security` 頁面本身已存在且可用。
 
-## 2. 尚未接通的功能
-
-### 2.1 `/admin/*` 路由被 layout 全域 redirect
-
-- 位置：`apps/demo/src/app/admin/layout.tsx`
-- 現況：admin page 檔案與對應 modules 都存在，但 layout 直接 `redirect('/map')`，導致整個 admin route tree 實際停用。
-
 ## 已處理
 
 ### 2026-06-13 Capability-first 重整

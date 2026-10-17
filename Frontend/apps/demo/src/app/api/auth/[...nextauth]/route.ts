@@ -1,5 +1,5 @@
 import NextAuth from 'next-auth';
-import { authOptions } from '../../../../lib/auth-options';
+import { authOptions } from '@rescue-frontend/modules/server';
 
 const handler = NextAuth(authOptions);
 

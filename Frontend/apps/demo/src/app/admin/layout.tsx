@@ -8,9 +8,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * The back office until it is rebuilt: the site's 前往後台 leads here. The
- * legacy `/admin/*` pages below are to be replaced wholesale, so every one of them shows this
- * placeholder instead; when the new back office lands, only this layout changes, not the button.
+ * The site's 前往後台 lands here until the admin app is deployed and `ADMIN_APP_URL` redirects `/admin/*` to it.
  */
 export default function AdminRouteLayout() {
   return (

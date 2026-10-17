@@ -53,6 +53,9 @@
     }
   },
   "targetDefaults": {
+    "dev": {
+      "continuous": true
+    },
     "@nx/js:tsc": {
       "cache": true,
       "dependsOn": ["^build"],

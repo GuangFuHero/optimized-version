@@ -1,7 +1,7 @@
 'use client';
 
-import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
-import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded';
+import { Copy, ChevronDown } from 'lucide-react';
+
 import {
   Box,
   ButtonBase,
@@ -18,8 +18,8 @@ import { getRescueColorScheme, Icons } from '@rescue-frontend/ui';
 
 const CloseIcon = Icons.close;
 const WarningIcon = Icons.warning;
-const InviteChevronIcon = KeyboardArrowDownRoundedIcon;
-const CopyIcon = ContentCopyRoundedIcon;
+const InviteChevronIcon = ChevronDown;
+const CopyIcon = Copy;
 
 const defaultInviteQrPattern = [
   '11111110000111111',

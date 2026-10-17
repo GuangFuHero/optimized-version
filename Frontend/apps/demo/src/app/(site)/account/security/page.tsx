@@ -2,8 +2,8 @@ import { Container } from '@mui/material';
 import type { Metadata } from 'next';
 
 import { redirect } from 'next/navigation';
-import { getServerAuthSession } from '../../../../lib/auth-session';
-import AccountSecurityClient from '../../../../modules/auth/session/account-security.client';
+import { AccountSecurityClient } from '@rescue-frontend/modules';
+import { getServerAuthSession } from '@rescue-frontend/modules/server';
 
 export const metadata: Metadata = {
   title: '帳號安全 - 島嶼守望',

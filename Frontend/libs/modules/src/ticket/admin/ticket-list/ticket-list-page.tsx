@@ -1,8 +1,7 @@
 'use client';
 
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import FileUploadRoundedIcon from '@mui/icons-material/FileUploadRounded';
-import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+import { Plus, Upload, SlidersHorizontal } from 'lucide-react';
+
 import { Box } from '@mui/material';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
@@ -178,7 +177,7 @@ function downloadOperationHistory(records: readonly TicketReportRecord[]) {
 
 export function TicketListPage() {
   const router = useRouter();
-  const pathname = usePathname() ?? '/admin/tickets';
+  const pathname = usePathname() ?? '/tickets';
   const searchParams = useSearchParams();
   const [rows, setRows] =
     useState<readonly TicketListRowItem[]>(initialTicketRows);
@@ -253,20 +252,20 @@ export function TicketListPage() {
       {
         id: 'export',
         label: '匯出',
-        icon: <FileUploadRoundedIcon />,
+        icon: <Upload />,
         variant: 'outlined',
         onClick: () => downloadOperationHistory(Object.values(reportRecords)),
       },
       {
         id: 'field-config',
         label: '欄位設定',
-        icon: <TuneRoundedIcon />,
+        icon: <SlidersHorizontal />,
         variant: 'outlined',
       },
       {
         id: 'new-ticket',
         label: '新增任務',
-        icon: <AddRoundedIcon />,
+        icon: <Plus />,
         variant: 'filled',
         onClick: openCreateDrawer,
       },

@@ -1,8 +1,9 @@
 'use client';
 
+import { ShieldCheck } from 'lucide-react';
+
 import type { ReactNode } from 'react';
 
-import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
 import { Box, Typography } from '@mui/material';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
@@ -36,9 +37,11 @@ export function LocationPrivacyNotice({
         border: `1px solid ${color.border.default}`,
       }}
     >
-      <VerifiedUserOutlinedIcon
+      <Box
+        component={ShieldCheck}
         sx={{
-          fontSize: 16,
+          width: 16,
+          height: 16,
           mt: '1px',
           color: color.fg.neutral.muted,
           flexShrink: 0,
