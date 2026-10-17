@@ -2115,6 +2115,7 @@ export type AdminStationQuery = {
 
 export type AdminAnnouncementsQueryVariables = Exact<{
   filter?: InputMaybe<AnnouncementFilter>;
+  placement?: InputMaybe<AnnouncementPlacement>;
 }>;
 
 export type AdminAnnouncementsQuery = {
@@ -2124,6 +2125,7 @@ export type AdminAnnouncementsQuery = {
     uuid: string;
     content: string;
     active: boolean;
+    placement: string;
     order?: number | null;
     createdBy?: string | null;
     createdAt?: string | null;
@@ -4175,6 +4177,18 @@ export const AdminAnnouncementsDocument = {
           },
           defaultValue: { kind: 'EnumValue', value: 'ALL' },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'placement' },
+          },
+          type: {
+            kind: 'NamedType',
+            name: { kind: 'Name', value: 'AnnouncementPlacement' },
+          },
+          defaultValue: { kind: 'EnumValue', value: 'admin_page' },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -4194,7 +4208,10 @@ export const AdminAnnouncementsDocument = {
               {
                 kind: 'Argument',
                 name: { kind: 'Name', value: 'placement' },
-                value: { kind: 'EnumValue', value: 'admin_page' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'placement' },
+                },
               },
             ],
             selectionSet: {
@@ -4203,6 +4220,7 @@ export const AdminAnnouncementsDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'placement' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'order' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },

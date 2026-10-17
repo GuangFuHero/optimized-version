@@ -27,6 +27,7 @@ export { PortalSiteShell } from './auth/session/site-shell.client';
 export { ROLE_DISPLAY_NAMES } from './constants/roles';
 
 export { ApplicationProviders, SiteProviders } from './providers';
+export { AnnouncementPage } from './announcement/announcement-page';
 
 export {
   createSiteHref,

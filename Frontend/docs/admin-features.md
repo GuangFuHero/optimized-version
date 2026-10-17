@@ -26,6 +26,7 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 - `admin/field-configuration`
 - `admin/invite-side-sheet`
 - `admin/user/user-list`
+- `announcement/*`
 - `shell/admin/*`
 - `station/admin/station-create`
 - `station/admin/station-detail`
@@ -62,6 +63,15 @@ Admin 使用獨立的 Next.js 16 app `apps/admin`，預設 port 為 3001。頁�
 
 - 已有 page 檔案
 - 對應的 reusable modules 位於 `admin/user/user-list`
+
+### `/announcements`
+
+- 超級管理員與政府身份可發布及關閉公告；API 仍負責 permission checks。
+- 支援前台、後台、前後台同時三種發布目標，公告上限為 50 個 Unicode 字符。
+- `latestAnnouncementForTarget` 共用前後台橫幅及管理頁的選取規則：只考慮目標相符的啟用公告，以發布時間選出最新一則。「前後台同時」參與兩邊的選取。
+- 發布新公告不會關閉舊公告。例如已有「前後台同時」公告，再發布一則前台公告，後台仍顯示原公告。關閉新公告後，前台會恢復顯示下一則仍啟用的公告。
+- 歷史紀錄顯示 API 儲存的公告、發布時間與目前狀態，也可關閉被較新公告覆蓋但仍啟用的公告。API 未提供操作事件，因此不顯示關閉者、關閉時間或取代事件。
+- 橫幅每 30 秒重新讀取公告，發布及關閉會更新目前 app 的 query cache。
 
 ## 目前缺口
 

@@ -6,10 +6,17 @@ import { designTokens } from '../../theme';
 
 const { color, typography } = designTokens;
 
-export function AnnouncementBanner({ children }: { children: ReactNode }) {
+export function AnnouncementBanner({
+  children,
+  announce = true,
+}: {
+  children: ReactNode;
+  announce?: boolean;
+}) {
   return (
     <Box
-      role="alert"
+      role={announce ? 'alert' : undefined}
+      aria-live={announce ? 'assertive' : 'off'}
       sx={{
         display: 'flex',
         flexShrink: 0,

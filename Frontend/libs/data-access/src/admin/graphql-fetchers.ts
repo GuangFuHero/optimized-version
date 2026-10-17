@@ -134,13 +134,18 @@ export const announcementsQuery = (
         .then(graphqlResponseData),
   });
 
+export interface AnnouncementQueryOptions extends AdminQueryOptions {
+  refetchInterval?: number;
+}
+
 export function useAnnouncements(
   variables: documents.AdminAnnouncementsQueryVariables = {},
-  options: AdminQueryOptions = {},
+  options: AnnouncementQueryOptions = {},
 ) {
   return useQuery({
     ...announcementsQuery(variables),
     enabled: options.enabled,
+    refetchInterval: options.refetchInterval,
   });
 }
 

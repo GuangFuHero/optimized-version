@@ -1,4 +1,6 @@
 export * from './graphql';
+export { latestAnnouncementForTarget } from './announcements';
+export type { AnnouncementTarget } from './announcements';
 export {
   ApiError,
   createRestClient,

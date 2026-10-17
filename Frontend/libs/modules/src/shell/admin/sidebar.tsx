@@ -23,6 +23,7 @@ import {
 } from '@rescue-frontend/ui';
 
 import { GuangFuBrandIcon } from '../../brand';
+import { useAnnouncementAccess } from '../../announcement/use-announcement-access';
 import { ADMIN_NAV_SECTIONS, type AdminNavItem } from './nav';
 
 const { color, radius, typography, motion } = designTokens;
@@ -38,6 +39,7 @@ export function AdminSidebar({
   onToggle,
   activeId,
 }: AdminSidebarProps) {
+  const { canManage: canManageAnnouncements } = useAnnouncementAccess();
   const renderItem = (item: AdminNavItem) => (
     <SidebarItem
       key={item.id}
@@ -107,7 +109,12 @@ export function AdminSidebar({
                   )}
                 </Box>
               ) : null}
-              {section.items.map(renderItem)}
+              {section.items
+                .filter(
+                  (item) =>
+                    item.id !== 'announcements' || canManageAnnouncements,
+                )
+                .map(renderItem)}
             </Fragment>
           ),
         )}

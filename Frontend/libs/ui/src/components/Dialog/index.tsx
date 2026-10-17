@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Box,
   Dialog as MuiDialog,
   DialogActions,
   DialogContent,
@@ -20,6 +21,9 @@ export interface DialogProps {
   onClose: () => void;
   onConfirm: () => void;
   title: ReactNode;
+  subtitle?: ReactNode;
+  width?: number;
+  footerContent?: ReactNode;
   confirmLabel: ReactNode;
   confirmIcon?: ReactNode;
   confirmTone?: 'primary' | 'danger';
@@ -36,6 +40,9 @@ export function Dialog({
   onClose,
   onConfirm,
   title,
+  subtitle,
+  width = 444,
+  footerContent,
   confirmLabel,
   confirmIcon,
   confirmTone = 'primary',
@@ -51,7 +58,7 @@ export function Dialog({
       open={open}
       onClose={submitting ? undefined : onClose}
       fullWidth
-      maxWidth="xs"
+      maxWidth={false}
       slotProps={{
         transition: { onExited },
         paper: {
@@ -64,6 +71,7 @@ export function Dialog({
             // MUI's 32px side margins leave each button ~130px on a 390px phone.
             m: { mobile: 2, tablet: 4 },
             width: { mobile: 'calc(100% - 32px)', tablet: 'calc(100% - 64px)' },
+            maxWidth: width,
             borderRadius: `${radius.lg}px`,
             bgcolor: color.bg.neutral.default,
             boxShadow: shadow.lg,
@@ -84,6 +92,20 @@ export function Dialog({
         }}
       >
         {title}
+        {subtitle ? (
+          <Box
+            component="span"
+            sx={{
+              display: 'block',
+              mt: '4px',
+              fontSize: displayTextSize[13],
+              fontWeight: 400,
+              color: color.fg.neutral.muted,
+            }}
+          >
+            {subtitle}
+          </Box>
+        ) : null}
       </DialogTitle>
 
       <DialogContent sx={{ px: 3, pb: 1 }}>
@@ -92,6 +114,20 @@ export function Dialog({
           {error ? <Callout tone="danger">{error}</Callout> : null}
         </Stack>
       </DialogContent>
+
+      {footerContent ? (
+        <Box
+          sx={{
+            flexShrink: 0,
+            px: 3,
+            pt: 2,
+            mt: 2,
+            borderTop: `1px solid ${color.border.default}`,
+          }}
+        >
+          {footerContent}
+        </Box>
+      ) : null}
 
       <DialogActions sx={{ px: 3, pt: 1, pb: 3, gap: 1.5 }}>
         <Button

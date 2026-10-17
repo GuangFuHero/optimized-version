@@ -65,6 +65,8 @@ export type {
 export { RowAction } from './components/RowAction';
 export type { RowActionProps, RowActionTone } from './components/RowAction';
 export { Sheet } from './components/Sheet';
+export { SegmentedTabs } from './components/SegmentedTabs';
+export type { SegmentedTabsProps } from './components/SegmentedTabs';
 export type { SheetProps } from './components/Sheet';
 export { SidebarItem } from './components/SidebarItem';
 export type { SidebarItemProps } from './components/SidebarItem';

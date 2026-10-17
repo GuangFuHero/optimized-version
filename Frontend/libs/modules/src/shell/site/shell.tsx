@@ -7,7 +7,9 @@ import { useTheme } from '@mui/material/styles';
 import { usePathname } from 'next/navigation';
 
 import { getRescueColorScheme, layoutSizes } from '@rescue-frontend/ui';
+import { AnnouncementPlacement } from '@rescue-frontend/data-access/admin';
 
+import { ActiveAnnouncementBanner } from '../../announcement/active-announcement-banner';
 import { SiteMapRouteProvider } from '../../map/site/use-site-map-route-state';
 import {
   RoleRequestDrawer,
@@ -68,165 +70,176 @@ export function SiteShell({
   const content = (
     <Box
       sx={{
-        display: 'grid',
-        position: 'relative',
-        isolation: 'isolate',
-        gridTemplateColumns: {
-          mobile: 'minmax(0, 1fr)',
-          tablet: `${desktopSidebarWidth}px minmax(0, 1fr)`,
-        },
-        gridTemplateRows: {
-          mobile: `${layoutSizes.site.mobileTopNavBarHeight}px minmax(0, 1fr)`,
-          tablet: `${layoutSizes.site.desktopTopNavBarHeight}px minmax(0, 1fr)`,
-        },
+        display: 'flex',
+        flexDirection: 'column',
         height: '100dvh',
-        bgcolor: rescue.adminShell.topNavBar.frame,
-        transition: {
-          mobile: 'none',
-          tablet: 'grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        },
+        overflow: 'hidden',
       }}
     >
+      <ActiveAnnouncementBanner target={AnnouncementPlacement.PublicPage} />
       <Box
         sx={{
-          gridColumn: '1 / -1',
-          gridRow: 1,
-          minWidth: 0,
+          display: 'grid',
           position: 'relative',
-          zIndex: 3,
-          display: { mobile: 'none', tablet: 'block' },
-        }}
-      >
-        <SiteTopNavBar
-          isAuthenticated={isAuthenticated}
-          userName={userName}
-          userImage={userImage}
-          portalEntry={portalEntry}
-          onApplyRoleRequest={openRoleRequest}
-          onSignIn={onSignIn}
-          onSignOut={onSignOut}
-        />
-      </Box>
-
-      <Box
-        sx={{
-          gridColumn: '1 / -1',
-          gridRow: 1,
-          minWidth: 0,
-          display: { mobile: 'block', tablet: 'none' },
-        }}
-      >
-        <SiteMobileTopNavBar
-          isAuthenticated={isAuthenticated}
-          onMenuClick={() => setMobileDrawerOpen(true)}
-          userName={userName}
-          userImage={userImage}
-          onSignIn={onSignIn}
-          onSignOut={onSignOut}
-        />
-      </Box>
-
-      <Box
-        onMouseEnter={() => setDesktopSidebarOpen(true)}
-        onMouseLeave={() => setDesktopSidebarOpen(false)}
-        onFocusCapture={() => setDesktopSidebarOpen(true)}
-        onBlurCapture={(event) => {
-          const nextTarget = event.relatedTarget;
-
-          if (
-            nextTarget instanceof Node &&
-            event.currentTarget.contains(nextTarget)
-          ) {
-            return;
-          }
-
-          setDesktopSidebarOpen(false);
-        }}
-        sx={{
-          gridColumn: 1,
-          gridRow: 2,
-          minWidth: 0,
+          isolation: 'isolate',
+          gridTemplateColumns: {
+            mobile: 'minmax(0, 1fr)',
+            tablet: `${desktopSidebarWidth}px minmax(0, 1fr)`,
+          },
+          gridTemplateRows: {
+            mobile: `${layoutSizes.site.mobileTopNavBarHeight}px minmax(0, 1fr)`,
+            tablet: `${layoutSizes.site.desktopTopNavBarHeight}px minmax(0, 1fr)`,
+          },
+          flex: 1,
           minHeight: 0,
-          position: 'relative',
-          zIndex: 2,
-          display: { mobile: 'none', tablet: 'block' },
-        }}
-      >
-        <SiteSidebar
-          collapsed={!desktopSidebarOpen}
-          isAuthenticated={isAuthenticated}
-          onSignIn={onSignIn}
-        />
-      </Box>
-
-      <Box
-        component="main"
-        sx={{
-          gridColumn: { mobile: 1, tablet: 2 },
-          gridRow: 2,
-          minWidth: 0,
-          minHeight: 0,
-          position: 'relative',
-          overflow: 'hidden',
-          zIndex: 0,
-        }}
-      >
-        {children}
-      </Box>
-
-      <Drawer
-        anchor="left"
-        open={mobileDrawerOpen}
-        onClose={() => setMobileDrawerOpen(false)}
-        ModalProps={{ keepMounted: true }}
-        sx={{
-          display: { mobile: 'block', tablet: 'none' },
-          '& .MuiDrawer-paper': {
-            width: 'min(320px, calc(100vw - 40px))',
-            maxWidth: 'calc(100vw - 40px)',
-            overflow: 'hidden',
-            bgcolor: 'transparent',
+          bgcolor: rescue.adminShell.topNavBar.frame,
+          transition: {
+            mobile: 'none',
+            tablet: 'grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           },
         }}
       >
-        <SiteSidebar
-          isAuthenticated={isAuthenticated}
-          onSignIn={onSignIn}
+        <Box
+          sx={{
+            gridColumn: '1 / -1',
+            gridRow: 1,
+            minWidth: 0,
+            position: 'relative',
+            zIndex: 3,
+            display: { mobile: 'none', tablet: 'block' },
+          }}
+        >
+          <SiteTopNavBar
+            isAuthenticated={isAuthenticated}
+            userName={userName}
+            userImage={userImage}
+            portalEntry={portalEntry}
+            onApplyRoleRequest={openRoleRequest}
+            onSignIn={onSignIn}
+            onSignOut={onSignOut}
+          />
+        </Box>
+
+        <Box
+          sx={{
+            gridColumn: '1 / -1',
+            gridRow: 1,
+            minWidth: 0,
+            display: { mobile: 'block', tablet: 'none' },
+          }}
+        >
+          <SiteMobileTopNavBar
+            isAuthenticated={isAuthenticated}
+            onMenuClick={() => setMobileDrawerOpen(true)}
+            userName={userName}
+            userImage={userImage}
+            onSignIn={onSignIn}
+            onSignOut={onSignOut}
+          />
+        </Box>
+
+        <Box
+          onMouseEnter={() => setDesktopSidebarOpen(true)}
+          onMouseLeave={() => setDesktopSidebarOpen(false)}
+          onFocusCapture={() => setDesktopSidebarOpen(true)}
+          onBlurCapture={(event) => {
+            const nextTarget = event.relatedTarget;
+
+            if (
+              nextTarget instanceof Node &&
+              event.currentTarget.contains(nextTarget)
+            ) {
+              return;
+            }
+
+            setDesktopSidebarOpen(false);
+          }}
+          sx={{
+            gridColumn: 1,
+            gridRow: 2,
+            minWidth: 0,
+            minHeight: 0,
+            position: 'relative',
+            zIndex: 2,
+            display: { mobile: 'none', tablet: 'block' },
+          }}
+        >
+          <SiteSidebar
+            collapsed={!desktopSidebarOpen}
+            isAuthenticated={isAuthenticated}
+            onSignIn={onSignIn}
+          />
+        </Box>
+
+        <Box
+          component="main"
+          sx={{
+            gridColumn: { mobile: 1, tablet: 2 },
+            gridRow: 2,
+            minWidth: 0,
+            minHeight: 0,
+            position: 'relative',
+            overflow: 'hidden',
+            zIndex: 0,
+          }}
+        >
+          {children}
+        </Box>
+
+        <Drawer
+          anchor="left"
+          open={mobileDrawerOpen}
           onClose={() => setMobileDrawerOpen(false)}
-          onSignOut={onSignOut}
-          portalEntry={portalEntry}
-          onApplyRoleRequest={openRoleRequest}
-          pageHelp={
-            pageHelp
-              ? {
-                  fresh: pageHelp.fresh,
-                  onOpen: () => {
-                    pageHelp.markSeen();
-                    setPageHelpOpen(true);
-                  },
-                }
-              : undefined
-          }
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            display: { mobile: 'block', tablet: 'none' },
+            '& .MuiDrawer-paper': {
+              width: 'min(320px, calc(100vw - 40px))',
+              maxWidth: 'calc(100vw - 40px)',
+              overflow: 'hidden',
+              bgcolor: 'transparent',
+            },
+          }}
+        >
+          <SiteSidebar
+            isAuthenticated={isAuthenticated}
+            onSignIn={onSignIn}
+            onClose={() => setMobileDrawerOpen(false)}
+            onSignOut={onSignOut}
+            portalEntry={portalEntry}
+            onApplyRoleRequest={openRoleRequest}
+            pageHelp={
+              pageHelp
+                ? {
+                    fresh: pageHelp.fresh,
+                    onOpen: () => {
+                      pageHelp.markSeen();
+                      setPageHelpOpen(true);
+                    },
+                  }
+                : undefined
+            }
+          />
+        </Drawer>
+
+        <PageHelpDialog
+          open={pageHelpOpen}
+          onClose={() => setPageHelpOpen(false)}
         />
-      </Drawer>
 
-      <PageHelpDialog
-        open={pageHelpOpen}
-        onClose={() => setPageHelpOpen(false)}
-      />
+        <RoleRequestDrawer
+          open={roleRequestOpen}
+          onClose={() => setRoleRequestOpen(false)}
+          myRoleRequests={myRoleRequests}
+          onSubmitted={refetchRoleRequests}
+        />
 
-      <RoleRequestDrawer
-        open={roleRequestOpen}
-        onClose={() => setRoleRequestOpen(false)}
-        myRoleRequests={myRoleRequests}
-        onSubmitted={refetchRoleRequests}
-      />
+        {/* The map has its own, clear of its 「＋」 (`MapRequestHelpButton`). */}
+        {pathname.startsWith('/map') ? null : <MobileRequestHelpFab />}
 
-      {/* The map has its own, clear of its 「＋」 (`MapRequestHelpButton`). */}
-      {pathname.startsWith('/map') ? null : <MobileRequestHelpFab />}
-
-      {/* Inside the route providers: once a ticket is filed it turns the page to it. */}
-      <HelpRequestHost isAuthenticated={isAuthenticated} />
+        {/* Inside the route providers: once a ticket is filed it turns the page to it. */}
+        <HelpRequestHost isAuthenticated={isAuthenticated} />
+      </Box>
     </Box>
   );
 

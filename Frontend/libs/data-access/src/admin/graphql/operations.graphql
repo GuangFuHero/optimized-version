@@ -211,11 +211,15 @@ query AdminStation($uuid: UUID!) {
     }
   }
 }
-query AdminAnnouncements($filter: AnnouncementFilter = ALL) {
-  announcements(filter: $filter, placement: admin_page) {
+query AdminAnnouncements(
+  $filter: AnnouncementFilter = ALL
+  $placement: AnnouncementPlacement = admin_page
+) {
+  announcements(filter: $filter, placement: $placement) {
     uuid
     content
     active
+    placement
     order
     createdBy
     createdAt

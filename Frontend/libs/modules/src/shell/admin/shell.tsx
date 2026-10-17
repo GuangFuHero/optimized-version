@@ -3,12 +3,10 @@
 import { Box } from '@mui/material';
 import { useState, type ReactNode } from 'react';
 
-import {
-  AnnouncementFilter,
-  useAnnouncements,
-} from '@rescue-frontend/data-access/admin';
-import { AnnouncementBanner, designTokens } from '@rescue-frontend/ui';
+import { AnnouncementPlacement } from '@rescue-frontend/data-access/admin';
+import { designTokens } from '@rescue-frontend/ui';
 
+import { ActiveAnnouncementBanner } from '../../announcement/active-announcement-banner';
 import { AdminHeader } from './header';
 import { useActiveAdminNavItem } from './nav';
 import { AdminSidebar } from './sidebar';
@@ -22,7 +20,6 @@ export interface AdminShellProps {
 export function AdminShell({ children }: AdminShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const activeItem = useActiveAdminNavItem();
-  const { data } = useAnnouncements({ filter: AnnouncementFilter.Active });
 
   return (
     <Box
@@ -33,11 +30,7 @@ export function AdminShell({ children }: AdminShellProps) {
         overflow: 'hidden',
       }}
     >
-      {data?.announcements.map((announcement) => (
-        <AnnouncementBanner key={announcement.uuid}>
-          {announcement.content}
-        </AnnouncementBanner>
-      ))}
+      <ActiveAnnouncementBanner target={AnnouncementPlacement.AdminPage} />
       <Box
         sx={{
           display: 'flex',
