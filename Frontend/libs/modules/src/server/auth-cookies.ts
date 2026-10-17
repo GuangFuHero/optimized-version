@@ -43,8 +43,9 @@ export function forwardedCookieHeader(
 
 /**
  * The Cookie header the browser will send once it has stored `setCookies`: each cookie they set
- * takes the place of the one by the same name. The proxy resends a request with it right after a
- * refresh, before the browser has had the new cookies.
+ * takes the place of the one by the same name, and one they clear (`Max-Age=0`, how the backend
+ * clears, §4) is gone. The proxy resends a request with it right after a refresh, and the
+ * middleware renders the page with it, before the browser has had the new cookies.
  */
 export function cookieHeaderAfter(
   cookieHeader: string,
@@ -55,8 +56,17 @@ export function cookieHeaderAfter(
   );
 
   for (const setCookie of setCookies) {
-    const pair = setCookie.split(';', 1)[0].trim();
-    pairs.set(cookieName(pair), pair);
+    const [first, ...attributes] = setCookie.split(';');
+    const pair = first.trim();
+    const cleared = attributes.some((attribute) =>
+      /^max-age=(0|-\d+)$/i.test(attribute.trim()),
+    );
+
+    if (cleared) {
+      pairs.delete(cookieName(pair));
+    } else {
+      pairs.set(cookieName(pair), pair);
+    }
   }
 
   return [...pairs.values()].join('; ');
