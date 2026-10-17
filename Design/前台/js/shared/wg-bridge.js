@@ -48,7 +48,11 @@
        ⚠️ 後端有 `user_role_assign` 可以存**結果**，但**沒有任何一張表存「申請」**
           （ERD grep `request`/`elevation`/`application` 零筆）—— 這一份是原型自有的。 */
     roleRequests: 'wg.bridge.roleRequests',
-    /* 🔴 2026-09-12 Sucre 裁示：直立地圖（同址多樓層）。
+    /* 🔴 2026-10-05 Sucre：「後台人員有名字跟電話，前台人員沒有 —— 申請時就該填，進後台就不用再填一次。」
+       前台帳號的基本資料（名字／電話／Email），對應後端 `users.name` ＋ `user_contacts`。
+       前台註冊只收「手機或 Email → 驗證碼 → 密碼」，**沒有名字那一步**，所以這裡多半是缺的。 */
+    siteProfiles: 'wg.bridge.siteProfiles',
+    /* 🔴 2026-09-12 Sucre 裁示：現場分區（同址多樓層）。
        「後台輸入某地址他有幾樓幾戶，所以開啟這個表格，然後前台的人才能看到並且勾選。」
 
        ⚠️ **後端完全沒有建築這個東西。** ERD 裡 `tickets.uuid` 就是 `base_geometries.uuid`，
@@ -61,6 +65,13 @@
           如果讓格子從已存在的單反推長出來，沒被撐到的範圍會看起來像「不存在」，
           而不是「沒消息」，使用者會把白格讀成「這戶沒事」。火災現場那是會害死人的誤讀。 */
     buildings: 'wg.bridge.buildings',
+    /* 🔴 2026-09-25 Sucre：「劃分區域預設為後台可見，但他可以勾選前台可見。」
+       後台互助地圖把**勾了前台可見**的區域寫到這裡，前台地圖讀。
+       只寫前台需要的欄位（名稱、類型、範圍、顏色、備註），**不寫責任單位與任務單歸屬** ——
+       那是後台的派工資訊。
+       ⚠️ 後端的 `work_zones` 沒有「是否公開」欄位（ERD 2026-08-27 讀過），正式版要開欄位。
+       `null`＝後台從沒開過，前台就只畫既有的封閉區域。 */
+    publicZones: 'wg.bridge.publicZones',
   };
   var EVENT = 'wg:bridge';
 
@@ -119,7 +130,7 @@
       title: input.title,
       county: '花蓮縣', city: input.region || '光復鄉',
       street: input.address || '', no: '', floor: input.floor || null,
-      /* 直立地圖（2026-09-12）。`room` 對齊 ERD `secondary_locations.room`（欄位早就存在，
+      /* 現場分區（2026-09-12）。`room` 對齊 ERD `secondary_locations.room`（欄位早就存在，
          只是前台從來沒寫過）。`buildingId` 是**原型自有**的，正式版沒有這個概念。
          兩者都可為 null —— 不知道自己在幾樓幾戶的人（代填的鄰居、不確定門牌的）
          仍然要能送出單，那張單會落到矩陣旁的「未定位」區。 */
@@ -137,7 +148,9 @@
       createdAt: stamp(now), updatedMin: 0,
       desc: input.desc || '',
       fields: {},
-      photos: [],
+      /* TM-IMG-101：只存網址字串，不存圖片檔。
+         前台貼的圖直接進任務單，後台看得到（TM-IMG-137）—— 這裡不過濾、不改寫網址。 */
+      photos: Array.isArray(input.photos) ? input.photos : [],
       tasks: rows.map(function (t, i) {
         return {
           id: 'K-' + seq + '-' + (i + 1),
@@ -320,13 +333,93 @@
   function pendingRoleRequestFor(userId) {
     return readRoleRequestsFor(userId).filter(function (r) { return r.status === 'pending'; })[0] || null;
   }
+  /* ── 前台帳號基本資料（2026-10-05）─────────────────────────────────────
+   *
+   * 🔒 裁示：申請管理權限時 **名字＋電話必填、Email 選填**；**電話申請時就要驗證**；
+   *    帳號裡已有的電話／Email **帶入唯讀**（要改請到個人設定，避免在這裡改到登入帳號）；名字可直接改。
+   * 送出申請時寫回這裡 —— 驗證過的電話是帳號事實，不因申請被拒而撤銷。
+   *
+   * ⚠️ 種子是我編的：王志豪用手機註冊（有電話、沒名字、沒 Email）；林佩珊用 Email 註冊（只有 Email）。
+   *    與登入頁 `site-auth.jsx` 的 DEMO_ACCOUNTS（每人都有手機與 Email，方便兩種登入都能試）**不一致**，
+   *    那份是登入示範，這份是「註冊時實際留下什麼」。
+   * ⚠️ `user_contacts` UNIQUE(type, value)：電話同時是登入帳號，不能和別人重複。正式版由後端擋。 */
+  var SITE_PROFILE_SEED = {
+    'usr-citizen-01': { name: '', phone: '0912345678', phoneVerified: true, email: '' },
+    'usr-citizen-42': { name: '', phone: '', phoneVerified: false, email: 'lin@example.tw' },
+  };
+  /* 別的帳號已經在用的電話（原型鏡像）。0933555777＝黃曉芳（後台人員）。 */
+  var TAKEN_PHONES_MIRROR = ['0933555777'];
+  function readSiteProfile(userId) {
+    if (!userId) return null;
+    var all = readRaw(KEYS.siteProfiles, null) || {};
+    var base = SITE_PROFILE_SEED[userId] || { name: '', phone: '', phoneVerified: false, email: '' };
+    return Object.assign({}, base, all[userId] || {});
+  }
+  function writeSiteProfile(userId, patch) {
+    if (!userId) return null;
+    var all = readRaw(KEYS.siteProfiles, null) || {};
+    all[userId] = Object.assign({}, readSiteProfile(userId), patch);
+    writeRaw(KEYS.siteProfiles, all);
+    return all[userId];
+  }
+  function normalizePhone(v) { return String(v || '').replace(/[\s-]/g, '').replace(/^\+886/, '0'); }
+  /** 這支電話是否已被**別的**帳號使用。 */
+  function isPhoneTaken(phone, userId) {
+    var p = normalizePhone(phone);
+    if (!p) return false;
+    if (TAKEN_PHONES_MIRROR.indexOf(p) >= 0) return true;
+    var all = Object.assign({}, SITE_PROFILE_SEED, readRaw(KEYS.siteProfiles, null) || {});
+    return Object.keys(all).some(function (id) { return id !== userId && all[id] && normalizePhone(all[id].phone) === p; });
+  }
+
+  /* ── 團隊名錄（前台申請身分時選團隊用）────────────────────────────────
+   *
+   * 🔒 2026-10-05 Sucre：「升級身份要可以選 team，因為希望進來就確定是哪個 team 了。」
+   *    前台原本沒有任何團隊清單（`MM_TEAMS` 只在後台載入）—— 09-11 就是因為這樣才
+   *    不做「加入指定團隊」。這裡補一份**只有名稱與類型**的名錄，不帶聯絡人、責任區。
+   *    後台頁面有載 `MM_TEAMS` 時以它為準（只取 active）；前台用下面這份鏡像。
+   *    ⚠️ 正式版要從後端 `teams` 表讀（只取啟用中），這份鏡像要跟 mm-data.js 一起改。
+   *    自創、還在審核中的團隊**不進名錄** —— 別人看得到一個還沒成立的團隊會選錯。
+   */
+  var TEAM_DIRECTORY_MIRROR = [
+    { id: 't1', name: '慈濟基金會',       type: 'ngo' },
+    { id: 't2', name: '壯闊台灣',         type: 'ngo' },
+    { id: 't3', name: '台灣世界展望會',   type: 'ngo' },
+    { id: 't4', name: '中華民國紅十字會', type: 'ngo' },
+    { id: 't5', name: '光復福安宮志工隊', type: 'ngo' },
+    { id: 't6', name: '花蓮縣政府災防辦', type: 'gov' },
+  ];
+  function readTeamDirectory(type) {
+    var src = (window.MM_TEAMS && window.MM_TEAMS.length)
+      ? window.MM_TEAMS.filter(function (t) { return t.status === 'active'; })
+          .map(function (t) { return { id: t.id, name: t.name, type: t.type }; })
+      : TEAM_DIRECTORY_MIRROR;
+    return type ? src.filter(function (t) { return t.type === type; }) : src.slice();
+  }
+
+  /* 🔒 2026-10-05 更新：審核者 —— **選既有團隊：該團隊的團隊管理員或超級管理員，兩個都可以，
+   *    任一人核准即成立。** 覆蓋正典 `AC-RE-103`（原寫只進團隊佇列、團隊管理員以外看不到）。
+   *    自創團隊：新團隊還沒有團隊管理員，所以**只有超級管理員**能審；
+   *    通過＝建立團隊 ＋ 申請人成為該團隊的團隊管理員（2026-10-05 裁示）。
+   *    不選團隊（資料檢核員）：超級管理員（`AC-RE-105` 不變）。 */
+  function roleRequestReviewers(input) {
+    if (input.teamIsNew) return ['super'];
+    if (input.teamId) return ['team_admin:' + input.teamId, 'super'];
+    return ['super'];
+  }
   function submitRoleRequest(input) {
     if (!input || !input.by) return null;
     if (pendingRoleRequestFor(input.by)) return null;      // AC-RE-106
     var row = {
       id: 'rr-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6),
       by: input.by, role: input.role, roleLabel: input.roleLabel,
-      reason: input.reason || '', contact: input.contact || '',
+      reason: input.reason || '',
+      /* 2026-10-05：申請人基本資料的快照（審核者要能打電話確認）。帳號本身另寫進 siteProfiles。 */
+      applicant: input.applicant || null,
+      /* 2026-10-05：政府／社福必帶團隊。teamIsNew＝申請人自創的團隊（只有名稱，還沒有 id）。 */
+      teamId: input.teamId || null, teamName: input.teamName || null,
+      teamType: input.teamType || null, teamIsNew: Boolean(input.teamIsNew),
+      reviewers: roleRequestReviewers(input),
       status: 'pending',
       submittedAt: stamp(), submittedAtISO: new Date().toISOString(),
       decidedAt: null, decidedNote: '',
@@ -334,6 +427,22 @@
     writeRaw(KEYS.roleRequests, [row].concat(readRoleRequests()));
     return row;
   }
+  /* 🔒 2026-10-06 Sucre：送出後**可以撤回**（9/27 會議記錄：後台團隊可能已直接用 QR 邀請，
+   *    不必再讓審核者處理）。只有本人、只有審核中的那一筆。撤回後可立刻再送（同 AC-RE-107 不設冷卻）。
+   *    撤回是終局狀態 `withdrawn`，不刪列 —— 審核者那邊要看得到「這筆被本人收回了」，不是憑空消失。 */
+  function withdrawRoleRequest(id, by) {
+    var all = readRoleRequests();
+    var hit = null;
+    var next = all.map(function (r) {
+      if (r.id !== id || r.by !== by || r.status !== 'pending') return r;
+      hit = Object.assign({}, r, { status: 'withdrawn', decidedAt: stamp(), decidedNote: '' });
+      return hit;
+    });
+    if (!hit) return null;
+    writeRaw(KEYS.roleRequests, next);
+    return hit;
+  }
+
   /** 審核裁決。**目前沒有任何後台介面會呼叫它** —— 留著是為了讓通知那一段
    *  有真正的觸發點，而不是在畫面上假裝有流程在跑。原型可由 console 觸發。 */
   function decideRoleRequest(id, status, note) {
@@ -354,10 +463,12 @@
       kind: status === 'approved' ? 'role-approved' : 'role-rejected',
       ticketId: null, taskId: null,
       title: status === 'approved'
-        ? '你的「' + hit.roleLabel + '」申請通過了'
-        : '你的「' + hit.roleLabel + '」申請沒有通過',
+        ? '你的「' + hit.roleLabel + (hit.teamName ? '・' + hit.teamName : '') + '」申請通過了'
+        : '你的「' + hit.roleLabel + (hit.teamName ? '・' + hit.teamName : '') + '」申請沒有通過',
       body: status === 'approved'
-        ? '右上角會出現「前往後台」，不需要重新登入。'
+        ? (hit.teamIsNew
+            ? '「' + hit.teamName + '」已建立，你是這個團隊的管理員。右上角會出現「前往後台」，不需要重新登入。'
+            : '右上角會出現「前往後台」，不需要重新登入。')
         : (hit.decidedNote || '你原本的權限沒有任何改變，可以再送一次申請。'),
       dedupeKey: 'role:' + hit.id + ':' + status,
     });
@@ -372,7 +483,8 @@
     var onStorage = function (e) {
       if (!e.key || e.key === KEYS.tickets || e.key === KEYS.matches
         || e.key === KEYS.notices || e.key === KEYS.stationReports
-        || e.key === KEYS.roleRequests || e.key === KEYS.buildings) fn();
+        || e.key === KEYS.roleRequests || e.key === KEYS.buildings
+        || e.key === KEYS.publicZones) fn();
     };
     window.addEventListener(EVENT, onCustom);
     window.addEventListener('storage', onStorage);
@@ -391,7 +503,7 @@
   }
 
   /* ══════════════════════════════════════════════════════════════════════
-     建築結構（直立地圖）— 2026-09-12
+     建築結構（現場分區）— 2026-09-12
      ══════════════════════════════════════════════════════════════════════ */
 
   /** 地址正規化，只為了「同一棟」比對用。
@@ -411,6 +523,8 @@
   function readBuildings() {
     var list = readRaw(KEYS.buildings, null);
     if (!Array.isArray(list)) { list = seedBuildings(); writeRaw(KEYS.buildings, list); }
+    var kept = list.filter(function (b) { return REMOVED_DEMO_BUILDINGS.indexOf(b && b.id) < 0; });
+    if (kept.length !== list.length) { list = kept; writeRaw(KEYS.buildings, list); }
     return list;
   }
 
@@ -456,6 +570,15 @@
     return Array.isArray(m) && m.indexOf(cellKey(floor, unit)) !== -1;
   }
 
+  /** 這一棟的分區名稱清單（由上而下的顯示順序）。
+   *  沒存過 `segments` 的舊資料 → 用樓層數產生，行為與改版前一致。 */
+  function buildingSegments(b) {
+    if (b && Array.isArray(b.segments) && b.segments.length) return b.segments.slice();
+    return buildingFloors(b || {}).map(function (f) {
+      return f < 0 ? ('B' + (-f)) : (String(f) + 'F');
+    });
+  }
+
   function createBuilding(input) {
     var all = readBuildings();
     var addr = input.address || '';
@@ -468,6 +591,16 @@
       floorsBelow: Math.max(0, parseInt(input.floorsBelow, 10) || 0),
       unitsPerFloor: Math.max(1, parseInt(input.unitsPerFloor, 10) || 1),
       missingCells: Array.isArray(input.missingCells) ? input.missingCells.slice() : [],
+      /* 🔴 2026-09-25 Sucre：「直立樓層的樓層不是固定的，應該要可以自己寫上，
+         例如第一節車廂第二節車廂。」
+         ERD 查證：`secondary_locations.floor` 是 **string, nullable** —— 「第 1 節車廂」
+         本來就寫得進去。全 schema 沒有任何 zone／area／section 欄位可以掛
+         （`work_zones` 是團隊轄區，與 tickets 無關），所以分區名稱只能靠 floor 這行字。
+         → 分區是一串**自由文字**，不是樓層數字。`floorsAbove/Below` 仍然存著，
+           只用來產生預設值與相容舊資料。 */
+      segments: Array.isArray(input.segments) && input.segments.length
+        ? input.segments.map(function (x) { return String(x).trim(); }).filter(Boolean)
+        : null,
       lat: (typeof input.lat === 'number') ? input.lat : null,
       lng: (typeof input.lng === 'number') ? input.lng : null,
       /* TODO(2026-09-12)：哪個後台角色能開這個開關**尚未裁示**。
@@ -504,25 +637,19 @@
     return updateBuilding(id, { missingCells: m });
   }
 
-  /** 🚨 種子建築：**這一棟是編的**，花蓮光復鄉沒有這個地址，不得對外使用。
-   *  存在的理由：現有 10 筆 mock 任務單全是低矮鄉村地址（堤防、國小、部落屋頂），
-   *  沒有任何一筆能示範「一個地址多層樓多戶」。不編一棟就看不到這個功能。 */
-  function seedBuildings() {
-    return [{
-      id: 'BLD-DEMO-1',
-      address: '花蓮縣光復鄉中正路二段 120 號',
-      addrKey: normalizeAddr('花蓮縣光復鄉中正路二段 120 號'),
-      alias: '中正路社區大樓',
-      floorsAbove: 12,
-      floorsBelow: 1,
-      unitsPerFloor: 6,
-      /* 頂樓兩戶打通、B1 只有 2 格是車位以外的空間 —— 都是編的，只為了讓
-         「不存在的格子」在畫面上真的出現，否則永遠測不到那個狀態。 */
-      missingCells: ['12-5', '12-6', '-1-3', '-1-4', '-1-5', '-1-6'],
-      lat: 23.6675, lng: 121.4223,
-      createdBy: null,
-      createdAt: stamp(new Date()),
-    }];
+  /** 🧹 2026-10-16：種子建築（BLD-DEMO-1，編的地址）已移除，現場分區一開是空的。
+   *  由後台「任務管理 → 現場分區」或前台建單時開分區。
+   *  舊瀏覽器裡若還存著那一棟，readBuildings() 會把它濾掉。 */
+  var REMOVED_DEMO_BUILDINGS = ['BLD-DEMO-1'];
+  function seedBuildings() { return []; }
+
+  /* ── 前台可見的區域（互助地圖 → 前台地圖）──────────────────────────── */
+  function readPublicZones() {
+    var list = readRaw(KEYS.publicZones, null);
+    return Array.isArray(list) ? list : null;
+  }
+  function writePublicZones(list) {
+    writeRaw(KEYS.publicZones, Array.isArray(list) ? list : []);
   }
 
   /** 清空（給 demo 重置用）。 */
@@ -544,12 +671,16 @@
     readNotices: readNotices, readNoticesFor: readNoticesFor, pushNotice: pushNotice, markNoticesRead: markNoticesRead,
     readStationReports: readStationReports, readStationReportsFor: readStationReportsFor, pushStationReport: pushStationReport,
     readRoleRequests: readRoleRequests, readRoleRequestsFor: readRoleRequestsFor,
-    pendingRoleRequestFor: pendingRoleRequestFor, submitRoleRequest: submitRoleRequest, decideRoleRequest: decideRoleRequest,
+    readTeamDirectory: readTeamDirectory,
+    readSiteProfile: readSiteProfile, writeSiteProfile: writeSiteProfile, isPhoneTaken: isPhoneTaken, normalizePhone: normalizePhone,
+    pendingRoleRequestFor: pendingRoleRequestFor, submitRoleRequest: submitRoleRequest, withdrawRoleRequest: withdrawRoleRequest, decideRoleRequest: decideRoleRequest,
     normalizeAddr: normalizeAddr,
     readBuildings: readBuildings, buildingById: buildingById, buildingForAddress: buildingForAddress,
     createBuilding: createBuilding, updateBuilding: updateBuilding, toggleCellMissing: toggleCellMissing,
     cellKey: cellKey, buildingFloors: buildingFloors, floorLabel: floorLabel, unitLabel: unitLabel,
+    buildingSegments: buildingSegments,
     isCellMissing: isCellMissing,
+    readPublicZones: readPublicZones, writePublicZones: writePublicZones,
     subscribe: subscribe, useBridgeVersion: useBridgeVersion, reset: reset,
   };
 })();

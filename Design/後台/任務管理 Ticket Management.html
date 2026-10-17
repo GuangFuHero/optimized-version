@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>任務管理 Ticket Management · 光復超人 ManagerEnd</title>
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
+<style>
+  .leaflet-container { font-family: inherit; }
+  .tk-leaflet-tip { border: 1px solid var(--color-border-default) !important; border-radius: var(--radius-md) !important; box-shadow: var(--shadow-lg) !important; padding: 9px 11px !important; background: var(--color-bg-neutral-default) !important; }
+  .tk-leaflet-tip::before { display: none !important; }
+  .tk-pinwrap:hover .tk-pin { transform: scale(1.18) !important; }</style>
+<style>
+  html, body { margin: 0; height: 100%; background: var(--color-bg-neutral-subtle); }
+  #root { height: 100vh; overflow: hidden; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--color-bg-neutral-sunken); border-radius: 999px; }
+
+  .tk-iconbtn { border: none; background: transparent; cursor: pointer; line-height: 0; width: 32px; height: 32px; border-radius: var(--radius-full); display: inline-flex; align-items: center; justify-content: center; transition: background var(--transition-fast); }
+  .tk-iconbtn:hover { background: var(--color-bg-neutral-subtle); }
+
+  .tk-row { transition: background var(--transition-fast); }
+  .tk-row:hover { background: var(--color-bg-neutral-subtle); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tk-rise { animation: tkRise var(--duration-base, 250ms) cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+    @keyframes tkRise { from { transform: translateY(8px); } to { transform: translateY(0); } }
+    .tk-slide { animation: tkSlide var(--duration-base, 250ms) cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+    @keyframes tkSlide { from { transform: translateX(40px); } to { transform: translateX(0); } }
+    .tk-pulse { animation: tkPulse 1.6s ease-in-out infinite; }
+    @keyframes tkPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+    .tk-chip-new { animation: tkSlide 250ms cubic-bezier(0.34, 1.56, 0.64, 1) both, tkChipFlash 0.5s ease-in-out 3; }
+    @keyframes tkChipFlash { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(227,121,30,0); } 50% { opacity: 0.8; box-shadow: 0 0 0 3px rgba(227,121,30,0.28); } }
+    .tk-pin { transition: transform var(--duration-fast) var(--ease-spring); }
+    .tk-tip { animation: tkTip var(--duration-fast) var(--ease-out) both; }
+    @keyframes tkTip { from { opacity: 0; transform: translate(-50%, -2px); } to { opacity: 1; transform: translate(-50%, -6px); } }
+  }
+  .tk-chipbtn { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: var(--radius-full); border: 1px solid var(--color-border-default); background: var(--color-bg-neutral-default); cursor: pointer; font: var(--font-data-300); font-weight: 700; color: var(--color-fg-neutral-subtle); transition: background var(--transition-fast), border-color var(--transition-fast); }
+  .tk-chipbtn:hover { background: var(--color-bg-neutral-subtle); border-color: var(--color-border-accent); }
+  .tk-chipx { width: 18px; height: 18px; flex-shrink: 0; margin: 0 -4px 0 1px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: var(--radius-full); background: transparent; color: var(--color-fg-neutral-muted); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 150ms var(--ease-out), background 150ms var(--ease-out); }
+  .tk-tag:hover .tk-chipx, .tk-tag:focus-within .tk-chipx { opacity: 1; pointer-events: auto; }
+  .tk-chipx:hover { background: var(--color-bg-danger-subtle); color: var(--color-fg-danger); }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/_ds_bundle.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+window.WGMark = '';
+window.WGIcon = function WGIcon({ n, s = 20, c = "currentColor", style }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!ref.current || !window.lucide || !lucide[n]) return;
+    const el = lucide.createElement(lucide[n]);
+    el.setAttribute('width', s); el.setAttribute('height', s);
+    el.setAttribute('stroke', c); el.setAttribute('stroke-width', '2');
+    ref.current.innerHTML = '';
+    ref.current.appendChild(el);
+  }, [n, s, c]);
+  return React.createElement('span', { ref, style: { display: 'inline-flex', lineHeight: 0, ...style } });
+};
+</script>
+
+<script src="js/admin/shell/wg-terms.js"></script>
+<script src="js/admin/shell/nav.js"></script>
+<script src="js/admin/shell/wg-event.js"></script>
+<script type="text/babel" src="js/admin/shell/wg-profile.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/shell/wg-notify.jsx" data-presets="react"></script>
+<!-- 全站橫幅（EA-FEAT-001）：載在 shell 之前 -->
+<script src="js/admin/announce/an-data.js"></script>
+<script type="text/babel" src="js/admin/announce/an-banner.jsx" data-presets="react"></script>
+<!-- 2026-09-27：每一頁的「？」頁面說明 -->
+<script type="text/babel" src="js/shared/wg-help.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/shell/wg-shell.jsx" data-presets="react"></script>
+<script src="js/admin/ticket/tk-data.js"></script>
+<!-- 前後台聯動（2026-08-22）：併入前台民眾建立的任務單與接任務狀態。必須排在 tk-data.js 之後 -->
+<script src="js/shared/wg-bridge.js?v=20261006a"></script>
+<script src="js/admin/ticket/tk-bridge-merge.js"></script>
+<script type="text/babel" src="js/admin/ticket/tk-shared.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/shell/tk-shell.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-stats.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-columns.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-table.jsx?v=20261002a" data-presets="react"></script>
+<!-- 圖片連結（TM-FEAT-010）。前台與後台共用這一支；要排在 tk-detail.jsx 與 tk-form.jsx 之前 —— 兩者都讀 window.TKPhotoThumb / TKPhotoLinkEditor -->
+<script type="text/babel" src="js/shared/wg-photos.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-detail.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-locpicker.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-form.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-building.jsx?v=20261002a" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-activation.jsx?v=20261002a" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-grouping.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-map.jsx" data-presets="react"></script>
+<script type="text/babel" src="js/admin/ticket/tk-app.jsx" data-presets="react"></script>
+
+<script type="text/babel" data-presets="react">
+fetch('assets/logo/mark.svg')
+  .then((r) => r.text())
+  .then((svg) => { window.WGMark = svg.replace(/width="\d+"/, '').replace(/height="\d+"/, '').replace(/<svg([^>]*)>/, '<svg$1 style="width:100%;height:100%" preserveAspectRatio="xMidYMid meet">'); })
+  .catch(() => {})
+  .finally(() => { ReactDOM.createRoot(document.getElementById('root')).render(<window.TKApp />); });
+</script>
+</body>
+</html>

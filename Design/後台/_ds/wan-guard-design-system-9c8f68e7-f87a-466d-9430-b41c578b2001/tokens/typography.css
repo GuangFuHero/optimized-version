@@ -1,0 +1,59 @@
+/* ==========================================================================
+ * Wan Guard 島嶼守望 — Typography shorthand + utility classes
+ * Composite `font:` shorthands (family · size · weight · line-height) and
+ * ready-to-use text classes. Built on the semantic typography tokens.
+ * ========================================================================== */
+
+:root {
+  /* ---- Heading (Bold, display family) ---------------------------------- */
+  --font-heading-900: 700 2.25rem/1.2  var(--font-display);  /* 36 / Marketing Hero      */
+  --font-heading-800: 700 1.875rem/1.2 var(--font-display);  /* 30 / Page H1             */
+  --font-heading-700: 700 1.50rem/1.4  var(--font-display);  /* 24 / Section Title H2    */
+  --font-heading-600: 700 1.25rem/1.4  var(--font-display);  /* 20 / Card / Dialog Title */
+
+  /* ---- Body (Regular, body family) ------------------------------------- */
+  --font-body-500: 400 1.125rem/1.75 var(--font-body);  /* 18 / Lead / Intro     */
+  --font-body-400: 400 1.00rem/1.5   var(--font-body);  /* 16 / Standard body    */
+  --font-body-300: 400 0.875rem/1.5  var(--font-body);  /* 14 / Helper / Caption */
+
+  /* ---- Label (UI text, latin family, fixed physical size) -------------- */
+  --font-label-500: 700 1.00rem/1.2  var(--font-latin);  /* 16 / Primary action  */
+  --font-label-400: 700 0.875rem/1.2 var(--font-latin);  /* 14 / Tab / Nav item  */
+  --font-label-300: 400 0.75rem/1.5  var(--font-latin);  /* 12 / Chip / Badge    */
+
+  /* ---- Data (tabular numerals, Inter) ---------------------------------- */
+  --font-data-500: 700 1.00rem/1.2  var(--font-data);  /* 16 / KPI value      */
+  --font-data-400: 700 0.875rem/1.2 var(--font-data);  /* 14 / Table value    */
+  --font-data-300: 400 0.75rem/1.5  var(--font-data);  /* 12 / Timestamp / ID */
+}
+
+/* ---- Utility classes ----------------------------------------------------- */
+.wg-h900 { font: var(--font-heading-900); color: var(--color-fg-neutral-default); letter-spacing: -0.01em; margin: 0; }
+.wg-h800 { font: var(--font-heading-800); color: var(--color-fg-neutral-default); letter-spacing: -0.01em; margin: 0; }
+.wg-h700 { font: var(--font-heading-700); color: var(--color-fg-neutral-default); margin: 0; }
+.wg-h600 { font: var(--font-heading-600); color: var(--color-fg-neutral-default); margin: 0; }
+
+.wg-body-lg { font: var(--font-body-500); color: var(--color-fg-neutral-subtle); margin: 0; }
+.wg-body    { font: var(--font-body-400); color: var(--color-fg-neutral-subtle); margin: 0; }
+.wg-caption { font: var(--font-body-300); color: var(--color-fg-neutral-muted);  margin: 0; }
+
+.wg-label    { font: var(--font-label-500); color: var(--color-fg-neutral-default); }
+.wg-label-sm { font: var(--font-label-400); color: var(--color-fg-neutral-subtle); }
+.wg-chip     { font: var(--font-label-300); color: var(--color-fg-neutral-subtle); }
+
+.wg-data    { font: var(--font-data-500); color: var(--color-fg-neutral-default); font-variant-numeric: tabular-nums; }
+.wg-data-sm { font: var(--font-data-400); color: var(--color-fg-neutral-default); font-variant-numeric: tabular-nums; }
+.wg-data-xs { font: var(--font-data-300); color: var(--color-fg-neutral-muted);  font-variant-numeric: tabular-nums; }
+
+/* Mobile responsive scaling for Heading / Body (per typography spec) */
+@media (max-width: 600px) {
+  :root {
+    --font-heading-900: 700 1.75rem/1.2  var(--font-display);  /* 28 */
+    --font-heading-800: 700 1.50rem/1.2  var(--font-display);  /* 24 */
+    --font-heading-700: 700 1.25rem/1.4  var(--font-display);  /* 20 */
+    --font-heading-600: 700 1.125rem/1.4 var(--font-display);  /* 18 */
+    --font-body-500: 400 1.00rem/1.75 var(--font-body);        /* 16 */
+    --font-body-400: 400 0.875rem/1.5  var(--font-body);       /* 14 */
+    --font-body-300: 400 0.75rem/1.5   var(--font-body);       /* 12 */
+  }
+}
