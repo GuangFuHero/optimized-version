@@ -1,4 +1,3 @@
-/* eslint-disable */
 import type { Geometry } from 'geojson';
 import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
 export type Maybe<T> = T | null;
