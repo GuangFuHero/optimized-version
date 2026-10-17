@@ -1442,6 +1442,9 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 4. **操作紀錄跟著改**：站點的 `comment` 從公開層改成 PII 層，不帶 mask（`services/history_fields.py`）。依
    ADR-197，同一個欄位的單筆讀取與時間軸用同一把鑰匙。照 seed，`station.view_history` 的 scope 沒有一個比
    `station.view_pii` 寬，但 scope 可以在執行期調整，seed 不是保證（ADR-197 的理由）。
+5. **站點的 `comment` 不再能提修改建議**：從 `graphql/suggestions/fields.py` 的 `SUGGESTABLE_FIELDS["station"]`
+   拿掉。提建議只要 `station.contribute`（一般帳號 `all`），也就是讀不到備註的人能建議備註該寫什麼，通過後還會蓋
+   掉後台寫的內部備註。前台的建議表單本來就沒有這一欄。`station_property` 的 `comment` 留著：它存的是屬性的值。
 
 **後果**：
 
@@ -1453,6 +1456,8 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
   comment-backed 屬性，例如供水充足程度），本來就是公開資料。
 - ➖ 團隊 `admin`／`member` 讀別的團隊的站點時拿到 `null`（之前讀得到）。後台目前沒有畫面讀 `comment`。
 - ➖ 前台站點詳情「沒有描述就顯示 `comment`」的退回要拿掉，fragment 也不再選它（前端另一支 PR）。
+- ➖ 拿掉之前就送出、還在待審的站點 `comment` 建議只能「不採用」：通過時 `coerce_and_validate` 會說這一欄不能
+  建議。之前已經通過的合併照樣能撤銷（撤銷不查欄位清單）。mock seed 沒有建議修改的資料。
 
 ---
 

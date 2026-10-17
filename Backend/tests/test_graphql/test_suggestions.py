@@ -138,6 +138,19 @@ async def test_create_rejects_unknown_field(client, login_user_auth, sample_stat
 
 
 @pytest.mark.asyncio
+async def test_a_stations_internal_comment_is_not_suggestable(client, login_user_auth, sample_station):
+    """ADR-332: nobody suggests a note they cannot read. A property's comment holds its value, so it stays."""
+    station_fields = (await _gql(client, None, SUGGESTABLE_FIELDS, {"t": "station"}))["data"]
+    assert "comment" not in {f["fieldName"] for f in station_fields["suggestableFields"]}
+    property_fields = (await _gql(client, None, SUGGESTABLE_FIELDS, {"t": "station_property"}))["data"]
+    assert "comment" in {f["fieldName"] for f in property_fields["suggestableFields"]}
+
+    _, token = login_user_auth
+    body = await _create(client, token, "station", sample_station, "comment", "X")
+    assert any("not suggestable" in e["message"] for e in body["errors"])
+
+
+@pytest.mark.asyncio
 async def test_create_rejects_bad_enum_value(client, login_user_auth, sample_station):
     """An enum field rejects a value outside its allowed set."""
     _, token = login_user_auth
@@ -283,6 +296,29 @@ async def test_merge_denied_without_station_review(client, login_user_auth, samp
 
     body = await _merge(client, token, sample_station, [_decide(sample_station, "op_hour", "24h")])
     assert any("Permission Denied." in e["message"] for e in body["errors"])
+
+
+@pytest.mark.asyncio
+async def test_a_comment_suggestion_left_pending_can_still_be_rejected(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """ADR-332 took `comment` off the list; a suggestion filed before that can be cleared, not applied."""
+    login_uuid, _ = login_user_auth
+    _, auditor_token = auditor_auth
+    async with test_db() as db:
+        db.add(StationUpdateSuggestion(
+            target_type="station", target_uuid=sample_station, field_name="comment",
+            new_value="X", status="pending", created_by=login_uuid,
+        ))
+
+    approve = await _merge(client, auditor_token, sample_station, [_decide(sample_station, "comment", "X")])
+    assert any("not suggestable" in e["message"] for e in approve["errors"])
+    reject = await _merge(
+        client, auditor_token, sample_station, [_decide(sample_station, "comment", approve=False)]
+    )
+    assert reject["data"]["mergeStationSuggestions"]["status"] == "applied"
+    view = (await _gql(client, auditor_token, REVIEW_VIEW, {"uuid": sample_station}))["data"]["station"]
+    assert view["pendingSuggestedFields"] == []
 
 
 @pytest.mark.asyncio

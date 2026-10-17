@@ -14,7 +14,8 @@ SUGGESTABLE_FIELDS: dict[str, list[tuple[str, str, list[str] | None]]] = {
         ("description", "string", None),
         ("op_hour", "string", None),
         ("level", "integer", None),
-        ("comment", "string", None),
+        # No `comment`: it is the back office's internal note, unreadable without
+        # station.view_pii (ADR-332), so nobody else suggests what it should say.
         ("visibility", "enum", ["public", "restricted", "internal"]),
         ("operational_status", "enum", ["active", "temporarily_closed", "permanently_closed"]),
     ],
