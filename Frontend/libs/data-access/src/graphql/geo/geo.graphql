@@ -20,6 +20,7 @@ fragment StationFields on StationType {
   isDuplicate
   isTemporary
   isOfficial
+  operationalStatus
   createdBy
   createdAt
   updatedAt

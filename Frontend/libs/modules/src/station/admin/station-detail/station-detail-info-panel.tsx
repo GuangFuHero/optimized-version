@@ -35,6 +35,8 @@ export function StationDetailInfoPanel({
           address={stationSummary.address}
           addressIcon={stationSummary.addressIcon}
           status={stationSummary.status}
+          statusDetail={stationSummary.statusDetail}
+          badges={stationSummary.badges}
         />
       ) : null}
 

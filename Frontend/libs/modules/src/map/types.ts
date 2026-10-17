@@ -149,6 +149,7 @@ export interface RescueMapMarkerItem {
       | 'isDuplicate'
       | 'isTemporary'
       | 'isOfficial'
+      | 'operationalStatus'
       | 'createdAt'
       | 'updatedAt'
     >

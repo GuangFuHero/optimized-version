@@ -6,10 +6,17 @@ import { Box } from '@mui/material';
 
 import { Icons } from '@rescue-frontend/ui';
 
+import { SiteBadge } from '../../../shell/site/site-badge';
 import { StationDetailDrawer } from '../../../station';
+import {
+  readOpHour,
+  resolveStationAvailability,
+  type StationAvailabilityTone,
+} from '../../../station/availability';
 import type {
   StationDetailActionProps,
   StationDetailTabId,
+  StationStatusTone,
 } from '../../../station/station-detail';
 import { TicketDetailDrawer } from '../../../ticket';
 import { formatTicketTypeLabel } from '../../../ticket/status';
@@ -53,30 +60,29 @@ const PersonIcon = Icons.person;
 const PinIcon = Icons.pin;
 const ResourcesIcon = Icons.resources;
 
-function formatStationStatus(marker: RescueMapMarkerItem) {
+const AVAILABILITY_TONES: Record<StationAvailabilityTone, StationStatusTone> = {
+  success: 'active',
+  warning: 'warning',
+  neutral: 'inactive',
+};
+
+// 官方 and 臨時站點 only when they hold: a chip on every ordinary station would drown the list
+// (prototype site-detail.jsx:214-219). Not `source`, which the site stopped showing (2026-08-21).
+function createStationBadges(marker: RescueMapMarkerItem): ReactNode {
   const station = marker.stationMeta;
 
-  if (
-    station?.visibility === 'public' &&
-    station?.verificationStatus === 'human_verified'
-  ) {
-    return {
-      label: station.isTemporary ? '臨時 · 已人工驗證' : '啟用 · 已人工驗證',
-      tone: 'active' as const,
-    };
+  if (!station?.isOfficial && !station?.isTemporary) {
+    return null;
   }
 
-  if (station?.verificationStatus === 'ai_verified') {
-    return {
-      label: 'AI 驗證',
-      tone: 'warning' as const,
-    };
-  }
-
-  return {
-    label: station?.visibility === 'public' ? '公開' : '未驗證',
-    tone: 'inactive' as const,
-  };
+  return (
+    <>
+      {station.isOfficial ? <SiteBadge tone="secondary">官方</SiteBadge> : null}
+      {station.isTemporary ? (
+        <SiteBadge tone="neutral">臨時站點</SiteBadge>
+      ) : null}
+    </>
+  );
 }
 
 function formatVerificationStatus(status: string | null | undefined) {
@@ -104,7 +110,7 @@ function createStationResources(marker: RescueMapMarkerItem) {
     {
       id: 'op-hour',
       label: '服務時間',
-      value: station?.opHour?.trim() || '未提供',
+      value: readOpHour(station?.opHour) ?? '未提供',
       icon: <MapIcon />,
     },
     // 「站點等級」與「可信度」依設計決議不在前台顯示：`level` 的語意還在問後端，
@@ -152,15 +158,26 @@ function createStationSummary({
   marker: RescueMapMarkerItem;
   stationSecondaryAction?: StationDetailActionProps;
 }) {
+  // 「現在能不能去」, the one thing the page has to answer first (prototype site-detail.jsx:222-224).
+  const availability = resolveStationAvailability({
+    operationalStatus: marker.stationMeta?.operationalStatus,
+    opHour: marker.stationMeta?.opHour,
+  });
+
   return {
     stationSummary: {
       stationCode: marker.stationMeta?.name?.trim() || marker.title,
       stationIcon: <ResourcesIcon />,
-      // Never the station's `comment`: that is the back office's internal note (backend ADR-332),
-      // and in its place it read as the station's address.
-      address: marker.stationMeta?.description?.trim() || marker.subtitle,
+      // The description only, as the prototype's 位置說明. Never the station's `comment`, the back
+      // office's internal note (backend ADR-332), nor the subtitle, which falls back to the hours.
+      address: marker.stationMeta?.description?.trim() || '未提供位置說明',
       addressIcon: <PinIcon />,
-      status: formatStationStatus(marker),
+      status: {
+        label: availability.headline,
+        tone: AVAILABILITY_TONES[availability.tone],
+      },
+      statusDetail: availability.detail,
+      badges: createStationBadges(marker),
     },
     tabs: [
       {
