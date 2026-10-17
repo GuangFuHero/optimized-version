@@ -46,6 +46,11 @@ export function verifyAndSignInAsync(
     .then(responseData);
 }
 
+/** Signs this browser out: the backend ends its session and clears both cookies. */
+export function signOutAsync() {
+  return authApiClient.DELETE('/api/v1/auth/session').then(() => undefined);
+}
+
 export function resendVerificationAsync(
   payload: components['schemas']['ResendVerificationRequest'],
 ) {
@@ -68,10 +73,6 @@ export function resetPasswordAsync(
   return authApiClient
     .POST('/api/v1/auth/reset-password', { body: payload })
     .then(() => undefined);
-}
-
-export function logoutAsync() {
-  return authApiClient.POST('/api/v1/auth/logout').then(() => undefined);
 }
 
 export function logoutAllAsync() {

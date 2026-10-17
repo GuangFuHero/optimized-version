@@ -18,6 +18,11 @@ export function markSigningOutHere(): void {
   signingOutHere = true;
 }
 
+/** Signing out here did not go through: the session goes on, and its end is news again. */
+export function unmarkSigningOutHere(): void {
+  signingOutHere = false;
+}
+
 /** The tab's sessionStorage, or none where the browser refuses it (blocked site data). */
 export function sessionStorageOrNull(): Storage | null {
   try {

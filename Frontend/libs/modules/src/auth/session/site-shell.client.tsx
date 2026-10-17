@@ -5,7 +5,6 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { clearAllHelpRequestDrafts } from '../../ticket/help-request';
 import {
   isSigningOutHere,
-  markSigningOutHere,
   sessionStorageOrNull,
 } from '../../session/end-expired-session';
 import { SessionExpiredNotice } from '../../session/session-expired-notice';
@@ -15,10 +14,10 @@ import {
   shouldReloadForSignOut,
 } from '@rescue-frontend/modules/session';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { toast } from 'sonner';
 
 import { useAuthSession } from '../../session/auth-session';
-import { logoutAsync } from '../api/client';
+import { SIGN_OUT_FAILED_MESSAGE, signOutHereAsync } from './sign-out';
 
 export function PortalSiteShell({ children }: { children: ReactNode }) {
   const { status, user } = useAuthSession();
@@ -45,25 +44,15 @@ export function PortalSiteShell({ children }: { children: ReactNode }) {
   }, [status, user]);
 
   const handleSignOut = () => {
-    // Its own reload below; the watch above must not add another.
-    markSigningOutHere();
     // The person chose to leave, maybe on a shared device: no half-filled 請求協助 (address,
     // phone) is left in the tab for whoever uses it next. First, before the backend is asked:
     // closing a slow tab must not keep it. A session that ended keeps its draft.
     clearAllHelpRequestDrafts(sessionStorageOrNull());
-    void (async () => {
-      try {
-        await logoutAsync();
-      } catch {
-        // Keep local sign-out resilient even if backend revocation fails.
+    void signOutHereAsync().then((outcome) => {
+      if (outcome === 'still-signed-in') {
+        toast.error(SIGN_OUT_FAILED_MESSAGE);
       }
-
-      await signOut({ redirect: false });
-      // Reload, not `router.refresh()`: what the page fetched while signed in — the list's
-      // claims, the map's exact pins, the urql cache — lives in the browser, and a refresh only
-      // re-renders the server's part. A guest must not go on seeing it.
-      window.location.reload();
-    })();
+    });
   };
 
   // From `window.location`, not `usePathname()`: the map rewrites its path in place
