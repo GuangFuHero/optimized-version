@@ -273,7 +273,7 @@ async def test_reviewers_hear_of_a_new_application(db):
     [notice] = await _notices(db, "role_request_submitted")
     assert notice.recipient_uuid == reviewer_uuid != citizen_uuid
     assert (notice.ref_type, notice.ref_uuid) == ("role_request", request.uuid)
-    assert (notice.title, notice.body) == ("有新的後台人員申請", "王小明 申請成為「資料檢核員」。")
+    assert (notice.title, notice.body) == ("有新的管理平台權限申請", "王小明 申請成為「資料檢核員」。")
 
 
 @pytest.mark.asyncio
@@ -661,7 +661,7 @@ async def test_the_applicant_hears_they_were_approved(db):
     assert notice.recipient_uuid == citizen_uuid
     assert (notice.ref_type, notice.ref_uuid) == ("role_request", request_uuid)
     assert notice.title == "你的「資料檢核員」申請通過了"
-    assert (notice.body, notice.priority) == ("右上角會出現「前往後台」，不需要重新登入。", "high")
+    assert (notice.body, notice.priority) == ("右上角會出現「前往管理平台」，不需要重新登入。", "high")
 
 
 @pytest.mark.asyncio
