@@ -25,9 +25,8 @@ async function resolveRequestOrigin() {
   const host = headerStore.get('x-forwarded-host') ?? headerStore.get('host');
   const protocol = headerStore.get('x-forwarded-proto') ?? 'http';
 
-  return host
-    ? `${protocol}://${host}`
-    : (process.env.NEXTAUTH_URL ?? 'http://localhost:3000');
+  // A browser's request always names its host; the fallback is for one that does not.
+  return host ? `${protocol}://${host}` : 'http://localhost:3000';
 }
 
 export async function generateMetadata({
