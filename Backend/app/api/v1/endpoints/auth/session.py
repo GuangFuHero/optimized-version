@@ -132,8 +132,9 @@ async def refresh(
 
     The identity is validated BEFORE rotating (ADR-096). `rotate()` burns the old refresh
     token the moment it runs, so refusing afterwards would leave the caller holding a dead
-    token with no replacement — and their retry would read as a replay and revoke the whole
-    session. Reading the record first is side-effect free.
+    token with no replacement — and their retry, once the grace period is over (ADR-330),
+    would read as a replay and revoke the whole session. Reading the record first is
+    side-effect free.
 
     **The identity comes from the session when the caller does not name one** (ADR-188).
     `body.identity` still wins, so a client that tracks it keeps deciding; but a client that
@@ -150,11 +151,12 @@ async def refresh(
     `SessionRepository` stays a pure Redis component — the DB write happens here, not there.
 
     The write is deliberately best-effort. By the time `rotate()` returns it has already
-    burned the old refresh token (`session_repository.py:78` claims the `refresh_used:` flag),
+    burned the old refresh token (`SessionRepository._claim` sets the `refresh_used:` flag),
     so letting a DB error escape would 500 the request *after* the old token died: the client
-    never receives `new_refresh`, retries with the old one, and `rotate()` reads that as a
-    replay and revokes the entire session. A transient DB outage would sign the device out
-    permanently. `last_activity_at` is observability — it is not worth a user's session.
+    never receives `new_refresh`, retries with the old one, and — once the grace period is
+    over (ADR-330) — `rotate()` reads that as a replay and revokes the entire session. A
+    transient DB outage would sign the device out permanently. `last_activity_at` is
+    observability — it is not worth a user's session.
     """
     repo = SessionRepository(redis)
     record = await repo.get_refresh(SessionRepository._hash(body.refresh_token))

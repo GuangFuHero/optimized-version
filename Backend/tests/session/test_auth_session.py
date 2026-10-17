@@ -23,8 +23,8 @@ async def test_login_returns_access_and_refresh(fake_redis, make_user):
 
 
 @pytest.mark.asyncio
-async def test_refresh_rotates_and_old_token_dies(fake_redis, make_user):
-    """Refresh 應 rotate token，重放舊 token 應回傳 401。"""
+async def test_refresh_rotates_and_old_token_dies(fake_redis, make_user, past_the_refresh_grace_period):
+    """Refresh 應 rotate token；寬限期內重送舊 token 拿到同一支新的（ADR-330），之後重送回傳 401。"""
     _, password, name = await make_user()
     async with _client() as c:
         login = (await c.post("/api/v1/auth/login",
@@ -34,7 +34,15 @@ async def test_refresh_rotates_and_old_token_dies(fake_redis, make_user):
         assert r1.status_code == 200
         assert r1.json()["refresh_token"] != old_rt
         r2 = await c.post("/api/v1/auth/refresh", json={"refresh_token": old_rt})
-        assert r2.status_code == 401
+        assert r2.status_code == 200
+        assert r2.json()["refresh_token"] == r1.json()["refresh_token"]
+        # The refresh token is shared, but the access token is signed afresh for this request.
+        assert r2.json()["access_token"] not in (login["access_token"], r1.json()["access_token"])
+        past_the_refresh_grace_period()
+        r3 = await c.post("/api/v1/auth/refresh", json={"refresh_token": old_rt})
+        assert r3.status_code == 401
+        r4 = await c.post("/api/v1/auth/refresh", json={"refresh_token": r1.json()["refresh_token"]})
+        assert r4.status_code == 401, "a replay past the grace period must revoke the whole session"
 
 
 @pytest.mark.asyncio

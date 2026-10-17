@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15            # short-lived access token
     REFRESH_TOKEN_EXPIRE_DAYS: int = 14              # refresh token lifetime (Redis TTL)
+    # How long a rotated refresh token still yields the token it was rotated into (ADR-330); 0 turns it off.
+    REFRESH_REUSE_GRACE_SECONDS: int = 30
 
     # Redis 連線字串
     # Docker 內部連線預設: redis://redis:6379

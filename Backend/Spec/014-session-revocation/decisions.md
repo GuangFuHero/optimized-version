@@ -487,6 +487,11 @@ if session.get("act") != payload.get("act"):
 
 **與 ADR-100 的關係**：ADR-100 說「分不出 session 死了還是 Redis 掛了就一律 401」，這條完全不變。本 ADR 改的是**在什麼情況下才算「Redis 掛了」**——一條死掉的池化連線不算，它只是需要重連。
 
+> **2026-10-17 由 ADR-330 修改**（`Spec/023-backend-session-login`）：決策 2 的 NX value 從單純的 nonce 改成一筆 JSON
+> 紀錄（這次嘗試的 nonce、claim 的時間、加密過的新 refresh token），讓寬限期內（`REFRESH_REUSE_GRACE_SECONDS`）重送的
+> 舊 token 拿到同一支新 token。
+> nonce 還在紀錄裡，每次嘗試的值仍然唯一，所以本 ADR 的重試語意不變。
+
 
 ---
 

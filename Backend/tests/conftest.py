@@ -301,6 +301,27 @@ async def auth_headers_for(redis, user_uuid, role=None, team=None) -> dict:
     return {"Authorization": f"Bearer {await token_for(redis, user_uuid, role, team)}"}
 
 
+@pytest.fixture
+def past_the_refresh_grace_period(monkeypatch):
+    """Call it to move the session store's clock past the refresh grace period (ADR-330).
+
+    A rotation stamps its claim with `session_repository._now`. Freezing that clock and stepping
+    it forward is how a test reaches "replayed too late" without sleeping through the period.
+    """
+    import time
+
+    from app.core.config import settings
+    from app.repositories import session_repository
+
+    now = {"t": time.time()}
+    monkeypatch.setattr(session_repository, "_now", lambda: now["t"])
+
+    def step() -> None:
+        now["t"] += settings.REFRESH_REUSE_GRACE_SECONDS
+
+    return step
+
+
 def acting_as(user, role, team=None):
     """Attach the identity a real request would have resolved from the token (feature 010).
 
