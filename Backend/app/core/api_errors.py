@@ -58,6 +58,10 @@ class ErrorCode(StrEnum):
     # A switch may only move between identities already held; the client's list was stale.
     # Remedy: refresh the identity list, not the sign-in.
     IDENTITY_NOT_HELD = "identity_not_held"
+    # A back-office request (ADR-329) from an account holding nothing besides `user`. Not a sign-in
+    # failure: the session is fine and the site still works, so the back office says "no access"
+    # and signs nobody out.
+    BACK_OFFICE_IDENTITY_REQUIRED = "back_office_identity_required"
 
     # Social login
     SSO_TOKEN_INVALID = "sso_token_invalid"

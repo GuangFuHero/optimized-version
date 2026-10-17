@@ -138,9 +138,12 @@ async def test_the_marker_does_not_revive_a_revoked_identity(client, db_session,
     assert response.status_code == 401
 
 
-@pytest.mark.parametrize("realm", ["admin", "Site"])
+@pytest.mark.parametrize("realm", ["back-office", "Site"])
 async def test_any_other_realm_is_ignored(client, db_session, redis, realm):
-    """Only the exact value the site sends means anything; the rest is as if it were absent."""
+    """Only the exact values the site and the back office send mean anything (`admin`: ADR-329).
+
+    Any other value is as if it were absent.
+    """
     _, _, headers = await _auditor(db_session, redis)
 
     assert await _active_role(client, {**headers, "X-WG-Realm": realm}) == "data_auditor"

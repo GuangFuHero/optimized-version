@@ -80,6 +80,7 @@ class UserResponse(UserBase):
         None,
         description=(
             "這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；"
+            "帶 `X-WG-Realm: admin` 的請求是後台身分，token 的身分是 `user` 時改用第一個後台身分（ADR-329）；"
             "沒有時為 null"
         ),
     )

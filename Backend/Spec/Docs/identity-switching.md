@@ -97,6 +97,9 @@ flowchart LR
 - `default_for_user()` 在平台身分（`team_uuid IS NULL`）裡**優先取 `user`**，超管也一樣；其餘依名稱、uuid 排序（019/ADR-290）。功能 019 之後一人可能持有 `user` 加一個其他平台身分：申請通過的資料檢核員、`bootstrap_admin` 設的超管（019/ADR-288、290）。要用後台權限就明確切換
 - 一筆都沒有時回 `None`（零權限），**刻意不退回任何 team 身分**——把人放到他沒有選擇的 team 身分上，正是 ADR-096 否決的「無聲降級」
 - 前台的請求帶 `X-WG-Realm: site` 時，**該次請求**改用此人持有的 `user`，token 與 session 都不變（019/ADR-289）；所以在後台切成什麼身分，都不影響前台
+- 後台的請求帶 `X-WG-Realm: admin` 時，token 的身分是後台身分（`user` 以外）就照用；是 `user` 或沒有身分時，
+  **該次請求**改用此人的第一個後台身分（平台身分優先，再依角色名稱、隊名、team uuid），token 與 session 一樣不變；
+  一個後台身分都沒有就回 403 `back_office_identity_required`（023/ADR-329）
 
 ---
 

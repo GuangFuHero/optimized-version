@@ -171,6 +171,70 @@ spelled out in the code — and a browser also has its cookies cleared, so it si
 
 ---
 
+### ADR-329 A request from the back office acts as a back-office identity (`X-WG-Realm: admin`)
+
+> **Status: ACCEPTED (2026-10-17).** Chosen by the product owner on 2026-10-16, together with moving sign-in
+> to the backend.
+
+**In plain words**: everyone lands on the ordinary-user identity when they sign in, and the site keeps them on
+it. The back office marks its requests, and on those the same session acts as the identity the person uses in
+the back office: the one they switched to there, or else the first one they hold. Someone with no back-office
+identity is turned away from the back office, but stays signed in.
+
+**Context**: The back office had a sign-in of its own. Its NextAuth session held its own tokens, and
+switching identity there (`POST /auth/switch-identity`) changed that session alone. With one sign-in for the
+site and the back office (ADR-325, ADR-326), both send the same cookie, so they share one session and one
+`act`. A login lands on `user` (ADR-290), and the site keeps every request on it with `X-WG-Realm: site`
+(ADR-289). The back office needs the opposite: `user` is the one identity that has no business there.
+
+**Options**:
+
+- The back office calls `switch-identity` when it is opened. **Rejected**: it rewrites the session the site is
+  using too. Every token the site's tabs hold then disagrees with the session and is refused as stale
+  (ADR-195), so each tab has to refresh; two back-office tabs opened together race to switch; and the frontend
+  has to pick the identity and handle an account with none.
+- **A per-request marker, as the site has (adopted).**
+
+**Decision**:
+
+1. The back office sends `X-WG-Realm: admin` on every request. `get_current_user` first checks the token, its
+   session and its `act` claim exactly as before; then, for the value `admin` only:
+   - A token acting as a back-office identity — anything but the platform `user`, team identities included —
+     keeps it. Switching identity in the back office therefore works as it did: `switch-identity` writes the
+     session's `act`, and from then on the back office acts as it.
+   - A token acting as `user`, or as no identity, acts as the caller's first back-office identity: platform
+     identities first, then by role name, team name and team uuid. The last two make `admin` of two teams
+     resolve to the same team every time; ordering by role name alone does not.
+   - An account holding nothing besides `user` gets 403 `back_office_identity_required`, "This account has no
+     back-office identity". Not a 401: the session is fine and the site still works, so nobody is signed out.
+     The GraphQL context answers the same way, as an HTTP 403 rather than an error inside a 200 (ADR-328).
+2. As with the site's marker (ADR-289 decisions 2 and 3): it lasts one request, and the token and the session
+   are not touched; it only ever picks a grant the caller holds; a revoked identity still answers 401, because
+   the marker applies after the checks; and the audit trail records the identity the request acted as.
+3. One session can therefore act as `user` on the site and as a data auditor in the back office at the same
+   time.
+4. Only the exact value `admin` counts; any other value is ignored, as before.
+
+**Amends**:
+
+- ADR-289 decision 5 (`Spec/019-role-requests`): back-office pages no longer reach the backend on a path
+  without the header; they send `X-WG-Realm: admin`. Decision 2's "any other value is ignored" no longer
+  covers `admin`.
+
+**Why the client may choose**: the header is set by the client, but all it can do is pick a grant the caller
+already holds, which they could switch to anyway (ADR-068). It cannot reach an identity they do not hold.
+
+**Consequences**:
+➕ The site and the back office share one session, and neither changes the identity the other acts as.
+➕ Nobody has to switch identity after signing in to use the back office.
+➖ A back-office request that forgets the header acts as the token's identity, which is `user` for anyone who
+has not switched. It shows up as 403 on back-office endpoints, not as an error about the header.
+➖ One extra query for each back-office request whose token acts as `user`.
+➖ Someone holding several back-office identities arrives on the first one by sort order, not on the one they
+used last, and switches from there.
+
+---
+
 ### ADR-330 A rotated refresh token is accepted again for 30 seconds
 
 > **Status: ACCEPTED (2026-10-17).** The grace period was chosen by the product owner on 2026-10-16, together

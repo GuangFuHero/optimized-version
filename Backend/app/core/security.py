@@ -305,9 +305,11 @@ async def _require_live_session(redis, payload: dict) -> None:
         raise _credentials_exception(ErrorCode.ACCESS_TOKEN_STALE)
 
 
-# The header, and the one value of it, by which the site marks its requests (ADR-289).
+# The header, and its two values, by which the site and the back office mark their requests
+# (ADR-289, ADR-329).
 REALM_HEADER = "X-WG-Realm"
 SITE_REALM = "site"
+ADMIN_REALM = "admin"
 
 
 async def get_current_user(
@@ -331,6 +333,11 @@ async def get_current_user(
     revoked one still 401s, and an account holding no `user` grant keeps the token's identity
     (ADR-289 decision 2). Neither the token nor the session changes.
 
+    A request the back office marks with `realm` = `admin` acts as a back-office identity in the
+    same way (ADR-329): the token's own, unless that is `user` — the site's identity, where every
+    login lands — in which case the caller's first back-office identity. An account holding none
+    gets a 403, after the same checks, so a revoked identity still 401s here too.
+
     `redis` and `realm` are ordinary parameters rather than read off the request, because the
     GraphQL context calls this function directly instead of through FastAPI and has to supply
     them itself (ADR-102).
@@ -353,6 +360,15 @@ async def get_current_user(
         identity = await active_identity_repository.default_for_user(db, str(user.uuid))
     if realm == SITE_REALM:
         identity = await active_identity_repository.site_identity(db, str(user.uuid)) or identity
+    elif realm == ADMIN_REALM:
+        identity = await active_identity_repository.back_office_identity(db, str(user.uuid), identity)
+        if identity is None:
+            # Not a 401: the session is fine and the site still works, so nobody is signed out.
+            raise ApiError(
+                status.HTTP_403_FORBIDDEN,
+                ErrorCode.BACK_OFFICE_IDENTITY_REQUIRED,
+                "This account has no back-office identity",
+            )
     user.active_identity = identity
     await _publish_identity_for_auditing(db, identity)
     return user
