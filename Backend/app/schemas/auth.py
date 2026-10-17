@@ -6,7 +6,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.permissions import Perm
+
 # --- Token 相關 ---
+
 
 class TokenData(BaseModel):
     """Decoded JWT payload data."""
@@ -16,10 +19,12 @@ class TokenData(BaseModel):
 
 # --- 使用者回傳與更新 ---
 
+
 class UserSaltResponse(BaseModel):
     """Response containing the frontend salt for client-side password hashing."""
 
     salt_frontend: str
+
 
 class UserBase(BaseModel):
     """Base fields shared by user response schemas."""
@@ -80,6 +85,9 @@ class UserResponse(UserBase):
     )
     contacts: list[ContactOut] = Field(default_factory=list)
     login_methods: list[LoginMethodOut] = Field(default_factory=list)
+    capabilities: list[Perm] = Field(
+        description="目前身分能使用的 capability；物件層級的範圍仍由各 endpoint 判斷"
+    )
 
     class Config:
         """Pydantic config: allow reading from ORM model attributes."""

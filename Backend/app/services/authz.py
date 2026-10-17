@@ -13,9 +13,9 @@ from fastapi import HTTPException, status
 from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.permissions import PUBLIC_PERMS, Perm
+from app.core.permissions import GOV_TEAM_ONLY_PERMS, PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope, active_team, in_scope
-from app.core.security import resolve_scope
+from app.core.security import _acts_for_gov_team, resolve_scope
 from app.models.auth import User
 from app.models.team import Team
 
@@ -41,9 +41,7 @@ async def require_scope(
     """
     if perm in PUBLIC_PERMS:
         if resource is not None:
-            raise ValueError(
-                f"{perm.value} is in PUBLIC_PERMS; object scoping it has no meaning"
-            )
+            raise ValueError(f"{perm.value} is in PUBLIC_PERMS; object scoping it has no meaning")
         return Scope.ALL
 
     scope = await resolve_scope(actor, perm, db, cache=cache)
@@ -76,6 +74,24 @@ async def require_gov_team(db: AsyncSession, actor: User, *, detail: str) -> Non
     team = await db.scalar(select(Team).where(Team.uuid == mine, Team.delete_at.is_(None)))
     if team is None or team.type != "gov" or team.status != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+async def capabilities(actor: User, db: AsyncSession) -> list[Perm]:
+    """Every capability `actor` passes checkpoint 1 for, with the gov-team fence applied.
+
+    Checkpoint 2 needs the resource, so it stays with the endpoint that receives one.
+    """
+    cache: dict = {}
+    fenced = active_team(actor) is not None and not await _acts_for_gov_team(actor, db, cache)
+    return [
+        perm
+        for perm in Perm
+        if perm in PUBLIC_PERMS
+        or (
+            await resolve_scope(actor, perm, db, cache=cache) != Scope.NONE
+            and not (fenced and perm in GOV_TEAM_ONLY_PERMS)
+        )
+    ]
 
 
 async def refresh_actor(db: AsyncSession, actor: User) -> None:
