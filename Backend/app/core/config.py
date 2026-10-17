@@ -5,6 +5,15 @@ import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def normalise_origin(origin: str) -> str:
+    """An origin as it is compared (ADR-327): trimmed, lower-case, without a trailing slash.
+
+    Both the allowlist and the `Origin` a request carries go through this, so the two can only match
+    or differ on what actually matters.
+    """
+    return origin.strip().lower().rstrip("/")
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and the .env file."""
 
@@ -71,11 +80,11 @@ class Settings(BaseSettings):
         """`AUTH_ALLOWED_ORIGINS` as a set, written the way a browser sends `Origin`.
 
         Kept as a plain string field and split here because pydantic-settings reads a list field from
-        the environment as JSON, which would reject a comma-separated value. Origins are compared
-        case-insensitively and without a trailing slash. Entries are filtered after normalising, so a
-        stray `/` cannot leave an empty origin in the set for a request without one to match.
+        the environment as JSON, which would reject a comma-separated value. Entries are filtered after
+        `normalise_origin`, so a stray `/` cannot leave an empty origin in the set for a request without
+        one to match.
         """
-        normalised = (origin.strip().lower().rstrip("/") for origin in self.AUTH_ALLOWED_ORIGINS.split(","))
+        normalised = (normalise_origin(origin) for origin in self.AUTH_ALLOWED_ORIGINS.split(","))
         return frozenset(origin for origin in normalised if origin)
 
     @property

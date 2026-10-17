@@ -21,6 +21,7 @@ from app.core.context import request_identity
 from app.core.permissions import GOV_TEAM_WIDENED_PERMS, Perm
 from app.core.rbac_scopes import Scope, active_team
 from app.core.redis import get_redis
+from app.core.request_auth import accept_access_token
 from app.db.session import SessionLocal
 from app.models.auth import User
 from app.models.team import Team
@@ -147,7 +148,30 @@ def parse_salt_frontend(hashed_password_db: str) -> str | None:
 
 # --- JWT 與 其他邏輯 ---
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# The Bearer half of `get_access_token`. `auto_error=False`, because a request without the header may
+# still carry the access cookie (ADR-327); kept as a dependency so the OpenAPI schema clients are
+# generated from still declares the scheme.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+
+async def get_access_token(request: Request, _bearer: str | None = Depends(oauth2_scheme)) -> str:
+    """The access token of a request that must be signed in: a Bearer token, else the cookie.
+
+    `_bearer` is not read: `accept_access_token` parses the header itself, so REST and the GraphQL
+    context follow one rule, Origin check included. The dependency is there for OpenAPI.
+
+    No token at all is 401 `credentials_invalid` with detail "Not authenticated" — every 401 here
+    carries a code (ADR-328). It is not a cookie-authenticated request, so nothing is cleared.
+    """
+    token = accept_access_token(request)
+    if token is None:
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.CREDENTIALS_INVALID,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return token
 
 
 def generate_salt(length: int = 16) -> str:
@@ -288,7 +312,7 @@ SITE_REALM = "site"
 
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
-    token: str = Depends(oauth2_scheme),
+    token: str = Depends(get_access_token),
     redis=Depends(get_redis),
     realm: str | None = Header(None, alias=REALM_HEADER),
 ) -> User:
@@ -355,7 +379,7 @@ async def _publish_identity_for_auditing(db: AsyncSession, identity) -> None:
     )
 
 
-async def get_current_session(token: str = Depends(oauth2_scheme)) -> tuple[str, str | None]:
+async def get_current_session(token: str = Depends(get_access_token)) -> tuple[str, str | None]:
     """Resolve (user_uuid, sid) from the access token without a DB hit or a Redis read.
 
     Deliberately does NOT check that the session is still live (ADR-190, superseding

@@ -43,6 +43,9 @@ class ErrorCode(StrEnum):
     # The session switched identity after this token was signed (ADR-195). Remedy: refresh, which
     # signs a token for the identity the session acts as now (ADR-328).
     ACCESS_TOKEN_STALE = "access_token_stale"
+    # A cookie-authenticated write that did not come from one of our own pages (ADR-327) — what a
+    # forged form on another site looks like. Not the user's doing, so nothing for them to fix.
+    ORIGIN_NOT_ALLOWED = "origin_not_allowed"
     # Logout could not reach the session store, so the caller is still signed in. Distinct from
     # every other failure because the generic "something went wrong" copy would let a user walk
     # away from a shared machine believing they signed out.

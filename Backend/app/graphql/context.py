@@ -5,6 +5,7 @@ from starlette.requests import Request
 
 from app.core.permissions import PUBLIC_PERMS, Perm
 from app.core.rbac_scopes import Scope
+from app.core.request_auth import accept_access_token
 from app.core.security import REALM_HEADER, get_current_user, get_db
 from app.graphql.loaders import build_loaders
 from app.models.auth import User
@@ -24,6 +25,10 @@ async def get_context(request: Request):
         - No token: user is None — a Guest (ADR-025): only PUBLIC_PERMS are reachable,
           everything else 403s in check_permission below. Guest is a program-level view,
           never a DB row.
+        - Token from the access cookie on a POST, without an allowed Origin: ApiError(403) from
+          `accept_access_token` (ADR-327). That covers every mutation and every query sent as a
+          POST. A query sent as a GET only reads, and passes without an Origin like any other
+          GET; mutations over GET are refused by Strawberry itself.
     """
     db_gen = get_db()
     db = await anext(db_gen)
@@ -38,8 +43,8 @@ async def get_context(request: Request):
         # selecting 2+ root fields fails. Do this unconditionally so both paths are
         # equally warmed and this doesn't silently regress if the auth lookup ever changes.
         await db.connection()
-        auth = request.headers.get("Authorization", "")
-        token = auth[7:] if auth.startswith("Bearer ") else ""
+        # The same rule as every REST endpoint: Bearer first, else the access cookie (ADR-327).
+        token = accept_access_token(request)
         user = None
         if token:
             # redis comes from app.state because this path bypasses FastAPI's dependency

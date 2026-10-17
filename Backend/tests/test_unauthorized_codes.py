@@ -13,14 +13,12 @@ from datetime import timedelta
 import pytest
 from jose import jwt
 from redis.exceptions import RedisError
-from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.identity import encode_act
 from app.core.security import create_access_token
-from app.models.auth import User
-from app.models.rbac import Role, UserRoleAssign
 from app.repositories.session_repository import SessionRepository
+from tests.conftest import sign_in
 
 pytestmark = pytest.mark.asyncio
 
@@ -38,19 +36,6 @@ def ask_each_entrypoint(request, client, fresh_app_engine):
     return _ask
 
 
-async def _signed_in(db, redis) -> tuple[str, str, str]:
-    """A `user` account with a live session; returns (user uuid, act, sid)."""
-    role = (await db.execute(select(Role).where(Role.name == "user"))).scalar_one()
-    account = User(name="401 測試")
-    db.add(account)
-    await db.flush()
-    db.add(UserRoleAssign(user_uuid=account.uuid, role_uuid=role.uuid))
-    user_uuid, act = str(account.uuid), encode_act(str(role.uuid), None)
-    await db.commit()
-    sid, _ = await SessionRepository(redis).create_session(user_uuid, "test", act=act)
-    return user_uuid, act, sid
-
-
 def _assert_401(res, code: str) -> None:
     assert res.status_code == 401, res.text
     assert res.json() == {"detail": "Could not validate credentials", "code": code}
@@ -59,7 +44,7 @@ def _assert_401(res, code: str) -> None:
 
 async def test_an_expired_access_token_asks_for_a_refresh(ask_each_entrypoint, db_session, redis):
     """The session is fine; only the 15-minute token ran out, so refreshing fixes it."""
-    user_uuid, act, sid = await _signed_in(db_session, redis)
+    user_uuid, act, sid = await sign_in(db_session, redis)
     token = create_access_token({"sub": user_uuid}, expires_delta=timedelta(minutes=-1), sid=sid, act=act)
 
     _assert_401(await ask_each_entrypoint(token), "access_token_expired")
@@ -71,7 +56,7 @@ async def test_logout_reports_an_expired_token_the_same_way(client, db_session, 
     It never looks at the session, but it reads the token through the same decoder, so an
     expired token reaching it is answered with the same refresh-me code.
     """
-    user_uuid, act, sid = await _signed_in(db_session, redis)
+    user_uuid, act, sid = await sign_in(db_session, redis)
     token = create_access_token({"sub": user_uuid}, expires_delta=timedelta(minutes=-1), sid=sid, act=act)
 
     res = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"})
@@ -83,7 +68,7 @@ async def test_a_token_from_before_an_identity_switch_asks_for_a_refresh(
     ask_each_entrypoint, db_session, redis
 ):
     """The session moved to another identity (ADR-195); a refresh signs for the one it has now."""
-    user_uuid, act, sid = await _signed_in(db_session, redis)
+    user_uuid, act, sid = await sign_in(db_session, redis)
     token = create_access_token({"sub": user_uuid}, sid=sid, act=act)
     await SessionRepository(redis).set_identity(sid, encode_act(str(uuid.uuid4()), None))
 
@@ -92,7 +77,7 @@ async def test_a_token_from_before_an_identity_switch_asks_for_a_refresh(
 
 async def test_a_revoked_session_signs_the_user_out(ask_each_entrypoint, db_session, redis):
     """Logout, a password change or an admin's kick ended the session: refreshing cannot help."""
-    user_uuid, act, sid = await _signed_in(db_session, redis)
+    user_uuid, act, sid = await sign_in(db_session, redis)
     token = create_access_token({"sub": user_uuid}, sid=sid, act=act)
     await SessionRepository(redis).revoke_session(sid)
 
@@ -100,24 +85,24 @@ async def test_a_revoked_session_signs_the_user_out(ask_each_entrypoint, db_sess
 
 
 async def _forged_signature(db, redis, monkeypatch):
-    user_uuid, act, sid = await _signed_in(db, redis)
+    user_uuid, act, sid = await sign_in(db, redis)
     claims = {"sub": user_uuid, "sid": sid, "act": act, "type": "access", "exp": time.time() + 600}
     return jwt.encode(claims, "not-our-key", algorithm=settings.ALGORITHM)
 
 
 async def _not_an_access_token(db, redis, monkeypatch):
-    user_uuid, act, sid = await _signed_in(db, redis)
+    user_uuid, act, sid = await sign_in(db, redis)
     claims = {"sub": user_uuid, "sid": sid, "act": act, "type": "refresh", "exp": time.time() + 600}
     return jwt.encode(claims, settings.JWT_SIGNING_KEY, algorithm=settings.ALGORITHM)
 
 
 async def _no_session_id(db, redis, monkeypatch):
-    user_uuid, act, _ = await _signed_in(db, redis)
+    user_uuid, act, _ = await sign_in(db, redis)
     return create_access_token({"sub": user_uuid}, act=act)
 
 
 async def _someone_elses_session(db, redis, monkeypatch):
-    _, act, sid = await _signed_in(db, redis)
+    _, act, sid = await sign_in(db, redis)
     return create_access_token({"sub": str(uuid.uuid4())}, sid=sid, act=act)
 
 
@@ -128,14 +113,14 @@ async def _account_gone(db, redis, monkeypatch):
 
 
 async def _identity_taken_away(db, redis, monkeypatch):
-    user_uuid, _, _ = await _signed_in(db, redis)
+    user_uuid, _, _ = await sign_in(db, redis)
     act = encode_act(str(uuid.uuid4()), None)
     sid, _ = await SessionRepository(redis).create_session(user_uuid, "test", act=act)
     return create_access_token({"sub": user_uuid}, sid=sid, act=act)
 
 
 async def _session_store_down(db, redis, monkeypatch):
-    user_uuid, act, sid = await _signed_in(db, redis)
+    user_uuid, act, sid = await sign_in(db, redis)
 
     async def unreachable(self, sid):
         raise RedisError("connection refused")

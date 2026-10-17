@@ -37,7 +37,7 @@ import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 import redis.asyncio as aioredis  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
-from sqlalchemy import text  # noqa: E402
+from sqlalchemy import select, text  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
@@ -47,8 +47,8 @@ from app.core.security import create_access_token  # noqa: E402
 from app.main import app  # noqa: E402
 from app.messaging.email import get_email_sender  # noqa: E402
 from app.messaging.sms import get_sms_sender  # noqa: E402
-from app.models.auth import Base  # noqa: E402
-from app.models.rbac import Role  # noqa: E402
+from app.models.auth import Base, User  # noqa: E402
+from app.models.rbac import Role, UserRoleAssign  # noqa: E402
 from app.sso.google import get_google_verifier  # noqa: E402
 from app.sso.line import get_line_verifier  # noqa: E402
 from tests.fakes import FakeGoogleVerifier, FakeLineVerifier  # noqa: E402
@@ -299,6 +299,26 @@ async def token_for(redis, user_uuid, role=None, team=None) -> str:
 async def auth_headers_for(redis, user_uuid, role=None, team=None) -> dict:
     """Bearer headers for a token acting as the given identity, backed by a live session."""
     return {"Authorization": f"Bearer {await token_for(redis, user_uuid, role, team)}"}
+
+
+async def sign_in(db, redis, name: str = "登入的人") -> tuple[str, str, str]:
+    """A committed account holding the seeded `user` role, with a live session acting as it.
+
+    Returns (user uuid, act, sid); mint the token with `create_access_token` so a test can shape
+    it — expired, for another user, or as it is. Needs the `user` role `db_session` seeds.
+    """
+    from app.core.identity import encode_act
+    from app.repositories.session_repository import SessionRepository
+
+    role = (await db.execute(select(Role).where(Role.name == "user"))).scalar_one()
+    account = User(name=name)
+    db.add(account)
+    await db.flush()
+    db.add(UserRoleAssign(user_uuid=account.uuid, role_uuid=role.uuid))
+    user_uuid, act = str(account.uuid), encode_act(str(role.uuid), None)
+    await db.commit()
+    sid, _ = await SessionRepository(redis).create_session(user_uuid, "test", act=act)
+    return user_uuid, act, sid
 
 
 @pytest.fixture

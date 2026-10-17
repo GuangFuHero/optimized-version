@@ -70,6 +70,54 @@ not only to the session endpoints.
 
 ---
 
+### ADR-327 A write carried by the cookie must come from one of our own pages
+
+> **Status: ACCEPTED (2026-10-17).** Chosen by the product owner on 2026-10-16, together with moving sign-in
+> to the backend. The exception for refreshing was added the same day, for the frontend's server.
+
+**In plain words**: once the browser holds the session in cookies, a page on any site could make the browser
+send us a request with those cookies attached. So a request that signs in with the cookie and changes
+something has to show that it came from one of our own pages; otherwise it is turned away.
+
+**Context**: A Bearer token is only sent by code that holds it. A cookie is attached by the browser to every
+request for our hosts — including one that a form on another site submits, which is cross-site request
+forgery. CORS does not help: since #75 it allows any origin without credentials, and in any case it decides
+who may read a response, not whether a request is sent. `SameSite=Lax` stops another site's form from carrying
+the cookie, but not a page on another subdomain of ours: to the browser, every `*.wan-guard.com` host is the
+same site.
+
+**Decision**:
+
+1. A request authenticates with a Bearer token when it sends one, and with the `{p}_at` cookie (ADR-326) only
+   when it does not. The two are never combined: a Bearer token that fails is a failure, whatever cookie came
+   with it. REST (`get_current_user`, `get_current_session`) and the GraphQL context go through the same
+   function; the audit middleware reads the token by the same rule, to attribute writes.
+2. A request authenticated by the cookie whose method is not GET, HEAD or OPTIONS must carry an `Origin`
+   listed in `AUTH_ALLOWED_ORIGINS` — the site's and the back office's — compared case-insensitively and
+   without a trailing slash; without `Origin`, the origin of its `Referer` counts. Neither, `Origin: null`,
+   or any other origin answers 403 `origin_not_allowed`. On GraphQL this covers every mutation and every
+   query sent as a POST. A query sent as a GET only reads and passes like any GET; the frontend's GraphQL
+   route forwards GET queries, and Strawberry refuses a mutation over GET.
+3. A Bearer request is not checked: a browser never puts a token into a header on its own.
+4. The endpoints that start a session from no cookie at all — signing in, finishing a registration, signing
+   out, starting a Google or LINE sign-in — check the origin as well (ADR-325, ADR-331), against signing a
+   victim into someone else's account. Refreshing is the exception: the frontend's server refreshes before it
+   renders a page, and a browser asks for a page without an `Origin`. Little is lost by it. A cross-site
+   request cannot carry the `SameSite=Lax` refresh cookie, and one from a sibling subdomain can only make the
+   victim's own browser renew its own session, without the attacker seeing the result — the worst case is one
+   rotation more, which ADR-330's grace period already absorbs. The OAuth callback is the provider's redirect
+   and is protected by its state instead.
+5. CORS stays as #75 left it.
+
+**Consequences**:
+➕ No other site, and no other subdomain, can make a signed-in browser change anything.
+➖ The frontend's server must send `Origin` itself on any POST it makes with a user's cookie — GraphQL queries
+sent as POSTs included — or be refused.
+➖ The allowed origins are configuration. An environment that forgets them refuses every cookie-authenticated
+write: loudly, rather than accepting one it should not.
+
+---
+
 ### ADR-328 Every 401 a token earns names why: refresh, or signed out
 
 > **Status: ACCEPTED (2026-10-17).** Chosen by the product owner on 2026-10-16, together with moving sign-in
@@ -105,12 +153,21 @@ or signed the user out whenever a token expired.
    case and keeps its GraphQL error from `require_authenticated`: there is no token to refresh.
 3. The session store being unreachable stays `credentials_invalid`. ADR-100 makes that answer identical to an
    invalid token on purpose, and the log is still what tells the two apart.
+4. A request authenticated by the access cookie (ADR-327) and answered `session_expired` or
+   `credentials_invalid` gets both sign-in cookies cleared in the same response (ADR-326); otherwise the
+   browser keeps sending a token that can never work again. `access_token_expired` and `access_token_stale`
+   clear nothing, because the refresh needs the cookies. A Bearer request never has cookies cleared. The
+   clearing is done in the exception handler REST and the GraphQL context share, not at each raise site, and
+   not in a middleware, which would have to parse the response body to find the code.
+5. A request carrying no token at all, on an endpoint that needs one, answers 401 `credentials_invalid` with
+   the detail "Not authenticated". It is not cookie-authenticated, so nothing is cleared, and a client tells a
+   guest apart by whether it sent a cookie.
 
 **Consequences**:
 ➕ A client refreshes exactly when that helps, and signs the user out exactly when it must.
 ➕ Bearer clients see the same status, detail and header as before; only `code` is new.
 ➖ While Redis is unreachable, everyone who makes a request reads as signed out — as before this ADR, now
-spelled out in the code.
+spelled out in the code — and a browser also has its cookies cleared, so it signs in again once Redis is back.
 
 ---
 
