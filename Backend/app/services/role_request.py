@@ -141,7 +141,7 @@ async def submit(
     await NotificationService.dispatch(
         db,
         event_type="role_request_submitted",
-        title="有新的管理平台權限申請",
+        title="有新的管理權限申請",
         body=f"{applicant_name} 申請成為「{ROLE_LABELS[requested_role]}」。",
         actor_uuid=applicant_uuid,
         ref_type="role_request",
