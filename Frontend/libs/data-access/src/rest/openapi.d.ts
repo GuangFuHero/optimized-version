@@ -712,9 +712,10 @@ export interface paths {
     put?: never;
     /**
      * Assign Role
-     * @description Grant a user a PLATFORM role, replacing the one they hold.
+     * @description Grant a user a PLATFORM role, replacing the other one they hold; `user` always stays.
      *
-     *     Team roles go through POST /teams/{team_uuid}/members, where the team is unambiguous —
+     *     Assigning `user` takes the other one away, which is how to demote (019/ADR-294). Team roles
+     *     go through POST /teams/{team_uuid}/members, where the team is unambiguous —
      *     granting a team role IS joining that team (ADR-072).
      */
     post: operations['assign_role_api_v1_admin_users__user_uuid__role_post'];
@@ -1000,6 +1001,66 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/role-requests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Role Requests
+     * @description Applications oldest first, so whoever applied first is reviewed first.
+     */
+    get: operations['list_role_requests_api_v1_admin_role_requests_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/role-requests/{request_uuid}/approve': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Approve Role Request
+     * @description Grant a pending data auditor application; government and NGO ones are refused for now.
+     */
+    post: operations['approve_role_request_api_v1_admin_role_requests__request_uuid__approve_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/role-requests/{request_uuid}/reject': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reject Role Request
+     * @description Turn a pending application down. The applicant is told, with the note if there is one.
+     */
+    post: operations['reject_role_request_api_v1_admin_role_requests__request_uuid__reject_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/rbac-test/public': {
     parameters: {
       query?: never;
@@ -1049,7 +1110,7 @@ export interface paths {
     };
     /**
      * Map Create Api
-     * @description 建立標記 API：需要 'map.add' 權限。
+     * @description 建立地圖區域 API：需要 'work_zone.add' 權限。
      */
     get: operations['map_create_api_api_v1_rbac_test_map_create_get'];
     put?: never;
@@ -2453,15 +2514,14 @@ export interface components {
       | 'station.export'
       | 'station.import'
       | 'map.view'
-      | 'map.add'
-      | 'map.edit'
-      | 'map.delete'
       | 'ai_duplicate.view'
       | 'ai_duplicate.review'
       | 'user.view'
       | 'user.add'
       | 'user.edit'
       | 'user.delete'
+      | 'role_request.add'
+      | 'role_request.review'
       | 'team.view'
       | 'team.edit'
       | 'team.member.manage'
@@ -2477,6 +2537,7 @@ export interface components {
       | 'project.view'
       | 'project.edit'
       | 'announcement.view'
+      | 'announcement.view_admin'
       | 'announcement.publish'
       | 'announcement.edit'
       | 'announcement.delete'
@@ -2616,6 +2677,93 @@ export interface components {
       grants: {
         [key: string]: string;
       };
+    };
+    /**
+     * RoleRequestDecision
+     * @description A reviewer's decision. The note is checked by the service (at most 500 characters).
+     */
+    RoleRequestDecision: {
+      /** Note */
+      note?: string | null;
+    };
+    /**
+     * RoleRequestResponse
+     * @description One application, as its reviewer sees it.
+     */
+    RoleRequestResponse: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /**
+       * Requested Role
+       * @enum {string}
+       */
+      requested_role: 'government' | 'ngo' | 'data_auditor';
+      /** Reason */
+      reason: string;
+      /** Contact */
+      contact: string | null;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'pending' | 'approved' | 'rejected' | 'withdrawn';
+      /** Review Note */
+      review_note: string | null;
+      /** Reviewed By */
+      reviewed_by: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Closed At */
+      closed_at: string | null;
+    };
+    /**
+     * RoleRequestReviewItem
+     * @description One row of the review list: the application and who sent it.
+     */
+    RoleRequestReviewItem: {
+      /**
+       * Uuid
+       * Format: uuid
+       */
+      uuid: string;
+      /**
+       * Requested Role
+       * @enum {string}
+       */
+      requested_role: 'government' | 'ngo' | 'data_auditor';
+      /** Reason */
+      reason: string;
+      /** Contact */
+      contact: string | null;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'pending' | 'approved' | 'rejected' | 'withdrawn';
+      /** Review Note */
+      review_note: string | null;
+      /** Reviewed By */
+      reviewed_by: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Closed At */
+      closed_at: string | null;
+      /**
+       * Applicant Uuid
+       * Format: uuid
+       */
+      applicant_uuid: string;
+      /** Applicant Name */
+      applicant_name: string;
     };
     /**
      * RowErrorResponse
@@ -2870,7 +3018,7 @@ export interface components {
       created_at: string;
       /** Identities */
       identities?: components['schemas']['IdentityOption'][];
-      /** @description 目前使用中的身分，一次只有一個；沒有時為 null */
+      /** @description 這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；沒有時為 null */
       active_identity?: components['schemas']['IdentityOption'] | null;
       /** Contacts */
       contacts?: components['schemas']['ContactOut'][];
@@ -3206,7 +3354,9 @@ export interface operations {
   switch_identity_api_v1_auth_switch_identity_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3308,7 +3458,9 @@ export interface operations {
   link_google_api_v1_auth_link_google_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3374,7 +3526,9 @@ export interface operations {
   link_line_api_v1_auth_link_line_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3407,7 +3561,9 @@ export interface operations {
   unlink_identity_api_v1_auth_link__provider__delete: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         provider: string;
       };
@@ -3442,7 +3598,9 @@ export interface operations {
   change_password_api_v1_auth_change_password_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3473,7 +3631,9 @@ export interface operations {
   set_password_api_v1_auth_set_password_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3568,7 +3728,9 @@ export interface operations {
   add_contact_api_v1_auth_contacts_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3601,7 +3763,9 @@ export interface operations {
   verify_contact_api_v1_auth_contacts_verify_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3634,7 +3798,9 @@ export interface operations {
   delete_contact_api_v1_auth_contacts__type__delete: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         type: string;
       };
@@ -3669,7 +3835,9 @@ export interface operations {
   resend_contact_api_v1_auth_contacts_resend_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3702,7 +3870,9 @@ export interface operations {
   read_user_me_api_v1_users_me_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3717,12 +3887,23 @@ export interface operations {
           'application/json': components['schemas']['UserResponse'];
         };
       };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
     };
   };
   update_user_me_api_v1_users_me_patch: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3762,7 +3943,9 @@ export interface operations {
         /** @description 僅篩選未讀通知 */
         unread_only?: boolean;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3791,7 +3974,9 @@ export interface operations {
   get_unread_count_api_v1_notifications_unread_count_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3806,12 +3991,23 @@ export interface operations {
           'application/json': components['schemas']['UnreadCountResponse'];
         };
       };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
     };
   };
   mark_notification_read_api_v1_notifications__uuid__read_patch: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         uuid: string;
       };
@@ -3842,7 +4038,9 @@ export interface operations {
   mark_all_notifications_read_api_v1_notifications_read_all_patch: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3857,6 +4055,15 @@ export interface operations {
           'application/json': components['schemas']['MarkAllReadResponse'];
         };
       };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
     };
   };
   list_users_api_v1_admin_users_get: {
@@ -3865,7 +4072,9 @@ export interface operations {
         skip?: number;
         limit?: number;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3894,7 +4103,9 @@ export interface operations {
   get_project_settings_api_v1_admin_project_settings_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3916,12 +4127,23 @@ export interface operations {
         };
         content?: never;
       };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
     };
   };
   update_project_settings_api_v1_admin_project_settings_patch: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -3961,7 +4183,9 @@ export interface operations {
   assign_role_api_v1_admin_users__user_uuid__role_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         user_uuid: string;
       };
@@ -3996,7 +4220,9 @@ export interface operations {
   revoke_user_sessions_api_v1_admin_users__user_uuid__revoke_sessions_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         user_uuid: string;
       };
@@ -4053,7 +4279,9 @@ export interface operations {
   list_teams_api_v1_admin_teams_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4075,12 +4303,23 @@ export interface operations {
         };
         content?: never;
       };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
     };
   };
   create_team_api_v1_admin_teams_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4120,7 +4359,9 @@ export interface operations {
   add_team_member_api_v1_admin_teams__team_uuid__members_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         team_uuid: string;
       };
@@ -4155,7 +4396,9 @@ export interface operations {
   remove_team_member_api_v1_admin_teams__team_uuid__members__user_uuid__delete: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         team_uuid: string;
         user_uuid: string;
@@ -4187,7 +4430,9 @@ export interface operations {
   get_capabilities_api_v1_admin_rbac_capabilities_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4202,12 +4447,23 @@ export interface operations {
           'application/json': components['schemas']['CapabilityCatalogResponse'];
         };
       };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
     };
   };
   get_matrix_api_v1_admin_rbac_matrix_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4222,12 +4478,23 @@ export interface operations {
           'application/json': components['schemas']['MatrixResponse'];
         };
       };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
     };
   };
   get_role_api_v1_admin_rbac_roles__role_uuid__get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         role_uuid: string;
       };
@@ -4258,7 +4525,9 @@ export interface operations {
   delete_role_api_v1_admin_rbac_roles__role_uuid__delete: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         role_uuid: string;
       };
@@ -4287,7 +4556,9 @@ export interface operations {
   rename_role_api_v1_admin_rbac_roles__role_uuid__patch: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         role_uuid: string;
       };
@@ -4322,7 +4593,9 @@ export interface operations {
   get_user_permissions_api_v1_admin_users__user_uuid__permissions_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         user_uuid: string;
       };
@@ -4353,7 +4626,9 @@ export interface operations {
   set_role_permission_api_v1_admin_rbac_roles__role_uuid__permissions__cap__put: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         role_uuid: string;
         cap: components['schemas']['Perm'];
@@ -4389,7 +4664,9 @@ export interface operations {
   revoke_role_permission_api_v1_admin_rbac_roles__role_uuid__permissions__cap__delete: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         role_uuid: string;
         cap: components['schemas']['Perm'];
@@ -4421,7 +4698,9 @@ export interface operations {
       query?: {
         team_uuid?: string | null;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         user_uuid: string;
         cap: components['schemas']['Perm'];
@@ -4459,7 +4738,9 @@ export interface operations {
       query?: {
         team_uuid?: string | null;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         user_uuid: string;
         cap: components['schemas']['Perm'];
@@ -4489,7 +4770,9 @@ export interface operations {
   create_role_api_v1_admin_rbac_roles_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4524,7 +4807,9 @@ export interface operations {
       query?: {
         team_uuid?: string | null;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         user_uuid: string;
         role_uuid: string;
@@ -4539,6 +4824,115 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  list_role_requests_api_v1_admin_role_requests_get: {
+    parameters: {
+      query?: {
+        status?: ('pending' | 'approved' | 'rejected' | 'withdrawn') | null;
+        skip?: number;
+        limit?: number;
+      };
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoleRequestReviewItem'][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  approve_role_request_api_v1_admin_role_requests__request_uuid__approve_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        request_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RoleRequestDecision'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoleRequestResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  reject_role_request_api_v1_admin_role_requests__request_uuid__reject_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path: {
+        request_uuid: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RoleRequestDecision'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoleRequestResponse'];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -4574,7 +4968,9 @@ export interface operations {
   map_view_api_api_v1_rbac_test_map_view_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4587,6 +4983,15 @@ export interface operations {
         };
         content: {
           'application/json': unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
         };
       };
     };
@@ -4594,7 +4999,9 @@ export interface operations {
   map_create_api_api_v1_rbac_test_map_create_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4609,12 +5016,23 @@ export interface operations {
           'application/json': unknown;
         };
       };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
     };
   };
   admin_only_api_api_v1_rbac_test_admin_only_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4627,6 +5045,15 @@ export interface operations {
         };
         content: {
           'application/json': unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
         };
       };
     };
@@ -4639,7 +5066,9 @@ export interface operations {
         /** @description 檔案格式：csv / xlsx */
         format?: string;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4680,7 +5109,9 @@ export interface operations {
         /** @description 檔案格式：csv / xlsx */
         format?: string;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4719,7 +5150,9 @@ export interface operations {
         /** @description 這份檔案的站點型別 */
         station_type: string;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4769,7 +5202,9 @@ export interface operations {
         /** @description 這份檔案的任務型別 */
         task_type: string;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4819,7 +5254,9 @@ export interface operations {
         /** @description 這份檔案的站點型別 */
         station_type: string;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4869,7 +5306,9 @@ export interface operations {
         /** @description 這份檔案的任務型別 */
         task_type: string;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -4919,7 +5358,9 @@ export interface operations {
         limit?: number;
         offset?: number;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         uuid: string;
       };
@@ -4967,7 +5408,9 @@ export interface operations {
         limit?: number;
         offset?: number;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path: {
         uuid: string;
       };
@@ -5081,7 +5524,9 @@ export interface operations {
   get_analytics_catalog_api_v1_analytics_catalog_get: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -5094,6 +5539,15 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CatalogResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
         };
       };
     };
@@ -5124,7 +5578,9 @@ export interface operations {
         /** @description JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{"title": {"text": "Custom title"}}'. */
         layout_overrides?: string | null;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -5162,7 +5618,9 @@ export interface operations {
         /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
         tz?: string;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -5214,7 +5672,9 @@ export interface operations {
         /** @description JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{"title": {"text": "Custom title"}}'. */
         layout_overrides?: string | null;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -5252,7 +5712,9 @@ export interface operations {
         /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
         tz?: string;
       };
-      header?: never;
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };

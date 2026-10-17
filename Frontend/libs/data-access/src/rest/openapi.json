@@ -263,15 +263,38 @@
         "summary": "Switch Identity",
         "description": "Act as a different identity you already hold; returns a re-signed access token.\n\nDeliberately gated by nothing but being logged in. Requiring a capability here would let\na user downgrade into an identity that cannot switch back, locking themselves out of\ntheir own permissions (ADR-070).\n\nOnly re-signs the access token — the session is untouched and the refresh token is not\nrotated, because switching is not a credential event.\n\n**The session it re-signs from has to still exist** (ADR-183). This mints a fresh\naccess token with a fresh expiry, so without that check the endpoint is a token\nrefresher gated on nothing but holding an unexpired token: after `logout` or\n`logout-all`, `/auth/refresh` correctly refuses, but calling this before each expiry\nwould keep a revoked session alive indefinitely. Rate limited for the same reason —\nit mints credentials, and `login` and `refresh` both are.",
         "operationId": "switch_identity_api_v1_auth_switch_identity_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SwitchIdentityRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -294,12 +317,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/auth/logout": {
@@ -392,15 +410,38 @@
         "summary": "Link Google",
         "description": "Attach a verified Google identity to the current account, proof first (ADR-217).\n\nThe id_token proves the caller holds that Google account. It is not proof that they hold\n*this* one, so the account is asked for the same channel proof a first password needs —\notherwise a stolen session plus the attacker's own Google account is a permanent way in\nthat no password change or session revocation can take back.",
         "operationId": "link_google_api_v1_auth_link_google_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LinkGoogleRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -421,12 +462,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/auth/sso/line": {
@@ -479,15 +515,38 @@
         "summary": "Link Line",
         "description": "Attach a verified LINE identity to the current account. Same contract as `link_google`.",
         "operationId": "link_line_api_v1_auth_link_line_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/IdTokenRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -508,12 +567,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/auth/link/{provider}": {
@@ -537,6 +591,22 @@
             "schema": {
               "type": "string",
               "title": "Provider"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -582,15 +652,38 @@
         "summary": "Change Password",
         "description": "Verify the old password, write the new hash, revoke every session, tell the owner.\n\nThe notification is ADR-218's rule applied here too: every change to how this account can\nbe signed into reaches the owner's own channels. `change-password` is the one path where\nknowing the current password is already required, so it is the least likely to be an\nattacker — but \"least likely\" is not a reason for the owner to hear nothing.",
         "operationId": "change_password_api_v1_auth_change_password_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ChangePasswordRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "204": {
@@ -606,12 +699,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/auth/set-password": {
@@ -622,15 +710,38 @@
         "summary": "Set Password",
         "description": "Create a first password identity for an SSO-only account, proof first.\n\nThere is no old password to check here, so before ADR-215 a session was the only thing\nbetween a caller and a brand-new credential. Revoking every session afterwards (ADR-160)\ndoes not close that on its own: the password outlives the session, and whoever minted it\nsigns straight back in with it. So the proof happens *before* the credential exists —\n`require_step_up_for_first_password` delivers a code to the account's own contact, and\nthe first call answers 422 asking for it back.\n\nThe revocation stays (ADR-160): it aligns with `/auth/change-password`, which has always\nrevoked, and it means a session that watched a password being set does not keep running\non the strength of it. The owner is told afterwards, because a first password on an\nSSO-only account is a new permanent way in and must not appear silently.",
         "operationId": "set_password_api_v1_auth_set_password_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SetPasswordRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "204": {
@@ -646,12 +757,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/auth/forgot-password": {
@@ -737,15 +843,38 @@
         "summary": "Add Contact",
         "description": "Start adding or replacing a contact: send a 6-digit code to the new value.\n\nReplacing an existing contact of the same type additionally requires step-up (ADR-085).\nFor an SSO-only account, the first call without `step_up` is what delivers the code to\nthe OLD channel, and answers 422 asking for it back.",
         "operationId": "add_contact_api_v1_auth_contacts_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AddContactRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -766,12 +895,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/auth/contacts/verify": {
@@ -782,15 +906,38 @@
         "summary": "Verify Contact",
         "description": "Verify a 6-digit code and attach — or atomically swap in — the verified contact.\n\nThe change notification to the old channel is dispatched via BackgroundTasks (ADR-162):\nthe swap has already committed by then, so a provider failure must not unwind the request\n— nor sit in front of the response while it times out.",
         "operationId": "verify_contact_api_v1_auth_contacts_verify_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/VerifyContactRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -811,12 +958,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/auth/contacts/{type}": {
@@ -840,6 +982,22 @@
             "schema": {
               "type": "string",
               "title": "Type"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -885,15 +1043,38 @@
         "summary": "Resend Contact",
         "description": "Resend the contact-verification code for a still-pending add/replace (rate limited).",
         "operationId": "resend_contact_api_v1_auth_contacts_resend_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AddContactRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -914,12 +1095,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/users/me": {
@@ -930,6 +1106,29 @@
         "summary": "Read User Me",
         "description": "獲取當前登入使用者的個人資料，含可切換的身分清單、聯絡方式與登入方式。",
         "operationId": "read_user_me_api_v1_users_me_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -940,13 +1139,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       },
       "patch": {
         "tags": [
@@ -955,15 +1159,38 @@
         "summary": "Update User Me",
         "description": "更新當前登入使用者的個人資料（僅 name；電話與信箱走 /auth/contacts 流程）。",
         "operationId": "update_user_me_api_v1_users_me_patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UserUpdate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -986,12 +1213,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/notifications": {
@@ -1046,6 +1268,22 @@
               "title": "Unread Only"
             },
             "description": "僅篩選未讀通知"
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -1080,6 +1318,29 @@
         "summary": "Get Unread Count",
         "description": "取得當前使用者之未讀通知數量與是否存在 urgent 等級未讀通知。",
         "operationId": "get_unread_count_api_v1_notifications_unread_count_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1090,13 +1351,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/notifications/{uuid}/read": {
@@ -1121,6 +1387,22 @@
               "type": "string",
               "format": "uuid",
               "title": "Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -1156,6 +1438,29 @@
         "summary": "Mark All Notifications Read",
         "description": "一鍵將當前使用者的所有未讀通知標記為已讀。",
         "operationId": "mark_all_notifications_read_api_v1_notifications_read_all_patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1166,13 +1471,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/admin/users": {
@@ -1207,6 +1517,22 @@
               "type": "integer",
               "default": 100,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -1246,6 +1572,29 @@
         "summary": "讀取專案（災害）設定",
         "description": "Return what disaster this deployment is responding to (ADR-090).",
         "operationId": "get_project_settings_api_v1_admin_project_settings_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1259,13 +1608,18 @@
           },
           "403": {
             "description": "Permission Denied"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       },
       "patch": {
         "tags": [
@@ -1274,15 +1628,38 @@
         "summary": "更新專案（災害）設定",
         "description": "Upsert the single settings row; changing disaster_types re-scopes the dynamic fields.\n\n`exclude_unset` gives real PATCH semantics: an omitted field keeps its stored value,\nwhile an explicit `\"started_at\": null` clears it. `name` / `disaster_types` are NOT NULL\ncolumns, so an explicit null there is dropped rather than written.",
         "operationId": "update_project_settings_api_v1_admin_project_settings_patch",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ProjectSettingsUpdate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1308,12 +1685,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/admin/users/{user_uuid}/role": {
@@ -1322,7 +1694,7 @@
           "管理員 API"
         ],
         "summary": "Assign Role",
-        "description": "Grant a user a PLATFORM role, replacing the one they hold.\n\nTeam roles go through POST /teams/{team_uuid}/members, where the team is unambiguous —\ngranting a team role IS joining that team (ADR-072).",
+        "description": "Grant a user a PLATFORM role, replacing the other one they hold; `user` always stays.\n\nAssigning `user` takes the other one away, which is how to demote (019/ADR-294). Team roles\ngo through POST /teams/{team_uuid}/members, where the team is unambiguous —\ngranting a team role IS joining that team (ADR-072).",
         "operationId": "assign_role_api_v1_admin_users__user_uuid__role_post",
         "security": [
           {
@@ -1338,6 +1710,22 @@
               "type": "string",
               "format": "uuid",
               "title": "User Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -1398,6 +1786,22 @@
               "format": "uuid",
               "title": "User Uuid"
             }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -1430,38 +1834,6 @@
       }
     },
     "/api/v1/admin/teams": {
-      "get": {
-        "tags": [
-          "管理員 API"
-        ],
-        "summary": "列出 team",
-        "description": "List teams filtered by the caller's team.view scope (all / own team / none).",
-        "operationId": "list_teams_api_v1_admin_teams_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/TeamResponse"
-                  },
-                  "type": "array",
-                  "title": "Response List Teams Api V1 Admin Teams Get"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Permission Denied"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
-      },
       "post": {
         "tags": [
           "管理員 API"
@@ -1469,15 +1841,38 @@
         "summary": "建立 team",
         "description": "Create a gov/ngo team (super_admin only, via team.edit).",
         "operationId": "create_team_api_v1_admin_teams_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateTeamRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -1503,12 +1898,67 @@
               }
             }
           }
-        },
+        }
+      },
+      "get": {
+        "tags": [
+          "管理員 API"
+        ],
+        "summary": "列出 team",
+        "description": "List teams filtered by the caller's team.view scope (all / own team / none).",
+        "operationId": "list_teams_api_v1_admin_teams_get",
         "security": [
           {
             "OAuth2PasswordBearer": []
           }
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TeamResponse"
+                  },
+                  "title": "Response List Teams Api V1 Admin Teams Get"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission Denied"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/admin/teams/{team_uuid}/members": {
@@ -1533,6 +1983,22 @@
               "type": "string",
               "format": "uuid",
               "title": "Team Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -1603,6 +2069,22 @@
               "format": "uuid",
               "title": "User Uuid"
             }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -1637,6 +2119,29 @@
         "summary": "Get Capabilities",
         "description": "Capability catalog + scope values for the frontend's dropdowns (read-only).",
         "operationId": "get_capabilities_api_v1_admin_rbac_capabilities_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1647,13 +2152,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/admin/rbac/matrix": {
@@ -1664,6 +2174,29 @@
         "summary": "Get Matrix",
         "description": "The full role × capability × scope grid.",
         "operationId": "get_matrix_api_v1_admin_rbac_matrix_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1674,13 +2207,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/admin/rbac/roles/{role_uuid}": {
@@ -1705,6 +2243,22 @@
               "type": "string",
               "format": "uuid",
               "title": "Role Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -1752,6 +2306,22 @@
               "type": "string",
               "format": "uuid",
               "title": "Role Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -1810,6 +2380,22 @@
               "format": "uuid",
               "title": "Role Uuid"
             }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -1851,6 +2437,22 @@
               "type": "string",
               "format": "uuid",
               "title": "User Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -1908,6 +2510,22 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/Perm"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -1973,6 +2591,22 @@
             "required": true,
             "schema": {
               "$ref": "#/components/schemas/Perm"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -2040,6 +2674,22 @@
                 }
               ],
               "title": "Team Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -2123,6 +2773,22 @@
               ],
               "title": "Team Uuid"
             }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -2150,15 +2816,38 @@
         "summary": "Create Role",
         "description": "Create a new empty role (super_admin only, via rbac.edit).",
         "operationId": "create_role_api_v1_admin_rbac_roles_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateRoleRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -2181,12 +2870,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/admin/users/{user_uuid}/role/{role_uuid}": {
@@ -2239,11 +2923,278 @@
               ],
               "title": "Team Uuid"
             }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/role-requests": {
+      "get": {
+        "tags": [
+          "後台人員申請審核"
+        ],
+        "summary": "List Role Requests",
+        "description": "Applications oldest first, so whoever applied first is reviewed first.",
+        "operationId": "list_role_requests_api_v1_admin_role_requests_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "approved",
+                    "rejected",
+                    "withdrawn"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoleRequestReviewItem"
+                  },
+                  "title": "Response List Role Requests Api V1 Admin Role Requests Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/role-requests/{request_uuid}/approve": {
+      "post": {
+        "tags": [
+          "後台人員申請審核"
+        ],
+        "summary": "Approve Role Request",
+        "description": "Grant a pending data auditor application; government and NGO ones are refused for now.",
+        "operationId": "approve_role_request_api_v1_admin_role_requests__request_uuid__approve_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleRequestDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleRequestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/role-requests/{request_uuid}/reject": {
+      "post": {
+        "tags": [
+          "後台人員申請審核"
+        ],
+        "summary": "Reject Role Request",
+        "description": "Turn a pending application down. The applicant is told, with the note if there is one.",
+        "operationId": "reject_role_request_api_v1_admin_role_requests__request_uuid__reject_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Uuid"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleRequestDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleRequestResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -2286,6 +3237,29 @@
         "summary": "Map View Api",
         "description": "地圖檢視 API：需要 'map.view' 權限。",
         "operationId": "map_view_api_api_v1_rbac_test_map_view_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2294,13 +3268,18 @@
                 "schema": {}
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/rbac-test/map-create": {
@@ -2309,8 +3288,31 @@
           "RBAC 測試"
         ],
         "summary": "Map Create Api",
-        "description": "建立標記 API：需要 'map.add' 權限。",
+        "description": "建立地圖區域 API：需要 'work_zone.add' 權限。",
         "operationId": "map_create_api_api_v1_rbac_test_map_create_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2319,13 +3321,18 @@
                 "schema": {}
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/rbac-test/admin-only": {
@@ -2336,6 +3343,29 @@
         "summary": "Admin Only Api",
         "description": "管理員專用 API：需要 'user.view' 權限。",
         "operationId": "admin_only_api_api_v1_rbac_test_admin_only_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2344,13 +3374,18 @@
                 "schema": {}
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/bulk/stations/export": {
@@ -2389,6 +3424,22 @@
               "title": "Format"
             },
             "description": "檔案格式：csv / xlsx"
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -2452,6 +3503,22 @@
               "title": "Format"
             },
             "description": "檔案格式：csv / xlsx"
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -2503,6 +3570,22 @@
               "title": "Station Type"
             },
             "description": "這份檔案的站點型別"
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "requestBody": {
@@ -2569,6 +3652,22 @@
               "title": "Task Type"
             },
             "description": "這份檔案的任務型別"
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "requestBody": {
@@ -2635,6 +3734,22 @@
               "title": "Station Type"
             },
             "description": "這份檔案的站點型別"
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "requestBody": {
@@ -2701,6 +3816,22 @@
               "title": "Task Type"
             },
             "description": "這份檔案的任務型別"
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "requestBody": {
@@ -2789,6 +3920,22 @@
               "default": 0,
               "title": "Offset"
             }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -2866,6 +4013,22 @@
               "minimum": 0,
               "default": 0,
               "title": "Offset"
+            }
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
             }
           }
         ],
@@ -3052,6 +4215,29 @@
         "summary": "Get Analytics Catalog",
         "description": "Machine-readable y-metric catalog: valid `x` values and chart types per metric.\n\nThe source of truth behind the \"ignore x when it doesn't apply\" behavior on both\nchart endpoints below — build x/y dropdowns from this response instead of\nhardcoding the rules client-side.\n\nAuthentication only, no capability: the response is a static description of this\nAPI's own shape and contains no records. Gating it on ticket.view (as it originally\nwas) locked a station-only role out of the station catalog it is allowed to chart.",
         "operationId": "get_analytics_catalog_api_v1_analytics_catalog_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3062,13 +4248,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/analytics/tickets/chart": {
@@ -3265,6 +4456,22 @@
               "title": "Layout Overrides"
             },
             "description": "JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{\"title\": {\"text\": \"Custom title\"}}'."
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -3364,6 +4571,22 @@
               "title": "Tz"
             },
             "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -3584,6 +4807,22 @@
               "title": "Layout Overrides"
             },
             "description": "JSON-encoded object merged into the figure's layout after `style` — any key from https://plotly.com/python/reference/layout/, e.g. '{\"title\": {\"text\": \"Custom title\"}}'."
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -3683,6 +4922,22 @@
               "title": "Tz"
             },
             "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
           }
         ],
         "responses": {
@@ -5538,15 +6793,14 @@
           "station.export",
           "station.import",
           "map.view",
-          "map.add",
-          "map.edit",
-          "map.delete",
           "ai_duplicate.view",
           "ai_duplicate.review",
           "user.view",
           "user.add",
           "user.edit",
           "user.delete",
+          "role_request.add",
+          "role_request.review",
           "team.view",
           "team.edit",
           "team.member.manage",
@@ -5562,6 +6816,7 @@
           "project.view",
           "project.edit",
           "announcement.view",
+          "announcement.view_admin",
           "announcement.publish",
           "announcement.edit",
           "announcement.delete",
@@ -5867,6 +7122,229 @@
         ],
         "title": "RoleGrants",
         "description": "A role and its capability->scope grants."
+      },
+      "RoleRequestDecision": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "RoleRequestDecision",
+        "description": "A reviewer's decision. The note is checked by the service (at most 500 characters)."
+      },
+      "RoleRequestResponse": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "requested_role": {
+            "type": "string",
+            "enum": [
+              "government",
+              "ngo",
+              "data_auditor"
+            ],
+            "title": "Requested Role"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "withdrawn"
+            ],
+            "title": "Status"
+          },
+          "review_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Note"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "requested_role",
+          "reason",
+          "contact",
+          "status",
+          "review_note",
+          "reviewed_by",
+          "created_at",
+          "closed_at"
+        ],
+        "title": "RoleRequestResponse",
+        "description": "One application, as its reviewer sees it."
+      },
+      "RoleRequestReviewItem": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "requested_role": {
+            "type": "string",
+            "enum": [
+              "government",
+              "ngo",
+              "data_auditor"
+            ],
+            "title": "Requested Role"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "withdrawn"
+            ],
+            "title": "Status"
+          },
+          "review_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Note"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "applicant_uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Applicant Uuid"
+          },
+          "applicant_name": {
+            "type": "string",
+            "title": "Applicant Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "requested_role",
+          "reason",
+          "contact",
+          "status",
+          "review_note",
+          "reviewed_by",
+          "created_at",
+          "closed_at",
+          "applicant_uuid",
+          "applicant_name"
+        ],
+        "title": "RoleRequestReviewItem",
+        "description": "One row of the review list: the application and who sent it."
       },
       "RowErrorResponse": {
         "properties": {
@@ -6290,7 +7768,7 @@
                 "type": "null"
               }
             ],
-            "description": "目前使用中的身分，一次只有一個；沒有時為 null"
+            "description": "這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；沒有時為 null"
           },
           "contacts": {
             "items": {
