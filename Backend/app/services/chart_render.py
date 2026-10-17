@@ -1,9 +1,7 @@
-"""Turns pre-aggregated analytics rows into a Plotly figure, rendered as a partial HTML div.
+"""Turns pre-aggregated analytics rows into chart series, and those into Plotly figure JSON.
 
-Rows come from ticket_analytics.py / station_analytics.py. Official Plotly Python
-docs: https://plotly.com/python/. This is the only module that
-imports `plotly` — everything upstream deals in plain dicts/lists (ADR: keep the
-charting library isolated to the render boundary).
+This is the only module that imports `plotly` (https://plotly.com/python/), so everything
+upstream deals in plain dicts and lists.
 
 X/Y model: `y` picks which metric to compute (see CATALOG below — the same set of
 values exposed publicly at `GET /api/v1/analytics/catalog`); `x` picks how to slice it
@@ -15,6 +13,9 @@ y is a 400); `x` is *not* — an `x` that doesn't apply is silently dropped rath
 rejected (e.g. requesting `x=date` on a pie-only metric, or `chart_type=pie` together
 with `x=date` on a metric that allows both individually but not combined).
 """
+
+import json
+from functools import partial
 
 import plotly.graph_objects as go
 
@@ -167,36 +168,102 @@ def resolve(domain: str, y: str, x: str | None, chart_type: str | None) -> tuple
     return resolved_x, resolved_chart_type
 
 
-# --- Small pivot/plot helpers ---
+# --- Series builders: rows -> (x values, {series name: values}). Series names are the
+# legend text, so they are zh-TW here rather than translated later. ---
+
+
+def _count_series(
+    data: list[dict], *, value_key: str = "count", series_label: str
+) -> tuple[list, dict[str, list]]:
+    """One series, from a single aggregate row or from rows of {"x": ..., value_key: ...}."""
+    return _x_values(data), {series_label: [row[value_key] for row in data]}
+
+
+def _x_values(data: list[dict]) -> list:
+    """The rows' "x" keys, or the one "overall" point of an aggregate.
+
+    An ungrouped query always returns exactly one row without "x", so no rows means a grouping
+    that matched nothing, not a zero total.
+    """
+    return [row["x"] for row in data] if not data or "x" in data[0] else ["overall"]
+
+
+def _time_to_completion_series(data):
+    return _x_values(data), {
+        "平均（天）": [(row["avg_seconds"] or 0) / 86400 for row in data],
+        "中位數（天）": [(row["median_seconds"] or 0) / 86400 for row in data],
+    }
+
+
+def _net_backlog_change_series(data):
+    # The two ways out of the backlog; both are already subtracted in "淨變化".
+    return [row["x"] for row in data], {
+        "新增": [row["new_count"] for row in data],
+        "完成": [row["completed_count"] for row in data],
+        "取消": [row["canceled_count"] for row in data],
+        "淨變化": [row["net_change"] for row in data],
+    }
+
+
+def _station_freshness_trend_series(data):
+    return [row["x"] for row in data], {
+        "新增": [row["added_count"] for row in data],
+        "關閉": [row["closed_count"] for row in data],
+    }
+
+
+_SERIES_BUILDERS = {
+    "tickets": {
+        "total_tickets": partial(_count_series, series_label="任務單"),
+        "ongoing_tickets": partial(_count_series, series_label="進行中"),
+        "unassigned_tickets": partial(_count_series, series_label="未指派"),
+        "completed_tickets": partial(_count_series, series_label="已完成"),
+        "canceled_tickets": partial(_count_series, series_label="已取消"),
+        "completion_rate": partial(_count_series, value_key="rate", series_label="完成率"),
+        "age_distribution": partial(_count_series, series_label="任務單"),
+        "time_to_completion": _time_to_completion_series,
+        "net_backlog_change": _net_backlog_change_series,
+        "task_completion_distribution": partial(_count_series, series_label="子任務"),
+        "duplicate_count": partial(_count_series, series_label="疑似重複"),
+    },
+    "stations": {
+        "station_count": partial(_count_series, series_label="站點"),
+        "station_status_count": partial(_count_series, series_label="站點"),
+        "station_freshness_trend": _station_freshness_trend_series,
+    },
+}
+
+
+def chart_series(domain: str, y: str, data: list[dict]) -> tuple[list, dict[str, list]]:
+    """The x values and {series name: values} that a chart of `y` plots, in display order.
+
+    render_chart draws exactly this and the data endpoints return it, so the two cannot disagree.
+    """
+    x_values, series = _SERIES_BUILDERS[domain][y](data)
+    # SQL GROUP BY promises no order, so known categories follow the glossary, dates run
+    # chronologically and None sorts last. Other keys keep the service's order, which is what
+    # holds age buckets in age order.
+    unknown = len(_CATEGORY_ORDER)
+    order = sorted(
+        range(len(x_values)),
+        key=lambda i: (
+            x_values[i] is None,
+            _CATEGORY_ORDER.get(x_values[i], unknown),
+            "" if isinstance(x_values[i], str) else x_values[i],
+        ),
+    )
+    x_values = [x_values[i] for i in order]
+    x_values = [_CATEGORY_LABEL.get(v, v) if isinstance(v, str) else v for v in x_values]
+    return x_values, {name: [values[i] for i in order] for name, values in series.items()}
 
 
 def _render_pivoted(
     x_values: list, series: dict[str, list], chart_type: str, style: ChartStyle
 ) -> go.Figure:
-    """Build a bar, line, or pie figure from (x_values, {series_name: [y values]}) data.
+    """Build a bar, line, or pie figure from chart_series output.
 
-    Chart type docs: https://plotly.com/python/bar-charts/,
-    https://plotly.com/python/line-charts/, https://plotly.com/python/pie-charts/.
     Series colours are not set per trace; they come from layout.colorway (see _layout_for).
     """
-    if chart_type == "line":
-        # A line connects points in array order and SQL GROUP BY promises none, so sort
-        # here. Known categories follow glossary order; dates and free-text keys share the
-        # `unknown` rank and sort by value, so dates stay chronological. None sorts last so
-        # a stray NULL can't raise TypeError against str/datetime.
-        unknown = len(_CATEGORY_ORDER)
-        order = sorted(
-            range(len(x_values)),
-            key=lambda i: (
-                x_values[i] is None,
-                _CATEGORY_ORDER.get(x_values[i], unknown),
-                x_values[i],
-            ),
-        )
-        x_values = [x_values[i] for i in order]
-        series = {name: [values[i] for i in order] for name, values in series.items()}
-    x_values = [_CATEGORY_LABEL.get(v, v) if isinstance(v, str) else v for v in x_values]
-
     if chart_type == "pie":
         values = next(iter(series.values())) if series else []
         return go.Figure(go.Pie(
@@ -243,162 +310,20 @@ def _layout_for(style: ChartStyle, chart_type: str) -> dict:
     return layout
 
 
-def _fig_count_metric(
-    data: list[dict], chart_type: str, style: ChartStyle, *,
-    value_key: str = "count", series_label: str = "value",
-) -> go.Figure:
-    """Shared figure builder for a metric shaped as an aggregate row or grouped rows.
-
-    Accepts either a single aggregate row or a list of {"x": ..., value_key: ...}
-    rows. The DATA shape — not the resolved `x` — decides whether this renders grouped or
-    aggregate: a row either has an `"x"` key (grouped, however that grouping was
-    produced — day/week, task_type, or a forced shape like age_distribution's age
-    bucket) or it doesn't (a single overall aggregate). This one function covers every
-    y-metric except the multi-series ones (time_to_completion, net_backlog_change,
-    station_freshness_trend), which keep their own builders below.
-    """
-    if data and "x" in data[0]:
-        x_values = [row["x"] for row in data]
-        y_values = [row[value_key] for row in data]
-    else:
-        x_values = ["overall"]
-        y_values = [data[0][value_key]] if data else [0]
-    return _render_pivoted(x_values, {series_label: y_values}, chart_type, style)
-
-
-# --- Ticket figure builders (one per key in _TICKET_CATALOG). Series names are the
-# legend text, so they are zh-TW here rather than translated later. ---
-
-
-def _fig_total_tickets(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, series_label="任務單")
-
-
-def _fig_ongoing_tickets(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, series_label="進行中")
-
-
-def _fig_unassigned_tickets(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, series_label="未指派")
-
-
-def _fig_completed_tickets(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, series_label="已完成")
-
-
-def _fig_canceled_tickets(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, series_label="已取消")
-
-
-def _fig_completion_rate(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, value_key="rate", series_label="完成率")
-
-
-def _fig_age_distribution(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, series_label="任務單")
-
-
-def _fig_time_to_completion(data, chart_type, style):
-    x_values = [row["x"] for row in data] if data and "x" in data[0] else ["overall"]
-    avg_days = [(row["avg_seconds"] or 0) / 86400 for row in data] if data else [0]
-    median_days = [(row["median_seconds"] or 0) / 86400 for row in data] if data else [0]
-    return _render_pivoted(
-        x_values, {"平均（天）": avg_days, "中位數（天）": median_days}, chart_type, style
-    )
-
-
-def _fig_net_backlog_change(data, chart_type, style):
-    # The two ways out of the backlog; both are already subtracted in "淨變化".
-    x_values = [row["x"] for row in data]
-    series = {
-        "新增": [row["new_count"] for row in data],
-        "完成": [row["completed_count"] for row in data],
-        "取消": [row["canceled_count"] for row in data],
-        "淨變化": [row["net_change"] for row in data],
-    }
-    return _render_pivoted(x_values, series, chart_type, style)
-
-
-def _fig_task_completion_distribution(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, series_label="子任務")
-
-
-def _fig_duplicate_count(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, series_label="疑似重複")
-
-
-# --- Station figure builders (one per key in _STATION_CATALOG) ---
-
-
-def _fig_station_count(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, series_label="站點")
-
-
-def _fig_station_status_count(data, chart_type, style):
-    return _fig_count_metric(data, chart_type, style, series_label="站點")
-
-
-def _fig_station_freshness_trend(data, chart_type, style):
-    x_values = [row["x"] for row in data]
-    series = {
-        "新增": [row["added_count"] for row in data],
-        "關閉": [row["closed_count"] for row in data],
-    }
-    return _render_pivoted(x_values, series, chart_type, style)
-
-
-_FIGURE_BUILDERS = {
-    "tickets": {
-        "total_tickets": _fig_total_tickets,
-        "ongoing_tickets": _fig_ongoing_tickets,
-        "unassigned_tickets": _fig_unassigned_tickets,
-        "completed_tickets": _fig_completed_tickets,
-        "canceled_tickets": _fig_canceled_tickets,
-        "completion_rate": _fig_completion_rate,
-        "age_distribution": _fig_age_distribution,
-        "time_to_completion": _fig_time_to_completion,
-        "net_backlog_change": _fig_net_backlog_change,
-        "task_completion_distribution": _fig_task_completion_distribution,
-        "duplicate_count": _fig_duplicate_count,
-    },
-    "stations": {
-        "station_count": _fig_station_count,
-        "station_status_count": _fig_station_status_count,
-        "station_freshness_trend": _fig_station_freshness_trend,
-    },
-}
-
-
 def render_chart(
     domain: str, y: str, data: list[dict], *,
     x: str | None, chart_type: str | None,
     style: ChartStyle | None = None, width: int | None = None, height: int | None = None,
     layout_overrides: dict | None = None,
-) -> str:
-    """Build a styled Plotly figure for `y` and return it as a partial HTML div.
+) -> dict:
+    """Build a styled Plotly figure for `y` and return it as `{"data", "layout", "config"}`.
 
-    No embedded plotly.js — the frontend loads it once. Styling is layered so each
-    stage can override the previous one: `style` (ChartStyle; its defaults are the ops
-    dashboard's look) sets colorway/font/legend/grid/margin/hover on top of the
-    plotly_white template, then the metric's own axis rules (_METRIC_LAYOUT) and a date
-    tick format when x=date, then `width`/`height`
-    (https://plotly.com/python/setting-graph-size/), then `layout_overrides` — arbitrary
-    keys from the Layout reference (https://plotly.com/python/reference/layout/), applied
-    via `update_layout(**...)`. A Plotly figure is pure JSON, not executable code, so
-    this passthrough is safe; Plotly's own schema validation rejects unknown keys, which
-    this function re-raises as AnalyticsInputError for the endpoint layer to return as 400.
-
-    `data` is expected to already reflect the *resolved* `x` (the caller — the
-    analytics endpoint — calls resolve() before querying, so the DB grouping and the
-    chart grouping always agree). This function re-resolves internally anyway
-    (idempotent, harmless) so it stays safe to call standalone.
-
-    Raises AnalyticsInputError on an unknown y, an unsupported chart_type for it, or an
-    invalid layout_overrides key.
+    Each layer overrides the one before: `style`, the metric's own axis rules, `width`/`height`,
+    then `layout_overrides`. A bad `y`, `chart_type` or layout key raises AnalyticsInputError.
     """
     style = style or ChartStyle()
     resolved_x, resolved_chart_type = resolve(domain, y, x, chart_type)
-    fig = _FIGURE_BUILDERS[domain][y](data, resolved_chart_type, style)
+    fig = _render_pivoted(*chart_series(domain, y, data), resolved_chart_type, style)
 
     fig.update_layout(**_layout_for(style, resolved_chart_type))
     fig.update_layout(**_METRIC_LAYOUT.get(y, {}))
@@ -415,8 +340,8 @@ def render_chart(
         except ValueError as err:
             raise AnalyticsInputError(f"invalid layout_overrides: {err}") from err
 
-    # plotly.io.to_html reference: https://plotly.com/python-api-reference/generated/plotly.io.to_html.html
-    return fig.to_html(
-        full_html=False, include_plotlyjs=False,
-        config={"displayModeBar": style.modebar, "responsive": True},
-    )
+    # Plotly's encoder turns the datetimes and Decimals in the rows into what Plotly.js reads,
+    # which a plain model dump would not.
+    figure = json.loads(fig.to_json())
+    figure["config"] = {"displayModeBar": style.modebar, "responsive": True}
+    return figure
