@@ -27,7 +27,9 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   password_not_set: '你的帳號還沒有設定密碼，請改用「建立密碼」。',
   password_already_set: '你的帳號已經設過密碼了，請改用「變更密碼」。',
   password_incorrect: '目前密碼不正確，請重新輸入。',
-  credentials_invalid: '帳號或密碼不正確。',
+  // Also what a request that needs a sign-in gets without a token, so here it means the session is
+  // gone; only the login form reads it as a wrong password (`loginErrorMessage`).
+  credentials_invalid: '登入已失效，請重新登入。',
   refresh_token_invalid: '登入已失效，請重新登入。',
   session_expired: '登入已失效，請重新登入。',
   // Says the user is still signed in — the generic fallback would let someone walk away from a

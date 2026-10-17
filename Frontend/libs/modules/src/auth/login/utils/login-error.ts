@@ -12,6 +12,12 @@ export const LOGIN_FALLBACK_MESSAGE = '登入失敗，請確認帳號或密碼�
  * reported as a wrong password.
  */
 export function loginErrorMessage(errorCode: string | null) {
+  // On the login form a wrong password; the shared copy reads it as a session that is gone, which
+  // is what it means everywhere else.
+  if (errorCode === 'credentials_invalid') {
+    return '帳號或密碼不正確。';
+  }
+
   const backendMessage = errorCode ? messageForCode(errorCode) : undefined;
 
   if (backendMessage) {
