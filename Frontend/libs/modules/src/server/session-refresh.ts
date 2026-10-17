@@ -17,7 +17,7 @@ export type SessionRefresh =
 type SettledRefresh = Exclude<SessionRefresh, { kind: 'unavailable' }>;
 
 /**
- * The 401 codes that a refresh cures (backend login design §5.3): the access token is past its 15
+ * The 401 codes that a refresh cures (ADR-328): the access token is past its 15
  * minutes, or it names an identity the session has since switched away from (ADR-195). Any other
  * 401 — the session itself gone, a broken token, a guest — a refresh cannot help.
  */
@@ -29,7 +29,7 @@ export const REFRESHABLE_CODES: ReadonlySet<unknown> = new Set([
 /** Thrown inside the shared refresh so an unavailable one is not kept for the next request. */
 class RefreshUnavailableError extends Error {}
 
-/** Trades the refresh token for a new pair (backend login design §6.2). */
+/** Trades the refresh token for a new pair (ADR-325). */
 async function requestRefreshAsync(
   refreshToken: string,
 ): Promise<SettledRefresh> {
@@ -59,7 +59,7 @@ async function requestRefreshAsync(
 
 // Within a refreshed pair's first 30 seconds a request still carrying the spent token (its browser
 // has not stored the new cookies yet) gets the same pair: the backend's grace period is as long
-// (`REFRESH_REUSE_GRACE_SECONDS`, §7), so this only saves the round trip and the rate limit.
+// (`REFRESH_REUSE_GRACE_SECONDS`, ADR-330), so this only saves the round trip and the rate limit.
 const SHARED_REFRESH_REUSE_MS = 30_000;
 const SHARED_REFRESH_KEY = '__wanguardSharedSessionRefresh';
 

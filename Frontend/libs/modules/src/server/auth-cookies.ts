@@ -1,5 +1,5 @@
 /**
- * The login cookies the backend sets and reads (backend login design §4): `{prefix}_at` holds the
+ * The login cookies the backend sets and reads (ADR-326): `{prefix}_at` holds the
  * access token, `{prefix}_rt` the refresh token. The prefix tells environments apart — production
  * `wg`, staging `wgstg`, local `wgdev` — because production's `.wan-guard.com` cookies also reach
  * the staging hosts. It must match the backend's `AUTH_COOKIE_PREFIX`, and falls back on the
@@ -13,7 +13,7 @@ export function authCookieNames() {
 }
 
 /**
- * The browser's Cookie header as the backend should see it (backend login design §4):
+ * The browser's Cookie header as the backend should see it (ADR-326):
  * - only this environment's own `{prefix}_*` cookies. Production's cookies sit on `.wan-guard.com`
  *   and reach the staging hosts too; its tokens must not go on into the staging backend (or its
  *   logs). Any other site's or tool's cookie is of no use to the backend either.
@@ -46,7 +46,7 @@ export function forwardedCookieHeader(
 /**
  * The Cookie header the browser will send once it has stored `setCookies`: each cookie they set
  * takes the place of the one by the same name, and one they clear (`Max-Age=0`, how the backend
- * clears, §4) is gone. The proxy resends a request with it right after a refresh, and the
+ * clears, ADR-326) is gone. The proxy resends a request with it right after a refresh, and the
  * middleware renders the page with it, before the browser has had the new cookies.
  */
 export function cookieHeaderAfter(

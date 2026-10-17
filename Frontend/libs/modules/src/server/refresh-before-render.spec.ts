@@ -115,7 +115,7 @@ describe('refresh before render', () => {
   });
 
   it("refreshes on the browser's own rate allowance, not this server's", async () => {
-    // The backend rate-limits the refresh by the first X-Forwarded-For address (§6.2).
+    // The backend rate-limits the refresh by the first X-Forwarded-For address.
     const calls = fakeBackend(() => refreshed('access-4b', 'refresh-4b'));
 
     await openPage(
@@ -190,7 +190,7 @@ describe('refresh before render', () => {
   });
 });
 
-/** The backend's answer when the refresh token is no good: 401, and both cookies cleared (§6.2). */
+/** The backend's answer to a refresh token that is no good: 401, both cookies cleared (ADR-328). */
 function refreshRefused() {
   const headers = new Headers({ 'content-type': 'application/json' });
   headers.append(

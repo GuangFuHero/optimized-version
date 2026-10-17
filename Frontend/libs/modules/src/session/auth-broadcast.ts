@@ -1,6 +1,6 @@
 /**
  * Tells this browser's other tabs that someone signed in or out here. next-auth used to do this for
- * us (its sign-out broadcast); since the login moved to the backend (backend login design §12) the
+ * us (its sign-out broadcast); since the login moved to the backend the
  * cookies change under every tab at once, but nothing else tells them, so they would go on showing
  * what the signed-in person could see. The session hook listens and reads `/users/me` again.
  *

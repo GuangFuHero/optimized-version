@@ -29,7 +29,7 @@ function expiresAtMs(accessToken: string): number | undefined {
 }
 
 /**
- * Refreshes a spent or nearly spent access token before a page renders (backend login design §12):
+ * Refreshes a spent or nearly spent access token before a page renders:
  * a Server Component cannot set cookies, so a page that reads the session on the server would
  * otherwise get a 401 in the minute its access token runs out. For the site's `proxy.ts`, and the
  * back office's once it signs in with the backend's cookies too.

@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 
 /**
  * Next's middleware (named `proxy` since Next 16): refreshes a spent access token before a page
- * renders, since a Server Component cannot set cookies (backend login design §12).
+ * renders, since a Server Component cannot set cookies.
  */
 export function proxy(request: NextRequest) {
   return refreshBeforeRenderAsync(request);

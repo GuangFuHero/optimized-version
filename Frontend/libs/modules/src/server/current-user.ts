@@ -14,7 +14,7 @@ export type CurrentUser = components['schemas']['UserResponse'];
 export async function currentUserFromBackendAsync(
   cookieHeader: string | null,
 ): Promise<CurrentUser | null> {
-  // Only this environment's cookies, and no refresh cookie, as the proxy sends them (§4).
+  // Only this environment's cookies, and no refresh cookie, as the proxy sends them (ADR-326).
   const cookie = forwardedCookieHeader(cookieHeader, 'users/me');
   const headers = new Headers(SITE_REALM_HEADERS);
   if (cookie) headers.set('cookie', cookie);

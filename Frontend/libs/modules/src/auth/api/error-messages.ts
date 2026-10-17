@@ -48,8 +48,8 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   sso_already_linked: '這個帳號已經綁定過了。',
   sso_linked_elsewhere: '這個第三方帳號已經綁定到另一個帳號了。',
   sso_signin_race: '登入沒有完成，請再試一次。',
-  // What the backend's Google and LINE sign-in sends the login page back with (`?error=`, backend
-  // login design §6.5). `origin_not_allowed` comes from any request another site sent, too.
+  // What the backend's Google and LINE sign-in sends the login page back with (`?error=`,
+  // ADR-331). `origin_not_allowed` comes from any request another site sent, too.
   oauth_request_invalid: '登入連結有誤，請回到登入頁重新操作。',
   oauth_state_invalid: '這次登入已經逾時了，請再點一次 Google 或 LINE 登入。',
   oauth_cancelled: '已取消第三方登入。',

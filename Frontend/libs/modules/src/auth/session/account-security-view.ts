@@ -10,7 +10,7 @@ export type LoginMethod = components['schemas']['LoginMethodOut'];
 
 /**
  * The account to look the password's salt up by, before checking the current password. The salt
- * belongs to the account (backend login design §4), so any contact it has verified will do; which
+ * belongs to the account, so any contact it has verified will do; which
  * one the person typed to sign in is no longer known since the login moved to the backend.
  */
 export function saltLookupIdentity(

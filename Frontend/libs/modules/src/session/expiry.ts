@@ -25,7 +25,7 @@ export interface SessionExpiryInput {
  *
  * The back office's rule, for as long as it still signs in with next-auth and sends a bearer token.
  * The site's proxy no longer needs it: the backend names an ended session in the 401's `code`
- * (`session_expired`, `credentials_invalid`; backend login design §5.3), see `backend-proxy.ts`.
+ * (`session_expired`, `credentials_invalid`; ADR-328), see `backend-proxy.ts`.
  */
 export function isSessionExpired({
   refreshFailed,

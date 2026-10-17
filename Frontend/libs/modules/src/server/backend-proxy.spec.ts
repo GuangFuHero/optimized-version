@@ -149,7 +149,7 @@ describe('site REST proxy', () => {
   });
 
   it("keeps production's tokens out of the staging backend", async () => {
-    // Production's `.wan-guard.com` cookies reach the staging hosts too (backend design §4).
+    // Production's `.wan-guard.com` cookies reach the staging hosts too (ADR-326).
     vi.stubEnv('AUTH_COOKIE_PREFIX', 'wgstg');
     const calls = fakeBackend();
 
@@ -283,7 +283,7 @@ describe('site REST proxy', () => {
   });
 });
 
-/** A backend answer refusing the access token with one of the 401 codes (backend design §5.3). */
+/** A backend answer refusing the access token with one of the 401 codes (ADR-328). */
 function unauthorized(code: string) {
   return Response.json(
     { detail: 'Could not validate credentials', code },
@@ -362,7 +362,7 @@ describe('site REST proxy, access token expired', () => {
   });
 
   it("puts the resent answer's own cookies after the refresh's, so the backend's last word wins", async () => {
-    // Switching identity answers with a new access cookie of its own (backend login design §6).
+    // Switching identity answers with a new access cookie of its own (ADR-325).
     fakeBackend((call) => {
       if (isRefresh(call)) return refreshed('access-28b', 'refresh-28b');
       if (!call.headers.get('cookie')?.includes('wgdev_at=access-28b')) {
@@ -439,7 +439,7 @@ describe('site REST proxy, access token expired', () => {
   });
 });
 
-/** The backend's answer when the refresh token is no good: 401, and both cookies cleared (§6.2). */
+/** The backend's answer to a refresh token that is no good: 401, both cookies cleared (ADR-328). */
 function refreshRefused() {
   const headers = new Headers({ 'content-type': 'application/json' });
   headers.append(
@@ -649,7 +649,7 @@ describe('site proxy, session ended elsewhere', () => {
     );
 
     const response = await callSiteRest('users/me', {
-      // Production's `.wan-guard.com` cookies reach the staging hosts too (backend design §4).
+      // Production's `.wan-guard.com` cookies reach the staging hosts too (ADR-326).
       cookie: 'theme=dark; wg_at=access-from-production',
     });
 

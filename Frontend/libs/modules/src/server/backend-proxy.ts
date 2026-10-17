@@ -51,7 +51,7 @@ function forwardHeaders(
     audience === 'site' ? SITE_REALM_HEADERS : undefined,
   );
   // Origin and Referer: the backend refuses a cookie-authenticated write from any other site
-  // (backend login design §5.2), and it can only tell when the browser's own headers reach it.
+  // (ADR-327), and it can only tell when the browser's own headers reach it.
   for (const name of ['content-type', 'accept', 'origin', 'referer']) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
@@ -66,10 +66,10 @@ function forwardHeaders(
 
 /**
  * The back office still signs in with next-auth until its own move to the backend login, which
- * ships in the same release (backend login design §13): its requests keep the bearer token from
+ * ships in the same release: its requests keep the bearer token from
  * next-auth's session. The
  * site never reads it, so a next-auth session left in a browser from before the move is ignored
- * rather than sent ahead of the new cookies (the backend prefers a bearer token, §5.1).
+ * rather than sent ahead of the new cookies (the backend prefers a bearer token, ADR-327).
  */
 function resolveNextAuthForAdminAsync(request: NextRequest) {
   return resolveBackendAuthTokenAsync(request);
@@ -107,16 +107,16 @@ async function readBodyAsync(request: NextRequest) {
 }
 
 /**
- * The 401 codes that mean the session itself has ended (§5.3): signed out, a password changed, an
- * admin's sign-out, an identity removed, a token the backend can no longer accept. The backend
- * clears both cookies in the same answer (§4); the browser is told so it reloads as a guest.
+ * The 401 codes that mean the session itself has ended (ADR-328): signed out, a password changed,
+ * an admin's sign-out, an identity removed, a token the backend can no longer accept. The backend
+ * clears both cookies in the same answer (ADR-328); the browser is told so it reloads as a guest.
  */
 const SESSION_ENDED_CODES: ReadonlySet<unknown> = new Set([
   'session_expired',
   'credentials_invalid',
 ]);
 
-/** The `code` of a 401 from the backend (`{ detail, code }`, §5.3); nothing for any other answer. */
+/** The `code` of a backend 401 (`{ detail, code }`, ADR-328); nothing for any other answer. */
 async function unauthorizedCodeAsync(response: Response): Promise<unknown> {
   if (response.status !== 401) return undefined;
   try {
@@ -264,7 +264,7 @@ export function createBackendRestHandler(audience: Audience) {
 /**
  * Sends the request with the browser's cookies. When the backend says the access token is spent,
  * refreshes the session — once, however many requests ask together — and sends it again with the
- * new cookies, handing them to the browser along with the answer (backend login design §12).
+ * new cookies, handing them to the browser along with the answer.
  */
 async function sendWithRefreshAsync(
   cookieHeader: string | null,

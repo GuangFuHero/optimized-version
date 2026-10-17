@@ -33,8 +33,8 @@ export function sessionStorageOrNull(): Storage | null {
 }
 
 /**
- * This tab is signed out now — the backend cleared both cookies in its answer (backend login
- * design §4) — so it carries on as a guest: the other tabs are told, and read the session again,
+ * This tab is signed out now — the backend cleared both cookies in its answer (ADR-328) —
+ * so it carries on as a guest: the other tabs are told, and read the session again,
  * and this one leaves for `href` or reloads where it is. A whole-page load, not client-side
  * navigation: urql's cache lives in the page and must not go on showing what the signed-in person
  * could see.

@@ -1,8 +1,8 @@
 /**
  * Where a sign-in may send the person afterwards, from the `?callbackUrl=` it was given. Anyone
  * can write that parameter into a link, so only a path on this site is kept; next-auth's redirect
- * check did this until the login moved to the backend, which checks `return_to` again (backend
- * login design §6.5).
+ * check did this until the login moved to the backend, which checks `return_to` again
+ * (ADR-331).
  */
 export function safeReturnPath(
   callbackUrl: string | null,
@@ -14,8 +14,8 @@ export function safeReturnPath(
 }
 
 /**
- * The backend's start of a Google or LINE sign-in, through this app's proxy (backend login design
- * §6.5): a whole-page navigation, which ends back on `return_to`, signed in — or on the login page
+ * The backend's start of a Google or LINE sign-in, through this app's proxy (ADR-331):
+ * a whole-page navigation, which ends back on `return_to`, signed in — or on the login page
  * with `?error=` if it did not work.
  */
 export function oauthStartHref(

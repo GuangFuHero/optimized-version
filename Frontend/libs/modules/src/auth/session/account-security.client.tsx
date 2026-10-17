@@ -48,7 +48,7 @@ interface AccountSecurityClientProps {
 
 /**
  * The backend ended every session of this account in its answer and cleared the cookies — a
- * password changed or created, every device signed out (backend login design §6.6) — so sign in
+ * password changed or created, every device signed out (ADR-325) — so sign in
  * again.
  */
 function signInAgain() {
