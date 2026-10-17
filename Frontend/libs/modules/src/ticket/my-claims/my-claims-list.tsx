@@ -11,11 +11,12 @@ import { Box, ButtonBase, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
 import { useState } from 'react';
-import { useMutation, useQuery } from 'urql';
+import type { UseQueryState } from 'urql';
+import { useMutation } from 'urql';
 
 import {
-  MyTaskAssignmentsDocument,
   ReleaseClaimDocument,
+  type MyTaskAssignmentsQuery,
 } from '@rescue-frontend/data-access';
 import { designTokens, displayTextSize, RowAction } from '@rescue-frontend/ui';
 
@@ -33,11 +34,14 @@ import { ReleaseClaimDialog } from './release-claim-dialog';
 
 const { color, radius, typography } = designTokens;
 
-// Its own loading line inside the drawer rather than suspending the page behind it. Fetched afresh
-// each time the drawer opens — the content mounts with it — so a claim made since shows up.
-const MY_CLAIMS_QUERY_CONTEXT = { suspense: false } as const;
-
 interface MyClaimsListProps {
+  /**
+   * `myTaskAssignments`, read by the drawer at each opening — its tab counts them — so a claim
+   * made since shows up.
+   */
+  result: UseQueryState<MyTaskAssignmentsQuery>;
+  /** Reads the drawer's lists again, once a place given back is answered. */
+  reload: () => void;
   /** Leaving for another page: the drawer lives in the account menu, which stays across pages. */
   onLeave: () => void;
 }
@@ -88,7 +92,7 @@ function DetailLine({
  * `site-actions.jsx:1943-1963`). Only above claims: without one there is nowhere to go. Its second
  * line says what the page says until the briefing has content.
  */
-function BriefingDepartureBar({ onLeave }: MyClaimsListProps) {
+function BriefingDepartureBar({ onLeave }: Pick<MyClaimsListProps, 'onLeave'>) {
   return (
     <ButtonBase
       LinkComponent={Link}
@@ -277,13 +281,12 @@ function Notice({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
 }
 
 /** 我承接的: the needs the viewer claimed, newest first. */
-export function MyClaimsList({ onLeave }: MyClaimsListProps) {
+export function MyClaimsList({
+  result: { data, fetching, error },
+  reload,
+  onLeave,
+}: MyClaimsListProps) {
   const route = useSiteRouteState();
-  const [{ data, fetching, error }, reloadClaims] = useQuery({
-    query: MyTaskAssignmentsDocument,
-    requestPolicy: 'network-only',
-    context: MY_CLAIMS_QUERY_CONTEXT,
-  });
   const [, executeRelease] = useMutation(ReleaseClaimDocument);
   // Open is kept apart from what is being confirmed, so the dialog keeps its content while it
   // fades out — as the claim confirmation does.
@@ -330,10 +333,10 @@ export function MyClaimsList({ onLeave }: MyClaimsListProps) {
       const result = await executeRelease({ uuid: releasing.assignmentUuid });
 
       // Answered either way: the place went back, or the need had changed under the volunteer.
-      // Both this list and every view of the ticket behind the drawer read it again.
+      // Both the drawer's lists and every view of the ticket behind the drawer read it again.
       if (!result.error?.networkError) {
         announceTicketChanged(releasing.ticketUuid);
-        reloadClaims({ requestPolicy: 'network-only' });
+        reload();
       }
 
       if (result.error) {
