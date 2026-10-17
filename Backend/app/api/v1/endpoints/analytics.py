@@ -18,7 +18,7 @@ Example queries:
 - `?y=task_completion_distribution` — no `x` needed, always a fixed 2-slice pie
 - `?y=net_backlog_change` — no `x` needed either; this metric is always date-grouped
 
-Each domain runs one aggregation query and returns it three ways: `/chart` as a Plotly figure
+Every metric's aggregation comes back three ways: `/chart` as a Plotly figure
 the frontend draws with `Plotly.react`, `/data` as the same series for its own chart library,
 and `/value` as the single number a KPI card shows.
 
@@ -403,7 +403,8 @@ async def get_ticket_data(
 ):
     """The series `/tickets/chart` would plot, as plain numbers for the frontend's own chart library.
 
-    Takes the chart's query minus the presentation params; `chart_type` is the frontend's choice here.
+    Takes the chart's query minus `chart_type` and the presentation params, so `x=date` is never
+    dropped to fit a pie the way the chart drops it.
     """
     return await _data_domain(
         "tickets", TICKET_METRIC_FNS, db,
