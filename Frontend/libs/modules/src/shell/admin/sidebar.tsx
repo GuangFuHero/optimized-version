@@ -71,7 +71,7 @@ export function AdminSidebar({
 
       <Stack
         component="nav"
-        aria-label="後台導覽"
+        aria-label="管理平台導覽"
         sx={{
           flex: 1,
           minHeight: 0,
