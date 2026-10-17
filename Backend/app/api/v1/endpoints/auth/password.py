@@ -1,6 +1,6 @@
 """Password endpoints: change, first-set, forgot, and logged-out reset."""
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,7 +35,7 @@ from app.services import auth_contact as contact_service
 from app.services.auth_contact import ContactNotFound, StepUpFailed, StepUpRequired
 from app.sso import get_sso_verifiers
 
-from .deps import _normalize_identifier, get_rate_limiter
+from .deps import _normalize_identifier, clear_cookies_if_cookie_authenticated, get_rate_limiter
 
 router = APIRouter()
 
@@ -45,6 +45,8 @@ router = APIRouter()
 async def change_password(
         body: ChangePasswordRequest,
         background_tasks: BackgroundTasks,
+        request: Request,
+        response: Response,
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
@@ -69,6 +71,7 @@ async def change_password(
     new_hash = security.get_password_hash(body.new_password, body.salt_frontend)
     await identity_repository.update(db, db_obj=identity, obj_in={"password_hash": new_hash})
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
+    clear_cookies_if_cookie_authenticated(request, response)
     await contact_service.notify_password_set(
         db, user_uuid=user_uuid, email_sender=email_sender, sms_sender=sms_sender,
         dispatch=background_tasks.add_task, changed=True,
@@ -80,6 +83,8 @@ async def change_password(
 async def set_password(
         body: SetPasswordRequest,
         background_tasks: BackgroundTasks,
+        request: Request,
+        response: Response,
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
         redis=Depends(get_redis),
@@ -130,6 +135,7 @@ async def set_password(
         raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.PASSWORD_ALREADY_SET,
                        detail="Password already set") from err
     await SessionRepository(redis).revoke_all_for_user(user_uuid)
+    clear_cookies_if_cookie_authenticated(request, response)
     await contact_service.notify_password_set(
         db, user_uuid=user_uuid, email_sender=email_sender, sms_sender=sms_sender,
         dispatch=background_tasks.add_task,

@@ -48,7 +48,7 @@ from app.sso.line import (
     get_line_verifier,
 )
 
-from .deps import get_rate_limiter, issue_token_pair
+from .deps import clear_cookies_if_cookie_authenticated, get_rate_limiter, issue_token_pair
 
 router = APIRouter()
 
@@ -257,6 +257,7 @@ async def link_line(
 async def unlink_identity(
         provider: str,
         background_tasks: BackgroundTasks,
+        request: Request,
         body: UnlinkIdentityRequest | None = None,
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
@@ -282,4 +283,8 @@ async def unlink_identity(
         )
     except tuple(_ERROR_MAP) as err:
         raise _as_http(err) from err
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    # Unlinking revoked every session. The cookies go on the Response returned here: FastAPI does
+    # not merge an injected `response` into one the endpoint builds itself.
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    clear_cookies_if_cookie_authenticated(request, response)
+    return response

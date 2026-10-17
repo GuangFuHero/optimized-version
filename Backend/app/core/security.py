@@ -413,6 +413,24 @@ async def get_current_session(token: str = Depends(get_access_token)) -> tuple[s
     return payload["sub"], payload.get("sid")
 
 
+def session_id_of_access_token(token: str) -> str | None:
+    """The `sid` of an access token we signed, even an expired one; None for anything else.
+
+    Only for signing a browser out (ADR-325): a token past its 15 minutes still says which session
+    the browser holds, and refusing to read it would leave that session running. The signature is
+    still checked, so nobody can name a session that is not theirs.
+    """
+    try:
+        payload = jwt.decode(
+            token, settings.JWT_SIGNING_KEY, algorithms=[settings.ALGORITHM], options={"verify_exp": False}
+        )
+    except JWTError:
+        return None
+    if payload.get("type") != "access":
+        return None
+    return payload.get("sid")
+
+
 def _request_rbac_cache(request: Request) -> dict:
     """Return (creating if absent) the request-scoped permission cache (ADR-046).
 

@@ -134,6 +134,10 @@ class SessionRepository:
         """Fetch a refresh-token record by hash."""
         return self._load(await self.redis.get(self.REFRESH + rt_hash))
 
+    async def get_refresh_for_token(self, raw_token: str) -> dict | None:
+        """Fetch the record of a refresh token as the client presents it, without consuming it."""
+        return await self.get_refresh(self._hash(raw_token))
+
     async def _claim(self, rt_hash: str, claim: bytes) -> bool:
         """Claim `rt_hash` for this rotation attempt. True if it is ours, False if replayed.
 

@@ -9,6 +9,82 @@ by the product owner between 2026-10-11 and 2026-10-17.
 
 ---
 
+### ADR-325 The backend signs the browser in, and keeps its session in cookies beside the Bearer API
+
+> **Status: ACCEPTED (2026-10-18).** Moving sign-in to the backend was chosen by the product owner on
+> 2026-10-11 and confirmed on 2026-10-16, together with the separate browser endpoints and with keeping
+> tokens out of their bodies.
+
+**In plain words**: the backend now signs a browser in, refreshes its session and signs it out, and it
+keeps the session in cookies it sets itself. The frontend only passes requests on. Scripts and tests keep the
+endpoints they have always used, which hand the tokens back in the body.
+
+**Context**: Sign-in used to belong to the frontend's NextAuth. For Google and LINE, NextAuth ran the
+provider's flow, took the `id_token` it returned and posted it to the backend (`/auth/sso/google`,
+`/auth/sso/line`); for passwords it called `/auth/login`. Either way it kept the backend's tokens inside its
+own session cookie and sent them on as Bearer. The Google sign-in design of 2026-06-02 chose this so that the
+backend would handle no redirects and hold no client secret, while one frontend app did both. That no longer
+holds. The back office is now a Next app of its own, on a sibling host, and one sign-in has to cover both:
+two NextAuth instances would each keep their own session, each need the OAuth configuration and its secrets,
+and each sign the user in separately. The backend is the one thing both apps already talk to.
+
+**Options**:
+
+- Keep NextAuth in both apps and share its session between them. **Rejected**: two copies of the OAuth
+  configuration and secrets, and the session still lives in two places that have to agree.
+- **The backend runs sign-in and sets the cookies (adopted).**
+
+**Decision**:
+
+1. The browser has endpoints of its own:
+
+   | endpoint | does | answers |
+   |---|---|---|
+   | `POST /auth/session` | sign in with `username` (an email or phone number, at most 320 characters) and `password` (frontend-hashed, as everywhere) | 200 `{"user": {"uuid", "name"}, "identity"}` and both cookies; 401 `credentials_invalid` with the cookies left alone |
+   | `POST /auth/session/verify` | finish a registration with its code, the body of `/auth/verify` | as above; 400 `code_invalid` or `registration_expired`; 409 `identifier_taken` |
+   | `POST /auth/session/refresh` | rotate the refresh cookie | 204 and both cookies renewed; 401 `refresh_token_invalid` or `identity_revoked`, with both cookies cleared |
+   | `DELETE /auth/session` | end this browser's session | 204 with both cookies cleared, always; 503 `session_store_unavailable` with the cookies kept when Redis cannot be reached |
+
+2. **No token in any of their bodies.** The cookies are `HttpOnly` (ADR-326), so a script injected into a
+   page cannot read them; it could read a body.
+3. A new session acts as the account's default identity, `user` (ADR-290). It is written into the session
+   and the token, not left for every request to work out, and the response names it. The back office reaches
+   its own identity through its marker (ADR-329).
+4. Signing in, verifying and signing out check the request's origin before validating the body (ADR-327
+   point 4), so a foreign page is refused whatever it sent. Only a body that is not JSON at all is
+   answered 422 first, by the framework, and does nothing. Refreshing is not checked.
+5. Signing out finds the session from the access cookie, even an expired one, whose signature is still
+   checked; without a usable one, from the record of the refresh cookie. The refresh cookie is read only by
+   these endpoints (ADR-326 point 5).
+6. Signing in shares its rate limit, 5 per 60 seconds, with `/auth/login`: both check the same password, and
+   two doors must not double the guesses a caller gets. Refreshing and verifying are counted on their own,
+   10 per 60 seconds each like their Bearer twins; a registration code is burned after a few wrong guesses
+   anyway.
+7. The endpoints that replace the access token or end the caller's session update the cookies too, but only
+   on a request that authenticated with them; a Bearer request gets no `Set-Cookie`. `switch-identity` also
+   sets the new `{p}_at` (its body is unchanged). `logout-all`, `change-password`, `set-password` and
+   `DELETE /auth/link/{provider}` revoke the caller's session and clear both cookies. `reset-password` does
+   not: it is used signed out, and the cookies on that browser may belong to someone else. If they belong to
+   the reset account, its next request answers `session_expired` and clears them (ADR-328).
+8. `/auth/login`, `/auth/refresh`, `/auth/verify` and `/auth/logout` stay as they are for scripts, tests and
+   the HTTP collections. Each pair goes through one set of service functions (`services/auth_session.py`),
+   so the two cannot drift apart.
+9. Google and LINE sign-in move to the backend too (ADR-331), in place of `/auth/sso/*`.
+
+**Amends**:
+
+- The Google sign-in design of 2026-06-02, never recorded as an ADR: the frontend's NextAuth no longer
+  obtains the provider's `id_token` for the backend to verify; the backend runs the flow itself (ADR-331).
+
+**Consequences**:
+➕ One sign-in covers the site and the back office, and sign-in lives in one place, with its secrets.
+➕ No token is reachable from a page's scripts.
+➖ The backend now handles redirects and holds the OAuth client secrets (ADR-331).
+➖ Two endpoints for each operation, kept in step only by sharing their service functions.
+➖ Deploying this signs everyone out once: the frontend stops reading NextAuth's cookie.
+
+---
+
 ### ADR-326 The browser keeps the session in prefixed cookies on its environment's parent domain
 
 > **Status: ACCEPTED (2026-10-17).** The domains and the cookies were chosen by the product owner on
@@ -155,10 +231,11 @@ or signed the user out whenever a token expired.
    invalid token on purpose, and the log is still what tells the two apart.
 4. A request authenticated by the access cookie (ADR-327) and answered `session_expired` or
    `credentials_invalid` gets both sign-in cookies cleared in the same response (ADR-326); otherwise the
-   browser keeps sending a token that can never work again. `access_token_expired` and `access_token_stale`
-   clear nothing, because the refresh needs the cookies. A Bearer request never has cookies cleared. The
-   clearing is done in the exception handler REST and the GraphQL context share, not at each raise site, and
-   not in a middleware, which would have to parse the response body to find the code.
+   browser keeps sending a token that can never work again. So does the browser's refresh (ADR-325) answered
+   `refresh_token_invalid` or `identity_revoked`: nothing is left to try. `access_token_expired` and
+   `access_token_stale` clear nothing, because the refresh needs the cookies. A Bearer request never has
+   cookies cleared. The clearing is done in the exception handler REST and the GraphQL context share, not at
+   each raise site, and not in a middleware, which would have to parse the response body to find the code.
 5. A request carrying no token at all, on an endpoint that needs one, answers 401 `credentials_invalid` with
    the detail "Not authenticated". It is not cookie-authenticated, so nothing is cleared, and a client tells a
    guest apart by whether it sent a cookie.

@@ -83,12 +83,20 @@ def accept_access_token(request: Request) -> str | None:
     """
     token, from_cookie = presented_access_token(request)
     if from_cookie:
-        request.state.auth_via_cookie = True
+        mark_authenticated_by_cookie(request)
         if request.method not in _READ_ONLY_METHODS:
             require_allowed_origin(request)
     return token
 
 
+def mark_authenticated_by_cookie(request: Request) -> None:
+    """Record that this request signs in with a cookie: the access cookie, or the refresh cookie.
+
+    The error handler reads it to clear the cookies of a session that is gone (ADR-328).
+    """
+    request.state.auth_via_cookie = True
+
+
 def authenticated_by_cookie(request: Request) -> bool:
-    """Whether `accept_access_token` took this request's token from the cookie."""
+    """Whether this request signed in with a cookie (`mark_authenticated_by_cookie`)."""
     return getattr(request.state, "auth_via_cookie", False)

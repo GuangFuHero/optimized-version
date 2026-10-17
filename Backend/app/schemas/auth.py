@@ -166,6 +166,34 @@ class TokenPair(BaseModel):
     identity: IdentityView | None = None
 
 
+class SessionSignInRequest(BaseModel):
+    """Body for `POST /auth/session`: the credentials `/auth/login` takes as a form (ADR-325).
+
+    320 is the longest email the normaliser accepts (#75), so a longer username is refused before
+    anything reads it.
+    """
+
+    username: str = Field(..., max_length=320)
+    password: str = Field(..., min_length=6, max_length=255)  # already frontend-hashed
+
+
+class SignedInUser(BaseModel):
+    """The account a browser just signed in as."""
+
+    uuid: UUID
+    name: str
+
+
+class SignedInResponse(BaseModel):
+    """Answer to the browser's sign-in and registration: who, and as which identity (ADR-325).
+
+    No token: those went into `HttpOnly` cookies, where a script on the page cannot read them.
+    """
+
+    user: SignedInUser
+    identity: IdentityView | None = None
+
+
 class RefreshRequest(BaseModel):
     """Request body carrying a refresh token to exchange.
 

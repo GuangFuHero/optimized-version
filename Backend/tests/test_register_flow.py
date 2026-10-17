@@ -211,7 +211,7 @@ async def test_verify_create_account_integrity_error_returns_409(client, capture
     """A concurrent-verify IntegrityError on create_account surfaces as 409, not a 500."""
     from sqlalchemy.exc import IntegrityError
 
-    import app.api.v1.endpoints.auth.register as auth_endpoint
+    import app.services.auth_session as auth_session
 
     await client.post(
         "/api/v1/auth/register",
@@ -224,8 +224,8 @@ async def test_verify_create_account_integrity_error_returns_409(client, capture
     async def _boom(*args, **kwargs):
         raise IntegrityError("x", "y", Exception("dup"))
 
-    # patch the symbol the endpoint actually references
-    monkeypatch.setattr(auth_endpoint, "create_account", _boom)
+    # patch the symbol the verify service actually references, shared by both verify endpoints
+    monkeypatch.setattr(auth_session, "create_account", _boom)
     res = await client.post(
         "/api/v1/auth/verify", json={"type": "email", "value": "race@x.com", "code": code}
     )
