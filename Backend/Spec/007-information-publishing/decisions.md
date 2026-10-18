@@ -1,4 +1,4 @@
-# 資訊發布（公告、行前通知）— ADR 全集（ADR-259~262、ADR-273~275、ADR-309）
+# 資訊發布（公告、行前通知）— ADR 全集（ADR-259~262、ADR-273~275、ADR-309、ADR-335）
 
 **慣例**：沿用 `Spec/008-rbac-authorization/decisions.md` 的「每個決策一條編號 ADR」。
 編號從 259 起跳，避開 `Spec/018-ticket-disaster-fields/decisions.md` 已佔用但尚未合併的 ADR-244~258。
@@ -7,6 +7,7 @@ ADR-259~262 源自 PR #49 第一輪 review；ADR-273~274 源自第二輪。
 273 起跳是避開 PR #50 已佔用的 ADR-263~272。
 ADR-275 源自 PR #48 第二輪 review——決策本身與行前通知無關，但它改的是本 PR 的 migration `c3f0a1b2d4e6`，所以記在這裡。
 ADR-309 是公告（緊急公告）的顯示位置，接在 ADR-308（前台／後台用語，Spec 006）之後編號。
+ADR-335 是公告與行前通知的草稿，接在 repo 目前最大的 ADR-334 之後編號。
 
 ---
 
@@ -49,7 +50,7 @@ ADR-309 是公告（緊急公告）的顯示位置，接在 ADR-308（前台／�
 `briefings` / `briefing` 維持公開。
 
 ➕ 公開面剛好等於志工真正要讀的東西。
-➕ 不必為了區分草稿與已發布而多一個 state 欄位。
+➕ 不必為了區分草稿與已發布而多一個 state 欄位。**已被 ADR-335 推翻**：briefing 現在有草稿。
 ➖ 未來若有「只能編輯、不能發布」的角色，得同時持有 `publish` 才讀得到範本。
 
 ---
@@ -252,3 +253,48 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
   也沒有。
 ➖ 在 `/admin/rbac` 新建的角色要手動給這個 key。
 ➖ 前端的 `/admin` 仍然只檢查登入。一般使用者打開時，後台公告的查詢會回 403，前端要把它當成空清單。
+
+---
+
+### ADR-335 公告與行前通知都有草稿；行前通知一列一版，公告原地編輯
+
+**白話**：兩邊都能先存草稿、之後再發布。行前通知每次發布都是新的一版，舊版留著；公告只有一列，改了就是改了，
+但會記下最後是誰動的。後台看得到作者是誰，前台看不到。
+
+**Context**：後台要顯示「目前這版是誰發布的」，但 GraphQL 只給 `createdBy` 的 UUID，查不到名字。行前通知要能
+多人一起改草稿、改好再發布，而 ADR-260 當時認定 briefing 不需要草稿。公告則是一建立就上線並通知全站。
+
+**Decision**：
+
+```
+行前通知（每列一版）                          公告（每則一列）
+ generateBriefing ─► DRAFT ─► PUBLISHED        createAnnouncement ─► DRAFT ─► ACTIVE ⇄ INACTIVE
+                     │ updateBriefing  唯讀                            setAnnouncementActive
+                     └ publishBriefing                                 （第一次 true 就是發布）
+```
+
+- 草稿用 `published_at IS NULL` 表示，不另開 status 欄位；GraphQL 的 `status` 由它推出來，兩者不會不一致。
+  briefing 另有 `published_by`（誰按了發布），兩張表都有 `updated_by`（最後一個改動的人，NOT NULL）。
+- **行前通知**：`generateBriefing` 一律產生草稿，同一個 `state` 可以同時有多份草稿。`updateBriefing` 只改得動
+  草稿；已發布的列是唯讀，要改就開新草稿。`publishBriefing` 把草稿變成該 `state` 的最新版本。
+  `briefings(status:)` 預設 `PUBLISHED`（公開），`DRAFT`／`ALL` 要 `pre_departure.edit`；清單先列草稿（最近改的在前），
+  再列已發布（`published_at` 新的在前），所以每個 `state` 的第一筆已發布就是目前版本。舊版仍然公開。
+- **公告**：`createAnnouncement` 產生不在排序裡、也不發通知的草稿。`setAnnouncementActive(true)` 照舊排到最後、
+  發通知，並寫入 `published_at`（最近一次上線的時間）。`announcements(filter:)` 多一個 `DRAFT`，與 `ALL` 一樣要
+  `announcement.edit`。已上線的公告仍是原地編輯、立即生效。
+- **權限**：兩個模組都改成「寫草稿要 `.edit`、上線要 `.publish`」：`generateBriefing`、`createAnnouncement` 從
+  `.publish` 改為 `.edit`；`setAnnouncementActive(true)` 從 `.edit` 改為 `.publish`，`false` 維持 `.edit`。
+- **作者資訊**：`creator`／`updater`／`publisher` 回傳 `{ uuid, name }`，只有暱稱、沒有聯絡方式，名字用既有的
+  `user_name_by_uuid` DataLoader 一次批次查完。呼叫端沒有該模組的 `.edit` 就回 `null`，不報錯。
+- migration 把既有的列都當成已發布：`published_at = created_at`，`published_by`／`updated_by = created_by`。
+
+**為什麼不開 `/admin/users/{uuid}`**：它要 `user.view`，只有平台管理員有；前端還得一則一則去查。
+
+**為什麼公告不做成一列一版**：排序（`display_order`）屬於那一列，改成多版就得在版本之間搬排序和上線狀態。
+
+**Consequences**：
+➕ 公開頁面拿不到草稿：前台的請求以 `user` 身分執行，`user` 沒有 `.edit`。
+➕ 刪掉目前版本，上一個已發布版本自動變回目前版本。
+➖ 從較舊版本開的草稿一樣能發布並成為目前版本；要不要警告由前端決定。
+➖ 已上線公告的修改沒有草稿，存下去就公開。
+➖ 目前只有 `super_admin` 持有 `.edit` 與 `.publish`，所以權限調整實際上沒有人因此得到或失去權限。

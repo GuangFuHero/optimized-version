@@ -195,7 +195,7 @@ Public education officers need to publish educational guides about disaster prep
 
 Everything above is the original 2025-11-29 draft and states intent. This section states what
 actually shipped, in PR #49, for the notice a volunteer reads before leaving for a deployment
-(README `FR-INFO-01`). Rationale for each rule is in `decisions.md` ADR-259~262 and ADR-273.
+(README `FR-INFO-01`). Rationale for each rule is in `decisions.md` ADR-259~262, ADR-273 and ADR-335.
 
 Two tables. A template is reusable boilerplate an admin authors once; a briefing is one
 generated notice. Both carry free-form `content`, a `tags` JSONB array, and a `state` naming
@@ -209,6 +209,9 @@ briefing_templates                    briefings
 ├── state         String(50)          ├── tags           JSONB '[]'
 ├── created_by    FK → users          ├── state          String(50)
 └── created_at/updated_at/delete_at   ├── created_by     FK → users
+                                      ├── updated_by     FK → users
+                                      ├── published_at   nullable; NULL = draft
+                                      ├── published_by   FK → users (nullable)
                                       └── created_at/updated_at/delete_at
 ```
 
@@ -216,22 +219,32 @@ briefing_templates                    briefings
   `PUBLIC_PERMS`, so it resolves to `Scope.ALL` for every caller — a volunteer reads the
   notice to decide whether to show up at all, so requiring a login first defeats the purpose.
 - **BR-002**: Templates are not public. All four template resolvers require
-  `pre_departure.publish`. The template is the authoring surface; the generated briefing is
-  the thing volunteers read. That split is why neither table needs a draft/published flag.
-- **BR-003**: Creating, editing and deleting either kind requires `pre_departure.publish` /
-  `pre_departure.edit` / `pre_departure.delete`. Deletes are soft (`delete_at`).
+  `pre_departure.publish`. The template is the authoring surface; only a *published* briefing
+  is the thing volunteers read.
+- **BR-003**: Creating a template requires `pre_departure.publish`; generating and editing a
+  draft briefing require `pre_departure.edit`; publishing one requires `pre_departure.publish`;
+  deleting either kind requires `pre_departure.delete`. Deletes are soft (`delete_at`).
 - **BR-004**: `generateBriefing` copies the template's `content`, `tags` and `state` into a new
-  briefing. A `templateUuid` that is unknown or soft-deleted raises `Briefing template not
+  draft briefing. A `templateUuid` that is unknown or soft-deleted raises `Briefing template not
   found` rather than producing an empty notice.
 - **BR-005**: `template_uuid` is nullable, so an ad-hoc briefing needs no template, and soft-
   deleting a template leaves the briefings generated from it readable.
+- **BR-006**: Each briefing row is one version. It is a draft until `publishBriefing` sets
+  `published_at`, and read-only after. A `state` may hold several drafts at once; its newest
+  published row is the current version, and older published rows stay public.
+- **BR-007**: `briefings(status:)` defaults to `PUBLISHED`, which is public; `DRAFT` and `ALL`
+  need `pre_departure.edit`, as does reading a draft by UUID. Drafts list first (most recently
+  edited first), then published rows newest first.
+- **BR-008**: `creator` / `updater` / `publisher` give `{ uuid, name }` (nickname only) to callers
+  holding `pre_departure.edit`, and null to everyone else.
 
 GraphQL surface: `briefingTemplates` / `briefingTemplate` / `briefings` / `briefing` (the list
-queries filter by `state` and by tag), plus `createBriefingTemplate`, `updateBriefingTemplate`,
-`deleteBriefingTemplate`, `generateBriefing`, `updateBriefing`, `deleteBriefing`.
+queries filter by `state` and by tag; `briefings` also by `status`), plus
+`createBriefingTemplate`, `updateBriefingTemplate`, `deleteBriefingTemplate`,
+`generateBriefing`, `updateBriefing`, `publishBriefing`, `deleteBriefing`.
 
 **Deliberately not built** (ADR-274): the shape in Notion PRD VB-FEAT-001 — content keyed by
-disaster type with four fixed sections, per-type draft/published, exactly one notice public
+disaster type with four fixed sections, exactly one notice public
 deployment-wide, and a retained snapshot per publish. That PRD is marked 年底範圍（not in this
 implementation round）at the top. Revisiting it means re-shaping both tables, so it belongs in
 its own feature, not in a revision of this one.
