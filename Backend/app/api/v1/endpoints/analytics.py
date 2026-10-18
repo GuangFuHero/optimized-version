@@ -1,4 +1,4 @@
-"""Analytics chart REST API — returns Plotly-generated HTML for the ops dashboard.
+"""Analytics chart REST API for the ops dashboard: Plotly figure JSON, plain series, and KPI numbers.
 
 See https://plotly.com/python/ for the underlying charting library.
 
@@ -18,12 +18,9 @@ Example queries:
 - `?y=task_completion_distribution` — no `x` needed, always a fixed 2-slice pie
 - `?y=net_backlog_change` — no `x` needed either; this metric is always date-grouped
 
-Each chart endpoint runs its aggregation query (app.services.ticket_analytics /
-station_analytics) and renders it to a partial HTML `<div>` (no embedded plotly.js —
-the frontend loads the library once and injects the div; see
-https://plotly.com/python/interactive-html-export/). The `/value` endpoints run the same
-query ungrouped and return the one number a KPI card shows, so the frontend doesn't have to
-render a chart just to read a total.
+Every metric's aggregation comes back three ways: `/chart` as a Plotly figure
+the frontend draws with `Plotly.react`, `/data` as the same series for its own chart library,
+and `/value` as the single number a KPI card shows.
 
 Presentation is layered: `style` (JSON, see ChartStyle — palette, font, legend, line/pie
 shape, modebar; defaults are the ops dashboard's look and are published as
@@ -55,6 +52,7 @@ from app.schemas.analytics import (
     ChartType,
     ChartX,
     ChartXGranularity,
+    DataResponse,
     StationYMetric,
     TicketYMetric,
     ValueResponse,
@@ -265,14 +263,49 @@ async def _render_domain(
             chart_type=chart_type.value if chart_type is not None else None,
             start_date=start_date, end_date=end_date, tz=tz, extra_filters=extra_filters,
         )
-        html = chart_render.render_chart(
+        figure = chart_render.render_chart(
             domain, y.value, data,
             x=resolved_x, chart_type=resolved_chart_type,
             style=chart_style, width=width, height=height, layout_overrides=overrides,
         )
     except AnalyticsInputError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
-    return ChartResponse(html=html)
+    return ChartResponse(**figure)
+
+
+async def _data_domain(
+    domain: str, metric_fns: dict, db: AsyncSession, *,
+    y, x, x_granularity,
+    start_date: date | None, end_date: date | None, tz: str, extra_filters: list,
+) -> DataResponse:
+    """Shared body of both data endpoints — the series a chart would plot, without the figure."""
+    try:
+        resolved_x, _, data = await _query_metric(
+            domain, metric_fns, db,
+            y=y, x=x.value if x is not None else None, x_granularity=x_granularity.value,
+            chart_type=None,
+            start_date=start_date, end_date=end_date, tz=tz, extra_filters=extra_filters,
+        )
+    except AnalyticsInputError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
+    x_values, series = chart_render.chart_series(domain, y.value, data)
+    return DataResponse(
+        x=resolved_x or chart_render.CATALOG[domain][y.value].get("grouping"),
+        x_values=x_values,
+        series=[
+            {"name": name, "values": [_in_catalog_unit(domain, y, v) for v in values]}
+            for name, values in series.items()
+        ],
+    )
+
+
+def _in_catalog_unit(domain: str, y, value: int | float) -> int | float:
+    """Scale a plotted number to the metric's catalog unit, for the endpoints that return numbers.
+
+    Rates stay 0–1 in the figure for its `.0%` tickformat, and rounding drops the noise `* 100`
+    leaves behind (0.07 would become 7.000000000000001).
+    """
+    return round(value * 100, 6) if chart_render.CATALOG[domain][y.value]["unit"] == "%" else value
 
 
 async def _value_domain(
@@ -294,12 +327,7 @@ async def _value_domain(
         )
     except AnalyticsInputError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
-    value = data[0][key] if data else 0
-    if chart_render.CATALOG[domain][y.value]["unit"] == "%":
-        # Rate rows are 0–1 fractions but the catalog unit is `%`. The chart still needs
-        # the fraction for its `.0%` tickformat, so only the KPI number is scaled.
-        value *= 100
-    return ValueResponse(value=value)
+    return ValueResponse(value=_in_catalog_unit(domain, y, data[0][key] if data else 0))
 
 
 @router.get(
@@ -342,7 +370,7 @@ async def get_ticket_chart(
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
 ):
-    """Render one ticket/task metric as a Plotly chart.
+    """One ticket/task metric as Plotly figure JSON, for `Plotly.react(element, response)`.
 
     See the module docstring for the x/y model and example queries, and GET
     /analytics/catalog for the full per-metric rules.
@@ -357,6 +385,31 @@ async def get_ticket_chart(
         y=y, x=x, x_granularity=x_granularity, chart_type=chart_type,
         start_date=start_date, end_date=end_date, tz=tz,
         style=style, width=width, height=height, layout_overrides=layout_overrides,
+        extra_filters=scope_filter(scope, actor=current_user, model=Tickets),
+    )
+
+
+@router.get("/tickets/data", response_model=DataResponse)
+async def get_ticket_data(
+    y: TicketYMetric = Query(..., description=_Y_DESCRIPTION),
+    x: ChartX | None = Query(None, description=_X_DESCRIPTION),
+    x_granularity: ChartXGranularity = Query(ChartXGranularity.day, description=_X_GRANULARITY_DESCRIPTION),
+    start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
+    end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
+    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    scope: Scope = security.has_permission(Perm.TICKET_VIEW),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+):
+    """The series `/tickets/chart` would plot, as plain numbers for the frontend's own chart library.
+
+    Takes the chart's query minus `chart_type` and the presentation params, so `x=date` is never
+    dropped to fit a pie the way the chart drops it.
+    """
+    return await _data_domain(
+        "tickets", TICKET_METRIC_FNS, db,
+        y=y, x=x, x_granularity=x_granularity,
+        start_date=start_date, end_date=end_date, tz=tz,
         extra_filters=scope_filter(scope, actor=current_user, model=Tickets),
     )
 
@@ -396,7 +449,7 @@ async def get_station_chart(
     current_user: User = Depends(security.get_current_user),
     db: AsyncSession = Depends(security.get_db),
 ):
-    """Render one station metric as a Plotly chart.
+    """One station metric as Plotly figure JSON, for `Plotly.react(element, response)`.
 
     See the module docstring for the x/y model and example queries, and GET
     /analytics/catalog for the full per-metric rules. `scope` is a bound parameter rather
@@ -407,6 +460,27 @@ async def get_station_chart(
         y=y, x=x, x_granularity=x_granularity, chart_type=chart_type,
         start_date=start_date, end_date=end_date, tz=tz,
         style=style, width=width, height=height, layout_overrides=layout_overrides,
+        extra_filters=scope_filter(scope, actor=current_user, model=Station),
+    )
+
+
+@router.get("/stations/data", response_model=DataResponse)
+async def get_station_data(
+    y: StationYMetric = Query(..., description=_Y_DESCRIPTION),
+    x: ChartX | None = Query(None, description=_X_DESCRIPTION),
+    x_granularity: ChartXGranularity = Query(ChartXGranularity.day, description=_X_GRANULARITY_DESCRIPTION),
+    start_date: date | None = Query(None, description="Inclusive range start, local to `tz`."),
+    end_date: date | None = Query(None, description="Inclusive range end, local to `tz`."),
+    tz: str = Query("UTC", description=_TZ_DESCRIPTION),
+    scope: Scope = security.has_permission(Perm.STATION_VIEW),
+    current_user: User = Depends(security.get_current_user),
+    db: AsyncSession = Depends(security.get_db),
+):
+    """The series `/stations/chart` would plot, as plain numbers for the frontend's own chart library."""
+    return await _data_domain(
+        "stations", STATION_METRIC_FNS, db,
+        y=y, x=x, x_granularity=x_granularity,
+        start_date=start_date, end_date=end_date, tz=tz,
         extra_filters=scope_filter(scope, actor=current_user, model=Station),
     )
 
