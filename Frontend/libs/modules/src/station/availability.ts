@@ -48,8 +48,10 @@ export function readOpHour(opHour: string | null | undefined): string | null {
 }
 
 /**
- * Whether `now` falls in the hours. Null when they cannot be read: only a `HH:MM–HH:MM` range and
- * round-the-clock are understood — a weekly schedule does not fit the one string the backend keeps.
+ * Whether `now` falls in the hours. Null when they cannot be read: only hours that are, as a whole,
+ * one `HH:MM–HH:MM` range or round the clock are understood. Anything more — a weekly schedule, two
+ * ranges in a day — is not judged by its first part, which would answer wrongly on the other days
+ * and hours; it is shown as typed.
  */
 export function isWithinOpenHours(
   opHour: string | null | undefined,
@@ -61,11 +63,13 @@ export function isWithinOpenHours(
     return null;
   }
 
-  if (/24\s*小時|全日|24h/i.test(hours)) {
+  if (/^(?:24\s*(?:小時|h)|全日)(?:開放|營業)?$/i.test(hours)) {
     return true;
   }
 
-  const range = hours.match(/(\d{1,2}):(\d{2})\s*[–\-~至]\s*(\d{1,2}):(\d{2})/);
+  const range = hours.match(
+    /^(\d{1,2}):(\d{2})\s*[–\-~至]\s*(\d{1,2}):(\d{2})$/,
+  );
 
   if (!range) {
     return null;

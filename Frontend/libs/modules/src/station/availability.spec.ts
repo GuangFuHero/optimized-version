@@ -52,12 +52,21 @@ describe('isWithinOpenHours', () => {
     expect(isWithinOpenHours('24 小時', at(3))).toBe(true);
     expect(isWithinOpenHours('24h', at(3))).toBe(true);
     expect(isWithinOpenHours('全日開放', at(3))).toBe(true);
+    expect(isWithinOpenHours('24小時營業', at(3))).toBe(true);
   });
 
   it('cannot tell from anything else, so says nothing', () => {
     // A weekly schedule does not fit the one string the backend keeps (prototype site-route.js:59-64).
     expect(isWithinOpenHours('星期一 9-15', at(10))).toBeNull();
     expect(isWithinOpenHours(null, at(10))).toBeNull();
+  });
+
+  it('does not judge the hours by a part of them', () => {
+    // 2026-10-18 is a Sunday. Read by their first part, the first and the last would say open, and
+    // the second closed at 14:00.
+    expect(isWithinOpenHours('星期一 08:00-18:00', at(10))).toBeNull();
+    expect(isWithinOpenHours('08:00-12:00、13:00-18:00', at(14))).toBeNull();
+    expect(isWithinOpenHours('週一至週五 24小時', at(10))).toBeNull();
   });
 });
 
