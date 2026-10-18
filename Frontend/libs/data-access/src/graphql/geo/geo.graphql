@@ -4,6 +4,7 @@ fragment PageInfoFields on PageInfo {
   hasPreviousPage
 }
 
+# No `comment`: the back office's internal note, read only by those with station.view_pii (ADR-332).
 fragment StationFields on StationType {
   uuid
   propertyName
@@ -13,7 +14,6 @@ fragment StationFields on StationType {
   description
   opHour
   level
-  comment
   source
   visibility
   verificationStatus

@@ -1802,7 +1802,6 @@ export type StationFieldsFragment = {
   description?: string | null;
   opHour?: string | null;
   level: number;
-  comment?: string | null;
   source?: string | null;
   visibility?: string | null;
   verificationStatus?: string | null;
@@ -2443,7 +2442,6 @@ export const StationFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
           { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
           {
@@ -2747,7 +2745,6 @@ export const GetStationsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
           { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
           {
@@ -2912,7 +2909,6 @@ export const GetStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
           { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
           {
@@ -3234,7 +3230,6 @@ export const UpdateStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'description' } },
           { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
           { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
           { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
           {
