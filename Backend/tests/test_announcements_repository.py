@@ -10,6 +10,7 @@ list/get immediately before asserting, mirroring how a resolver reads the freshl
 object within a single request.
 """
 
+import asyncio
 import uuid as uuid_mod
 
 import pytest
@@ -191,3 +192,23 @@ async def test_set_active_decides_on_a_fresh_read(db):
     await repo.set_active(db, uuid=ua, active=True, actor_uuid=uid)
     items = await repo.list_announcements(db, status="active")
     assert [(i.content, i.display_order) for i in items] == [("live", 1), ("draft", 2)]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_activations_take_distinct_orders(db):
+    """An activation waiting on another's lock still sees the row it appended, so it goes after it."""
+    uid = await _user(db)
+    await _create(db, uid, "live")
+    first = await _draft(db, uid, "first")
+    second = await _draft(db, uid, "second")
+    async with AsyncSession(db.bind) as holder, AsyncSession(db.bind) as waiter:
+        await repo._live_for_update(holder)
+        waiting = asyncio.create_task(repo.set_active(waiter, uuid=second, active=True, actor_uuid=uid))
+        await asyncio.sleep(0.3)
+        row = await repo.get_by_uuid_active(holder, first, for_update=True)
+        row.active, row.display_order = True, 2
+        await holder.commit()
+        await waiting
+
+    items = await repo.list_announcements(db, status="active")
+    assert [(i.content, i.display_order) for i in items] == [("live", 1), ("first", 2), ("second", 3)]

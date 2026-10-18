@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -18,8 +18,8 @@ class AnnouncementRepository(GenericRepository[Announcement]):
 
     Ordering invariant: ``display_order IS NOT NULL`` iff ``active AND delete_at IS NULL``.
     Live rows form a contiguous ``1..N`` sequence ordered top-to-bottom. Every order-mutating
-    method first loads the live rows ``FOR UPDATE`` and commits once, so concurrent admin
-    actions serialize and order uniqueness holds without a DB constraint.
+    method goes through ``_live_for_update`` and commits once, so concurrent admin actions
+    serialize and order uniqueness holds without a DB constraint.
     """
 
     def __init__(self):
@@ -50,7 +50,12 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         return result.scalars().all()
 
     async def _live_for_update(self, db: AsyncSession) -> list[Announcement]:
-        """Load all live (active, non-deleted) rows locked FOR UPDATE, ordered by position."""
+        """Take the ordering lock, then load all live (active, non-deleted) rows FOR UPDATE, by position.
+
+        Row locks alone miss a row another call activates meanwhile, so two activations could take
+        the same order; the lock, held until commit, makes the select see every committed change.
+        """
+        await db.execute(text("SELECT pg_advisory_xact_lock(hashtext('announcements.display_order'))"))
         result = await db.execute(
             select(self.model)
             .where(self.model.active.is_(True), self.model.delete_at.is_(None))
