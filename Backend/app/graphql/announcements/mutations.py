@@ -48,7 +48,7 @@ class AnnouncementMutation:
         """
         await check_permission(info, Perm.ANN_EDIT)
         db = info.context["db"]
-        a = await announcement_repository.get_by_uuid_active(db, uuid)
+        a = await announcement_repository.get_by_uuid_active(db, uuid, for_update=True)
         if not a:
             raise ValueError("Announcement not found")
         changes = {"content": input.content, "updated_by": str(info.context["user"].uuid)}
