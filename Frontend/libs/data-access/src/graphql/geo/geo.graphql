@@ -112,12 +112,6 @@ query GetClosureArea($uuid: UUID!) {
 
 # ─── Mutations ──────────────────────────────────────────────
 
-mutation CreateStation($input: CreateStationInput!) {
-  createStation(input: $input) {
-    ...StationFields
-  }
-}
-
 mutation UpdateStation($uuid: UUID!, $input: UpdateStationInput!) {
   updateStation(uuid: $uuid, input: $input) {
     ...StationFields

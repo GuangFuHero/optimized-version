@@ -57,6 +57,14 @@ export const AnnouncementMoveDirection = {
 
 export type AnnouncementMoveDirection =
   (typeof AnnouncementMoveDirection)[keyof typeof AnnouncementMoveDirection];
+export const AnnouncementPlacement = {
+  AdminPage: 'admin_page',
+  All: 'all',
+  PublicPage: 'public_page',
+} as const;
+
+export type AnnouncementPlacement =
+  (typeof AnnouncementPlacement)[keyof typeof AnnouncementPlacement];
 export type AnnouncementType = {
   __typename?: 'AnnouncementType';
   active: Scalars['Boolean']['output'];
@@ -66,6 +74,8 @@ export type AnnouncementType = {
   createdBy?: Maybe<Scalars['String']['output']>;
   /** Display position (1 = top) among active announcements; null when inactive */
   order?: Maybe<Scalars['Int']['output']>;
+  /** admin_page, public_page, or all (both pages) */
+  placement: Scalars['String']['output'];
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
 };
@@ -155,9 +165,50 @@ export type BriefingType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export type BuildingFloorAreasInput = {
+  /** Area names, 1-20 characters each */
+  areas: Array<Scalars['String']['input']>;
+  /** Floor label: '3F', '1F', 'B1' */
+  floor: Scalars['String']['input'];
+};
+
+export type BuildingFloorType = {
+  __typename?: 'BuildingFloorType';
+  /** Areas a ticket on this floor must pick from, ending with '其他' for an unlisted space. Empty when the floor takes a free-text room number instead */
+  areas: Array<Scalars['String']['output']>;
+  /** Floor label: '3F', '1F', 'B1' */
+  label: Scalars['String']['output'];
+};
+
+export type BuildingMapConnection = {
+  __typename?: 'BuildingMapConnection';
+  items: Array<BuildingMapType>;
+  pageInfo: PageInfo;
+};
+
+export type BuildingMapType = {
+  __typename?: 'BuildingMapType';
+  createdAt?: Maybe<Scalars['DateTime']['output']>;
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** The building's floors, roof (RF) first */
+  floors: Array<BuildingFloorType>;
+  floorsAboveGround: Scalars['Int']['output'];
+  floorsBelowGround: Scalars['Int']['output'];
+  /** GeoJSON Point of the building — [longitude, latitude] */
+  geometry?: Maybe<Scalars['GeoJSON']['output']>;
+  /** Building name shown on the map and in the sidebar */
+  name: Scalars['String']['output'];
+  /** The building's street address. Public, like a station's */
+  secondaryLocation?: Maybe<SecondaryLocationType>;
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  uuid: Scalars['UUID']['output'];
+};
+
 export type CreateAnnouncementInput = {
   /** The announcement body text */
   content: Scalars['String']['input'];
+  /** Which page shows it; defaults to both */
+  placement?: AnnouncementPlacement;
 };
 
 export type CreateAreaInput = {
@@ -183,6 +234,21 @@ export type CreateBriefingTemplateInput = {
   state?: BriefingState;
   /** Categorization tags */
   tags?: Array<Scalars['String']['input']>;
+};
+
+export type CreateBuildingMapInput = {
+  /** Areas per floor. A floor left out takes a free-text room number */
+  floorAreas?: Array<BuildingFloorAreasInput>;
+  /** Floors from 1F up, 1-200 */
+  floorsAboveGround: Scalars['Int']['input'];
+  /** Basement floors, 0-20 */
+  floorsBelowGround?: Scalars['Int']['input'];
+  /** GeoJSON Point — [longitude, latitude] */
+  geometry: Scalars['GeoJSON']['input'];
+  /** Building name, e.g. '光復國小圖書館' */
+  name: Scalars['String']['input'];
+  /** Street address. Leave buildingSection, floor and room empty */
+  secondaryLocation: SecondaryLocationInput;
 };
 
 export type CreateCrowdSourcingInput = {
@@ -254,6 +320,8 @@ export type CreateStationPropertyInput = {
   weightings?: Scalars['Float']['input'];
 };
 
+export type CreateStationResult = DuplicatesSuspected | StationCreated;
+
 export type CreateStationSuggestionInput = {
   /** Why the change is suggested */
   comment?: InputMaybe<Scalars['String']['input']>;
@@ -280,6 +348,8 @@ export type CreateTaskPropertyInput = {
 };
 
 export type CreateTicketInput = {
+  /** File the ticket inside this building map. Its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it */
+  buildingMapUuid?: InputMaybe<Scalars['UUID']['input']>;
   /** Optional email for follow-up */
   contactEmail?: InputMaybe<Scalars['String']['input']>;
   /** Full name of the requester */
@@ -289,8 +359,8 @@ export type CreateTicketInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   /** Disaster type keys, e.g. ['flood', 'landslide']. Each must be an active key from `disasterTypes`; an unknown one is rejected rather than stored, because a ticket filed under a disaster that does not exist would show the reporter an empty form */
   disasterTypes?: InputMaybe<Array<Scalars['String']['input']>>;
-  /** GeoJSON Point for the location where help is needed — [longitude, latitude] */
-  geometry: Scalars['GeoJSON']['input'];
+  /** GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted */
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
   /** 立即生命危險. Omit when nobody was asked */
   immediateDangerReported?: InputMaybe<TriState>;
   /** 災民受困／無法自行離開. Omit when nobody was asked */
@@ -301,8 +371,27 @@ export type CreateTicketInput = {
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** Type of help: 'rescue', 'supply', 'medical', or 'hr' */
   taskType?: InputMaybe<Scalars['String']['input']>;
+  /** The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates */
+  tasks?: Array<CreateTicketTaskDraft>;
   title: Scalars['String']['input'];
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
+  visibility?: Visibility;
+};
+
+export type CreateTicketResult = DuplicatesSuspected | TicketCreated;
+
+export type CreateTicketTaskDraft = {
+  /** Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again */
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
+  /** Number of people or units needed */
+  quantity?: InputMaybe<Scalars['Int']['input']>;
+  routeUuid?: InputMaybe<Scalars['UUID']['input']>;
+  /** Origin: 'user' (default) or 'official' */
+  source?: Scalars['String']['input'];
+  taskDescription?: InputMaybe<Scalars['String']['input']>;
+  taskName: Scalars['String']['input'];
+  /** Category: 'rescue', 'supply', 'medical', or 'hr' */
+  taskType: Scalars['String']['input'];
   visibility?: Visibility;
 };
 
@@ -322,6 +411,8 @@ export type CreateTicketTaskInput = {
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
   visibility?: Visibility;
 };
+
+export type CreateTicketTaskResult = DuplicatesSuspected | TicketTaskCreated;
 
 export type CrowdSourcingType = {
   __typename?: 'CrowdSourcingType';
@@ -350,6 +441,23 @@ export type DisasterTypeType = {
   /** Display name, e.g. '水災' */
   label: Scalars['String']['output'];
   uuid: Scalars['UUID']['output'];
+};
+
+export type DuplicateSuspect = {
+  __typename?: 'DuplicateSuspect';
+  /** Which part of what was sent: "task:0", "task:1"…, or "station" */
+  draftRef: Scalars['String']['output'];
+  /** What it looks like: "ticket_task" or "station" */
+  relatedKind: Scalars['String']['output'];
+  /** When it looks like a task, that task's ticket */
+  relatedTicketUuid?: Maybe<Scalars['String']['output']>;
+  /** The existing entity it looks like */
+  relatedUuid: Scalars['String']['output'];
+};
+
+export type DuplicatesSuspected = {
+  __typename?: 'DuplicatesSuspected';
+  suspects: Array<DuplicateSuspect>;
 };
 
 export const FieldDataType = {
@@ -418,18 +526,20 @@ export type Mutation = {
   createAnnouncement: AnnouncementType;
   createArea: AreaType;
   createBriefingTemplate: BriefingTemplateType;
+  createBuildingMap: BuildingMapType;
   createCrowdSourcing: CrowdSourcingType;
   createHelpRequest: TicketType;
-  createStation: StationType;
+  createStation: CreateStationResult;
   createStationProperty: StationPropertyType;
   createStationSuggestion: StationSuggestionType;
   createTaskProperty: TaskPropertyType;
-  createTicket: TicketType;
-  createTicketTask: TicketTaskType;
+  createTicket: CreateTicketResult;
+  createTicketTask: CreateTicketTaskResult;
   deleteAnnouncement: Scalars['Boolean']['output'];
   deleteArea: Scalars['Boolean']['output'];
   deleteBriefing: Scalars['Boolean']['output'];
   deleteBriefingTemplate: Scalars['Boolean']['output'];
+  deleteBuildingMap: Scalars['Boolean']['output'];
   deleteStation: Scalars['Boolean']['output'];
   deleteTicket: Scalars['Boolean']['output'];
   deleteTicketTask: Scalars['Boolean']['output'];
@@ -451,6 +561,7 @@ export type Mutation = {
   updateArea: AreaType;
   updateBriefing: BriefingType;
   updateBriefingTemplate: BriefingTemplateType;
+  updateBuildingMap: BuildingMapType;
   updateStation: StationType;
   updateStationProperty: StationPropertyType;
   updateTaskAssignment: TaskAssignmentType;
@@ -496,6 +607,10 @@ export type MutationCreateBriefingTemplateArgs = {
   input: CreateBriefingTemplateInput;
 };
 
+export type MutationCreateBuildingMapArgs = {
+  input: CreateBuildingMapInput;
+};
+
 export type MutationCreateCrowdSourcingArgs = {
   input: CreateCrowdSourcingInput;
 };
@@ -505,6 +620,7 @@ export type MutationCreateHelpRequestArgs = {
 };
 
 export type MutationCreateStationArgs = {
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   input: CreateStationInput;
 };
 
@@ -525,6 +641,7 @@ export type MutationCreateTicketArgs = {
 };
 
 export type MutationCreateTicketTaskArgs = {
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
   input: CreateTicketTaskInput;
 };
 
@@ -541,6 +658,10 @@ export type MutationDeleteBriefingArgs = {
 };
 
 export type MutationDeleteBriefingTemplateArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MutationDeleteBuildingMapArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
@@ -637,6 +758,11 @@ export type MutationUpdateBriefingArgs = {
 
 export type MutationUpdateBriefingTemplateArgs = {
   input: UpdateBriefingTemplateInput;
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MutationUpdateBuildingMapArgs = {
+  input: UpdateBuildingMapInput;
   uuid: Scalars['UUID']['input'];
 };
 
@@ -756,6 +882,9 @@ export type Query = {
   briefingTemplate?: Maybe<BriefingTemplateType>;
   briefingTemplates: Array<BriefingTemplateType>;
   briefings: Array<BriefingType>;
+  buildingMap?: Maybe<BuildingMapType>;
+  buildingMapTickets: Array<TicketType>;
+  buildingMaps: BuildingMapConnection;
   disasterTypes: Array<DisasterTypeType>;
   hazardousZone?: Maybe<HazardousZoneType>;
   hazardousZones: HazardousZoneConnection;
@@ -783,6 +912,7 @@ export type QueryAnnouncementArgs = {
 
 export type QueryAnnouncementsArgs = {
   filter?: AnnouncementFilter;
+  placement?: AnnouncementPlacement;
 };
 
 export type QueryAreasArgs = {
@@ -808,6 +938,22 @@ export type QueryBriefingTemplatesArgs = {
 export type QueryBriefingsArgs = {
   state?: InputMaybe<BriefingState>;
   tag?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type QueryBuildingMapArgs = {
+  uuid: Scalars['UUID']['input'];
+};
+
+export type QueryBuildingMapTicketsArgs = {
+  buildingMapUuid: Scalars['UUID']['input'];
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
+};
+
+export type QueryBuildingMapsArgs = {
+  bounds?: InputMaybe<BoundsInput>;
+  limit?: Scalars['Int']['input'];
+  skip?: Scalars['Int']['input'];
 };
 
 export type QueryDisasterTypesArgs = {
@@ -998,6 +1144,11 @@ export type StationConnection = {
   __typename?: 'StationConnection';
   items: Array<StationType>;
   pageInfo: PageInfo;
+};
+
+export type StationCreated = {
+  __typename?: 'StationCreated';
+  station: StationType;
 };
 
 export const StationOperationalStatus = {
@@ -1206,6 +1357,8 @@ export type TaskAssignmentStatus =
   (typeof TaskAssignmentStatus)[keyof typeof TaskAssignmentStatus];
 export type TaskAssignmentType = {
   __typename?: 'TaskAssignmentType';
+  /** Display name of the assigned person. Null to a caller without ticket.view_history on the parent ticket, unless the assignment is their own */
+  actorName?: Maybe<Scalars['String']['output']>;
   /** UUID of the assigned user or group */
   actorUuid: Scalars['String']['output'];
   /** Timestamp when the assignment was created */
@@ -1300,6 +1453,12 @@ export type TicketConnection = {
   pageInfo: PageInfo;
 };
 
+export type TicketCreated = {
+  __typename?: 'TicketCreated';
+  tasks: Array<TicketTaskType>;
+  ticket: TicketType;
+};
+
 export type TicketDisasterDetailInput = {
   /** The field key from `ticketPropertyConfigs` */
   propertyName: Scalars['String']['input'];
@@ -1337,6 +1496,11 @@ export type TicketPropertyConfigType = {
   /** Unit suffix for a number field, e.g. 'cm', 'mm' */
   unit?: Maybe<Scalars['String']['output']>;
   uuid: Scalars['UUID']['output'];
+};
+
+export type TicketTaskCreated = {
+  __typename?: 'TicketTaskCreated';
+  task: TicketTaskType;
 };
 
 export type TicketTaskType = {
@@ -1439,6 +1603,8 @@ export type TriState = (typeof TriState)[keyof typeof TriState];
 export type UpdateAnnouncementInput = {
   /** The new announcement body text */
   content: Scalars['String']['input'];
+  /** Which page shows it; omit to keep the current placement */
+  placement?: InputMaybe<AnnouncementPlacement>;
 };
 
 export type UpdateAreaInput = {
@@ -1466,6 +1632,15 @@ export type UpdateBriefingTemplateInput = {
   state?: InputMaybe<BriefingState>;
   /** Replacement tag list */
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+export type UpdateBuildingMapInput = {
+  /** Replaces every floor's areas when sent; [] clears them */
+  floorAreas?: InputMaybe<Array<BuildingFloorAreasInput>>;
+  floorsAboveGround?: InputMaybe<Scalars['Int']['input']>;
+  floorsBelowGround?: InputMaybe<Scalars['Int']['input']>;
+  geometry?: InputMaybe<Scalars['GeoJSON']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateStationInput = {
@@ -1757,17 +1932,6 @@ export type GetClosureAreaQuery = {
     | null;
 };
 
-export type CreateStationMutationVariables = Exact<{
-  input: CreateStationInput;
-}>;
-
-export type CreateStationMutation = {
-  __typename?: 'Mutation';
-  createStation: { __typename?: 'StationType' } & {
-    ' $fragmentRefs'?: { StationFieldsFragment: StationFieldsFragment };
-  };
-};
-
 export type UpdateStationMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   input: UpdateStationInput;
@@ -2044,17 +2208,6 @@ export type GetTicketTasksQuery = {
   >;
 };
 
-export type CreateTicketMutationVariables = Exact<{
-  input: CreateTicketInput;
-}>;
-
-export type CreateTicketMutation = {
-  __typename?: 'Mutation';
-  createTicket: { __typename?: 'TicketType' } & {
-    ' $fragmentRefs'?: { TicketFieldsFragment: TicketFieldsFragment };
-  };
-};
-
 export type CreateHelpRequestMutationVariables = Exact<{
   input: CreateHelpRequestInput;
 }>;
@@ -2087,13 +2240,28 @@ export type UpdateTicketMutation = {
 
 export type CreateTicketTaskMutationVariables = Exact<{
   input: CreateTicketTaskInput;
+  acknowledgedDuplicateOf?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 export type CreateTicketTaskMutation = {
   __typename?: 'Mutation';
-  createTicketTask: { __typename?: 'TicketTaskType' } & {
-    ' $fragmentRefs'?: { TicketTaskFieldsFragment: TicketTaskFieldsFragment };
-  };
+  createTicketTask:
+    | {
+        __typename: 'DuplicatesSuspected';
+        suspects: Array<{
+          __typename?: 'DuplicateSuspect';
+          relatedUuid: string;
+          relatedTicketUuid?: string | null;
+        }>;
+      }
+    | {
+        __typename: 'TicketTaskCreated';
+        task: { __typename?: 'TicketTaskType' } & {
+          ' $fragmentRefs'?: {
+            TicketTaskFieldsFragment: TicketTaskFieldsFragment;
+          };
+        };
+      };
 };
 
 export type UpdateTicketTaskMutationVariables = Exact<{
@@ -2980,98 +3148,6 @@ export const GetClosureAreaDocument = {
     },
   ],
 } as unknown as DocumentNode<GetClosureAreaQuery, GetClosureAreaQueryVariables>;
-export const CreateStationDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'CreateStation' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateStationInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createStation' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'StationFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'StationFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'StationType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'type' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'level' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'comment' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'isDuplicate' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  CreateStationMutation,
-  CreateStationMutationVariables
->;
 export const UpdateStationDocument = {
   kind: 'Document',
   definitions: [
@@ -4303,97 +4379,6 @@ export const GetTicketTasksDocument = {
     },
   ],
 } as unknown as DocumentNode<GetTicketTasksQuery, GetTicketTasksQueryVariables>;
-export const CreateTicketDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
-      name: { kind: 'Name', value: 'CreateTicket' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'input' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'CreateTicketInput' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'createTicket' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'input' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'input' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'TicketFields' },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'TicketFields' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'TicketType' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'propertyName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'geometry' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'locationCell' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'title' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'description' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'status' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  CreateTicketMutation,
-  CreateTicketMutationVariables
->;
 export const CreateHelpRequestDocument = {
   kind: 'Document',
   definitions: [
@@ -4656,6 +4641,14 @@ export const CreateTicketTaskDocument = {
             },
           },
         },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -4672,13 +4665,75 @@ export const CreateTicketTaskDocument = {
                   name: { kind: 'Name', value: 'input' },
                 },
               },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'acknowledgedDuplicateOf' },
+                },
+              },
             ],
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
+                { kind: 'Field', name: { kind: 'Name', value: '__typename' } },
                 {
-                  kind: 'FragmentSpread',
-                  name: { kind: 'Name', value: 'TicketTaskFields' },
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'TicketTaskCreated' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'task' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'FragmentSpread',
+                              name: { kind: 'Name', value: 'TicketTaskFields' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: 'InlineFragment',
+                  typeCondition: {
+                    kind: 'NamedType',
+                    name: { kind: 'Name', value: 'DuplicatesSuspected' },
+                  },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'suspects' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'relatedUuid' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: {
+                                kind: 'Name',
+                                value: 'relatedTicketUuid',
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
                 },
               ],
             },

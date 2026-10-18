@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { canAddNeed, toCreateTicketTaskInput } from './add-need';
+import {
+  canAddNeed,
+  readAddNeedOutcome,
+  toCreateTicketTaskInput,
+} from './add-need';
 import { emptyNeed } from './help-request-form';
 
 describe('canAddNeed', () => {
@@ -71,6 +75,50 @@ describe('toCreateTicketTaskInput', () => {
       taskType: 'hr',
       taskName: '修繕',
       quantity: null,
+    });
+  });
+});
+
+describe('readAddNeedOutcome', () => {
+  it('reads an added need as added', () => {
+    expect(readAddNeedOutcome({ __typename: 'TicketTaskCreated' })).toEqual({
+      kind: 'added',
+    });
+  });
+
+  it('holds one that looks like another ticket’s, one entry per ticket in the order given', () => {
+    expect(
+      readAddNeedOutcome({
+        __typename: 'DuplicatesSuspected',
+        suspects: [
+          { relatedUuid: 'need-a1', relatedTicketUuid: 'ticket-a' },
+          { relatedUuid: 'need-b1', relatedTicketUuid: 'ticket-b' },
+          { relatedUuid: 'need-a2', relatedTicketUuid: 'ticket-a' },
+        ],
+      }),
+    ).toEqual({
+      kind: 'held',
+      tickets: [
+        { ticketUuid: 'ticket-a', needUuids: ['need-a1', 'need-a2'] },
+        { ticketUuid: 'ticket-b', needUuids: ['need-b1'] },
+      ],
+      acknowledge: 'need-a1',
+    });
+  });
+
+  it('leaves out a suspect with no ticket to show', () => {
+    expect(
+      readAddNeedOutcome({
+        __typename: 'DuplicatesSuspected',
+        suspects: [
+          { relatedUuid: 'need-x', relatedTicketUuid: null },
+          { relatedUuid: 'need-b1', relatedTicketUuid: 'ticket-b' },
+        ],
+      }),
+    ).toEqual({
+      kind: 'held',
+      tickets: [{ ticketUuid: 'ticket-b', needUuids: ['need-b1'] }],
+      acknowledge: 'need-x',
     });
   });
 });
