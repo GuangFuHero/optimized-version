@@ -45,6 +45,7 @@ export type AccessStatus = (typeof AccessStatus)[keyof typeof AccessStatus];
 export const AnnouncementFilter = {
   Active: 'ACTIVE',
   All: 'ALL',
+  Draft: 'DRAFT',
 } as const;
 
 export type AnnouncementFilter =
@@ -71,11 +72,19 @@ export type AnnouncementType = {
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who created this announcement */
   createdBy?: Maybe<Scalars['String']['output']>;
+  /** Who created it. Null unless the caller holds announcement.edit */
+  creator?: Maybe<UserRefType>;
   /** Display position (1 = top) among active announcements; null when inactive */
   order?: Maybe<Scalars['Int']['output']>;
   /** admin_page, public_page, or all (both pages) */
   placement: Scalars['String']['output'];
+  /** When it last went live; null while a draft */
+  publishedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** 'draft', 'active' or 'inactive' */
+  status: Scalars['String']['output'];
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who last changed it. Null unless the caller holds announcement.edit */
+  updater?: Maybe<UserRefType>;
   uuid: Scalars['UUID']['output'];
 };
 
@@ -134,12 +143,22 @@ export const BriefingState = {
 } as const;
 
 export type BriefingState = (typeof BriefingState)[keyof typeof BriefingState];
+export const BriefingStatusFilter = {
+  All: 'ALL',
+  Draft: 'DRAFT',
+  Published: 'PUBLISHED',
+} as const;
+
+export type BriefingStatusFilter =
+  (typeof BriefingStatusFilter)[keyof typeof BriefingStatusFilter];
 export type BriefingTemplateType = {
   __typename?: 'BriefingTemplateType';
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who created this template */
   createdBy?: Maybe<Scalars['String']['output']>;
+  /** Who created it. Null unless the caller holds pre_departure.edit */
+  creator?: Maybe<UserRefType>;
   /** Lifecycle phase: 'briefing', 'in_field', or 'debrief' */
   state: Scalars['String']['output'];
   /** Free-form categorization tags */
@@ -154,13 +173,23 @@ export type BriefingType = {
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who created this briefing */
   createdBy?: Maybe<Scalars['String']['output']>;
+  /** Who created it. Null unless the caller holds pre_departure.edit */
+  creator?: Maybe<UserRefType>;
+  /** When it was published; null while a draft */
+  publishedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who published it; null while a draft or unless the caller holds pre_departure.edit */
+  publisher?: Maybe<UserRefType>;
   /** Lifecycle phase: 'briefing', 'in_field', or 'debrief' */
   state: Scalars['String']['output'];
+  /** 'draft' or 'published' */
+  status: Scalars['String']['output'];
   /** Free-form categorization tags */
   tags: Array<Scalars['String']['output']>;
   /** UUID of the source template, or null for ad-hoc briefings */
   templateUuid?: Maybe<Scalars['UUID']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Who last changed it. Null unless the caller holds pre_departure.edit */
+  updater?: Maybe<UserRefType>;
   uuid: Scalars['UUID']['output'];
 };
 
@@ -547,6 +576,7 @@ export type Mutation = {
   mergeStationSuggestions: StationSuggestionMergeType;
   moveAnnouncement: AnnouncementType;
   promoteMarkZone: HazardousZoneType;
+  publishBriefing: BriefingType;
   removeZoneFromTeam: Scalars['Boolean']['output'];
   reviewTicket: TicketType;
   revokeStationSuggestionMerge: StationSuggestionMergeType;
@@ -697,6 +727,10 @@ export type MutationMoveAnnouncementArgs = {
 
 export type MutationPromoteMarkZoneArgs = {
   input: PromoteMarkZoneInput;
+  uuid: Scalars['UUID']['input'];
+};
+
+export type MutationPublishBriefingArgs = {
   uuid: Scalars['UUID']['input'];
 };
 
@@ -936,6 +970,7 @@ export type QueryBriefingTemplatesArgs = {
 
 export type QueryBriefingsArgs = {
   state?: InputMaybe<BriefingState>;
+  status?: BriefingStatusFilter;
   tag?: InputMaybe<Scalars['String']['input']>;
 };
 
@@ -1762,6 +1797,12 @@ export type UpsertTicketPropertyConfigInput = {
   propertyName: Scalars['String']['input'];
   /** Unit suffix for a number field, e.g. 'cm', 'mm'. Omit or pass null to leave the stored unit untouched; pass "" to clear it */
   unit?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UserRefType = {
+  __typename?: 'UserRefType';
+  name?: Maybe<Scalars['String']['output']>;
+  uuid: Scalars['String']['output'];
 };
 
 export const Visibility = {
