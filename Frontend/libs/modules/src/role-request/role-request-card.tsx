@@ -14,11 +14,12 @@ import { ROLE_REQUEST_LABELS } from './form';
 
 const { color, radius } = designTokens;
 
-// Prototype `ROLE_REQUEST_STATUS` (site-actions.jsx:151-155). A withdrawn application gets no card.
+// Prototype `ROLE_REQUEST_STATUS` (site-actions.jsx).
 const STATUS_META: Record<string, { label: string; tone: BadgeTone }> = {
   pending: { label: '審核中', tone: 'warning' },
   approved: { label: '已通過', tone: 'success' },
   rejected: { label: '未通過', tone: 'neutral' },
+  withdrawn: { label: '已撤回', tone: 'neutral' },
 };
 
 // Taiwan time whatever the device's zone, as 我承接的 and 我建立的 show theirs (`formatTaiwanTime`).
