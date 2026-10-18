@@ -9,6 +9,7 @@ immediately before asserting.
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
 from app.repositories.briefings_repository import (
@@ -138,3 +139,20 @@ async def test_list_puts_drafts_first_then_newest_published(db):
     assert [b.content for b in listed] == ["draft", "published last", "published first"]
     published = await briefings.list_briefings(db, status="published")
     assert [b.content for b in published] == ["published last", "published first"]
+
+
+@pytest.mark.asyncio
+async def test_locked_fetch_sees_a_publish_committed_elsewhere(db):
+    """The locked read the draft-only writes check against reflects a concurrent publish."""
+    uid = await _user(db)
+    b_uuid = str((await briefings.generate_briefing(db, created_by=uid, content="x")).uuid)
+    stale = await briefings.get_by_uuid_active(db, b_uuid)
+    assert stale.published_at is None
+    async with AsyncSession(db.bind) as other:
+        row = await briefings.get_by_uuid_active(other, b_uuid)
+        await briefings.update(
+            other, db_obj=row, obj_in={"published_at": datetime.now(UTC), "published_by": uid}
+        )
+
+    locked = await briefings.get_by_uuid_active(db, b_uuid, for_update=True)
+    assert locked.published_at is not None

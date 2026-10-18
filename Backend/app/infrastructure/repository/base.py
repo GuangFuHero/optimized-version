@@ -24,14 +24,14 @@ class GenericRepository(Generic[ModelType]):
         return result.scalar_one_or_none()
 
     async def get_multi(
-            self,
-            db: AsyncSession,
-            *,
-            skip: int = 0,
-            limit: int = 100,
-            filters: dict[str, Any] = None,
-            sort_by: str | None = None,
-            sort_desc: bool = False
+        self,
+        db: AsyncSession,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        filters: dict[str, Any] = None,
+        sort_by: str | None = None,
+        sort_desc: bool = False,
     ) -> list[ModelType]:
         """DataTable 核心邏輯：支援動態過濾、分頁與排序。"""
         query = select(self.model)
@@ -87,9 +87,7 @@ class GenericRepository(Generic[ModelType]):
         await db.refresh(db_obj)
         return db_obj
 
-    async def update(
-            self, db: AsyncSession, *, db_obj: ModelType, obj_in: dict[str, Any]
-    ) -> ModelType:
+    async def update(self, db: AsyncSession, *, db_obj: ModelType, obj_in: dict[str, Any]) -> ModelType:
         """Apply field updates to an existing record and return the refreshed instance."""
         for field in obj_in:
             if hasattr(db_obj, field):
@@ -106,16 +104,24 @@ class GenericRepository(Generic[ModelType]):
         await db.commit()
         return result.scalar_one()
 
-    async def get_by_uuid_active(self, db: AsyncSession, uuid: Any) -> ModelType | None:
-        """Fetch a non-deleted record by UUID. Checks delete_at IS NULL if column exists."""
+    async def get_by_uuid_active(
+        self, db: AsyncSession, uuid: Any, *, for_update: bool = False
+    ) -> ModelType | None:
+        """Fetch a non-deleted record by UUID. Checks delete_at IS NULL if column exists.
+
+        ``for_update`` locks the row and re-reads it, so a check made on it holds until commit.
+        """
         query = select(self.model).where(self.model.uuid == uuid)
         if hasattr(self.model, "delete_at"):
             query = query.where(self.model.delete_at.is_(None))
+        if for_update:
+            query = query.with_for_update().execution_options(populate_existing=True)
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
     async def soft_delete(self, db: AsyncSession, *, db_obj: ModelType) -> None:
         """Set delete_at to now, effectively soft-deleting the record."""
         from datetime import UTC, datetime
+
         db_obj.delete_at = datetime.now(UTC)
         await db.commit()

@@ -101,7 +101,7 @@ class BriefingMutation:
         """Edit a draft briefing; a published one is read-only. Requires pre_departure.edit."""
         await check_permission(info, Perm.PREDEP_EDIT)
         db = info.context["db"]
-        b = await briefing_repository.get_by_uuid_active(db, uuid)
+        b = await briefing_repository.get_by_uuid_active(db, uuid, for_update=True)
         if not b:
             raise ValueError("Briefing not found")
         if b.published_at is not None:
@@ -115,7 +115,7 @@ class BriefingMutation:
         """Publish a draft briefing as the newest version for its state. Requires pre_departure.publish."""
         await check_permission(info, Perm.PREDEP_PUBLISH)
         db = info.context["db"]
-        b = await briefing_repository.get_by_uuid_active(db, uuid)
+        b = await briefing_repository.get_by_uuid_active(db, uuid, for_update=True)
         if not b:
             raise ValueError("Briefing not found")
         if b.published_at is not None:

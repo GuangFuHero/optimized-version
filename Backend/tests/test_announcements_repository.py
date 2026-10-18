@@ -13,6 +13,7 @@ object within a single request.
 import uuid as uuid_mod
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import User
 from app.repositories.announcements_repository import announcement_repository as repo
@@ -174,3 +175,19 @@ async def test_invariant_order_iff_active_and_not_deleted(db):
     await repo.set_active(db, uuid=ua, active=False, actor_uuid=uid)
     fetched = await repo.get_by_uuid_active(db, ua)
     assert fetched.active is False and fetched.display_order is None
+
+
+@pytest.mark.asyncio
+async def test_set_active_decides_on_a_fresh_read(db):
+    """An activation that lost a race to another sees the row already live and changes nothing."""
+    uid = await _user(db)
+    await _create(db, uid, "live")
+    ua = await _draft(db, uid, "draft")
+    stale = await repo.get_by_uuid_active(db, ua)
+    assert stale.active is False
+    async with AsyncSession(db.bind) as other:
+        await repo.set_active(other, uuid=ua, active=True, actor_uuid=uid)
+
+    await repo.set_active(db, uuid=ua, active=True, actor_uuid=uid)
+    items = await repo.list_announcements(db, status="active")
+    assert [(i.content, i.display_order) for i in items] == [("live", 1), ("draft", 2)]

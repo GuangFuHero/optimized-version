@@ -116,6 +116,16 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         await db.refresh(a)
         return a
 
+    async def _lock_target(
+        self, db: AsyncSession, uuid: Any
+    ) -> tuple[Announcement | None, list[Announcement]]:
+        """Lock the live rows, then re-read the target under its own lock so two calls can't both act.
+
+        The live rows go first, as in ``move``, so every caller takes the locks in the same order.
+        """
+        live = await self._live_for_update(db)
+        return await self.get_by_uuid_active(db, uuid, for_update=True), live
+
     async def set_active(
         self, db: AsyncSession, *, uuid: Any, active: bool, actor_uuid: Any
     ) -> Announcement | None:
@@ -123,11 +133,10 @@ class AnnouncementRepository(GenericRepository[Announcement]):
 
         Returns the updated announcement, or None if not found / already soft-deleted.
         """
-        target = await self.get_by_uuid_active(db, uuid)
+        target, live = await self._lock_target(db, uuid)
         if target is None:
             return None
         if active and not target.active:
-            live = await self._live_for_update(db)
             target.display_order = (live[-1].display_order + 1) if live else 1
             target.active = True
             target.published_at = datetime.now(UTC)
@@ -139,7 +148,6 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             await db.refresh(target)
 
         elif not active and target.active:
-            live = await self._live_for_update(db)
             self._remove_from_order(live, target)
             target.active = False
             target.updated_by = actor_uuid
@@ -152,11 +160,10 @@ class AnnouncementRepository(GenericRepository[Announcement]):
 
         Returns True if a non-deleted announcement was found and removed, else False.
         """
-        target = await self.get_by_uuid_active(db, uuid)
+        target, live = await self._lock_target(db, uuid)
         if target is None:
             return False
         if target.active:
-            live = await self._live_for_update(db)
             self._remove_from_order(live, target)
         target.active = False
         target.delete_at = datetime.now(UTC)
