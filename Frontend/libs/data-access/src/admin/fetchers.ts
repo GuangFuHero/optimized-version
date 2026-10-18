@@ -22,6 +22,13 @@ export function useCurrentUser(options: AdminQueryOptions = {}) {
   return useQuery({ ...currentUserQuery(), enabled: options.enabled });
 }
 
+export function useCapability(capability: components['schemas']['Perm']) {
+  return useQuery({
+    ...currentUserQuery(),
+    select: (user) => user.capabilities.includes(capability),
+  });
+}
+
 export type UsersQuery = NonNullable<
   paths['/api/v1/admin/users']['get']['parameters']['query']
 >;

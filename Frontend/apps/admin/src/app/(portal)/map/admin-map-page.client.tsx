@@ -3,9 +3,9 @@
 import { ClipboardList, X, MapPin } from 'lucide-react';
 
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { useSession } from 'next-auth/react';
 import { useMemo, useState } from 'react';
 
+import { useCapability } from '@rescue-frontend/data-access/admin';
 import {
   Map,
   readRescueMapMarkers,
@@ -58,10 +58,14 @@ function ControlChip({
 function AdminMapCreateControls({
   mode,
   pendingPosition,
+  canCreateStation,
+  canCreateTicket,
   onToggleMode,
   onCancel,
 }: {
   mode: CreateMode;
+  canCreateStation: boolean;
+  canCreateTicket: boolean;
   pendingPosition: [number, number] | null;
   onToggleMode: (mode: CreateMode) => void;
   onCancel: () => void;
@@ -108,27 +112,33 @@ function AdminMapCreateControls({
               spacing={1}
               sx={{ flexWrap: 'wrap', rowGap: 1 }}
             >
-              <ControlChip
-                label="新增站點"
-                active={mode === 'station'}
-                icon={<Box component={MapPin} sx={{ width: 18, height: 18 }} />}
-                onClick={() =>
-                  onToggleMode(mode === 'station' ? 'idle' : 'station')
-                }
-              />
-              <ControlChip
-                label="新增任務"
-                active={mode === 'ticket'}
-                icon={
-                  <Box
-                    component={ClipboardList}
-                    sx={{ width: 18, height: 18 }}
-                  />
-                }
-                onClick={() =>
-                  onToggleMode(mode === 'ticket' ? 'idle' : 'ticket')
-                }
-              />
+              {canCreateStation ? (
+                <ControlChip
+                  label="新增站點"
+                  active={mode === 'station'}
+                  icon={
+                    <Box component={MapPin} sx={{ width: 18, height: 18 }} />
+                  }
+                  onClick={() =>
+                    onToggleMode(mode === 'station' ? 'idle' : 'station')
+                  }
+                />
+              ) : null}
+              {canCreateTicket ? (
+                <ControlChip
+                  label="新增任務"
+                  active={mode === 'ticket'}
+                  icon={
+                    <Box
+                      component={ClipboardList}
+                      sx={{ width: 18, height: 18 }}
+                    />
+                  }
+                  onClick={() =>
+                    onToggleMode(mode === 'ticket' ? 'idle' : 'ticket')
+                  }
+                />
+              ) : null}
               {mode !== 'idle' ? (
                 <ControlChip
                   label="取消"
@@ -156,7 +166,8 @@ function AdminMapCreateControls({
 }
 
 export function AdminMapPageClient() {
-  const { status: authStatus } = useSession();
+  const canCreateStation = useCapability('station.add').data ?? false;
+  const canCreateTicket = useCapability('ticket.add').data ?? false;
   const [markers, setMarkers] = useState<readonly RescueMapMarkerItem[]>(() =>
     readRescueMapMarkers(),
   );
@@ -171,10 +182,8 @@ export function AdminMapPageClient() {
     () => pendingPosition,
     [pendingPosition],
   );
-  const canCreate = authStatus === 'authenticated';
-
   const handleMapClick = (position: [number, number]) => {
-    if (!canCreate || createMode === 'idle') {
+    if (createMode === 'idle') {
       return;
     }
 
@@ -203,10 +212,12 @@ export function AdminMapPageClient() {
           showScale
           onMapClick={handleMapClick}
           renderControls={() =>
-            canCreate ? (
+            canCreateStation || canCreateTicket ? (
               <AdminMapCreateControls
                 mode={createMode}
                 pendingPosition={pendingPosition}
+                canCreateStation={canCreateStation}
+                canCreateTicket={canCreateTicket}
                 onToggleMode={setCreateMode}
                 onCancel={resetCreateFlow}
               />
