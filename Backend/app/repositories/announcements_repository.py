@@ -27,18 +27,21 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         super().__init__(Announcement)
 
     async def list_announcements(
-        self, db: AsyncSession, *, only_active: bool, placement: str = "all"
+        self, db: AsyncSession, *, status: str, placement: str = "all"
     ) -> list[Announcement]:
         """List non-deleted announcements placed on `placement` or "all", active ones by order.
 
-        placement="all" returns every row; only_active=False appends inactive rows, newest first.
+        placement="all" returns every row. status is "active", "draft", or "all", which appends
+        inactive rows and drafts after the active ones, newest first.
         """
         query = select(self.model).where(self.model.delete_at.is_(None))
         if placement != "all":
             query = query.where(self.model.placement.in_((placement, "all")))
-        if only_active:
+        if status == "active":
             query = query.where(self.model.active.is_(True)).order_by(self.model.display_order.asc())
         else:
+            if status == "draft":
+                query = query.where(self.model.published_at.is_(None))
             query = query.order_by(
                 self.model.display_order.asc().nulls_last(),
                 self.model.created_at.desc(),
@@ -93,25 +96,6 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             explicit_recipients=recipients,
         )
 
-    async def create_at_end(
-        self, db: AsyncSession, *, content: str, created_by: str, placement: str = "all"
-    ) -> Announcement:
-        """Create an active announcement appended at the bottom (largest order)."""
-        live = await self._live_for_update(db)
-        next_order = (live[-1].display_order + 1) if live else 1
-        obj = self.model(
-            content=content, created_by=created_by, placement=placement,
-            active=True, display_order=next_order,
-        )
-        db.add(obj)
-        await db.commit()
-        await db.refresh(obj)
-
-        await self._notify_published(db, obj, actor_uuid=created_by)
-        await db.refresh(obj)
-
-        return obj
-
     async def move(self, db: AsyncSession, *, uuid: Any, up: bool) -> Announcement | None:
         """Swap an active announcement with its adjacent live neighbor.
 
@@ -133,9 +117,9 @@ class AnnouncementRepository(GenericRepository[Announcement]):
         return a
 
     async def set_active(
-        self, db: AsyncSession, *, uuid: Any, active: bool, actor_uuid: Any = None
+        self, db: AsyncSession, *, uuid: Any, active: bool, actor_uuid: Any
     ) -> Announcement | None:
-        """Activate (append at end) or deactivate (null order + close gap) an announcement.
+        """Activate (append at end, publishing a draft) or deactivate (null order + close gap).
 
         Returns the updated announcement, or None if not found / already soft-deleted.
         """
@@ -146,16 +130,19 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             live = await self._live_for_update(db)
             target.display_order = (live[-1].display_order + 1) if live else 1
             target.active = True
+            target.published_at = datetime.now(UTC)
+            target.updated_by = actor_uuid
             await db.commit()
             await db.refresh(target)
 
-            await self._notify_published(db, target, actor_uuid=actor_uuid or target.created_by)
+            await self._notify_published(db, target, actor_uuid=actor_uuid)
             await db.refresh(target)
 
         elif not active and target.active:
             live = await self._live_for_update(db)
             self._remove_from_order(live, target)
             target.active = False
+            target.updated_by = actor_uuid
             await db.commit()
             await db.refresh(target)
         return target

@@ -41,18 +41,29 @@ class BriefingRepository(GenericRepository[Briefing]):
         super().__init__(Briefing)
 
     async def list_briefings(
-        self, db: AsyncSession, *, state: str | None = None, tag: str | None = None
+        self,
+        db: AsyncSession,
+        *,
+        status: str,
+        state: str | None = None,
+        tag: str | None = None,
     ) -> list[Briefing]:
-        """List non-deleted briefings, newest first.
+        """List non-deleted briefings whose ``status`` is "published", "draft" or either ("all").
 
-        Optionally filter by ``state`` (equality) and ``tag`` (JSONB array containment).
+        Drafts come first, most recently edited first, then published rows newest first, so the
+        first published row per ``state`` is the current version. Optionally filter by ``state``
+        (equality) and ``tag`` (JSONB array containment).
         """
         query = select(self.model).where(self.model.delete_at.is_(None))
+        if status == "published":
+            query = query.where(self.model.published_at.is_not(None))
+        elif status == "draft":
+            query = query.where(self.model.published_at.is_(None))
         if state is not None:
             query = query.where(self.model.state == state)
         if tag is not None:
             query = query.where(self.model.tags.contains([tag]))
-        query = query.order_by(self.model.created_at.desc())
+        query = query.order_by(self.model.published_at.desc().nulls_first(), self.model.updated_at.desc())
         result = await db.execute(query)
         return list(result.scalars().all())
 
@@ -66,7 +77,7 @@ class BriefingRepository(GenericRepository[Briefing]):
         tags: list | None = None,
         state: str | None = None,
     ) -> Briefing:
-        """Create a briefing, optionally seeded from a template.
+        """Create a draft briefing, optionally seeded from a template.
 
         When ``content``/``tags``/``state`` are omitted they are copied from the template;
         omitting ``template_uuid`` too yields an ad-hoc briefing with empty content. Raises
@@ -93,6 +104,7 @@ class BriefingRepository(GenericRepository[Briefing]):
             tags=tags,
             state=state,
             created_by=created_by,
+            updated_by=created_by,
         )
         db.add(obj)
         await db.commit()

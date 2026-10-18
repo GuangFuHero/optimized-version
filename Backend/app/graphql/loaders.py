@@ -62,13 +62,14 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
     photos_by_geometry = DataLoader(load_fn=_make_photos_by_geometry_loader(db))
     return {
         "secondary_location_by_geometry": DataLoader(
-            load_fn=_make_one_to_one_loader(
-                db, SecondaryLocation, "geometry_uuid", SecondaryLocationType
-            )
+            load_fn=_make_one_to_one_loader(db, SecondaryLocation, "geometry_uuid", SecondaryLocationType)
         ),
         "station_properties_by_station": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, StationProperty, "station_uuid", StationPropertyType,
+                db,
+                StationProperty,
+                "station_uuid",
+                StationPropertyType,
                 # Groups the form by facility/supply/service, then by name within each.
                 order_by=(
                     StationProperty.property_type,
@@ -79,19 +80,23 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         ),
         "crowd_sourcings_by_property": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, CrowdSourcing, "item_uuid", CrowdSourcingType,
+                db,
+                CrowdSourcing,
+                "item_uuid",
+                CrowdSourcingType,
                 # A feed, not a form: newest rating first.
                 order_by=(CrowdSourcing.created_at.desc(), CrowdSourcing.uuid),
             )
         ),
         # Keyed by station and covering its properties too, so a station list with nested
         # properties still costs one query.
-        "pending_suggestions_by_station": DataLoader(
-            load_fn=_make_pending_suggestions_by_station_loader(db)
-        ),
+        "pending_suggestions_by_station": DataLoader(load_fn=_make_pending_suggestions_by_station_loader(db)),
         "suggestion_merges_by_station": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, StationSuggestionMerge, "station_uuid", StationSuggestionMergeType,
+                db,
+                StationSuggestionMerge,
+                "station_uuid",
+                StationSuggestionMergeType,
                 soft_delete=True,
                 # Newest decision first, since that is the one a revoke would target.
                 order_by=(StationSuggestionMerge.created_at.desc(), StationSuggestionMerge.uuid),
@@ -101,7 +106,10 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         "photos_by_station": photos_by_geometry,
         "disaster_details_by_ticket": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, TicketDisasterDetail, "ticket_uuid", TicketDisasterDetailType,
+                db,
+                TicketDisasterDetail,
+                "ticket_uuid",
+                TicketDisasterDetailType,
                 soft_delete=True,
                 # Must match the write path's ordering, or the same values come back one
                 # way from a write and another from a read. Already total: the unique
@@ -114,21 +122,32 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
         ),
         "tasks_by_ticket": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, TicketTask, "ticket_uuid", TicketTaskType, soft_delete=True,
+                db,
+                TicketTask,
+                "ticket_uuid",
+                TicketTaskType,
+                soft_delete=True,
                 # A worklist reads chronologically, oldest first.
                 order_by=(TicketTask.created_at, TicketTask.uuid),
             )
         ),
         "task_properties_by_task": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, TaskProperty, "task_uuid", TaskPropertyType, soft_delete=True,
+                db,
+                TaskProperty,
+                "task_uuid",
+                TaskPropertyType,
+                soft_delete=True,
                 # By field name, so the values line up with the form's field order.
                 order_by=(TaskProperty.property_name, TaskProperty.uuid),
             )
         ),
         "task_assignments_by_task": DataLoader(
             load_fn=_make_one_to_many_loader(
-                db, TaskAssignment, "task_uuid", TaskAssignmentType,
+                db,
+                TaskAssignment,
+                "task_uuid",
+                TaskAssignmentType,
                 # This table has no `created_at`; `assigned_at` is the timestamp.
                 order_by=(TaskAssignment.assigned_at, TaskAssignment.uuid),
             )
@@ -147,8 +166,12 @@ def build_loaders(db: AsyncSession) -> dict[str, DataLoader]:
 
 
 def _make_one_to_many_loader(
-    db: AsyncSession, model, parent_column: str, gql_type,
-    soft_delete: bool = False, order_by=None,
+    db: AsyncSession,
+    model,
+    parent_column: str,
+    gql_type,
+    soft_delete: bool = False,
+    order_by=None,
 ):
     """Build a load function: ``list[parent_uuid] -> list[list[gql_type]]``.
 
@@ -209,16 +232,12 @@ def _make_pending_suggestions_by_station_loader(db: AsyncSession):
     return load_fn
 
 
-def _make_one_to_one_loader(
-    db: AsyncSession, model, parent_column: str, gql_type
-):
+def _make_one_to_one_loader(db: AsyncSession, model, parent_column: str, gql_type):
     """Build a load function: ``list[parent_uuid] -> list[gql_type | None]``."""
     column = getattr(model, parent_column)
 
     async def load_fn(parent_uuids: list[str]) -> list:
-        rows = (
-            await db.execute(select(model).where(column.in_(parent_uuids)))
-        ).scalars().all()
+        rows = (await db.execute(select(model).where(column.in_(parent_uuids)))).scalars().all()
         by_parent = {str(getattr(r, parent_column)): gql_type.from_model(r) for r in rows}
         return [by_parent.get(str(uuid)) for uuid in parent_uuids]
 
@@ -261,9 +280,7 @@ def _make_ticket_by_uuid_loader(db: AsyncSession):
     """
 
     async def load_fn(ticket_uuids: list[str]) -> list[Tickets | None]:
-        rows = (
-            await db.execute(select(Tickets).where(Tickets.uuid.in_(ticket_uuids)))
-        ).scalars().all()
+        rows = (await db.execute(select(Tickets).where(Tickets.uuid.in_(ticket_uuids)))).scalars().all()
         by_uuid = {str(row.uuid): row for row in rows}
         return [by_uuid.get(str(uuid)) for uuid in ticket_uuids]
 
@@ -316,7 +333,7 @@ def _make_ticket_claimed_by_loader(db: AsyncSession):
 
 
 def _make_user_name_by_uuid_loader(db: AsyncSession):
-    """Batch-load display names for task assignees."""
+    """Batch-load users' display names."""
 
     async def load_fn(user_uuids: list[str]) -> list[str | None]:
         rows = (await db.execute(select(User.uuid, User.name).where(User.uuid.in_(user_uuids)))).all()
@@ -369,8 +386,10 @@ def _make_team_by_uuid_loader(db: AsyncSession):
 
     async def load_fn(team_uuids: list[str]) -> list[AssignedTeamType | None]:
         rows = (
-            await db.execute(select(Team).where(Team.uuid.in_(team_uuids), Team.delete_at.is_(None)))
-        ).scalars().all()
+            (await db.execute(select(Team).where(Team.uuid.in_(team_uuids), Team.delete_at.is_(None))))
+            .scalars()
+            .all()
+        )
         by_uuid = {str(row.uuid): AssignedTeamType.from_model(row) for row in rows}
         return [by_uuid.get(str(uuid)) for uuid in team_uuids]
 

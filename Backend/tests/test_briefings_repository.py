@@ -6,6 +6,8 @@ expire_on_commit=True, so UUIDs are captured eagerly and state is re-read via li
 immediately before asserting.
 """
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from app.models.auth import User
@@ -46,13 +48,15 @@ async def test_generate_briefing_copies_template(db):
     t = await templates.create(
         db,
         obj_in={
-            "content": "supply list", "tags": ["supply"], "state": "in_field",
+            "content": "supply list",
+            "tags": ["supply"],
+            "state": "in_field",
             "created_by": uid,
         },
     )
     tpl_uuid = str(t.uuid)
     b = await briefings.generate_briefing(db, created_by=uid, template_uuid=tpl_uuid)
-    items = await briefings.list_briefings(db)
+    items = await briefings.list_briefings(db, status="all")
     assert len(items) == 1
     got = items[0]
     assert got.content == "supply list"
@@ -69,7 +73,7 @@ async def test_generate_briefing_ad_hoc(db):
     await briefings.generate_briefing(
         db, created_by=uid, content="ad-hoc note", tags=["misc"], state="debrief"
     )
-    items = await briefings.list_briefings(db)
+    items = await briefings.list_briefings(db, status="all")
     assert len(items) == 1
     assert items[0].template_uuid is None
     assert items[0].content == "ad-hoc note"
@@ -103,3 +107,34 @@ async def test_soft_delete_hides_row(db):
     await templates.soft_delete(db, db_obj=t)
     assert await templates.list_templates(db) == []
     assert await templates.get_by_uuid_active(db, tpl_uuid) is None
+
+
+@pytest.mark.asyncio
+async def test_generated_briefing_is_a_draft(db):
+    """A generated briefing is a draft its creator last edited, so only the draft list has it."""
+    uid = await _user(db)
+    b = await briefings.generate_briefing(db, created_by=uid, content="draft")
+    b_uuid = str(b.uuid)
+    assert await briefings.list_briefings(db, status="published") == []
+    drafts = await briefings.list_briefings(db, status="draft")
+    assert [str(d.uuid) for d in drafts] == [b_uuid]
+    assert drafts[0].published_at is None and str(drafts[0].updated_by) == uid
+
+
+@pytest.mark.asyncio
+async def test_list_puts_drafts_first_then_newest_published(db):
+    """Drafts lead, then published rows by publish time, whatever order they were created in."""
+    uid = await _user(db)
+    now = datetime.now(UTC)
+    contents = ["published first", "published last", "draft"]
+    uuids = {
+        c: str((await briefings.generate_briefing(db, created_by=uid, content=c)).uuid) for c in contents
+    }
+    for content, published_at in (("published last", now), ("published first", now - timedelta(hours=1))):
+        row = await briefings.get_by_uuid_active(db, uuids[content])
+        await briefings.update(db, db_obj=row, obj_in={"published_at": published_at, "published_by": uid})
+
+    listed = await briefings.list_briefings(db, status="all")
+    assert [b.content for b in listed] == ["draft", "published last", "published first"]
+    published = await briefings.list_briefings(db, status="published")
+    assert [b.content for b in published] == ["published last", "published first"]

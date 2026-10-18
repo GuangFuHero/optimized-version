@@ -1,0 +1,48 @@
+"""briefing and announcement drafts: published_at, published_by, updated_by
+
+A NULL `published_at` marks a draft. Every existing row was live when it was written, so the
+backfill marks them all published at their creation time, by their creator.
+
+Revision ID: 209c4375c3e1
+Revises: d4c8b1e07a92
+Create Date: 2026-10-18
+
+"""
+
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from alembic import op
+
+# revision identifiers, used by Alembic.
+revision: str = "209c4375c3e1"
+down_revision: str | Sequence[str] | None = "d4c8b1e07a92"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def _user_fk(name: str) -> sa.Column:
+    return sa.Column(name, sa.UUID(as_uuid=True), sa.ForeignKey("users.uuid"), nullable=True)
+
+
+def upgrade() -> None:
+    """Add the draft columns to briefings and announcements and backfill existing rows."""
+    for table in ("briefings", "announcements"):
+        op.add_column(table, sa.Column("published_at", sa.DateTime(timezone=True), nullable=True))
+        op.add_column(table, _user_fk("updated_by"))
+    op.add_column("briefings", _user_fk("published_by"))
+
+    op.execute(
+        "UPDATE briefings SET published_at = created_at, published_by = created_by, updated_by = created_by"
+    )
+    op.execute("UPDATE announcements SET published_at = created_at, updated_by = created_by")
+    for table in ("briefings", "announcements"):
+        op.alter_column(table, "updated_by", nullable=False)
+
+
+def downgrade() -> None:
+    """Drop the draft columns."""
+    op.drop_column("briefings", "published_by")
+    for table in ("briefings", "announcements"):
+        op.drop_column(table, "updated_by")
+        op.drop_column(table, "published_at")

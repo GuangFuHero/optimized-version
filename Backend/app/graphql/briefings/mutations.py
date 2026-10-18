@@ -1,5 +1,6 @@
 """GraphQL mutations for briefing templates and briefings."""
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 import strawberry
@@ -34,7 +35,7 @@ def _update_fields(input) -> dict:
 
 @strawberry.type
 class BriefingMutation:
-    """Mutations for creating, generating, editing, and removing briefings."""
+    """Mutations for creating, generating, editing, publishing, and removing briefings."""
 
     @strawberry.mutation
     async def create_briefing_template(
@@ -67,9 +68,7 @@ class BriefingMutation:
         return BriefingTemplateType.from_model(t)
 
     @strawberry.mutation
-    async def delete_briefing_template(
-        self, info: strawberry.types.Info, uuid: UUID
-    ) -> bool:
+    async def delete_briefing_template(self, info: strawberry.types.Info, uuid: UUID) -> bool:
         """Soft-delete a briefing template. Requires pre_departure.delete."""
         await check_permission(info, Perm.PREDEP_DELETE)
         db = info.context["db"]
@@ -83,8 +82,8 @@ class BriefingMutation:
     async def generate_briefing(
         self, info: strawberry.types.Info, input: GenerateBriefingInput
     ) -> BriefingType:
-        """Generate a briefing, optionally seeded from a template. Requires pre_departure.publish."""
-        await check_permission(info, Perm.PREDEP_PUBLISH)
+        """Generate a draft briefing, optionally seeded from a template. Requires pre_departure.edit."""
+        await check_permission(info, Perm.PREDEP_EDIT)
         b = await briefing_repository.generate_briefing(
             info.context["db"],
             created_by=str(info.context["user"].uuid),
@@ -99,13 +98,34 @@ class BriefingMutation:
     async def update_briefing(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateBriefingInput
     ) -> BriefingType:
-        """Edit a briefing. Requires pre_departure.edit."""
+        """Edit a draft briefing; a published one is read-only. Requires pre_departure.edit."""
         await check_permission(info, Perm.PREDEP_EDIT)
         db = info.context["db"]
         b = await briefing_repository.get_by_uuid_active(db, uuid)
         if not b:
             raise ValueError("Briefing not found")
-        b = await briefing_repository.update(db, db_obj=b, obj_in=_update_fields(input))
+        if b.published_at is not None:
+            raise ValueError("Published briefings are read-only")
+        obj_in = _update_fields(input) | {"updated_by": str(info.context["user"].uuid)}
+        b = await briefing_repository.update(db, db_obj=b, obj_in=obj_in)
+        return BriefingType.from_model(b)
+
+    @strawberry.mutation
+    async def publish_briefing(self, info: strawberry.types.Info, uuid: UUID) -> BriefingType:
+        """Publish a draft briefing as the newest version for its state. Requires pre_departure.publish."""
+        await check_permission(info, Perm.PREDEP_PUBLISH)
+        db = info.context["db"]
+        b = await briefing_repository.get_by_uuid_active(db, uuid)
+        if not b:
+            raise ValueError("Briefing not found")
+        if b.published_at is not None:
+            raise ValueError("Briefing is already published")
+        actor = str(info.context["user"].uuid)
+        b = await briefing_repository.update(
+            db,
+            db_obj=b,
+            obj_in={"published_at": datetime.now(UTC), "published_by": actor, "updated_by": actor},
+        )
         return BriefingType.from_model(b)
 
     @strawberry.mutation

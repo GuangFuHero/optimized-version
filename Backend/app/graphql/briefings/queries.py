@@ -5,7 +5,12 @@ from uuid import UUID
 import strawberry
 
 from app.core.permissions import Perm
-from app.graphql.briefings.types import BriefingState, BriefingTemplateType, BriefingType
+from app.graphql.briefings.types import (
+    BriefingState,
+    BriefingStatusFilter,
+    BriefingTemplateType,
+    BriefingType,
+)
 from app.graphql.context import check_permission
 from app.repositories.briefings_repository import (
     briefing_repository,
@@ -37,9 +42,7 @@ class BriefingQuery:
         return [BriefingTemplateType.from_model(t) for t in items]
 
     @strawberry.field
-    async def briefing_template(
-        self, info: strawberry.types.Info, uuid: UUID
-    ) -> BriefingTemplateType | None:
+    async def briefing_template(self, info: strawberry.types.Info, uuid: UUID) -> BriefingTemplateType | None:
         """Fetch a single non-deleted template by UUID.
 
         Requires pre_departure.publish — see `briefing_templates` for why templates, unlike
@@ -55,22 +58,26 @@ class BriefingQuery:
         info: strawberry.types.Info,
         state: BriefingState | None = None,
         tag: str | None = None,
+        status: BriefingStatusFilter = BriefingStatusFilter.PUBLISHED,
     ) -> list[BriefingType]:
         """List non-deleted briefings, optionally filtered by state and/or tag.
 
-        Requires pre_departure.view (public).
+        Published ones are public (pre_departure.view), newest first, so the first per state is
+        the current version; DRAFT and ALL need pre_departure.edit.
         """
         await check_permission(info, Perm.PREDEP_VIEW)
+        if status is not BriefingStatusFilter.PUBLISHED:
+            await check_permission(info, Perm.PREDEP_EDIT)
         items = await briefing_repository.list_briefings(
-            info.context["db"], state=state.value if state else None, tag=tag
+            info.context["db"], status=status.value, state=state.value if state else None, tag=tag
         )
         return [BriefingType.from_model(b) for b in items]
 
     @strawberry.field
-    async def briefing(
-        self, info: strawberry.types.Info, uuid: UUID
-    ) -> BriefingType | None:
-        """Fetch a single non-deleted briefing by UUID. Requires pre_departure.view (public)."""
+    async def briefing(self, info: strawberry.types.Info, uuid: UUID) -> BriefingType | None:
+        """Fetch a single non-deleted briefing by UUID; public once published, else pre_departure.edit."""
         await check_permission(info, Perm.PREDEP_VIEW)
         m = await briefing_repository.get_by_uuid_active(info.context["db"], uuid)
+        if m and m.published_at is None:
+            await check_permission(info, Perm.PREDEP_EDIT)
         return BriefingType.from_model(m) if m else None

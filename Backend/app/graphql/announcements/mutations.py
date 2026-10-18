@@ -23,16 +23,17 @@ class AnnouncementMutation:
     async def create_announcement(
         self, info: strawberry.types.Info, input: CreateAnnouncementInput
     ) -> AnnouncementType:
-        """Create an active announcement appended at the bottom of the list.
-
-        Requires announcement.publish. Returns the created AnnouncementType.
-        """
-        await check_permission(info, Perm.ANN_PUBLISH)
-        a = await announcement_repository.create_at_end(
+        """Create a draft announcement; activating it publishes it. Requires announcement.edit."""
+        await check_permission(info, Perm.ANN_EDIT)
+        actor = str(info.context["user"].uuid)
+        a = await announcement_repository.create(
             info.context["db"],
-            content=input.content,
-            created_by=str(info.context["user"].uuid),
-            placement=input.placement.value,
+            obj_in={
+                "content": input.content,
+                "placement": input.placement.value,
+                "created_by": actor,
+                "updated_by": actor,
+            },
         )
         return AnnouncementType.from_model(a)
 
@@ -46,7 +47,7 @@ class AnnouncementMutation:
         a = await announcement_repository.get_by_uuid_active(db, uuid)
         if not a:
             raise ValueError("Announcement not found")
-        changes = {"content": input.content}
+        changes = {"content": input.content, "updated_by": str(info.context["user"].uuid)}
         if input.placement is not None:
             changes["placement"] = input.placement.value
         a = await announcement_repository.update(db, db_obj=a, obj_in=changes)
@@ -69,15 +70,13 @@ class AnnouncementMutation:
     async def set_announcement_active(
         self, info: strawberry.types.Info, uuid: UUID, active: bool
     ) -> AnnouncementType:
-        """Activate (append at end) or deactivate (remove from order) an announcement.
+        """Activate (append at end, which publishes a draft) or deactivate (remove from order).
 
-        Requires announcement.edit. Returns the updated AnnouncementType.
+        Activating requires announcement.publish and deactivating announcement.edit.
         """
-        await check_permission(info, Perm.ANN_EDIT)
-        user = info.context.get("user")
-        actor_uuid = str(user.uuid) if user else None
+        await check_permission(info, Perm.ANN_PUBLISH if active else Perm.ANN_EDIT)
         a = await announcement_repository.set_active(
-            info.context["db"], uuid=uuid, active=active, actor_uuid=actor_uuid
+            info.context["db"], uuid=uuid, active=active, actor_uuid=str(info.context["user"].uuid)
         )
         if a is None:
             raise ValueError("Announcement not found")
