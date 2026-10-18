@@ -28,6 +28,7 @@ from app.repositories.auth_repository import user_repository
 
 # --- 密碼處理框架 ---
 
+
 class PasswordHandler(Protocol):
     """Protocol defining the password handler interface."""
 
@@ -56,26 +57,20 @@ class PBKDF2SHA256Handler:
         """格式: pbkdf2_sha256$<iterations>$<salt_frontend>$<salt_backend>$<hash>"""
         salt_backend = secrets.token_hex(16)
         hash_hex = hashlib.pbkdf2_hmac(
-            'sha256',
-            password.encode('utf-8'),
-            salt_backend.encode('utf-8'),
-            self.default_iterations
+            "sha256", password.encode("utf-8"), salt_backend.encode("utf-8"), self.default_iterations
         ).hex()
         return f"{self.name}${self.default_iterations}${salt_frontend}${salt_backend}${hash_hex}"
 
     def verify(self, password: str, hashed_password_db: str) -> bool:
         """Verify a plaintext password against the stored PBKDF2 hash."""
         try:
-            parts = hashed_password_db.split('$')
+            parts = hashed_password_db.split("$")
             if len(parts) != 5:
                 return False
             _, iterations, _, salt_backend, hash_val = parts
 
             new_hash = hashlib.pbkdf2_hmac(
-                'sha256',
-                password.encode('utf-8'),
-                salt_backend.encode('utf-8'),
-                int(iterations)
+                "sha256", password.encode("utf-8"), salt_backend.encode("utf-8"), int(iterations)
             ).hex()
             return hmac.compare_digest(new_hash, hash_val)
         except (ValueError, IndexError):
@@ -83,7 +78,7 @@ class PBKDF2SHA256Handler:
 
     def parse_salt_frontend(self, hashed_password_db: str) -> str | None:
         """Extract the frontend salt from a stored PBKDF2 hash string."""
-        parts = hashed_password_db.split('$')
+        parts = hashed_password_db.split("$")
         return parts[2] if len(parts) >= 3 else None
 
 
@@ -115,16 +110,16 @@ class PasswordManager:
 
     def verify(self, password: str, hashed_password_db: str) -> bool:
         """Verify a plaintext password against a stored hash string."""
-        if not hashed_password_db or '$' not in hashed_password_db:
+        if not hashed_password_db or "$" not in hashed_password_db:
             return False
-        algorithm = hashed_password_db.split('$', 1)[0]
+        algorithm = hashed_password_db.split("$", 1)[0]
         return self._get_handler(algorithm).verify(password, hashed_password_db)
 
     def get_salt_frontend(self, hashed_password_db: str) -> str | None:
         """Extract the frontend salt from a stored hash string."""
-        if not hashed_password_db or '$' not in hashed_password_db:
+        if not hashed_password_db or "$" not in hashed_password_db:
             return None
-        algorithm = hashed_password_db.split('$', 1)[0]
+        algorithm = hashed_password_db.split("$", 1)[0]
         return self._get_handler(algorithm).parse_salt_frontend(hashed_password_db)
 
 
@@ -170,22 +165,26 @@ def hash_refresh_token(token: str) -> str:
 
 
 def create_access_token(
-        data: dict, expires_delta: timedelta | None = None, sid: str | None = None,
-        act: str | None = None,
+    data: dict,
+    expires_delta: timedelta | None = None,
+    sid: str | None = None,
+    act: str | None = None,
 ) -> str:
     """Create a signed JWT access token, tagging it with type/jti and optional session id."""
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.now(UTC),
-        "type": "access",
-        "jti": secrets.token_hex(16),
-        "sid": sid,
-        # The identity this token acts as (ADR-069). Absent means "no identity resolved",
-        # which yields no grants at all.
-        "act": act,
-    })
+    to_encode.update(
+        {
+            "exp": expire,
+            "iat": datetime.now(UTC),
+            "type": "access",
+            "jti": secrets.token_hex(16),
+            "sid": sid,
+            # The identity this token acts as (ADR-069). Absent means "no identity resolved",
+            # which yields no grants at all.
+            "act": act,
+        }
+    )
     return jwt.encode(to_encode, settings.JWT_SIGNING_KEY, algorithm=settings.ALGORITHM)
 
 
@@ -267,10 +266,10 @@ SITE_REALM = "site"
 
 
 async def get_current_user(
-        db: AsyncSession = Depends(get_db),
-        token: str = Depends(oauth2_scheme),
-        redis=Depends(get_redis),
-        realm: str | None = Header(None, alias=REALM_HEADER),
+    db: AsyncSession = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
+    redis=Depends(get_redis),
+    realm: str | None = Header(None, alias=REALM_HEADER),
 ) -> User:
     """Resolve the authenticated user AND the identity this token acts as (ADR-069/096).
 
@@ -330,8 +329,9 @@ async def _publish_identity_for_auditing(db: AsyncSession, identity) -> None:
         return
     snapshot = json.dumps(identity.to_audit_context(), ensure_ascii=False)
     request_identity.set(snapshot)
-    await db.execute(text("SELECT set_config('app.active_identity', :identity, true)"),
-                     {"identity": snapshot})
+    await db.execute(
+        text("SELECT set_config('app.active_identity', :identity, true)"), {"identity": snapshot}
+    )
 
 
 async def get_current_session(token: str = Depends(oauth2_scheme)) -> tuple[str, str | None]:
@@ -365,9 +365,7 @@ def _request_rbac_cache(request: Request) -> dict:
     return request.state.rbac_cache
 
 
-async def resolve_scope(
-        actor: User, perm: Perm, db: AsyncSession, cache: dict | None = None
-) -> Scope:
+async def resolve_scope(actor: User, perm: Perm, db: AsyncSession, cache: dict | None = None) -> Scope:
     """Checkpoint 1 (ADR-022): resolve `actor`'s widest granted scope for `perm`.
 
     `cache`, when given, is a plain dict scoped to one request/GraphQL-context; the full
@@ -383,12 +381,12 @@ async def resolve_scope(
         if cache is not None:
             cache[actor.uuid] = grants
     scope = grants.get(perm.value, Scope.NONE)
-    if scope == Scope.TEAM and perm in GOV_TEAM_WIDENED_PERMS and await _acts_for_gov_team(actor, db, cache):
+    if scope == Scope.TEAM and perm in GOV_TEAM_WIDENED_PERMS and await acts_for_gov_team(actor, db, cache):
         return Scope.ALL
     return scope
 
 
-async def _acts_for_gov_team(actor: User, db: AsyncSession, cache: dict | None) -> bool:
+async def acts_for_gov_team(actor: User, db: AsyncSession, cache: dict | None = None) -> bool:
     """Whether `actor`'s active identity speaks for a live, active gov team (ADR-285).
 
     A suspended or inactive gov team does not widen: assign_station will not hand such a team
@@ -403,11 +401,14 @@ async def _acts_for_gov_team(actor: User, db: AsyncSession, cache: dict | None) 
     key = ("active_gov_team", str(team_uuid))
     if cache is not None and key in cache:
         return cache[key]
-    is_active_gov = await db.scalar(
-        select(Team.uuid).where(
-            Team.uuid == team_uuid, Team.delete_at.is_(None), Team.type == "gov", Team.status == "active"
+    is_active_gov = (
+        await db.scalar(
+            select(Team.uuid).where(
+                Team.uuid == team_uuid, Team.delete_at.is_(None), Team.type == "gov", Team.status == "active"
+            )
         )
-    ) is not None
+        is not None
+    )
     if cache is not None:
         cache[key] = is_active_gov
     return is_active_gov
@@ -428,10 +429,10 @@ class PermissionChecker:
         self.perm = perm
 
     async def __call__(
-            self,
-            request: Request,
-            current_user: User = Depends(get_current_user),
-            db: AsyncSession = Depends(get_db),
+        self,
+        request: Request,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
     ) -> Scope:
         """Resolve and return the caller's scope for `self.perm`; 403 if none."""
         scope = await resolve_scope(current_user, self.perm, db, cache=_request_rbac_cache(request))
