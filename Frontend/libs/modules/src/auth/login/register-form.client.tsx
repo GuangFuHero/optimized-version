@@ -16,7 +16,7 @@ import {
 import { useAuthSession } from '../../session/auth-session';
 import { resolveAuthErrorMessage } from '../api/error-messages';
 import { AuthActionCard } from '../shared/auth-action-card';
-import { useContinueSignedIn } from './continue-signed-in';
+import { continueSignedIn } from './continue-signed-in';
 import { createHashedCredentialAsync } from './credentials';
 import { safeReturnPath } from './utils/return-path';
 
@@ -55,7 +55,6 @@ export function RegisterFormClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refetch: refetchSession } = useAuthSession();
-  const continueSignedIn = useContinueSignedIn();
   // The page the login page was asked to return to, carried here — a guest who pressed 「登入後接」
   // and had no account yet lands back on that ticket. Nothing asked: the map.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
@@ -93,7 +92,7 @@ export function RegisterFormClient({
           code,
         });
         setVerificationSuccess('帳號驗證完成，正在登入。');
-        await continueSignedIn(safeReturnPath(requestedCallbackUrl, '/map'));
+        continueSignedIn(safeReturnPath(requestedCallbackUrl, '/map'));
         return;
       }
 

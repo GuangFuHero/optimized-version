@@ -16,7 +16,7 @@ import { signInAsync } from '../api/client';
 import { useAuthSession } from '../../session/auth-session';
 import { sessionStorageOrNull } from '../../session/end-expired-session';
 import { takeSessionExpired } from '@rescue-frontend/modules/session';
-import { useContinueSignedIn } from './continue-signed-in';
+import { continueSignedIn } from './continue-signed-in';
 import { resolveHashedCredentialAsync } from './credentials';
 import {
   LOGIN_FALLBACK_MESSAGE,
@@ -43,7 +43,6 @@ export function LoginFormClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refetch: refetchSession } = useAuthSession();
-  const continueSignedIn = useContinueSignedIn();
   // Set by the page that sent the user here — a guest's 「登入後接」 among them — and kept if they
   // register instead, or go through a forgotten password.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
@@ -115,7 +114,7 @@ export function LoginFormClient({
             }
 
             // next-auth's redirect callback kept `?callbackUrl=` on this site; now nothing else does.
-            await continueSignedIn(
+            continueSignedIn(
               safeReturnPath(requestedCallbackUrl, defaultCallbackUrl),
             );
             return;
