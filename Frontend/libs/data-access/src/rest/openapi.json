@@ -4268,7 +4268,7 @@
           "數據分析 API"
         ],
         "summary": "Get Ticket Chart",
-        "description": "Render one ticket/task metric as a Plotly chart.\n\nSee the module docstring for the x/y model and example queries, and GET\n/analytics/catalog for the full per-metric rules.\n\n`scope` is a bound parameter, not a `dependencies=[]` entry, because FastAPI discards a\ndependency's return value there. The permission check is the same either way, but the\nresolved scope is needed to narrow the rows — otherwise a caller holding `ticket.view`\nat `own` gets totals for the whole table.",
+        "description": "One ticket/task metric as Plotly figure JSON, for `Plotly.react(element, response)`.\n\nSee the module docstring for the x/y model and example queries, and GET\n/analytics/catalog for the full per-metric rules.\n\n`scope` is a bound parameter, not a `dependencies=[]` entry, because FastAPI discards a\ndependency's return value there. The permission check is the same either way, but the\nresolved scope is needed to narrow the rows — otherwise a caller holding `ticket.view`\nat `own` gets totals for the whole table.",
         "operationId": "get_ticket_chart_api_v1_analytics_tickets_chart_get",
         "security": [
           {
@@ -4498,6 +4498,150 @@
         }
       }
     },
+    "/api/v1/analytics/tickets/data": {
+      "get": {
+        "tags": [
+          "數據分析 API"
+        ],
+        "summary": "Get Ticket Data",
+        "description": "The series `/tickets/chart` would plot, as plain numbers for the frontend's own chart library.\n\nTakes the chart's query minus `chart_type` and the presentation params, so `x=date` is never\ndropped to fit a pie the way the chart drops it.",
+        "operationId": "get_ticket_data_api_v1_analytics_tickets_data_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "y",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TicketYMetric",
+              "description": "What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports."
+            },
+            "description": "What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports."
+          },
+          {
+            "name": "x",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ChartX"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog.",
+              "title": "X"
+            },
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog."
+          },
+          {
+            "name": "x_granularity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ChartXGranularity",
+              "description": "Bucket size when x=date. Ignored for every other x.",
+              "default": "day"
+            },
+            "description": "Bucket size when x=date. Ignored for every other x."
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive range start, local to `tz`.",
+              "title": "Start Date"
+            },
+            "description": "Inclusive range start, local to `tz`."
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive range end, local to `tz`.",
+              "title": "End Date"
+            },
+            "description": "Inclusive range end, local to `tz`."
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
+              "default": "UTC",
+              "title": "Tz"
+            },
+            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/analytics/tickets/value": {
       "get": {
         "tags": [
@@ -4619,7 +4763,7 @@
           "數據分析 API"
         ],
         "summary": "Get Station Chart",
-        "description": "Render one station metric as a Plotly chart.\n\nSee the module docstring for the x/y model and example queries, and GET\n/analytics/catalog for the full per-metric rules. `scope` is a bound parameter rather\nthan a route dependency for the reason given on the ticket endpoint above.",
+        "description": "One station metric as Plotly figure JSON, for `Plotly.react(element, response)`.\n\nSee the module docstring for the x/y model and example queries, and GET\n/analytics/catalog for the full per-metric rules. `scope` is a bound parameter rather\nthan a route dependency for the reason given on the ticket endpoint above.",
         "operationId": "get_station_chart_api_v1_analytics_stations_chart_get",
         "security": [
           {
@@ -4832,6 +4976,150 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ChartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/stations/data": {
+      "get": {
+        "tags": [
+          "數據分析 API"
+        ],
+        "summary": "Get Station Data",
+        "description": "The series `/stations/chart` would plot, as plain numbers for the frontend's own chart library.",
+        "operationId": "get_station_data_api_v1_analytics_stations_data_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "y",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/StationYMetric",
+              "description": "What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports."
+            },
+            "description": "What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports."
+          },
+          {
+            "name": "x",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ChartX"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog.",
+              "title": "X"
+            },
+            "description": "How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog."
+          },
+          {
+            "name": "x_granularity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ChartXGranularity",
+              "description": "Bucket size when x=date. Ignored for every other x.",
+              "default": "day"
+            },
+            "description": "Bucket size when x=date. Ignored for every other x."
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive range start, local to `tz`.",
+              "title": "Start Date"
+            },
+            "description": "Inclusive range start, local to `tz`."
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive range end, local to `tz`.",
+              "title": "End Date"
+            },
+            "description": "Inclusive range end, local to `tz`."
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it.",
+              "default": "UTC",
+              "title": "Tz"
+            },
+            "description": "IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it."
+          },
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
                 }
               }
             }
@@ -5862,17 +6150,67 @@
       },
       "ChartResponse": {
         "properties": {
-          "html": {
-            "type": "string",
-            "title": "Html"
+          "data": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Data",
+            "description": "Plotly traces (https://plotly.com/javascript/reference/)."
+          },
+          "layout": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Layout",
+            "description": "Plotly layout, with `style` and `layout_overrides` applied."
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config",
+            "description": "Plotly config: modebar visibility and responsive resizing."
           }
         },
         "type": "object",
         "required": [
-          "html"
+          "data",
+          "layout",
+          "config"
         ],
         "title": "ChartResponse",
-        "description": "A rendered Plotly chart as a partial HTML div (no embedded plotly.js)."
+        "description": "A Plotly figure as JSON, drawn with `Plotly.react(element, response)`.\n\nThe frontend owns the element and its size; nothing in here is HTML or script."
+      },
+      "ChartSeries": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Legend text (zh-TW), e.g. '任務單' or '平均（天）'."
+          },
+          "values": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Values",
+            "description": "One per `x_values` entry, in the metric's catalog `unit`; completion_rate is 0–100."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "values"
+        ],
+        "title": "ChartSeries",
+        "description": "One line, bar group or pie of a chart."
       },
       "ChartStyle": {
         "properties": {
@@ -6092,6 +6430,56 @@
         ],
         "title": "CreateTeamRequest",
         "description": "Body for creating a gov/ngo team."
+      },
+      "DataResponse": {
+        "properties": {
+          "x": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X",
+            "description": "The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' (the two metrics with a built-in grouping), or null for one aggregate. It can differ from the requested `x`, which is ignored where it doesn't apply."
+          },
+          "x_values": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "X Values",
+            "description": "Axis values in display order: bucket starts as wall-clock time in the request's `tz`, with no UTC offset, when x is 'date'; otherwise category or bucket names (zh-TW where the glossary has them), or ['總計'] for an aggregate."
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/ChartSeries"
+            },
+            "type": "array",
+            "title": "Series"
+          }
+        },
+        "type": "object",
+        "required": [
+          "x",
+          "x_values",
+          "series"
+        ],
+        "title": "DataResponse",
+        "description": "The numbers a chart of the metric plots, for a frontend that draws its own."
       },
       "DeleteContactRequest": {
         "properties": {
@@ -7974,7 +8362,7 @@
           "unit": {
             "type": "string",
             "title": "Unit",
-            "description": "Unit suffix for the `/value` number, e.g. '件', '%', '天'."
+            "description": "Unit of the `/value` and `/data` numbers, e.g. '件', '%', '天'."
           },
           "description": {
             "type": "string",
