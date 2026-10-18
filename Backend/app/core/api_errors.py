@@ -46,9 +46,10 @@ class ErrorCode(StrEnum):
     # A cookie-authenticated write that did not come from one of our own pages (ADR-327) — what a
     # forged form on another site looks like. Not the user's doing, so nothing for them to fix.
     ORIGIN_NOT_ALLOWED = "origin_not_allowed"
-    # Logout could not reach the session store, so the caller is still signed in. Distinct from
-    # every other failure because the generic "something went wrong" copy would let a user walk
-    # away from a shared machine believing they signed out.
+    # The session store could not be reached, so whether the caller is signed in is unknown. On a
+    # logout, distinct from every other failure because the generic "something went wrong" copy
+    # would let a user walk away from a shared machine believing they signed out. On any other
+    # request (503, ADR-328), so the caller is refused without being signed out.
     SESSION_STORE_UNAVAILABLE = "session_store_unavailable"
 
     # Identity switching (multi-team membership)

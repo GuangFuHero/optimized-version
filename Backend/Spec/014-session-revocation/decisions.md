@@ -36,6 +36,9 @@
 
 ### ADR-100 Redis 不可用時回 401；不降級為只驗 JWT
 
+> **回應的狀態碼被 023/ADR-328 修改**：照樣拒絕、不放行，但改回 503 `session_store_unavailable`，不再刻意跟無效的 token
+> 一樣。瀏覽器的 cookie 因此不會被清，Redis 恢復後同一組 cookie 照常能用，不必所有人重新登入。
+
 **白話**：Redis 掛掉的時候，寧可讓所有人都登不進去，也不放行。
 
 **Context**：ADR-099 讓認證路徑依賴 Redis。連不上時無法判斷 session 是否已被撤銷。

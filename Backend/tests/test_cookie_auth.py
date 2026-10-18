@@ -10,6 +10,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
+from redis.exceptions import RedisError
 from sqlalchemy import select
 
 from app.core import auth_cookies
@@ -277,6 +278,27 @@ async def test_a_stale_token_keeps_the_cookies_for_the_refresh(ask_with_cookie, 
 
     assert res.json()["code"] == "access_token_stale"
     assert cookies_set_by(res) == {}
+
+
+async def test_an_unreachable_session_store_keeps_the_cookies(
+    ask_with_cookie, db_session, redis, monkeypatch
+):
+    """The session may be alive: once Redis is back, the same cookies sign the browser in again."""
+    user_uuid, act, sid = await sign_in(db_session, redis)
+    token = create_access_token({"sub": user_uuid}, sid=sid, act=act)
+    reachable = SessionRepository.get_session
+
+    async def unreachable(self, sid):
+        raise RedisError("connection refused")
+
+    monkeypatch.setattr(SessionRepository, "get_session", unreachable)
+    while_down = await ask_with_cookie(token)
+    monkeypatch.setattr(SessionRepository, "get_session", reachable)
+    once_back = await ask_with_cookie(token)
+
+    assert while_down.json()["code"] == "session_store_unavailable"
+    assert cookies_set_by(while_down) == {}
+    assert once_back.status_code == 200, once_back.text
 
 
 async def test_a_bearer_token_on_a_revoked_session_clears_nothing(client, db_session, redis):

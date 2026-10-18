@@ -138,20 +138,31 @@ async def _session_store_down(db, redis, monkeypatch):
         _someone_elses_session,
         _account_gone,
         _identity_taken_away,
-        _session_store_down,
     ],
 )
 async def test_a_token_that_proves_nothing_signs_the_user_out(
     ask_each_entrypoint, db_session, redis, monkeypatch, token_for_case
 ):
-    """Nothing a refresh could repair: the browser treats it as signed out (ADR-328).
-
-    The session store being unreachable is in this group on purpose: ADR-100 fails closed with
-    the same answer as an invalid token, and only the log tells the two apart.
-    """
+    """Nothing a refresh could repair: the browser treats it as signed out (ADR-328)."""
     token = await token_for_case(db_session, redis, monkeypatch)
 
     _assert_401(await ask_each_entrypoint(token), "credentials_invalid")
+
+
+async def test_an_unreachable_session_store_refuses_without_signing_anyone_out(
+    ask_each_entrypoint, db_session, redis, monkeypatch
+):
+    """Still refused, as ADR-100 requires, but not as signed out: the session may well be alive.
+
+    A 503 of its own, so a browser keeps its cookies and carries on once Redis is back (ADR-328).
+    """
+    token = await _session_store_down(db_session, redis, monkeypatch)
+
+    res = await ask_each_entrypoint(token)
+
+    assert res.status_code == 503, res.text
+    assert res.json() == {"detail": "Session store is unavailable", "code": "session_store_unavailable"}
+    assert "www-authenticate" not in res.headers
 
 
 async def test_a_guest_on_graphql_is_still_served(client, fresh_app_engine):

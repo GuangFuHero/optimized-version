@@ -103,8 +103,8 @@ class SessionRepository:
 
         Deliberately does NOT catch connection errors. A Redis outage and a revoked session
         are different things and the caller has to tell them apart — swallowing the error
-        into None would disguise an outage as "this session was revoked" and leave the
-        fail-closed 401 with no cause to log (ADR-100).
+        into None would disguise an outage as "this session was revoked", signing the browser
+        out, where the caller refuses with a 503 and logs the cause (ADR-100, ADR-328).
         """
         return self._load(await self.redis.get(self.SESSION + sid))
 

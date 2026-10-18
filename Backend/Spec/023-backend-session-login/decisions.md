@@ -209,8 +209,10 @@ write: loudly, rather than accepting one it should not.
 
 ### ADR-328 Every 401 a token earns names why: refresh, or signed out
 
-> **Status: ACCEPTED (2026-10-17).** Chosen by the product owner on 2026-10-16, together with moving sign-in
-> to the backend.
+> **Status: ACCEPTED (2026-10-18).** Chosen by the product owner on 2026-10-16, together with moving sign-in
+> to the backend. Answering an unreachable session store with a 503 instead of signing everyone out was
+> chosen on 2026-10-18, after the frontend's testing showed that stopping Redis for a moment signed every
+> browser out for good.
 
 **In plain words**: when the backend turns a token away, it now says why. Two answers mean "this pass just ran
 out, get a new one and try again"; the others mean "you are signed out". The browser has to know which: the
@@ -234,14 +236,18 @@ or signed the user out whenever a token expired.
    | `access_token_expired` | the token's `exp` has passed | refresh, then send the request again |
    | `access_token_stale` | the token's `act` no longer matches its session's (ADR-195) | refresh, then send the request again |
    | `session_expired` | the session is gone: logout, logout-all, a password change or reset, an admin's kick | treat the user as signed out |
-   | `credentials_invalid` | a bad signature, not an access token, no `sub` or `sid`, a session belonging to someone else, the account or the acting identity gone, the session store unreachable | treat the user as signed out |
+   | `credentials_invalid` | a bad signature, not an access token, no `sub` or `sid`, a session belonging to someone else, the account or the acting identity gone | treat the user as signed out |
 
 2. REST and GraphQL answer in one shape: HTTP 401 with `{"detail", "code"}`. The GraphQL context is a FastAPI
    dependency of the Strawberry router, so its `ApiError` reaches the same exception handler as REST instead
    of becoming a GraphQL error inside a 200. A guest who reaches a resolver that needs a user is a different
    case and keeps its GraphQL error from `require_authenticated`: there is no token to refresh.
-3. The session store being unreachable stays `credentials_invalid`. ADR-100 makes that answer identical to an
-   invalid token on purpose, and the log is still what tells the two apart.
+3. **An unreachable session store is not a sign-out.** The request is still refused, as ADR-100 requires:
+   without Redis the backend cannot tell a live session from a revoked one, and letting it through would
+   switch revocation off for anyone who can disrupt Redis. But it answers 503 `session_store_unavailable`,
+   "Session store is unavailable", without `WWW-Authenticate` — the code a sign-out that cannot reach Redis
+   already answers (ADR-325). The session may well be alive, so nothing is cleared, and the same cookies
+   work again once Redis is back. The log says why the store was unreachable.
 4. A request authenticated by the access cookie (ADR-327) and answered `session_expired` or
    `credentials_invalid` gets both sign-in cookies cleared in the same response (ADR-326); otherwise the
    browser keeps sending a token that can never work again. So does the browser's refresh (ADR-325) answered
@@ -253,11 +259,21 @@ or signed the user out whenever a token expired.
    the detail "Not authenticated". It is not cookie-authenticated, so nothing is cleared, and a client tells a
    guest apart by whether it sent a cookie.
 
+**Amends**:
+
+- ADR-100 (`Spec/014-session-revocation`): an unreachable Redis is still refused, never let through, but
+  with a 503 of its own rather than a 401 identical to an invalid token.
+
 **Consequences**:
 ➕ A client refreshes exactly when that helps, and signs the user out exactly when it must.
-➕ Bearer clients see the same status, detail and header as before; only `code` is new.
-➖ While Redis is unreachable, everyone who makes a request reads as signed out — as before this ADR, now
-spelled out in the code — and a browser also has its cookies cleared, so it signs in again once Redis is back.
+➕ A moment without Redis — a restart, a redeploy of its container — signs nobody out: the requests made
+meanwhile fail, and the browser carries on once it is back.
+➕ Bearer clients see the same status, detail and header as before for every failed token; only `code` is
+new.
+➖ While Redis is unreachable, every request that needs a signed-in user still fails, now with a 503. A
+Bearer client that took the old 401 as "sign in again" now gets a 503 it has to retry.
+➖ The answer now tells a caller that the session store is down, which the identical 401 hid. It reveals
+nothing about any account.
 
 ---
 

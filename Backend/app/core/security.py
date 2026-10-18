@@ -280,11 +280,15 @@ async def _require_live_session(redis, payload: dict) -> None:
     except RedisError:
         # Fail closed (ADR-100): with Redis unreachable we cannot tell a live session from a
         # revoked one, and guessing "live" would hand anyone who can disrupt Redis a way to
-        # switch revocation off. The response is deliberately identical to an invalid token,
-        # so this log is the only thing that distinguishes "everyone was signed out" from
-        # "everyone's credentials broke".
+        # switch revocation off. But a 503, not a 401 (ADR-328): the session may well be alive,
+        # and a browser told it is signed out would have its cookies cleared and stay signed out
+        # after Redis is back. The log is what says why the store was unreachable.
         logger.exception("refusing the request: Redis (the session store) is unreachable")
-        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID) from None
+        raise ApiError(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            ErrorCode.SESSION_STORE_UNAVAILABLE,
+            detail="Session store is unavailable",
+        ) from None
     # Gone: logged out, signed out everywhere, a password change or an admin's kick. The token
     # itself is fine, but nothing a refresh does can bring the session back (ADR-328).
     if session is None:
