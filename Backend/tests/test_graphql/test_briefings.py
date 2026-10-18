@@ -266,13 +266,15 @@ async def test_draft_lists_and_publishing_need_editor_permissions(
 
 @pytest.mark.asyncio
 async def test_edit_alone_drafts_but_cannot_publish_or_read_templates(client, redis, briefing_admin_auth):
-    """Without pre_departure.publish an editor can draft ad hoc, but can't publish or copy a template."""
+    """Without .publish an editor can draft ad hoc, but can't publish, copy or edit a template."""
     _, admin_token = briefing_admin_auth
     _, editor = await _create_user_with_grants(redis, ((Perm.PREDEP_EDIT, "all"),))
     t = await _create_template(client, admin_token, "template body", [], "BRIEFING")
 
     seeded = await _post(client, GENERATE, {"templateUuid": t["uuid"]}, editor)
     assert seeded.get("errors") and "template body" not in str(seeded)
+    touched = await _post(client, UPDATE_TEMPLATE, {"uuid": t["uuid"], "content": None}, editor)
+    assert touched.get("errors") and "template body" not in str(touched)
 
     gen = await _post(client, GENERATE_CONTENT, {"content": "ad hoc"}, editor)
     assert "errors" not in gen, gen

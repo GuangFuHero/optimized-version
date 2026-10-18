@@ -221,7 +221,8 @@ briefing_templates                    briefings
 - **BR-002**: Templates are not public. All four template resolvers require
   `pre_departure.publish`. The template is the authoring surface; only a *published* briefing
   is the thing volunteers read.
-- **BR-003**: Creating a template requires `pre_departure.publish`; generating and editing a
+- **BR-003**: Creating a template requires `pre_departure.publish`, and editing one requires
+  `pre_departure.edit` plus `pre_departure.publish` (the reply carries it); generating and editing a
   draft briefing require `pre_departure.edit` (plus `pre_departure.publish` when seeding from a
   template, since that copies its content); publishing one requires `pre_departure.publish`;
   deleting either kind requires `pre_departure.delete`. Deletes are soft (`delete_at`).

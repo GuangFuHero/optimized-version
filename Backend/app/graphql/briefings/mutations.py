@@ -58,8 +58,9 @@ class BriefingMutation:
     async def update_briefing_template(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateBriefingTemplateInput
     ) -> BriefingTemplateType:
-        """Edit a briefing template. Requires pre_departure.edit."""
+        """Edit a briefing template. Requires pre_departure.edit and, as the reply shows it, .publish."""
         await check_permission(info, Perm.PREDEP_EDIT)
+        await check_permission(info, Perm.PREDEP_PUBLISH)
         db = info.context["db"]
         t = await briefing_template_repository.get_by_uuid_active(db, uuid)
         if not t:
