@@ -1400,7 +1400,7 @@ export interface paths {
     };
     /**
      * Get Ticket Chart
-     * @description Render one ticket/task metric as a Plotly chart.
+     * @description One ticket/task metric as Plotly figure JSON, for `Plotly.react(element, response)`.
      *
      *     See the module docstring for the x/y model and example queries, and GET
      *     /analytics/catalog for the full per-metric rules.
@@ -1411,6 +1411,29 @@ export interface paths {
      *     at `own` gets totals for the whole table.
      */
     get: operations['get_ticket_chart_api_v1_analytics_tickets_chart_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/analytics/tickets/data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Ticket Data
+     * @description The series `/tickets/chart` would plot, as plain numbers for the frontend's own chart library.
+     *
+     *     Takes the chart's query minus `chart_type` and the presentation params, so `x=date` is never
+     *     dropped to fit a pie the way the chart drops it.
+     */
+    get: operations['get_ticket_data_api_v1_analytics_tickets_data_get'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1448,13 +1471,33 @@ export interface paths {
     };
     /**
      * Get Station Chart
-     * @description Render one station metric as a Plotly chart.
+     * @description One station metric as Plotly figure JSON, for `Plotly.react(element, response)`.
      *
      *     See the module docstring for the x/y model and example queries, and GET
      *     /analytics/catalog for the full per-metric rules. `scope` is a bound parameter rather
      *     than a route dependency for the reason given on the ticket endpoint above.
      */
     get: operations['get_station_chart_api_v1_analytics_stations_chart_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/analytics/stations/data': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Station Data
+     * @description The series `/stations/chart` would plot, as plain numbers for the frontend's own chart library.
+     */
+    get: operations['get_station_data_api_v1_analytics_stations_data_get'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1970,11 +2013,48 @@ export interface components {
     };
     /**
      * ChartResponse
-     * @description A rendered Plotly chart as a partial HTML div (no embedded plotly.js).
+     * @description A Plotly figure as JSON, drawn with `Plotly.react(element, response)`.
+     *
+     *     The frontend owns the element and its size; nothing in here is HTML or script.
      */
     ChartResponse: {
-      /** Html */
-      html: string;
+      /**
+       * Data
+       * @description Plotly traces (https://plotly.com/javascript/reference/).
+       */
+      data: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * Layout
+       * @description Plotly layout, with `style` and `layout_overrides` applied.
+       */
+      layout: {
+        [key: string]: unknown;
+      };
+      /**
+       * Config
+       * @description Plotly config: modebar visibility and responsive resizing.
+       */
+      config: {
+        [key: string]: unknown;
+      };
+    };
+    /**
+     * ChartSeries
+     * @description One line, bar group or pie of a chart.
+     */
+    ChartSeries: {
+      /**
+       * Name
+       * @description Legend text (zh-TW), e.g. '任務單' or '平均（天）'.
+       */
+      name: string;
+      /**
+       * Values
+       * @description One per `x_values` entry, in the metric's catalog `unit`; completion_rate is 0–100.
+       */
+      values: number[];
     };
     /**
      * ChartStyle
@@ -2131,6 +2211,24 @@ export interface components {
       type: 'gov' | 'ngo';
       /** Tax Id */
       tax_id?: string | null;
+    };
+    /**
+     * DataResponse
+     * @description The numbers a chart of the metric plots, for a frontend that draws its own.
+     */
+    DataResponse: {
+      /**
+       * X
+       * @description The grouping actually applied: 'date', 'category', 'age_bucket' or 'completion' (the two metrics with a built-in grouping), or null for one aggregate. It can differ from the requested `x`, which is ignored where it doesn't apply.
+       */
+      x: string | null;
+      /**
+       * X Values
+       * @description Axis values in display order: bucket starts as wall-clock time in the request's `tz`, with no UTC offset, when x is 'date'; otherwise category or bucket names (zh-TW where the glossary has them), or ['總計'] for an aggregate.
+       */
+      x_values: (string | null)[];
+      /** Series */
+      series: components['schemas']['ChartSeries'][];
     };
     /**
      * DeleteContactRequest
@@ -3024,6 +3122,11 @@ export interface components {
       contacts?: components['schemas']['ContactOut'][];
       /** Login Methods */
       login_methods?: components['schemas']['LoginMethodOut'][];
+      /**
+       * Capabilities
+       * @description 目前身分能使用的 capability；物件層級的範圍仍由各 endpoint 判斷
+       */
+      capabilities: components['schemas']['Perm'][];
     };
     /**
      * UserSaltResponse
@@ -3112,7 +3215,7 @@ export interface components {
       label: string;
       /**
        * Unit
-       * @description Unit suffix for the `/value` number, e.g. '件', '%', '天'.
+       * @description Unit of the `/value` and `/data` numbers, e.g. '件', '%', '天'.
        */
       unit: string;
       /**
@@ -5606,6 +5709,50 @@ export interface operations {
       };
     };
   };
+  get_ticket_data_api_v1_analytics_tickets_data_get: {
+    parameters: {
+      query: {
+        /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
+        y: components['schemas']['TicketYMetric'];
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog. */
+        x?: components['schemas']['ChartX'] | null;
+        /** @description Bucket size when x=date. Ignored for every other x. */
+        x_granularity?: components['schemas']['ChartXGranularity'];
+        /** @description Inclusive range start, local to `tz`. */
+        start_date?: string | null;
+        /** @description Inclusive range end, local to `tz`. */
+        end_date?: string | null;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz?: string;
+      };
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DataResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
   get_ticket_value_api_v1_analytics_tickets_value_get: {
     parameters: {
       query: {
@@ -5687,6 +5834,50 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ChartResponse'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  get_station_data_api_v1_analytics_stations_data_get: {
+    parameters: {
+      query: {
+        /** @description What to measure — see GET /analytics/catalog for the full list and which `x` values / chart types each one supports. */
+        y: components['schemas']['StationYMetric'];
+        /** @description How to slice `y`: 'date' (day/week trend) or 'category' (breakdown by type). Omit for a single aggregate value. An `x` that doesn't apply to the chosen `y` or `chart_type` is silently ignored rather than rejected — see GET /analytics/catalog. */
+        x?: components['schemas']['ChartX'] | null;
+        /** @description Bucket size when x=date. Ignored for every other x. */
+        x_granularity?: components['schemas']['ChartXGranularity'];
+        /** @description Inclusive range start, local to `tz`. */
+        start_date?: string | null;
+        /** @description Inclusive range end, local to `tz`. */
+        end_date?: string | null;
+        /** @description IANA timezone name (e.g. 'Asia/Taipei', 'America/New_York'), default UTC. Controls day/week bucket boundaries when x=date and how start_date/end_date are interpreted (local midnight in this timezone, not UTC midnight) — duration-based metrics like age_distribution/time_to_completion ignore it. */
+        tz?: string;
+      };
+      header?: {
+        'X-WG-Realm'?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DataResponse'];
         };
       };
       /** @description Validation Error */

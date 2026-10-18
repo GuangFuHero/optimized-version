@@ -1461,6 +1461,27 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 
 ---
 
+#### ADR-334 `/users/me` lists checkpoint 1 capabilities for the active identity
+
+**Status: ACCEPTED (2026-10-18).** PR #79.
+
+**Context**: The frontend needs to decide which controls and pages to show. Role names cannot answer this because role grants and direct grants can change at runtime. Repeating the seed's role-to-capability mapping in the frontend would let it drift from backend authorization.
+
+**Decision**:
+
+1. Both `GET` and `PATCH /api/v1/users/me` return `capabilities: list[Perm]` for the request's active identity. A request with `X-WG-Realm: site` uses its `user` identity under ADR-289. Grants from other identities are excluded.
+2. `authz.capabilities` includes every `PUBLIC_PERMS` entry, even without a grant or with a `none` grant. Other entries require `resolve_scope(...) != Scope.NONE`, which includes role grants, direct grants, and government-team scope widening. For a team identity, `GOV_TEAM_ONLY_PERMS` also requires a non-deleted, active government team, as in `require_gov_team`. Platform identities are exempt from that fence.
+3. The response is a list of capability keys, not a capability-to-scope map. `openapi-typescript` 7 ignores JSON Schema `propertyNames`, so a map would generate plain string keys. A list preserves the `Perm` union in the generated client contract.
+4. This list answers checkpoint 1 only. The frontend uses it to decide what to show. Each backend request still checks authorization, including checkpoint 2 against the resource and any service-specific eligibility or state rules. Unlike `require_scope`, `has_permission` / `PermissionChecker` requires grants even for `PUBLIC_PERMS`, so `/analytics/tickets/*` and `/analytics/stations/*` can return 403 for custom roles without `ticket.view` or `station.view` even though those capabilities are listed. Seeded roles already hold both grants. For example, `role_request.add` can be listed for a site `user` identity whose account also holds a back-office identity, while the role-request service rejects that account as ineligible under ADR-287.
+
+**Consequences**:
+
+- The frontend can use capability keys without maintaining its own role mapping. It must fetch the profile again after an identity switch or a grant change to see the new list.
+- A listed capability does not promise access to every resource or guarantee that an operation will succeed.
+- Grant queries share one cache per listing. `tests/test_me_capabilities.py` checks seed roles, government-team fencing, public capabilities, direct grants, fixed query counts, and the GET/PATCH response under back-office and site identities.
+
+---
+
 ## 附錄 A. Scope 語意表（ADR-049 定案：純地理，無 gov/ngo）
 | scope | 判定式 | 依賴 |
 |---|---|---|

@@ -12,6 +12,7 @@ from app.repositories.auth_repository import (
     user_repository,
 )
 from app.schemas.auth import IdentityOption, UserResponse, UserUpdate
+from app.services import authz
 
 router = APIRouter()
 
@@ -43,14 +44,17 @@ async def _profile(db: AsyncSession, user: User) -> UserResponse:
         active_identity=_as_option(active) if active else None,
         contacts=await contact_repository.list_by_user(db, str(user.uuid)),
         login_methods=await identity_repository.list_by_user(db, str(user.uuid)),
+        capabilities=await authz.capabilities(user, db),
     )
 
 
 def _as_option(identity) -> IdentityOption:
     """Map an ActiveIdentity onto its API shape."""
     return IdentityOption(
-        role_uuid=identity.role_uuid, role=identity.role_name,
-        team_uuid=identity.team_uuid, team=identity.team_name,
+        role_uuid=identity.role_uuid,
+        role=identity.role_name,
+        team_uuid=identity.team_uuid,
+        team=identity.team_name,
     )
 
 
