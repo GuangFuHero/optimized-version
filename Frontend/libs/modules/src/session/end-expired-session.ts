@@ -12,7 +12,8 @@ export function isSigningOutHere(): boolean {
 
 /**
  * Say so before signing out here — 登出 from the menu, or an ended session — so the watch on
- * the session (`shouldReloadForSignOut`) leaves this tab to its own reload instead of adding one.
+ * the session (`shouldReloadForSessionChange`) leaves this tab to its own reload instead of adding
+ * one.
  */
 export function markSigningOutHere(): void {
   signingOutHere = true;

@@ -71,15 +71,17 @@ export interface SessionSeen {
 
 /**
  * The person this tab shows is no longer the one signed in — another tab signed out (on its own,
- * or because its session ended), or signed out and in as someone else — and this tab has just
- * read its session again (the other tab's broadcast, or a check on focus): reload, so urql's cache
- * stops showing what the first person could see. A tab left in the background may go straight
- * from one person to the next without ever seeing the guest in between.
+ * or because its session ended), signed in, or signed out and in as someone else — and this tab
+ * has just read its session again (the other tab's broadcast, or a check on focus): reload, so
+ * urql's cache stops showing what the last person, or the guest, was shown. A guest's results lack
+ * what is the person's own: a need they already took would still offer 接這筆. A tab left in the
+ * background may go straight from one person to the next without ever seeing the guest in between.
  *
- * Only from `authenticated`: a guest tab holds nothing private, and one that another tab signs in
- * just shows the person. `loading` is a page still reading its session, not a sign-out.
+ * `loading` is a page still reading its session, neither a sign-in nor a sign-out. The tab that
+ * signs in is not reloaded here: the login and register pages sit outside the site shell, and it
+ * loads its next page whole anyway (`continueSignedIn`).
  */
-export function shouldReloadForSignOut({
+export function shouldReloadForSessionChange({
   previous,
   current,
   signingOutHere,
@@ -90,7 +92,7 @@ export function shouldReloadForSignOut({
   signingOutHere: boolean;
 }): boolean {
   return (
-    previous.status === 'authenticated' &&
+    previous.status !== 'loading' &&
     current.status !== 'loading' &&
     current.user?.uuid !== previous.user?.uuid &&
     !signingOutHere

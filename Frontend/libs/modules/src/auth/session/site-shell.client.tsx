@@ -11,7 +11,7 @@ import { SessionExpiredNotice } from '../../session/session-expired-notice';
 import { SiteShell } from '../../shell/site';
 import {
   reloginHref,
-  shouldReloadForSignOut,
+  shouldReloadForSessionChange,
 } from '@rescue-frontend/modules/session';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -25,15 +25,15 @@ export function PortalSiteShell({ children }: { children: ReactNode }) {
   const isAuthenticated = status === 'authenticated' && !!user;
   const previousSession = useRef({ status, user });
 
-  // Signed out in another tab — from its menu, or because its session ended — or signed in there
-  // as someone else, and this tab has read its session again. Reload as handleSignOut does,
-  // without a notice: that is for the tab it ended in.
+  // Signed out in another tab — from its menu, or because its session ended — or signed in there,
+  // as someone else or while this tab was a guest, and this tab has read its session again. Reload
+  // as handleSignOut does, without a notice: that is for the tab it ended in.
   useEffect(() => {
     const previous = previousSession.current;
     previousSession.current = { status, user };
 
     if (
-      shouldReloadForSignOut({
+      shouldReloadForSessionChange({
         previous,
         current: { status, user },
         signingOutHere: isSigningOutHere(),

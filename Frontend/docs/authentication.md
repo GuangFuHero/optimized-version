@@ -97,18 +97,21 @@ Server Component 要讀目前登入的人時，用 `currentUserFromBackendAsync(
 `AuthSessionProvider` 讀 `/api/v1/users/me`，兩個 app 的 providers 都有掛。`useAuthSession()` 回傳
 `{ status, user, refetch }`：`status` 是 `loading`、`authenticated` 或 `unauthenticated`；`user` 只有 `uuid`、`name`。
 
-重新讀的時機：頁面載入、視窗取得焦點、分頁回到前景、其他分頁通知登入或登出、呼叫 `refetch()`（登入成功之後）。
+重新讀的時機：頁面載入、視窗取得焦點、分頁回到前景、其他分頁通知登入或登出、呼叫 `refetch()`（後台用
+NextAuth 登入成功之後）。
 
 跨分頁通知用 `BroadcastChannel('wg-auth')`，訊息是 `signed-in` 或 `signed-out`（`session/auth-broadcast.ts`）。
 
-前台的分頁什麼時候重新整理（`shouldReloadForSignOut`）：
+前台的分頁什麼時候重新整理（`shouldReloadForSessionChange`）：
 
-- 原本是登入狀態的分頁，讀到「已登出」或「換成另一個帳號」（`uuid` 不同）：重新整理。
-- 訪客的分頁看到別的分頁登入：不重新整理，只更新畫面。
+- 讀到的人跟畫面上的不一樣（`uuid` 不同）：重新整理。包括登入的分頁讀到「已登出」或「換成另一個帳號」，
+  以及訪客的分頁看到別的分頁登入。
+- 還在讀（`loading`）：不算，等讀完再比。
 - 這個分頁自己正在登出：交給登出流程自己重新整理，不重複。
 
 用整頁重新整理而不是 `router.refresh()`，是因為登入時抓的資料（列表的認領、地圖的精確位置、urql 的快取）存在
-browser 裡，`router.refresh()` 只會重畫 server 那部分，訪客會繼續看到登入的人才看得到的東西。
+browser 裡，`router.refresh()` 只會重畫 server 那部分，訪客會繼續看到登入的人才看得到的東西。反過來也一樣：
+訪客時抓的結果沒有登入的人自己的資料，自己已經承接的需求還會顯示「接這筆」。
 
 ## 登入方式
 
@@ -120,7 +123,8 @@ browser 裡，`router.refresh()` 只會重畫 server 那部分，訪客會繼續
 1. `GET /api/v1/auth/salt/:value` 取 `salt_frontend`。
 2. browser 用 PBKDF2 雜湊密碼，後端不會收到明文密碼。
 3. `POST /api/v1/auth/session`，body `{ username, password }`。後端設好 cookie，回 `{ user, identity }`。
-4. 通知其他分頁、`refetch()`、回到 `callbackUrl`。`safeReturnPath` 只接受本站的路徑，其他一律換成預設頁。
+4. 通知其他分頁，整頁載入 `callbackUrl`（`continueSignedIn`），理由跟上面的重新整理一樣。
+   `safeReturnPath` 只接受本站的路徑，其他一律換成預設頁。
 
 錯誤文案：`passwordSignInErrorMessage`。`credentials_invalid` 顯示「帳號或密碼不正確」，其他 code 照
 `libs/modules/src/auth/api/error-messages.ts`。
