@@ -63,11 +63,13 @@ function DetailLine({
         color: color.fg.neutral.subtle,
       }}
     >
+      {/* As tall as a line of the text beside it, so the icon sits on that line at any text size. */}
       <Box
         sx={{
           display: 'grid',
           placeItems: 'center',
-          mt: '3px',
+          height: '1.6em',
+          fontSize: displayTextSize[13],
           color: color.fg.neutral.muted,
           '& svg': { fontSize: 14 },
         }}
