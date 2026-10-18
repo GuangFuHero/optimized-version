@@ -14,7 +14,6 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.core import auth_cookies
 from app.core.config import settings
 from app.main import app
 from app.models.auth import User, UserContact, UserIdentity
@@ -22,7 +21,6 @@ from app.services import sso_login
 from app.services.auth_account import create_account
 from app.sso.oauth import get_oauth_exchanger
 from tests import oauth_flow
-from tests.cookies import cookies_set_by
 from tests.fakes import FakeOAuthExchanger
 
 pytestmark = pytest.mark.asyncio
@@ -65,13 +63,6 @@ async def _contacts(db) -> list[tuple[str, str, bool]]:
     return [(c.type, c.value, c.verified) for c in (await db.execute(select(UserContact))).scalars().all()]
 
 
-def _signed_in(response) -> None:
-    """Assert the browser lands where it started, signed in."""
-    assert response.status_code == 302, response.text
-    assert response.headers["location"] == f"{oauth_flow.SITE}/tickets"
-    assert auth_cookies.access_cookie_name() in cookies_set_by(response)
-
-
 async def test_start_sends_the_browser_to_line(client):
     """LINE's sign-in page, for our channel, with the same state, nonce and PKCE as Google's."""
     params = oauth_flow.sent_to(await oauth_flow.start(client, "line"), LINE_AUTHORIZE)
@@ -99,7 +90,7 @@ async def test_a_first_sign_in_without_an_email_creates_an_account_with_no_conta
     """LINE need not share an email, and the account works without one."""
     response = await _round_trip(client, exchanger)
 
-    _signed_in(response)
+    oauth_flow.signed_in(response)
     assert exchanger.exchanges[0][:2] == ("line", oauth_flow.CODE)
     [identity] = (await db_session.execute(select(UserIdentity))).scalars().all()
     assert (identity.provider, identity.provider_subject) == ("line", "U1234567890")
@@ -108,7 +99,7 @@ async def test_a_first_sign_in_without_an_email_creates_an_account_with_no_conta
 
 async def test_a_first_sign_in_with_an_email_keeps_it_as_a_verified_contact(client, db_session, exchanger):
     """LINE has verified the email it shares, so it becomes the account's verified contact."""
-    _signed_in(await _round_trip(client, exchanger, email="mei@x.com"))
+    oauth_flow.signed_in(await _round_trip(client, exchanger, email="mei@x.com"))
 
     assert await _contacts(db_session) == [("email", "mei@x.com", True)]
 
@@ -119,7 +110,7 @@ async def test_an_email_another_account_holds_is_left_out_not_refused(client, db
         db_session, name="Owner", contact_type="email", value="taken@x.com", password_hash="h"
     )
 
-    _signed_in(await _round_trip(client, exchanger, email="taken@x.com"))
+    oauth_flow.signed_in(await _round_trip(client, exchanger, email="taken@x.com"))
 
     assert len((await db_session.execute(select(User))).scalars().all()) == 2
     assert await _contacts(db_session) == [("email", "taken@x.com", True)]
@@ -127,24 +118,35 @@ async def test_an_email_another_account_holds_is_left_out_not_refused(client, db
 
 async def test_a_malformed_email_is_left_out(client, db_session, exchanger):
     """Not an email at all: the account is created without it, and no error."""
-    _signed_in(await _round_trip(client, exchanger, email="not-an-email"))
+    oauth_flow.signed_in(await _round_trip(client, exchanger, email="not-an-email"))
 
     assert await _contacts(db_session) == []
 
 
 async def test_a_first_sign_in_without_a_name_is_named_after_the_line_id(client, db_session, exchanger):
     """No display name from LINE: the account is called `LINE-` and the first 8 characters of its id."""
-    _signed_in(await _round_trip(client, exchanger, name=None))
+    oauth_flow.signed_in(await _round_trip(client, exchanger, name=None))
 
     assert (await db_session.execute(select(User))).scalars().one().name == "LINE-U1234567"
 
 
 async def test_a_second_sign_in_lands_on_the_same_account(client, db_session, exchanger):
     """The LINE login method finds its account; no second one is created."""
-    _signed_in(await _round_trip(client, exchanger))
-    _signed_in(await _round_trip(client, exchanger))
+    oauth_flow.signed_in(await _round_trip(client, exchanger))
+    oauth_flow.signed_in(await _round_trip(client, exchanger))
 
     assert len((await db_session.execute(select(User))).scalars().all()) == 1
+
+
+async def test_an_id_token_that_does_not_verify_is_refused(client, exchanger):
+    """The exchange answered, but with nothing LINE's verify API accepts."""
+    started = await oauth_flow.start(client, "line")
+    state = oauth_flow.sent_to(started, LINE_AUTHORIZE)["state"]
+    exchanger.id_token = "not-a-token"
+
+    response = await oauth_flow.callback(client, "line", state, cookie=oauth_flow.oauth_cookie(started))
+
+    oauth_flow.sent_back_with(response, "sso_token_invalid")
 
 
 @pytest.mark.parametrize("nonce", ["another-sign-in's-nonce", None])

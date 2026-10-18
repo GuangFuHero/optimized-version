@@ -263,12 +263,6 @@ class StepUp(BaseModel):
     id_token: str | None = Field(None, min_length=1)
 
 
-class GoogleSsoRequest(BaseModel):
-    """Body carrying a Google id_token for SSO login / first-login create."""
-
-    id_token: str = Field(..., min_length=1)
-
-
 class LinkGoogleRequest(BaseModel):
     """Body carrying a Google id_token to link to the current account, plus its proof.
 
@@ -283,9 +277,9 @@ class LinkGoogleRequest(BaseModel):
 
 
 class IdTokenRequest(BaseModel):
-    """Body carrying a provider id_token (LINE SSO / link).
+    """Body carrying a LINE id_token to link to the current account, plus its proof.
 
-    `step_up` is ignored on the SSO login path and required on the link path (ADR-217).
+    Same contract as `LinkGoogleRequest` (ADR-217).
     """
 
     id_token: str = Field(..., min_length=1)

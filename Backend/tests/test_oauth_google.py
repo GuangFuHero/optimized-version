@@ -15,12 +15,14 @@ import logging
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core import auth_cookies
 from app.core.access_log import OAuthQueryRedactor
 from app.core.config import settings
 from app.main import app
 from app.models.auth import User, UserContact, UserIdentity
+from app.services import sso_login
 from app.services.auth_account import create_account
 from app.sso.oauth import get_oauth_exchanger
 from tests import oauth_flow
@@ -186,7 +188,7 @@ async def test_the_back_office_may_start_one_too(client):
 async def test_a_first_sign_in_creates_the_account_and_signs_the_browser_in(
     client, db_session, redis, exchanger
 ):
-    """A verified email contact and a google login method; the browser lands where it started, signed in."""
+    """A verified email contact, a google login method, a last login; the browser lands where it started."""
     started = await _start(client)
     params = _sent_to_google(started)
     verifier = json.loads(await redis.get(f"oauth_state:{params['state']}"))["code_verifier"]
@@ -210,14 +212,16 @@ async def test_a_first_sign_in_creates_the_account_and_signs_the_browser_in(
     assert (contact.type, contact.value, contact.verified) == ("email", "g@x.com", True)
     [identity] = (await db_session.execute(select(UserIdentity))).scalars().all()
     assert (identity.provider, identity.provider_subject) == ("google", "g-1")
+    user = (await db_session.execute(select(User))).scalar_one()
+    await db_session.refresh(user)
+    assert user.last_login_at is not None  # as a password sign-in stamps it (`record_login`)
 
 
 async def test_a_second_sign_in_lands_on_the_same_account(client, db_session, exchanger):
     """The Google login method finds its account; no second one is created."""
-    first = await _round_trip(client, exchanger)
-    second = await _round_trip(client, exchanger)
+    oauth_flow.signed_in(await _round_trip(client, exchanger))
+    oauth_flow.signed_in(await _round_trip(client, exchanger))
 
-    assert first.status_code == second.status_code == 302
     assert len((await db_session.execute(select(User))).scalars().all()) == 1
 
 
@@ -340,7 +344,7 @@ async def test_an_id_token_from_another_sign_in_is_refused(client, exchanger, no
 
 
 async def test_an_unverified_email_is_refused(client, exchanger):
-    """A first sign-in needs an email Google has verified, as `/auth/sso/google` always did."""
+    """A first sign-in needs an email Google has verified: it becomes the account's verified contact."""
     oauth_flow.sent_back_with(
         await _round_trip(client, exchanger, email_verified=False), "sso_email_unverified"
     )
@@ -351,6 +355,34 @@ async def test_an_email_another_account_holds_is_refused(client, db_session, exc
     await create_account(db_session, name="Owner", contact_type="email", value="g@x.com", password_hash="h")
 
     oauth_flow.sent_back_with(await _round_trip(client, exchanger), "sso_email_taken")
+
+
+async def test_a_first_sign_in_that_loses_a_race_is_refused_as_a_taken_email(client, exchanger, monkeypatch):
+    """The account could not be created, nor did a twin sign-in create it: the email was taken meanwhile.
+
+    Unlike LINE's `sso_signin_race`: a first Google sign-in needs that email, so its owner links Google.
+    """
+
+    async def _raced(*args, **kwargs):
+        raise IntegrityError("insert", {}, Exception("duplicate"))
+
+    monkeypatch.setattr(sso_login, "create_account", _raced)
+
+    oauth_flow.sent_back_with(await _round_trip(client, exchanger), "sso_email_taken")
+
+
+# --- the endpoints it replaces ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("provider", ["google", "line"])
+async def test_the_id_token_sign_in_endpoints_are_gone(client, provider):
+    """`/auth/sso/*` signed in with an `id_token` the frontend obtained; this flow is the only way now."""
+    id_token = json.dumps({"sub": "someone", "email": "s@x.com", "email_verified": True})
+
+    response = await client.post(f"/api/v1/auth/sso/{provider}", json={"id_token": id_token})
+
+    assert response.status_code == 404, response.text
+    assert response.json() == {"detail": "Not Found"}  # no route at all, not a handler's own 404
 
 
 # --- logs ----------------------------------------------------------------------------------

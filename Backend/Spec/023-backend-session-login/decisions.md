@@ -436,7 +436,7 @@ a `return_to` pointing at another site.
 6. `start` must come from one of our pages (ADR-327 point 4). A navigation carries no `Origin`, so in
    practice the `Referer` decides, and a browser set to send none is refused with `origin_not_allowed`. The
    callback is the provider's redirect and carries neither; the state protects it instead.
-7. Who signs in follows the rules `/auth/sso/*` always had, now shared (`services/sso_login.py`). A known
+7. Who signs in follows the rules `/auth/sso/*` always had, now in `services/sso_login.py`. A known
    identity signs in to its account. A first Google sign-in creates one with Google's verified email, and
    an email another account already holds is refused: its owner links Google in their settings (ADR-217). A
    first LINE sign-in always creates one, because LINE's email is optional: a missing, malformed or taken
@@ -450,6 +450,9 @@ a `return_to` pointing at another site.
    state, the verifier or the nonce, and uvicorn's access log has the query of every
    `/api/v1/auth/oauth/` request replaced with `?…`.
 9. `start` and `callback` are each limited to 10 requests per 60 seconds, as `/auth/sso/*` was.
+10. `/auth/sso/google` and `/auth/sso/line`, which signed in with an `id_token` the frontend obtained, are
+    removed: this flow is the only way to sign in with a provider. Linking one (`/auth/link/*`) still takes
+    an `id_token`, as before.
 
 **Consequences**:
 ➕ The frontend holds no OAuth configuration or secret, and one flow serves both apps.
@@ -465,6 +468,8 @@ host, which changes the frontend's links and its cookie filter; it is left for b
 ➖ Signing in now depends on the backend reaching the provider's token endpoint.
 ➖ A browser or extension that strips `Referer` cannot start a sign-in from our pages.
 ➖ Each environment's redirect URI has to be registered with each provider before its first deployment.
+➖ The backend, the site and the back office are merged together and deployed at once: a frontend still on
+NextAuth posts to `/auth/sso/*`, now a 404, and cannot sign in with Google or LINE.
 ➖ Over their rate limit, start and callback answer 429 as JSON, a bare page for a navigation, rather than
 going back to the sign-in page; the refused callback leaves `{p}_oauth` to expire on its own. So does a
 callback that fails on the server itself (Redis or the database), as a 500.

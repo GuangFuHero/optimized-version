@@ -1,8 +1,8 @@
 """Who a verified Google or LINE identity signs in as, creating the account on a first sign-in.
 
-Shared by `/auth/sso/google` and `/auth/sso/line`, which receive an `id_token` the frontend obtained, and by
-the backend's own OAuth callback, which obtains it itself (ADR-331). The refusals are this module's own
-exceptions; each caller answers them its own way, as a JSON error or as a redirect back to the sign-in page.
+Called by the backend's OAuth callback once the provider's `id_token` has been verified (ADR-331). The
+refusals are this module's own exceptions, which the callback answers with a redirect back to the sign-in
+page.
 """
 
 from sqlalchemy.exc import IntegrityError

@@ -71,6 +71,13 @@ async def callback(client, provider: str, state: str | None, *, cookie: str | No
     )
 
 
+def signed_in(response, location: str = f"{SITE}/tickets") -> None:
+    """Assert a callback sends the browser on to `location` signed in: where `start` began, by default."""
+    assert response.status_code == 302, response.text
+    assert response.headers["location"] == location
+    assert auth_cookies.access_cookie_name() in cookies_set_by(response)
+
+
 def sent_back_with(response, error: str, app_url: str = SITE) -> None:
     """Assert a callback sends the browser to the app's sign-in page with `error`, its OAuth cookie gone."""
     assert response.status_code == 302, response.text

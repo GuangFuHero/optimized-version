@@ -1,4 +1,4 @@
-"""SSO endpoints: Google/LINE first-login + account linking."""
+"""SSO endpoints: linking and unlinking Google/LINE login methods. Signing in with them is `oauth.py`."""
 
 from fastapi import (
     APIRouter,
@@ -17,13 +17,11 @@ from app.messaging.email import get_email_sender
 from app.messaging.sms import get_sms_sender
 from app.models.auth import User
 from app.schemas.auth import (
-    GoogleSsoRequest,
     IdTokenRequest,
     LinkGoogleRequest,
-    TokenPair,
     UnlinkIdentityRequest,
 )
-from app.services import auth_identity, auth_session, sso_login
+from app.services import auth_identity
 from app.services.auth_contact import SSO_PROVIDERS, ContactNotFound, StepUpFailed, StepUpRequired
 from app.sso import get_sso_verifiers
 from app.sso.google import (
@@ -37,7 +35,7 @@ from app.sso.line import (
     get_line_verifier,
 )
 
-from .deps import clear_cookies_if_cookie_authenticated, get_rate_limiter, issue_token_pair
+from .deps import clear_cookies_if_cookie_authenticated, get_rate_limiter
 
 router = APIRouter()
 
@@ -65,33 +63,6 @@ _ERROR_MAP = {
 def _as_http(err: Exception) -> ApiError:
     """Translate a link/unlink use-case error into its HTTP equivalent, carrying its code."""
     return _ERROR_MAP[type(err)](str(err))
-
-
-@router.post("/sso/google", response_model=TokenPair,
-             dependencies=[Depends(get_rate_limiter(10, 60))])
-async def sso_google(
-        body: GoogleSsoRequest,
-        request: Request,
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        verifier: GoogleTokenVerifier = Depends(get_google_verifier),
-):
-    """Verify a Google id_token; log in an existing google identity or create the account on first login."""
-    try:
-        gid = await verifier.verify(body.id_token)
-    except GoogleTokenVerificationError as err:
-        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID,
-                       detail="Invalid Google token") from err
-    try:
-        user = await sso_login.sign_in_with_google(db, gid)
-    except sso_login.EmailUnverified as err:
-        raise ApiError(status.HTTP_400_BAD_REQUEST, ErrorCode.SSO_EMAIL_UNVERIFIED, detail=str(err)) from err
-    except sso_login.EmailTaken as err:
-        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.SSO_EMAIL_TAKEN, detail=str(err)) from err
-    # Same as the password path: no access token on the request, but the provider's ID token
-    # has just established who this is, so the audited write gets an actor (ADR-170).
-    await auth_session.record_login(db, user)
-    return await issue_token_pair(redis, request, str(user.uuid))
 
 
 @router.post("/link/google", status_code=status.HTTP_200_OK,
@@ -128,31 +99,6 @@ async def link_google(
     except tuple(_ERROR_MAP) as err:
         raise _as_http(err) from err
     return {"detail": "Google account linked"}
-
-
-@router.post("/sso/line", response_model=TokenPair,
-             dependencies=[Depends(get_rate_limiter(10, 60))])
-async def sso_line(
-        body: IdTokenRequest,
-        request: Request,
-        db: AsyncSession = Depends(security.get_db),
-        redis=Depends(get_redis),
-        verifier: LineTokenVerifier = Depends(get_line_verifier),
-):
-    """Verify a LINE id_token; log in an existing line identity or create the account on first login."""
-    try:
-        lid = await verifier.verify(body.id_token)
-    except LineTokenVerificationError as err:
-        raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID,
-                       detail="Invalid LINE token") from err
-    try:
-        user = await sso_login.sign_in_with_line(db, lid)
-    except sso_login.SignInRace as err:
-        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.SSO_SIGNIN_RACE, detail=str(err)) from err
-    # Same as the password path: no access token on the request, but the provider's ID token
-    # has just established who this is, so the audited write gets an actor (ADR-170).
-    await auth_session.record_login(db, user)
-    return await issue_token_pair(redis, request, str(user.uuid))
 
 
 @router.post("/link/line", status_code=status.HTTP_200_OK,
