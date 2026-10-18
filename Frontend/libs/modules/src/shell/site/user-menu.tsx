@@ -81,6 +81,9 @@ export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
             bgcolor: color.brand.secondary.default,
             color: color.fg.onSecondary,
             border: `1px solid ${color.border.default}`,
+            // Fixed, not displayTextSize (16 on a phone): two initials have to fit on one line in
+            // the 32px circle. The ui Avatar's size too (`size * 0.36`).
+            fontSize: 12,
           }}
         >
           {/* No picture since the login moved to the backend (`/users/me` has none): the name's initials. */}
