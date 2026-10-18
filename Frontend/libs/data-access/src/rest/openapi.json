@@ -219,7 +219,7 @@
           "認證系統"
         ],
         "summary": "Refresh",
-        "description": "以 refresh token 換發新的 access token，並 rotate refresh token。\n\nThe identity is validated BEFORE rotating (ADR-096). `rotate()` burns the old refresh\ntoken the moment it runs, so refusing afterwards would leave the caller holding a dead\ntoken with no replacement — and their retry would read as a replay and revoke the whole\nsession. Reading the record first is side-effect free.\n\n**The identity comes from the session when the caller does not name one** (ADR-188).\n`body.identity` still wins, so a client that tracks it keeps deciding; but a client that\ndoes not — or forgets on one request — no longer gets silently returned to its platform\nidentity, which for a super_admin acting as a team member was a silent re-escalation\nevery time an access token expired.\n\nRotation is also where `users.last_activity_at` is recorded (ADR-093). Access tokens\nlive 15 minutes, so an active user rotates about that often — precise enough to answer\n\"has this account been used lately?\", which is all the admin console needs. It is\ndeliberately NOT updated per request: `users` is in AUDITED_TABLES, so that would append\none `audit_logs` row per request and bury the audit trail under activity noise.\n\n`SessionRepository` stays a pure Redis component — the DB write happens here, not there.\n\nThe write is deliberately best-effort. By the time `rotate()` returns it has already\nburned the old refresh token (`session_repository.py:78` claims the `refresh_used:` flag),\nso letting a DB error escape would 500 the request *after* the old token died: the client\nnever receives `new_refresh`, retries with the old one, and `rotate()` reads that as a\nreplay and revokes the entire session. A transient DB outage would sign the device out\npermanently. `last_activity_at` is observability — it is not worth a user's session.",
+        "description": "以 refresh token 換發新的 access token，並 rotate refresh token。\n\n`body.identity`, when given, names the identity the new token acts as; otherwise the\nsession's own carries forward (ADR-188). See `auth_session.refresh_session` for the rest.",
         "operationId": "refresh_api_v1_auth_refresh_post",
         "requestBody": {
           "content": {
@@ -261,7 +261,7 @@
           "認證系統"
         ],
         "summary": "Switch Identity",
-        "description": "Act as a different identity you already hold; returns a re-signed access token.\n\nDeliberately gated by nothing but being logged in. Requiring a capability here would let\na user downgrade into an identity that cannot switch back, locking themselves out of\ntheir own permissions (ADR-070).\n\nOnly re-signs the access token — the session is untouched and the refresh token is not\nrotated, because switching is not a credential event.\n\n**The session it re-signs from has to still exist** (ADR-183). This mints a fresh\naccess token with a fresh expiry, so without that check the endpoint is a token\nrefresher gated on nothing but holding an unexpired token: after `logout` or\n`logout-all`, `/auth/refresh` correctly refuses, but calling this before each expiry\nwould keep a revoked session alive indefinitely. Rate limited for the same reason —\nit mints credentials, and `login` and `refresh` both are.",
+        "description": "Act as a different identity you already hold; returns a re-signed access token.\n\nThe rules are in `auth_session.switch_identity`. Rate limited because it mints credentials,\nas `login` and `refresh` do (ADR-183).\n\n**Bearer only** (ADR-325). The answer carries the token in its body, which is exactly what\nthe browser's cookie keeps away from the page's scripts, so a request signed in by the\ncookie is refused. A browser switches through `POST /auth/session/identity`.",
         "operationId": "switch_identity_api_v1_auth_switch_identity_post",
         "security": [
           {
@@ -346,7 +346,7 @@
           "認證系統"
         ],
         "summary": "Logout All",
-        "description": "Log out EVERY device: revoke all of the user's sessions.\n\nIdempotent for the same reason `logout` is, but it cannot simply revoke and let the\nno-op handle it: unlike `logout`, this acts on sessions OTHER than the caller's. A token\nwhose own session has already been revoked must not reach them (ADR-180) — otherwise an\nintruder holding a stolen-then-revoked token can keep calling this to kick the victim out\nof every session they create afterwards, for the rest of the token's 15 minutes. So the\ncaller's own session has to be live for this to revoke anything; when it is not, the\nanswer is still 204, because \"every device is signed out\" is what the caller asked for\nand this token's own device already is (ADR-190).",
+        "description": "Log out EVERY device: revoke all of the user's sessions.\n\nIdempotent for the same reason `logout` is, but it cannot simply revoke and let the\nno-op handle it: unlike `logout`, this acts on sessions OTHER than the caller's. A token\nwhose own session has already been revoked must not reach them (ADR-180) — otherwise an\nintruder holding a stolen-then-revoked token can keep calling this to kick the victim out\nof every session they create afterwards, for the rest of the token's 15 minutes. So the\ncaller's own session has to be live for this to revoke anything; when it is not, the\nanswer is still 204, because \"every device is signed out\" is what the caller asked for\nand this token's own device already is (ADR-190).\n\nA browser signed in by cookie has them cleared, on both 204s: either way its session is over.",
         "operationId": "logout_all_api_v1_auth_logout_all_post",
         "responses": {
           "204": {
@@ -360,19 +360,19 @@
         ]
       }
     },
-    "/api/v1/auth/sso/google": {
+    "/api/v1/auth/session": {
       "post": {
         "tags": [
           "認證系統"
         ],
-        "summary": "Sso Google",
-        "description": "Verify a Google id_token; log in an existing google identity or create the account on first login.",
-        "operationId": "sso_google_api_v1_auth_sso_google_post",
+        "summary": "Sign In",
+        "description": "Sign the browser in with an email or phone number and a password.\n\nA wrong password clears nothing: whoever is already signed in on this browser stays signed in.",
+        "operationId": "sign_in_api_v1_auth_session_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GoogleSsoRequest"
+                "$ref": "#/components/schemas/SessionSignInRequest"
               }
             }
           },
@@ -384,10 +384,297 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TokenPair"
+                  "$ref": "#/components/schemas/SignedInResponse"
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "認證系統"
+        ],
+        "summary": "Sign Out",
+        "description": "Sign this browser out: end its session and clear both cookies.\n\nAlways 204, like `/auth/logout` (ADR-190): a browser with no session, or one already ended, is\nalready where it asked to be. The one exception is a session store that cannot be reached: then\nthe session may still be running, so the answer is 503 and the cookies stay.",
+        "operationId": "sign_out_api_v1_auth_session_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/session/refresh": {
+      "post": {
+        "tags": [
+          "認證系統"
+        ],
+        "summary": "Refresh Browser Session",
+        "description": "Exchange the refresh cookie for a new pair of cookies; the session keeps its identity (ADR-188).\n\nA replay within the grace period gets the same new refresh token (ADR-330). Any failure is a\nsign-out, so the error handler clears both cookies: the request is marked as signing in by cookie.",
+        "operationId": "refresh_browser_session_api_v1_auth_session_refresh_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/session/identity": {
+      "post": {
+        "tags": [
+          "認證系統"
+        ],
+        "summary": "Switch Browser Identity",
+        "description": "Act as another identity the account holds; the new access token goes into the cookie.\n\nThe browser's `/auth/switch-identity`, under the same rules (`auth_session.switch_identity`). The\naccess cookie it replaces is stale from now on (ADR-195), and a refresh carries the new identity\nforward (ADR-188). A cookie-authenticated write, so it needs one of our origins (ADR-327).\n\n**Cookie only** (ADR-325). A Bearer client would get its new token in a cookie it does not read,\nand be left holding one that acts as the identity it switched away from; it is refused, and switches\nthrough `/auth/switch-identity`.",
+        "operationId": "switch_browser_identity_api_v1_auth_session_identity_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-WG-Realm",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Wg-Realm"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchIdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionIdentityResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/session/verify": {
+      "post": {
+        "tags": [
+          "認證系統"
+        ],
+        "summary": "Verify And Sign In",
+        "description": "Finish a registration with its 6-digit code, and sign the new account in.",
+        "operationId": "verify_and_sign_in_api_v1_auth_session_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedInResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/oauth/{provider}/start": {
+      "get": {
+        "tags": [
+          "認證系統"
+        ],
+        "summary": "Start Oauth",
+        "description": "Send the browser to the provider's sign-in page, bound to this browser, this sign-in and this server.\n\n`app` (`site` or `admin`) is the app to come back to, at `return_to`, a path on it. The request must\ncome from one of our pages (ADR-327), which for a navigation means its `Referer`. A start that is\nrefused leaves `{p}_oauth` alone: a link from another site must not end a sign-in in another tab.",
+        "operationId": "start_oauth_api_v1_auth_oauth__provider__start_get",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "app",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App"
+            }
+          },
+          {
+            "name": "return_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return To"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/oauth/{provider}/callback": {
+      "get": {
+        "tags": [
+          "認證系統"
+        ],
+        "summary": "Oauth Callback",
+        "description": "Finish a sign-in: check it is this browser's, exchange the code, check the token, sign in.\n\nThe provider's redirect, so no `Origin` to check: the state does that job, and it is checked first.\nIt must match the browser's `{p}_oauth` cookie and still be on record, and is spent on the spot.",
+        "operationId": "oauth_callback_api_v1_auth_oauth__provider__callback_get",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -449,48 +736,6 @@
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/sso/line": {
-      "post": {
-        "tags": [
-          "認證系統"
-        ],
-        "summary": "Sso Line",
-        "description": "Verify a LINE id_token; log in an existing line identity or create the account on first login.",
-        "operationId": "sso_line_api_v1_auth_sso_line_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/IdTokenRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TokenPair"
-                }
               }
             }
           },
@@ -6579,21 +6824,6 @@
         "title": "ForgotPasswordRequest",
         "description": "Body to request a logged-out password reset code."
       },
-      "GoogleSsoRequest": {
-        "properties": {
-          "id_token": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Id Token"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id_token"
-        ],
-        "title": "GoogleSsoRequest",
-        "description": "Body carrying a Google id_token for SSO login / first-login create."
-      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -6741,7 +6971,7 @@
           "id_token"
         ],
         "title": "IdTokenRequest",
-        "description": "Body carrying a provider id_token (LINE SSO / link).\n\n`step_up` is ignored on the SSO login path and required on the link path (ADR-217)."
+        "description": "Body carrying a LINE id_token to link to the current account, plus its proof.\n\nSame contract as `LinkGoogleRequest` (ADR-217)."
       },
       "IdentityOption": {
         "properties": {
@@ -7772,6 +8002,41 @@
         "title": "Scope",
         "description": "Data-boundary scope. Ordering (narrowest → widest) is defined by WIDTH below."
       },
+      "SessionIdentityResponse": {
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/IdentityView"
+          }
+        },
+        "type": "object",
+        "required": [
+          "identity"
+        ],
+        "title": "SessionIdentityResponse",
+        "description": "Answer to the browser's identity switch: the identity now in effect (ADR-325).\n\nThe new access token went into the cookie, so there is none here."
+      },
+      "SessionSignInRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 320,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 6,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "SessionSignInRequest",
+        "description": "Body for `POST /auth/session`: the credentials `/auth/login` takes as a form (ADR-325).\n\n320 is the longest email the normaliser accepts (#75), so a longer username is refused before\nanything reads it."
+      },
       "SetGrantRequest": {
         "properties": {
           "scope": {
@@ -7816,6 +8081,49 @@
         ],
         "title": "SetPasswordRequest",
         "description": "Body for SSO-only users to set a first password (no old password).\n\n`step_up` carries the code delivered to the account's own contact (ADR-215). It is\noptional in the schema because the first call is expected to arrive without one — that\ncall is what sends the code and answers 422 asking for it back, the same shape\n`DeleteContactRequest` uses."
+      },
+      "SignedInResponse": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/SignedInUser"
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentityView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "title": "SignedInResponse",
+        "description": "Answer to the browser's sign-in and registration: who, and as which identity (ADR-325).\n\nNo token: those went into `HttpOnly` cookies, where a script on the page cannot read them."
+      },
+      "SignedInUser": {
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "uuid",
+          "name"
+        ],
+        "title": "SignedInUser",
+        "description": "The account a browser just signed in as."
       },
       "StationYMetric": {
         "type": "string",
@@ -8156,7 +8464,7 @@
                 "type": "null"
               }
             ],
-            "description": "這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；沒有時為 null"
+            "description": "這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；帶 `X-WG-Realm: admin` 的請求是後台身分，token 的身分是 `user` 時改用第一個後台身分（ADR-329）；沒有時為 null"
           },
           "contacts": {
             "items": {

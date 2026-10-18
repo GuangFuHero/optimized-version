@@ -99,17 +99,3 @@ export function resendContactAsync(
     .POST('/api/v1/auth/contacts/resend', { body: payload })
     .then(() => undefined);
 }
-
-export function googleSsoAsync(
-  payload: components['schemas']['IdTokenRequest'],
-) {
-  return authApiClient
-    .POST('/api/v1/auth/sso/google', { body: payload })
-    .then(responseData);
-}
-
-export function lineSsoAsync(payload: components['schemas']['IdTokenRequest']) {
-  return authApiClient
-    .POST('/api/v1/auth/sso/line', { body: payload })
-    .then(responseData);
-}
