@@ -10,9 +10,10 @@ from uuid import UUID
 import pytest
 from sqlalchemy import select, update
 
+from app.core.permissions import Perm
 from app.models.announcement import Announcement
 from app.models.notification import Notification
-from tests.test_graphql.conftest import _create_user_with_role, auth_header
+from tests.test_graphql.conftest import _create_user_with_grants, _create_user_with_role, auth_header
 from tests.test_graphql.conftest import test_db as _test_db
 
 CREATE = """
@@ -313,3 +314,23 @@ async def test_unknown_placement_is_kept_off_the_public_site(
     notified = await _notified(a)
     assert "staff only" not in notified[staff_uuid]
     assert user_uuid not in notified
+
+
+@pytest.mark.asyncio
+async def test_edit_alone_cannot_put_an_announcement_live(client, redis, content_admin_auth):
+    """Without announcement.publish an editor can draft and edit, but can't activate or move a live one."""
+    _, admin_token = content_admin_auth
+    _, editor = await _create_user_with_grants(redis, ((Perm.ANN_VIEW_ADMIN, "all"), (Perm.ANN_EDIT, "all")))
+    draft = await _post(client, CREATE_PLACED, {"content": "staff", "placement": "admin_page"}, editor)
+    assert "errors" not in draft, draft
+    d = draft["data"]["createAnnouncement"]["uuid"]
+    assert (await _post(client, SET_ACTIVE, {"uuid": d, "active": True}, editor)).get("errors")
+    moved_draft = await _post(client, UPDATE, {"uuid": d, "content": "staff", "placement": "all"}, editor)
+    assert "errors" not in moved_draft, moved_draft
+
+    live = await _create_placed(client, admin_token, "staff only", "admin_page")
+    edited = await _post(client, UPDATE, {"uuid": live, "content": "staff only!"}, editor)
+    assert "errors" not in edited, edited
+    widened = await _post(client, UPDATE, {"uuid": live, "content": "x", "placement": "public_page"}, editor)
+    assert widened.get("errors")
+    assert await _listed(client, {live}, LIST_DEFAULT) == set()

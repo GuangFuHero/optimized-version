@@ -222,7 +222,8 @@ briefing_templates                    briefings
   `pre_departure.publish`. The template is the authoring surface; only a *published* briefing
   is the thing volunteers read.
 - **BR-003**: Creating a template requires `pre_departure.publish`; generating and editing a
-  draft briefing require `pre_departure.edit`; publishing one requires `pre_departure.publish`;
+  draft briefing require `pre_departure.edit` (plus `pre_departure.publish` when seeding from a
+  template, since that copies its content); publishing one requires `pre_departure.publish`;
   deleting either kind requires `pre_departure.delete`. Deletes are soft (`delete_at`).
 - **BR-004**: `generateBriefing` copies the template's `content`, `tags` and `state` into a new
   draft briefing. A `templateUuid` that is unknown or soft-deleted raises `Briefing template not

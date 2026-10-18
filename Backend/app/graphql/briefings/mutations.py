@@ -82,8 +82,14 @@ class BriefingMutation:
     async def generate_briefing(
         self, info: strawberry.types.Info, input: GenerateBriefingInput
     ) -> BriefingType:
-        """Generate a draft briefing, optionally seeded from a template. Requires pre_departure.edit."""
+        """Generate a draft briefing, optionally seeded from a template. Requires pre_departure.edit.
+
+        Seeding from a template copies its content, so that also requires pre_departure.publish, as
+        reading a template does.
+        """
         await check_permission(info, Perm.PREDEP_EDIT)
+        if input.template_uuid is not None:
+            await check_permission(info, Perm.PREDEP_PUBLISH)
         b = await briefing_repository.generate_briefing(
             info.context["db"],
             created_by=str(info.context["user"].uuid),

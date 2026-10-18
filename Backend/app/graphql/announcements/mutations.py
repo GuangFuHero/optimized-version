@@ -41,7 +41,11 @@ class AnnouncementMutation:
     async def update_announcement(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateAnnouncementInput
     ) -> AnnouncementType:
-        """Edit an announcement's content and, optionally, its placement. Requires announcement.edit."""
+        """Edit an announcement's content and, optionally, its placement. Requires announcement.edit.
+
+        Moving a live announcement to another placement shows it on a page it wasn't on, so that also
+        requires announcement.publish.
+        """
         await check_permission(info, Perm.ANN_EDIT)
         db = info.context["db"]
         a = await announcement_repository.get_by_uuid_active(db, uuid)
@@ -49,6 +53,8 @@ class AnnouncementMutation:
             raise ValueError("Announcement not found")
         changes = {"content": input.content, "updated_by": str(info.context["user"].uuid)}
         if input.placement is not None:
+            if a.active and input.placement.value != a.placement:
+                await check_permission(info, Perm.ANN_PUBLISH)
             changes["placement"] = input.placement.value
         a = await announcement_repository.update(db, db_obj=a, obj_in=changes)
         return AnnouncementType.from_model(a)

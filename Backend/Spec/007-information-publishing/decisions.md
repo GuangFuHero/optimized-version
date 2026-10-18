@@ -284,6 +284,8 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
   `announcement.edit`。已上線的公告仍是原地編輯、立即生效。
 - **權限**：兩個模組都改成「寫草稿要 `.edit`、上線要 `.publish`」：`generateBriefing`、`createAnnouncement` 從
   `.publish` 改為 `.edit`；`setAnnouncementActive(true)` 從 `.edit` 改為 `.publish`，`false` 維持 `.edit`。
+  從 template 產生草稿會複製 template 內容，所以另外要 `pre_departure.publish`（與讀 template 相同）；
+  改動已上線公告的 `placement` 會讓它出現在原本不在的頁面，所以另外要 `announcement.publish`。
 - **作者資訊**：`creator`／`updater`／`publisher` 回傳 `{ uuid, name }`，只有暱稱、沒有聯絡方式，名字用既有的
   `user_name_by_uuid` DataLoader 一次批次查完。呼叫端沒有該模組的 `.edit` 就回 `null`，不報錯。
 - migration 把既有的列都當成已發布：`published_at = created_at`，`published_by`／`updated_by = created_by`。
