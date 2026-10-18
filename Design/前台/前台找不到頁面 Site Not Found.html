@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>找不到這一頁 · 島嶼守望 Wan Guard</title>
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/primitives.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/semantic.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/typography.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/motion.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/tokens/base.css">
+<link rel="stylesheet" href="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/styles.css">
+<link rel="stylesheet" href="js/site/site.css?v=20260919a">
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
+<script src="_ds/wan-guard-design-system-9c8f68e7-f87a-466d-9430-b41c578b2001/_ds_bundle.js"></script>
+
+<script src="js/shared/wg-bridge.js?v=20261006a"></script>
+<script src="js/site/site-route.js?v=20260919a"></script>
+<!-- site-controls.jsx 提供 WGIcon 與 useSiteRouteState，必須排在其他 jsx 之前 -->
+<script type="text/babel" src="js/site/site-controls.jsx?v=20260919a" data-presets="react"></script>
+<!-- 全站橫幅（EA-FEAT-001） -->
+<script src="js/admin/announce/an-data.js?v=20260919a"></script>
+<script type="text/babel" src="js/admin/announce/an-banner.jsx?v=20260919a" data-presets="react"></script>
+<!-- 2026-09-27：每一頁的「？」頁面說明 -->
+<script type="text/babel" src="js/shared/wg-help.jsx?v=20260927a" data-presets="react"></script>
+<script type="text/babel" src="js/site/site-shell.jsx?v=20260919a" data-presets="react"></script>
+<!-- 登入入口的落點（2026-09-21）。UI 在 登入 Login.html，這一支只有導覽與身份寫入 -->
+<script src="js/site/site-auth.js?v=20260919a"></script>
+<script type="text/babel" src="js/site/site-notify.jsx?v=20260919a" data-presets="react"></script>
+<!-- 行前資訊（VB-FEAT-001）：與後台載入同一支資料層與同一支呈現元件 -->
+<script type="text/babel" src="js/shared/wg-notfound.jsx?v=20261018b" data-presets="react"></script>
+
+<script type="text/babel" data-presets="react">
+/* 前台的「找不到這一頁」（2026-10-18）。畫面本體在 js/shared/wg-notfound.jsx，前後台共用。
+ * 正式版：前台路由對不到任何頁面時顯示這一頁（例：/mapp、舊的分享連結）。
+ * 🔒 外殼照常顯示（側欄、頂欄、緊急公告、登入狀態），下一步只給前台三個入口。
+ * ⚠️ 不處理「任務單或站點已被刪除」—— 那是地圖／列表裡的內容狀態，不是這一頁。 */
+function SiteNotFoundPage() {
+  const [session] = useSitePersona();
+  const state = { dataType: 'station', subDataTypes: [] };
+  const links = [
+    { key: 'map',   label: '救災地圖',     sub: '看附近的任務與資源站點', icon: 'Map',        href: encodeURI('前台地圖 Site Map.html') },
+    { key: 'list',  label: '救災列表',     sub: '找需要人手的任務',       icon: 'LayoutList', href: encodeURI('前台列表 Site List.html') },
+    { key: 'brief', label: '志工行前資訊', sub: '出發前要準備什麼',       icon: 'BookOpen',   href: encodeURI('前台行前資訊 Site Briefing.html') },
+  ];
+  return (
+    <SiteShell module="notfound" state={state} search=""
+      onSearchChange={(value) => {
+        /* 同 /brief：這一頁沒有東西可搜，帶去列表搜，不要讓輸入框看起來壞掉。 */
+        const v = (value || '').trim();
+        if (v) window.location.href = encodeURI('前台列表 Site List.html') + '#/list/station?search=' + encodeURIComponent(v);
+      }}
+      isAuthenticated={session.isAuthenticated} platformRole={session.platformRole} userName={session.userName}
+      onSignIn={() => window.SiteAuth.goSignIn()}
+      onSignOut={() => window.SiteAuth.signOutHere()}>
+      <WGNotFound realm="site" lead="連結可能打錯了，或這個頁面已經不在了。可以從這裡繼續：" links={links} />
+    </SiteShell>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<SiteNotFoundPage />);
+</script>
+</body>
+</html>
