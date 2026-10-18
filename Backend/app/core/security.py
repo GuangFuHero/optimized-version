@@ -381,12 +381,12 @@ async def resolve_scope(actor: User, perm: Perm, db: AsyncSession, cache: dict |
         if cache is not None:
             cache[actor.uuid] = grants
     scope = grants.get(perm.value, Scope.NONE)
-    if scope == Scope.TEAM and perm in GOV_TEAM_WIDENED_PERMS and await acts_for_gov_team(actor, db, cache):
+    if scope == Scope.TEAM and perm in GOV_TEAM_WIDENED_PERMS and await _acts_for_gov_team(actor, db, cache):
         return Scope.ALL
     return scope
 
 
-async def acts_for_gov_team(actor: User, db: AsyncSession, cache: dict | None = None) -> bool:
+async def _acts_for_gov_team(actor: User, db: AsyncSession, cache: dict | None = None) -> bool:
     """Whether `actor`'s active identity speaks for a live, active gov team (ADR-285).
 
     A suspended or inactive gov team does not widen: assign_station will not hand such a team
