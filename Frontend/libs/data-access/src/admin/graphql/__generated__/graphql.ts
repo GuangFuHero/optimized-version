@@ -301,6 +301,8 @@ export type CreateStationInput = {
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** Data origin: 'user' (default) or 'official' */
   source?: Scalars['String']['input'];
+  /** Optional public line on what the station is short of */
+  supplyStatus?: InputMaybe<Scalars['String']['input']>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: InputMaybe<Scalars['String']['input']>;
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
@@ -1249,7 +1251,7 @@ export type StationType = {
   __typename?: 'StationType';
   /** The team that runs this station, or null when unassigned (ADR-285). Public: which organisation runs a station is not protected. Only the team's uuid, name and type show — never its members. */
   assignedTeam?: Maybe<AssignedTeamType>;
-  /** Internal admin comment, not shown to the public */
+  /** Internal back-office note on this station — null unless the caller holds station.view_pii here (ADR-332) */
   comment?: Maybe<Scalars['String']['output']>;
   /** Station contact email — masked unless the caller holds station.view_pii here */
   contactEmail?: Maybe<Scalars['String']['output']>;
@@ -1291,6 +1293,10 @@ export type StationType = {
   suggestedFields: Array<SuggestedFieldType>;
   /** Merges applied to this station, newest first; empty without station.review over this station */
   suggestionMerges: Array<StationSuggestionMergeType>;
+  /** What the station is short of, in free text, e.g. '飲用水見底、尿布尚有存量'. Public (ADR-333) */
+  supplyStatus?: Maybe<Scalars['String']['output']>;
+  /** When supply_status last changed; null while it has never been set */
+  supplyStatusUpdatedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: Maybe<Scalars['String']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1656,6 +1662,7 @@ export type UpdateStationInput = {
   opHour?: InputMaybe<Scalars['String']['input']>;
   /** Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed' */
   operationalStatus?: InputMaybe<StationOperationalStatus>;
+  supplyStatus?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<Scalars['String']['input']>;
   /** Updated visibility: 'public', 'restricted', or 'internal' */
   visibility?: InputMaybe<Visibility>;
