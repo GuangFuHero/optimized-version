@@ -15,7 +15,7 @@ from app.core.config import Settings, settings
 from tests.cookies import cookies_set_by
 
 # Staging's attributes, which every one of its sign-in cookies is both set and cleared with.
-STAGING = {"domain": ".staging.wan-guard.com", "secure": True, "httponly": True, "samesite": "lax"}
+STAGING = {"domain": ".wan-guard.com", "secure": True, "httponly": True, "samesite": "lax"}
 # A session lifetime other than the default, so the tests show Max-Age follows the setting.
 SESSION_DAYS = 7
 
@@ -24,7 +24,7 @@ SESSION_DAYS = 7
 def staging(monkeypatch):
     """Staging's settings: its own prefix, the parent domain of both of its hosts, HTTPS."""
     monkeypatch.setattr(settings, "AUTH_COOKIE_PREFIX", "wgstg")
-    monkeypatch.setattr(settings, "AUTH_COOKIE_DOMAIN", ".staging.wan-guard.com")
+    monkeypatch.setattr(settings, "AUTH_COOKIE_DOMAIN", ".wan-guard.com")
     monkeypatch.setattr(settings, "AUTH_COOKIE_SECURE", True)
     monkeypatch.setattr(settings, "REFRESH_TOKEN_EXPIRE_DAYS", SESSION_DAYS)
 
@@ -100,7 +100,7 @@ def test_an_oauth_sign_in_is_bound_to_the_browser_only_for_the_round_trip(stagin
 
 
 def test_only_this_environments_cookies_are_read(staging):
-    """Production's cookies reach staging's hosts too (`.wan-guard.com` covers them); they are ignored."""
+    """Production's cookies reach staging's hosts too, both being on `.wan-guard.com`; they are ignored."""
     request = Request(
         {
             "type": "http",
@@ -124,8 +124,8 @@ def test_an_empty_cookie_reads_as_none(staging):
     ("configured", "expected"),
     [
         (
-            "https://staging.wan-guard.com,https://admin.staging.wan-guard.com",
-            {"https://staging.wan-guard.com", "https://admin.staging.wan-guard.com"},
+            "https://staging.wan-guard.com,https://admin-staging.wan-guard.com",
+            {"https://staging.wan-guard.com", "https://admin-staging.wan-guard.com"},
         ),
         (
             " https://Admin.Wan-Guard.com/ , ,https://wan-guard.com ",

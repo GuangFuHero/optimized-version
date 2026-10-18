@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     # The default is the developer's, never production's: an environment that forgets to set it cannot end
     # up answering to production's cookies.
     AUTH_COOKIE_PREFIX: str = os.getenv("AUTH_COOKIE_PREFIX", "wgdev")
-    # The parent domain of the site and the back office, so one sign-in reaches both
-    # (`.staging.wan-guard.com`). Empty sends no Domain: the cookie stays on the one host, as on localhost.
+    # The parent domain of the site and the back office, so one sign-in reaches both (`.wan-guard.com`,
+    # on staging too). Empty sends no Domain: the cookie stays on the one host, as on localhost.
     AUTH_COOKIE_DOMAIN: str = os.getenv("AUTH_COOKIE_DOMAIN", "")
     # Deliberately not derived from ENV, which counts as production when unset; a developer serving over
     # plain http sets it to false.

@@ -66,7 +66,7 @@ gcloud secrets versions access latest --secret=staging-backend-postgres-password
 | Published ports | Backend `:8000`; Postgres on **loopback only** (`127.0.0.1:5432`, for SSH-tunnel inspection); Redis internal-only |
 | GCP firewall | Only 22/SSH open. **8000 is NOT open** — access via SSH tunnel until a firewall rule (or Caddy/HTTPS) is added for the frontend |
 | External IP | Static `34.80.0.121` (reserved as `wanguard-prod-external-ip`). 簡訊王 only accepts API calls from this registered IP — releasing it breaks SMS (`statuscode=k`). Still connect via `gcloud compute ssh` |
-| Secrets | GCP Secret Manager: `staging-backend-{jwt-signing-key,postgres-password,smtp2go-api-key,kotsms-username,kotsms-password}`, `staging-frontend-{nextauth-secret,google-client-secret,line-client-secret}`, `staging-cloudflared-tunnel-token` |
+| Secrets | GCP Secret Manager: `staging-backend-{jwt-signing-key,postgres-password,smtp2go-api-key,kotsms-username,kotsms-password,google-client-secret,line-channel-secret}`, `staging-frontend-{nextauth-secret,google-client-secret,line-client-secret}`, `staging-cloudflared-tunnel-token`. The two `staging-frontend-*` OAuth secrets hold the same values as the `staging-backend-*` pair and are deleted once the frontend no longer uses NextAuth (see [Sign-in](#sign-in-cookie-session-and-oauth)) |
 | SMS | 簡訊王 (KotSMS), `SMS_PROVIDER=kotsms` written by `gen_env`. Messages are signed 島嶼守望, the 實名制 identity the account is approved for; a mismatch is dropped by the carrier while the API still answers `statuscode=1`. **Takes two deploys to switch on**: a running `deploy.sh` keeps the `gen_env` it parsed before checkout, so the first deploy that ships the KotSMS lines still writes the old `.env` (SMS stays on `console`); the next deploy writes them |
 | Backups | `gs://wanguard-250923-db-backups` |
 | Swap | 2 GB `/swapfile`, `vm.swappiness=10` — prevents the OOM killer hitting Postgres during image builds |
@@ -103,6 +103,94 @@ Design rules baked into the script:
 - Concurrency: a flock on `/var/lock/disaster-deploy.lock` makes a second concurrent deploy fail
   immediately with "another deploy is already in progress". The lock is released when the process
   exits (including crashes) — there are no stale-lock cleanup steps to run.
+
+---
+
+## Sign-in (cookie session and OAuth)
+
+The backend signs browsers in itself (`Spec/023-backend-session-login`, ADR-325 to ADR-331). It sets the
+session cookies on the parent domain of the site and the back office, so one sign-in covers both, and it runs
+the Google and LINE sign-in with the client secrets. The browser never talks to the backend directly: it goes
+through the Next app's proxy (`/api/v1/*`), so the provider calls back to the site's host.
+
+### Settings
+
+Staging's values are in `scripts/deploy-config.staging.env`, which `gen_env` appends to both `.env` and
+`.env.frontend`: the frontend reads `AUTH_COOKIE_PREFIX` too. The OAuth secrets are written to the backend's
+`.env` only. Production does not exist yet; its column is the plan.
+
+| Setting | Production | Staging | Local |
+|---------|------------|---------|-------|
+| `AUTH_COOKIE_PREFIX` | `wg` | `wgstg` | `wgdev` (default) |
+| `AUTH_COOKIE_DOMAIN` | `.wan-guard.com` | `.wan-guard.com` | empty (default): the cookie stays on `localhost` |
+| `AUTH_COOKIE_SECURE` | `true` | `true` | `false`, set in `docker-compose.yml`; a browser drops a `Secure` cookie over http |
+| `AUTH_ALLOWED_ORIGINS` | `https://wan-guard.com,https://admin.wan-guard.com` | `https://staging.wan-guard.com,https://admin-staging.wan-guard.com` | `http://localhost:3000,http://localhost:3001` (default) |
+| `SITE_APP_URL` | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000` (default) |
+| `ADMIN_APP_URL` | `https://admin.wan-guard.com` | `https://admin-staging.wan-guard.com` | `http://localhost:3001` (default) |
+| `OAUTH_REDIRECT_BASE_URL` | `https://wan-guard.com` | `https://staging.wan-guard.com` | `http://localhost:3000` (default) |
+| `GOOGLE_CLIENT_SECRET`, `LINE_CHANNEL_SECRET` | Secret Manager | `staging-backend-google-client-secret`, `staging-backend-line-channel-secret`, written by `gen_env` | `Backend/.env` |
+| `REFRESH_REUSE_GRACE_SECONDS` | `30` (default) | `30` (default) | `30` (default) |
+
+- **Why `admin-staging` and not `admin.staging`**: Cloudflare's free certificate covers `wan-guard.com` and
+  one level of subdomain below it. `admin.staging.wan-guard.com` is two levels deep and would get no
+  certificate.
+- **What that costs**: staging's cookies now sit on `.wan-guard.com` like production's, so each
+  environment's cookies reach the other's hosts. The prefixes keep them apart: a backend reads only its own
+  prefix, and each has its own signing key. The frontend servers still receive the other environment's
+  cookies (ADR-326). Separating the two completely takes a separate registrable domain for staging, to be
+  decided before production launches.
+- A provider whose secret is empty refuses to start a sign-in: the browser lands on
+  `/login?error=oauth_request_invalid`.
+- An environment that forgets `AUTH_ALLOWED_ORIGINS` refuses every cookie-authenticated write with 403
+  `origin_not_allowed` (ADR-327).
+
+### Cloudflare Tunnel hostnames
+
+| Hostname | Service |
+|----------|---------|
+| `staging.wan-guard.com` (was `demo.wan-guard.com`) | `http://frontend:3000` |
+| `admin-staging.wan-guard.com` | the back office app |
+
+`docker-compose.staging.yml` does not run the back office yet: `Frontend/Dockerfile` builds only the site
+(`demo`). The back-office hostname has nothing to point at until a service for it is added.
+
+`APP_BASE_URL`, the base of the links in emails and SMS, moved to `https://staging.wan-guard.com` too.
+
+### Redirect URIs to register
+
+Register these before the first deploy, or that provider's sign-in fails at the provider with a
+redirect URI mismatch:
+
+- Google Cloud console, OAuth client `717563375943-pibc1j3t…` → Authorized redirect URIs:
+  - `https://staging.wan-guard.com/api/v1/auth/oauth/google/callback`
+  - `http://localhost:3000/api/v1/auth/oauth/google/callback`
+- LINE Developers, channel `2010287145` → LINE Login → Callback URL:
+  - `https://staging.wan-guard.com/api/v1/auth/oauth/line/callback`
+  - `http://localhost:3000/api/v1/auth/oauth/line/callback`. Whether LINE accepts an `http://localhost` URL
+    has not been checked.
+
+Production adds the same paths on `https://wan-guard.com`. The old NextAuth callback URLs can be removed once
+the frontend no longer uses NextAuth.
+
+### Deploying the change that moved sign-in to the backend
+
+The backend, site and back-office changes are merged together and deployed at once. The backend removed
+`/auth/sso/google` and `/auth/sso/line`, so a frontend still on NextAuth cannot sign in with Google or LINE.
+
+1. Before deploying, create `staging-backend-google-client-secret` and `staging-backend-line-channel-secret`
+   (same values as the `staging-frontend-*` pair) and their IAM bindings (see
+   [One-time setup](#one-time-setup-already-done-2026-06-12--recorded-for-reproducibility)). The second run
+   below fails at step 4 without them.
+2. Point the Tunnel hostnames and register the redirect URIs above.
+3. **Run `deploy.sh` twice in a row.** This change edits `gen_env`, and a running `deploy.sh` keeps the
+   `gen_env` it parsed before checkout. The first run therefore writes a `.env` without the OAuth secrets:
+   Google and LINE sign-in answer `oauth_request_invalid` and password sign-in works. The second run writes
+   them. The KotSMS switch behaved the same way (see Environment facts).
+4. Everyone is signed out once: the frontend stops reading NextAuth's cookie. Tell the testers on Discord
+   first.
+5. No migration and no seed change. Redis gains `oauth_state:*` keys, which expire after 10 minutes.
+6. To roll back, deploy the previous ref. Sessions started under the new sign-in stop working, and everyone
+   signs in again.
 
 ---
 
@@ -231,6 +319,9 @@ printf '%s' '<new-value>' | gcloud secrets versions add staging-backend-smtp2go-
 # (rotating staging-backend-jwt-signing-key invalidates ALL existing logins — users just sign in again)
 # (a KotSMS password change in the 簡訊王 console takes effect at once, so every SMS fails from then
 #  until the deploy that carries the new secret version — add the version and deploy right away)
+# (a Google or LINE client secret reissued in its console: add the new version to
+#  staging-backend-google-client-secret or staging-backend-line-channel-secret, and to its
+#  staging-frontend-* twin while that still exists, then deploy)
 
 # DB password: the postgres volume is already initialized, so changing the secret alone does NOT
 # change the actual DB password. Do both, in this order:
@@ -255,11 +346,15 @@ printf '%s' '<smtp2go-key>' | gcloud secrets create staging-backend-smtp2go-api-
 # 簡訊王 member login (the API authenticates with it); also register the static IP above in its console
 printf '%s' '<kotsms-username>' | gcloud secrets create staging-backend-kotsms-username --data-file=-
 printf '%s' '<kotsms-password>' | gcloud secrets create staging-backend-kotsms-password --data-file=-
+# Google and LINE sign-in (ADR-331): the OAuth client's secret, and the LINE Login channel's secret
+printf '%s' '<google-secret>' | gcloud secrets create staging-backend-google-client-secret --data-file=-
+printf '%s' '<line-secret>' | gcloud secrets create staging-backend-line-channel-secret --data-file=-
 
 # Grant the VM's service account read access (least privilege: one binding per secret). The
 # staging-frontend-* and staging-cloudflared-tunnel-token secrets need the same binding.
 for s in staging-backend-postgres-password staging-backend-jwt-signing-key \
-         staging-backend-smtp2go-api-key staging-backend-kotsms-username staging-backend-kotsms-password; do
+         staging-backend-smtp2go-api-key staging-backend-kotsms-username staging-backend-kotsms-password \
+         staging-backend-google-client-secret staging-backend-line-channel-secret; do
   gcloud secrets add-iam-policy-binding $s \
     --member="serviceAccount:<vm-service-account-email>" \
     --role="roles/secretmanager.secretAccessor"

@@ -98,10 +98,13 @@ moves to the browser endpoint.
 
 ### ADR-326 The browser keeps the session in prefixed cookies on its environment's parent domain
 
-> **Status: ACCEPTED (2026-10-17).** The domains and the cookies were chosen by the product owner on
+> **Status: ACCEPTED (2026-10-18).** The domains and the cookies were chosen by the product owner on
 > 2026-10-16. The first layout scoped the refresh cookie to `/api/v1/auth/session` and let the access cookie
 > expire with its JWT after 15 minutes; it was changed to point 4 below the same day, once the frontend design
-> showed it could not work.
+> showed it could not work. Staging's hosts were changed on 2026-10-18: the back office was to be
+> `admin.staging.wan-guard.com`, with staging's cookies on `.staging.wan-guard.com`, but Cloudflare's free
+> certificate covers only one level of subdomain. The back office moved to `admin-staging.wan-guard.com`, and
+> staging's cookies to `.wan-guard.com`.
 
 **In plain words**: after signing in, the browser holds two cookies the backend set — the short-lived pass and
 the means to renew it. Page scripts cannot read them, and every page of both the site and the back office
@@ -111,7 +114,7 @@ staging and a developer's machine never mix theirs up.
 **Context**: Until now the frontend's NextAuth cookie held the backend's tokens and the frontend's server sent
 them on as Bearer. With sign-in moving to the backend (ADR-325), the backend sets the cookies itself, and they
 have to reach two sibling hosts: the site and the back office (`staging.wan-guard.com` and
-`admin.staging.wan-guard.com` on staging, `wan-guard.com` and `admin.wan-guard.com` in production).
+`admin-staging.wan-guard.com` on staging, `wan-guard.com` and `admin.wan-guard.com` in production).
 
 **Decision**:
 
@@ -126,8 +129,8 @@ have to reach two sibling hosts: the site and the back office (`staging.wan-guar
 
 2. All three are `HttpOnly` and `SameSite=Lax`, and `Secure` unless `AUTH_COOKIE_SECURE` is false. `Secure` is
    a setting of its own rather than derived from `ENV`, which counts as production when unset.
-3. `Domain` is `AUTH_COOKIE_DOMAIN`, the parent of the environment's two hosts (`.wan-guard.com`,
-   `.staging.wan-guard.com`). Left empty, no `Domain` is sent and the cookie stays on one host, as a
+3. `Domain` is `AUTH_COOKIE_DOMAIN`, the parent of the environment's two hosts: `.wan-guard.com` in
+   production and on staging alike. Left empty, no `Domain` is sent and the cookie stays on one host, as a
    developer's `localhost` needs.
 4. **The access cookie outlives its JWT, and the refresh cookie goes to every path.** The frontend's server
    refreshes on the browser's behalf — in its proxy, and before rendering a page — and both only ever see
@@ -147,11 +150,10 @@ have to reach two sibling hosts: the site and the back office (`staging.wan-guar
 **Consequences**:
 ➕ One sign-in covers the site and the back office.
 ➕ A script injected into a page cannot read a token.
-➖ Staging and production are separated in one direction only. Staging's cookies, on `.staging.wan-guard.com`,
-never reach production's hosts. Production's, on `.wan-guard.com`, do reach staging's, which are subdomains of
-`wan-guard.com` too: staging's backend never reads them (another prefix, another signing key) and its proxy
-does not forward them, but staging's frontend server receives them. Separating the two completely takes a
-registrable domain of staging's own, to be decided before production launches.
+➖ Staging and production are separated only by their prefixes. Both put their cookies on `.wan-guard.com`,
+so each environment's cookies reach the other's hosts. Neither backend reads the other's (another prefix,
+another signing key), and neither proxy forwards them, but each frontend server receives them. Separating
+the two completely takes a registrable domain of staging's own, to be decided before production launches.
 ➖ The refresh token now travels with every request to the frontend's own server (same origin, `HttpOnly`),
 not only to the session endpoints.
 
