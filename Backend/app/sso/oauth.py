@@ -52,6 +52,17 @@ def oauth_provider(name: str) -> OAuthProvider | None:
             client_id=settings.GOOGLE_CLIENT_ID,
             client_secret=settings.GOOGLE_CLIENT_SECRET,
         )
+    if name == "line":
+        return OAuthProvider(
+            name="line",
+            authorize_url="https://access.line.me/oauth2/v2.1/authorize",
+            token_url="https://api.line.me/oauth2/v2.1/token",
+            # As the frontend always asked, without `email`: that scope needs the channel's own permission
+            # from LINE, and a LINE account's email is optional anyway (ADR-331).
+            scope="openid profile",
+            client_id=settings.LINE_CHANNEL_ID,
+            client_secret=settings.LINE_CHANNEL_SECRET,
+        )
     return None
 
 

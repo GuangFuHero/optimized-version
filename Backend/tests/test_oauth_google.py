@@ -12,7 +12,6 @@ import base64
 import hashlib
 import json
 import logging
-from urllib.parse import parse_qsl, urlsplit
 
 import pytest
 from sqlalchemy import select
@@ -24,15 +23,13 @@ from app.main import app
 from app.models.auth import User, UserContact, UserIdentity
 from app.services.auth_account import create_account
 from app.sso.oauth import get_oauth_exchanger
+from tests import oauth_flow
 from tests.cookies import cookie_header, cookies_set_by
 from tests.fakes import FakeOAuthExchanger
 
 pytestmark = pytest.mark.asyncio
 
-SITE = "https://site.test"
-ADMIN = "https://admin.site.test"
-FROM_OUR_PAGE = {"Referer": f"{SITE}/login"}
-CODE = "the-one-time-code"
+GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth"
 
 
 @pytest.fixture(autouse=True)
@@ -40,10 +37,7 @@ def _configured(monkeypatch):
     """Google configured, and the two apps on hosts of their own, whatever the environment says."""
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "google-client")
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "google-secret")
-    monkeypatch.setattr(settings, "SITE_APP_URL", SITE)
-    monkeypatch.setattr(settings, "ADMIN_APP_URL", ADMIN)
-    monkeypatch.setattr(settings, "OAUTH_REDIRECT_BASE_URL", SITE)
-    monkeypatch.setattr(settings, "AUTH_ALLOWED_ORIGINS", f"{SITE},{ADMIN}")
+    oauth_flow.configure_apps(monkeypatch)
 
 
 @pytest.fixture
@@ -55,36 +49,13 @@ def exchanger(client):
     app.dependency_overrides.pop(get_oauth_exchanger, None)
 
 
-def _oauth_cookie_name() -> str:
-    return auth_cookies.oauth_cookie_name()
-
-
-async def _start(
-    client,
-    *,
-    provider: str = "google",
-    app: str | None = "site",
-    return_to: str | None = "/tickets",
-    headers: dict = FROM_OUR_PAGE,
-):
-    params = {name: value for name, value in (("app", app), ("return_to", return_to)) if value is not None}
-    return await client.get(f"/api/v1/auth/oauth/{provider}/start", params=params, headers=headers)
+async def _start(client, *, provider: str = "google", **kwargs):
+    return await oauth_flow.start(client, provider, **kwargs)
 
 
 def _sent_to_google(response) -> dict[str, str]:
     """Assert the browser is sent to Google's sign-in page, and return the query it is sent with."""
-    assert response.status_code == 302, response.text
-    location = urlsplit(response.headers["location"])
-    assert (location.scheme, location.netloc, location.path) == (
-        "https",
-        "accounts.google.com",
-        "/o/oauth2/v2/auth",
-    )
-    return dict(parse_qsl(location.query))
-
-
-def _oauth_cookie(response) -> str:
-    return cookies_set_by(response)[_oauth_cookie_name()]["value"]
+    return oauth_flow.sent_to(response, GOOGLE_AUTHORIZE)
 
 
 def _google_token(nonce: str | None, **claims) -> str:
@@ -94,13 +65,7 @@ def _google_token(nonce: str | None, **claims) -> str:
 
 
 async def _callback(client, state: str | None, *, cookie: str | None, provider: str = "google", **params):
-    query = {"code": CODE, "state": state, **params}
-    headers = cookie_header(**{_oauth_cookie_name(): cookie}) if cookie is not None else {}
-    return await client.get(
-        f"/api/v1/auth/oauth/{provider}/callback",
-        params={name: value for name, value in query.items() if value is not None},
-        headers=headers,
-    )
+    return await oauth_flow.callback(client, provider, state, cookie=cookie, **params)
 
 
 async def _round_trip(client, exchanger, *, app: str = "site", return_to: str = "/tickets", **claims):
@@ -108,22 +73,7 @@ async def _round_trip(client, exchanger, *, app: str = "site", return_to: str = 
     started = await _start(client, app=app, return_to=return_to)
     params = _sent_to_google(started)
     exchanger.id_token = _google_token(params["nonce"], **claims)
-    return await _callback(client, params["state"], cookie=_oauth_cookie(started))
-
-
-def _sent_back_with(response, error: str, app_url: str = SITE) -> None:
-    """Assert a callback sends the browser to the app's sign-in page with `error`, its OAuth cookie gone."""
-    assert response.status_code == 302, response.text
-    assert response.headers["location"] == f"{app_url}/login?error={error}"
-    cleared = cookies_set_by(response)[_oauth_cookie_name()]
-    assert (cleared["max-age"], cleared["path"]) == ("0", "/api/v1/auth/oauth")
-
-
-def _start_refused(response, error: str, app_url: str = SITE) -> None:
-    """Assert a start is refused to the app's sign-in page, leaving any sign-in in progress alone."""
-    assert response.status_code == 302, response.text
-    assert response.headers["location"] == f"{app_url}/login?error={error}"
-    assert cookies_set_by(response) == {}
+    return await _callback(client, params["state"], cookie=oauth_flow.oauth_cookie(started))
 
 
 # --- start --------------------------------------------------------------------------------------
@@ -137,7 +87,7 @@ async def test_start_sends_the_browser_to_google_with_everything_it_needs(client
     assert {k: params[k] for k in ("response_type", "client_id", "redirect_uri", "scope")} == {
         "response_type": "code",
         "client_id": "google-client",
-        "redirect_uri": f"{SITE}/api/v1/auth/oauth/google/callback",
+        "redirect_uri": f"{oauth_flow.SITE}/api/v1/auth/oauth/google/callback",
         "scope": "openid email profile",
     }
     record = json.loads(await redis.get(f"oauth_state:{params['state']}"))
@@ -155,7 +105,7 @@ async def test_start_binds_the_sign_in_to_this_browser(client):
     """The state rides in a cookie that only the OAuth endpoints see, for the length of the round trip."""
     response = await _start(client)
 
-    cookie = cookies_set_by(response)[_oauth_cookie_name()]
+    cookie = cookies_set_by(response)[oauth_flow.oauth_cookie_name()]
     assert cookie["value"] == _sent_to_google(response)["state"]
     assert (cookie["path"], cookie["max-age"]) == ("/api/v1/auth/oauth", "600")
     assert cookie["httponly"] is True and cookie["secure"] is True
@@ -193,7 +143,7 @@ async def test_start_returns_only_to_a_path_on_our_own_site(client, return_to):
     """
     response = await _start(client, return_to=return_to)
 
-    _start_refused(response, "oauth_request_invalid")
+    oauth_flow.start_refused(response, "oauth_request_invalid")
 
 
 async def test_start_accepts_a_path_with_its_query(client):
@@ -205,14 +155,14 @@ async def test_start_refuses_an_unknown_provider(client):
     """A provider this API does not know: back to the sign-in page of the app that asked."""
     response = await _start(client, provider="facebook", app="admin")
 
-    _start_refused(response, "oauth_request_invalid", ADMIN)
+    oauth_flow.start_refused(response, "oauth_request_invalid", oauth_flow.ADMIN)
 
 
 async def test_start_refuses_a_provider_without_its_secret(client, monkeypatch):
     """The sign-in could never finish, so it does not begin."""
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "")
 
-    _start_refused(await _start(client), "oauth_request_invalid")
+    oauth_flow.start_refused(await _start(client), "oauth_request_invalid")
 
 
 @pytest.mark.parametrize(
@@ -220,14 +170,14 @@ async def test_start_refuses_a_provider_without_its_secret(client, monkeypatch):
 )
 async def test_start_must_be_reached_from_one_of_our_pages(client, headers):
     """Otherwise another page could start a sign-in into an account of its choosing (ADR-327)."""
-    _start_refused(await _start(client, headers=headers), "origin_not_allowed")
+    oauth_flow.start_refused(await _start(client, headers=headers), "origin_not_allowed")
 
 
 async def test_the_back_office_may_start_one_too(client):
     """Clicking the button sends no `Origin` on a navigation, but the back office's `Referer` will do."""
-    response = await _start(client, app="admin", headers={"Referer": f"{ADMIN}/login"})
+    response = await _start(client, app="admin", headers={"Referer": f"{oauth_flow.ADMIN}/login"})
 
-    assert _sent_to_google(response)["redirect_uri"] == f"{SITE}/api/v1/auth/oauth/google/callback"
+    assert _sent_to_google(response)["redirect_uri"] == f"{oauth_flow.SITE}/api/v1/auth/oauth/google/callback"
 
 
 # --- callback: signing in -------------------------------------------------------------------------
@@ -242,13 +192,13 @@ async def test_a_first_sign_in_creates_the_account_and_signs_the_browser_in(
     verifier = json.loads(await redis.get(f"oauth_state:{params['state']}"))["code_verifier"]
     exchanger.id_token = _google_token(params["nonce"])
 
-    response = await _callback(client, params["state"], cookie=_oauth_cookie(started))
+    response = await _callback(client, params["state"], cookie=oauth_flow.oauth_cookie(started))
 
     assert response.status_code == 302, response.text
-    assert response.headers["location"] == f"{SITE}/tickets"
-    assert exchanger.exchanges == [("google", CODE, verifier)]
+    assert response.headers["location"] == f"{oauth_flow.SITE}/tickets"
+    assert exchanger.exchanges == [("google", oauth_flow.CODE, verifier)]
     cookies = cookies_set_by(response)
-    assert cookies[_oauth_cookie_name()]["max-age"] == "0"
+    assert cookies[oauth_flow.oauth_cookie_name()]["max-age"] == "0"
     access = cookies[auth_cookies.access_cookie_name()]["value"]
     assert cookies[auth_cookies.refresh_cookie_name()]["value"]
     me = await client.get(
@@ -275,7 +225,7 @@ async def test_a_sign_in_from_the_back_office_returns_there(client, exchanger):
     """One callback on the site's host serves both apps; the state remembers which one started."""
     response = await _round_trip(client, exchanger, app="admin", return_to="/tickets?page=2")
 
-    assert response.headers["location"] == f"{ADMIN}/tickets?page=2"
+    assert response.headers["location"] == f"{oauth_flow.ADMIN}/tickets?page=2"
 
 
 # --- callback: refusals ------------------------------------------------------------------------
@@ -287,7 +237,7 @@ async def test_a_callback_without_the_cookie_is_refused(client, exchanger):
 
     response = await _callback(client, _sent_to_google(started)["state"], cookie=None)
 
-    _sent_back_with(response, "oauth_state_invalid")
+    oauth_flow.sent_back_with(response, "oauth_state_invalid")
     assert exchanger.exchanges == []
 
 
@@ -295,9 +245,11 @@ async def test_a_callback_whose_cookie_names_another_state_is_refused(client, ex
     """Two sign-ins started, the callback of one with the cookie of the other: not the same sign-in."""
     first, second = await _start(client), await _start(client)
 
-    response = await _callback(client, _sent_to_google(first)["state"], cookie=_oauth_cookie(second))
+    response = await _callback(
+        client, _sent_to_google(first)["state"], cookie=oauth_flow.oauth_cookie(second)
+    )
 
-    _sent_back_with(response, "oauth_state_invalid")
+    oauth_flow.sent_back_with(response, "oauth_state_invalid")
 
 
 async def test_a_state_works_once(client, exchanger):
@@ -305,11 +257,13 @@ async def test_a_state_works_once(client, exchanger):
     started = await _start(client)
     params = _sent_to_google(started)
     exchanger.id_token = _google_token(params["nonce"])
-    assert (await _callback(client, params["state"], cookie=_oauth_cookie(started))).status_code == 302
+    assert (
+        await _callback(client, params["state"], cookie=oauth_flow.oauth_cookie(started))
+    ).status_code == 302
 
-    replayed = await _callback(client, params["state"], cookie=_oauth_cookie(started))
+    replayed = await _callback(client, params["state"], cookie=oauth_flow.oauth_cookie(started))
 
-    _sent_back_with(replayed, "oauth_state_invalid")
+    oauth_flow.sent_back_with(replayed, "oauth_state_invalid")
 
 
 async def test_an_expired_state_is_refused(client, redis, exchanger):
@@ -318,7 +272,9 @@ async def test_an_expired_state_is_refused(client, redis, exchanger):
     state = _sent_to_google(started)["state"]
     await redis.delete(f"oauth_state:{state}")
 
-    _sent_back_with(await _callback(client, state, cookie=_oauth_cookie(started)), "oauth_state_invalid")
+    oauth_flow.sent_back_with(
+        await _callback(client, state, cookie=oauth_flow.oauth_cookie(started)), "oauth_state_invalid"
+    )
 
 
 async def test_a_state_started_for_another_provider_is_refused(client, exchanger):
@@ -326,9 +282,9 @@ async def test_a_state_started_for_another_provider_is_refused(client, exchanger
     started = await _start(client, app="admin")
     state = _sent_to_google(started)["state"]
 
-    response = await _callback(client, state, cookie=_oauth_cookie(started), provider="line")
+    response = await _callback(client, state, cookie=oauth_flow.oauth_cookie(started), provider="line")
 
-    _sent_back_with(response, "oauth_state_invalid", ADMIN)
+    oauth_flow.sent_back_with(response, "oauth_state_invalid", oauth_flow.ADMIN)
 
 
 @pytest.mark.parametrize(
@@ -339,10 +295,10 @@ async def test_google_sending_back_an_error(client, exchanger, error, code):
     started = await _start(client, app="admin")
 
     response = await _callback(
-        client, _sent_to_google(started)["state"], cookie=_oauth_cookie(started), error=error
+        client, _sent_to_google(started)["state"], cookie=oauth_flow.oauth_cookie(started), error=error
     )
 
-    _sent_back_with(response, code, ADMIN)
+    oauth_flow.sent_back_with(response, code, oauth_flow.ADMIN)
     assert exchanger.exchanges == []
 
 
@@ -351,9 +307,11 @@ async def test_a_failed_exchange_is_refused(client, exchanger):
     started = await _start(client)
     exchanger.id_token = None  # Google refuses the code
 
-    response = await _callback(client, _sent_to_google(started)["state"], cookie=_oauth_cookie(started))
+    response = await _callback(
+        client, _sent_to_google(started)["state"], cookie=oauth_flow.oauth_cookie(started)
+    )
 
-    _sent_back_with(response, "oauth_exchange_failed")
+    oauth_flow.sent_back_with(response, "oauth_exchange_failed")
 
 
 async def test_an_id_token_that_does_not_verify_is_refused(client, exchanger):
@@ -361,9 +319,11 @@ async def test_an_id_token_that_does_not_verify_is_refused(client, exchanger):
     started = await _start(client)
     exchanger.id_token = "not-a-token"
 
-    response = await _callback(client, _sent_to_google(started)["state"], cookie=_oauth_cookie(started))
+    response = await _callback(
+        client, _sent_to_google(started)["state"], cookie=oauth_flow.oauth_cookie(started)
+    )
 
-    _sent_back_with(response, "sso_token_invalid")
+    oauth_flow.sent_back_with(response, "sso_token_invalid")
 
 
 @pytest.mark.parametrize("nonce", ["another-sign-in's-nonce", None])
@@ -372,21 +332,25 @@ async def test_an_id_token_from_another_sign_in_is_refused(client, exchanger, no
     started = await _start(client)
     exchanger.id_token = _google_token(nonce)
 
-    response = await _callback(client, _sent_to_google(started)["state"], cookie=_oauth_cookie(started))
+    response = await _callback(
+        client, _sent_to_google(started)["state"], cookie=oauth_flow.oauth_cookie(started)
+    )
 
-    _sent_back_with(response, "sso_token_invalid")
+    oauth_flow.sent_back_with(response, "sso_token_invalid")
 
 
 async def test_an_unverified_email_is_refused(client, exchanger):
     """A first sign-in needs an email Google has verified, as `/auth/sso/google` always did."""
-    _sent_back_with(await _round_trip(client, exchanger, email_verified=False), "sso_email_unverified")
+    oauth_flow.sent_back_with(
+        await _round_trip(client, exchanger, email_verified=False), "sso_email_unverified"
+    )
 
 
 async def test_an_email_another_account_holds_is_refused(client, db_session, exchanger):
     """The owner of that email links Google in their settings instead (ADR-217)."""
     await create_account(db_session, name="Owner", contact_type="email", value="g@x.com", password_hash="h")
 
-    _sent_back_with(await _round_trip(client, exchanger), "sso_email_taken")
+    oauth_flow.sent_back_with(await _round_trip(client, exchanger), "sso_email_taken")
 
 
 # --- logs ----------------------------------------------------------------------------------
@@ -403,13 +367,20 @@ async def test_no_code_token_or_state_reaches_the_log(client, redis, exchanger, 
     params = _sent_to_google(started)
     verifier = json.loads(await redis.get(f"oauth_state:{params['state']}"))["code_verifier"]
     signed_in_with = exchanger.id_token = _google_token(params["nonce"])
-    await _callback(client, params["state"], cookie=_oauth_cookie(started))
+    await _callback(client, params["state"], cookie=oauth_flow.oauth_cookie(started))
     exchanger.id_token = "not-a-token"
     failed = await _start(client)
-    await _callback(client, _sent_to_google(failed)["state"], cookie=_oauth_cookie(failed))
+    await _callback(client, _sent_to_google(failed)["state"], cookie=oauth_flow.oauth_cookie(failed))
 
     ours = "\n".join(record.getMessage() for record in caplog.records if not record.name.startswith("httpx"))
-    for secret in (CODE, params["state"], params["nonce"], verifier, signed_in_with, exchanger.id_token):
+    for secret in (
+        oauth_flow.CODE,
+        params["state"],
+        params["nonce"],
+        verifier,
+        signed_in_with,
+        exchanger.id_token,
+    ):
         assert secret not in ours
 
 

@@ -1,4 +1,4 @@
-"""Sign in with Google (and, next, LINE) through the backend's own OAuth flow (ADR-331).
+"""Sign in with Google or LINE through the backend's own OAuth flow (ADR-331).
 
 `start` sends the browser to the provider; `callback` is where the provider sends it back. Both are
 navigations rather than API calls, so they answer with redirects: the provider's sign-in page, the page
@@ -21,9 +21,12 @@ from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.redis import get_redis
 from app.core.request_auth import require_allowed_origin
+from app.models.auth import User
 from app.repositories.oauth_state_repository import OAuthStateRepository
 from app.services import auth_session, sso_login
-from app.sso.google import GoogleTokenVerificationError, GoogleTokenVerifier, get_google_verifier
+from app.sso import get_sso_verifiers
+from app.sso.google import GoogleTokenVerificationError
+from app.sso.line import LineTokenVerificationError
 from app.sso.oauth import (
     OAuthCodeExchanger,
     OAuthExchangeError,
@@ -39,7 +42,44 @@ router = APIRouter()
 _SIGN_IN_REFUSALS = {
     sso_login.EmailUnverified: ErrorCode.SSO_EMAIL_UNVERIFIED,
     sso_login.EmailTaken: ErrorCode.SSO_EMAIL_TAKEN,
+    sso_login.SignInRace: ErrorCode.SSO_SIGNIN_RACE,
 }
+
+
+class _TokenRefused(Exception):
+    """The provider's `id_token` does not verify, or was issued for another sign-in."""
+
+
+def _constant_time_equal(a: str, b: str) -> bool:
+    """Compare two secrets without leaking, through timing, how much of them matched."""
+    return hmac.compare_digest(a.encode(), b.encode())
+
+
+async def _google_account(db: AsyncSession, verifiers: dict, id_token: str, nonce: str) -> User:
+    """Who Google's `id_token` signs in as; its nonce is compared here, by us."""
+    try:
+        gid = await verifiers["google"].verify(id_token)
+    except GoogleTokenVerificationError as err:
+        raise _TokenRefused from err
+    # The nonce ties the token to this sign-in: one replayed from another, or minted for another client,
+    # carries a different one or none.
+    if gid.nonce is None or not _constant_time_equal(gid.nonce, nonce):
+        raise _TokenRefused
+    return await sso_login.sign_in_with_google(db, gid)
+
+
+async def _line_account(db: AsyncSession, verifiers: dict, id_token: str, nonce: str) -> User:
+    """Who LINE's `id_token` signs in as; LINE's verify API compares the nonce it is handed."""
+    try:
+        lid = await verifiers["line"].verify(id_token, nonce=nonce)
+    except LineTokenVerificationError as err:
+        raise _TokenRefused from err
+    return await sso_login.sign_in_with_line(db, lid)
+
+
+# How each provider's `id_token` is verified and becomes an account. A provider takes part in the sign-in
+# only once it is here and `oauth_provider` knows it; `start` checks both, so a half-added one refuses there.
+_SIGN_IN_WITH = {"google": _google_account, "line": _line_account}
 
 
 def _app_url(app: str | None) -> str | None:
@@ -102,7 +142,8 @@ async def start_oauth(
     except ApiError as err:
         return _to_sign_in_page(app_url, err.code)
     oauth = oauth_provider(provider)
-    if oauth is None or not oauth.configured or not _is_path_on_our_site(return_to):
+    usable = oauth is not None and oauth.configured and provider in _SIGN_IN_WITH
+    if not usable or not _is_path_on_our_site(return_to):
         return _to_sign_in_page(app_url, ErrorCode.OAUTH_REQUEST_INVALID)
     sign_in = await OAuthStateRepository(redis).create(provider, app, return_to)
     response = RedirectResponse(
@@ -113,11 +154,6 @@ async def start_oauth(
     )
     auth_cookies.set_oauth_cookie(response, sign_in.state)
     return response
-
-
-def _constant_time_equal(a: str, b: str) -> bool:
-    """Compare two secrets without leaking, through timing, how much of them matched."""
-    return hmac.compare_digest(a.encode(), b.encode())
 
 
 @router.get(
@@ -135,7 +171,7 @@ async def oauth_callback(
     db: AsyncSession = Depends(security.get_db),
     redis=Depends(get_redis),
     exchanger: OAuthCodeExchanger = Depends(get_oauth_exchanger),
-    verifier: GoogleTokenVerifier = Depends(get_google_verifier),
+    verifiers=Depends(get_sso_verifiers),
 ):
     """Finish a sign-in: check it is this browser's, exchange the code, check the token, sign in.
 
@@ -151,7 +187,8 @@ async def oauth_callback(
         return _sign_in_failed(settings.SITE_APP_URL, ErrorCode.OAUTH_STATE_INVALID)
     app_url = _app_url(sign_in.app)
     oauth = oauth_provider(provider)
-    if sign_in.provider != provider or oauth is None:
+    sign_in_with = _SIGN_IN_WITH.get(provider)
+    if sign_in.provider != provider or oauth is None or sign_in_with is None:
         return _sign_in_failed(app_url, ErrorCode.OAUTH_STATE_INVALID)
     if error is not None:
         cancelled = error == "access_denied"
@@ -165,15 +202,9 @@ async def oauth_callback(
     except OAuthExchangeError:
         return _sign_in_failed(app_url, ErrorCode.OAUTH_EXCHANGE_FAILED)
     try:
-        gid = await verifier.verify(id_token)
-    except GoogleTokenVerificationError:
+        user = await sign_in_with(db, verifiers, id_token, sign_in.nonce)
+    except _TokenRefused:
         return _sign_in_failed(app_url, ErrorCode.SSO_TOKEN_INVALID)
-    # The nonce ties the token to this sign-in: one replayed from another, or minted for another client,
-    # carries a different one or none.
-    if gid.nonce is None or not _constant_time_equal(gid.nonce, sign_in.nonce):
-        return _sign_in_failed(app_url, ErrorCode.SSO_TOKEN_INVALID)
-    try:
-        user = await sso_login.sign_in_with_google(db, gid)
     except sso_login.SsoSignInRefused as err:
         return _sign_in_failed(app_url, _SIGN_IN_REFUSALS[type(err)])
     await auth_session.record_login(db, user)

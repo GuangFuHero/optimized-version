@@ -390,19 +390,20 @@ Redis server's clock instead (the claim key's remaining TTL).
 
 > **Status: ACCEPTED (2026-10-18).** Chosen by the product owner on 2026-10-16, together with moving sign-in
 > to the backend (ADR-325); sending every failure back to the sign-in page was chosen on 2026-10-17, and
-> leaving the sibling-subdomain risk below for before production on 2026-10-18. This records the flow with
-> Google; LINE joins it, and `/auth/sso/google` and `/auth/sso/line` are removed, in the same change.
+> leaving the sibling-subdomain risk below for before production on 2026-10-18. It covers Google and LINE;
+> `/auth/sso/google` and `/auth/sso/line` are removed in the same change.
 
-**In plain words**: "Sign in with Google" now takes the browser from our page to Google and back to our own
-backend, which then talks to Google directly and signs the browser in. The frontend never sees Google's
-tokens or our secret. Whatever goes wrong, the person lands back on the sign-in page with the reason.
+**In plain words**: "Sign in with Google" (or LINE) now takes the browser from our page to the provider and
+back to our own backend, which then talks to the provider directly and signs the browser in. The frontend
+never sees the provider's tokens or our secret. Whatever goes wrong, the person lands back on the sign-in
+page with the reason.
 
 **Context**: The frontend's NextAuth used to run the provider's flow and post the `id_token` it got to
-`/auth/sso/google` (ADR-325). With sign-in in the backend, the backend has to take the browser to the
-provider and back, exchange the one-time code for the `id_token` itself, and hold the client secret that
-exchange needs. Done naively, that flow can be hijacked in three places: a code intercepted on its way
-back, a callback planted in another person's browser to sign them into the attacker's account, and a
-`return_to` pointing at another site.
+`/auth/sso/google` or `/auth/sso/line` (ADR-325). With sign-in in the backend, the backend has to take the
+browser to the provider and back, exchange the one-time code for the `id_token` itself, and hold the client
+secret that exchange needs. Done naively, that flow can be hijacked in three places: a code intercepted on
+its way back, a callback planted in another person's browser to sign them into the attacker's account, and
+a `return_to` pointing at another site.
 
 **Decision**:
 
@@ -414,7 +415,8 @@ back, a callback planted in another person's browser to sign them into the attac
    `callback` first requires the state it receives to equal that cookie and to be on record, and spends it
    in the same step (`GETDEL`): a state works once, in the browser that started it. Only then does it
    exchange the code, with the verifier and the client secret, verify the `id_token` as before (signature,
-   audience, issuer, expiry), and require its nonce to be the one recorded.
+   audience, issuer, expiry), and require its nonce to be the one recorded. For Google the backend compares
+   the nonce itself; LINE's verify API is handed it and compares it.
 3. **One redirect URI per provider, on the site's host**:
    `{OAUTH_REDIRECT_BASE_URL}/api/v1/auth/oauth/{provider}/callback`. A sign-in started from the back office
    comes back there too and is sent on to the back office, as its state records.
@@ -425,7 +427,8 @@ back, a callback planted in another person's browser to sign them into the attac
 5. **Every failure goes back to the sign-in page**, `{app}/login?error=<code>`: `oauth_request_invalid`
    (an unknown or unconfigured provider, a bad `return_to`), `origin_not_allowed`, `oauth_state_invalid`,
    `oauth_cancelled` (the user said no at the provider), `oauth_exchange_failed`, `sso_token_invalid` (the
-   token does not verify, or carries another nonce), `sso_email_unverified` and `sso_email_taken`. A
+   token does not verify, or carries another nonce), `sso_email_unverified`, `sso_email_taken` and
+   `sso_signin_race` (a first sign-in that lost a race with another; trying again works). A
    callback whose state is not on record cannot tell which app it was for and goes to the site's. Only a
    start naming no app of ours answers with JSON, 400 `oauth_request_invalid`. A callback clears
    `{p}_oauth` whatever its outcome; a refused start leaves it alone, so a link from another site cannot end
@@ -433,11 +436,15 @@ back, a callback planted in another person's browser to sign them into the attac
 6. `start` must come from one of our pages (ADR-327 point 4). A navigation carries no `Origin`, so in
    practice the `Referer` decides, and a browser set to send none is refused with `origin_not_allowed`. The
    callback is the provider's redirect and carries neither; the state protects it instead.
-7. Who signs in follows the rules `/auth/sso/google` always had, now shared (`services/sso_login.py`): a
-   known Google identity signs in to its account; a first sign-in creates one with Google's verified email;
-   an email another account already holds is refused, and its owner links Google in their settings
-   (ADR-217). The new session acts as the account's default identity (ADR-325 point 3), and the browser is
-   sent to `{app}{return_to}` with the sign-in cookies set.
+7. Who signs in follows the rules `/auth/sso/*` always had, now shared (`services/sso_login.py`). A known
+   identity signs in to its account. A first Google sign-in creates one with Google's verified email, and
+   an email another account already holds is refused: its owner links Google in their settings (ADR-217). A
+   first LINE sign-in always creates one, because LINE's email is optional: a missing, malformed or taken
+   email is left out rather than refused, and an account without a display name is called `LINE-` and the
+   first 8 characters of its LINE id. LINE is asked for `openid profile`, as the frontend always asked:
+   the `email` scope needs a permission LINE grants each channel separately, so LINE sign-ins carry no
+   email until the channel holds it and the scope is added. The new session acts as the account's default
+   identity (ADR-325 point 3), and the browser is sent to `{app}{return_to}` with the sign-in cookies set.
 8. The client secrets (`GOOGLE_CLIENT_SECRET`, `LINE_CHANNEL_SECRET`) live only in the backend's settings,
    and a provider without its secret refuses to start. Nothing we log holds the code, the `id_token`, the
    state, the verifier or the nonce, and uvicorn's access log has the query of every

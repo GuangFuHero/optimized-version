@@ -1,7 +1,5 @@
 """SSO endpoints: Google/LINE first-login + account linking."""
 
-from datetime import UTC, datetime
-
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -10,22 +8,14 @@ from fastapi import (
     Response,
     status,
 )
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import security
 from app.core.api_errors import ApiError, ErrorCode
-from app.core.normalize import normalize_email
 from app.core.redis import get_redis
-from app.db.session import attribute_writes_to
 from app.messaging.email import get_email_sender
 from app.messaging.sms import get_sms_sender
 from app.models.auth import User
-from app.repositories.auth_repository import (
-    contact_repository,
-    identity_repository,
-    user_repository,
-)
 from app.schemas.auth import (
     GoogleSsoRequest,
     IdTokenRequest,
@@ -34,7 +24,6 @@ from app.schemas.auth import (
     UnlinkIdentityRequest,
 )
 from app.services import auth_identity, auth_session, sso_login
-from app.services.auth_account import create_account
 from app.services.auth_contact import SSO_PROVIDERS, ContactNotFound, StepUpFailed, StepUpRequired
 from app.sso import get_sso_verifiers
 from app.sso.google import (
@@ -156,39 +145,13 @@ async def sso_line(
     except LineTokenVerificationError as err:
         raise ApiError(status.HTTP_401_UNAUTHORIZED, ErrorCode.SSO_TOKEN_INVALID,
                        detail="Invalid LINE token") from err
-
-    identity = await identity_repository.get_by_provider_subject(db, provider="line", subject=lid.sub)
-    if identity is None:
-        contact_type = contact_value = None
-        if lid.email:
-            try:
-                email = normalize_email(lid.email)
-            except ValueError:
-                email = None
-            # LINE email is optional: if it collides, just skip it (do NOT block the login)
-            if email and not await contact_repository.is_value_taken(db, type_="email", value=email):
-                contact_type, contact_value = "email", email
-        name = lid.name or f"LINE-{lid.sub[:8]}"
-        try:
-            user = await create_account(
-                db, name=name, provider="line", provider_subject=lid.sub,
-                contact_type=contact_type, value=contact_value,
-            )
-        except IntegrityError as err:  # concurrent first-login race
-            await db.rollback()
-            identity = await identity_repository.get_by_provider_subject(
-                db, provider="line", subject=lid.sub)
-            if identity is None:
-                raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.SSO_SIGNIN_RACE,
-                               detail="LINE account conflict") from err
-            user = await user_repository.get_by_uuid(db, identity.user_uuid)
-    else:
-        user = await user_repository.get_by_uuid(db, identity.user_uuid)
-
+    try:
+        user = await sso_login.sign_in_with_line(db, lid)
+    except sso_login.SignInRace as err:
+        raise ApiError(status.HTTP_409_CONFLICT, ErrorCode.SSO_SIGNIN_RACE, detail=str(err)) from err
     # Same as the password path: no access token on the request, but the provider's ID token
     # has just established who this is, so the audited write gets an actor (ADR-170).
-    await attribute_writes_to(db, str(user.uuid))
-    await user_repository.update(db, db_obj=user, obj_in={"last_login_at": datetime.now(UTC)})
+    await auth_session.record_login(db, user)
     return await issue_token_pair(redis, request, str(user.uuid))
 
 
