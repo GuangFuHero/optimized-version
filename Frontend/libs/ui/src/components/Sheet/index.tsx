@@ -23,6 +23,7 @@ export interface SheetProps {
   title: ReactNode;
   subtitle?: ReactNode;
   eyebrow?: ReactNode;
+  leading?: ReactNode;
   actions?: ReactNode;
   headerContent?: ReactNode;
   footer?: ReactNode;
@@ -36,6 +37,7 @@ export function Sheet({
   title,
   subtitle,
   eyebrow,
+  leading,
   actions,
   headerContent,
   footer,
@@ -91,6 +93,7 @@ export function Sheet({
         }}
       >
         <Stack direction="row" sx={{ alignItems: 'flex-start', gap: '12px' }}>
+          {leading}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {eyebrow ? (
               <Typography

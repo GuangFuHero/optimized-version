@@ -1,9 +1,7 @@
-import { Megaphone, CircleMinus, ArrowLeftRight } from 'lucide-react';
 import { Box } from '@mui/material';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { Badge } from '../Badge';
-import { Timeline, TimelineChange } from './index';
+import { Timeline } from './index';
 
 const meta = {
   title: 'Components/Timeline',
@@ -18,24 +16,36 @@ const meta = {
   args: {
     items: [
       {
-        id: '3',
-        title: '變更狀態',
-        time: '09/28 14:02',
-        actor: '林承翰',
-        content: <TimelineChange field="狀態" from="待指派" to="進行中" />,
+        event_type: 'UPDATED',
+        at: '2026-09-28T06:02:00Z',
+        entity: 'ticket',
+        actor: {
+          uuid: 'user-1',
+          name: '林承翰',
+          kind: 'user',
+          is_removed: false,
+        },
+        changes: [{ field: 'status', before: 'pending', after: 'in_progress' }],
       },
       {
-        id: '2',
-        title: '指派 Team',
-        time: '09/28 13:40',
-        actor: '陳怡君',
-        tone: 'primary',
-        badges: <Badge size="sm">承接</Badge>,
-        content: (
-          <TimelineChange field="指派 Team" from="未指派" to="慈濟基金會" />
-        ),
+        event_type: 'ASSIGNED',
+        at: '2026-09-28T05:40:00Z',
+        entity: 'task_assignment',
+        actor: {
+          uuid: 'user-2',
+          name: '陳怡君',
+          kind: 'user',
+          is_removed: true,
+        },
+        changes: [{ field: 'actor_uuid', before: null, after: '林承翰' }],
       },
-      { id: '1', title: '建立任務單', time: '09/28 13:12', actor: '民眾回報' },
+      {
+        event_type: 'CREATED',
+        at: '2026-09-28T05:12:00Z',
+        entity: 'ticket',
+        actor: { uuid: null, name: null, kind: 'system', is_removed: false },
+        changes: [],
+      },
     ],
   },
 } satisfies Meta<typeof Timeline>;
@@ -44,36 +54,41 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Dots: Story = {};
-
-export const Icons: Story = {
+export const Icons: Story = { args: { showIcons: true } };
+export const Withheld: Story = {
   args: {
     items: [
       {
-        id: '3',
-        title: '發布',
-        time: '09/28 18:00',
-        actor: '林承翰',
-        tone: 'danger',
-        icon: <Megaphone />,
-        badges: <Badge tone="success">仍在顯示</Badge>,
-        content: '今日 18:00 前需回報各隊在場人數，未回報者由縣府直接致電',
-      },
-      {
-        id: '2',
-        title: '取代',
-        time: '09/28 12:10',
-        actor: '林承翰',
-        icon: <ArrowLeftRight />,
-      },
-      {
-        id: '1',
-        title: '關閉',
-        time: '09/27 21:30',
-        actor: '陳怡君',
-        icon: <CircleMinus />,
+        ...meta.args.items[0],
+        changes: [
+          { field: 'geometry', before: null, after: null, changed: true },
+          { field: 'contact_phone', before: '09****1234', after: '09****5678' },
+        ],
       },
     ],
   },
 };
-
+export const JsonValues: Story = {
+  args: {
+    items: [
+      {
+        ...meta.args.items[0],
+        changes: [
+          { field: 'quantity', before: 0, after: 12 },
+          { field: 'is_temporary', before: false, after: true },
+          {
+            field: 'disaster_types',
+            before: ['flood'],
+            after: ['flood', 'landslide'],
+          },
+          {
+            field: 'details',
+            before: null,
+            after: { quantity: 12, note: '飲用水' },
+          },
+        ],
+      },
+    ],
+  },
+};
 export const Empty: Story = { args: { items: [] } };

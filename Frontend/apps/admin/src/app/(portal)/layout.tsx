@@ -1,4 +1,4 @@
-import { PortalAdminLayout } from '@rescue-frontend/modules';
+import { AdminShell } from '@rescue-frontend/modules';
 import { getServerAuthSession } from '@rescue-frontend/modules/server';
 import { redirect } from 'next/navigation';
 
@@ -9,5 +9,5 @@ export default async function AdminLayout({
 }) {
   const session = await getServerAuthSession();
   if (!session) redirect('/login?callbackUrl=/');
-  return <PortalAdminLayout>{children}</PortalAdminLayout>;
+  return <AdminShell>{children}</AdminShell>;
 }

@@ -5,14 +5,8 @@ import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startTransition, useState } from 'react';
 
-import {
-  type AuthIdentityType,
-} from '@rescue-frontend/data-access';
-import {
-  AuthFormError,
-  authHref,
-  RegisterForm,
-} from './index';
+import { type AuthIdentityType } from '@rescue-frontend/data-access';
+import { AuthFormError, authHref, RegisterForm } from './index';
 import {
   registerAsync,
   resendVerificationAsync,

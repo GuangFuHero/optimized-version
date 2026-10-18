@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 
-import { SiteShell } from '../../shell';
-import { SessionExpiredNotice } from '../../session/session-expired-notice';
 import { clearAllHelpRequestDrafts } from '../../ticket/help-request';
 import {
   isSigningOutHere,
   markSigningOutHere,
   sessionStorageOrNull,
 } from '../../session/end-expired-session';
+import { SessionExpiredNotice } from '../../session/session-expired-notice';
+import { SiteShell } from '../../shell/site';
 import {
   reloginHref,
   shouldReloadForSignOut,

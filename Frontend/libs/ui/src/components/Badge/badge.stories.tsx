@@ -61,7 +61,7 @@ export const WithIcon: Story = {
   render: () => (
     <Stack direction="row" sx={{ gap: 1 }}>
       <Badge tone="neutral" icon={<ShieldCheck />}>
-        管理後台
+        管理平台
       </Badge>
       <Badge tone="neutral" icon={<Globe />}>
         公開頁面

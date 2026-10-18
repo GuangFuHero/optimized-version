@@ -88,7 +88,7 @@ Frontend/
 
 Libraries 透過 `exports` 提供 `src/index.ts`，`@rescue-frontend/data-access/server` 則提供 `src/server.ts`。Next.js 的 `transpilePackages` 負責編譯這些 TypeScript source，不需要先 build libraries。
 
-在 `Frontend/` 執行 `pnpm typecheck` 會檢查所有 packages。也可用 `pnpm --filter @rescue-frontend/ui typecheck` 單獨檢查一個 package。兩個 app 的 typecheck 會先執行 `next typegen` 產生 route types。
+在 `Frontend/` 執行 `pnpm typecheck` 會檢查所有 packages，不會重新產生 schemas。也可用 `pnpm --filter @rescue-frontend/ui typecheck` 單獨檢查一個 package。兩個 app 的 typecheck 會先執行 `next typegen` 產生 route types。GitHub Actions 的 `frontend-ci.yaml` 會在 frontend 或 backend 更新時執行 `pnpm schemas:generate`，產生結果與 commit 不同時失敗，再執行 typecheck、lint 與 test。Schema export 需要 `uv` 與 Python 3.13，不需啟動 backend 或 database。
 
 開發 UI library 時，執行 `pnpm dev:ui` 啟動 Storybook，預設 port 為 6006。Stories 使用共用 MUI theme，包含 icon gallery 與可互動的 pagination。更多指令見 [`libs/ui/README.md`](libs/ui/README.md)。
 
@@ -108,7 +108,8 @@ Libraries 透過 `exports` 提供 `src/index.ts`，`@rescue-frontend/data-access
 | `pnpm format` / `pnpm format:check`          | 透過 `nx format` 套用 / 檢查 Prettier 格式              |
 | `pnpm graph`                                 | 開啟 Nx project dependency graph                        |
 | `pnpm reset`                                 | 清除 Nx cache                                           |
-| `pnpm codegen`                               | 執行 GraphQL codegen                                  |
+| `pnpm schemas:generate`                      | Export backend schemas 並執行 GraphQL / OpenAPI codegen |
+| `pnpm codegen`                               | 使用已存的 schemas 執行 GraphQL / OpenAPI codegen       |
 
 ---
 
