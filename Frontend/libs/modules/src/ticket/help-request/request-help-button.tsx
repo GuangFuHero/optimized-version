@@ -12,7 +12,7 @@ import { openHelpRequest } from './open-help-request';
  * Shown to guests too: the drawer asks them to sign in before sending, not before starting. No
  * rescue wording or siren: most who need help need hands, not a rescue team.
  *
- * Only its icon from 768 to 899px: with 申請成為後台人員 on the left and 這一頁怎麼用 beside it,
+ * Only its icon from 768 to 899px: with 申請管理權限 on the left and 這一頁怎麼用 beside it,
  * the words leave the search box between them nothing to type in.
  */
 export function RequestHelpButton() {

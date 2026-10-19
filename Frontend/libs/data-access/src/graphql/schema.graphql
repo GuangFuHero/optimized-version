@@ -15,10 +15,19 @@ enum AnnouncementMoveDirection {
   DOWN
 }
 
+enum AnnouncementPlacement {
+  admin_page
+  public_page
+  all
+}
+
 type AnnouncementType {
   uuid: UUID!
   content: String!
   active: Boolean!
+
+  """admin_page, public_page, or all (both pages)"""
+  placement: String!
 
   """
   Display position (1 = top) among active announcements; null when inactive
@@ -135,9 +144,56 @@ type BriefingType {
   updatedAt: DateTime
 }
 
+input BuildingFloorAreasInput {
+  """Floor label: '3F', '1F', 'B1'"""
+  floor: String!
+
+  """Area names, 1-20 characters each"""
+  areas: [String!]!
+}
+
+type BuildingFloorType {
+  """Floor label: '3F', '1F', 'B1'"""
+  label: String!
+
+  """
+  Areas a ticket on this floor must pick from, ending with '其他' for an unlisted space. Empty when the floor takes a free-text room number instead
+  """
+  areas: [String!]!
+}
+
+type BuildingMapConnection {
+  items: [BuildingMapType!]!
+  pageInfo: PageInfo!
+}
+
+type BuildingMapType {
+  uuid: UUID!
+
+  """Building name shown on the map and in the sidebar"""
+  name: String!
+
+  """GeoJSON Point of the building — [longitude, latitude]"""
+  geometry: GeoJSON
+  floorsAboveGround: Int!
+  floorsBelowGround: Int!
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """The building's floors, roof (RF) first"""
+  floors: [BuildingFloorType!]!
+
+  """The building's street address. Public, like a station's"""
+  secondaryLocation: SecondaryLocationType
+}
+
 input CreateAnnouncementInput {
   """The announcement body text"""
   content: String!
+
+  """Which page shows it; defaults to both"""
+  placement: AnnouncementPlacement! = all
 }
 
 input CreateAreaInput {
@@ -172,6 +228,26 @@ input CreateBriefingTemplateInput {
 
   """Lifecycle phase this template targets"""
   state: BriefingState! = BRIEFING
+}
+
+input CreateBuildingMapInput {
+  """Building name, e.g. '光復國小圖書館'"""
+  name: String!
+
+  """GeoJSON Point — [longitude, latitude]"""
+  geometry: GeoJSON!
+
+  """Street address. Leave buildingSection, floor and room empty"""
+  secondaryLocation: SecondaryLocationInput!
+
+  """Floors from 1F up, 1-200"""
+  floorsAboveGround: Int!
+
+  """Basement floors, 0-20"""
+  floorsBelowGround: Int! = 0
+
+  """Areas per floor. A floor left out takes a free-text room number"""
+  floorAreas: [BuildingFloorAreasInput!]! = []
 }
 
 input CreateCrowdSourcingInput {
@@ -276,6 +352,8 @@ input CreateStationPropertyInput {
   weightings: Float! = 1
 }
 
+union CreateStationResult = StationCreated | DuplicatesSuspected
+
 input CreateStationSuggestionInput {
   """'station' or 'station_property'"""
   targetType: String!
@@ -313,9 +391,14 @@ input CreateTicketInput {
   description: String = null
 
   """
-  GeoJSON Point for the location where help is needed — [longitude, latitude]
+  GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted
   """
-  geometry: GeoJSON!
+  geometry: GeoJSON = null
+
+  """
+  File the ticket inside this building map. Its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it
+  """
+  buildingMapUuid: UUID = null
 
   """Full name of the requester"""
   contactName: String!
@@ -347,6 +430,33 @@ input CreateTicketInput {
   Street address and space detail for where help is needed. New in feature 018 — before it, only stations could carry one, so the record that most needs a door number had nothing but a map pin
   """
   secondaryLocation: SecondaryLocationInput = null
+
+  """
+  The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates
+  """
+  tasks: [CreateTicketTaskDraft!]! = []
+}
+
+union CreateTicketResult = TicketCreated | DuplicatesSuspected
+
+input CreateTicketTaskDraft {
+  """Category: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String!
+  taskName: String!
+  taskDescription: String = null
+
+  """Number of people or units needed"""
+  quantity: Int = null
+
+  """Origin: 'user' (default) or 'official'"""
+  source: String! = "user"
+  visibility: Visibility! = public
+  routeUuid: UUID = null
+
+  """
+  Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again
+  """
+  acknowledgedDuplicateOf: String = null
 }
 
 input CreateTicketTaskInput {
@@ -369,6 +479,8 @@ input CreateTicketTaskInput {
   """Optional UUID of an associated route"""
   routeUuid: UUID = null
 }
+
+union CreateTicketTaskResult = TicketTaskCreated | DuplicatesSuspected
 
 type CrowdSourcingType {
   uuid: UUID!
@@ -411,6 +523,28 @@ type DisasterTypeType {
 
   """False retires the type: no new writes, existing ones readable"""
   isActive: Boolean!
+}
+
+type DuplicateSuspect {
+  """
+  Which part of what was sent: "task:0", "task:1"…, or "station"
+  """
+  draftRef: String!
+
+  """
+  What it looks like: "ticket_task" or "station"
+  """
+  relatedKind: String!
+
+  """The existing entity it looks like"""
+  relatedUuid: String!
+
+  """When it looks like a task, that task's ticket"""
+  relatedTicketUuid: String
+}
+
+type DuplicatesSuspected {
+  suspects: [DuplicateSuspect!]!
 }
 
 enum FieldDataType {
@@ -489,17 +623,20 @@ The `JSON` scalar type represents JSON values as specified by [ECMA-404](https:/
 scalar JSON @specifiedBy(url: "https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf")
 
 type Mutation {
-  createStation(input: CreateStationInput!): StationType!
+  createStation(input: CreateStationInput!, acknowledgedDuplicateOf: String = null): CreateStationResult!
   attachStationPhoto(stationUuid: UUID!, url: String!): PhotoType!
   detachStationPhoto(uuid: UUID!): Boolean!
   updateStation(uuid: UUID!, input: UpdateStationInput!): StationType!
   deleteStation(uuid: UUID!): Boolean!
   assignStationToTeam(stationUuid: UUID!, teamUuid: UUID!): StationType!
   unassignStation(stationUuid: UUID!): StationType!
+  createBuildingMap(input: CreateBuildingMapInput!): BuildingMapType!
+  updateBuildingMap(uuid: UUID!, input: UpdateBuildingMapInput!): BuildingMapType!
+  deleteBuildingMap(uuid: UUID!): Boolean!
   createStationProperty(input: CreateStationPropertyInput!): StationPropertyType!
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
-  createTicket(input: CreateTicketInput!): TicketType!
+  createTicket(input: CreateTicketInput!): CreateTicketResult!
   createHelpRequest(input: CreateHelpRequestInput!): TicketType!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
   setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!
@@ -512,7 +649,7 @@ type Mutation {
     note: String = null
   ): TicketType!
   deleteTicket(uuid: UUID!): Boolean!
-  createTicketTask(input: CreateTicketTaskInput!): TicketTaskType!
+  createTicketTask(input: CreateTicketTaskInput!, acknowledgedDuplicateOf: String = null): CreateTicketTaskResult!
   updateTicketTask(uuid: UUID!, input: UpdateTicketTaskInput!): TicketTaskType!
   deleteTicketTask(uuid: UUID!): Boolean!
   createTaskProperty(input: CreateTaskPropertyInput!): TaskPropertyType!
@@ -616,6 +753,8 @@ type Query {
   station(uuid: UUID!): StationType
   hazardousZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): HazardousZoneConnection!
   hazardousZone(uuid: UUID!): HazardousZoneType
+  buildingMaps(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): BuildingMapConnection!
+  buildingMap(uuid: UUID!): BuildingMapType
   tickets(
     bounds: BoundsInput = null
     status: String = null
@@ -651,6 +790,7 @@ type Query {
     zoom: Float = null
   ): TicketType
   myTickets: [TicketType!]!
+  buildingMapTickets(buildingMapUuid: UUID!, skip: Int! = 0, limit: Int! = 100): [TicketType!]!
   ticketTasks(ticketUuid: String!, status: String = null, q: String = null, skip: Int! = 0, limit: Int! = 50): [TicketTaskType!]!
   myTaskAssignments: [MyTaskAssignmentType!]!
   taskProperties(taskUuid: String!): [TaskPropertyType!]!
@@ -658,7 +798,7 @@ type Query {
   taskPropertyConfigs(taskType: String!, includeInactive: Boolean! = false): [TaskPropertyConfigType!]!
   ticketPropertyConfigs(disasterTypes: [String!]!, includeInactive: Boolean! = false): [TicketPropertyConfigType!]!
   disasterTypes(includeInactive: Boolean! = false): [DisasterTypeType!]!
-  announcements(filter: AnnouncementFilter! = ACTIVE): [AnnouncementType!]!
+  announcements(filter: AnnouncementFilter! = ACTIVE, placement: AnnouncementPlacement! = public_page): [AnnouncementType!]!
   announcement(uuid: UUID!): AnnouncementType
   briefingTemplates(state: BriefingState = null, tag: String = null): [BriefingTemplateType!]!
   briefingTemplate(uuid: UUID!): BriefingTemplateType
@@ -786,6 +926,10 @@ type SecondaryLocationType {
 type StationConnection {
   items: [StationType!]!
   pageInfo: PageInfo!
+}
+
+type StationCreated {
+  station: StationType!
 }
 
 enum StationOperationalStatus {
@@ -1079,6 +1223,11 @@ type TaskAssignmentType {
 
   """Timestamp when the status was last changed"""
   updatedAt: DateTime
+
+  """
+  Display name of the assigned person. Null to a caller without ticket.view_history on the parent ticket, unless the assignment is their own
+  """
+  actorName: String
 }
 
 type TaskPropertyConfigType {
@@ -1214,6 +1363,11 @@ type TicketConnection {
   pageInfo: PageInfo!
 }
 
+type TicketCreated {
+  ticket: TicketType!
+  tasks: [TicketTaskType!]!
+}
+
 input TicketDisasterDetailInput {
   """The field key from `ticketPropertyConfigs`"""
   propertyName: String!
@@ -1267,6 +1421,10 @@ type TicketPropertyConfigType {
 
   """Whether the field is in use"""
   isActive: Boolean!
+}
+
+type TicketTaskCreated {
+  task: TicketTaskType!
 }
 
 type TicketTaskType {
@@ -1458,6 +1616,9 @@ scalar UUID
 input UpdateAnnouncementInput {
   """The new announcement body text"""
   content: String!
+
+  """Which page shows it; omit to keep the current placement"""
+  placement: AnnouncementPlacement = null
 }
 
 input UpdateAreaInput {
@@ -1489,6 +1650,16 @@ input UpdateBriefingTemplateInput {
 
   """New lifecycle phase"""
   state: BriefingState = null
+}
+
+input UpdateBuildingMapInput {
+  name: String = null
+  geometry: GeoJSON = null
+  floorsAboveGround: Int = null
+  floorsBelowGround: Int = null
+
+  """Replaces every floor's areas when sent; [] clears them"""
+  floorAreas: [BuildingFloorAreasInput!] = null
 }
 
 input UpdateStationInput {

@@ -15,6 +15,8 @@ export interface StationStatusCardProps {
   address: StationSummaryProps['address'];
   addressIcon?: StationSummaryProps['addressIcon'];
   status: StationSummaryProps['status'];
+  statusDetail?: StationSummaryProps['statusDetail'];
+  badges?: StationSummaryProps['badges'];
 }
 
 function resolveStatusPalette(
@@ -67,6 +69,8 @@ export function StationStatusCard({
   address,
   addressIcon,
   status,
+  statusDetail,
+  badges,
 }: StationStatusCardProps) {
   const stationDetailPalette = useStationDetailColorScheme();
   const statusPalette = resolveStatusPalette(status, stationDetailPalette);
@@ -77,9 +81,8 @@ export function StationStatusCard({
         width: '100%',
         p: '17px',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 1.5,
+        flexDirection: 'column',
+        gap: 1.25,
         borderRadius: '32px',
         bgcolor: stationDetailPalette.cardSurface,
         border: `1px solid ${stationDetailPalette.cardBorder}`,
@@ -90,64 +93,97 @@ export function StationStatusCard({
         sx={{
           display: 'flex',
           alignItems: 'center',
-          minWidth: 0,
-          columnGap: '4px',
-        }}
-      >
-        <StationDetailIconSlot
-          icon={addressIcon}
-          width="10.667px"
-          height="13.333px"
-          color={stationDetailPalette.bodyText}
-        />
-        <Typography
-          sx={{
-            color: stationDetailPalette.bodyText,
-            fontSize: displayTextSize[14],
-            lineHeight: '20px',
-            fontWeight: 400,
-            minWidth: 0,
-          }}
-        >
-          {address}
-        </Typography>
-      </Box>
-
-      <Box
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '4px',
-          px: '9px',
-          py: '5px',
-          borderRadius: '999px',
-          flexShrink: 0,
-          bgcolor: statusPalette.backgroundColor,
-          border: `1px solid ${statusPalette.borderColor}`,
+          justifyContent: 'space-between',
+          gap: 1.5,
         }}
       >
         <Box
           sx={{
-            width: 8,
-            height: 8,
-            borderRadius: '999px',
-            bgcolor: statusPalette.dotColor,
-            flexShrink: 0,
-          }}
-        />
-        <Typography
-          sx={{
-            color: statusPalette.textColor,
-            fontSize: displayTextSize[10],
-            lineHeight: 1.2,
-            fontWeight: 700,
-            letterSpacing: '0.8px',
-            textTransform: 'uppercase',
+            display: 'flex',
+            alignItems: 'center',
+            minWidth: 0,
+            columnGap: '4px',
           }}
         >
-          {status.label}
-        </Typography>
+          <StationDetailIconSlot
+            icon={addressIcon}
+            width="10.667px"
+            height="13.333px"
+            color={stationDetailPalette.bodyText}
+          />
+          <Typography
+            sx={{
+              color: stationDetailPalette.bodyText,
+              fontSize: displayTextSize[14],
+              lineHeight: '20px',
+              fontWeight: 400,
+              minWidth: 0,
+            }}
+          >
+            {address}
+          </Typography>
+        </Box>
+
+        <Box
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            px: '9px',
+            py: '5px',
+            borderRadius: '999px',
+            flexShrink: 0,
+            bgcolor: statusPalette.backgroundColor,
+            border: `1px solid ${statusPalette.borderColor}`,
+          }}
+        >
+          <Box
+            sx={{
+              width: 8,
+              height: 8,
+              borderRadius: '999px',
+              bgcolor: statusPalette.dotColor,
+              flexShrink: 0,
+            }}
+          />
+          <Typography
+            sx={{
+              color: statusPalette.textColor,
+              fontSize: displayTextSize[10],
+              lineHeight: 1.2,
+              fontWeight: 700,
+              letterSpacing: '0.8px',
+              textTransform: 'uppercase',
+            }}
+          >
+            {status.label}
+          </Typography>
+        </Box>
       </Box>
+
+      {badges || statusDetail ? (
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
+          {badges}
+          {statusDetail ? (
+            <Typography
+              sx={{
+                color: stationDetailPalette.bodyText,
+                fontSize: displayTextSize[13],
+                lineHeight: 1.5,
+              }}
+            >
+              {statusDetail}
+            </Typography>
+          ) : null}
+        </Box>
+      ) : null}
     </Box>
   );
 }

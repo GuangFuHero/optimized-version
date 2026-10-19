@@ -168,14 +168,14 @@ function SiteSidebarNav({
             LinkComponent={Link}
             href={BACK_OFFICE_HREF}
             icon={<SwapHorizRoundedIcon />}
-            label="前往後台"
+            label="前往管理平台"
             collapsed={collapsed}
           />
         ) : null}
         {portalEntry === 'apply' ? (
           <SidebarItem
             icon={<VerifiedRoundedIcon />}
-            label="申請成為後台人員"
+            label="申請管理權限"
             collapsed={collapsed}
             onClick={onApplyRoleRequest}
           />

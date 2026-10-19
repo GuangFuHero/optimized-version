@@ -77,7 +77,18 @@ export function ReleaseClaimDialog({
             color: color.fg.neutral.subtle,
           }}
         >
-          <AssignmentRoundedIcon sx={{ fontSize: 14, mt: '3px' }} />
+          {/* As tall as a line of the text beside it, so the icon sits on that line at any text size. */}
+          <Box
+            sx={{
+              display: 'grid',
+              placeItems: 'center',
+              height: '1.6em',
+              fontSize: displayTextSize[13],
+              '& svg': { fontSize: 14 },
+            }}
+          >
+            <AssignmentRoundedIcon />
+          </Box>
           <Typography sx={{ fontSize: displayTextSize[13], lineHeight: 1.6 }}>
             {claim?.ticketTitle}
           </Typography>

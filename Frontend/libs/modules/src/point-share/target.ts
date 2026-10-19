@@ -3,6 +3,7 @@ import {
   GetTicketDocument,
   StationFieldsFragmentDoc,
   TicketFieldsFragmentDoc,
+  TicketNeedFieldsFragmentDoc,
   createUrqlClient,
   useFragment,
   type GetStationQuery,
@@ -12,15 +13,21 @@ import {
 import { SITE_FALLBACK_BASE_LAYER, SITE_FALLBACK_DATA_TYPE } from '../route/constants';
 import { createSiteHref } from '../route/serialize';
 import type { SiteModule, SiteRouteState } from '../route/types';
+import { readOpHour } from '../station/availability';
 import { getStationTypeLabel } from '../station/type-options';
-import { formatTicketStatusLabel } from '../ticket/status';
+import type { TicketNeed } from '../ticket/needs/need-claim';
+import { describeTicketForShare } from './share-description';
 import type { PointShareTarget } from './types';
 
 type PointShareMarker = {
   id: string;
   title: string;
+  /** What a station says of itself. A ticket's comes from its needs (`describeTicketForShare`). */
   subtitle: string;
   detailType: 'station' | 'ticket';
+  /** A ticket's needs, when they are known: always on the server, on a list marker in the browser. */
+  needs?: readonly TicketNeed[];
+  ticketMeta?: { taskType?: string | null };
 };
 
 const SHARE_QUERY_CONTEXT = {
@@ -30,10 +37,6 @@ const SHARE_QUERY_CONTEXT = {
 
 function resolveDataType(marker: PointShareMarker) {
   return marker.detailType === 'ticket' ? 'ticket' : 'station';
-}
-
-function resolveTicketLabel(status?: string | null) {
-  return formatTicketStatusLabel(status, '救災任務');
 }
 
 function toPointShareMarkerFromStation(
@@ -48,7 +51,7 @@ function toPointShareMarkerFromStation(
     station.name?.trim() || station.propertyName?.trim() || station.uuid;
   const subtitle =
     station.description?.trim() ||
-    station.opHour?.trim() ||
+    readOpHour(station.opHour) ||
     getStationTypeLabel(station.type);
 
   return {
@@ -69,16 +72,18 @@ function toPointShareMarkerFromTicket(
   const ticket = useFragment(TicketFieldsFragmentDoc, ticketRef);
   const title =
     ticket.title.trim() || ticket.propertyName?.trim() || ticket.uuid;
-  const subtitle =
-    ticket.description?.trim() ||
-    ticket.taskType?.trim() ||
-    resolveTicketLabel(ticket.status);
 
   return {
     id: ticket.uuid,
     title,
-    subtitle,
+    subtitle: '',
     detailType: 'ticket',
+    // Read here rather than through `readTicketNeeds`, whose module is client-only: this runs in
+    // the page's `generateMetadata`. Need names and headcounts reach a guest (ADR-281).
+    needs: (ticketRef.tasks ?? []).map((task) =>
+      useFragment(TicketNeedFieldsFragmentDoc, task),
+    ),
+    ticketMeta: { taskType: ticket.taskType },
   };
 }
 
@@ -163,7 +168,13 @@ export function createPointShareTarget({
 
   return {
     title,
-    description: marker.subtitle,
+    description:
+      marker.detailType === 'ticket'
+        ? describeTicketForShare({
+            needs: marker.needs,
+            taskType: marker.ticketMeta?.taskType,
+          })
+        : marker.subtitle,
     url: new URL(href, origin).toString(),
   };
 }

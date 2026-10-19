@@ -7,7 +7,7 @@ export type RoleRequestRow =
 export type RoleRequestDrawerView =
   | { kind: 'pending'; pending: RoleRequestRow }
   | { kind: 'granted'; approved: RoleRequestRow | null }
-  | { kind: 'form'; lastRejected: RoleRequestRow | null; paused: boolean };
+  | { kind: 'form'; lastClosed: RoleRequestRow | null; paused: boolean };
 
 /**
  * What the application drawer shows (prototype `RoleElevationDrawer`,
@@ -17,8 +17,8 @@ export type RoleRequestDrawerView =
  *   say, which a failed withdrawal's reload reveals. Nothing is left to apply for, and `canApply`
  *   being false then does not mean paused;
  * - otherwise the form, under the last application if it was rejected, so its reply is read before
- *   the same thing is sent again (AC-RE-107). A withdrawn one shows no card: the applicant took it
- *   back themselves, so there is nothing for them to read;
+ *   the same thing is sent again (AC-RE-107), or withdrawn, as word that the withdrawal went
+ *   through (the designer's 2026-10-06 prototype);
  * - `paused` when a super admin has switched applying off (`canApply` with nothing waiting).
  */
 export function roleRequestDrawerView({
@@ -48,7 +48,10 @@ export function roleRequestDrawerView({
 
   return {
     kind: 'form',
-    lastRejected: newest?.status === 'rejected' ? newest : null,
+    lastClosed:
+      newest?.status === 'rejected' || newest?.status === 'withdrawn'
+        ? newest
+        : null,
     paused: !canApply,
   };
 }

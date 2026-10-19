@@ -8,39 +8,31 @@ import { WithdrawRoleRequestDocument } from '@rescue-frontend/data-access';
 import { roleRequestErrorMessage } from './error';
 
 /**
- * Withdrawing the application waiting for review: asked first in a dialog, then sent.
+ * Withdrawing the application waiting for review: asked first in the drawer itself, then sent.
  * `onSubmitted` reads the applications again after either outcome.
  */
 export function useWithdrawRoleRequest(onSubmitted: () => void) {
-  // Open is kept apart from the application being withdrawn, so the dialog can tell whether that
-  // one still waits after a refusal's reload.
-  const [open, setOpen] = useState(false);
-  const [withdrawing, setWithdrawing] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [{ fetching: submitting }, withdrawRoleRequest] = useMutation(
     WithdrawRoleRequestDocument,
   );
 
-  const request = (uuid: string) => {
+  const request = () => {
     setError(null);
-    setWithdrawing(uuid);
-    setOpen(true);
+    setConfirming(true);
   };
 
-  const confirm = async () => {
-    if (!withdrawing) {
-      return;
-    }
-
+  const confirm = async (uuid: string) => {
     setError(null);
-    const result = await withdrawRoleRequest({ uuid: withdrawing });
+    const result = await withdrawRoleRequest({ uuid });
 
     if (result.error) {
       setError(
         roleRequestErrorMessage(result.error, '撤回失敗，請稍後再試一次。'),
       );
     } else {
-      setOpen(false);
+      setConfirming(false);
     }
 
     // Either way: the drawer goes back to the form, or shows what the application became instead.
@@ -49,18 +41,17 @@ export function useWithdrawRoleRequest(onSubmitted: () => void) {
 
   // Stable, so the drawer's opening effect can call it.
   const reset = useCallback(() => {
-    setOpen(false);
+    setConfirming(false);
     setError(null);
   }, []);
 
   return {
-    open,
-    withdrawing,
+    confirming,
     error,
     submitting,
     request,
     confirm,
-    cancel: () => setOpen(false),
+    cancel: () => setConfirming(false),
     reset,
   };
 }
