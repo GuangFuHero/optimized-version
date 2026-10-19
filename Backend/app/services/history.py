@@ -546,6 +546,11 @@ def _render_change(change: Change, *, entity: str, names: dict, visibility: Visi
     }
 
 
+def _is_verdict(event: Event) -> bool:
+    """An auditor's verdict on a ticket: the one write that stamps `audited_at`."""
+    return any(c.table == "tickets" and c.field == "audited_at" for c in event.changes)
+
+
 def render_events(events: list[Event], *, entity: str, names: dict, visibility: Visibility) -> list[dict]:
     """Serialise events, dropping whatever this caller may not see (ADR-130/145).
 
@@ -566,6 +571,9 @@ def render_events(events: list[Event], *, entity: str, names: dict, visibility: 
             if change is not None
         ]
         actor = actor_view(event, names)
+        if not visibility.audit and _is_verdict(event):
+            # Who audited is staff-only, as it is on the ticket itself: the status still shows.
+            actor = ActorView(uuid=None, name=None, kind=actor.kind)
         payload = {
             "event_type": event.event_type,
             "at": event.at,

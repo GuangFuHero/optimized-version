@@ -428,6 +428,40 @@ def test_the_audit_note_requires_audit_view():
     assert with_audit["audit_note"]["after"] == "電話打不通，疑似詐騙"
 
 
+def test_a_verdict_names_its_auditor_only_for_audit_view():
+    """The status moves in public; who gave the verdict stays with oversight, as on the ticket."""
+    auditor = uuidlib.uuid4()
+    rows = [
+        _audit_row(
+            "tickets",
+            "UPDATE",
+            user=auditor,
+            old={"audit_status": "no_audit", "audited_at": None},
+            new={"audit_status": "audited", "audited_at": "2026-10-18T09:12:00+00:00"},
+        )
+    ]
+    names = {str(auditor): ("資料檢核員", False)}
+
+    [public] = _render(rows, Visibility(pii=True, detail=True, audit=False), names=names)
+    [full] = _render(rows, FULL, names=names)
+
+    assert public["changes"] == [{"field": "audit_status", "before": "no_audit", "after": "audited"}]
+    assert (public["actor"]["uuid"], public["actor"]["name"]) == (None, None)
+    assert (full["actor"]["uuid"], full["actor"]["name"]) == (str(auditor), "資料檢核員")
+
+
+def test_an_edit_still_names_its_editor_without_audit_view():
+    """Only the verdict hides its actor: a requester's own edit is theirs to see."""
+    editor = uuidlib.uuid4()
+    rows = [_audit_row("tickets", "UPDATE", user=editor, old={"title": "舊"}, new={"title": "新"})]
+
+    [event] = _render(
+        rows, Visibility(pii=True, detail=True, audit=False), names={str(editor): ("王", False)}
+    )
+
+    assert event["actor"]["uuid"] == str(editor)
+
+
 def test_the_raw_payload_is_attached_only_for_audit_view():
     """The escape hatch for oversight — and invisible to everyone else."""
     rows = [
