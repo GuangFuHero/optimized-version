@@ -12,6 +12,7 @@ import strawberry
 from app.graphql.context import require_authenticated
 from app.graphql.shared import DuplicatesSuspected, secondary_location_to_dict
 from app.graphql.tickets.types import (
+    AuditVerdict,
     CreateHelpRequestInput,
     CreateTaskPropertyInput,
     CreateTicketInput,
@@ -32,6 +33,7 @@ from app.graphql.tickets.types import (
     UpdateTicketTaskInput,
 )
 from app.services import ticket as ticket_service
+from app.services import ticket_audit
 from app.services.dedup_submission import SubmissionHeld, TaskSubmission, submit_new_task, submit_new_ticket
 
 
@@ -65,7 +67,6 @@ class RequestMutation:
             contact_phone=input.contact_phone,
             priority=input.priority,
             task_type=input.task_type,
-            visibility=input.visibility.value,
             disaster_types=input.disaster_types,
             person_trapped_reported=(
                 input.person_trapped_reported.value if input.person_trapped_reported else None
@@ -104,6 +105,7 @@ class RequestMutation:
             description=input.description,
             contact_name=input.contact_name,
             contact_phone=input.contact_phone,
+            contact_email=input.contact_email,
             secondary_location=(
                 secondary_location_to_dict(input.secondary_location)
                 if input.secondary_location is not None
@@ -126,28 +128,26 @@ class RequestMutation:
     async def update_ticket(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateTicketInput
     ) -> TicketType:
-        """Update a ticket's priority, title, address, or review notes.
+        """Update a ticket's priority, title, content, or address.
 
-        Not its status, which is worked out from its needs. `secondaryLocation` replaces the
-        address wholesale and creates it when the ticket was filed without one (ADR-268).
-        Requires ticket.edit with scope check.
-
-        Note: verification_status is NOT set here — that is a review decision, handled by
-        review_ticket under ticket.review (ADR-049).
+        Not its status, which is worked out from its needs, nor its audit, which auditTicket
+        gives. A change to the content voids a verdict given on the old one. `secondaryLocation`
+        replaces the address wholesale and creates it when the ticket was filed without one
+        (ADR-268). Requires ticket.edit with scope check.
         """
         changes = {}
         if input.priority is not None:
             changes["priority"] = input.priority
         if input.title is not None:
             changes["title"] = input.title
-        for field in ("description", "review_note", "disaster_types"):
+        for field in ("description", "disaster_types"):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
                 changes[field] = val
-        # Enums have to be unwrapped to their string value before reaching the service, the
-        # same way `visibility` is on create. `GenericRepository.update` matches keys by
-        # `hasattr`, so an unwrapped enum would be stored as the member object rather than
-        # rejected — silently, which is why this is explicit rather than folded into the loop.
+        # Enums have to be unwrapped to their string value before reaching the service.
+        # `update_ticket` matches keys by `hasattr`, so an unwrapped enum would be stored as the
+        # member object rather than rejected — silently, which is why this is explicit rather
+        # than folded into the loop.
         for field in ("person_trapped_reported", "immediate_danger_reported"):
             val = getattr(input, field)
             if val is not strawberry.UNSET:
@@ -198,24 +198,25 @@ class RequestMutation:
         return [TicketDisasterDetailType.from_model(r) for r in rows]
 
     @strawberry.mutation
-    async def review_ticket(
+    async def audit_ticket(
         self,
         info: strawberry.types.Info,
         uuid: UUID,
-        verification_status: str,
-        review_note: str | None = None,
+        status: AuditVerdict,
+        note: str | None = None,
     ) -> TicketType:
-        """Verify/approve a ticket by setting its verification_status.
+        """Give the verdict on a ticket as it now stands: 'audited', or 'audit_issue' with a note.
 
-        A review decision, gated by ticket.review (not ticket.edit) with scope check.
-        Returns the updated TicketType.
+        Requires ticket.audit with scope check. The note is required for an issue, and the
+        requester and the volunteers on its needs are told the ticket may be wrong, without the
+        note. A later change to the content sends the ticket back to 'no_audit'.
         """
-        ticket = await ticket_service.review_ticket(
+        ticket = await ticket_audit.audit_ticket(
             info.context["db"],
             actor=require_authenticated(info),
             uuid=str(uuid),
-            verification_status=verification_status,
-            review_note=review_note,
+            status=status.value,
+            note=note,
         )
         return TicketType.from_model(ticket)
 
@@ -260,7 +261,6 @@ class TicketTaskMutation:
                 task_description=input.task_description,
                 quantity=input.quantity,
                 source=input.source,
-                visibility=input.visibility.value,
                 route_uuid=str(input.route_uuid) if input.route_uuid else None,
                 acknowledged_duplicate_of=acknowledged_duplicate_of,
             ),
@@ -273,21 +273,15 @@ class TicketTaskMutation:
     async def update_ticket_task(
         self, info: strawberry.types.Info, uuid: UUID, input: UpdateTicketTaskInput
     ) -> TicketTaskType:
-        """Update a ticket task's moderation status, visibility, or notes.
+        """Update a ticket task's progress note.
 
         UNSET fields are skipped. Requires ticket.edit permission. Returns the updated task.
         Its status is not editable: it moves only through assignTaskActor, unassignTaskActor,
         stopRecruiting and deletion.
         """
         changes = {}
-        if input.moderation_status is not None:
-            changes["moderation_status"] = input.moderation_status
-        if input.visibility is not None:
-            changes["visibility"] = input.visibility.value
-        for field in ("progress_note", "review_note"):
-            val = getattr(input, field)
-            if val is not strawberry.UNSET:
-                changes[field] = val
+        if input.progress_note is not strawberry.UNSET:
+            changes["progress_note"] = input.progress_note
 
         task = await ticket_service.update_ticket_task(
             info.context["db"], actor=require_authenticated(info), uuid=str(uuid), changes=changes
@@ -439,7 +433,6 @@ def _task_submission(draft) -> TaskSubmission:
         task_description=draft.task_description,
         quantity=draft.quantity,
         source=draft.source,
-        visibility=draft.visibility.value,
         route_uuid=str(draft.route_uuid) if draft.route_uuid else None,
         acknowledged_duplicate_of=draft.acknowledged_duplicate_of,
     )

@@ -42,7 +42,6 @@ def _make_ticket(
         status="pending",
         priority="high",
         task_type=task_type,
-        visibility="public",
     )
 
 
@@ -54,7 +53,6 @@ def _make_task(
         task_type=task_type,
         task_name="task",
         source="user",
-        visibility="public",
         created_by=user_uuid,
         status=status,
     )

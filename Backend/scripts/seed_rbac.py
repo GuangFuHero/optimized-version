@@ -92,17 +92,17 @@ ROLES_DATA = [
             Perm.TICKET_VIEW_HISTORY: "all",
             Perm.STATION_VIEW_HISTORY: "all",
             # Oversight reads the whole platform, so its export reaches everything. It gets no
-            # import, because its only writes are reviews: deciding and undoing station
-            # suggestions (ADR-300), and the verdict on tickets and needs (ADR-312).
+            # import, because its only writes are reviews and audits: deciding and undoing
+            # station suggestions (ADR-300), and the verdict on tickets.
             Perm.STATION_EXPORT: "all",
             Perm.TICKET_EXPORT: "all",
             # A reversal of the read-only auditor (ADR-300): a merge can only write a field
             # someone suggested, and every merge records its before values so it can be undone.
             Perm.STATION_REVIEW: "all",
             Perm.STATION_REVOKE: "all",
-            # ADR-312: a data auditor reviews every ticket and need — the moderation status and
-            # review notes — without the ticket.edit that would let them rewrite what was filed.
-            Perm.TICKET_REVIEW: "all",
+            # A data auditor checks every ticket, giving the verdict and its note, without the
+            # ticket.edit that would let them rewrite what was filed.
+            Perm.TICKET_AUDIT: "all",
         },
     },
     {
@@ -129,7 +129,7 @@ ROLES_DATA = [
                 Perm.TICKET_EDIT,
                 Perm.TICKET_DELETE,
                 Perm.TICKET_ASSIGN,
-                Perm.TICKET_REVIEW,
+                Perm.TICKET_AUDIT,
                 Perm.FIELD_VIEW,
                 Perm.FIELD_ADD,
                 Perm.FIELD_EDIT,
@@ -207,7 +207,7 @@ ROLES_DATA = [
             Perm.TICKET_EDIT: "zone",
             Perm.TICKET_DELETE: "zone",
             Perm.TICKET_ASSIGN: "zone",
-            Perm.TICKET_REVIEW: "zone",
+            Perm.TICKET_AUDIT: "zone",
             Perm.TEAM_VIEW: "team",
             Perm.TEAM_MEMBER_MANAGE: "team",
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
@@ -256,8 +256,8 @@ ROLES_DATA = [
             Perm.TICKET_EDIT: "zone",
             Perm.TICKET_DELETE: "own",
             Perm.TICKET_ASSIGN: "own",
-            # ADR-312: field workers review the tickets and needs in their zone, as admins do.
-            Perm.TICKET_REVIEW: "zone",
+            # Field workers audit the tickets in their zone, as admins do.
+            Perm.TICKET_AUDIT: "zone",
             Perm.TEAM_VIEW: "team",
             Perm.ANN_VIEW_ADMIN: "all",  # staff read admin-page announcements
         },

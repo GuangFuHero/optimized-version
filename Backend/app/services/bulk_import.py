@@ -502,7 +502,6 @@ async def _write_ticket(
             contact_phone=fixed.get("contact_phone"),
             priority=fixed.get("priority") or "low",
             task_type=task_type,
-            visibility=fixed.get("visibility") or "public",
             disaster_types=fixed.get("disaster_types"),
         )
         progress.parent_written = True
@@ -566,7 +565,6 @@ async def _write_task(
         task_description=creating.get("task_description"),
         quantity=creating.get("task_quantity"),
         source="import",
-        visibility="public",
         route_uuid=None,
     )
     return str(task.uuid)

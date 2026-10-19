@@ -195,12 +195,12 @@ def test_who_claimed_a_need_stays_with_the_requester_and_coordinators():
     }
 
 
-def test_reviewing_tickets_and_needs_is_the_back_offices():
-    """ADR-312: a citizen cannot review even their own; members review their zone, auditors all."""
+def test_auditing_tickets_is_the_back_offices():
+    """A citizen cannot audit even their own; members audit their zone, auditors all."""
     from app.core.permissions import Perm
     from scripts.seed_rbac import ROLES_DATA
 
-    scopes = {spec["name"]: spec["permissions"].get(Perm.TICKET_REVIEW) for spec in ROLES_DATA}
+    scopes = {spec["name"]: spec["permissions"].get(Perm.TICKET_AUDIT) for spec in ROLES_DATA}
     assert scopes == {
         "user": None,
         "data_auditor": "all",

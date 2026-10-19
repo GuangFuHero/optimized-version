@@ -117,7 +117,7 @@ async def test_a_citizen_files_a_help_request_with_its_needs(db):
         ticket.contact_phone,
         ticket.status,
         ticket.priority,
-        ticket.visibility,
+        ticket.audit_status,
         ticket.task_type,
         str(ticket.created_by),
     ) == (
@@ -127,7 +127,7 @@ async def test_a_citizen_files_a_help_request_with_its_needs(db):
         "0912345678",
         "pending",
         "medium",
-        "public",
+        "no_audit",
         "hr",
         citizen_uuid,
     )

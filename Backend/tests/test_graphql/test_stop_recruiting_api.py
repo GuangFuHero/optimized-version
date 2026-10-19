@@ -30,7 +30,6 @@ async def _claimed_need(requester_uuid: str, volunteer_uuid: str) -> str:
             status="pending",
             priority="high",
             task_type="hr",
-            visibility="public",
         )
         db.add(ticket)
         await db.flush()
@@ -40,7 +39,6 @@ async def _claimed_need(requester_uuid: str, volunteer_uuid: str) -> str:
             task_name="清淤",
             quantity=3,
             source="user",
-            visibility="public",
             created_by=requester_uuid,
         )
         db.add(task)

@@ -68,7 +68,6 @@ async def _ticket(db, author, *, title, phone) -> Tickets:
         status="pending",
         priority="high",
         task_type="rescue",
-        visibility="public",
     )
     db.add(ticket)
     await db.flush()
@@ -110,7 +109,7 @@ async def test_one_station_with_the_same_key_is_a_match(db):
 
 @pytest.mark.asyncio
 async def test_the_same_name_in_another_district_is_not_a_match(db):
-    """ "光復國小" exists all over Taiwan — the county/city half of the key is what separates them."""
+    """A "光復國小" exists all over Taiwan — the county/city half of the key is what separates them."""
     author = await _author(db)
     await _station(db, author, name="光復國小", county="花蓮縣", city="光復鄉")
 
@@ -194,7 +193,6 @@ async def test_a_task_matches_within_its_own_ticket(db):
         task_type="rescue",
         task_name="送水",
         source="user",
-        visibility="public",
         created_by=str(author.uuid),
     )
     db.add(task)
@@ -216,7 +214,6 @@ async def test_a_task_of_another_name_under_the_same_ticket_is_new(db):
             task_type="rescue",
             task_name="送水",
             source="user",
-            visibility="public",
             created_by=str(author.uuid),
         )
     )

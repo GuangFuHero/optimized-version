@@ -714,7 +714,6 @@ async def test_create_ticket(client, coordinator_auth):
                     "contactEmail": "alice@example.com",
                     "priority": "high",
                     "taskType": "hr",
-                    "visibility": "public",
                 }
             },
         },
@@ -1167,7 +1166,6 @@ async def test_a_requester_adds_a_property_to_their_own_need(client, login_user_
                     "contactName": "王小明",
                     "priority": "high",
                     "taskType": "hr",
-                    "visibility": "public",
                 }
             },
         },

@@ -116,11 +116,10 @@ def test_the_shared_tables_really_are_classified_differently():
     assert differing, "shared tables are identical — the (entity, table) key buys nothing"
 
 
-def test_review_columns_are_audit_tier():
-    """ADR-130: internal review notes need audit.view, not merely *.view_history."""
-    assert FIELD_TIERS[("ticket", "tickets")]["review_note"].tier is Tier.AUDIT
-    assert FIELD_TIERS[("ticket", "ticket_tasks")]["review_note"].tier is Tier.AUDIT
-    assert FIELD_TIERS[("ticket", "ticket_tasks")]["moderation_status"].tier is Tier.AUDIT
+def test_the_audit_note_is_audit_tier_and_the_status_public():
+    """The note says what an auditor found; the status is public on the ticket itself."""
+    assert FIELD_TIERS[("ticket", "tickets")]["audit_note"].tier is Tier.AUDIT
+    assert FIELD_TIERS[("ticket", "tickets")]["audit_status"].tier is Tier.PUBLIC
 
 
 def test_dedup_and_scoring_columns_are_excluded_everywhere():

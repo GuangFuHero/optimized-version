@@ -32,7 +32,6 @@ async def _filed(requester_uuid: str, volunteer_uuid: str) -> None:
             status="in_progress",
             priority="medium",
             task_type="hr",
-            visibility="public",
         )
         db.add(ticket)
         await db.flush()
@@ -44,7 +43,6 @@ async def _filed(requester_uuid: str, volunteer_uuid: str) -> None:
                 quantity=quantity,
                 status=status,
                 source="user",
-                visibility="public",
                 created_by=requester_uuid,
             )
             db.add(task)

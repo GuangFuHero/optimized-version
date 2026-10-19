@@ -157,7 +157,6 @@ TICKET_COLUMNS: tuple[ColumnSpec, ...] = (
     # `UpdateTicketInput` has no geometry, so a ticket's location is fixed once created.
     _create_only(_c("latitude", FLOAT, required_on_create=True)),
     _create_only(_c("longitude", FLOAT, required_on_create=True)),
-    _create_only(_c("visibility", ENUM, enum_options=_VISIBILITY_OPTIONS, max_length=50)),
     # One row is one ticket plus one task (ADR-120). task_type + task_name are the task's
     # match key; task_description and task_quantity are absent from UpdateTicketTaskInput.
     _create_only(_c("task_type", max_length=50)),
@@ -165,8 +164,11 @@ TICKET_COLUMNS: tuple[ColumnSpec, ...] = (
     _create_only(_c("task_description", TEXT)),
     # At least 1, as for any need (`_validate_need_size`): with 0 every claim reads as full.
     _create_only(_c("task_quantity", INTEGER, min_value=1)),
-    _readonly(_c("verification_status")),
-    _readonly(_c("review_note", TEXT)),
+    # The latest verdict, for every exporter. Only `auditTicket` gives one, so a file never sets it.
+    _readonly(_c("audit_status")),
+    _readonly(_c("audit_note", TEXT)),
+    _readonly(_c("audited_at", TIMESTAMP)),
+    _readonly(_c("audited_by")),
     _readonly(_c("created_at", TIMESTAMP)),
 )
 

@@ -121,7 +121,6 @@ async def main():
             contact_phone="0912345678",
             priority="high",
             task_type=None,
-            visibility="public",
             disaster_types=None,
         )
     )
@@ -145,7 +144,6 @@ async def main():
             task_description=None,
             quantity=5,
             source="user",
-            visibility="public",
             route_uuid=None,
         )
     )
@@ -267,8 +265,8 @@ async def main():
         )
         check("無 audit.view 時沒有 RAW（ADR-130）", all(e.get("raw") is None for e in limited.events))
         check(
-            "無 audit.view 時看不到 moderation_status（稽核層，ADR-130）",
-            not any(c["field"] == "moderation_status" for c in changes),
+            "無 audit.view 時看不到 audit_note（稽核層，ADR-130）",
+            not any(c["field"] == "audit_note" for c in changes),
         )
         check(
             "事件數與稽核員看到的一樣多（過濾的是欄位，不是事件）",

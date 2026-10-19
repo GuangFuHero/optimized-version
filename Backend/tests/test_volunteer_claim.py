@@ -210,19 +210,6 @@ async def test_a_need_on_a_ticket_in_progress_can_still_be_claimed(db):
 
 
 @pytest.mark.asyncio
-async def test_a_need_awaiting_review_can_be_claimed(db):
-    """`pending_review` needs are already on the public site; blocking them would strand them."""
-    task = await _need(db, quantity=2)
-    assert task.moderation_status == "pending_review"
-    task_uuid = str(task.uuid)
-    volunteer = await _volunteer(db)
-
-    await _claim(db, volunteer, task_uuid)
-
-    assert await _claims(db, task_uuid) == 1
-
-
-@pytest.mark.asyncio
 async def test_two_volunteers_racing_for_the_last_place_get_one_claim(db, monkeypatch):
     """The need row is locked while counting, so the last place is given out once.
 
@@ -949,34 +936,3 @@ async def test_an_edit_cannot_move_a_needs_status(db):
         await update_ticket_task(db, actor=requester, uuid=task_uuid, changes={"status": "fulfilled"})
 
     assert (await _state(db, task_uuid))[0] == "pending"
-
-
-async def _reviewer(db) -> User:
-    """Act with ticket.review `all`, as the seed gives a data auditor (ADR-312)."""
-    user = User(name="資料檢核員")
-    role = Role(name=f"reviewer-{uuidlib.uuid4().hex[:8]}", kind="platform")
-    db.add_all([user, role])
-    await db.flush()
-    permission = (
-        await db.execute(select(Permission).where(Permission.key == Perm.TICKET_REVIEW.value))
-    ).scalar_one_or_none()
-    if permission is None:
-        permission = Permission(key=Perm.TICKET_REVIEW.value)
-        db.add(permission)
-        await db.flush()
-    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope="all"))
-    db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid))
-    await db.flush()
-    return acting_as(user, role)
-
-
-@pytest.mark.asyncio
-async def test_moderation_changes_name_the_outcome_in_chinese(db):
-    """「已通過」, not 【approved】 — same words the site uses (待審核／已通過／已退回)."""
-    task_uuid, volunteer_uuid, _ = await _claimed_by_one(db)
-    reviewer = await _reviewer(db)
-
-    await update_ticket_task(db, actor=reviewer, uuid=task_uuid, changes={"moderation_status": "approved"})
-
-    [notice] = await _notices(db, volunteer_uuid, "ticket_task_moderation_update")
-    assert notice.body == "工單任務「清淤」審核狀態已變更為【已通過】。"

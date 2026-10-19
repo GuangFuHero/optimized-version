@@ -123,7 +123,6 @@ async def _add(
         task_description=None,
         quantity=quantity,
         source="user",
-        visibility="public",
         route_uuid=None,
     )
     return str(task.uuid)
@@ -140,7 +139,6 @@ async def _import(db, actor: User, ticket_uuid: str, *, quantity: int | None = 3
         task_description=None,
         quantity=quantity,
         source="import",
-        visibility="public",
         route_uuid=None,
     )
     return str(task.uuid)

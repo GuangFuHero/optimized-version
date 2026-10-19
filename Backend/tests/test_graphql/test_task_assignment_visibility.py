@@ -49,7 +49,6 @@ async def _need_filed_by(requester_uuid: str) -> tuple[str, str]:
             status="pending",
             priority="high",
             task_type="hr",
-            visibility="public",
         )
         db.add(ticket)
         await db.flush()
@@ -59,7 +58,6 @@ async def _need_filed_by(requester_uuid: str) -> tuple[str, str]:
             task_name="清淤",
             quantity=3,
             source="user",
-            visibility="public",
             created_by=requester_uuid,
         )
         db.add(task)

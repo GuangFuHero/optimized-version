@@ -134,7 +134,6 @@ async def seeded_tickets(coordinator_auth):
                 contact_phone="0912345678" if contact == "王小姐" else None,
                 status=status,
                 priority=priority,
-                visibility="public",
             )
             db.add(ticket)
             await db.flush()
@@ -299,7 +298,6 @@ async def ticket_with_address(coordinator_auth):
             contact_name="陳先生",
             status="pending",
             priority="high",
-            visibility="public",
         )
         db.add(ticket)
         await db.flush()

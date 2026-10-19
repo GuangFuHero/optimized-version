@@ -48,7 +48,6 @@ async def _ticket(title: str, *, deleted: bool = False) -> tuple[str, dict[str, 
             status="pending",
             priority="high",
             task_type="hr",
-            visibility="public",
             delete_at=datetime.now(UTC) if deleted else None,
         )
         db.add(ticket)
@@ -61,7 +60,6 @@ async def _ticket(title: str, *, deleted: bool = False) -> tuple[str, dict[str, 
                 task_name=name,
                 quantity=3,
                 source="user",
-                visibility="public",
                 created_by=str(requester.uuid),
             )
             db.add(task)

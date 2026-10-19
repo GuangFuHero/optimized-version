@@ -91,7 +91,6 @@ async def _task_property(db) -> TaskProperty:
         status="pending",
         priority="high",
         task_type="supply",
-        visibility="public",
     )
     db.add(ticket)
     await db.flush()
@@ -101,7 +100,6 @@ async def _task_property(db) -> TaskProperty:
         task_name="Deliver bottled water",
         quantity=50,
         source="user",
-        visibility="public",
         created_by=str(author.uuid),
     )
     db.add(task)

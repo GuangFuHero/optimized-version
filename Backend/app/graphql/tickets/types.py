@@ -8,6 +8,7 @@ from typing import Annotated
 from uuid import UUID
 
 import strawberry
+from strawberry.scalars import JSON
 
 from app.core.permissions import Perm
 from app.core.rbac_scopes import Scope, in_scope
@@ -21,15 +22,15 @@ from app.graphql.shared import (
     SecondaryLocationInput,
     SecondaryLocationType,
     TriState,
-    Visibility,
 )
+from app.services import ticket_audit
 
 
 def ticket_detail_visible(info: strawberry.types.Info, ticket_uuid: str, resource=None):
     """Whether the caller may see this ticket's detail (ADR-281), decided once per request.
 
     Detail is everything `ticket.view_detail` guards: the exact point, the address, the free
-    text of the ticket and its tasks, the photos, the review notes, who filed it. One ticket
+    text of the ticket and its tasks, the photos, who filed it. One ticket
     is one decision, so the answer is shared by the ticket, its tasks and their properties —
     keyed by ticket uuid in the request context rather than memoized per GraphQL object,
     because a task has no object in common with its ticket.
@@ -57,9 +58,9 @@ def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str, resour
     widened it to everyone signed in; with `createdBy` open and the requester's name in full to
     anyone who claims, an open claimant list would let anyone follow a volunteer from need to
     need. So they follow the timeline instead, which kept view_pii's old tiering — and already
-    names who took and who dropped a task (ADR-143). It also gates a need's moderation status,
-    the contact details beside a claim, and the triage answers in the `tickets` list (ADR-286
-    points 1, 5 and 6). `resource` spares the loader as in ticket_detail_visible.
+    names who took and who dropped a task (ADR-143). It also gates the contact details beside a
+    claim, and the triage answers in the `tickets` list (ADR-286 points 1, 5 and 6). `resource`
+    spares the loader as in ticket_detail_visible.
     """
     decided = info.context["_ticket_history_visible"]
     key = str(ticket_uuid)
@@ -67,6 +68,20 @@ def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str, resour
         decided[key] = asyncio.ensure_future(
             _decide_ticket_scope(info, Perm.TICKET_VIEW_HISTORY, key, resource)
         )
+    return decided[key]
+
+
+def ticket_audit_visible(info: strawberry.types.Info, ticket_uuid: str, resource=None):
+    """Whether the caller holds ticket.audit on this ticket, decided once per request.
+
+    Gates the audit note, who gave the verdict and when, and the audit history. On the public
+    site everyone acts as their plain account, which holds no ticket.audit, so all of it stays
+    on the admin page; the status alone is public. `resource` as in ticket_detail_visible.
+    """
+    decided = info.context["_ticket_audit_visible"]
+    key = str(ticket_uuid)
+    if key not in decided:
+        decided[key] = asyncio.ensure_future(_decide_ticket_scope(info, Perm.TICKET_AUDIT, key, resource))
     return decided[key]
 
 
@@ -118,6 +133,56 @@ class NeedKind(enum.Enum):
     supply = "supply"
     medical = "medical"
     hr = "hr"
+
+
+@strawberry.enum
+class AuditVerdict(enum.Enum):
+    """What an auditor decides on a ticket: `VERDICTS` in app/services/ticket_audit.py."""
+
+    audited = "audited"
+    audit_issue = "audit_issue"
+
+
+@strawberry.enum
+class AuditStatus(enum.Enum):
+    """A ticket's audit status, to filter on: `AUDIT_STATUSES` in app/services/ticket_audit.py."""
+
+    no_audit = "no_audit"
+    need_audit = "need_audit"
+    audited = "audited"
+    audit_issue = "audit_issue"
+
+
+@strawberry.type(description="One move of a ticket's audit status")
+class TicketAuditEntryType:
+    """An entry of `TicketType.auditHistory`, built by `ticket_audit.audit_history`."""
+
+    kind: str = strawberry.field(
+        description=(
+            "What moved it: 'verdict' (an auditor's), 'scan' (picked out for checking) or "
+            "'content_change' (a change that voided the verdict)"
+        )
+    )
+    status: str = strawberry.field(description="The audit status it moved to")
+    note: str | None = strawberry.field(description="The auditor's note; set on a verdict only")
+    at: datetime
+    actor_uuid: str | None = strawberry.field(description="Who moved it; null for the scan")
+    actor_name: str | None = None
+
+
+@strawberry.type(description="One field that differs from the content the last verdict was given on")
+class TicketAuditChangeType:
+    """An entry of `TicketType.changesSinceAudit`, built by `ticket_audit.content_changes`."""
+
+    entity: str = strawberry.field(
+        description="'ticket', 'secondary_location', 'disaster_detail', 'task' or 'task_property'"
+    )
+    entity_uuid: str = strawberry.field(
+        description="The row it is on; the ticket's own uuid for its address and disaster answers"
+    )
+    field: str = strawberry.field(description="Column name, or the disaster field's property name")
+    audited_value: JSON | None = strawberry.field(description="Its value when audited; null if it is new")
+    current_value: JSON | None = None
 
 
 @strawberry.type
@@ -275,9 +340,6 @@ class TicketTaskType:
         ),
     )
     source: str = strawberry.field(default="user", description="Origin of this task: 'user' or 'official'")
-    visibility: str = strawberry.field(
-        default="public", description="Who can see this task: 'public', 'restricted', or 'internal'"
-    )
     recruiting_stopped_at: datetime | None = strawberry.field(
         default=None,
         description=(
@@ -295,9 +357,7 @@ class TicketTaskType:
     # about original free text, not structure).
     _task_description_raw: strawberry.Private[str | None] = None
     _progress_note_raw: strawberry.Private[str | None] = None
-    _review_note_raw: strawberry.Private[str | None] = None
     _created_by_raw: strawberry.Private[str | None] = None
-    _moderation_status_raw: strawberry.Private[str] = "pending_review"
 
     def _detail_visible(self, info: strawberry.types.Info):
         return ticket_detail_visible(info, self.ticket_uuid)
@@ -324,16 +384,6 @@ class TicketTaskType:
 
     @strawberry.field(
         description=(
-            "Moderator's notes explaining the review decision. Null to a caller without "
-            "ticket.view_detail on the parent ticket"
-        )
-    )
-    async def review_note(self, info: strawberry.types.Info) -> str | None:
-        """Return the moderator's note, or null when the caller is out of detail scope."""
-        return self._review_note_raw if await self._detail_visible(info) else None
-
-    @strawberry.field(
-        description=(
             "UUID of the user who created this task. Null to a caller without "
             "ticket.view_detail on the parent ticket"
         )
@@ -341,22 +391,6 @@ class TicketTaskType:
     async def created_by(self, info: strawberry.types.Info) -> str | None:
         """Return the author's uuid, or null when the caller is out of detail scope."""
         return self._created_by_raw if await self._detail_visible(info) else None
-
-    @strawberry.field(
-        description=(
-            "Review state: 'pending_review', 'approved', or 'rejected'. Null to a caller without "
-            "ticket.view_history on the parent ticket"
-        )
-    )
-    async def moderation_status(self, info: strawberry.types.Info) -> str | None:
-        """The back office's verdict on the need: the requester's and the coordinators' to see.
-
-        Every need a citizen files starts as pending_review, so shown to everyone it reads as
-        "not to be trusted yet", and a rejection tells the public what staff decided. The
-        timeline keeps it in its audit layer; here it follows ticket.view_history, as the claimant
-        list does, so whoever can review the need can still read it back.
-        """
-        return self._moderation_status_raw if await ticket_history_visible(info, self.ticket_uuid) else None
 
     @strawberry.field
     async def properties(self, info: strawberry.types.Info) -> list[TaskPropertyType]:
@@ -420,15 +454,12 @@ class TicketTaskType:
             quantity=m.quantity,
             status=m.status,
             source=m.source,
-            visibility=m.visibility,
             recruiting_stopped_at=m.recruiting_stopped_at,
             created_at=m.created_at,
             updated_at=m.updated_at,
             _task_description_raw=m.task_description,
             _progress_note_raw=m.progress_note,
-            _review_note_raw=m.review_note,
             _created_by_raw=m.created_by,
-            _moderation_status_raw=m.moderation_status,
         )
 
 
@@ -447,10 +478,6 @@ class CreateTicketTaskInput:
         ),
     )
     source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
-    visibility: Visibility = strawberry.field(
-        default=Visibility.public,
-        description="Visibility: 'public' (default), 'restricted', or 'internal'",
-    )
     route_uuid: UUID | None = strawberry.field(
         default=None, description="Optional UUID of an associated route"
     )
@@ -484,6 +511,9 @@ class CreateHelpRequestInput:
     contact_phone: str | None = strawberry.field(
         default=None, description="Phone number or LINE ID, as the person typed it"
     )
+    contact_email: str | None = strawberry.field(
+        default=None, description="Optional; the account's own email is never filled in for it"
+    )
     secondary_location: SecondaryLocationInput | None = strawberry.field(
         default=None,
         description="The address as typed goes in `landmarkNote`, with `floor` and `room`",
@@ -500,20 +530,10 @@ class CreateHelpRequestInput:
 
 @strawberry.input
 class UpdateTicketTaskInput:
-    """Input for updating a ticket task's moderation status, visibility, or notes — not its status."""
+    """Input for updating a ticket task's progress note — not its status."""
 
     progress_note: str | None = strawberry.field(
         default=strawberry.UNSET, description="Updated progress description — pass null to clear"
-    )
-    review_note: str | None = strawberry.field(
-        default=strawberry.UNSET, description="Moderator's review notes — pass null to clear"
-    )
-    moderation_status: str | None = strawberry.field(
-        default=None,
-        description="New review state: 'pending_review', 'approved', or 'rejected'",
-    )
-    visibility: Visibility | None = strawberry.field(
-        default=None, description="Updated visibility: 'public', 'restricted', or 'internal'"
     )
 
 
@@ -580,11 +600,13 @@ class TicketType:
         default=None,
         description="Type of help needed: 'rescue', 'supply', 'medical', or 'hr'",
     )
-    visibility: str | None = strawberry.field(
-        default=None, description="Who can see this ticket: 'public', 'restricted', or 'internal'"
-    )
-    verification_status: str | None = strawberry.field(
-        default=None, description="Review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'"
+    audit_status: str = strawberry.field(
+        default="no_audit",
+        description=(
+            "The data check: 'no_audit' (not checked as it now stands), 'need_audit' (picked out "
+            "for checking), 'audited' (found right) or 'audit_issue' (found wrong). Public, so a "
+            "list can leave out tickets with issues"
+        ),
     )
     disaster_types: list[str] = strawberry.field(
         default_factory=list,
@@ -618,8 +640,11 @@ class TicketType:
     # scope checks — `own` is decided on it whether or not the caller may read it.
     _geometry_geojson: strawberry.Private[dict | None] = None
     _description_raw: strawberry.Private[str | None] = None
-    _review_note_raw: strawberry.Private[str | None] = None
     _created_by_raw: strawberry.Private[str | None] = None
+    # Backing the ticket.audit resolvers: the verdict's note, when and by whom.
+    _audit_note_raw: strawberry.Private[str | None] = None
+    _audited_at_raw: strawberry.Private[datetime | None] = None
+    _audited_by_raw: strawberry.Private[str | None] = None
     # How coarse the point is for a caller without detail: the query's `zoom`, capped.
     _coarse_resolution: strawberry.Private[int] = COARSE_MAX_H3_RESOLUTION
 
@@ -683,15 +708,67 @@ class TicketType:
         """Return the description, or null when the caller is out of detail scope (AC-03)."""
         return self._description_raw if await self._detail_visible(info) else None
 
+    def _audit_visible(self, info: strawberry.types.Info):
+        """This ticket's ticket.audit decision (see ticket_audit_visible)."""
+        return ticket_audit_visible(info, str(self.uuid), self._scope_resource())
+
     @strawberry.field(
         description=(
-            "Moderator's notes about the verification decision. Null to a caller without "
-            "ticket.view_detail here"
+            "The auditor's note on the last verdict; always set for 'audit_issue'. Null to a caller "
+            "without ticket.audit here"
         )
     )
-    async def review_note(self, info: strawberry.types.Info) -> str | None:
-        """Return the moderator's note, or null when the caller is out of detail scope."""
-        return self._review_note_raw if await self._detail_visible(info) else None
+    async def audit_note(self, info: strawberry.types.Info) -> str | None:
+        """Return the note, or null when the caller cannot audit this ticket."""
+        return self._audit_note_raw if await self._audit_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "When the last verdict was given, kept after a change voids it. Null if never audited, "
+            "or to a caller without ticket.audit here"
+        )
+    )
+    async def audited_at(self, info: strawberry.types.Info) -> datetime | None:
+        """Return the time of the last verdict, or null when the caller cannot audit this ticket."""
+        return self._audited_at_raw if await self._audit_visible(info) else None
+
+    @strawberry.field(
+        description="UUID of who gave the last verdict. Null if never audited, or without ticket.audit here"
+    )
+    async def audited_by(self, info: strawberry.types.Info) -> str | None:
+        """Return the auditor's uuid, or null when the caller cannot audit this ticket."""
+        return self._audited_by_raw if await self._audit_visible(info) else None
+
+    @strawberry.field(
+        description=(
+            "Every move of the audit status, newest first: verdicts, the scan's flags, and changes "
+            "that voided a verdict. Null to a caller without ticket.audit here. Read it on one "
+            "ticket at a time: it queries the change log per ticket"
+        )
+    )
+    async def audit_history(self, info: strawberry.types.Info) -> list[TicketAuditEntryType] | None:
+        """Return the audit history, or null when the caller cannot audit this ticket."""
+        if not await self._audit_visible(info):
+            return None
+        entries = await ticket_audit.audit_history(info.context["db"], str(self.uuid))
+        return [TicketAuditEntryType(**entry) for entry in entries]
+
+    @strawberry.field(
+        description=(
+            "What differs from the content the last verdict was given on, field by field. Null if "
+            "never audited, or to a caller without ticket.audit here. A need taken off since does "
+            "not appear: it does not void a verdict. Read it on one ticket at a time"
+        )
+    )
+    async def changes_since_audit(self, info: strawberry.types.Info) -> list[TicketAuditChangeType] | None:
+        """Return the changes since the last verdict, or null when not audited or not visible."""
+        if not await self._audit_visible(info):
+            return None
+        ticket = await info.context["loaders"]["ticket_by_uuid"].load(str(self.uuid))
+        if ticket is None:
+            return None
+        changes = await ticket_audit.changes_since_audit(info.context["db"], ticket)
+        return None if changes is None else [TicketAuditChangeType(**change) for change in changes]
 
     @strawberry.field(
         description=(
@@ -900,8 +977,7 @@ class TicketType:
             status=m.status,
             priority=m.priority,
             task_type=m.task_type,
-            visibility=m.visibility,
-            verification_status=m.verification_status,
+            audit_status=m.audit_status,
             disaster_types=list(m.disaster_types or []),
             created_at=m.created_at,
             updated_at=m.updated_at,
@@ -913,8 +989,10 @@ class TicketType:
             _geometry_raw=m.geometry,
             _geometry_geojson=geom_to_geojson(m.geometry),
             _description_raw=m.description,
-            _review_note_raw=m.review_note,
             _created_by_raw=m.created_by,
+            _audit_note_raw=m.audit_note,
+            _audited_at_raw=m.audited_at,
+            _audited_by_raw=str(m.audited_by) if m.audited_by else None,
             _coarse_resolution=coarse_resolution,
             _listed=listed,
         )
@@ -967,7 +1045,6 @@ class CreateTicketTaskDraft:
     task_description: str | None = None
     quantity: int | None = strawberry.field(default=None, description="Number of people or units needed")
     source: str = strawberry.field(default="user", description="Origin: 'user' (default) or 'official'")
-    visibility: Visibility = strawberry.field(default=Visibility.public)
     route_uuid: UUID | None = None
     acknowledged_duplicate_of: str | None = strawberry.field(
         default=None,
@@ -1011,10 +1088,6 @@ class CreateTicketInput:
     task_type: str | None = strawberry.field(
         default=None, description="Type of help: 'rescue', 'supply', 'medical', or 'hr'"
     )
-    visibility: Visibility = strawberry.field(
-        default=Visibility.public,
-        description="Visibility: 'public' (default), 'restricted', or 'internal'",
-    )
     disaster_types: list[str] | None = strawberry.field(
         default=None,
         description=(
@@ -1047,9 +1120,10 @@ class CreateTicketInput:
 
 @strawberry.input
 class UpdateTicketInput:
-    """Input for updating a ticket's priority, content, address, or review notes.
+    """Input for updating a ticket's priority, content, or address.
 
-    There is no `status`: a ticket's status is worked out from its needs.
+    There is no `status`: a ticket's status is worked out from its needs. Nor the audit fields:
+    only `auditTicket` gives a verdict.
     """
 
     priority: str | None = strawberry.field(
@@ -1057,13 +1131,6 @@ class UpdateTicketInput:
     )
     title: str | None = None
     description: str | None = strawberry.UNSET
-    review_note: str | None = strawberry.field(
-        default=strawberry.UNSET, description="Moderator's review notes — pass null to clear"
-    )
-    verification_status: str | None = strawberry.field(
-        default=None,
-        description="Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'",
-    )
     disaster_types: list[str] | None = strawberry.field(
         default=strawberry.UNSET,
         description="Disaster type keys — pass [] or null to clear. Validated against `disasterTypes`",

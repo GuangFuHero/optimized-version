@@ -89,7 +89,6 @@ def _ticket(**overrides) -> dict:
         "contact_phone": "0912345678",
         "priority": "high",
         "task_type": "rescue",
-        "visibility": "public",
         "disaster_types": ["flood"],
     }
     return fields | overrides
@@ -240,7 +239,6 @@ async def _existing_ticket(db, actor) -> str:
         title="淹水",
         status="pending",
         priority="high",
-        visibility="public",
         contact_name="李",
         created_by=actor.uuid,
     )

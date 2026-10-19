@@ -134,7 +134,6 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
         status="pending",
         priority="high",
         task_type="rescue",
-        visibility="public",
     )
     db.add(ticket)
     await db.flush()
@@ -144,7 +143,6 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
         task_name=f"{title} 任務",
         quantity=3,
         source="user",
-        visibility="public",
         created_by=str(creator.uuid),
     )
     db.add(task)
@@ -358,7 +356,6 @@ async def test_ticket_export_writes_one_row_per_task(db):
             task_type="rescue",
             task_name="第二個任務",
             source="user",
-            visibility="public",
             created_by=str(actor.uuid),
         )
     )
@@ -425,7 +422,8 @@ async def test_a_caller_without_view_pii_gets_every_contact_masked(db):
 
 
 async def _with_free_text(db, ticket, task) -> None:
-    ticket.description, ticket.review_note = "中正路十二號", "已電話確認"
+    ticket.description = "中正路十二號"
+    ticket.audit_status, ticket.audit_note = "audit_issue", "電話打不通"
     task.task_description = "從後門進去"
     await db.flush()
 
@@ -449,11 +447,13 @@ async def test_detail_follows_view_detail_row_by_row(db):
     inside, outside = rows["區內"], rows["區外"]
     assert (inside["latitude"], inside["longitude"]) == ("25", "121.5")
     assert inside["description"] == "中正路十二號"
-    assert inside["review_note"] == "已電話確認"
     assert inside["task_description"] == "從後門進去"
     assert (outside["latitude"], outside["longitude"]) == ("", "")
-    assert outside["description"] == outside["review_note"] == outside["task_description"] == ""
+    assert outside["description"] == outside["task_description"] == ""
     assert outside["task_name"] == "區外 任務"  # structured fields are never withheld
+    # The verdict goes out whole to every exporter, inside the zone or not.
+    assert (inside["audit_status"], inside["audit_note"]) == ("audit_issue", "電話打不通")
+    assert (outside["audit_status"], outside["audit_note"]) == ("audit_issue", "電話打不通")
 
 
 @pytest.mark.asyncio

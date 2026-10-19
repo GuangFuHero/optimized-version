@@ -112,7 +112,6 @@ async def _make_ticket_at(point: Point) -> str:
             contact_name="Someone",
             status="pending",
             priority="low",
-            visibility="public",
         )
         db.add(ticket)
         await db.flush()
@@ -171,7 +170,6 @@ async def _make_task_under(ticket_uuid: str) -> str:
             task_name="Need medics",
             quantity=2,
             source="user",
-            visibility="public",
             created_by=str(creator.uuid),
         )
         db.add(task)
@@ -184,13 +182,10 @@ async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, re
     """ADR-052 (direction B): a task inherits its parent ticket's location for the zone check.
 
     A TicketTask has no geometry of its own, so a `zone` grant would never match it directly;
-    borrowing the parent ticket's point lets a zone member moderate tasks under tickets inside
-    the team's assigned zone (which they own neither). Moderating takes ticket.review, which
-    the seed gives a member at `zone` beside ticket.edit (ADR-312).
+    borrowing the parent ticket's point lets a zone member update tasks under tickets inside
+    the team's assigned zone (which they own neither).
     """
-    _, editor_token = await _make_zone_scoped_editor(
-        redis, team_assigned_to_zone, (Perm.TICKET_EDIT, Perm.TICKET_REVIEW)
-    )
+    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone, (Perm.TICKET_EDIT,))
     ticket_uuid = await _make_ticket_at(INSIDE_ZONE_POINT)
     task_uuid = await _make_task_under(ticket_uuid)
 
@@ -198,24 +193,20 @@ async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, re
         "/graphql",
         json={
             "query": UPDATE_TICKET_TASK,
-            "variables": {"uuid": task_uuid, "input": {"moderationStatus": "approved"}},
+            "variables": {"uuid": task_uuid, "input": {"progressNote": "兩人已到場"}},
         },
         headers=auth_header(editor_token),
     )
     body = resp.json()
     assert "errors" not in body, body
-    # Read back from the row: reading the status back through GraphQL takes
-    # ticket.view_history, which is not what this test is about.
     async with test_db() as db:
-        assert (await db.get(TicketTask, task_uuid)).moderation_status == "approved"
+        assert (await db.get(TicketTask, task_uuid)).progress_note == "兩人已到場"
 
 
 @pytest.mark.asyncio
 async def test_zone_scope_404s_task_under_ticket_outside_zone(client, redis, team_assigned_to_zone):
     """Symmetric to the ticket-level case: a task under a ticket OUTSIDE the zone is 404."""
-    _, editor_token = await _make_zone_scoped_editor(
-        redis, team_assigned_to_zone, (Perm.TICKET_EDIT, Perm.TICKET_REVIEW)
-    )
+    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone, (Perm.TICKET_EDIT,))
     ticket_uuid = await _make_ticket_at(OUTSIDE_ZONE_POINT)
     task_uuid = await _make_task_under(ticket_uuid)
 
@@ -223,7 +214,7 @@ async def test_zone_scope_404s_task_under_ticket_outside_zone(client, redis, tea
         "/graphql",
         json={
             "query": UPDATE_TICKET_TASK,
-            "variables": {"uuid": task_uuid, "input": {"moderationStatus": "approved"}},
+            "variables": {"uuid": task_uuid, "input": {"progressNote": "兩人已到場"}},
         },
         headers=auth_header(editor_token),
     )

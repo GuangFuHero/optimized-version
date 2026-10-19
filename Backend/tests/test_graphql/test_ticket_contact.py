@@ -51,7 +51,6 @@ async def _ticket(created_by: str | None = None) -> tuple[str, str]:
             person_trapped_reported="yes",
             status="pending",
             priority="high",
-            visibility="public",
         )
         db.add(ticket)
         await db.flush()
@@ -61,7 +60,6 @@ async def _ticket(created_by: str | None = None) -> tuple[str, str]:
             task_name="清淤",
             quantity=5,
             source="user",
-            visibility="public",
             created_by=created_by,
         )
         db.add(task)

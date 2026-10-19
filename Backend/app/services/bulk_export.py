@@ -354,6 +354,12 @@ async def export_tickets(
             ).scalars():
                 properties.setdefault(str(row.task_uuid), {})[row.property_name] = row
 
+        auditor_uuids = {str(ticket.audited_by) for _, ticket in pairs if ticket.audited_by}
+        auditors = {}
+        if auditor_uuids:
+            found = await db.execute(select(User.uuid, User.name).where(User.uuid.in_(auditor_uuids)))
+            auditors = {str(uuid): name for uuid, name in found.all()}
+
         rows = []
         for task, ticket in pairs:
             # AC-04: the export is one more path to the same fields, so the same boundary
@@ -377,14 +383,16 @@ async def export_tickets(
                 "description",
                 "status",
                 "priority",
-                "visibility",
-                "verification_status",
-                "review_note",
+                "audit_status",
+                "audit_note",
+                "audited_at",
                 "created_at",
             ):
                 row[field] = _text(getattr(ticket, field, None))
+            # The verdict goes out whole to every exporter, whatever detail the row withholds.
+            row["audited_by"] = _text(auditors.get(str(ticket.audited_by))) if ticket.audited_by else ""
             if not detail:
-                row["description"] = row["review_note"] = ""
+                row["description"] = ""
             # One cell, comma-separated, matching what the importer splits back apart.
             row["disaster_types"] = ",".join(ticket.disaster_types or [])
             for column in columns:

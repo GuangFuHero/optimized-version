@@ -127,8 +127,10 @@ _TICKET_FIELDS = {
     "status": _public(),
     "priority": _public(),
     "task_type": _public(),
-    "visibility": _public(),
-    "verification_status": _public(),
+    # Public, as on the ticket itself: the site leaves out tickets with issues. The note says
+    # what the auditor found, so it stays with the review columns.
+    "audit_status": _public(),
+    "audit_note": _audit(),
     "disaster_types": _public(),
     # Feature 018: the reporter's own triage answers, gated exactly like their phone number
     # because `TicketType` withholds them without `ticket.view_pii` (ADR-254). No mask — a
@@ -138,7 +140,6 @@ _TICKET_FIELDS = {
     "contact_name": _pii(mask_name),
     "contact_email": _pii(mask_email),
     "contact_phone": _pii(mask_phone),
-    "review_note": _audit(),
 }
 
 _STATION_FIELDS = {
@@ -177,9 +178,6 @@ _TASK_FIELDS = {
     "status": _public(),
     "source": _public(),
     "progress_note": _detail(),
-    "visibility": _public(),
-    "moderation_status": _audit(),
-    "review_note": _audit(),
 }
 
 _TASK_PROPERTY_FIELDS = {
@@ -270,6 +268,11 @@ _GENERATED = (
     "timeline already reports (ADR-243)"
 )
 
+_AUDITED_CONTENT = (
+    "a copy of the ticket's content as the last verdict saw it, made of fields the timeline "
+    "already classifies at their own tiers; `changesSinceAudit` is where it is read"
+)
+
 _GEOMETRY_EXCLUSIONS = {
     "uuid": _ID,
     "created_by": _FK,
@@ -289,7 +292,14 @@ _ADDRESS_EXCLUSIONS = {
 EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
     ("ticket", "base_geometries"): _GEOMETRY_EXCLUSIONS,
     ("station", "base_geometries"): _GEOMETRY_EXCLUSIONS,
-    ("ticket", "tickets"): {"uuid": _ID, "search_text": _GENERATED},
+    ("ticket", "tickets"): {
+        "uuid": _ID,
+        "search_text": _GENERATED,
+        # Stamped by the verdict along with the status and note it sets.
+        "audited_at": _DERIVED_STAMP,
+        "audited_by": _FK,
+        "audited_content": _AUDITED_CONTENT,
+    },
     ("station", "stations"): {
         "uuid": _ID,
         "search_text": _GENERATED,

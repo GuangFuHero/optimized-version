@@ -42,11 +42,11 @@ OUTSIDE = Point(122.4312345, 24.6654321)
 TICKET = """
 query($uuid: UUID!, $zoom: Float) {
   ticket(uuid: $uuid, zoom: $zoom) {
-    uuid geometry description reviewNote createdBy
+    uuid geometry description createdBy
     photos { url }
     secondaryLocation { county city lane no }
     tasks {
-      taskName taskDescription progressNote reviewNote createdBy
+      taskName taskDescription progressNote createdBy
       properties { propertyValue comment }
     }
   }
@@ -63,7 +63,7 @@ query($bounds: BoundsInput, $q: String, $zoom: Float) {
 TASKS = """
 query($ticketUuid: String!, $q: String) {
   ticketTasks(ticketUuid: $ticketUuid, q: $q) {
-    uuid taskName taskDescription progressNote reviewNote createdBy
+    uuid taskName taskDescription progressNote createdBy
   }
 }
 """
@@ -131,7 +131,6 @@ async def _ticket(point: Point = INSIDE, created_by: str | None = None, **fields
             contact_name="王小明",
             status="pending",
             priority="low",
-            visibility="public",
             **fields,
         )
         db.add(ticket)
@@ -141,7 +140,7 @@ async def _ticket(point: Point = INSIDE, created_by: str | None = None, **fields
 
 async def _full_ticket() -> tuple[str, str]:
     """A ticket carrying every withheld field at least once, and its task's uuid."""
-    uuid = await _ticket(description="中正路十二號三樓", review_note="已電話確認")
+    uuid = await _ticket(description="中正路十二號三樓")
     async with db_ctx() as db:
         creator = (await db.get(Tickets, uuid)).created_by
         db.add(
@@ -161,9 +160,7 @@ async def _full_ticket() -> tuple[str, str]:
             task_name="清淤人力",
             task_description="從後門進去",
             progress_note="鄰居說人在二樓",
-            review_note="重複單已合併",
             source="user",
-            visibility="public",
             created_by=creator,
         )
         db.add(task)
@@ -461,7 +458,8 @@ async def _near_a_vertex() -> tuple[Point, list[float]]:
         row = (
             await db.execute(
                 text(
-                    "WITH c AS (SELECT h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(:x, :y), 4326), 8) AS cell), "
+                    "WITH c AS (SELECT h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(:x, :y), 4326), 8) "
+                    "AS cell), "
                     "g AS (SELECT h3_cell_to_geometry(cell) AS centre, "
                     "ST_PointN(ST_ExteriorRing(h3_cell_to_boundary_geometry(cell)), 1) AS vertex FROM c) "
                     "SELECT ST_X(centre), ST_Y(centre), ST_X(vertex), ST_Y(vertex) FROM g"
@@ -551,7 +549,6 @@ async def test_an_anonymous_caller_gets_none_of_the_detail(client):
     ticket = (await _query(client, TICKET, {"uuid": uuid}))["ticket"]
 
     assert ticket["description"] is None
-    assert ticket["reviewNote"] is None
     assert ticket["createdBy"] is None
     assert ticket["photos"] == []
     assert ticket["secondaryLocation"] is None
@@ -559,7 +556,6 @@ async def test_an_anonymous_caller_gets_none_of_the_detail(client):
     assert task["taskName"] == "清淤人力"  # structured: what help is needed stays public
     assert task["taskDescription"] is None
     assert task["progressNote"] is None
-    assert task["reviewNote"] is None
     assert task["createdBy"] is None
     [prop] = task["properties"]
     assert prop["propertyValue"] == "shovel"
@@ -575,14 +571,12 @@ async def test_a_signed_in_caller_gets_all_of_the_detail(client, redis):
     ticket = (await _query(client, TICKET, {"uuid": uuid}, token))["ticket"]
 
     assert ticket["description"] == "中正路十二號三樓"
-    assert ticket["reviewNote"] == "已電話確認"
     assert ticket["createdBy"] is not None
     assert ticket["photos"] == [{"url": "https://x/door.jpg"}]
     assert ticket["secondaryLocation"]["no"] == "12號"
     [task] = ticket["tasks"]
     assert task["taskDescription"] == "從後門進去"
     assert task["progressNote"] == "鄰居說人在二樓"
-    assert task["reviewNote"] == "重複單已合併"
     assert task["createdBy"] is not None
     assert task["properties"][0]["comment"] == "找巷口的陳先生拿鑰匙"
 
@@ -597,7 +591,6 @@ async def test_the_task_list_withholds_the_same_detail(client):
     assert task["taskName"] == "清淤人力"
     assert task["taskDescription"] is None
     assert task["progressNote"] is None
-    assert task["reviewNote"] is None
     assert task["createdBy"] is None
 
 
@@ -615,7 +608,6 @@ async def test_task_detail_follows_the_parent_tickets_scope(client, redis):
                 task_name="搬家具",
                 task_description="我家客廳",
                 source="user",
-                visibility="public",
                 created_by=user_uuid,
             )
         )

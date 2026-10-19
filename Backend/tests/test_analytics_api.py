@@ -335,7 +335,6 @@ async def test_ticket_chart_counts_only_tickets_in_the_callers_scope(client, db_
                 status="pending",
                 priority="high",
                 task_type="rescue",
-                visibility="public",
             )
         )
     await db_session.commit()
@@ -437,7 +436,6 @@ async def test_category_axis_shows_display_names(client, db_session, redis):
             status="pending",
             priority="high",
             task_type="rescue",
-            visibility="public",
         )
     )
     await db_session.commit()
@@ -483,7 +481,6 @@ async def test_value_returns_the_aggregate_within_the_callers_scope(client, db_s
                 status="pending",
                 priority="high",
                 task_type="rescue",
-                visibility="public",
             )
         )
     await db_session.commit()
@@ -513,7 +510,6 @@ async def test_value_of_completion_rate_is_a_percentage(client, db_session, redi
             status="pending",
             priority="high",
             task_type="rescue",
-            visibility="public",
         )
         for _ in range(2)
     )
@@ -524,7 +520,6 @@ async def test_value_of_completion_rate_is_a_percentage(client, db_session, redi
         task_type="rescue",
         task_name="task",
         source="user",
-        visibility="public",
         created_by=user_uuid,
         status="fulfilled",
     )
@@ -674,7 +669,6 @@ def _ticket(owner: str, task_type: str | None = "rescue") -> Tickets:
         status="pending",
         priority="high",
         task_type=task_type,
-        visibility="public",
     )
 
 
@@ -760,7 +754,6 @@ async def test_data_completion_rate_is_a_percentage(client, db_session, redis):
         task_type="rescue",
         task_name="task",
         source="user",
-        visibility="public",
         created_by=user_uuid,
         status="fulfilled",
     )
@@ -847,7 +840,6 @@ async def test_data_durations_are_days_as_numbers(client, db_session, redis):
         task_type="rescue",
         task_name="task",
         source="user",
-        visibility="public",
         created_by=user_uuid,
         status="fulfilled",
     )

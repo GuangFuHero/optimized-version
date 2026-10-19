@@ -409,23 +409,23 @@ def test_a_tickets_geometry_move_follows_view_detail_not_view_pii():
     assert "geometry" in _fields(_render(rows, Visibility(pii=False, detail=True)))
 
 
-def test_review_columns_require_audit_view():
-    """Internal review notes are oversight material, not part of the public timeline."""
+def test_the_audit_note_requires_audit_view():
+    """What an auditor found is oversight material; the status beside it is public."""
     rows = [
         _audit_row(
-            "ticket_tasks",
+            "tickets",
             "UPDATE",
-            old={"status": "pending", "review_note": "電話打不通，疑似詐騙"},
-            new={"status": "rejected", "review_note": "已確認為誤報"},
+            old={"audit_status": "no_audit", "audit_note": None},
+            new={"audit_status": "audit_issue", "audit_note": "電話打不通，疑似詐騙"},
         )
     ]
 
     without = _fields(_render(rows, Visibility(pii=True, audit=False)))
     with_audit = _fields(_render(rows, FULL))
 
-    assert "review_note" not in without
-    assert "status" in without, "the public column must survive the audit filter"
-    assert with_audit["review_note"]["after"] == "已確認為誤報"
+    assert "audit_note" not in without
+    assert without["audit_status"]["after"] == "audit_issue", "the public column survives the audit filter"
+    assert with_audit["audit_note"]["after"] == "電話打不通，疑似詐騙"
 
 
 def test_the_raw_payload_is_attached_only_for_audit_view():
@@ -471,7 +471,7 @@ def test_the_raw_payload_never_contains_a_password_hash():
 
 def test_an_event_survives_even_when_every_change_is_filtered_away():
     """Hiding it would misrepresent the timeline as quieter than it actually was."""
-    rows = [_audit_row("tickets", "UPDATE", old={"review_note": "內部"}, new={"review_note": "內部二"})]
+    rows = [_audit_row("tickets", "UPDATE", old={"audit_note": "內部"}, new={"audit_note": "內部二"})]
 
     rendered = _render(rows, NONE)
 

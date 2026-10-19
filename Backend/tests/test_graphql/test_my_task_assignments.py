@@ -44,7 +44,6 @@ async def _ticket_with_needs(requester_uuid: str, title: str, needs: list[str]) 
             status="pending",
             priority="high",
             task_type="hr",
-            visibility="public",
         )
         db.add(ticket)
         await db.flush()
@@ -56,7 +55,6 @@ async def _ticket_with_needs(requester_uuid: str, title: str, needs: list[str]) 
                 task_name=name,
                 quantity=5,
                 source="user",
-                visibility="public",
                 created_by=requester_uuid,
             )
             db.add(task)

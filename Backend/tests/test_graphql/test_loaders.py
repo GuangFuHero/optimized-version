@@ -63,7 +63,6 @@ async def test_tickets_photos_uses_single_batched_query(client, coordinator_auth
                 status="pending",
                 priority="medium",
                 task_type="hr",
-                visibility="public",
             )
             db.add(t)
             tickets.append(t)

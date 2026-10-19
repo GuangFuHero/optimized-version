@@ -33,7 +33,6 @@ async def _need(requester_uuid: str) -> str:
             status="pending",
             priority="high",
             task_type="hr",
-            visibility="public",
         )
         db.add(ticket)
         await db.flush()
@@ -44,7 +43,6 @@ async def _need(requester_uuid: str) -> str:
                 task_name=name,
                 quantity=3,
                 source="user",
-                visibility="public",
                 created_by=requester_uuid,
             )
             for name in ("清淤", "搬家具")

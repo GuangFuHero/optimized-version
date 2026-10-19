@@ -59,6 +59,8 @@ async def get_context(request: Request):
             "_ticket_detail_visible": {},
             # Same, for ticket.view_history; see ticket_history_visible beside it.
             "_ticket_history_visible": {},
+            # Same, for ticket.audit; see ticket_audit_visible.
+            "_ticket_audit_visible": {},
         }
     finally:
         await db_gen.aclose()
