@@ -263,9 +263,7 @@ def _diff(old: dict | None, new: dict | None) -> dict[str, tuple]:
     old = old or {}
     new = new or {}
     return {
-        key: (old.get(key), new.get(key))
-        for key in old.keys() | new.keys()
-        if old.get(key) != new.get(key)
+        key: (old.get(key), new.get(key)) for key in old.keys() | new.keys() if old.get(key) != new.get(key)
     }
 
 
@@ -349,8 +347,10 @@ def build_events(rows: list[AuditLog]) -> list[Event]:
             for column, (before, after) in _diff(row.old_values, row.new_values).items():
                 event.changes.append(
                     Change(
-                        field=column, table=row.table_name,
-                        before=before, after=after,
+                        field=column,
+                        table=row.table_name,
+                        before=before,
+                        after=after,
                     )
                 )
         events.append(event)
@@ -401,9 +401,7 @@ async def resolve_actors(db: AsyncSession, events: list[Event]) -> dict[str, tup
     if not referenced:
         return {}
     rows = (
-        await db.execute(
-            select(User.uuid, User.name, User.delete_at).where(User.uuid.in_(referenced))
-        )
+        await db.execute(select(User.uuid, User.name, User.delete_at).where(User.uuid.in_(referenced)))
     ).all()
     return {str(uuid): (name, delete_at is not None) for uuid, name, delete_at in rows}
 
@@ -441,9 +439,7 @@ def actor_view(event: Event, names: dict[str, tuple[str, bool]]) -> ActorView:
     if event.actor_uuid is None:
         return ActorView(uuid=None, name=None, kind=event.actor_kind)
     name, is_removed = names.get(str(event.actor_uuid), (None, False))
-    return ActorView(
-        uuid=event.actor_uuid, name=name, kind=event.actor_kind, is_removed=is_removed
-    )
+    return ActorView(uuid=event.actor_uuid, name=name, kind=event.actor_kind, is_removed=is_removed)
 
 
 # --- visibility (ADR-130) ---
@@ -511,9 +507,7 @@ def _render_value(value, names: dict[str, tuple[str, bool]], change: Change):
     return value
 
 
-def _render_change(
-    change: Change, *, entity: str, names: dict, visibility: Visibility
-) -> dict | None:
+def _render_change(change: Change, *, entity: str, names: dict, visibility: Visibility) -> dict | None:
     """One field change as the API reports it, or None when the caller may not see it."""
     spec = spec_for(entity, change.table, change.field)
     if spec is None:
@@ -552,9 +546,7 @@ def _render_change(
     }
 
 
-def render_events(
-    events: list[Event], *, entity: str, names: dict, visibility: Visibility
-) -> list[dict]:
+def render_events(events: list[Event], *, entity: str, names: dict, visibility: Visibility) -> list[dict]:
     """Serialise events, dropping whatever this caller may not see (ADR-130/145).
 
     Field names and raw values go out as they are; Chinese labels and status wording are the
@@ -569,8 +561,7 @@ def render_events(
         changes = [
             change
             for change in (
-                _render_change(c, entity=entity, names=names, visibility=visibility)
-                for c in event.changes
+                _render_change(c, entity=entity, names=names, visibility=visibility) for c in event.changes
             )
             if change is not None
         ]
@@ -635,9 +626,7 @@ async def load_timeline(
 
     page = events[offset : offset + limit]
     names = await resolve_actors(db, page) | await resolve_teams(db, page)
-    visibility = await resolve_visibility(
-        db, actor=actor, resource=resource, entity=entity, cache=cache
-    )
+    visibility = await resolve_visibility(db, actor=actor, resource=resource, entity=entity, cache=cache)
 
     return Timeline(
         events=render_events(page, entity=entity, names=names, visibility=visibility),
