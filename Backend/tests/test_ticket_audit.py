@@ -26,7 +26,7 @@ from app.models.request import Tickets
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.services import ticket as ticket_service
 from app.services import ticket_audit
-from tests.conftest import TEST_DB_URL, acting_as
+from tests.conftest import TEST_DB_URL, acting_as, seed_disaster_types
 from tests.test_add_ticket_task import _need, _requester, _stranger, _ticket
 
 
@@ -353,6 +353,23 @@ async def test_the_version_check_never_lets_a_change_through_unseen(db, change, 
     assert bool(ticket_audit.content_changes(before, after, ticket_uuid=ticket_uuid)) is voids
     assert (ticket_audit.content_hash(before) != ticket_audit.content_hash(after)) is new_version
     assert ((await _state(db, ticket_uuid)).audit_status == "no_audit") is voids
+
+
+@pytest.mark.asyncio
+async def test_the_same_disaster_types_in_another_order_are_no_change(db):
+    """A row written out of order, as seed data can be, then saved through the form in order."""
+    seed_disaster_types(db)
+    ticket = await _ticket(db)
+    ticket.disaster_types = ["landslide", "flood"]
+    ticket_uuid = str(ticket.uuid)
+    await db.flush()
+    await _give(db, actor=await _auditor(db), uuid=ticket_uuid, status="audited", note=None)
+
+    await ticket_service.update_ticket(
+        db, actor=await _operator(db), uuid=ticket_uuid, changes={"disaster_types": ["flood", "landslide"]}
+    )
+
+    assert (await _state(db, ticket_uuid)).audit_status == "audited"
 
 
 @pytest.mark.asyncio

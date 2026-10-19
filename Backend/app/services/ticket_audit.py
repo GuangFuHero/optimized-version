@@ -77,6 +77,18 @@ def _set_fields(row, fields) -> dict:
     return {field: value for field in fields if not _blank(value := _plain(getattr(row, field)))}
 
 
+def _ticket_fields(ticket: Tickets) -> dict:
+    """The ticket's own content, its disaster types sorted.
+
+    Their order is no change, and a row written outside the services that sort them, such as
+    seed data, need not be in order.
+    """
+    fields = _set_fields(ticket, TICKET_FIELDS)
+    if "disaster_types" in fields:
+        fields["disaster_types"] = sorted(fields["disaster_types"])
+    return fields
+
+
 def _blank(value) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 
@@ -108,7 +120,7 @@ async def content_of(db: AsyncSession, ticket: Tickets) -> dict:
         else []
     )
     return {
-        "ticket": _set_fields(ticket, TICKET_FIELDS),
+        "ticket": _ticket_fields(ticket),
         "address": _set_fields(address, ADDRESS_FIELDS) if address else {},
         # Sorted: the form sends the same answers back in whatever order, and that is no change.
         "disaster_details": {name: sorted(values) for name, values in answers.items()},
