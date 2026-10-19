@@ -2596,7 +2596,7 @@ export interface components {
       | 'ticket.edit'
       | 'ticket.delete'
       | 'ticket.assign'
-      | 'ticket.review'
+      | 'ticket.audit'
       | 'ticket.export'
       | 'ticket.import'
       | 'station.view'

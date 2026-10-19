@@ -164,9 +164,7 @@ export interface RescueMapMarkerItem {
       | 'contactEmail'
       | 'contactPhone'
       | 'createdBy'
-      | 'visibility'
-      | 'verificationStatus'
-      | 'reviewNote'
+      | 'auditStatus'
       | 'createdAt'
       | 'updatedAt'
     >

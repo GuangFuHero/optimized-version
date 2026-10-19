@@ -696,9 +696,11 @@ tickets {
     string status "pending/in_progress/completed/canceled/archived"
     string priority "low/medium/high/critical"
     string task_type "search_rescue/medical_support/fire_response/supply_delivery/etc"
-    string visibility "public/restricted/internal"
-    string verification_status "unverified/ai_verified/human_verified/disputed"
-    string review_note "nullable"
+    string audit_status "no_audit/need_audit/audited/audit_issue, default no_audit, CHECK in set; public"
+    string audit_note "nullable; CHECK non-blank when audit_status = audit_issue"
+    timestamp audited_at "nullable, when the last verdict was given; kept after content voids it"
+    uuid audited_by FK "nullable FK to users, who gave the last verdict"
+    jsonb audited_content "nullable, the ticket's content as the last verdict saw it"
     string_array disaster_types "default '{}', references disaster_types.key by string; stored sorted+deduped (ADR-246)"
     string person_trapped_reported "nullable, String(20), yes/no/unknown — reporter's answer, NOT a medical judgement"
     string immediate_danger_reported "nullable, String(20), yes/no/unknown — NOT a triage grade"
@@ -706,6 +708,8 @@ tickets {
 }
 %% INDEX: ix_tickets_search_text_trgm USING gin (search_text gin_trgm_ops)
 %% NOTE: contact_name/contact_email/contact_phone are PII and never enter search_text (ADR-079)
+%% NOTE: a verdict (audited/audit_issue) holds for audited_content; once the ticket's content no
+%% longer matches it, audit_status goes back to no_audit. need_audit is set by the scan only.
 base_geometries ||--|| tickets : "inherits as general ticket"
 %% NOTE: polymorphic_identity = "request" (base_geometries.property_name stores "request" for ticket rows)
 %% NOTE: disaster_types is PLURAL (ADR-246) — one incident is routinely two disasters at once
@@ -771,9 +775,6 @@ ticket_tasks {
     string progress_note "nullable"
     boolean is_duplicate
     string dedup_group_id "nullable"
-    string moderation_status "pending_review/approved/rejected/merged"
-    string visibility "public/restricted/internal"
-    string review_note "nullable"
     uuid created_by FK
     timestamp completed_at "nullable, set when status enters 'fulfilled' and cleared when it leaves"
     timestamp canceled_at "nullable, set when status enters 'canceled' and cleared when it leaves"

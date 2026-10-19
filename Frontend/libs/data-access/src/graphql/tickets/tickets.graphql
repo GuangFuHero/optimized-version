@@ -12,9 +12,7 @@ fragment TicketFields on TicketType {
   status
   priority
   taskType
-  visibility
-  verificationStatus
-  reviewNote
+  auditStatus
   createdBy
   createdAt
   updatedAt
@@ -30,9 +28,6 @@ fragment TicketTaskFields on TicketTaskType {
   status
   source
   progressNote
-  visibility
-  moderationStatus
-  reviewNote
   createdAt
   updatedAt
 }

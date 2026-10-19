@@ -2,7 +2,7 @@
 
 - delete_ticket / delete_area: SOFT delete (sets delete_at; row hidden from active
   queries afterwards, not physically removed).
-- review_ticket: verification_status is gated by ticket.review, separate from ticket.edit.
+- audit_ticket: the verdict is gated by ticket.audit, separate from ticket.edit.
 """
 
 import pytest
@@ -16,11 +16,12 @@ mutation($input: CreateTicketInput!) {
 """
 DELETE_TICKET = "mutation($uuid: UUID!) { deleteTicket(uuid: $uuid) }"
 GET_TICKET = "query($uuid: UUID!) { ticket(uuid: $uuid) { uuid status } }"
-REVIEW_TICKET = """
-mutation($uuid: UUID!, $vs: String!) {
-    reviewTicket(uuid: $uuid, verificationStatus: $vs) { uuid verificationStatus }
+AUDIT_TICKET = """
+mutation($uuid: UUID!, $hash: String!) {
+    auditTicket(uuid: $uuid, status: audited, contentHash: $hash) { uuid auditStatus }
 }
 """
+CONTENT_HASH = "query($uuid: UUID!) { ticket(uuid: $uuid) { auditContentHash } }"
 CREATE_AREA = """
 mutation($input: CreateAreaInput!) { createArea(input: $input) { uuid } }
 """
@@ -87,24 +88,30 @@ async def test_login_user_cannot_delete_others_ticket(client, coordinator_auth, 
 
 
 @pytest.mark.asyncio
-async def test_review_ticket_requires_ticket_review(client, coordinator_auth, login_user_auth):
-    """A ticket review needs ticket.review — coordinator succeeds, plain login user is denied."""
+async def test_audit_ticket_requires_ticket_audit(client, coordinator_auth, login_user_auth):
+    """A verdict needs ticket.audit — coordinator succeeds, plain login user is denied."""
     _, coord_token = coordinator_auth
     _, login_token = login_user_auth
     ticket_uuid = await _create_ticket(client, login_token)
+    seen = await client.post(
+        "/graphql",
+        json={"query": CONTENT_HASH, "variables": {"uuid": ticket_uuid}},
+        headers=auth_header(coord_token),
+    )
+    content_hash = seen.json()["data"]["ticket"]["auditContentHash"]
 
     ok = await client.post(
         "/graphql",
-        json={"query": REVIEW_TICKET, "variables": {"uuid": ticket_uuid, "vs": "human_verified"}},
+        json={"query": AUDIT_TICKET, "variables": {"uuid": ticket_uuid, "hash": content_hash}},
         headers=auth_header(coord_token),
     )
     body = ok.json()
     assert "errors" not in body, body
-    assert body["data"]["reviewTicket"]["verificationStatus"] == "human_verified"
+    assert body["data"]["auditTicket"]["auditStatus"] == "audited"
 
     denied = await client.post(
         "/graphql",
-        json={"query": REVIEW_TICKET, "variables": {"uuid": ticket_uuid, "vs": "human_verified"}},
+        json={"query": AUDIT_TICKET, "variables": {"uuid": ticket_uuid, "hash": content_hash}},
         headers=auth_header(login_token),
     )
     denied_errors = denied.json().get("errors", [])

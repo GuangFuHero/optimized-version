@@ -191,18 +191,16 @@ function mapStatus(status?: string | null): TicketListRowItem['status'] {
   return 'pending';
 }
 
-function mapVerification(
-  verificationStatus?: string | null,
+// The list's badges still speak of verification; until they are relabelled for the audit, a
+// checked ticket shows as verified and one with an issue as disputed.
+function mapAudit(
+  auditStatus?: string | null,
 ): TicketListRowItem['verification'] {
-  if (verificationStatus === 'human_verified') {
+  if (auditStatus === 'audited') {
     return 'humanVerified';
   }
 
-  if (verificationStatus === 'ai_verified') {
-    return 'aiVerified';
-  }
-
-  if (verificationStatus === 'disputed') {
+  if (auditStatus === 'audit_issue') {
     return 'disputed';
   }
 
@@ -222,7 +220,7 @@ function buildTicketRow(
     location: address || '未提供地址',
     status: mapStatus(input.status),
     priority: mapPriority(input.priority),
-    verification: mapVerification(input.verificationStatus),
+    verification: mapAudit(input.auditStatus),
     createdAt: input.createdAt
       ? new Intl.DateTimeFormat('zh-TW', {
           month: '2-digit',
@@ -566,7 +564,6 @@ export function TicketCreateDrawer({
           },
           priority: 'medium',
           taskType: form.taskType,
-          visibility: 'public',
           tasks: tasks.map(
             (task) =>
               ({
@@ -575,7 +572,6 @@ export function TicketCreateDrawer({
                 taskDescription: task.taskDescription.trim() || undefined,
                 quantity: task.quantity ? Number(task.quantity) : undefined,
                 source: 'user',
-                visibility: 'public',
               }) satisfies CreateTicketTaskDraft,
           ),
           // TODO: backend 目前 createTicket 還沒有 secondary location / 地址拆欄位。

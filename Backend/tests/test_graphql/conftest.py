@@ -113,7 +113,7 @@ async def _ensure_db():
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_DELETE, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_ASSIGN, "all")
-        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_REVIEW, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_AUDIT, "all")
 
         # Content Admin: announcement management. ADR-026 dropped the Group/Policy tables in
         # favour of capability grants, so this role is the capability-era equivalent of the old
@@ -140,14 +140,15 @@ async def _ensure_db():
         await _grant(db, briefing_role, perm_cache, Perm.PREDEP_EDIT, "all")
         await _grant(db, briefing_role, perm_cache, Perm.PREDEP_DELETE, "all")
 
-        # Data Auditor: reviews and revokes station suggestions everywhere, as the seeded
-        # `data_auditor` role does, but edits nothing directly.
+        # Data Auditor: reviews and revokes station suggestions and audits tickets everywhere, as
+        # the seeded `data_auditor` role does, but edits nothing directly.
         auditor_role = Role(name="Data Auditor", kind="platform")
         db.add(auditor_role)
         await db.flush()
         await _grant(db, auditor_role, perm_cache, Perm.STATION_VIEW, "all")
         await _grant(db, auditor_role, perm_cache, Perm.STATION_REVIEW, "all")
         await _grant(db, auditor_role, perm_cache, Perm.STATION_REVOKE, "all")
+        await _grant(db, auditor_role, perm_cache, Perm.TICKET_AUDIT, "all")
 
         await db.commit()
     await eng.dispose()
@@ -191,6 +192,7 @@ async def setup_db():
     # Dispose the app-level engine pool so each test gets fresh connections
     # on the current event loop (avoids "Future attached to a different loop").
     from app.db.session import engine as app_engine
+
     await app_engine.dispose()
 
 
@@ -308,8 +310,11 @@ async def sample_station(coordinator_auth):
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
             created_by=user_uuid,
             type="shelter",
-            op_hour="08:00-18:00", level=3, comment="Test station",
-            source="user", visibility="public",
+            op_hour="08:00-18:00",
+            level=3,
+            comment="Test station",
+            source="user",
+            visibility="public",
         )
         db.add(station)
         await db.flush()
@@ -322,12 +327,22 @@ async def sample_hazardous_zone(coordinator_auth):
     user_uuid, _ = coordinator_auth
     async with test_db() as db:
         area = HazardousZone(
-            geometry=from_shape(Polygon([
-                (121.49, 24.99), (121.51, 24.99), (121.51, 25.01),
-                (121.49, 25.01), (121.49, 24.99),
-            ]), srid=4326),
+            geometry=from_shape(
+                Polygon(
+                    [
+                        (121.49, 24.99),
+                        (121.51, 24.99),
+                        (121.51, 25.01),
+                        (121.49, 25.01),
+                        (121.49, 24.99),
+                    ]
+                ),
+                srid=4326,
+            ),
             created_by=user_uuid,
-            status="blocked", information_source="test", is_public=True,
+            status="blocked",
+            information_source="test",
+            is_public=True,
             note="Test hazardous zone",
         )
         db.add(area)
@@ -343,10 +358,13 @@ async def sample_ticket(coordinator_auth):
         ticket = Tickets(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
             created_by=user_uuid,
-            title="Need volunteers", description="Cleanup needed",
-            contact_name="Test", contact_email="test@test.com",
-            status="pending", priority="high",
-            task_type="hr", visibility="public",
+            title="Need volunteers",
+            description="Cleanup needed",
+            contact_name="Test",
+            contact_email="test@test.com",
+            status="pending",
+            priority="high",
+            task_type="hr",
         )
         db.add(ticket)
         await db.flush()
@@ -360,8 +378,10 @@ async def sample_ticket_task(coordinator_auth, sample_ticket):
     async with test_db() as db:
         task = TicketTask(
             ticket_uuid=sample_ticket,
-            task_type="hr", task_name="Need medics",
-            quantity=3, source="user", visibility="public",
+            task_type="hr",
+            task_name="Need medics",
+            quantity=3,
+            source="user",
             created_by=user_uuid,
         )
         db.add(task)
@@ -378,7 +398,9 @@ async def sample_station_property(coordinator_auth, sample_station):
             station_uuid=sample_station,
             property_type="facility",
             property_name="restroom",
-            quantity=2, status="pending", weightings=1.0,
+            quantity=2,
+            status="pending",
+            weightings=1.0,
             created_by=user_uuid,
         )
         db.add(prop)

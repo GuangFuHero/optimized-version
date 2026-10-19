@@ -96,7 +96,6 @@ async def _seed_ticket_with_task(owner: str, *, east_deg=0.0, task=PUMP) -> tupl
             title="民生街淹水",
             status="pending",
             priority="high",
-            visibility="public",
             contact_name="李",
             created_by=owner,
         )

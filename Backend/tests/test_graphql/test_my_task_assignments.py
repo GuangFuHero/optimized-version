@@ -37,17 +37,25 @@ async def _ticket_with_needs(requester_uuid: str, title: str, needs: list[str]) 
     """A ticket filed by `requester_uuid` with one task per name; returns name -> task uuid."""
     async with test_db() as db:
         ticket = Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=requester_uuid,
-            title=title, contact_name="王小姐", status="pending", priority="high",
-            task_type="hr", visibility="public",
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=requester_uuid,
+            title=title,
+            contact_name="王小姐",
+            status="pending",
+            priority="high",
+            task_type="hr",
         )
         db.add(ticket)
         await db.flush()
         tasks = {}
         for name in needs:
             task = TicketTask(
-                ticket_uuid=str(ticket.uuid), task_type="hr", task_name=name, quantity=5,
-                source="user", visibility="public", created_by=requester_uuid,
+                ticket_uuid=str(ticket.uuid),
+                task_type="hr",
+                task_name=name,
+                quantity=5,
+                source="user",
+                created_by=requester_uuid,
             )
             db.add(task)
             await db.flush()

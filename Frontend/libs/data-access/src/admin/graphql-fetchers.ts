@@ -324,12 +324,12 @@ export function useDeleteTicket() {
   });
 }
 
-export function useReviewTicket() {
+export function useAuditTicket() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (variables: documents.AdminReviewTicketMutationVariables) =>
+    mutationFn: (variables: documents.AdminAuditTicketMutationVariables) =>
       adminGraphqlClient
-        .mutation(documents.AdminReviewTicketDocument, variables)
+        .mutation(documents.AdminAuditTicketDocument, variables)
         .toPromise()
         .then(graphqlResponseData),
     onSuccess: () =>
