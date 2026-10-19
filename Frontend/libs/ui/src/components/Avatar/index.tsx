@@ -26,12 +26,15 @@ export interface AvatarProps extends Omit<MuiAvatarProps, 'children'> {
   tone?: AvatarTone;
 }
 
-/** What an avatar without a picture shows: the first letter of each of the name's first two words. */
+/**
+ * What an avatar without a picture shows: the first letter of each of the name's first two words.
+ * By code point: `word[0]` is half of an emoji or a CJK Extension B character.
+ */
 export function nameInitials(name: string): string {
   return name
     .trim()
     .split(/\s+/)
-    .map((word) => word[0] ?? '')
+    .map((word) => Array.from(word)[0] ?? '')
     .slice(0, 2)
     .join('')
     .toUpperCase();
