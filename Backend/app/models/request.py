@@ -1,6 +1,9 @@
 """SQLAlchemy model for support tickets (disaster relief requests)."""
 
-from sqlalchemy import ARRAY, Computed, ForeignKey, String, text
+from datetime import datetime
+
+from sqlalchemy import ARRAY, CheckConstraint, Computed, DateTime, ForeignKey, String, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.geo import BaseGeometry
@@ -26,9 +29,19 @@ class Tickets(BaseGeometry):
     status: Mapped[str] = mapped_column(String(50))
     priority: Mapped[str] = mapped_column(String(20))
     task_type: Mapped[str | None] = mapped_column(String(50))
-    visibility: Mapped[str | None] = mapped_column(String(50))
-    verification_status: Mapped[str | None] = mapped_column(String(50))
-    review_note: Mapped[str | None] = mapped_column(String)
+    # The data check (services/ticket_audit.py). A verdict holds for the content it was given on:
+    # `audited_content` is that content, and once the ticket no longer matches it the status goes
+    # back to no_audit, while audited_at and audited_by still say when it was last checked.
+    audit_status: Mapped[str] = mapped_column(
+        String(20),
+        default="no_audit",
+        server_default=text("'no_audit'"),
+        comment="檢核狀態：no_audit/need_audit/audited/audit_issue",
+    )
+    audit_note: Mapped[str | None] = mapped_column(String, comment="檢核說明；audit_issue 時必填")
+    audited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="最近一次檢核時間")
+    audited_by: Mapped[str | None] = mapped_column(ForeignKey("users.uuid"), comment="最近一次檢核者")
+    audited_content: Mapped[dict | None] = mapped_column(JSONB, comment="最近一次檢核時的內容快照")
     # Plural since feature 018 (ADR-246): one incident is routinely two disasters at once —
     # a typhoon brings 水災 and 土石流 to the same house — and the dynamic-field query is an
     # array intersection either way, so the singular column bought nothing.
@@ -39,7 +52,10 @@ class Tickets(BaseGeometry):
     # and PostgreSQL array equality is order-sensitive, so {flood,fire} and {fire,flood}
     # would otherwise read as different disasters.
     disaster_types: Mapped[list[str]] = mapped_column(
-        ARRAY(String), server_default=text("'{}'"), default=list, nullable=False,
+        ARRAY(String),
+        server_default=text("'{}'"),
+        default=list,
+        nullable=False,
         comment="災害型別集合，參照 disaster_types.key；已排序去重",
     )
     # Reporter-supplied triage flags (feature 018). Nullable with no default: "nobody has
@@ -69,4 +85,16 @@ class Tickets(BaseGeometry):
     }
 
     # The title on its own: what a caller without ticket.view_detail searches (ADR-281).
-    __table_args__ = (search_text_index("tickets"), trigram_index("tickets", "title"))
+    __table_args__ = (
+        search_text_index("tickets"),
+        trigram_index("tickets", "title"),
+        CheckConstraint(
+            "audit_status IN ('no_audit', 'need_audit', 'audited', 'audit_issue')",
+            name="ck_tickets_audit_status",
+        ),
+        # Enforced here as well as in the service, so no writer can mark an issue without saying what it is.
+        CheckConstraint(
+            "audit_status <> 'audit_issue' OR btrim(coalesce(audit_note, '')) <> ''",
+            name="ck_tickets_audit_issue_note",
+        ),
+    )

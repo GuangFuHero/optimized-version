@@ -60,6 +60,7 @@ _DEFAULT_WEIGHTING = 1.0
 
 logger = logging.getLogger(__name__)
 
+
 class BulkImportError(ValueError):
     """The upload cannot be processed at all (mapped to 400 by the endpoint)."""
 
@@ -107,9 +108,7 @@ class ImportOutcome:
 def _check_size(raw: bytes) -> None:
     """Refuse an oversized upload before it is parsed (ADR-209)."""
     if len(raw) > MAX_BYTES:
-        raise BulkImportError(
-            f"檔案超過 {MAX_BYTES // 1024 // 1024} MB 上限，請分批匯入"
-        )
+        raise BulkImportError(f"檔案超過 {MAX_BYTES // 1024 // 1024} MB 上限，請分批匯入")
 
 
 def _check_rows(table: Table) -> None:
@@ -132,9 +131,7 @@ def _suggest_mapping(headers: tuple[str, ...], columns: tuple[ColumnSpec, ...]) 
     """Pair up headers that already match a column name, case- and space-insensitively."""
     known = {column.header.casefold(): column.header for column in columns}
     return {
-        header: known[header.strip().casefold()]
-        for header in headers
-        if header.strip().casefold() in known
+        header: known[header.strip().casefold()] for header in headers if header.strip().casefold() in known
     }
 
 
@@ -178,7 +175,8 @@ def _as_report(table: Table, failures: dict[int, list[RowError]], *, filename: s
     extension = "csv" if is_csv else "xlsx"
     return ReportFile(
         filename=f"{stem}-errors.{extension}",
-        media_type="text/csv; charset=utf-8" if is_csv
+        media_type="text/csv; charset=utf-8"
+        if is_csv
         else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         content_base64=base64.b64encode(content).decode(),
     )
@@ -229,9 +227,7 @@ def _ambiguous_error(line: int, candidates: tuple[str, ...], column: str) -> Row
     table — so the uuids here would tell a caller with no read capability that those rows
     exist. The count is what the user needs to act on; the identifiers are not.
     """
-    return _error(
-        line, column, f"比對到 {len(candidates)} 筆現有資料，請先人工處理再匯入"
-    )
+    return _error(line, column, f"比對到 {len(candidates)} 筆現有資料，請先人工處理再匯入")
 
 
 def _type_mismatch_error(line: int, column: str, declared: str, expected: str) -> RowError:
@@ -286,9 +282,11 @@ async def _plan_stations(
         errors += validate_row(columns, row, index=position, is_update=is_update)
         plans.append(
             RowPlan(
-                index=position, row=row,
+                index=position,
+                row=row,
                 match_uuid=match.uuid if is_update else None,
-                is_update=is_update, errors=tuple(errors),
+                is_update=is_update,
+                errors=tuple(errors),
             )
         )
     return plans
@@ -318,14 +316,23 @@ async def _write_station_properties(
             )
         else:
             await station_service.create_station_property(
-                db, actor=actor, station_uuid=station_uuid,
-                property_type=_DEFAULT_PROPERTY_TYPE, property_name=name,
-                quantity=quantity, weightings=_DEFAULT_WEIGHTING,
+                db,
+                actor=actor,
+                station_uuid=station_uuid,
+                property_type=_DEFAULT_PROPERTY_TYPE,
+                property_name=name,
+                quantity=quantity,
+                weightings=_DEFAULT_WEIGHTING,
             )
 
 
 async def _write_station(
-    db: AsyncSession, *, actor: User, plan: RowPlan, columns, station_type: str,
+    db: AsyncSession,
+    *,
+    actor: User,
+    plan: RowPlan,
+    columns,
+    station_type: str,
     progress: RowProgress,
 ) -> str:
     values = writable_values(columns, plan.row, is_update=plan.is_update)
@@ -339,10 +346,15 @@ async def _write_station(
         progress.parent_written = True
         station_uuid = plan.match_uuid
     else:
-        address = {key: fixed.pop(key) for key in
-                   ("county", "city", "lane", "alley", "no", "floor", "room") if key in fixed}
+        address = {
+            key: fixed.pop(key)
+            for key in ("county", "city", "lane", "alley", "no", "floor", "room")
+            if key in fixed
+        }
         station = await station_service.create_station(
-            db, actor=actor, geometry=geometry,
+            db,
+            actor=actor,
+            geometry=geometry,
             type=fixed.get("type") or station_type,
             name=fixed.get("name"),
             description=fixed.get("description"),
@@ -369,10 +381,7 @@ async def _plan_tickets(
 ) -> tuple[list[RowPlan], object]:
     index = await build_ticket_index(db)
     keys = [ticket_key(row.get("title"), row.get("contact_phone")) for row in rows]
-    task_keys = [
-        (*key, (row.get("task_name") or "").strip())
-        for key, row in zip(keys, rows, strict=True)
-    ]
+    task_keys = [(*key, (row.get("task_name") or "").strip()) for key, row in zip(keys, rows, strict=True)]
     collisions = duplicate_key_rows(task_keys)
 
     seen_keys: set[tuple] = set()
@@ -415,23 +424,20 @@ async def _plan_tickets(
             seen_keys.add(key)
         plans.append(
             RowPlan(
-                index=position, row=row,
+                index=position,
+                row=row,
                 match_uuid=match.uuid if match.kind == MATCHED else None,
-                is_update=is_update, errors=tuple(errors),
+                is_update=is_update,
+                errors=tuple(errors),
             )
         )
     return plans, index
 
 
-async def _write_task_properties(
-    db: AsyncSession, *, actor: User, task_uuid: str, dynamic: dict
-) -> None:
+async def _write_task_properties(db: AsyncSession, *, actor: User, task_uuid: str, dynamic: dict) -> None:
     if not dynamic:
         return
-    existing = {
-        row.property_name: row
-        for row in await task_property_repository.list_by_task(db, task_uuid)
-    }
+    existing = {row.property_name: row for row in await task_property_repository.list_by_task(db, task_uuid)}
     for name, value in dynamic.items():
         text = "" if value is None else str(value)
         if name in existing:
@@ -440,12 +446,22 @@ async def _write_task_properties(
             )
         else:
             await ticket_service.import_task_property(
-                db, actor=actor, task_uuid=task_uuid, property_name=name, property_value=text,
+                db,
+                actor=actor,
+                task_uuid=task_uuid,
+                property_name=name,
+                property_value=text,
             )
 
 
 async def _write_ticket(
-    db: AsyncSession, *, actor: User, plan: RowPlan, columns, task_type: str, index,
+    db: AsyncSession,
+    *,
+    actor: User,
+    plan: RowPlan,
+    columns,
+    task_type: str,
+    index,
     progress: RowProgress,
 ) -> str:
     # Resolved against the LIVE index, not the plan: a row can become an update mid-file by
@@ -463,8 +479,11 @@ async def _write_ticket(
 
     values = writable_values(columns, plan.row, is_update=is_update)
     fixed, dynamic = _split_dynamic(columns, values)
-    task_fields = {key_name: fixed.pop(key_name) for key_name in
-                   ("task_type", "task_name", "task_description", "task_quantity") if key_name in fixed}
+    task_fields = {
+        key_name: fixed.pop(key_name)
+        for key_name in ("task_type", "task_name", "task_description", "task_quantity")
+        if key_name in fixed
+    }
 
     if is_update:
         ticket_uuid = resolved.uuid
@@ -473,7 +492,9 @@ async def _write_ticket(
             progress.parent_written = True
     else:
         ticket = await ticket_service.create_ticket(
-            db, actor=actor, geometry=_point_of(plan.row),
+            db,
+            actor=actor,
+            geometry=_point_of(plan.row),
             title=fixed.get("title"),
             description=fixed.get("description"),
             contact_name=fixed.get("contact_name"),
@@ -481,7 +502,6 @@ async def _write_ticket(
             contact_phone=fixed.get("contact_phone"),
             priority=fixed.get("priority") or "low",
             task_type=task_type,
-            visibility=fixed.get("visibility") or "public",
             disaster_types=fixed.get("disaster_types"),
         )
         progress.parent_written = True
@@ -496,8 +516,13 @@ async def _write_ticket(
     # (ADR-240). Read them the same way, and let `_write_task` use them only when creating.
     task_on_create = values_for(columns, plan.row, ("task_description", "task_quantity"))
     task_uuid = await _write_task(
-        db, actor=actor, ticket_uuid=ticket_uuid, task_type=task_type,
-        task_name=task_name, task_fields=task_fields, task_on_create=task_on_create,
+        db,
+        actor=actor,
+        ticket_uuid=ticket_uuid,
+        task_type=task_type,
+        task_name=task_name,
+        task_fields=task_fields,
+        task_on_create=task_on_create,
     )
     if task_uuid:
         progress.parent_written = True
@@ -506,8 +531,14 @@ async def _write_ticket(
 
 
 async def _write_task(
-    db: AsyncSession, *, actor: User, ticket_uuid: str, task_type: str, task_name: str,
-    task_fields: dict, task_on_create: dict | None = None,
+    db: AsyncSession,
+    *,
+    actor: User,
+    ticket_uuid: str,
+    task_type: str,
+    task_name: str,
+    task_fields: dict,
+    task_on_create: dict | None = None,
 ) -> str | None:
     """Create or update the one task this row stands for (ADR-120).
 
@@ -526,10 +557,15 @@ async def _write_task(
 
     creating = {**(task_on_create or {}), **task_fields}
     task = await ticket_service.import_ticket_task(
-        db, actor=actor, ticket_uuid=ticket_uuid, task_type=task_type, task_name=task_name,
+        db,
+        actor=actor,
+        ticket_uuid=ticket_uuid,
+        task_type=task_type,
+        task_name=task_name,
         task_description=creating.get("task_description"),
         quantity=creating.get("task_quantity"),
-        source="import", visibility="public", route_uuid=None,
+        source="import",
+        route_uuid=None,
     )
     return str(task.uuid)
 
@@ -547,9 +583,7 @@ async def _read(
     return table, [_apply_mapping(row, mapping or {}) for row in table.rows]
 
 
-def _preview_of(
-    table: Table, plans: list[RowPlan], columns, *, skipped=()
-) -> PreviewResult:
+def _preview_of(table: Table, plans: list[RowPlan], columns, *, skipped=()) -> PreviewResult:
     suggested = _suggest_mapping(table.headers, columns)
     errors = tuple(error for plan in plans for error in plan.errors)
     return PreviewResult(
@@ -566,8 +600,13 @@ def _preview_of(
 
 
 async def preview_stations(
-    db: AsyncSession, *, actor: User, raw: bytes, filename: str,
-    station_type: str, mapping: dict[str, str] | None = None,
+    db: AsyncSession,
+    *,
+    actor: User,
+    raw: bytes,
+    filename: str,
+    station_type: str,
+    mapping: dict[str, str] | None = None,
 ) -> PreviewResult:
     """Dry-run a station file: report every problem at once, write nothing (ADR-112/114).
 
@@ -587,8 +626,13 @@ async def preview_stations(
 
 
 async def preview_tickets(
-    db: AsyncSession, *, actor: User, raw: bytes, filename: str,
-    task_type: str, mapping: dict[str, str] | None = None,
+    db: AsyncSession,
+    *,
+    actor: User,
+    raw: bytes,
+    filename: str,
+    task_type: str,
+    mapping: dict[str, str] | None = None,
 ) -> PreviewResult:
     """Dry-run a ticket file. Same contract as `preview_stations`."""
     async with stable_actor(db, actor):
@@ -609,9 +653,7 @@ async def _commit(
     validation runs first, so the realistic cause is a permission the caller lacks for the
     dependent write (for example station.contribute for a dynamic value).
     """
-    failures: dict[int, list[RowError]] = {
-        plan.index: list(plan.errors) for plan in plans if not plan.ok
-    }
+    failures: dict[int, list[RowError]] = {plan.index: list(plan.errors) for plan in plans if not plan.ok}
 
     created, updated, partial = await _write_all(db, actor, plans, write, failures)
 
@@ -653,8 +695,7 @@ async def _write_all(db, actor, plans, write, failures) -> tuple[int, int, list[
                 detail = f"權限不足：{exc.detail}"
             elif isinstance(exc, SQLAlchemyError):
                 detail = "資料庫拒絕了這一列，請檢查欄位長度與格式"
-                logger.warning("bulk import row %s rejected by the database", plan.line,
-                               exc_info=exc)
+                logger.warning("bulk import row %s rejected by the database", plan.line, exc_info=exc)
             else:
                 detail = str(exc)
             failures[plan.index] = [_error(plan.line, "-", detail)]
@@ -681,8 +722,13 @@ async def _recover(db: AsyncSession, actor: User) -> None:
 
 
 async def commit_stations(
-    db: AsyncSession, *, actor: User, raw: bytes, filename: str,
-    station_type: str, mapping: dict[str, str] | None = None,
+    db: AsyncSession,
+    *,
+    actor: User,
+    raw: bytes,
+    filename: str,
+    station_type: str,
+    mapping: dict[str, str] | None = None,
 ) -> ImportOutcome:
     """Import a station file: matched rows are updated, unmatched ones created (ADR-106)."""
     async with stable_actor(db, actor):
@@ -693,18 +739,25 @@ async def commit_stations(
 
         async def write(plan: RowPlan, progress: RowProgress) -> None:
             await _write_station(
-                db, actor=actor, plan=plan, columns=columns, station_type=station_type,
+                db,
+                actor=actor,
+                plan=plan,
+                columns=columns,
+                station_type=station_type,
                 progress=progress,
             )
 
-        return await _commit(
-            db, actor=actor, table=table, plans=plans, write=write, filename=filename
-        )
+        return await _commit(db, actor=actor, table=table, plans=plans, write=write, filename=filename)
 
 
 async def commit_tickets(
-    db: AsyncSession, *, actor: User, raw: bytes, filename: str,
-    task_type: str, mapping: dict[str, str] | None = None,
+    db: AsyncSession,
+    *,
+    actor: User,
+    raw: bytes,
+    filename: str,
+    task_type: str,
+    mapping: dict[str, str] | None = None,
 ) -> ImportOutcome:
     """Import a ticket file: one row is one ticket plus one task (ADR-120)."""
     async with stable_actor(db, actor):
@@ -715,10 +768,13 @@ async def commit_tickets(
 
         async def write(plan: RowPlan, progress: RowProgress) -> None:
             await _write_ticket(
-                db, actor=actor, plan=plan, columns=columns, task_type=task_type, index=index,
+                db,
+                actor=actor,
+                plan=plan,
+                columns=columns,
+                task_type=task_type,
+                index=index,
                 progress=progress,
             )
 
-        return await _commit(
-            db, actor=actor, table=table, plans=plans, write=write, filename=filename
-        )
+        return await _commit(db, actor=actor, table=table, plans=plans, write=write, filename=filename)

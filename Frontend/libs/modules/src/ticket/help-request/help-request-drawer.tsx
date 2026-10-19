@@ -275,7 +275,9 @@ function HelpRequestFormDrawer({
   /**
    * To the first field still missing, and into it: a summary at the foot alone says something is
    * wrong without saying where, often two screens up (designer, 2026-09-11). `missing` runs top to
-   * bottom, so the first is the highest.
+   * bottom, so the first is the highest. To the top of the form, not its middle: on a phone the
+   * keyboard the field opens covers the sheet's lower half, and on an iPhone 13 an address centred
+   * in it ended just above the keyboard, under Safari's address bar (WG-030).
    */
   const scrollToMissing = () => {
     const first = missing[0];
@@ -287,7 +289,7 @@ function HelpRequestFormDrawer({
       return;
     }
 
-    host.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
     host
       .querySelector<HTMLElement>('input, textarea, button')
       ?.focus({ preventScroll: true });
@@ -343,7 +345,13 @@ function HelpRequestFormDrawer({
         </>
       }
     >
-      <Stack key={round} ref={formRef} spacing={3}>
+      <Stack
+        key={round}
+        ref={formRef}
+        spacing={3}
+        // Clear of the drawer's header when scrolled to a missing field.
+        sx={{ '& [data-field]': { scrollMarginTop: 16 } }}
+      >
         {/* Back after signing in again, the drawer opens already filled in: without a word it could
             pass for one already sent. */}
         {restored ? (

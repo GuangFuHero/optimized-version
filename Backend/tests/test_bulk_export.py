@@ -57,17 +57,19 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, *, team
         await db.refresh(team)
     kind = "team" if team is not None else "platform"
     identity_role = f"bulk-tests-{user.name}"
-    role = (
-        await db.execute(select(Role).where(Role.name == identity_role))
-    ).scalar_one_or_none()
+    role = (await db.execute(select(Role).where(Role.name == identity_role))).scalar_one_or_none()
     if role is None:
         role = Role(name=identity_role, kind=kind)
         db.add(role)
         await db.flush()
-        db.add(UserRoleAssign(
-            user_uuid=user.uuid, role_uuid=role.uuid,
-            team_uuid=team.uuid if team is not None else None, role_kind=kind,
-        ))
+        db.add(
+            UserRoleAssign(
+                user_uuid=user.uuid,
+                role_uuid=role.uuid,
+                team_uuid=team.uuid if team is not None else None,
+                role_kind=kind,
+            )
+        )
         acting_as(user, role, team)
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     await db.flush()
@@ -132,7 +134,6 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
         status="pending",
         priority="high",
         task_type="rescue",
-        visibility="public",
     )
     db.add(ticket)
     await db.flush()
@@ -142,7 +143,6 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
         task_name=f"{title} 任務",
         quantity=3,
         source="user",
-        visibility="public",
         created_by=str(creator.uuid),
     )
     db.add(task)
@@ -153,15 +153,21 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
 
 
 async def _configs(db) -> None:
-    db.add(StationPropertyConfig(
-        station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
-    ))
-    db.add(StationPropertyConfig(
-        station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
-    ))
-    db.add(TaskPropertyConfig(
-        task_type="rescue", property_name="people_count", data_type="number", enum_options=None
-    ))
+    db.add(
+        StationPropertyConfig(
+            station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
+        )
+    )
+    db.add(
+        StationPropertyConfig(
+            station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
+        )
+    )
+    db.add(
+        TaskPropertyConfig(
+            task_type="rescue", property_name="people_count", data_type="number", enum_options=None
+        )
+    )
     await db.flush()
 
 
@@ -346,8 +352,11 @@ async def test_ticket_export_writes_one_row_per_task(db):
     ticket, _ = await _ticket_with_task(db, title="求救", point=IN_ZONE, creator=actor)
     db.add(
         TicketTask(
-            ticket_uuid=ticket.uuid, task_type="rescue", task_name="第二個任務",
-            source="user", visibility="public", created_by=str(actor.uuid),
+            ticket_uuid=ticket.uuid,
+            task_type="rescue",
+            task_name="第二個任務",
+            source="user",
+            created_by=str(actor.uuid),
         )
     )
     await db.flush()
@@ -413,7 +422,8 @@ async def test_a_caller_without_view_pii_gets_every_contact_masked(db):
 
 
 async def _with_free_text(db, ticket, task) -> None:
-    ticket.description, ticket.review_note = "中正路十二號", "已電話確認"
+    ticket.description = "中正路十二號"
+    ticket.audit_status, ticket.audit_note = "audit_issue", "電話打不通"
     task.task_description = "從後門進去"
     await db.flush()
 
@@ -437,11 +447,13 @@ async def test_detail_follows_view_detail_row_by_row(db):
     inside, outside = rows["區內"], rows["區外"]
     assert (inside["latitude"], inside["longitude"]) == ("25", "121.5")
     assert inside["description"] == "中正路十二號"
-    assert inside["review_note"] == "已電話確認"
     assert inside["task_description"] == "從後門進去"
     assert (outside["latitude"], outside["longitude"]) == ("", "")
-    assert outside["description"] == outside["review_note"] == outside["task_description"] == ""
+    assert outside["description"] == outside["task_description"] == ""
     assert outside["task_name"] == "區外 任務"  # structured fields are never withheld
+    # The verdict goes out whole to every exporter, inside the zone or not.
+    assert (inside["audit_status"], inside["audit_note"]) == ("audit_issue", "電話打不通")
+    assert (outside["audit_status"], outside["audit_note"]) == ("audit_issue", "電話打不通")
 
 
 @pytest.mark.asyncio

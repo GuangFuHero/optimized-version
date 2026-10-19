@@ -72,9 +72,7 @@ async def _known_types(db: AsyncSession, *, data_column, config_column) -> set[s
     """The type vocabulary: every value in use, plus every value the field config names."""
     values = set()
     for column in (data_column, config_column):
-        values.update(
-            value for (value,) in (await db.execute(select(column).distinct())).all() if value
-        )
+        values.update(value for (value,) in (await db.execute(select(column).distinct())).all() if value)
     return values - {_CONFIG_WILDCARD}
 
 
@@ -191,9 +189,21 @@ def _station_row(station: Station, address, properties: dict, columns) -> dict[s
         "latitude": latitude,
         "longitude": longitude,
     }
-    for field in ("name", "type", "description", "op_hour", "level", "comment", "source",
-                  "visibility", "verification_status", "is_official", "confidence_score",
-                  "created_at", "updated_at"):
+    for field in (
+        "name",
+        "type",
+        "description",
+        "op_hour",
+        "level",
+        "comment",
+        "source",
+        "visibility",
+        "verification_status",
+        "is_official",
+        "confidence_score",
+        "created_at",
+        "updated_at",
+    ):
         row[field] = _text(getattr(station, field, None))
     for field in _ADDRESS_FIELDS:
         row[field] = _text(getattr(address, field, None)) if address else ""
@@ -216,8 +226,10 @@ async def export_stations(
     async with stable_actor(db, actor):
         scope = await require_scope(actor, Perm.STATION_EXPORT, db)
         await _require_known_type(
-            db, station_type,
-            data_column=Station.type, config_column=StationPropertyConfig.station_type,
+            db,
+            station_type,
+            data_column=Station.type,
+            config_column=StationPropertyConfig.station_type,
         )
         columns = await station_columns(db, station_type)
 
@@ -302,8 +314,10 @@ async def export_tickets(
     async with stable_actor(db, actor):
         scope = await require_scope(actor, Perm.TICKET_EXPORT, db)
         await _require_known_type(
-            db, task_type,
-            data_column=TicketTask.task_type, config_column=TaskPropertyConfig.task_type,
+            db,
+            task_type,
+            data_column=TicketTask.task_type,
+            config_column=TaskPropertyConfig.task_type,
         )
         columns = await ticket_columns(db, task_type)
         may_see_pii = await _row_decider(db, actor, Perm.TICKET_VIEW_PII)
@@ -340,6 +354,12 @@ async def export_tickets(
             ).scalars():
                 properties.setdefault(str(row.task_uuid), {})[row.property_name] = row
 
+        auditor_uuids = {str(ticket.audited_by) for _, ticket in pairs if ticket.audited_by}
+        auditors = {}
+        if auditor_uuids:
+            found = await db.execute(select(User.uuid, User.name).where(User.uuid.in_(auditor_uuids)))
+            auditors = {str(uuid): name for uuid, name in found.all()}
+
         rows = []
         for task, ticket in pairs:
             # AC-04: the export is one more path to the same fields, so the same boundary
@@ -358,11 +378,21 @@ async def export_tickets(
                 "task_quantity": _text(task.quantity),
                 **_contact_fields(ticket, visible=await may_see_pii(ticket)),
             }
-            for field in ("title", "description", "status", "priority",
-                          "visibility", "verification_status", "review_note", "created_at"):
+            for field in (
+                "title",
+                "description",
+                "status",
+                "priority",
+                "audit_status",
+                "audit_note",
+                "audited_at",
+                "created_at",
+            ):
                 row[field] = _text(getattr(ticket, field, None))
+            # The verdict goes out whole to every exporter, whatever detail the row withholds.
+            row["audited_by"] = _text(auditors.get(str(ticket.audited_by))) if ticket.audited_by else ""
             if not detail:
-                row["description"] = row["review_note"] = ""
+                row["description"] = ""
             # One cell, comma-separated, matching what the importer splits back apart.
             row["disaster_types"] = ",".join(ticket.disaster_types or [])
             for column in columns:

@@ -69,7 +69,6 @@ async def _world(db, *, tasks_per_ticket=2, tickets=10, text="一樓淹水需要
             title="淹水",
             status="pending",
             priority="high",
-            visibility="public",
             contact_name="王",
             created_by=owner.uuid,
         )
@@ -216,16 +215,16 @@ async def _far_open_tasks(db, n: int) -> None:
     )
     await db.execute(
         text(
-            "INSERT INTO tickets (uuid, title, contact_name, status, priority, visibility) "
-            "SELECT u, '遠處 ' || i, '李', 'pending', 'high', 'public' FROM far"
+            "INSERT INTO tickets (uuid, title, contact_name, status, priority) "
+            "SELECT u, '遠處 ' || i, '李', 'pending', 'high' FROM far"
         )
     )
     await db.execute(
         text(
             "INSERT INTO ticket_tasks (uuid, ticket_uuid, task_type, task_name, status, source, "
-            "is_duplicate, moderation_status, visibility, created_by) "
+            "is_duplicate, created_by) "
             "SELECT gen_random_uuid(), u, 'rescue', '清淤 ' || i, "
-            "'pending', 'user', false, 'pending_review', 'public', :owner FROM far"
+            "'pending', 'user', false, :owner FROM far"
         ),
         {"owner": owner.uuid},
     )

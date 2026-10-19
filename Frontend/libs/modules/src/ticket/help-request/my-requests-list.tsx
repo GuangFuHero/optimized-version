@@ -5,9 +5,9 @@ import HandshakeRoundedIcon from '@mui/icons-material/HandshakeRounded';
 import { Box, Button, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
-import { useQuery } from 'urql';
+import type { UseQueryState } from 'urql';
 
-import { MyTicketsDocument } from '@rescue-frontend/data-access';
+import type { MyTicketsQuery } from '@rescue-frontend/data-access';
 import {
   Badge,
   designTokens,
@@ -23,12 +23,12 @@ import { openHelpRequest } from './open-help-request';
 
 const { color, radius, typography } = designTokens;
 
-// Its own loading line inside the drawer rather than suspending the page behind it. Fetched afresh
-// each time the tab shows — the content mounts with it — so a request filed since shows up, and a
-// need added, deleted or claimed since is counted.
-const MY_TICKETS_QUERY_CONTEXT = { suspense: false } as const;
-
 interface MyRequestsListProps {
+  /**
+   * `myTickets`, read by the drawer at each opening — its tab counts them — so a request filed
+   * since shows up, and a need added, deleted or claimed since is counted.
+   */
+  result: UseQueryState<MyTicketsQuery>;
   /** Leaving for another page: the drawer lives in the account menu, which stays across pages. */
   onLeave: () => void;
 }
@@ -145,13 +145,11 @@ function NoticeText({ children }: { children: ReactNode }) {
 }
 
 /** 我建立的: the requests the viewer filed, newest first, every status. */
-export function MyRequestsList({ onLeave }: MyRequestsListProps) {
+export function MyRequestsList({
+  result: { data, fetching, error },
+  onLeave,
+}: MyRequestsListProps) {
   const route = useSiteRouteState();
-  const [{ data, fetching, error }] = useQuery({
-    query: MyTicketsDocument,
-    requestPolicy: 'network-only',
-    context: MY_TICKETS_QUERY_CONTEXT,
-  });
 
   const openTicket = (event: MouseEvent<HTMLElement>, ticketUuid: string) => {
     const opening = openClaimedTicket(route, ticketUuid);

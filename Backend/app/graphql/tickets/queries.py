@@ -22,6 +22,7 @@ from app.graphql.context import check_permission, require_authenticated
 from app.graphql.geo.types import BoundsInput
 from app.graphql.shared import PageInfo
 from app.graphql.tickets.types import (
+    AuditStatus,
     MyTaskAssignmentType,
     TaskAssignmentType,
     TaskPropertyType,
@@ -32,12 +33,14 @@ from app.graphql.tickets.types import (
 )
 from app.models.geo import BuildingMapTicketMap
 from app.models.request import Tickets
+from app.models.ticket_task import TicketTask
 from app.repositories.tickets_repository import (
     task_property_repository,
     ticket_repository,
     ticket_task_repository,
 )
 from app.services import ticket as ticket_service
+from app.services.ticket_status import OPEN_NEED_STATUSES
 
 _ZOOM_DESCRIPTION = (
     "Map zoom the result is for. Only affects a caller without ticket.view_detail: sets how "
@@ -57,10 +60,35 @@ async def _detail_filters(info: strawberry.types.Info) -> list:
     so it goes through the same path rather than a special case.
     """
     user = info.context["user"]
-    scope = Scope.NONE if user is None else await resolve_scope(
-        user, Perm.TICKET_VIEW_DETAIL, info.context["db"], cache=info.context["_rbac_cache"]
+    scope = (
+        Scope.NONE
+        if user is None
+        else await resolve_scope(
+            user, Perm.TICKET_VIEW_DETAIL, info.context["db"], cache=info.context["_rbac_cache"]
+        )
     )
     return scope_filter(scope, actor=user, model=Tickets)
+
+
+def _list_filters(need_type: str | None, open_needs_only: bool, audit_status: AuditStatus | None) -> list:
+    """The need-type and audit-status filters of the `tickets` list, as conditions on Tickets.
+
+    A need taken off never matches. Both read only what the list shows anyone: each need's type,
+    and the public audit status.
+    """
+    conditions = []
+    if need_type is not None:
+        need = select(TicketTask.uuid).where(
+            TicketTask.ticket_uuid == Tickets.uuid,
+            TicketTask.delete_at.is_(None),
+            TicketTask.task_type == need_type,
+        )
+        if open_needs_only:
+            need = need.where(TicketTask.status.in_(OPEN_NEED_STATUSES))
+        conditions.append(need.exists())
+    if audit_status is not None:
+        conditions.append(Tickets.audit_status == audit_status.value)
+    return conditions
 
 
 @strawberry.type
@@ -69,15 +97,35 @@ class RequestQuery:
 
     @strawberry.field
     async def tickets(
-        self, info: strawberry.types.Info,
+        self,
+        info: strawberry.types.Info,
         bounds: BoundsInput | None = None,
         status: str | None = None,
         priority: str | None = None,
         q: str | None = None,
-        skip: int = 0, limit: int = 50,
+        skip: int = 0,
+        limit: int = 50,
         zoom: Annotated[float | None, strawberry.argument(description=_ZOOM_DESCRIPTION)] = None,
+        need_type: Annotated[
+            str | None,
+            strawberry.argument(
+                description=(
+                    "Only tickets with a need of this type, e.g. 'rescue' or 'supply'. A string, "
+                    "not an enum: the back office can configure kinds of its own"
+                )
+            ),
+        ] = None,
+        open_needs_only: Annotated[
+            bool,
+            strawberry.argument(
+                description="With needType: only a need still taking volunteers counts. Ignored without it"
+            ),
+        ] = False,
+        audit_status: Annotated[
+            AuditStatus | None, strawberry.argument(description="Only tickets at this audit status")
+        ] = None,
     ) -> TicketConnection:
-        """List tickets with optional bbox, status, priority and keyword filters, paginated.
+        """List tickets with optional bbox, status, priority, need-type, audit and keyword filters, paginated.
 
         Requires ticket.view permission (public — Guest may call this). Note: the
         help-request board is public (ADR-027), so the seed grants ticket.view at `all`
@@ -114,7 +162,10 @@ class RequestQuery:
             raise ValueError(f"limit must be at most {TICKET_LIST_MAX_LIMIT}")
         db = info.context["db"]
         scope = await check_permission(info, Perm.TICKET_VIEW)
-        extra_filters = scope_filter(scope, actor=info.context["user"], model=Tickets)
+        extra_filters = [
+            *scope_filter(scope, actor=info.context["user"], model=Tickets),
+            *_list_filters(need_type, open_needs_only, audit_status),
+        ]
         detail_filters = await _detail_filters(info)
         resolution = coarse_resolution(zoom)
         # One ceiling for the whole request, not one per statement (ADR-176). count and
@@ -123,13 +174,25 @@ class RequestQuery:
         # own set_config/RESET, so this costs two round-trips where it used to cost six.
         async with search_timeout(db, normalize_query(q)):
             total = await ticket_repository.count_active(
-                db, bounds=bounds, status=status, priority=priority, q=q,
-                extra_filters=extra_filters, detail_filters=detail_filters,
+                db,
+                bounds=bounds,
+                status=status,
+                priority=priority,
+                q=q,
+                extra_filters=extra_filters,
+                detail_filters=detail_filters,
                 coarse_resolution=resolution,
             )
             items = await ticket_repository.list_active(
-                db, bounds=bounds, status=status, priority=priority, q=q, skip=skip, limit=limit,
-                extra_filters=extra_filters, detail_filters=detail_filters,
+                db,
+                bounds=bounds,
+                status=status,
+                priority=priority,
+                q=q,
+                skip=skip,
+                limit=limit,
+                extra_filters=extra_filters,
+                detail_filters=detail_filters,
                 coarse_resolution=resolution,
             )
         return TicketConnection(
@@ -143,7 +206,9 @@ class RequestQuery:
 
     @strawberry.field
     async def ticket(
-        self, info: strawberry.types.Info, uuid: UUID,
+        self,
+        info: strawberry.types.Info,
+        uuid: UUID,
         zoom: Annotated[float | None, strawberry.argument(description=_ZOOM_DESCRIPTION)] = None,
     ) -> TicketType | None:
         """Fetch a single active ticket by UUID.
@@ -178,7 +243,11 @@ class RequestQuery:
 
     @strawberry.field
     async def building_map_tickets(
-        self, info: strawberry.types.Info, building_map_uuid: UUID, skip: int = 0, limit: int = 100,
+        self,
+        info: strawberry.types.Info,
+        building_map_uuid: UUID,
+        skip: int = 0,
+        limit: int = 100,
     ) -> list[TicketType]:
         """List the tickets filed under a building map, newest first.
 
@@ -208,11 +277,13 @@ class TicketTaskQuery:
 
     @strawberry.field
     async def ticket_tasks(
-        self, info: strawberry.types.Info,
+        self,
+        info: strawberry.types.Info,
         ticket_uuid: str,
         status: str | None = None,
         q: str | None = None,
-        skip: int = 0, limit: int = 50,
+        skip: int = 0,
+        limit: int = 50,
     ) -> list[TicketTaskType]:
         """List tasks for a given ticket UUID, with optional status/keyword filters.
 
@@ -231,12 +302,14 @@ class TicketTaskQuery:
         await check_permission(info, Perm.TICKET_VIEW)
         if not await ticket_repository.get_by_uuid_active(info.context["db"], ticket_uuid):
             return []
-        public_only = (
-            normalize_query(q) is not None
-            and not await ticket_detail_visible(info, ticket_uuid)
-        )
+        public_only = normalize_query(q) is not None and not await ticket_detail_visible(info, ticket_uuid)
         items = await ticket_task_repository.list_by_ticket(
-            info.context["db"], ticket_uuid, status=status, q=q, skip=skip, limit=limit,
+            info.context["db"],
+            ticket_uuid,
+            status=status,
+            q=q,
+            skip=skip,
+            limit=limit,
             public_only=public_only,
         )
         return [TicketTaskType.from_model(t) for t in items]
@@ -261,9 +334,7 @@ class TicketTaskQuery:
         ]
 
     @strawberry.field
-    async def task_properties(
-        self, info: strawberry.types.Info, task_uuid: str
-    ) -> list[TaskPropertyType]:
+    async def task_properties(self, info: strawberry.types.Info, task_uuid: str) -> list[TaskPropertyType]:
         """List all active properties for a given task UUID.
 
         Requires ticket.view permission (public — Guest may call this). Checkpoint 1 only.

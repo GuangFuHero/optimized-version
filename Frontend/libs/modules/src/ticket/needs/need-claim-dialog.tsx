@@ -42,7 +42,16 @@ interface NeedClaimDialogProps {
 function DetailLine({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <Stack direction="row" sx={{ gap: 0.75, alignItems: 'flex-start' }}>
-      <Box sx={{ display: 'grid', placeItems: 'center', mt: '3px', '& svg': { fontSize: 14 } }}>
+      {/* As tall as a line of the text beside it, so the icon sits on that line at any text size. */}
+      <Box
+        sx={{
+          display: 'grid',
+          placeItems: 'center',
+          height: '1.6em',
+          fontSize: displayTextSize[13],
+          '& svg': { fontSize: 14 },
+        }}
+      >
         {icon}
       </Box>
       <Typography sx={{ fontSize: displayTextSize[13], lineHeight: 1.6 }}>{children}</Typography>

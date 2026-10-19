@@ -15,10 +15,19 @@ enum AnnouncementMoveDirection {
   DOWN
 }
 
+enum AnnouncementPlacement {
+  admin_page
+  public_page
+  all
+}
+
 type AnnouncementType {
   uuid: UUID!
   content: String!
   active: Boolean!
+
+  """admin_page, public_page, or all (both pages)"""
+  placement: String!
 
   """
   Display position (1 = top) among active announcements; null when inactive
@@ -66,6 +75,18 @@ type AssignedTeamType {
   uuid: UUID!
   name: String!
   type: String!
+}
+
+enum AuditStatus {
+  no_audit
+  need_audit
+  audited
+  audit_issue
+}
+
+enum AuditVerdict {
+  audited
+  audit_issue
 }
 
 input BoundsInput {
@@ -123,9 +144,56 @@ type BriefingType {
   updatedAt: DateTime
 }
 
+input BuildingFloorAreasInput {
+  """Floor label: '3F', '1F', 'B1'"""
+  floor: String!
+
+  """Area names, 1-20 characters each"""
+  areas: [String!]!
+}
+
+type BuildingFloorType {
+  """Floor label: '3F', '1F', 'B1'"""
+  label: String!
+
+  """
+  Areas a ticket on this floor must pick from, ending with '其他' for an unlisted space. Empty when the floor takes a free-text room number instead
+  """
+  areas: [String!]!
+}
+
+type BuildingMapConnection {
+  items: [BuildingMapType!]!
+  pageInfo: PageInfo!
+}
+
+type BuildingMapType {
+  uuid: UUID!
+
+  """Building name shown on the map and in the sidebar"""
+  name: String!
+
+  """GeoJSON Point of the building — [longitude, latitude]"""
+  geometry: GeoJSON
+  floorsAboveGround: Int!
+  floorsBelowGround: Int!
+  createdBy: String
+  createdAt: DateTime
+  updatedAt: DateTime
+
+  """The building's floors, roof (RF) first"""
+  floors: [BuildingFloorType!]!
+
+  """The building's street address. Public, like a station's"""
+  secondaryLocation: SecondaryLocationType
+}
+
 input CreateAnnouncementInput {
   """The announcement body text"""
   content: String!
+
+  """Which page shows it; defaults to both"""
+  placement: AnnouncementPlacement! = all
 }
 
 input CreateAreaInput {
@@ -162,6 +230,26 @@ input CreateBriefingTemplateInput {
   state: BriefingState! = BRIEFING
 }
 
+input CreateBuildingMapInput {
+  """Building name, e.g. '光復國小圖書館'"""
+  name: String!
+
+  """GeoJSON Point — [longitude, latitude]"""
+  geometry: GeoJSON!
+
+  """Street address. Leave buildingSection, floor and room empty"""
+  secondaryLocation: SecondaryLocationInput!
+
+  """Floors from 1F up, 1-200"""
+  floorsAboveGround: Int!
+
+  """Basement floors, 0-20"""
+  floorsBelowGround: Int! = 0
+
+  """Areas per floor. A floor left out takes a free-text room number"""
+  floorAreas: [BuildingFloorAreasInput!]! = []
+}
+
 input CreateCrowdSourcingInput {
   """UUID of the station being rated"""
   stationUuid: UUID!
@@ -193,6 +281,9 @@ input CreateHelpRequestInput {
 
   """Phone number or LINE ID, as the person typed it"""
   contactPhone: String = null
+
+  """Optional; the account's own email is never filled in for it"""
+  contactEmail: String = null
 
   """The address as typed goes in `landmarkNote`, with `floor` and `room`"""
   secondaryLocation: SecondaryLocationInput = null
@@ -261,6 +352,8 @@ input CreateStationPropertyInput {
   weightings: Float! = 1
 }
 
+union CreateStationResult = StationCreated | DuplicatesSuspected
+
 input CreateStationSuggestionInput {
   """'station' or 'station_property'"""
   targetType: String!
@@ -298,9 +391,14 @@ input CreateTicketInput {
   description: String = null
 
   """
-  GeoJSON Point for the location where help is needed — [longitude, latitude]
+  GeoJSON Point for the location where help is needed — [longitude, latitude]. Required unless buildingMapUuid is given, in which case it must be omitted
   """
-  geometry: GeoJSON!
+  geometry: GeoJSON = null
+
+  """
+  File the ticket inside this building map. Its point and address are copied onto the ticket, and secondaryLocation.floor (and room, on a floor with areas) must match the building's floors. Omit floor when the reporter doesn't know it
+  """
+  buildingMapUuid: UUID = null
 
   """Full name of the requester"""
   contactName: String!
@@ -317,9 +415,6 @@ input CreateTicketInput {
   """Type of help: 'rescue', 'supply', 'medical', or 'hr'"""
   taskType: String = null
 
-  """Visibility: 'public' (default), 'restricted', or 'internal'"""
-  visibility: Visibility! = public
-
   """
   Disaster type keys, e.g. ['flood', 'landslide']. Each must be an active key from `disasterTypes`; an unknown one is rejected rather than stored, because a ticket filed under a disaster that does not exist would show the reporter an empty form
   """
@@ -335,6 +430,33 @@ input CreateTicketInput {
   Street address and space detail for where help is needed. New in feature 018 — before it, only stations could carry one, so the record that most needs a door number had nothing but a map pin
   """
   secondaryLocation: SecondaryLocationInput = null
+
+  """
+  The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates
+  """
+  tasks: [CreateTicketTaskDraft!]! = []
+}
+
+union CreateTicketResult = TicketCreated | DuplicatesSuspected
+
+input CreateTicketTaskDraft {
+  """Category: 'rescue', 'supply', 'medical', or 'hr'"""
+  taskType: String!
+  taskName: String!
+  taskDescription: String = null
+
+  """Number of people or units needed"""
+  quantity: Int = null
+
+  """Origin: 'user' (default) or 'official'"""
+  source: String! = "user"
+  visibility: Visibility! = public
+  routeUuid: UUID = null
+
+  """
+  Confirmed not a duplicate of this task (a relatedUuid from DuplicatesSuspected); not checked again
+  """
+  acknowledgedDuplicateOf: String = null
 }
 
 input CreateTicketTaskInput {
@@ -354,12 +476,11 @@ input CreateTicketTaskInput {
   """Origin: 'user' (default) or 'official'"""
   source: String! = "user"
 
-  """Visibility: 'public' (default), 'restricted', or 'internal'"""
-  visibility: Visibility! = public
-
   """Optional UUID of an associated route"""
   routeUuid: UUID = null
 }
+
+union CreateTicketTaskResult = TicketTaskCreated | DuplicatesSuspected
 
 type CrowdSourcingType {
   uuid: UUID!
@@ -402,6 +523,28 @@ type DisasterTypeType {
 
   """False retires the type: no new writes, existing ones readable"""
   isActive: Boolean!
+}
+
+type DuplicateSuspect {
+  """
+  Which part of what was sent: "task:0", "task:1"…, or "station"
+  """
+  draftRef: String!
+
+  """
+  What it looks like: "ticket_task" or "station"
+  """
+  relatedKind: String!
+
+  """The existing entity it looks like"""
+  relatedUuid: String!
+
+  """When it looks like a task, that task's ticket"""
+  relatedTicketUuid: String
+}
+
+type DuplicatesSuspected {
+  suspects: [DuplicateSuspect!]!
 }
 
 enum FieldDataType {
@@ -474,24 +617,39 @@ input HelpRequestTaskInput {
   quantity: Int = null
 }
 
+"""
+The `JSON` scalar type represents JSON values as specified by [ECMA-404](https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf).
+"""
+scalar JSON @specifiedBy(url: "https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf")
+
 type Mutation {
-  createStation(input: CreateStationInput!): StationType!
+  createStation(input: CreateStationInput!, acknowledgedDuplicateOf: String = null): CreateStationResult!
   attachStationPhoto(stationUuid: UUID!, url: String!): PhotoType!
   detachStationPhoto(uuid: UUID!): Boolean!
   updateStation(uuid: UUID!, input: UpdateStationInput!): StationType!
   deleteStation(uuid: UUID!): Boolean!
   assignStationToTeam(stationUuid: UUID!, teamUuid: UUID!): StationType!
   unassignStation(stationUuid: UUID!): StationType!
+  createBuildingMap(input: CreateBuildingMapInput!): BuildingMapType!
+  updateBuildingMap(uuid: UUID!, input: UpdateBuildingMapInput!): BuildingMapType!
+  deleteBuildingMap(uuid: UUID!): Boolean!
   createStationProperty(input: CreateStationPropertyInput!): StationPropertyType!
   updateStationProperty(uuid: UUID!, input: UpdateStationPropertyInput!): StationPropertyType!
   createCrowdSourcing(input: CreateCrowdSourcingInput!): CrowdSourcingType!
-  createTicket(input: CreateTicketInput!): TicketType!
+  createTicket(input: CreateTicketInput!): CreateTicketResult!
   createHelpRequest(input: CreateHelpRequestInput!): TicketType!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
   setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!
-  reviewTicket(uuid: UUID!, verificationStatus: String!, reviewNote: String = null): TicketType!
+  auditTicket(
+    uuid: UUID!
+    status: AuditVerdict!
+
+    """`auditContentHash` as read when the auditor opened the ticket"""
+    contentHash: String!
+    note: String = null
+  ): TicketType!
   deleteTicket(uuid: UUID!): Boolean!
-  createTicketTask(input: CreateTicketTaskInput!): TicketTaskType!
+  createTicketTask(input: CreateTicketTaskInput!, acknowledgedDuplicateOf: String = null): CreateTicketTaskResult!
   updateTicketTask(uuid: UUID!, input: UpdateTicketTaskInput!): TicketTaskType!
   deleteTicketTask(uuid: UUID!): Boolean!
   createTaskProperty(input: CreateTaskPropertyInput!): TaskPropertyType!
@@ -595,6 +753,8 @@ type Query {
   station(uuid: UUID!): StationType
   hazardousZones(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): HazardousZoneConnection!
   hazardousZone(uuid: UUID!): HazardousZoneType
+  buildingMaps(bounds: BoundsInput = null, skip: Int! = 0, limit: Int! = 50): BuildingMapConnection!
+  buildingMap(uuid: UUID!): BuildingMapType
   tickets(
     bounds: BoundsInput = null
     status: String = null
@@ -607,6 +767,19 @@ type Query {
     Map zoom the result is for. Only affects a caller without ticket.view_detail: sets how coarse the H3 cell standing in for each point is — coarser as the map zooms out, never finer than resolution 8 whatever is sent
     """
     zoom: Float = null
+
+    """
+    Only tickets with a need of this type, e.g. 'rescue' or 'supply'. A string, not an enum: the back office can configure kinds of its own
+    """
+    needType: String = null
+
+    """
+    With needType: only a need still taking volunteers counts. Ignored without it
+    """
+    openNeedsOnly: Boolean! = false
+
+    """Only tickets at this audit status"""
+    auditStatus: AuditStatus = null
   ): TicketConnection!
   ticket(
     uuid: UUID!
@@ -617,6 +790,7 @@ type Query {
     zoom: Float = null
   ): TicketType
   myTickets: [TicketType!]!
+  buildingMapTickets(buildingMapUuid: UUID!, skip: Int! = 0, limit: Int! = 100): [TicketType!]!
   ticketTasks(ticketUuid: String!, status: String = null, q: String = null, skip: Int! = 0, limit: Int! = 50): [TicketTaskType!]!
   myTaskAssignments: [MyTaskAssignmentType!]!
   taskProperties(taskUuid: String!): [TaskPropertyType!]!
@@ -624,7 +798,7 @@ type Query {
   taskPropertyConfigs(taskType: String!, includeInactive: Boolean! = false): [TaskPropertyConfigType!]!
   ticketPropertyConfigs(disasterTypes: [String!]!, includeInactive: Boolean! = false): [TicketPropertyConfigType!]!
   disasterTypes(includeInactive: Boolean! = false): [DisasterTypeType!]!
-  announcements(filter: AnnouncementFilter! = ACTIVE): [AnnouncementType!]!
+  announcements(filter: AnnouncementFilter! = ACTIVE, placement: AnnouncementPlacement! = public_page): [AnnouncementType!]!
   announcement(uuid: UUID!): AnnouncementType
   briefingTemplates(state: BriefingState = null, tag: String = null): [BriefingTemplateType!]!
   briefingTemplate(uuid: UUID!): BriefingTemplateType
@@ -752,6 +926,10 @@ type SecondaryLocationType {
 type StationConnection {
   items: [StationType!]!
   pageInfo: PageInfo!
+}
+
+type StationCreated {
+  station: StationType!
 }
 
 enum StationOperationalStatus {
@@ -1045,6 +1223,11 @@ type TaskAssignmentType {
 
   """Timestamp when the status was last changed"""
   updatedAt: DateTime
+
+  """
+  Display name of the assigned person. Null to a caller without ticket.view_history on the parent ticket, unless the assignment is their own
+  """
+  actorName: String
 }
 
 type TaskPropertyConfigType {
@@ -1136,9 +1319,53 @@ type TeamZoneType {
   assignedTeams: [AssignedTeamType!]!
 }
 
+"""One field that differs from the content the last verdict was given on"""
+type TicketAuditChangeType {
+  """
+  'ticket', 'secondary_location', 'disaster_detail', 'task' or 'task_property'
+  """
+  entity: String!
+
+  """
+  The row it is on; the ticket's own uuid for its address and disaster answers
+  """
+  entityUuid: String!
+
+  """Column name, or the disaster field's property name"""
+  field: String!
+
+  """Its value when audited; null if it is new"""
+  auditedValue: JSON
+  currentValue: JSON
+}
+
+"""One move of a ticket's audit status"""
+type TicketAuditEntryType {
+  """
+  What moved it: 'verdict' (an auditor's), 'scan' (picked out for checking) or 'content_change' (a change that voided the verdict)
+  """
+  kind: String!
+
+  """The audit status it moved to"""
+  status: String!
+
+  """The auditor's note; set on a verdict only"""
+  note: String
+  at: DateTime!
+
+  """Who moved it; null for the scan"""
+  actorUuid: String
+  actorName: String
+}
+
 type TicketConnection {
   items: [TicketType!]!
   pageInfo: PageInfo!
+}
+
+type TicketCreated {
+  ticket: TicketType!
+  tasks: [TicketTaskType!]!
 }
 
 input TicketDisasterDetailInput {
@@ -1196,6 +1423,10 @@ type TicketPropertyConfigType {
   isActive: Boolean!
 }
 
+type TicketTaskCreated {
+  task: TicketTaskType!
+}
+
 type TicketTaskType {
   uuid: UUID!
 
@@ -1221,9 +1452,6 @@ type TicketTaskType {
   """Origin of this task: 'user' or 'official'"""
   source: String!
 
-  """Who can see this task: 'public', 'restricted', or 'internal'"""
-  visibility: String!
-
   """
   When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back
   """
@@ -1242,19 +1470,9 @@ type TicketTaskType {
   progressNote: String
 
   """
-  Moderator's notes explaining the review decision. Null to a caller without ticket.view_detail on the parent ticket
-  """
-  reviewNote: String
-
-  """
   UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket
   """
   createdBy: String
-
-  """
-  Review state: 'pending_review', 'approved', or 'rejected'. Null to a caller without ticket.view_history on the parent ticket
-  """
-  moderationStatus: String
   properties: [TaskPropertyType!]!
 
   """
@@ -1287,13 +1505,10 @@ type TicketType {
   """Type of help needed: 'rescue', 'supply', 'medical', or 'hr'"""
   taskType: String
 
-  """Who can see this ticket: 'public', 'restricted', or 'internal'"""
-  visibility: String
-
   """
-  Review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'
+  The data check: 'no_audit' (not checked as it now stands), 'need_audit' (picked out for checking), 'audited' (found right) or 'audit_issue' (found wrong). Public, so a list can leave out tickets with issues
   """
-  verificationStatus: String
+  auditStatus: String!
 
   """
   Disaster type keys this ticket is filed under, e.g. ['flood', 'landslide']. Plural because one incident is routinely two disasters at once. Drives which fields `ticketPropertyConfigs` returns for it
@@ -1318,9 +1533,34 @@ type TicketType {
   description: String
 
   """
-  Moderator's notes about the verification decision. Null to a caller without ticket.view_detail here
+  The note given with the last verdict, kept after a change voids it, so the next auditor sees what was found; always set while 'audit_issue'. Null to a caller without ticket.audit here
   """
-  reviewNote: String
+  auditNote: String
+
+  """
+  When the last verdict was given, kept after a change voids it. Null if never audited, or to a caller without ticket.audit here
+  """
+  auditedAt: DateTime
+
+  """
+  UUID of who gave the last verdict. Null if never audited, or without ticket.audit here
+  """
+  auditedBy: String
+
+  """
+  Every move of the audit status, newest first: verdicts, the scan's flags, and changes that voided a verdict. Null to a caller without ticket.audit here. Read it on one ticket at a time: it queries the change log per ticket
+  """
+  auditHistory: [TicketAuditEntryType!]
+
+  """
+  What differs from the content the last verdict was given on, field by field. Null if never audited, or to a caller without ticket.audit here. A need taken off since does not appear: it does not void a verdict. A value the caller could not read on the ticket itself (address, free text, triage answers) comes back null, the change still listed. Read it on one ticket at a time
+  """
+  changesSinceAudit: [TicketAuditChangeType!]
+
+  """
+  A fingerprint of the ticket's content as it now stands, to pass back to auditTicket so the verdict is refused if the ticket changes in between. Null to a caller without ticket.audit here. Read it on one ticket at a time
+  """
+  auditContentHash: String
 
   """
   UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here
@@ -1376,6 +1616,9 @@ scalar UUID
 input UpdateAnnouncementInput {
   """The new announcement body text"""
   content: String!
+
+  """Which page shows it; omit to keep the current placement"""
+  placement: AnnouncementPlacement = null
 }
 
 input UpdateAreaInput {
@@ -1407,6 +1650,16 @@ input UpdateBriefingTemplateInput {
 
   """New lifecycle phase"""
   state: BriefingState = null
+}
+
+input UpdateBuildingMapInput {
+  name: String = null
+  geometry: GeoJSON = null
+  floorsAboveGround: Int = null
+  floorsBelowGround: Int = null
+
+  """Replaces every floor's areas when sent; [] clears them"""
+  floorAreas: [BuildingFloorAreasInput!] = null
 }
 
 input UpdateStationInput {
@@ -1471,14 +1724,6 @@ input UpdateTicketInput {
   title: String = null
   description: String
 
-  """Moderator's review notes — pass null to clear"""
-  reviewNote: String
-
-  """
-  Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed'
-  """
-  verificationStatus: String = null
-
   """
   Disaster type keys — pass [] or null to clear. Validated against `disasterTypes`
   """
@@ -1499,15 +1744,6 @@ input UpdateTicketInput {
 input UpdateTicketTaskInput {
   """Updated progress description — pass null to clear"""
   progressNote: String
-
-  """Moderator's review notes — pass null to clear"""
-  reviewNote: String
-
-  """New review state: 'pending_review', 'approved', or 'rejected'"""
-  moderationStatus: String = null
-
-  """Updated visibility: 'public', 'restricted', or 'internal'"""
-  visibility: Visibility = null
 }
 
 input UpsertDisasterTypeInput {

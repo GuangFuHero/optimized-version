@@ -45,15 +45,22 @@ async def get_context(request: Request):
             # injection — get_current_user needs it to check the token's session (ADR-102).
             # For the same reason the site's realm header is handed over here (ADR-289).
             user = await get_current_user(
-                db=db, token=token, redis=request.app.state.redis,
+                db=db,
+                token=token,
+                redis=request.app.state.redis,
                 realm=request.headers.get(REALM_HEADER),
             )
         yield {
-            "db": db, "user": user, "loaders": build_loaders(db), "_rbac_cache": {},
+            "db": db,
+            "user": user,
+            "loaders": build_loaders(db),
+            "_rbac_cache": {},
             # ticket uuid -> Task[bool]; see app/graphql/tickets/types.py:ticket_detail_visible.
             "_ticket_detail_visible": {},
             # Same, for ticket.view_history; see ticket_history_visible beside it.
             "_ticket_history_visible": {},
+            # Same, for ticket.audit; see ticket_audit_visible.
+            "_ticket_audit_visible": {},
         }
     finally:
         await db_gen.aclose()

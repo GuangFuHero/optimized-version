@@ -39,7 +39,6 @@ async def _ticket(db, owner, *, east_deg=0.0, **overrides) -> Tickets:
         "title": "淹水",
         "status": "pending",
         "priority": "high",
-        "visibility": "public",
         "contact_name": "王",
     }
     ticket = Tickets(

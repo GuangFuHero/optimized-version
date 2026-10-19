@@ -149,6 +149,7 @@ export interface RescueMapMarkerItem {
       | 'isDuplicate'
       | 'isTemporary'
       | 'isOfficial'
+      | 'operationalStatus'
       | 'createdAt'
       | 'updatedAt'
     >
@@ -163,9 +164,7 @@ export interface RescueMapMarkerItem {
       | 'contactEmail'
       | 'contactPhone'
       | 'createdBy'
-      | 'visibility'
-      | 'verificationStatus'
-      | 'reviewNote'
+      | 'auditStatus'
       | 'createdAt'
       | 'updatedAt'
     >

@@ -44,7 +44,6 @@ class TaskSubmission:
     task_description: str | None = None
     quantity: int | None = None
     source: str = "user"
-    visibility: str = "public"
     route_uuid: str | None = None
     acknowledged_duplicate_of: str | None = None
 
@@ -223,6 +222,5 @@ def _task_kwargs(task: TaskSubmission) -> dict:
         "task_description": task.task_description,
         "quantity": task.quantity,
         "source": task.source,
-        "visibility": task.visibility,
         "route_uuid": task.route_uuid,
     }

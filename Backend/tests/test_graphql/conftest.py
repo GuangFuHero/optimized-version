@@ -113,7 +113,7 @@ async def _ensure_db():
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_EDIT, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_DELETE, "all")
         await _grant(db, coordinator_role, perm_cache, Perm.TICKET_ASSIGN, "all")
-        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_REVIEW, "all")
+        await _grant(db, coordinator_role, perm_cache, Perm.TICKET_AUDIT, "all")
 
         # Content Admin: announcement management. ADR-026 dropped the Group/Policy tables in
         # favour of capability grants, so this role is the capability-era equivalent of the old
@@ -140,14 +140,15 @@ async def _ensure_db():
         await _grant(db, briefing_role, perm_cache, Perm.PREDEP_EDIT, "all")
         await _grant(db, briefing_role, perm_cache, Perm.PREDEP_DELETE, "all")
 
-        # Data Auditor: reviews and revokes station suggestions everywhere, as the seeded
-        # `data_auditor` role does, but edits nothing directly.
+        # Data Auditor: reviews and revokes station suggestions and audits tickets everywhere, as
+        # the seeded `data_auditor` role does, but edits nothing directly.
         auditor_role = Role(name="Data Auditor", kind="platform")
         db.add(auditor_role)
         await db.flush()
         await _grant(db, auditor_role, perm_cache, Perm.STATION_VIEW, "all")
         await _grant(db, auditor_role, perm_cache, Perm.STATION_REVIEW, "all")
         await _grant(db, auditor_role, perm_cache, Perm.STATION_REVOKE, "all")
+        await _grant(db, auditor_role, perm_cache, Perm.TICKET_AUDIT, "all")
 
         await db.commit()
     await eng.dispose()
@@ -372,7 +373,6 @@ async def sample_ticket(coordinator_auth):
             status="pending",
             priority="high",
             task_type="hr",
-            visibility="public",
         )
         db.add(ticket)
         await db.flush()
@@ -390,7 +390,6 @@ async def sample_ticket_task(coordinator_auth, sample_ticket):
             task_name="Need medics",
             quantity=3,
             source="user",
-            visibility="public",
             created_by=user_uuid,
         )
         db.add(task)

@@ -4,7 +4,7 @@ export interface PointShareTarget {
   url: string;
 }
 
-export type PointShareChannel = 'line' | 'facebook' | 'threads';
+export type PointShareChannel = 'line' | 'facebook' | 'threads' | 'x';
 
 export interface PointShareLink {
   channel: PointShareChannel;
