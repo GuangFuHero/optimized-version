@@ -1445,13 +1445,20 @@ ADR-048 當初拒絕資源上的 team 歸屬，理由是「gov 把東西交給 N
 5. **站點的 `comment` 不再能提修改建議**：從 `graphql/suggestions/fields.py` 的 `SUGGESTABLE_FIELDS["station"]`
    拿掉。提建議只要 `station.contribute`（一般帳號 `all`），也就是讀不到備註的人能建議備註該寫什麼，通過後還會蓋
    掉後台寫的內部備註。前台的建議表單本來就沒有這一欄。`station_property` 的 `comment` 留著：它存的是屬性的值。
+6. **另外兩條讀得到備註的路用同一把鑰匙**（#81 review，2026-10-19 補）：
+   - **站點匯出**（`GET /stations/export`）：`services/bulk_export.py` 每一列用 `station.view_pii` 判斷，做法同
+     單匯出的聯絡欄位；範圍外的列 `comment` 欄留空。匯出檔也是匯入範本（ADR-119），匯入時空白代表不動
+     （ADR-121），拿回去匯入不會清掉備註。
+   - **建議合併紀錄**：第 5 條之前通過的合併，`changes` 存著備註的前後原文，而 `suggestionMerges` 和撤銷合併的
+     回傳只查 `station.review`／`station.revoke`。`StationSuggestionMergeType.changes` 在呼叫者沒有這個站點的
+     `station.view_pii` 時，拿掉站點 `comment` 那幾筆，兩條路一起生效。照 seed，持有這兩個能力的人都有範圍一樣
+     大的 `station.view_pii`，理由同第 4 條。
 
 **後果**：
 
 - ➕ 訪客與一般帳號讀不到別人站點的內部備註。`station`、`stations`、`createStation`、`updateStation` 都經過
   `from_model`，一起生效。
-- ◾ 站點搜尋原本就只比對名稱與描述（`models/geo.py` 的 `search_text`），不能用 `q` 猜備註；REST 沒有回傳站點的
-  `comment`。
+- ◾ 站點搜尋原本就只比對名稱與描述（`models/geo.py` 的 `search_text`），不能用 `q` 猜備註。
 - ◾ `StationPropertyType.comment` 不受影響：它存的是 Boolean／Enum 屬性的值（`services/station.py` 的
   comment-backed 屬性，例如供水充足程度），本來就是公開資料。
 - ➖ 團隊 `admin`／`member` 讀別的團隊的站點時拿到 `null`（之前讀得到）。後台目前沒有畫面讀 `comment`。
