@@ -4,7 +4,7 @@
 `supply_status_updated_at` moves only when it changes (Spec/024 ADR-333). Both start empty.
 
 Revision ID: eb02aafe5f5a
-Revises: d4c8b1e07a92
+Revises: 259489888127
 Create Date: 2026-10-17
 
 """
@@ -16,7 +16,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "eb02aafe5f5a"
-down_revision: str | Sequence[str] | None = "d4c8b1e07a92"
+down_revision: str | Sequence[str] | None = "259489888127"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
