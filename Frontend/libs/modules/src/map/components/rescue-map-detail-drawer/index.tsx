@@ -140,7 +140,7 @@ function createTicketSummary(marker: RescueMapMarkerItem) {
       requesterLabel: '現場聯絡人',
       requesterValue: contactSummary.join(' / ') || '未提供',
       notesLabel: '任務說明',
-      notesValue: marker.ticketMeta?.reviewNote?.trim() || marker.subtitle,
+      notesValue: marker.subtitle,
     },
   };
 }

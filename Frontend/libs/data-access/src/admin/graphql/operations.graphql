@@ -11,8 +11,7 @@ fragment AdminTicketFields on TicketType {
   status
   priority
   taskType
-  visibility
-  verificationStatus
+  auditStatus
   contactName
   contactEmail
   contactPhone
@@ -29,10 +28,7 @@ fragment AdminTaskFields on TicketTaskType {
   quantity
   status
   progressNote
-  reviewNote
   source
-  visibility
-  moderationStatus
   createdAt
   updatedAt
   assignments {
@@ -329,16 +325,8 @@ mutation AdminUpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
 mutation AdminDeleteTicket($uuid: UUID!) {
   deleteTicket(uuid: $uuid)
 }
-mutation AdminReviewTicket(
-  $uuid: UUID!
-  $verificationStatus: String!
-  $reviewNote: String
-) {
-  reviewTicket(
-    uuid: $uuid
-    verificationStatus: $verificationStatus
-    reviewNote: $reviewNote
-  ) {
+mutation AdminAuditTicket($uuid: UUID!, $status: AuditVerdict!, $note: String) {
+  auditTicket(uuid: $uuid, status: $status, note: $note) {
     ...AdminTicketFields
   }
 }
