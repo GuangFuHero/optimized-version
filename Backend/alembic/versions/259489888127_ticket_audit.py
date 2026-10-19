@@ -35,16 +35,23 @@ def upgrade() -> None:
     """Rename the review columns to audit ones, add the verdict's who/when/content, drop the rest."""
     op.alter_column("tickets", "verification_status", new_column_name="audit_status")
     op.alter_column("tickets", "review_note", new_column_name="audit_note")
-    op.execute("UPDATE tickets SET audit_status = 'no_audit', audit_note = NULL")
+    # Reset by rewriting the columns, not by updating the rows: an UPDATE fires the change log's
+    # trigger, and every ticket's history would show a status move nobody made.
+    op.alter_column("tickets", "audit_status", type_=sa.String(20), postgresql_using="'no_audit'")
     op.alter_column(
         "tickets",
         "audit_status",
-        type_=sa.String(20),
         nullable=False,
         server_default=sa.text("'no_audit'"),
         comment="檢核狀態：no_audit/need_audit/audited/audit_issue",
     )
-    op.alter_column("tickets", "audit_note", comment="檢核說明；audit_issue 時必填")
+    op.alter_column(
+        "tickets",
+        "audit_note",
+        type_=sa.String(),
+        postgresql_using="NULL",
+        comment="檢核說明；audit_issue 時必填",
+    )
     op.add_column(
         "tickets",
         sa.Column("audited_at", sa.DateTime(timezone=True), nullable=True, comment="最近一次檢核時間"),
@@ -110,15 +117,9 @@ def downgrade() -> None:
     op.drop_column("tickets", "audited_content")
     op.drop_column("tickets", "audited_by")
     op.drop_column("tickets", "audited_at")
-    op.alter_column(
-        "tickets",
-        "audit_status",
-        type_=sa.String(50),
-        nullable=True,
-        server_default=None,
-        comment=None,
-    )
-    op.execute("UPDATE tickets SET audit_status = NULL")
-    op.alter_column("tickets", "audit_note", comment=None)
+    # Rewritten rather than updated, as on the way up, so the change log records nothing.
+    op.alter_column("tickets", "audit_status", nullable=True, server_default=None, comment=None)
+    op.alter_column("tickets", "audit_status", type_=sa.String(50), postgresql_using="NULL")
+    op.alter_column("tickets", "audit_note", type_=sa.String(), postgresql_using="NULL", comment=None)
     op.alter_column("tickets", "audit_note", new_column_name="review_note")
     op.alter_column("tickets", "audit_status", new_column_name="verification_status")
