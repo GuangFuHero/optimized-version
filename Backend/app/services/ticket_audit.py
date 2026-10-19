@@ -34,6 +34,7 @@ from app.models.request import Tickets
 from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_disaster_detail import TicketDisasterDetail
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
+from app.repositories.geo_repository import secondary_location_repository
 from app.repositories.tickets_repository import ticket_repository
 from app.services.authz import require_scope
 from app.services.notification_service import NotificationService
@@ -96,7 +97,8 @@ def _blank(value) -> bool:
 async def content_of(db: AsyncSession, ticket: Tickets) -> dict:
     """The ticket's content as a verdict is given on it. Reads what the session has flushed."""
     ticket_uuid = str(ticket.uuid)
-    address = await db.scalar(select(SecondaryLocation).where(SecondaryLocation.geometry_uuid == ticket_uuid))
+    # The row an edit writes to (`_replace_secondary_location`), should a ticket ever hold two.
+    address = await secondary_location_repository.get_by_geometry(db, ticket_uuid)
     answers: dict[str, list[str]] = {}
     for row in await db.scalars(
         select(TicketDisasterDetail).where(TicketDisasterDetail.ticket_uuid == ticket_uuid)

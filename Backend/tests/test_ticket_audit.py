@@ -23,6 +23,7 @@ from app.models.auth import User
 from app.models.notification import Notification
 from app.models.rbac import Permission, Role, RolePermissionAssign, UserRoleAssign
 from app.models.request import Tickets
+from app.models.secondary_location import SecondaryLocation
 from app.models.ticket_task import TaskAssignment, TaskProperty, TicketTask
 from app.services import ticket as ticket_service
 from app.services import ticket_audit
@@ -370,6 +371,25 @@ async def test_the_same_disaster_types_in_another_order_are_no_change(db):
     )
 
     assert (await _state(db, ticket_uuid)).audit_status == "audited"
+
+
+@pytest.mark.asyncio
+async def test_the_audited_address_is_the_row_an_edit_writes_to(db):
+    """One address per ticket is a convention, not a constraint: read the row edits replace."""
+    ticket = await _ticket(db)
+    ticket_uuid = str(ticket.uuid)
+    first, second = sorted([uuidlib.uuid4(), uuidlib.uuid4()])
+    for row_uuid, county in ((second, "台東縣"), (first, "花蓮縣")):
+        db.add(
+            SecondaryLocation(
+                uuid=row_uuid, geometry_uuid=ticket_uuid, location_type="address", county=county
+            )
+        )
+    await db.flush()
+
+    content = await ticket_audit.content_of(db, await _state(db, ticket_uuid))
+
+    assert content["address"]["county"] == "花蓮縣"
 
 
 @pytest.mark.asyncio
