@@ -93,8 +93,8 @@ app.add_middleware(
 )
 
 
-# The 401 codes that mean the user is signed out, as opposed to needing a refresh (ADR-328). The last
-# two only come from a refresh that failed, which leaves nothing to try next (ADR-325).
+# The 401 codes that mean the user is signed out, as opposed to needing a refresh (ADR-328).
+# `refresh_token_invalid` only comes from a refresh that failed, which leaves nothing to try next (ADR-325).
 _SIGNED_OUT = frozenset({
     ErrorCode.SESSION_EXPIRED, ErrorCode.CREDENTIALS_INVALID,
     ErrorCode.REFRESH_TOKEN_INVALID, ErrorCode.IDENTITY_REVOKED,

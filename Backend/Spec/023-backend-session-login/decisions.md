@@ -212,7 +212,8 @@ write: loudly, rather than accepting one it should not.
 > **Status: ACCEPTED (2026-10-18).** Chosen by the product owner on 2026-10-16, together with moving sign-in
 > to the backend. Answering an unreachable session store with a 503 instead of signing everyone out was
 > chosen on 2026-10-18, after the frontend's testing showed that stopping Redis for a moment signed every
-> browser out for good.
+> browser out for good. Giving a revoked identity its own code, the one the refresh already answered, was
+> added on 2026-10-19, after review.
 
 **In plain words**: when the backend turns a token away, it now says why. Two answers mean "this pass just ran
 out, get a new one and try again"; the others mean "you are signed out". The browser has to know which: the
@@ -228,7 +229,7 @@ or signed the user out whenever a token expired.
 **Decision**:
 
 1. The 401 from `get_current_user` and `get_current_session` — every REST endpoint and the GraphQL context —
-   is an `ApiError` with one of four codes. `detail` stays "Could not validate credentials", and the
+   is an `ApiError` with one of five codes. `detail` stays "Could not validate credentials", and the
    `WWW-Authenticate: Bearer` header stays.
 
    | code | when | the client should |
@@ -236,7 +237,8 @@ or signed the user out whenever a token expired.
    | `access_token_expired` | the token's `exp` has passed | refresh, then send the request again |
    | `access_token_stale` | the token's `act` no longer matches its session's (ADR-195) | refresh, then send the request again |
    | `session_expired` | the session is gone: logout, logout-all, a password change or reset, an admin's kick | treat the user as signed out |
-   | `credentials_invalid` | a bad signature, not an access token, no `sub` or `sid`, a session belonging to someone else, the account or the acting identity gone | treat the user as signed out |
+   | `credentials_invalid` | a bad signature, not an access token, no `sub` or `sid`, a session belonging to someone else, the account gone | treat the user as signed out |
+   | `identity_revoked` | the identity the token acts as is no longer the caller's: its role revoked or deleted, its team deleted (ADR-096); the refresh answers the same (ADR-325) | treat the user as signed out, and say their access was taken away |
 
 2. REST and GraphQL answer in one shape: HTTP 401 with `{"detail", "code"}`. The GraphQL context is a FastAPI
    dependency of the Strawberry router, so its `ApiError` reaches the same exception handler as REST instead
@@ -248,13 +250,14 @@ or signed the user out whenever a token expired.
    "Session store is unavailable", without `WWW-Authenticate` — the code a sign-out that cannot reach Redis
    already answers (ADR-325). The session may well be alive, so nothing is cleared, and the same cookies
    work again once Redis is back. The log says why the store was unreachable.
-4. A request authenticated by the access cookie (ADR-327) and answered `session_expired` or
-   `credentials_invalid` gets both sign-in cookies cleared in the same response (ADR-326); otherwise the
-   browser keeps sending a token that can never work again. So does the browser's refresh (ADR-325) answered
-   `refresh_token_invalid` or `identity_revoked`: nothing is left to try. `access_token_expired` and
-   `access_token_stale` clear nothing, because the refresh needs the cookies. A Bearer request never has
-   cookies cleared. The clearing is done in the exception handler REST and the GraphQL context share, not at
-   each raise site, and not in a middleware, which would have to parse the response body to find the code.
+4. A request authenticated by the access cookie (ADR-327) and answered `session_expired`,
+   `credentials_invalid` or `identity_revoked` gets both sign-in cookies cleared in the same response
+   (ADR-326); otherwise the browser keeps sending a token that can never work again. So does the browser's
+   refresh (ADR-325) answered `refresh_token_invalid` or `identity_revoked`: nothing is left to try.
+   `access_token_expired` and `access_token_stale` clear nothing, because the refresh needs the cookies. A
+   Bearer request never has cookies cleared. The clearing is done in the exception handler REST and the
+   GraphQL context share, not at each raise site, and not in a middleware, which would have to parse the
+   response body to find the code.
 5. A request carrying no token at all, on an endpoint that needs one, answers 401 `credentials_invalid` with
    the detail "Not authenticated". It is not cookie-authenticated, so nothing is cleared, and a client tells a
    guest apart by whether it sent a cookie.
@@ -339,6 +342,12 @@ has not switched. It shows up as 403 on back-office endpoints, not as an error a
 ➖ One extra query for each back-office request whose token acts as `user`.
 ➖ Someone holding several back-office identities arrives on the first one by sort order, not on the one they
 used last, and switches from there.
+➖ One session, so one identity switched to. Someone who switched to a back-office identity
+(`POST /auth/session/identity`) that is then revoked is signed out of the site as well, with `identity_revoked`
+(ADR-096, ADR-328), and signs in again on `user`; with two sign-ins only the back office's ended. Keeping the site
+signed in would take moving the session to another identity on refresh, which ADR-096 refuses: the refresh carries
+no realm, so it decides for the site and the back office at once. Someone who never switched is not affected: the
+site carries on, and the back office answers 403 `back_office_identity_required`.
 
 ---
 

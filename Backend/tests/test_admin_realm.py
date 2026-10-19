@@ -205,7 +205,7 @@ async def test_the_marker_does_not_stand_in_for_a_revoked_identity(client, db_se
     response = await client.get("/api/v1/users/me", headers=headers)
 
     assert response.status_code == 401, response.text
-    assert response.json()["code"] == "credentials_invalid"
+    assert response.json()["code"] == "identity_revoked"
 
 
 async def test_what_the_back_office_changes_is_recorded_under_its_identity(client, db_session, redis):

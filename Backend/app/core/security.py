@@ -327,8 +327,8 @@ async def get_current_user(
     An `act` claim that no longer names a grant the user holds — role revoked, role deleted,
     team soft-deleted — is refused here rather than quietly downgraded. Silently dropping to
     a lesser identity would leave the caller acting with permissions they cannot see they
-    lost; refusing makes it visible. `/auth/refresh` refuses the same case, so between them
-    the user is signed out and comes back on their platform identity.
+    lost; refusing makes it visible. `/auth/refresh` refuses the same case with the same
+    `identity_revoked`, so between them the user is signed out and comes back on their platform identity.
 
     A request the site marks with `realm` = `site` then acts as the caller's `user` grant
     instead, for that request alone (ADR-289): everyone signed in has the same
@@ -355,7 +355,8 @@ async def get_current_user(
     if act:
         identity = await active_identity_repository.resolve(db, str(user.uuid), act)
         if identity is None:
-            raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
+            # The code a refresh answers too, so a client can say the access was taken away (ADR-328).
+            raise _credentials_exception(ErrorCode.IDENTITY_REVOKED)
     else:
         # No `act` at all is a different case from one that names a vanished identity: nothing
         # was claimed, so fall back to the platform identity — the ADR-069 default, and what

@@ -136,6 +136,7 @@ async def test_the_marker_does_not_revive_a_revoked_identity(client, db_session,
     response = await client.get("/api/v1/users/me", headers={**headers, **SITE})
 
     assert response.status_code == 401
+    assert response.json()["code"] == "identity_revoked"
 
 
 @pytest.mark.parametrize("realm", ["back-office", "Site"])

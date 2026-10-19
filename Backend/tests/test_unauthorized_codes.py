@@ -137,7 +137,6 @@ async def _session_store_down(db, redis, monkeypatch):
         _no_session_id,
         _someone_elses_session,
         _account_gone,
-        _identity_taken_away,
     ],
 )
 async def test_a_token_that_proves_nothing_signs_the_user_out(
@@ -147,6 +146,15 @@ async def test_a_token_that_proves_nothing_signs_the_user_out(
     token = await token_for_case(db_session, redis, monkeypatch)
 
     _assert_401(await ask_each_entrypoint(token), "credentials_invalid")
+
+
+async def test_a_token_whose_identity_was_taken_away_signs_the_user_out(
+    ask_each_entrypoint, db_session, redis, monkeypatch
+):
+    """Signed out too, but with the code the refresh answers, so a client can say why (ADR-328)."""
+    token = await _identity_taken_away(db_session, redis, monkeypatch)
+
+    _assert_401(await ask_each_entrypoint(token), "identity_revoked")
 
 
 async def test_an_unreachable_session_store_refuses_without_signing_anyone_out(

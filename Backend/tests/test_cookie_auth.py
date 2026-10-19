@@ -257,6 +257,17 @@ async def test_a_token_that_proves_nothing_clears_the_cookies(ask_with_cookie, d
     )
 
 
+async def test_a_revoked_identity_clears_the_cookies(ask_with_cookie, db_session, redis):
+    """The identity the session acts as was taken away: signed out, so the cookies go too."""
+    user_uuid, _, _ = await sign_in(db_session, redis)
+    act = encode_act(str(uuid.uuid4()), None)
+    sid, _ = await SessionRepository(redis).create_session(user_uuid, "test", act=act)
+
+    _assert_cleared(
+        await ask_with_cookie(create_access_token({"sub": user_uuid}, sid=sid, act=act)), "identity_revoked"
+    )
+
+
 async def test_an_expired_token_keeps_the_cookies_for_the_refresh(ask_with_cookie, db_session, redis):
     """Refreshing needs the refresh cookie, so a token that only ran out clears nothing."""
     user_uuid, act, sid = await sign_in(db_session, redis)
