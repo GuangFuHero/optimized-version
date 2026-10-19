@@ -23,6 +23,7 @@ from app.repositories.geo_repository import (
     station_repository,
 )
 from app.services.authz import require_scope
+from app.services.geo_validation import normalize_supply_status
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 from app.services.station import OPERATIONAL_PROPERTY_NAMES, notify_operational_status_change
@@ -269,6 +270,8 @@ async def _apply_decisions(db: AsyncSession, station: Station, decisions, rows_b
         if decision.value is None:
             raise ValueError(f"'{decision.field_name}' needs a value to approve")
         value = coerce_and_validate(target_type, decision.field_name, decision.value)
+        if target_type == "station" and decision.field_name == "supply_status":
+            value = normalize_supply_status(value)
         before = getattr(target, decision.field_name)
         change = {
             "target_type": target_type,

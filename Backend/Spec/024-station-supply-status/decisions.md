@@ -41,6 +41,10 @@ free text with the hint 「缺什麼比有什麼更能驅動行動，優先寫�
    `status_changed_at` pattern, and the two share code: `services/suggestion.py` maps each stamped field to its
    stamp. A merge's change record keeps the old stamp under `<stamp>_before`. For `status_changed_at` that is
    the key merges already store, so revoking a merge made before this change still works.
+   A value is stripped, and a blank one is stored as null (`normalize_supply_status` in
+   `services/geo_validation.py`, on all three paths). Otherwise a form clearing the field with `""` would store
+   a blank line and date it, and a blank sent on create would date a line that does not exist (#81 review,
+   2026-10-19).
 5. **History**: `supply_status` is public tier, like `op_hour`. `supply_status_updated_at` is excluded as a
    derived stamp, like `status_changed_at`.
 

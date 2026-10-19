@@ -30,6 +30,7 @@ from app.services.authz import require_gov_team, require_scope
 from app.services.geo_validation import (
     check_address_lengths,
     normalize_contact_fields,
+    normalize_supply_status,
     validate_point,
 )
 from app.services.notification_resolver import NotificationRecipientResolver
@@ -144,7 +145,7 @@ async def validate_station(
             # PR #40 review found leaking the INSERT.
             **contacts,
             "operational_status": operational_status,
-            "supply_status": supply_status,
+            "supply_status": normalize_supply_status(supply_status),
         },
         secondary_location=secondary_location,
     )
@@ -278,8 +279,10 @@ async def update_station(
     if obj_in.get("operational_status") not in (None, station.operational_status):
         obj_in["status_changed_at"] = datetime.now(UTC)
     # Same rule for the supply status (ADR-333), except that clearing it is a change too.
-    if "supply_status" in obj_in and obj_in["supply_status"] != station.supply_status:
-        obj_in["supply_status_updated_at"] = datetime.now(UTC)
+    if "supply_status" in obj_in:
+        obj_in["supply_status"] = normalize_supply_status(obj_in["supply_status"])
+        if obj_in["supply_status"] != station.supply_status:
+            obj_in["supply_status_updated_at"] = datetime.now(UTC)
     updated = await station_repository.update(db, db_obj=station, obj_in=obj_in)
 
     # 觸發通知

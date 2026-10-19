@@ -554,6 +554,22 @@ async def test_supply_status_merge_stamps_it(client, auditor_auth, login_user_au
 
 
 @pytest.mark.asyncio
+async def test_a_blank_supply_status_merged_dates_nothing(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """A reviewer's blank is no line, as on a direct edit: the station had none, so nothing moves."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, user_token, "station", sample_station, "supply_status", "飲用水見底")
+
+    await _merge(client, auditor_token, sample_station, [_decide(sample_station, "supply_status", " ")])
+
+    after = (await _gql(client, auditor_token, SUPPLY_QUERY, {"uuid": sample_station}))["data"]["station"]
+    assert after["supplyStatus"] is None
+    assert after["supplyStatusUpdatedAt"] is None
+
+
+@pytest.mark.asyncio
 async def test_revoke_restores_supply_status_and_when_it_was_set(
     client, auditor_auth, login_user_auth, sample_station
 ):

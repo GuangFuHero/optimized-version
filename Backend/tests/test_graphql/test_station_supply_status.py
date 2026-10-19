@@ -111,6 +111,33 @@ async def test_update_moves_the_stamp_only_on_a_real_change(client, coordinator_
 
 
 @pytest.mark.asyncio
+async def test_a_blank_supply_status_is_no_line_and_dates_nothing(client, coordinator_auth):
+    """A form that sends "" for an empty field must not date a blank line."""
+    _, token = coordinator_auth
+    created = await _create(client, token, "  ")
+    assert created["supplyStatus"] is None
+    assert created["supplyStatusUpdatedAt"] is None
+
+    blank = {"uuid": created["uuid"], "input": {"supplyStatus": ""}}
+    saved = await _gql(client, UPDATE_STATION, blank, token)
+    assert saved["updateStation"]["supplyStatus"] is None
+    assert saved["updateStation"]["supplyStatusUpdatedAt"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_blank_clears_a_supply_status_as_null_does(client, coordinator_auth):
+    """Clearing is a change, so it is dated, and stored as the null an unset field holds."""
+    _, token = coordinator_auth
+    created = await _create(client, token, "飲用水見底")
+
+    blank = {"uuid": created["uuid"], "input": {"supplyStatus": " "}}
+    cleared = await _gql(client, UPDATE_STATION, blank, token)
+
+    assert cleared["updateStation"]["supplyStatus"] is None
+    assert cleared["updateStation"]["supplyStatusUpdatedAt"] > created["supplyStatusUpdatedAt"]
+
+
+@pytest.mark.asyncio
 async def test_supply_status_is_suggestable_as_free_text(client):
     """The site's suggest-an-edit form offers 物資狀況, so the field list carries it."""
     fields = {f["fieldName"]: f for f in (await _gql(client, SUGGESTABLE_FIELDS))["suggestableFields"]}
