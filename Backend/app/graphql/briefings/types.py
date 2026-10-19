@@ -38,16 +38,14 @@ class BriefingTemplateType:
     state: str = strawberry.field(
         default="briefing", description="Lifecycle phase: 'briefing', 'in_field', or 'debrief'"
     )
-    created_by: str | None = strawberry.field(
-        default=None, description="UUID of the user who created this template"
-    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    _created_by: strawberry.Private[str | None] = None
 
     @strawberry.field(description="Who created it. Null unless the caller holds pre_departure.edit")
     async def creator(self, info: strawberry.types.Info) -> UserRefType | None:
         """The template's author, to editors only."""
-        return await staff_user_ref(info, self.created_by, Perm.PREDEP_EDIT)
+        return await staff_user_ref(info, self._created_by, Perm.PREDEP_EDIT)
 
     @classmethod
     def from_model(cls, m) -> "BriefingTemplateType":
@@ -57,7 +55,7 @@ class BriefingTemplateType:
             content=m.content,
             tags=list(m.tags or []),
             state=m.state,
-            created_by=m.created_by,
+            _created_by=m.created_by,
             created_at=m.created_at,
             updated_at=m.updated_at,
         )
@@ -76,22 +74,20 @@ class BriefingType:
     state: str = strawberry.field(
         default="briefing", description="Lifecycle phase: 'briefing', 'in_field', or 'debrief'"
     )
-    created_by: str | None = strawberry.field(
-        default=None, description="UUID of the user who created this briefing"
-    )
     status: str = strawberry.field(default="published", description="'draft' or 'published'")
     published_at: datetime | None = strawberry.field(
         default=None, description="When it was published; null while a draft"
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    _created_by: strawberry.Private[str | None] = None
     _updated_by: strawberry.Private[str | None] = None
     _published_by: strawberry.Private[str | None] = None
 
     @strawberry.field(description="Who created it. Null unless the caller holds pre_departure.edit")
     async def creator(self, info: strawberry.types.Info) -> UserRefType | None:
         """The briefing's author, to editors only."""
-        return await staff_user_ref(info, self.created_by, Perm.PREDEP_EDIT)
+        return await staff_user_ref(info, self._created_by, Perm.PREDEP_EDIT)
 
     @strawberry.field(description="Who last changed it. Null unless the caller holds pre_departure.edit")
     async def updater(self, info: strawberry.types.Info) -> UserRefType | None:
@@ -114,7 +110,7 @@ class BriefingType:
             content=m.content,
             tags=list(m.tags or []),
             state=m.state,
-            created_by=m.created_by,
+            _created_by=m.created_by,
             status="draft" if m.published_at is None else "published",
             published_at=m.published_at,
             created_at=m.created_at,

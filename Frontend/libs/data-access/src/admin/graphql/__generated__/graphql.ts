@@ -72,8 +72,6 @@ export type AnnouncementType = {
   active: Scalars['Boolean']['output'];
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who created this announcement */
-  createdBy?: Maybe<Scalars['String']['output']>;
   /** Who created it. Null unless the caller holds announcement.edit */
   creator?: Maybe<UserRefType>;
   /** Display position (1 = top) among active announcements; null when inactive */
@@ -171,8 +169,6 @@ export type BriefingTemplateType = {
   __typename?: 'BriefingTemplateType';
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who created this template */
-  createdBy?: Maybe<Scalars['String']['output']>;
   /** Who created it. Null unless the caller holds pre_departure.edit */
   creator?: Maybe<UserRefType>;
   /** Lifecycle phase: 'briefing', 'in_field', or 'debrief' */
@@ -187,8 +183,6 @@ export type BriefingType = {
   __typename?: 'BriefingType';
   content: Scalars['String']['output'];
   createdAt?: Maybe<Scalars['DateTime']['output']>;
-  /** UUID of the user who created this briefing */
-  createdBy?: Maybe<Scalars['String']['output']>;
   /** Who created it. Null unless the caller holds pre_departure.edit */
   creator?: Maybe<UserRefType>;
   /** When it was published; null while a draft */
@@ -2247,7 +2241,6 @@ export type AdminAnnouncementsQuery = {
     content: string;
     active: boolean;
     order?: number | null;
-    createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   }>;
@@ -2267,7 +2260,6 @@ export type AdminBriefingsQuery = {
     content: string;
     tags: Array<string>;
     state: string;
-    createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   }>;
@@ -2286,7 +2278,6 @@ export type AdminBriefingTemplatesQuery = {
     content: string;
     tags: Array<string>;
     state: string;
-    createdBy?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
   }>;
@@ -4309,7 +4300,6 @@ export const AdminAnnouncementsDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'active' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'order' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
               ],
@@ -4383,7 +4373,6 @@ export const AdminBriefingsDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
               ],
@@ -4450,7 +4439,6 @@ export const AdminBriefingTemplatesDocument = {
                 { kind: 'Field', name: { kind: 'Name', value: 'content' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'tags' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'state' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
               ],

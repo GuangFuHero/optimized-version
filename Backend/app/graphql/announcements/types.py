@@ -48,21 +48,19 @@ class AnnouncementType:
         default=None,
         description="Display position (1 = top) among active announcements; null when inactive",
     )
-    created_by: str | None = strawberry.field(
-        default=None, description="UUID of the user who created this announcement"
-    )
     status: str = strawberry.field(default="active", description="'draft', 'active' or 'inactive'")
     published_at: datetime | None = strawberry.field(
         default=None, description="When it last went live; null while a draft"
     )
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    _created_by: strawberry.Private[str | None] = None
     _updated_by: strawberry.Private[str | None] = None
 
     @strawberry.field(description="Who created it. Null unless the caller holds announcement.edit")
     async def creator(self, info: strawberry.types.Info) -> UserRefType | None:
         """The announcement's author, to editors only."""
-        return await staff_user_ref(info, self.created_by, Perm.ANN_EDIT)
+        return await staff_user_ref(info, self._created_by, Perm.ANN_EDIT)
 
     @strawberry.field(description="Who last changed it. Null unless the caller holds announcement.edit")
     async def updater(self, info: strawberry.types.Info) -> UserRefType | None:
@@ -79,7 +77,7 @@ class AnnouncementType:
             active=m.active,
             placement=m.placement,
             order=m.display_order,
-            created_by=m.created_by,
+            _created_by=m.created_by,
             status=status,
             published_at=m.published_at,
             created_at=m.created_at,

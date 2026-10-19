@@ -14,7 +14,7 @@ from tests.test_graphql.conftest import _create_user_with_grants, _create_user_w
 CREATE_TEMPLATE = """
 mutation($content: String!, $tags: [String!]!, $state: BriefingState!) {
   createBriefingTemplate(input: {content: $content, tags: $tags, state: $state}) {
-    uuid content tags state createdBy
+    uuid content tags state creator { uuid }
   }
 }
 """
@@ -104,7 +104,7 @@ async def test_template_and_briefing_lifecycle(client, briefing_admin_auth):
     t = await _create_template(client, token, "supply list", ["supply"], "IN_FIELD")
     assert t["tags"] == ["supply"]
     assert t["state"] == "in_field"
-    assert t["createdBy"] == user_uuid
+    assert t["creator"]["uuid"] == user_uuid
 
     # Generate a briefing seeded from the template
     gen = await _post(client, GENERATE, {"templateUuid": t["uuid"]}, token)

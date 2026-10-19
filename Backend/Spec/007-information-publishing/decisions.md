@@ -289,6 +289,7 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
   只有 `.edit` 的人要先把它下線再改。
 - **作者資訊**：`creator`／`updater`／`publisher` 回傳 `{ uuid, name }`，只有暱稱、沒有聯絡方式，名字用既有的
   `user_name_by_uuid` DataLoader 一次批次查完。呼叫端沒有該模組的 `.edit` 就回 `null`，不報錯。
+  原本公開的 `createdBy` 拿掉：它讓訪客看得出哪幾則出自同一人，編輯者要 UUID 就讀 `creator { uuid }`。
 - migration 把既有的列都當成已發布：`published_at = created_at`，`published_by`／`updated_by = created_by`。
 
 **為什麼不開 `/admin/users/{uuid}`**：它要 `user.view`，只有平台管理員有；前端還得一則一則去查。
