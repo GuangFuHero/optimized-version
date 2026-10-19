@@ -79,6 +79,18 @@ def normalize_contact_fields(fields: dict, *, required: frozenset[str] = frozens
     return out
 
 
+def normalize_supply_status(value: str | None) -> str | None:
+    """A station's supply status stripped, or None when nothing is left of it (ADR-333).
+
+    Its stamp says when a line last changed, so a form clearing the field with "" must store the
+    same None an unset field holds: kept as "", the blank would count as a new line and be dated.
+    Every path that writes it — create, update, a merged suggestion — goes through here.
+    """
+    if value is None:
+        return None
+    return value.strip() or None
+
+
 def check_address_lengths(fields: dict | None) -> None:
     """Refuse an address part longer than its `secondary_locations` column.
 

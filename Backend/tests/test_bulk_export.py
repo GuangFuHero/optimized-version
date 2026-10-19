@@ -90,7 +90,8 @@ async def _zoned_team(db) -> Team:
 
 
 async def _station(
-    db, *, name: str, point: Point, creator: User, quantity: int | None = None, team: Team | None = None
+    db, *, name: str, point: Point, creator: User, quantity: int | None = None, team: Team | None = None,
+    comment: str | None = None,
 ) -> Station:
     station = Station(
         geometry=from_shape(point, srid=4326),
@@ -100,6 +101,7 @@ async def _station(
         name=name,
         level=0,
         visibility="public",
+        comment=comment,
     )
     db.add(station)
     await db.flush()
@@ -260,6 +262,42 @@ async def test_team_scoped_export_follows_station_assignment(db, exporter_type, 
     # A set: all three rows share one transaction's now(), so their created_at order is a tie.
     assert {row["name"] for row in table.rows} == expected
     assert len(table.rows) == len(expected)
+
+
+@pytest.mark.asyncio
+async def test_station_comment_follows_view_pii_row_by_row(db):
+    """The internal note is station.view_pii's in the file as in the API (ADR-332)."""
+    await _configs(db)
+    mine = Team(name="Mine", type="ngo")
+    other = Team(name="Other", type="ngo")
+    actor = User(name="TeamAdmin")
+    author = User(name="Someone")
+    db.add_all([mine, other, actor, author])
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "all", "exporter", team=mine)
+    await _grant(db, actor, Perm.STATION_VIEW_PII, "team", "team-pii", team=mine)
+    await _station(db, name="本隊站", point=IN_ZONE, creator=author, team=mine, comment="與 b…07 疑似重複")
+    await _station(db, name="他隊站", point=IN_ZONE, creator=author, team=other, comment="水退後已撤站")
+
+    rows = {r["name"]: r for r in _parse(await export_stations(db, actor=actor, station_type="shelter")).rows}
+
+    assert rows["本隊站"]["comment"] == "與 b…07 疑似重複"
+    assert rows["他隊站"]["comment"] == ""
+
+
+@pytest.mark.asyncio
+async def test_holding_station_export_does_not_imply_reading_the_comment(db):
+    """Export and view_pii are separate grants, as on tickets."""
+    await _configs(db)
+    actor = User(name="Admin")
+    db.add(actor)
+    await db.flush()
+    await _grant(db, actor, Perm.STATION_EXPORT, "all", "exporter")
+    await _station(db, name="光復國小", point=IN_ZONE, creator=actor, comment="水退後已撤站")
+
+    row = _parse(await export_stations(db, actor=actor, station_type="shelter")).rows[0]
+
+    assert row["comment"] == ""
 
 
 @pytest.mark.asyncio

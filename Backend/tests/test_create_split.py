@@ -41,7 +41,7 @@ CREATE_TICKET_PARAMS = [
 CREATE_STATION_PARAMS = [
     "db", "actor", "geometry", "type", "name", "description", "op_hour", "level", "comment",
     "source", "visibility", "contact_name", "contact_email", "contact_phone",
-    "operational_status", "secondary_location",
+    "operational_status", "supply_status", "secondary_location",
 ]  # fmt: skip
 
 

@@ -102,9 +102,6 @@ class StationType:
     level: int = strawberry.field(
         default=0, description="Importance level used for map rendering priority (0 = default)"
     )
-    comment: str | None = strawberry.field(
-        default=None, description="Internal admin comment, not shown to the public"
-    )
     source: str | None = strawberry.field(
         default=None, description="Data source of this record: 'user' or 'official'"
     )
@@ -133,15 +130,24 @@ class StationType:
     status_changed_at: datetime | None = strawberry.field(
         default=None, description="When operational_status last changed"
     )
+    supply_status: str | None = strawberry.field(
+        default=None,
+        description="What the station is short of, in free text, e.g. '飲用水見底、尿布尚有存量'. Public "
+        "(ADR-333)",
+    )
+    supply_status_updated_at: datetime | None = strawberry.field(
+        default=None, description="When supply_status last changed; null while it has never been set"
+    )
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
     # Private storage backing the contact_* PII resolvers below (mirrors TicketType,
-    # ADR-049) — never exposed directly in the schema, only readable (raw or masked)
-    # through the gated resolvers below.
+    # ADR-049) and the comment resolver (ADR-332) — never exposed directly in the schema,
+    # only readable (raw, masked or withheld) through the gated resolvers below.
     _contact_name_raw: strawberry.Private[str | None] = None
     _contact_email_raw: strawberry.Private[str | None] = None
     _contact_phone_raw: strawberry.Private[str | None] = None
+    _comment_raw: strawberry.Private[str | None] = None
     _geometry_raw: strawberry.Private[object | None] = None
     _team_uuid_raw: strawberry.Private[object | None] = None
     _pii_visible_task: strawberry.Private[object | None] = None
@@ -158,7 +164,7 @@ class StationType:
         return await info.context["loaders"]["team_by_uuid"].load(str(self._team_uuid_raw))
 
     def _pii_visible(self, info: strawberry.types.Info):
-        """Memoized PII-visibility check shared by the three contact_* resolvers.
+        """Memoized PII-visibility check shared by the three contact_* resolvers and comment.
 
         See TicketType._pii_in_scope (app/graphql/tickets/types.py) for the full rationale —
         same memoization-per-instance pattern, scoped to station.view_pii here instead.
@@ -216,6 +222,16 @@ class StationType:
         if await self._pii_visible(info):
             return self._contact_phone_raw
         return mask_phone(self._contact_phone_raw)
+
+    @strawberry.field(
+        description="Internal back-office note on this station — null unless the caller holds "
+        "station.view_pii here (ADR-332)"
+    )
+    async def comment(self, info: strawberry.types.Info) -> str | None:
+        """Return the comment if in scope; withheld rather than masked, as free text has no shape."""
+        if await self._pii_visible(info):
+            return self._comment_raw
+        return None
 
     @strawberry.field
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
@@ -279,16 +295,18 @@ class StationType:
             uuid=m.uuid, property_name=m.property_name,
             geometry=geom_to_geojson(m.geometry), created_by=m.created_by,
             type=m.type, name=m.name, description=m.description,
-            op_hour=m.op_hour, level=m.level, comment=m.comment,
+            op_hour=m.op_hour, level=m.level,
             source=m.source, visibility=m.visibility,
             verification_status=m.verification_status,
             is_duplicate=m.is_duplicate, is_temporary=m.is_temporary,
             is_official=m.is_official,
             operational_status=m.operational_status, status_changed_at=m.status_changed_at,
+            supply_status=m.supply_status, supply_status_updated_at=m.supply_status_updated_at,
             created_at=m.created_at, updated_at=m.updated_at,
             _contact_name_raw=m.contact_name,
             _contact_email_raw=m.contact_email,
             _contact_phone_raw=m.contact_phone,
+            _comment_raw=m.comment,
             _geometry_raw=m.geometry,
             _team_uuid_raw=m.team_uuid,
         )
@@ -346,6 +364,9 @@ class CreateStationInput:
         description="Whether the station is open: 'active' (default), 'temporarily_closed', "
         "or 'permanently_closed'",
     )
+    supply_status: str | None = strawberry.field(
+        default=None, description="Optional public line on what the station is short of"
+    )
     secondary_location: SecondaryLocationInput | None = strawberry.field(
         default=None,
         description="Optional secondary address or pole location to attach to this station",
@@ -372,6 +393,7 @@ class UpdateStationInput:
         default=None,
         description="Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed'",
     )
+    supply_status: str | None = strawberry.UNSET
     contact_name: str | None = strawberry.UNSET
     contact_email: str | None = strawberry.UNSET
     contact_phone: str | None = strawberry.UNSET

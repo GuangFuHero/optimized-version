@@ -109,9 +109,10 @@ async def test_unicode_in_fields(client, coordinator_auth):
     created_uuid = data["uuid"]
     assert data["comment"] == "\u6e2c\u8a66\u7ad9\u9ede"
 
+    # comment is behind station.view_pii (ADR-332), so the read-back is signed in too.
     res = await client.post("/graphql", json={
         "query": f'{{ station(uuid: "{created_uuid}") {{ comment }} }}',
-    })
+    }, headers=auth_header(token))
     station = res.json()["data"]["station"]
     assert station["comment"] == "\u6e2c\u8a66\u7ad9\u9ede"
 
