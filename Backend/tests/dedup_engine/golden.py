@@ -56,7 +56,6 @@ async def seed(db) -> None:
             "title": "淹水",
             "status": "pending",
             "priority": "high",
-            "visibility": "public",
             "contact_name": "王",
         }
         return Tickets(

@@ -100,7 +100,9 @@ async def test_a_citizen_files_a_help_request_with_its_needs(db):
             {"task_type": "hr", "task_name": "清淤人力", "task_description": None, "quantity": 3},
             # A rescue need alone may leave out how many (ADR-291 point 7).
             {
-                "task_type": "rescue", "task_name": "人員受困／急難", "task_description": None,
+                "task_type": "rescue",
+                "task_name": "人員受困／急難",
+                "task_description": None,
                 "quantity": None,
             },
         ],
@@ -115,7 +117,7 @@ async def test_a_citizen_files_a_help_request_with_its_needs(db):
         ticket.contact_phone,
         ticket.status,
         ticket.priority,
-        ticket.visibility,
+        ticket.audit_status,
         ticket.task_type,
         str(ticket.created_by),
     ) == (
@@ -125,7 +127,7 @@ async def test_a_citizen_files_a_help_request_with_its_needs(db):
         "0912345678",
         "pending",
         "medium",
-        "public",
+        "no_audit",
         "hr",
         citizen_uuid,
     )
@@ -202,8 +204,15 @@ GOOD_NEED = {"task_type": "hr", "task_name": "清淤人力", "task_description":
             "^quantity is required for a medical task$",
         ),
     ],
-    ids=["unknown-type", "blank-name", "long-name", "zero-quantity", "hr-no-quantity",
-         "supply-no-quantity", "medical-no-quantity"],
+    ids=[
+        "unknown-type",
+        "blank-name",
+        "long-name",
+        "zero-quantity",
+        "hr-no-quantity",
+        "supply-no-quantity",
+        "medical-no-quantity",
+    ],
 )
 async def test_one_bad_need_refuses_the_whole_request(db, bad_need, message):
     """The good first need is not filed either: all of the request, or none of it."""

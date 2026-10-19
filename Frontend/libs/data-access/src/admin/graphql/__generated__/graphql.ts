@@ -31,6 +31,8 @@ export type Scalars = {
   DateTime: { input: string; output: string };
   /** GeoJSON geometry object (RFC 7946) */
   GeoJSON: { input: Geometry; output: Geometry };
+  /** The `JSON` scalar type represents JSON values as specified by [ECMA-404](https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf). */
+  JSON: { input: unknown; output: unknown };
   UUID: { input: string; output: string };
 };
 
@@ -116,6 +118,20 @@ export type AssignedTeamType = {
   uuid: Scalars['UUID']['output'];
 };
 
+export const AuditStatus = {
+  AuditIssue: 'audit_issue',
+  Audited: 'audited',
+  NeedAudit: 'need_audit',
+  NoAudit: 'no_audit',
+} as const;
+
+export type AuditStatus = (typeof AuditStatus)[keyof typeof AuditStatus];
+export const AuditVerdict = {
+  AuditIssue: 'audit_issue',
+  Audited: 'audited',
+} as const;
+
+export type AuditVerdict = (typeof AuditVerdict)[keyof typeof AuditVerdict];
 export type BoundsInput = {
   /** North boundary latitude */
   maxLat: Scalars['Float']['input'];
@@ -262,6 +278,8 @@ export type CreateCrowdSourcingInput = {
 };
 
 export type CreateHelpRequestInput = {
+  /** Optional; the account's own email is never filled in for it */
+  contactEmail?: InputMaybe<Scalars['String']['input']>;
   /** Who to ask for at the place */
   contactName: Scalars['String']['input'];
   /** Phone number or LINE ID, as the person typed it */
@@ -375,8 +393,6 @@ export type CreateTicketInput = {
   /** The ticket's tasks, created with it in one go (Spec 022 §5.1). Each is checked for duplicates */
   tasks?: Array<CreateTicketTaskDraft>;
   title: Scalars['String']['input'];
-  /** Visibility: 'public' (default), 'restricted', or 'internal' */
-  visibility?: Visibility;
 };
 
 export type CreateTicketResult = DuplicatesSuspected | TicketCreated;
@@ -393,7 +409,6 @@ export type CreateTicketTaskDraft = {
   taskName: Scalars['String']['input'];
   /** Category: 'rescue', 'supply', 'medical', or 'hr' */
   taskType: Scalars['String']['input'];
-  visibility?: Visibility;
 };
 
 export type CreateTicketTaskInput = {
@@ -409,8 +424,6 @@ export type CreateTicketTaskInput = {
   taskType: Scalars['String']['input'];
   /** UUID of the ticket this task belongs to */
   ticketUuid: Scalars['UUID']['input'];
-  /** Visibility: 'public' (default), 'restricted', or 'internal' */
-  visibility?: Visibility;
 };
 
 export type CreateTicketTaskResult = DuplicatesSuspected | TicketTaskCreated;
@@ -524,6 +537,7 @@ export type Mutation = {
   assignTaskActor: TaskAssignmentType;
   assignZoneToTeam: ZoneAssignmentType;
   attachStationPhoto: PhotoType;
+  auditTicket: TicketType;
   createAnnouncement: AnnouncementType;
   createArea: AreaType;
   createBriefingTemplate: BriefingTemplateType;
@@ -550,7 +564,6 @@ export type Mutation = {
   moveAnnouncement: AnnouncementType;
   promoteMarkZone: HazardousZoneType;
   removeZoneFromTeam: Scalars['Boolean']['output'];
-  reviewTicket: TicketType;
   revokeStationSuggestionMerge: StationSuggestionMergeType;
   setAnnouncementActive: AnnouncementType;
   setTicketDisasterDetails: Array<TicketDisasterDetailType>;
@@ -594,6 +607,13 @@ export type MutationAssignZoneToTeamArgs = {
 export type MutationAttachStationPhotoArgs = {
   stationUuid: Scalars['UUID']['input'];
   url: Scalars['String']['input'];
+};
+
+export type MutationAuditTicketArgs = {
+  contentHash: Scalars['String']['input'];
+  note?: InputMaybe<Scalars['String']['input']>;
+  status: AuditVerdict;
+  uuid: Scalars['UUID']['input'];
 };
 
 export type MutationCreateAnnouncementArgs = {
@@ -704,12 +724,6 @@ export type MutationPromoteMarkZoneArgs = {
 
 export type MutationRemoveZoneFromTeamArgs = {
   input: ZoneTeamAssignmentInput;
-};
-
-export type MutationReviewTicketArgs = {
-  reviewNote?: InputMaybe<Scalars['String']['input']>;
-  uuid: Scalars['UUID']['input'];
-  verificationStatus: Scalars['String']['input'];
 };
 
 export type MutationRevokeStationSuggestionMergeArgs = {
@@ -1034,8 +1048,11 @@ export type QueryTicketTasksArgs = {
 };
 
 export type QueryTicketsArgs = {
+  auditStatus?: InputMaybe<AuditStatus>;
   bounds?: InputMaybe<BoundsInput>;
   limit?: Scalars['Int']['input'];
+  needType?: InputMaybe<Scalars['String']['input']>;
+  openNeedsOnly?: Scalars['Boolean']['input'];
   priority?: InputMaybe<Scalars['String']['input']>;
   q?: InputMaybe<Scalars['String']['input']>;
   skip?: Scalars['Int']['input'];
@@ -1453,6 +1470,35 @@ export type TeamZoneType = {
   uuid: Scalars['UUID']['output'];
 };
 
+/** One field that differs from the content the last verdict was given on */
+export type TicketAuditChangeType = {
+  __typename?: 'TicketAuditChangeType';
+  /** Its value when audited; null if it is new */
+  auditedValue?: Maybe<Scalars['JSON']['output']>;
+  currentValue?: Maybe<Scalars['JSON']['output']>;
+  /** 'ticket', 'secondary_location', 'disaster_detail', 'task' or 'task_property' */
+  entity: Scalars['String']['output'];
+  /** The row it is on; the ticket's own uuid for its address and disaster answers */
+  entityUuid: Scalars['String']['output'];
+  /** Column name, or the disaster field's property name */
+  field: Scalars['String']['output'];
+};
+
+/** One move of a ticket's audit status */
+export type TicketAuditEntryType = {
+  __typename?: 'TicketAuditEntryType';
+  actorName?: Maybe<Scalars['String']['output']>;
+  /** Who moved it; null for the scan */
+  actorUuid?: Maybe<Scalars['String']['output']>;
+  at: Scalars['DateTime']['output'];
+  /** What moved it: 'verdict' (an auditor's), 'scan' (picked out for checking) or 'content_change' (a change that voided the verdict) */
+  kind: Scalars['String']['output'];
+  /** The auditor's note; set on a verdict only */
+  note?: Maybe<Scalars['String']['output']>;
+  /** The audit status it moved to */
+  status: Scalars['String']['output'];
+};
+
 export type TicketConnection = {
   __typename?: 'TicketConnection';
   items: Array<TicketType>;
@@ -1518,8 +1564,6 @@ export type TicketTaskType = {
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of the user who created this task. Null to a caller without ticket.view_detail on the parent ticket */
   createdBy?: Maybe<Scalars['String']['output']>;
-  /** Review state: 'pending_review', 'approved', or 'rejected'. Null to a caller without ticket.view_history on the parent ticket */
-  moderationStatus?: Maybe<Scalars['String']['output']>;
   /** The caller's own claim on this task. Null to a guest or a non-claimant */
   myAssignment?: Maybe<TaskAssignmentType>;
   progress?: Maybe<Scalars['Float']['output']>;
@@ -1530,8 +1574,6 @@ export type TicketTaskType = {
   quantity?: Maybe<Scalars['Int']['output']>;
   /** When the requester stopped recruiting for this need by hand (stopRecruiting); null if they never did — a need that filled by itself is fulfilled with no such time. Once set, nobody on the need can give their place back */
   recruitingStoppedAt?: Maybe<Scalars['DateTime']['output']>;
-  /** Moderator's notes explaining the review decision. Null to a caller without ticket.view_detail on the parent ticket */
-  reviewNote?: Maybe<Scalars['String']['output']>;
   /** Origin of this task: 'user' or 'official' */
   source: Scalars['String']['output'];
   /** Lifecycle state: 'pending' (recruiting), 'fulfilled' (has everyone it asked for, or its requester stopped recruiting — the people on it still go), or 'canceled'. Moves only through assignTaskActor, unassignTaskActor, stopRecruiting and deletion */
@@ -1546,12 +1588,24 @@ export type TicketTaskType = {
   ticketUuid: Scalars['String']['output'];
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
-  /** Who can see this task: 'public', 'restricted', or 'internal' */
-  visibility: Scalars['String']['output'];
 };
 
 export type TicketType = {
   __typename?: 'TicketType';
+  /** A fingerprint of the ticket's content as it now stands, to pass back to auditTicket so the verdict is refused if the ticket changes in between. Null to a caller without ticket.audit here. Read it on one ticket at a time */
+  auditContentHash?: Maybe<Scalars['String']['output']>;
+  /** Every move of the audit status, newest first: verdicts, the scan's flags, and changes that voided a verdict. Null to a caller without ticket.audit here. Read it on one ticket at a time: it queries the change log per ticket */
+  auditHistory?: Maybe<Array<TicketAuditEntryType>>;
+  /** The note given with the last verdict, kept after a change voids it, so the next auditor sees what was found; always set while 'audit_issue'. Null to a caller without ticket.audit here */
+  auditNote?: Maybe<Scalars['String']['output']>;
+  /** The data check: 'no_audit' (not checked as it now stands), 'need_audit' (picked out for checking), 'audited' (found right) or 'audit_issue' (found wrong). Public, so a list can leave out tickets with issues */
+  auditStatus: Scalars['String']['output'];
+  /** When the last verdict was given, kept after a change voids it. Null if never audited, or to a caller without ticket.audit here */
+  auditedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** UUID of who gave the last verdict. Null if never audited, or without ticket.audit here */
+  auditedBy?: Maybe<Scalars['String']['output']>;
+  /** What differs from the content the last verdict was given on, field by field. Null if never audited, or to a caller without ticket.audit here. A need taken off since does not appear: it does not void a verdict. A value the caller could not read on the ticket itself (address, free text, triage answers) comes back null, the change still listed. Read it on one ticket at a time */
+  changesSinceAudit?: Maybe<Array<TicketAuditChangeType>>;
   /** Follow-up email — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
   contactEmail?: Maybe<Scalars['String']['output']>;
   /** Requester full name — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
@@ -1580,8 +1634,6 @@ export type TicketType = {
   priority: Scalars['String']['output'];
   /** Internal polymorphic discriminator — always 'request' */
   propertyName: Scalars['String']['output'];
-  /** Moderator's notes about the verification decision. Null to a caller without ticket.view_detail here */
-  reviewNote?: Maybe<Scalars['String']['output']>;
   /** Street address and space detail for where help is needed. Null to a caller without ticket.view_detail here, and null when the ticket carries no address */
   secondaryLocation?: Maybe<SecondaryLocationType>;
   /** Lifecycle state: 'pending', 'in_progress', 'completed', or 'cancelled' */
@@ -1593,10 +1645,6 @@ export type TicketType = {
   title: Scalars['String']['output'];
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
   uuid: Scalars['UUID']['output'];
-  /** Review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed' */
-  verificationStatus?: Maybe<Scalars['String']['output']>;
-  /** Who can see this ticket: 'public', 'restricted', or 'internal' */
-  visibility?: Maybe<Scalars['String']['output']>;
 };
 
 export const TriState = {
@@ -1705,24 +1753,14 @@ export type UpdateTicketInput = {
   personTrappedReported?: InputMaybe<TriState>;
   /** Updated urgency: 'low', 'medium', 'high', or 'critical' */
   priority?: InputMaybe<Scalars['String']['input']>;
-  /** Moderator's review notes — pass null to clear */
-  reviewNote?: InputMaybe<Scalars['String']['input']>;
   /** Replace the ticket's street address and space detail, creating it if the ticket was filed without one. A whole-input replacement, not a patch — omitted members are written as null */
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   title?: InputMaybe<Scalars['String']['input']>;
-  /** Updated review state: 'unverified', 'ai_verified', 'human_verified', or 'disputed' */
-  verificationStatus?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateTicketTaskInput = {
-  /** New review state: 'pending_review', 'approved', or 'rejected' */
-  moderationStatus?: InputMaybe<Scalars['String']['input']>;
   /** Updated progress description — pass null to clear */
   progressNote?: InputMaybe<Scalars['String']['input']>;
-  /** Moderator's review notes — pass null to clear */
-  reviewNote?: InputMaybe<Scalars['String']['input']>;
-  /** Updated visibility: 'public', 'restricted', or 'internal' */
-  visibility?: InputMaybe<Visibility>;
 };
 
 export type UpsertDisasterTypeInput = {
@@ -1808,8 +1846,7 @@ export type AdminTicketFieldsFragment = {
   status: string;
   priority: string;
   taskType?: string | null;
-  visibility?: string | null;
-  verificationStatus?: string | null;
+  auditStatus: string;
   contactName?: string | null;
   contactEmail?: string | null;
   contactPhone?: string | null;
@@ -1828,10 +1865,7 @@ export type AdminTaskFieldsFragment = {
   quantity?: number | null;
   status: string;
   progressNote?: string | null;
-  reviewNote?: string | null;
   source: string;
-  visibility: string;
-  moderationStatus?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   assignments: Array<{
@@ -1895,8 +1929,7 @@ export type AdminTicketsQuery = {
       status: string;
       priority: string;
       taskType?: string | null;
-      visibility?: string | null;
-      verificationStatus?: string | null;
+      auditStatus: string;
       contactName?: string | null;
       contactEmail?: string | null;
       contactPhone?: string | null;
@@ -1913,10 +1946,7 @@ export type AdminTicketsQuery = {
         quantity?: number | null;
         status: string;
         progressNote?: string | null;
-        reviewNote?: string | null;
         source: string;
-        visibility: string;
-        moderationStatus?: string | null;
         createdAt?: string | null;
         updatedAt?: string | null;
         assignments: Array<{
@@ -1954,8 +1984,7 @@ export type AdminTicketQuery = {
     status: string;
     priority: string;
     taskType?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
+    auditStatus: string;
     contactName?: string | null;
     contactEmail?: string | null;
     contactPhone?: string | null;
@@ -1989,10 +2018,7 @@ export type AdminTicketQuery = {
       quantity?: number | null;
       status: string;
       progressNote?: string | null;
-      reviewNote?: string | null;
       source: string;
-      visibility: string;
-      moderationStatus?: string | null;
       createdAt?: string | null;
       updatedAt?: string | null;
       properties: Array<{
@@ -2043,10 +2069,7 @@ export type AdminTicketTasksQuery = {
     quantity?: number | null;
     status: string;
     progressNote?: string | null;
-    reviewNote?: string | null;
     source: string;
-    visibility: string;
-    moderationStatus?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
     assignments: Array<{
@@ -2337,8 +2360,7 @@ export type AdminCreateTicketMutation = {
           status: string;
           priority: string;
           taskType?: string | null;
-          visibility?: string | null;
-          verificationStatus?: string | null;
+          auditStatus: string;
           contactName?: string | null;
           contactEmail?: string | null;
           contactPhone?: string | null;
@@ -2365,8 +2387,7 @@ export type AdminUpdateTicketMutation = {
     status: string;
     priority: string;
     taskType?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
+    auditStatus: string;
     contactName?: string | null;
     contactEmail?: string | null;
     contactPhone?: string | null;
@@ -2385,15 +2406,16 @@ export type AdminDeleteTicketMutation = {
   deleteTicket: boolean;
 };
 
-export type AdminReviewTicketMutationVariables = Exact<{
+export type AdminAuditTicketMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
-  verificationStatus: Scalars['String']['input'];
-  reviewNote?: InputMaybe<Scalars['String']['input']>;
+  status: AuditVerdict;
+  contentHash: Scalars['String']['input'];
+  note?: InputMaybe<Scalars['String']['input']>;
 }>;
 
-export type AdminReviewTicketMutation = {
+export type AdminAuditTicketMutation = {
   __typename?: 'Mutation';
-  reviewTicket: {
+  auditTicket: {
     __typename?: 'TicketType';
     uuid: string;
     title: string;
@@ -2402,8 +2424,7 @@ export type AdminReviewTicketMutation = {
     status: string;
     priority: string;
     taskType?: string | null;
-    visibility?: string | null;
-    verificationStatus?: string | null;
+    auditStatus: string;
     contactName?: string | null;
     contactEmail?: string | null;
     contactPhone?: string | null;
@@ -2448,10 +2469,7 @@ export type AdminCreateTicketTaskMutation = {
           quantity?: number | null;
           status: string;
           progressNote?: string | null;
-          reviewNote?: string | null;
           source: string;
-          visibility: string;
-          moderationStatus?: string | null;
           createdAt?: string | null;
           updatedAt?: string | null;
           assignments: Array<{
@@ -2484,10 +2502,7 @@ export type AdminUpdateTicketTaskMutation = {
     quantity?: number | null;
     status: string;
     progressNote?: string | null;
-    reviewNote?: string | null;
     source: string;
-    visibility: string;
-    moderationStatus?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
     assignments: Array<{
@@ -3071,11 +3086,7 @@ export const AdminTicketFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -3108,10 +3119,7 @@ export const AdminTaskFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           {
@@ -3359,11 +3367,7 @@ export const AdminTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -3391,10 +3395,7 @@ export const AdminTicketsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           {
@@ -3595,11 +3596,7 @@ export const AdminTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -3627,10 +3624,7 @@ export const AdminTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           {
@@ -3780,10 +3774,7 @@ export const AdminTicketTasksDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           {
@@ -4857,11 +4848,7 @@ export const AdminCreateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -4961,11 +4948,7 @@ export const AdminUpdateTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -5022,13 +5005,13 @@ export const AdminDeleteTicketDocument = {
   AdminDeleteTicketMutation,
   AdminDeleteTicketMutationVariables
 >;
-export const AdminReviewTicketDocument = {
+export const AdminAuditTicketDocument = {
   kind: 'Document',
   definitions: [
     {
       kind: 'OperationDefinition',
       operation: 'mutation',
-      name: { kind: 'Name', value: 'AdminReviewTicket' },
+      name: { kind: 'Name', value: 'AdminAuditTicket' },
       variableDefinitions: [
         {
           kind: 'VariableDefinition',
@@ -5042,7 +5025,21 @@ export const AdminReviewTicketDocument = {
           kind: 'VariableDefinition',
           variable: {
             kind: 'Variable',
-            name: { kind: 'Name', value: 'verificationStatus' },
+            name: { kind: 'Name', value: 'status' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'AuditVerdict' },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'contentHash' },
           },
           type: {
             kind: 'NonNullType',
@@ -5054,10 +5051,7 @@ export const AdminReviewTicketDocument = {
         },
         {
           kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'reviewNote' },
-          },
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'note' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
         },
       ],
@@ -5066,7 +5060,7 @@ export const AdminReviewTicketDocument = {
         selections: [
           {
             kind: 'Field',
-            name: { kind: 'Name', value: 'reviewTicket' },
+            name: { kind: 'Name', value: 'auditTicket' },
             arguments: [
               {
                 kind: 'Argument',
@@ -5078,18 +5072,26 @@ export const AdminReviewTicketDocument = {
               },
               {
                 kind: 'Argument',
-                name: { kind: 'Name', value: 'verificationStatus' },
+                name: { kind: 'Name', value: 'status' },
                 value: {
                   kind: 'Variable',
-                  name: { kind: 'Name', value: 'verificationStatus' },
+                  name: { kind: 'Name', value: 'status' },
                 },
               },
               {
                 kind: 'Argument',
-                name: { kind: 'Name', value: 'reviewNote' },
+                name: { kind: 'Name', value: 'contentHash' },
                 value: {
                   kind: 'Variable',
-                  name: { kind: 'Name', value: 'reviewNote' },
+                  name: { kind: 'Name', value: 'contentHash' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'note' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'note' },
                 },
               },
             ],
@@ -5123,11 +5125,7 @@ export const AdminReviewTicketDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
           { kind: 'Field', name: { kind: 'Name', value: 'taskType' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'verificationStatus' },
-          },
+          { kind: 'Field', name: { kind: 'Name', value: 'auditStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactName' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactEmail' } },
           { kind: 'Field', name: { kind: 'Name', value: 'contactPhone' } },
@@ -5139,8 +5137,8 @@ export const AdminReviewTicketDocument = {
     },
   ],
 } as unknown as DocumentNode<
-  AdminReviewTicketMutation,
-  AdminReviewTicketMutationVariables
+  AdminAuditTicketMutation,
+  AdminAuditTicketMutationVariables
 >;
 export const AdminSetTicketDisasterDetailsDocument = {
   kind: 'Document',
@@ -5315,10 +5313,7 @@ export const AdminCreateTicketTaskDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           {
@@ -5430,10 +5425,7 @@ export const AdminUpdateTicketTaskDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'quantity' } },
           { kind: 'Field', name: { kind: 'Name', value: 'status' } },
           { kind: 'Field', name: { kind: 'Name', value: 'progressNote' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'reviewNote' } },
           { kind: 'Field', name: { kind: 'Name', value: 'source' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'visibility' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'moderationStatus' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
           {

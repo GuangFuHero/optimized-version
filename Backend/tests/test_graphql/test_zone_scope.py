@@ -85,11 +85,7 @@ async def team_assigned_to_zone() -> str:
         zone = TeamZone(name="Test Zone", geometry=from_shape(ZONE_POLYGON, srid=4326))
         db.add(zone)
         await db.flush()
-        db.add(
-            TeamZoneAssign(
-                team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)
-            )
-        )
+        db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))
         await db.flush()
         return str(team.uuid)
 
@@ -116,7 +112,6 @@ async def _make_ticket_at(point: Point) -> str:
             contact_name="Someone",
             status="pending",
             priority="low",
-            visibility="public",
         )
         db.add(ticket)
         await db.flush()
@@ -171,8 +166,10 @@ async def _make_task_under(ticket_uuid: str) -> str:
         await db.flush()
         task = TicketTask(
             ticket_uuid=ticket_uuid,
-            task_type="hr", task_name="Need medics",
-            quantity=2, source="user", visibility="public",
+            task_type="hr",
+            task_name="Need medics",
+            quantity=2,
+            source="user",
             created_by=str(creator.uuid),
         )
         db.add(task)
@@ -185,13 +182,10 @@ async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, re
     """ADR-052 (direction B): a task inherits its parent ticket's location for the zone check.
 
     A TicketTask has no geometry of its own, so a `zone` grant would never match it directly;
-    borrowing the parent ticket's point lets a zone member moderate tasks under tickets inside
-    the team's assigned zone (which they own neither). Moderating takes ticket.review, which
-    the seed gives a member at `zone` beside ticket.edit (ADR-312).
+    borrowing the parent ticket's point lets a zone member update tasks under tickets inside
+    the team's assigned zone (which they own neither).
     """
-    _, editor_token = await _make_zone_scoped_editor(
-        redis, team_assigned_to_zone, (Perm.TICKET_EDIT, Perm.TICKET_REVIEW)
-    )
+    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone, (Perm.TICKET_EDIT,))
     ticket_uuid = await _make_ticket_at(INSIDE_ZONE_POINT)
     task_uuid = await _make_task_under(ticket_uuid)
 
@@ -199,24 +193,20 @@ async def test_zone_scope_grants_task_edit_via_parent_ticket_geometry(client, re
         "/graphql",
         json={
             "query": UPDATE_TICKET_TASK,
-            "variables": {"uuid": task_uuid, "input": {"moderationStatus": "approved"}},
+            "variables": {"uuid": task_uuid, "input": {"progressNote": "兩人已到場"}},
         },
         headers=auth_header(editor_token),
     )
     body = resp.json()
     assert "errors" not in body, body
-    # Read back from the row: reading the status back through GraphQL takes
-    # ticket.view_history, which is not what this test is about.
     async with test_db() as db:
-        assert (await db.get(TicketTask, task_uuid)).moderation_status == "approved"
+        assert (await db.get(TicketTask, task_uuid)).progress_note == "兩人已到場"
 
 
 @pytest.mark.asyncio
 async def test_zone_scope_404s_task_under_ticket_outside_zone(client, redis, team_assigned_to_zone):
     """Symmetric to the ticket-level case: a task under a ticket OUTSIDE the zone is 404."""
-    _, editor_token = await _make_zone_scoped_editor(
-        redis, team_assigned_to_zone, (Perm.TICKET_EDIT, Perm.TICKET_REVIEW)
-    )
+    _, editor_token = await _make_zone_scoped_editor(redis, team_assigned_to_zone, (Perm.TICKET_EDIT,))
     ticket_uuid = await _make_ticket_at(OUTSIDE_ZONE_POINT)
     task_uuid = await _make_task_under(ticket_uuid)
 
@@ -224,7 +214,7 @@ async def test_zone_scope_404s_task_under_ticket_outside_zone(client, redis, tea
         "/graphql",
         json={
             "query": UPDATE_TICKET_TASK,
-            "variables": {"uuid": task_uuid, "input": {"moderationStatus": "approved"}},
+            "variables": {"uuid": task_uuid, "input": {"progressNote": "兩人已到場"}},
         },
         headers=auth_header(editor_token),
     )
@@ -257,12 +247,16 @@ async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, redis
 
     async with test_db() as db:
         zone = (
-            await db.execute(
-                select(TeamZone)
-                .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == TeamZone.uuid)
-                .where(TeamZoneAssign.team_uuid == team_assigned_to_zone)
+            (
+                await db.execute(
+                    select(TeamZone)
+                    .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == TeamZone.uuid)
+                    .where(TeamZoneAssign.team_uuid == team_assigned_to_zone)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         assert zone is not None
         zone.delete_at = datetime.now(UTC)
 

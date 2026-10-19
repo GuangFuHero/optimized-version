@@ -42,15 +42,23 @@ async def _need_filed_by(requester_uuid: str) -> tuple[str, str]:
     """A ticket filed by a signed-in citizen, with one need; returns (ticket_uuid, task_uuid)."""
     async with test_db() as db:
         ticket = Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=requester_uuid,
-            title="需要清淤人力", contact_name="王小姐", status="pending", priority="high",
-            task_type="hr", visibility="public",
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=requester_uuid,
+            title="需要清淤人力",
+            contact_name="王小姐",
+            status="pending",
+            priority="high",
+            task_type="hr",
         )
         db.add(ticket)
         await db.flush()
         task = TicketTask(
-            ticket_uuid=str(ticket.uuid), task_type="hr", task_name="清淤", quantity=3,
-            source="user", visibility="public", created_by=requester_uuid,
+            ticket_uuid=str(ticket.uuid),
+            task_type="hr",
+            task_name="清淤",
+            quantity=3,
+            source="user",
+            created_by=requester_uuid,
         )
         db.add(task)
         await db.flush()
@@ -66,7 +74,8 @@ async def _claimed_need(client, redis):
     volunteer_uuid, volunteer_token = await _create_user_with_role(redis, "Login User")
     ticket_uuid, task_uuid = await _need_filed_by(requester_uuid)
     claimed = await client.post(
-        "/graphql", json={"query": CLAIM, "variables": {"taskUuid": task_uuid}},
+        "/graphql",
+        json={"query": CLAIM, "variables": {"taskUuid": task_uuid}},
         headers=auth_header(volunteer_token),
     )
     assert "errors" not in claimed.json(), claimed.json()
@@ -77,7 +86,8 @@ async def _claimed_need(client, redis):
 async def _claims_seen(client, ticket_uuid: str, token: str | None) -> dict:
     headers = auth_header(token) if token else {}
     res = await client.post(
-        "/graphql", json={"query": TASK_CLAIMS, "variables": {"ticketUuid": ticket_uuid}},
+        "/graphql",
+        json={"query": TASK_CLAIMS, "variables": {"ticketUuid": ticket_uuid}},
         headers=headers,
     )
     assert "errors" not in res.json(), res.json()
@@ -134,13 +144,15 @@ async def test_a_volunteer_who_may_call_the_requester_still_does_not_see_who_els
         task = await db.scalar(select(TicketTask).where(TicketTask.ticket_uuid == ticket_uuid))
         task_uuid = str(task.uuid)
     claimed = await client.post(
-        "/graphql", json={"query": CLAIM, "variables": {"taskUuid": task_uuid}},
+        "/graphql",
+        json={"query": CLAIM, "variables": {"taskUuid": task_uuid}},
         headers=auth_header(citizen_token),
     )
     assert "errors" not in claimed.json(), claimed.json()
 
     res = await client.post(
-        "/graphql", json={"query": CONTACT_AND_CLAIMS, "variables": {"uuid": ticket_uuid}},
+        "/graphql",
+        json={"query": CONTACT_AND_CLAIMS, "variables": {"uuid": ticket_uuid}},
         headers=auth_header(citizen_token),
     )
 

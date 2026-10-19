@@ -41,9 +41,13 @@ async def _ticket(title: str, *, deleted: bool = False) -> tuple[str, dict[str, 
         db.add(requester)
         await db.flush()
         ticket = Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=str(requester.uuid),
-            title=title, contact_name="王小姐", status="pending", priority="high",
-            task_type="hr", visibility="public",
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=str(requester.uuid),
+            title=title,
+            contact_name="王小姐",
+            status="pending",
+            priority="high",
+            task_type="hr",
             delete_at=datetime.now(UTC) if deleted else None,
         )
         db.add(ticket)
@@ -51,8 +55,12 @@ async def _ticket(title: str, *, deleted: bool = False) -> tuple[str, dict[str, 
         needs = {}
         for name in ("清淤", "搬家具"):
             task = TicketTask(
-                ticket_uuid=str(ticket.uuid), task_type="hr", task_name=name, quantity=3,
-                source="user", visibility="public", created_by=str(requester.uuid),
+                ticket_uuid=str(ticket.uuid),
+                task_type="hr",
+                task_name=name,
+                quantity=3,
+                source="user",
+                created_by=str(requester.uuid),
             )
             db.add(task)
             await db.flush()

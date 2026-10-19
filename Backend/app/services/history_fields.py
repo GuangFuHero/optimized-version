@@ -78,8 +78,12 @@ def _audit() -> FieldSpec:
 # appear under both — that is the point of the compound key.
 ENTITY_TABLES: dict[str, tuple[str, ...]] = {
     "ticket": (
-        "base_geometries", "tickets", "ticket_tasks",
-        "task_properties", "task_assignments", "secondary_locations",
+        "base_geometries",
+        "tickets",
+        "ticket_tasks",
+        "task_properties",
+        "task_assignments",
+        "secondary_locations",
     ),
     "station": ("base_geometries", "stations", "station_properties", "secondary_locations"),
 }
@@ -98,11 +102,23 @@ HISTORY_MODELS = {
 }
 
 _ADDRESS_COLUMNS = (
-    "county", "city", "lane", "alley", "no", "floor", "room",
-    "pole_id", "pole_type", "pole_note",
+    "county",
+    "city",
+    "lane",
+    "alley",
+    "no",
+    "floor",
+    "room",
+    "pole_id",
+    "pole_type",
+    "pole_note",
     # Feature 018 (ADR-249) added these five to the same table, so they follow whatever tier
     # the entity gives the rest of its address — detail on a ticket, public on a station.
-    "building_section", "space_description", "victim_space", "access_status", "landmark_note",
+    "building_section",
+    "space_description",
+    "victim_space",
+    "access_status",
+    "landmark_note",
 )
 
 _TICKET_FIELDS = {
@@ -111,8 +127,10 @@ _TICKET_FIELDS = {
     "status": _public(),
     "priority": _public(),
     "task_type": _public(),
-    "visibility": _public(),
-    "verification_status": _public(),
+    # Public, as on the ticket itself: the site leaves out tickets with issues. The note says
+    # what the auditor found, so it stays with the review columns.
+    "audit_status": _public(),
+    "audit_note": _audit(),
     "disaster_types": _public(),
     # Feature 018: the reporter's own triage answers, gated exactly like their phone number
     # because `TicketType` withholds them without `ticket.view_pii` (ADR-254). No mask — a
@@ -122,7 +140,6 @@ _TICKET_FIELDS = {
     "contact_name": _pii(mask_name),
     "contact_email": _pii(mask_email),
     "contact_phone": _pii(mask_phone),
-    "review_note": _audit(),
 }
 
 _STATION_FIELDS = {
@@ -165,9 +182,6 @@ _TASK_FIELDS = {
     "status": _public(),
     "source": _public(),
     "progress_note": _detail(),
-    "visibility": _public(),
-    "moderation_status": _audit(),
-    "review_note": _audit(),
 }
 
 _TASK_PROPERTY_FIELDS = {
@@ -247,8 +261,7 @@ _DISCRIMINATOR = (
     "row, so it can never appear as a change"
 )
 _SOFT_DELETE = (
-    "this is an event, not a field change — a NULL->value transition becomes event_type "
-    "DELETED (ADR-135)"
+    "this is an event, not a field change — a NULL->value transition becomes event_type DELETED (ADR-135)"
 )
 
 _GENERATED = (
@@ -257,6 +270,11 @@ _GENERATED = (
     "`title` and `description`, so showing it at any single tier would leak whichever of its "
     "inputs sits above that tier. It also changes on every edit to those inputs, which the "
     "timeline already reports (ADR-243)"
+)
+
+_AUDITED_CONTENT = (
+    "a copy of the ticket's content as the last verdict saw it, made of fields the timeline "
+    "already classifies at their own tiers; `changesSinceAudit` is where it is read"
 )
 
 _GEOMETRY_EXCLUSIONS = {
@@ -269,14 +287,23 @@ _GEOMETRY_EXCLUSIONS = {
 }
 
 _ADDRESS_EXCLUSIONS = {
-    "uuid": _ID, "geometry_uuid": _FK, "pole_photo_uuid": _FK,
+    "uuid": _ID,
+    "geometry_uuid": _FK,
+    "pole_photo_uuid": _FK,
     "search_text": _GENERATED,
 }
 
 EXCLUDED: dict[tuple[str, str], dict[str, str]] = {
     ("ticket", "base_geometries"): _GEOMETRY_EXCLUSIONS,
     ("station", "base_geometries"): _GEOMETRY_EXCLUSIONS,
-    ("ticket", "tickets"): {"uuid": _ID, "search_text": _GENERATED},
+    ("ticket", "tickets"): {
+        "uuid": _ID,
+        "search_text": _GENERATED,
+        # Stamped by the verdict along with the status and note it sets.
+        "audited_at": _DERIVED_STAMP,
+        "audited_by": _FK,
+        "audited_content": _AUDITED_CONTENT,
+    },
     ("station", "stations"): {
         "uuid": _ID,
         "search_text": _GENERATED,

@@ -39,7 +39,9 @@ class Perm(StrEnum):
     TICKET_EDIT = "ticket.edit"
     TICKET_DELETE = "ticket.delete"
     TICKET_ASSIGN = "ticket.assign"
-    TICKET_REVIEW = "ticket.review"
+    # The data check on a ticket: giving the verdict, and reading its note and history. The
+    # status itself is public, so the site can leave out tickets marked as having issues.
+    TICKET_AUDIT = "ticket.audit"
     TICKET_EXPORT = "ticket.export"  # registered since RBAC v1; first enforced by feature 015
     TICKET_IMPORT = "ticket.import"  # see the bulk note under Resource Station below
 

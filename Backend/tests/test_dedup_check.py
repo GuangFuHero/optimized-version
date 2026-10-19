@@ -162,7 +162,7 @@ async def test_record_suspect_shown(db, engine):
 async def _ticket_with_task(db, owner, task_uuid=None) -> tuple[str, str]:
     ticket = Tickets(
         geometry=from_shape(Point(HERE.lon, HERE.lat), srid=4326), title="淹水", status="pending",
-        priority="high", visibility="public", contact_name="王", created_by=owner,
+        priority="high", contact_name="王", created_by=owner,
     )  # fmt: skip
     db.add(ticket)
     await db.flush()

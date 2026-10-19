@@ -39,24 +39,35 @@ async def _author(db) -> User:
 
 async def _station(db, author, *, name, county="花蓮縣", city="光復鄉", with_address=True) -> Station:
     station = Station(
-        geometry=from_shape(POINT, srid=4326), created_by=str(author.uuid),
-        type="shelter", name=name, level=0, visibility="public",
+        geometry=from_shape(POINT, srid=4326),
+        created_by=str(author.uuid),
+        type="shelter",
+        name=name,
+        level=0,
+        visibility="public",
     )
     db.add(station)
     await db.flush()
     if with_address:
-        db.add(SecondaryLocation(
-            geometry_uuid=str(station.uuid), location_type="address", county=county, city=city
-        ))
+        db.add(
+            SecondaryLocation(
+                geometry_uuid=str(station.uuid), location_type="address", county=county, city=city
+            )
+        )
         await db.flush()
     return station
 
 
 async def _ticket(db, author, *, title, phone) -> Tickets:
     ticket = Tickets(
-        geometry=from_shape(POINT, srid=4326), created_by=str(author.uuid), title=title,
-        contact_name="王小明", contact_phone=phone, status="pending", priority="high",
-        task_type="rescue", visibility="public",
+        geometry=from_shape(POINT, srid=4326),
+        created_by=str(author.uuid),
+        title=title,
+        contact_name="王小明",
+        contact_phone=phone,
+        status="pending",
+        priority="high",
+        task_type="rescue",
     )
     db.add(ticket)
     await db.flush()
@@ -98,7 +109,7 @@ async def test_one_station_with_the_same_key_is_a_match(db):
 
 @pytest.mark.asyncio
 async def test_the_same_name_in_another_district_is_not_a_match(db):
-    """"光復國小" exists all over Taiwan — the county/city half of the key is what separates them."""
+    """A "光復國小" exists all over Taiwan — the county/city half of the key is what separates them."""
     author = await _author(db)
     await _station(db, author, name="光復國小", county="花蓮縣", city="光復鄉")
 
@@ -178,8 +189,11 @@ async def test_a_task_matches_within_its_own_ticket(db):
     author = await _author(db)
     ticket = await _ticket(db, author, title="求救", phone="0912345678")
     task = TicketTask(
-        ticket_uuid=ticket.uuid, task_type="rescue", task_name="送水",
-        source="user", visibility="public", created_by=str(author.uuid),
+        ticket_uuid=ticket.uuid,
+        task_type="rescue",
+        task_name="送水",
+        source="user",
+        created_by=str(author.uuid),
     )
     db.add(task)
     await db.flush()
@@ -194,10 +208,15 @@ async def test_a_task_of_another_name_under_the_same_ticket_is_new(db):
     """A different task name under the same ticket is another task, not an edit."""
     author = await _author(db)
     ticket = await _ticket(db, author, title="求救", phone="0912345678")
-    db.add(TicketTask(
-        ticket_uuid=ticket.uuid, task_type="rescue", task_name="送水",
-        source="user", visibility="public", created_by=str(author.uuid),
-    ))
+    db.add(
+        TicketTask(
+            ticket_uuid=ticket.uuid,
+            task_type="rescue",
+            task_name="送水",
+            source="user",
+            created_by=str(author.uuid),
+        )
+    )
     await db.flush()
 
     result = await match_task(db, ticket_uuid=str(ticket.uuid), task_type="rescue", task_name="清淤")

@@ -34,7 +34,7 @@ ADDRESS = {"location_type": "address", "county": "花蓮縣", "city": "光復鄉
 # The keyword names batch import and the GraphQL resolvers call `create_*` with.
 CREATE_TICKET_PARAMS = [
     "db", "actor", "geometry", "title", "description", "contact_name", "contact_email",
-    "contact_phone", "priority", "task_type", "visibility", "disaster_types",
+    "contact_phone", "priority", "task_type", "disaster_types",
     "person_trapped_reported", "immediate_danger_reported", "secondary_location",
     "building_map_uuid",
 ]  # fmt: skip
@@ -75,7 +75,6 @@ def _ticket_fields(**overrides) -> dict:
         "contact_phone": " 0912345678 ",
         "priority": "high",
         "task_type": "rescue",
-        "visibility": "public",
         "disaster_types": ["flood"],
         "secondary_location": ADDRESS,
     }
@@ -241,7 +240,7 @@ async def test_create_station_keeps_its_signature():
 
 CREATE_TICKET_TASK_PARAMS = [
     "db", "actor", "ticket_uuid", "task_type", "task_name", "task_description", "quantity",
-    "source", "visibility", "route_uuid",
+    "source", "route_uuid",
 ]  # fmt: skip
 
 
@@ -252,7 +251,6 @@ def _task_fields(**overrides) -> dict:
         "task_description": "一樓積水",
         "quantity": 2,
         "source": "user",
-        "visibility": "public",
         "route_uuid": None,
     }
     return fields | overrides

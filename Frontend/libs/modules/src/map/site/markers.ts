@@ -14,6 +14,7 @@ import type {
   RescueMapClosureArea,
   RescueMapMarkerItem,
 } from '../types';
+import { readOpHour } from '../../station/availability';
 import { getStationTypeLabel } from '../../station/type-options';
 import { formatTicketStatusLabel, formatTicketTypeLabel } from '../../ticket/status';
 import type { SiteRouteState } from '../../route/types';
@@ -84,9 +85,10 @@ function resolveStationVariant(
 }
 
 function createStationSubtitle(station: StationFieldsFragment): string {
+  const opHour = readOpHour(station.opHour);
   const parts = [
     station.description?.trim(),
-    station.opHour?.trim() ? `服務時間 ${station.opHour.trim()}` : null,
+    opHour ? `服務時間 ${opHour}` : null,
     typeof station.level === 'number' ? `等級 ${station.level}` : null,
   ].filter(Boolean);
 
@@ -163,13 +165,14 @@ export function mapStationToMarker(
       description: station.description,
       opHour: station.opHour,
       level: station.level,
-      comment: station.comment,
+      // No `comment`: the back office's internal note, which the site never shows (ADR-332).
       source: station.source,
       visibility: station.visibility,
       verificationStatus: station.verificationStatus,
       isDuplicate: station.isDuplicate,
       isTemporary: station.isTemporary,
       isOfficial: station.isOfficial,
+      operationalStatus: station.operationalStatus,
       createdAt: station.createdAt?.toString() ?? null,
       updatedAt: station.updatedAt?.toString() ?? null,
     },
@@ -212,9 +215,7 @@ export function mapTicketToMarker(
       contactEmail: ticket.contactEmail,
       contactPhone: ticket.contactPhone,
       createdBy: ticket.createdBy,
-      visibility: ticket.visibility,
-      verificationStatus: ticket.verificationStatus,
-      reviewNote: ticket.reviewNote,
+      auditStatus: ticket.auditStatus,
       createdAt: ticket.createdAt?.toString() ?? null,
       updatedAt: ticket.updatedAt?.toString() ?? null,
     },

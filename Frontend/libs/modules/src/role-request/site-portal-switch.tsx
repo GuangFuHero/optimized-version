@@ -35,8 +35,8 @@ const ICON_SX = { fontSize: 16, color: color.fg.neutral.muted } as const;
 /**
  * The desktop top bar's back-office entry, after the 公開頁面 badge (prototype `SitePortalSwitch`,
  * topbar variant, `Design/前台/js/site/site-shell.jsx:272-296`). The two look alike but are not
- * the same element: 前往後台 crosses to another page, so it is a link and opens in a new tab;
- * 申請成為後台人員 opens the application drawer, so it is a button. On a phone the same entry sits
+ * the same element: 前往管理平台 crosses to another page, so it is a link and opens in a new tab;
+ * 申請管理權限 opens the application drawer, so it is a button. On a phone the same entry sits
  * at the foot of the menu drawer instead.
  */
 export function SitePortalSwitch({
@@ -51,20 +51,20 @@ export function SitePortalSwitch({
       <ButtonBase
         LinkComponent={Link}
         href={BACK_OFFICE_HREF}
-        title="前往後台（不需再次登入）"
+        title="前往管理平台（不需再次登入）"
         sx={PILL_SX}
       >
         <SwapHorizRoundedIcon sx={ICON_SX} />
-        前往後台
+        前往管理平台
       </ButtonBase>
     );
   }
 
   if (entry === 'apply') {
     return (
-      <ButtonBase onClick={onApply} title="送出成為後台人員的申請" sx={PILL_SX}>
+      <ButtonBase onClick={onApply} title="送出管理權限的申請" sx={PILL_SX}>
         <VerifiedRoundedIcon sx={ICON_SX} />
-        申請成為後台人員
+        申請管理權限
       </ButtonBase>
     );
   }

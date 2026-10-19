@@ -12,9 +12,7 @@ fragment TicketFields on TicketType {
   status
   priority
   taskType
-  visibility
-  verificationStatus
-  reviewNote
+  auditStatus
   createdBy
   createdAt
   updatedAt
@@ -30,9 +28,6 @@ fragment TicketTaskFields on TicketTaskType {
   status
   source
   progressNote
-  visibility
-  moderationStatus
-  reviewNote
   createdAt
   updatedAt
 }
@@ -170,12 +165,6 @@ query GetTicketTasks(
 
 # ─── Mutations ──────────────────────────────────────────────
 
-mutation CreateTicket($input: CreateTicketInput!) {
-  createTicket(input: $input) {
-    ...TicketFields
-  }
-}
-
 # 請求協助 (ticket/help-request): the ticket and every need on it in one go — nothing is written
 # unless all of it is. Answered with what the map and the list make their markers of, so the new
 # ticket shows on both without asking the server again.
@@ -194,9 +183,29 @@ mutation UpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
   }
 }
 
-mutation CreateTicketTask($input: CreateTicketTaskInput!) {
-  createTicketTask(input: $input) {
-    ...TicketTaskFields
+# 再加一件 (ticket/help-request/add-need-panel): one more need on a request. Held — nothing added —
+# when it looks like an open need of another ticket; sent again with `acknowledgedDuplicateOf` set
+# to one of the suspects, it is added anyway.
+mutation CreateTicketTask(
+  $input: CreateTicketTaskInput!
+  $acknowledgedDuplicateOf: String
+) {
+  createTicketTask(
+    input: $input
+    acknowledgedDuplicateOf: $acknowledgedDuplicateOf
+  ) {
+    __typename
+    ... on TicketTaskCreated {
+      task {
+        ...TicketTaskFields
+      }
+    }
+    ... on DuplicatesSuspected {
+      suspects {
+        relatedUuid
+        relatedTicketUuid
+      }
+    }
   }
 }
 
