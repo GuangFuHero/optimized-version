@@ -183,7 +183,7 @@
 | announcement.edit | — | — | — | all | — | — |
 | announcement.delete | — | — | — | all | — | — |
 
-> 新公告是草稿：建立要 `announcement.edit`，上線（`setAnnouncementActive(true)`）或改動已上線公告的 `placement` 要 `announcement.publish`。
+> 新公告是草稿：建立要 `announcement.edit`，上線（`setAnnouncementActive(true)`）或修改已上線的公告要 `announcement.publish`。
 
 ### 行前通知 Pre-Departure（功能 007）
 

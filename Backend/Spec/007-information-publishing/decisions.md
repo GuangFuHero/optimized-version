@@ -285,7 +285,8 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 - **權限**：兩個模組都改成「寫草稿要 `.edit`、上線要 `.publish`」：`generateBriefing`、`createAnnouncement` 從
   `.publish` 改為 `.edit`；`setAnnouncementActive(true)` 從 `.edit` 改為 `.publish`，`false` 維持 `.edit`。
   從 template 產生草稿會複製 template 內容，所以另外要 `pre_departure.publish`（與讀 template 相同）；
-  改動已上線公告的 `placement` 會讓它出現在原本不在的頁面，所以另外要 `announcement.publish`。
+  已上線公告的修改（內容或 `placement`）存下去就公開，等於重新發布，所以另外要 `announcement.publish`；
+  只有 `.edit` 的人要先把它下線再改。
 - **作者資訊**：`creator`／`updater`／`publisher` 回傳 `{ uuid, name }`，只有暱稱、沒有聯絡方式，名字用既有的
   `user_name_by_uuid` DataLoader 一次批次查完。呼叫端沒有該模組的 `.edit` 就回 `null`，不報錯。
 - migration 把既有的列都當成已發布：`published_at = created_at`，`published_by`／`updated_by = created_by`。
@@ -298,5 +299,5 @@ P4 從來沒有被寫出來。`739eea8` 把 `password: Mapped[str] = mapped_colu
 ➕ 公開頁面拿不到草稿：前台的請求以 `user` 身分執行，`user` 沒有 `.edit`。
 ➕ 刪掉目前版本，上一個已發布版本自動變回目前版本。
 ➖ 從較舊版本開的草稿一樣能發布並成為目前版本；要不要警告由前端決定。
-➖ 已上線公告的修改沒有草稿，存下去就公開。
+➖ 已上線公告的修改沒有草稿，存下去就公開，所以只有 `.edit` 的人改不動已上線的公告。
 ➖ 目前只有 `super_admin` 持有 `.edit` 與 `.publish`，所以權限調整實際上沒有人因此得到或失去權限。

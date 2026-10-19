@@ -318,7 +318,7 @@ async def test_unknown_placement_is_kept_off_the_public_site(
 
 @pytest.mark.asyncio
 async def test_edit_alone_cannot_put_an_announcement_live(client, redis, content_admin_auth):
-    """Without announcement.publish an editor can draft and edit, but can't activate or move a live one."""
+    """Without announcement.publish an editor can draft and edit, but can't activate or edit a live one."""
     _, admin_token = content_admin_auth
     _, editor = await _create_user_with_grants(redis, ((Perm.ANN_VIEW_ADMIN, "all"), (Perm.ANN_EDIT, "all")))
     draft = await _post(client, CREATE_PLACED, {"content": "staff", "placement": "admin_page"}, editor)
@@ -329,8 +329,11 @@ async def test_edit_alone_cannot_put_an_announcement_live(client, redis, content
     assert "errors" not in moved_draft, moved_draft
 
     live = await _create_placed(client, admin_token, "staff only", "admin_page")
-    edited = await _post(client, UPDATE, {"uuid": live, "content": "staff only!"}, editor)
-    assert "errors" not in edited, edited
+    assert (await _post(client, UPDATE, {"uuid": live, "content": "staff only!"}, editor)).get("errors")
     widened = await _post(client, UPDATE, {"uuid": live, "content": "x", "placement": "public_page"}, editor)
     assert widened.get("errors")
     assert await _listed(client, {live}, LIST_DEFAULT) == set()
+
+    assert "errors" not in await _post(client, SET_ACTIVE, {"uuid": live, "active": False}, editor)
+    edited = await _post(client, UPDATE, {"uuid": live, "content": "staff only!"}, editor)
+    assert "errors" not in edited, edited
