@@ -1211,6 +1211,7 @@ export type StationPropertyType = {
 
 export type StationSuggestionMergeType = {
   __typename?: 'StationSuggestionMergeType';
+  /** The fields this merge wrote, before and after. A station's internal comment, which merges could write until ADR-332, is left out without station.view_pii over the station */
   changes: Array<SuggestionChangeType>;
   createdAt?: Maybe<Scalars['DateTime']['output']>;
   reviewNote?: Maybe<Scalars['String']['output']>;

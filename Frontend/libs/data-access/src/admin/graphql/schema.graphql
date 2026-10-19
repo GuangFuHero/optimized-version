@@ -983,7 +983,6 @@ type StationPropertyType {
 type StationSuggestionMergeType {
   uuid: UUID!
   stationUuid: String!
-  changes: [SuggestionChangeType!]!
 
   """'applied' or 'revoked'"""
   status: String!
@@ -992,6 +991,11 @@ type StationSuggestionMergeType {
   revokedBy: String
   revokedAt: DateTime
   createdAt: DateTime
+
+  """
+  The fields this merge wrote, before and after. A station's internal comment, which merges could write until ADR-332, is left out without station.view_pii over the station
+  """
+  changes: [SuggestionChangeType!]!
 }
 
 type StationSuggestionType {
