@@ -538,6 +538,17 @@ SUPPLY_QUERY = "query($uuid: UUID!) { station(uuid: $uuid) { supplyStatus supply
 
 
 @pytest.mark.asyncio
+async def test_a_supply_status_is_suggested_stripped(client, login_user_auth, sample_station):
+    """One line however spaced is one proposal to the reviewer, and any blank is the same blank."""
+    _, user_token = login_user_auth
+    spaced = await _create(client, user_token, "station", sample_station, "supply_status", " 飲用水見底 ")
+    assert spaced["data"]["createStationSuggestion"]["newValue"] == "飲用水見底"
+
+    blank = await _create(client, user_token, "station", sample_station, "supply_status", "   ")
+    assert blank["data"]["createStationSuggestion"]["newValue"] == ""
+
+
+@pytest.mark.asyncio
 async def test_supply_status_merge_stamps_it(client, auditor_auth, login_user_auth, sample_station):
     """ADR-333: a merged supply status is as fresh as a direct edit."""
     _, user_token = login_user_auth

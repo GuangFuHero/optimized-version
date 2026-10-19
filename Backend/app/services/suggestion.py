@@ -80,6 +80,10 @@ async def create_station_suggestion(
 
     _check_length(new_value=new_value, comment=comment)
     value = str(coerce_and_validate(target_type, field_name, new_value))
+    if target_type == "station" and field_name == "supply_status":
+        # Stripped here as at merge, so one line however spaced is one proposal to the reviewer.
+        # A blank stays "", the column being text; the merge stores it as null (ADR-333).
+        value = value.strip()
 
     # xmax = 0 only on a freshly inserted row, which tells an insert from a resubmit.
     suggestion_uuid, inserted = (
