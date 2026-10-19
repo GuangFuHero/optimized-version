@@ -90,7 +90,11 @@ Next 的 proxy（middleware）在 render 前先看 `{p}_at` 裡 JWT 的 `exp`（
 - matcher 排除 `/api/*`、`/_next/*` 和靜態檔。
 
 Server Component 要讀目前登入的人時，用 `currentUserFromBackendAsync(cookieHeader)`（`@rescue-frontend/modules/server`）：
-回傳使用者，訪客回 `null`。token 過期或其他錯誤會丟例外，不會把登入的人當成訪客。
+回傳使用者，訪客回 `null`。access token 要 refresh 才能用時（middleware refresh 失敗，或 token 還沒過期但已
+`access_token_stale`：session 在簽發後切過身分，middleware 只看 `exp` 所以不會 refresh）回 `READ_IN_BROWSER`，
+頁面改在瀏覽器透過 proxy 讀，由 proxy refresh 並把新 cookie 交給瀏覽器。server 端不能自己 refresh：Server
+Component 不能設 cookie，瀏覽器留著已經輪替掉的 refresh token，過了 30 秒寬限（ADR-330）再拿去 refresh 會被當成
+重放，整個 session 被撤銷。其他錯誤（後端連不上）丟例外，不會把登入的人當成訪客。
 
 ## browser 的登入狀態（`useAuthSession`）
 
@@ -161,7 +165,9 @@ browser 裡，`router.refresh()` 只會重畫 server 那部分，訪客會繼續
 
 需登入：`/account/security`。
 
-- server 端用 `currentUserFromBackendAsync` 讀目前登入的人，訪客導回 `/login`。
+- server 端用 `currentUserFromBackendAsync` 讀目前登入的人，訪客導回 `/login`。回 `READ_IN_BROWSER` 時改由
+  `AccountSecurityInBrowser` 在瀏覽器讀：讀到就顯示頁面；401（refresh 被拒）導回 `/login`；503 顯示「暫時無法讀取
+  帳號資料，請稍後重新整理。」，人還是登入狀態。
 - 改密碼、建立密碼、登出所有裝置之後，頁面導回 `/login` 重新登入，並通知其他分頁。
 - 前台使用者選單還沒打開「帳號安全」的入口：頁面可以用，但選單裡沒有連過去。
 

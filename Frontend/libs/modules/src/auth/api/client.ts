@@ -46,6 +46,11 @@ export function verifyAndSignInAsync(
     .then(responseData);
 }
 
+/** The signed-in account, through the proxy, which refreshes a spent access token on the way. */
+export function getCurrentUserAsync() {
+  return authApiClient.GET('/api/v1/users/me').then(responseData);
+}
+
 /** Signs this browser out: the backend ends its session and clears both cookies. */
 export function signOutAsync() {
   return authApiClient.DELETE('/api/v1/auth/session').then(() => undefined);

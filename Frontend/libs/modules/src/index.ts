@@ -23,6 +23,7 @@ export { LoginFormClient } from './auth/login/login-form.client';
 export { RegisterFormClient } from './auth/login/register-form.client';
 export { ResetPasswordFormClient } from './auth/login/reset-password-form.client';
 export { AccountSecurityClient } from './auth/session/account-security.client';
+export { AccountSecurityInBrowser } from './auth/session/account-security-in-browser.client';
 export { PortalSiteShell } from './auth/session/site-shell.client';
 export { ROLE_DISPLAY_NAMES } from './constants/roles';
 

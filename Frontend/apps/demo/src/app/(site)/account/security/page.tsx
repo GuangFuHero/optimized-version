@@ -3,8 +3,14 @@ import type { Metadata } from 'next';
 
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { AccountSecurityClient } from '@rescue-frontend/modules';
-import { currentUserFromBackendAsync } from '@rescue-frontend/modules/server';
+import {
+  AccountSecurityClient,
+  AccountSecurityInBrowser,
+} from '@rescue-frontend/modules';
+import {
+  currentUserFromBackendAsync,
+  READ_IN_BROWSER,
+} from '@rescue-frontend/modules/server';
 
 export const metadata: Metadata = {
   title: '帳號安全 - 島嶼守望',
@@ -12,7 +18,8 @@ export const metadata: Metadata = {
 };
 
 export default async function AccountSecurityPage() {
-  // The middleware (`proxy.ts`) has refreshed a spent access token before this renders.
+  // The middleware (`proxy.ts`) has refreshed an expiring access token before this renders; one it
+  // could not, or a stale one, is left for the browser (`READ_IN_BROWSER`).
   const user = await currentUserFromBackendAsync(
     (await headers()).get('cookie'),
   );
@@ -23,10 +30,14 @@ export default async function AccountSecurityPage() {
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 3, md: 4 } }}>
-      <AccountSecurityClient
-        contacts={user.contacts ?? []}
-        loginMethods={user.login_methods ?? []}
-      />
+      {user === READ_IN_BROWSER ? (
+        <AccountSecurityInBrowser />
+      ) : (
+        <AccountSecurityClient
+          contacts={user.contacts ?? []}
+          loginMethods={user.login_methods ?? []}
+        />
+      )}
     </Container>
   );
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { currentUserFromBackendAsync } from './current-user';
+import { currentUserFromBackendAsync, READ_IN_BROWSER } from './current-user';
 
 /** What the page's server side sent to the backend, as the fake backend received it. */
 interface BackendCall {
@@ -103,10 +103,11 @@ describe('currentUserFromBackendAsync', () => {
   });
 
   it.each(['access_token_expired', 'access_token_stale'])(
-    'does not read a session whose access token is merely %s as a guest',
+    'leaves a session whose access token is merely %s for the browser to read',
     async (code) => {
-      // The middleware could not refresh it just now (rate-limited, say); the session itself lives
-      // on, and the page has no client-side retry to fall back on.
+      // Expired: the middleware could not refresh it just now (rate-limited, say). Stale: still in
+      // date, so the middleware never tried. Either way the session lives on, and only the proxy
+      // can refresh it, handing the browser the new cookies.
       fakeBackend(() =>
         Response.json(
           { detail: 'Could not validate credentials', code },
@@ -114,9 +115,11 @@ describe('currentUserFromBackendAsync', () => {
         ),
       );
 
-      await expect(
-        currentUserFromBackendAsync('wgdev_at=access-6; wgdev_rt=refresh-6'),
-      ).rejects.toThrow();
+      expect(
+        await currentUserFromBackendAsync(
+          'wgdev_at=access-6; wgdev_rt=refresh-6',
+        ),
+      ).toBe(READ_IN_BROWSER);
     },
   );
 });
