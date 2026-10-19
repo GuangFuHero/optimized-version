@@ -4,7 +4,7 @@ A NULL `published_at` marks a draft. Every existing row was live when it was wri
 backfill marks them all published at their creation time, by their creator.
 
 Revision ID: 209c4375c3e1
-Revises: d4c8b1e07a92
+Revises: 259489888127
 Create Date: 2026-10-18
 
 """
@@ -16,7 +16,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "209c4375c3e1"
-down_revision: str | Sequence[str] | None = "d4c8b1e07a92"
+down_revision: str | Sequence[str] | None = "259489888127"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
