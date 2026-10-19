@@ -608,6 +608,7 @@ export type MutationAttachStationPhotoArgs = {
 };
 
 export type MutationAuditTicketArgs = {
+  contentHash: Scalars['String']['input'];
   note?: InputMaybe<Scalars['String']['input']>;
   status: AuditVerdict;
   uuid: Scalars['UUID']['input'];
@@ -1584,9 +1585,11 @@ export type TicketTaskType = {
 
 export type TicketType = {
   __typename?: 'TicketType';
+  /** A fingerprint of the ticket's content as it now stands, to pass back to auditTicket so the verdict is refused if the ticket changes in between. Null to a caller without ticket.audit here. Read it on one ticket at a time */
+  auditContentHash?: Maybe<Scalars['String']['output']>;
   /** Every move of the audit status, newest first: verdicts, the scan's flags, and changes that voided a verdict. Null to a caller without ticket.audit here. Read it on one ticket at a time: it queries the change log per ticket */
   auditHistory?: Maybe<Array<TicketAuditEntryType>>;
-  /** The auditor's note on the last verdict; always set for 'audit_issue'. Null to a caller without ticket.audit here */
+  /** The note given with the last verdict, kept after a change voids it, so the next auditor sees what was found; always set while 'audit_issue'. Null to a caller without ticket.audit here */
   auditNote?: Maybe<Scalars['String']['output']>;
   /** The data check: 'no_audit' (not checked as it now stands), 'need_audit' (picked out for checking), 'audited' (found right) or 'audit_issue' (found wrong). Public, so a list can leave out tickets with issues */
   auditStatus: Scalars['String']['output'];
@@ -1594,7 +1597,7 @@ export type TicketType = {
   auditedAt?: Maybe<Scalars['DateTime']['output']>;
   /** UUID of who gave the last verdict. Null if never audited, or without ticket.audit here */
   auditedBy?: Maybe<Scalars['String']['output']>;
-  /** What differs from the content the last verdict was given on, field by field. Null if never audited, or to a caller without ticket.audit here. A need taken off since does not appear: it does not void a verdict. Read it on one ticket at a time */
+  /** What differs from the content the last verdict was given on, field by field. Null if never audited, or to a caller without ticket.audit here. A need taken off since does not appear: it does not void a verdict. A value the caller could not read on the ticket itself (address, free text, triage answers) comes back null, the change still listed. Read it on one ticket at a time */
   changesSinceAudit?: Maybe<Array<TicketAuditChangeType>>;
   /** Follow-up email — masked unless the caller holds ticket.view_pii here and either ticket.view_history on the ticket or a claim on one of its needs */
   contactEmail?: Maybe<Scalars['String']['output']>;
@@ -2398,6 +2401,7 @@ export type AdminDeleteTicketMutation = {
 export type AdminAuditTicketMutationVariables = Exact<{
   uuid: Scalars['UUID']['input'];
   status: AuditVerdict;
+  contentHash: Scalars['String']['input'];
   note?: InputMaybe<Scalars['String']['input']>;
 }>;
 
@@ -5025,6 +5029,20 @@ export const AdminAuditTicketDocument = {
         },
         {
           kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'contentHash' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
           variable: { kind: 'Variable', name: { kind: 'Name', value: 'note' } },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
         },
@@ -5050,6 +5068,14 @@ export const AdminAuditTicketDocument = {
                 value: {
                   kind: 'Variable',
                   name: { kind: 'Name', value: 'status' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'contentHash' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'contentHash' },
                 },
               },
               {

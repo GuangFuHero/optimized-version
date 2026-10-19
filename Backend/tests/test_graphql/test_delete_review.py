@@ -17,10 +17,11 @@ mutation($input: CreateTicketInput!) {
 DELETE_TICKET = "mutation($uuid: UUID!) { deleteTicket(uuid: $uuid) }"
 GET_TICKET = "query($uuid: UUID!) { ticket(uuid: $uuid) { uuid status } }"
 AUDIT_TICKET = """
-mutation($uuid: UUID!) {
-    auditTicket(uuid: $uuid, status: audited) { uuid auditStatus }
+mutation($uuid: UUID!, $hash: String!) {
+    auditTicket(uuid: $uuid, status: audited, contentHash: $hash) { uuid auditStatus }
 }
 """
+CONTENT_HASH = "query($uuid: UUID!) { ticket(uuid: $uuid) { auditContentHash } }"
 CREATE_AREA = """
 mutation($input: CreateAreaInput!) { createArea(input: $input) { uuid } }
 """
@@ -92,10 +93,16 @@ async def test_audit_ticket_requires_ticket_audit(client, coordinator_auth, logi
     _, coord_token = coordinator_auth
     _, login_token = login_user_auth
     ticket_uuid = await _create_ticket(client, login_token)
+    seen = await client.post(
+        "/graphql",
+        json={"query": CONTENT_HASH, "variables": {"uuid": ticket_uuid}},
+        headers=auth_header(coord_token),
+    )
+    content_hash = seen.json()["data"]["ticket"]["auditContentHash"]
 
     ok = await client.post(
         "/graphql",
-        json={"query": AUDIT_TICKET, "variables": {"uuid": ticket_uuid}},
+        json={"query": AUDIT_TICKET, "variables": {"uuid": ticket_uuid, "hash": content_hash}},
         headers=auth_header(coord_token),
     )
     body = ok.json()
@@ -104,7 +111,7 @@ async def test_audit_ticket_requires_ticket_audit(client, coordinator_auth, logi
 
     denied = await client.post(
         "/graphql",
-        json={"query": AUDIT_TICKET, "variables": {"uuid": ticket_uuid}},
+        json={"query": AUDIT_TICKET, "variables": {"uuid": ticket_uuid, "hash": content_hash}},
         headers=auth_header(login_token),
     )
     denied_errors = denied.json().get("errors", [])

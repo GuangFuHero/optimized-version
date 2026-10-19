@@ -5,6 +5,7 @@ validation, and persistence), map the result back to a GraphQL type. See
 app/services/ticket.py.
 """
 
+from typing import Annotated
 from uuid import UUID
 
 import strawberry
@@ -203,13 +204,18 @@ class RequestMutation:
         info: strawberry.types.Info,
         uuid: UUID,
         status: AuditVerdict,
+        content_hash: Annotated[
+            str,
+            strawberry.argument(description="`auditContentHash` as read when the auditor opened the ticket"),
+        ],
         note: str | None = None,
     ) -> TicketType:
-        """Give the verdict on a ticket as it now stands: 'audited', or 'audit_issue' with a note.
+        """Give the verdict on the version of a ticket the auditor saw: 'audited', or 'audit_issue'.
 
-        Requires ticket.audit with scope check. The note is required for an issue, and the
-        requester and the volunteers on its needs are told the ticket may be wrong, without the
-        note. A later change to the content sends the ticket back to 'no_audit'.
+        Requires ticket.audit with scope check. Refused if the ticket changed since
+        `auditContentHash` was read. The note is required for an issue, and the requester and the
+        volunteers on its needs are told the ticket may be wrong, without the note. A later change
+        to the content sends the ticket back to 'no_audit'.
         """
         ticket = await ticket_audit.audit_ticket(
             info.context["db"],
@@ -217,6 +223,7 @@ class RequestMutation:
             uuid=str(uuid),
             status=status.value,
             note=note,
+            seen_hash=content_hash,
         )
         return TicketType.from_model(ticket)
 

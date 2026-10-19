@@ -42,7 +42,7 @@ from app.services.geo_validation import (
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 from app.services.photo import normalize_photo_url
-from app.services.ticket_audit import void_stale_verdict
+from app.services.ticket_audit import lock_ticket, void_stale_verdict
 from app.services.ticket_status import recompute_ticket_status
 
 # Size limits for `set_ticket_disaster_details` (ADR-267). ADR-092 leaves the vocabulary
@@ -865,6 +865,8 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     if not task:
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
+    # The ticket before the need, the order every writer keeps: voiding the verdict locks it.
+    await lock_ticket(db, str(task.ticket_uuid))
 
     old_dup = task.is_duplicate
     task_id = task.uuid
@@ -968,6 +970,8 @@ async def _add_task_property(
 ) -> TaskProperty:
     """Write the property, void the ticket's verdict if it no longer holds, and commit."""
     ticket_uuid = str(task.ticket_uuid)
+    # The ticket before the need, the order every writer keeps: the new row holds the need too.
+    await lock_ticket(db, ticket_uuid)
     prop = await task_property_repository.add(
         db,
         obj_in={
@@ -997,6 +1001,7 @@ async def update_task_property(db: AsyncSession, *, actor: User, uuid: str, chan
         raise ValueError("Ticket task not found")
     await require_scope(actor, Perm.TICKET_EDIT, db, resource=await _task_scope_target(db, task))
     ticket_uuid = str(task.ticket_uuid)
+    await lock_ticket(db, ticket_uuid)  # the ticket before the need, as in _add_task_property
     for field, value in changes.items():
         if hasattr(prop, field):
             setattr(prop, field, value)

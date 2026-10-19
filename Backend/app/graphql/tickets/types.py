@@ -170,6 +170,12 @@ class TicketAuditEntryType:
     actor_name: str | None = None
 
 
+# What `changesSinceAudit` withholds the values of, as the ticket's own resolvers do: the free
+# text and the address behind ticket.view_detail, the triage answers behind ticket.view_pii.
+_DETAIL_CHANGES = frozenset({("ticket", "description"), ("task", "task_description")})
+_TRIAGE_CHANGES = frozenset({("ticket", "person_trapped_reported"), ("ticket", "immediate_danger_reported")})
+
+
 @strawberry.type(description="One field that differs from the content the last verdict was given on")
 class TicketAuditChangeType:
     """An entry of `TicketType.changesSinceAudit`, built by `ticket_audit.content_changes`."""
@@ -714,8 +720,9 @@ class TicketType:
 
     @strawberry.field(
         description=(
-            "The auditor's note on the last verdict; always set for 'audit_issue'. Null to a caller "
-            "without ticket.audit here"
+            "The note given with the last verdict, kept after a change voids it, so the next "
+            "auditor sees what was found; always set while 'audit_issue'. Null to a caller without "
+            "ticket.audit here"
         )
     )
     async def audit_note(self, info: strawberry.types.Info) -> str | None:
@@ -757,7 +764,9 @@ class TicketType:
         description=(
             "What differs from the content the last verdict was given on, field by field. Null if "
             "never audited, or to a caller without ticket.audit here. A need taken off since does "
-            "not appear: it does not void a verdict. Read it on one ticket at a time"
+            "not appear: it does not void a verdict. A value the caller could not read on the ticket "
+            "itself (address, free text, triage answers) comes back null, the change still listed. "
+            "Read it on one ticket at a time"
         )
     )
     async def changes_since_audit(self, info: strawberry.types.Info) -> list[TicketAuditChangeType] | None:
@@ -768,7 +777,40 @@ class TicketType:
         if ticket is None:
             return None
         changes = await ticket_audit.changes_since_audit(info.context["db"], ticket)
-        return None if changes is None else [TicketAuditChangeType(**change) for change in changes]
+        if changes is None:
+            return None
+        detail = await self._detail_visible(info)
+        triage = await self._triage_visible(info)
+
+        def withheld(change: dict) -> bool:
+            """Whether this ticket's own field would be null to the caller."""
+            key = (change["entity"], change["field"])
+            if change["entity"] == "secondary_location" or key in _DETAIL_CHANGES:
+                return not detail
+            return key in _TRIAGE_CHANGES and not triage
+
+        return [
+            TicketAuditChangeType(
+                **({**change, "audited_value": None, "current_value": None} if withheld(change) else change)
+            )
+            for change in changes
+        ]
+
+    @strawberry.field(
+        description=(
+            "A fingerprint of the ticket's content as it now stands, to pass back to auditTicket so "
+            "the verdict is refused if the ticket changes in between. Null to a caller without "
+            "ticket.audit here. Read it on one ticket at a time"
+        )
+    )
+    async def audit_content_hash(self, info: strawberry.types.Info) -> str | None:
+        """Return the content fingerprint, or null when the caller cannot audit this ticket."""
+        if not await self._audit_visible(info):
+            return None
+        ticket = await info.context["loaders"]["ticket_by_uuid"].load(str(self.uuid))
+        if ticket is None:
+            return None
+        return ticket_audit.content_hash(await ticket_audit.content_of(info.context["db"], ticket))
 
     @strawberry.field(
         description=(

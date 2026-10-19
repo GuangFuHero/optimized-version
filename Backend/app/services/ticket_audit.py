@@ -18,6 +18,8 @@ ticket is filed.
 Its own module, as `ticket_status` is, so every action that writes content calls the one rule.
 """
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -110,6 +112,12 @@ async def content_of(db: AsyncSession, ticket: Tickets) -> dict:
     }
 
 
+def content_hash(content: dict) -> str:
+    """A fingerprint of `content`: what an auditor saw, so a verdict can name the version it is on."""
+    canonical = json.dumps(content, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def content_changes(audited: dict, current: dict, *, ticket_uuid: str) -> list[dict]:
     """Every field that differs between the audited content and the current one.
 
@@ -159,13 +167,23 @@ def content_changes(audited: dict, current: dict, *, ticket_uuid: str) -> list[d
     return changes
 
 
+async def lock_ticket(db: AsyncSession, ticket_uuid: str) -> Tickets | None:
+    """Lock the ticket row and read it fresh, so a verdict and a content change take turns."""
+    return await db.scalar(
+        select(Tickets)
+        .where(Tickets.uuid == ticket_uuid)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
 async def void_stale_verdict(db: AsyncSession, ticket_uuid: str) -> None:
     """Send a verdict back to no_audit once the ticket no longer matches what it was given on.
 
     Call it inside the writing action's transaction, after flushing the content change; the
     action commits. A ticket at no_audit or need_audit is left as it is.
     """
-    ticket = await db.get(Tickets, ticket_uuid)
+    ticket = await lock_ticket(db, ticket_uuid)
     if ticket is None or ticket.audit_status not in VERDICTS:
         return
     current = await content_of(db, ticket)
@@ -174,12 +192,17 @@ async def void_stale_verdict(db: AsyncSession, ticket_uuid: str) -> None:
         await db.flush()
 
 
-async def audit_ticket(db: AsyncSession, *, actor: User, uuid: str, status: str, note: str | None) -> Tickets:
-    """Give the verdict on a ticket as it now stands: audited, or audit_issue saying what is wrong.
+async def audit_ticket(
+    db: AsyncSession, *, actor: User, uuid: str, status: str, note: str | None, seen_hash: str
+) -> Tickets:
+    """Give the verdict on the version of a ticket the auditor saw: audited, or audit_issue saying why.
 
-    ticket.audit on the ticket. The verdict records who gave it, when, and the content it was
-    given on. An issue is told to the requester, who can put it right, and to everyone signed up
-    for its needs, who may be on their way; neither notice carries the note, which only staff read.
+    ticket.audit on the ticket. `seen_hash` is the `content_hash` of what the auditor read; if the
+    ticket has changed since, the verdict is refused rather than given on content nobody checked.
+    The ticket row is locked first, so a content change cannot land between that check and the
+    commit. The verdict records who gave it, when, and the content it was given on. An issue is
+    told to the requester, who can put it right, and to everyone signed up for its needs, who may
+    be on their way; neither notice carries the note or the auditor, which only staff read.
     """
     if status not in VERDICTS:
         raise ValueError(f"Unknown audit verdict: {status}")
@@ -190,9 +213,14 @@ async def audit_ticket(db: AsyncSession, *, actor: User, uuid: str, status: str,
     if not ticket:
         raise ValueError("Ticket not found")
     await require_scope(actor, Perm.TICKET_AUDIT, db, resource=ticket)
+    ticket = await lock_ticket(db, uuid)
+    if ticket is None or ticket.delete_at is not None:
+        raise ValueError("Ticket not found")
 
     # Read before anything is set: reading flushes, and the verdict should be one write.
     content = await content_of(db, ticket)
+    if content_hash(content) != seen_hash:
+        raise ValueError("The ticket has changed since it was loaded; reload it and audit again")
     ticket.audit_status = status
     ticket.audit_note = note
     ticket.audited_at = datetime.now(UTC)
@@ -206,13 +234,13 @@ async def audit_ticket(db: AsyncSession, *, actor: User, uuid: str, status: str,
             .join(TicketTask, TicketTask.uuid == TaskAssignment.task_uuid)
             .where(TicketTask.ticket_uuid == str(ticket_id), TicketTask.delete_at.is_(None))
         )
-        volunteers = {str(person) for person in on_needs} - {str(requester)}
+        volunteers = {str(person) for person in on_needs} - {str(requester), str(actor_uid)}
     await db.commit()
 
     if status == AUDIT_ISSUE:
         notices = [
             (
-                [requester] if requester else [],
+                [requester] if requester and str(requester) != str(actor_uid) else [],
                 f"您的求助單「{title}」已被標記為內容有疑慮，請確認資料是否正確。",
             ),
             (list(volunteers), f"您報名的求助單「{title}」已被標記為內容有疑慮，資料可能有誤，請留意。"),
@@ -224,7 +252,8 @@ async def audit_ticket(db: AsyncSession, *, actor: User, uuid: str, status: str,
                 title=f"求助單內容待確認：{title}",
                 body=body,
                 priority="high",
-                actor_uuid=actor_uid,
+                # No actor: who audited is staff-only, and the notice reaches the requester.
+                actor_uuid=None,
                 ref_type="ticket",
                 ref_uuid=ticket_id,
                 explicit_recipients=recipients,

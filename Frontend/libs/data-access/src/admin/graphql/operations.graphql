@@ -325,8 +325,18 @@ mutation AdminUpdateTicket($uuid: UUID!, $input: UpdateTicketInput!) {
 mutation AdminDeleteTicket($uuid: UUID!) {
   deleteTicket(uuid: $uuid)
 }
-mutation AdminAuditTicket($uuid: UUID!, $status: AuditVerdict!, $note: String) {
-  auditTicket(uuid: $uuid, status: $status, note: $note) {
+mutation AdminAuditTicket(
+  $uuid: UUID!
+  $status: AuditVerdict!
+  $contentHash: String!
+  $note: String
+) {
+  auditTicket(
+    uuid: $uuid
+    status: $status
+    contentHash: $contentHash
+    note: $note
+  ) {
     ...AdminTicketFields
   }
 }

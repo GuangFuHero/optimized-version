@@ -639,7 +639,14 @@ type Mutation {
   createHelpRequest(input: CreateHelpRequestInput!): TicketType!
   updateTicket(uuid: UUID!, input: UpdateTicketInput!): TicketType!
   setTicketDisasterDetails(uuid: UUID!, details: [TicketDisasterDetailInput!]!): [TicketDisasterDetailType!]!
-  auditTicket(uuid: UUID!, status: AuditVerdict!, note: String = null): TicketType!
+  auditTicket(
+    uuid: UUID!
+    status: AuditVerdict!
+
+    """`auditContentHash` as read when the auditor opened the ticket"""
+    contentHash: String!
+    note: String = null
+  ): TicketType!
   deleteTicket(uuid: UUID!): Boolean!
   createTicketTask(input: CreateTicketTaskInput!, acknowledgedDuplicateOf: String = null): CreateTicketTaskResult!
   updateTicketTask(uuid: UUID!, input: UpdateTicketTaskInput!): TicketTaskType!
@@ -1525,7 +1532,7 @@ type TicketType {
   description: String
 
   """
-  The auditor's note on the last verdict; always set for 'audit_issue'. Null to a caller without ticket.audit here
+  The note given with the last verdict, kept after a change voids it, so the next auditor sees what was found; always set while 'audit_issue'. Null to a caller without ticket.audit here
   """
   auditNote: String
 
@@ -1545,9 +1552,14 @@ type TicketType {
   auditHistory: [TicketAuditEntryType!]
 
   """
-  What differs from the content the last verdict was given on, field by field. Null if never audited, or to a caller without ticket.audit here. A need taken off since does not appear: it does not void a verdict. Read it on one ticket at a time
+  What differs from the content the last verdict was given on, field by field. Null if never audited, or to a caller without ticket.audit here. A need taken off since does not appear: it does not void a verdict. A value the caller could not read on the ticket itself (address, free text, triage answers) comes back null, the change still listed. Read it on one ticket at a time
   """
   changesSinceAudit: [TicketAuditChangeType!]
+
+  """
+  A fingerprint of the ticket's content as it now stands, to pass back to auditTicket so the verdict is refused if the ticket changes in between. Null to a caller without ticket.audit here. Read it on one ticket at a time
+  """
+  auditContentHash: String
 
   """
   UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here
