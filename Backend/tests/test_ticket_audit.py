@@ -306,6 +306,50 @@ async def test_what_voids_a_verdict(db, change, status):
     assert (await _state(db, ticket_uuid)).audit_status == status
 
 
+async def _add_empty_address(db, actor, ticket_uuid, need_uuid):
+    await ticket_service.update_ticket(
+        db, actor=actor, uuid=ticket_uuid, changes={}, secondary_location={"location_type": "address"}
+    )
+
+
+async def _clear_the_empty_description(db, actor, ticket_uuid, need_uuid):
+    await ticket_service.update_ticket(db, actor=actor, uuid=ticket_uuid, changes={"description": None})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "change, voids, new_version",
+    [
+        (_change_title, True, True),
+        (_add_address, True, True),
+        (_add_empty_address, True, True),
+        (_answer_disaster_field, True, True),
+        (_add_need, True, True),
+        (_add_property, True, True),
+        (_same_title, False, False),
+        (_clear_the_empty_description, False, False),
+        (_change_priority, False, False),
+        (_write_progress_note, False, False),
+        (_sign_up, False, False),
+        # Stricter on purpose: the hash names a version, so it cannot skip a removal the way
+        # voiding does, and an auditor who read the need reloads rather than audit unseen content.
+        (_take_need_off, False, True),
+    ],
+    ids=lambda value: value.__name__.strip("_") if callable(value) else str(value),
+)
+async def test_the_version_check_never_lets_a_change_through_unseen(db, change, voids, new_version):
+    """Whatever voids a verdict also refuses a verdict on the version before it."""
+    ticket_uuid, need_uuid = await _audited_ticket(db)
+    before = await ticket_audit.content_of(db, await _state(db, ticket_uuid))
+
+    await change(db, await _operator(db), ticket_uuid, need_uuid)
+
+    after = await ticket_audit.content_of(db, await _state(db, ticket_uuid))
+    assert bool(ticket_audit.content_changes(before, after, ticket_uuid=ticket_uuid)) is voids
+    assert (ticket_audit.content_hash(before) != ticket_audit.content_hash(after)) is new_version
+    assert ((await _state(db, ticket_uuid)).audit_status == "no_audit") is voids
+
+
 @pytest.mark.asyncio
 async def test_an_issue_is_voided_like_any_verdict_and_its_note_kept(db):
     """The last note and its time survive, so the next auditor sees what was found."""

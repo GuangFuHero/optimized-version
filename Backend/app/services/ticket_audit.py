@@ -68,6 +68,15 @@ def _plain(value):
     return str(value) if isinstance(value, UUID) else value
 
 
+def _set_fields(row, fields) -> dict:
+    """The fields of `row` that hold a value.
+
+    An unset field is left out rather than stored as null, so a missing row and an empty one read
+    the same to `content_changes` and to `content_hash`.
+    """
+    return {field: value for field in fields if (value := _plain(getattr(row, field))) is not None}
+
+
 async def content_of(db: AsyncSession, ticket: Tickets) -> dict:
     """The ticket's content as a verdict is given on it. Reads what the session has flushed."""
     ticket_uuid = str(ticket.uuid)
@@ -95,18 +104,13 @@ async def content_of(db: AsyncSession, ticket: Tickets) -> dict:
         else []
     )
     return {
-        "ticket": {field: _plain(getattr(ticket, field)) for field in TICKET_FIELDS},
-        "address": ({field: _plain(getattr(address, field)) for field in ADDRESS_FIELDS} if address else {}),
+        "ticket": _set_fields(ticket, TICKET_FIELDS),
+        "address": _set_fields(address, ADDRESS_FIELDS) if address else {},
         # Sorted: the form sends the same answers back in whatever order, and that is no change.
         "disaster_details": {name: sorted(values) for name, values in answers.items()},
-        "needs": {
-            str(need.uuid): {field: _plain(getattr(need, field)) for field in NEED_FIELDS} for need in needs
-        },
+        "needs": {str(need.uuid): _set_fields(need, NEED_FIELDS) for need in needs},
         "properties": {
-            str(prop.uuid): {
-                "task_uuid": str(prop.task_uuid),
-                **{field: _plain(getattr(prop, field)) for field in PROPERTY_FIELDS},
-            }
+            str(prop.uuid): {"task_uuid": str(prop.task_uuid), **_set_fields(prop, PROPERTY_FIELDS)}
             for prop in properties
         },
     }
@@ -199,7 +203,8 @@ async def audit_ticket(
 
     ticket.audit on the ticket. `seen_hash` is the `content_hash` of what the auditor read; if the
     ticket has changed since, the verdict is refused rather than given on content nobody checked.
-    The ticket row is locked first, so a content change cannot land between that check and the
+    That is any change, a need taken off included, though taking one off does not void a verdict
+    given earlier. The ticket row is locked first, so a content change cannot land between that check and the
     commit. The verdict records who gave it, when, and the content it was given on. An issue is
     told to the requester, who can put it right, and to everyone signed up for its needs, who may
     be on their way; neither notice carries the note or the auditor, which only staff read.
