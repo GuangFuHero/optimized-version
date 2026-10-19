@@ -19,6 +19,13 @@ export function isAdminPermissionError(error: Error | null) {
   );
 }
 
+/**
+ * Set `meta: { [SILENT_ERROR_META]: true }` on a query that shows its own error state, so a failure
+ * is not also raised through `onError` (the admin app toasts it). A 401 is still raised: the
+ * app's sign-out on an expired session hangs off `onError`.
+ */
+export const SILENT_ERROR_META = 'silentError';
+
 export function createAdminQueryClient(onError: (error: Error) => void) {
   const reportError = (error: Error) => {
     if (error instanceof ApiError && error.code === 'step_up_required') return;
@@ -40,6 +47,10 @@ export function createAdminQueryClient(onError: (error: Error) => void) {
       // is retried on the next poll, not reported.
       onError: (error, query) => {
         if (query.meta?.quietErrors) return;
+        const silent = query.meta?.[SILENT_ERROR_META] === true;
+        if (silent && !(error instanceof ApiError && error.status === 401)) {
+          return;
+        }
         if (!isAdminPermissionError(error)) reportError(error);
       },
     }),
