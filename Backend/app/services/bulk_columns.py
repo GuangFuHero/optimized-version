@@ -205,9 +205,7 @@ async def station_columns(db: AsyncSession, station_type: str) -> tuple[ColumnSp
     to tell the user what was left out and why.
     """
     configs = await _station_configs(db, station_type)
-    dynamic = tuple(
-        _dynamic_column(c) for c in configs if c.data_type in STORABLE_STATION_DATA_TYPES
-    )
+    dynamic = tuple(_dynamic_column(c) for c in configs if c.data_type in STORABLE_STATION_DATA_TYPES)
     return STATION_COLUMNS + dynamic
 
 
@@ -238,7 +236,5 @@ async def ticket_columns(db: AsyncSession, task_type: str) -> tuple[ColumnSpec, 
     the station side nothing has to be dropped.
     """
     disaster_types = await project_settings_repository.get_current_disaster_types(db)
-    configs = await task_property_config_repository.list_by_type(
-        db, task_type, disaster_types=disaster_types
-    )
+    configs = await task_property_config_repository.list_by_type(db, task_type, disaster_types=disaster_types)
     return TICKET_COLUMNS + tuple(_dynamic_column(c) for c in configs)

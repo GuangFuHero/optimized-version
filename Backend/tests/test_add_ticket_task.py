@@ -40,8 +40,13 @@ async def _ticket(db, *, status: str = "pending", deleted: bool = False) -> Tick
     db.add(requester)
     await db.flush()
     ticket = Tickets(
-        uuid=uuidlib.uuid4(), property_name="request", created_by=str(requester.uuid),
-        title="一樓客廳積泥需要幫忙清", contact_name="王阿嬤", status=status, priority="medium",
+        uuid=uuidlib.uuid4(),
+        property_name="request",
+        created_by=str(requester.uuid),
+        title="一樓客廳積泥需要幫忙清",
+        contact_name="王阿嬤",
+        status=status,
+        priority="medium",
         delete_at=datetime.now(UTC) if deleted else None,
     )
     db.add(ticket)
@@ -52,8 +57,13 @@ async def _ticket(db, *, status: str = "pending", deleted: bool = False) -> Tick
 async def _need(db, ticket: Tickets, *, status: str = "pending", claims: int = 0, deleted: bool = False):
     """A need already on `ticket`, with `claims` volunteers on it."""
     task = TicketTask(
-        uuid=uuidlib.uuid4(), ticket_uuid=str(ticket.uuid), task_type="hr", task_name="清淤",
-        quantity=claims or 3, status="canceled" if deleted else status, created_by=ticket.created_by,
+        uuid=uuidlib.uuid4(),
+        ticket_uuid=str(ticket.uuid),
+        task_type="hr",
+        task_name="清淤",
+        quantity=claims or 3,
+        status="canceled" if deleted else status,
+        created_by=ticket.created_by,
         delete_at=datetime.now(UTC) if deleted else None,
     )
     db.add(task)
@@ -95,13 +105,26 @@ async def _stranger(db, perm: Perm = Perm.TICKET_EDIT, scope: str = "own") -> Us
 
 
 async def _add(
-    db, actor: User, ticket_uuid: str, *,
-    name: str = "搬家具", quantity: int | None = 3, task_type: str = "hr",
+    db,
+    actor: User,
+    ticket_uuid: str,
+    *,
+    name: str = "搬家具",
+    quantity: int | None = 3,
+    task_type: str = "hr",
 ) -> str:
     """Add a need through createTicketTask's service. It commits: take ids out beforehand."""
     task = await ticket_service.create_ticket_task(
-        db, actor=actor, ticket_uuid=ticket_uuid, task_type=task_type, task_name=name,
-        task_description=None, quantity=quantity, source="user", visibility="public", route_uuid=None,
+        db,
+        actor=actor,
+        ticket_uuid=ticket_uuid,
+        task_type=task_type,
+        task_name=name,
+        task_description=None,
+        quantity=quantity,
+        source="user",
+        visibility="public",
+        route_uuid=None,
     )
     return str(task.uuid)
 
@@ -109,8 +132,16 @@ async def _add(
 async def _import(db, actor: User, ticket_uuid: str, *, quantity: int | None = 3) -> str:
     """Add a need the way a bulk import does."""
     task = await ticket_service.import_ticket_task(
-        db, actor=actor, ticket_uuid=ticket_uuid, task_type="hr", task_name="搬家具",
-        task_description=None, quantity=quantity, source="import", visibility="public", route_uuid=None,
+        db,
+        actor=actor,
+        ticket_uuid=ticket_uuid,
+        task_type="hr",
+        task_name="搬家具",
+        task_description=None,
+        quantity=quantity,
+        source="import",
+        visibility="public",
+        route_uuid=None,
     )
     return str(task.uuid)
 

@@ -47,28 +47,20 @@ async def _assign_seed_role(db, user: User, role_name: str, *, team_type: str = 
     spec = next(r for r in ROLES_DATA if r["name"] == role_name)
     # Reused when present: roles.name is unique, and a test that gives two actors different
     # roles would otherwise collide on the second one.
-    role = (
-        await db.execute(select(Role).where(Role.name == spec["name"]))
-    ).scalars().first()
+    role = (await db.execute(select(Role).where(Role.name == spec["name"]))).scalars().first()
 
     if role is None:
         role = Role(name=spec["name"], kind=spec["kind"])
         db.add(role)
         await db.flush()
         for perm, scope in spec["permissions"].items():
-            result = await db.execute(
-                select(Permission).where(Permission.key == perm.value)
-            )
+            result = await db.execute(select(Permission).where(Permission.key == perm.value))
             permission = result.scalar_one_or_none()
             if permission is None:
                 permission = Permission(key=perm.value)
                 db.add(permission)
                 await db.flush()
-            db.add(
-                RolePermissionAssign(
-                    role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-                )
-            )
+            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
 
     # A team-kind role must carry a team and a platform-kind one must not (ADR-073's CHECK).
     team = None
@@ -76,10 +68,14 @@ async def _assign_seed_role(db, user: User, role_name: str, *, team_type: str = 
         team = Team(name=f"team-for-{role_name}", type=team_type)
         db.add(team)
         await db.flush()
-    db.add(UserRoleAssign(
-        user_uuid=user.uuid, role_uuid=role.uuid,
-        team_uuid=team.uuid if team is not None else None, role_kind=spec["kind"],
-    ))
+    db.add(
+        UserRoleAssign(
+            user_uuid=user.uuid,
+            role_uuid=role.uuid,
+            team_uuid=team.uuid if team is not None else None,
+            role_kind=spec["kind"],
+        )
+    )
     # Without an active identity `get_user_permissions` returns {} — the fail-closed default
     # since feature 010, and not what these tests are exercising.
     acting_as(user, role, team)
@@ -237,16 +233,19 @@ NONE = Visibility(pii=False, detail=False, audit=False)
 
 def _audit_row(table, action, *, old=None, new=None, row_id=None, user=None):
     return AuditLog(
-        uuid=uuidlib.uuid4(), table_name=table, action=action,
-        row_id=row_id or uuidlib.uuid4(), old_values=old, new_values=new,
-        user_uuid=user, created_at=datetime(2026, 8, 21, 9, 12, tzinfo=UTC),
+        uuid=uuidlib.uuid4(),
+        table_name=table,
+        action=action,
+        row_id=row_id or uuidlib.uuid4(),
+        old_values=old,
+        new_values=new,
+        user_uuid=user,
+        created_at=datetime(2026, 8, 21, 9, 12, tzinfo=UTC),
     )
 
 
 def _render(rows, visibility, entity=TICKET, names=None):
-    return render_events(
-        build_events(rows), entity=entity, names=names or {}, visibility=visibility
-    )
+    return render_events(build_events(rows), entity=entity, names=names or {}, visibility=visibility)
 
 
 def _fields(rendered):
@@ -255,8 +254,7 @@ def _fields(rendered):
 
 def test_public_fields_need_no_extra_authority():
     """Passing *.view_history is enough for the business columns."""
-    rows = [_audit_row("tickets", "UPDATE",
-                       old={"status": "pending"}, new={"status": "in_progress"})]
+    rows = [_audit_row("tickets", "UPDATE", old={"status": "pending"}, new={"status": "in_progress"})]
 
     changes = _fields(_render(rows, NONE))
 
@@ -266,9 +264,14 @@ def test_public_fields_need_no_extra_authority():
 
 def test_contact_details_are_masked_without_view_pii():
     """Masked, not dropped: a masked value reads as "get authorized", not "no data"."""
-    rows = [_audit_row("tickets", "UPDATE",
-                       old={"contact_phone": "0912345678", "contact_name": "王小明"},
-                       new={"contact_phone": "0987654321", "contact_name": "王大明"})]
+    rows = [
+        _audit_row(
+            "tickets",
+            "UPDATE",
+            old={"contact_phone": "0912345678", "contact_name": "王小明"},
+            new={"contact_phone": "0987654321", "contact_name": "王大明"},
+        )
+    ]
 
     changes = _fields(_render(rows, NONE))
 
@@ -283,9 +286,11 @@ def test_view_detail_does_not_unmask_contact_details():
     Every role that can open a timeline holds view_detail at `all` today, so collapsing the
     two tiers would compile and pass everything else while unmasking every phone number.
     """
-    rows = [_audit_row("tickets", "UPDATE",
-                       old={"contact_phone": "0912345678"},
-                       new={"contact_phone": "0987654321"})]
+    rows = [
+        _audit_row(
+            "tickets", "UPDATE", old={"contact_phone": "0912345678"}, new={"contact_phone": "0987654321"}
+        )
+    ]
 
     changes = _fields(_render(rows, Visibility(pii=False, detail=True)))
 
@@ -294,9 +299,11 @@ def test_view_detail_does_not_unmask_contact_details():
 
 def test_contact_details_are_raw_with_view_pii():
     """In scope, the timeline shows exactly what the single-row query would show."""
-    rows = [_audit_row("tickets", "UPDATE",
-                       old={"contact_phone": "0912345678"},
-                       new={"contact_phone": "0987654321"})]
+    rows = [
+        _audit_row(
+            "tickets", "UPDATE", old={"contact_phone": "0912345678"}, new={"contact_phone": "0987654321"}
+        )
+    ]
 
     changes = _fields(_render(rows, FULL))
 
@@ -305,9 +312,14 @@ def test_contact_details_are_raw_with_view_pii():
 
 def test_a_ticket_address_is_withheld_rather_than_half_revealed():
     """ADR-142: no masker exists, and half an address would be fabricated location data."""
-    rows = [_audit_row("secondary_locations", "UPDATE",
-                       old={"county": "花蓮縣", "no": "12"},
-                       new={"county": "花蓮縣", "no": "34"})]
+    rows = [
+        _audit_row(
+            "secondary_locations",
+            "UPDATE",
+            old={"county": "花蓮縣", "no": "12"},
+            new={"county": "花蓮縣", "no": "34"},
+        )
+    ]
 
     withheld = _fields(_render(rows, NONE))["no"]
     revealed = _fields(_render(rows, FULL))["no"]
@@ -322,8 +334,7 @@ def test_a_ticket_address_follows_view_detail_not_view_pii():
     ADR-281 moved `secondaryLocation` from `ticket.view_pii` to `ticket.view_detail`; the
     timeline kept the old gate, so the two disagreed in both directions.
     """
-    rows = [_audit_row("secondary_locations", "UPDATE",
-                       old={"no": "12"}, new={"no": "34"})]
+    rows = [_audit_row("secondary_locations", "UPDATE", old={"no": "12"}, new={"no": "34"})]
 
     pii_only = _fields(_render(rows, Visibility(pii=True, detail=False)))["no"]
     detail_only = _fields(_render(rows, Visibility(pii=False, detail=True)))["no"]
@@ -347,8 +358,7 @@ def test_free_text_is_withheld_without_view_detail(table, field):
     Requesters write house numbers into descriptions; hiding the point and the address while
     the timeline still printed the text would be the "等於沒擋" ADR-281 exists to close.
     """
-    rows = [_audit_row(table, "UPDATE",
-                       old={field: "中正路 12 號二樓"}, new={field: "中正路 34 號二樓"})]
+    rows = [_audit_row(table, "UPDATE", old={field: "中正路 12 號二樓"}, new={field: "中正路 34 號二樓"})]
 
     withheld = _fields(_render(rows, Visibility(pii=True, detail=False)))[field]
     revealed = _fields(_render(rows, Visibility(pii=False, detail=True)))[field]
@@ -359,8 +369,7 @@ def test_free_text_is_withheld_without_view_detail(table, field):
 
 def test_a_station_address_needs_no_authority_at_all():
     """The same table under a station: a shelter's location is already on the public map."""
-    rows = [_audit_row("secondary_locations", "UPDATE",
-                       old={"no": "12"}, new={"no": "34"})]
+    rows = [_audit_row("secondary_locations", "UPDATE", old={"no": "12"}, new={"no": "34"})]
 
     changes = _fields(_render(rows, NONE, entity="station"))
 
@@ -369,14 +378,22 @@ def test_a_station_address_needs_no_authority_at_all():
 
 def test_geometry_never_carries_a_coordinate_even_at_the_top_tier():
     """ADR-141: WKB is unreadable and a decoded coordinate is location data."""
-    rows = [_audit_row("base_geometries", "UPDATE",
-                       old={"geometry": "0101000020E6100000AA"},
-                       new={"geometry": "0101000020E6100000BB"})]
+    rows = [
+        _audit_row(
+            "base_geometries",
+            "UPDATE",
+            old={"geometry": "0101000020E6100000AA"},
+            new={"geometry": "0101000020E6100000BB"},
+        )
+    ]
 
     changes = _fields(_render(rows, FULL, entity="station"))
 
     assert changes["geometry"] == {
-        "field": "geometry", "before": None, "after": None, "changed": True,
+        "field": "geometry",
+        "before": None,
+        "after": None,
+        "changed": True,
     }
 
 
@@ -386,8 +403,7 @@ def test_a_tickets_geometry_move_follows_view_detail_not_view_pii():
     ADR-284: the exact point is `ticket.view_detail` material (ADR-281), so the fact that it
     moved is too — view_pii alone no longer reveals it, and no longer needs to.
     """
-    rows = [_audit_row("base_geometries", "UPDATE",
-                       old={"geometry": "AA"}, new={"geometry": "BB"})]
+    rows = [_audit_row("base_geometries", "UPDATE", old={"geometry": "AA"}, new={"geometry": "BB"})]
 
     assert "geometry" not in _fields(_render(rows, Visibility(pii=True, detail=False)))
     assert "geometry" in _fields(_render(rows, Visibility(pii=False, detail=True)))
@@ -395,9 +411,14 @@ def test_a_tickets_geometry_move_follows_view_detail_not_view_pii():
 
 def test_review_columns_require_audit_view():
     """Internal review notes are oversight material, not part of the public timeline."""
-    rows = [_audit_row("ticket_tasks", "UPDATE",
-                       old={"status": "pending", "review_note": "電話打不通，疑似詐騙"},
-                       new={"status": "rejected", "review_note": "已確認為誤報"})]
+    rows = [
+        _audit_row(
+            "ticket_tasks",
+            "UPDATE",
+            old={"status": "pending", "review_note": "電話打不通，疑似詐騙"},
+            new={"status": "rejected", "review_note": "已確認為誤報"},
+        )
+    ]
 
     without = _fields(_render(rows, Visibility(pii=True, audit=False)))
     with_audit = _fields(_render(rows, FULL))
@@ -409,9 +430,14 @@ def test_review_columns_require_audit_view():
 
 def test_the_raw_payload_is_attached_only_for_audit_view():
     """The escape hatch for oversight — and invisible to everyone else."""
-    rows = [_audit_row("tickets", "UPDATE",
-                       old={"status": "a", "search_text": "舊"},
-                       new={"status": "b", "search_text": "新"})]
+    rows = [
+        _audit_row(
+            "tickets",
+            "UPDATE",
+            old={"status": "a", "search_text": "舊"},
+            new={"status": "b", "search_text": "新"},
+        )
+    ]
 
     assert "raw" not in _render(rows, Visibility(pii=True, audit=False))[0]
     assert _render(rows, FULL)[0]["raw"][0]["new_values"]["search_text"] == "新"
@@ -423,8 +449,7 @@ def test_search_text_never_appears_as_a_field_change():
     RAW remains the only way to reach them, and it is labelled as raw rather than presented
     as a curated field change.
     """
-    rows = [_audit_row("tickets", "UPDATE",
-                       old={"search_text": "舊"}, new={"search_text": "新"})]
+    rows = [_audit_row("tickets", "UPDATE", old={"search_text": "舊"}, new={"search_text": "新"})]
 
     assert _fields(_render(rows, FULL)) == {}
 
@@ -446,8 +471,7 @@ def test_the_raw_payload_never_contains_a_password_hash():
 
 def test_an_event_survives_even_when_every_change_is_filtered_away():
     """Hiding it would misrepresent the timeline as quieter than it actually was."""
-    rows = [_audit_row("tickets", "UPDATE",
-                       old={"review_note": "內部"}, new={"review_note": "內部二"})]
+    rows = [_audit_row("tickets", "UPDATE", old={"review_note": "內部"}, new={"review_note": "內部二"})]
 
     rendered = _render(rows, NONE)
 
@@ -459,8 +483,11 @@ def test_an_event_survives_even_when_every_change_is_filtered_away():
 def test_an_assignee_is_rendered_as_a_name_not_a_uuid():
     """ADR-143's single kept foreign key would be useless raw."""
     assignee = uuidlib.uuid4()
-    rows = [_audit_row("task_assignments", "INSERT",
-                       new={"task_uuid": str(uuidlib.uuid4()), "actor_uuid": str(assignee)})]
+    rows = [
+        _audit_row(
+            "task_assignments", "INSERT", new={"task_uuid": str(uuidlib.uuid4()), "actor_uuid": str(assignee)}
+        )
+    ]
 
     changes = _fields(_render(rows, FULL, names={str(assignee): ("張三", False)}))
 
@@ -472,8 +499,13 @@ def test_an_assignee_is_rendered_as_a_name_not_a_uuid():
 
 async def _ticket_owned_by(db, owner):
     ticket = Tickets(
-        uuid=uuidlib.uuid4(), property_name="request", created_by=str(owner.uuid),
-        title="需要飲用水", contact_name="王小姐", status="pending", priority="high",
+        uuid=uuidlib.uuid4(),
+        property_name="request",
+        created_by=str(owner.uuid),
+        title="需要飲用水",
+        contact_name="王小姐",
+        status="pending",
+        priority="high",
     )
     db.add(ticket)
     await db.flush()
@@ -558,10 +590,12 @@ async def test_actor_names_are_resolved_in_one_batch(db):
     somebody = User(name="李四")
     db.add(somebody)
     await db.flush()
-    events = build_events([
-        _audit_row("tickets", "UPDATE", new={"status": "a"}, user=somebody.uuid),
-        _audit_row("tickets", "UPDATE", new={"status": "b"}, user=somebody.uuid),
-    ])
+    events = build_events(
+        [
+            _audit_row("tickets", "UPDATE", new={"status": "a"}, user=somebody.uuid),
+            _audit_row("tickets", "UPDATE", new={"status": "b"}, user=somebody.uuid),
+        ]
+    )
 
     names = await resolve_actors(db, events)
 
@@ -574,15 +608,20 @@ async def test_a_removed_user_keeps_their_name_and_gains_a_flag(db):
     gone = User(name="離職者", delete_at=datetime.now(UTC))
     db.add(gone)
     await db.flush()
-    events = build_events([
-        _audit_row("tickets", "UPDATE", new={"status": "a"}, user=gone.uuid),
-    ])
+    events = build_events(
+        [
+            _audit_row("tickets", "UPDATE", new={"status": "a"}, user=gone.uuid),
+        ]
+    )
 
     names = await resolve_actors(db, events)
     rendered = render_events(events, entity=TICKET, names=names, visibility=NONE)
 
     assert rendered[0]["actor"] == {
-        "uuid": str(gone.uuid), "name": "離職者", "kind": "user", "is_removed": True,
+        "uuid": str(gone.uuid),
+        "name": "離職者",
+        "kind": "user",
+        "is_removed": True,
     }
 
 
@@ -593,8 +632,12 @@ async def _station_owned_by(db, owner):
     from app.models.geo import Station
 
     station = Station(
-        uuid=uuidlib.uuid4(), property_name="station", created_by=str(owner.uuid),
-        name="光復國小避難所", type="shelter", contact_name="王小姐",
+        uuid=uuidlib.uuid4(),
+        property_name="station",
+        created_by=str(owner.uuid),
+        name="光復國小避難所",
+        type="shelter",
+        contact_name="王小姐",
     )
     db.add(station)
     await db.flush()
@@ -609,9 +652,7 @@ async def _grant(db, user: User, perm: Perm, scope: str) -> None:
     one is active and none of the others.
     """
     identity_role = f"history-tests-{user.name}"
-    role = (
-        await db.execute(select(Role).where(Role.name == identity_role))
-    ).scalars().first()
+    role = (await db.execute(select(Role).where(Role.name == identity_role))).scalars().first()
     permission = (
         await db.execute(select(Permission).where(Permission.key == perm.value))
     ).scalars().first() or Permission(key=perm.value)
@@ -620,13 +661,10 @@ async def _grant(db, user: User, perm: Perm, scope: str) -> None:
         role = Role(name=identity_role, kind="platform")
         db.add(role)
         await db.flush()
-        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid,
-                              team_uuid=None, role_kind="platform"))
+        db.add(UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=None, role_kind="platform"))
         acting_as(user, role)
     await db.flush()
-    db.add(RolePermissionAssign(
-        role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-    ))
+    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     await db.flush()
 
 

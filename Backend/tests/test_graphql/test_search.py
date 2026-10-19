@@ -165,6 +165,7 @@ def _uuids(body, field: str) -> set[str]:
 # stations
 # ──────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_search_matches_station_name(client, seeded_stations):
     """A keyword in the name matches; unrelated stations are excluded."""
@@ -221,7 +222,10 @@ async def test_search_is_case_insensitive_for_latin_text(client, coordinator_aut
     async with test_db() as db:
         station = Station(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid, name="Hualien HQ", type="office", level=1,
+            created_by=user_uuid,
+            name="Hualien HQ",
+            type="office",
+            level=1,
         )
         db.add(station)
         await db.flush()
@@ -245,6 +249,7 @@ async def test_wildcard_in_query_is_matched_literally(client, seeded_stations):
 # tickets
 # ──────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_ticket_search_matches_title(client, seeded_tickets):
     """Ticket titles are searchable."""
@@ -261,25 +266,19 @@ async def test_ticket_search_cannot_find_by_phone(client, seeded_tickets):
     Ticket.contact_* is decorative — anyone could locate a ticket by typing its
     reporter's phone number.
     """
-    assert seeded_tickets["需要飲用水"] not in _uuids(
-        await _tickets(client, q="0912345678"), "tickets"
-    )
+    assert seeded_tickets["需要飲用水"] not in _uuids(await _tickets(client, q="0912345678"), "tickets")
 
 
 @pytest.mark.asyncio
 async def test_ticket_search_cannot_find_by_contact_name(client, seeded_tickets):
     """ADR-079: same guarantee for the reporter's name."""
-    assert seeded_tickets["需要飲用水"] not in _uuids(
-        await _tickets(client, q="王小姐"), "tickets"
-    )
+    assert seeded_tickets["需要飲用水"] not in _uuids(await _tickets(client, q="王小姐"), "tickets")
 
 
 @pytest.mark.asyncio
 async def test_ticket_search_cannot_find_by_contact_email(client, seeded_tickets):
     """ADR-079: same guarantee for the reporter's email."""
-    assert seeded_tickets["需要飲用水"] not in _uuids(
-        await _tickets(client, q="wang@example.com"), "tickets"
-    )
+    assert seeded_tickets["需要飲用水"] not in _uuids(await _tickets(client, q="wang@example.com"), "tickets")
 
 
 @pytest_asyncio.fixture
@@ -294,16 +293,27 @@ async def ticket_with_address(coordinator_auth):
     async with test_db() as db:
         ticket = Tickets(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid, title="住址不可搜工單", description="無關描述",
-            contact_name="陳先生", status="pending", priority="high", visibility="public",
+            created_by=user_uuid,
+            title="住址不可搜工單",
+            description="無關描述",
+            contact_name="陳先生",
+            status="pending",
+            priority="high",
+            visibility="public",
         )
         db.add(ticket)
         await db.flush()
         db.add(
             SecondaryLocation(
-                geometry_uuid=ticket.uuid, location_type="address",
-                county="花蓮縣", city="光復鄉", lane="中正路", alley="12巷", no="3號",
-                floor="4樓", room="A室",
+                geometry_uuid=ticket.uuid,
+                location_type="address",
+                county="花蓮縣",
+                city="光復鄉",
+                lane="中正路",
+                alley="12巷",
+                no="3號",
+                floor="4樓",
+                room="A室",
             )
         )
         await db.flush()
@@ -321,9 +331,9 @@ async def test_ticket_search_cannot_find_by_address(client, ticket_with_address)
     threat model as test_ticket_search_cannot_find_by_phone.
     """
     for term in ["中正路", "12巷", "光復鄉中正路"]:
-        assert ticket_with_address not in _uuids(
-            await _tickets(client, q=term), "tickets"
-        ), f"ticket became findable by its address via {term!r}"
+        assert ticket_with_address not in _uuids(await _tickets(client, q=term), "tickets"), (
+            f"ticket became findable by its address via {term!r}"
+        )
 
 
 @pytest.mark.asyncio
@@ -366,15 +376,21 @@ async def station_with_generator(coordinator_auth):
     async with test_db() as db:
         station = Station(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid, name="鳳林國中", description="避難收容",
-            type="shelter", level=1,
+            created_by=user_uuid,
+            name="鳳林國中",
+            description="避難收容",
+            type="shelter",
+            level=1,
         )
         db.add(station)
         await db.flush()
         db.add(
             StationProperty(
-                station_uuid=station.uuid, property_type="facility",
-                property_name="發電機", quantity=2, created_by=user_uuid,
+                station_uuid=station.uuid,
+                property_type="facility",
+                property_name="發電機",
+                quantity=2,
+                created_by=user_uuid,
             )
         )
         await db.flush()
@@ -388,14 +404,22 @@ async def station_with_address(coordinator_auth):
     async with test_db() as db:
         station = Station(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid, name="大進活動中心", type="shelter", level=1,
+            created_by=user_uuid,
+            name="大進活動中心",
+            type="shelter",
+            level=1,
         )
         db.add(station)
         await db.flush()
         db.add(
             SecondaryLocation(
-                geometry_uuid=station.uuid, location_type="address",
-                county="花蓮縣", city="鳳林鎮", lane="中正路", alley="12巷", no="3號",
+                geometry_uuid=station.uuid,
+                location_type="address",
+                county="花蓮縣",
+                city="鳳林鎮",
+                lane="中正路",
+                alley="12巷",
+                no="3號",
             )
         )
         await db.flush()
@@ -409,20 +433,29 @@ async def ticket_with_task_property(coordinator_auth):
     async with test_db() as db:
         ticket = Tickets(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid, title="現場支援需求", description="人力調度",
-            contact_name="陳先生", status="pending", priority="medium",
+            created_by=user_uuid,
+            title="現場支援需求",
+            description="人力調度",
+            contact_name="陳先生",
+            status="pending",
+            priority="medium",
         )
         db.add(ticket)
         await db.flush()
         task = TicketTask(
-            ticket_uuid=ticket.uuid, task_type="supply", task_name="物資配送",
-            status="pending", created_by=user_uuid,
+            ticket_uuid=ticket.uuid,
+            task_type="supply",
+            task_name="物資配送",
+            status="pending",
+            created_by=user_uuid,
         )
         db.add(task)
         await db.flush()
         db.add(
             TaskProperty(
-                task_uuid=task.uuid, property_name="需求品項", property_value="嬰兒奶粉",
+                task_uuid=task.uuid,
+                property_name="需求品項",
+                property_value="嬰兒奶粉",
             )
         )
         await db.flush()
@@ -468,15 +501,20 @@ async def test_station_matched_through_a_property_appears_once(client, coordinat
     async with test_db() as db:
         station = Station(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid, name="重複測試站", type="shelter", level=1,
+            created_by=user_uuid,
+            name="重複測試站",
+            type="shelter",
+            level=1,
         )
         db.add(station)
         await db.flush()
         for name in ("柴油發電機", "汽油發電機", "備用發電機"):
             db.add(
                 StationProperty(
-                    station_uuid=station.uuid, property_type="facility",
-                    property_name=name, created_by=user_uuid,
+                    station_uuid=station.uuid,
+                    property_type="facility",
+                    property_name=name,
+                    created_by=user_uuid,
                 )
             )
         await db.flush()
@@ -504,9 +542,7 @@ async def test_ticket_search_reaches_into_its_tasks(client, ticket_with_task_pro
 @pytest.mark.asyncio
 async def test_related_table_search_still_excludes_pii(client, seeded_tickets):
     """Reaching into related tables must not open a back door to contact details."""
-    assert seeded_tickets["需要飲用水"] not in _uuids(
-        await _tickets(client, q="0912345678"), "tickets"
-    )
+    assert seeded_tickets["需要飲用水"] not in _uuids(await _tickets(client, q="0912345678"), "tickets")
 
 
 @pytest.mark.asyncio
@@ -522,18 +558,26 @@ async def test_name_match_outranks_property_only_match(client, coordinator_auth)
     async with test_db() as db:
         named = Station(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid, name="排序發電機站", type="shelter", level=1,
+            created_by=user_uuid,
+            name="排序發電機站",
+            type="shelter",
+            level=1,
         )
         other = Station(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
-            created_by=user_uuid, name="排序無關站", type="shelter", level=1,
+            created_by=user_uuid,
+            name="排序無關站",
+            type="shelter",
+            level=1,
         )
         db.add_all([named, other])
         await db.flush()
         db.add(
             StationProperty(
-                station_uuid=other.uuid, property_type="facility",
-                property_name="排序發電機站", created_by=user_uuid,
+                station_uuid=other.uuid,
+                property_type="facility",
+                property_name="排序發電機站",
+                created_by=user_uuid,
             )
         )
         await db.flush()
@@ -559,8 +603,11 @@ async def test_mid_string_name_match_outranks_property_only_match(client, coordi
     # rows an identical created_at and the tiebreaker would be arbitrary.
     async with test_db() as db:
         named = Station(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=user_uuid,
-            name="花蓮縣光復鄉救災站", type="shelter", level=1,
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid,
+            name="花蓮縣光復鄉救災站",
+            type="shelter",
+            level=1,
         )
         db.add(named)
         await db.flush()
@@ -568,15 +615,20 @@ async def test_mid_string_name_match_outranks_property_only_match(client, coordi
 
     async with test_db() as db:
         other = Station(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=user_uuid,
-            name="中正路臨時站", type="shelter", level=1,
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=user_uuid,
+            name="中正路臨時站",
+            type="shelter",
+            level=1,
         )
         db.add(other)
         await db.flush()
         db.add(
             StationProperty(
-                station_uuid=other.uuid, property_type="facility",
-                property_name="光復物資調度", created_by=user_uuid,
+                station_uuid=other.uuid,
+                property_type="facility",
+                property_name="光復物資調度",
+                created_by=user_uuid,
             )
         )
         await db.flush()
@@ -620,14 +672,19 @@ async def test_paging_a_run_of_tied_rows_loses_no_row(client, coordinator_auth):
         for i in range(6):
             station = Station(
                 geometry=from_shape(Point(121.5, 25.0), srid=4326),
-                created_by=user_uuid, name=f"分頁站{i}", type="shelter", level=1,
+                created_by=user_uuid,
+                name=f"分頁站{i}",
+                type="shelter",
+                level=1,
             )
             db.add(station)
             await db.flush()
             db.add(
                 StationProperty(
-                    station_uuid=station.uuid, property_type="supply",
-                    property_name=term, created_by=user_uuid,
+                    station_uuid=station.uuid,
+                    property_type="supply",
+                    property_name=term,
+                    created_by=user_uuid,
                 )
             )
             expected.add(str(station.uuid))
@@ -639,12 +696,8 @@ async def test_paging_a_run_of_tied_rows_loses_no_row(client, coordinator_auth):
         pages.append([i["uuid"] for i in body["data"]["stations"]["items"]])
 
     first, second = pages
-    assert not set(first) & set(second), (
-        f"a row appeared on both pages: {sorted(set(first) & set(second))}"
-    )
-    assert set(first) | set(second) == expected, (
-        "paging did not cover every matching row exactly once"
-    )
+    assert not set(first) & set(second), f"a row appeared on both pages: {sorted(set(first) & set(second))}"
+    assert set(first) | set(second) == expected, "paging did not cover every matching row exactly once"
 
 
 TICKET_TASKS_Q = """
@@ -657,10 +710,13 @@ query($ticketUuid: String!, $q: String) {
 @pytest.mark.asyncio
 async def test_ticket_tasks_keyword_filter(client, ticket_with_task_property):
     """The ticketTasks query narrows by keyword on the task's own name."""
-    resp = await client.post("/graphql", json={
-        "query": TICKET_TASKS_Q,
-        "variables": {"ticketUuid": ticket_with_task_property, "q": "物資"},
-    })
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": TICKET_TASKS_Q,
+            "variables": {"ticketUuid": ticket_with_task_property, "q": "物資"},
+        },
+    )
     names = [t["taskName"] for t in resp.json()["data"]["ticketTasks"]]
     assert names == ["物資配送"]
 
@@ -668,10 +724,13 @@ async def test_ticket_tasks_keyword_filter(client, ticket_with_task_property):
 @pytest.mark.asyncio
 async def test_ticket_tasks_keyword_reaches_into_properties(client, ticket_with_task_property):
     """A task is findable through its own properties, mirroring the ticket behaviour."""
-    resp = await client.post("/graphql", json={
-        "query": TICKET_TASKS_Q,
-        "variables": {"ticketUuid": ticket_with_task_property, "q": "嬰兒奶粉"},
-    })
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": TICKET_TASKS_Q,
+            "variables": {"ticketUuid": ticket_with_task_property, "q": "嬰兒奶粉"},
+        },
+    )
     names = [t["taskName"] for t in resp.json()["data"]["ticketTasks"]]
     assert names == ["物資配送"]
 
@@ -679,8 +738,11 @@ async def test_ticket_tasks_keyword_reaches_into_properties(client, ticket_with_
 @pytest.mark.asyncio
 async def test_ticket_tasks_non_matching_keyword_returns_nothing(client, ticket_with_task_property):
     """The keyword filter actually narrows rather than being ignored."""
-    resp = await client.post("/graphql", json={
-        "query": TICKET_TASKS_Q,
-        "variables": {"ticketUuid": ticket_with_task_property, "q": "完全無關的字"},
-    })
+    resp = await client.post(
+        "/graphql",
+        json={
+            "query": TICKET_TASKS_Q,
+            "variables": {"ticketUuid": ticket_with_task_property, "q": "完全無關的字"},
+        },
+    )
     assert resp.json()["data"]["ticketTasks"] == []

@@ -183,9 +183,7 @@ async def validate_ticket(
     """
     await require_scope(actor, Perm.TICKET_ADD, db)
     if building_map_uuid:
-        geometry, secondary_location = await place_ticket(
-            db, building_map_uuid, geometry, secondary_location
-        )
+        geometry, secondary_location = await place_ticket(db, building_map_uuid, geometry, secondary_location)
     if geometry is None:
         raise ValueError("geometry or buildingMapUuid is required")
     disaster_types = await validate_disaster_types(db, disaster_types or [])

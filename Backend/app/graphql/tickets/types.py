@@ -70,9 +70,7 @@ def ticket_history_visible(info: strawberry.types.Info, ticket_uuid: str, resour
     return decided[key]
 
 
-async def _decide_ticket_scope(
-    info: strawberry.types.Info, perm: Perm, ticket_uuid: str, resource
-) -> bool:
+async def _decide_ticket_scope(info: strawberry.types.Info, perm: Perm, ticket_uuid: str, resource) -> bool:
     """resolve_scope + in_scope, like _compute_pii_in_scope. Never raises: denial is withholding."""
     user = info.context["user"]
     if user is None:
@@ -130,8 +128,7 @@ class PhotoType:
     ref_uuid: str = strawberry.field(description="UUID of the parent entity this photo is attached to")
     ref_type: str = strawberry.field(
         description=(
-            "'geometry' (attached to a ticket or station) "
-            "or 'pole' (attached to a secondary_location)"
+            "'geometry' (attached to a ticket or station) or 'pole' (attached to a secondary_location)"
         )
     )
     url: str = strawberry.field(description="Public URL of the uploaded photo")
@@ -674,9 +671,7 @@ class TicketType:
 
     def _coarse(self, info: strawberry.types.Info):
         """The `coarse_point` loader's `{point, cell}` for this ticket at its resolution."""
-        return info.context["loaders"]["coarse_point"].load(
-            (str(self.uuid), self._coarse_resolution)
-        )
+        return info.context["loaders"]["coarse_point"].load((str(self.uuid), self._coarse_resolution))
 
     @strawberry.field(
         description=(
@@ -700,8 +695,7 @@ class TicketType:
 
     @strawberry.field(
         description=(
-            "UUID of the user who submitted this ticket. Null to a caller without "
-            "ticket.view_detail here"
+            "UUID of the user who submitted this ticket. Null to a caller without ticket.view_detail here"
         )
     )
     async def created_by(self, info: strawberry.types.Info) -> str | None:
@@ -842,9 +836,7 @@ class TicketType:
         return self._immediate_danger_reported_raw if await self._triage_visible(info) else None
 
     @strawberry.field(
-        description=(
-            "Photos attached to this ticket. Empty to a caller without ticket.view_detail here"
-        )
+        description=("Photos attached to this ticket. Empty to a caller without ticket.view_detail here")
     )
     async def photos(self, info: strawberry.types.Info) -> list[PhotoType]:
         """Resolve photos attached to this ticket, or none when out of detail scope.
@@ -867,9 +859,7 @@ class TicketType:
             "without ticket.view_detail here, and null when the ticket carries no address"
         )
     )
-    async def secondary_location(
-        self, info: strawberry.types.Info
-    ) -> SecondaryLocationType | None:
+    async def secondary_location(self, info: strawberry.types.Info) -> SecondaryLocationType | None:
         """Resolve the ticket's address, or null when the caller is out of detail scope.
 
         Gated where the station's identical field is not (ADR-268): a shelter's address is
@@ -881,14 +871,10 @@ class TicketType:
         """
         if not await self._detail_visible(info):
             return None
-        return await info.context["loaders"]["secondary_location_by_geometry"].load(
-            str(self.uuid)
-        )
+        return await info.context["loaders"]["secondary_location_by_geometry"].load(str(self.uuid))
 
     @strawberry.field
-    async def disaster_details(
-        self, info: strawberry.types.Info
-    ) -> list["TicketDisasterDetailType"]:
+    async def disaster_details(self, info: strawberry.types.Info) -> list["TicketDisasterDetailType"]:
         """Resolve this ticket's disaster-specific field values.
 
         A `multi_select` field arrives as several rows sharing one `propertyName`; the caller
@@ -1113,8 +1099,7 @@ class TicketDisasterDetailType:
     )
     value: str = strawberry.field(
         description=(
-            "One selected value. Numbers arrive as strings — the config's dataType says "
-            "how to read it"
+            "One selected value. Numbers arrive as strings — the config's dataType says how to read it"
         )
     )
 

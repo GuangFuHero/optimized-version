@@ -87,12 +87,10 @@ async def _actor(redis, grants, team_uuid=None) -> tuple[str, str]:
                 permission = Permission(key=perm.value)
                 db.add(permission)
                 await db.flush()
-            db.add(RolePermissionAssign(
-                role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-            ))
-        db.add(UserRoleAssign(
-            user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid if team else None
-        ))
+            db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
+        db.add(
+            UserRoleAssign(user_uuid=user.uuid, role_uuid=role.uuid, team_uuid=team.uuid if team else None)
+        )
         return str(user.uuid), await token_for(redis, user.uuid, role, team)
 
 
@@ -105,9 +103,7 @@ async def zone_team() -> str:
         zone = TeamZone(name="Detail Zone", geometry=from_shape(ZONE_POLYGON, srid=4326))
         db.add_all([team, assigner, zone])
         await db.flush()
-        db.add(TeamZoneAssign(
-            team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)
-        ))
+        db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))
         return str(team.uuid)
 
 
@@ -129,9 +125,14 @@ async def _ticket(point: Point = INSIDE, created_by: str | None = None, **fields
             await db.flush()
             created_by = str(creator.uuid)
         ticket = Tickets(
-            geometry=from_shape(point, srid=4326), created_by=created_by,
-            title=TITLE, contact_name="王小明", status="pending",
-            priority="low", visibility="public", **fields,
+            geometry=from_shape(point, srid=4326),
+            created_by=created_by,
+            title=TITLE,
+            contact_name="王小明",
+            status="pending",
+            priority="low",
+            visibility="public",
+            **fields,
         )
         db.add(ticket)
         await db.flush()
@@ -143,35 +144,53 @@ async def _full_ticket() -> tuple[str, str]:
     uuid = await _ticket(description="中正路十二號三樓", review_note="已電話確認")
     async with db_ctx() as db:
         creator = (await db.get(Tickets, uuid)).created_by
-        db.add(SecondaryLocation(
-            geometry_uuid=uuid, location_type="address", county="花蓮縣", city="光復鄉",
-            lane="中正路", no="12號",
-        ))
+        db.add(
+            SecondaryLocation(
+                geometry_uuid=uuid,
+                location_type="address",
+                county="花蓮縣",
+                city="光復鄉",
+                lane="中正路",
+                no="12號",
+            )
+        )
         db.add(Photo(ref_uuid=uuid, ref_type="geometry", url="https://x/door.jpg", created_by=creator))
         task = TicketTask(
-            ticket_uuid=uuid, task_type="hr", task_name="清淤人力",
-            task_description="從後門進去", progress_note="鄰居說人在二樓",
-            review_note="重複單已合併", source="user", visibility="public", created_by=creator,
+            ticket_uuid=uuid,
+            task_type="hr",
+            task_name="清淤人力",
+            task_description="從後門進去",
+            progress_note="鄰居說人在二樓",
+            review_note="重複單已合併",
+            source="user",
+            visibility="public",
+            created_by=creator,
         )
         db.add(task)
         await db.flush()
-        db.add(TaskProperty(
-            task_uuid=task.uuid, property_name="skill", property_value="shovel",
-            comment="找巷口的陳先生拿鑰匙",
-        ))
+        db.add(
+            TaskProperty(
+                task_uuid=task.uuid,
+                property_name="skill",
+                property_value="shovel",
+                comment="找巷口的陳先生拿鑰匙",
+            )
+        )
         return uuid, str(task.uuid)
 
 
 async def _centre(point: Point, resolution: int = 8) -> list[float]:
     """The H3 cell centre h3-pg computes for `point` — what a coarse caller should get."""
     async with db_ctx() as db:
-        row = (await db.execute(
-            text(
-                "SELECT ST_X(c), ST_Y(c) FROM (SELECT h3_cell_to_geometry(h3_lat_lng_to_cell("
-                "ST_SetSRID(ST_MakePoint(:x, :y), 4326), :r)) AS c) s"
-            ),
-            {"x": point.x, "y": point.y, "r": resolution},
-        )).one()
+        row = (
+            await db.execute(
+                text(
+                    "SELECT ST_X(c), ST_Y(c) FROM (SELECT h3_cell_to_geometry(h3_lat_lng_to_cell("
+                    "ST_SetSRID(ST_MakePoint(:x, :y), 4326), :r)) AS c) s"
+                ),
+                {"x": point.x, "y": point.y, "r": resolution},
+            )
+        ).one()
         return [row[0], row[1]]
 
 
@@ -186,16 +205,18 @@ async def _cell(point: Point, resolution: int = 8) -> str:
 
 def _box(centre: list[float], half: float) -> dict:
     return {
-        "minLng": centre[0] - half, "maxLng": centre[0] + half,
-        "minLat": centre[1] - half, "maxLat": centre[1] + half,
+        "minLng": centre[0] - half,
+        "maxLng": centre[0] + half,
+        "minLat": centre[1] - half,
+        "maxLat": centre[1] + half,
     }
 
 
 async def _query(client, query, variables, token=None) -> dict:
     headers = auth_header(token) if token else {}
-    body = (await client.post(
-        "/graphql", json={"query": query, "variables": variables}, headers=headers
-    )).json()
+    body = (
+        await client.post("/graphql", json={"query": query, "variables": variables}, headers=headers)
+    ).json()
     assert "errors" not in body, body
     return body["data"]
 
@@ -208,8 +229,7 @@ async def _signed_in(redis, detail_scope="all", team_uuid=None) -> tuple[str, st
     """A plain account: view is public, contact details own-scoped, detail at `detail_scope`."""
     return await _actor(
         redis,
-        [(Perm.TICKET_VIEW, "all"), (Perm.TICKET_VIEW_PII, "own"),
-         (Perm.TICKET_VIEW_DETAIL, detail_scope)],
+        [(Perm.TICKET_VIEW, "all"), (Perm.TICKET_VIEW_PII, "own"), (Perm.TICKET_VIEW_DETAIL, detail_scope)],
         team_uuid,
     )
 
@@ -351,9 +371,7 @@ async def test_an_anonymous_bbox_matches_the_cell_centre_not_the_point(client):
     gap = max(abs(centre[0] - INSIDE.x), abs(centre[1] - INSIDE.y))
 
     around_centre = (await _query(client, TICKETS, {"bounds": _box(centre, gap / 2)}))["tickets"]
-    around_point = (
-        await _query(client, TICKETS, {"bounds": _box([INSIDE.x, INSIDE.y], gap / 2)})
-    )["tickets"]
+    around_point = (await _query(client, TICKETS, {"bounds": _box([INSIDE.x, INSIDE.y], gap / 2)}))["tickets"]
 
     assert [i["uuid"] for i in around_centre["items"]] == [uuid]
     assert around_centre["pageInfo"]["totalCount"] == 1
@@ -369,12 +387,10 @@ async def test_a_bbox_matches_each_row_by_the_point_its_caller_can_see(client, r
     centre = await _centre(INSIDE)
     gap = max(abs(centre[0] - INSIDE.x), abs(centre[1] - INSIDE.y))
 
-    around_point = (
-        await _query(client, TICKETS, {"bounds": _box([INSIDE.x, INSIDE.y], gap / 2)}, token)
-    )["tickets"]
-    around_centre = (
-        await _query(client, TICKETS, {"bounds": _box(centre, gap / 2)}, token)
-    )["tickets"]
+    around_point = (await _query(client, TICKETS, {"bounds": _box([INSIDE.x, INSIDE.y], gap / 2)}, token))[
+        "tickets"
+    ]
+    around_centre = (await _query(client, TICKETS, {"bounds": _box(centre, gap / 2)}, token))["tickets"]
 
     assert [i["uuid"] for i in around_point["items"]] == [mine]
     assert [i["uuid"] for i in around_centre["items"]] == [theirs]
@@ -393,10 +409,15 @@ async def test_an_anonymous_bbox_survives_a_hazardous_zone_in_the_same_box(clien
         closer = User(name="closer")
         db.add(closer)
         await db.flush()
-        db.add(HazardousZone(
-            geometry=from_shape(INSIDE.buffer(0.01), srid=4326), created_by=str(closer.uuid),
-            status="blocked", information_source="test", note=TITLE,
-        ))
+        db.add(
+            HazardousZone(
+                geometry=from_shape(INSIDE.buffer(0.01), srid=4326),
+                created_by=str(closer.uuid),
+                status="blocked",
+                information_source="test",
+                note=TITLE,
+            )
+        )
     centre = await _centre(INSIDE)
 
     page = (await _query(client, TICKETS, {"bounds": _box(centre, 0.02)}))["tickets"]
@@ -412,9 +433,7 @@ async def test_a_signed_in_bbox_matches_the_exact_point(client, redis):
     centre = await _centre(INSIDE)
     gap = max(abs(centre[0] - INSIDE.x), abs(centre[1] - INSIDE.y))
 
-    page = (
-        await _query(client, TICKETS, {"bounds": _box([INSIDE.x, INSIDE.y], gap / 2)}, token)
-    )["tickets"]
+    page = (await _query(client, TICKETS, {"bounds": _box([INSIDE.x, INSIDE.y], gap / 2)}, token))["tickets"]
 
     assert [i["uuid"] for i in page["items"]] == [uuid]
 
@@ -423,10 +442,15 @@ async def test_a_signed_in_bbox_matches_the_exact_point(client, redis):
 async def test_the_edge_table_matches_h3_pg():
     """The pre-filter margin is derived from these; a wrong one silently drops rows."""
     async with db_ctx() as db:
-        rows = (await db.execute(text(
-            "SELECT r, h3_get_hexagon_edge_length_avg(r, 'm') "
-            "FROM generate_series(0, :top) r ORDER BY r"
-        ), {"top": h3.COARSE_MAX_H3_RESOLUTION})).all()
+        rows = (
+            await db.execute(
+                text(
+                    "SELECT r, h3_get_hexagon_edge_length_avg(r, 'm') "
+                    "FROM generate_series(0, :top) r ORDER BY r"
+                ),
+                {"top": h3.COARSE_MAX_H3_RESOLUTION},
+            )
+        ).all()
 
     assert list(h3._AVG_EDGE_M) == pytest.approx([edge for _, edge in rows], rel=1e-6)
 
@@ -434,12 +458,17 @@ async def test_the_edge_table_matches_h3_pg():
 async def _near_a_vertex() -> tuple[Point, list[float]]:
     """A point 99% of the way from its cell centre to a vertex — as far as a point gets."""
     async with db_ctx() as db:
-        row = (await db.execute(text(
-            "WITH c AS (SELECT h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(:x, :y), 4326), 8) AS cell), "
-            "g AS (SELECT h3_cell_to_geometry(cell) AS centre, "
-            "ST_PointN(ST_ExteriorRing(h3_cell_to_boundary_geometry(cell)), 1) AS vertex FROM c) "
-            "SELECT ST_X(centre), ST_Y(centre), ST_X(vertex), ST_Y(vertex) FROM g"
-        ), {"x": INSIDE.x, "y": INSIDE.y})).one()
+        row = (
+            await db.execute(
+                text(
+                    "WITH c AS (SELECT h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(:x, :y), 4326), 8) AS cell), "
+                    "g AS (SELECT h3_cell_to_geometry(cell) AS centre, "
+                    "ST_PointN(ST_ExteriorRing(h3_cell_to_boundary_geometry(cell)), 1) AS vertex FROM c) "
+                    "SELECT ST_X(centre), ST_Y(centre), ST_X(vertex), ST_Y(vertex) FROM g"
+                ),
+                {"x": INSIDE.x, "y": INSIDE.y},
+            )
+        ).one()
     cx, cy, vx, vy = row
     return Point(cx + 0.99 * (vx - cx), cy + 0.99 * (vy - cy)), [cx, cy]
 
@@ -487,16 +516,22 @@ async def test_a_mutation_response_withholds_detail_like_a_read(client, redis):
     )
     uuid = await _ticket(INSIDE, description="中正路十二號三樓")
 
-    body = (await client.post("/graphql", headers=auth_header(token), json={
-        "query": """
+    body = (
+        await client.post(
+            "/graphql",
+            headers=auth_header(token),
+            json={
+                "query": """
             mutation($uuid: UUID!) {
               updateTicket(uuid: $uuid, input: {priority: "high"}) {
                 priority geometry description
               }
             }
         """,
-        "variables": {"uuid": uuid},
-    })).json()
+                "variables": {"uuid": uuid},
+            },
+        )
+    ).json()
     assert "errors" not in body, body
     ticket = body["data"]["updateTicket"]
 
@@ -573,10 +608,17 @@ async def test_task_detail_follows_the_parent_tickets_scope(client, redis):
     mine = await _ticket(INSIDE, created_by=user_uuid)
     theirs, _ = await _full_ticket()
     async with db_ctx() as db:
-        db.add(TicketTask(
-            ticket_uuid=mine, task_type="hr", task_name="搬家具", task_description="我家客廳",
-            source="user", visibility="public", created_by=user_uuid,
-        ))
+        db.add(
+            TicketTask(
+                ticket_uuid=mine,
+                task_type="hr",
+                task_name="搬家具",
+                task_description="我家客廳",
+                source="user",
+                visibility="public",
+                created_by=user_uuid,
+            )
+        )
 
     [my_task] = (await _query(client, TASKS, {"ticketUuid": mine}, token))["ticketTasks"]
     [their_task] = (await _query(client, TASKS, {"ticketUuid": theirs}, token))["ticketTasks"]
@@ -597,11 +639,11 @@ async def test_an_anonymous_search_cannot_match_withheld_text(client):
         page = (await _query(client, TICKETS, {"q": q}, token))["tickets"]
         return uuid in {i["uuid"] for i in page["items"]}
 
-    assert await found("詳情邊界")        # title
-    assert await found("清淤人力")        # task name
-    assert await found("shovel")         # task property value
+    assert await found("詳情邊界")  # title
+    assert await found("清淤人力")  # task name
+    assert await found("shovel")  # task property value
     assert not await found("中正路十二號")  # description
-    assert not await found("從後門進去")    # task description
+    assert not await found("從後門進去")  # task description
 
 
 @pytest.mark.asyncio

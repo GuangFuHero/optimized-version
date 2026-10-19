@@ -78,8 +78,12 @@ def _audit() -> FieldSpec:
 # appear under both — that is the point of the compound key.
 ENTITY_TABLES: dict[str, tuple[str, ...]] = {
     "ticket": (
-        "base_geometries", "tickets", "ticket_tasks",
-        "task_properties", "task_assignments", "secondary_locations",
+        "base_geometries",
+        "tickets",
+        "ticket_tasks",
+        "task_properties",
+        "task_assignments",
+        "secondary_locations",
     ),
     "station": ("base_geometries", "stations", "station_properties", "secondary_locations"),
 }
@@ -98,11 +102,23 @@ HISTORY_MODELS = {
 }
 
 _ADDRESS_COLUMNS = (
-    "county", "city", "lane", "alley", "no", "floor", "room",
-    "pole_id", "pole_type", "pole_note",
+    "county",
+    "city",
+    "lane",
+    "alley",
+    "no",
+    "floor",
+    "room",
+    "pole_id",
+    "pole_type",
+    "pole_note",
     # Feature 018 (ADR-249) added these five to the same table, so they follow whatever tier
     # the entity gives the rest of its address — detail on a ticket, public on a station.
-    "building_section", "space_description", "victim_space", "access_status", "landmark_note",
+    "building_section",
+    "space_description",
+    "victim_space",
+    "access_status",
+    "landmark_note",
 )
 
 _TICKET_FIELDS = {
@@ -243,8 +259,7 @@ _DISCRIMINATOR = (
     "row, so it can never appear as a change"
 )
 _SOFT_DELETE = (
-    "this is an event, not a field change — a NULL->value transition becomes event_type "
-    "DELETED (ADR-135)"
+    "this is an event, not a field change — a NULL->value transition becomes event_type DELETED (ADR-135)"
 )
 
 _GENERATED = (
@@ -265,7 +280,9 @@ _GEOMETRY_EXCLUSIONS = {
 }
 
 _ADDRESS_EXCLUSIONS = {
-    "uuid": _ID, "geometry_uuid": _FK, "pole_photo_uuid": _FK,
+    "uuid": _ID,
+    "geometry_uuid": _FK,
+    "pole_photo_uuid": _FK,
     "search_text": _GENERATED,
 }
 

@@ -85,11 +85,7 @@ async def team_assigned_to_zone() -> str:
         zone = TeamZone(name="Test Zone", geometry=from_shape(ZONE_POLYGON, srid=4326))
         db.add(zone)
         await db.flush()
-        db.add(
-            TeamZoneAssign(
-                team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)
-            )
-        )
+        db.add(TeamZoneAssign(team_uuid=team.uuid, zone_uuid=zone.uuid, assigned_by=str(assigner.uuid)))
         await db.flush()
         return str(team.uuid)
 
@@ -171,8 +167,11 @@ async def _make_task_under(ticket_uuid: str) -> str:
         await db.flush()
         task = TicketTask(
             ticket_uuid=ticket_uuid,
-            task_type="hr", task_name="Need medics",
-            quantity=2, source="user", visibility="public",
+            task_type="hr",
+            task_name="Need medics",
+            quantity=2,
+            source="user",
+            visibility="public",
             created_by=str(creator.uuid),
         )
         db.add(task)
@@ -257,12 +256,16 @@ async def test_soft_deleting_the_zone_revokes_the_teams_zone_scope(client, redis
 
     async with test_db() as db:
         zone = (
-            await db.execute(
-                select(TeamZone)
-                .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == TeamZone.uuid)
-                .where(TeamZoneAssign.team_uuid == team_assigned_to_zone)
+            (
+                await db.execute(
+                    select(TeamZone)
+                    .join(TeamZoneAssign, TeamZoneAssign.zone_uuid == TeamZone.uuid)
+                    .where(TeamZoneAssign.team_uuid == team_assigned_to_zone)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         assert zone is not None
         zone.delete_at = datetime.now(UTC)
 

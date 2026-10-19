@@ -245,18 +245,36 @@ async def test_suggestion_submit_merge_and_revoke_each_leave_an_attributed_trail
         finally:
             request_user_uuid.reset(token)
 
-    await as_user(author_id, lambda actor: suggestion_service.create_station_suggestion(
-        db, actor=actor, target_type="station_property", target_uuid=str(prop_id),
-        field_name="quantity", new_value="150", comment=None,
-    ))
-    merge = await as_user(reviewer_id, lambda actor: suggestion_service.merge_station_suggestions(
-        db, actor=actor, station_uuid=str(station_id),
-        decisions=[suggestion_service.SuggestionDecision(str(prop_id), "quantity", True, "150")],
-    ))
+    await as_user(
+        author_id,
+        lambda actor: suggestion_service.create_station_suggestion(
+            db,
+            actor=actor,
+            target_type="station_property",
+            target_uuid=str(prop_id),
+            field_name="quantity",
+            new_value="150",
+            comment=None,
+        ),
+    )
+    merge = await as_user(
+        reviewer_id,
+        lambda actor: suggestion_service.merge_station_suggestions(
+            db,
+            actor=actor,
+            station_uuid=str(station_id),
+            decisions=[suggestion_service.SuggestionDecision(str(prop_id), "quantity", True, "150")],
+        ),
+    )
     merge_id = merge.uuid
-    await as_user(reviewer_id, lambda actor: suggestion_service.revoke_station_suggestion_merge(
-        db, actor=actor, uuid=str(merge_id),
-    ))
+    await as_user(
+        reviewer_id,
+        lambda actor: suggestion_service.revoke_station_suggestion_merge(
+            db,
+            actor=actor,
+            uuid=str(merge_id),
+        ),
+    )
 
     suggestion_logs = await _logs_for(db, "station_update_suggestions")
     assert [(log.action, log.new_values["status"], log.user_uuid) for log in suggestion_logs] == [
@@ -266,7 +284,8 @@ async def test_suggestion_submit_merge_and_revoke_each_leave_an_attributed_trail
     ]
     merge_logs = await _logs_for(db, "station_suggestion_merges")
     assert [(log.action, log.new_values["status"]) for log in merge_logs] == [
-        ("INSERT", "applied"), ("UPDATE", "revoked"),
+        ("INSERT", "applied"),
+        ("UPDATE", "revoked"),
     ]
     quantities = [log.new_values["quantity"] for log in await _logs_for(db, "station_properties")]
     assert quantities[-2:] == [150, 200]
@@ -302,6 +321,4 @@ def test_every_audited_table_has_a_trigger_installed_by_some_migration():
 
     missing = [table for table in AUDITED_TABLES if table not in covered]
 
-    assert not missing, (
-        f"in AUDITED_TABLES but no migration ever attaches their trigger: {missing}"
-    )
+    assert not missing, f"in AUDITED_TABLES but no migration ever attaches their trigger: {missing}"

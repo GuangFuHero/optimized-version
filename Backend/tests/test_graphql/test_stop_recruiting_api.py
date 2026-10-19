@@ -23,15 +23,25 @@ async def _claimed_need(requester_uuid: str, volunteer_uuid: str) -> str:
     """A need for three on a fresh ticket of the requester's, with one volunteer on it."""
     async with test_db() as db:
         ticket = Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=requester_uuid,
-            title="需要清淤人力", contact_name="王小姐", status="pending", priority="high",
-            task_type="hr", visibility="public",
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=requester_uuid,
+            title="需要清淤人力",
+            contact_name="王小姐",
+            status="pending",
+            priority="high",
+            task_type="hr",
+            visibility="public",
         )
         db.add(ticket)
         await db.flush()
         task = TicketTask(
-            ticket_uuid=str(ticket.uuid), task_type="hr", task_name="清淤", quantity=3,
-            source="user", visibility="public", created_by=requester_uuid,
+            ticket_uuid=str(ticket.uuid),
+            task_type="hr",
+            task_name="清淤",
+            quantity=3,
+            source="user",
+            visibility="public",
+            created_by=requester_uuid,
         )
         db.add(task)
         await db.flush()
@@ -48,14 +58,17 @@ async def test_the_requester_stops_recruiting_for_a_need_through_graphql(client,
     task_uuid = await _claimed_need(requester_uuid, volunteer_uuid)
 
     res = await client.post(
-        "/graphql", json={"query": STOP, "variables": {"taskUuid": task_uuid}},
+        "/graphql",
+        json={"query": STOP, "variables": {"taskUuid": task_uuid}},
         headers=auth_header(requester_token),
     )
 
     assert "errors" not in res.json(), res.json()
     stopped = res.json()["data"]["stopRecruiting"]
     assert {key: stopped[key] for key in ("taskName", "status", "quantity")} == {
-        "taskName": "清淤", "status": "fulfilled", "quantity": 1,
+        "taskName": "清淤",
+        "status": "fulfilled",
+        "quantity": 1,
     }
     assert stopped["recruitingStoppedAt"] is not None
 

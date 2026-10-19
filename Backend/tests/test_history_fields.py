@@ -62,8 +62,7 @@ def test_classification_never_names_a_column_that_does_not_exist(entity, table):
     columns = {c.name for c in HISTORY_MODELS[table].__table__.columns}
     key = (entity, table)
     named = set(FIELD_TIERS.get(key, {})) | set(EXCLUDED.get(key, {}))
-    assert named - columns == set(), (
-        f"{entity}/{table} 分類到不存在的欄位: {sorted(named - columns)}")
+    assert named - columns == set(), f"{entity}/{table} 分類到不存在的欄位: {sorted(named - columns)}"
 
 
 @pytest.mark.parametrize("key", sorted(EXCLUDED))

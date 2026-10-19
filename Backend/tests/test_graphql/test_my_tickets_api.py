@@ -25,16 +25,27 @@ async def _filed(requester_uuid: str, volunteer_uuid: str) -> None:
     """A ticket of the requester's: 清淤 for three with one volunteer on it, 搬家具 filled."""
     async with graphql_db() as db:
         ticket = Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=requester_uuid,
-            title="一樓客廳積泥需要幫忙清", contact_name="王阿嬤", status="in_progress",
-            priority="medium", task_type="hr", visibility="public",
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=requester_uuid,
+            title="一樓客廳積泥需要幫忙清",
+            contact_name="王阿嬤",
+            status="in_progress",
+            priority="medium",
+            task_type="hr",
+            visibility="public",
         )
         db.add(ticket)
         await db.flush()
         for name, quantity, status in (("清淤", 3, "pending"), ("搬家具", 1, "fulfilled")):
             task = TicketTask(
-                ticket_uuid=str(ticket.uuid), task_type="hr", task_name=name, quantity=quantity,
-                status=status, source="user", visibility="public", created_by=requester_uuid,
+                ticket_uuid=str(ticket.uuid),
+                task_type="hr",
+                task_name=name,
+                quantity=quantity,
+                status=status,
+                source="user",
+                visibility="public",
+                created_by=requester_uuid,
             )
             db.add(task)
             await db.flush()

@@ -39,7 +39,10 @@ class Tickets(BaseGeometry):
     # and PostgreSQL array equality is order-sensitive, so {flood,fire} and {fire,flood}
     # would otherwise read as different disasters.
     disaster_types: Mapped[list[str]] = mapped_column(
-        ARRAY(String), server_default=text("'{}'"), default=list, nullable=False,
+        ARRAY(String),
+        server_default=text("'{}'"),
+        default=list,
+        nullable=False,
         comment="災害型別集合，參照 disaster_types.key；已排序去重",
     )
     # Reporter-supplied triage flags (feature 018). Nullable with no default: "nobody has

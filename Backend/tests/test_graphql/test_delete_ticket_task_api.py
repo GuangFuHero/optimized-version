@@ -26,16 +26,26 @@ async def _need(requester_uuid: str) -> str:
     """One of two needs on a fresh ticket of the requester's."""
     async with graphql_db() as db:
         ticket = Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=requester_uuid,
-            title="需要清淤人力", contact_name="王小姐", status="pending", priority="high",
-            task_type="hr", visibility="public",
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=requester_uuid,
+            title="需要清淤人力",
+            contact_name="王小姐",
+            status="pending",
+            priority="high",
+            task_type="hr",
+            visibility="public",
         )
         db.add(ticket)
         await db.flush()
         tasks = [
             TicketTask(
-                ticket_uuid=str(ticket.uuid), task_type="hr", task_name=name, quantity=3,
-                source="user", visibility="public", created_by=requester_uuid,
+                ticket_uuid=str(ticket.uuid),
+                task_type="hr",
+                task_name=name,
+                quantity=3,
+                source="user",
+                visibility="public",
+                created_by=requester_uuid,
             )
             for name in ("清淤", "搬家具")
         ]
@@ -51,7 +61,8 @@ async def test_the_requester_deletes_a_need_through_graphql(client, redis):
     task_uuid = await _need(requester_uuid)
 
     res = await client.post(
-        "/graphql", json={"query": DELETE, "variables": {"uuid": task_uuid}},
+        "/graphql",
+        json={"query": DELETE, "variables": {"uuid": task_uuid}},
         headers=auth_header(requester_token),
     )
 

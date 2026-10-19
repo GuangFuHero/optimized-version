@@ -41,9 +41,7 @@ async def test_ensure_role_grant_inserts_when_absent(db_session):
 async def test_ensure_role_grant_never_overwrites_existing(db_session):
     """An existing grant's scope is left untouched (runtime edit survives re-seed)."""
     role, perm = await _role_and_perm(db_session)
-    db_session.add(
-        RolePermissionAssign(role_uuid=role.uuid, permission_uuid=perm.uuid, scope="all")
-    )
+    db_session.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=perm.uuid, scope="all"))
     await db_session.flush()
 
     created = await ensure_role_grant(db_session, role=role, permission=perm, scope="own")
@@ -122,6 +120,7 @@ def test_team_roles_reach_stations_by_team_not_zone():
     Exact dicts rather than "no zone anywhere", so a capability quietly dropped from a role
     fails here too.
     """
+
     def station_grants(role_name: str) -> dict[str, str]:
         return {
             perm.value: scope
@@ -188,7 +187,11 @@ def test_who_claimed_a_need_stays_with_the_requester_and_coordinators():
 
     scopes = {spec["name"]: spec["permissions"].get(Perm.TICKET_VIEW_HISTORY) for spec in ROLES_DATA}
     assert scopes == {
-        "user": "own", "data_auditor": "all", "super_admin": "all", "admin": "zone", "member": "zone",
+        "user": "own",
+        "data_auditor": "all",
+        "super_admin": "all",
+        "admin": "zone",
+        "member": "zone",
     }
 
 
@@ -199,5 +202,9 @@ def test_reviewing_tickets_and_needs_is_the_back_offices():
 
     scopes = {spec["name"]: spec["permissions"].get(Perm.TICKET_REVIEW) for spec in ROLES_DATA}
     assert scopes == {
-        "user": None, "data_auditor": "all", "super_admin": "all", "admin": "zone", "member": "zone",
+        "user": None,
+        "data_auditor": "all",
+        "super_admin": "all",
+        "admin": "zone",
+        "member": "zone",
     }

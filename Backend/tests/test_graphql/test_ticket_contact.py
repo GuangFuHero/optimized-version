@@ -42,16 +42,27 @@ async def _ticket(created_by: str | None = None) -> tuple[str, str]:
             await db.flush()
             created_by = str(someone.uuid)
         ticket = Tickets(
-            geometry=from_shape(Point(121.5, 25.0), srid=4326), created_by=created_by,
-            title="一樓積泥", contact_name="王小明", contact_phone="0912345678",
-            contact_email="wang@example.com", person_trapped_reported="yes",
-            status="pending", priority="high", visibility="public",
+            geometry=from_shape(Point(121.5, 25.0), srid=4326),
+            created_by=created_by,
+            title="一樓積泥",
+            contact_name="王小明",
+            contact_phone="0912345678",
+            contact_email="wang@example.com",
+            person_trapped_reported="yes",
+            status="pending",
+            priority="high",
+            visibility="public",
         )
         db.add(ticket)
         await db.flush()
         task = TicketTask(
-            ticket_uuid=str(ticket.uuid), task_type="hr", task_name="清淤", quantity=5,
-            source="user", visibility="public", created_by=created_by,
+            ticket_uuid=str(ticket.uuid),
+            task_type="hr",
+            task_name="清淤",
+            quantity=5,
+            source="user",
+            visibility="public",
+            created_by=created_by,
         )
         db.add(task)
         await db.flush()

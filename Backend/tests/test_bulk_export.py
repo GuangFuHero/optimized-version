@@ -57,17 +57,19 @@ async def _grant(db, user: User, perm: Perm, scope: str, role_name: str, *, team
         await db.refresh(team)
     kind = "team" if team is not None else "platform"
     identity_role = f"bulk-tests-{user.name}"
-    role = (
-        await db.execute(select(Role).where(Role.name == identity_role))
-    ).scalar_one_or_none()
+    role = (await db.execute(select(Role).where(Role.name == identity_role))).scalar_one_or_none()
     if role is None:
         role = Role(name=identity_role, kind=kind)
         db.add(role)
         await db.flush()
-        db.add(UserRoleAssign(
-            user_uuid=user.uuid, role_uuid=role.uuid,
-            team_uuid=team.uuid if team is not None else None, role_kind=kind,
-        ))
+        db.add(
+            UserRoleAssign(
+                user_uuid=user.uuid,
+                role_uuid=role.uuid,
+                team_uuid=team.uuid if team is not None else None,
+                role_kind=kind,
+            )
+        )
         acting_as(user, role, team)
     db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     await db.flush()
@@ -153,15 +155,21 @@ async def _ticket_with_task(db, *, title: str, point: Point, creator: User, phon
 
 
 async def _configs(db) -> None:
-    db.add(StationPropertyConfig(
-        station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
-    ))
-    db.add(StationPropertyConfig(
-        station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
-    ))
-    db.add(TaskPropertyConfig(
-        task_type="rescue", property_name="people_count", data_type="number", enum_options=None
-    ))
+    db.add(
+        StationPropertyConfig(
+            station_type="shelter", property_name="capacity_total", data_type="number", enum_options=None
+        )
+    )
+    db.add(
+        StationPropertyConfig(
+            station_type="shelter", property_name="pet_friendly", data_type="boolean", enum_options=None
+        )
+    )
+    db.add(
+        TaskPropertyConfig(
+            task_type="rescue", property_name="people_count", data_type="number", enum_options=None
+        )
+    )
     await db.flush()
 
 
@@ -346,8 +354,12 @@ async def test_ticket_export_writes_one_row_per_task(db):
     ticket, _ = await _ticket_with_task(db, title="求救", point=IN_ZONE, creator=actor)
     db.add(
         TicketTask(
-            ticket_uuid=ticket.uuid, task_type="rescue", task_name="第二個任務",
-            source="user", visibility="public", created_by=str(actor.uuid),
+            ticket_uuid=ticket.uuid,
+            task_type="rescue",
+            task_name="第二個任務",
+            source="user",
+            visibility="public",
+            created_by=str(actor.uuid),
         )
     )
     await db.flush()

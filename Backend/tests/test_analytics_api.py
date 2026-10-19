@@ -57,11 +57,7 @@ async def _seeded_user(db, redis, *perms: Perm, scope: str = "all") -> tuple[str
         permission = Permission(key=perm.value)
         db.add(permission)
         await db.flush()
-        db.add(
-            RolePermissionAssign(
-                role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-            )
-        )
+        db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     user = User(name="analytics tester")
     db.add(user)
     await db.flush()
@@ -135,9 +131,7 @@ async def test_invalid_timezone_is_a_400(client, db_session, tz, redis):
     unknown ones. Only the latter was caught, so `?tz=` (an easy frontend accident) 500'd.
     """
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(
-        TICKETS_URL, params={"y": "total_tickets", "tz": tz}, headers=headers
-    )
+    res = await client.get(TICKETS_URL, params={"y": "total_tickets", "tz": tz}, headers=headers)
     assert res.status_code == 400
     assert "timezone" in res.json()["detail"].lower()
 
@@ -146,9 +140,7 @@ async def test_invalid_timezone_is_a_400(client, db_session, tz, redis):
 async def test_valid_timezone_is_accepted(client, db_session, redis):
     """Control for the above — a real IANA name still works."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(
-        TICKETS_URL, params={"y": "total_tickets", "tz": "Asia/Taipei"}, headers=headers
-    )
+    res = await client.get(TICKETS_URL, params={"y": "total_tickets", "tz": "Asia/Taipei"}, headers=headers)
     assert res.status_code == 200
 
 
@@ -230,12 +222,22 @@ async def test_catalog_needs_no_domain_permission(client, db_session, redis):
     # Named rather than counted, so adding a metric doesn't fail this test for no reason —
     # but a metric silently disappearing from the frontend's dropdowns still does.
     assert set(body["tickets"]) == {
-        "total_tickets", "ongoing_tickets", "unassigned_tickets", "completed_tickets",
-        "canceled_tickets", "completion_rate", "age_distribution", "time_to_completion",
-        "net_backlog_change", "task_completion_distribution", "duplicate_count",
+        "total_tickets",
+        "ongoing_tickets",
+        "unassigned_tickets",
+        "completed_tickets",
+        "canceled_tickets",
+        "completion_rate",
+        "age_distribution",
+        "time_to_completion",
+        "net_backlog_change",
+        "task_completion_distribution",
+        "duplicate_count",
     }
     assert set(body["stations"]) == {
-        "station_count", "station_status_count", "station_freshness_trend",
+        "station_count",
+        "station_status_count",
+        "station_freshness_trend",
     }
     # These two fields are how the frontend keeps duplicate_count's cost under control
     # without waiting for a 400 — see chart_render.CATALOG.
@@ -292,8 +294,12 @@ async def test_station_status_count_always_groups_by_status(client, db_session, 
         db_session.add(
             Station(
                 geometry=from_shape(Point(121.5, 25.0), srid=4326),
-                created_by=user_uuid, level=1, source="user", visibility="public",
-                type="shelter", operational_status=operational_status,
+                created_by=user_uuid,
+                level=1,
+                source="user",
+                visibility="public",
+                type="shelter",
+                operational_status=operational_status,
             )
         )
     await db_session.commit()
@@ -324,8 +330,12 @@ async def test_ticket_chart_counts_only_tickets_in_the_callers_scope(client, db_
             Tickets(
                 geometry=from_shape(Point(121.5, 25.0), srid=4326),
                 created_by=owner,
-                title="t", contact_name="c", status="pending", priority="high",
-                task_type="rescue", visibility="public",
+                title="t",
+                contact_name="c",
+                status="pending",
+                priority="high",
+                task_type="rescue",
+                visibility="public",
             )
         )
     await db_session.commit()
@@ -400,9 +410,7 @@ async def test_style_param_overrides_the_defaults(client, db_session, redis):
 async def test_bad_style_is_a_400(client, db_session, redis, style):
     """Undecodable, unknown-field, non-hex, or empty-palette styles are the caller's error."""
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(
-        TICKETS_URL, params={"y": "total_tickets", "style": style}, headers=headers
-    )
+    res = await client.get(TICKETS_URL, params={"y": "total_tickets", "style": style}, headers=headers)
     assert res.status_code == 400
     assert "style" in res.json()["detail"]
 
@@ -424,15 +432,17 @@ async def test_category_axis_shows_display_names(client, db_session, redis):
         Tickets(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
             created_by=user_uuid,
-            title="t", contact_name="c", status="pending", priority="high",
-            task_type="rescue", visibility="public",
+            title="t",
+            contact_name="c",
+            status="pending",
+            priority="high",
+            task_type="rescue",
+            visibility="public",
         )
     )
     await db_session.commit()
 
-    res = await client.get(
-        TICKETS_URL, params={"y": "total_tickets", "x": "category"}, headers=headers
-    )
+    res = await client.get(TICKETS_URL, params={"y": "total_tickets", "x": "category"}, headers=headers)
     assert res.status_code == 200
     bar = res.json()["data"][0]
     assert bar["x"] == ["搜救"]
@@ -468,8 +478,12 @@ async def test_value_returns_the_aggregate_within_the_callers_scope(client, db_s
             Tickets(
                 geometry=from_shape(Point(121.5, 25.0), srid=4326),
                 created_by=owner,
-                title="t", contact_name="c", status="pending", priority="high",
-                task_type="rescue", visibility="public",
+                title="t",
+                contact_name="c",
+                status="pending",
+                priority="high",
+                task_type="rescue",
+                visibility="public",
             )
         )
     await db_session.commit()
@@ -494,16 +508,25 @@ async def test_value_of_completion_rate_is_a_percentage(client, db_session, redi
         Tickets(
             geometry=from_shape(Point(121.5, 25.0), srid=4326),
             created_by=user_uuid,
-            title="t", contact_name="c", status="pending", priority="high",
-            task_type="rescue", visibility="public",
+            title="t",
+            contact_name="c",
+            status="pending",
+            priority="high",
+            task_type="rescue",
+            visibility="public",
         )
         for _ in range(2)
     )
     db_session.add_all([open_ticket, done_ticket])
     await db_session.flush()
     task = TicketTask(
-        ticket_uuid=done_ticket.uuid, task_type="rescue", task_name="task",
-        source="user", visibility="public", created_by=user_uuid, status="fulfilled",
+        ticket_uuid=done_ticket.uuid,
+        task_type="rescue",
+        task_name="task",
+        source="user",
+        visibility="public",
+        created_by=user_uuid,
+        status="fulfilled",
     )
     db_session.add(task)
     await db_session.flush()
@@ -550,6 +573,7 @@ async def test_a_render_bug_is_not_reported_as_a_client_error(client, db_session
     The handler used to wrap the whole query-and-render chain in `except ValueError`, so an
     internal failure came back as the caller's mistake with the raw message attached.
     """
+
     def _boom(*args, **kwargs):
         raise ValueError("internal render bug")
 
@@ -571,9 +595,7 @@ async def test_out_of_range_end_date_is_a_400(client, db_session, url, redis):
     """
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW, Perm.STATION_VIEW)
     y = "total_tickets" if url == TICKETS_URL else "station_count"
-    res = await client.get(
-        url, params={"y": y, "end_date": "9999-12-31"}, headers=headers
-    )
+    res = await client.get(url, params={"y": y, "end_date": "9999-12-31"}, headers=headers)
     assert res.status_code == 400
     assert "end_date" in res.json()["detail"]
 
@@ -627,9 +649,7 @@ async def test_undersized_figure_is_rejected(client, db_session, param, value, r
     plotly unguarded and 500'd. Now bounded at the framework edge, like the enum params.
     """
     headers = await _user_with_perms(db_session, redis, Perm.TICKET_VIEW)
-    res = await client.get(
-        TICKETS_URL, params={"y": "total_tickets", param: value}, headers=headers
-    )
+    res = await client.get(TICKETS_URL, params={"y": "total_tickets", param: value}, headers=headers)
     assert res.status_code == 422
 
 
@@ -649,8 +669,12 @@ def _ticket(owner: str, task_type: str | None = "rescue") -> Tickets:
     return Tickets(
         geometry=from_shape(Point(121.5, 25.0), srid=4326),
         created_by=owner,
-        title="t", contact_name="c", status="pending", priority="high",
-        task_type=task_type, visibility="public",
+        title="t",
+        contact_name="c",
+        status="pending",
+        priority="high",
+        task_type=task_type,
+        visibility="public",
     )
 
 
@@ -732,8 +756,13 @@ async def test_data_completion_rate_is_a_percentage(client, db_session, redis):
     db_session.add_all([open_ticket, done_ticket])
     await db_session.flush()
     task = TicketTask(
-        ticket_uuid=done_ticket.uuid, task_type="rescue", task_name="task",
-        source="user", visibility="public", created_by=user_uuid, status="fulfilled",
+        ticket_uuid=done_ticket.uuid,
+        task_type="rescue",
+        task_name="task",
+        source="user",
+        visibility="public",
+        created_by=user_uuid,
+        status="fulfilled",
     )
     db_session.add(task)
     await db_session.flush()
@@ -814,8 +843,13 @@ async def test_data_durations_are_days_as_numbers(client, db_session, redis):
     db_session.add(ticket)
     await db_session.flush()
     task = TicketTask(
-        ticket_uuid=ticket.uuid, task_type="rescue", task_name="task",
-        source="user", visibility="public", created_by=user_uuid, status="fulfilled",
+        ticket_uuid=ticket.uuid,
+        task_type="rescue",
+        task_name="task",
+        source="user",
+        visibility="public",
+        created_by=user_uuid,
+        status="fulfilled",
     )
     task.created_at = datetime.fromisoformat("2026-08-01T00:00:00+00:00")
     task.completed_at = datetime.fromisoformat("2026-08-02T12:00:00+00:00")

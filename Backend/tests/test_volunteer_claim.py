@@ -64,14 +64,24 @@ async def _need(db, *, quantity: int | None, status: str = "pending") -> TicketT
     db.add(requester)
     await db.flush()
     ticket = Tickets(
-        uuid=uuidlib.uuid4(), property_name="request", created_by=str(requester.uuid),
-        title="需要清淤人力", contact_name="王小姐", status="pending", priority="high",
+        uuid=uuidlib.uuid4(),
+        property_name="request",
+        created_by=str(requester.uuid),
+        title="需要清淤人力",
+        contact_name="王小姐",
+        status="pending",
+        priority="high",
     )
     db.add(ticket)
     await db.flush()
     task = TicketTask(
-        uuid=uuidlib.uuid4(), ticket_uuid=str(ticket.uuid), task_type="hr",
-        task_name="清淤", quantity=quantity, status=status, created_by=str(requester.uuid),
+        uuid=uuidlib.uuid4(),
+        ticket_uuid=str(ticket.uuid),
+        task_type="hr",
+        task_name="清淤",
+        quantity=quantity,
+        status=status,
+        created_by=str(requester.uuid),
     )
     db.add(task)
     await db.flush()
@@ -245,6 +255,7 @@ async def test_two_volunteers_racing_for_the_last_place_get_one_claim(db, monkey
     engines = [create_async_engine(TEST_DB_URL) for _ in range(2)]
     sessions = [sessionmaker(engine, class_=AsyncSession, expire_on_commit=True)() for engine in engines]
     try:
+
         async def claim(session, user_uuid):
             actor = await session.get(User, user_uuid)
             actor.active_identity = identities[user_uuid]
@@ -524,8 +535,13 @@ async def _requester_of(db, task_uuid: str) -> User:
 async def _second_need(db, first: TicketTask, name: str, status: str = "pending") -> TicketTask:
     """Another need on the same ticket as `first`."""
     task = TicketTask(
-        uuid=uuidlib.uuid4(), ticket_uuid=first.ticket_uuid, task_type="hr", task_name=name,
-        quantity=5, status=status, created_by=first.created_by,
+        uuid=uuidlib.uuid4(),
+        ticket_uuid=first.ticket_uuid,
+        task_type="hr",
+        task_name=name,
+        quantity=5,
+        status=status,
+        created_by=first.created_by,
     )
     db.add(task)
     await db.flush()

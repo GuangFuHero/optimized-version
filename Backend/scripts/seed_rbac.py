@@ -44,11 +44,11 @@ ROLES_DATA = [
             Perm.MAP_VIEW: "all",
             Perm.STATION_VIEW: "all",
             Perm.STATION_VIEW_PII: "own",  # only your own station's contact info; others masked
-            Perm.STATION_ADD: "all",     # ADR-049: anyone (incl. citizens) can register a station
+            Perm.STATION_ADD: "all",  # ADR-049: anyone (incl. citizens) can register a station
             Perm.STATION_CONTRIBUTE: "all",  # open crowd-sourcing: property/rating on any station
             Perm.STATION_EDIT: "own",
             Perm.STATION_DELETE: "own",
-            Perm.TICKET_VIEW: "all",      # help-request board is public (ADR-027)
+            Perm.TICKET_VIEW: "all",  # help-request board is public (ADR-027)
             # ADR-286: the two triage answers to anyone signed in. The contact details also take
             # view_history or a claim on one of the ticket's needs, which the code asks for:
             # volunteers could not reach the person they were going to help.
@@ -65,7 +65,7 @@ ROLES_DATA = [
             Perm.TICKET_ADD: "all",
             Perm.TICKET_EDIT: "own",
             Perm.TICKET_DELETE: "own",
-            Perm.TICKET_ASSIGN: "own",    # volunteer self-signup (see app/services/ticket.py)
+            Perm.TICKET_ASSIGN: "own",  # volunteer self-signup (see app/services/ticket.py)
             # Feature 019: the 申請成為後台人員 entry exists for this account only.
             Perm.ROLE_REQUEST_ADD: "all",
         },
@@ -111,24 +111,61 @@ ROLES_DATA = [
         "permissions": dict.fromkeys(
             [
                 Perm.MAP_VIEW,
-                Perm.STATION_VIEW, Perm.STATION_VIEW_PII, Perm.STATION_VIEW_HISTORY,
-                Perm.STATION_ADD, Perm.STATION_CONTRIBUTE, Perm.STATION_EDIT,
-                Perm.STATION_DELETE, Perm.STATION_REVIEW, Perm.STATION_ASSIGN, Perm.STATION_REVOKE,
-                Perm.TICKET_VIEW, Perm.TICKET_VIEW_PII, Perm.TICKET_VIEW_DETAIL,
-                Perm.TICKET_VIEW_HISTORY, Perm.TICKET_ADD, Perm.TICKET_EDIT,
-                Perm.TICKET_DELETE, Perm.TICKET_ASSIGN, Perm.TICKET_REVIEW,
-                Perm.FIELD_VIEW, Perm.FIELD_ADD, Perm.FIELD_EDIT, Perm.FIELD_DELETE,
-                Perm.ANN_VIEW, Perm.ANN_VIEW_ADMIN, Perm.ANN_PUBLISH, Perm.ANN_EDIT,
+                Perm.STATION_VIEW,
+                Perm.STATION_VIEW_PII,
+                Perm.STATION_VIEW_HISTORY,
+                Perm.STATION_ADD,
+                Perm.STATION_CONTRIBUTE,
+                Perm.STATION_EDIT,
+                Perm.STATION_DELETE,
+                Perm.STATION_REVIEW,
+                Perm.STATION_ASSIGN,
+                Perm.STATION_REVOKE,
+                Perm.TICKET_VIEW,
+                Perm.TICKET_VIEW_PII,
+                Perm.TICKET_VIEW_DETAIL,
+                Perm.TICKET_VIEW_HISTORY,
+                Perm.TICKET_ADD,
+                Perm.TICKET_EDIT,
+                Perm.TICKET_DELETE,
+                Perm.TICKET_ASSIGN,
+                Perm.TICKET_REVIEW,
+                Perm.FIELD_VIEW,
+                Perm.FIELD_ADD,
+                Perm.FIELD_EDIT,
+                Perm.FIELD_DELETE,
+                Perm.ANN_VIEW,
+                Perm.ANN_VIEW_ADMIN,
+                Perm.ANN_PUBLISH,
+                Perm.ANN_EDIT,
                 Perm.ANN_DELETE,
-                Perm.PREDEP_VIEW, Perm.PREDEP_PUBLISH, Perm.PREDEP_EDIT, Perm.PREDEP_DELETE,
-                Perm.USER_VIEW, Perm.USER_ADD, Perm.USER_EDIT, Perm.USER_DELETE,
-                Perm.RBAC_VIEW, Perm.RBAC_ASSIGN, Perm.RBAC_EDIT, Perm.AUDIT_VIEW,
+                Perm.PREDEP_VIEW,
+                Perm.PREDEP_PUBLISH,
+                Perm.PREDEP_EDIT,
+                Perm.PREDEP_DELETE,
+                Perm.USER_VIEW,
+                Perm.USER_ADD,
+                Perm.USER_EDIT,
+                Perm.USER_DELETE,
+                Perm.RBAC_VIEW,
+                Perm.RBAC_ASSIGN,
+                Perm.RBAC_EDIT,
+                Perm.AUDIT_VIEW,
                 Perm.ROLE_REQUEST_REVIEW,
-                Perm.TEAM_VIEW, Perm.TEAM_EDIT, Perm.TEAM_MEMBER_MANAGE,
-                Perm.ZONE_VIEW, Perm.ZONE_ADD, Perm.ZONE_EDIT, Perm.ZONE_ASSIGN, Perm.ZONE_DELETE,
-                Perm.PROJECT_VIEW, Perm.PROJECT_EDIT,
-                Perm.STATION_EXPORT, Perm.STATION_IMPORT,
-                Perm.TICKET_EXPORT, Perm.TICKET_IMPORT,
+                Perm.TEAM_VIEW,
+                Perm.TEAM_EDIT,
+                Perm.TEAM_MEMBER_MANAGE,
+                Perm.ZONE_VIEW,
+                Perm.ZONE_ADD,
+                Perm.ZONE_EDIT,
+                Perm.ZONE_ASSIGN,
+                Perm.ZONE_DELETE,
+                Perm.PROJECT_VIEW,
+                Perm.PROJECT_EDIT,
+                Perm.STATION_EXPORT,
+                Perm.STATION_IMPORT,
+                Perm.TICKET_EXPORT,
+                Perm.TICKET_IMPORT,
             ],
             "all",
         ),
@@ -228,29 +265,27 @@ ROLES_DATA = [
 ]
 
 
-async def ensure_role_grant(
-    db: AsyncSession, *, role: Role, permission: Permission, scope: str
-) -> bool:
+async def ensure_role_grant(db: AsyncSession, *, role: Role, permission: Permission, scope: str) -> bool:
     """Insert a role→permission grant only when it is missing (ADR-055 idempotent bootstrap).
 
     Never touches an existing grant: runtime edits made via /admin/rbac survive re-seeding.
     Returns True when a new grant was inserted, False when one already existed.
     """
     existing = (
-        await db.execute(
-            select(RolePermissionAssign).where(
-                RolePermissionAssign.role_uuid == role.uuid,
-                RolePermissionAssign.permission_uuid == permission.uuid,
+        (
+            await db.execute(
+                select(RolePermissionAssign).where(
+                    RolePermissionAssign.role_uuid == role.uuid,
+                    RolePermissionAssign.permission_uuid == permission.uuid,
+                )
             )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if existing is not None:
         return False
-    db.add(
-        RolePermissionAssign(
-            role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope
-        )
-    )
+    db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
     print(f"為角色 {role.name} 授予 {permission.key} ({scope})")
     return True
 
