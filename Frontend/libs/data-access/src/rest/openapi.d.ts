@@ -347,7 +347,8 @@ export interface paths {
      * @description Finish a sign-in: check it is this browser's, exchange the code, check the token, sign in.
      *
      *     The provider's redirect, so no `Origin` to check: the state does that job, and it is checked first.
-     *     It must match the browser's `{p}_oauth` cookie and still be on record, and is spent on the spot.
+     *     It must match the browser's `{p}_oauth` cookie and still be on record, and is spent on the spot. A
+     *     state that does not match leaves the cookie alone, as a refused start does.
      */
     get: operations['oauth_callback_api_v1_auth_oauth__provider__callback_get'];
     put?: never;

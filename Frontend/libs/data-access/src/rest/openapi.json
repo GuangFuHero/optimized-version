@@ -611,7 +611,7 @@
           "認證系統"
         ],
         "summary": "Oauth Callback",
-        "description": "Finish a sign-in: check it is this browser's, exchange the code, check the token, sign in.\n\nThe provider's redirect, so no `Origin` to check: the state does that job, and it is checked first.\nIt must match the browser's `{p}_oauth` cookie and still be on record, and is spent on the spot.",
+        "description": "Finish a sign-in: check it is this browser's, exchange the code, check the token, sign in.\n\nThe provider's redirect, so no `Origin` to check: the state does that job, and it is checked first.\nIt must match the browser's `{p}_oauth` cookie and still be on record, and is spent on the spot. A\nstate that does not match leaves the cookie alone, as a refused start does.",
         "operationId": "oauth_callback_api_v1_auth_oauth__provider__callback_get",
         "parameters": [
           {
