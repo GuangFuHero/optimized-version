@@ -98,6 +98,7 @@ export type {
 } from './point-share';
 
 export { AnnouncementPage } from './admin/announcement';
+export { DashboardPage } from './admin/dashboard';
 export { BackOfficePlaceholder } from './role-request';
 export {
   AdminErrorPage,
