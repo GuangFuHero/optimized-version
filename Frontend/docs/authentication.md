@@ -60,11 +60,11 @@
 
 後端的 401 一律是 `{ "detail": …, "code": … }`。proxy 只處理**有帶 `{p}_at`** 的請求：
 
-| code                                         | proxy 做什麼                                                                           |
-| -------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `access_token_expired`、`access_token_stale` | refresh 一次，用新的 cookie 重送原本的請求，把新的 cookie 連同重送的回應一起交給瀏覽器 |
-| `session_expired`、`credentials_invalid`     | 回應加上 `x-wg-session: expired`。後端在同一個回應裡已經清掉 cookie                    |
-| 其他                                         | 原樣轉回                                                                               |
+| code                                                         | proxy 做什麼                                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `access_token_expired`、`access_token_stale`                 | refresh 一次，用新的 cookie 重送原本的請求，把新的 cookie 連同重送的回應一起交給瀏覽器 |
+| `session_expired`、`credentials_invalid`、`identity_revoked` | 回應加上 `x-wg-session: expired`。後端在同一個回應裡已經清掉 cookie                    |
+| 其他                                                         | 原樣轉回                                                                               |
 
 - 沒帶 `{p}_at` 的請求是訪客。後端對訪客也回 `credentials_invalid`，但沒有 session 可以 refresh 或結束，proxy 原樣轉回。
 - 例外：`POST /api/v1/auth/session`（密碼登入）打錯密碼也回 `credentials_invalid`，可是跟目前登入的 session 無關

@@ -114,6 +114,7 @@ async function readBodyAsync(request: NextRequest) {
 const SESSION_ENDED_CODES: ReadonlySet<unknown> = new Set([
   'session_expired',
   'credentials_invalid',
+  'identity_revoked',
 ]);
 
 /** The `code` of a backend 401 (`{ detail, code }`, ADR-328); nothing for any other answer. */

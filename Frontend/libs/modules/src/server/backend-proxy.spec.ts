@@ -638,6 +638,16 @@ describe('site proxy, session ended elsewhere', () => {
     expect(response.headers.get('x-wg-session')).toBe('expired');
   });
 
+  it('tells the browser when the identity its session acts as was removed', async () => {
+    fakeBackend(() => unauthorized('identity_revoked'));
+
+    const response = await callSiteRest('tickets', {
+      cookie: 'wgdev_at=access-22; wgdev_rt=refresh-22',
+    });
+
+    expect(response.headers.get('x-wg-session')).toBe('expired');
+  });
+
   it('leaves a guest alone whose browser holds other cookies but no access token', async () => {
     // The backend names a request with no token `credentials_invalid` too, without clearing
     // anything: marking it would reload the guest's page on every load.
