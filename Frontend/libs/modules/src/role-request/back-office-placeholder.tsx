@@ -11,7 +11,7 @@ const { color } = designTokens;
 
 /**
  * The back office until it is rebuilt — the old `/admin` pages are to be replaced wholesale, so none
- * of them is shown meanwhile: where 前往後台 leads. It says so and offers
+ * of them is shown meanwhile: where 前往管理平台 leads. It says so and offers
  * the way back. Laid out like the briefing placeholder (`ticket/needs/briefing.tsx`).
  */
 export function BackOfficePlaceholder() {
@@ -29,7 +29,7 @@ export function BackOfficePlaceholder() {
           fontWeight: 700,
         }}
       >
-        後台
+        管理平台
       </Typography>
       <Typography
         sx={{
@@ -38,7 +38,7 @@ export function BackOfficePlaceholder() {
           lineHeight: 1.7,
         }}
       >
-        後台正在準備中。開放後，這顆按鈕會直接帶你進去。
+        管理平台正在準備中。開放後，這顆按鈕會直接帶你進去。
       </Typography>
       <Button component={Link} href="/map" variant="outlined" sx={{ mt: 1 }}>
         回到地圖

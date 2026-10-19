@@ -13,7 +13,7 @@ describe('roleRequestErrorMessage', () => {
       roleRequestErrorMessage(
         refusal('Only an account without a back-office identity can apply'),
       ),
-    ).toBe('你已經有後台身分，不需要申請。');
+    ).toBe('你已經有管理平台身分，不需要申請。');
     expect(roleRequestErrorMessage(refusal('Reason is required'))).toBe(
       '請填寫申請理由。',
     );

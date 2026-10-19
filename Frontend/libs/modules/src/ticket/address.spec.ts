@@ -1,6 +1,41 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatTicketAddress } from './address';
+import {
+  formatTicketAddress,
+  formatTicketStreet,
+  formatTicketUnit,
+} from './address';
+
+describe('formatTicketStreet and formatTicketUnit', () => {
+  // The ticket's 位置資訊 puts which floor and room on a line of its own: someone going there needs
+  // it before anything else (prototype site-detail.jsx:415-417).
+  it('splits the address into the street and the building, floor and room', () => {
+    const location = {
+      city: '光復鄉',
+      lane: '中正路一段',
+      no: '31號',
+      buildingSection: 'A棟',
+      floor: 'B1',
+      room: '樓梯間',
+    };
+
+    expect(formatTicketStreet(location)).toBe('光復鄉中正路一段31號');
+    expect(formatTicketUnit(location)).toBe('A棟 B1 樓梯間');
+  });
+
+  it('reads the street as typed on the site when none of it was split out', () => {
+    expect(
+      formatTicketStreet({ landmarkNote: ' 中山路100號 ', floor: '3樓' }),
+    ).toBe('中山路100號');
+  });
+
+  it('has nothing to say for a part that is missing or blank', () => {
+    expect(formatTicketStreet({ floor: '3樓' })).toBeNull();
+    expect(formatTicketUnit({ city: '光復鄉', room: '  ' })).toBeNull();
+    expect(formatTicketStreet(null)).toBeNull();
+    expect(formatTicketUnit(undefined)).toBeNull();
+  });
+});
 
 describe('formatTicketAddress', () => {
   it('runs the street address together, road from `lane` and 巷弄 from `alley`, as they are stored', () => {

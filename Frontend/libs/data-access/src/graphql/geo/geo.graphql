@@ -4,6 +4,7 @@ fragment PageInfoFields on PageInfo {
   hasPreviousPage
 }
 
+# No `comment`: the back office's internal note, read only by those with station.view_pii (ADR-332).
 fragment StationFields on StationType {
   uuid
   propertyName
@@ -13,13 +14,13 @@ fragment StationFields on StationType {
   description
   opHour
   level
-  comment
   source
   visibility
   verificationStatus
   isDuplicate
   isTemporary
   isOfficial
+  operationalStatus
   createdBy
   createdAt
   updatedAt
@@ -110,12 +111,6 @@ query GetClosureArea($uuid: UUID!) {
 }
 
 # ─── Mutations ──────────────────────────────────────────────
-
-mutation CreateStation($input: CreateStationInput!) {
-  createStation(input: $input) {
-    ...StationFields
-  }
-}
 
 mutation UpdateStation($uuid: UUID!, $input: UpdateStationInput!) {
   updateStation(uuid: $uuid, input: $input) {

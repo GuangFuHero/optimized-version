@@ -7,6 +7,10 @@ export function createPointShareLinks(
   const encodedMessage = encodeURIComponent(
     `${target.title}\n${target.description}\n${target.url}`,
   );
+  // X takes the link apart from the text and shows it as a card.
+  const encodedText = encodeURIComponent(
+    `${target.title}\n${target.description}`,
+  );
 
   return [
     {
@@ -23,6 +27,11 @@ export function createPointShareLinks(
       channel: 'threads',
       label: 'Threads',
       href: `https://www.threads.net/intent/post?text=${encodedMessage}`,
+    },
+    {
+      channel: 'x',
+      label: 'X',
+      href: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
     },
   ];
 }

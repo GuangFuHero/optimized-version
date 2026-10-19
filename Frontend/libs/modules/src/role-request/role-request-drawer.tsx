@@ -33,11 +33,10 @@ import {
 } from './form';
 import { RoleRequestCard } from './role-request-card';
 import { useWithdrawRoleRequest } from './use-withdraw-role-request';
-import { WithdrawRoleRequestDialog } from './withdraw-role-request-dialog';
 
 const { color, radius } = designTokens;
 
-const TITLE = '申請成為後台人員';
+const TITLE = '申請管理權限';
 const EMPTY_FORM: RoleRequestFormValues = {
   role: null,
   reason: '',
@@ -56,7 +55,7 @@ interface RoleRequestDrawerProps {
 }
 
 /**
- * 申請成為後台人員 (prototype `RoleElevationDrawer`, `Design/前台/js/site/site-actions.jsx:157-265`):
+ * 申請管理權限 (prototype `RoleElevationDrawer`, `Design/前台/js/site/site-actions.jsx:157-265`):
  * the application waiting for review, which can be withdrawn, or the form under the last
  * rejection. What it shows is `roleRequestDrawerView`'s decision; the form's rules are
  * `validateRoleRequestForm`'s.
@@ -92,61 +91,102 @@ export function RoleRequestDrawer({
   }
 
   const view = roleRequestDrawerView(myRoleRequests);
-  const stillWaiting =
-    view.kind === 'pending' && view.pending.uuid === withdraw.withdrawing;
 
-  // Outside the views below: after a refusal the reload may switch the view under it, and the
-  // reason must stay in sight until the applicant closes it.
-  const withdrawDialog = (
-    <WithdrawRoleRequestDialog
-      open={withdraw.open}
-      error={withdraw.error}
-      submitting={withdraw.submitting}
-      // Only after a refusal: a success reloads too, as the dialog fades out, and 取消 must not
-      // turn into 關閉 on the way.
-      settled={Boolean(withdraw.error) && !stillWaiting}
-      onCancel={withdraw.cancel}
-      onConfirm={() => void withdraw.confirm()}
-    />
-  );
+  // After a refusal the reload may show what the application became instead — decided meanwhile,
+  // say — and the reason stays in sight until the drawer is closed.
+  const withdrawRefusal =
+    withdraw.error && view.kind !== 'pending' ? (
+      <Alert severity="error">{withdraw.error}</Alert>
+    ) : null;
 
   if (view.kind === 'pending') {
+    const { pending } = view;
+
     return (
-      <>
-        <SiteActionDrawer open={open} title={TITLE} onClose={onClose}>
-          <Stack spacing={2}>
-            <Alert severity="info">
-              <AlertTitle>你已經有一筆申請在審核中</AlertTitle>
-              同一時間只能有一筆申請。要改申請別的身分，請等這一筆有結果。
-            </Alert>
-            <RoleRequestCard request={view.pending} />
-            <Button
-              variant="outlined"
-              onClick={() => withdraw.request(view.pending.uuid)}
-              sx={{ alignSelf: 'flex-start' }}
+      <SiteActionDrawer open={open} title={TITLE} onClose={onClose}>
+        <Stack spacing={2}>
+          <Alert severity="info">
+            <AlertTitle>你已經有一筆申請在審核中</AlertTitle>
+            同一時間只能有一筆申請。要改申請別的身分或團隊，可以先撤回這一筆。
+          </Alert>
+          <RoleRequestCard request={pending} />
+          {/* Asked here, not in a dialog (the designer's 2026-10-06 prototype): withdrawn, it can
+              be sent again at once. */}
+          {withdraw.confirming ? (
+            <Stack
+              spacing={1.5}
+              sx={{
+                p: 2,
+                borderRadius: `${radius.md}px`,
+                border: `1px solid ${color.border.default}`,
+              }}
             >
-              撤回申請
-            </Button>
-          </Stack>
-        </SiteActionDrawer>
-        {withdrawDialog}
-      </>
+              <Typography
+                sx={{
+                  color: color.fg.neutral.default,
+                  fontSize: displayTextSize[13],
+                  lineHeight: 1.6,
+                  textWrap: 'pretty',
+                }}
+              >
+                撤回後審核者就不會再處理這筆申請。你隨時可以重新送出，但要重新排隊審核。
+              </Typography>
+              {withdraw.error ? (
+                <Alert severity="error">{withdraw.error}</Alert>
+              ) : null}
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant="outlined"
+                  onClick={withdraw.cancel}
+                  disabled={withdraw.submitting}
+                  sx={{ flex: 1 }}
+                >
+                  先不要
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={() => void withdraw.confirm(pending.uuid)}
+                  disabled={withdraw.submitting}
+                  sx={{ flex: 1 }}
+                >
+                  {withdraw.submitting ? '撤回中…' : '確定撤回'}
+                </Button>
+              </Stack>
+            </Stack>
+          ) : (
+            <Box>
+              <Button variant="outlined" onClick={() => withdraw.request()}>
+                撤回這筆申請
+              </Button>
+              <Typography
+                sx={{
+                  mt: 1,
+                  color: color.fg.neutral.muted,
+                  fontSize: displayTextSize[12],
+                  lineHeight: 1.6,
+                  textWrap: 'pretty',
+                }}
+              >
+                如果團隊已經用邀請碼讓你加入，就不需要這筆申請了，可以直接撤回。
+              </Typography>
+            </Box>
+          )}
+        </Stack>
+      </SiteActionDrawer>
     );
   }
 
   if (view.kind === 'granted') {
     return (
-      <>
-        <SiteActionDrawer open={open} title={TITLE} onClose={onClose}>
-          <Stack spacing={2}>
-            <Alert severity="success">
-              你已經有後台身分，可以從「前往後台」進入。
-            </Alert>
-            {view.approved ? <RoleRequestCard request={view.approved} /> : null}
-          </Stack>
-        </SiteActionDrawer>
-        {withdrawDialog}
-      </>
+      <SiteActionDrawer open={open} title={TITLE} onClose={onClose}>
+        <Stack spacing={2}>
+          {withdrawRefusal}
+          <Alert severity="success">
+            你已經有管理平台身分，可以從「前往管理平台」進入。
+          </Alert>
+          {view.approved ? <RoleRequestCard request={view.approved} /> : null}
+        </Stack>
+      </SiteActionDrawer>
     );
   }
 
@@ -175,11 +215,11 @@ export function RoleRequestDrawer({
     onSubmitted();
   };
 
-  const formDrawer = (
+  return (
     <SiteActionDrawer
       open={open}
       title={TITLE}
-      subtitle="後台人員可以派工、審核資料、管理站點。送出後由超級管理員審核。"
+      subtitle="有管理權限的人可以派工、審核資料、管理站點。送出後由超級管理員審核。"
       onClose={onClose}
       footer={
         <>
@@ -198,13 +238,13 @@ export function RoleRequestDrawer({
       }
     >
       <Stack spacing={2.5}>
+        {withdrawRefusal}
+
         {view.paused ? (
           <Alert severity="info">目前暫停開放申請，請稍後再來。</Alert>
         ) : null}
 
-        {view.lastRejected ? (
-          <RoleRequestCard request={view.lastRejected} />
-        ) : null}
+        {view.lastClosed ? <RoleRequestCard request={view.lastClosed} /> : null}
 
         <Box>
           <Typography
@@ -270,12 +310,12 @@ export function RoleRequestDrawer({
           fullWidth
           value={values.reason}
           onChange={(event) => set('reason')(event.target.value)}
-          placeholder="例：我是光復鄉公所民政課，負責收容所名冊，需要在後台更新站點資訊。"
+          placeholder="例：我是光復鄉公所民政課，負責收容所名冊，需要在管理平台更新站點資訊。"
           error={touched && Boolean(errors.reason)}
           helperText={
             touched && errors.reason
               ? errors.reason
-              : `寫清楚你的單位、職務，以及為什麼需要後台權限（最多 ${REASON_MAX_LENGTH} 字）`
+              : `寫清楚你的單位、職務，以及為什麼需要管理權限（最多 ${REASON_MAX_LENGTH} 字）`
           }
         />
 
@@ -304,13 +344,6 @@ export function RoleRequestDrawer({
         {submitError ? <Alert severity="error">{submitError}</Alert> : null}
       </Stack>
     </SiteActionDrawer>
-  );
-
-  return (
-    <>
-      {formDrawer}
-      {withdrawDialog}
-    </>
   );
 }
 

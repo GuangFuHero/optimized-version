@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box, Drawer, Stack, Typography, useMediaQuery } from '@mui/material';
@@ -8,6 +15,7 @@ import { useSession } from 'next-auth/react';
 
 import { RescueMapDetailDrawer } from '../map/components/rescue-map-detail-drawer';
 import { RESCUE_MAP_DESKTOP_DETAIL_DRAWER_WIDTH } from '../map/constants';
+import { countDetailOpenings } from '../map/detail-openings';
 import { useRescueMapController } from '../map/hooks/use-rescue-map-controller';
 import type { RescueMapMarkerItem } from '../map/types';
 import {
@@ -96,7 +104,11 @@ export function SiteListView() {
 
   const [displayMarker, setDisplayMarker] =
     useState<RescueMapMarkerItem | null>(selectedMarker);
-  const [detailOpen, setDetailOpen] = useState(Boolean(selectedMarker));
+  const [{ open: detailOpen, openings: detailOpenings }, setDetailOpen] =
+    useReducer(countDetailOpenings, {
+      open: Boolean(selectedMarker),
+      openings: 0,
+    });
   // The phone's drawer opens on a phone only. Hidden by CSS on a wider screen, it was still an open
   // modal, and MUI hid the rest of the page — the list, the detail panel — from screen readers.
   const isPhone = useMediaQuery((theme) => theme.breakpoints.down('tablet'));
@@ -386,6 +398,8 @@ export function SiteListView() {
           }}
         >
           <RescueMapDetailDrawer
+            // A new panel at each opening, so that a ticket opened again is read again (WG-028).
+            key={detailOpenings}
             marker={displayMarker}
             onClose={closeDetail}
             ticketDetailOverrides={

@@ -28,7 +28,7 @@ const { color, typography } = designTokens;
 /**
  * 場域標籤：只回答「我現在在前台」。
  *
- * 靜態、不可點 —— 旁邊將來會有「前往後台」切換鈕，可點的長相會讓兩者混淆。
+ * 靜態、不可點 —— 旁邊將來會有「前往管理平台」切換鈕，可點的長相會讓兩者混淆。
  * 未登入者也顯示，因為這是狀態資訊，不是權限控制項。
  * 只放桌機：手機頂欄 56px 高、360px 寬，已經被漢堡、品牌、搜尋、使用者選單佔滿。
  */
@@ -69,7 +69,7 @@ interface SiteTopNavBarProps {
   userImage?: string;
   /** Which back-office entry sits beside the badge (`sitePortalEntry`, worked out in the shell). */
   portalEntry?: SitePortalEntry;
-  /** 申請成為後台人員: opens the application drawer, which the shell holds. */
+  /** 申請管理權限: opens the application drawer, which the shell holds. */
   onApplyRoleRequest?: () => void;
   onSignIn?: () => void;
   onSignOut?: () => void;

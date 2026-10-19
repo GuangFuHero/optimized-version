@@ -45,19 +45,31 @@ describe('roleRequestDrawerView', () => {
       }),
     ).toEqual({
       kind: 'form',
-      lastRejected: rejected,
+      lastClosed: rejected,
       paused: false,
     });
   });
 
-  it('shows no card for a withdrawal, even with an older rejection behind it', () => {
+  it('shows the form under the withdrawal just made, as word that it went through', () => {
+    const withdrawn = row('withdrawn');
+
     expect(
       roleRequestDrawerView({
         hasBackofficeIdentity: false,
         canApply: true,
-        requests: [row('withdrawn'), row('rejected')],
+        requests: [withdrawn, row('rejected')],
       }),
-    ).toEqual({ kind: 'form', lastRejected: null, paused: false });
+    ).toEqual({ kind: 'form', lastClosed: withdrawn, paused: false });
+  });
+
+  it('shows no card under an approval since lost, as there is nothing to act on', () => {
+    expect(
+      roleRequestDrawerView({
+        hasBackofficeIdentity: false,
+        canApply: true,
+        requests: [row('approved')],
+      }),
+    ).toEqual({ kind: 'form', lastClosed: null, paused: false });
   });
 
   it('shows a plain form to someone who never applied', () => {
@@ -69,7 +81,7 @@ describe('roleRequestDrawerView', () => {
       }),
     ).toEqual({
       kind: 'form',
-      lastRejected: null,
+      lastClosed: null,
       paused: false,
     });
   });
@@ -83,7 +95,7 @@ describe('roleRequestDrawerView', () => {
       }),
     ).toEqual({
       kind: 'form',
-      lastRejected: null,
+      lastClosed: null,
       paused: true,
     });
   });

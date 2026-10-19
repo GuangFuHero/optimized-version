@@ -34,6 +34,10 @@ export interface StationSummaryProps {
   address: string;
   addressIcon?: ReactNode;
   status: StationStatusBadgeProps;
+  /** Under the address: what the status means right now — the site's 「服務時間 08:00-18:00」. */
+  statusDetail?: string;
+  /** Beside that: the site's 官方 and 臨時站點. */
+  badges?: ReactNode;
 }
 
 export interface StationCapacityBarProps {
