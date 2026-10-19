@@ -1,6 +1,6 @@
 'use client';
 
-import { Box } from '@mui/material';
+import { Box, Drawer, useMediaQuery, useTheme } from '@mui/material';
 import { useState, type ReactNode } from 'react';
 
 import {
@@ -21,6 +21,10 @@ export interface AdminShellProps {
 
 export function AdminShell({ children }: AdminShellProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const theme = useTheme();
+  const mobile = useMediaQuery(theme.breakpoints.down('tablet'));
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
   const activeItem = useActiveAdminNavItem();
   const { data } = useAnnouncements({ filter: AnnouncementFilter.Active });
 
@@ -46,11 +50,39 @@ export function AdminShell({ children }: AdminShellProps) {
           bgcolor: color.bg.neutral.subtle,
         }}
       >
-        <AdminSidebar
-          collapsed={collapsed}
-          onToggle={() => setCollapsed((value) => !value)}
-          activeId={activeItem?.id}
-        />
+        {mobile ? (
+          <Drawer
+            open={mobileOpen}
+            transitionDuration={reduceMotion ? 0 : undefined}
+            onClose={() => setMobileOpen(false)}
+            slotProps={{
+              paper: {
+                id: 'admin-mobile-navigation',
+                sx: { maxWidth: '85vw' },
+              },
+            }}
+          >
+            <Box
+              sx={{ display: 'flex', height: '100%' }}
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest('a[href]'))
+                  setMobileOpen(false);
+              }}
+            >
+              <AdminSidebar
+                collapsed={false}
+                onToggle={() => setMobileOpen(false)}
+                activeId={activeItem?.id}
+              />
+            </Box>
+          </Drawer>
+        ) : (
+          <AdminSidebar
+            collapsed={collapsed}
+            onToggle={() => setCollapsed((value) => !value)}
+            activeId={activeItem?.id}
+          />
+        )}
         <Box
           sx={{
             flex: 1,
@@ -59,7 +91,11 @@ export function AdminShell({ children }: AdminShellProps) {
             flexDirection: 'column',
           }}
         >
-          <AdminHeader title={activeItem?.label} />
+          <AdminHeader
+            title={activeItem?.label}
+            onOpenNavigation={() => setMobileOpen(true)}
+            navigationOpen={mobileOpen}
+          />
           <Box
             component="main"
             sx={{

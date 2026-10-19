@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 import { Fragment } from 'react';
 import { differenceInCalendarDays, parseISO } from 'date-fns';
+import { ApiError } from '@rescue-frontend/data-access';
 import { useProjectSettings } from '@rescue-frontend/data-access/admin';
 
 import {
@@ -64,6 +65,7 @@ export function AdminSidebar({
         bgcolor: color.bg.neutral.subtle,
         borderRight: `1px solid ${color.border.default}`,
         transition: `width ${motion.transition.base}`,
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
       <EventHeader collapsed={collapsed} onToggle={onToggle} />
@@ -139,13 +141,21 @@ function EventHeader({
   collapsed,
   onToggle,
 }: Pick<AdminSidebarProps, 'collapsed' | 'onToggle'>) {
-  const { data: settings, isPending, isError } = useProjectSettings();
-  const name =
-    settings?.name ??
-    (isPending ? '載入中…' : isError ? '無法載入專案' : '尚未設定專案');
-  const elapsedDays = settings?.started_at
-    ? differenceInCalendarDays(new Date(), parseISO(settings.started_at))
-    : -1;
+  const {
+    data: settings,
+    isPending,
+    isError,
+    error,
+  } = useProjectSettings({ silentError: true });
+  const forbidden = error instanceof ApiError && error.status === 403;
+  const name = forbidden
+    ? '島嶼守望'
+    : (settings?.name ??
+      (isPending ? '載入中…' : isError ? '無法載入專案' : '尚未設定專案'));
+  const elapsedDays =
+    !isError && settings?.started_at
+      ? differenceInCalendarDays(new Date(), parseISO(settings.started_at))
+      : -1;
   const day =
     Number.isFinite(elapsedDays) && elapsedDays >= 0 ? elapsedDays + 1 : null;
   const status = day == null ? null : `進行中 · 第 ${day} 天`;
@@ -165,7 +175,12 @@ function EventHeader({
     <IconButton
       aria-label={collapsed ? '展開選單' : '收合選單'}
       onClick={onToggle}
-      sx={{ color: color.fg.neutral.default, borderRadius: `${radius.sm}px` }}
+      sx={{
+        width: 44,
+        height: 44,
+        color: color.fg.neutral.default,
+        borderRadius: `${radius.sm}px`,
+      }}
     >
       {collapsed ? <ChevronsRight /> : <ChevronsLeft />}
     </IconButton>
