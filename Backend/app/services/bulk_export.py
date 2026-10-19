@@ -184,7 +184,9 @@ async def _station_rows(db: AsyncSession, stations: list[Station]) -> dict:
 _ADDRESS_FIELDS = ("county", "city", "lane", "alley", "no", "floor", "room")
 
 
-def _station_row(station: Station, address, properties: dict, columns) -> dict[str, str]:
+def _station_row(
+    station: Station, address, properties: dict, columns, *, comment_visible: bool
+) -> dict[str, str]:
     latitude, longitude = _coordinates(station.geometry)
     row = {
         "uuid": _text(station.uuid),
@@ -195,6 +197,11 @@ def _station_row(station: Station, address, properties: dict, columns) -> dict[s
                   "visibility", "verification_status", "is_official", "confidence_score",
                   "created_at", "updated_at"):
         row[field] = _text(getattr(station, field, None))
+    # The internal note follows station.view_pii here as in the API (ADR-332). Blank rather than
+    # a placeholder: the importer reads a blank cell as "leave it alone" (ADR-121), so the row
+    # round-trips without erasing the note.
+    if not comment_visible:
+        row["comment"] = ""
     for field in _ADDRESS_FIELDS:
         row[field] = _text(getattr(address, field, None)) if address else ""
     for column in columns:
@@ -220,6 +227,7 @@ async def export_stations(
             data_column=Station.type, config_column=StationPropertyConfig.station_type,
         )
         columns = await station_columns(db, station_type)
+        may_see_comment = await _row_decider(db, actor, Perm.STATION_VIEW_PII)
 
         stations = list(
             (
@@ -243,6 +251,7 @@ async def export_stations(
                 related["addresses"].get(str(station.uuid)),
                 related["properties"].get(str(station.uuid), {}),
                 columns,
+                comment_visible=await may_see_comment(station),
             )
             for station in stations
         ]
@@ -253,10 +262,11 @@ async def export_stations(
 
 
 async def _row_decider(db: AsyncSession, actor: User, perm: Perm):
-    """Return an `async (ticket) -> bool` answering "does `perm` reach this row for this caller".
+    """Return an `async (resource) -> bool` answering "does `perm` reach this row for this caller".
 
     Used for ticket.view_pii (the contact columns) and ticket.view_detail (the point and the
-    free text, ADR-281) — the same two decisions the API makes per field. The API also asks the
+    free text, ADR-281) — the same two decisions the API makes per field — and for
+    station.view_pii (a station's internal comment, ADR-332). The API also asks the
     contact for ticket.view_history or a claim (ADR-286 point 1); every seeded holder of
     ticket.export holds ticket.view_history over the rows it may export, so it is not asked
     again here. Resolves the capability once and only falls back to a per-row geometry check
@@ -265,12 +275,12 @@ async def _row_decider(db: AsyncSession, actor: User, perm: Perm):
     """
     scope = await resolve_scope(actor, perm, db)
     if scope == Scope.ALL:
-        return lambda ticket: _always(True)
+        return lambda resource: _always(True)
     if scope == Scope.NONE:
-        return lambda ticket: _always(False)
+        return lambda resource: _always(False)
 
-    def decide(ticket):
-        return in_scope(scope, actor=actor, resource=ticket, db=db)
+    def decide(resource):
+        return in_scope(scope, actor=actor, resource=resource, db=db)
 
     return decide
 
