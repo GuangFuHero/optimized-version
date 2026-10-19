@@ -71,10 +71,14 @@ def _plain(value):
 def _set_fields(row, fields) -> dict:
     """The fields of `row` that hold a value.
 
-    An unset field is left out rather than stored as null, so a missing row and an empty one read
-    the same to `content_changes` and to `content_hash`.
+    An unset or blank field is left out rather than stored, so a missing row, an empty one and a
+    form saving a blank field as "" all read the same to `content_changes` and to `content_hash`.
     """
-    return {field: value for field in fields if (value := _plain(getattr(row, field))) is not None}
+    return {field: value for field in fields if not _blank(value := _plain(getattr(row, field)))}
+
+
+def _blank(value) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 async def content_of(db: AsyncSession, ticket: Tickets) -> dict:

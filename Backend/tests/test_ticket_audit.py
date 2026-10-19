@@ -316,6 +316,10 @@ async def _clear_the_empty_description(db, actor, ticket_uuid, need_uuid):
     await ticket_service.update_ticket(db, actor=actor, uuid=ticket_uuid, changes={"description": None})
 
 
+async def _save_the_blank_description_as_empty(db, actor, ticket_uuid, need_uuid):
+    await ticket_service.update_ticket(db, actor=actor, uuid=ticket_uuid, changes={"description": ""})
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "change, voids, new_version",
@@ -328,6 +332,7 @@ async def _clear_the_empty_description(db, actor, ticket_uuid, need_uuid):
         (_add_property, True, True),
         (_same_title, False, False),
         (_clear_the_empty_description, False, False),
+        (_save_the_blank_description_as_empty, False, False),
         (_change_priority, False, False),
         (_write_progress_note, False, False),
         (_sign_up, False, False),
@@ -348,6 +353,26 @@ async def test_the_version_check_never_lets_a_change_through_unseen(db, change, 
     assert bool(ticket_audit.content_changes(before, after, ticket_uuid=ticket_uuid)) is voids
     assert (ticket_audit.content_hash(before) != ticket_audit.content_hash(after)) is new_version
     assert ((await _state(db, ticket_uuid)).audit_status == "no_audit") is voids
+
+
+@pytest.mark.asyncio
+async def test_saving_an_address_member_blank_is_no_change(db):
+    """The form leaves a member out once and sends it blank the next time: the same address."""
+    ticket = await _ticket(db)
+    ticket_uuid = str(ticket.uuid)
+    operator = await _operator(db)
+    address = {"location_type": "address", "county": "花蓮縣"}
+    await ticket_service.update_ticket(
+        db, actor=operator, uuid=ticket_uuid, changes={}, secondary_location=address
+    )
+    await _give(db, actor=await _auditor(db), uuid=ticket_uuid, status="audited", note=None)
+    await db.refresh(operator)  # the test session expires everything on commit
+
+    await ticket_service.update_ticket(
+        db, actor=operator, uuid=ticket_uuid, changes={}, secondary_location={**address, "lane": " "}
+    )
+
+    assert (await _state(db, ticket_uuid)).audit_status == "audited"
 
 
 @pytest.mark.asyncio
