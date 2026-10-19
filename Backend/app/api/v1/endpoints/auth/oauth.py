@@ -176,14 +176,18 @@ async def oauth_callback(
     """Finish a sign-in: check it is this browser's, exchange the code, check the token, sign in.
 
     The provider's redirect, so no `Origin` to check: the state does that job, and it is checked first.
-    It must match the browser's `{p}_oauth` cookie and still be on record, and is spent on the spot.
+    It must match the browser's `{p}_oauth` cookie and still be on record, and is spent on the spot. A
+    state that does not match leaves the cookie alone, as a refused start does.
     """
     cookie_state = auth_cookies.read_oauth_cookie(request)
-    sign_in = None
-    if state and cookie_state and _constant_time_equal(state, cookie_state):
-        sign_in = await OAuthStateRepository(redis).consume(state)
+    if not (state and cookie_state and _constant_time_equal(state, cookie_state)):
+        # Not a sign-in this browser started. The callback is a top-level GET, so a link from another site
+        # brings the cookie along; clearing it would end a sign-in another tab has in progress (ADR-331).
+        return _to_sign_in_page(settings.SITE_APP_URL, ErrorCode.OAUTH_STATE_INVALID)
+    sign_in = await OAuthStateRepository(redis).consume(state)
     if sign_in is None:
-        # Not a sign-in this browser started, so there is no telling which app it was for.
+        # This browser's state, but expired or already used: nothing is left to finish, so forget it. With
+        # no record there is no telling which app it was for either.
         return _sign_in_failed(settings.SITE_APP_URL, ErrorCode.OAUTH_STATE_INVALID)
     app_url = _app_url(sign_in.app)
     oauth = oauth_provider(provider)

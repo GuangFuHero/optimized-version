@@ -408,7 +408,8 @@ Redis server's clock instead (the claim key's remaining TTL).
 
 > **Status: ACCEPTED (2026-10-18).** Chosen by the product owner on 2026-10-16, together with moving sign-in
 > to the backend (ADR-325); sending every failure back to the sign-in page was chosen on 2026-10-17, and
-> leaving the sibling-subdomain risk below for before production on 2026-10-18. It covers Google and LINE;
+> leaving the sibling-subdomain risk below for before production on 2026-10-18. A callback this browser did
+> not start leaving `{p}_oauth` alone was added on 2026-10-19, after review. It covers Google and LINE;
 > `/auth/sso/google` and `/auth/sso/line` are removed in the same change.
 
 **In plain words**: "Sign in with Google" (or LINE) now takes the browser from our page to the provider and
@@ -448,9 +449,10 @@ a `return_to` pointing at another site.
    token does not verify, or carries another nonce), `sso_email_unverified`, `sso_email_taken` and
    `sso_signin_race` (a first sign-in that lost a race with another; trying again works). A
    callback whose state is not on record cannot tell which app it was for and goes to the site's. Only a
-   start naming no app of ours answers with JSON, 400 `oauth_request_invalid`. A callback clears
-   `{p}_oauth` whatever its outcome; a refused start leaves it alone, so a link from another site cannot end
-   a sign-in another tab has in progress.
+   start naming no app of ours answers with JSON, 400 `oauth_request_invalid`. A callback whose state
+   matches `{p}_oauth` clears it whatever its outcome: that sign-in is spent. A callback whose state does not
+   match leaves it alone, as a refused start does. Both are top-level GETs, so a link from another site
+   brings the cookie along, and clearing it would end a sign-in another tab has in progress.
 6. `start` must come from one of our pages (ADR-327 point 4). A navigation carries no `Origin`, so in
    practice the `Referer` decides, and a browser set to send none is refused with `origin_not_allowed`. The
    callback is the provider's redirect and carries neither; the state protects it instead.

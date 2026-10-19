@@ -241,7 +241,7 @@ async def test_a_callback_without_the_cookie_is_refused(client, exchanger):
 
     response = await _callback(client, _sent_to_google(started)["state"], cookie=None)
 
-    oauth_flow.sent_back_with(response, "oauth_state_invalid")
+    oauth_flow.not_this_browsers(response)
     assert exchanger.exchanges == []
 
 
@@ -253,7 +253,17 @@ async def test_a_callback_whose_cookie_names_another_state_is_refused(client, ex
         client, _sent_to_google(first)["state"], cookie=oauth_flow.oauth_cookie(second)
     )
 
-    oauth_flow.sent_back_with(response, "oauth_state_invalid")
+    oauth_flow.not_this_browsers(response)
+
+
+async def test_a_link_from_another_site_leaves_a_sign_in_in_progress_alone(client, exchanger):
+    """A made-up state on our callback, with this browser's cookie along: the real sign-in still finishes."""
+    started = await _start(client)
+    params, cookie = _sent_to_google(started), oauth_flow.oauth_cookie(started)
+    exchanger.id_token = _google_token(params["nonce"])
+
+    oauth_flow.not_this_browsers(await _callback(client, "made-up", cookie=cookie))
+    oauth_flow.signed_in(await _callback(client, params["state"], cookie=cookie))
 
 
 async def test_a_state_works_once(client, exchanger):

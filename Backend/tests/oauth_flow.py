@@ -86,6 +86,16 @@ def sent_back_with(response, error: str, app_url: str = SITE) -> None:
     assert (cleared["max-age"], cleared["path"]) == ("0", "/api/v1/auth/oauth")
 
 
+def not_this_browsers(response) -> None:
+    """Assert a callback this browser did not start goes to the site's sign-in page, its OAuth cookie kept.
+
+    A link from another site can bring the cookie along; clearing it would end a sign-in in another tab.
+    """
+    assert response.status_code == 302, response.text
+    assert response.headers["location"] == f"{SITE}/login?error=oauth_state_invalid"
+    assert cookies_set_by(response) == {}
+
+
 def start_refused(response, error: str, app_url: str = SITE) -> None:
     """Assert a start is refused to the app's sign-in page, leaving any sign-in in progress alone."""
     assert response.status_code == 302, response.text
