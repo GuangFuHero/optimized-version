@@ -153,6 +153,7 @@ async def list_users(
     limit: int = 100,
     db: AsyncSession = Depends(security.get_db),
     redis=Depends(get_redis),
+    current_user: User = Depends(security.get_current_user),
 ):
     """List users with every identity they hold, plus last login/activity and live sessions.
 
@@ -164,10 +165,12 @@ async def list_users(
     user_uuids = [str(u.uuid) for u in users]
     identities = await _identities_by_user(db, user_uuids)
     sessions_by_user = await _session_counts(redis, user_uuids)
+    shows_real_name = await security.resolve_scope(current_user, Perm.ROLE_REQUEST_REVIEW, db) != Scope.NONE
     return [
         AdminUserListItem(
             uuid=u.uuid,
             name=u.name,
+            real_name=u.real_name if shows_real_name else None,
             platform_role=_platform_role(identities.get(str(u.uuid), [])),
             identities=identities.get(str(u.uuid), []),
             last_login_at=u.last_login_at,

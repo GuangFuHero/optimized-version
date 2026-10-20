@@ -25,6 +25,10 @@ class AdminUserListItem(BaseModel):
 
     uuid: UUID
     name: str
+    # The name a reviewer confirmed on approval (Spec/026, ADR-355). Filled only for holders of
+    # role_request.review: data auditors also read this list, and are kept from applicants'
+    # details (ADR-287 point 7).
+    real_name: str | None = None
     platform_role: str | None
     identities: list[IdentitySummary] = Field(default_factory=list)
     last_login_at: datetime | None = None
