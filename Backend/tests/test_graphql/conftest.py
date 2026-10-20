@@ -238,23 +238,13 @@ async def _create_user_with_role(redis, role_name: str) -> tuple[str, str]:
         return str(user.uuid), token
 
 
-async def _citizen_since_adr_286(redis) -> str:
-    """A signed-in citizen granted as the seed grants one since ADR-286; returns their token.
-
-    view_pii `all` (whom to call once they claim, ADR-286), view_history `own`, assign `own`
-    (claiming a need). Login User keeps view_pii at `own`, which the masking tests rely on.
-    """
+async def _create_user_with_grants(redis, grants) -> tuple[str, str]:
+    """Create a one-off platform role holding `grants` ((Perm, scope) pairs) and a user acting as it."""
     async with test_db() as db:
-        role = Role(name=f"citizen-{uuid_mod.uuid4().hex[:8]}", kind="platform")
+        role = Role(name=f"adhoc-{uuid_mod.uuid4().hex[:8]}", kind="platform")
         db.add(role)
         await db.flush()
-        for perm, scope in (
-            (Perm.TICKET_VIEW, "all"),
-            (Perm.TICKET_VIEW_DETAIL, "all"),
-            (Perm.TICKET_VIEW_PII, "all"),
-            (Perm.TICKET_VIEW_HISTORY, "own"),
-            (Perm.TICKET_ASSIGN, "own"),
-        ):
+        for perm, scope in grants:
             permission = await db.scalar(select(Permission).where(Permission.key == perm.value))
             if permission is None:
                 permission = Permission(key=perm.value)
@@ -262,7 +252,25 @@ async def _citizen_since_adr_286(redis) -> str:
                 await db.flush()
             db.add(RolePermissionAssign(role_uuid=role.uuid, permission_uuid=permission.uuid, scope=scope))
         role_name = role.name
-    _, token = await _create_user_with_role(redis, role_name)
+    return await _create_user_with_role(redis, role_name)
+
+
+async def _citizen_since_adr_286(redis) -> str:
+    """A signed-in citizen granted as the seed grants one since ADR-286; returns their token.
+
+    view_pii `all` (whom to call once they claim, ADR-286), view_history `own`, assign `own`
+    (claiming a need). Login User keeps view_pii at `own`, which the masking tests rely on.
+    """
+    _, token = await _create_user_with_grants(
+        redis,
+        (
+            (Perm.TICKET_VIEW, "all"),
+            (Perm.TICKET_VIEW_DETAIL, "all"),
+            (Perm.TICKET_VIEW_PII, "all"),
+            (Perm.TICKET_VIEW_HISTORY, "own"),
+            (Perm.TICKET_ASSIGN, "own"),
+        ),
+    )
     return token
 
 

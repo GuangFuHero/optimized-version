@@ -38,13 +38,24 @@ flowchart LR
 
 ---
 
-## 2. 切換：`POST /auth/switch-identity`
+## 2. 切換：`POST /auth/switch-identity`（Bearer）、`POST /auth/session/identity`（瀏覽器）
 
 切換身分**不是憑證事件**。不輪替 refresh token、不延長 session 壽命、不要求重新登入。
 
+兩支 endpoint 走同一套規則（`services/auth_session.py` 的 `switch_identity`，就是下圖），差別只在新的 access token 交到哪裡
+（023/ADR-325）：
+
+| endpoint | 給誰 | 新的 access token | 另一種用戶端打進來 |
+|---|---|---|---|
+| `POST /auth/switch-identity` | 腳本、測試（Bearer） | 在 body | cookie 驗證的請求 → 403 `bearer_token_required`，什麼都不改 |
+| `POST /auth/session/identity` | 瀏覽器（cookie） | 寫進 `{p}_at` cookie，body 只回 `identity` | Bearer → 403 `cookie_session_required`，什麼都不改 |
+
+瀏覽器不能用前者，是因為 body 裡的 token 會被頁面上注入的 script 讀走，`HttpOnly` cookie 就白設了。Bearer 用戶端不能用後者，是因為它
+讀不到 cookie，手上那顆 token 卻已經跟 session 的身分對不上。
+
 ```mermaid
 flowchart TD
-    REQ["POST /auth/switch-identity<br/>{ role_uuid, team_uuid? }"] --> S1
+    REQ["POST /auth/switch-identity 或 /auth/session/identity<br/>{ role_uuid, team_uuid? }"] --> S1
 
     S1{"1 · resolve()<br/>你持有這個身分嗎"}
     S1 -- "否" --> E1["403 You do not hold that identity<br/><i>切換只在既有身分間移動，永不授予</i>"]
@@ -97,6 +108,9 @@ flowchart LR
 - `default_for_user()` 在平台身分（`team_uuid IS NULL`）裡**優先取 `user`**，超管也一樣；其餘依名稱、uuid 排序（019/ADR-290）。功能 019 之後一人可能持有 `user` 加一個其他平台身分：申請通過的資料檢核員、`bootstrap_admin` 設的超管（019/ADR-288、290）。要用後台權限就明確切換
 - 一筆都沒有時回 `None`（零權限），**刻意不退回任何 team 身分**——把人放到他沒有選擇的 team 身分上，正是 ADR-096 否決的「無聲降級」
 - 前台的請求帶 `X-WG-Realm: site` 時，**該次請求**改用此人持有的 `user`，token 與 session 都不變（019/ADR-289）；所以在後台切成什麼身分，都不影響前台
+- 後台的請求帶 `X-WG-Realm: admin` 時，token 的身分是後台身分（`user` 以外）就照用；是 `user` 或沒有身分時，
+  **該次請求**改用此人的第一個後台身分（平台身分優先，再依角色名稱、隊名、team uuid），token 與 session 一樣不變；
+  一個後台身分都沒有就回 403 `back_office_identity_required`（023/ADR-329）
 
 ---
 

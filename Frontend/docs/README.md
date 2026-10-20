@@ -8,12 +8,13 @@
 | --- | --- | --- |
 | 1 | [`frontend-working-principles.md`](frontend-working-principles.md) | 先理解 `apps/demo`、`libs/ui`、`libs/modules`、`libs/data-access` 的責任邊界 |
 | 2 | [`frontend-library-layering-inventory.md`](frontend-library-layering-inventory.md) | 對照 `libs/modules/src` 目前實際目錄與 capability 分層 |
-| 3 | [`authentication.md`](authentication.md) | 修改登入、註冊、NextAuth session、BFF auth route 前先讀 |
+| 3 | [`authentication.md`](authentication.md) | 修改登入、註冊、登出、session cookie、proxy 的 refresh 前先讀 |
 | 4 | [`data-access.md`](data-access.md) | 新增或調整 GraphQL / REST client、urql client、codegen 時查閱 |
 | 5 | [`site-map-interaction-architecture.md`](site-map-interaction-architecture.md) | 修改前台 `/map`、`/list`、分享 metadata 或 viewport/live-data 流程前先讀 |
 | 6 | [`admin-features.md`](admin-features.md) | 了解目前 repo 內 admin 頁面與 modules 的實作狀態，以及哪些部分仍未接通 |
 | 7 | [`database-schema.md`](database-schema.md) | 快速查看前端目前依賴的後端資料契約摘要 |
 | 8 | [`known-issues.md`](known-issues.md) | 先掃一遍目前已知的死碼、未串接功能與技術債 |
+| 9 | [`local-oauth-secrets-setup.md`](local-oauth-secrets-setup.md) | 要在本機測試 Google / LINE 登入時，照這份把 secret 寫進 `Backend/.env`（client ID 已在 `Backend/.env.example`） |
 
 ## 維護原則
 

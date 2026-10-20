@@ -1,7 +1,6 @@
 'use client';
 
-import { signOut } from 'next-auth/react';
-
+import { broadcastAuthChange } from './auth-broadcast';
 import { isSessionExpiredResponse, markSessionExpired } from './expiry';
 
 let signingOutHere = false;
@@ -13,10 +12,16 @@ export function isSigningOutHere(): boolean {
 
 /**
  * Say so before signing out here — 登出 from the menu, or an ended session — so the watch on
- * the session (`shouldReloadForSignOut`) leaves this tab to its own reload instead of adding one.
+ * the session (`shouldReloadForSessionChange`) leaves this tab to its own reload instead of adding
+ * one.
  */
 export function markSigningOutHere(): void {
   signingOutHere = true;
+}
+
+/** Signing out here did not go through: the session goes on, and its end is news again. */
+export function unmarkSigningOutHere(): void {
+  signingOutHere = false;
 }
 
 /** The tab's sessionStorage, or none where the browser refuses it (blocked site data). */
@@ -29,26 +34,35 @@ export function sessionStorageOrNull(): Storage | null {
 }
 
 /**
- * The proxy says the session has ended: sign out and reload where the person is, now a guest — as
- * signing out does, rather than sending them to the login page. A reload, not client-side
- * navigation: urql's cache lives in
- * the page and must not go on showing what the signed-in person could see. Runs once per tab,
- * however many requests come back marked at the same time.
+ * This tab is signed out now — the backend cleared both cookies in its answer (ADR-328) —
+ * so it carries on as a guest: the other tabs are told, and read the session again,
+ * and this one leaves for `href` or reloads where it is. A whole-page load, not client-side
+ * navigation: urql's cache lives in the page and must not go on showing what the signed-in person
+ * could see.
  */
-export async function endExpiredSession(): Promise<void> {
+export function continueSignedOut(href?: string): void {
+  markSigningOutHere();
+  broadcastAuthChange('signed-out');
+
+  if (href) {
+    window.location.assign(href);
+  } else {
+    window.location.reload();
+  }
+}
+
+/**
+ * The proxy says the session has ended: reload where the person is, now a guest — as signing out
+ * does, rather than sending them to the login page — with word for the next page to say why. Runs
+ * once per tab, however many requests come back marked at the same time.
+ */
+export function endExpiredSession(): void {
   if (signingOutHere) {
     return;
   }
 
-  markSigningOutHere();
   markSessionExpired(sessionStorageOrNull());
-
-  try {
-    // Clears next-auth's own view of the session and tells the other tabs, which reload as guests.
-    await signOut({ redirect: false });
-  } finally {
-    window.location.reload();
-  }
+  continueSignedOut();
 }
 
 /**
@@ -62,7 +76,7 @@ export const sessionExpiryFetch: typeof fetch = async (input, init) => {
     typeof window !== 'undefined' &&
     isSessionExpiredResponse(response.headers)
   ) {
-    void endExpiredSession();
+    endExpiredSession();
   }
 
   return response;

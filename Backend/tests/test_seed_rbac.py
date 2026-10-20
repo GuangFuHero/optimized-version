@@ -208,3 +208,30 @@ def test_auditing_tickets_is_the_back_offices():
         "admin": "zone",
         "member": "zone",
     }
+
+
+def test_every_back_office_role_reads_the_project_settings():
+    """ADR-324: every back-office page's shell shows the disaster; only a super admin changes it.
+
+    The site never reads the settings, and the disaster types its report form needs are public
+    (ADR-263), so `user` holds neither.
+    """
+    from app.core.permissions import Perm
+    from scripts.seed_rbac import ROLES_DATA
+
+    view = {spec["name"]: spec["permissions"].get(Perm.PROJECT_VIEW) for spec in ROLES_DATA}
+    edit = {spec["name"]: spec["permissions"].get(Perm.PROJECT_EDIT) for spec in ROLES_DATA}
+    assert view == {
+        "user": None,
+        "data_auditor": "all",
+        "super_admin": "all",
+        "admin": "all",
+        "member": "all",
+    }
+    assert edit == {
+        "user": None,
+        "data_auditor": None,
+        "super_admin": "all",
+        "admin": None,
+        "member": None,
+    }

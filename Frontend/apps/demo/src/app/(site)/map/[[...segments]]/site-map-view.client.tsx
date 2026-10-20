@@ -7,7 +7,6 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import { Box, ButtonBase, Fab, Stack, Typography, Zoom } from '@mui/material';
-import { useSession } from 'next-auth/react';
 
 import { designTokens, displayTextSize } from '@rescue-frontend/ui';
 
@@ -24,6 +23,7 @@ import {
   SiteMapControls,
   StationCreateDrawer,
   syncDocumentMetadata,
+  useAuthSession,
   useCreatedTicketMarker,
   useSiteMapLiveData,
   useSiteMapLiveDataSnapshot,
@@ -287,7 +287,7 @@ function SiteMapViewportDataLayer({
   onOpenShareTarget: (target: PointShareTarget) => void;
   onReplaceRouteState: (next: SiteRouteState) => void;
 }) {
-  const { status: authStatus } = useSession();
+  const { status: authStatus } = useAuthSession();
   const viewportState = useSiteMapViewportState();
   const viewportStore = useSiteMapViewportStore();
   const liveDataStore = useSiteMapLiveData(baseRouteState);

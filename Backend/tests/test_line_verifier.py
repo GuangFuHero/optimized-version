@@ -100,3 +100,43 @@ async def test_adapter_httpx_error_raises(monkeypatch):
     _patch_client(monkeypatch, boom)
     with pytest.raises(LineTokenVerificationError):
         await LineVerifyApiVerifier("chan").verify("tok")
+
+
+@pytest.mark.asyncio
+async def test_adapter_hands_line_the_nonce_and_checks_it_too(monkeypatch):
+    """The backend's own sign-in (ADR-331): LINE gets the nonce, and the claims it returns must carry it."""
+    sent = {}
+
+    def handler(req):
+        sent.update(dict(httpx.QueryParams(req.content.decode())))
+        return httpx.Response(200, json={"sub": "U1", "nonce": "n-1"})
+
+    _patch_client(monkeypatch, handler)
+    lid = await LineVerifyApiVerifier("chan").verify("tok", nonce="n-1")
+
+    assert lid.sub == "U1"
+    assert sent == {"id_token": "tok", "client_id": "chan", "nonce": "n-1"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("claims", [{"sub": "U1", "nonce": "another"}, {"sub": "U1"}])
+async def test_adapter_refuses_claims_without_the_nonce(monkeypatch, claims):
+    """Even if LINE answered 200, a token carrying another nonce, or none, is not this sign-in's."""
+    _patch_client(monkeypatch, lambda req: httpx.Response(200, json=claims))
+    with pytest.raises(LineTokenVerificationError):
+        await LineVerifyApiVerifier("chan").verify("tok", nonce="n-1")
+
+
+@pytest.mark.asyncio
+async def test_adapter_without_a_nonce_sends_and_checks_none(monkeypatch):
+    """Linking and step-up verify a token the frontend obtained, exactly as before."""
+    sent = {}
+
+    def handler(req):
+        sent.update(dict(httpx.QueryParams(req.content.decode())))
+        return httpx.Response(200, json={"sub": "U1"})
+
+    _patch_client(monkeypatch, handler)
+    await LineVerifyApiVerifier("chan").verify("tok")
+
+    assert sent == {"id_token": "tok", "client_id": "chan"}

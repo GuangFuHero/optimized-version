@@ -1,7 +1,6 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import {
   createContext,
   useCallback,
@@ -16,6 +15,7 @@ import { useClient, useMutation } from 'urql';
 
 import { ClaimNeedDocument, GetTicketDocument } from '@rescue-frontend/data-access';
 
+import { useAuthSession } from '../../session/auth-session';
 import { onTicketChanged } from '../ticket-changes';
 import { claimErrorMessage } from './claim-error';
 import {
@@ -80,14 +80,9 @@ interface NeedClaimProviderProps {
 export function NeedClaimProvider({ children, onTicketReloaded }: NeedClaimProviderProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session, status: sessionStatus } = useSession();
-  // The account's uuid — the app's auth options put it there; this library's session type does
-  // not know the field.
-  const sessionUser = session?.user;
-  const viewerId =
-    sessionUser && 'id' in sessionUser && typeof sessionUser.id === 'string'
-      ? sessionUser.id
-      : null;
+  const { user, status: sessionStatus } = useAuthSession();
+  // The account's uuid.
+  const viewerId = user?.uuid ?? null;
   const client = useClient();
   const [, executeClaim] = useMutation(ClaimNeedDocument);
   // Open is kept apart from what is being confirmed, so the dialog keeps its content while it

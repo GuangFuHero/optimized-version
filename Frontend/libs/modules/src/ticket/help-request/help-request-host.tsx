@@ -1,7 +1,6 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import {
   Suspense,
   useCallback,
@@ -22,6 +21,7 @@ import { useOptionalSiteMapRouteState } from '../../map/site/use-site-map-route-
 import { SiteMapViewportStoreContext } from '../../map/site/use-site-map-viewport-state';
 import { createSiteHref } from '../../route/serialize';
 import { useSiteRouteState } from '../../route/use-site-route-state';
+import { useAuthSession } from '../../session/auth-session';
 import { SiteToast } from '../../shell/site/site-toast';
 import { announceTicketCreated } from '../ticket-changes';
 import {
@@ -74,7 +74,7 @@ function HelpRequestReturn({
   onReturn: (seed: HelpRequestSeed | null) => void;
 }) {
   const searchParams = useSearchParams();
-  const { status } = useSession();
+  const { status } = useAuthSession();
   const [helpReturn] = useState(() => readHelpReturn(searchParams));
   const handled = useRef(false);
 
@@ -116,14 +116,8 @@ export function HelpRequestHost({ isAuthenticated }: HelpRequestHostProps) {
   // Only on the map, whose zoom the new ticket is shown at, unless that is too far out.
   const mapViewport = useContext(SiteMapViewportStoreContext);
   const [, createHelpRequest] = useMutation(CreateHelpRequestDocument);
-  const { data: session } = useSession();
-  // The account's uuid, as `NeedClaimProvider` reads it: the app's auth options put it there; this
-  // library's session type does not know the field.
-  const sessionUser = session?.user;
-  const userId =
-    sessionUser && 'id' in sessionUser && typeof sessionUser.id === 'string'
-      ? sessionUser.id
-      : null;
+  // The account's uuid, as `NeedClaimProvider` reads it.
+  const userId = useAuthSession().user?.uuid ?? null;
   const [opening, setOpening] = useState<Opening | null>(null);
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);

@@ -27,7 +27,6 @@ interface SiteShellProps {
   children: ReactNode;
   isAuthenticated?: boolean;
   userName?: string;
-  userImage?: string;
   onSignIn?: () => void;
   onSignOut?: () => void;
 }
@@ -40,7 +39,6 @@ export function SiteShell({
   children,
   isAuthenticated = false,
   userName,
-  userImage,
   onSignIn,
   onSignOut,
 }: SiteShellProps) {
@@ -101,7 +99,6 @@ export function SiteShell({
         <SiteTopNavBar
           isAuthenticated={isAuthenticated}
           userName={userName}
-          userImage={userImage}
           portalEntry={portalEntry}
           onApplyRoleRequest={openRoleRequest}
           onSignIn={onSignIn}
@@ -121,7 +118,6 @@ export function SiteShell({
           isAuthenticated={isAuthenticated}
           onMenuClick={() => setMobileDrawerOpen(true)}
           userName={userName}
-          userImage={userImage}
           onSignIn={onSignIn}
           onSignOut={onSignOut}
         />

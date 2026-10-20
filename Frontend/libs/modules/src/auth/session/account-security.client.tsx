@@ -10,9 +10,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { signOut } from 'next-auth/react';
 import { useState } from 'react';
 
+import { continueSignedOut } from '../../session/end-expired-session';
 import {
   newPasswordProblem,
   newPasswordText,
@@ -33,10 +33,26 @@ import {
   createHashedCredentialAsync,
   resolveHashedCredentialAsync,
 } from '../login/credentials';
+import {
+  loginMethodsText,
+  saltLookupIdentity,
+  type AccountContact,
+  type LoginMethod,
+} from './account-security-view';
 
 interface AccountSecurityClientProps {
-  currentIdentity?: string | null;
-  currentProvider?: 'credentials' | 'google' | 'line';
+  /** `/users/me`'s contacts and login methods, read on the server. */
+  contacts: AccountContact[];
+  loginMethods: LoginMethod[];
+}
+
+/**
+ * The backend ended every session of this account in its answer and cleared the cookies — a
+ * password changed or created, every device signed out (ADR-325) — so sign in
+ * again.
+ */
+function signInAgain() {
+  continueSignedOut('/login');
 }
 
 interface PendingContact {
@@ -84,9 +100,10 @@ function SecuritySection({
 }
 
 export function AccountSecurityClient({
-  currentIdentity,
-  currentProvider,
+  contacts,
+  loginMethods,
 }: AccountSecurityClientProps) {
+  const saltIdentity = saltLookupIdentity(contacts);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
@@ -116,8 +133,8 @@ export function AccountSecurityClient({
   const [isLoggingOutAll, setIsLoggingOutAll] = useState(false);
 
   async function handleChangePasswordAsync() {
-    if (!currentIdentity) {
-      setPasswordError('目前無法判斷你的登入識別，請重新登入後再試');
+    if (!saltIdentity) {
+      setPasswordError('你的帳號還沒有已驗證的聯絡方式，無法確認目前的密碼。');
       return;
     }
 
@@ -137,7 +154,7 @@ export function AccountSecurityClient({
 
     try {
       const currentPassword = await resolveHashedCredentialAsync(
-        currentIdentity,
+        saltIdentity,
         oldPassword,
       );
       const nextPassword = await createHashedCredentialAsync(newPassword);
@@ -149,7 +166,7 @@ export function AccountSecurityClient({
       });
 
       setPasswordSuccess('密碼已更新，系統將重新登入。');
-      await signOut({ callbackUrl: '/login' });
+      signInAgain();
     } catch (error) {
       setPasswordError(
         resolveAuthErrorMessage(error, '變更密碼失敗，請稍後再試。'),
@@ -183,9 +200,11 @@ export function AccountSecurityClient({
         salt_frontend: createdPassword.saltFrontend,
       });
 
-      setSetPasswordSuccessMessage('已建立登入密碼。');
+      setSetPasswordSuccessMessage('已建立登入密碼，請用新密碼重新登入。');
       setSetPasswordValue('');
       setSetPasswordConfirm('');
+      // The backend ends the session on a password created, as on one changed.
+      signInAgain();
     } catch (error) {
       setSetPasswordErrorMessage(
         resolveAuthErrorMessage(error, '建立密碼失敗，請稍後再試。'),
@@ -295,7 +314,7 @@ export function AccountSecurityClient({
 
     try {
       await logoutAllAsync();
-      await signOut({ callbackUrl: '/login' });
+      signInAgain();
     } finally {
       setIsLoggingOutAll(false);
     }
@@ -308,15 +327,7 @@ export function AccountSecurityClient({
           帳號安全
         </Typography>
         <Typography sx={{ mt: 1, fontSize: 14, color: '#6A5F5B' }}>
-          目前登入識別：{currentIdentity ?? '未提供'}
-        </Typography>
-        <Typography sx={{ mt: 0.5, fontSize: 14, color: '#6A5F5B' }}>
-          目前登入方式：
-          {currentProvider === 'google'
-            ? 'Google'
-            : currentProvider === 'line'
-              ? 'LINE'
-              : '密碼'}
+          登入方式：{loginMethodsText(loginMethods)}
         </Typography>
       </Box>
 
@@ -366,7 +377,7 @@ export function AccountSecurityClient({
 
       <SecuritySection
         title="建立登入密碼"
-        description="如果你的帳號原本只透過第三方登入，可以在這裡建立本地登入密碼。"
+        description="如果你的帳號原本只透過第三方登入，可以在這裡建立本地登入密碼。建立後需要重新登入。"
       >
         <Stack spacing={2}>
           <TextField

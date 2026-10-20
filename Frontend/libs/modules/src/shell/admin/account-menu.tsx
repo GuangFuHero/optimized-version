@@ -11,7 +11,7 @@ import {
   MenuItem,
 } from '@mui/material';
 import { useState } from 'react';
-import { signOut, useSession } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 import {
   useCurrentUser,
   useSwitchIdentity,
@@ -26,6 +26,7 @@ import {
   ROLE_DISPLAY_NAMES,
   TEAM_TYPE_DISPLAY_NAMES,
 } from '../../constants/roles';
+import { useAuthSession } from '../../session/auth-session';
 import { ProfileSheet } from './profile-sheet';
 
 const { color, radius, shadow, typography, motion } = designTokens;
@@ -49,8 +50,8 @@ function identityTone(identity: components['schemas']['IdentityOption']) {
 
 export function AccountMenu() {
   const { data: user } = useCurrentUser();
-  const { data: session } = useSession();
-  const name = user?.name ?? session?.user?.name ?? '';
+  const session = useAuthSession();
+  const name = user?.name ?? session.user?.name ?? '';
   const identity = user?.active_identity;
   const identities = user?.identities ?? [];
   const switchIdentity = useSwitchIdentity();
@@ -92,7 +93,7 @@ export function AccountMenu() {
           '&:hover': { bgcolor: color.bg.neutral.subtle },
         }}
       >
-        <Avatar name={name} src={session?.user?.image ?? undefined} size={36} />
+        <Avatar name={name} size={36} />
         <Box sx={{ lineHeight: 1.25 }}>
           <Box
             sx={{

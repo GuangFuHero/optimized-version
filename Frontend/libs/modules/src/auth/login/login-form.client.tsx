@@ -12,69 +12,42 @@ import {
   LoginForm,
   signedInMessage,
 } from './index';
+import { signInAsync } from '../api/client';
+import { useAuthSession } from '../../session/auth-session';
 import { sessionStorageOrNull } from '../../session/end-expired-session';
 import { takeSessionExpired } from '@rescue-frontend/modules/session';
-import { messageForCode } from '../api/error-messages';
+import { continueSignedIn } from './continue-signed-in';
 import { resolveHashedCredentialAsync } from './credentials';
-
-const LOGIN_FALLBACK_MESSAGE = '登入失敗，請確認帳號或密碼。';
+import {
+  LOGIN_FALLBACK_MESSAGE,
+  loginErrorMessage,
+  passwordSignInErrorMessage,
+} from './utils/login-error';
+import { oauthStartHref, safeReturnPath } from './utils/return-path';
 
 /**
- * Resolve the `?error=` next-auth redirected with.
- *
- * Two vocabularies arrive on this one parameter: next-auth's own codes, and — since `authorize` and
- * the `signIn` callback now throw instead of returning null — our backend's. Backend codes are tried
- * first so a classified failure keeps its meaning; a 429 used to land here as `CredentialsSignin`
- * and be reported as a wrong password.
+ * Who signs the form in: next-auth by default, the back office's way until its own move to the
+ * backend login (③); or the backend's cookies, for which Google and LINE need to know the app to
+ * send the person back to.
  */
-function resolveAuthErrorMessage(errorCode: string | null) {
-  const backendMessage = errorCode ? messageForCode(errorCode) : undefined;
-
-  if (backendMessage) {
-    return backendMessage;
-  }
-
-  switch (errorCode) {
-    // `login_failed` is what `authorize` throws when the failure carried no code of its own
-    // (network, gateway, a token-less 200). Same generic copy as next-auth's own fixed code.
-    case 'login_failed':
-    case 'CredentialsSignin':
-      return LOGIN_FALLBACK_MESSAGE;
-    case 'OAuthSignin':
-      return '無法啟動第三方登入流程，請稍後再試。';
-    case 'OAuthCallback':
-    case 'Callback':
-      return '第三方登入驗證失敗，請稍後再試。';
-    case 'AccessDenied':
-      return '第三方帳號未通過登入驗證。';
-    // next-auth used to answer these on its own error page, which `pages.error` now bypasses.
-    // `Configuration` in particular was a 500 saying to check the server logs — a deployment with
-    // no NEXTAUTH_SECRET must not read as an ordinary login failure.
-    case 'Configuration':
-      return '登入服務設定有誤，請聯絡管理員（伺服器 log 有詳細原因）。';
-    case 'Verification':
-      return '這個登入連結已失效或已被使用過，請重新登入。';
-    case 'OAuthAccountNotLinked':
-      return '這個帳號已綁定其他登入方式。';
-    case 'SessionRequired':
-      return '請先登入後再繼續。';
-    default:
-      return errorCode ? '登入流程發生錯誤，請稍後再試。' : undefined;
-  }
-}
+export type SignInWith =
+  | { signInWith?: 'next-auth' }
+  | { signInWith: 'backend'; app: 'site' | 'admin' };
 
 export function LoginFormClient({
   defaultCallbackUrl = '/map',
+  ...auth
 }: {
   defaultCallbackUrl?: string;
-}) {
+} & SignInWith) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { refetch: refetchSession } = useAuthSession();
   // Set by the page that sent the user here — a guest's 「登入後接」 among them — and kept if they
   // register instead, or go through a forgotten password.
   const requestedCallbackUrl = searchParams.get('callbackUrl');
   const callbackUrl = requestedCallbackUrl ?? defaultCallbackUrl;
-  const authErrorMessage = resolveAuthErrorMessage(searchParams.get('error'));
+  const authErrorMessage = loginErrorMessage(searchParams.get('error'));
   // Sent here by a page only a signed-in person sees (帳號安全) after the session ended there: the
   // site shell's notice never got to say why, so this page does.
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -84,6 +57,22 @@ export function LoginFormClient({
       setSessionExpired(true);
     }
   }, []);
+
+  async function signInWithProviderAsync(provider: 'google' | 'line') {
+    if (auth.signInWith === 'backend') {
+      // A whole-page navigation: the backend sends the browser on to Google or LINE.
+      window.location.assign(
+        oauthStartHref(provider, {
+          app: auth.app,
+          callbackUrl: requestedCallbackUrl,
+          fallback: defaultCallbackUrl,
+        }),
+      );
+      return;
+    }
+
+    await signIn(provider, { callbackUrl });
+  }
 
   return (
     <Stack spacing={2}>
@@ -100,16 +89,12 @@ export function LoginFormClient({
           {
             provider: 'google',
             label: '使用 Google 繼續',
-            onClick: async () => {
-              await signIn('google', { callbackUrl });
-            },
+            onClick: () => signInWithProviderAsync('google'),
           },
           {
             provider: 'line',
             label: '使用 LINE 繼續',
-            onClick: async () => {
-              await signIn('line', { callbackUrl });
-            },
+            onClick: () => signInWithProviderAsync('line'),
           },
         ]}
         onSubmitAsync={async ({ normalizedIdentity, password }) => {
@@ -117,6 +102,23 @@ export function LoginFormClient({
             normalizedIdentity,
             password,
           );
+
+          if (auth.signInWith === 'backend') {
+            try {
+              await signInAsync({
+                username: normalizedIdentity,
+                password: hashedPassword,
+              });
+            } catch (error) {
+              throw new AuthFormError(passwordSignInErrorMessage(error));
+            }
+
+            // next-auth's redirect callback kept `?callbackUrl=` on this site; now nothing else does.
+            continueSignedIn(
+              safeReturnPath(requestedCallbackUrl, defaultCallbackUrl),
+            );
+            return;
+          }
 
           const result = await signIn('credentials', {
             username: normalizedIdentity,
@@ -127,10 +129,12 @@ export function LoginFormClient({
 
           if (result?.error) {
             throw new AuthFormError(
-              resolveAuthErrorMessage(result.error) ?? LOGIN_FALLBACK_MESSAGE,
+              loginErrorMessage(result.error) ?? LOGIN_FALLBACK_MESSAGE,
             );
           }
 
+          // Nothing else tells this tab it is signed in now (next-auth's provider used to).
+          await refetchSession();
           startTransition(() => {
             router.replace(result?.url ?? callbackUrl, { scroll: false });
           });

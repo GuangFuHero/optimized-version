@@ -125,5 +125,33 @@ class ActiveIdentityRepository:
         ).first()
         return _to_identity(row) if row else None
 
+    async def back_office_identity(
+        self, db: AsyncSession, user_uuid: str, current: ActiveIdentity | None
+    ) -> ActiveIdentity | None:
+        """The identity a request from the back office acts as (ADR-329), or None if the caller holds none.
+
+        `current`, the token's identity, when it is a back-office one: whatever the caller switched to
+        there. `user` is the site's identity and where every login lands (ADR-290), so it — or no
+        identity at all — gives way to the first back-office identity the caller holds: anything besides
+        the platform `user` grant, platform identities first, then by role name, team name and team uuid.
+        The last two keep `admin` of two teams resolving to the same team on every request, which
+        ordering by role name alone does not.
+        """
+        if current is not None and not (current.is_platform and current.role_name == DEFAULT_PLATFORM_ROLE):
+            return current
+        row = (
+            await db.execute(
+                _select_identities()
+                .where(
+                    UserRoleAssign.user_uuid == user_uuid,
+                    or_(UserRoleAssign.team_uuid.is_not(None), Role.name != DEFAULT_PLATFORM_ROLE),
+                )
+                .order_by(
+                    UserRoleAssign.team_uuid.is_not(None), Role.name, Team.name, UserRoleAssign.team_uuid
+                )
+            )
+        ).first()
+        return _to_identity(row) if row else None
+
 
 active_identity_repository = ActiveIdentityRepository()

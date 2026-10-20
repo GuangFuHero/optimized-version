@@ -13,7 +13,12 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { designTokens, displayTextSize, Icons } from '@rescue-frontend/ui';
+import {
+  designTokens,
+  displayTextSize,
+  Icons,
+  nameInitials,
+} from '@rescue-frontend/ui';
 
 import { MyTasksDrawer } from '../../ticket/my-claims/my-tasks-drawer';
 
@@ -23,18 +28,13 @@ const PersonIcon = Icons.person;
 
 interface SiteUserMenuProps {
   userName?: string;
-  userImage?: string;
   onSignOut?: () => void;
 }
 
 /**
  * 前台使用者操作按鈕：以左側 Avatar 作為觸發點，開啟登出等帳號操作。
  */
-export function SiteUserMenu({
-  userName,
-  userImage,
-  onSignOut,
-}: SiteUserMenuProps) {
+export function SiteUserMenu({ userName, onSignOut }: SiteUserMenuProps) {
   const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
@@ -75,16 +75,19 @@ export function SiteUserMenu({
       >
         <Avatar
           alt={userName ?? '使用者'}
-          src={userImage}
           sx={{
             width: 32,
             height: 32,
             bgcolor: color.brand.secondary.default,
             color: color.fg.onSecondary,
             border: `1px solid ${color.border.default}`,
+            // Fixed, not displayTextSize (16 on a phone): two initials have to fit on one line in
+            // the 32px circle. The ui Avatar's size too (`size * 0.36`).
+            fontSize: 12,
           }}
         >
-          {!userImage ? <PersonIcon sx={{ fontSize: 20 }} /> : null}
+          {/* No picture since the login moved to the backend (`/users/me` has none): the name's initials. */}
+          {nameInitials(userName ?? '') || <PersonIcon sx={{ fontSize: 20 }} />}
         </Avatar>
       </ButtonBase>
 

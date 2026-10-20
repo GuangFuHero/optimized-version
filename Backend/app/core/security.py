@@ -10,16 +10,18 @@ from typing import Protocol
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
 from redis.exceptions import RedisError
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
 from app.core.context import request_identity
 from app.core.permissions import GOV_TEAM_WIDENED_PERMS, Perm
 from app.core.rbac_scopes import Scope, active_team
 from app.core.redis import get_redis
+from app.core.request_auth import accept_access_token
 from app.db.session import SessionLocal
 from app.models.auth import User
 from app.models.team import Team
@@ -146,7 +148,30 @@ def parse_salt_frontend(hashed_password_db: str) -> str | None:
 
 # --- JWT 與 其他邏輯 ---
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# The Bearer half of `get_access_token`. `auto_error=False`, because a request without the header may
+# still carry the access cookie (ADR-327); kept as a dependency so the OpenAPI schema clients are
+# generated from still declares the scheme.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+
+async def get_access_token(request: Request, _bearer: str | None = Depends(oauth2_scheme)) -> str:
+    """The access token of a request that must be signed in: a Bearer token, else the cookie.
+
+    `_bearer` is not read: `accept_access_token` parses the header itself, so REST and the GraphQL
+    context follow one rule, Origin check included. The dependency is there for OpenAPI.
+
+    No token at all is 401 `credentials_invalid` with detail "Not authenticated" — every 401 here
+    carries a code (ADR-328). It is not a cookie-authenticated request, so nothing is cleared.
+    """
+    token = accept_access_token(request)
+    if token is None:
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            ErrorCode.CREDENTIALS_INVALID,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return token
 
 
 def generate_salt(length: int = 16) -> str:
@@ -197,10 +222,22 @@ async def get_db():
 logger = logging.getLogger(__name__)
 
 
-def _credentials_exception() -> HTTPException:
-    """Build the standard 401 used when an access token cannot be validated."""
-    return HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
+def _credentials_exception(code: ErrorCode) -> ApiError:
+    """Build the 401 used when an access token cannot be used, naming why (ADR-328).
+
+    The detail is the same in every case; `code` is what a client branches on. Two codes mean
+    "refresh and send it again" — `access_token_expired`, `access_token_stale` — and the rest
+    mean the user is signed out. Without them a browser cannot tell a token that merely ran out
+    from a session that was revoked, and either refreshes in vain or signs out for nothing.
+
+    `code` has no default, and every caller spells it as `ErrorCode.X`: the same contract
+    `tests/test_error_codes.py` enforces on the auth endpoints, where a code that arrives some
+    other way is how a typo ships. A default would also let a new raise site sign users out
+    without anyone having decided that it should.
+    """
+    return ApiError(
+        status.HTTP_401_UNAUTHORIZED,
+        code,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
@@ -210,10 +247,13 @@ def _decode_access_payload(token: str) -> dict:
     """Decode and validate an access JWT, returning its payload. Raises 401 on any failure."""
     try:
         payload = jwt.decode(token, settings.JWT_SIGNING_KEY, algorithms=[settings.ALGORITHM])
+    except ExpiredSignatureError as err:
+        # Checked before JWTError, which it subclasses: only an expired token is worth refreshing.
+        raise _credentials_exception(ErrorCode.ACCESS_TOKEN_EXPIRED) from err
     except JWTError as err:
-        raise _credentials_exception() from err
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID) from err
     if payload.get("sub") is None or payload.get("type") != "access":
-        raise _credentials_exception()
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
     return payload
 
 
@@ -234,40 +274,51 @@ async def _require_live_session(redis, payload: dict) -> None:
     # session to check them against. Letting them through would make "leave the sid out" a
     # way around this check (ADR-101).
     if not sid:
-        raise _credentials_exception()
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
     try:
         session = await SessionRepository(redis).get_session(sid)
     except RedisError:
         # Fail closed (ADR-100): with Redis unreachable we cannot tell a live session from a
         # revoked one, and guessing "live" would hand anyone who can disrupt Redis a way to
-        # switch revocation off. The response is deliberately identical to an invalid token,
-        # so this log is the only thing that distinguishes "everyone was signed out" from
-        # "everyone's credentials broke".
+        # switch revocation off. But a 503, not a 401 (ADR-328): the session may well be alive,
+        # and a browser told it is signed out would have its cookies cleared and stay signed out
+        # after Redis is back. The log is what says why the store was unreachable.
         logger.exception("refusing the request: Redis (the session store) is unreachable")
-        raise _credentials_exception() from None
+        raise ApiError(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            ErrorCode.SESSION_STORE_UNAVAILABLE,
+            detail="Session store is unavailable",
+        ) from None
+    # Gone: logged out, signed out everywhere, a password change or an admin's kick. The token
+    # itself is fine, but nothing a refresh does can bring the session back (ADR-328).
+    if session is None:
+        raise _credentials_exception(ErrorCode.SESSION_EXPIRED)
     # A session that names a different user than the token does is not a case that can arise
     # today — both claims are signed — but pinning it here keeps sid/sub paired as an
     # invariant a future path cannot quietly break (ADR-101).
-    if session is None or session.get("user_uuid") != payload["sub"]:
-        raise _credentials_exception()
-    # The identity is pinned to the session too (ADR-195). `/auth/switch-identity` writes the
+    if session.get("user_uuid") != payload["sub"]:
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
+    # The identity is pinned to the session too (ADR-195). Switching identity writes the
     # new `act` into the session record, but the access token it replaced carries the same
     # sid/sub and would otherwise stay usable for the rest of its 15 minutes — replaying it
     # undoes a deliberate downgrade, and attributes whatever it does to the pre-switch
     # identity in the audit trail. The session record is the single source of truth for which
-    # identity a session is acting as; a token that disagrees with it is stale.
+    # identity a session is acting as; a token that disagrees with it is stale — and a refresh,
+    # which signs for the session's current identity, is what replaces it (ADR-328).
     if session.get("act") != payload.get("act"):
-        raise _credentials_exception()
+        raise _credentials_exception(ErrorCode.ACCESS_TOKEN_STALE)
 
 
-# The header, and the one value of it, by which the site marks its requests (ADR-289).
+# The header, and its two values, by which the site and the back office mark their requests
+# (ADR-289, ADR-329).
 REALM_HEADER = "X-WG-Realm"
 SITE_REALM = "site"
+ADMIN_REALM = "admin"
 
 
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
-    token: str = Depends(oauth2_scheme),
+    token: str = Depends(get_access_token),
     redis=Depends(get_redis),
     realm: str | None = Header(None, alias=REALM_HEADER),
 ) -> User:
@@ -276,8 +327,8 @@ async def get_current_user(
     An `act` claim that no longer names a grant the user holds — role revoked, role deleted,
     team soft-deleted — is refused here rather than quietly downgraded. Silently dropping to
     a lesser identity would leave the caller acting with permissions they cannot see they
-    lost; refusing makes it visible. `/auth/refresh` refuses the same case, so between them
-    the user is signed out and comes back on their platform identity.
+    lost; refusing makes it visible. `/auth/refresh` refuses the same case with the same
+    `identity_revoked`, so between them the user is signed out and comes back on their platform identity.
 
     A request the site marks with `realm` = `site` then acts as the caller's `user` grant
     instead, for that request alone (ADR-289): everyone signed in has the same
@@ -285,6 +336,11 @@ async def get_current_user(
     after the token's own identity has been checked, so a
     revoked one still 401s, and an account holding no `user` grant keeps the token's identity
     (ADR-289 decision 2). Neither the token nor the session changes.
+
+    A request the back office marks with `realm` = `admin` acts as a back-office identity in the
+    same way (ADR-329): the token's own, unless that is `user` — the site's identity, where every
+    login lands — in which case the caller's first back-office identity. An account holding none
+    gets a 403, after the same checks, so a revoked identity still 401s here too.
 
     `redis` and `realm` are ordinary parameters rather than read off the request, because the
     GraphQL context calls this function directly instead of through FastAPI and has to supply
@@ -294,12 +350,13 @@ async def get_current_user(
     await _require_live_session(redis, payload)
     user = await user_repository.get_by_uuid(db, payload["sub"])
     if user is None:
-        raise _credentials_exception()
+        raise _credentials_exception(ErrorCode.CREDENTIALS_INVALID)
     act = payload.get("act")
     if act:
         identity = await active_identity_repository.resolve(db, str(user.uuid), act)
         if identity is None:
-            raise _credentials_exception()
+            # The code a refresh answers too, so a client can say the access was taken away (ADR-328).
+            raise _credentials_exception(ErrorCode.IDENTITY_REVOKED)
     else:
         # No `act` at all is a different case from one that names a vanished identity: nothing
         # was claimed, so fall back to the platform identity — the ADR-069 default, and what
@@ -308,6 +365,15 @@ async def get_current_user(
         identity = await active_identity_repository.default_for_user(db, str(user.uuid))
     if realm == SITE_REALM:
         identity = await active_identity_repository.site_identity(db, str(user.uuid)) or identity
+    elif realm == ADMIN_REALM:
+        identity = await active_identity_repository.back_office_identity(db, str(user.uuid), identity)
+        if identity is None:
+            # Not a 401: the session is fine and the site still works, so nobody is signed out.
+            raise ApiError(
+                status.HTTP_403_FORBIDDEN,
+                ErrorCode.BACK_OFFICE_IDENTITY_REQUIRED,
+                "This account has no back-office identity",
+            )
     user.active_identity = identity
     await _publish_identity_for_auditing(db, identity)
     return user
@@ -334,13 +400,14 @@ async def _publish_identity_for_auditing(db: AsyncSession, identity) -> None:
     )
 
 
-async def get_current_session(token: str = Depends(oauth2_scheme)) -> tuple[str, str | None]:
+async def get_current_session(token: str = Depends(get_access_token)) -> tuple[str, str | None]:
     """Resolve (user_uuid, sid) from the access token without a DB hit or a Redis read.
 
     Deliberately does NOT check that the session is still live (ADR-190, superseding
-    ADR-180). Its only callers are the logout endpoints and `/auth/switch-identity`, and
-    "the session is gone" means something different at each: switch-identity checks it
-    itself and refuses, while logout has already got what it was asking for and answers 204.
+    ADR-180). Its only callers are the logout endpoints and the two that switch identity, and
+    "the session is gone" means something different at each: switching checks it itself
+    (`auth_session.switch_identity`) and refuses, while logout has already got what it was
+    asking for and answers 204.
     Raising 401 from here made `/auth/logout` non-idempotent, which breaks the ordinary
     client pattern of calling logout from a 401 interceptor.
 
@@ -350,6 +417,24 @@ async def get_current_session(token: str = Depends(oauth2_scheme)) -> tuple[str,
     """
     payload = _decode_access_payload(token)
     return payload["sub"], payload.get("sid")
+
+
+def session_id_of_access_token(token: str) -> str | None:
+    """The `sid` of an access token we signed, even an expired one; None for anything else.
+
+    Only for signing a browser out (ADR-325): a token past its 15 minutes still says which session
+    the browser holds, and refusing to read it would leave that session running. The signature is
+    still checked, so nobody can name a session that is not theirs.
+    """
+    try:
+        payload = jwt.decode(
+            token, settings.JWT_SIGNING_KEY, algorithms=[settings.ALGORITHM], options={"verify_exp": False}
+        )
+    except JWTError:
+        return None
+    if payload.get("type") != "access":
+        return None
+    return payload.get("sid")
 
 
 def _request_rbac_cache(request: Request) -> dict:

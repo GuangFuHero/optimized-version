@@ -26,6 +26,11 @@ export function runWithClientIp<T>(
   return clientIp ? clientIpStorage.run(clientIp, handler) : handler();
 }
 
+/** The IP `runWithClientIp` attached, for a backend call made with `fetch` rather than `requestAsync`. */
+export function currentClientIp(): string | undefined {
+  return clientIpStorage.getStore();
+}
+
 /**
  * Pick the browser's IP out of an inbound request's headers.
  *

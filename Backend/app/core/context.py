@@ -7,6 +7,7 @@ from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
+from app.core.request_auth import presented_access_token
 
 # Thread-safe/Async-safe context variables
 request_user_uuid: ContextVar[str | None] = ContextVar("request_user_uuid", default=None)
@@ -28,11 +29,13 @@ class AuditContextMiddleware(BaseHTTPMiddleware):
         if "x-forwarded-for" in request.headers:
             client_ip = request.headers["x-forwarded-for"].split(",")[0].strip()
 
-        # Extract authenticated user UUID from Authorization header
+        # Extract the authenticated user's UUID from the token the request carries — the Bearer
+        # token, or, from a browser, the access cookie (ADR-327) — read by the same rule that
+        # authenticates it, so the audit trail names whoever the request was let in as. Only
+        # attribution is decided here; whether the token is accepted is `get_current_user`'s call.
         user_uuid = None
-        auth_header = request.headers.get("authorization")
-        if auth_header and auth_header.lower().startswith("bearer "):
-            token = auth_header[7:]
+        token, _ = presented_access_token(request)
+        if token:
             try:
                 payload = jwt.decode(token, settings.JWT_SIGNING_KEY, algorithms=[settings.ALGORITHM])
                 if payload.get("type") == "access":

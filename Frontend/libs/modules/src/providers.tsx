@@ -3,13 +3,13 @@
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v13-appRouter';
 import { ThemeProvider } from '@mui/material/styles';
 import { UrqlProvider, ssrExchange } from '@urql/next';
-import { SessionProvider } from 'next-auth/react';
 import { useState, type ReactNode } from 'react';
 
 import {
   createUrqlClient,
   createUrqlExchanges,
 } from '@rescue-frontend/data-access';
+import { AuthSessionProvider } from './session/auth-session';
 import { sessionExpiryFetch } from './session/end-expired-session';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createAdminQueryClient } from '@rescue-frontend/data-access/admin';
@@ -43,7 +43,7 @@ function PortalUrqlClientProvider({ children }: { children: ReactNode }) {
 export function ApplicationProviders({ children }: { children: ReactNode }) {
   return (
     <AppRouterCacheProvider>
-      <SessionProvider>
+      <AuthSessionProvider>
         <ThemeProvider
           theme={theme}
           defaultMode="light"
@@ -54,7 +54,7 @@ export function ApplicationProviders({ children }: { children: ReactNode }) {
           {children}
           <Toaster richColors closeButton />
         </ThemeProvider>
-      </SessionProvider>
+      </AuthSessionProvider>
     </AppRouterCacheProvider>
   );
 }

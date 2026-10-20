@@ -1,9 +1,8 @@
 """Session endpoints: password login, refresh-token rotation, and logout."""
 
 import logging
-from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,66 +10,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import security
 from app.core.api_errors import ApiError, ErrorCode
 from app.core.config import settings
-from app.core.identity import encode_act
-from app.core.normalize import normalize_email, normalize_phone
 from app.core.redis import get_redis
-from app.db.session import attribute_writes_to
+from app.core.request_auth import authenticated_by_cookie
 from app.models.auth import User
 from app.repositories.active_identity_repository import active_identity_repository
-from app.repositories.auth_repository import (
-    contact_repository,
-    identity_repository,
-    user_repository,
-)
-from app.repositories.session_repository import (
-    InvalidRefreshToken,
-    RefreshTokenReuse,
-    SessionRepository,
-)
+from app.repositories.session_repository import SessionRepository
 from app.schemas.auth import (
     AccessTokenResponse,
     RefreshRequest,
     SwitchIdentityRequest,
     TokenPair,
 )
+from app.services import auth_session
 
-from .deps import get_rate_limiter, issue_token_pair
+from .deps import (
+    PASSWORD_SIGN_IN_BUCKET,
+    clear_cookies_if_cookie_authenticated,
+    get_rate_limiter,
+    issue_token_pair,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-async def _record_activity(db: AsyncSession, user_uuid: str) -> None:
-    """Stamp `users.last_activity_at`, swallowing any failure (ADR-093).
-
-    Called only after the refresh token has already been rotated, so raising here would cost
-    the caller their session — see the note in `refresh`. The session is rolled back on
-    failure so the request's remaining work is not left inside an aborted transaction.
-
-    `users` is an audited table, so the write appends an `audit_logs` row; naming the actor
-    first is what keeps that row attributable (ADR-170).
-    """
-    try:
-        user = await user_repository.get_by_uuid(db, user_uuid)
-        if user is not None:
-            # `rotate()` resolved this uuid from the refresh token it just accepted, so the
-            # actor is known even though the request carried no access token (ADR-170).
-            await attribute_writes_to(db, user_uuid)
-            await user_repository.update(
-                db, db_obj=user, obj_in={"last_activity_at": datetime.now(UTC)}
-            )
-    except Exception:  # noqa: BLE001 — observability must never fail the token exchange
-        logger.warning("Could not record last_activity_at for %s", user_uuid, exc_info=True)
-        try:
-            await db.rollback()
-        except Exception:  # noqa: BLE001 — the session is already unusable; nothing to salvage
-            logger.warning("Rollback after the activity write also failed", exc_info=True)
-
-
 @router.post("/login",
              response_model=TokenPair,
-             dependencies=[Depends(get_rate_limiter(5, 60))])
+             dependencies=[Depends(get_rate_limiter(5, 60, bucket=PASSWORD_SIGN_IN_BUCKET))])
 async def login(
         request: Request,
         form_data: OAuth2PasswordRequestForm = Depends(),
@@ -78,31 +45,8 @@ async def login(
         redis=Depends(get_redis),
 ):
     """Email/phone + password login: contact → user → password identity → verify."""
-    cred_exc = ApiError(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        code=ErrorCode.CREDENTIALS_INVALID,
-        detail="Incorrect email or password",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    raw = form_data.username
-    user = None
-    for type_, normalizer in (("email", normalize_email), ("phone", normalize_phone)):
-        try:
-            ident = normalizer(raw)
-        except ValueError:
-            continue
-        user = await contact_repository.get_user_by_contact(db, type_=type_, value=ident)
-        if user:
-            break
-    if user is None:
-        raise cred_exc
-    identity = await identity_repository.get_password_identity(db, str(user.uuid))
-    if identity is None or not security.verify_password(form_data.password, identity.password_hash):
-        raise cred_exc
-    # The request carries no access token, so nothing has named an actor for the audit
-    # trigger — but the password check above just proved who this is (ADR-170).
-    await attribute_writes_to(db, str(user.uuid))
-    await user_repository.update(db, db_obj=user, obj_in={"last_login_at": datetime.now(UTC)})
+    user = await auth_session.authenticate_password(db, form_data.username, form_data.password)
+    await auth_session.record_login(db, user)
     identity = None
     if form_data.scopes:
         # OAuth2PasswordRequestForm carries `scope`; the client passes the identity it
@@ -130,74 +74,11 @@ async def refresh(
 ):
     """以 refresh token 換發新的 access token，並 rotate refresh token。
 
-    The identity is validated BEFORE rotating (ADR-096). `rotate()` burns the old refresh
-    token the moment it runs, so refusing afterwards would leave the caller holding a dead
-    token with no replacement — and their retry would read as a replay and revoke the whole
-    session. Reading the record first is side-effect free.
-
-    **The identity comes from the session when the caller does not name one** (ADR-188).
-    `body.identity` still wins, so a client that tracks it keeps deciding; but a client that
-    does not — or forgets on one request — no longer gets silently returned to its platform
-    identity, which for a super_admin acting as a team member was a silent re-escalation
-    every time an access token expired.
-
-    Rotation is also where `users.last_activity_at` is recorded (ADR-093). Access tokens
-    live 15 minutes, so an active user rotates about that often — precise enough to answer
-    "has this account been used lately?", which is all the admin console needs. It is
-    deliberately NOT updated per request: `users` is in AUDITED_TABLES, so that would append
-    one `audit_logs` row per request and bury the audit trail under activity noise.
-
-    `SessionRepository` stays a pure Redis component — the DB write happens here, not there.
-
-    The write is deliberately best-effort. By the time `rotate()` returns it has already
-    burned the old refresh token (`session_repository.py:78` claims the `refresh_used:` flag),
-    so letting a DB error escape would 500 the request *after* the old token died: the client
-    never receives `new_refresh`, retries with the old one, and `rotate()` reads that as a
-    replay and revokes the entire session. A transient DB outage would sign the device out
-    permanently. `last_activity_at` is observability — it is not worth a user's session.
+    `body.identity`, when given, names the identity the new token acts as; otherwise the
+    session's own carries forward (ADR-188). See `auth_session.refresh_session` for the rest.
     """
-    repo = SessionRepository(redis)
-    record = await repo.get_refresh(SessionRepository._hash(body.refresh_token))
-    session = await repo.get_session(record["sid"]) if record else None
-    # What the caller asked for, else what this session was already acting as. None means a
-    # session predating ADR-188, which falls back to the platform default as it used to.
-    wanted = body.identity or (session or {}).get("act")
-    # Resolved once, before rotation, and reused afterwards (ADR-206). `rotate()` returns the
-    # same session's owner and `wanted` cannot change in between, so resolving a second time
-    # asked the database an identical question — on every refresh, from every logged-in
-    # client, roughly every 15 minutes.
-    identity = None
-    if wanted is not None and record is not None:
-        identity = await active_identity_repository.resolve(db, record["user_uuid"], wanted)
-        if identity is None:
-            # The identity this client was acting as is gone. Refuse here as well as on the
-            # request path, so a revoked identity means signed out, not silently downgraded.
-            raise ApiError(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                code=ErrorCode.IDENTITY_REVOKED,
-                detail="This identity no longer exists",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-    try:
-        sid, user_uuid, new_refresh = await repo.rotate(body.refresh_token)
-    except (InvalidRefreshToken, RefreshTokenReuse) as err:
-        raise ApiError(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            code=ErrorCode.REFRESH_TOKEN_INVALID,
-            detail="Invalid or revoked refresh token",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from err
-    # Only the no-identity path still needs a query here: `wanted` was already resolved above.
-    if not wanted:
-        identity = await active_identity_repository.default_for_user(db, user_uuid)
-    # Rotation preserves the session record, so a `wanted` that came from it is already
-    # stored; one the caller named has to be written back, or the next refresh without an
-    # identity would revert to whatever the session remembered before.
-    if identity is not None:
-        await repo.set_identity(sid, identity.to_claim())
-    await _record_activity(db, user_uuid)
-    access_token = security.create_access_token(
-        data={"sub": user_uuid}, sid=sid, act=identity.to_claim() if identity else None
+    access_token, new_refresh, identity = await auth_session.refresh_session(
+        db, redis, body.refresh_token, body.identity
     )
     return TokenPair(
         access_token=access_token, refresh_token=new_refresh,
@@ -210,6 +91,7 @@ async def refresh(
              dependencies=[Depends(get_rate_limiter(10, 60))])
 async def switch_identity(
         body: SwitchIdentityRequest,
+        request: Request,
         session=Depends(security.get_current_session),
         current_user: User = Depends(security.get_current_user),
         db: AsyncSession = Depends(security.get_db),
@@ -217,46 +99,21 @@ async def switch_identity(
 ):
     """Act as a different identity you already hold; returns a re-signed access token.
 
-    Deliberately gated by nothing but being logged in. Requiring a capability here would let
-    a user downgrade into an identity that cannot switch back, locking themselves out of
-    their own permissions (ADR-070).
+    The rules are in `auth_session.switch_identity`. Rate limited because it mints credentials,
+    as `login` and `refresh` do (ADR-183).
 
-    Only re-signs the access token — the session is untouched and the refresh token is not
-    rotated, because switching is not a credential event.
-
-    **The session it re-signs from has to still exist** (ADR-183). This mints a fresh
-    access token with a fresh expiry, so without that check the endpoint is a token
-    refresher gated on nothing but holding an unexpired token: after `logout` or
-    `logout-all`, `/auth/refresh` correctly refuses, but calling this before each expiry
-    would keep a revoked session alive indefinitely. Rate limited for the same reason —
-    it mints credentials, and `login` and `refresh` both are.
+    **Bearer only** (ADR-325). The answer carries the token in its body, which is exactly what
+    the browser's cookie keeps away from the page's scripts, so a request signed in by the
+    cookie is refused. A browser switches through `POST /auth/session/identity`.
     """
-    identity = await active_identity_repository.resolve(
-        db, str(current_user.uuid),
-        encode_act(str(body.role_uuid), str(body.team_uuid) if body.team_uuid else None),
-    )
-    if identity is None:
-        # Switching may only move between identities already held; it never grants one.
+    if authenticated_by_cookie(request):
         raise ApiError(
             status_code=status.HTTP_403_FORBIDDEN,
-            code=ErrorCode.IDENTITY_NOT_HELD,
-            detail="You do not hold that identity",
+            code=ErrorCode.BEARER_TOKEN_REQUIRED,
+            detail="A browser switches identity through POST /auth/session/identity",
         )
     _user_uuid, sid = session
-    if sid is None or await SessionRepository(redis).get_session(sid) is None:
-        raise ApiError(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            code=ErrorCode.SESSION_EXPIRED,
-            detail="Session is no longer active",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    # The switch has to outlive the token it returns (ADR-188): without this the session
-    # still remembers the identity it was created with, and the next refresh that does not
-    # name one would undo the switch.
-    await SessionRepository(redis).set_identity(sid, identity.to_claim())
-    access_token = security.create_access_token(
-        data={"sub": str(current_user.uuid)}, sid=sid, act=identity.to_claim()
-    )
+    access_token, identity = await auth_session.switch_identity(db, redis, current_user, sid, body)
     return AccessTokenResponse(
         access_token=access_token, expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         identity=identity.to_view(),
@@ -297,6 +154,8 @@ async def logout(
 
 @router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
 async def logout_all(
+        request: Request,
+        response: Response,
         session=Depends(security.get_current_session),
         redis=Depends(get_redis),
 ):
@@ -310,12 +169,15 @@ async def logout_all(
     caller's own session has to be live for this to revoke anything; when it is not, the
     answer is still 204, because "every device is signed out" is what the caller asked for
     and this token's own device already is (ADR-190).
+
+    A browser signed in by cookie has them cleared, on both 204s: either way its session is over.
     """
     _, sid = session
     repo = SessionRepository(redis)
     try:
         live = await repo.get_session(sid) if sid is not None else None
         if live is None:
+            clear_cookies_if_cookie_authenticated(request, response)
             return
         # The session record's own `user_uuid`, not the token's `sub` (ADR-223). Both claims
         # are signed, so no path mints a mismatched pair today — but this is the endpoint
@@ -331,3 +193,4 @@ async def logout_all(
             code=ErrorCode.SESSION_STORE_UNAVAILABLE,
             detail="Session store is unavailable; you are not signed out",
         ) from err
+    clear_cookies_if_cookie_authenticated(request, response)

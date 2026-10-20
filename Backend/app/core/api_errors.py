@@ -37,9 +37,19 @@ class ErrorCode(StrEnum):
     # The session died out from under a live client (revoked elsewhere, or expired). Remedy:
     # sign in again; everything will be as it was.
     SESSION_EXPIRED = "session_expired"
-    # Logout could not reach the session store, so the caller is still signed in. Distinct from
-    # every other failure because the generic "something went wrong" copy would let a user walk
-    # away from a shared machine believing they signed out.
+    # The access token's own 15 minutes ran out; the session behind it is fine. Remedy: refresh
+    # and send the request again — unlike SESSION_EXPIRED, nobody is signed out (ADR-328).
+    ACCESS_TOKEN_EXPIRED = "access_token_expired"
+    # The session switched identity after this token was signed (ADR-195). Remedy: refresh, which
+    # signs a token for the identity the session acts as now (ADR-328).
+    ACCESS_TOKEN_STALE = "access_token_stale"
+    # A cookie-authenticated write that did not come from one of our own pages (ADR-327) — what a
+    # forged form on another site looks like. Not the user's doing, so nothing for them to fix.
+    ORIGIN_NOT_ALLOWED = "origin_not_allowed"
+    # The session store could not be reached, so whether the caller is signed in is unknown. On a
+    # logout, distinct from every other failure because the generic "something went wrong" copy
+    # would let a user walk away from a shared machine believing they signed out. On any other
+    # request (503, ADR-328), so the caller is refused without being signed out.
     SESSION_STORE_UNAVAILABLE = "session_store_unavailable"
 
     # Identity switching (multi-team membership)
@@ -49,6 +59,17 @@ class ErrorCode(StrEnum):
     # A switch may only move between identities already held; the client's list was stale.
     # Remedy: refresh the identity list, not the sign-in.
     IDENTITY_NOT_HELD = "identity_not_held"
+    # `/auth/switch-identity` answers with a token in the body, so a request signed in by the cookie is
+    # refused there (ADR-325): the cookie exists to keep the token from the page's scripts. A browser
+    # switches through `POST /auth/session/identity`. A client bug, not something to show a user.
+    BEARER_TOKEN_REQUIRED = "bearer_token_required"
+    # The mirror case: `POST /auth/session/identity` answers with a cookie, so a Bearer request is refused
+    # there and switches through `/auth/switch-identity` (ADR-325). Also a client bug.
+    COOKIE_SESSION_REQUIRED = "cookie_session_required"
+    # A back-office request (ADR-329) from an account holding nothing besides `user`. Not a sign-in
+    # failure: the session is fine and the site still works, so the back office says "no access"
+    # and signs nobody out.
+    BACK_OFFICE_IDENTITY_REQUIRED = "back_office_identity_required"
 
     # Social login
     SSO_TOKEN_INVALID = "sso_token_invalid"
@@ -64,6 +85,20 @@ class ErrorCode(StrEnum):
     # A first login that raced another and could not complete. Distinct from the "taken" cases
     # because the remedy is to retry, not to log in some other way.
     SSO_SIGNIN_RACE = "sso_signin_race"
+
+    # The backend's own Google / LINE sign-in (ADR-331). They reach the browser as `?error=<code>` on the
+    # sign-in page, which is where the user lands either way; only a start naming no app of ours is
+    # answered as JSON instead, there being no sign-in page to send it to.
+    # A sign-in that cannot be started: an unknown or unconfigured provider, an unknown app, or a
+    # `return_to` that is not a path on our own site. A bug in the page that linked here.
+    OAUTH_REQUEST_INVALID = "oauth_request_invalid"
+    # The provider sent the browser back with a state this browser did not start, or one already used
+    # or expired. Remedy: start again.
+    OAUTH_STATE_INVALID = "oauth_state_invalid"
+    # The user said no at the provider. Not an error to apologise for: just offer the buttons again.
+    OAUTH_CANCELLED = "oauth_cancelled"
+    # The provider could not be asked for the user's identity, or answered with none. Remedy: retry.
+    OAUTH_EXCHANGE_FAILED = "oauth_exchange_failed"
 
     # Step-up proof before authentication material changes (ADR-215/217/220/234).
     # STEP_UP_REQUIRED is not a mistake the caller made: the backend has just delivered a code

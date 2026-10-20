@@ -80,6 +80,7 @@ class UserResponse(UserBase):
         None,
         description=(
             "這次請求使用的身分，一次只有一個；帶 `X-WG-Realm: site` 的請求是 `user`（ADR-289）；"
+            "帶 `X-WG-Realm: admin` 的請求是後台身分，token 的身分是 `user` 時改用第一個後台身分（ADR-329）；"
             "沒有時為 null"
         ),
     )
@@ -165,6 +166,43 @@ class TokenPair(BaseModel):
     identity: IdentityView | None = None
 
 
+class SessionSignInRequest(BaseModel):
+    """Body for `POST /auth/session`: the credentials `/auth/login` takes as a form (ADR-325).
+
+    320 is the longest email the normaliser accepts (#75), so a longer username is refused before
+    anything reads it.
+    """
+
+    username: str = Field(..., max_length=320)
+    password: str = Field(..., min_length=6, max_length=255)  # already frontend-hashed
+
+
+class SignedInUser(BaseModel):
+    """The account a browser just signed in as."""
+
+    uuid: UUID
+    name: str
+
+
+class SignedInResponse(BaseModel):
+    """Answer to the browser's sign-in and registration: who, and as which identity (ADR-325).
+
+    No token: those went into `HttpOnly` cookies, where a script on the page cannot read them.
+    """
+
+    user: SignedInUser
+    identity: IdentityView | None = None
+
+
+class SessionIdentityResponse(BaseModel):
+    """Answer to the browser's identity switch: the identity now in effect (ADR-325).
+
+    The new access token went into the cookie, so there is none here.
+    """
+
+    identity: IdentityView
+
+
 class RefreshRequest(BaseModel):
     """Request body carrying a refresh token to exchange.
 
@@ -225,12 +263,6 @@ class StepUp(BaseModel):
     id_token: str | None = Field(None, min_length=1)
 
 
-class GoogleSsoRequest(BaseModel):
-    """Body carrying a Google id_token for SSO login / first-login create."""
-
-    id_token: str = Field(..., min_length=1)
-
-
 class LinkGoogleRequest(BaseModel):
     """Body carrying a Google id_token to link to the current account, plus its proof.
 
@@ -245,9 +277,9 @@ class LinkGoogleRequest(BaseModel):
 
 
 class IdTokenRequest(BaseModel):
-    """Body carrying a provider id_token (LINE SSO / link).
+    """Body carrying a LINE id_token to link to the current account, plus its proof.
 
-    `step_up` is ignored on the SSO login path and required on the link path (ADR-217).
+    Same contract as `LinkGoogleRequest` (ADR-217).
     """
 
     id_token: str = Field(..., min_length=1)

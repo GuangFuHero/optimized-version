@@ -104,7 +104,7 @@ services:
       - app-network
 
   # Cloudflare Tunnel: outbound-only connection to Cloudflare's edge — no inbound ports on
-  # the VM, free HTTPS. Public hostname demo.wan-guard.com -> http://frontend:3000 is set in
+  # the VM, free HTTPS. Public hostname staging.wan-guard.com -> http://frontend:3000 is set in
   # the Zero Trust dashboard. TUNNEL_TOKEN comes from .env.frontend (gen_env → Secret Manager).
   cloudflared:
     image: cloudflare/cloudflared:latest

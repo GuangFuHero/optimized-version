@@ -66,7 +66,6 @@ function SiteRealmBadge() {
 interface SiteTopNavBarProps {
   isAuthenticated?: boolean;
   userName?: string;
-  userImage?: string;
   /** Which back-office entry sits beside the badge (`sitePortalEntry`, worked out in the shell). */
   portalEntry?: SitePortalEntry;
   /** 申請管理權限: opens the application drawer, which the shell holds. */
@@ -78,7 +77,6 @@ interface SiteTopNavBarProps {
 export function SiteTopNavBar({
   isAuthenticated = false,
   userName,
-  userImage,
   portalEntry = 'none',
   onApplyRoleRequest,
   onSignIn,
@@ -141,11 +139,7 @@ export function SiteTopNavBar({
         {/* The site's pages have no title to sit beside, so here. */}
         <PageHelpButton ringColor={palette.frame} />
         {isAuthenticated ? (
-          <SiteUserMenu
-            userName={userName}
-            userImage={userImage}
-            onSignOut={onSignOut}
-          />
+          <SiteUserMenu userName={userName} onSignOut={onSignOut} />
         ) : (
           <ButtonBase
             disableRipple

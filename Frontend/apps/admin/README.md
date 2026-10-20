@@ -1,6 +1,6 @@
 # Admin app
 
-Run `pnpm dev:admin` from `Frontend/`. The app uses Next.js 16 and listens on port 3001. Pages use root routes such as `/dashboard`, `/map`, `/tickets`, and `/stations`; `/` opens the dashboard. Copy `.env.example` to `.env.local` and set `NEXTAUTH_SECRET`. Use the same secret as the site to share its session on the same hostname. Set `ADMIN_APP_URL` in the demo app to the deployed admin origin. The site's `/admin` entry redirects to that origin's root.
+Run `pnpm dev:admin` from `Frontend/`. The app uses Next.js 16 and listens on port 3001. Pages use root routes such as `/dashboard`, `/map`, `/tickets`, and `/stations`; `/` opens the dashboard. Copy `.env.example` to `.env.local` and set `NEXTAUTH_SECRET`. The site signs in with the backend's cookies now, so until the back office does too it signs in on its own: a sign-in on the site does not carry over. Set `ADMIN_APP_URL` in the demo app to the deployed admin origin. The site's `/admin` entry redirects to that origin's root.
 
 Both apps use shared document layout, UI/session providers, GraphQL and REST proxy handlers, and Google reverse geocoding. The app's route files select the admin audience. Backend requests use the current token identity and omit the site's `X-WG-Realm` header. `API_BASE_URL` includes `/api`.
 

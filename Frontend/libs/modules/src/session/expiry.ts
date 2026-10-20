@@ -22,6 +22,10 @@ export interface SessionExpiryInput {
  * A revoked token answers 401 for every request, public ones included (backend
  * `tests/test_graphql/test_session_revocation.py`). A 403 is a signed-in caller who may not do
  * this, and a guest's 401 ends nothing they had.
+ *
+ * The back office's rule, for as long as it still signs in with next-auth and sends a bearer token.
+ * The site's proxy no longer needs it: the backend names an ended session in the 401's `code`
+ * (`session_expired`, `credentials_invalid`; ADR-328), see `backend-proxy.ts`.
  */
 export function isSessionExpired({
   refreshFailed,
@@ -56,28 +60,41 @@ export function reloginHref({
   return `/login?callbackUrl=${callbackUrl}`;
 }
 
-/** next-auth's `useSession().status`, spelled out so this file stays import-free. */
+/** `useAuthSession().status` (`auth-session.tsx`), spelled out so this file stays import-free. */
 export type SessionStatus = 'authenticated' | 'unauthenticated' | 'loading';
 
+/** What the reload rule reads of `useAuthSession()`. */
+export interface SessionSeen {
+  status: SessionStatus;
+  user: { uuid: string } | null;
+}
+
 /**
- * Another tab signed out — on its own, or because its session ended — and next-auth told this one
- * (its sign-out broadcast, or a refetch on focus): reload, so urql's cache stops showing what the
- * signed-in person could see. Only from `authenticated`:
- * `loading` is a page still reading its session, not a sign-out.
+ * The person this tab shows is no longer the one signed in — another tab signed out (on its own,
+ * or because its session ended), signed in, or signed out and in as someone else — and this tab
+ * has just read its session again (the other tab's broadcast, or a check on focus): reload, so
+ * urql's cache stops showing what the last person, or the guest, was shown. A guest's results lack
+ * what is the person's own: a need they already took would still offer 接這筆. A tab left in the
+ * background may go straight from one person to the next without ever seeing the guest in between.
+ *
+ * `loading` is a page still reading its session, neither a sign-in nor a sign-out. The tab that
+ * signs in is not reloaded here: the login and register pages sit outside the site shell, and it
+ * loads its next page whole anyway (`continueSignedIn`).
  */
-export function shouldReloadForSignOut({
+export function shouldReloadForSessionChange({
   previous,
   current,
   signingOutHere,
 }: {
-  previous: SessionStatus;
-  current: SessionStatus;
+  previous: SessionSeen;
+  current: SessionSeen;
   /** This tab started the sign-out and reloads by itself. */
   signingOutHere: boolean;
 }): boolean {
   return (
-    previous === 'authenticated' &&
-    current === 'unauthenticated' &&
+    previous.status !== 'loading' &&
+    current.status !== 'loading' &&
+    current.user?.uuid !== previous.user?.uuid &&
     !signingOutHere
   );
 }
