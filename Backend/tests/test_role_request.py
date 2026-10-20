@@ -122,7 +122,7 @@ async def _reviewer(db) -> User:
     return acting_as(reviewer, super_admin)
 
 
-async def _reject(db, reviewer: User, request_uuid, note: str | None = None):
+async def _reject(db, reviewer: User, request_uuid, note: str | None = "資料不足，請補上單位證明"):
     """Turn an application down as `reviewer`, refreshed first for the same reason as in _submit."""
     await refresh_actor(db, reviewer)
     return await role_request.reject(db, actor=reviewer, request_uuid=request_uuid, note=note)
@@ -427,15 +427,17 @@ async def test_rejecting_records_who_decided_and_their_reply(db):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("note", [None, "   "])
-async def test_a_blank_reply_is_no_reply(db, note):
-    """Nothing typed and only spaces typed read the same: the card falls back to its default."""
+async def test_a_rejection_without_a_reason_is_refused(db, note):
+    """Spec 026 (BE-038 step 4): the applicant always hears why, so a blank reason is refused."""
     reviewer = await _reviewer(db)
     citizen = await _citizen(db)
     request = await _submit(db, citizen)
+    request_uuid = request.uuid
 
-    rejected = await _reject(db, reviewer, request.uuid, note=note)
-
-    assert rejected.review_note is None
+    with pytest.raises(ValueError, match="^A reason is required$"):
+        await _reject(db, reviewer, request_uuid, note=note)
+    [still] = (await _state(db, citizen)).requests
+    assert still.status == "pending"
 
 
 @pytest.mark.asyncio
@@ -494,15 +496,9 @@ async def test_only_a_reviewer_can_reject(db):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("note", "body"),
-    [
-        ("請附上單位證明後再申請", "請附上單位證明後再申請"),
-        (None, "你原本的權限沒有任何改變，可以再送一次申請。"),
-    ],
-)
+@pytest.mark.parametrize(("note", "body"), [("請附上單位證明後再申請", "請附上單位證明後再申請")])
 async def test_the_applicant_hears_they_were_turned_down(db, note, body):
-    """ADR-287, in the prototype's words (wg-bridge.js): the reply if there is one, else reassurance."""
+    """ADR-287: the applicant reads the reason, which is required since Spec 026."""
     reviewer = await _reviewer(db)
     citizen = await _citizen(db)
     citizen_uuid = citizen.uuid
@@ -536,7 +532,9 @@ async def test_the_review_list_is_oldest_first_and_names_the_applicant(db, statu
         if name == "乙":
             await _withdraw(db, citizen, request.uuid)
 
-    entries = await role_request.list_for_review(db, status=status, skip=skip, limit=limit)
+    reviewer = await _reviewer(db)
+    await refresh_actor(db, reviewer)
+    entries = await role_request.list_for_review(db, actor=reviewer, status=status, skip=skip, limit=limit)
 
     assert [entry.applicant_name for entry in entries] == applicants
     assert all(entry.request.reason == REASON for entry in entries)

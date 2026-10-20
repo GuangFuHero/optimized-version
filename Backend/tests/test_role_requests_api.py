@@ -130,7 +130,7 @@ async def test_a_refusal_carries_the_status_that_says_why(client, db_session, re
         response = await client.get(URL, params={"status": "super_admin"}, headers=headers)
     else:
         target = str(uuid.uuid4()) if case == "an application that does not exist" else request_uuid
-        note = "字" * 501 if case == "a reply over 500 characters" else None
+        note = "字" * 501 if case == "a reply over 500 characters" else "理由"
         response = await client.post(f"{URL}/{target}/reject", json={"note": note}, headers=headers)
 
     assert response.status_code == expected, response.text
