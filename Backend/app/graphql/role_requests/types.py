@@ -26,6 +26,23 @@ class RoleRequestStatus(enum.Enum):
     withdrawn = "withdrawn"
 
 
+@strawberry.enum
+class RoleRequestTeamType(enum.Enum):
+    """A team's type as the form names it: 政府單位人員 picks GOV, 社福團體人員 picks NGO."""
+
+    GOV = "gov"
+    NGO = "ngo"
+
+
+@strawberry.type
+class RoleRequestTeam:
+    """One entry of the team picker. Nothing else about a team is shown here (ADR-357 point 5)."""
+
+    uuid: UUID
+    name: str
+    type: RoleRequestTeamType
+
+
 @strawberry.type
 class RoleRequestType:
     """One application. Only its applicant and holders of role_request.review ever see it."""

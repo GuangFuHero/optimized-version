@@ -24,6 +24,17 @@ class TeamRepository(GenericRepository[Team]):
         )
         return (await db.execute(query)).scalars().all()
 
+    async def list_joinable(self, db: AsyncSession, *, type_: str | None = None) -> list[Team]:
+        """Teams someone can ask to join: active and not deleted, by name (Spec/026, ADR-352).
+
+        No RBAC filter: it backs the 申請成為後台人員 picker, read by people in no team yet.
+        Callers expose only uuid, name and type.
+        """
+        query = select(Team).where(Team.delete_at.is_(None), Team.status == "active")
+        if type_ is not None:
+            query = query.where(Team.type == type_)
+        return (await db.execute(query.order_by(Team.name, Team.uuid))).scalars().all()
+
 
 class TeamZoneRepository(AreaRepository):
     """Repository for TeamZone; bbox listing comes from AreaRepository (ADR-015: no orchestration here)."""
