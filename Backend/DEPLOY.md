@@ -176,8 +176,10 @@ the frontend no longer uses NextAuth.
 
 ### Deploying the change that moved sign-in to the backend
 
-The backend, site and back-office changes are merged together and deployed at once. The backend removed
-`/auth/sso/google` and `/auth/sso/line`, so a frontend still on NextAuth cannot sign in with Google or LINE.
+The backend and site changes are merged together, and the back office's after them. The backend removed
+`/auth/sso/google` and `/auth/sso/line`, so until the back office moves off NextAuth its Google and LINE
+sign-in answer 404. Staging does not run the back office yet, so nothing deployed is affected. Do not deploy
+a `main` that holds the change before steps 1 and 2 below are done.
 
 1. Before deploying, create `staging-backend-google-client-secret` and `staging-backend-line-channel-secret`
    (same values as the `staging-frontend-*` pair) and their IAM bindings (see

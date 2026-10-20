@@ -420,7 +420,8 @@ Redis server's clock instead (the claim key's remaining TTL).
 > leaving the sibling-subdomain risk below for before production on 2026-10-18. A callback this browser did
 > not start leaving `{p}_oauth` alone was added on 2026-10-19, after review. It covers Google and LINE;
 > `/auth/sso/google` and `/auth/sso/line` are removed in the same change. That a browser can no longer
-> present an `id_token` for a step-up was recorded on 2026-10-21, after review.
+> present an `id_token` for a step-up was recorded on 2026-10-21, after review, and merging the back office
+> after the backend and the site was chosen the same day.
 
 **In plain words**: "Sign in with Google" (or LINE) now takes the browser from our page to the provider and
 back to our own backend, which then talks to the provider directly and signs the browser in. The frontend
@@ -498,8 +499,9 @@ host, which changes the frontend's links and its cookie filter; it is left for b
 ➖ Signing in now depends on the backend reaching the provider's token endpoint.
 ➖ A browser or extension that strips `Referer` cannot start a sign-in from our pages.
 ➖ Each environment's redirect URI has to be registered with each provider before its first deployment.
-➖ The backend, the site and the back office are merged together and deployed at once: a frontend still on
-NextAuth posts to `/auth/sso/*`, now a 404, and cannot sign in with Google or LINE.
+➖ The backend and the site are merged together, and the back office after them. Until it moves off NextAuth,
+the back office posts to `/auth/sso/*`, now a 404, and cannot sign in with Google or LINE. Staging does not
+run the back office yet.
 ➖ Over their rate limit, start and callback answer 429 as JSON, a bare page for a navigation, rather than
 going back to the sign-in page; the refused callback leaves `{p}_oauth` to expire on its own. So does a
 callback that fails on the server itself (Redis or the database), as a 500.
