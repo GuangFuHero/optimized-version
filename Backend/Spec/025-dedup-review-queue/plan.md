@@ -72,6 +72,8 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 7：待審提醒（ADR-345）
 
+- ✅ 2026-10-20：`dedup_review.notify_new_cards`（類型 `dedup_review_pending`）；移除 `ticket.py`／`station.py` 的死分支（−48 行）；`test_dedup_submission` 的站點通知預期跟著改。全套件 **2274 passed**；真實流程中只有 data_auditor 和 super admin 收到通知。
+
 - `dedup_submission` 三個 submit 函式：commit 後若寫了 `dup_ignored` 卡，發一則通知（N 筆）；失敗只記 log。
 - 移除 `ticket.py`、`station.py` 的 `dedup_flag_*` 舊分支與其測試。
 - 測試：照樣建立 1 個任務 → 一則；一張工單 3 個任務都照樣建立 → 仍一則、N=3；沒照樣建立 → 不發；

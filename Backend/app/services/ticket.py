@@ -39,7 +39,6 @@ from app.services.geo_validation import (
     normalize_contact_fields,
     validate_point,
 )
-from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 from app.services.photo import normalize_photo_url
 from app.services.ticket_audit import lock_ticket, void_stale_verdict
@@ -868,11 +867,6 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     # The ticket before the need, the order every writer keeps: voiding the verdict locks it.
     await lock_ticket(db, str(task.ticket_uuid))
 
-    old_dup = task.is_duplicate
-    task_id = task.uuid
-    task_name = task.task_name
-
-    actor_uid = actor.uuid
     for field, value in changes.items():
         if hasattr(task, field):
             setattr(task, field, value)
@@ -880,24 +874,6 @@ async def update_ticket_task(db: AsyncSession, *, actor: User, uuid: str, change
     await void_stale_verdict(db, str(task.ticket_uuid))
     await db.commit()
     updated_task = task
-
-    # 重複工單標記通知 (Medium)
-    if ("is_duplicate" in changes and changes["is_duplicate"] and not old_dup) or (
-        "dedup_group_id" in changes and changes["dedup_group_id"]
-    ):
-        dedup_managers = await NotificationRecipientResolver.resolve_permission(db, Perm.AI_DUP_REVIEW.value)
-        await NotificationService.dispatch(
-            db,
-            event_type="dedup_flag_ticket",
-            title=f"重複工單待審核：{task_name}",
-            body=f"工單任務「{task_name}」已被系統標記為疑似重複項目，請進行審核。",
-            priority="medium",
-            actor_uuid=actor_uid,
-            ref_type="ticket_task",
-            ref_uuid=task_id,
-            explicit_recipients=dedup_managers,
-        )
-
     await db.refresh(updated_task)
     return updated_task
 

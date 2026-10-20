@@ -26,6 +26,7 @@ from app.models.geo import Station
 from app.models.request import Tickets
 from app.models.ticket_task import TicketTask
 from app.services import dedup as dedup_service
+from app.services import dedup_review
 from app.services import station as station_service
 from app.services import ticket as ticket_service
 from app.services.dedup_snapshot import (
@@ -98,8 +99,9 @@ async def submit_new_ticket(
         for f in task_fields
     ]
     created = {task_ref(i): str(t.uuid) for i, t in enumerate(created_tasks)}
-    await _record_acknowledged(db, pairs, created, actor_uuid)
+    carded = await _record_acknowledged(db, pairs, created, actor_uuid)
     await db.commit()
+    await dedup_review.notify_new_cards(db, count=carded, actor_uuid=actor_uuid)
     await db.refresh(ticket)
     for task in created_tasks:
         await db.refresh(task)
@@ -133,8 +135,9 @@ async def submit_new_task(
     created_task = await ticket_service.insert_added_task(
         db, actor=actor, ticket_uuid=ticket_uuid, fields=fields
     )
-    await _record_acknowledged(db, pairs, {task_ref(0): str(created_task.uuid)}, actor_uuid)
+    carded = await _record_acknowledged(db, pairs, {task_ref(0): str(created_task.uuid)}, actor_uuid)
     await db.commit()
+    await dedup_review.notify_new_cards(db, count=carded, actor_uuid=actor_uuid)
     await db.refresh(created_task)
     return SubmissionCreated(entity=created_task)
 
@@ -157,8 +160,9 @@ async def submit_new_station(
         return held
 
     station = await station_service.insert_station(db, actor=actor, fields=fields)
-    await _record_acknowledged(db, pairs, {"station": str(station.uuid)}, actor_uuid)
+    carded = await _record_acknowledged(db, pairs, {"station": str(station.uuid)}, actor_uuid)
     await db.commit()
+    await dedup_review.notify_new_cards(db, count=carded, actor_uuid=actor_uuid)
     await db.refresh(station)
     await station_service.announce_station_created(db, station=station, actor_uuid=actor_uuid)
     return SubmissionCreated(entity=station)
@@ -206,13 +210,16 @@ async def _score_acknowledged(
     return pairs
 
 
-async def _record_acknowledged(db, pairs, created, actor_uuid) -> None:
-    """Card each scored pair against the entity made from its draft."""
+async def _record_acknowledged(db, pairs, created, actor_uuid) -> int:
+    """Card each scored pair against the entity made from its draft; returns how many were carded."""
+    carded = 0
     for pair in pairs:
         if pair.draft_ref in created:
             await dedup_service.record_pair_ignored(
                 db, pair=pair, created_uuid=created[pair.draft_ref], actor_uuid=actor_uuid
             )
+            carded += 1
+    return carded
 
 
 def _task_kwargs(task: TaskSubmission) -> dict:

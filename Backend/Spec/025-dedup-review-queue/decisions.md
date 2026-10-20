@@ -142,5 +142,13 @@ BE-RBAC-3 擔心「data_auditor 不能寫」，但 main 上已有放寬的先例
   在 commit 之後，若這次送出寫了 `dup_ignored` 卡，就發一則通知給有 `ai_duplicate.review` 的人：
   「N 筆疑似重複待審」，附審核頁連結。同一次送出不論幾張卡只發一則。
 - 通知失敗只記 log，不影響已完成的建立。
-- 移除上述兩個舊分支（連同其測試）。
+- 移除上述兩個舊分支。（查證時兩段都沒有測試；`UpdateTicketTaskInput` 只有 `progress_note`、
+  `UpdateStationInput` 沒有 `is_duplicate`，批次匯入也沒有這兩個欄位，所以確實不會觸發。）
 - 擁有者通知與志工通知屬於合併票（ADR-336）。
+
+**實作時補定（慣例，未另外拍板）**：
+- 通知類型改名為 `dedup_review_pending`，不沿用 `dedup_flag_ticket`／`dedup_flag_station`：
+  舊名稱是「一筆實體一則」，新的是「一次送出一則」，沿用會誤導。前端沒有任何地方用到舊名稱。
+  `Spec/Docs/er-diagram.md` 的類型清單已同步。
+- `ref_type = "dedup_review"`、`ref_uuid = None`：一次送出可能有好幾張卡，所以指向審核頁本身，不指向單張卡。
+- 實作在 `app/services/dedup_review.py::notify_new_cards`，由 `dedup_submission` 三個 submit 在 commit 後呼叫。

@@ -123,7 +123,8 @@ ROLE-BASED TIMELINE →「Super admin access to AI 重複審核 (DEDUP-008)」�
 
 - `dedup_submission.submit_new_ticket`／`submit_new_task`／`submit_new_station` commit 之後，
   這次送出若寫了 `dup_ignored` 卡，就發一則通知給有 `ai_duplicate.review` 的人
-  （`NotificationRecipientResolver.resolve_permission`），內容「N 筆疑似重複待審」＋審核頁連結。
+  （`NotificationRecipientResolver.resolve_permission`），內容「N 筆疑似重複待審」。
+  類型 `dedup_review_pending`，`ref_type = "dedup_review"`、`ref_uuid = None`（指向審核頁）。
 - 通知失敗只記 log，不影響已完成的建立。
 - 移除 `ticket.py`、`station.py` 裡兩個永遠不會觸發的 `dedup_flag_*` 分支與其測試。
 

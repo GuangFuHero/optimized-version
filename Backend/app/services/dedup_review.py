@@ -7,6 +7,7 @@ verdict never touches the paired entities (ADR-341). Submitting new work goes th
 `services/dedup_submission`, which writes the cards this module reads.
 """
 
+import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -21,6 +22,10 @@ from app.models.auth import User
 from app.models.dedup import ENTITY_KINDS, PAIR_SOURCE_LAYERS, PAIR_STATUSES, DedupAuditEvent, DuplicatePair
 from app.repositories.dedup_repository import dedup_audit_event_repository, duplicate_pair_repository
 from app.services.authz import require_scope
+from app.services.notification_resolver import NotificationRecipientResolver
+from app.services.notification_service import NotificationService
+
+logger = logging.getLogger(__name__)
 
 # ADR-339: what still waits for a reviewer. `dup_ignored` is a submitter's "create anyway";
 # `suggested` is for the slow layer, listed now so it needs no API change when it lands.
@@ -307,3 +312,30 @@ def _checked_note(note: str | None) -> str | None:
     if note is not None and len(note) > NOTE_MAX_LENGTH:
         raise ValueError(f"Note must be at most {NOTE_MAX_LENGTH} characters")
     return note
+
+
+async def notify_new_cards(db: AsyncSession, *, count: int, actor_uuid: str) -> None:
+    """Tell everyone holding ai_duplicate.review that `count` new cards wait (ADR-345).
+
+    One notice per submission, however many cards it left, pointing at the queue rather than a
+    card. Called after the submission committed: a failure here is logged and swallowed, so the
+    work the submitter just created is never undone by a notice.
+    """
+    if count <= 0:
+        return
+    try:
+        recipients = await NotificationRecipientResolver.resolve_permission(db, Perm.AI_DUP_REVIEW.value)
+        await NotificationService.dispatch(
+            db,
+            event_type="dedup_review_pending",
+            title=f"疑似重複待審核：{count} 筆",
+            body=f"有 {count} 筆照樣建立的資料和既有的項目疑似重複，請到「AI 重複審核」處理。",
+            priority="medium",
+            actor_uuid=actor_uuid,
+            ref_type="dedup_review",
+            ref_uuid=None,
+            explicit_recipients=recipients,
+        )
+    except Exception:
+        logger.exception("Sending the dedup review notice failed (%d new cards)", count)
+        await db.rollback()

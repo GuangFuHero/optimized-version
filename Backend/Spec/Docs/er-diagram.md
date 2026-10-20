@@ -306,9 +306,11 @@ users ||--o{ announcements : "last published"
 %% type values: announcement_published, zone_assigned, zone_unassigned, team_member_added,
 %%   ticket_task_moderation_update, task_assignment_created, task_assignment_removed, task_claimed,
 %%   task_full, task_recruiting_stopped, task_deleted, ticket_deleted, resource_station_updated,
-%%   station_assigned, station_unassigned, station_suggestion_created, dedup_flag_ticket,
-%%   dedup_flag_station, role_request_submitted, role_request_approved, role_request_rejected
+%%   station_assigned, station_unassigned, station_suggestion_created, dedup_review_pending,
+%%   role_request_submitted, role_request_approved, role_request_rejected
 %% (ticket_task_status_update is gone: a need's status is no longer edited by hand, ADR-293.)
+%% (dedup_flag_ticket / dedup_flag_station are gone: nothing could set is_duplicate, so they never
+%%  fired. dedup_review_pending replaces them, one per submission that leaves pair cards, ADR-345.)
 notifications {
     uuid uuid PK
     uuid recipient_uuid FK "FK to users, ON DELETE CASCADE"
