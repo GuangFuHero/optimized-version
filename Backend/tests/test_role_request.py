@@ -540,7 +540,6 @@ async def test_the_review_list_is_oldest_first_and_names_the_applicant(db, statu
     assert all(entry.request.reason == REASON for entry in entries)
 
 
-_NOT_OPEN_YET = "Approving government and NGO applications is not available yet"
 
 
 @pytest.mark.asyncio
@@ -562,23 +561,6 @@ async def test_an_approved_data_auditor_keeps_user_beside_the_new_role(db):
     state = await _state(db, citizen)
     # Still offered: a data auditor may ask to join a team (Spec 026, ADR-351).
     assert (state.has_backoffice_identity, state.can_apply) == (True, True)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("requested_role", ["government", "ngo"])
-async def test_a_government_or_ngo_application_cannot_be_approved_yet(db, requested_role):
-    """ADR-288: which team they join is not decided yet, so it stays pending."""
-    reviewer = await _reviewer(db)
-    citizen = await _citizen(db)
-    citizen_uuid = citizen.uuid
-    request = await _submit(db, citizen, requested_role)
-    request_uuid = request.uuid
-
-    with pytest.raises(ValueError, match=f"^{_NOT_OPEN_YET}$"):
-        await _approve(db, reviewer, request_uuid)
-    [still] = (await _state(db, citizen)).requests
-    assert still.status == "pending"
-    assert await _platform_roles(db, citizen_uuid) == ["user"]
 
 
 @pytest.mark.asyncio

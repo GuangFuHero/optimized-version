@@ -29,6 +29,7 @@ from app.models.role_request import (
 from app.models.team import Team
 from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import role_repository
+from app.services.admin import DEFAULT_TEAM_ROLE, grant_team_role
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 from app.services.notification_resolver import NotificationRecipientResolver
@@ -45,6 +46,9 @@ _APPROVED_DATA_AUDITOR = "右上角會出現「前往管理平台」，不需要
 # The one application that can be approved yet (ADR-288). The requested role and the platform role
 # it grants share the name, unlike `government` / `ngo`, which name a type of team.
 _DATA_AUDITOR = "data_auditor"
+
+# The team role a founder gets (ADR-350 point 6); the one a member gets is DEFAULT_TEAM_ROLE.
+TEAM_ADMIN_ROLE = "admin"
 
 # The team type each team identity picks from and founds (ADR-352 point 1).
 TEAM_TYPE_FOR_ROLE = {"government": "gov", "ngo": "ngo"}
@@ -250,12 +254,14 @@ async def submit(
     # Read before committing: the session expires `actor` on commit, and async SQLAlchemy cannot
     # lazily reload it afterwards.
     applicant_uuid, applicant_name = actor.uuid, actor.name
+    joined_team_uuid = target.team.uuid if target.team is not None else None
+    team_name = target.team.name if target.team is not None else None
     request_uuid = uuid.uuid4()  # chosen here so the notice below can name it without a reload
     request = RoleRequest(
         uuid=request_uuid,
         requested_role=requested_role,
         reason=reason,
-        team_uuid=target.team.uuid if target.team is not None else None,
+        team_uuid=joined_team_uuid,
         new_team_name=target.new_team_name,
         invite_uuid=invite_uuid,
         applicant_name=name,
@@ -277,11 +283,20 @@ async def submit(
     # Tell whoever can decide it (ADR-287). The back office that shows this does not exist yet, but
     # the notice is written now so nothing on the server has to change when it does.
     reviewers = await NotificationRecipientResolver.resolve_permission(db, Perm.ROLE_REQUEST_REVIEW.value)
+    if team_name is not None:
+        # The team's own admins decide it by default (ADMIN-027 review rules).
+        team_admins = await NotificationRecipientResolver.resolve_team_admin(db, team_uuid=joined_team_uuid)
+        reviewers = list(dict.fromkeys([*map(str, reviewers), *map(str, team_admins)]))
+        body = f"{applicant_name} 申請加入「{team_name}」。"
+    elif target.new_team_name is not None:
+        body = f"{applicant_name} 申請成立新團隊「{target.new_team_name}」。"
+    else:
+        body = f"{applicant_name} 申請成為「{ROLE_LABELS[requested_role]}」。"
     await NotificationService.dispatch(
         db,
         event_type="role_request_submitted",
         title="有新的管理權限申請",
-        body=f"{applicant_name} 申請成為「{ROLE_LABELS[requested_role]}」。",
+        body=body,
         actor_uuid=applicant_uuid,
         ref_type="role_request",
         ref_uuid=request_uuid,
@@ -423,56 +438,117 @@ async def reject(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, note
     return request
 
 
+async def _grant_data_auditor(db: AsyncSession, applicant_uuid) -> str:
+    """Add the platform `data_auditor` beside `user` (ADR-288); return the role's uuid.
+
+    An applicant who has since become a super admin, or joined a team, is refused and the
+    application stays pending for the reviewer to reject: granting would leave a third platform
+    role (ADR-294) or a team identity beside it, and an account holding either could not have
+    applied (AC-RE-101).
+    """
+    if await _has_backoffice_identity(db, applicant_uuid, besides=_DATA_AUDITOR):
+        raise RoleRequestConflictError("The applicant has another back-office identity now")
+    role = await role_repository.get_by_name(db, _DATA_AUDITOR)
+    if role is None:
+        raise RuntimeError("The data_auditor role is missing: run scripts/seed_rbac.py")
+    # Nothing to add if an admin granted the role another way since the application was sent.
+    await db.execute(
+        insert(UserRoleAssign)
+        .values(user_uuid=applicant_uuid, role_uuid=role.uuid, team_uuid=None, role_kind="platform")
+        .on_conflict_do_nothing(
+            index_elements=["user_uuid", "role_uuid"], index_where=text("team_uuid IS NULL")
+        )
+    )
+    return role.uuid
+
+
+async def _team_role(db: AsyncSession, name: str):
+    role = await role_repository.get_by_name(db, name)
+    if role is None or role.kind != "team":
+        raise RuntimeError(f"The team role '{name}' is missing: run scripts/seed_rbac.py")
+    return role
+
+
+async def _join_existing_team(db: AsyncSession, request: RoleRequest) -> tuple[str, str, str]:
+    """Add the applicant to the team as `member`; return (team uuid, team name, role uuid).
+
+    Checked again here, since days can pass after sending: the team must still be active, and
+    the applicant not already in it (ADR-351 point 2).
+    """
+    team = await db.scalar(
+        select(Team).where(Team.uuid == request.team_uuid, Team.delete_at.is_(None), Team.status == "active")
+    )
+    if team is None:
+        raise RoleRequestConflictError("The team cannot be joined now")
+    if await _is_member(db, request.created_by, team.uuid):
+        raise RoleRequestConflictError("The applicant is already a member of this team")
+    role = await _team_role(db, DEFAULT_TEAM_ROLE)
+    await grant_team_role(db, user_uuid=request.created_by, team_uuid=team.uuid, role=role)
+    return team.uuid, team.name, role.uuid
+
+
+async def _found_new_team(db: AsyncSession, request: RoleRequest) -> tuple[str, str, str]:
+    """Create the team with the applicant as its `admin`; return (team uuid, name, role uuid).
+
+    The name is checked again under a transaction-scoped advisory lock on it, so two approvals
+    founding the same name at once cannot both succeed (ADR-352 point 3).
+    """
+    name = request.new_team_name
+    await db.execute(text("SELECT pg_advisory_xact_lock(hashtext(lower(btrim(:name))))"), {"name": name})
+    if await team_name_taken(db, name):
+        raise RoleRequestConflictError("A team with this name already exists")
+    team = Team(name=name, type=TEAM_TYPE_FOR_ROLE[request.requested_role], status="active")
+    db.add(team)
+    await db.flush()
+    role = await _team_role(db, TEAM_ADMIN_ROLE)
+    await grant_team_role(db, user_uuid=request.created_by, team_uuid=team.uuid, role=role)
+    return team.uuid, team.name, role.uuid
+
+
 async def approve(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, note: str | None) -> RoleRequest:
-    """Grant what a pending application asked for and tell the applicant (ADR-288).
+    """Grant what a pending application asked for and tell the applicant (ADR-288, ADR-350).
 
-    Only a data auditor can be approved yet: which team a government or NGO applicant joins
-    is still to be decided, so those are refused and stay pending.
-    Approval *adds* the platform `data_auditor` grant beside `user` rather than calling
-    `assign_role`, which would replace it: the site acts as `user` (ADR-289), and an added
-    identity signs nobody out, since ADR-096 refuses only one that is gone. The grant and the
-    new status are one commit, so a withdrawal racing this one finds both or neither.
-
-    Days can pass between sending and deciding. An applicant who has since become a super admin,
-    or joined a team, is refused and the application stays pending for the reviewer to reject:
-    granting would leave a third platform role (ADR-294) or a team identity beside it, and an
-    account holding either could not have applied (AC-RE-101).
+    A member request adds the applicant to the team as `member`; a new-team application creates
+    the team with the applicant as its `admin`; a data auditor gains the platform role beside
+    `user`. Every grant is an added identity, so nobody is signed out (ADR-096 refuses only one
+    that is gone). The grant, the new status and `users.real_name` (ADR-355) are one commit, so a
+    withdrawal racing this one finds all or none.
     """
     if await _reach(db, actor) is None:
         raise _forbidden()
     note = _checked_note(note)
     reviewer_uuid = actor.uuid  # read before the commit expires `actor`
     request = await _lock_pending(db, request_uuid, reviewer=actor)
-    if request.requested_role != _DATA_AUDITOR:
-        raise ValueError("Approving government and NGO applications is not available yet")
-    applicant_uuid = request.created_by
-    if await _has_backoffice_identity(db, applicant_uuid, besides=_DATA_AUDITOR):
-        raise RoleRequestConflictError("The applicant has another back-office identity now")
-    role = await role_repository.get_by_name(db, _DATA_AUDITOR)
-    if role is None:
-        raise RuntimeError("The data_auditor role is missing: run scripts/seed_rbac.py")
-    role_uuid = role.uuid
-    # Nothing to add if an admin granted the role another way since the application was sent.
-    await db.execute(
-        insert(UserRoleAssign)
-        .values(user_uuid=applicant_uuid, role_uuid=role_uuid, team_uuid=None, role_kind="platform")
-        .on_conflict_do_nothing(
-            index_elements=["user_uuid", "role_uuid"], index_where=text("team_uuid IS NULL")
+    applicant_uuid, label = request.created_by, ROLE_LABELS[request.requested_role]
+    team_name = None
+    if request.requested_role == _DATA_AUDITOR:
+        request.granted_role_uuid = await _grant_data_auditor(db, applicant_uuid)
+        body = _APPROVED_DATA_AUDITOR
+    elif request.team_uuid is None and request.new_team_name is None:
+        # Sent before Spec 026, naming no team: nothing to grant (ADR-350 point 9).
+        raise RoleRequestConflictError("This application names no team; the applicant should apply again")
+    else:
+        found = _join_existing_team if request.team_uuid is not None else _found_new_team
+        request.granted_team_uuid, team_name, request.granted_role_uuid = await found(db, request)
+        body = (
+            f"你已加入「{team_name}」。{_APPROVED_DATA_AUDITOR}"
+            if request.team_uuid is not None
+            else f"「{team_name}」已建立，你是管理員，可以邀請其他人加入。{_APPROVED_DATA_AUDITOR}"
         )
-    )
+    if request.applicant_name is not None:
+        applicant = await db.get(User, applicant_uuid)
+        applicant.real_name = request.applicant_name
     request.status = "approved"
     request.reviewed_by = reviewer_uuid
     request.review_note = note
-    request.granted_role_uuid = role_uuid
     request.closed_at = datetime.now(UTC)
-    label = ROLE_LABELS[request.requested_role]
     await db.commit()
 
     await NotificationService.dispatch(
         db,
         event_type="role_request_approved",
         title=f"你的「{label}」申請通過了",
-        body=_APPROVED_DATA_AUDITOR,
+        body=body,
         priority="high",
         actor_uuid=reviewer_uuid,
         ref_type="role_request",
