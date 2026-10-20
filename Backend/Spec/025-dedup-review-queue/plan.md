@@ -54,6 +54,8 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 5：判定 — confirm／reject（ADR-341、343）
 
+- ✅ 2026-10-20：service 測試 16 個＋API 9 個；突變測試（拿掉 `FOR UPDATE`、拿掉待審檢查）都會被抓到。全套件 **2245 passed**，`dedup_review.py` 覆蓋率 100%。
+
 - service：鎖卡、檢查狀態、改 `status`／`reviewed_by`／`reviewed_at`、寫事件（含 `before_state`／`after_state`、`note`）。
 - 端點：`POST /{uuid}/confirm`、`/reject`。
 - 測試：兩種判定的狀態與事件；不是待審 → 409；`note` 長度上限；實體完全不變（比對判定前後的 task／station 欄位）；

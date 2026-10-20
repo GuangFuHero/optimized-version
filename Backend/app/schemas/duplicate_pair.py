@@ -78,3 +78,9 @@ class DuplicatePairDetail(DuplicatePairResponse):
     """One card with every event recorded on it, oldest first."""
 
     events: list[DedupEventResponse]
+
+
+class DuplicatePairDecision(BaseModel):
+    """A reviewer's verdict. The optional note is checked by the service (at most 1000 characters)."""
+
+    note: str | None = None

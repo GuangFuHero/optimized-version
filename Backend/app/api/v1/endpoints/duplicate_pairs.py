@@ -1,7 +1,7 @@
-"""Back-office AI 重複審核: list the duplicate pair cards and read one (Spec 025 §2, ADR-338).
+"""Back-office AI 重複審核: list the duplicate pair cards, read one, decide one (Spec 025 §2, ADR-338).
 
-Mounted under /admin like role-requests. Endpoints stay thin (ADR-014): the capability check
-(`ai_duplicate.view`) and every rule live in `app/services/dedup_review.py`.
+Mounted under /admin like role-requests. Endpoints stay thin (ADR-014): the capability checks
+(`ai_duplicate.view` / `ai_duplicate.review`) and every rule live in `app/services/dedup_review.py`.
 """
 
 from uuid import UUID
@@ -13,6 +13,7 @@ from app.core import security
 from app.models.auth import User
 from app.schemas.duplicate_pair import (
     DedupEventResponse,
+    DuplicatePairDecision,
     DuplicatePairDetail,
     DuplicatePairPage,
     DuplicatePairResponse,
@@ -23,7 +24,7 @@ from app.schemas.duplicate_pair import (
     SourceLayer,
 )
 from app.services import dedup_review
-from app.services.dedup_review import DuplicatePairNotFoundError, PairItem
+from app.services.dedup_review import DuplicatePairConflictError, DuplicatePairNotFoundError, PairItem
 
 router = APIRouter()
 
@@ -51,10 +52,12 @@ def _response(item: PairItem) -> dict:
 
 
 def _refusal(err: ValueError) -> HTTPException:
-    """404 for a missing card, else 422 (a value the service refuses)."""
+    """404 for a missing card, 409 for one not in the state the action needs, else 422."""
     if isinstance(err, DuplicatePairNotFoundError):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err))
-    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err))
+    if isinstance(err, DuplicatePairConflictError):
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err))
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(err))
 
 
 @router.get("/duplicate-pairs", response_model=DuplicatePairPage)
@@ -102,3 +105,37 @@ async def get_duplicate_pair(
         **_response(detail.item),
         events=[DedupEventResponse.model_validate(event) for event in detail.events],
     )
+
+
+@router.post("/duplicate-pairs/{pair_uuid}/confirm", response_model=DuplicatePairResponse)
+async def confirm_duplicate_pair(
+    pair_uuid: UUID,
+    body: DuplicatePairDecision | None = None,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Mark a pending card a duplicate (ADR-341: only the card changes)."""
+    try:
+        item = await dedup_review.confirm(
+            db, actor=current_user, pair_uuid=pair_uuid, note=body.note if body else None
+        )
+    except ValueError as err:
+        raise _refusal(err) from err
+    return DuplicatePairResponse(**_response(item))
+
+
+@router.post("/duplicate-pairs/{pair_uuid}/reject", response_model=DuplicatePairResponse)
+async def reject_duplicate_pair(
+    pair_uuid: UUID,
+    body: DuplicatePairDecision | None = None,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Mark a pending card not a duplicate (ADR-341: only the card changes)."""
+    try:
+        item = await dedup_review.reject(
+            db, actor=current_user, pair_uuid=pair_uuid, note=body.note if body else None
+        )
+    except ValueError as err:
+        raise _refusal(err) from err
+    return DuplicatePairResponse(**_response(item))

@@ -1,15 +1,17 @@
-"""The AI 重複審核 queue (Spec 025): read the pair cards the dedup layers leave behind.
+"""The AI 重複審核 queue (Spec 025): read the pair cards the dedup layers leave behind, and decide them.
 
-`ai_duplicate.view` reads cards and their events. It governs the dedup records only; the engine in
-`app/dedup_engine/` never checks it. Submitting new work goes through `services/dedup_submission`,
-which writes the cards this module reads.
+`ai_duplicate.view` reads cards and their events; `ai_duplicate.review` confirms or rejects one.
+They govern the dedup records only; the engine in `app/dedup_engine/` never checks them, and a
+verdict never touches the paired entities (ADR-341). Submitting new work goes through
+`services/dedup_submission`, which writes the cards this module reads.
 """
 
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import Perm
@@ -24,6 +26,7 @@ PENDING_STATUSES = ("dup_ignored", "suggested")
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 DEFAULT_SORT = "-created_at"
+NOTE_MAX_LENGTH = 1000
 
 _SORTS = {
     "created_at": (DuplicatePair.created_at.asc(),),
@@ -35,7 +38,11 @@ _SORTS = {
 
 
 class DuplicatePairNotFoundError(ValueError):
-    """No live card has that uuid."""
+    """No live card has that uuid. REST answers 404."""
+
+
+class DuplicatePairConflictError(ValueError):
+    """The card is not in a state the action applies to (ADR-343). REST answers 409."""
 
 
 @dataclass(frozen=True)
@@ -179,3 +186,66 @@ def _summary(row: dict | None, entity_uuid) -> EntitySummary:
         created_at=row.get("created_at"),
     )
 
+
+async def confirm(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, note: str | None) -> PairItem:
+    """Mark a pending card a duplicate. Only the card changes (ADR-341)."""
+    return await _decide(db, actor=actor, pair_uuid=pair_uuid, verdict="confirmed", note=note)
+
+
+async def reject(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, note: str | None) -> PairItem:
+    """Mark a pending card not a duplicate. Only the card changes (ADR-341)."""
+    return await _decide(db, actor=actor, pair_uuid=pair_uuid, verdict="rejected", note=note)
+
+
+async def _decide(
+    db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID, verdict: str, note: str | None
+) -> PairItem:
+    """Lock the card, check it is pending, write the verdict and its event in one commit."""
+    await require_scope(actor, Perm.AI_DUP_REVIEW, db)
+    note = _checked_note(note)
+    reviewer_uuid = actor.uuid  # read before the commit expires `actor`
+    pair = await _lock(db, pair_uuid)
+    if pair.status not in PENDING_STATUSES:
+        raise DuplicatePairConflictError(f"Duplicate pair is already {pair.status}")
+    before = pair.status
+    pair.status = verdict
+    pair.reviewed_by = reviewer_uuid
+    pair.reviewed_at = datetime.now(UTC)
+    db.add(
+        DedupAuditEvent(
+            entity_kind=pair.entity_kind,
+            event_type=verdict,
+            pair_uuid=pair.uuid,
+            duplicate_group_uuid=pair.duplicate_group_uuid,
+            actor_uuid=reviewer_uuid,
+            source_layer="manual",
+            decision_reason=note,
+            before_state={"status": before},
+            after_state={"status": verdict},
+        )
+    )
+    await db.commit()
+    await db.refresh(pair)
+    (item,) = await _with_sides(db, [pair])
+    return item
+
+
+async def _lock(db: AsyncSession, pair_uuid: uuid.UUID) -> DuplicatePair:
+    """The live card FOR UPDATE, so two reviewers acting on it are settled one after the other."""
+    pair = await db.scalar(
+        select(DuplicatePair)
+        .where(DuplicatePair.uuid == pair_uuid, DuplicatePair.delete_at.is_(None))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if pair is None:
+        raise DuplicatePairNotFoundError("Duplicate pair not found")
+    return pair
+
+
+def _checked_note(note: str | None) -> str | None:
+    """The reviewer's note trimmed, or None if blank; refused when longer than NOTE_MAX_LENGTH."""
+    note = (note or "").strip() or None
+    if note is not None and len(note) > NOTE_MAX_LENGTH:
+        raise ValueError(f"Note must be at most {NOTE_MAX_LENGTH} characters")
+    return note

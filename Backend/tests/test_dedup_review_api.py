@@ -201,3 +201,56 @@ async def test_an_unknown_card_is_not_found(client, db_session, redis):
     headers = await _headers(db_session, redis, "super_admin")
     response = await client.get(f"{URL}/00000000-0000-0000-0000-000000000000", headers=headers)
     assert response.status_code == 404
+
+
+# --- decisions (Spec 025 §2.3) -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(("action", "verdict"), [("confirm", "confirmed"), ("reject", "rejected")])
+@pytest.mark.parametrize("role_name", ["super_admin", "data_auditor"])
+async def test_the_seeded_reviewers_decide_a_card(client, db_session, redis, role_name, action, verdict):
+    """ADR-337: both roles hold ai_duplicate.review; the response is the updated card."""
+    card = await _card(db_session)
+    headers = await _headers(db_session, redis, role_name)
+
+    response = await client.post(f"{URL}/{card['pair']}/{action}", json={"note": "同一戶"}, headers=headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["uuid"], body["status"]) == (card["pair"], verdict)
+    assert body["reviewed_by"] is not None and body["reviewed_at"] is not None
+    assert body["low"]["uuid"] == card["low"]
+
+
+async def test_a_decision_needs_no_body(client, db_session, redis):
+    """The note is optional, and so is the body."""
+    card = await _card(db_session)
+    headers = await _headers(db_session, redis, "super_admin")
+    response = await client.post(f"{URL}/{card['pair']}/reject", headers=headers)
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize("role_name", ["user", "admin", "member"])
+async def test_everyone_else_cannot_decide(client, db_session, redis, role_name):
+    """No ai_duplicate.review, no verdict."""
+    card = await _card(db_session)
+    headers = await _headers(db_session, redis, role_name)
+    response = await client.post(f"{URL}/{card['pair']}/confirm", json={}, headers=headers)
+    assert response.status_code == 403
+
+
+async def test_a_refusal_carries_the_status_that_says_why(client, db_session, redis):
+    """409 for a decided card (ADR-343), 404 for a missing one, 422 for an oversized note."""
+    decided = await _card(db_session, status="confirmed")
+    pending = await _card(db_session)
+    headers = await _headers(db_session, redis, "super_admin")
+
+    conflict = await client.post(f"{URL}/{decided['pair']}/reject", json={}, headers=headers)
+    missing = await client.post(
+        f"{URL}/00000000-0000-0000-0000-000000000000/confirm", json={}, headers=headers
+    )
+    oversized = await client.post(
+        f"{URL}/{pending['pair']}/confirm", json={"note": "字" * 1001}, headers=headers
+    )
+
+    assert (conflict.status_code, missing.status_code, oversized.status_code) == (409, 404, 422)
