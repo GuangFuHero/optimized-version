@@ -419,7 +419,8 @@ Redis server's clock instead (the claim key's remaining TTL).
 > to the backend (ADR-325); sending every failure back to the sign-in page was chosen on 2026-10-17, and
 > leaving the sibling-subdomain risk below for before production on 2026-10-18. A callback this browser did
 > not start leaving `{p}_oauth` alone was added on 2026-10-19, after review. It covers Google and LINE;
-> `/auth/sso/google` and `/auth/sso/line` are removed in the same change.
+> `/auth/sso/google` and `/auth/sso/line` are removed in the same change. That a browser can no longer
+> present an `id_token` for a step-up was recorded on 2026-10-21, after review.
 
 **In plain words**: "Sign in with Google" (or LINE) now takes the browser from our page to the provider and
 back to our own backend, which then talks to the provider directly and signs the browser in. The frontend
@@ -481,7 +482,7 @@ a `return_to` pointing at another site.
 9. `start` and `callback` are each limited to 10 requests per 60 seconds, as `/auth/sso/*` was.
 10. `/auth/sso/google` and `/auth/sso/line`, which signed in with an `id_token` the frontend obtained, are
     removed: this flow is the only way to sign in with a provider. Linking one (`/auth/link/*`) still takes
-    an `id_token`, as before.
+    an `id_token`, as before, which only a Bearer client can now present (see the consequences).
 
 **Consequences**:
 ➕ The frontend holds no OAuth configuration or secret, and one flow serves both apps.
@@ -502,3 +503,12 @@ NextAuth posts to `/auth/sso/*`, now a 404, and cannot sign in with Google or LI
 ➖ Over their rate limit, start and callback answer 429 as JSON, a bare page for a navigation, rather than
 going back to the sign-in page; the refused callback leaves `{p}_oauth` to expire on its own. So does a
 callback that fails on the server itself (Redis or the database), as a 500.
+➖ **A browser no longer holds an `id_token`.** Two things still take one in a request body: the third
+step-up proof of ADR-234 (an account with no password and no contact proves itself with a fresh token from
+a provider it holds) and linking a provider (`/auth/link/*`). Only a Bearer client can use them now. A
+LINE-only account is that shape, since LINE gives us no email (point 7), so from the site it cannot add a
+first contact, set a first password, or link or unlink a provider: each answers 422 `step_up_required`. The
+frontend never sent such a token before this change either (ADR-234 left it for its own ticket), so nothing
+that worked stops working. To be closed in a follow-up with a re-authentication through this flow, a
+`start` for a signed-in session whose callback records a short-lived proof for one action instead of signing
+in.
