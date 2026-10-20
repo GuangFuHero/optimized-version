@@ -4,8 +4,9 @@
 - 基準（`e29650bfd`，main + 文件）：2170 passed、0 failed。
 - Task 1 完成：全套件 2180 passed、0 failed。`teams.status` 的 CHECK 讓 4 個拿 `'inactive'` 當「非啟用」範例的既有測試
   失敗；程式從未寫入 `'inactive'`，改用 `'suspended'`（Popo 2026-10-20 選定）。
-- Task 2 完成：全套件 2184 passed；另有 5 個 GraphQL 申請測試失敗，原因是套件跑到一半時改了 Task 3 的 service。
-  只用 Task 2 的程式重跑這 5 個全部通過。**之後套件跑的時候不改程式。**
+- Task 2 完成：全套件 2184 passed、5 failed。當時誤判為「套件跑到一半改了程式」；實際原因是 Task 2 的測試建了一個
+  沒有權限的共用 `user` 角色，同一個 worker 上之後的申請測試就拿不到 `role_request.add`（順序相關，單獨跑會過）。
+  已在後續 commit 修正：該測試改用自己命名的角色。
 
 **Goal:** 在 Spec 019 的 `role_requests` 上加入「申請加入既有團隊／成立新團隊」與團隊邀請連結，讓 team admin 與
 super admin 從各自的審核佇列決定；加上團隊雜項（最後 admin 防呆、聯絡欄位、編輯／停用、稽核紀錄讀取）。

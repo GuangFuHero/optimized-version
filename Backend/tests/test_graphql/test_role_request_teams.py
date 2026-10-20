@@ -4,10 +4,10 @@ An applicant is in no team yet, and `GET /admin/teams` lists only the caller's o
 needs its own list: every active team, by name, with nothing beyond what the picker shows.
 """
 
+import uuid
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import select
 
 from app.models.rbac import Role
 from app.models.team import Team
@@ -29,11 +29,15 @@ async def _teams(*rows: dict) -> dict[str, str]:
 
 
 async def _plain_user_token(redis) -> str:
-    """A token for an account holding only a platform role with no capabilities at all."""
+    """A token for an account holding only a platform role with no capabilities at all.
+
+    The role gets a name of its own: other GraphQL tests share the `user` role and grant it
+    role_request.add only when they create it, so creating a bare `user` here would take that away.
+    """
+    name = f"plain-{uuid.uuid4().hex[:8]}"
     async with graphql_db() as db:
-        if (await db.execute(select(Role).where(Role.name == "user"))).scalar_one_or_none() is None:
-            db.add(Role(name="user", kind="platform"))
-    _, token = await _create_user_with_role(redis, "user")
+        db.add(Role(name=name, kind="platform"))
+    _, token = await _create_user_with_role(redis, name)
     return token
 
 
