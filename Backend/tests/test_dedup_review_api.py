@@ -254,3 +254,67 @@ async def test_a_refusal_carries_the_status_that_says_why(client, db_session, re
     )
 
     assert (conflict.status_code, missing.status_code, oversized.status_code) == (409, 404, 422)
+
+
+# --- revoke (Spec 025 §2.4) --------------------------------------------------------------
+
+
+async def _decided_by(client, db, redis, role_name: str) -> tuple[dict, dict]:
+    """A card confirmed over REST by a new `role_name` account; returns (card, that account's headers)."""
+    card = await _card(db)
+    headers = await _headers(db, redis, role_name)
+    response = await client.post(f"{URL}/{card['pair']}/confirm", json={}, headers=headers)
+    assert response.status_code == 200, response.text
+    return card, headers
+
+
+async def test_a_data_auditor_undoes_their_own_verdict(client, db_session, redis):
+    """ADR-342: one's own verdict needs only ai_duplicate.review; the card is pending again."""
+    card, headers = await _decided_by(client, db_session, redis, "data_auditor")
+
+    response = await client.post(f"{URL}/{card['pair']}/revoke", headers=headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["status"], body["reviewed_by"], body["reviewed_at"]) == ("dup_ignored", None, None)
+    detail = await client.get(f"{URL}/{card['pair']}", headers=headers)
+    assert [e["event_type"] for e in detail.json()["events"]] == [
+        "ignored_by_submitter",
+        "confirmed",
+        "verdict_revoked",
+    ]
+
+
+async def test_a_data_auditor_cannot_undo_a_super_admins_verdict(client, db_session, redis):
+    """ai_duplicate.revoke stays with super_admin (ADR-342)."""
+    card, _ = await _decided_by(client, db_session, redis, "super_admin")
+    auditor = await _headers(db_session, redis, "data_auditor")
+
+    response = await client.post(f"{URL}/{card['pair']}/revoke", headers=auditor)
+
+    assert response.status_code == 403
+    assert (await client.get(f"{URL}/{card['pair']}", headers=auditor)).json()["status"] == "confirmed"
+
+
+async def test_a_super_admin_undoes_a_data_auditors_verdict(client, db_session, redis):
+    """super_admin holds ai_duplicate.revoke, so anyone's verdict can be undone."""
+    card, _ = await _decided_by(client, db_session, redis, "data_auditor")
+    admin = await _headers(db_session, redis, "super_admin")
+
+    response = await client.post(f"{URL}/{card['pair']}/revoke", headers=admin)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "dup_ignored"
+
+
+async def test_revoke_refusals_carry_their_status(client, db_session, redis):
+    """409 for a pending card, 404 for a missing one, 403 for someone without review."""
+    pending = await _card(db_session)
+    admin = await _headers(db_session, redis, "super_admin")
+    citizen = await _headers(db_session, redis, "user")
+
+    conflict = await client.post(f"{URL}/{pending['pair']}/revoke", headers=admin)
+    missing = await client.post(f"{URL}/00000000-0000-0000-0000-000000000000/revoke", headers=admin)
+    refused = await client.post(f"{URL}/{pending['pair']}/revoke", headers=citizen)
+
+    assert (conflict.status_code, missing.status_code, refused.status_code) == (409, 404, 403)

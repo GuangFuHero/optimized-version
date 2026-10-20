@@ -63,6 +63,8 @@ commit 前看 `git diff --cached --stat`）。
 
 ## Task 6：撤銷（ADR-342、343、344）
 
+- ✅ 2026-10-20：service 測試 16 個＋API 4 個（用 seed 的 data_auditor／super_admin）；突變測試（拿掉撤別人要 revoke 的檢查、一律還原成 dup_ignored）都會被抓到。全套件 **2265 passed**。
+
 - service：鎖卡、檢查狀態、判斷是否本人、非本人檢查 `ai_duplicate.revoke`、改回 `before_state.status`、清審核人、寫 `verdict_revoked`。
 - 端點：`POST /{uuid}/revoke`。
 - 測試：本人撤銷（data_auditor）成功；data_auditor 撤別人的 403；super_admin 撤別人的成功；

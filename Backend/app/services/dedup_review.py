@@ -1,7 +1,8 @@
 """The AI 重複審核 queue (Spec 025): read the pair cards the dedup layers leave behind, and decide them.
 
-`ai_duplicate.view` reads cards and their events; `ai_duplicate.review` confirms or rejects one.
-They govern the dedup records only; the engine in `app/dedup_engine/` never checks them, and a
+`ai_duplicate.view` reads cards and their events; `ai_duplicate.review` confirms or rejects one and
+undoes one's own verdict; `ai_duplicate.revoke` undoes anyone's (ADR-342). They govern the dedup
+records only; the engine in `app/dedup_engine/` never checks them, and a
 verdict never touches the paired entities (ADR-341). Submitting new work goes through
 `services/dedup_submission`, which writes the cards this module reads.
 """
@@ -11,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +29,7 @@ DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 DEFAULT_SORT = "-created_at"
 NOTE_MAX_LENGTH = 1000
+VERDICTS = ("confirmed", "rejected")
 
 _SORTS = {
     "created_at": (DuplicatePair.created_at.asc(),),
@@ -228,6 +231,61 @@ async def _decide(
     await db.refresh(pair)
     (item,) = await _with_sides(db, [pair])
     return item
+
+
+async def revoke(db: AsyncSession, *, actor: User, pair_uuid: uuid.UUID) -> PairItem:
+    """Undo a card's verdict and put it back in the queue (ADR-342/344).
+
+    One's own verdict needs ai_duplicate.review; anyone else's also needs ai_duplicate.revoke.
+    The card returns to the status its latest verdict replaced, as that verdict's event recorded.
+    """
+    await require_scope(actor, Perm.AI_DUP_REVIEW, db)
+    actor_uuid = actor.uuid  # read before the commit expires `actor`
+    pair = await _lock(db, pair_uuid)
+    if pair.status not in VERDICTS:
+        raise DuplicatePairConflictError(f"Duplicate pair is {pair.status}: there is no verdict to revoke")
+    if pair.reviewed_by != actor_uuid:
+        try:
+            await require_scope(actor, Perm.AI_DUP_REVOKE, db)
+        except HTTPException:
+            await db.rollback()  # release the card's lock before refusing
+            raise
+    restored = await _status_before_latest_verdict(db, pair)
+    decided, reviewer = pair.status, pair.reviewed_by
+    pair.status = restored
+    pair.reviewed_by = None
+    pair.reviewed_at = None
+    db.add(
+        DedupAuditEvent(
+            entity_kind=pair.entity_kind,
+            event_type="verdict_revoked",
+            pair_uuid=pair.uuid,
+            duplicate_group_uuid=pair.duplicate_group_uuid,
+            actor_uuid=actor_uuid,
+            source_layer="manual",
+            before_state={"status": decided, "reviewed_by": str(reviewer) if reviewer else None},
+            after_state={"status": restored},
+        )
+    )
+    await db.commit()
+    await db.refresh(pair)
+    (item,) = await _with_sides(db, [pair])
+    return item
+
+
+async def _status_before_latest_verdict(db: AsyncSession, pair: DuplicatePair) -> str:
+    """What the newest confirmed/rejected event says the card was before it."""
+    event = await db.scalar(
+        select(DedupAuditEvent)
+        .where(DedupAuditEvent.pair_uuid == pair.uuid, DedupAuditEvent.event_type.in_(VERDICTS))
+        .order_by(DedupAuditEvent.created_at.desc(), DedupAuditEvent.uuid.desc())
+        .limit(1)
+    )
+    restored = (event.before_state or {}).get("status") if event is not None else None
+    if restored not in PENDING_STATUSES:
+        # A verdict written outside this module would leave nothing to restore from.
+        raise DuplicatePairConflictError("No recorded verdict to revoke")
+    return restored
 
 
 async def _lock(db: AsyncSession, pair_uuid: uuid.UUID) -> DuplicatePair:

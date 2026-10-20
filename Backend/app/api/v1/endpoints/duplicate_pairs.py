@@ -1,7 +1,7 @@
-"""Back-office AI 重複審核: list the duplicate pair cards, read one, decide one (Spec 025 §2, ADR-338).
+"""Back-office AI 重複審核: list the duplicate pair cards, read, decide or revoke one (Spec 025 §2, ADR-338).
 
 Mounted under /admin like role-requests. Endpoints stay thin (ADR-014): the capability checks
-(`ai_duplicate.view` / `ai_duplicate.review`) and every rule live in `app/services/dedup_review.py`.
+(`ai_duplicate.view` / `review` / `revoke`) and every rule live in `app/services/dedup_review.py`.
 """
 
 from uuid import UUID
@@ -136,6 +136,20 @@ async def reject_duplicate_pair(
         item = await dedup_review.reject(
             db, actor=current_user, pair_uuid=pair_uuid, note=body.note if body else None
         )
+    except ValueError as err:
+        raise _refusal(err) from err
+    return DuplicatePairResponse(**_response(item))
+
+
+@router.post("/duplicate-pairs/{pair_uuid}/revoke", response_model=DuplicatePairResponse)
+async def revoke_duplicate_pair_verdict(
+    pair_uuid: UUID,
+    db: AsyncSession = Depends(security.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Undo a card's verdict, back to the queue; someone else's needs ai_duplicate.revoke (ADR-342)."""
+    try:
+        item = await dedup_review.revoke(db, actor=current_user, pair_uuid=pair_uuid)
     except ValueError as err:
         raise _refusal(err) from err
     return DuplicatePairResponse(**_response(item))
