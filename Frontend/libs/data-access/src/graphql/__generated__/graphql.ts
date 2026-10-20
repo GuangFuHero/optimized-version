@@ -320,6 +320,8 @@ export type CreateStationInput = {
   secondaryLocation?: InputMaybe<SecondaryLocationInput>;
   /** Data origin: 'user' (default) or 'official' */
   source?: Scalars['String']['input'];
+  /** Optional public line on what the station is short of */
+  supplyStatus?: InputMaybe<Scalars['String']['input']>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: InputMaybe<Scalars['String']['input']>;
   /** Visibility: 'public' (default), 'restricted', or 'internal' */
@@ -1310,6 +1312,10 @@ export type StationType = {
   suggestedFields: Array<SuggestedFieldType>;
   /** Merges applied to this station, newest first; empty without station.review over this station */
   suggestionMerges: Array<StationSuggestionMergeType>;
+  /** What the station is short of, in free text, e.g. '飲用水見底、尿布尚有存量'. Public (ADR-333) */
+  supplyStatus?: Maybe<Scalars['String']['output']>;
+  /** When supply_status last changed; null while it has never been set */
+  supplyStatusUpdatedAt?: Maybe<Scalars['DateTime']['output']>;
   /** Station category, e.g. 'shelter', 'supply', 'medical' */
   type?: Maybe<Scalars['String']['output']>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1706,6 +1712,7 @@ export type UpdateStationInput = {
   opHour?: InputMaybe<Scalars['String']['input']>;
   /** Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed' */
   operationalStatus?: InputMaybe<StationOperationalStatus>;
+  supplyStatus?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<Scalars['String']['input']>;
   /** Updated visibility: 'public', 'restricted', or 'internal' */
   visibility?: InputMaybe<Visibility>;
@@ -1848,6 +1855,8 @@ export type StationFieldsFragment = {
   isTemporary: boolean;
   isOfficial: boolean;
   operationalStatus: string;
+  supplyStatus?: string | null;
+  supplyStatusUpdatedAt?: any | null;
   createdBy?: string | null;
   createdAt?: any | null;
   updatedAt?: any | null;
@@ -2024,6 +2033,40 @@ export type CreateCrowdSourcingMutation = {
     itemUuid?: string | null;
     rating: string;
     createdAt?: any | null;
+  };
+};
+
+export type GetStationForSuggestionQueryVariables = Exact<{
+  uuid: Scalars['UUID']['input'];
+}>;
+
+export type GetStationForSuggestionQuery = {
+  __typename?: 'Query';
+  station?: {
+    __typename?: 'StationType';
+    uuid: string;
+    name?: string | null;
+    type?: string | null;
+    description?: string | null;
+    opHour?: string | null;
+    operationalStatus: string;
+    supplyStatus?: string | null;
+    pendingSuggestedFields: Array<string>;
+  } | null;
+};
+
+export type CreateStationSuggestionMutationVariables = Exact<{
+  input: CreateStationSuggestionInput;
+}>;
+
+export type CreateStationSuggestionMutation = {
+  __typename?: 'Mutation';
+  createStationSuggestion: {
+    __typename?: 'StationSuggestionType';
+    uuid: string;
+    fieldName: string;
+    newValue: string;
+    status: string;
   };
 };
 
@@ -2486,6 +2529,11 @@ export const StationFieldsFragmentDoc = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -2781,6 +2829,11 @@ export const GetStationsDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -2945,6 +2998,11 @@ export const GetStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3266,6 +3324,11 @@ export const UpdateStationDocument = {
           { kind: 'Field', name: { kind: 'Name', value: 'isTemporary' } },
           { kind: 'Field', name: { kind: 'Name', value: 'isOfficial' } },
           { kind: 'Field', name: { kind: 'Name', value: 'operationalStatus' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'supplyStatus' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'supplyStatusUpdatedAt' },
+          },
           { kind: 'Field', name: { kind: 'Name', value: 'createdBy' } },
           { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
           { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
@@ -3444,6 +3507,127 @@ export const CreateCrowdSourcingDocument = {
 } as unknown as DocumentNode<
   CreateCrowdSourcingMutation,
   CreateCrowdSourcingMutationVariables
+>;
+export const GetStationForSuggestionDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetStationForSuggestion' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'uuid' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UUID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'station' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'uuid' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'uuid' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'type' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'opHour' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'operationalStatus' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'supplyStatus' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'pendingSuggestedFields' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  GetStationForSuggestionQuery,
+  GetStationForSuggestionQueryVariables
+>;
+export const CreateStationSuggestionDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'CreateStationSuggestion' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'input' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'CreateStationSuggestionInput' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'createStationSuggestion' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'input' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'uuid' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'fieldName' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'newValue' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CreateStationSuggestionMutation,
+  CreateStationSuggestionMutationVariables
 >;
 export const MyRoleRequestsDocument = {
   kind: 'Document',

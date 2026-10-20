@@ -333,6 +333,9 @@ input CreateStationInput {
   """
   operationalStatus: StationOperationalStatus! = active
 
+  """Optional public line on what the station is short of"""
+  supplyStatus: String = null
+
   """Optional secondary address or pole location to attach to this station"""
   secondaryLocation: SecondaryLocationInput = null
 }
@@ -1109,6 +1112,14 @@ type StationType {
 
   """When operational_status last changed"""
   statusChangedAt: DateTime
+
+  """
+  What the station is short of, in free text, e.g. '飲用水見底、尿布尚有存量'. Public (ADR-333)
+  """
+  supplyStatus: String
+
+  """When supply_status last changed; null while it has never been set"""
+  supplyStatusUpdatedAt: DateTime
   createdAt: DateTime
   updatedAt: DateTime
 
@@ -1681,6 +1692,7 @@ input UpdateStationInput {
   Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed'
   """
   operationalStatus: StationOperationalStatus = null
+  supplyStatus: String
   contactName: String
   contactEmail: String
   contactPhone: String
