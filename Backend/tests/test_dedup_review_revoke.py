@@ -205,3 +205,16 @@ async def test_two_revokes_at_once_leave_one(db):
     refused = [o for o in outcomes if isinstance(o, DuplicatePairConflictError)]
     assert len(refused) == 1, f"expected exactly one refusal, got {outcomes}"
     assert await _events(db, pair_uuid) == ["confirmed", "verdict_revoked"]
+
+
+async def test_a_verdict_with_no_recorded_event_is_not_guessed(db):
+    """A card decided outside this module has no before_state to restore: refused, not defaulted."""
+    reviewer = await _actor(db, Perm.AI_DUP_REVIEW, Perm.AI_DUP_REVOKE)
+    a, b = await _two_tasks(db, reviewer)
+    pair_uuid = (await _pair(db, a, b, status="confirmed")).uuid
+
+    with pytest.raises(DuplicatePairConflictError, match="No recorded verdict"):
+        await dedup_review.revoke(db, actor=reviewer, pair_uuid=pair_uuid)
+
+    db.expire_all()
+    assert (await db.get(DuplicatePair, pair_uuid)).status == "confirmed"

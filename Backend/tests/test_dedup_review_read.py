@@ -383,3 +383,18 @@ async def test_a_missing_card_is_not_found(db, deleted):
         target = (await _pair(db, a, b, deleted=True)).uuid
     with pytest.raises(DuplicatePairNotFoundError):
         await dedup_review.get_pair(db, actor=actor, pair_uuid=target)
+
+
+async def test_ticket_cards_carry_both_sides(db):
+    """The CHECK allows ticket-level cards; their sides come from the ticket itself."""
+    actor = await _actor(db, Perm.AI_DUP_VIEW)
+    t1 = await _ticket(db, actor, title="一樓淹水", lon=121.45, lat=23.65)
+    t2 = await _ticket(db, actor, title="二樓淹水")
+    pair = await _pair(db, t1, t2, kind="ticket")
+
+    (item,) = (await dedup_review.list_pairs(db, actor=actor)).items
+
+    side = item.low if pair.low_uuid == t1.uuid else item.high
+    assert (side.title, side.status, side.ticket_uuid) == ("一樓淹水", "pending", None)
+    assert (side.longitude, side.latitude) == pytest.approx((121.45, 23.65))
+    assert side.created_by == str(actor.uuid)
