@@ -130,6 +130,9 @@ class Station(BaseGeometry):
     contact_phone: Mapped[str | None] = mapped_column(String(50))
     operational_status: Mapped[str] = mapped_column(String(20), server_default="active")
     status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # What the station is short of, in free text, and when that last changed (Spec/024 ADR-333).
+    supply_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    supply_status_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Keyword-search column, maintained by PostgreSQL (ADR-079/081). The field list here
     # IS the positive list — see app/models/search.py before changing it.

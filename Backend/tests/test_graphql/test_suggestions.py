@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy import select, update
 
+from app.models.geo import Station
 from app.models.station_property import StationProperty, StationUpdateSuggestion
 from tests.test_graphql.conftest import _create_user_with_role, auth_header, test_db
 
@@ -134,6 +135,19 @@ async def test_create_rejects_unknown_field(client, login_user_auth, sample_stat
     """Suggesting a non-suggestable field errors."""
     _, token = login_user_auth
     body = await _create(client, token, "station", sample_station, "credibility_score", "99")
+    assert any("not suggestable" in e["message"] for e in body["errors"])
+
+
+@pytest.mark.asyncio
+async def test_a_stations_internal_comment_is_not_suggestable(client, login_user_auth, sample_station):
+    """ADR-332: nobody suggests a note they cannot read. A property's comment holds its value, so it stays."""
+    station_fields = (await _gql(client, None, SUGGESTABLE_FIELDS, {"t": "station"}))["data"]
+    assert "comment" not in {f["fieldName"] for f in station_fields["suggestableFields"]}
+    property_fields = (await _gql(client, None, SUGGESTABLE_FIELDS, {"t": "station_property"}))["data"]
+    assert "comment" in {f["fieldName"] for f in property_fields["suggestableFields"]}
+
+    _, token = login_user_auth
+    body = await _create(client, token, "station", sample_station, "comment", "X")
     assert any("not suggestable" in e["message"] for e in body["errors"])
 
 
@@ -283,6 +297,29 @@ async def test_merge_denied_without_station_review(client, login_user_auth, samp
 
     body = await _merge(client, token, sample_station, [_decide(sample_station, "op_hour", "24h")])
     assert any("Permission Denied." in e["message"] for e in body["errors"])
+
+
+@pytest.mark.asyncio
+async def test_a_comment_suggestion_left_pending_can_still_be_rejected(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """ADR-332 took `comment` off the list; a suggestion filed before that can be cleared, not applied."""
+    login_uuid, _ = login_user_auth
+    _, auditor_token = auditor_auth
+    async with test_db() as db:
+        db.add(StationUpdateSuggestion(
+            target_type="station", target_uuid=sample_station, field_name="comment",
+            new_value="X", status="pending", created_by=login_uuid,
+        ))
+
+    approve = await _merge(client, auditor_token, sample_station, [_decide(sample_station, "comment", "X")])
+    assert any("not suggestable" in e["message"] for e in approve["errors"])
+    reject = await _merge(
+        client, auditor_token, sample_station, [_decide(sample_station, "comment", approve=False)]
+    )
+    assert reject["data"]["mergeStationSuggestions"]["status"] == "applied"
+    view = (await _gql(client, auditor_token, REVIEW_VIEW, {"uuid": sample_station}))["data"]["station"]
+    assert view["pendingSuggestedFields"] == []
 
 
 @pytest.mark.asyncio
@@ -494,6 +531,77 @@ async def test_revoke_restores_status_changed_at(
     await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
 
     after = (await _gql(client, auditor_token, status_query, {"uuid": sample_station}))["data"]["station"]
+    assert after == before
+
+
+SUPPLY_QUERY = "query($uuid: UUID!) { station(uuid: $uuid) { supplyStatus supplyStatusUpdatedAt } }"
+
+
+@pytest.mark.asyncio
+async def test_a_supply_status_is_suggested_stripped(client, login_user_auth, sample_station):
+    """One line however spaced is one proposal to the reviewer, and any blank is the same blank."""
+    _, user_token = login_user_auth
+    spaced = await _create(client, user_token, "station", sample_station, "supply_status", " 飲用水見底 ")
+    assert spaced["data"]["createStationSuggestion"]["newValue"] == "飲用水見底"
+
+    blank = await _create(client, user_token, "station", sample_station, "supply_status", "   ")
+    assert blank["data"]["createStationSuggestion"]["newValue"] == ""
+
+
+@pytest.mark.asyncio
+async def test_supply_status_merge_stamps_it(client, auditor_auth, login_user_auth, sample_station):
+    """ADR-333: a merged supply status is as fresh as a direct edit."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, user_token, "station", sample_station, "supply_status", "飲用水見底")
+
+    await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "supply_status", "飲用水見底"),
+    ])
+
+    after = (await _gql(client, auditor_token, SUPPLY_QUERY, {"uuid": sample_station}))["data"]["station"]
+    assert after["supplyStatus"] == "飲用水見底"
+    assert after["supplyStatusUpdatedAt"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_blank_supply_status_merged_dates_nothing(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """A reviewer's blank is no line, as on a direct edit: the station had none, so nothing moves."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    await _create(client, user_token, "station", sample_station, "supply_status", "飲用水見底")
+
+    await _merge(client, auditor_token, sample_station, [_decide(sample_station, "supply_status", " ")])
+
+    after = (await _gql(client, auditor_token, SUPPLY_QUERY, {"uuid": sample_station}))["data"]["station"]
+    assert after["supplyStatus"] is None
+    assert after["supplyStatusUpdatedAt"] is None
+
+
+@pytest.mark.asyncio
+async def test_revoke_restores_supply_status_and_when_it_was_set(
+    client, auditor_auth, login_user_auth, sample_station
+):
+    """Undoing a wrong report puts back the old line and its old time, not the time of the revoke."""
+    _, user_token = login_user_auth
+    _, auditor_token = auditor_auth
+    async with test_db() as db:
+        await db.execute(
+            update(Station).where(Station.uuid == sample_station).values(
+                supply_status="尿布不足", supply_status_updated_at=datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
+            )
+        )
+    before = (await _gql(client, auditor_token, SUPPLY_QUERY, {"uuid": sample_station}))["data"]["station"]
+    await _create(client, user_token, "station", sample_station, "supply_status", "飲用水見底")
+    merge = (await _merge(client, auditor_token, sample_station, [
+        _decide(sample_station, "supply_status", "飲用水見底"),
+    ]))["data"]["mergeStationSuggestions"]
+
+    await _gql(client, auditor_token, REVOKE, {"uuid": merge["uuid"]})
+
+    after = (await _gql(client, auditor_token, SUPPLY_QUERY, {"uuid": sample_station}))["data"]["station"]
     assert after == before
 
 

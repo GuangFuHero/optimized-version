@@ -87,7 +87,7 @@ class AnnouncementRepository(GenericRepository[Announcement]):
             body = ann.content[:80] + ("..." if len(ann.content) > 80 else "")
             recipients = await NotificationRecipientResolver.resolve_all_active(db)
         else:
-            title, body = "📢 後台公告", "後台有一則新公告。"
+            title, body = "📢 管理平台公告", "管理平台有一則新公告。"
             recipients = await NotificationRecipientResolver.resolve_permission(db, Perm.ANN_VIEW_ADMIN.value)
         await NotificationService.dispatch(
             db,

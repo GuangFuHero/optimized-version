@@ -4,6 +4,12 @@ from datetime import datetime
 from uuid import UUID
 
 import strawberry
+from sqlalchemy import select
+
+from app.core.permissions import Perm
+from app.core.rbac_scopes import Scope, in_scope
+from app.core.security import resolve_scope
+from app.models.geo import Station
 
 
 @strawberry.type
@@ -95,13 +101,35 @@ class SuggestionChangeType:
     after: str | None
 
 
+def _is_station_comment(change: SuggestionChangeType) -> bool:
+    return change.target_type == "station" and change.field_name == "comment"
+
+
+async def _may_read_station_comment(info: strawberry.types.Info, station_uuid: str) -> bool:
+    """Whether the caller holds station.view_pii over the station, as StationType.comment asks.
+
+    Never raises: a denial leaves the entries out.
+    """
+    user = info.context["user"]
+    if user is None:
+        return False
+    db = info.context["db"]
+    scope = await resolve_scope(user, Perm.STATION_VIEW_PII, db, cache=info.context["_rbac_cache"])
+    if scope == Scope.NONE:
+        return False
+    if scope == Scope.ALL:
+        return True
+    station = await db.scalar(select(Station).where(Station.uuid == station_uuid))
+    return station is not None and await in_scope(scope, actor=user, resource=station, db=db)
+
+
 @strawberry.type
 class StationSuggestionMergeType:
     """One reviewer decision that applied suggested values to a station, and whether it was revoked."""
 
     uuid: UUID
     station_uuid: str
-    changes: list[SuggestionChangeType]
+    _changes: strawberry.Private[list[SuggestionChangeType]]
     status: str = strawberry.field(description="'applied' or 'revoked'")
     review_note: str | None
     reviewed_by: str
@@ -109,12 +137,24 @@ class StationSuggestionMergeType:
     revoked_at: datetime | None
     created_at: datetime | None
 
+    @strawberry.field(
+        description="The fields this merge wrote, before and after. A station's internal comment, "
+        "which merges could write until ADR-332, is left out without station.view_pii over the station"
+    )
+    async def changes(self, info: strawberry.types.Info) -> list[SuggestionChangeType]:
+        """Every change, or all but the comment's: its before and after are the note's own text."""
+        if not any(_is_station_comment(c) for c in self._changes):
+            return self._changes
+        if await _may_read_station_comment(info, self.station_uuid):
+            return self._changes
+        return [c for c in self._changes if not _is_station_comment(c)]
+
     @classmethod
     def from_model(cls, m) -> "StationSuggestionMergeType":
         """Build from a SQLAlchemy model instance."""
         return cls(
             uuid=m.uuid, station_uuid=str(m.station_uuid),
-            changes=[
+            _changes=[
                 SuggestionChangeType(
                     target_type=c["target_type"], target_uuid=c["target_uuid"],
                     field_name=c["field_name"],

@@ -543,6 +543,8 @@ stations {
     string contact_phone "nullable, String(50)"
     string operational_status "active/temporarily_closed/permanently_closed, String(20), default active, CHECK ck_stations_operational_status"
     timestamp status_changed_at "nullable, stamped only when operational_status actually changes value"
+    string supply_status "nullable, public free text on what the station is short of (ADR-333)"
+    timestamp supply_status_updated_at "nullable, stamped only when supply_status actually changes value"
     string search_text "GENERATED ALWAYS AS left(name, 500) + left(description, 500), STORED"
 }
 %% INDEX: ix_stations_search_text_trgm USING gin (search_text gin_trgm_ops)

@@ -363,6 +363,9 @@ input CreateStationInput {
   """
   operationalStatus: StationOperationalStatus! = active
 
+  """Optional public line on what the station is short of"""
+  supplyStatus: String = null
+
   """Optional secondary address or pole location to attach to this station"""
   secondaryLocation: SecondaryLocationInput = null
 }
@@ -1044,7 +1047,6 @@ type StationPropertyType {
 type StationSuggestionMergeType {
   uuid: UUID!
   stationUuid: String!
-  changes: [SuggestionChangeType!]!
 
   """'applied' or 'revoked'"""
   status: String!
@@ -1053,6 +1055,11 @@ type StationSuggestionMergeType {
   revokedBy: String
   revokedAt: DateTime
   createdAt: DateTime
+
+  """
+  The fields this merge wrote, before and after. A station's internal comment, which merges could write until ADR-332, is left out without station.view_pii over the station
+  """
+  changes: [SuggestionChangeType!]!
 }
 
 type StationSuggestionType {
@@ -1111,9 +1118,6 @@ type StationType {
   """Importance level used for map rendering priority (0 = default)"""
   level: Int!
 
-  """Internal admin comment, not shown to the public"""
-  comment: String
-
   """Data source of this record: 'user' or 'official'"""
   source: String
 
@@ -1139,6 +1143,14 @@ type StationType {
 
   """When operational_status last changed"""
   statusChangedAt: DateTime
+
+  """
+  What the station is short of, in free text, e.g. '飲用水見底、尿布尚有存量'. Public (ADR-333)
+  """
+  supplyStatus: String
+
+  """When supply_status last changed; null while it has never been set"""
+  supplyStatusUpdatedAt: DateTime
   createdAt: DateTime
   updatedAt: DateTime
 
@@ -1161,6 +1173,11 @@ type StationType {
   Station contact phone — masked unless the caller holds station.view_pii here
   """
   contactPhone: String
+
+  """
+  Internal back-office note on this station — null unless the caller holds station.view_pii here (ADR-332)
+  """
+  comment: String
   photos: [PhotoType!]!
   secondaryLocation: SecondaryLocationType
   properties: [StationPropertyType!]!
@@ -1711,6 +1728,7 @@ input UpdateStationInput {
   Updated operational status: 'active', 'temporarily_closed', or 'permanently_closed'
   """
   operationalStatus: StationOperationalStatus = null
+  supplyStatus: String
   contactName: String
   contactEmail: String
   contactPhone: String

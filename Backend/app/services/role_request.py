@@ -36,7 +36,7 @@ ROLE_LABELS = {"government": "政府單位人員", "ngo": "社福團體人員", 
 # What a turned-down applicant reads when the reviewer left no reply (ADR-287; wg-bridge.js).
 _REJECTED_WITHOUT_REPLY = "你原本的權限沒有任何改變，可以再送一次申請。"
 # What an approved data auditor reads. Approval adds an identity, so nobody is signed out (ADR-288).
-_APPROVED_DATA_AUDITOR = "右上角會出現「前往後台」，不需要重新登入。"
+_APPROVED_DATA_AUDITOR = "右上角會出現「前往管理平台」，不需要重新登入。"
 
 # The one application that can be approved yet (ADR-288). The requested role and the platform role
 # it grants share the name, unlike `government` / `ngo`, which name a type of team.
@@ -141,7 +141,7 @@ async def submit(
     await NotificationService.dispatch(
         db,
         event_type="role_request_submitted",
-        title="有新的後台人員申請",
+        title="有新的管理權限申請",
         body=f"{applicant_name} 申請成為「{ROLE_LABELS[requested_role]}」。",
         actor_uuid=applicant_uuid,
         ref_type="role_request",

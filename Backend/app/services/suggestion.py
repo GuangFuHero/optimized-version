@@ -23,12 +23,18 @@ from app.repositories.geo_repository import (
     station_repository,
 )
 from app.services.authz import require_scope
+from app.services.geo_validation import normalize_supply_status
 from app.services.notification_resolver import NotificationRecipientResolver
 from app.services.notification_service import NotificationService
 from app.services.station import OPERATIONAL_PROPERTY_NAMES, notify_operational_status_change
 
 # Free text a caller can write on every submit; the audit trigger copies each write.
 _MAX_TEXT = 1000
+
+# A station field whose real change moves a stamp, and that stamp (ADR-333). A merge keeps the
+# old stamp under "<stamp>_before" so a revoke can put it back; for status_changed_at that is
+# the key merges stored before this map existed.
+_STAMPS = {"operational_status": "status_changed_at", "supply_status": "supply_status_updated_at"}
 
 # Maps a suggestion's target_type to the repository that owns that table.
 _TARGET_REPOS = {
@@ -74,6 +80,10 @@ async def create_station_suggestion(
 
     _check_length(new_value=new_value, comment=comment)
     value = str(coerce_and_validate(target_type, field_name, new_value))
+    if target_type == "station" and field_name == "supply_status":
+        # Stripped here as at merge, so one line however spaced is one proposal to the reviewer.
+        # A blank stays "", the column being text; the merge stores it as null (ADR-333).
+        value = value.strip()
 
     # xmax = 0 only on a freshly inserted row, which tells an insert from a resubmit.
     suggestion_uuid, inserted = (
@@ -225,9 +235,10 @@ async def revoke_station_suggestion_merge(
 
     for change, target in zip(changes, targets, strict=True):
         _set_field(target, change["field_name"], change["before"])
-        if "status_changed_at_before" in change:
-            before = change["status_changed_at_before"]
-            target.status_changed_at = datetime.fromisoformat(before) if before else None
+        stamp = _STAMPS.get(change["field_name"])
+        if stamp and f"{stamp}_before" in change:
+            before = change[f"{stamp}_before"]
+            setattr(target, stamp, datetime.fromisoformat(before) if before else None)
     merge.status = "revoked"
     merge.revoked_by = actor_uid
     merge.revoked_at = datetime.now(UTC)
@@ -263,6 +274,8 @@ async def _apply_decisions(db: AsyncSession, station: Station, decisions, rows_b
         if decision.value is None:
             raise ValueError(f"'{decision.field_name}' needs a value to approve")
         value = coerce_and_validate(target_type, decision.field_name, decision.value)
+        if target_type == "station" and decision.field_name == "supply_status":
+            value = normalize_supply_status(value)
         before = getattr(target, decision.field_name)
         change = {
             "target_type": target_type,
@@ -271,10 +284,11 @@ async def _apply_decisions(db: AsyncSession, station: Station, decisions, rows_b
             "before": before,
             "after": value,
         }
-        if decision.field_name == "operational_status":
-            # A revoke restores the old status, so it restores when that status began too.
-            stamp = target.status_changed_at
-            change["status_changed_at_before"] = stamp.isoformat() if stamp else None
+        stamp = _STAMPS.get(decision.field_name)
+        if stamp:
+            # A revoke restores the old value, so it restores when that value began too.
+            began = getattr(target, stamp)
+            change[f"{stamp}_before"] = began.isoformat() if began else None
         _set_field(target, decision.field_name, value)
         touched.append(target)
         changes.append(change)
@@ -322,9 +336,10 @@ def _check_length(**fields: str | None) -> None:
 
 
 def _set_field(target, field_name: str, value) -> None:
-    """Write one field, stamping status_changed_at on a real operational_status transition."""
-    if field_name == "operational_status" and value != target.operational_status:
-        target.status_changed_at = datetime.now(UTC)
+    """Write one field, moving its stamp (see _STAMPS) only when the value really changes."""
+    stamp = _STAMPS.get(field_name)
+    if stamp and value != getattr(target, field_name):
+        setattr(target, stamp, datetime.now(UTC))
     setattr(target, field_name, value)
 
 
