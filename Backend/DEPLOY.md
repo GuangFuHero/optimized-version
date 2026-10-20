@@ -166,8 +166,10 @@ redirect URI mismatch:
   - `http://localhost:3000/api/v1/auth/oauth/google/callback`
 - LINE Developers, channel `2010287145` → LINE Login → Callback URL:
   - `https://staging.wan-guard.com/api/v1/auth/oauth/line/callback`
-  - `http://localhost:3000/api/v1/auth/oauth/line/callback`. Whether LINE accepts an `http://localhost` URL
-    has not been checked.
+  - `http://localhost:3000/api/v1/auth/oauth/line/callback`: registered on 2026-10-20. LINE accepts a plain
+    `http://localhost` URL; one that is not registered gets a 400 from LINE's authorize page.
+
+The LINE channel is published (2026-10-20), so any LINE account can sign in, not only the channel's testers.
 
 Production adds the same paths on `https://wan-guard.com`. The old NextAuth callback URLs can be removed once
 the frontend no longer uses NextAuth.
@@ -180,7 +182,16 @@ The backend, site and back-office changes are merged together and deployed at on
 1. Before deploying, create `staging-backend-google-client-secret` and `staging-backend-line-channel-secret`
    (same values as the `staging-frontend-*` pair) and their IAM bindings (see
    [One-time setup](#one-time-setup-already-done-2026-06-12--recorded-for-reproducibility)). The second run
-   below fails at step 4 without them.
+   below fails at step 4 without them. Developers who test Google or LINE sign-in locally
+   (`Backend/.env.example`) need read access to these two secrets as well. Grant it on each secret, never on
+   the project: `roles/secretmanager.secretAccessor` there reads every secret, the JWT signing key included.
+
+   ```bash
+   for s in staging-backend-google-client-secret staging-backend-line-channel-secret; do
+     gcloud secrets add-iam-policy-binding $s \
+       --member="user:<developer-email>" --role="roles/secretmanager.secretAccessor"
+   done
+   ```
 2. Point the Tunnel hostnames and register the redirect URIs above.
 3. **Run `deploy.sh` twice in a row.** This change edits `gen_env`, and a running `deploy.sh` keeps the
    `gen_env` it parsed before checkout. The first run therefore writes a `.env` without the OAuth secrets:
