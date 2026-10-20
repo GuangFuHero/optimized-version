@@ -22,15 +22,11 @@ from app.schemas.team_invite import (
     OpenedInviteResponse,
 )
 from app.services import team_invite as team_invite_service
+from app.services.role_request import RoleRequestConflictError, RoleRequestNotFoundError
 from app.services.team_invite import InviteNotFoundError, TeamNotFoundError
 
 admin_router = APIRouter()
 router = APIRouter()
-
-# A request through an invite that collides with what the applicant already has. Everything
-# else the submit refuses is a field to fix (422).
-_CONFLICTS = frozenset({"You already have a pending request", "You are already a member of this team"})
-
 
 @admin_router.post(
     "/teams/{team_uuid}/invites",
@@ -49,6 +45,8 @@ async def create_invite(
         invite = await team_invite_service.create_invite(db, actor=current_user, team_uuid=team_uuid)
     except TeamNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
+    except ValueError as err:  # the team is not active: a link would 404 at once
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
     return InviteResponse(**vars(invite))
 
 
@@ -117,13 +115,13 @@ async def request_to_join(
         request = await team_invite_service.request_to_join(
             db, actor=current_user, token=token, name=body.name, reason=body.reason, email=body.email
         )
-    except InviteNotFoundError as err:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
-    except ValueError as err:
-        if str(err) == "Team not found":  # suspended between the link check and the submit
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found") from err
-        code = status.HTTP_409_CONFLICT if str(err) in _CONFLICTS else status.HTTP_422_UNPROCESSABLE_ENTITY
-        raise HTTPException(status_code=code, detail=str(err)) from err
+    except (InviteNotFoundError, RoleRequestNotFoundError) as err:
+        # The team stopped being joinable between the link check and the submit: the link is dead.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found") from err
+    except RoleRequestConflictError as err:  # already a member, or a request is pending
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
+    except ValueError as err:  # a field to fix
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(err)) from err
     return InviteJoinResponse(
         uuid=request.uuid,
         requested_role=request.requested_role,

@@ -146,7 +146,7 @@ async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_nam
     return assignment
 
 
-async def _refuse_last_team_admin(db: AsyncSession, *, team_uuid, user_uuid) -> None:
+async def refuse_last_team_admin(db: AsyncSession, *, team_uuid, user_uuid) -> None:
     """Refuse taking the team's only `admin` away (ADR-356).
 
     Locks every admin grant in the team FOR UPDATE first, as _remaining_super_admins does, so two
@@ -200,6 +200,8 @@ async def add_team_member(
         db,
         resource=SimpleNamespace(created_by=None, team_uuid=team.uuid, geometry=None),
     )
+    if team.status == "disbanded":  # kept as history only (ADR-357)
+        raise AdminConflictError("A disbanded team cannot be changed")
 
     target = await user_repository.get_by_uuid(db, user_uuid)
     if target is None:
@@ -213,7 +215,7 @@ async def add_team_member(
         raise AdminNotFoundError(f"Team role '{team_role_name or DEFAULT_TEAM_ROLE}' not found")
 
     if role.name != TEAM_ADMIN_ROLE_NAME:
-        await _refuse_last_team_admin(db, team_uuid=team.uuid, user_uuid=target.uuid)
+        await refuse_last_team_admin(db, team_uuid=team.uuid, user_uuid=target.uuid)
     await grant_team_role(db, user_uuid=target.uuid, team_uuid=team.uuid, role=role)
 
     # Read every attribute we still need BEFORE committing: the session runs with
@@ -270,7 +272,7 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
     ).first()
     if held is None:
         raise AdminNotFoundError("User is not a member of this team")
-    await _refuse_last_team_admin(db, team_uuid=team.uuid, user_uuid=target.uuid)
+    await refuse_last_team_admin(db, team_uuid=team.uuid, user_uuid=target.uuid)
 
     # Leaving a team is revoking every grant scoped to it — that IS the membership now
     # (ADR-072). Grants in the user's other teams, and their platform grant, are untouched:
@@ -418,6 +420,11 @@ async def create_team(
     """
     if await require_scope(actor, Perm.TEAM_EDIT, db) != Scope.ALL:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
+    # One rule for team names everywhere (ADR-352 point 3), under the same lock as founding one.
+    name = name.strip()
+    await team_repository.lock_name(db, name)
+    if await team_repository.name_taken(db, name):
+        raise AdminConflictError("A team with this name already exists")
     return await team_repository.create(
         db, obj_in={"name": name, "type": type_, "tax_id": tax_id}
     )
@@ -438,10 +445,13 @@ async def update_team(db: AsyncSession, *, actor: User, team_uuid: str, changes:
         db,
         resource=SimpleNamespace(created_by=None, team_uuid=team.uuid, geometry=None),
     )
+    if team.status == "disbanded":
+        raise AdminConflictError("A disbanded team cannot be changed")
     if "name" in changes:
-        changes = {**changes, "name": changes["name"].strip()}
+        changes = {**changes, "name": (changes["name"] or "").strip()}
         if not changes["name"]:
             raise AdminValidationError("Team name is required")
+        await team_repository.lock_name(db, changes["name"])
         if await team_repository.name_taken(db, changes["name"], excluding=team.uuid):
             raise AdminConflictError("A team with this name already exists")
     for field, value in changes.items():

@@ -71,7 +71,7 @@ async def approve_role_request(
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Grant a pending data auditor application; government and NGO ones are refused for now."""
+    """Grant a pending application: a team membership, a new team, or the data auditor role."""
     try:
         request = await role_request_service.approve(
             db, actor=current_user, request_uuid=request_uuid, note=body.note

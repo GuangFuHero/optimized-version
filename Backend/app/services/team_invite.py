@@ -79,9 +79,15 @@ async def _managed_team(db: AsyncSession, actor: User, team_uuid) -> Team:
     return team
 
 
+class TeamNotActiveError(ValueError):
+    """Suspended or disbanded: a link to it would answer 404 at once. REST answers 409."""
+
+
 async def create_invite(db: AsyncSession, *, actor: User, team_uuid) -> IssuedInvite:
-    """Issue a new 24-hour link for the team."""
+    """Issue a new 24-hour link for the team, which must be active."""
     team = await _managed_team(db, actor, team_uuid)
+    if team.status != "active":
+        raise TeamNotActiveError("The team is not active")
     invite = await team_invite_repository.create(
         db, token=secrets.token_urlsafe(_TOKEN_BYTES), team_uuid=team.uuid, created_by=actor.uuid
     )

@@ -354,16 +354,23 @@ their queue (ADR-354 point 3).
 2. **Approving a `government` / `ngo` request that names no team answers 409**
    `This application names no team; the applicant should apply again`. The migration rejects the pending
    ones (ADR-350 point 9); this covers any written another way.
-3. **A team that is not active yields no identities**, in `active_identity_repository` — the one query every
-   request, login, refresh and switch resolves identities through. Its grants are untouched, so restoring
-   needs nothing re-granted. The identity list (`/users/me`, the RBAC admin's effective permissions) leaves
-   it out while suspended.
-4. **A data auditor application ignores identities in a suspended team** when checking AC-RE-101, since
-   they are not identities while suspended. Restoring the team afterwards leaves the account with both.
+3. **A team that is not active yields no usable identities**: `active_identity_repository` leaves it out of
+   resolving a token, logging in, refreshing, switching and the switcher (`/users/me`). Its grants are
+   untouched, so restoring needs nothing re-granted. Questions about what an account *holds* — the AC-RE-101
+   eligibility check and the RBAC admin's permissions view — still see it (`include_inactive_teams=True`), so
+   a suspended team's member cannot become a data auditor in the meantime.
+4. **Every path that names a team checks the same rules**, after code review: creating, renaming and founding
+   a team take the same advisory lock on the name before checking it is unused; a disbanded team refuses new
+   members, edits and invites (409), and a suspended one refuses invites; the last-admin guard also covers
+   the RBAC admin's role revoke; approving a member request locks the team before the request, the order
+   disbanding takes them in, so the two cannot interleave.
+5. **The platform audit view masks applicant details** (`reason`, `contact`, `applicant_*` on
+   `role_requests`; `real_name` on `users`) for callers without `role_request.review` — in practice data
+   auditors, who ADR-287 point 7 keeps from them. Team admins read their own team's, as in their queue.
 
 **Consequences**:
-➖ Point 4 can leave an account holding `data_auditor` and a team identity, which AC-RE-101 otherwise
-prevents. Rare, and visible in the user list.
+➕ One rule for team names and for disbanded teams, whichever endpoint is used.
+➖ Masked audit values read `[redacted]`, so a data auditor sees that a field changed, not to what.
 
 ---
 

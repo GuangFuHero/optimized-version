@@ -29,8 +29,8 @@ from app.models.role_request import (
 from app.models.team import Team
 from app.repositories.active_identity_repository import active_identity_repository
 from app.repositories.auth_repository import role_repository
-from app.repositories.team_repository import team_repository
-from app.services.admin import DEFAULT_TEAM_ROLE, grant_team_role
+from app.repositories.team_repository import joinable, team_repository
+from app.services.admin import DEFAULT_TEAM_ROLE, TEAM_ADMIN_ROLE_NAME, grant_team_role
 from app.services.auth_account import DEFAULT_PLATFORM_ROLE
 from app.services.authz import require_scope
 from app.services.notification_resolver import NotificationRecipientResolver
@@ -47,9 +47,6 @@ _APPROVED_DATA_AUDITOR = "右上角會出現「前往管理平台」，不需要
 # The one application that can be approved yet (ADR-288). The requested role and the platform role
 # it grants share the name, unlike `government` / `ngo`, which name a type of team.
 _DATA_AUDITOR = "data_auditor"
-
-# The team role a founder gets (ADR-350 point 6); the one a member gets is DEFAULT_TEAM_ROLE.
-TEAM_ADMIN_ROLE = "admin"
 
 # The team type each team identity picks from and founds (ADR-352 point 1).
 TEAM_TYPE_FOR_ROLE = {"government": "gov", "ngo": "ngo"}
@@ -152,15 +149,12 @@ async def _checked_target(
         return Target(new_team_name=new_team_name)
     team = await db.scalar(
         select(Team).where(
-            Team.uuid == team_uuid,
-            Team.delete_at.is_(None),
-            Team.status == "active",
-            Team.type == TEAM_TYPE_FOR_ROLE[requested_role],
+            Team.uuid == team_uuid, joinable(), Team.type == TEAM_TYPE_FOR_ROLE[requested_role]
         )
     )
     # Unknown, not active and the wrong type read the same: none of them can be joined.
     if team is None:
-        raise ValueError("Team not found")
+        raise RoleRequestNotFoundError("Team not found")
     return Target(team=team)
 
 
@@ -209,7 +203,10 @@ async def _has_backoffice_identity(db: AsyncSession, user_uuid, *, besides: str 
     one more platform role out of the count, for approval to ask what else turned up meanwhile.
     """
     plain = {DEFAULT_PLATFORM_ROLE, besides}
-    identities = await active_identity_repository.list_for_user(db, str(user_uuid))
+    # What the account holds, a suspended team's grants included (ADR-359 point 3).
+    identities = await active_identity_repository.list_for_user(
+        db, str(user_uuid), include_inactive_teams=True
+    )
     return any(identity.team_uuid is not None or identity.role_name not in plain for identity in identities)
 
 
@@ -240,7 +237,7 @@ async def submit(
         if await _has_backoffice_identity(db, actor.uuid):
             raise ValueError("Only an account without a back-office identity can apply")
     elif target.team is not None and await _is_member(db, actor.uuid, target.team.uuid):
-        raise ValueError("You are already a member of this team")
+        raise RoleRequestConflictError("You are already a member of this team")
     phone, email = await _applicant_contacts(db, actor.uuid, email)
     # Read before committing: the session expires `actor` on commit, and async SQLAlchemy cannot
     # lazily reload it afterwards.
@@ -269,7 +266,7 @@ async def submit(
         await db.rollback()
         if _ONE_PENDING_INDEX not in str(exc.orig):
             raise
-        raise ValueError("You already have a pending request") from exc
+        raise RoleRequestConflictError("You already have a pending request") from exc
 
     # Tell whoever can decide it (ADR-287). The back office that shows this does not exist yet, but
     # the notice is written now so nothing on the server has to change when it does.
@@ -304,6 +301,7 @@ async def _lock_pending(
     *,
     applicant_uuid: uuid.UUID | None = None,
     reviewer: User | None = None,
+    reach: ReviewerReach | None = None,
 ) -> RoleRequest:
     """Lock the application FOR UPDATE and check it is still pending.
 
@@ -320,7 +318,7 @@ async def _lock_pending(
     if request is None:
         raise RoleRequestNotFoundError("Role request not found")
     if reviewer is not None:
-        await _require_reviewer(db, reviewer, request)
+        await _require_reviewer(db, reviewer, request, reach)
     if request.status != "pending":
         raise RoleRequestConflictError("Role request is no longer pending")
     return request
@@ -362,14 +360,16 @@ def _forbidden() -> HTTPException:
     return HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Permission Denied.")
 
 
-async def _require_reviewer(db: AsyncSession, actor: User, request: RoleRequest) -> None:
+async def _require_reviewer(
+    db: AsyncSession, actor: User, request: RoleRequest, reach: "ReviewerReach | None"
+) -> None:
     """Refuse a decision the caller may not make.
 
     Nothing to review at all → 403. A request outside their reach → not found, so a team admin
     cannot learn of another team's requests or of new-team and data auditor ones (ADR-354).
     Checkpoint 2 for a member request goes through `require_scope`, as add_team_member's does.
+    `reach` is the caller's, computed once by the decision.
     """
-    reach = await _reach(db, actor)
     if reach is None:
         raise _forbidden()
     if reach.everything:
@@ -400,13 +400,14 @@ async def reject(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, note
 
     The reason is required (BE-038 step 4), so the applicant always hears it.
     """
-    if await _reach(db, actor) is None:
+    reach = await _reach(db, actor)
+    if reach is None:
         raise _forbidden()
     note = _checked_note(note)
     if note is None:
         raise ValueError("A reason is required")
     reviewer_uuid = actor.uuid  # read before the commit expires `actor`
-    request = await _lock_pending(db, request_uuid, reviewer=actor)
+    request = await _lock_pending(db, request_uuid, reviewer=actor, reach=reach)
     request.status = "rejected"
     request.reviewed_by = reviewer_uuid
     request.review_note = note
@@ -466,9 +467,8 @@ async def _join_existing_team(db: AsyncSession, request: RoleRequest) -> tuple[s
     Checked again here, since days can pass after sending: the team must still be active, and
     the applicant not already in it (ADR-351 point 2).
     """
-    team = await db.scalar(
-        select(Team).where(Team.uuid == request.team_uuid, Team.delete_at.is_(None), Team.status == "active")
-    )
+    # approve() locked the team row before the request, so its status cannot change under us.
+    team = await db.scalar(select(Team).where(Team.uuid == request.team_uuid, joinable()))
     if team is None:
         raise RoleRequestConflictError("The team cannot be joined now")
     if await _is_member(db, request.created_by, team.uuid):
@@ -481,17 +481,17 @@ async def _join_existing_team(db: AsyncSession, request: RoleRequest) -> tuple[s
 async def _found_new_team(db: AsyncSession, request: RoleRequest) -> tuple[str, str, str]:
     """Create the team with the applicant as its `admin`; return (team uuid, name, role uuid).
 
-    The name is checked again under a transaction-scoped advisory lock on it, so two approvals
-    founding the same name at once cannot both succeed (ADR-352 point 3).
+    The name is checked again under the same advisory lock creating or renaming a team takes, so
+    two of them claiming one name at once cannot both succeed (ADR-352 point 3).
     """
     name = request.new_team_name
-    await db.execute(text("SELECT pg_advisory_xact_lock(hashtext(lower(btrim(:name))))"), {"name": name})
+    await team_repository.lock_name(db, name)
     if await team_repository.name_taken(db, name):
         raise RoleRequestConflictError("A team with this name already exists")
     team = Team(name=name, type=TEAM_TYPE_FOR_ROLE[request.requested_role], status="active")
     db.add(team)
     await db.flush()
-    role = await _team_role(db, TEAM_ADMIN_ROLE)
+    role = await _team_role(db, TEAM_ADMIN_ROLE_NAME)
     await grant_team_role(db, user_uuid=request.created_by, team_uuid=team.uuid, role=role)
     return team.uuid, team.name, role.uuid
 
@@ -505,11 +505,17 @@ async def approve(db: AsyncSession, *, actor: User, request_uuid: uuid.UUID, not
     that is gone). The grant, the new status and `users.real_name` (ADR-355) are one commit, so a
     withdrawal racing this one finds all or none.
     """
-    if await _reach(db, actor) is None:
+    reach = await _reach(db, actor)
+    if reach is None:
         raise _forbidden()
     note = _checked_note(note)
     reviewer_uuid = actor.uuid  # read before the commit expires `actor`
-    request = await _lock_pending(db, request_uuid, reviewer=actor)
+    # Lock the team before the request, the order set_team_status takes them in, so an approval
+    # and a disband cannot interleave: whichever runs second sees the other's result.
+    team_uuid = await db.scalar(select(RoleRequest.team_uuid).where(RoleRequest.uuid == request_uuid))
+    if team_uuid is not None:
+        await db.execute(select(Team.uuid).where(Team.uuid == team_uuid).with_for_update())
+    request = await _lock_pending(db, request_uuid, reviewer=actor, reach=reach)
     applicant_uuid, label = request.created_by, ROLE_LABELS[request.requested_role]
     team_name = None
     if request.requested_role == _DATA_AUDITOR:

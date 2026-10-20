@@ -311,17 +311,20 @@ async def revoke_user_sessions(
     response_model=TeamResponse,
     status_code=status.HTTP_201_CREATED,
     summary="建立 team",
-    responses={403: {"description": "Permission Denied"}},
+    responses={403: {"description": "Permission Denied"}, 409: {"description": "Name already taken"}},
 )
 async def create_team(
     body: CreateTeamRequest,
     db: AsyncSession = Depends(security.get_db),
     current_user: User = Depends(security.get_current_user),
 ):
-    """Create a gov/ngo team (super_admin only, via team.edit at `all`)."""
-    team = await admin_service.create_team(
-        db, actor=current_user, name=body.name, type_=body.type, tax_id=body.tax_id
-    )
+    """Create a gov/ngo team (super_admin only, via team.edit at `all`). Names are unique (ADR-352)."""
+    try:
+        team = await admin_service.create_team(
+            db, actor=current_user, name=body.name, type_=body.type, tax_id=body.tax_id
+        )
+    except AdminConflictError as err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
     return TeamResponse.model_validate(team)
 
 

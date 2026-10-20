@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.team import Team
 from app.models.team_invite import TeamInvite
+from app.repositories.team_repository import joinable
 
 
 class TeamInviteRepository:
@@ -35,12 +36,7 @@ class TeamInviteRepository:
             await db.execute(
                 select(TeamInvite, Team)
                 .join(Team, Team.uuid == TeamInvite.team_uuid)
-                .where(
-                    TeamInvite.token == token,
-                    TeamInvite.expires_at > func.now(),
-                    Team.status == "active",
-                    Team.delete_at.is_(None),
-                )
+                .where(TeamInvite.token == token, TeamInvite.expires_at > func.now(), joinable())
             )
         ).first()
         return None if row is None else (row[0], row[1])
