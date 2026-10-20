@@ -173,6 +173,59 @@
     );
   }
 
+  // ── 真的 QRCode（2026-10-20 取代 FakeQR）──────────────────────────────────
+  /* MEM-QR-112：網址 → QR 一律用 vendored 的 window.qrcode（js/vendor/qrcode.js），前端自己畫。
+   *   HTML 必須在本檔之前載入 js/vendor/qrcode.js，否則顯示「QR 產生器未載入」而不是一張假圖 ——
+   *   ❌ 不可以退回 FakeQR：假圖看起來能掃，現場會以為壞掉的是別人的手機。
+   *   容錯等級用 M：印出來貼在現場髒了一角仍讀得到（與前台分享同一個選擇）。 */
+  function mmMakeQr(value) {
+    if (!value || !window.qrcode) return null;
+    try { const qr = window.qrcode(0, "M"); qr.addData(value); qr.make(); return qr; }
+    catch (e) { return null; }
+  }
+
+  function MMQRCode({ value, size = 168 }) {
+    const svg = React.useMemo(() => {
+      const qr = mmMakeQr(value);
+      if (!qr) return null;
+      const n = qr.getModuleCount();
+      return qr.createSvgTag({ cellSize: Math.max(2, Math.floor(size / (n + 4))), margin: 0, scalable: true });
+    }, [value, size]);
+    if (!svg) {
+      return (
+        <div style={{ width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 12, font: "var(--font-body-300)", color: "var(--color-fg-danger)" }}>
+          QR 產生器未載入，請確認 HTML 有引入 js/vendor/qrcode.js
+        </div>
+      );
+    }
+    return <div role="img" aria-label="邀請 QRCode" style={{ width: size, height: size, lineHeight: 0 }} dangerouslySetInnerHTML={{ __html: svg }} />;
+  }
+
+  /** 下載 PNG（LINE 收不了 SVG）。四周留 4 格白邊 —— QR 規格要求的靜區，少了有些相機掃不到。 */
+  function mmDownloadQrPng(value, fileName) {
+    const qr = mmMakeQr(value);
+    if (!qr) return false;
+    const n = qr.getModuleCount(), cell = 16, quiet = 4, px = (n + quiet * 2) * cell;
+    const cv = document.createElement("canvas");
+    cv.width = px; cv.height = px;
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, px, px);
+    ctx.fillStyle = "#000";
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      if (qr.isDark(r, c)) ctx.fillRect((c + quiet) * cell, (r + quiet) * cell, cell, cell);
+    }
+    // 用 blob 網址不用 data: 網址 —— Chrome 對 data: 網址常忽略 download 檔名，存下來會叫「download」
+    cv.toBlob((blob) => {
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = fileName || "wanguard-invite.png";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 1000);
+    }, "image/png");
+    return true;
+  }
+
   // ── 示意 QRCode（依 token 決定圖樣的佔位圖）────────────────────────────────
   function FakeQR({ token = "wanguard", size = 168 }) {
     const n = 25;
@@ -249,6 +302,6 @@
 
   Object.assign(window, {
     MMCtx, useMM, RbacBadge, TeamRoleBadge, StatusBadge, TeamStatusBadge, TypeBadge,
-    MMModal, BlockDialog, ReasonDialog, MMMenu, FakeQR, EmptyState, StatPill, ToastHost,
+    MMModal, BlockDialog, ReasonDialog, MMMenu, FakeQR, MMQRCode, mmDownloadQrPng, EmptyState, StatPill, ToastHost,
   });
 })();

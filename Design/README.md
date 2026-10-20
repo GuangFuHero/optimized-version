@@ -30,7 +30,7 @@
 | | `緊急公告 Emergency Announcements.html` | 發布前台／後台公告橫幅 |
 | | `志工行前資訊 Volunteer Briefing.html` | 編輯並發布前台的行前資訊 |
 | | `後台找不到頁面 Not Found.html` | 走到不存在的網址時顯示的畫面（2026-10-18 加入） |
-| | `成員管理 Member Management.html` | 側欄的「團隊」與「成員與權限」**是這一頁的兩個分頁**（`#view=teams`／`#view=members`） |
+| | `成員管理 Member Management.html` | 側欄的「團隊」與「成員與權限」**是這一頁的兩個分頁**（`#view=teams`／`#view=members`）。邀請 QR 見 `後台/docs/成員邀請QR.md`（2026-10-20） |
 
 每一頁標題旁的 **？** 是該頁的功能說明。
 
@@ -51,4 +51,4 @@
 ## 兩個資料夾的共用檔
 
 `前台/` 與 `後台/` 各有一份 `_ds/`（設計系統與字型）與 `js/`，彼此獨立、可以分開打開。
-`js/admin/announce/an-*`（公告橫幅）、`js/admin/ticket/tk-locpicker.jsx`，以及 `js/shared/` 的 `wg-help.jsx`、`wg-photos.jsx`、`wg-bridge.js`、`wg-hazard.js`、`wg-notfound.jsx`，以及 `assets/mascot/` 兩邊都有，**內容相同**，改一邊要同步另一邊。
+`js/admin/announce/an-*`（公告橫幅）、`js/admin/ticket/tk-locpicker.jsx`，以及 `js/shared/` 的 `wg-help.jsx`、`wg-photos.jsx`、`wg-bridge.js`、`wg-hazard.js`、`wg-notfound.jsx`，以及 `assets/mascot/`、`js/vendor/qrcode.js` 兩邊都有，**內容相同**，改一邊要同步另一邊。

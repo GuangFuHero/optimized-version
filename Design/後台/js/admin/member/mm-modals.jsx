@@ -2,23 +2,61 @@
 (function () {
   const { Button, Badge, Field, Input, Alert } = window.WanGuardDesignSystem_9c8f68;
   const Icon = window.WGIcon;
-  const { MMModal, FakeQR, useMM } = window;
+  const { MMModal, useMM } = window;
 
   // ── QR + 短連結展示區塊 ───────────────────────────────────────────────────
-  function QRBlock({ token, link, metaItems = [], otpNote = true }) {
+  /* 2026-10-20 改版（Sucre：「改一下設計稿」，起因是 PM 問「網址變成 QR 的 generator」）
+   *
+   * MEM-QR-112（我定的編號）：QR 由前端把邀請網址轉成圖，不另外接 QR 服務。
+   *   - 用專案內 vendored 的 js/vendor/qrcode.js（qrcode-generator v2.0.4，MIT），與前台分享同一支。
+   *   - ❌ 不可以改用線上 QR 產生器（goqr、qr-code-generator.com 之類）：
+   *       ① 災區網路不穩，外部站掛掉就產不出 QR
+   *       ② 邀請網址本身就是入隊憑證，丟給第三方等於把 token 外流
+   *   - 後端只負責發網址（token、效期、人數上限、作廢）；QR 只是同一條網址的另一種樣子，
+   *     所以 QR 與短連結**永遠是同一個 token**，不得各自產生。
+   *
+   * MEM-QR-113（我定的）：產生後要能直接送出去 —— 現場的傳遞管道就是 LINE 群組。
+   *   動作順序：分享到 LINE → 系統分享（只在支援的裝置顯示，不給死鈕）→ 下載 QR 圖 → 複製連結。
+   *   下載給 PNG 不給 SVG：LINE 收不了 SVG，傳到群組會變成檔案而不是圖片。 */
+  // 檔名一律英數：中文檔名在部分 Chrome 會被存成「download」（2026-10-20 實測）
+  function QRBlock({ link, shareText = "", fileName = "wanguard-invite", metaItems = [], otpNote = true }) {
     const mm = useMM();
+    const url = "https://" + link;
+    const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+    const text = shareText || "點連結或掃 QR 加入團隊";
+
+    const copy = () => {
+      const done = () => mm.toast("已複製邀請連結");
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, done);
+      else done();
+    };
+    const shareLine = () => {
+      // LINE 官方 web intent：手機會開 LINE App 選聊天室，桌機開 LINE 網頁版。不需 SDK。
+      window.open("https://line.me/R/msg/text/?" + encodeURIComponent(text + "\n" + url), "_blank", "noopener");
+    };
+    const nativeShare = () => { navigator.share({ title: text, url }).catch(() => {}); };
+    const download = () => {
+      const ok = window.mmDownloadQrPng(url, fileName + ".png");
+      mm.toast(ok ? "已下載 QR 圖片，可直接傳到 LINE 群組或列印張貼" : "QR 產生器未載入，無法下載", ok ? undefined : "danger");
+    };
+
     return (
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ padding: 14, borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-default)", background: "#fff", boxShadow: "var(--shadow-sm)", flexShrink: 0 }}>
-          <window.FakeQR token={token} size={168} />
+          <window.MMQRCode value={url} size={168} />
         </div>
         <div style={{ flex: 1, minWidth: 260, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <Button variant="primary" size="sm" startIcon={<Icon n="MessageCircle" s={15} />} onClick={shareLine}>分享到 LINE</Button>
+            {canNativeShare && <Button variant="outline" size="sm" startIcon={<Icon n="Share2" s={15} />} onClick={nativeShare}>其他分享方式</Button>}
+            <Button variant="outline" size="sm" startIcon={<Icon n="Download" s={15} />} onClick={download}>下載 QR 圖片</Button>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span className="wg-caption" style={{ fontWeight: 700, color: "var(--color-fg-neutral-subtle)" }}>邀請短連結（與 QR 共享同一 token）</span>
+            <span className="wg-caption" style={{ fontWeight: 700, color: "var(--color-fg-neutral-subtle)" }}>邀請連結（與 QR 是同一個）</span>
             <div style={{ display: "flex", alignItems: "center", gap: 8, height: 44, padding: "0 6px 0 14px", borderRadius: "var(--radius-full)", background: "var(--color-bg-neutral-subtle)", boxShadow: "inset 0 0 0 1px var(--color-border-default)" }}>
               <Icon n="Link" s={16} c="var(--color-fg-neutral-muted)" />
               <span style={{ flex: 1, font: "var(--font-data-400)", color: "var(--color-fg-neutral-default)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{link}</span>
-              <Button size="sm" variant="ghost" startIcon={<Icon n="Copy" s={15} />} onClick={() => mm.toast("已複製邀請連結")}>複製</Button>
+              <Button size="sm" variant="ghost" startIcon={<Icon n="Copy" s={15} />} onClick={copy}>複製</Button>
             </div>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -28,7 +66,6 @@
                 <span className="wg-caption" style={{ color: "var(--color-fg-neutral-subtle)" }}>{m.text}</span>
               </span>
             ))}
-            <Button size="sm" variant="ghost" startIcon={<Icon n="Clock" s={15} />} onClick={() => mm.toast("有效期已延長")}>延長有效期</Button>
           </div>
           {otpNote && (
             <Alert tone="info" title="掃碼者需完成 OTP 驗證">
@@ -68,7 +105,8 @@
             將 QR 或短連結傳給「{f.name}」的聯絡窗口。<b>第一位掃碼者將自動成為該團隊的管理員</b>；其平台角色由該隊型別推導為 {derivedRole()}。
           </p>
           <QRBlock
-            token={"team-" + f.name}
+            shareText={"邀請你成為「" + f.name + "」在島嶼守望的團隊管理員，點連結或掃 QR 加入"}
+            fileName={"wanguard-admin-invite"}
             link={"wanguard.tw/i/tm-" + Math.abs(f.name.length * 7919 % 9000 + 1000)}
             metaItems={[
               { icon: "Clock", text: "有效期 72 小時" },
@@ -125,75 +163,47 @@
   }
 
   // ── 邀請成員（管理員 / 超級管理員）──────────────────────────────────
+  /* 2026-10-20 再簡化（Sucre：「後端要寫了，簡單設計就好。不要選時間，固定 24 小時；時間到就到期，也不限制人數」）
+   *
+   * MEM-QR-103（改寫）：一張邀請**固定 24 小時後失效，不設人數上限**，沒有任何設定可選。
+   *   - 不限人數是安全的，因為掃碼**不等於入隊**：掃碼 → 手機 OTP → 進審核佇列 → 管理員核准才算數。
+   *     擋人的是審核，不是名額。QR 被轉傳出去，最壞的情況是佇列裡多幾筆要按「拒絕」。
+   *   - 失效只在後端判斷（掃碼時用 token 查到期時間）。前端顯示的時間只是提醒，不得拿來擋人 —— 使用者手機時間可以亂調。
+   *   - 沒有「延長」：要延長就再產生一張新的。舊的照樣在自己的 24 小時內有效。
+   *   - 已經在佇列裡的申請，邀請過期後照常可審（MEM-QR-105）。
+   *   - ❌ 不要加回「單次／多次」「有效期選項」「人數上限」：每多一個設定，現場招人就多一個要先想的決定，後端也多一組要守的規則。
+   *
+   * 所以打開視窗就直接產生，不需要「產生」那一步。 */
+  const INVITE_HOURS = 24;
+
   function InviteMemberModal({ team, onClose }) {
     const mm = useMM();
-    const [mode, setMode] = React.useState("multi");
-    const [validity, setValidity] = React.useState("24");
-    const [cap, setCap] = React.useState(50);
-    const [generated, setGenerated] = React.useState(false);
-
-    const generate = () => {
-      setGenerated(true);
-      mm.pushAudit({ actor: mm.persona.name, action: `產生成員邀請 QRCode（${mode === "multi" ? `多次 · 上限 ${cap}` : "單次"} · ${validity} 小時）`, cat: "qr", scope: team.id });
-    };
-
-    const segBtn = (val, label, sub) => (
-      <button
-        key={val} onClick={() => setMode(val)}
-        style={{
-          flex: 1, padding: "12px 14px", borderRadius: "var(--radius-md)", cursor: "pointer", textAlign: "left",
-          border: mode === val ? "1.5px solid var(--color-border-accent)" : "1px solid var(--color-border-default)",
-          background: mode === val ? "var(--color-bg-primary-subtle)" : "var(--color-bg-neutral-default)",
-        }}
-      >
-        <div style={{ font: "var(--font-label-400)", color: mode === val ? "var(--color-brand-primary-subtle)" : "var(--color-fg-neutral-default)" }}>{label}</div>
-        <div className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)", marginTop: 2 }}>{sub}</div>
-      </button>
-    );
+    // 打開即產生一張（原型：只在第一次 render 記一筆 audit）
+    const logged = React.useRef(false);
+    React.useEffect(() => {
+      if (logged.current) return;
+      logged.current = true;
+      mm.pushAudit({ actor: mm.persona.name, action: `產生成員邀請 QR（${INVITE_HOURS} 小時）`, cat: "qr", scope: team.id });
+    }, []);
 
     return (
       <MMModal
         title={`邀請成員加入「${team.name}」`} width={640} onClose={onClose}
-        footer={generated
-          ? <Button variant="primary" onClick={onClose}>完成</Button>
-          : <>
-              <Button variant="ghost" onClick={onClose}>取消</Button>
-              <Button variant="primary" startIcon={<Icon n="QrCode" s={16} />} onClick={generate}>產生 QR 與短連結</Button>
-            </>}
+        footer={<Button variant="primary" onClick={onClose}>完成</Button>}
       >
-        {!generated ? (
-          <>
-            <div style={{ display: "flex", gap: 10 }}>
-              {segBtn("single", "單次 QR", "供 1 人使用，用後即作廢")}
-              {segBtn("multi", "多次 QR", "可發到 LINE 群，多人共用")}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <span className="wg-caption" style={{ fontWeight: 700, color: "var(--color-fg-neutral-subtle)" }}>有效期</span>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {["24", "48", "72"].map((v) => (
-                    <button key={v} onClick={() => setValidity(v)} style={{ flex: 1, height: 40, borderRadius: "var(--radius-full)", cursor: "pointer", font: "var(--font-label-300)", border: validity === v ? "1.5px solid var(--color-border-accent)" : "1px solid var(--color-border-default)", background: validity === v ? "var(--color-bg-primary-subtle)" : "transparent", color: validity === v ? "var(--color-brand-primary-subtle)" : "var(--color-fg-neutral-subtle)" }}>{v} 小時</button>
-                  ))}
-                </div>
-              </div>
-              {mode === "multi" && (
-                <Field label="使用人數上限">
-                  <Input type="number" value={cap} onChange={(e) => setCap(e.target.value)} />
-                </Field>
-              )}
-            </div>
-            <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)" }}>掃碼者將以 <b>成員</b> 身份加入本隊；其平台角色由本隊型別推導。</span>
-          </>
-        ) : (
-          <QRBlock
-            token={`invite-${team.id}-${mode}-${validity}`}
-            link={`wanguard.tw/i/${team.id.replace("t", "mb")}${validity}${mode === "multi" ? "g" : "s"}7`}
-            metaItems={[
-              { icon: "Clock", text: `有效期 ${validity} 小時` },
-              mode === "multi" ? { icon: "Users", text: `上限 ${cap} 人` } : { icon: "QrCode", text: "單次 · 用後即作廢" },
-            ]}
-          />
-        )}
+        <span className="wg-caption" style={{ color: "var(--color-fg-neutral-muted)", lineHeight: 1.7 }}>
+          把 QR 或連結傳到 LINE 群組，<b>{INVITE_HOURS} 小時內</b>誰都可以掃，不限人數。
+          掃碼者完成手機驗證後進入審核佇列，<b>你核准了才會加入</b>，並以成員身份加入本隊。
+        </span>
+        <QRBlock
+          link={`wanguard.tw/i/${team.id.replace("t", "mb")}24h`}
+          shareText={`邀請你加入「${team.name}」，24 小時內點連結或掃 QR，完成手機驗證後由管理員審核`}
+          fileName={`wanguard-invite-${team.id}`}
+          metaItems={[
+            { icon: "Clock", text: `${INVITE_HOURS} 小時後失效` },
+            { icon: "Users", text: "不限人數 · 需管理員核准" },
+          ]}
+        />
       </MMModal>
     );
   }
