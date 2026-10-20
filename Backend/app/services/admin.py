@@ -138,6 +138,24 @@ async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_nam
     return assignment
 
 
+async def grant_team_role(db: AsyncSession, *, user_uuid, team_uuid, role: Role) -> None:
+    """Make `role` the user's one role in the team. Neither commits nor notifies.
+
+    One role per team per user: whatever team role they held IN THIS TEAM is replaced, and
+    their roles in other teams are left alone (ADR-072). Shared by add_team_member and by
+    approving a join request (Spec/026, ADR-354 point 4), which commits it together with the
+    request's new status.
+    """
+    await db.execute(
+        delete(UserRoleAssign).where(
+            UserRoleAssign.user_uuid == user_uuid,
+            UserRoleAssign.team_uuid == team_uuid,
+        )
+    )
+    db.add(UserRoleAssign(user_uuid=user_uuid, role_uuid=role.uuid, team_uuid=team_uuid, role_kind="team"))
+    await db.flush()
+
+
 async def add_team_member(
     db: AsyncSession, *, actor: User, team_uuid: str, user_uuid: str, team_role_name: str | None = None
 ) -> User:
@@ -168,17 +186,7 @@ async def add_team_member(
     if role is None or role.kind != "team":
         raise AdminNotFoundError(f"Team role '{team_role_name or DEFAULT_TEAM_ROLE}' not found")
 
-    # One role per team per user: replace whatever team role they held IN THIS TEAM, leaving
-    # their roles in other teams alone.
-    await db.execute(
-        delete(UserRoleAssign).where(
-            UserRoleAssign.user_uuid == target.uuid,
-            UserRoleAssign.team_uuid == team.uuid,
-        )
-    )
-    db.add(UserRoleAssign(
-        user_uuid=target.uuid, role_uuid=role.uuid, team_uuid=team.uuid, role_kind="team"
-    ))
+    await grant_team_role(db, user_uuid=target.uuid, team_uuid=team.uuid, role=role)
 
     # Read every attribute we still need BEFORE committing: the session runs with
     # expire_on_commit=True (app/db/session.py), so `team` and `actor` are expired the
