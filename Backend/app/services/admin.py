@@ -31,6 +31,8 @@ from app.services.notification_service import NotificationService
 logger = logging.getLogger(__name__)
 
 SUPER_ADMIN_ROLE_NAME = "super_admin"
+# The team role that manages the team (Spec/026): a team must keep at least one (ADR-356).
+TEAM_ADMIN_ROLE_NAME = "admin"
 # Joining a team means being granted a role in it (ADR-072); `member` is the least-privileged
 # one, so it is what an add-without-a-role means.
 DEFAULT_TEAM_ROLE = "member"
@@ -138,6 +140,24 @@ async def assign_role(db: AsyncSession, *, actor: User, user_uuid: str, role_nam
     return assignment
 
 
+async def _refuse_last_team_admin(db: AsyncSession, *, team_uuid, user_uuid) -> None:
+    """Refuse taking the team's only `admin` away (ADR-356).
+
+    Locks every admin grant in the team FOR UPDATE first, as _remaining_super_admins does, so two
+    admins demoting each other at once serialize on the same rows and cannot both see another
+    admin left. A user who is not an admin of the team passes.
+    """
+    rows = await db.execute(
+        select(UserRoleAssign.user_uuid)
+        .join(Role, Role.uuid == UserRoleAssign.role_uuid)
+        .where(UserRoleAssign.team_uuid == team_uuid, Role.name == TEAM_ADMIN_ROLE_NAME)
+        .with_for_update(of=UserRoleAssign)
+    )
+    admins = {str(holder) for (holder,) in rows.all()}
+    if str(user_uuid) in admins and len(admins) == 1:
+        raise AdminConflictError("Cannot remove the team's only admin")
+
+
 async def grant_team_role(db: AsyncSession, *, user_uuid, team_uuid, role: Role) -> None:
     """Make `role` the user's one role in the team. Neither commits nor notifies.
 
@@ -186,6 +206,8 @@ async def add_team_member(
     if role is None or role.kind != "team":
         raise AdminNotFoundError(f"Team role '{team_role_name or DEFAULT_TEAM_ROLE}' not found")
 
+    if role.name != TEAM_ADMIN_ROLE_NAME:
+        await _refuse_last_team_admin(db, team_uuid=team.uuid, user_uuid=target.uuid)
     await grant_team_role(db, user_uuid=target.uuid, team_uuid=team.uuid, role=role)
 
     # Read every attribute we still need BEFORE committing: the session runs with
@@ -242,6 +264,7 @@ async def remove_team_member(db: AsyncSession, *, actor: User, team_uuid: str, u
     ).first()
     if held is None:
         raise AdminNotFoundError("User is not a member of this team")
+    await _refuse_last_team_admin(db, team_uuid=team.uuid, user_uuid=target.uuid)
 
     # Leaving a team is revoking every grant scoped to it — that IS the membership now
     # (ADR-072). Grants in the user's other teams, and their platform grant, are untouched:

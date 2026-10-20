@@ -379,6 +379,8 @@ async def remove_team_member(
         )
     except AdminNotFoundError as err:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err
+    except AdminConflictError as err:  # the team's only admin (Spec/026, ADR-356)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(err)) from err
     # None: they are out of this team now. A user may still belong to others — GET /admin/users
     # lists every identity they hold.
     return TeamMemberResponse(uuid=user.uuid, team_uuid=None)
